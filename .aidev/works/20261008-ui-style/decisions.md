@@ -11,3 +11,106 @@
 | E5 | `uiStyle` の `theme-boot.js` での扱い | 控えの `uiStyle` が `"modern"` のときだけ `data-ui-style` を当てる。それ以外（無い・壊れている・知らない値）は何もしない。テーマの組が壊れていても様式は当てる（互いに独立）。`ThemeController` は、動いている間は `classic`・`modern` のどちらも属性に書く |
 | E6 | vitest の既定では CSS が空に置き換わる（`?raw` も空） | `packages/web/vitest.config.ts` の `test.css.include` に `uiStyle.css` だけを入れる（`uiStyle.test.ts` が中身を検査するため） |
 | E7 | **T8 の「クラシックは `origin/main` との差が 0」の例外（設計の見落とし）** | 設定の画面に、ラジオ「画面の様式」を足す（T7）ので、設定ダイアログの画像のうち、この項目の下にある部分・スクロールバーのつまみが変わる（32 枚中 10 枚。差の画像で、差は追加したラジオ・その下へずれた内容・つまみだけと確認）。**これは、機能の追加そのもの**で、避けられない。ほかの 22 枚は差 0。モダンを選んでも（`UI_STYLE=modern`）、差の枚数・画素数は classic とまったく同じ（どの部品も、まだトークンを読まないため） |
+
+## T9: `border-radius` の全行の仕分け（PR1c）
+
+94 行（`packages/web/src`。`public/` の `ask-view`・`display-view` と `third_party/` は、対象外で数えない）→ **置き換える 77 行・置き換えない 17 行**。
+
+決めたこと: `4px`→`--soda-shape-radius`（55）・`3px`→`-s`（9）・`6px`→`-l`（9）。片側だけの丸は、4 つの角と同じ 4px の角の一部（上だけ／右だけ）なので、同じトークンに置き換えてよい（`4px 4px 0 0`〔`AskViewer`・`PanePanel`・`MobileDisplaySheet`〕と `0 4px 4px 0`〔`SettingsDialog`〕の 4 行）。置き換えない: `2px`・`999px`・`50%`・`em`・`9px`・`7px`・`10px`・守りのファイルの中。
+
+| ファイル:行 | 値 | 扱い | 置き換え後／理由 |
+| :- | :- | :- | :- |
+| `components/OnboardingDialog.vue:345` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/OnboardingDialog.vue:373` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/OnboardingDialog.vue:416` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/AskViewer.vue:190` | `4px 4px 0 0` | 置き換える | `var(--soda-shape-radius) var(--soda-shape-radius) 0 0` |
+| `components/SidebarRowsSettings.vue:943` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SidebarRowsSettings.vue:1005` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/GroupPickerDialog.vue:123` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SettingsDialog.vue:1435` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/SettingsDialog.vue:1479` | `0 4px 4px 0` | 置き換える | `0 var(--soda-shape-radius) var(--soda-shape-radius) 0` |
+| `components/SettingsDialog.vue:1534` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SettingsDialog.vue:1560` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SettingsDialog.vue:1574` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/SettingsDialog.vue:1594` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SettingsDialog.vue:1672` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SessionSwitchDialog.vue:192` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SessionSwitchDialog.vue:216` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `mobile/MobileShell.vue:183` | `4px` | 置き換えない | 守りのファイル |
+| `mobile/MobileShell.vue:203` | `4px` | 置き換えない | 守りのファイル |
+| `components/AskDialog.vue:359` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/PanePanel.vue:272` | `4px 4px 0 0` | 置き換える | `var(--soda-shape-radius) var(--soda-shape-radius) 0 0` |
+| `components/NotificationHistoryDialog.vue:186` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/NotificationHistoryDialog.vue:225` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/NotificationHistoryDialog.vue:246` | `999px` | 置き換えない | 丸（ピル） |
+| `components/Toast.vue:209` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/Toast.vue:242` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ReconnectOverlay.vue:95` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/ReconnectOverlay.vue:110` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/DisplayScriptMark.vue:76` | `4px` | 置き換えない | 守りのファイル |
+| `components/DisplayScriptMark.vue:88` | `4px` | 置き換えない | 守りのファイル |
+| `components/DisplayTray.vue:178` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/WorktreeOpenDialog.vue:147` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/WorktreeOpenDialog.vue:184` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/DisplayFrame.vue:624` | `4px` | 置き換えない | 守りのファイル |
+| `components/PrefixIndicator.vue:21` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionApprovalDialog.vue:367` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/ExtensionApprovalDialog.vue:405` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionApprovalDialog.vue:413` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionApprovalDialog.vue:429` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionApprovalDialog.vue:451` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/NotificationBell.vue:47` | `2px` | 置き換えない | 小さな丸（3px に寄せると 1px 変わる） |
+| `components/NotificationBell.vue:59` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/NotificationBell.vue:74` | `999px` | 置き換えない | 丸（ピル） |
+| `components/graph/MobileGraphSheet.vue:126` | `10px 10px 0 0` | 置き換えない | シートの上だけの丸（固有の値） |
+| `components/graph/MobileGraphSheet.vue:175` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/LoginView.vue:214` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/KeySettings.vue:848` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/KeySettings.vue:871` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/KeySettings.vue:914` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/KeySettings.vue:927` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/KeySettings.vue:938` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/KeySettings.vue:960` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/KeySettings.vue:981` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/KeySettings.vue:992` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/HelpDialog.vue:275` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/NameDialog.vue:141` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/RekeyPicker.vue:153` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/graph/RekeyPicker.vue:185` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/PaneChecklist.vue:262` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/graph/PaneChecklist.vue:280` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/PaneChecklist.vue:304` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/WorktreeCreateDialog.vue:92` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/HistoryPanel.vue:166` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SubagentListDialog.vue:125` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `mobile/MobileDisplaySheet.vue:138` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `mobile/MobileDisplaySheet.vue:156` | `4px 4px 0 0` | 置き換える | `var(--soda-shape-radius) var(--soda-shape-radius) 0 0` |
+| `components/graph/GraphConfirm.vue:85` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/graph/GraphConfirm.vue:105` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ConfirmDialog.vue:171` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/DisplayPanelHead.vue:190` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/StateIcon.vue:85` | `50%` | 置き換えない | 丸 |
+| `components/ExtensionSettings.vue:302` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionSettings.vue:319` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionSettings.vue:334` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/ExtensionSettings.vue:355` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/ExtensionSettings.vue:372` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
+| `components/ExtensionSettings.vue:449` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/SubagentPanel.vue:108` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `mobile/ExtraKeys.vue:131` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/Sidebar.vue:1237` | `0.6em` | 置き換えない | em の丸 |
+| `components/Sidebar.vue:1311` | `9px` | 置き換えない | 固有の値 |
+| `components/Sidebar.vue:1434` | `2px` | 置き換えない | 小さな丸（3px に寄せると 1px 変わる） |
+| `components/graph/GraphNode.vue:187` | `6px` | 置き換える | `var(--soda-shape-radius-l)` |
+| `components/graph/GraphNode.vue:253` | `7px` | 置き換えない | 固有の値 |
+| `components/graph/GraphNode.vue:275` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/GraphNode.vue:287` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/GraphNode.vue:302` | `50%` | 置き換えない | 丸 |
+| `components/GotoPicker.vue:332` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/GotoPicker.vue:358` | `999px` | 置き換えない | 丸（ピル） |
+| `components/graph/GraphView.vue:1716` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/GraphView.vue:1785` | `10px` | 置き換えない | 固有の値（シート） |
+| `components/graph/GraphView.vue:1825` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/graph/LinkPanel.vue:533` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/CommandPopup.vue:242` | `4px` | 置き換える | `var(--soda-shape-radius)` |
+| `components/SubagentList.vue:53` | `3px` | 置き換える | `var(--soda-shape-radius-s)` |
