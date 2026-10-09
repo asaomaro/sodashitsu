@@ -32,19 +32,16 @@ export function createAgentKindsLister(opts: AgentKindsOptions = {}): () => Prom
   return async () => {
     if (cached !== null && now() - cached.at < CACHE_MS) return cached.value;
     const dirs = (env["PATH"] ?? "").split(delimiter).filter((d) => d !== "");
-    const kinds: AgentKindsResult["kinds"] = [];
-    for (const [kind, executable] of Object.entries(AGENT_START_EXECUTABLES)) {
-      let available = false;
-      if (platform !== "win32") {
-        for (const dir of dirs) {
-          if (await isExecutable(join(dir, executable))) {
-            available = true;
-            break;
-          }
-        }
-      }
-      kinds.push({ kind, label: agentStartLabel(kind), available });
-    }
+    // 種類ごと・ディレクトリごとに並べて確かめる（WSL の `PATH` には Windows 側の `/mnt/c/…` が数十個あり、1 つずつ確かめると数秒かかる）。
+    const kinds: AgentKindsResult["kinds"] = await Promise.all(
+      Object.entries(AGENT_START_EXECUTABLES).map(async ([kind, executable]) => {
+        const available =
+          platform === "win32"
+            ? false
+            : (await Promise.all(dirs.map((dir) => isExecutable(join(dir, executable))))).some(Boolean);
+        return { kind, label: agentStartLabel(kind), available };
+      }),
+    );
     const value = { kinds };
     cached = { at: now(), value };
     return value;
