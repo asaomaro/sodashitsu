@@ -127,6 +127,35 @@ describe("tidySpace（並びを整える）", () => {
     expect(fa.h).toBeLessThan(400);
   });
 
+  it("ほかの空間の囲いが、整えた並びが元の左上から始まると重なる所にあっても、その囲いを避けて置く（PR1e レビュー S1。避けなければ落ちる）", () => {
+    const a1 = ws("a1", 1);
+    const a2 = ws("a2", 1);
+    const o = ws("o", 2);
+    const st: LayoutStructure = {
+      spaces: [
+        { id: "g:a", tops: [{ id: "a1", kind: "workspace", members: [a1] }, { id: "a2", kind: "workspace", members: [a2] }] },
+        { id: "g:o", tops: [{ id: "o", kind: "workspace", members: [o] }] },
+      ],
+    };
+    const pos = nodePositions([
+      { key: a1.nodes[0]!, x: 1000, y: 1000 }, // 整える空間の囲い a1（左上は 980,960）
+      { key: a2.nodes[0]!, x: 6000, y: 6000 }, // a2 は遠く（整えると、a1 の下の段へ来る）
+      { key: o.nodes[0]!, x: 1000, y: 1250 }, // ほかの空間の囲い o: a1 のすぐ下（詰めた a2 の置き場所に重なる）
+      { key: o.nodes[1]!, x: 1240, y: 1250 },
+    ]);
+    const m = tidySpace(st, pos, "g:a")!;
+    const next = new Map(pos);
+    for (const [key, p] of m) next.set(key, p);
+    const fs = frames(st, next);
+    const fo = fs.find((f) => f.id === "o")!.rect;
+    for (const id of ["a1", "a2"]) {
+      const f = fs.find((x) => x.id === id)!.rect;
+      const apart = f.x + f.w <= fo.x || fo.x + fo.w <= f.x || f.y + f.h <= fo.y || fo.y + fo.h <= f.y;
+      expect(apart, `${id} ${JSON.stringify(f)} と o ${JSON.stringify(fo)}`).toBe(true);
+    }
+    for (const key of o.nodes) expect(next.get(key)).toEqual(pos.get(key)); // ほかの空間は動かない
+  });
+
   it("空間が無い・ノードが無いなら、何も動かさない", () => {
     expect(tidySpace({ spaces: [] }, new Map(), "g:x")!.size).toBe(0);
     const st: LayoutStructure = { spaces: [{ id: "g:a", tops: [{ id: "a", kind: "workspace", members: [ws("a", 0)] }] }] };

@@ -1185,6 +1185,13 @@ watchDragInterrupt(view, () => {
   /* 行の文字列（`.sidebar-label`）が D&D の掴み手を兼ねる——`PaneFrame.vue` の `.pane-frame-name` と
    * 同じ理由で選択（ハイライト）を止める（タスク点検の指摘。無いとドラッグのたびに文字が選択される）。 */
   user-select: none;
+  /* モダンの様式（PR1f）: 行を左右に少し内側へ寄せ、角を丸くする。クラシックでは変数が無く、今のまま（余白 0・角 0）。 */
+  margin-inline: var(--soda-shape-row-inset, 0px);
+  border-radius: var(--soda-shape-row-radius, 0px);
+}
+/* 畳んだサイドバーは幅が無いので、内側へ寄せない。 */
+.sidebar-collapsed .sidebar-row {
+  margin-inline: 0;
 }
 /* グループのメンバー・子行のインデント（20260923-workspace-grouping。herdr と同じ並び）。 */
 .sidebar-row-indent {
@@ -1212,6 +1219,13 @@ watchDragInterrupt(view, () => {
 /* `.sidebar-row:hover` と詳細度をそろえ、後に置くことで表示中を勝たせる（一時的な状態で上書きしない）。 */
 .sidebar-row.sidebar-row-current {
   background: var(--soda-menu-active-bg, #44475a);
+  /* モダン（PR1f）: 地に accent を薄く重ねる。クラシックは割合が 0%（透明のグラデーション＝何も変わらない）。 */
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--soda-accent, #8be9fd) var(--soda-shape-row-current-tint, 0%), transparent),
+    color-mix(in srgb, var(--soda-accent, #8be9fd) var(--soda-shape-row-current-tint, 0%), transparent)
+  );
+  /* 枠: クラシックは太さ 0（何も描かれない）。モダンは accent の細い線（navigate の選択は fg の outline、D&D の落とせる行は別の枠・影なので、見分けが付く）。 */
+  box-shadow: inset 0 0 0 var(--soda-shape-row-current-ring, 0px) var(--soda-accent, #8be9fd);
 }
 .sidebar-row-selected {
   outline: 1px solid var(--soda-fg, #f8f8f2);

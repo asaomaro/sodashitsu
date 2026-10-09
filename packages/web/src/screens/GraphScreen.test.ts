@@ -38,6 +38,49 @@ const flush = async (): Promise<void> => {
   for (let i = 0; i < 4; i++) await nextTick();
 };
 
+describe("GraphScreen: 並びを整える（確認のあいだに、ほかの更新が入ったとき。PR1e レビュー S2）", () => {
+  it("衝突のあと、取り直した最新のグラフ（増えたノードを含む）で計算し直して送る", async () => {
+    const { paneOf, graphOf, fakeGraphPort, rpcError } = await import("../components/graph/graphTestKit.js");
+    const { useSessionStore } = await import("../store/session.js");
+    const { useGraphStore } = await import("../store/graph.js");
+    const session = useSessionStore(pinia);
+    session.workspaces.set("w1", { id: "w1", label: "api", cwd: "/a", tabIds: ["t1"], activeTabId: "t1", groupId: null, git: null } as never);
+    session.tabs.set("t1", { id: "t1", workspaceId: "w1", label: "1", layout: { type: "pane", paneId: "p1" } } as never);
+    for (const id of ["p1", "p2", "p3"]) session.panes.set(id, paneOf(id, "t1"));
+    session.layout = { top: [], groups: {}, ungrouped: ["w:w1"] } as never;
+    const nodes = [
+      { key: "local:p1", x: 100, y: 100 },
+      { key: "local:p2", x: 900, y: 700 },
+    ] as const satisfies readonly { key: `local:${string}`; x: number; y: number }[];
+    const newer = graphOf({ rev: 3, nodes: [...nodes, { key: "local:p3", x: 500, y: 300 }] }); // 確認のあいだに、別のブラウザが p3 を足した
+    let updates = 0;
+    const fake = fakeGraphPort({
+      "graph.get": () => newer,
+      "graph.update": (params) => {
+        updates++;
+        if (updates === 1) throw rpcError("rev_conflict");
+        return { ...newer, rev: 4 };
+      },
+    });
+    const graph = useGraphStore(pinia);
+    graph.bind(fake.port);
+    graph.applyGraph(graphOf({ rev: 2, nodes: [...nodes] }), "fresh");
+    const { wrapper, view } = mountScreen();
+    view.setScreen("graph");
+    await flush();
+    await wrapper.find(".graph-tidy").trigger("click");
+    await flush();
+    expect(wrapper.find(".graph-confirm").text()).toContain("2 個のノード"); // 確認を出した時点では 2 個
+    await wrapper.find(".graph-confirm-ok").trigger("click");
+    await flush();
+    const sent = fake.calls.filter((c) => c.method === "graph.update");
+    expect(sent).toHaveLength(2); // 1 回目は衝突
+    const ops = (sent[1]!.params as { ops: { key: string }[] }).ops;
+    expect(ops.map((o) => o.key).sort()).toEqual(["local:p1", "local:p2", "local:p3"]); // 2 回目は、増えたノードも含めて計算し直している
+    wrapper.unmount();
+  });
+});
+
 describe("GraphScreen", () => {
   it("dialog を使わない。画面が graph の間だけ中身を出し、根にフォーカスを置く（ノードが無いとき）", async () => {
     const showModal = vi.spyOn(HTMLDialogElement.prototype, "showModal");

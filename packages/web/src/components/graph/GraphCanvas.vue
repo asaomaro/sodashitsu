@@ -9,7 +9,7 @@
  * 座標・線の経路・当たり判定は client-core/graph の純関数（geometry）。サーバとのやりとりは `store/graph`。
  */
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { GraphLink, GraphOp, NodeKey } from "@sodashitsu/protocol";
+import { GRAPH_OPS_MAX, type GraphLink, type GraphOp, type NodeKey } from "@sodashitsu/protocol";
 import {
   clampZoom,
   displayFrames,
@@ -239,6 +239,18 @@ function zoomReset(): void {
   viewport.value = zoomGraphAt(viewport.value, 1, { x: size.w / 2, y: size.h / 2 });
 }
 const zoomPercent = computed(() => `${Math.round(viewport.value.zoom * 100)}%`);
+/**
+ * 面の地の、点の格子（PR1f。20px 間隔。面の移動・拡大縮小に付いて動く）。縮小して間隔が詰まりすぎる（8px 未満）ときは、間隔を倍々にして読める疎さを保つ。
+ * 色は `--soda-fg` を薄く混ぜたもの（新しい色の値は足さない）。
+ */
+const gridStyle = computed(() => {
+  const v = viewport.value;
+  let step = GRAPH_GRID * v.zoom;
+  while (step < 8) step *= 2;
+  const ox = ((v.panX % step) + step) % step;
+  const oy = ((v.panY % step) + step) % step;
+  return { backgroundSize: `${step}px ${step}px`, backgroundPosition: `${ox}px ${oy}px` };
+});
 const worldStyle = computed(() => ({
   transform: `translate(${viewport.value.panX}px, ${viewport.value.panY}px) scale(${viewport.value.zoom})`,
 }));
@@ -1960,7 +1972,7 @@ const connectDisabledHint = computed(() => (selection.value?.kind === "node" ? "
 
 // --- 並びを整える（PR1e T17c。AC-L3）----------------------------------------------------------------------------------
 /** 1 回の `graph.update` で送れる操作の数（`GRAPH_OPS_MAX`）。 */
-const TIDY_OPS_MAX = 1024;
+const TIDY_OPS_MAX = GRAPH_OPS_MAX;
 /** 直前の「並べ直し」を戻すための記憶（別の更新が入るまで）。 */
 let tidyUndo: { toastId: number; rev: number; before: { key: NodeKey; x: number; y: number }[] } | null = null;
 function dropTidyUndo(): void {
@@ -2006,20 +2018,20 @@ function requestTidy(): void {
   };
 }
 async function runTidy(): Promise<void> {
-  // 確認を出している間にグラフが変わったかもしれないので、送る直前に計算し直す。
-  const st = spaces.structure;
-  if (st === null) return;
-  const moves = tidySpace(st, nodePositions(graph.nodes), spaces.currentId);
-  if (moves === null || moves.size === 0 || moves.size > TIDY_OPS_MAX) {
-    view.toast("並べ直せませんでした。もう一度試してください。");
-    return;
-  }
+  const spaceId = spaces.currentId;
   let before: { key: NodeKey; x: number; y: number }[] = [];
-  const r = await graph.update((g): GraphOp[] | null => {
+  // 確認を出している間に、ほかの更新（別のブラウザ・sodactl）が入るかもしれない。`graph.update` は、衝突（`rev_conflict`）のあと取り直した**最新**のグラフで
+  // もう一度ここを呼ぶので、計算は、そのつど渡された最新のグラフ `g` の位置・構成で行う（古い位置で計算して、新しいノードと重ねない）。
+  const r = await graph.update((g): GraphOp[] | { conflict: string } => {
+    const st = graph.layoutStructure(g.nodes.map((n) => n.key));
+    if (st === null) return { conflict: "手元のセッションを見ているときだけ、並べ直せます。" };
+    const moves = tidySpace(st, nodePositions(g.nodes), spaceId);
+    if (moves === null) return { conflict: "座標の範囲に収まりません。" };
+    if (moves.size === 0 || moves.size > TIDY_OPS_MAX) return { conflict: "並べ直すノードの数が合いません。" };
     const now = new Map(g.nodes.map((n) => [n.key, n]));
     before = [...moves.keys()].flatMap((k) => (now.has(k) ? [{ key: k, x: now.get(k)!.x, y: now.get(k)!.y }] : []));
     const ops = [...moves].flatMap(([key, p]) => (now.has(key) ? [{ op: "move_node" as const, key, x: p.x, y: p.y }] : []));
-    return ops.length === 0 ? null : ops;
+    return ops.length === 0 ? { conflict: "並べ直すノードがありません。" } : ops;
   });
   if (!r.ok) {
     view.toast(`並べ直せませんでした（${r.message}）`);
@@ -2369,7 +2381,7 @@ function chipAria(e: EdgeView): string {
         @select="onSpaceSelect"
       />
       <div class="graph-body">
-        <div ref="canvasEl" class="graph-canvas" @pointerdown="onCanvasPointerdown">
+        <div ref="canvasEl" class="graph-canvas" :style="gridStyle" @pointerdown="onCanvasPointerdown">
           <div class="graph-world" :style="worldStyle">
             <GraphFrameLayer
               :frames="spaces.frames"
@@ -2666,6 +2678,7 @@ function chipAria(e: EdgeView): string {
 }
 .graph-canvas {
   position: relative;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--soda-fg, #f8f8f2) 22%, transparent) 1px, transparent 1.4px);
   flex: 1;
   overflow: hidden;
   touch-action: none;
