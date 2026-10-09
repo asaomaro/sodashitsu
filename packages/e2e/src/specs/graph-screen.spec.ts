@@ -115,6 +115,11 @@ test("ノードを押すと選ばれる。ドラッグで位置が変わり、�
   await page.mouse.click(ob.x + 30, ob.y + 8);
   await expect(other).toHaveClass(/graph-node-selected/);
   await expect(initiallySelected).not.toHaveClass(/graph-node-selected/);
+  // 20261008-graph-first PR2a: 押すと端末の窓が開く（グラフの上。基本画面へは移らない）。以降のノード・線の操作のため、閉じる。
+  await expect(page.locator("[data-graph-terminal-window]")).toBeVisible();
+  await expect(graphView(page)).toBeVisible();
+  await page.locator("[data-graph-terminal-close]").click();
+  await expect(page.locator("[data-graph-terminal-window]")).toHaveCount(0);
   const b1 = (await n1.boundingBox())!;
   // ドラッグ
   const posOf = async () => {
@@ -151,9 +156,12 @@ test("開いている間のキーは端末へ届かない（文字・Enter）。
   await openByKey(page);
   const before = input().length;
   await page.keyboard.type("hello");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter"); // ノードに対する Enter: 端末の窓が開く（20261008-graph-first PR2a。Enter 自体は端末へ送られない）
   await page.waitForTimeout(400);
   expect(input().slice(before)).toEqual([]);
+  await expect(page.locator("[data-graph-terminal-window]")).toBeVisible();
+  await page.locator("[data-graph-terminal-close]").click(); // 窓を閉じると、フォーカスはそのノードへ戻る
+  await expect(page.locator("[data-graph-terminal-window]")).toHaveCount(0);
   await page.keyboard.press("Escape"); // 選択を外す
   await page.keyboard.press("Escape");
   await expect(graphView(page)).toBeHidden();
