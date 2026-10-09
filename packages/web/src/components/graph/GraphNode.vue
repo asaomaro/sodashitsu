@@ -27,6 +27,12 @@ const props = defineProps<{
   dropTarget?: boolean;
   outCount: number;
   inCount: number;
+  /** その pane の tab の名前（tab が 1 つだけの workspace では渡さない。20261008-graph-first の T11d）。右上のタグ。 */
+  tabLabel?: string | null;
+  /** tab の強調（見出しのタグを押したとき）。`weak` は薄く出す。 */
+  tabEmphasis?: "normal" | "strong" | "weak";
+  /** 囲いのドラッグ・ノードのドラッグの途中で、ここへは落とせない（ほかの workspace の囲いの上）。 */
+  blocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -58,6 +64,7 @@ const ariaLabel = computed(() => {
   const parts = [props.info.name, props.info.machineLabel];
   if (invalid.value) parts.push("無効（pane がありません）");
   else if (props.info.exists === null) parts.push("マシンに未接続");
+  if (props.tabLabel) parts.push(`tab ${props.tabLabel}`);
   parts.push(agentLine.value);
   const s = stateLabel(props.info.state);
   if (s) parts.push(s);
@@ -75,6 +82,9 @@ const ariaLabel = computed(() => {
       'graph-node-invalid': invalid,
       'graph-node-source': connectSource,
       'graph-node-drop': dropTarget,
+      'graph-node-weak': tabEmphasis === 'weak',
+      'graph-node-strong': tabEmphasis === 'strong',
+      'graph-node-blocked': blocked,
     }"
     role="group"
     aria-roledescription="ノード"
@@ -89,6 +99,7 @@ const ariaLabel = computed(() => {
     }"
     @pointerdown="emit('bodyPointerdown', $event)"
   >
+    <span v-if="tabLabel" class="graph-node-tab" :title="`tab: ${tabLabel}`" data-node-tab>{{ tabLabel }}</span>
     <div class="graph-node-head">
       <span class="graph-node-name">{{ info.name }}</span>
       <span class="graph-node-machine">{{ info.machineLabel }}</span>
@@ -197,6 +208,36 @@ const ariaLabel = computed(() => {
 .graph-node-selected {
   border-color: var(--soda-accent, #6070a1);
   box-shadow: 0 0 0 2px var(--soda-accent, #6070a1);
+}
+/* 右上の tab のタグ（枠に半分かかる丸い小さなタグ）。 */
+.graph-node-tab {
+  position: absolute;
+  top: -9px;
+  right: 8px;
+  max-width: 7em;
+  padding: 0 8px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 10px;
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.graph-node-weak {
+  opacity: 0.35;
+}
+.graph-node-strong {
+  border-color: var(--soda-state-working, #f1fa8c);
+}
+.graph-node-blocked {
+  border-style: dotted;
+  border-color: var(--soda-error-fg, #ff5555);
+  opacity: 0.8;
+  cursor: not-allowed;
 }
 .graph-node-source {
   box-shadow: 0 0 0 2px var(--soda-state-working, #f1fa8c);

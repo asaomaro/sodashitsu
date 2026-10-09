@@ -2033,7 +2033,7 @@ describe("GraphView（表示の保存の間引き・ノードの中身を位置�
     const { wrapper, view } = await openWithGraph();
     vi.useFakeTimers();
     const setItem = vi.spyOn(localStorage, "setItem");
-    const writes = () => setItem.mock.calls.filter(([k]) => k === "soda.graphView.v1").length;
+    const writes = () => setItem.mock.calls.filter(([k]) => k === "soda.graphViewports.v1").length;
     const canvas = wrapper.find(".graph-canvas").element;
     for (let i = 0; i < 10; i++)
       canvas.dispatchEvent(
@@ -2049,7 +2049,8 @@ describe("GraphView（表示の保存の間引き・ノードの中身を位置�
     await nextTick();
     await nextTick();
     expect(writes()).toBe(2);
-    expect(JSON.parse(localStorage.getItem("soda.graphView.v1")!).panY).toBe(40 - 110);
+    // 表示は空間ごとに覚える（PR1c。空間 u の分）。
+    expect(JSON.parse(localStorage.getItem("soda.graphViewports.v1")!).u.panY).toBe(40 - 110);
     wrapper.unmount();
   });
 
