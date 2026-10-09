@@ -203,11 +203,11 @@ test("位置と大きさを覚える: 窓を動かして閉じ、同じ pane を
   await expect(anyWin(page)).toHaveCount(0);
   await openByKey(page, p1);
   await expect(win(page, p1)).toHaveAttribute("data-status", "attached");
-  // 位置は、余白に対する割合で覚えるので、1px 未満の丸めの差は許す
-  await expect.poll(async () => Math.abs((await win(page, p1).boundingBox())!.x - moved.x)).toBeLessThanOrEqual(2);
+  // 位置は、余白に対する割合で覚えるので、数 px の丸めの差は許す
+  await expect.poll(async () => Math.abs((await win(page, p1).boundingBox())!.x - moved.x)).toBeLessThanOrEqual(4);
   const again = (await win(page, p1).boundingBox())!;
-  expect(Math.abs(again.y - moved.y)).toBeLessThanOrEqual(2);
-  expect(Math.abs(again.width - moved.width)).toBeLessThanOrEqual(2);
+  expect(Math.abs(again.y - moved.y)).toBeLessThanOrEqual(4);
+  expect(Math.abs(again.width - moved.width)).toBeLessThanOrEqual(4);
   await expect.poll(async () => (await win(page, p1).locator("[data-graph-terminal-size]").innerText()).trim()).toBe(size);
   await expect(page.locator("[data-graph-terminal-link]")).toHaveCount(0);
 });

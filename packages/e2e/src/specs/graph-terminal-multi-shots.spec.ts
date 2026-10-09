@@ -36,9 +36,11 @@ async function shot(page: Page, name: string): Promise<void> {
 
 for (const { key, theme } of THEMES)
   for (const style of ["classic", "modern"] as const)
-    test(`${style}-${key}`, async ({ page, appServer }) => {
+   for (const scene of ["three", "default"] as const)
+    test(`${style}-${key}-${scene}`, async ({ page, appServer }) => {
       await mkdir(OUT!, { recursive: true });
       const prefix = `${style}-${key}`;
+      const three = scene === "three";
       const client = await appServer.openClient();
       const initial = client.helloSnapshot()!.workspaces[0]!;
       const cwd = await mkdtemp(join(tmpdir(), "soda-graph-terminal-"));
@@ -53,7 +55,7 @@ for (const { key, theme } of THEMES)
       await client.request("prefs.set", { patch: { theme, themeAuto: false, uiStyle: style } });
       // 3 つの窓の位置と大きさ（左・中・右。45 桁 × 26 行）を、記憶に仕込む（開くと、そこに出る）。
       const mem = { geometry: Object.fromEntries(ids.map((id, i) => [id, { fx: i / 2, fy: 0.3, cols: 45, rows: 26 }])), pinned: [] };
-      await page.addInitScript((m) => localStorage.setItem("soda.graphTerminalWindows.v1", JSON.stringify(m)), mem);
+      if (three) await page.addInitScript((m) => localStorage.setItem("soda.graphTerminalWindows.v1", JSON.stringify(m)), mem);
       await page.goto(`${appServer.origin}/#token=${appServer.token}`);
       await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
       await expect(page.locator(".xterm-helper-textarea")).toHaveCount(3);
@@ -71,14 +73,16 @@ for (const { key, theme } of THEMES)
       const graph = page.locator(".graph-view");
       await expect(graph.locator("[data-node-key]").first()).toBeVisible();
       const win = (id: string) => page.locator(`[data-graph-terminal-window][data-pane-id="${id}"]`);
-      for (const id of ids) {
+      for (const id of three ? ids : [ids[1]!]) {
         await graph.locator(`[data-node-key="local:${id}"]`).focus();
         await page.keyboard.press("Enter");
         await expect(win(id)).toHaveAttribute("data-status", "attached");
-        await win(id).locator("[data-graph-terminal-pin]").focus();
-        await page.keyboard.press("Enter");
-        await expect(win(id)).toHaveAttribute("data-pinned", "1");
+        if (three) {
+          await win(id).locator("[data-graph-terminal-pin]").focus();
+          await page.keyboard.press("Enter");
+          await expect(win(id)).toHaveAttribute("data-pinned", "1");
+        }
       }
       await page.waitForTimeout(500);
-      await shot(page, `${prefix}-1-three-windows`);
+      await shot(page, three ? `${prefix}-1-three-windows` : `${prefix}-2-default-size`);
     });

@@ -197,4 +197,49 @@ describe("GraphTerminalLayer / GraphTerminalWindow", () => {
     expect(wrapper.find("[data-graph-terminal-link]").exists()).toBe(false);
     wrapper.unmount();
   });
+
+  const sized = (wrapper: ReturnType<typeof mountLayer>["wrapper"], w: number, h: number) => {
+    const layer = wrapper.find("[data-graph-terminal-layer]").element as HTMLElement;
+    Object.defineProperty(layer, "clientWidth", { configurable: true, value: w });
+    Object.defineProperty(layer, "clientHeight", { configurable: true, value: h });
+  };
+
+  it("最初の大きさは、領域の幅の 70%・高さの 80%。最小は 80×24 ぶん、最大は領域から余白 24px ずつを引いた大きさ", async () => {
+    const { wrapper, store } = mountLayer();
+    sized(wrapper, 1400, 900);
+    store.add("p1");
+    await flush();
+    let r = store.find("p1")!.shownRect!;
+    expect(r.w).toBe(980);
+    expect(r.h).toBe(720);
+    wrapper.unmount();
+    // 狭い領域: 70% は 80 桁に満たないので 80×24 ぶん（9×18 のセル＋枠）。最大（領域 − 48px）を超えない
+    const narrow = mountLayer();
+    sized(narrow.wrapper, 640, 400);
+    narrow.wrapper.vm.$forceUpdate();
+    narrow.store.add("p2");
+    await flush();
+    r = narrow.store.find("p2")!.shownRect!;
+    expect(r.w).toBeLessThanOrEqual(640 - 48);
+    expect(r.h).toBeLessThanOrEqual(400 - 48);
+    expect(r.w).toBeGreaterThan(640 * 0.7 - 1);
+    narrow.wrapper.unmount();
+  });
+
+  it("押したノードの隣に収まるなら隣（右 → 左 → 下 → 上）。どの側にも収まらないときは、領域の中央（点線は出ない）", async () => {
+    const { wrapper, store } = mountLayer();
+    sized(wrapper, 1400, 900);
+    // origin は層の左上（テストでは 0,0）。ノードが左端: 右に 980 幅は収まる
+    store.add("left", { anchor: { x: 0, y: 100, w: 200, h: 80 } });
+    await flush();
+    expect(store.find("left")!.shownRect!.x).toBe(216);
+    // ノードが中央: どの側にも 980×720 は収まらない → 中央（(1400-980)/2, (900-720)/2）
+    store.remove("left");
+    store.add("mid", { anchor: { x: 600, y: 400, w: 200, h: 80 } });
+    await flush();
+    const r = store.find("mid")!.shownRect!;
+    expect(r.x).toBe(210);
+    expect(r.y).toBe(90);
+    wrapper.unmount();
+  });
 });

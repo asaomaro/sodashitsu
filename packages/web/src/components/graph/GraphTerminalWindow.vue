@@ -82,10 +82,16 @@ const minSize = computed<Area>(() => sizeOf(GRAPH_TERMINAL_MIN_COLS, GRAPH_TERMI
 const mem = computed(() => store.memory.geometry[paneId.value]);
 
 /**
- * 覚えた位置があれば、そこ（桁と行も覚えた値）。無ければ、押したノードの隣（領域に収まる側。右 → 左 → 下 → 上の順。80 桁 × 24 行ぶん。収まらなければ縮める）。
- * ノードが分からないときは右上（開いている窓の数ぶんずらす）。
+ * 覚えた位置があれば、そこ（桁と行も覚えた値）。無ければ:
+ * - **最初の大きさ**は、面の領域の幅の 70%・高さの 80%（最小は 80 桁 × 24 行ぶん。最大は領域から余白 24px ずつを引いた大きさ。領域が狭ければ収まる大きさ）。
+ * - **位置**は、押したノードの隣（領域に収まる側。右 → 左 → 下 → 上の順）。大きくなって、どの側にも収まらないときは、**領域の中央**（ノードが隠れてもよい。点線は出ない）。
+ *   ノードが分からないときも中央（開いている窓の数ぶん、ずらす）。
  */
 const GAP = 16;
+/** 領域の端から窓までの余白の下限（最大の大きさを決める）。 */
+const MARGIN = 24;
+const WIDTH_RATIO = 0.7;
+const HEIGHT_RATIO = 0.8;
 function defaultRect(): Rect {
   const m = mem.value;
   if (m) {
@@ -94,31 +100,29 @@ function defaultRect(): Rect {
     const h = Math.min(sz.h, props.area.h);
     return { ...placeFromMemory(m, props.area, { w, h }), w, h };
   }
-  const full = sizeOf(80, 24);
-  const ww = Math.min(full.w, Math.max(minSize.value.w, props.area.w - 16));
-  const hh = Math.min(full.h, Math.max(minSize.value.h, props.area.h - 16));
+  const base = sizeOf(80, 24);
+  const maxW = Math.max(1, props.area.w - MARGIN * 2);
+  const maxH = Math.max(1, props.area.h - MARGIN * 2);
+  const ww = Math.min(Math.max(base.w, Math.round(props.area.w * WIDTH_RATIO)), maxW);
+  const hh = Math.min(Math.max(base.h, Math.round(props.area.h * HEIGHT_RATIO)), maxH);
   const a = props.win.anchor;
   const o = props.origin;
   if (a && o) {
     const nx = a.x - o.x;
     const ny = a.y - o.y;
-    const min = minSize.value;
-    const clampY = (y: number, hh2: number): number => Math.min(Math.max(y, 0), props.area.h - hh2);
-    const clampX = (x: number, ww2: number): number => Math.min(Math.max(x, 0), props.area.w - ww2);
-    // 辺ごとの、置ける最大の大きさ（右・左は幅が、下・上は高さが、ノードで削られる）。全体が収まる辺を先に、無ければ最小より大きく取れる辺を縮めて。
-    const sides: { fit: { w: number; h: number }; place: (w2: number, h2: number) => Rect }[] = [
-      { fit: { w: props.area.w - (nx + a.w + GAP), h: hh }, place: (w2, h2) => ({ x: nx + a.w + GAP, y: clampY(ny, h2), w: w2, h: h2 }) },
-      { fit: { w: nx - GAP, h: hh }, place: (w2, h2) => ({ x: nx - GAP - w2, y: clampY(ny, h2), w: w2, h: h2 }) },
-      { fit: { w: ww, h: props.area.h - (ny + a.h + GAP) }, place: (w2, h2) => ({ x: clampX(nx, w2), y: ny + a.h + GAP, w: w2, h: h2 }) },
-      { fit: { w: ww, h: ny - GAP }, place: (w2, h2) => ({ x: clampX(nx, w2), y: ny - GAP - h2, w: w2, h: h2 }) },
+    const clampY = (y: number): number => Math.min(Math.max(y, 0), props.area.h - hh);
+    const clampX = (x: number): number => Math.min(Math.max(x, 0), props.area.w - ww);
+    const sides: { fits: boolean; at: { x: number; y: number } }[] = [
+      { fits: props.area.w - (nx + a.w + GAP) >= ww, at: { x: nx + a.w + GAP, y: clampY(ny) } },
+      { fits: nx - GAP >= ww, at: { x: nx - GAP - ww, y: clampY(ny) } },
+      { fits: props.area.h - (ny + a.h + GAP) >= hh, at: { x: clampX(nx), y: ny + a.h + GAP } },
+      { fits: ny - GAP >= hh, at: { x: clampX(nx), y: ny - GAP - hh } },
     ];
-    const fits = sides.find((sd) => sd.fit.w >= ww && sd.fit.h >= hh);
-    if (fits) return fits.place(ww, hh);
-    const shrunk = sides.find((sd) => sd.fit.w >= min.w && sd.fit.h >= min.h);
-    if (shrunk) return shrunk.place(Math.min(ww, Math.floor(shrunk.fit.w)), Math.min(hh, Math.floor(shrunk.fit.h)));
+    const side = sides.find((sd) => sd.fits);
+    if (side) return { ...side.at, w: ww, h: hh };
   }
   const i = Math.max(0, store.windows.findIndex((x) => x.key === props.win.key));
-  return { x: props.area.w - ww - 8 - i * FLOAT_CASCADE_PX, y: 8 + i * FLOAT_CASCADE_PX, w: ww, h: hh };
+  return { x: Math.round((props.area.w - ww) / 2) + i * FLOAT_CASCADE_PX, y: Math.round((props.area.h - hh) / 2) + i * FLOAT_CASCADE_PX, w: ww, h: hh };
 }
 const live = ref<Rect | null>(null);
 const rect = computed<Rect>(() => live.value ?? clampFloatRect(props.win.rect ?? defaultRect(), props.area, minSize.value));

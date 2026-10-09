@@ -30,8 +30,9 @@ function measure(): void {
   const cur = box.value;
   if (!cur || cur.left !== next.left || cur.top !== next.top || cur.width !== next.width || cur.height !== next.height) box.value = next;
   origin.value = { x: br.left, y: br.top };
-  const w = el.clientWidth;
-  const h = el.clientHeight;
+  // 層の箱に当てる大きさ（style はまだ反映されていないので、`clientWidth`・`clientHeight` は読まない）。
+  const w = next.width > 0 ? next.width : el.clientWidth; // レイアウトの無い環境（単体テスト）では、層の clientWidth・clientHeight
+  const h = next.height > 0 ? next.height : el.clientHeight;
   if (w !== area.value.w || h !== area.value.h) area.value = { w, h };
   // `.graph-body` は画面が開いてから現れる。見つかったら観測に加える。
   if (observer && body && !observed.includes(body)) {

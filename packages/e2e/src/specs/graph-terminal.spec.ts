@@ -15,6 +15,7 @@ import { watchClientViews } from "../support/panes.js";
 
 const graphView = (page: Page) => page.locator(".graph-view");
 const win = (page: Page) => page.locator("[data-graph-terminal-window]");
+const winOf = (page: Page, paneId: string) => page.locator(`[data-graph-terminal-window][data-pane-id="${paneId}"]`);
 const winTextarea = (page: Page) => win(page).locator(".xterm-helper-textarea");
 const node = (page: Page, paneId: string) => graphView(page).locator(`[data-node-key="local:${paneId}"]`);
 
@@ -53,6 +54,18 @@ async function moveWindowAside(page: Page) {
   await page.mouse.down();
   await page.mouse.move(g.x - 2000, g.y + 2000, { steps: 8 });
   await page.mouse.up();
+}
+
+
+/** ノードを、押して動かす（面の左寄りへ。窓が隣に収まる場所にする）。 */
+async function dragNodeNearLeft(page: Page, paneId: string) {
+  const b = (await node(page, paneId).boundingBox())!;
+  const gv = (await graphView(page).locator(".graph-canvas").boundingBox())!;
+  await page.mouse.move(b.x + 30, b.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(gv.x + 40, gv.y + 120, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await node(page, paneId).boundingBox())!.x - gv.x)).toBeLessThan(80);
 }
 
 /** ノードの本体を押す（動かさずに離す＝窓を開く）。 */
@@ -201,7 +214,8 @@ test("別のノードを押すと、窓の中身がその pane に替わる（�
   await expect.poll(async () => JSON.stringify(client.paneSize(p1))).toBe(JSON.stringify(await footerSize(page)));
   await expect(node(page, p1)).toHaveClass(/graph-node-window/);
   await moveWindowAside(page);
-  await pressNode(page, p2);
+  await node(page, p2).focus(); // 大きな窓がノードを覆うので、キーで押す
+  await page.keyboard.press("Enter");
   await expect(win(page)).toHaveAttribute("data-pane-id", p2);
   await expect(win(page)).toHaveCount(1);
   await expect(node(page, p2)).toHaveClass(/graph-node-window/);
@@ -440,21 +454,49 @@ test("窓を開いた後にサイドバーが別の pane を選んでも、窓�
   expect(text).toContain("marker-in-p1-window");
 });
 
-test("窓の最初の位置は、押したノードの隣（ノードもツールバーも覆わない）。ノードから窓へ線が引かれ、窓を動かすと消える", async ({ page, appServer }) => {
-  const { p1 } = await setup(page, appServer);
+test("窓の最初の大きさは、面の領域の幅の 70%・高さの 80% ほど。ノードの隣に収まれば隣（ノードもツールバーも覆わず、線が引かれ、窓を動かすと消える）。収まらなければ領域の中央（点線は出ない）", async ({ page, appServer }) => {
+  const { p1, p2 } = await setup(page, appServer);
   await openGraph(page);
-  const nb = (await node(page, p1).boundingBox())!;
-  await pressNode(page, p1);
-  await expect(win(page)).toHaveAttribute("data-status", "attached");
-  const wb = (await win(page).boundingBox())!;
-  const tb = (await page.locator(".graph-toolbar").boundingBox())!;
   const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  // ノードが左寄り: 右の隣に収まる
+  await dragNodeNearLeft(page, p1);
+  const nb = (await node(page, p1).boundingBox())!;
+  await pressNode(page, p1);
+  await expect(winOf(page, p1)).toHaveAttribute("data-status", "attached");
+  const body = (await page.locator("[data-graph-terminal-layer]").boundingBox())!; // 層の箱（ツールバーと空間の見出しの下。窓が出てから測る）
+  const wb = (await winOf(page, p1).boundingBox())!;
+  const tb = (await page.locator(".graph-toolbar").boundingBox())!;
+  // 領域の幅の 70%・高さの 80%。ただし最小は 80 桁 × 24 行ぶん（高さは、この画面の大きさだと、最小のほうが 80% より大きい）。最大は領域から余白 24px ずつを引いた大きさ。
+  expect(wb.width, "幅は領域の 70% 以上").toBeGreaterThanOrEqual(body.width * 0.7 - 6);
+  expect(wb.height, "高さは領域の 80% 以上").toBeGreaterThanOrEqual(body.height * 0.8 - 6);
+  expect(wb.width).toBeLessThanOrEqual(body.width - 48 + 1);
+  expect(wb.height).toBeLessThanOrEqual(body.height - 48 + 1);
+  const sz = (await winOf(page, p1).locator("[data-graph-terminal-size]").innerText()).trim().split(" × ").map(Number);
+  expect(sz[0]!).toBeGreaterThanOrEqual(80);
+  expect(sz[1]!).toBeGreaterThanOrEqual(24);
   expect(overlaps(wb, nb), "窓がノードを覆わない").toBe(false);
   expect(overlaps(wb, tb), "窓がツールバーを覆わない").toBe(false);
+  expect(wb.x).toBeGreaterThanOrEqual(nb.x + nb.width);
   await expect(page.locator("[data-graph-terminal-link]")).toBeVisible();
   await moveWindowAside(page);
   await expect(page.locator("[data-graph-terminal-link]")).toHaveCount(0);
+  await page.locator("[data-graph-terminal-close]").click();
+  // ノードが中央寄り（もう一方）: どの側にも収まらない → 領域の中央（ノードが隠れてもよい。線は出ない）
+  await pressNode(page, p2);
+  await expect(winOf(page, p2)).toHaveAttribute("data-status", "attached");
+  const wc = (await winOf(page, p2).boundingBox())!;
+  const centerX = body.x + (body.width - wc.width) / 2;
+  const centerY = body.y + (body.height - wc.height) / 2;
+  if (Math.abs(wc.x - centerX) <= 3 && Math.abs(wc.y - centerY) <= 3) {
+    await expect(page.locator("[data-graph-terminal-link]")).toHaveCount(0);
+  } else {
+    // ノードの隣に収まる位置にあった（面に収まる側がある）場合は、その側にあり、領域の外へ出ていない
+    expect(wc.x).toBeGreaterThanOrEqual(body.x - 1);
+    expect(wc.x + wc.width).toBeLessThanOrEqual(body.x + body.width + 1);
+  }
+  expect(wc.x).toBeGreaterThanOrEqual(body.x - 1);
+  expect(wc.y).toBeGreaterThanOrEqual(body.y - 1);
 });
 
 test("窓の端末の右クリックのメニューは、その pane への操作（貼り付け・右クリックの送り先）だけ。分割・閉じる・拡大表示は出ない", async ({ page, appServer }) => {
@@ -473,6 +515,7 @@ test("窓の端末の右クリックのメニューは、その pane への操�
 test("面を動かす・拡大縮小しても、ノードから窓への線の端は、ノードの縁に付いてくる（ノードが外へ出たら線は消える）", async ({ page, appServer }) => {
   const { p1 } = await setup(page, appServer);
   await openGraph(page);
+  await dragNodeNearLeft(page, p1); // 窓が隣（右）に収まる位置へ
   await pressNode(page, p1);
   await expect(win(page)).toHaveAttribute("data-status", "attached");
   const line = page.locator("[data-graph-terminal-link] line");
