@@ -105,6 +105,11 @@ const MESSAGES: Record<ErrorCode, string> = {
   rev_conflict: "グラフがほかの画面・sodactl で先に変わったため、保存しませんでした。最新の内容でやり直してください。",
   // 連携のグラフの検査（20261008-graph-first）。
   node_required: "開いている pane のノードは外せません（pane を閉じると、ノードも消えます）。",
+  fork_unavailable: "このエージェントは fork できません（Claude Code で、会話の id が分かる pane だけです）。",
+  fork_branch_exists: "そのブランチ名は既にあります。別の名前にしてください。",
+  fork_shell_not_ready: "新しい pane のシェルが、入力を受けられる状態になりませんでした。pane は残してあります。",
+  fork_in_progress: "この pane の fork は、すでに進んでいます。",
+  fork_failed: "fork の途中で失敗しました。作ったものは残してあります。",
   frame_overlap: "囲い（workspace・worktree グループ）が重なるため、その位置には置けません。",
 };
 
