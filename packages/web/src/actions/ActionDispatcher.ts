@@ -42,7 +42,7 @@ import { loadSidebarRows } from "@sodashitsu/client-core";
 import { loadThemePrefs } from "@sodashitsu/client-core";
 import { clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
 import { depthFirstPaneIds, neighborPaneId } from "@sodashitsu/client-core";
-import type { MenuTarget, UiPort } from "../term/MouseBridge.js";
+import type { MenuAt, MenuTarget, UiPort } from "../term/MouseBridge.js";
 import { readClipboard, writeClipboard } from "../term/clipboard.js";
 import type { TerminalRegistry } from "../term/TerminalRegistry.js";
 
@@ -111,7 +111,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   // --- UiPort --------------------------------------------------------------
 
-  openContextMenu(target: MenuTarget, at: { x: number; y: number }): void {
+  openContextMenu(target: MenuTarget, at: MenuAt): void {
     this.view.openContextMenu(target, at);
   }
 
