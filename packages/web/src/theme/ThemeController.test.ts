@@ -158,6 +158,7 @@ describe("変化を追う", () => {
       fixed: { colorScheme: "dark", vars: uiTokens("catppuccin").vars },
       light: { colorScheme: "light", vars: uiTokens("catppuccin-latte").vars },
       dark: { colorScheme: "dark", vars: uiTokens("catppuccin").vars },
+      uiStyle: "classic",
     });
     settings.setThemeDark("one-dark");
     await nextTick();
@@ -347,5 +348,62 @@ describe("色の上書き", () => {
     settings.setThemeDark("vesper"); // このタブで何か別の設定を変え、writeBoot を起こす
     await nextTick();
     expect(storage.boot()?.fixed.vars["--soda-accent"]).toBe("#1a2b3c");
+  });
+});
+
+describe("画面の様式（20261008-ui-style）", () => {
+  it("start で、設定の様式を root の data-ui-style へ当てる（既定は classic）。控えにも書く", () => {
+    const { controller, storage } = make();
+    controller.start();
+    expect(root.dataset["uiStyle"]).toBe("classic");
+    expect(storage.boot()?.uiStyle).toBe("classic");
+  });
+
+  it("保存された modern で始めると、modern を当てて控えにも書く", () => {
+    writePrefs({ uiStyle: "modern" });
+    const { controller, storage } = make();
+    controller.start();
+    expect(root.dataset["uiStyle"]).toBe("modern");
+    expect(storage.boot()?.uiStyle).toBe("modern");
+  });
+
+  it("動いている間に変えると（再読み込みなしで）属性が変わり、控えが書き直される", async () => {
+    const { settings, controller, storage } = make();
+    controller.start();
+    settings.setUiStyle("modern");
+    await nextTick();
+    expect(root.dataset["uiStyle"]).toBe("modern");
+    expect(storage.boot()?.uiStyle).toBe("modern");
+    settings.setUiStyle("classic");
+    await nextTick();
+    expect(root.dataset["uiStyle"]).toBe("classic");
+    expect(storage.boot()?.uiStyle).toBe("classic");
+  });
+
+  it("ほかの端末・ブラウザから届いた値（settings.uiStyle の変化）にも追従する", async () => {
+    const { settings, controller } = make();
+    controller.start();
+    settings.uiStyle = "modern"; // applyPrefsToStores が直接代入する形
+    await nextTick();
+    expect(root.dataset["uiStyle"]).toBe("modern");
+  });
+
+  it("控えの様式も保存された設定から作る（このタブの store ではなく）", async () => {
+    const { settings, controller, storage } = make();
+    controller.start();
+    writePrefs({ uiStyle: "modern" }); // 別のタブが保存した（このタブの store は追従前）
+    settings.setThemeDark("vesper"); // このタブで別の設定を変え、writeBoot を起こす
+    await nextTick();
+    expect(storage.boot()?.uiStyle).toBe("modern");
+  });
+
+  it("様式を替えても、テーマの控え・当てた色は変わらない（色は様式で変えない）", async () => {
+    const { settings, controller, storage } = make();
+    controller.start();
+    const before = { fixed: storage.boot()?.fixed, vars: root.getAttribute("style") };
+    settings.setUiStyle("modern");
+    await nextTick();
+    expect(storage.boot()?.fixed).toEqual(before.fixed);
+    expect(root.getAttribute("style")).toBe(before.vars);
   });
 });
