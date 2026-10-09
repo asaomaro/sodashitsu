@@ -148,3 +148,65 @@ describe("控えが無い・壊れているときは何もしない（起動で�
     expect(root.style.colorScheme).toBe("");
   });
 });
+
+describe("画面の様式の控え（20261008-ui-style）", () => {
+  /** 様式つきの控え（本体が書く形）。 */
+  function bootWithStyle(uiStyle: unknown): string {
+    const cache = JSON.parse(
+      bootWrittenFor({ theme: "dracula", auto: false, light: null, dark: null }),
+    ) as Record<string, unknown>;
+    cache["uiStyle"] = uiStyle;
+    return JSON.stringify(cache);
+  }
+
+  it("本体が書いた modern の控えから、data-ui-style=modern を当てる（テーマの変数も当たる）", () => {
+    localStorage.clear();
+    writePrefs({ uiStyle: "modern" });
+    const map = new Map<string, string>();
+    new ThemeController({
+      settings: useSettingsStore(createPinia()),
+      root: document.createElement("div"),
+      media: null,
+      setTerminalTheme: () => undefined,
+      sendTheme: () => undefined,
+      storage: { setItem: (k: string, v: string) => map.set(k, v), getItem: (k: string) => map.get(k) ?? null } as unknown as Storage,
+    }).writeBoot();
+    runBoot({ stored: map.get(BOOT_KEY)!, dark: true, root });
+    expect(root.getAttribute("data-ui-style")).toBe("modern");
+    expect(appliedVars(root)).toEqual(uiTokens("dracula").vars);
+  });
+
+  it("classic の控え・様式の無い古い控え・知らない値・型の違う値では、属性を当てない（＝クラシック）", () => {
+    for (const style of ["classic", undefined, "Modern", "fancy", "", 1, true, null, {}, []]) {
+      const r = document.createElement("div");
+      runBoot({ stored: bootWithStyle(style), dark: true, root: r });
+      expect(r.hasAttribute("data-ui-style"), JSON.stringify(style)).toBe(false);
+      expect(appliedVars(r)).toEqual(uiTokens("dracula").vars); // テーマは、いつもどおり当たる
+    }
+  });
+
+  it("控えが無い・壊れている・読めないときは、属性を当てず、投げない（クラシック）", () => {
+    for (const stored of [null, "{oops", "null", "3", '"modern"', JSON.stringify({ uiStyle: "modern", auto: false, fixed: 3 })]) {
+      const r = document.createElement("div");
+      expect(() => runBoot({ stored, dark: true, root: r })).not.toThrow();
+      if (stored === null || stored === "{oops" || stored === "null" || stored === "3" || stored === '"modern"')
+        expect(r.hasAttribute("data-ui-style"), String(stored)).toBe(false);
+    }
+    expect(() => runBoot({ stored: null, dark: true, root, storageThrows: true })).not.toThrow();
+    expect(root.hasAttribute("data-ui-style")).toBe(false);
+  });
+
+  it("テーマの組が壊れていても、様式は当てる（互いに独立。投げない）", () => {
+    expect(() => runBoot({ stored: JSON.stringify({ uiStyle: "modern", auto: false, fixed: 3 }), dark: true, root })).not.toThrow();
+    expect(root.getAttribute("data-ui-style")).toBe("modern");
+    expect(root.getAttribute("style")).toBeNull(); // 色は何も当てない
+  });
+
+  it("小さく・外から読み込まない（描画を止めて走るスクリプト）", () => {
+    expect(bootSource.length).toBeLessThan(3000);
+    for (const banned of ["import ", "import(", "fetch(", "XMLHttpRequest", "WebSocket", "document.write", "createElement", "innerHTML", "eval(", "new Function", "setTimeout", "await "])
+      expect(bootSource, banned).not.toContain(banned);
+    // 外のスクリプト・URL を指さない。
+    expect(bootSource).not.toMatch(/https?:\/\//);
+  });
+});

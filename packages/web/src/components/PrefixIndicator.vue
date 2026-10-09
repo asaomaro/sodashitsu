@@ -18,7 +18,7 @@ const view = useViewStore();
   padding: 0.3em 1em;
   background: var(--soda-menu-active-bg, #44475a);
   color: var(--soda-fg, #f8f8f2);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   font-family: monospace;
   letter-spacing: 0.1em;
   z-index: 950;

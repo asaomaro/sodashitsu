@@ -89,7 +89,7 @@ function onNativeCancel(ev: Event): void {
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   min-width: 28em;
   padding: 1em;
 }

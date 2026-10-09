@@ -530,7 +530,7 @@ defineExpose({ requestClose, focusFirstField, showConflict });
 .link-panel button {
   padding: 3px 10px;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   background: var(--soda-subtle-bg, #343746);
   color: inherit;
   cursor: pointer;

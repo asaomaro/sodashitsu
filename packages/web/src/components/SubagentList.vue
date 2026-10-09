@@ -50,7 +50,7 @@ defineExpose({ focus: () => listEl.value?.focus() });
   max-height: 50vh;
   overflow-y: auto;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0.3em 0.5em;
 }
 .subagent-list:focus-visible {

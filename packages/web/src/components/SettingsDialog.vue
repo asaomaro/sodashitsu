@@ -8,7 +8,7 @@ import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
 import { useNotificationsStore } from "../store/notifications.js";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore, type NewCwdPolicy, type PaneFrameThickness } from "../store/settings.js";
-import { DISPLAY_STATES, stateGlyph, stateLabel } from "@sodashitsu/client-core";
+import { DISPLAY_STATES, stateGlyph, stateLabel, type UiStyle } from "@sodashitsu/client-core";
 import { useViewStore } from "../store/view.js";
 import { effectiveScrollback, scrollbackChoices, type ScrollbackPref } from "../term/scrollback.js";
 import type { FileLocality } from "../term/FileTransfer.js";
@@ -206,6 +206,16 @@ const paneBordersChoices: readonly { value: PaneBorders; label: string }[] = [
 
 function choosePaneBorders(v: PaneBorders): void {
   settings.setPaneBorders(v);
+}
+
+/** 画面の様式（20261008-ui-style。クラシック＝いまの見た目・モダン＝丸い角）。選んだ時点で反映・保存（確定ボタン無し。再読み込みも要らない）。 */
+const uiStyleChoices: readonly { value: UiStyle; label: string }[] = [
+  { value: "classic", label: "クラシック" },
+  { value: "modern", label: "モダン" },
+];
+
+function chooseUiStyle(v: UiStyle): void {
+  settings.setUiStyle(v);
 }
 
 function togglePaneGaps(): void {
@@ -1093,6 +1103,21 @@ function onNativeCancel(ev: Event): void {
           </fieldset>
         </li>
         <li class="settings-row">
+          <fieldset class="settings-fieldset">
+            <legend class="settings-legend">画面の様式</legend>
+            <label v-for="c in uiStyleChoices" :key="c.value" class="settings-radio">
+              <input
+                type="radio"
+                name="settings-ui-style"
+                :value="c.value"
+                :checked="settings.uiStyle === c.value"
+                @change="chooseUiStyle(c.value)"
+              />
+              <span>{{ c.label }}</span>
+            </label>
+          </fieldset>
+        </li>
+        <li class="settings-row">
           <button type="button" role="switch" class="settings-switch" :aria-checked="settings.paneAgentNameVisible" @click="toggleAgentNameVisible">
             <span class="settings-mark">{{ settings.paneAgentNameVisible ? "入" : "切" }}</span>
             <span>pane にエージェント名を表示する</span>
@@ -1408,7 +1433,7 @@ function onNativeCancel(ev: Event): void {
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 6px;
+  border-radius: var(--soda-shape-radius-l);
 }
 .settings-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
@@ -1452,7 +1477,7 @@ function onNativeCancel(ev: Event): void {
   background: transparent;
   border: 0;
   border-left: 3px solid transparent;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 var(--soda-shape-radius) var(--soda-shape-radius) 0;
   padding: 0.35em 0.7em;
   cursor: pointer;
 }
@@ -1507,7 +1532,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.2em 0.8em;
   cursor: pointer;
 }
@@ -1533,7 +1558,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.4em 0.6em;
   cursor: pointer;
   text-align: left;
@@ -1547,7 +1572,7 @@ function onNativeCancel(ev: Event): void {
   min-width: 2em;
   text-align: center;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   padding: 0 0.2em;
 }
 .settings-switch[aria-checked="true"] .settings-mark {
@@ -1567,7 +1592,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.2em 0.8em;
   cursor: pointer;
 }
@@ -1645,7 +1670,7 @@ function onNativeCancel(ev: Event): void {
   color: inherit;
   background: transparent;
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.15em 0.7em;
   min-height: 1.75rem;
   cursor: pointer;

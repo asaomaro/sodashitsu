@@ -183,7 +183,7 @@ function cancelClear(): void {
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   width: min(36em, calc(100vw - 2em));
   max-height: 80vh;
   padding: 1em;
@@ -222,7 +222,7 @@ button {
   color: inherit;
   background: var(--soda-menu-hover-bg, #343746);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   cursor: pointer;
 }
 button:disabled {

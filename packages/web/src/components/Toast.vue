@@ -206,7 +206,7 @@ function dismiss(id: number): void {
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   cursor: pointer;
 }
 /* 消えない知らせは、左の細い帯で 4 秒で消える短い知らせと見分ける（20261005-notify-bell）。 */
@@ -239,7 +239,7 @@ function dismiss(id: number): void {
   color: inherit;
   background: var(--soda-menu-hover-bg, #343746);
   border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   padding: 0.1em 0.6em;
   cursor: pointer;
 }

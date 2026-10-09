@@ -9,6 +9,7 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadUiStyle,
   loadDisplayBandEdge,
   loadDisplayPanelDock,
   loadDisplayPanelInitial,
@@ -154,5 +155,13 @@ describe("loadDisplayScriptEnabled（既定は無効）", () => {
   it("true のときだけ有効。未設定・壊れた値は無効", () => {
     expect(loadDisplayScriptEnabled(true)).toBe(true);
     for (const v of [false, undefined, null, "true", 1, {}, []]) expect(loadDisplayScriptEnabled(v)).toBe(false);
+  });
+});
+
+describe("loadUiStyle（20261008-ui-style。既定は classic）", () => {
+  it('"modern" のときだけ modern。無い・壊れた値・知らない値は classic', () => {
+    expect(loadUiStyle("modern")).toBe("modern");
+    expect(loadUiStyle("classic")).toBe("classic");
+    for (const v of [undefined, null, "Modern", "MODERN", "x", "", 1, true, {}, []]) expect(loadUiStyle(v), String(v)).toBe("classic");
   });
 });

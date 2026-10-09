@@ -209,7 +209,7 @@ function onKeydown(ev: KeyboardEvent): void {
   color: var(--soda-fg, #f8f8f2);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--soda-shape-radius);
   cursor: pointer;
 }
 .display-head-btn:hover {

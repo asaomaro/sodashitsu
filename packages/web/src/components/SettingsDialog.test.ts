@@ -2046,3 +2046,36 @@ describe("SettingsDialog — サイドメニュー（20261004-settings-side-menu
     });
   });
 });
+
+// 20261008-ui-style T7。節「表示」のラジオ「画面の様式」（クラシック／モダン）。
+describe("SettingsDialog — 表示の節 — 画面の様式", () => {
+  const displaySection = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) =>
+    w.get('section[aria-labelledby="settings-display"]');
+  const styleRadios = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) =>
+    displaySection(w).findAll('input[type="radio"][name="settings-ui-style"]');
+  const checked = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) =>
+    styleRadios(w).filter((r) => (r.element as HTMLInputElement).checked).map((r) => (r.element as HTMLInputElement).value);
+
+  it("クラシック・モダンの 2 択で、既定はクラシック。凡例は「画面の様式」", async () => {
+    const { wrapper } = await openDialog();
+    expect(styleRadios(wrapper).map((r) => (r.element as HTMLInputElement).value)).toEqual(["classic", "modern"]);
+    expect(checked(wrapper)).toEqual(["classic"]);
+    expect(displaySection(wrapper).text()).toContain("画面の様式");
+    expect(displaySection(wrapper).text()).toContain("クラシック");
+    expect(displaySection(wrapper).text()).toContain("モダン");
+  });
+
+  it("選ぶと、その場で反映され、保存され（値はいつも書く）、再読み込みしても残る。確定ボタンは無い", async () => {
+    const { wrapper } = await openDialog();
+    await styleRadios(wrapper).find((r) => (r.element as HTMLInputElement).value === "modern")!.trigger("change");
+    expect(useSettingsStore(pinia).uiStyle).toBe("modern");
+    expect(readPrefs()["uiStyle"]).toBe("modern");
+    expect(useSettingsStore(createPinia()).uiStyle).toBe("modern");
+    await wrapper.vm.$nextTick();
+    expect(checked(wrapper)).toEqual(["modern"]); // 常にちょうど 1 つ
+    await styleRadios(wrapper).find((r) => (r.element as HTMLInputElement).value === "classic")!.trigger("change");
+    expect(readPrefs()["uiStyle"]).toBe("classic");
+    expect("uiStyle" in readPrefs()).toBe(true);
+    expect(wrapper.find('button[type="submit"]').exists()).toBe(false);
+  });
+});

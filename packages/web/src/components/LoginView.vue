@@ -211,7 +211,7 @@ function onSubmit(): void {
   color: var(--soda-fg, #f8f8f2);
   background: var(--soda-subtle-bg, rgba(255, 255, 255, 0.08));
   padding: 0.3em 0.5em;
-  border-radius: 3px;
+  border-radius: var(--soda-shape-radius-s);
   overflow-wrap: anywhere;
   user-select: all;
 }
