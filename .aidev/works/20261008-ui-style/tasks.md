@@ -133,3 +133,18 @@
 - [ ] T14: PR5 モバイルの中の部品・文書（グラフの画面の様式は、`20261008-graph-first` の PR1e で入った）
       依存: T13
       AC: AC3, AC11
+
+## PR6: tab バーの設定・tab と切り替えのボタンの見た目・モダンのカード（利用者の新しい要望）
+
+- [ ] T18a: tab バーを常に出すかの設定（**独立点検あり**: 設定の保存と、端末の行が変わる）。共有の設定 `tabBarAlways`（`true`・`false`・無い/`null`＝様式に従う）。client-core の `loadTabBarAlways`・protocol の `SharedPrefs`・`store/settings.ts`・`prefsApply.ts`・`ActionDispatcher`（読み直し）・設定の画面（切り替え＋「既定に戻す」）・`TabBar.vue` の表示条件。単体（既定・選んだ値・様式の切り替え・古い保存・壊れた値）と E2E（`ui-style-layout`: 出す／出さない × クラシック／モダン・桁と行・別のブラウザへの反映）。
+      依存: なし
+      AC: AC24
+- [ ] T18b: tab と切り替えのボタンの見た目をそろえる。形のトークン（`--soda-shape-seg-*`）を `uiStyle.css` に。モダン: tab をボタンの形に（`TabBar.vue`）。クラシック: 切り替えのボタンを tab の見た目に（`ScreenSwitcher.vue`。クラシックはそのボタンの規則だけ変える）。E2E（形が同じ・tab の働きが変わらない）と、比べる道具（クラシックは、切り替えのボタンの矩形の中だけに差）。
+      依存: T18a
+      AC: AC25, AC26
+- [ ] T18c: モダンのサイドバーの区画をカードに。E2E（区画の折りたたみ・つまみ・たたんだサイドバー・D&D）。
+      依存: T18b
+      AC: AC27
+- [ ] T18d: 絵（暗い・明るい × クラシック・モダン: 基本画面〔tab 1 つ・複数〕・グラフの画面・サイドバー）を `uistyle-pr6-shots/` に。`docs/ui-style.md`。
+      依存: T18c
+      AC: AC24〜AC27, AC11
