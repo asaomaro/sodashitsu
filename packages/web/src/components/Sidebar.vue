@@ -18,6 +18,7 @@ import StateIcon from "./StateIcon.vue";
 import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
 import ScreenSwitcher from "./ScreenSwitcher.vue";
+import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useMachinesStore } from "../store/machines.js";
 import { watchDragInterrupt } from "../store/dragInterrupt.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
@@ -39,6 +40,7 @@ const view = useViewStore();
 const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
 const machines = useMachinesStore();
+const graphSpaces = useGraphSpacesStore();
 
 /**
  * マシンのまとまり（20260927-multi-host-machines の design「サイドバー」）。有効なマシンが無ければ、選んでいる（＝ローカルの）1 つだけで見出しを
@@ -372,6 +374,8 @@ function focusWorkspace(workspaceId: string): void {
   if (tab) view.focusPane(tab.focusedPaneId);
   void conn?.request("workspace.focus", { workspaceId }).catch(() => undefined);
   view.notifySidebarPick();
+  // グラフの画面では、その workspace のある空間へ切り替えて、囲いへ動く（20261008-graph-first の T11e）。
+  if (view.screen === "graph") graphSpaces.requestReveal({ kind: "workspace", workspaceId });
 }
 
 function focusPane(paneId: string, tabId: string, workspaceId: string): void {
@@ -379,6 +383,8 @@ function focusPane(paneId: string, tabId: string, workspaceId: string): void {
   view.focusPane(paneId);
   void conn?.request("pane.focus", { paneId }).catch(() => undefined);
   view.notifySidebarPick();
+  // グラフの画面では、そのエージェントのノードへ動く（選ぶ）。
+  if (view.screen === "graph") graphSpaces.requestReveal({ kind: "node", key: `${machines.selectedId}:${paneId}` });
 }
 
 /** グループのヘッダー行（グループ）は `group` メニュー、それ以外（workspace を持つ行）は
@@ -594,6 +600,9 @@ function onRowPointerUp(ev: PointerEvent, row: SpaceRow): void {
     }
   } else if (row.workspace) {
     focusWorkspace(row.workspace.id);
+  } else if (view.screen === "graph") {
+    // グラフの画面では、グループの見出しを押すとその空間へ切り替わる（畳み・広げは、矢印で）。
+    graphSpaces.requestReveal({ kind: "space", spaceId: row.groupKind === "manual" && row.groupTargetId ? `g:${row.groupTargetId}` : "u" });
   } else {
     onToggleCollapse(row); // グループのヘッダー行のクリックは折りたたみを切り替える
   }

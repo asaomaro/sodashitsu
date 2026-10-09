@@ -311,6 +311,83 @@ describe("placeNode（隣がいる長い増加。PR1a 再レビュー指摘 1）
     expect([...layoutOverlaps(st, pos).keys()]).toEqual([]);
   });
 
+  it("隣に囲まれた workspace は、横一列に伸び続けない: 80 個足しても、囲いの縦横の比がほぼ正方形（20261008-graph-first PR1c T11h）", () => {
+    const a = ws("a", 0);
+    const b = ws("b", 3);
+    const c = ws("c", 3);
+    const st = structureOf([
+      { id: "a", kind: "workspace", members: [a] },
+      { id: "b", kind: "workspace", members: [b] },
+      { id: "c", kind: "workspace", members: [c] },
+    ]);
+    const pos = new Map<string, GraphPoint>();
+    b.nodes.forEach((key, i) => pos.set(key, { x: 300 + i * 240, y: 60 }));
+    c.nodes.forEach((key, i) => pos.set(key, { x: 60 + i * 240, y: 400 }));
+    for (let i = 0; i < 80; i++) {
+      const key = k(`a${i}`);
+      a.nodes.push(key);
+      const r = i === 0 ? placeFrame(st, pos, "a") : placeNode(st, pos, "a");
+      applyPlacement(st, pos, "a", key, r);
+    }
+    const f = frames(st, pos).find((x) => x.id === "a")!.rect;
+    const ratio = Math.max(f.w, f.h) / Math.min(f.w, f.h);
+    expect(ratio, `囲い ${f.w}×${f.h}`).toBeLessThan(2.5);
+    expect([...layoutOverlaps(st, pos).keys()]).toEqual([]);
+  });
+
+  /** 乱数の構成を作って、pane を足す。`shift` があれば囲いごと動いた。 */
+  function addTo(
+    st: LayoutStructure,
+    pos: Map<string, GraphPoint>,
+    ws: { id: string; nodes: NodeKey[] },
+    key: NodeKey,
+  ): boolean {
+    const first = ws.nodes.length === 0;
+    ws.nodes.push(key);
+    const r = first ? placeFrame(st, pos, ws.id) : placeNode(st, pos, ws.id);
+    applyPlacement(st, pos, ws.id, key, r);
+    return r.shift !== null;
+  }
+
+  it("pane を 1 つ足しただけで、利用者が置いた workspace が囲いごと動く頻度は 10% 以下（2〜6 個の workspace・各 1〜6 pane に 1 つ足す 300 通り。PR1c レビュー指摘 1）", () => {
+    let moved = 0;
+    const total = 300;
+    for (let seed = 1; seed <= total; seed++) {
+      const rnd = rng(seed);
+      const n = 2 + Math.floor(rnd() * 5);
+      const wss = Array.from({ length: n }, (_, i) => ({ id: `w${i}`, nodes: [] as NodeKey[] }));
+      const st = structureOf(wss.map((w) => ({ id: w.id, kind: "workspace" as const, members: [w] })));
+      const pos = new Map<string, GraphPoint>();
+      let c = 0;
+      for (const w of wss)
+        for (let j = 0, m = 1 + Math.floor(rnd() * 6); j < m; j++) addTo(st, pos, w, k(`s${c++}`));
+      if (addTo(st, pos, wss[Math.floor(rnd() * n)]!, k(`s${c++}`))) moved++;
+      expect([...layoutOverlaps(st, pos).keys()], `seed ${seed}`).toEqual([]);
+    }
+    expect(moved / total, `${moved}/${total}`).toBeLessThanOrEqual(0.1);
+  });
+
+  it("4 つの workspace に交互に 30 個ずつ足しても、全体の広がりは幅が高さの 4 倍以内（20 通り。PR1c レビュー指摘 1）", () => {
+    let worst = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const rnd = rng(seed * 7);
+      const wss = Array.from({ length: 4 }, (_, i) => ({ id: `w${i}`, nodes: [] as NodeKey[] }));
+      const st = structureOf(wss.map((w) => ({ id: w.id, kind: "workspace" as const, members: [w] })));
+      const pos = new Map<string, GraphPoint>();
+      let c = 0;
+      for (let i = 0; i < 120; i++) {
+        const w = wss[Math.floor(rnd() * 4)]!;
+        if (w.nodes.length < 30) addTo(st, pos, w, k(`s${c++}`));
+      }
+      const fs = frames(st, pos).map((f) => f.rect);
+      const w = Math.max(...fs.map((r) => r.x + r.w)) - Math.min(...fs.map((r) => r.x));
+      const h = Math.max(...fs.map((r) => r.y + r.h)) - Math.min(...fs.map((r) => r.y));
+      worst = Math.max(worst, w / h);
+      expect([...layoutOverlaps(st, pos).keys()], `seed ${seed}`).toEqual([]);
+    }
+    expect(worst).toBeLessThanOrEqual(4);
+  });
+
   it("否定の対照: 出口の保証と実際の列数を外すと（頭打ちの列数の位置に置くと）既存のノードの真上になる", () => {
     // 頭打ちの列数（32）の位置 = 33 列目。32 列分、横一列に並んだ workspace の、33 列目より先を既存のノードがふさぐ状況を直接作る。
     const a = ws("a", 40);

@@ -12,6 +12,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import type { GraphLink, GraphOp, NodeKey } from "@sodashitsu/protocol";
 import {
   clampZoom,
+  displayFrames,
   edgeGeometry,
   fitGraphView,
   GRAPH_GRID,
@@ -41,11 +42,16 @@ import {
   type GraphBuild,
   type GraphNodeInfo,
 } from "../../store/graph.js";
+import { useGraphSpacesStore, type GraphRevealTarget } from "../../store/graphSpaces.js";
 import { useMachinesStore } from "../../store/machines.js";
+import { useSessionStore } from "../../store/session.js";
 import { useSettingsStore } from "../../store/settings.js";
 import { useViewStore } from "../../store/view.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
+import GraphFrameLayer from "./GraphFrameLayer.vue";
+import GraphLinkMark from "./GraphLinkMark.vue";
+import GraphSpaceBar from "./GraphSpaceBar.vue";
 import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import SubagentPanel from "./SubagentPanel.vue";
@@ -58,6 +64,7 @@ import {
   LINK_KIND_NAME,
   linkChipText,
   linkDescription,
+  pauseMark,
   linkConfigOf,
   linkDraftOf,
   linkEditOp,
@@ -74,6 +81,8 @@ const props = defineProps<{
 
 const view = useViewStore();
 const graph = useGraphStore();
+const spaces = useGraphSpacesStore();
+const session = useSessionStore();
 const machines = useMachinesStore();
 const settings = useSettingsStore();
 const registry = inject(TerminalRegistryKey, null);
@@ -85,37 +94,20 @@ const isMobile = isMobileViewport();
 const dialogEl = ref<HTMLElement | null>(null);
 const canvasEl = ref<HTMLElement | null>(null);
 
-// --- 表示（パン・ズーム）。このブラウザだけのもの（サーバへは保存しない。research-ui §2.4）-------------------------------
+// --- 表示（パン・ズーム）。このブラウザだけのもの（サーバへは保存しない。空間ごとに覚える。research-ui §2.4）-----------------------------
 
-const VIEWPORT_KEY = "soda.graphView.v1";
-function loadViewport(): GraphViewport | null {
-  try {
-    const raw = localStorage.getItem(VIEWPORT_KEY);
-    if (!raw) return null;
-    const v = JSON.parse(raw) as Partial<GraphViewport>;
-    if (typeof v.zoom !== "number" || typeof v.panX !== "number" || typeof v.panY !== "number")
-      return null;
-    if (![v.zoom, v.panX, v.panY].every(Number.isFinite)) return null;
-    return { zoom: clampZoom(v.zoom), panX: v.panX, panY: v.panY };
-  } catch {
-    return null;
-  }
-}
-const savedViewport = loadViewport();
-const viewport = ref<GraphViewport>(savedViewport ?? { zoom: 1, panX: 0, panY: 0 });
-/** 保存した表示が無ければ、最初に中身を描いたときに全体表示にする。 */
-let needsFit = savedViewport === null;
+const viewport = ref<GraphViewport>({ zoom: 1, panX: 0, panY: 0 });
+/** `viewport` が属する空間（空間を替えるときに、替える前の表示をこの空間として覚える）。まだ決めていなければ null。 */
+let viewportSpace: string | null = null;
+/** 覚えた表示が無い空間は、最初に中身を描いたときに全体表示にする。 */
+let needsFit = false;
 /** 表示の保存は間引く（パン・ズームの毎回には書かない。止まって 300ms 後・閉じるときにすぐ。レビュー R10）。 */
 const VIEWPORT_SAVE_DELAY_MS = 300;
 let viewportTimer: ReturnType<typeof setTimeout> | null = null;
 function saveViewport(): void {
   if (viewportTimer !== null) clearTimeout(viewportTimer);
   viewportTimer = null;
-  try {
-    localStorage.setItem(VIEWPORT_KEY, JSON.stringify(viewport.value));
-  } catch {
-    // 保存できなくても動く
-  }
+  if (viewportSpace !== null) spaces.saveViewport(viewportSpace, viewport.value);
 }
 function flushViewportSave(): void {
   if (viewportTimer !== null) saveViewport();
@@ -126,6 +118,55 @@ watch(viewport, () => {
 });
 onBeforeUnmount(flushViewportSave);
 
+/**
+ * 表示中の空間が替わったら、替える前の表示をその空間として覚え、替えた先の覚えた表示に替える（無ければ、中身が描かれたときに全体表示）。
+ * グラフが読み込まれてから。
+ */
+function syncSpaceViewport(): void {
+  if (!graph.graph) return;
+  const id = spaces.currentId;
+  if (viewportSpace === id) return;
+  if (viewportSpace !== null) {
+    if (viewportTimer !== null) clearTimeout(viewportTimer);
+    viewportTimer = null;
+    spaces.saveViewport(viewportSpace, viewport.value);
+  }
+  viewportSpace = id;
+  cancelViewportAnimation();
+  const saved = spaces.loadViewport(id);
+  if (saved) {
+    viewport.value = saved;
+    needsFit = false;
+  } else {
+    needsFit = true;
+    if (hasContent()) {
+      fitAll();
+      needsFit = false;
+    }
+  }
+}
+/** 表示中の空間に、描くものがあるか。 */
+function hasContent(): boolean {
+  return shownNodes.value.length > 0 || spaces.frames.length > 0;
+}
+/** 表示中の空間を切り替える（記憶・表示の読み替え。選択は、表示に無くなったら外す）。 */
+function switchSpace(id: string): void {
+  spaces.setCurrent(id);
+  syncSpaceViewport();
+  const s = selection.value;
+  if (s?.kind === "node" && !spaces.isShown(s.key)) selection.value = null;
+  if (s?.kind === "link" && !linkVisible(s.id)) selection.value = null;
+}
+function linkVisible(id: string): boolean {
+  const l = graph.links.find((x) => x.id === id);
+  return l !== undefined && (spaces.isShown(l.from) || spaces.isShown(l.to));
+}
+/** ノードのある空間が表示中でなければ、その空間に切り替える。 */
+function ensureSpaceOf(key: string): void {
+  const sp = spaces.spaceOfNode.get(key);
+  if (sp !== undefined && sp !== spaces.currentId) switchSpace(sp);
+}
+
 function canvasSize(): { w: number; h: number } {
   const el = canvasEl.value;
   const w = el?.clientWidth ?? 0;
@@ -133,9 +174,50 @@ function canvasSize(): { w: number; h: number } {
   // レイアウトの無い環境（試験）・開いた直後の 0 は、ありがちな大きさで代える。
   return { w: w > 0 ? w : 800, h: h > 0 ? h : 600 };
 }
-function fitAll(): void {
-  viewport.value = fitGraphView([...rects.value.values()], canvasSize());
+/** 全体表示に収める四角（表示中の空間のノードと囲い）。 */
+function fitRects(): GraphRect[] {
+  return [...shownNodes.value.map((n) => graphNodeRect(n)), ...spaces.frames.map((f) => f.rect)];
 }
+function fitAll(): void {
+  cancelViewportAnimation();
+  viewport.value = fitGraphView(fitRects(), canvasSize());
+}
+
+// --- 動き（サイドバー・印から動かす。`prefers-reduced-motion` のときは一度に切り替える）-----------------------------------
+const MOVE_MS = 260;
+let moveFrame: number | null = null;
+function cancelViewportAnimation(): void {
+  if (moveFrame !== null) cancelAnimationFrame(moveFrame);
+  moveFrame = null;
+}
+function prefersReducedMotion(): boolean {
+  try {
+    return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+function animateViewport(to: GraphViewport): void {
+  cancelViewportAnimation();
+  if (prefersReducedMotion() || typeof requestAnimationFrame !== "function") {
+    viewport.value = to;
+    return;
+  }
+  const from = viewport.value;
+  const t0 = performance.now();
+  const step = (now: number): void => {
+    const t = Math.min(1, (now - t0) / MOVE_MS);
+    const e = t * (2 - t); // ease-out
+    viewport.value = {
+      zoom: from.zoom + (to.zoom - from.zoom) * e,
+      panX: from.panX + (to.panX - from.panX) * e,
+      panY: from.panY + (to.panY - from.panY) * e,
+    };
+    moveFrame = t < 1 ? requestAnimationFrame(step) : null;
+  };
+  moveFrame = requestAnimationFrame(step);
+}
+onBeforeUnmount(cancelViewportAnimation);
 function zoomBy(factor: number, anchor?: { x: number; y: number }): void {
   const size = canvasSize();
   viewport.value = zoomGraphAt(
@@ -156,14 +238,16 @@ const worldStyle = computed(() => ({
 // --- 描くもの ------------------------------------------------------------------------------------------------
 
 /** Tab の順＝読み順（上から、同じ高さなら左から）。配置の変更に追従する（research-ui §2.12）。 */
-const orderedNodes = computed(() => [...graph.nodes].sort((a, b) => a.y - b.y || a.x - b.x));
+/** 表示中の空間のノード（構成が導けないときは全部）。 */
+const shownNodes = computed(() => graph.nodes.filter((n) => spaces.isShown(n.key)));
+const orderedNodes = computed(() => [...shownNodes.value].sort((a, b) => a.y - b.y || a.x - b.x));
 /**
  * Tab の入口（tabindex=0）のノード: 選んでいるノード、無ければ読み順の先頭。ほかのノードは -1 で、ノードの間の Tab は読み順で自前に動かす。
  * **DOM の順は並べ替えない**（グラフの順のまま）——並べ替えると、ドラッグ・矢印で他のノードを越えた瞬間に要素が付け替わりフォーカスが落ちる（g03 点検）。
  */
 const tabEntryKey = computed(() => {
   const s = selection.value;
-  if (s?.kind === "node" && graph.nodes.some((n) => n.key === s.key)) return s.key;
+  if (s?.kind === "node" && shownNodes.value.some((n) => n.key === s.key)) return s.key;
   return orderedNodes.value[0]?.key ?? null;
 });
 const rects = computed(
@@ -204,6 +288,8 @@ const edges = computed<EdgeView[]>(() => {
     const a = rects.value.get(link.from);
     const b = rects.value.get(link.to);
     if (!a || !b) continue;
+    // 片方が表示中の空間に無い線は、印（`marks`）で出す。両方とも無い線は出ない。
+    if (!spaces.isShown(link.from) || !spaces.isShown(link.to)) continue;
     // 監督は監督役→配下の向きで描く（design「線の種類の見た目」）。
     const [src, dst] = link.kind === "supervise" ? [b, a] : [a, b];
     const geo = edgeGeometry(src, dst, offsets.get(link.id) ?? 0);
@@ -216,6 +302,138 @@ const edges = computed<EdgeView[]>(() => {
   }
   return out;
 });
+
+/** 別の空間のノードとの線の印（見えているノードの縁。20261008-graph-first の T11g）。 */
+interface MarkView {
+  link: GraphLink;
+  /** 見えているノードの鍵。 */
+  nodeKey: string;
+  otherKey: string;
+  otherName: string;
+  otherSpace: string;
+  direction: "out" | "in";
+  /** 一時停止・上限・無効（線のチップと同じ語）。無ければ空。 */
+  status: string;
+  x: number;
+  y: number;
+}
+/** 1 つのノードの印を並べて出す数。残りは「+N」（押すと一覧）。 */
+const MARKS_PER_NODE = 3;
+const allMarks = computed<MarkView[]>(() => {
+  const out: MarkView[] = [];
+  const spaceLabel = (key: string): string => {
+    const id = spaces.spaceOfNode.get(key);
+    return spaces.spaces.find((s) => s.id === id)?.label ?? "別の空間";
+  };
+  const perNode = new Map<string, number>();
+  for (const link of graph.links) {
+    const sa = spaces.isShown(link.from);
+    const sb = spaces.isShown(link.to);
+    if (sa === sb) continue;
+    const mine = sa ? link.from : link.to;
+    const other = sa ? link.to : link.from;
+    const r = rects.value.get(mine);
+    if (!r) continue;
+    const i = perNode.get(mine) ?? 0;
+    perNode.set(mine, i + 1);
+    const status = [
+      pauseMark(link, graph.graph?.paused === true),
+      nodeInvalid(link.from) || nodeInvalid(link.to) ? "⚠" : "",
+    ]
+      .filter((t) => t !== "")
+      .join(" ");
+    out.push({
+      link,
+      nodeKey: mine,
+      otherKey: other,
+      otherName: graph.nodeInfo(other as NodeKey).name,
+      otherSpace: spaceLabel(other),
+      direction: sa ? "out" : "in",
+      status,
+      x: r.x + 12,
+      y: r.y + r.h + 2 + Math.min(i, MARKS_PER_NODE) * 20,
+    });
+  }
+  return out;
+});
+/** 並べて出す印（1 つのノードにつき 3 本まで）。 */
+const marks = computed<MarkView[]>(() => {
+  const seen = new Map<string, number>();
+  return allMarks.value.filter((m) => {
+    const n = seen.get(m.nodeKey) ?? 0;
+    seen.set(m.nodeKey, n + 1);
+    return n < MARKS_PER_NODE;
+  });
+});
+/** 3 本を超えるノードの「+N」。 */
+const markMore = computed(() => {
+  const counts = new Map<string, number>();
+  for (const m of allMarks.value) counts.set(m.nodeKey, (counts.get(m.nodeKey) ?? 0) + 1);
+  const out: { nodeKey: string; n: number; x: number; y: number }[] = [];
+  for (const [key, c] of counts) {
+    if (c <= MARKS_PER_NODE) continue;
+    const r = rects.value.get(key);
+    if (r) out.push({ nodeKey: key, n: c - MARKS_PER_NODE, x: r.x + 12, y: r.y + r.h + 2 + MARKS_PER_NODE * 20 });
+  }
+  return out;
+});
+/** 「+N」を押して開いている、そのノードの印の一覧。 */
+const markListKey = ref<string | null>(null);
+const markList = computed(() => (markListKey.value === null ? [] : allMarks.value.filter((m) => m.nodeKey === markListKey.value)));
+function chooseFromMarkList(m: MarkView): void {
+  markListKey.value = null;
+  goToMark(m);
+}
+/** 「+N」: ↑ で最後の印へ・Enter/↓ で一覧を開いて最初の項目へ。 */
+function onMoreKeydown(ev: KeyboardEvent, nodeKey: string): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  if (ev.key === "ArrowUp") {
+    const last = [...(dialogEl.value?.querySelectorAll<HTMLElement>(`[data-mark-node="${CSS.escape(nodeKey)}"]`) ?? [])].at(-1);
+    ev.preventDefault();
+    ev.stopPropagation();
+    last?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+  } else if (ev.key === "ArrowDown" || ev.key === "Enter" || ev.key === " ") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    markListKey.value = nodeKey;
+    void nextTick(() => dialogEl.value?.querySelector<HTMLElement>(".graph-mark-list-item")?.focus({ preventScroll: true }));
+  } else if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    focusNode(nodeKey);
+  }
+}
+/** 一覧: ↑ ↓ で項目を移り、`Esc` で閉じて「+N」へ戻る。 */
+function onMarkListKeydown(ev: KeyboardEvent): void {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+  const items = [...(dialogEl.value?.querySelectorAll<HTMLElement>(".graph-mark-list-item") ?? [])];
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    items[ev.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1)]?.focus({ preventScroll: true });
+  } else if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const key = markListKey.value;
+    markListKey.value = null;
+    void nextTick(() => dialogEl.value?.querySelector<HTMLElement>(`[data-mark-more="${CSS.escape(key ?? "")}"]`)?.focus({ preventScroll: true }));
+  }
+}
+/** 囲いのタグから `Esc`: 選んでいるノード（無ければ入口のノード）へ戻る。 */
+function leaveFrameLayer(): void {
+  const s = selection.value;
+  const key = s?.kind === "node" && shownNodes.value.some((n) => n.key === s.key) ? s.key : tabEntryKey.value;
+  if (key) focusNode(key);
+  else dialogEl.value?.focus({ preventScroll: true });
+}
+/** ノードで `m`: そのノードの最初の印へ入る（印のボタンは Tab の順に入れない）。 */
+function enterMarks(key: string): boolean {
+  const btn = dialogEl.value?.querySelector<HTMLElement>(`[data-mark-node="${CSS.escape(key)}"] button`);
+  if (!btn) return false;
+  btn.focus({ preventScroll: true });
+  return true;
+}
 const degree = computed(() => {
   const out = new Map<string, number>();
   const inn = new Map<string, number>();
@@ -242,6 +460,7 @@ function chipEl(id: string): HTMLElement | null {
   return dialogEl.value?.querySelector<HTMLElement>(`[data-link-chip="${CSS.escape(id)}"]`) ?? null;
 }
 function focusNode(key: string): void {
+  ensureSpaceOf(key);
   selection.value = { kind: "node", key };
   reveal(rects.value.get(key));
   void nextTick(() => nodeEl(key)?.focus({ preventScroll: true }));
@@ -330,17 +549,127 @@ function onNodePointerdown(ev: PointerEvent, key: string): void {
   target.focus({ preventScroll: true });
   drag.start(ev, target, {
     threshold: 4,
-    onMove: (e, dx, dy) => graph.setDragPosition(key, posOf(e, dx, dy)),
+    onMove: (e, dx, dy) => {
+      const p = posOf(e, dx, dy);
+      graph.setDragPosition(key, p);
+      nodeDrag.value = { key, blockedFrame: blockedFrameFor(key, p) };
+    },
     onEnd: (e, dx, dy) => {
       const p = posOf(e, dx, dy);
+      const blocked = blockedFrameFor(key, p);
+      nodeDrag.value = null;
+      if (blocked !== null) {
+        // ほかの workspace の囲いの上には置けない（pane を別の workspace へ移すのは PR4）。元の位置へ戻す。
+        graph.setDragPosition(key, null);
+        view.toast("ほかの workspace の囲いの上には置けません。元の位置へ戻しました。");
+        return;
+      }
       if (p.x === x0 && p.y === y0) graph.setDragPosition(key, null);
       else void graph.moveNodes([{ key, ...p }]);
     },
-    onCancel: () => graph.setDragPosition(key, null),
+    onCancel: () => {
+      nodeDrag.value = null;
+      graph.setDragPosition(key, null);
+    },
   });
 }
 
+/** ノードをドラッグしている間の状態（落とせない囲いの見た目）。 */
+const nodeDrag = ref<{ key: string; blockedFrame: string | null } | null>(null);
+/**
+ * ノード `key` を `pos` に置いたとき、ほかの workspace（や別のマシン）の囲いの上なら、その囲いの id。自分の workspace の囲い・自分の worktree グループの外側の囲いの上は落とせる。
+ * 判定はノードの中心。内側の囲い（メンバー）を先に見る。
+ */
+function blockedFrameFor(key: string, pos: { x: number; y: number }): string | null {
+  const own = spaces.memberOfNode.get(key);
+  if (own === undefined) return null;
+  const ownParent = spaces.infoMap.get(own)?.parentId ?? null;
+  const cx = pos.x + GRAPH_NODE_WIDTH / 2;
+  const cy = pos.y + GRAPH_NODE_HEIGHT / 2;
+  const hit = (f: { rect: GraphRect }): boolean =>
+    cx >= f.rect.x && cx <= f.rect.x + f.rect.w && cy >= f.rect.y && cy <= f.rect.y + f.rect.h;
+  const frames = spaces.frames.filter((f) => !f.placeholder);
+  const inner = frames.find((f) => f.kind !== "worktree" && f.id !== own && hit(f));
+  if (inner) return inner.id;
+  const outer = frames.find((f) => f.kind === "worktree" && f.id !== ownParent && hit(f));
+  return outer ? outer.id : null;
+}
+
+// --- 囲いのドラッグ（見出しをつかんで、中のノードをまとめて平行移動。20261008-graph-first の T11f）------------------------
+
+/** つかんで動かしている囲い。 */
+const frameDrag = ref<{ frameId: string; sig: string } | null>(null);
+function onFrameHeadingPointerdown(ev: PointerEvent, frameId: string): void {
+  if (isMobile.value || ev.button !== 0) return;
+  ev.stopPropagation(); // 背景のパンへ流さない
+  if (confirmState.value || connectFrom.value) return;
+  if (checklistOpen.value) {
+    closeChecklist();
+    return;
+  }
+  if (rekeyKey.value) {
+    closeRekey();
+    return;
+  }
+  if (panel.value) {
+    panelRef.value?.requestClose();
+    return;
+  }
+  const info = spaces.infoMap.get(frameId);
+  if (!info) return;
+  const keys = info.memberIds.flatMap((m) => spaces.memberNodes.get(m) ?? []);
+  const start = new Map<string, { x: number; y: number }>();
+  for (const n of graph.nodes) if (keys.includes(n.key)) start.set(n.key, { x: n.x, y: n.y });
+  if (start.size === 0) return;
+  const target = ev.currentTarget as HTMLElement;
+  const delta = (e: PointerEvent, dx: number, dy: number) => {
+    const rawX = dx / viewport.value.zoom;
+    const rawY = dy / viewport.value.zoom;
+    return e.altKey
+      ? { x: Math.round(rawX), y: Math.round(rawY) }
+      : { x: snapToGrid(rawX), y: snapToGrid(rawY) };
+  };
+  const clear = (): void => {
+    for (const k of start.keys()) graph.setDragPosition(k, null);
+  };
+  drag.start(ev, target, {
+    threshold: 4,
+    onStart: () => {
+      frameDrag.value = { frameId, sig: spaces.structureSig };
+    },
+    onMove: (e, dx, dy) => {
+      const d = delta(e, dx, dy);
+      for (const [k, p] of start) graph.setDragPosition(k, { x: p.x + d.x, y: p.y + d.y });
+    },
+    onEnd: (e, dx, dy) => {
+      frameDrag.value = null;
+      const d = delta(e, dx, dy);
+      if (d.x === 0 && d.y === 0) {
+        clear();
+        return;
+      }
+      // 離す前に `resolveDrop` で重ならない位置へ寄せる（`graph.moveNodes`）。1 回の `graph.update`。
+      void graph.moveNodes([...start].map(([key, p]) => ({ key, x: p.x + d.x, y: p.y + d.y })));
+    },
+    onCancel: () => {
+      frameDrag.value = null;
+      clear();
+    },
+  });
+}
+// 囲いの構成が変わった（pane が増えた・workspace が閉じた）ら、動かしているのを取りやめる。
+watch(
+  () => spaces.structureSig,
+  (sig) => {
+    if (frameDrag.value !== null && frameDrag.value.sig !== sig) {
+      drag.cancel();
+      liveMessage.value = "囲いの構成が変わったので、移動を取りやめました。";
+    }
+  },
+);
+
 function onCanvasPointerdown(ev: PointerEvent): void {
+  cancelViewportAnimation();
   if (ev.button !== 0 && ev.pointerType === "mouse") return;
   if (confirmState.value) return;
   if (checklistOpen.value) {
@@ -523,7 +852,7 @@ function toWorld(e: { clientX: number; clientY: number }): { x: number; y: numbe
 }
 function nodeAtPoint(p: { x: number; y: number }, exclude: string): string | null {
   return graphNodeAt(
-    graph.nodes
+    shownNodes.value
       .filter((n) => n.key !== exclude)
       .map((n) => ({ key: n.key, rect: graphNodeRect(n) })),
     p,
@@ -1185,6 +1514,9 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
     ev.preventDefault();
     ev.stopPropagation();
     startConnectMode(key);
+  } else if ((ev.key === "m" || ev.key === "M") && enterMarks(key)) {
+    ev.preventDefault();
+    ev.stopPropagation();
   } else if ((ev.key === "r" || ev.key === "R") && canRekey(key)) {
     ev.preventDefault();
     ev.stopPropagation();
@@ -1213,6 +1545,7 @@ function onNodeKeydown(ev: KeyboardEvent, key: string): void {
 
 /** ホイール: 既定はパン、Ctrl/⌘（トラックパッドのピンチ）はポインタの位置を中心にズーム。ページはスクロールさせない（AC-I5）。 */
 function onWheel(ev: WheelEvent): void {
+  cancelViewportAnimation();
   ev.preventDefault();
   ev.stopPropagation();
   if (ev.ctrlKey || ev.metaKey) {
@@ -1286,7 +1619,8 @@ watch(
           el?.focus();
           void graph.load();
         } else {
-          if (needsFit && graph.nodes.length > 0) {
+          syncSpaceViewport();
+          if (needsFit && hasContent()) {
             fitAll();
             needsFit = false;
           }
@@ -1329,7 +1663,8 @@ watch(
   () => graph.graph,
   (g) => {
     if (!g || !props.active) return;
-    if (needsFit && g.nodes.length > 0) {
+    syncSpaceViewport();
+    if (needsFit && hasContent()) {
       fitAll();
       needsFit = false;
     }
@@ -1343,6 +1678,99 @@ watch(
     if (s?.kind === "link" && !g.links.some((l) => l.id === s.id)) selection.value = null;
   },
 );
+
+// 表示中の空間が（選んでいる workspace が別の空間へ移った等で）替わったら、表示を読み替える。
+watch(
+  () => spaces.currentId,
+  () => {
+    if (props.active) syncSpaceViewport();
+  },
+);
+// 囲いの構成が変わって、まだ全体表示にしていない空間に中身が描かれたら、全体表示にする。
+watch(hasContent, (has) => {
+  if (props.active && has && needsFit) {
+    fitAll();
+    needsFit = false;
+  }
+});
+
+// --- サイドバー・印から動かす（20261008-graph-first の T11e・T11g）-------------------------------------------------------
+
+/** 空間の見出しを押した: その空間の全体が収まる位置と倍率にする。 */
+function onSpaceSelect(id: string): void {
+  switchSpace(id);
+  fitAll();
+}
+function nodeViewportFor(key: string): GraphViewport | null {
+  const r = rects.value.get(key);
+  if (!r) return null;
+  const size = canvasSize();
+  const zoom = clampZoom(Math.max(0.6, Math.min(1, viewport.value.zoom)));
+  return { zoom, panX: size.w / 2 - (r.x + r.w / 2) * zoom, panY: size.h / 2 - (r.y + r.h / 2) * zoom };
+}
+function handleReveal(t: GraphRevealTarget): void {
+  const st = spaces.structure;
+  if (st === null) return;
+  if (t.kind === "space") {
+    if (spaces.spaces.some((x) => x.id === t.spaceId)) onSpaceSelect(t.spaceId);
+    return;
+  }
+  if (t.kind === "workspace") {
+    const sp = spaces.spaceOfMember.get(t.workspaceId);
+    if (sp === undefined) return;
+    switchSpace(sp);
+    const frame = displayFrames(st, new Map(graph.nodes.map((n) => [n.key, { x: n.x, y: n.y }])), sp).find(
+      (f) => f.id === t.workspaceId,
+    );
+    spaces.flash(t.workspaceId);
+    if (frame) animateViewport(fitGraphView([frame.rect], canvasSize(), 60));
+    return;
+  }
+  const sp = spaces.spaceOfNode.get(t.key);
+  if (sp === undefined) return;
+  switchSpace(sp);
+  selection.value = { kind: "node", key: t.key };
+  const memberId = spaces.memberOfNode.get(t.key);
+  if (memberId) spaces.flash(memberId);
+  const vp = nodeViewportFor(t.key);
+  if (vp) animateViewport(vp);
+  void nextTick(() => nodeEl(t.key)?.focus({ preventScroll: true }));
+}
+watch(
+  () => spaces.revealSeq,
+  () => {
+    const t = spaces.revealTarget;
+    if (props.kind !== "screen" || !props.active || t === null) return;
+    // サイドバーの行を押した後の処理（選ぶ・フォーカスを面へ戻す）が先に走ってから動かす。
+    void nextTick(() => handleReveal(t));
+  },
+);
+
+/** 別の空間のノードとの線の印から: 相手のノードへ（相手の空間へ切り替える）。 */
+function goToMark(m: { otherKey: string }): void {
+  spaces.requestReveal({ kind: "node", key: m.otherKey });
+}
+function openMarkSettings(m: { link: GraphLink }): void {
+  onChipClick(m.link.id);
+}
+
+// --- tab のタグ・強調（20261008-graph-first の T11d）-------------------------------------------------------------------
+/** ノードの右上のタグ（tab が 1 つだけの workspace では出さない）。 */
+function tabLabelOf(key: string): string | null {
+  const loc = infos.value.get(key)?.location;
+  if (!loc) return null;
+  const ws = session.workspaces.get(loc.workspaceId);
+  if (!ws || ws.tabIds.length < 2) return null;
+  return session.tabs.get(loc.tabId)?.label ?? null;
+}
+/** 見出しのタグで強調した tab のノードは強く、同じ workspace のほかの tab のノードは弱く。 */
+function tabEmphasisOf(key: string): "normal" | "strong" | "weak" {
+  const e = spaces.emphasis;
+  if (e === null) return "normal";
+  const loc = infos.value.get(key)?.location;
+  if (!loc || loc.workspaceId !== e.workspaceId) return "normal";
+  return loc.tabId === e.tabId ? "strong" : "weak";
+}
 
 // --- キー -----------------------------------------------------------------------------------------------------
 
@@ -1578,9 +2006,28 @@ function chipAria(e: EdgeView): string {
           ×
         </button>
       </header>
+      <GraphSpaceBar
+        v-if="spaces.showBar"
+        :spaces="spaces.spaces"
+        :current-id="spaces.currentId"
+        @select="onSpaceSelect"
+      />
       <div class="graph-body">
         <div ref="canvasEl" class="graph-canvas" @pointerdown="onCanvasPointerdown">
           <div class="graph-world" :style="worldStyle">
+            <GraphFrameLayer
+              :frames="spaces.frames"
+              :infos="spaces.infoMap"
+              :selected-workspace-id="view.workspaceId"
+              :flash-id="spaces.flashId"
+              :emphasis="spaces.emphasis"
+              :blocked-id="nodeDrag?.blockedFrame ?? null"
+              :dragging-id="frameDrag?.frameId ?? null"
+              :read-only="isMobile"
+              @heading-pointerdown="onFrameHeadingPointerdown"
+              @leave="leaveFrameLayer"
+              @tag="spaces.toggleEmphasis"
+            />
             <svg class="graph-edges" width="1" height="1" aria-hidden="true">
               <GraphEdge
                 v-for="e in edges"
@@ -1605,9 +2052,12 @@ function chipAria(e: EdgeView): string {
               />
             </svg>
             <GraphNode
-              v-for="n in graph.nodes"
+              v-for="n in shownNodes"
               :key="n.key"
               :info="infos.get(n.key)!"
+              :tab-label="tabLabelOf(n.key)"
+              :tab-emphasis="tabEmphasisOf(n.key)"
+              :blocked="nodeDrag?.key === n.key && nodeDrag.blockedFrame !== null"
               :x="n.x"
               :y="n.y"
               :selected="isNodeSelected(n.key)"
@@ -1628,6 +2078,58 @@ function chipAria(e: EdgeView): string {
               @rekey="openRekey(n.key)"
               @subagents="openSubagents(n.key)"
             />
+            <GraphLinkMark
+              v-for="m in marks"
+              :key="`mark-${m.link.id}`"
+              :link-id="m.link.id"
+              :other-name="m.otherName"
+              :other-space="m.otherSpace"
+              :kind-name="LINK_KIND_NAME[m.link.kind]"
+              :direction="m.direction"
+              :node-key="m.nodeKey"
+              :status="m.status"
+              :x="m.x"
+              :y="m.y"
+              :selected="isLinkSelected(m.link.id)"
+              :read-only="isMobile"
+              @go="goToMark(m)"
+              @settings="openMarkSettings(m)"
+              @back="focusNode(m.nodeKey)"
+            />
+            <button
+              v-for="more in markMore"
+              :key="`more-${more.nodeKey}`"
+              type="button"
+              class="graph-mark-more"
+              tabindex="-1"
+              :data-mark-more="more.nodeKey"
+              @keydown="onMoreKeydown($event, more.nodeKey)"
+              :style="{ left: `${more.x}px`, top: `${more.y}px` }"
+              :aria-label="`別の空間との線があと ${more.n} 本。押すと一覧`"
+              @pointerdown.stop
+              @click="markListKey = markListKey === more.nodeKey ? null : more.nodeKey"
+            >
+              +{{ more.n }}
+            </button>
+            <div
+              v-if="markList.length > 0"
+              class="graph-mark-list"
+              role="menu"
+              @keydown="onMarkListKeydown"
+              :style="{ left: `${markList[0]!.x}px`, top: `${markList[0]!.y + 4 * 20}px` }"
+              @pointerdown.stop
+            >
+              <button
+                v-for="m in markList"
+                :key="`list-${m.link.id}`"
+                type="button"
+                role="menuitem"
+                class="graph-mark-list-item"
+                @click="chooseFromMarkList(m)"
+              >
+                {{ m.direction === "out" ? "→" : "←" }} {{ m.otherName }}（{{ m.otherSpace }}・{{ LINK_KIND_NAME[m.link.kind] }}{{ m.status ? `・${m.status}` : "" }}）
+              </button>
+            </div>
             <button
               v-for="e in edges"
               :key="`chip-${e.link.id}`"
@@ -1653,6 +2155,12 @@ function chipAria(e: EdgeView): string {
           </div>
           <p v-if="graph.graph && graph.nodes.length === 0" class="graph-empty">
             表示する pane がありません。
+          </p>
+          <p
+            v-else-if="graph.graph && shownNodes.length === 0 && spaces.frames.length === 0"
+            class="graph-empty"
+          >
+            この空間には表示する pane がありません。
           </p>
           <p v-else-if="!graph.graph" class="graph-empty">
             {{ graph.loadError ?? "読み込んでいます…" }}
@@ -1821,6 +2329,41 @@ function chipAria(e: EdgeView): string {
 .graph-chip-selected {
   outline: 2px solid var(--soda-accent, #6070a1);
   outline-offset: 1px;
+}
+.graph-mark-more {
+  position: absolute;
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 9px;
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
+  font-size: 10px;
+  cursor: pointer;
+}
+.graph-mark-list {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: var(--soda-shape-radius, 4px);
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-menu-fg, #f8f8f2);
+  font-size: 11px;
+  z-index: 3;
+}
+.graph-mark-list-item {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.graph-mark-list-item:hover {
+  background: var(--soda-menu-hover-bg, #343746);
 }
 .graph-chip-paused {
   color: var(--soda-warn-fg, #ffb86c);
