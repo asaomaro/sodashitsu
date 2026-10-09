@@ -28,6 +28,7 @@ const raw = {
   paneOuterBorders: true,
   paneBorders: "off",
   paneGaps: false,
+  uiStyle: "modern",
   scrollback: 2000,
   newCwdPolicy: "path",
   newCwdPath: "/tmp",
@@ -67,6 +68,7 @@ describe("applyPrefsToStores", () => {
     expect(settings.paneOuterBorders).toBe(true);
     expect(settings.paneBorders).toBe("off");
     expect(settings.paneGaps).toBe(false);
+    expect(settings.uiStyle).toBe("modern");
     expect(settings.scrollback).toBe(2000);
     expect(settings.newCwdPolicy).toBe("path");
     expect(settings.newCwdPath).toBe("/tmp");
@@ -98,6 +100,7 @@ describe("applyPrefsToStores", () => {
     expect(settings.shellCwdTracking).toBe(true);
     expect(settings.displayPanelInitial).toBe("open");
     expect(settings.displayPanelDock).toBe("right");
+    expect(settings.uiStyle).toBe("classic");
     expect(settings.displayBandEdge).toBe("top");
     expect(settings.paneBorders).toBe("always");
     expect(settings.theme).not.toBe("nord");

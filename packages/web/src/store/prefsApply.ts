@@ -24,6 +24,7 @@ import {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadUiStyle,
   useSettingsStore,
 } from "./settings.js";
 import { loadAgentSort, loadCollapsedAutoGroups, loadUngroupedCollapsed, loadWorkspaceSort, useViewStore } from "./view.js";
@@ -52,6 +53,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("paneOuterBorders", loadPaneOuterBorders(raw["paneOuterBorders"]));
   set("paneBorders", loadPaneBorders(raw["paneBorders"]));
   set("paneGaps", loadPaneGaps(raw["paneGaps"]));
+  set("uiStyle", loadUiStyle(raw["uiStyle"]));
   set("scrollback", loadScrollbackPref(raw["scrollback"]));
   set("newCwdPolicy", loadNewCwdPolicy(raw["newCwdPolicy"]));
   set("newCwdPath", loadNewCwdPath(raw["newCwdPath"]));

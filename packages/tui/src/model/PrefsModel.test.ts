@@ -127,3 +127,22 @@ describe("区画の折りたたみ（20261004-ui-interaction-polish）", () => {
     }
   });
 });
+
+describe("知らない項目を保つ（20261008-ui-style の uiStyle。端末版は読まない）", () => {
+  it("prefs.changed で届いた uiStyle を、知らない項目として保つ。ほかの項目を重ねても・サーバの返事で置き換えても消えない", () => {
+    const p = new PrefsModel();
+    p.apply({ theme: "nord", uiStyle: "modern" }, 1);
+    expect(p.shared.uiStyle).toBe("modern");
+    // 端末版が、ほかの項目を（手元で先に）替える。
+    const release = p.overlay({ paneGaps: false });
+    expect(p.shared.uiStyle).toBe("modern");
+    expect(p.shared.paneGaps).toBe(false);
+    // サーバの返事（prefs.set の結果。uiStyle を含む全体）で置き換わっても、重ねを外しても保たれる。
+    p.apply({ theme: "nord", uiStyle: "modern", paneGaps: false }, 2);
+    release();
+    expect(p.shared.uiStyle).toBe("modern");
+    // 端末版が読む値は、uiStyle に影響されない。
+    expect(p.theme).toBe("nord");
+    expect(p.paneGaps).toBe(false);
+  });
+});

@@ -1168,8 +1168,10 @@ describe("ActionDispatcher — reloadConfig（設定を読み直す。20260922-a
     settings.paneBorders = "off";
     settings.paneGaps = false;
     settings.shellCwdTracking = false;
-    localStorage.setItem("soda.prefs.v1", JSON.stringify({ paneFrameThickness: "huge", paneBorders: "framed", paneGaps: "no", shellCwdTracking: "off" }));
+    settings.uiStyle = "modern";
+    localStorage.setItem("soda.prefs.v1", JSON.stringify({ paneFrameThickness: "huge", paneBorders: "framed", paneGaps: "no", shellCwdTracking: "off", uiStyle: "fancy" }));
     dispatcher.run({ type: "reloadConfig" });
+    expect(settings.uiStyle).toBe("classic");
     expect(settings.shellCwdTracking).toBe(true);
     expect(settings.paneFrameThickness).toBe("default");
     expect(settings.paneBorders).toBe("always");

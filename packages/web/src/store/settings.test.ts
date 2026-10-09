@@ -866,3 +866,36 @@ describe("useSettingsStore — サイドバーの行の並び（20260927-sidebar
     expect(store.sidebarRows).toBe(before);
   });
 });
+
+describe("uiStyle（画面の様式。20261008-ui-style）", () => {
+  it("何も保存されていなければ classic。壊れた値・知らない値も classic", () => {
+    expect(useSettingsStore(pinia).uiStyle).toBe("classic");
+    for (const bad of ["Modern", 1, null, {}, "x"]) {
+      localStorage.clear();
+      writePrefs({ uiStyle: bad });
+      expect(useSettingsStore(createPinia()).uiStyle, JSON.stringify(bad)).toBe("classic");
+    }
+  });
+
+  it("変えると反映と保存を同時に行い、新しいストアが読み戻す。classic に戻すときも値を書く（消さない）", () => {
+    const store = useSettingsStore(pinia);
+    store.setUiStyle("modern");
+    expect(store.uiStyle).toBe("modern");
+    expect(readPrefs()["uiStyle"]).toBe("modern");
+    expect(useSettingsStore(createPinia()).uiStyle).toBe("modern");
+    store.setUiStyle("classic");
+    expect(store.uiStyle).toBe("classic");
+    expect(readPrefs()["uiStyle"]).toBe("classic");
+    expect("uiStyle" in readPrefs()).toBe(true);
+  });
+
+  it("別のタブ・ウィンドウでの変更に storage イベントで追従する", () => {
+    const store = useSettingsStore(pinia);
+    writePrefs({ uiStyle: "modern" });
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
+    expect(store.uiStyle).toBe("modern");
+    writePrefs({ uiStyle: "classic" });
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
+    expect(store.uiStyle).toBe("classic");
+  });
+});
