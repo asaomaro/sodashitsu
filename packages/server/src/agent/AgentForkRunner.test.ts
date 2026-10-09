@@ -1,7 +1,8 @@
 import { RpcError, type AgentInfo, type Pane } from "@sodashitsu/protocol";
 import { describe, expect, it } from "vitest";
 import type { ForkSourceInfo } from "../git/WorktreeService.js";
-import { AgentForkRunner } from "./AgentForkRunner.js";
+import { MemoryLogger } from "../log/Logger.js";
+import { AgentForkRunner, type AgentForkRunnerDeps } from "./AgentForkRunner.js";
 
 const ID = "3e81f9a7-a757-461a-b21c-196db1d9196e";
 const agent: AgentInfo = { instanceId: "i1", kind: "claude", label: "c", state: "idle", completionSeq: 0, serverSeenSeq: 0, verified: true, since: 0 };
@@ -12,8 +13,12 @@ const info = (over: Partial<ForkSourceInfo> = {}): ForkSourceInfo => ({ repoRoot
 function make(p: Pane | undefined, inspect: (dir: string, branch?: string) => Promise<ForkSourceInfo>, platform: NodeJS.Platform = "linux") {
   const calls: unknown[] = [];
   const runner = new AgentForkRunner({
-    session: { getPane: () => p },
-    worktrees: { inspectForFork: async (d, b) => (calls.push([d, b]), inspect(d, b)) },
+    session: { getPane: () => p } as unknown as AgentForkRunnerDeps["session"],
+    worktrees: { inspectForFork: async (d: string, b?: string) => (calls.push([d, b]), inspect(d, b)) } as unknown as AgentForkRunnerDeps["worktrees"],
+    terminals: { get: () => undefined },
+    starter: {} as AgentForkRunnerDeps["starter"],
+    bus: { subscribe: () => ({ dispose: () => undefined }), publish: () => undefined },
+    logger: new MemoryLogger(),
     platform,
   });
   return { runner, calls };

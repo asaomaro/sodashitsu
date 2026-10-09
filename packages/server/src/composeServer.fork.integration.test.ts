@@ -188,6 +188,23 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     await vi.waitFor(() => expect(stages(client, result.paneId)).toContain("done"), { timeout: 30_000 });
     expect(stages(client, result.paneId)).toEqual(["pane_created", "launched", "detected", "ready", "done"]);
     expect(agentOf(server, result.paneId)?.kind).toBe("claude");
+    // グラフ: 新しい pane のノードに、元のノードを指す注記（見るだけの線）。自動の監督の線・承認の代理の線は付かない（AC4・S8）。
+    expect(result.annotated).toBe(true);
+    const g = server.graph.get();
+    expect(g.nodes.find((n) => n.key === `local:${result.paneId}`)?.forkedFrom).toBe(`local:${paneId}`);
+    expect(g.links.filter((l) => l.from === `local:${result.paneId}` || l.to === `local:${result.paneId}`)).toEqual([]);
+  });
+
+  it("元の pane を閉じると、fork した pane のノードの注記は消える（元のノードが無くなったら、線は消える。A5）", async () => {
+    const { server, client, paneId } = await bootWithAgent();
+    const result = await ok<{ paneId: string }>(client.request("agent.fork", { paneId, target: { kind: "same" } }));
+    const key = `local:${result.paneId}`;
+    await vi.waitFor(() => expect(server.graph.get().nodes.find((n) => n.key === key)?.forkedFrom).toBe(`local:${paneId}`), { timeout: 10_000 });
+    await vi.waitFor(() => expect(stages(client, result.paneId)).toContain("done"), { timeout: 30_000 });
+    await ok(client.request("pane.close", { paneId }));
+    await vi.waitFor(() => expect(server.graph.get().nodes.some((n) => n.key === `local:${paneId}`)).toBe(false), { timeout: 15_000, interval: 100 });
+    expect(server.graph.get().nodes.find((n) => n.key === key)).toBeDefined(); // fork した側は残る
+    expect(server.graph.get().nodes.find((n) => n.key === key)).not.toHaveProperty("forkedFrom");
   });
 
   it("同じ pane を続けて 2 回 fork すると、別々の pane が 2 つできる。同時の 2 回目は fork_in_progress（二重押しを弾く）", async () => {

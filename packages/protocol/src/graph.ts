@@ -60,6 +60,12 @@ export interface GraphNode {
   /** 位置（ズーム前の px。グリッドへの吸着はクライアントが行う）。 */
   x: number;
   y: number;
+  /**
+   * このノードのエージェントが、どのノードのエージェントから fork されたか（20261009-agent-fork）。**見るだけの注記**で、線の種類ではない
+   * （指示は流れない・設定を持たない・線の上限に数えない）。サーバが書き、利用者の `graph.update` では書けない。指す先のノードが消えたら外れる。
+   * 古い版は、読み込みでこの項目を落とす（保存し直すと注記は消える。グラフのファイルは読める）。
+   */
+  forkedFrom?: NodeKey;
 }
 
 export interface GraphLink {
@@ -142,6 +148,7 @@ export const GraphNodeSchema = z.object({
   key: nodeKey,
   x: coord,
   y: coord,
+  forkedFrom: nodeKey.optional(),
 });
 export const GraphLinkSchema = z.object({
   id: linkId,

@@ -80,6 +80,7 @@ import { MetadataService } from "./metadata/MetadataService.js";
 import { PrefsStore } from "./persist/PrefsStore.js";
 import { GraphStore } from "./persist/GraphStore.js";
 import { GraphEngine } from "./graph/GraphEngine.js";
+import { LOCAL_MACHINE, nodeKey } from "@sodashitsu/client-core";
 import { AgentLineage } from "./graph/AgentLineage.js";
 import { AgentForkRunner } from "./agent/AgentForkRunner.js";
 import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
@@ -322,7 +323,20 @@ export async function composeServer(
   });
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
-  const agentFork = new AgentForkRunner({ session, worktrees, terminals, starter: agentStarter, bus, logger }); // 20261009-agent-fork
+  const agentFork = new AgentForkRunner({
+    session,
+    worktrees,
+    terminals,
+    starter: agentStarter,
+    bus,
+    logger,
+    // 新しい pane のノードに、fork の注記を書く（見るだけの線。20261009-agent-fork の A12）。ノードは維持（`GraphMaintainer`）が 50ms の遅れで足すので、先にそろえる。
+    // 上限でノードが足せなければ、注記なしで成功する（false）。
+    annotate: async (newPaneId, sourcePaneId) => {
+      await graphMaintainer.reconcileNow();
+      return graph.setForkedFrom(nodeKey(LOCAL_MACHINE, newPaneId), nodeKey(LOCAL_MACHINE, sourcePaneId));
+    },
+  }); // 20261009-agent-fork
   // 独自コマンド（20260927-custom-command-keys）。状態ディレクトリ（名前付き session ではその session のもの）の commands.json。起動時に 1 度読む
   // （まだ `/ws` を受け付けていないので `command.updated` を受け取る接続は無い）。読み直しは `command.reload`。
   const commands = new CommandService({ filePath: join(options.stateDir, COMMANDS_FILE_NAME), session, terminals, bus, clients, logger });
