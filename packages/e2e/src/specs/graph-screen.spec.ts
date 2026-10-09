@@ -210,3 +210,207 @@ test("スクリプトの面（script-html）を載せた pane がある状態で
   await expect(page.getByText(/入力のフォーカスを繰り返し外しています/)).toHaveCount(0);
   ev.kill();
 });
+
+// --- PR1b（20261008-graph-first）で足した検証: 主な領域の画面 --------------------------------------------------------------------------
+
+/** ブラウザが送った `client.view`（`visible` の有無を問わず）の数。大きさの申告が送り直されていないことを数で見る。 */
+async function watchAllClientViews(page: Page): Promise<{ count: () => number }> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Network.enable");
+  let count = 0;
+  cdp.on("Network.webSocketFrameSent", (e) => {
+    if (e.response.opcode !== 1) return;
+    try {
+      const msg = JSON.parse(e.response.payloadData) as { method?: string };
+      if (msg.method === "client.view") count++;
+    } catch {
+      // JSON でないテキストは無視する
+    }
+  });
+  return { count: () => count };
+}
+
+const baseScreen = (page: Page) => page.locator('[data-screen="base"]');
+const switcherBtn = (page: Page, id: "base" | "graph") => page.locator(`[data-screen-id="${id}"]`);
+const paneBoxes = (page: Page) => page.locator(".pane-frame").evaluateAll((els) => els.map((e) => {
+  const r = e.getBoundingClientRect();
+  return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+}));
+
+test("画面を切り替えても、client.view は送られず、PTY の大きさ・pane の箱は変わらない。基本画面は描かれたまま見えず、押せない（AC-S7・D11）", async ({ page, appServer }) => {
+  const { client, p1, p2, views: shownViews } = await setup(page, appServer);
+  const views = await watchAllClientViews(page); // 開いた後に送られる分を数える（起動の申告は含まない）
+  await page.waitForTimeout(800); // 起動直後の申告が落ち着くまで
+  const sizes0 = { p1: client.paneSize(p1), p2: client.paneSize(p2) };
+  expect(sizes0.p1).toBeDefined();
+  const boxes0 = await paneBoxes(page);
+  const count0 = views.count();
+  for (let i = 0; i < 3; i++) {
+    // キーで
+    await openByKey(page);
+    expect(await baseScreen(page).evaluate((el) => ({ inert: el.hasAttribute("inert"), visibility: getComputedStyle(el).visibility, display: getComputedStyle(el).display }))).toEqual({ inert: true, visibility: "hidden", display: "block" });
+    expect(await paneBoxes(page)).toEqual(boxes0); // 隠れていても箱は同じ（0×0 にならない）
+    await expect(page.locator(".xterm-helper-textarea")).toHaveCount(2); // 描かれたまま
+    await prefixKey(page, "a");
+    await expect(graphView(page)).toBeHidden();
+    // 切り替えの部品で
+    await switcherBtn(page, "graph").click();
+    await expect(graphView(page)).toBeVisible();
+    await switcherBtn(page, "base").click();
+    await expect(graphView(page)).toBeHidden();
+  }
+  await page.waitForTimeout(600); // 遅れて送られる申告を巻き込む
+  expect(views.count(), "切り替えで client.view が送られていない").toBe(count0);
+  expect(await paneBoxes(page)).toEqual(boxes0);
+  expect({ p1: client.paneSize(p1), p2: client.paneSize(p2) }).toEqual(sizes0);
+  // 申告の中身も、2 つの pane が表示のまま（1×1 になっていない）
+  const last = shownViews.latest();
+  expect(last?.visible.length).toBe(2);
+  for (const v of last!.visible) expect(v.cols).toBeGreaterThan(10);
+});
+
+test("グラフの画面にもサイドバーが出て、操作できる（workspace を選び直す）。基本画面へは切り替わらない。戻ると選んだ workspace が出る（AC-S1・AC-S3）", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const cwd = process.cwd();
+  await client.request("workspace.create", { cwd, label: "wsB" });
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+  const rows = page.locator(".sidebar-spaces .sidebar-row");
+  await expect(rows).toHaveCount(2);
+  await focusTerminal(page);
+  await openByKey(page);
+  // サイドバーは見えていて、押せる（グラフの面に隠れていない）
+  await expect(page.locator(".sidebar")).toBeVisible();
+  const row = rows.filter({ hasText: "wsB" });
+  await expect(row).toBeVisible();
+  const hit = await row.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return t !== null && el.contains(t);
+  });
+  expect(hit).toBe(true);
+  await row.click();
+  await expect(graphView(page)).toBeVisible(); // 基本画面へ切り替わらない
+  await expect(rows.filter({ hasText: "wsB" })).toHaveClass(/sidebar-row-current/);
+  // グラフの面に戻ると、グラフのキーが働く（フォーカスはサイドバーの行にある間は働かない）
+  await graphView(page).locator("[data-node-key]").first().focus();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(graphView(page)).toBeHidden();
+  // 基本画面に、選んだ workspace の pane が出ている
+  await expect(rows.filter({ hasText: "wsB" })).toHaveClass(/sidebar-row-current/);
+  await expect(page.locator(".xterm-helper-textarea")).toHaveCount(1);
+  await expect.poll(() => activeIsTerminal(page)).toBe(true);
+});
+
+test("切り替えの部品: 押すとグラフの面（フォーカスはグラフの中）／基本画面（フォーカスは端末）へ。選んでいる pane は保たれる", async ({ page, appServer }) => {
+  const { p2, input } = await setup(page, appServer);
+  await page.locator(".xterm-helper-textarea").nth(1).focus();
+  await switcherBtn(page, "graph").click();
+  await expect(graphView(page)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.closest(".graph-view") !== null)).toBe(true);
+  await expect(switcherBtn(page, "graph")).toHaveAttribute("aria-pressed", "true");
+  await switcherBtn(page, "base").click();
+  await expect(graphView(page)).toBeHidden();
+  await expect.poll(() => activeIsTerminal(page)).toBe(true);
+  const before = input().length;
+  await page.keyboard.type("Z");
+  await expect.poll(() => input().slice(before).map((i) => `${i.paneId}:${i.text}`).join("")).toContain(`${p2}:Z`); // 2 つ目の pane のまま
+});
+
+test("グラフの面の外（サイドバー）にフォーカスがあるときは prefix+a で基本画面へ戻れる。ノードを開いて「pane へ」で基本画面のその pane へ", async ({ page, appServer }) => {
+  const { p1, p2, input } = await setup(page, appServer);
+  await openByKey(page);
+  await page.locator(".sidebar-spaces .sidebar-row").first().focus(); // サイドバーにフォーカス
+  await prefixKey(page, "a");
+  await expect(graphView(page)).toBeHidden();
+  // ノードの［pane へ］
+  await openByKey(page);
+  const goto = node(page, p2).locator(".graph-node-goto");
+  await node(page, p2).hover();
+  await goto.click({ force: true });
+  await expect(graphView(page)).toBeHidden();
+  await expect.poll(() => activeIsTerminal(page)).toBe(true);
+  const before = input().length;
+  await page.keyboard.type("Q");
+  await expect.poll(() => input().slice(before).map((i) => `${i.paneId}:${i.text}`).join("")).toContain(`${p2}:Q`);
+  expect(p1).not.toBe(p2);
+});
+
+test("窓を狭めてモバイル（1 列）の画面になると基本画面へ戻り、グラフは重ねるダイアログのまま。広げても開き直さない", async ({ page, appServer }) => {
+  await setup(page, appServer);
+  await openByKey(page);
+  await page.setViewportSize({ width: 600, height: 800 });
+  await expect(page.locator(".mobile-shell")).toBeVisible();
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await expect(graphView(page)).toBeHidden(); // 画面は基本画面へ戻っている
+  // 1 列のグラフ: 重ねる dialog
+  await page.locator(".mobile-shell-graph-btn").click();
+  const dlg = page.locator("dialog.graph-dialog");
+  await expect(dlg).toHaveAttribute("open", "");
+  await expect(dlg.locator(".graph-toolbar")).toBeVisible();
+  await dlg.locator(".graph-close").click();
+  await expect(dlg).not.toHaveAttribute("open", "");
+  // 広げると、サイドバーのある画面（基本画面）に戻る。グラフは開き直さない
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await expect(graphView(page)).toBeHidden();
+});
+
+test("スクリプトの面を載せた状態で、切り替え・サイドバーの操作・ask のダイアログをくり返しても、フォーカスの脱落が数えられない（面が止まらない）", async ({ page, appServer }) => {
+  await enableScript(appServer);
+  const { p1 } = await setup(page, appServer);
+  const ev = await runDisplay(appServer, p1, ["events", "g"]);
+  expect((await ev.nextLine())["type"]).toBe("display.ready");
+  await setScriptOk(appServer, p1, "g", `<!doctype html><body><p id=x>ok</p></body>`);
+  await expect(scriptFrameEl(page)).toHaveCount(1);
+  await focusTerminal(page);
+  const row = page.locator(".sidebar-spaces .sidebar-row").first();
+  for (let i = 0; i < 6; i++) {
+    await switcherBtn(page, "graph").click();
+    await expect(graphView(page)).toBeVisible();
+    await row.click(); // サイドバーの操作
+    await expect(graphView(page)).toBeVisible();
+    const run = await runAsk(appServer, p1, { title: "確認", questions: [{ id: "a", label: "どれ", options: ["x", "y"] }] });
+    await expect(askDialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await run.done;
+    await expect(askDialog(page)).toBeHidden();
+    await switcherBtn(page, "base").click();
+    await expect(graphView(page)).toBeHidden();
+    await expect.poll(() => activeIsTerminal(page)).toBe(true);
+  }
+  await page.waitForTimeout(3500);
+  await expect(scriptFrameEl(page)).toHaveCount(1);
+  await expect(page.getByText(/キー入力を取ろうとし続けたので閉じました/)).toHaveCount(0);
+  await expect(page.getByText(/入力のフォーカスを繰り返し外しています/)).toHaveCount(0);
+  ev.kill();
+});
+
+// 画面の見た目の確認用（結果に載せるスクリーンショット）。`GRAPH_SHOTS_DIR` を渡したときだけ撮る。
+test("スクリーンショット: グラフの画面にサイドバーが出ている（暗い・明るい）", async ({ browser, appServer }) => {
+  const dir = process.env["GRAPH_SHOTS_DIR"];
+  test.skip(dir === undefined, "GRAPH_SHOTS_DIR を渡したときだけ撮る");
+  const client = await appServer.openClient();
+  const p1 = client.helloSnapshot()!.panes[0]!.id;
+  const cwd = process.cwd();
+  await client.request("workspace.create", { cwd, label: "wsB" });
+  await client.request("pane.split", { paneId: p1, direction: "right" });
+  for (const scheme of ["dark", "light"] as const) {
+    await client.request("prefs.set", { patch: { theme: scheme === "light" ? "catppuccin-latte" : "dracula" } });
+    const context = await browser.newContext({ colorScheme: scheme, viewport: { width: 1280, height: 720 } });
+    const page = await context.newPage();
+    await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+    await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
+    await page.keyboard.press("Control+b");
+    await page.keyboard.press("a");
+    await expect(graphView(page)).toBeVisible();
+    await expect(graphView(page).locator("[data-node-key]").first()).toBeVisible();
+    // 最初の案内のトースト（押すと消える）を消してから撮る
+    await page.evaluate(() => document.querySelectorAll<HTMLElement>(".toast-list .toast").forEach((t) => t.click()));
+    await expect(page.locator(".toast-list .toast")).toHaveCount(0);
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${dir}/graph-screen-${scheme}.png` });
+    await context.close();
+  }
+});

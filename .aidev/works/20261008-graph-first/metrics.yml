@@ -21,3 +21,5 @@ events:
   - { ts: 2026-10-08T23:16:43Z, phase: test, event: smoke, metrics: { result: pass, exit_code: 0, commands: 10 } }
   - { ts: 2026-10-08T23:33:12Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T10b, mode: delegated } }
   - { ts: 2026-10-08T23:33:12Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T10c, mode: delegated } }
+  - { ts: 2026-10-08T23:59:49Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T10d, mode: delegated } }
+  - { ts: 2026-10-08T23:59:49Z, phase: coding, event: taskcheck, metrics: { stage: start, task: T10e, mode: delegated } }
