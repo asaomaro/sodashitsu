@@ -1692,7 +1692,7 @@ export class SessionService {
     // 検算: 会話の記録が実在して、cwd が pane の場所と一致し、pane の TUI（`originator` が `codex-tui`）が始めた会話であること。
     // Sodashitsu の外の Codex（同じ daemon を使う VS Code の拡張・`codex exec`・リモート）の会話は、付けない。
     // 記録を確かめられない（`CODEX_HOME` が見つからない）ときは、`sole-codex` だけ、今までどおり付ける。
-    const verdict = await this.checkCodexRecord(sessionId, owner, true);
+    const verdict = this.codexRecordLookup ? await this.checkCodexRecord(sessionId, owner, true) : "unavailable";
     if (verdict !== "ok" && verdict !== "unavailable") return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, verdict);
     if (verdict === "unavailable" && via === "first-turn") return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the session record could not be checked");
     // 待つ間に、状況が変わっていないこと（pane・前面の codex・ほかの pane が同じ会話を持った）。
