@@ -509,9 +509,13 @@ test("見た目の言葉をそろえる（AC25・AC26）: モダンは tab が�
   await expect.poll(() => uiStyleAttr(page)).toBe("modern");
   const tabM = await lookOf(page, ".tab-bar-item:not(.tab-bar-item-active)");
   const btnM = await lookOf(page, ".screen-switcher-btn:not(.screen-switcher-btn-active)");
-  for (const k of ["fontSize", "paddingTop", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "minHeight", "backgroundColor", "color"] as const) {
+  // 左右の余白だけは、tab が広い（短い名前の tab が細くならないよう。F3）。角・線・高さ・文字・地・色は共有。
+  for (const k of ["fontSize", "paddingTop", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "minHeight", "backgroundColor", "color"] as const) {
     expect(tabM[k], `モダン: ${k}`).toBe(btnM[k]);
   }
+  expect(parseFloat(tabM["paddingLeft"]!), "tab の左右の余白は、切り替えのボタンより広い").toBeGreaterThan(parseFloat(btnM["paddingLeft"]!));
+  const tabBox = (await page.locator(".tab-bar-item").first().boundingBox())!;
+  expect(tabBox.width, "tab の最小の幅（control-h）").toBeGreaterThanOrEqual(32);
   expect(parseFloat(tabM["borderTopLeftRadius"]!), "モダンの角は丸い（検査が、何も変わらない状態で通っていない）").toBeGreaterThan(0);
   expect(parseFloat(tabM["borderTopWidth"]!)).toBeGreaterThan(0);
   const tabActiveM = await lookOf(page, ".tab-bar-item-active");
