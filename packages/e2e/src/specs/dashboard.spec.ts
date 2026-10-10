@@ -131,7 +131,9 @@ test.describe("ダッシュボード（PR3）", () => {
     await expect(r.locator("[data-dash-tokens]")).toContainText("1.1k");
     await expect(r.locator("[data-dash-cost]")).toContainText("$2.50");
     await expect(row(page, shellPane)).toHaveCount(0);
-    await expect(page.locator("[data-dash-no-accounts]")).toHaveText("まだ値がありません");
+    // アカウントの枠: 値があれば枠が、無ければ「まだ値がありません」（このテストの HOME は利用者のものなので、Codex の記録があれば枠が出る。どちらでも枠の区画は出る）。
+    await expect(page.locator("[data-dash-accounts]")).toBeVisible();
+    await expect(page.locator("[data-dash-account], [data-dash-no-accounts]").first()).toBeVisible();
   });
 
   test("見ている間は、記録が増えると画面が更新される（再読み込みなし）。見ていない間は配信が止まる（頼まず・届かず）。戻ると最新になる", async ({ page, appServer }) => {

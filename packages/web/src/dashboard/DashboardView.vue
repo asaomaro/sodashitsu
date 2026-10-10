@@ -506,7 +506,7 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 }
 .dash-window {
   display: grid;
-  grid-template-columns: 4.5em minmax(6em, 1fr) 4.5em;
+  grid-template-columns: 4.5em minmax(6em, 1fr) 6.5em;
   align-items: center;
   gap: 0.2em 0.6em;
 }
@@ -545,7 +545,7 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 }
 .dash-row {
   display: grid;
-  grid-template-columns: 1.6em 6.5em minmax(7em, 1.2fr) minmax(8em, 1fr) minmax(10em, 1.6fr) 3em minmax(9em, 1fr) minmax(7em, 0.8fr) minmax(8em, 0.9fr) 7.5em;
+  grid-template-columns: 1.6em 6.5em minmax(7em, 1.2fr) minmax(8em, 1fr) minmax(10em, 1.6fr) 3em minmax(9em, 1fr) minmax(8em, 0.9fr) minmax(8em, 0.9fr) 7.5em;
   align-items: center;
   gap: 0 0.6em;
   padding: 0.25em 0.4em;
@@ -580,6 +580,11 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 }
 .dash-num {
   font-variant-numeric: tabular-nums;
+}
+/* 印・時点の添え書きが付くセルは、切らずに折り返す（コストの時点・基準・一部・読み込み中） */
+.dash-c-tokens,
+.dash-c-cost {
+  white-space: normal;
 }
 .dash-basis,
 .dash-cost-note,

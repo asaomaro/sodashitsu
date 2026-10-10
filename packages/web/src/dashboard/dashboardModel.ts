@@ -202,8 +202,9 @@ export function contextDisplay(u: AgentUsage | null): ContextDisplay {
     return { pct, text: `${pct}%` };
   }
   if (u.contextTokens !== undefined) {
+    // 単位（tok）を添える（率ではなく、いま文脈にあるトークン数だと分かるように）。
     const win = u.contextWindowTokens !== undefined ? ` / ${formatTokens(u.contextWindowTokens)}` : "";
-    return { pct: null, text: `${formatTokens(u.contextTokens)}${win}` };
+    return { pct: null, text: `${formatTokens(u.contextTokens)}${win} tok` };
   }
   return { pct: null, text: NONE };
 }

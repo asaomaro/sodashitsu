@@ -130,8 +130,8 @@ describe("数字の見せ方", () => {
   });
   it("コンテキスト: 率があれば率。窓の大きさが分からなければトークン数だけ。無ければ「—」", () => {
     expect(contextDisplay(usage("p", { contextUsedPct: 41.6 }))).toEqual({ pct: 42, text: "42%" });
-    expect(contextDisplay(usage("p", { contextTokens: 12_000 }))).toEqual({ pct: null, text: "12k" });
-    expect(contextDisplay(usage("p", { contextTokens: 12_000, contextWindowTokens: 200_000 })).text).toBe("12k / 200k");
+    expect(contextDisplay(usage("p", { contextTokens: 12_000 }))).toEqual({ pct: null, text: "12k tok" });
+    expect(contextDisplay(usage("p", { contextTokens: 12_000, contextWindowTokens: 200_000 })).text).toBe("12k / 200k tok");
     expect(contextDisplay(usage("p"))).toEqual({ pct: null, text: NONE });
     expect(contextDisplay(null).text).toBe(NONE);
   });

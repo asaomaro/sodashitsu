@@ -23,7 +23,7 @@ const view = useViewStore();
       :title="def.label"
       @click="view.setScreen(def.id)"
     >
-      {{ view.sidebarCollapsed ? def.shortLabel : def.label }}
+      <span class="screen-switcher-label">{{ view.sidebarCollapsed ? def.shortLabel : def.label }}</span>
     </button>
   </div>
 </template>
@@ -61,7 +61,8 @@ const view = useViewStore();
   display: none;
 }
 .screen-switcher-btn {
-  flex: none;
+  /* 3 つ目の画面（ダッシュボード）が増えても、狭いサイドバー（既定 240px）で、はみ出して端末の領域に隠れないよう、縮められる（はみ出す分は省略記号）。 */
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   align-self: stretch;
@@ -76,6 +77,13 @@ const view = useViewStore();
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 名前が入りきらないとき（狭いサイドバーの「ダッシュボード」）は、省略記号で切る（ボタンは flex なので、名前を包んで効かせる）。 */
+.screen-switcher-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .screen-switcher-collapsed .screen-switcher-btn {
   /* たたんだ幅（縦並び）は、これまでの箱の大きさを保つ（0.8em の文字・上下 0.2em・線 1px）。塗りだけを tab の言葉に（平ら・区切りは下の線）。 */
@@ -110,7 +118,7 @@ const view = useViewStore();
   min-height: var(--soda-shape-control-h, auto);
   justify-content: center;
   font-size: var(--soda-shape-seg-font);
-  padding: var(--soda-shape-seg-pad-y) var(--soda-shape-seg-pad-x);
+  padding: var(--soda-shape-seg-pad-y) min(var(--soda-shape-seg-pad-x), 0.25em);
   border: var(--soda-shape-seg-border) solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-seg-radius);
 }

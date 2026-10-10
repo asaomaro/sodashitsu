@@ -385,9 +385,10 @@ test("畳んだサイドバー: 境の印（縦の中央）は、行の印〔状
       const b = e.getBoundingClientRect();
       return b.width > 0 && b.left < t.right && b.right > t.left && b.top < t.bottom && b.bottom > t.top;
     }).length;
+    // 縦の中央の前後 20px（行の間のすき間に印がちょうど入ったときも、検査が空振りしない。画面の切り替えのボタンが 3 つになって、行の位置が変わった: 20261010-agent-usage PR3）。
     const rowsAtCenter = Array.from(document.querySelectorAll(".sidebar .sidebar-state-icon")).filter((e) => {
       const b = e.getBoundingClientRect();
-      return b.top < t.bottom && b.bottom > t.top;
+      return b.top < t.bottom + 20 && b.bottom > t.top - 20;
     }).length;
     return { hit, rowsAtCenter, width: t.width };
   });
@@ -491,7 +492,7 @@ test("見た目の言葉をそろえる（AC25・AC26）: モダンは tab が�
   await client.request("tab.create", { workspaceId: hello.workspaces[0]!.id, label: "second" } as never).catch(() => undefined);
   await open(page, appServer);
   await expect(page.locator(".tab-bar-item")).toHaveCount(2);
-  await expect(page.locator(".screen-switcher-btn")).toHaveCount(2);
+  await expect(page.locator(".screen-switcher-btn")).toHaveCount(3); // 基本画面・グラフ・ダッシュボード（20261010-agent-usage PR3）
 
   // クラシック: 切り替えのボタンは、tab の見た目（選んでいない tab と選んでいないボタンを比べる）。
   const tabC = await lookOf(page, ".tab-bar-item:not(.tab-bar-item-active)");

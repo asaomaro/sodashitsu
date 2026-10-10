@@ -354,11 +354,11 @@ describe("ContextMenu — group", () => {
 describe("ContextMenu — global", () => {
   // 「設定」は 20260920-agent-notifications で「通知の設定」として足し、20260921-herdr-settings-gaps で設定全体に広げた。
   // **切り離しは最後のまま**（押し間違えると接続が切れるので、`ContextMenu.vue` のコメントがそう定めている）。
-  it("キー割り当て・移動・連携（グラフ）・ダッシュボード・設定・切り離しを、この順で出す", () => {
+  it("キー割り当て・移動・連携（グラフ）・設定・切り離しを、この順で出す", () => {
     const view = useViewStore(pinia);
     view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["キー割り当て", "移動", "連携（グラフ）", "ダッシュボード", "設定", "切り離し"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["キー割り当て", "移動", "連携（グラフ）", "設定", "切り離し"]);
   });
 
   it("「設定」を選ぶと、キー操作と同じ action が渡る", async () => {
@@ -366,18 +366,8 @@ describe("ContextMenu — global", () => {
     const actions = makeActions();
     view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
-    await wrapper.findAll("li")[4]!.trigger("click");
-    expect(actions.run).toHaveBeenCalledWith({ type: "settings" });
-  });
-
-  it("「ダッシュボード」を選ぶと、ダッシュボードの画面へ切り替わる（20261010-agent-usage PR3）", async () => {
-    const view = useViewStore(pinia);
-    const actions = makeActions();
-    view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
-    const wrapper = mountMenu(actions);
     await wrapper.findAll("li")[3]!.trigger("click");
-    expect(view.screen).toBe("dashboard");
-    expect(actions.run).not.toHaveBeenCalled();
+    expect(actions.run).toHaveBeenCalledWith({ type: "settings" });
   });
 
   it("「連携（グラフ）」を選ぶと、キーの open_graph と同じ action が渡る（20260927-agent-graph）", async () => {

@@ -23,7 +23,7 @@
 - [ ] T12 ★ 画面の一般化（`isAllowedOnNonBaseScreen`・`ActionDispatcher` の `openGraph`・`view.ts` のダッシュボードの開閉）。AC3
 - [ ] T13 web の状態と配信の購読（`store/usage.ts`・`usage/UsageController.ts`・`StoreAdapter`・`main.ts`）。AC1・AC2
 - [ ] T14 画面（`DashboardScreen`・アカウントの枠・一覧・並べ替え・絞り込み・行から pane へ・様式・キーボード）。AC1・AC5
-- [ ] T15 モバイル（`DashboardDialog`・`PanePicker`・全体のメニュー）。AC4
+- [ ] T15 モバイル（`DashboardDialog`・`PanePicker`）。AC4
 - [ ] T16 試験（単体・E2E `dashboard.spec.ts`・否定の対照）。AC6
 - [ ] T17 文書と絵。AC7
 - [x] T10 ★ Codex の集計（AC4。`usage/codexRollout.ts`・`codexAdapter.ts`・`agent/codexSession.ts` の共通化）。`feature/agent-usage-codex`
