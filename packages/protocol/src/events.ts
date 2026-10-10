@@ -8,7 +8,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "./model.js";
-import type { AgentIntegrationStatusResult, SharedPrefs } from "./messages.js";
+import type { AgentForkProgress, AgentIntegrationStatusResult, SharedPrefs } from "./messages.js";
 import type { Graph, LinkRun } from "./graph.js";
 import type { CommandListResult } from "./commands.js";
 import type { DisplayClosedReasonValue, DisplayInfo } from "./display.js";
@@ -102,6 +102,11 @@ export interface PaneClosedEvent {
 export interface PaneAgentStatusChangedEvent {
   event: "pane.agent_status_changed";
   data: { paneId: string; agent: AgentInfo | null };
+}
+/** fork の進み具合（20261009-agent-fork）。`agent.fork` の応答の後の、検知・手が空く・最初の知らせの状態を配る。 */
+export interface AgentForkProgressEvent {
+  event: "agent.fork_progress";
+  data: AgentForkProgress;
 }
 export interface PaneSizeChangedEvent {
   event: "pane.size_changed";
@@ -240,6 +245,7 @@ export type ServerEvent =
   | PaneExitedEvent
   | PaneClosedEvent
   | PaneAgentStatusChangedEvent
+  | AgentForkProgressEvent
   | PaneSizeChangedEvent
   | PaneAttachChangedEvent
   | SessionFocusChangedEvent

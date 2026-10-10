@@ -94,7 +94,13 @@ export type ErrorCode =
   | "display_busy" // 頻度の上限（set の回数・量）・待ちの上限（pane 4・全体 32）
   | "display_closed" // その面はもう無い。`display.subscribe` していない接続からの get・action・dismiss・report も同じ
   // 拡張の承認（20261007-ext-host PR3）。
-  | "extension_stale"; // 承認しようとした登録の鍵が、いまの登録と違う（承認の画面を開いている間に、設定ファイルが変わった）
+  | "extension_stale" // 承認しようとした登録の鍵が、いまの登録と違う（承認の画面を開いている間に、設定ファイルが変わった）
+  // エージェントの fork（20261009-agent-fork）。
+  | "fork_unavailable" // この pane のエージェントは fork できない（理由の種類はメッセージの先頭の語。`ForkUnavailableReason`）
+  | "fork_branch_exists" // 新しい worktree のブランチ名が既にある（fork は既存のブランチへは作らない）
+  | "fork_shell_not_ready" // 作ったばかりの pane のシェルが、入力を受けられる状態にならなかった（pane は残す）
+  | "fork_in_progress" // 同じ pane の fork が進行中
+  | "fork_failed"; // 手順の途中の失敗（何が残ったかは `message` と結果に）
 
 export interface ProtocolError {
   code: ErrorCode;

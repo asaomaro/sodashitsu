@@ -286,6 +286,47 @@ describe("FsAgentIntegrationInstaller — Claude Code のフックの追加と�
     }
   });
 
+  it("claude の SessionStart の matcher は fork・clear・compact も拾う。matcher だけ古い導入済みは「更新が必要」になり、［更新］で matcher だけ直る（20261009-agent-fork T0b）", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    const fresh = await readSettings();
+    expect(fresh.hooks.SessionStart[0].matcher).toBe("startup|resume|fork|clear|compact");
+    // 空の matcher にはしない（知らない source を黙って拾わない）。
+    expect(fresh.hooks.SessionStart[0].matcher).not.toBe("");
+    // matcher だけ古い（ほかは最新）: 利用者のほかの SessionStart のフックは保つ。
+    const mine = { matcher: "compact", hooks: [{ type: "command", command: "echo mine" }] };
+    fresh.hooks.SessionStart[0].matcher = "startup|resume";
+    fresh.hooks.SessionStart.push(mine);
+    await writeFile(settingsPath, JSON.stringify(fresh));
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: true });
+    expect(await installer.install("claude")).toEqual({ ok: true, message: null });
+    expect(await installer.status("claude")).toMatchObject({ installed: true, needsUpdate: false });
+    const after = await readSettings();
+    expect(after.hooks.SessionStart).toHaveLength(2);
+    expect(after.hooks.SessionStart[0].matcher).toBe("startup|resume|fork|clear|compact");
+    expect(after.hooks.SessionStart[1]).toEqual(mine);
+  });
+
+  it("matcher が期待の値を含む（`\"\"` は全部）なら「更新が必要」にしない。利用者のフックと同じエントリは、古い matcher でも直さない（20261009-agent-fork R6）", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    const fresh = await readSettings();
+    for (const m of ["", "startup|resume|fork|clear|compact|extra"]) {
+      fresh.hooks.SessionStart[0].matcher = m;
+      await writeFile(settingsPath, JSON.stringify(fresh));
+      expect(await installer.status("claude"), m).toMatchObject({ installed: true, needsUpdate: false });
+    }
+    // 利用者のフックと同じエントリ（matcher が古い）: 直さず、「更新が必要」にもしない（文書に書く）。
+    fresh.hooks.SessionStart[0].matcher = "startup|resume";
+    fresh.hooks.SessionStart[0].hooks.push({ type: "command", command: "echo mine" });
+    await writeFile(settingsPath, JSON.stringify(fresh));
+    expect(await installer.status("claude")).toMatchObject({ needsUpdate: false });
+    expect(await installer.install("claude")).toEqual({ ok: true, message: "既に導入済みです" });
+    const after = await readSettings();
+    expect(after.hooks.SessionStart[0].matcher).toBe("startup|resume");
+    expect(after.hooks.SessionStart[0].hooks).toHaveLength(2);
+  });
+
   it("旧版の導入済み → needsUpdate が true → install で更新される（スクリプトを写し直し、足りない分だけ足す）", async () => {
     await installOldVersion();
     const installer = makeInstaller();
@@ -305,6 +346,26 @@ describe("FsAgentIntegrationInstaller — Claude Code のフックの追加と�
     await makeInstaller().status("claude");
     expect(await readFile(settingsPath, "utf8")).toBe(before);
     expect(await readFile(installedScript, "utf8")).toBe("// old hook script\n");
+  });
+
+  it("追加のエントリを持たない kind（codex）でも、スクリプトが同梱のものと違えば needsUpdate が true。install で写し直すと false（20261009-agent-session-attribution）", async () => {
+    const codexDir = join(workDir, "codex-home");
+    const installer = new FsAgentIntegrationInstaller(
+      hookScriptSource,
+      { PATH: "", CODEX_HOME: codexDir } as NodeJS.ProcessEnv,
+      join(workDir, "unused-home"),
+    );
+    await mkdir(codexDir, { recursive: true });
+    await installer.install("codex");
+    expect(await installer.status("codex")).toMatchObject({ installed: true, needsUpdate: false });
+    // 同梱のスクリプトが新しくなった（報告したプロセスの pid を足す版）。導入済みの写しは古い。
+    await writeFile(hookScriptSource, "// fake hook script v2 (agentPid)\n");
+    expect(await installer.status("codex")).toMatchObject({ installed: true, needsUpdate: true });
+    // 押したときだけ書き換える（status は何も書かない）
+    expect(await readFile(join(codexDir, "hooks", "soda-agent-report.cjs"), "utf8")).toBe("// new hook script\n");
+    await installer.install("codex");
+    expect(await readFile(join(codexDir, "hooks", "soda-agent-report.cjs"), "utf8")).toBe("// fake hook script v2 (agentPid)\n");
+    expect(await installer.status("codex")).toMatchObject({ installed: true, needsUpdate: false });
   });
 
   it("エントリは揃っているがスクリプトが古い／無い → needsUpdate が true。install で写し直す", async () => {

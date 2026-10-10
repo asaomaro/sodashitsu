@@ -952,6 +952,7 @@ function stubWorktrees(): WorktreeService {
   return {
     list: () => Promise.reject(new Error("not used in this test")),
     create: () => Promise.reject(new Error("not used in this test")),
+    inspectForFork: () => Promise.reject(new Error("not used in this test")),
     remove: () => Promise.reject(new Error("not used in this test")),
   };
 }

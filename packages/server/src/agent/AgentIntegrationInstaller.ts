@@ -27,6 +27,12 @@ export interface AgentIntegrationInstaller {
 /** 本製品の hook エントリだと分かる目印。install/uninstall/status のすべてがこれで一致を見る（design D4）。 */
 const HOOK_SCRIPT_NAME = "soda-agent-report.cjs";
 const MATCHER = "startup|resume";
+/**
+ * Claude Code の `SessionStart` の matcher。`/clear`（`clear`）・`compact`・fork（`fork`）でも報告する（20261009-agent-fork の T0b）。
+ * 実機（2.1.296）: `/clear` と fork は**新しい会話の id**で来る（拾わないと `pane.agentSession` が古い id のまま残り、再起動の再開・fork が消した会話を引く）。
+ * `compact` は id が変わらない（同じ id の再報告で害はない）。空の matcher にはしない（知らない `source` を黙って拾わないため）。
+ */
+const CLAUDE_SESSION_START_MATCHER = "startup|resume|fork|clear|compact";
 
 /** 削除した後に残す、何もしないスクリプト（標準出力にも書かず、正常に終わる）。 */
 const NOOP_HOOK_SCRIPT =
@@ -72,6 +78,8 @@ interface HookSpec {
   }[];
   /** そのエントリが本製品の hook か判定する（コマンド文字列に `HOOK_SCRIPT_NAME` を含むか）。 */
   isOurs(entry: unknown): boolean;
+  /** 持つ kind だけ: `entriesPath` の自分のエントリの matcher の期待値。違えば「更新が必要」にし、［更新］で matcher だけ直す（20261009-agent-fork T0b）。 */
+  expectedMatcher?: string;
 }
 
 /** ネストした経路を辿って配列を取り出す。存在しない・形が違えば空配列（＝「本製品のエントリは無い」扱い）。 */
@@ -131,6 +139,29 @@ function nestedCommandsOf(entry: unknown): string[] {
     .map((h) => (typeof h === "object" && h !== null ? (h as JsonObject).command : undefined))
     .filter((c): c is string => typeof c === "string");
 }
+function matcherOf(entry: unknown): string | undefined {
+  const m = typeof entry === "object" && entry !== null ? (entry as JsonObject).matcher : undefined;
+  return typeof m === "string" ? m : undefined;
+}
+/**
+ * 現在の matcher が期待の値を**含む**か（`|` で区切った項目ごと）。`""`（全部）は、どの値も含む（機能の上では上位）。
+ * 含むなら「更新が必要」にしない（20261009-agent-fork の R6）。
+ */
+function matcherCovers(current: string | undefined, expected: string): boolean {
+  if (current === undefined) return false;
+  if (current === "") return true;
+  const have = new Set(current.split("|"));
+  return expected.split("|").every((t) => have.has(t));
+}
+/** 自分のエントリに、利用者のほかのフックが同じエントリで入っているか。matcher を直すと、利用者のフックの動きも変わるので、直さない（文書に書く）。 */
+function sharesEntryWithOthers(spec: HookSpec, entry: unknown): boolean {
+  const hooks = typeof entry === "object" && entry !== null ? (entry as JsonObject).hooks : undefined;
+  return Array.isArray(hooks) && hooks.some((h) => !spec.isOurs({ hooks: [h] }));
+}
+/** 自分のエントリで、matcher が期待の値を含まず、かつ利用者のフックと同じエントリではない（＝［更新］で直す対象）。 */
+function matcherStale(spec: HookSpec, entry: unknown, expected: string): boolean {
+  return spec.isOurs(entry) && !sharesEntryWithOthers(spec, entry) && !matcherCovers(matcherOf(entry), expected);
+}
 function isOursNested(entry: unknown): boolean {
   return nestedCommandsOf(entry).some((c) => c.includes(HOOK_SCRIPT_NAME));
 }
@@ -153,7 +184,7 @@ function hookCommand(scriptPath: string, kind: AgentIntegrationKind): string {
 /** Claude Code・Codex と同じ形（`{matcher, hooks:[{type:"command",command,async:true}]}`）。 */
 function nestedAsyncEntry(scriptPath: string, kind: AgentIntegrationKind): JsonObject {
   return {
-    matcher: MATCHER,
+    matcher: kind === "claude" ? CLAUDE_SESSION_START_MATCHER : MATCHER,
     hooks: [{ type: "command", command: hookCommand(scriptPath, kind), async: true }],
   };
 }
@@ -212,6 +243,7 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     entriesPath: ["hooks", "SessionStart"],
     buildEntry: nestedAsyncEntry,
     isOurs: isOursNested,
+    expectedMatcher: CLAUDE_SESSION_START_MATCHER,
     extraEntries: [
       { path: ["hooks", "PreToolUse"], build: nestedSyncEntry("Agent|Task") },
       { path: ["hooks", "SubagentStart"], build: nestedSyncEntry("") },
@@ -519,12 +551,12 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
   }
 
   /**
-   * 導入済みで、本製品のフックが足りない（追加のエントリのどれかの経路に自分のエントリが無い）か、写した先のスクリプトが古い。
-   * 追加のエントリを持たない kind は常に false。同梱のスクリプトが読めないときも false（押しても直らない「更新が必要」を出さない）。
+   * 導入済みで、本製品のフックが足りない（追加のエントリのどれかの経路に自分のエントリが無い）か、写した先のスクリプトが、同梱のものと違う（古い）。
+   * スクリプトの差は、追加のエントリを持たない kind でも見る（20261009-agent-session-attribution: フックのスクリプトが、報告したプロセスの pid を足す版に
+   * 変わったので、導入済みは「更新が必要」になる。押したときだけ書き換える）。同梱のスクリプトが読めないときは false（押しても直らない「更新が必要」を出さない）。
    */
   private async needsUpdate(spec: HookSpec, root: JsonObject): Promise<boolean> {
-    const extras = spec.extraEntries;
-    if (!extras || extras.length === 0) return false;
+    const extras = spec.extraEntries ?? [];
     let bundled: Buffer;
     try {
       bundled = await readFile(this.hookScriptSource);
@@ -534,6 +566,8 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     // 経路の値が配列でないとき、`install()` は断る（直せない）ので、「更新が必要」は出さない。
     if (extras.some((e) => pathShape(root, e.path) === "invalid")) return false;
     if (extras.some((e) => !getPath(root, e.path).some(spec.isOurs))) return true;
+    const expected = spec.expectedMatcher;
+    if (expected !== undefined && getPath(root, spec.entriesPath).some((e) => matcherStale(spec, e, expected))) return true;
     const installedScript = await readFile(
       hookScriptPathFor(spec.hooksDir(this.env, this.home)),
     ).catch(() => undefined);
@@ -572,8 +606,14 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
       if (hit.file === configFile)
         updated = removeOurs(updated, hit.legacy.entriesPath, hit.legacy.isOurs).root;
     }
+    const expected = spec.expectedMatcher;
     for (const t of targets) {
       const entries = getPath(updated, t.path);
+      if (t.path === spec.entriesPath && expected !== undefined && entries.some((e) => matcherStale(spec, e, expected))) {
+        // 自分のエントリの matcher だけを直す（ほかの項目・利用者のほかのフックは保つ）。利用者のフックと同じエントリは直さない（下の `matcherStale`）。
+        updated = setPath(updated, t.path, entries.map((e) => (matcherStale(spec, e, expected) ? { ...(e as JsonObject), matcher: expected } : e)));
+        continue;
+      }
       if (entries.some(spec.isOurs)) continue; // 足りない経路にだけ足す（重ねない。利用者のほかのフックは保つ）
       updated = setPath(updated, t.path, [...entries, t.build(scriptPath, kind)]);
     }

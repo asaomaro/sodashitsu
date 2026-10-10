@@ -1166,6 +1166,16 @@ export class SessionModel {
     return updated;
   }
 
+  /** pane ごとの、前の会話の参照（最新が先頭。いまの参照は含めない。保存する。公開の `Pane` には載せない。20261009-agent-session-attribution）。 */
+  private readonly agentSessionHistories = new Map<PaneId, AgentSessionRef[]>();
+  agentSessionHistory(paneId: PaneId): AgentSessionRef[] {
+    return this.agentSessionHistories.get(paneId) ?? [];
+  }
+  setAgentSessionHistory(paneId: PaneId, list: AgentSessionRef[]): void {
+    if (list.length === 0) this.agentSessionHistories.delete(paneId);
+    else this.agentSessionHistories.set(paneId, list);
+  }
+
   /** 公式フック連携（20260923-agent-session-resume）が報告した会話参照を反映する。 */
   setAgentSession(paneId: PaneId, agentSession: AgentSessionRef | null): Pane {
     const pane = this.requirePane(paneId);
@@ -1473,6 +1483,12 @@ export class SessionModel {
             sessionId: paneData.agentSession.sessionId,
             reportedAt: paneData.agentSession.reportedAt,
           };
+        }
+        if (paneData.agentSessionHistory && paneData.agentSessionHistory.length > 0) {
+          this.agentSessionHistories.set(
+            pane.id,
+            paneData.agentSessionHistory.map((h) => ({ kind: h.kind as AgentIntegrationKind, sessionId: h.sessionId, reportedAt: h.reportedAt })),
+          );
         }
         this.panes.set(pane.id, pane);
       }

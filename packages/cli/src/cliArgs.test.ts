@@ -827,3 +827,27 @@ describe("parseArgs — display（20261007-soda-extensions）", () => {
     expect(cmd.kind === "display" && cmd.opts.paneSocket).toBe("/s/pane.sock");
   });
 });
+
+describe("parseArgs — agent fork（20261009-agent-fork）", () => {
+  const env = {} as NodeJS.ProcessEnv;
+  it("対象だけ: 同じフォルダ・最初の知らせはある・最後まで待つ", () => {
+    expect(parseArgs(["agent", "fork", "p1"], env)).toMatchObject({ kind: "agent-fork", paneId: "p1", worktree: undefined, note: true, wait: true, json: false });
+  });
+  it("--worktree・--no-note・--no-wait・--timeout・--json", () => {
+    expect(parseArgs(["agent", "fork", "p1", "--worktree", "fork/x", "--no-note", "--no-wait", "--timeout", "5000", "--json"], env)).toMatchObject({
+      worktree: "fork/x",
+      note: false,
+      wait: false,
+      timeoutMs: 5000,
+      json: true,
+    });
+  });
+  it("使い方の誤り: 対象なし・--no-note だけ・余計な位置引数・会話の id やコマンドの引数は受けない", () => {
+    expect(() => parseArgs(["agent", "fork"], env)).toThrow(CliUsageError);
+    expect(() => parseArgs(["agent", "fork", "p1", "--no-note"], env)).toThrow(CliUsageError);
+    expect(() => parseArgs(["agent", "fork", "p1", "p2"], env)).toThrow(CliUsageError);
+    expect(() => parseArgs(["agent", "fork", "p1", "--session-id", "x"], env)).toThrow(CliUsageError);
+    expect(() => parseArgs(["agent", "fork", "p1", "--timeout", "abc"], env)).toThrow(CliUsageError);
+    expect(() => parseArgs(["agent", "fork", "p1", "--worktree", ""], env)).toThrow(CliUsageError);
+  });
+});

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { GRAPH_CELL_WIDTH } from "@sodashitsu/client-core";
-import { GRAPH_COORD_MAX, GraphSchema, type Graph, type GraphOp } from "@sodashitsu/protocol";
+import { GRAPH_COORD_MAX, GraphSchema, type Graph, type GraphOp, type NodeKey } from "@sodashitsu/protocol";
 import {
   applyGraphOps,
   emptyGraph,
@@ -247,6 +247,34 @@ export class GraphStore {
         },
       };
     }, byClientId);
+  }
+
+  /**
+   * ノードに fork の注記を書く／外す（20261009-agent-fork の A12。サーバの内部の更新だけ。`GraphOp` は足さず、利用者の `graph.update` からは書けない）。
+   * rev を進めて全クライアントへ配る。ノードが無い・既に同じならなにもしない（false）。書いたら true。
+   */
+  async setForkedFrom(childKey: NodeKey, sourceKey: NodeKey | null, byClientId: string | null = null): Promise<boolean> {
+    let changed = false;
+    await this.commit((s) => {
+      const node = s.graph.nodes.find((n) => n.key === childKey);
+      if (node === undefined) return null;
+      if (sourceKey === null ? node.forkedFrom === undefined : node.forkedFrom === sourceKey) return null;
+      if (sourceKey !== null && !s.graph.nodes.some((n) => n.key === sourceKey)) return null; // 指す先が無い注記は書かない
+      changed = true;
+      return {
+        ...s,
+        graph: {
+          ...s.graph,
+          nodes: s.graph.nodes.map((n) => {
+            if (n.key !== childKey) return n;
+            const { forkedFrom: _drop, ...rest } = n;
+            void _drop;
+            return sourceKey === null ? rest : { ...rest, forkedFrom: sourceKey };
+          }),
+        },
+      };
+    }, byClientId);
+    return changed;
   }
 
   /**

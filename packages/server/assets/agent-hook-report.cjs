@@ -20,6 +20,8 @@
  */
 
 const net = require("node:net");
+const fs = require("node:fs");
+const path = require("node:path");
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -122,6 +124,40 @@ function typedFields(payload) {
   }
 }
 
+/**
+ * 報告したエージェント自身のプロセスの pid（20261009-agent-session-attribution）。サーバは、これが、その pane の前面のエージェントの
+ * プロセスかを確かめて、別のプログラム（pane の中で起動した子のエージェント・常駐のプロセスの中で動いたフック）の報告で、会話の参照が
+ * すり替わらないようにする。取れなければ付けない（サーバは、今までどおり受ける）。
+ * - Claude Code: フックの環境変数 `CLAUDE_PID`（その `claude` のプロセス。子が起動した `claude` は、自分の pid を入れる）。
+ * - ほか・無いとき: Linux の `/proc` で、フックの親をたどり、最も近い、名前（comm・argv[0]・argv[1] の basename）が `kind` のプロセス。
+ * これは、取り違えを防ぐ材料で、安全の境界ではない（pane の中のプログラムは、好きな値を送れる）。
+ */
+function agentPidOf(kind) {
+  const fromEnv = Number(process.env.CLAUDE_PID);
+  if (kind === "claude" && Number.isInteger(fromEnv) && fromEnv > 0 && fromEnv <= 0x7fffffff) return fromEnv;
+  if (process.platform !== "linux") return undefined;
+  const want = String(kind).toLowerCase();
+  const nameOf = (s) => path.basename(String(s)).replace(/\.(c|m)?js$/i, "").toLowerCase();
+  let pid = process.ppid;
+  for (let i = 0; i < 4 && pid > 1; i++) { // フックは、エージェントの直の子か、`sh -c` を挟んだ孫。遠い祖先まではたどらない（別のエージェントの中で動かしたとき、外側のエージェントを拾わない）
+    let comm = "";
+    let argv = [];
+    let ppid = 0;
+    try {
+      comm = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim();
+      argv = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter((x) => x.length > 0);
+      const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+      ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[1]);
+    } catch {
+      return undefined;
+    }
+    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && nameOf(n) === want)) return pid;
+    if (!Number.isFinite(ppid) || ppid <= 1) return undefined;
+    pid = ppid;
+  }
+  return undefined;
+}
+
 async function main() {
   const paneId = process.env.SODA_PANE_ID;
   const sock = process.env.SODA_AGENT_REPORT_SOCKET;
@@ -131,12 +167,19 @@ async function main() {
   const raw = await readStdin();
   let sessionId;
   let extra;
+  let origin = {}; // 作業フォルダと、会話が始まった理由（サーバが、報告の持ち主を確かめる材料）
   try {
     const payload = JSON.parse(raw);
     // `session_id`（snake_case。Claude Code・Codex・Cursor・Devin・Droid・Qwen Code）と
     // `sessionId`（camelCase。Grok CLI・GitHub Copilot CLI の一部）の両方を受ける
     // （20260923-other-agents-session-resume design「hook スクリプト」・research.md F4）。
     sessionId = payload && (payload.session_id || payload.sessionId);
+    if (payload && typeof payload === "object") {
+      origin = compact({
+        cwd: typeof payload.cwd === "string" && payload.cwd !== "" && payload.cwd.length <= 1024 && !payload.cwd.includes("\0") ? payload.cwd : undefined,
+        source: typeof payload.source === "string" && /^[a-z_]{1,16}$/.test(payload.source) ? payload.source : undefined,
+      });
+    }
     if (payload && typeof payload === "object" && kind === "claude") {
       extra = typedFields(payload);
       if (extra === null) return;
@@ -148,7 +191,8 @@ async function main() {
 
   await new Promise((resolve) => {
     const conn = net.connect(sock, () => {
-      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...extra })}\n`);
+      const agentPid = agentPidOf(kind);
+      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...origin, ...extra })}\n`);
     });
     conn.on("error", () => resolve()); // サーバが落ちている等 → 黙って諦める（report は best-effort）
     conn.on("close", () => resolve());
