@@ -26,7 +26,7 @@ export class LinuxProcessInspector implements ProcessInspector {
     if (tpgid === null) return null;
     const members = await scanProcessGroupMembers(tpgid);
     if (members.length === 0) return null;
-    const processes = (await Promise.all(members.map((m) => buildForegroundProcess(m.pid, m.comm)))).sort((a, b) => a.pid - b.pid);
+    const processes = (await Promise.all(members.map((m) => buildForegroundProcess(m.pid, m.comm, m.ppid)))).sort((a, b) => a.pid - b.pid);
     return { processGroupId: tpgid, processes };
   }
 
@@ -70,7 +70,7 @@ async function readProcessInfo(pid: number): Promise<ForegroundProcess | null> {
 }
 
 /** `/proc/<pid>/stat` の comm（フィールド1）と pgrp（")" の後ろの3番目）を読む。読めなければ null。 */
-async function readCommAndPgrp(pid: number): Promise<{ comm: string; pgrp: number } | null> {
+async function readCommAndPgrp(pid: number): Promise<{ comm: string; pgrp: number; ppid: number } | null> {
   try {
     const raw = await readFile(`/proc/${pid}/stat`, "utf8");
     const openParen = raw.indexOf("(");
@@ -82,14 +82,15 @@ async function readCommAndPgrp(pid: number): Promise<{ comm: string; pgrp: numbe
     const pgrpStr = rest[2];
     if (pgrpStr === undefined) return null;
     const pgrp = Number(pgrpStr);
-    return Number.isFinite(pgrp) ? { comm, pgrp } : null;
+    const ppid = Number(rest[1]);
+    return Number.isFinite(pgrp) ? { comm, pgrp, ppid: Number.isFinite(ppid) ? ppid : 0 } : null;
   } catch {
     return null;
   }
 }
 
 /** `/proc` 全体を走査し、`pgrp` が `processGroupId` と一致するプロセスを集める（LinuxProcessInspector 参照）。 */
-async function scanProcessGroupMembers(processGroupId: number): Promise<{ pid: number; comm: string }[]> {
+async function scanProcessGroupMembers(processGroupId: number): Promise<{ pid: number; comm: string; ppid: number }[]> {
   let entries: string[];
   try {
     entries = await readdir("/proc");
@@ -102,13 +103,13 @@ async function scanProcessGroupMembers(processGroupId: number): Promise<{ pid: n
       .map(async (name) => {
         const pid = Number(name);
         const info = await readCommAndPgrp(pid);
-        return info && info.pgrp === processGroupId ? { pid, comm: info.comm } : null;
+        return info && info.pgrp === processGroupId ? { pid, comm: info.comm, ppid: info.ppid } : null;
       }),
   );
-  return results.filter((r): r is { pid: number; comm: string } => r !== null);
+  return results.filter((r): r is { pid: number; comm: string; ppid: number } => r !== null);
 }
 
-async function buildForegroundProcess(pid: number, comm: string): Promise<ForegroundProcess> {
+async function buildForegroundProcess(pid: number, comm: string, ppid: number): Promise<ForegroundProcess> {
   let argv: string[] = [];
   try {
     const cmdlineRaw = await readFile(`/proc/${pid}/cmdline`, "utf8");
@@ -118,5 +119,5 @@ async function buildForegroundProcess(pid: number, comm: string): Promise<Foregr
   }
   const exe = argv[0] ?? comm;
   const cwd = await readlink(`/proc/${pid}/cwd`).catch(() => null);
-  return { pid, exe, argv, cwd };
+  return { pid, exe, argv, cwd, ppid };
 }

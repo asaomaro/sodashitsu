@@ -19,7 +19,11 @@ export interface AgentReportSocket {
 }
 
 /** 受け口が解釈した報告。`session` は `type` の無い電文（今までのセッション ID の報告）。 */
-export type AgentReport =
+export type AgentReport = AgentReportBody & {
+  /** 報告したエージェントのプロセスの pid（フックが足す。無ければ付かない）。pane の中のプログラムが好きに書ける値で、取り違えを防ぐための材料。 */
+  agentPid?: number;
+};
+type AgentReportBody =
   | { type: "session"; paneId: string; kind: string; sessionId: string }
   | { type: "subagent_pending"; paneId: string; kind: string; sessionId: string; description?: string; agentType?: string; background?: boolean; parentAgentId?: string; transcriptPath?: string }
   | { type: "subagent_start"; paneId: string; kind: string; sessionId: string; agentId: string; agentType?: string; transcriptPath?: string }
@@ -149,7 +153,9 @@ function parseReport(v: unknown): AgentReport | undefined {
   if (typeof v !== "object" || v === null) return undefined;
   const o = v as Record<string, unknown>;
   if (typeof o.paneId !== "string" || typeof o.kind !== "string" || typeof o.sessionId !== "string") return undefined;
-  const base = { paneId: o.paneId, kind: o.kind, sessionId: o.sessionId };
+  const pid = o.agentPid;
+  const agentPid = typeof pid === "number" && Number.isInteger(pid) && pid > 0 && pid <= 0x7fffffff ? pid : undefined;
+  const base = { paneId: o.paneId, kind: o.kind, sessionId: o.sessionId, ...(agentPid !== undefined ? { agentPid } : {}) };
   if (o.type === undefined) return { type: "session", ...base };
   switch (o.type) {
     case "subagent_pending": {

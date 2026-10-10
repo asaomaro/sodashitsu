@@ -20,6 +20,7 @@ type Report = Record<string, unknown>;
 function cleanEnv(set: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const k of Object.keys(env)) if (k.startsWith("SODA_")) delete env[k];
+  delete env["CLAUDE_PID"]; // フックを動かしている開発セッション自身の値を継がない（報告の `agentPid` に入る）
   for (const [k, v] of Object.entries(set)) if (v !== undefined) env[k] = v;
   return env;
 }
@@ -481,3 +482,68 @@ describe("agent-hook-report.cjs", () => {
     });
   });
 }, 20000);
+
+// 20261009-agent-session-attribution: 報告したエージェント自身の pid を足す。
+describe("報告したエージェントの pid（agentPid）", () => {
+  it("claude: 環境変数 CLAUDE_PID（正の整数）を agentPid に足す", async () => {
+    const result = await runHook("claude", JSON.stringify({ session_id: "s1" }), { CLAUDE_PID: "4321" });
+    expect(result).toEqual({ paneId: "p1", kind: "claude", sessionId: "s1", agentPid: 4321 });
+  });
+
+  it("CLAUDE_PID が数でない・0 以下・大きすぎるときは付けない（/proc の祖先にも名前の合うものが無ければ、付かない）", async () => {
+    for (const bad of ["abc", "0", "-5", "99999999999", ""]) {
+      const result = await runHook("claude", JSON.stringify({ session_id: "s1" }), { CLAUDE_PID: bad });
+      expect(result, bad).toEqual({ paneId: "p1", kind: "claude", sessionId: "s1" });
+    }
+  });
+
+  it("CLAUDE_PID が無いとき、Linux では、親をたどって最も近い、名前が kind のプロセスの pid を付ける（node <dir>/claude.js のような起動も）", async () => {
+    if (process.platform !== "linux") return;
+    const workDir = await makeTempDir("soda-agent-hook-pid-test-");
+    try {
+      const sockPath = join(workDir, "report.sock");
+      const launcher = join(workDir, "claude.js");
+      // 「claude」という名前のプロセス（node claude.js）が、フックを起動する。
+      await writeFile(
+        launcher,
+        `const { spawn } = require("node:child_process");
+const c = spawn("node", [${JSON.stringify(SCRIPT_PATH)}, "claude"], { env: process.env, stdio: ["pipe", "ignore", "ignore"] });
+c.stdin.end(JSON.stringify({ session_id: "s-proc" }));
+c.on("close", () => process.exit(0));
+console.log("PID=" + process.pid);
+`,
+      );
+      const { received, launcherPid } = await new Promise<{ received: Report | null; launcherPid: number }>((resolve) => {
+        let launcherPid = 0;
+        const server = createServer((conn) => {
+          let data = "";
+          conn.on("data", (c) => (data += c));
+          conn.on("end", () => {
+            server.close();
+            resolve({ received: JSON.parse(data.trim()), launcherPid });
+          });
+        });
+        server.listen(sockPath, () => {
+          const child = spawn("node", [launcher], {
+            env: cleanEnv({ SODA_PANE_ID: "p1", SODA_AGENT_REPORT_SOCKET: sockPath }),
+            stdio: ["ignore", "pipe", "ignore"],
+          });
+          launcherPid = child.pid ?? 0;
+          const t = setTimeout(() => {
+            server.close();
+            resolve({ received: null, launcherPid });
+          }, 4000);
+          t.unref();
+        });
+      });
+      expect(received).toEqual({ paneId: "p1", kind: "claude", sessionId: "s-proc", agentPid: launcherPid });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it("名前の合うプロセスが祖先に無いときは、付けない（今までどおり）", async () => {
+    const result = await runHook("codex", JSON.stringify({ session_id: "s2" }));
+    expect(result).toEqual({ paneId: "p1", kind: "codex", sessionId: "s2" });
+  });
+});

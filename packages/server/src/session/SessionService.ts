@@ -1,6 +1,7 @@
 import type {
   AgentInfo,
   AgentIntegrationKind,
+  AgentSessionRef,
   Dir,
   GitInfo,
   GroupId,
@@ -32,6 +33,7 @@ import type { EventBus } from "../bus/EventBus.js";
 import { gitIdentityChanged, NotFoundError, SessionModel, type GitJudgement } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import { resumeCommandFor } from "../agent/resumeCommand.js";
+import { procAncestors } from "./procAncestors.js";
 import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
 import { buildPaneEnv } from "./paneEnv.js";
 import { AUTO_LABEL_TIMEOUT_MS, autoWorkspaceLabel, defaultWorkspaceLabelDeps, folderLabelOf, type WorkspaceLabelDeps } from "./workspaceLabel.js";
@@ -132,6 +134,11 @@ export interface SessionServiceOptions {
   serverUrlForPanes?: (() => string | undefined) | undefined;
   /** 名前付き session の名前（20260926-named-session-ui）。pane の環境の `SODA_SESSION` に入れる。既定の session では省く。 */
   sessionName?: string | undefined;
+  /**
+   * プロセスの祖先の pid（自分から親へ。取れなければ null）。会話の参照の報告が、その pane のシェルの子孫のものかを確かめる
+   * （20261009-agent-session-attribution）。既定は Linux の `/proc`。テストが差し替える。
+   */
+  ancestorsOf?: ((pid: number) => number[] | null) | undefined;
 }
 
 /**
@@ -147,6 +154,17 @@ const RESUME_PENDING_MS = 30_000;
  * システムの停止でエージェントのプロセスがサーバより先に終わっても、サーバが止まる処理に入る前にこの時間は過ぎない。
  */
 const AGENT_GONE_GRACE_MS = 10_000;
+
+/**
+ * 会話の参照の報告を、前面のエージェントが検出されるまで保留する長さ（20261009-agent-session-attribution）。エージェントを起動した直後は、
+ * 報告が検出より先に届く。落とさずに待ち、検出されたときに、報告したプロセスが前面のエージェント自身かを確かめて、受けるか捨てるかを決める。
+ */
+const REPORT_HOLD_MS = 15_000;
+/** pane ごとに覚える、前の会話の参照の数（いまの参照のほかに）。再開の失敗のとき、一つ前へ戻す（20261009-agent-session-attribution）。 */
+const AGENT_SESSION_HISTORY_MAX = 2;
+
+/** 会話の参照の報告の判定。 */
+type ReportVerdict = { verdict: "accept" } | { verdict: "hold" } | { verdict: "reject"; reason: string };
 
 export class SessionService {
   private readonly model: SessionModel;
@@ -202,6 +220,17 @@ export class SessionService {
   private readonly resumeWrittenAt = new Map<PaneId, number>();
   /** エージェントが居なくなったと見えた時刻（`clock`。会話の参照を捨てる猶予の起点。20261009-agent-resume-lost）。 */
   private readonly agentGoneAt = new Map<PaneId, number>();
+  /** 前面のエージェント（`AgentMonitor` が判定ごとに知らせる）。会話の参照の報告の確かめに使う（20261009-agent-session-attribution）。 */
+  private readonly frontAgents = new Map<PaneId, { kind: string; pids: ReadonlySet<number> }>();
+  /** その pane で最後に見えたエージェントのプロセス（居なくなった後に検出されたものが、同じエージェントか別のものかを見分ける）。 */
+  private readonly lastSeenAgentPids = new Map<PaneId, ReadonlySet<number>>();
+  /** 居なくなったと見えたときの、そのエージェントのプロセス（`agentGoneAt` と同じ間だけ）。 */
+  private readonly goneAgentPids = new Map<PaneId, ReadonlySet<number>>();
+  /** 保留した会話の参照の報告（pane ごとに 1 件。新しいものが勝つ）。 */
+  private readonly pendingReports = new Map<PaneId, { kind: string; sessionId: string; agentPid: number; at: number; timer: ReturnType<typeof setTimeout> }>();
+  /** 復元で再開コマンドを打ち込んだ記録（再開の失敗を見分ける。`settled` はエージェントが立ち上がった印）。 */
+  private readonly resumeAttempts = new Map<PaneId, { at: number; sessionId: string; settled: boolean }>();
+  private readonly ancestorsOf: (pid: number) => number[] | null;
   /** サーバが止まる処理に入った後は、会話の参照を捨てない（止まる途中で先に終わった PTY・エージェントの巻き添えにしない）。 */
   private shuttingDown = false;
 
@@ -224,6 +253,7 @@ export class SessionService {
     this.getAutoResumeEnabled = opts.getAutoResumeEnabled ?? (() => true);
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
     this.sessionName = opts.sessionName;
+    this.ancestorsOf = opts.ancestorsOf ?? ((pid) => procAncestors(pid));
     this.scrollbackEditorEnv = {
       tmpRoot: opts.scrollbackEditor?.tmpRoot,
       platform: opts.scrollbackEditor?.platform ?? process.platform,
@@ -551,6 +581,7 @@ export class SessionService {
   private publishPaneClosed(paneId: PaneId, successorPaneId: PaneId | undefined): void {
     this.resumeWrittenAt.delete(paneId); // 20260926-agent-start の review ラウンド 1（閉じた pane の記録を残さない）
     this.agentGoneAt.delete(paneId);
+    this.clearAttributionState(paneId);
     this.commandPanes.delete(paneId); // 20260927-custom-command-keys
     const editor = this.scrollbackEditors.get(paneId);
     if (editor) {
@@ -1163,9 +1194,31 @@ export class SessionService {
     // ただし**すぐには捨てない**（20261009-agent-resume-lost）。システムの停止ではエージェントのプロセスがサーバより先に終わることがあり、
     // その巻き添えで参照が消えて、次の起動で再開されなかった。居なくなった時刻を覚え、シェルが生きたまま `AGENT_GONE_GRACE_MS`
     // エージェントの居ない状態が続いたときに捨てる（下）。止まる処理に入った後は捨てない。
-    if (patch.agent) this.agentGoneAt.delete(paneId);
+    // 居なくなった猶予の間に、**別のエージェント**（居なくなったものと共通のプロセスが無い）が検出されたら、その後に報告が来ていない限り、参照を捨てる
+    // （20261009-agent-session-attribution AC9。フックの報告をしない別のエージェントが、前のエージェントの参照を引き継いでしまうため）。
+    // 同じエージェントの判定の揺れ（居なくなって、すぐ同じプロセスが検出された）では捨てない。捨てた参照は、「一つ前」として履歴に残す。
+    let droppedForNewAgent = false;
+    if (patch.agent) {
+      const goneSince = this.agentGoneAt.get(paneId);
+      if (goneSince !== undefined && pane.agent === null && pane.agentSession !== null && !this.shuttingDown && !this.sameProcessesAsGone(paneId)) {
+        droppedForNewAgent = true;
+        this.logger.info("agent session dropped (a different agent started without reporting)", {
+          paneId,
+          kind: pane.agentSession.kind,
+          session: pane.agentSession.sessionId.slice(0, 8),
+          sinceGoneMs: this.clock.now() - goneSince,
+        });
+      }
+      this.agentGoneAt.delete(paneId);
+      this.goneAgentPids.delete(paneId);
+      // 再開で立ち上がった印（手が空く前に居なくなれば、再開の失敗）。
+      const attempt = this.resumeAttempts.get(paneId);
+      if (attempt && patch.agent.state !== "unknown") attempt.settled = true;
+    }
     if (patch.agent === null && pane.agent !== null && pane.agentSession !== null && !this.shuttingDown && !this.agentGoneAt.has(paneId)) {
       this.agentGoneAt.set(paneId, this.clock.now());
+      const seen = this.lastSeenAgentPids.get(paneId);
+      if (seen) this.goneAgentPids.set(paneId, seen);
     }
     const goneAt = this.agentGoneAt.get(paneId);
     const clearsAgentSession =
@@ -1175,11 +1228,38 @@ export class SessionService {
       pane.agent === null &&
       pane.agentSession !== null &&
       this.clock.now() - goneAt >= AGENT_GONE_GRACE_MS;
-    if (goneAt !== undefined && (pane.agentSession === null || clearsAgentSession)) this.agentGoneAt.delete(paneId);
-    if (clearsAgentSession) {
-      this.logger.info("agent session dropped (agent gone, shell alive)", { paneId, graceMs: AGENT_GONE_GRACE_MS, kind: pane.agentSession?.kind });
+    if (goneAt !== undefined && (pane.agentSession === null || clearsAgentSession)) {
+      this.agentGoneAt.delete(paneId);
+      this.goneAgentPids.delete(paneId);
     }
-    const fullPatch = clearsAgentSession ? { ...patch, agentSession: null } : patch;
+    // 参照の行き先: 再開の失敗（再開を打ち込んだ後、手が空く前に居なくなった）なら、一つ前へ戻す。そうでなければ捨てる。
+    let nextSession: AgentSessionRef | null | undefined;
+    if (droppedForNewAgent && pane.agentSession) {
+      this.pushHistory(paneId, pane.agentSession);
+      nextSession = null;
+    } else if (clearsAgentSession && pane.agentSession) {
+      const attempt = this.resumeAttempts.get(paneId);
+      const since = attempt ? this.clock.now() - attempt.at : undefined;
+      const failed = attempt !== undefined && !attempt.settled && attempt.sessionId === pane.agentSession.sessionId;
+      const base = {
+        paneId,
+        graceMs: AGENT_GONE_GRACE_MS,
+        kind: pane.agentSession.kind,
+        session: pane.agentSession.sessionId.slice(0, 8),
+        ...(since !== undefined ? { sinceResumeWrittenMs: since } : {}),
+      };
+      if (failed) {
+        const previous = this.popHistory(paneId);
+        nextSession = previous ?? null;
+        this.logger.info("agent resume failed; reverted to the previous session", { ...base, reason: "agent gone before it settled after the resume command", previous: previous?.sessionId.slice(0, 8) ?? null });
+      } else {
+        nextSession = null;
+        this.clearHistory(paneId);
+        this.logger.info("agent session dropped (agent gone, shell alive)", { ...base, reason: since !== undefined ? "agent ended after a resumed session" : "agent ended" });
+      }
+      this.resumeAttempts.delete(paneId);
+    }
+    const fullPatch = nextSession !== undefined ? { ...patch, agentSession: nextSession } : patch;
     const updated = this.model.updatePaneRuntime(paneId, fullPatch);
     if (agentChanged) {
       this.bus.publish({ event: "pane.agent_status_changed", data: { paneId, agent: updated.agent } });
@@ -1189,7 +1269,7 @@ export class SessionService {
     }
     // 会話参照の消滅も保存契機にする（design D8）——さもないと、サーバが不意に落ちたときに
     // 「もう有効ではない」という事実が session.json に反映されないまま残ることがある。
-    if (cwdChanged || clearsAgentSession) this.persist.touch();
+    if (cwdChanged || clearsAgentSession || droppedForNewAgent) this.persist.touch();
   }
 
   /**
@@ -1318,15 +1398,192 @@ export class SessionService {
   /**
    * 公式フック連携（20260923-agent-session-resume）からの報告を反映する。`paneId` が存在しなければ
    * 何もしない（report 経路は best-effort。design「振る舞いの詳細・会話IDの報告受信」）。
+   *
+   * **誰の報告かを確かめる**（20261009-agent-session-attribution）。`agentPid` は、フックが足した「報告したエージェントのプロセスの pid」。
+   * - 付いていない（古い版のフック・pid の取れない環境）: 今までどおり受ける。
+   * - その pane のシェルの子孫でない（常駐のプロセスの中で動いたフック・別の端末〔tmux〕の中のエージェント）: 捨てる。
+   * - 前面のエージェント自身のプロセスでない（エージェントが起動した、同じ種類の子）: 捨てる。
+   * - 前面のエージェントが、まだ検出されていない: `REPORT_HOLD_MS` の間、保留して、検出されたときに決める。
+   * 報告の中の pid は、pane の中のプログラムが好きに書けるので、**これは、取り違えを防ぐ仕組みで、安全の境界ではない**。
    */
-  reportAgentSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string): void {
+  reportAgentSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid?: number): void {
+    const pane = this.model.getPane(paneId);
+    if (!pane) return;
+    if (agentPid === undefined) {
+      this.applyReportedSession(paneId, kind, sessionId);
+      return;
+    }
+    const v = this.attribute(paneId, kind, agentPid);
+    if (v.verdict === "accept") {
+      this.dropPending(paneId);
+      this.applyReportedSession(paneId, kind, sessionId);
+    } else if (v.verdict === "reject") {
+      this.logIgnoredReport(paneId, kind, sessionId, agentPid, v.reason);
+    } else {
+      this.holdReport(paneId, kind, sessionId, agentPid);
+    }
+  }
+
+  /**
+   * サブエージェントの報告などを、受けてよいか（`reportAgentSession` と同じ確かめ。保留はしない。pid の無い報告・前面のエージェントが
+   * まだ分からない間は、今までどおり受ける）。
+   */
+  acceptsReporter(paneId: PaneId, kind: string, agentPid: number | undefined): boolean {
+    if (agentPid === undefined) return true;
+    const v = this.attribute(paneId, kind, agentPid);
+    if (v.verdict === "reject") {
+      this.logger.info("agent report ignored", { paneId, kind, reason: v.reason, agentPid });
+      return false;
+    }
+    return true;
+  }
+
+  /** 前面のエージェント（その pane の前面のジョブのエージェント自身のプロセス）を知らせる。`null` は、居ない。保留した報告があれば、ここで決める。 */
+  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number> } | null): void {
+    if (front) {
+      this.frontAgents.set(paneId, front);
+      this.lastSeenAgentPids.set(paneId, front.pids);
+    } else {
+      this.frontAgents.delete(paneId);
+    }
+    this.settlePending(paneId);
+    this.expireResumeAttempt(paneId);
+  }
+
+  /** 保存・復元のための、前の会話の参照（最新が先頭。いまの参照は含めない）。 */
+  agentSessionHistoryOf(paneId: PaneId): AgentSessionRef[] {
+    return this.model.agentSessionHistory(paneId);
+  }
+
+  private applyReportedSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string): void {
     const pane = this.model.getPane(paneId);
     if (!pane) return;
     // `reportedAt` は壁時計の epoch ms（protocol の doc comment）。`this.clock` は復元の期限計測用の
     // 単調時計（`monotonicNow`）なので、ここでは使わない（`AgentInfo.since` と同じ `Date.now()` に揃える）。
     this.agentGoneAt.delete(paneId); // 新しい報告は、居なくなった前のエージェントの参照ではない（捨てる猶予を打ち切る）
+    this.goneAgentPids.delete(paneId);
+    this.resumeAttempts.delete(paneId); // 報告が届いた＝エージェントが立ち上がった
+    const prev = pane.agentSession;
+    if (prev && prev.sessionId !== sessionId) this.pushHistory(paneId, prev);
+    else this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
     this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
     this.persist.touch();
+  }
+
+  private pushHistory(paneId: PaneId, ref: AgentSessionRef): void {
+    const rest = this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== ref.sessionId);
+    this.model.setAgentSessionHistory(paneId, [ref, ...rest].slice(0, AGENT_SESSION_HISTORY_MAX));
+  }
+  private popHistory(paneId: PaneId): AgentSessionRef | undefined {
+    const list = this.model.agentSessionHistory(paneId);
+    const first = list[0];
+    this.model.setAgentSessionHistory(paneId, list.slice(1));
+    return first;
+  }
+  private clearHistory(paneId: PaneId): void {
+    if (this.model.agentSessionHistory(paneId).length > 0) this.model.setAgentSessionHistory(paneId, []);
+  }
+
+  /**
+   * 居なくなったエージェントと、いま検出されたエージェントが、同じプロセスを含むか（判定の揺れか、別のエージェントか）。
+   * どちらかのプロセスが分からない（前面のジョブを読めていない環境）ときは、同じとみなす＝捨てない（#122 の猶予のまま）。
+   */
+  private sameProcessesAsGone(paneId: PaneId): boolean {
+    const gone = this.goneAgentPids.get(paneId);
+    const now = this.frontAgents.get(paneId)?.pids;
+    if (!gone || !now || gone.size === 0 || now.size === 0) return true;
+    for (const pid of now) if (gone.has(pid)) return true;
+    return false;
+  }
+
+  private attribute(paneId: PaneId, kind: string, agentPid: number): ReportVerdict {
+    const shell = this.terminals.get(paneId)?.pid;
+    const ancestors = this.ancestorsOf(agentPid);
+    if (ancestors !== null && shell !== undefined && !ancestors.includes(shell)) {
+      return { verdict: "reject", reason: "the reporting process is not a descendant of the pane's shell" };
+    }
+    const front = this.frontAgents.get(paneId);
+    if (front) {
+      if (front.kind !== kind) return { verdict: "reject", reason: `the pane's front agent is another kind (${front.kind})` };
+      if (front.pids.has(agentPid)) return { verdict: "accept" };
+      return { verdict: "reject", reason: "the reporting process is not the pane's front agent (a nested or unrelated process)" };
+    }
+    return { verdict: "hold" };
+  }
+
+  private logIgnoredReport(paneId: PaneId, kind: string, sessionId: string, agentPid: number, reason: string): void {
+    this.logger.info("agent report ignored", { paneId, kind, session: sessionId.slice(0, 8), reason, agentPid });
+  }
+
+  private holdReport(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid: number): void {
+    this.dropPending(paneId);
+    const timer = setTimeout(() => this.settlePending(paneId, true), REPORT_HOLD_MS);
+    timer.unref?.();
+    this.pendingReports.set(paneId, { kind, sessionId, agentPid, at: this.clock.now(), timer });
+  }
+
+  private dropPending(paneId: PaneId): void {
+    const p = this.pendingReports.get(paneId);
+    if (!p) return;
+    clearTimeout(p.timer);
+    this.pendingReports.delete(paneId);
+  }
+
+  /**
+   * 保留した報告を決める。前面のエージェントが分かれば、確かめて、受けるか捨てる。分からないまま `REPORT_HOLD_MS` が過ぎた・
+   * サーバが止まる処理に入った（`force`）なら、**今までどおり受けた扱い**にする（報告したプロセスは、シェルの子孫であることを確かめてある。
+   * 検出できないエージェントの再開を、落とさない）。
+   */
+  private settlePending(paneId: PaneId, force = false): void {
+    const p = this.pendingReports.get(paneId);
+    if (!p) return;
+    if (!this.model.getPane(paneId)) {
+      this.dropPending(paneId);
+      return;
+    }
+    const v = this.attribute(paneId, p.kind, p.agentPid);
+    if (v.verdict === "reject") {
+      this.dropPending(paneId);
+      this.logIgnoredReport(paneId, p.kind, p.sessionId, p.agentPid, v.reason);
+      return;
+    }
+    const expired = this.clock.now() - p.at >= REPORT_HOLD_MS;
+    if (v.verdict === "hold" && !force && !expired) return;
+    this.dropPending(paneId);
+    if (v.verdict === "hold") {
+      this.logger.info("agent report accepted without verification (no front agent was detected in time)", { paneId, kind: p.kind, session: p.sessionId.slice(0, 8), agentPid: p.agentPid });
+    }
+    this.applyReportedSession(paneId, p.kind as AgentIntegrationKind, p.sessionId);
+  }
+
+  /** 再開を打ち込んでから `RESUME_PENDING_MS` の間にエージェントが検出されなければ、再開の失敗として、一つ前へ戻す（検出の前に終わる速い失敗）。 */
+  private expireResumeAttempt(paneId: PaneId): void {
+    const attempt = this.resumeAttempts.get(paneId);
+    if (!attempt || attempt.settled || this.shuttingDown) return;
+    const pane = this.model.getPane(paneId);
+    if (!pane || pane.agent !== null || pane.agentSession === null) return;
+    if (this.clock.now() - attempt.at <= RESUME_PENDING_MS) return;
+    this.resumeAttempts.delete(paneId);
+    if (pane.agentSession.sessionId !== attempt.sessionId) return;
+    const previous = this.popHistory(paneId);
+    this.model.setAgentSession(paneId, previous ?? null);
+    this.logger.info("agent resume failed; reverted to the previous session", {
+      paneId,
+      kind: pane.agentSession.kind,
+      session: attempt.sessionId.slice(0, 8),
+      sinceResumeWrittenMs: this.clock.now() - attempt.at,
+      reason: "no agent was detected after the resume command",
+      previous: previous?.sessionId.slice(0, 8) ?? null,
+    });
+    this.persist.touch();
+  }
+
+  private clearAttributionState(paneId: PaneId): void {
+    this.frontAgents.delete(paneId);
+    this.lastSeenAgentPids.delete(paneId);
+    this.goneAgentPids.delete(paneId);
+    this.resumeAttempts.delete(paneId);
+    this.dropPending(paneId);
   }
 
   /**
@@ -1567,6 +1824,7 @@ export class SessionService {
     }
     this.terminals.get(paneId)?.write(`${decision.command}\r`);
     this.resumeWrittenAt.set(paneId, this.clock.now());
+    if (agentSession) this.resumeAttempts.set(paneId, { at: this.clock.now(), sessionId: agentSession.sessionId, settled: false });
     // 会話の id は先頭 8 文字だけ（ログに全体を残さない）。
     this.logger.info("agent resume command written", { paneId, kind: agentSession?.kind, session: agentSession?.sessionId.slice(0, 8) });
   }
@@ -1574,6 +1832,8 @@ export class SessionService {
   /** サーバが止まる処理に入ったことを知らせる（以後、エージェントが居ないと見えても会話の参照を捨てない。20261009-agent-resume-lost）。 */
   beginShutdown(): void {
     this.shuttingDown = true;
+    // 保留した報告は、今までどおり受けた扱いにして保存する（再開できないより、ましなため。20261009-agent-session-attribution）。
+    for (const paneId of [...this.pendingReports.keys()]) this.settlePending(paneId, true);
   }
 
   /** 会話の再開コマンドを打ち込んでから `RESUME_PENDING_MS` の間で、まだエージェントが検出されていないか（`agent start` はその pane に打ち込まない）。 */

@@ -747,9 +747,11 @@ export async function composeServer(
           agentReportSocketPath,
           (report) => {
             if (report.type === "session") {
-              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId); // 連携の kind の全部（20261007-agent-hook-drift research X1）
+              // 連携の kind の全部（20261007-agent-hook-drift research X1）。報告したプロセスの確かめは `reportAgentSession` の中（20261009-agent-session-attribution）。
+              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid);
             } else if (report.kind === "claude") {
-              subagents.report(report); // サブエージェントの報告は claude だけ
+              // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
+              if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
             }
           },
           logger,
@@ -1021,6 +1023,7 @@ export function toSessionFileData(session: SessionService): SessionFileData {
               shell: p.shell,
               status: p.status,
               agentSession: p.agentSession ?? undefined,
+              agentSessionHistory: session.agentSessionHistoryOf(p.id).length > 0 ? session.agentSessionHistoryOf(p.id) : undefined,
             })),
         })),
     })),

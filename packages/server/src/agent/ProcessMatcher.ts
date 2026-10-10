@@ -39,6 +39,30 @@ export function match(job: ForegroundJob): string | null {
 }
 
 /**
+ * 前面のジョブのうち、その pane の**エージェント自身**のプロセスの pid（20261009-agent-session-attribution）。種類が `kind` と判定されるプロセスのうち、
+ * ジョブの中に、同じ種類と判定される祖先が居ないもの（いちばん外側）と、その直の子（親が同じ種類。ランタイムの包みと、その中の本体）。
+ * **エージェントが Bash ツールなどで起動した子の同じ種類のプロセス**（間に別のプロセスを挟む）は入らない。親子の情報（`ppid`）が取れない環境は、種類が合う全部。
+ */
+export function agentProcessPids(job: ForegroundJob, kind: string): number[] {
+  const matched = job.processes.filter((p) => lookupAgentKind(normalizedProcessName(p)) === kind);
+  if (matched.length === 0) return [];
+  if (matched.some((p) => p.ppid === undefined)) return matched.map((p) => p.pid);
+  const byPid = new Map(job.processes.map((p) => [p.pid, p] as const));
+  const matchedPids = new Set(matched.map((p) => p.pid));
+  const hasMatchedAncestor = (p: ForegroundProcess): boolean => {
+    let cur = p.ppid !== undefined ? byPid.get(p.ppid) : undefined;
+    for (let i = 0; cur !== undefined && i < 64; i++) {
+      if (matchedPids.has(cur.pid)) return true;
+      cur = cur.ppid !== undefined ? byPid.get(cur.ppid) : undefined;
+    }
+    return false;
+  };
+  const cluster = new Set(matched.filter((p) => !hasMatchedAncestor(p)).map((p) => p.pid));
+  for (const p of matched) if (p.ppid !== undefined && cluster.has(p.ppid)) cluster.add(p.pid);
+  return [...cluster];
+}
+
+/**
  * 実際に使う「候補名」を決める（herdr の `normalized_process_name`）。
  * `process.exe` は `LinuxProcessInspector`/`WindowsProcessInspector` が既に「argv[0] か、それが
  * 無ければプロセス名」として組み立てている（herdr の `argv0.unwrap_or(name)` に相当する値）。
