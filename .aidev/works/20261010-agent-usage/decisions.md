@@ -83,3 +83,15 @@
 | F7・F8 | stdin・起動の費用 | 3 秒の上限は残す。費用（約 45〜60 ms。送りは並行で最大 200 ms）を文書に。 |
 - **クラシックの切り替えのボタンの左右の余白は、3 つ（基本画面・グラフ・利用状況）を既定の 240px に収めるため、1em → 0.6em（tab の 1em より詰まる）。** モダンの余白は元のまま（`--soda-shape-seg-pad-x`。origin/main と同じ）。
 - **比べる道具の基準（元）は、基準のコミットの `appServer.ts` を使う**ので、E2E の環境の隔離（`CODEX_HOME`・`CLAUDE_CONFIG_DIR` を空へ）の前後では、その機械の `~/.claude` に依る差（`08-settings-4`。エージェント連携の導入状態）が出る。画面の変更ではない。
+
+## PR4 pane の情報（`feature/agent-usage-4`）
+| # | 事項 | 決定 |
+| :- | :- | :- |
+| I1 | 窓の形 | 非モーダルの小さな窓（`role="dialog"`・非 `aria-modal`）。端末へのキーを止めない。ダイアログの 1 枠（`openDialog`）とは別の状態（`view.paneInfoPaneId`）。確認などのダイアログが開いている間は隠す。 |
+| I2 | 「見ている」の数え方 | `view.usageWatchWanted` を 1 つの真偽にして、`UsageController` はそれだけを見る。サーバへ送る `agent.usage_watch` は接続ごとの 1 つの印のまま（ダッシュボードと窓のどちらかが見えていれば on）。 |
+| I3 | キー | `show_usage`（`prefix+shift+u`。`u` は usage。`prefix+shift+s` の `show_subagents` と並ぶ）。基本画面以外・グラフの窓のキーの絞りでは食う。 |
+| I4 | クラシックの配置 | 隅のボタンを出さない（画面が 1 画素も変わらない。比べる道具で 48 枚差 0）。メニュー・キーから開く。 |
+| I5 | 検知からの時間 | プロトコルに検出の時刻が無い。`AgentInfo.since`（状態が変わった時刻）を「いまの状態になってから」として出す。検出の時刻を足すのは別の変更。 |
+| I6 | 共有の部品 | アカウントの枠は `AccountCard.vue` に切り出した（PR3 の CSS はそのまま移した）。数字の整形は `dashboardModel.ts`。 |
+| I7 | モバイルの入口 | pane の右クリックのメニューが 1 列の画面に無い（かつ `MobileShell.vue` に触れない）ので、ピッカーの各エージェントの行の［利用状況］。 |
+
