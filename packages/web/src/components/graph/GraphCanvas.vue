@@ -71,6 +71,7 @@ import GraphNode from "./GraphNode.vue";
 import HistoryPanel from "./HistoryPanel.vue";
 import SubagentPanel from "./SubagentPanel.vue";
 import GraphSubagentLayer from "./GraphSubagentLayer.vue";
+import GraphForkLayer from "./GraphForkLayer.vue";
 import SubagentTranscriptWindow from "./SubagentTranscriptWindow.vue";
 import MobileGraphSheet from "./MobileGraphSheet.vue";
 import PaneChecklist from "./PaneChecklist.vue";
@@ -271,6 +272,11 @@ const worldStyle = computed(() => ({
 /** Tab の順＝読み順（上から、同じ高さなら左から）。配置の変更に追従する（research-ui §2.12）。 */
 /** 表示中の空間のノード（構成が導けないときは全部）。 */
 const shownNodes = computed(() => graph.nodes.filter((n) => spaces.isShown(n.key)));
+/** グラフにあるノードの鍵の全部（fork 元が別の空間にあるか、無くなったかの見分け。20261009-agent-fork PR2）。 */
+const knownNodeKeys = computed(() => new Set(graph.nodes.map((n) => n.key)));
+function forkSourceName(key: string): string {
+  return graph.nodeInfo(key as NodeKey).name;
+}
 const orderedNodes = computed(() => [...shownNodes.value].sort((a, b) => a.y - b.y || a.x - b.x));
 /**
  * Tab の入口（tabindex=0）のノード: 選んでいるノード、無ければ読み順の先頭。ほかのノードは -1 で、ノードの間の Tab は読み順で自前に動かす。
@@ -2831,6 +2837,11 @@ function chipAria(e: EdgeView): string {
               @add="openAddForm"
               @head-contextmenu="onFrameContextmenu"
               @group-contextmenu="onGroupFrameContextmenu"
+            />
+            <GraphForkLayer
+              :nodes="shownNodes"
+              :known="knownNodeKeys"
+              :name-of="forkSourceName"
             />
             <svg class="graph-edges" width="1" height="1" aria-hidden="true">
               <GraphEdge
