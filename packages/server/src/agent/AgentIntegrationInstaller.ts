@@ -380,7 +380,7 @@ async function followDanglingLink(path: string): Promise<string> {
   throw new Error("シンボリックリンクが深すぎます");
 }
 
-async function writeConfigFile(path: string, contents: string): Promise<void> {
+export async function writeConfigFile(path: string, contents: string): Promise<void> {
   let target = path;
   let mode: number | undefined;
   try {

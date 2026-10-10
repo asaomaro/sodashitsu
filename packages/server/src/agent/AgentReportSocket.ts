@@ -42,7 +42,24 @@ type AgentReportBody =
       running: { id: string; agentType?: string; description?: string }[];
       truncated: boolean;
     }
-  | { type: "session_end"; paneId: string; kind: string; sessionId: string };
+  | { type: "session_end"; paneId: string; kind: string; sessionId: string }
+  /** ステータスラインの包みの利用状況（20261010-agent-usage の PR2）。数字と、短い文字列だけ。 */
+  | ({ type: "usage"; paneId: string; kind: string; sessionId: string } & UsageFields);
+
+/** `type: "usage"` の項目（検査済み。受け口が、範囲・長さ・形を掛ける）。 */
+export interface UsageFields {
+  model?: string;
+  modelName?: string;
+  costUsd?: number;
+  contextUsedPct?: number;
+  contextWindowSize?: number;
+  contextTokens?: number;
+  fiveHour?: { usedPct: number; resetsAt?: number };
+  sevenDay?: { usedPct: number; resetsAt?: number };
+  spendLimit?: { usedPct: number; resetsAt?: number; usedUsd?: number; limitUsd?: number; period?: string };
+  configKey?: string;
+  configDirName?: string;
+}
 
 export type AgentReportHandler = (report: AgentReport) => void;
 
@@ -228,7 +245,61 @@ function parseReport(v: unknown): AgentReport | undefined {
     }
     case "session_end":
       return { type: "session_end", ...base };
+    case "usage": {
+      // 会話の id は UUID の形だけ（Claude Code）。ほかの項目は、範囲・長さを掛けて、通るものだけ。
+      if (!UUID_RE.test(o.sessionId)) return undefined;
+      return { type: "usage", ...base, ...usageFieldsOf(o) };
+    }
     default:
       return undefined; // 知らない type は捨てる
   }
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function numIn(v: unknown, lo: number, hi: number): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : undefined;
+}
+
+function windowIn(v: unknown): { usedPct: number; resetsAt?: number } | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  const usedPct = numIn(o.usedPct, 0, 100000);
+  if (usedPct === undefined) return undefined;
+  const resetsAt = numIn(o.resetsAt, 0, 1e11);
+  return { usedPct, ...(resetsAt !== undefined ? { resetsAt } : {}) };
+}
+
+/** `type: "usage"` の電文から、通す項目だけを取り出す。 */
+function usageFieldsOf(o: Record<string, unknown>): UsageFields {
+  const out: UsageFields = {};
+  const model = cut(o.model, 128);
+  if (model !== undefined) out.model = model;
+  const modelName = cut(o.modelName, 64);
+  if (modelName !== undefined) out.modelName = modelName;
+  const costUsd = numIn(o.costUsd, 0, 1e9);
+  if (costUsd !== undefined) out.costUsd = costUsd;
+  const pct = numIn(o.contextUsedPct, 0, 1000);
+  if (pct !== undefined) out.contextUsedPct = pct;
+  const win = numIn(o.contextWindowSize, 0, 1e12);
+  if (win !== undefined) out.contextWindowSize = win;
+  const tokens = numIn(o.contextTokens, 0, 1e12);
+  if (tokens !== undefined) out.contextTokens = tokens;
+  const five = windowIn(o.fiveHour);
+  if (five) out.fiveHour = five;
+  const seven = windowIn(o.sevenDay);
+  if (seven) out.sevenDay = seven;
+  const spend = windowIn(o.spendLimit);
+  if (spend) {
+    const sl = o.spendLimit as Record<string, unknown>;
+    const usedUsd = numIn(sl.usedUsd, 0, 1e9);
+    const limitUsd = numIn(sl.limitUsd, 0, 1e9);
+    const period = cut(sl.period, 32);
+    out.spendLimit = { ...spend, ...(usedUsd !== undefined ? { usedUsd } : {}), ...(limitUsd !== undefined ? { limitUsd } : {}), ...(period !== undefined ? { period } : {}) };
+  }
+  const configKey = typeof o.configKey === "string" && /^[0-9a-f]{16}$/.test(o.configKey) ? o.configKey : undefined;
+  if (configKey !== undefined) out.configKey = configKey;
+  const dirName = cut(o.configDirName, 64);
+  if (dirName !== undefined) out.configDirName = dirName;
+  return out;
 }

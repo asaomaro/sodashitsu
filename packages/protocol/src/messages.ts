@@ -880,10 +880,32 @@ export interface AgentIntegrationStatus {
   /** 導入済みだが、本製品のフックが足りない・スクリプトが古い（［更新］で足せる）。無ければ false 扱い（20261004-subagent-display）。 */
   needsUpdate?: boolean;
 }
+/**
+ * Claude Code のステータスラインの包み（20261010-agent-usage の PR2。利用状況の報告を受けるための、`statusLine` の差し替え）の状態。
+ * フックの［導入］とは別の項目（押したときだけ書き換える）。
+ * - `none`: 未導入（`statusLine` が無い・利用者の元のまま）
+ * - `installed`: 導入済み
+ * - `needs_update`: 導入済みだが、包みのスクリプトが古い・無い（［更新］で直る）
+ * - `detached`: 以前に導入したが、利用者が後から `statusLine` を替えた（外れています。外すは何もしない）
+ * - `invalid`: 設定の形が想定と違う・読めない（何も変えない。`message` に理由）
+ * - `unsupported`: この OS では導入できない（Windows）
+ */
+export type StatusLineWrapState = "none" | "installed" | "needs_update" | "detached" | "invalid" | "unsupported";
+export interface StatusLineWrapStatus {
+  state: StatusLineWrapState;
+  /** `invalid` の理由など。 */
+  message?: string;
+  /** 導入済み（`installed`・`needs_update`）で、動いている Claude Code から、一定の時間、報告が届いていない（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性）。 */
+  silent?: boolean;
+  /** 最後に報告を受けた時刻（epoch ms。受けたことが無ければ項目なし）。 */
+  lastReportAt?: number;
+}
 export interface AgentIntegrationStatusResult {
   /** herdr の `resume_agents_on_restore` に相当（design D3）。 */
   autoResumeEnabled: boolean;
   agents: Record<AgentIntegrationKind, AgentIntegrationStatus>;
+  /** Claude Code のステータスラインの包み。古いサーバには無い。 */
+  statusLine?: StatusLineWrapStatus;
 }
 
 export const AgentIntegrationInstallParams = z.object({ kind: agentIntegrationKind });
@@ -897,6 +919,10 @@ export interface AgentIntegrationInstallResult {
 export const AgentIntegrationUninstallParams = z.object({ kind: agentIntegrationKind });
 export type AgentIntegrationUninstallParams = z.infer<typeof AgentIntegrationUninstallParams>;
 export type AgentIntegrationUninstallResult = AgentIntegrationInstallResult;
+
+/** ステータスラインの包みの導入・外す（Claude Code だけ。引数は無い）。結果は `AgentIntegrationInstallResult`。 */
+export const AgentIntegrationStatusLineParams = z.object({});
+export type AgentIntegrationStatusLineParams = z.infer<typeof AgentIntegrationStatusLineParams>;
 
 export const AgentIntegrationSetAutoResumeParams = z.object({ enabled: z.boolean() });
 export type AgentIntegrationSetAutoResumeParams = z.infer<typeof AgentIntegrationSetAutoResumeParams>;
@@ -1269,6 +1295,8 @@ export const METHOD_SCHEMAS = {
   "agent_integration.install": AgentIntegrationInstallParams,
   "agent_integration.uninstall": AgentIntegrationUninstallParams,
   "agent_integration.set_auto_resume": AgentIntegrationSetAutoResumeParams,
+  "agent_integration.statusline_install": AgentIntegrationStatusLineParams,
+  "agent_integration.statusline_uninstall": AgentIntegrationStatusLineParams,
   "agent.prompt": AgentPromptParams,
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
@@ -1391,6 +1419,8 @@ export interface MethodResultMap {
   "agent_integration.install": AgentIntegrationInstallResult;
   "agent_integration.uninstall": AgentIntegrationUninstallResult;
   "agent_integration.set_auto_resume": Record<string, never>;
+  "agent_integration.statusline_install": AgentIntegrationInstallResult;
+  "agent_integration.statusline_uninstall": AgentIntegrationInstallResult;
   "agent.prompt": AgentPromptResult;
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
