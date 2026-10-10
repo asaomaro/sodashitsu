@@ -384,6 +384,41 @@ describe("ActionDispatcher — newWorkspace（名前を尋ねず直接作る。h
   });
 });
 
+describe("ActionDispatcher — moveItemToGroup / movePaneToTab（グラフの画面から。20261008-graph-first PR4）", () => {
+  it("moveItemToGroup: グループへ入れる（group.add_member）・「グループなし」へ出す（group.remove_member）。成功は true、失敗はトーストと false", async () => {
+    const conn = makeConnection();
+    const { dispatcher } = makeDispatcher(conn);
+    expect(await dispatcher.moveItemToGroup("w1", "g1")).toBe(true);
+    expect(await dispatcher.moveItemToGroup("w1", null)).toBe(true);
+    const methods = conn.requests.map((r) => r[0]);
+    expect(methods.some((m) => m === "group.add_member")).toBe(true);
+    expect(methods.some((m) => m === "group.remove_member")).toBe(true);
+    const conn2 = makeConnection();
+    conn2.rejectWith["group.add_member"] = "boom";
+    const view = useViewStore(pinia);
+    expect(await makeDispatcher(conn2).dispatcher.moveItemToGroup("w1", "g1")).toBe(false);
+    expect(view.toasts.at(-1)?.message ?? "").toContain("グループへ追加できませんでした");
+  });
+
+  it("movePaneToTab: サーバが理由つきで断ったら、トーストを出して結果を返す。follow: false なら、見ている workspace・tab を切り替えない", async () => {
+    const conn = makeConnection();
+    conn.resolveWith["pane.move_to_tab"] = { ok: false, reason: "different_worktree" };
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(conn);
+    const r = await dispatcher.movePaneToTab("p1", "t9", { follow: false });
+    expect(r).toEqual({ ok: false, reason: "different_worktree" });
+    expect(view.toasts.at(-1)?.message ?? "").toContain("別の worktree の workspace へは移せません");
+    const conn2 = makeConnection();
+    conn2.resolveWith["pane.move_to_tab"] = { ok: true };
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted?.({ id: "w9", label: "w9", cwd: "/", tabIds: ["t9"], activeTabId: "t9", groupId: null, git: null, autoLabel: false } as never);
+    view.setView("w1", "t1");
+    const r2 = await makeDispatcher(conn2).dispatcher.movePaneToTab("p1", "t9", { follow: false });
+    expect(r2).toEqual({ ok: true });
+    expect(view.workspaceId).toBe("w1"); // 切り替わらない
+  });
+});
+
 describe("ActionDispatcher — 閉じる前の確認（D23。busy な pane を含むときだけ・workspace は常に）", () => {
   it("closePane: busy でなければ確認せず直接閉じる", () => {
     const conn = makeConnection();

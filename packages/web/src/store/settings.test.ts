@@ -902,6 +902,44 @@ describe("uiStyle（画面の様式。20261008-ui-style）", () => {
   });
 });
 
+describe("tabBarAlways（tab が 1 つのときも tab バーを出すか。20261008-ui-style の AC24）", () => {
+  it("何も保存されていなければ null（様式に従う）。壊れた値も null", () => {
+    expect(useSettingsStore(pinia).tabBarAlways).toBeNull();
+    for (const bad of ["true", 1, {}, []]) {
+      localStorage.clear();
+      writePrefs({ tabBarAlways: bad });
+      expect(useSettingsStore(createPinia()).tabBarAlways, JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("選ぶと反映と保存を同時に行い、新しいストアが読み戻す。様式を切り替えても残る。null（既定に戻す）も値を書く", () => {
+    const store = useSettingsStore(pinia);
+    store.setTabBarAlways(true);
+    expect(store.tabBarAlways).toBe(true);
+    expect(readPrefs()["tabBarAlways"]).toBe(true);
+    store.setUiStyle("modern");
+    store.setUiStyle("classic");
+    expect(store.tabBarAlways).toBe(true); // 様式の切り替えでは消えない
+    expect(useSettingsStore(createPinia()).tabBarAlways).toBe(true);
+    store.setTabBarAlways(false);
+    expect(readPrefs()["tabBarAlways"]).toBe(false);
+    store.setTabBarAlways(null);
+    expect(store.tabBarAlways).toBeNull();
+    expect(readPrefs()["tabBarAlways"]).toBeNull();
+    expect("tabBarAlways" in readPrefs()).toBe(true);
+  });
+
+  it("別のタブ・ウィンドウでの変更に storage イベントで追従する", () => {
+    const store = useSettingsStore(pinia);
+    writePrefs({ tabBarAlways: false });
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
+    expect(store.tabBarAlways).toBe(false);
+    writePrefs({ tabBarAlways: null });
+    window.dispatchEvent(new StorageEvent("storage", { key: "soda.prefs.v1" }));
+    expect(store.tabBarAlways).toBeNull();
+  });
+});
+
 describe("様式ごとの pane の太さの表（20261008-ui-style の D7）", () => {
   it("クラシックは、今の表そのもの（回帰なし）。モダンは 3 段が単調に増え、どの段もクラシックより広い", () => {
     expect(PANE_FRAME_THICKNESS_PX_BY_STYLE.classic).toEqual({ thin: 2, default: 4, thick: 6 });

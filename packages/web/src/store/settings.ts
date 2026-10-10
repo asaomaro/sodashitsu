@@ -30,6 +30,7 @@ import {
 import type { CssVar } from "@sodashitsu/client-core";
 import { loadScrollbackPref, type ScrollbackPref } from "../term/scrollback.js";
 import {
+  loadTabBarAlways,
   loadTabBarPosition,
   loadTabBarRightEntries,
   loadTabBarRightSeparator,
@@ -81,6 +82,7 @@ export {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadTabBarAlways,
   loadUiStyle,
   type NewCwdPolicy,
 };
@@ -163,6 +165,11 @@ export const useSettingsStore = defineStore("settings", () => {
    * 両立する——前者は各 pane の内側の枠・後者は pane 領域全体の外周）。
    */
   const tabBarPosition = ref<TabBarPosition>(loadTabBarPosition(initial["tabBarPosition"]));
+  /**
+   * tab が 1 つのときも tab バーを出すか（20261008-ui-style の AC24）。`null`＝様式に従う（クラシック: 出さない・モダン: 出す）。
+   * 利用者が選んだ `true`・`false` は、様式を切り替えても残る。共有の設定。端末版は読まない。
+   */
+  const tabBarAlways = ref<boolean | null>(loadTabBarAlways(initial["tabBarAlways"]));
   const tabBarRight = ref<TabBarRightEntry[]>(loadTabBarRightEntries(initial["tabBarRight"]));
   const tabBarRightSeparator = ref(loadTabBarRightSeparator(initial["tabBarRightSeparator"]));
   const paneOuterBorders = ref(loadPaneOuterBorders(initial["paneOuterBorders"]));
@@ -244,6 +251,13 @@ export const useSettingsStore = defineStore("settings", () => {
   function setPaneAgentNameVisible(v: boolean): void {
     paneAgentNameVisible.value = v;
     writePrefs({ paneAgentNameVisible: v });
+  }
+
+  /** 反映と保存を同時に行う。`null`（既定＝様式に従う）も、いつも書く（消さない。「既定に戻す」の保存値）。 */
+  function setTabBarAlways(v: boolean | null): void {
+    const normalized = loadTabBarAlways(v);
+    tabBarAlways.value = normalized;
+    writePrefs({ tabBarAlways: normalized });
   }
 
   /** 反映と保存を同時に行う（PR #12 から取り込み）。 */
@@ -510,6 +524,8 @@ export const useSettingsStore = defineStore("settings", () => {
     const prefs = readPrefs();
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
     if (nextPosition !== tabBarPosition.value) tabBarPosition.value = nextPosition;
+    const nextAlways = loadTabBarAlways(prefs["tabBarAlways"]);
+    if (nextAlways !== tabBarAlways.value) tabBarAlways.value = nextAlways;
     const nextRight = loadTabBarRightEntries(prefs["tabBarRight"]);
     if (JSON.stringify(nextRight) !== JSON.stringify(tabBarRight.value)) tabBarRight.value = nextRight;
     const nextSeparator = loadTabBarRightSeparator(prefs["tabBarRightSeparator"]);
@@ -607,6 +623,8 @@ export const useSettingsStore = defineStore("settings", () => {
     paneFrameThickness,
     paneAgentNameVisible,
     tabBarPosition,
+    tabBarAlways,
+    setTabBarAlways,
     tabBarRight,
     tabBarRightSeparator,
     paneOuterBorders,
