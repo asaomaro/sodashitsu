@@ -77,6 +77,11 @@ export interface UsageWindow {
   /** リセットの時刻（epoch ms）。 */
   resetsAt?: number;
   windowMinutes?: number;
+  /** リセットの時刻を過ぎている（この値は古い。次の値・報告を待っている）。画面は「古い」と出す。 */
+  stale?: boolean;
+  /** 組織の枠（`spend_limit`）の、使った額・上限（USD）。 */
+  usedUsd?: number;
+  limitUsd?: number;
 }
 
 export interface AccountUsage {

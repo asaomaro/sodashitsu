@@ -22,6 +22,16 @@ import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 // 落ちた。上限を持たない it の既定を 15 秒にする（このファイルにだけ効く。20260926-load-flaky-tests の D5）。
 vi.setConfig({ testTimeout: 15_000 });
 
+/**
+ * 1 つ目のサーバの、起動直後の非同期の書き込みを終わらせる（基準の写しを取る前に呼ぶ）。workspace の git の情報（`repoKey`・`isLinkedWorktree`）は、定期のポーリング
+ * （5 秒）か最初の問い合わせで埋まり、その結果が session.json に保存される。固定の短い待ち（300ms）だけでは、負荷が高いと、基準の写しの後に埋まって、
+ * 「2 つ目の起動が書き換えた」と見間違える（試験が確かめるのは、2 つ目が触れないこと）。ここで、全 workspace を今ポーリングし、保存の予約を流す。
+ */
+async function settleFirstServer(server: { session: { snapshot(): { workspaces: { id: string }[] } }; gitPoller: { pollWorkspaceNow(id: string): Promise<unknown> }; persist: { flush(): Promise<void> } }): Promise<void> {
+  for (const w of server.session.snapshot().workspaces) await server.gitPoller.pollWorkspaceNow(w.id).catch(() => undefined);
+  await server.persist.flush();
+}
+
 describe("composeServer (integration)", () => {
   const cleanups: (() => Promise<void>)[] = [];
   afterEach(async () => {
@@ -67,8 +77,7 @@ describe("composeServer (integration)", () => {
     const def = await composeServerOnFreePort({ host: "127.0.0.1", stateDir: base, origin: [] });
     cleanups.unshift(() => def.close());
     await def.session.createWorkspace(process.cwd(), "marker-default");
-    await def.persist.flush();
-    await new Promise((res) => setTimeout(res, 300));
+    await settleFirstServer(def);
     const snap = async (name: string) => {
       const path = join(base, name);
       return { content: await readFile(path, "utf8"), mtimeMs: (await stat(path)).mtimeMs };
@@ -209,8 +218,7 @@ describe("composeServer (integration)", () => {
     const first = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [] });
     cleanups.unshift(() => first.close()); // rm より先に閉じる
     await first.session.createWorkspace(process.cwd(), "saved-by-first");
-    await first.persist.flush();
-    await new Promise((res) => setTimeout(res, 300)); // 1 つ目の起動直後の書き込みが落ち着くのを待つ
+    await settleFirstServer(first); // 1 つ目の起動直後の書き込み（git の情報の保存）を終わらせる
     const lockPath = join(stateDir, STATE_DIR_LOCK_FILE);
     const snap = async (name: string) => {
       const path = join(stateDir, name);

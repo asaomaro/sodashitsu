@@ -275,4 +275,43 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     const u = (await client.request("agent.usage", { paneId })).result.panes[paneId];
     expect(u.tokens.output).toBe(5); // 別の写し（4242）ではない
   });
+
+  it("Codex: アカウント全体の枠は、pane との対応が無くても、sessions のいちばん新しい記録から出る。会話の文は、答えに出ない（AC4・AC7）", async () => {
+    const { client } = await boot();
+    const day = join(dir, ".codex", "sessions", "2026", "10", "10");
+    await mkdir(day, { recursive: true });
+    const id = "01a1234a-1768-7210-befd-023a395239b0";
+    await writeFile(
+      join(day, `rollout-2026-10-10T09-50-20-${id}.jsonl`),
+      line({ timestamp: "2026-10-10T00:50:00.000Z", type: "session_meta", payload: { id, cwd: `/home/${MARK}`, originator: "codex_exec" } }) +
+        line({ timestamp: "2026-10-10T00:50:48.000Z", type: "response_item", payload: { type: "message", text: MARK } }) +
+        line({
+          timestamp: "2026-10-10T00:50:52.978Z",
+          type: "event_msg",
+          payload: {
+            type: "token_count",
+            info: { total_token_usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 1, total_tokens: 11 }, model_context_window: 1000 },
+            rate_limits: { primary: { used_percent: 16, window_minutes: 300, resets_at: 4_000_000_000 }, secondary: { used_percent: 2.5, window_minutes: 10080, resets_at: 4_000_100_000 }, plan_type: "pro" },
+          },
+        }),
+    );
+    const r = await client.request("agent.usage", {});
+    expect(r.error).toBeUndefined();
+    expect(r.result.panes).toEqual({});
+    expect(r.result.accounts).toHaveLength(1);
+    expect(r.result.accounts[0]).toMatchObject({
+      kind: "codex",
+      label: "codex",
+      plan: "pro",
+      source: "rollout",
+      asOf: Date.parse("2026-10-10T00:50:52.978Z"),
+      windows: [
+        { label: "5 時間", usedPct: 16, resetsAt: 4_000_000_000_000, windowMinutes: 300 },
+        { label: "週", usedPct: 2.5, resetsAt: 4_000_100_000_000, windowMinutes: 10080 },
+      ],
+    });
+    const json = JSON.stringify(r.result);
+    expect(json).not.toContain(MARK);
+    expect(json).not.toContain(dir);
+  });
 });

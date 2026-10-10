@@ -442,4 +442,43 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
       expect(refOf()?.sessionId).toBe("aaaaaaaa-1111");
     });
   });
+
+  // 20261010-agent-usage PR2（AC4）: ステータスラインの包みの報告を、受けてよいか。
+  describe("usageReportVerdict（利用状況の報告の確かめ）", () => {
+    const ID = "3e81f9a7-a757-461a-b21c-196db1d9196e";
+    const OTHER = "9c9c9c9c-1111-4111-8111-999999999999";
+
+    it("前面のエージェント自身の報告で、会話の id が pane の今の参照と一致すれば受ける", () => {
+      detect([100]);
+      service.reportAgentSession("p1", "claude", ID, 100);
+      expect(service.usageReportVerdict("p1", "claude", 100, ID)).toEqual({ verdict: "accept" });
+    });
+
+    it("別の会話の id（子の claude・別の会話）は受けない（保留して、それでも合わなければ捨てる側が決める）。pid が前面のエージェントでないものは、確かめ直しの後に捨てる", () => {
+      detect([100]);
+      service.reportAgentSession("p1", "claude", ID, 100);
+      expect(service.usageReportVerdict("p1", "claude", 100, OTHER)).toEqual({ verdict: "hold" });
+      // pid が、前面のエージェントでない（子の claude。#128 の確かめ）: 前面の記録が古いだけかもしれないので、まず hold
+      expect(service.usageReportVerdict("p1", "claude", 200, ID)).toEqual({ verdict: "hold" });
+    });
+
+    it("シェルの子孫でないプロセスの報告は、すぐ捨てる。種類の違う報告も捨てる", async () => {
+      await build({ ancestors: { 900: [900, 301, 1] } });
+      detect([100]);
+      service.reportAgentSession("p1", "claude", ID, 100);
+      const v = service.usageReportVerdict("p1", "claude", 900, ID);
+      expect(v.verdict).toBe("reject");
+      expect(service.usageReportVerdict("p1", "codex", 100, ID).verdict).toBe("reject");
+    });
+
+    it("参照がまだ無い・前面が未検出の間は保留。pane が無ければ捨てる。pid の無い報告は、会話の id の一致だけを見る", () => {
+      expect(service.usageReportVerdict("p1", "claude", undefined, ID)).toEqual({ verdict: "hold" });
+      expect(service.usageReportVerdict("p1", "claude", 100, ID)).toEqual({ verdict: "hold" });
+      expect(service.usageReportVerdict("nope", "claude", undefined, ID).verdict).toBe("reject");
+      detect([100]);
+      service.reportAgentSession("p1", "claude", ID, 100);
+      expect(service.usageReportVerdict("p1", "claude", undefined, ID)).toEqual({ verdict: "accept" });
+      expect(service.usageReportVerdict("p1", "claude", undefined, OTHER)).toEqual({ verdict: "hold" });
+    });
+  });
 });

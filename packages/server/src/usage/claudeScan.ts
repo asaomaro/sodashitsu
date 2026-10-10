@@ -71,7 +71,7 @@ const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v)
 
 /** モデルの id の形: 先頭が英数字で、英数字と `.`・`_`・`-`・`:` と、末尾の `[1m]` の類だけ（`/`・`..` 始まり・空白は通さない）。 */
 const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*(\[[A-Za-z0-9]{1,8}\])?$/;
-function safeModel(v: unknown): string | null {
+export function safeModel(v: unknown): string | null {
   if (typeof v !== "string" || v.length > MODEL_MAX || !MODEL_RE.test(v)) return null;
   return v;
 }
