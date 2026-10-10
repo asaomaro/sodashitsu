@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
+import { assertPaneResolvesFake, composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { parseArgs } from "./cliArgs.js";
 import { runAgentGet, runAgentList } from "./commands/agent.js";
@@ -103,19 +103,16 @@ describe.skipIf(
   async function newPane(): Promise<string> {
     const first = server.session.snapshot().panes[0]!.id;
     const { pane } = await server.session.splitPane(first, "down", undefined);
-    // 印のファイルには pane のシェルが解決した claude を書かせ、偽物であることも確かめる（本物を起動しないため）。
-    const marker = join(dir, `ready-${pane.id}`);
-    await type(
-      pane.id,
-      `cd ${JSON.stringify(work)} && command -v claude > ${JSON.stringify(marker)}\r`,
-    );
-    await vi.waitFor(
-      async () => expect((await readFile(marker, "utf8")).trim()).toBe(join(dir, "bin", "claude")),
-      {
-        timeout: 10_000,
-        interval: 50,
+    // `cd` を実行し終えたことと、pane のシェルが解決する `claude` が偽物であること（本物を起動しないため）を、共通の守りで確かめる。
+    await type(pane.id, `cd ${JSON.stringify(work)}\r`);
+    await assertPaneResolvesFake({
+      write: (input) => {
+        void type(pane.id, input);
       },
-    );
+      name: "claude",
+      fakeDir: join(dir, "bin"),
+      scratchDir: dir,
+    });
     return pane.id;
   }
   async function screen(paneId: string): Promise<string> {
