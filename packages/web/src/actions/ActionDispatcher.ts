@@ -279,8 +279,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         return;
       // 20260927-agent-graph。グラフはダイアログの 1 枠とは別の状態。デスクトップでは基本画面とグラフの画面の入れ替え（サイドバーにフォーカスがあるときも同じ。20261008-graph-first）、
       // 1 列の画面では重ねるダイアログを開く（閉じるのはダイアログ自身。Esc・閉じるボタン・同じキー）。
+      // 基本画面以外（グラフ・ダッシュボード）では、同じキーで基本画面へ戻す（ダッシュボードに入るキーは、今回は足さない。20261010-agent-usage PR3）。
       case "openGraph":
         if (this.view.screen === "graph") this.view.closeGraph();
+        else if (this.view.screen !== "base") this.view.setScreen("base");
         else this.view.openGraph();
         return;
       case "displayMenu":

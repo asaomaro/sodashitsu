@@ -352,6 +352,8 @@ const items = computed<MenuItem[]>(() => {
     { label: "移動", run: () => actions.run({ type: "goto" }) },
     // 連携のグラフ画面（20260927-agent-graph の design「入口」。キーの open_graph と同じ操作）。モダンの配置では、サイドバーの上の切り替えとキーで足りるので出さない（AC12）。
     ...(modernLayout.value ? [] : [{ label: "連携（グラフ）", run: () => actions.run({ type: "openGraph" }) }]),
+    // ダッシュボード（20261010-agent-usage PR3。利用状況の一覧）。モダンの配置では、サイドバーの上の切り替えで足りるので出さない（グラフと同じ）。1 列の画面では重ねるダイアログで開く。
+    ...(modernLayout.value ? [] : [{ label: "ダッシュボード", run: () => view.openDashboard() }]),
     { label: "設定", run: () => actions.run({ type: "settings" }) },
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
   ];

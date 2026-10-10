@@ -1,10 +1,17 @@
 import type { Action, KeyDecision } from "@sodashitsu/client-core";
 import { describe, expect, it } from "vitest";
-import { isAllowedOnGraphScreen } from "./graphScreenKeys.js";
+import { isAllowedOnNonBaseScreen } from "./graphScreenKeys.js";
 
 const act = (action: Action): KeyDecision => ({ kind: "action", action });
 
-describe("isAllowedOnGraphScreen（グラフの画面の間、面の外の prefix の 2 打目）", () => {
+describe("isAllowedOnNonBaseScreen（基本画面以外の画面〔グラフ・ダッシュボード〕の間、面の外の prefix の 2 打目）", () => {
+  it("ダッシュボードの画面でも同じ絞りが効く: 見えない基本画面の端末へ向かう操作（prefix の二度押し・分割・閉じる）は届かない（20261010-agent-usage PR3）", () => {
+    expect(isAllowedOnNonBaseScreen({ kind: "send", bytes: "\x02" })).toBe(false);
+    expect(isAllowedOnNonBaseScreen(act({ type: "split", dir: "right" }))).toBe(false);
+    expect(isAllowedOnNonBaseScreen(act({ type: "closePane" }))).toBe(false);
+    expect(isAllowedOnNonBaseScreen(act({ type: "openGraph" }))).toBe(true); // 基本画面へ戻す
+  });
+
   it("画面の切り替え・設定・ヘルプ・サイドバーの操作・通知の一覧は通す", () => {
     for (const a of [
       { type: "openGraph" },
@@ -19,7 +26,7 @@ describe("isAllowedOnGraphScreen（グラフの画面の間、面の外の prefi
       { type: "navigate", op: "down" },
       { type: "workspaceDelta", delta: 1 },
     ] as Action[]) {
-      expect(isAllowedOnGraphScreen(act(a)), a.type).toBe(true);
+      expect(isAllowedOnNonBaseScreen(act(a)), a.type).toBe(true);
     }
   });
 
@@ -39,13 +46,13 @@ describe("isAllowedOnGraphScreen（グラフの画面の間、面の外の prefi
       { type: "runCommand", commandId: "x" },
       { type: "showSubagents" },
     ] as Action[]) {
-      expect(isAllowedOnGraphScreen(act(a)), a.type).toBe(false);
+      expect(isAllowedOnNonBaseScreen(act(a)), a.type).toBe(false);
     }
   });
 
   it("prefix の二度押し（端末へ送る）は食う。通常のキー・捨てるキーはそのまま", () => {
-    expect(isAllowedOnGraphScreen({ kind: "send", bytes: "\x02" })).toBe(false);
-    expect(isAllowedOnGraphScreen({ kind: "pass" })).toBe(true);
-    expect(isAllowedOnGraphScreen({ kind: "consume" })).toBe(true);
+    expect(isAllowedOnNonBaseScreen({ kind: "send", bytes: "\x02" })).toBe(false);
+    expect(isAllowedOnNonBaseScreen({ kind: "pass" })).toBe(true);
+    expect(isAllowedOnNonBaseScreen({ kind: "consume" })).toBe(true);
   });
 });

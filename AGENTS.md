@@ -18,7 +18,7 @@
 - ブラウザ版の端末のファイルのリンクとドロップ（同じマシンかの判定・開き方・送ったファイルの置き場所）は `docs/file-links.md`。
 - グラフの上の端末の窓（ノードを押すと開く・キーの線引き・直結と大きさ・閉じる道。`docs/agent-graph.md`「端末の窓」）。
 - エージェントの fork（動いている Claude Code を、会話を引き継いだまま、同じフォルダの新しい pane か新しい worktree に起こす。使える条件・フックの matcher の更新〔`fork`・`clear` の後の会話の id が追える。導入済みは「更新が必要」〕・最初の知らせ・引き継がれないもの・失敗したとき・グラフの注記・限界）は `docs/agent-fork.md`、`sodactl agent fork` は `docs/sodactl.md`。
-- エージェントの利用状況（トークン・コスト・コンテキストの使用率。記録から読む。何が出るか・数え方の印〔記録に残る分／累計〕・出ないもの・安全・限界）は `docs/agent-usage.md`、`sodactl agent usage` は `docs/sodactl.md`。
+- エージェントの利用状況（トークン・コスト・コンテキストの使用率。記録から読む。何が出るか・数え方の印〔記録に残る分／累計〕・出ないもの・安全・限界。**3 つ目の画面「ダッシュボード」**〔一覧・アカウントの枠・並べ替え・行から pane へ・更新の配信 `agent.usage_watch`／`agent.usage_changed`・1 列の画面〕）は `docs/agent-usage.md`、`sodactl agent usage` は `docs/sodactl.md`。
 - エージェントの連携のグラフ（画面・線の種類・上限と一時停止・受け渡しの注意・別のマシン）は `docs/agent-graph.md`、`sodactl graph` は `docs/sodactl.md`。
 - エージェントが動かしているサブエージェントの件数と一覧（フックの導入と更新・仕組み・対象外と制約）は `docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」、`sodactl agent get` の `subagents` は `docs/sodactl.md`。
 - 実体（workspace・tab・pane・分割・エージェントのインスタンス・手動グループ・グラフの線）の id はすべて UUID（`crypto.randomUUID()`。連番ではなく、再利用されない）。人が見る呼び名は先頭 8 文字（`shortId`）。`sodactl` の指定は完全な id か一意に決まる先頭の部分（4 文字以上）で、`docs/sodactl.md`「id の指定（UUID と先頭の部分）」。

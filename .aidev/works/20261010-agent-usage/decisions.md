@@ -37,3 +37,11 @@
 - **R2**: 探索は全部の候補を見て、更新の時刻（`mtime`）が新しいほうを選ぶ。
 - **R5**: 走査の生涯の読む量（512 MiB）を、書き換え（reset）での数え直しに**引き継ぐ**（`new ClaudeSessionScan(id, limits, carriedRead)`）。上限に達したら更新を止め、`partial` と `updatesStopped`（protocol の `AgentUsage` に足した省略可の項目）を立てる。
 - **R1・R3・R4・R6**: 直さずに、`docs/agent-usage.md` の限界に書いた（先頭の行を取る・`CLAUDE_CONFIG_DIR` が違うと黙って無い・`cost-state` の遅れて書かれたサブエージェントの分・5000 フォルダで探索が打ち切られる）。
+
+## D7 PR3（ダッシュボード）の決め
+- **見ている、の知らせ方**: `agent.usage_watch {on: boolean}`（`ClientRecord.watchingUsage`）。`client.view` は PTY の大きさの権限（SizeAuthority）の入力なので、載せない（見えている画面の情報とは別の関心）。サーバは、`WsGateway` の配信で `agent.usage_changed` を `watchingUsage` の接続だけに送る。印は接続の寿命と同じ（接続が切れたら消える。ブラウザは、開き直したら送り直す）。
+- **配信の中身**: `agent.usage_changed {panes: Record<paneId, AgentUsage|null>, accounts?: AccountUsage[]}`。前回の確かめと比べて、変わった pane だけ（取れなくなったものは null）。アカウントは、変わったときだけ全部。1 回の確かめで 1 つのできごと。
+- **確かめ**: `UsageFeed` が、見ている接続が居る間だけ 5 秒おきに `UsageService.get()` を呼ぶ（中の `stat` の決まりは PR1 のまま）。前の確かめが終わっていなければ飛ばす。見ている接続が 0 になったらタイマーを止め、前回の控えを捨てる（次に始まったときは全部を配る）。サーバの終了で止める。
+- **別のマシン**: 画面の接続が向いているマシンの分だけ（`requirements.md` の「決めたこと」）。
+- **画面の一般化**: `view.screen` の判定は「基本画面か」に寄せる。グラフ専用の所（グラフの窓の層・空間のタグ・サイドバーの空間の見出し）は、そのまま `=== "graph"`。
+- **モバイルの入口**: `MobileShell.vue` に触れない決まりなので、pane のピッカー（全画面の `PanePicker`）に「ダッシュボード」のボタンを足す。全体のメニュー（クラシックのみ。グラフの項目と同じ）にも足す。

@@ -362,6 +362,60 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
     });
   });
 
+  // 20261010-agent-usage PR3：3 つ目の画面（ダッシュボード）。デスクトップは画面、1 列は重ねるダイアログ（ダイアログの 1 枠）。
+  describe("ダッシュボード", () => {
+    it("openDashboard / closeDashboard はデスクトップでは screen を dashboard / base にする。見えている間だけ dashboardVisible", () => {
+      const store = useViewStore(pinia);
+      expect(store.dashboardVisible).toBe(false);
+      store.openDashboard();
+      expect(store.screen).toBe("dashboard");
+      expect(store.dashboardVisible).toBe(true);
+      expect(store.graphVisible).toBe(false);
+      expect(store.modalOpen).toBe(false); // 画面なので、キーを奪うダイアログではない
+      store.closeDashboard();
+      expect(store.screen).toBe("base");
+      expect(store.dashboardVisible).toBe(false);
+    });
+
+    it("グラフとダッシュボードは、画面の切り替えで入れ替わる（同時には見えない）", () => {
+      const store = useViewStore(pinia);
+      store.openGraph();
+      store.setScreen("dashboard");
+      expect(store.dashboardVisible).toBe(true);
+      expect(store.graphVisible).toBe(false);
+      store.setScreen("graph");
+      expect(store.dashboardVisible).toBe(false);
+      expect(store.graphVisible).toBe(true);
+    });
+
+    it("1 列では、画面でなくダイアログ（dialogContext）として開く。閉じると開く前の pane へ戻る。デスクトップに戻ったら閉じる", () => {
+      const store = useViewStore(pinia);
+      store.setMobileViewport(true);
+      store.focusPane("p1");
+      store.openDashboard();
+      expect(store.screen).toBe("base");
+      expect(store.dialogContext).toEqual({ kind: "dashboard" });
+      expect(store.dashboardVisible).toBe(true);
+      expect(store.modalOpen).toBe(true);
+      store.closeDashboard();
+      expect(store.dialogContext).toBeNull();
+      expect(store.dashboardVisible).toBe(false);
+      expect(store.focusedPaneId).toBe("p1");
+      store.openDashboard();
+      store.setMobileViewport(false);
+      expect(store.dialogContext).toBeNull();
+      expect(store.screen).toBe("base"); // 画面として開き直しはしない
+    });
+
+    it("窓が 1 列の画面になったら、ダッシュボードの画面から基本画面へ戻る", () => {
+      const store = useViewStore(pinia);
+      store.openDashboard();
+      store.setMobileViewport(true);
+      expect(store.screen).toBe("base");
+      expect(store.dashboardVisible).toBe(false);
+    });
+  });
+
   describe("グラフ: 1 列（モバイル）の重ねるダイアログ", () => {
     it("openGraph / closeGraph: 開く前の focus を覚えて戻す。二度開いても戻り先は最初のまま。screen は変えない", () => {
       const store = useViewStore(pinia);

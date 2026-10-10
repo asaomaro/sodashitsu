@@ -465,7 +465,7 @@ describe("App — 画面の並び（デスクトップ）", () => {
     return view;
   }
 
-  it("画面の一覧から作った 2 つの画面が主な領域にあり、はじめは基本画面だけが見えている（もう一方は inert・visibility: hidden）", async () => {
+  it("画面の一覧から作った 3 つの画面が主な領域にあり、はじめは基本画面だけが見えている（ほかは inert・visibility: hidden）", async () => {
     setupTab();
     const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
     await flushTicks(wrapper);
@@ -475,7 +475,11 @@ describe("App — 画面の並び（デスクトップ）", () => {
     expect(base.classes()).not.toContain("app-screen-hidden");
     expect(graph.attributes("inert")).toBeDefined();
     expect(graph.classes()).toContain("app-screen-hidden");
-    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["基本画面", "グラフ"]);
+    const dashboard = wrapper.get('[data-screen="dashboard"]');
+    expect(dashboard.attributes("inert")).toBeDefined();
+    expect(dashboard.classes()).toContain("app-screen-hidden");
+    expect(wrapper.find("[data-dashboard]").exists()).toBe(false); // 見えない間は中身を持たない
+    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["基本画面", "グラフ", "ダッシュボード"]);
     wrapper.unmount();
   });
 
@@ -500,6 +504,44 @@ describe("App — 画面の並び（デスクトップ）", () => {
     await flushTicks(wrapper);
     expect(view.screen).toBe("base");
     expect(wrapper.get('[data-screen="base"]').attributes("inert")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("ダッシュボードの画面（20261010-agent-usage PR3）: 基本画面は描かれたまま inert になり、切り替えの部品で入って戻れる。行を押すとその pane の基本画面へ移る", async () => {
+    const view = setupTab();
+    const session = useSessionStore(pinia);
+    session.paneUpserted({
+      id: "p1", tabId: "t1", label: null, cwd: "/work", shell: "/bin/bash", cols: 80, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr",
+      agent: { instanceId: "i1", kind: "claude", label: "Claude Code", state: "working", completionSeq: 0, serverSeenSeq: 0, verified: true, since: Date.now() - 60_000, name: "alpha" },
+      agentSession: null,
+    });
+    const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
+    await flushTicks(wrapper);
+    await wrapper.get('[data-screen-id="dashboard"]').trigger("click");
+    await flushTicks(wrapper);
+    expect(view.screen).toBe("dashboard");
+    expect(view.dashboardVisible).toBe(true);
+    const base = wrapper.get('[data-screen="base"]');
+    expect(base.attributes("inert")).toBeDefined();
+    expect(base.classes()).toContain("app-screen-hidden");
+    expect(wrapper.find(".xterm").exists()).toBe(true); // pane は描かれたまま（PTY の大きさを保つ）
+    expect(wrapper.get('[data-screen="dashboard"]').attributes("inert")).toBeUndefined();
+    expect(document.querySelector("dialog.dashboard-dialog")).toBeNull(); // デスクトップでは dialog を使わない
+    const row = wrapper.get('[data-dash-row="p1"]');
+    expect(row.text()).toContain("alpha");
+    expect(wrapper.get("[data-dash-no-accounts]").text()).toBe("まだ値がありません");
+    await row.trigger("click");
+    await flushTicks(wrapper);
+    expect(view.screen).toBe("base");
+    expect(view.focusedPaneId).toBe("p1");
+    expect(wrapper.get('[data-screen="base"]').attributes("inert")).toBeUndefined();
+    expect(wrapper.find("[data-dashboard]").exists()).toBe(false);
+    // もう一度入って、Esc で戻る
+    view.setScreen("dashboard");
+    await flushTicks(wrapper);
+    await wrapper.get("[data-dashboard]").trigger("keydown", { key: "Escape" });
+    await flushTicks(wrapper);
+    expect(view.screen).toBe("base");
     wrapper.unmount();
   });
 

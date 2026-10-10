@@ -6,6 +6,7 @@ import ContextMenu from "./components/ContextMenu.vue";
 import DetachedView from "./components/DetachedView.vue";
 import GotoPicker from "./components/GotoPicker.vue";
 import GraphDialog from "./components/graph/GraphDialog.vue";
+import DashboardDialog from "./components/DashboardDialog.vue";
 import GroupPickerDialog from "./components/GroupPickerDialog.vue";
 import HelpDialog from "./components/HelpDialog.vue";
 import LoginView from "./components/LoginView.vue";
@@ -89,6 +90,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
     <OnboardingDialog />
     <GotoPicker />
     <GraphDialog v-if="isMobile" />
+    <DashboardDialog v-if="isMobile" />
     <CommandPopup />
     <!-- 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。ほかのダイアログとは別の枠で、後から開くので上に重なる。 -->
     <AskDialog />

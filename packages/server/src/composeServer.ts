@@ -89,6 +89,7 @@ import { GraphMaintainer } from "./graph/GraphMaintainer.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
 import { UsageService } from "./usage/UsageService.js";
+import { UsageFeed } from "./usage/UsageFeed.js";
 import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
@@ -500,6 +501,14 @@ export async function composeServer(
   session.onReportAccepted((paneId, kind, sessionId, ctx) => {
     if (kind === "claude") usage.noteTranscript(paneId, sessionId, ctx.transcriptPath);
   });
+  // 利用状況の配信（PR3）。見ている接続（`agent.usage_watch`）が居る間だけ 5 秒おきに確かめ、変わったものを、見ている接続にだけ配る（絞るのは `WsGateway`）。
+  const usageFeed = new UsageFeed({ usage, publish: (e) => bus.publish(e), logger });
+  const usageWatch = {
+    set: (clientId: string, on: boolean): void => {
+      clients.setUsageWatch(clientId, on);
+      usageFeed.setWatching(clientId, on);
+    },
+  };
   const usageSub = bus.subscribe((e) => {
     if (e.event === "pane.closed") usage.forgetPane(e.data.paneId);
   });
@@ -515,6 +524,7 @@ export async function composeServer(
     agentFork,
     subagentTranscripts,
     usage,
+    usageWatch,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
     machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
     commands,
@@ -563,6 +573,7 @@ export async function composeServer(
       asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
       displays.onClientGone(clientId); // 面を出せる画面の名乗り・この接続の display.wait（20261007-soda-extensions）
       fileUploads.onClientGone(clientId); // 受け取り中のファイルの書きかけを消す
+      usageFeed.clientGone(clientId); // 利用状況を見ていた接続なら、見ている数を減らす（0 で確かめを止める）
     },
   });
   // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `soda serve` が SSH と `soda bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
@@ -575,6 +586,7 @@ export async function composeServer(
       asks.onClientGone(clientId);
       displays.onClientGone(clientId);
       fileUploads.onClientGone(clientId);
+      usageFeed.clientGone(clientId);
     },
   });
   let bridgeListening = false;
@@ -886,6 +898,7 @@ export async function composeServer(
         graphEngine.stop();
         lineage.close();
         usageSub.dispose();
+        usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -923,6 +936,7 @@ export async function composeServer(
         graphEngine.stop();
         lineage.close();
         usageSub.dispose();
+        usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
