@@ -79,12 +79,14 @@ export async function lookupCodexRecord(codexHome: string, id: string): Promise<
     const names = await readdir(dir).catch(() => [] as string[]);
     const hit = names.find((n) => n.startsWith("rollout-") && n.toLowerCase().endsWith(wanted));
     if (hit === undefined) continue;
-    return { cwd: await readHeadCwd(join(dir, hit), id) };
+    const head = await readHeadCwd(join(dir, hit), id);
+    return head === undefined ? null : { cwd: head };
   }
   return null;
 }
 
-async function readHeadCwd(path: string, id: string): Promise<string | null> {
+/** 先頭の `cwd`。`id` が合わない・読めない記録は undefined（無いものとして扱う）。`cwd` が読めないだけなら null。 */
+async function readHeadCwd(path: string, id: string): Promise<string | null | undefined> {
   try {
     const fh = await open(path, "r");
     try {
@@ -92,7 +94,7 @@ async function readHeadCwd(path: string, id: string): Promise<string | null> {
       const { bytesRead } = await fh.read(buf, 0, HEAD_BYTES, 0);
       const head = buf.subarray(0, bytesRead).toString("utf8");
       // 先頭の 1 行（session_meta）の `id` が、探している id であること。`cwd` は JSON の文字列として読む。
-      if (!new RegExp(`"id"\\s*:\\s*"${id}"`, "i").test(head)) return null;
+      if (!new RegExp(`"id"\\s*:\\s*"${id}"`, "i").test(head)) return undefined;
       const m = /"cwd"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(head);
       if (!m) return null;
       const v: unknown = JSON.parse(m[1]!);
@@ -101,6 +103,6 @@ async function readHeadCwd(path: string, id: string): Promise<string | null> {
       await fh.close();
     }
   } catch {
-    return null;
+    return undefined;
   }
 }

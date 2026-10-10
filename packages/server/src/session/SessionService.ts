@@ -1655,8 +1655,8 @@ export class SessionService {
       if (record === null) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "no session record was found for the conversation");
       if (record === undefined) {
         if (via === "first-turn") return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the session record could not be checked");
-      } else if (record.cwd !== null && !sameDir(record.cwd, this.model.getPane(owner)?.cwd ?? "")) {
-        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the session record's cwd is not the pane's");
+      } else if (record.cwd === null ? via === "first-turn" : !sameDir(record.cwd, this.model.getPane(owner)?.cwd ?? "")) {
+        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, record.cwd === null ? "the session record has no readable cwd" : "the session record's cwd is not the pane's");
       }
       // 待つ間に、状況が変わっていないこと（pane・前面の codex・参照）。
       const pane = this.model.getPane(owner);
