@@ -120,7 +120,9 @@ test.describe("ダッシュボード（PR3）", () => {
     const shellPane = split.pane.id;
     await startAgent(appServer, client, p0, "lead");
     await open(page, appServer);
-    await expect(page.locator(".screen-switcher-btn")).toHaveText(["基本画面", "グラフ", "ダッシュボード"]);
+    await expect(page.locator(".screen-switcher-btn")).toHaveText(["基本画面", "グラフ", "利用状況"]);
+    // 正式な名前（読み上げ・title）は両方が分かる形。
+    await expect(page.locator('[data-screen-id="dashboard"]')).toHaveAttribute("title", "利用状況（ダッシュボード）");
     await page.locator('[data-screen-id="dashboard"]').click();
     await expect(dash(page)).toBeVisible();
     const r = row(page, p0);
@@ -131,9 +133,33 @@ test.describe("ダッシュボード（PR3）", () => {
     await expect(r.locator("[data-dash-tokens]")).toContainText("1.1k");
     await expect(r.locator("[data-dash-cost]")).toContainText("$2.50");
     await expect(row(page, shellPane)).toHaveCount(0);
-    // アカウントの枠: 値があれば枠が、無ければ「まだ値がありません」（このテストの HOME は利用者のものなので、Codex の記録があれば枠が出る。どちらでも枠の区画は出る）。
-    await expect(page.locator("[data-dash-accounts]")).toBeVisible();
-    await expect(page.locator("[data-dash-account], [data-dash-no-accounts]").first()).toBeVisible();
+    // アカウントの枠: この環境の記録（空の `CODEX_HOME`・テストの `CLAUDE_CONFIG_DIR`）には、枠の値が無い。
+    await expect(page.locator("[data-dash-no-accounts]")).toHaveText("まだ値がありません");
+    await expect(page.locator("[data-dash-account]")).toHaveCount(0);
+  });
+
+  test("既定の幅（240px）で、3 つの切り替えのボタンのラベルが、どれも切れていない（クラシック・モダン）。畳んだサイドバーでも 3 つ出る", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    await open(page, appServer);
+    const clipped = () =>
+      page.locator(".screen-switcher-label").evaluateAll((els) => els.map((e) => ({ text: e.textContent, clipped: e.scrollWidth > e.clientWidth })));
+    await expect(page.locator(".screen-switcher-label")).toHaveCount(3);
+    for (const style of ["classic", "modern"] as const) {
+      await client.request("prefs.set", { patch: { uiStyle: style } });
+      await expect.poll(() => page.evaluate(() => document.documentElement.dataset["uiStyle"])).toBe(style);
+      expect(await page.locator(".sidebar").evaluate((e) => Math.round(e.getBoundingClientRect().width)), "既定の幅").toBeGreaterThanOrEqual(240);
+      expect(await clipped(), style).toEqual([
+        { text: "基本画面", clipped: false },
+        { text: "グラフ", clipped: false },
+        { text: "利用状況", clipped: false },
+      ]);
+    }
+    // 畳んだサイドバーでも、3 つ目を出す（短い名前「利」。名前は両方が分かる形のまま）。
+    await page.locator(".sidebar-edge-toggle").click();
+    await expect(page.locator(".sidebar")).toHaveClass(/sidebar-collapsed/);
+    await expect(page.locator(".screen-switcher-btn")).toHaveCount(3);
+    await expect(page.locator('[data-screen-id="dashboard"]')).toHaveText("利");
+    await expect(page.locator('[data-screen-id="dashboard"]')).toHaveAttribute("aria-label", "利用状況（ダッシュボード）");
   });
 
   test("見ている間は、記録が増えると画面が更新される（再読み込みなし）。見ていない間は配信が止まる（頼まず・届かず）。戻ると最新になる", async ({ page, appServer }) => {

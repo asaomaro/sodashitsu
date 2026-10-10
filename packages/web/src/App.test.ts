@@ -479,7 +479,7 @@ describe("App — 画面の並び（デスクトップ）", () => {
     expect(dashboard.attributes("inert")).toBeDefined();
     expect(dashboard.classes()).toContain("app-screen-hidden");
     expect(wrapper.find("[data-dashboard]").exists()).toBe(false); // 見えない間は中身を持たない
-    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["基本画面", "グラフ", "ダッシュボード"]);
+    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["基本画面", "グラフ", "利用状況"]);
     wrapper.unmount();
   });
 

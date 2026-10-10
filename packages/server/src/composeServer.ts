@@ -114,6 +114,8 @@ export interface ComposedServer {
   graphHistory(linkId?: string): LinkRun[];
   /** 連携の別のマシンへの接続が使えるか（04。結合試験が繋がった・切れたを待つ）。 */
   graphRemoteAvailable(machineId: string): boolean;
+  /** 利用状況の配信の、いま見ている接続の数・確かめのタイマーが動いているか（結合試験が、接続が切れた後に止まることを確かめる。20261010-agent-usage PR3）。 */
+  usageFeedState(): { watchers: number; running: boolean };
   logger: Logger;
   options: ServeOptions;
   /**
@@ -750,6 +752,7 @@ export async function composeServer(
     graph,
     graphHistory: (linkId) => graphEngine.getHistory(linkId),
     graphRemoteAvailable: (machineId) => remoteLinks.get(machineId)?.available() === true,
+    usageFeedState: () => ({ watchers: usageFeed.watcherCount, running: usageFeed.running }),
     logger,
     options,
     get freshToken(): string | undefined {

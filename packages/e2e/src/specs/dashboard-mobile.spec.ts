@@ -118,7 +118,13 @@ for (const { key, theme } of THEMES)
     test.setTimeout(120_000);
     await mkdir(OUT!, { recursive: true });
     const client = await appServer.openClient("mobile");
-    const p0 = client.helloSnapshot()!.panes[0]!.id;
+    // 行の「場所」に、この作業フォルダの実パスが写らないよう、短い一時のフォルダの workspace だけにする。
+    const root = await mkdtemp(join(tmpdir(), "shots-"));
+    await mkdir(join(root, "app"), { recursive: true });
+    const initial = client.helloSnapshot()!.workspaces[0]!;
+    const w1 = await client.request("workspace.create", { cwd: join(root, "app"), label: "app" });
+    await client.request("workspace.close", { workspaceId: initial.id });
+    const p0 = w1.pane.id;
     await client.request("prefs.set", { patch: { theme, themeAuto: false } });
     let route: WebSocketRoute | undefined;
     let frozen = false;
@@ -147,6 +153,7 @@ for (const { key, theme } of THEMES)
     await page.locator(".mobile-shell-title").click();
     await page.locator("[data-picker-dashboard]").click();
     await expect(page.locator("dialog.dashboard-dialog [data-dash-row]")).toHaveCount(1);
+    await expect(page.locator("[data-dash-loading]")).toHaveCount(0); // 最初の応答（agent.usage）が届いてから差し込む
     const now = Date.now();
     frozen = true;
     route?.send(

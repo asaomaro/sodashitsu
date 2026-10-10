@@ -179,4 +179,19 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     expect(json).not.toContain(dir);
     expect(json).not.toContain(".jsonl");
   });
+
+  it("見ていた接続が切れたら、見ている数が 0 になり、確かめのタイマーが止まる（接続が切れる道の後始末の配線）", async () => {
+    const { server } = await bootWithAgent(3);
+    const watcher = await connectClient(server);
+    const other = await connectClient(server);
+    cleanups.push(() => other.close());
+    expect(server.usageFeedState()).toEqual({ watchers: 0, running: false });
+    await watcher.request("agent.usage_watch", { on: true });
+    await other.request("agent.usage_watch", { on: true });
+    expect(server.usageFeedState()).toEqual({ watchers: 2, running: true });
+    watcher.close(); // 画面を離れる（`on: false`）のではなく、接続が切れる
+    await vi.waitFor(() => expect(server.usageFeedState()).toEqual({ watchers: 1, running: true }), { timeout: 10_000, interval: 100 });
+    other.close();
+    await vi.waitFor(() => expect(server.usageFeedState()).toEqual({ watchers: 0, running: false }), { timeout: 10_000, interval: 100 });
+  });
 });

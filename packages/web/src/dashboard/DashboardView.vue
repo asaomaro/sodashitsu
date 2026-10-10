@@ -545,7 +545,7 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 }
 .dash-row {
   display: grid;
-  grid-template-columns: 1.6em 6.5em minmax(7em, 1.2fr) minmax(8em, 1fr) minmax(10em, 1.6fr) 3em minmax(9em, 1fr) minmax(8em, 0.9fr) minmax(8em, 0.9fr) 7.5em;
+  grid-template-columns: 1.6em 6.5em minmax(7em, 1.2fr) minmax(8em, 1fr) minmax(10em, 1.6fr) 3em minmax(9em, 1fr) minmax(8em, 0.9fr) minmax(8em, 0.9fr) 9em;
   align-items: center;
   gap: 0 0.6em;
   padding: 0.25em 0.4em;

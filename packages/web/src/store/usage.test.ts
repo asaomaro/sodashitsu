@@ -40,6 +40,13 @@ describe("useUsageStore（20261010-agent-usage PR3）", () => {
     s.applyChanged({ panes: { a: u("a", 1, 4000) } });
     expect(s.panes["a"]!.tokens.output).toBe(9);
   });
+  it("最初の応答が、先に着いた新しい配信の値を、古い値で戻さない（updatedAt の新しいほうを残す）", () => {
+    const s = useUsageStore();
+    s.applyChanged({ panes: { a: u("a", 9, 5000) } });
+    s.setSnapshot({ panes: { a: u("a", 1, 4000), b: u("b", 2, 1000) }, accounts: [] });
+    expect(s.panes["a"]!.tokens.output).toBe(9);
+    expect(s.panes["b"]!.tokens.output).toBe(2);
+  });
   it("対応しない・取れなかった・マシンの切り替え（clear）", () => {
     const s = useUsageStore();
     s.markUnsupported();

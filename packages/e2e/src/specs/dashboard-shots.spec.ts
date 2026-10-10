@@ -133,7 +133,16 @@ for (const { key, theme } of THEMES)
       test.setTimeout(150_000);
       await mkdir(OUT!, { recursive: true });
       const client = await appServer.openClient();
-      const p0 = client.helloSnapshot()!.panes[0]!.id;
+      // 行の「場所」に、この作業フォルダの実パスが写らないよう、短い一時のフォルダの workspace だけにする（最初の workspace は閉じる）。
+      const root = await mkdtemp(join(tmpdir(), "shots-"));
+      const dirs = await Promise.all(["app", "api", "docs"].map(async (n) => {
+        await mkdir(join(root, n), { recursive: true });
+        return join(root, n);
+      }));
+      const initial = client.helloSnapshot()!.workspaces[0]!;
+      const w1 = await client.request("workspace.create", { cwd: dirs[0]!, label: "app" });
+      await client.request("workspace.close", { workspaceId: initial.id });
+      const p0 = w1.pane.id;
       await client.request("prefs.set", { patch: { theme, themeAuto: false, uiStyle: style } });
       await page.setViewportSize({ width: 1400, height: 760 });
       const inject = await routeInjectable(page);
@@ -146,13 +155,14 @@ for (const { key, theme } of THEMES)
       await shot(page, `${style}-${key}-1-empty`);
       await page.locator('[data-screen-id="base"]').click();
       // エージェントを 3 つ
-      const w2 = await client.request("workspace.create", { cwd: process.cwd(), label: "api-server" });
-      const w3 = await client.request("workspace.create", { cwd: process.cwd(), label: "docs" });
+      const w2 = await client.request("workspace.create", { cwd: dirs[1]!, label: "api-server" });
+      const w3 = await client.request("workspace.create", { cwd: dirs[2]!, label: "docs" });
       await startAgent(appServer, client, p0, "lead");
       await startAgent(appServer, client, w2.pane.id, "reviewer");
       await startAgent(appServer, client, w3.pane.id, "writer");
       await page.locator('[data-screen-id="dashboard"]').click();
       await expect(page.locator("[data-dash-row]")).toHaveCount(3, { timeout: 30_000 });
+      await expect(page.locator("[data-dash-loading]")).toHaveCount(0); // 最初の応答（agent.usage）が届いてから差し込む
       // 値あり（差し込み）: 報告のコスト・コンテキスト・古い値・Codex の枠・Claude の枠（古い印・組織の額）
       const now = Date.now();
       inject.send({

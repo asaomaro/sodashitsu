@@ -498,9 +498,11 @@ test("見た目の言葉をそろえる（AC25・AC26）: モダンは tab が�
   const tabC = await lookOf(page, ".tab-bar-item:not(.tab-bar-item-active)");
   const btnC = await lookOf(page, ".screen-switcher-btn:not(.screen-switcher-btn-active)");
   // 上下の余白は比べない: 帯の外形の高さを、これまでと同じに保つため（U2）、ボタンは帯の高さいっぱいに伸びる（tab も帯の高さいっぱいに伸びる）。
-  for (const k of ["fontSize", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "backgroundColor", "color"] as const) {
+  // 左右の余白だけは、切り替えのボタンのほうが狭い（既定の 240px に、3 つの名前が切れずに並ぶため。20261010-agent-usage PR3）。
+  for (const k of ["fontSize", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "backgroundColor", "color"] as const) {
     expect(btnC[k], `クラシック: ${k}`).toBe(tabC[k]);
   }
+  expect(parseFloat(btnC["paddingLeft"]!), "クラシック: 切り替えのボタンの左右の余白は、tab 以下").toBeLessThanOrEqual(parseFloat(tabC["paddingLeft"]!));
   const tabActiveC = await lookOf(page, ".tab-bar-item-active");
   const btnActiveC = await lookOf(page, ".screen-switcher-btn-active");
   expect(btnActiveC["backgroundColor"], "クラシック: 選んでいるものの示し方").toBe(tabActiveC["backgroundColor"]);

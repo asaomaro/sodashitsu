@@ -19,8 +19,13 @@ export const useUsageStore = defineStore("usage", () => {
   const failed = ref(false);
 
   function setSnapshot(r: AgentUsageResult): void {
+    // 配信（`applyChanged`）が先に着いていても、古い読みの答えで新しい値を戻さない（`updatedAt` の新しいほうを残す）。
     const next: Record<string, AgentUsage> = {};
-    for (const [id, u] of Object.entries(r.panes)) if (u !== null) next[id] = u;
+    for (const [id, u] of Object.entries(r.panes)) {
+      if (u === null) continue;
+      const cur = panes.value[id];
+      next[id] = cur !== undefined && cur.updatedAt > u.updatedAt ? cur : u;
+    }
     panes.value = next;
     accounts.value = r.accounts;
     loaded.value = true;

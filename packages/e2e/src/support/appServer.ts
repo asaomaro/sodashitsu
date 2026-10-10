@@ -77,6 +77,13 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
 export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; extensions?: ExtensionsInternal } = {}): Promise<AppServer> {
   const stateDir = await mkdtemp(join(tmpdir(), "soda-e2e-"));
   const port = await getFreePort();
+  // 利用者の本物の `~/.codex`・`~/.claude` を読まないよう、未設定のときだけ、状態の下の空のフォルダへ向ける（`close()` で戻す。`process.env` はワーカー全体のもの）。
+  const savedRoots: [string, string | undefined][] = [];
+  for (const name of ["CODEX_HOME", "CLAUDE_CONFIG_DIR"]) {
+    if (process.env[name] !== undefined) continue;
+    savedRoots.push([name, undefined]);
+    process.env[name] = join(stateDir, `empty-${name.toLowerCase()}`);
+  }
   let booted = await bootServer(stateDir, port, opts);
   const sockets: WebSocket[] = [];
 
@@ -102,6 +109,7 @@ export async function startAppServer(opts: { scrollback?: number; askImageFetche
   async function close(): Promise<void> {
     for (const ws of sockets) ws.close();
     await booted.composed.close();
+    for (const [name] of savedRoots) delete process.env[name];
     await rm(stateDir, { recursive: true, force: true });
   }
 
