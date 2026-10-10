@@ -239,7 +239,7 @@ setInterval(() => {}, 1000);
     async function writeRecord(id: string, cwd: string): Promise<void> {
       const day = join(dir, "codex-home", "sessions", "2026", "10", "10");
       await mkdir(day, { recursive: true });
-      const meta = { timestamp: "2026-10-10T01:11:52.954Z", type: "session_meta", payload: { session_id: id, id, cwd, originator: "codex-tui", base_instructions: { text: "x".repeat(20_000) } } };
+      const meta = { timestamp: new Date().toISOString(), type: "session_meta", payload: { session_id: id, id, cwd, originator: "codex-tui", base_instructions: { text: "x".repeat(20_000) } } };
       await writeFile(join(day, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify(meta)}\n`);
     }
     async function bootTwo() {
@@ -262,11 +262,11 @@ setInterval(() => {}, 1000);
       await writeRecord(ID1, cwd);
       await writeRecord(ID2, cwd);
       submit(server, p2);
-      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd }); // 報告の paneId は p1（daemon を起動した pane）
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd, source: "startup" }); // 報告の paneId は p1（daemon を起動した pane）
       await vi.waitFor(() => expect(refOf(server, p2)).toBe(ID1));
       expect(refOf(server, p1)).toBeNull();
       submit(server, p1);
-      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd });
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd, source: "startup" });
       await vi.waitFor(() => expect(refOf(server, p1)).toBe(ID2));
       expect(refOf(server, p2)).toBe(ID1);
     });
@@ -276,7 +276,7 @@ setInterval(() => {}, 1000);
       await writeRecord(ID1, cwd);
       submit(server, p1);
       submit(server, p2);
-      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd });
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd, source: "startup" });
       await sleep(800);
       expect(refOf(server, p1)).toBeNull();
       expect(refOf(server, p2)).toBeNull();
@@ -287,7 +287,7 @@ setInterval(() => {}, 1000);
       submit(server, p2);
       await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID3, agentPid: daemonPid, cwd: "/somewhere/else" });
       await writeRecord(ID1, cwd);
-      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd }); // 記録が無い
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd, source: "startup" }); // 記録が無い
       await sleep(1_500);
       expect(refOf(server, p2)).toBeNull();
       expect(refOf(server, p1)).toBeNull();
@@ -306,7 +306,7 @@ setInterval(() => {}, 1000);
       const { server, stateDir, p1, p2, cwd } = await bootTwo();
       await writeRecord(ID1, cwd);
       submit(server, p2);
-      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd });
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd, source: "startup" });
       await vi.waitFor(() => expect(refOf(server, p2)).toBe(ID1));
       // p2 の codex を、終了の文言つきで終わらせる（本当は ID2 の会話だった）
       server.terminals.get(p2)!.write("q");
@@ -336,10 +336,10 @@ setInterval(() => {}, 1000);
       await writeRecord(ID1, first.cwd);
       await writeRecord(ID2, first.cwd);
       submit(first.server, first.p2);
-      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd: first.cwd });
+      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd: first.cwd, source: "startup" });
       await vi.waitFor(() => expect(refOf(first.server, first.p2)).toBe(ID1));
       submit(first.server, first.p1);
-      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd: first.cwd });
+      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd: first.cwd, source: "startup" });
       await vi.waitFor(() => expect(refOf(first.server, first.p1)).toBe(ID2));
       const log = join(dir, "codex-args.log");
       const countOf = async (id: string) => (existsSync(log) ? (await readFile(log, "utf8")).split("\n").filter((l) => l === `resume ${id}`).length : 0);

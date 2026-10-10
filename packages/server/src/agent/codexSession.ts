@@ -45,8 +45,14 @@ export function codexExitSessionId(text: string): string | undefined {
   return last;
 }
 
-/** 記録の先頭から読む量（先頭の 1 行は 20 KiB を超えるが、id・cwd・originator は先頭の数百バイトにある。実測の最大は 480 バイト付近）。 */
-const HEAD_BYTES = 8192;
+/**
+ * 記録の先頭から読む量。先頭の 1 行（`session_meta`）は約 23 KB（`base_instructions` が大きい）。**収まれば、その 1 行を JSON として読む**。
+ * 収まらない・読めないときは、先頭の `HEAD_REGEX_BYTES` だけを正規表現で読む（id・cwd・originator は先頭の数百バイトにある。実測の最大は 480 バイト付近）。
+ */
+const HEAD_BYTES = 64 * 1024;
+const HEAD_REGEX_BYTES = 8192;
+/** 記録の探索の全体の時間の上限（フォルダの歩きを含む。止まった fs で、検算が終わらないままにならないため）。 */
+const LOOKUP_TIMEOUT_MS = 2_000;
 /** 記録を探すときに見る日付のフォルダの上限（新しい順に、見つかったら止める）。 */
 export const MAX_DAY_DIRS = 400;
 /** 記録を 1 件読む時間の上限（FIFO・止まった fs で、固まらないため）。 */
@@ -60,6 +66,11 @@ export interface CodexRecord {
    * 読めなければ null）。`source` は、pane の TUI でも環境（`TERM_PROGRAM=vscode`）で `vscode` になるので使えない。
    */
   originator: string | null;
+  /**
+   * 先頭の行の `timestamp`（epoch ms）。記録は**最初のターンで作られる**ので、新しい会話では、最初の入力（Enter）の時刻に近い（実測: +21ms）。
+   * 前からある会話（再開）では、古い。読めなければ null。
+   */
+  startedAt: number | null;
 }
 
 /**
@@ -69,6 +80,20 @@ export interface CodexRecord {
  * 読み方は、リンクを辿らず・通常のファイルだけ・時間切れつき（#126 の `SubagentTranscript` と同じ守り）。
  */
 export async function lookupCodexRecord(codexHome: string, id: string, maxDayDirs = MAX_DAY_DIRS): Promise<CodexRecord | null | undefined> {
+  // 全体を時間切れで包む（探索の途中で止まったら「見つからない」＝付けない。確かめられない〔undefined〕にはしない）。
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), LOOKUP_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([lookupUnbounded(codexHome, id, maxDayDirs), timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function lookupUnbounded(codexHome: string, id: string, maxDayDirs: number): Promise<CodexRecord | null | undefined> {
   if (!isCodexSessionId(id)) return null;
   const root = join(codexHome, "sessions");
   const years = await subdirs(root);
@@ -111,9 +136,29 @@ async function readHead(path: string, id: string): Promise<CodexRecord | undefin
       const buf = Buffer.alloc(HEAD_BYTES);
       const { bytesRead } = await fh.read(buf, 0, HEAD_BYTES, 0);
       const head = buf.subarray(0, bytesRead).toString("utf8");
-      // 先頭の 1 行（session_meta）の `id` が、探している id であること。値は JSON の文字列として読む。
-      if (!new RegExp(`"id"\\s*:\\s*"${id}"`, "i").test(head)) return undefined;
-      return { cwd: stringField(head, "cwd"), originator: stringField(head, "originator") };
+      // 先頭の 1 行が収まっていて JSON として読めるなら、それで読む（`payload.id`・`payload.cwd`・`payload.originator`・行の `timestamp`）。
+      const eol = head.indexOf("\n");
+      if (eol > 0) {
+        try {
+          const o: unknown = JSON.parse(head.slice(0, eol));
+          if (typeof o === "object" && o !== null) {
+            const rec = o as { timestamp?: unknown; payload?: unknown };
+            const pl = typeof rec.payload === "object" && rec.payload !== null ? (rec.payload as Record<string, unknown>) : null;
+            if (pl === null || typeof pl["id"] !== "string" || pl["id"].toLowerCase() !== id.toLowerCase()) return undefined;
+            const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+            const t = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
+            return { cwd: str(pl["cwd"]), originator: str(pl["originator"]), startedAt: Number.isFinite(t) ? t : null };
+          }
+        } catch {
+          // 読めない（途中で切れた・壊れた）: 下の正規表現に落ちる。
+        }
+      }
+      // 先頭の `session_meta` の `id` が、探している id であること。値は JSON の文字列として読む。
+      const small = head.slice(0, HEAD_REGEX_BYTES);
+      if (!new RegExp(`"id"\\s*:\\s*"${id}"`, "i").test(small)) return undefined;
+      const ts = /^\s*\{\s*"timestamp"\s*:\s*"([^"]+)"/.exec(small);
+      const t = ts ? Date.parse(ts[1]!) : NaN;
+      return { cwd: stringField(small, "cwd"), originator: stringField(small, "originator"), startedAt: Number.isFinite(t) ? t : null };
     } catch {
       return undefined;
     }

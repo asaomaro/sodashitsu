@@ -57,7 +57,7 @@ describe("lookupCodexRecord", () => {
 
   it("日付のフォルダの中の記録を id で探し、先頭の cwd を返す（先頭の行が 20 KiB を超えても）", async () => {
     await writeRollout("2026/10/10", ID, "/workspaces/yukkuri-work");
-    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/workspaces/yukkuri-work", originator: "codex-tui" });
+    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/workspaces/yukkuri-work", originator: "codex-tui", startedAt: Date.parse("2026-10-10T01:11:52.954Z") });
   });
   it("記録が無ければ null。sessions が無ければ undefined（確かめられない）。UUID の形でない id は null", async () => {
     expect(await lookupCodexRecord(home, ID)).toBeUndefined();
@@ -73,7 +73,7 @@ describe("lookupCodexRecord", () => {
   });
   it("originator を返す（source は pane の TUI でも vscode になりうるので使わない）", async () => {
     await writeRollout("2026/10/10", ID, "/x", 22_000, "codex_exec");
-    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/x", originator: "codex_exec" });
+    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/x", originator: "codex_exec", startedAt: Date.parse("2026-10-10T01:11:52.954Z") });
   });
   it("リンク・通常でないファイルは読まない（シンボリックリンク・ハードリンク）", async () => {
     const dir = join(home, "sessions", "2026", "10", "10");
@@ -90,9 +90,23 @@ describe("lookupCodexRecord", () => {
     await writeRollout("2026/10/10", ID, "/new");
     for (let d = 1; d <= 9; d++) await mkdir(join(home, "sessions", "2026", "09", String(d).padStart(2, "0")), { recursive: true });
     await writeRollout("2026/09/01", "01a1234a-1768-7210-befd-023a395239b0", "/old");
-    expect(await lookupCodexRecord(home, ID, 1)).toEqual({ cwd: "/new", originator: "codex-tui" });
+    expect(await lookupCodexRecord(home, ID, 1)).toEqual({ cwd: "/new", originator: "codex-tui", startedAt: Date.parse("2026-10-10T01:11:52.954Z") });
     expect(await lookupCodexRecord(home, "01a1234a-1768-7210-befd-023a395239b0", 3)).toBeNull(); // 3 日では届かない
-    expect(await lookupCodexRecord(home, "01a1234a-1768-7210-befd-023a395239b0")).toEqual({ cwd: "/old", originator: "codex-tui" });
+    expect(await lookupCodexRecord(home, "01a1234a-1768-7210-befd-023a395239b0")).toEqual({ cwd: "/old", originator: "codex-tui", startedAt: Date.parse("2026-10-10T01:11:52.954Z") });
+  });
+  it("先頭の行が 64 KiB に収まらないとき・JSON として読めないときは、先頭の正規表現で読む（id・cwd・originator・行の timestamp）", async () => {
+    const dir = join(home, "sessions", "2026", "10", "10");
+    await mkdir(dir, { recursive: true });
+    const head = `{"timestamp":"2026-10-10T01:11:52.954Z","ordinal":0,"type":"session_meta","payload":{"session_id":"${ID}","id":"${ID}","cwd":"/big","originator":"codex-tui","base_instructions":{"text":"${"x".repeat(80_000)}"}}}\n`;
+    await writeFile(join(dir, `rollout-2026-10-10T10-11-42-${ID}.jsonl`), head);
+    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/big", originator: "codex-tui", startedAt: Date.parse("2026-10-10T01:11:52.954Z") });
+  });
+  it("会話の中の文字列（エスケープされた originator）には釣られない: JSON として読めるときは、payload の値だけを見る", async () => {
+    const dir = join(home, "sessions", "2026", "10", "10");
+    await mkdir(dir, { recursive: true });
+    const line = { timestamp: "2026-10-10T01:11:52.954Z", payload: { id: ID, cwd: "/x", originator: "codex_exec", base_instructions: { text: '"originator":"codex-tui"' } } };
+    await writeFile(join(dir, `rollout-2026-10-10T10-11-42-${ID}.jsonl`), `${JSON.stringify(line)}\n`);
+    expect((await lookupCodexRecord(home, ID))?.originator).toBe("codex_exec");
   });
   it("isCodexSessionId", () => {
     expect(isCodexSessionId(ID)).toBe(true);

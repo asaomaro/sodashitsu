@@ -186,7 +186,19 @@ export interface CodexRecordInfo {
   cwd: string | null;
   /** 会話を始めた道具。pane の TUI は `codex-tui`。 */
   originator: string | null;
+  /** 記録の先頭の行の時刻（epoch ms。新しい会話では、最初の入力〔Enter〕の時刻に近い。前からある会話では古い）。読めなければ null。 */
+  startedAt: number | null;
 }
+
+/** 検算を挟む間に、その pane が変わっていないかを見るための控え（前面のエージェントの instanceId・今の参照の会話の id）。 */
+interface PaneStamp {
+  instance: string | null;
+  ref: string | null;
+}
+
+/** 新しい会話の記録の時刻が、最初の入力（Enter）の時刻の、この範囲に入るときだけ、その入力が作った会話とみなす（実測: +21ms）。 */
+const START_BEFORE_ENTER_MS = 2_000;
+const START_AFTER_ENTER_MS = 5_000;
 
 /** 報告に添えられる、判定の材料（フックの入力から）。 */
 export interface AgentReportContext {
@@ -1362,8 +1374,8 @@ export class SessionService {
    * 会話の記録で検算する。`ok`・`unavailable`（`CODEX_HOME` が見つからない・検算の部品が無い）・付けない理由（文字列）。
    * 記録は、最初の入力のすぐ後に書かれるので、無ければ（`retry`）少し待って、最近の数日だけをやり直す。
    */
-  private async checkCodexRecord(sessionId: string, paneId: PaneId, retry: boolean): Promise<"ok" | "unavailable" | string> {
-    if (!this.codexRecordLookup) return "unavailable";
+  private async checkCodexRecord(sessionId: string, paneId: PaneId, retry: boolean): Promise<{ ok: true; record: CodexRecordInfo | undefined } | { ok: false; reason: string }> {
+    if (!this.codexRecordLookup) return { ok: true, record: undefined };
     let record: CodexRecordInfo | null | undefined;
     const times = retry ? this.codexRecordRetry.times : 0;
     for (let i = 0; i <= times; i++) {
@@ -1371,13 +1383,13 @@ export class SessionService {
       if (record !== null) break;
       if (i < times) await new Promise((r) => setTimeout(r, this.codexRecordRetry.delayMs));
     }
-    if (record === null) return "no session record was found for the conversation";
-    if (record === undefined) return "unavailable";
-    if (record.originator !== "codex-tui") return `the session was not started by a pane's codex TUI (originator: ${record.originator ?? "unknown"})`;
+    if (record === null) return { ok: false, reason: "no session record was found for the conversation" };
+    if (record === undefined) return { ok: true, record: undefined };
+    if (record.originator !== "codex-tui") return { ok: false, reason: `the session was not started by a pane's codex TUI (originator: ${record.originator ?? "unknown"})` };
     const paneCwd = this.model.getPane(paneId)?.cwd ?? "";
-    if (record.cwd === null) return "the session record has no readable cwd";
-    if (!sameDir(record.cwd, paneCwd)) return "the session record's cwd is not the pane's";
-    return "ok";
+    if (record.cwd === null) return { ok: false, reason: "the session record has no readable cwd" };
+    if (!sameDir(record.cwd, paneCwd)) return { ok: false, reason: "the session record's cwd is not the pane's" };
+    return { ok: true, record };
   }
 
   private screenTail(paneId: PaneId): string {
@@ -1397,9 +1409,18 @@ export class SessionService {
   private captureCodexExitText(paneId: PaneId): void {
     const id = codexExitSessionId(this.screenTail(paneId));
     if (id === undefined || this.staleExitIds.get(paneId)?.has(id)) return;
-    void this.checkCodexRecord(id, paneId, false).then((verdict) => {
-      if (verdict === "ok") this.attachByEvidence(paneId, "codex", id, "exit-text");
-      else this.logger.info("agent report ignored", { paneId, kind: "codex", session: id.slice(0, 8), reason: `exit text not used: ${verdict === "unavailable" ? "the session record could not be checked" : verdict}` });
+    // 検算を挟む間に、同じ pane で別のエージェントが起動した・別の参照が付いたら、古い結果で上書きしない。
+    // 控えは、終わった（いま消えようとしている）エージェントの instanceId と、今の参照。
+    const stamp = this.paneStamp(paneId);
+    const ignored = (reason: string): void =>
+      this.logger.info("agent report ignored", { paneId, kind: "codex", session: id.slice(0, 8), reason: `exit text not used: ${reason}` });
+    void this.checkCodexRecord(id, paneId, false).then((checked) => {
+      if (!checked.ok) return ignored(checked.reason);
+      if (checked.record === undefined) return ignored("the session record could not be checked");
+      const pane = this.model.getPane(paneId);
+      const nowInstance = pane?.agent?.instanceId ?? null;
+      if (!pane || (nowInstance !== null && nowInstance !== stamp.instance) || (pane.agentSession?.sessionId ?? null) !== stamp.ref) return ignored("the pane changed while the record was checked");
+      this.attachByEvidence(paneId, "codex", id, "exit-text");
     });
   }
 
@@ -1662,6 +1683,9 @@ export class SessionService {
     if (holder !== undefined) return; // すでに、この会話が付いている（引数・終了の文言）
     if (ctx.cwd === undefined) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the report carries no cwd");
     if (codexPanes.length === 0) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "no front codex is detected");
+    // 新しい会話（`startup`・`/clear` の後）か。前からある会話の再開（`resume`・`fork`・`compact`・source が無い古いフック）は、始まりの時刻が古いので、
+    // 時刻では結べない。そのときは、**参照の無い pane だけ**を候補にする。
+    const startsNew = ctx.source === "startup" || ctx.source === "clear";
     let owner: PaneId | undefined;
     let via: "sole-codex" | "first-turn";
     if (codexPanes.length === 1) {
@@ -1673,9 +1697,8 @@ export class SessionService {
       const now = Date.now();
       const candidates = codexPanes.filter((id) => {
         const pane = this.model.getPane(id)!;
-        // 参照のある pane も候補にする（引数で付いた pane が、アプリの中の `/new` で会話を替えたとき、新しい会話に付け替える）。
-        // その会話が、ほかの pane の今の参照なら、冒頭で付けない（その会話は、そちらのもの）。
         if (!sameDir(ctx.cwd!, pane.cwd)) return false;
+        if (pane.agentSession !== null && !startsNew) return false;
         const at = this.terminals.get(id)?.lastSubmitAt?.() ?? 0;
         return at > 0 && at > (this.submitConsumed.get(id) ?? 0) && now - at <= FIRST_TURN_WINDOW_MS && at <= now + 1_000;
       });
@@ -1689,22 +1712,46 @@ export class SessionService {
       }
       owner = candidates[0]!;
     }
+    // 検算を挟む前の、その pane の控え（待つ間に、別のエージェントが起動した・別の参照が付いた、ときは付けない）。
+    const stamp = this.paneStamp(owner);
+    const submitAt = this.terminals.get(owner)?.lastSubmitAt?.() ?? 0;
+    // 記録の始まりの時刻が、その pane の入力に近いこと（新しい会話の最初の入力が作った会話であること）。次のとき必須:
+    // 複数の pane で、新しい会話の報告を結ぶとき（別の pane の会話を、参照のある pane に付けないため）・
+    // 1 つだけの codex でも、すでに参照のある pane を付け替えるとき（外の Codex の会話で、上書きしないため）。
+    const needsTime = (via === "first-turn" && startsNew) || (via === "sole-codex" && stamp.ref !== null);
     // 検算: 会話の記録が実在して、cwd が pane の場所と一致し、pane の TUI（`originator` が `codex-tui`）が始めた会話であること。
     // Sodashitsu の外の Codex（同じ daemon を使う VS Code の拡張・`codex exec`・リモート）の会話は、付けない。
-    // 記録を確かめられない（`CODEX_HOME` が見つからない）ときは、`sole-codex` だけ、今までどおり付ける。
-    const verdict = this.codexRecordLookup ? await this.checkCodexRecord(sessionId, owner, true) : "unavailable";
-    if (verdict !== "ok" && verdict !== "unavailable") return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, verdict);
-    if (verdict === "unavailable" && via === "first-turn") return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the session record could not be checked");
-    // 待つ間に、状況が変わっていないこと（pane・前面の codex・ほかの pane が同じ会話を持った）。
-    if (this.codexLookup) {
-      const pane = this.model.getPane(owner);
-      if (!pane || this.frontAgents.get(owner)?.kind !== "codex") return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the owner pane changed while the record was checked");
-      if ([...this.frontAgents.keys()].some((id) => id !== owner && this.model.getPane(id)?.agentSession?.sessionId === sessionId))
-        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "another pane got the same conversation while the record was checked");
+    // 記録を確かめられない（`CODEX_HOME` が見つからない）ときは、`sole-codex` の（参照の無い pane の）道だけ、今までどおり付ける。
+    const checked = this.codexRecordLookup ? await this.checkCodexRecord(sessionId, owner, true) : ({ ok: true, record: undefined } as const);
+    if (!checked.ok) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, checked.reason);
+    if (checked.record === undefined && (via === "first-turn" || needsTime))
+      return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the session record could not be checked");
+    if (needsTime) {
+      const startedAt = checked.record?.startedAt ?? null;
+      if (startedAt === null || submitAt <= 0)
+        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the start time of the conversation or the pane's input time is unknown");
+      const delta = startedAt - submitAt;
+      if (delta < -START_BEFORE_ENTER_MS || delta > START_AFTER_ENTER_MS)
+        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the conversation did not start at the pane's last input (it belongs to another pane or another tool)");
     }
-    const submitAt = this.terminals.get(owner)?.lastSubmitAt?.() ?? 0;
+    // 待つ間に、状況が変わっていないこと（pane・前面の codex・参照・ほかの pane が同じ会話を持った）。
+    if (!this.stampMatches(owner, stamp) || this.frontAgents.get(owner)?.kind !== "codex")
+      return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the pane changed while the record was checked");
+    if ([...this.frontAgents.keys()].some((id) => id !== owner && this.model.getPane(id)?.agentSession?.sessionId === sessionId))
+      return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "another pane got the same conversation while the record was checked");
     if (submitAt > 0) this.submitConsumed.set(owner, submitAt);
     this.applyReportedSession(owner, "codex", sessionId, { ...ctx, via });
+  }
+
+  private paneStamp(paneId: PaneId): PaneStamp {
+    const pane = this.model.getPane(paneId);
+    return { instance: pane?.agent?.instanceId ?? null, ref: pane?.agentSession?.sessionId ?? null };
+  }
+
+  private stampMatches(paneId: PaneId, stamp: PaneStamp): boolean {
+    const pane = this.model.getPane(paneId);
+    if (!pane) return false;
+    return (pane.agent?.instanceId ?? null) === stamp.instance && (pane.agentSession?.sessionId ?? null) === stamp.ref;
   }
 
   private pushHistory(paneId: PaneId, ref: AgentSessionRef): void {
