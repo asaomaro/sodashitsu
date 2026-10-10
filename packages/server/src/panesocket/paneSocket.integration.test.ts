@@ -364,7 +364,16 @@ describe.skipIf(process.platform === "win32")(
       }
       const after = server.session.snapshot();
       expect(after.workspaces).toHaveLength(before.workspaces.length);
-      expect(after.panes).toEqual(before.panes);
+      // pane の中身（ラベル・場所の記録・大きさ・タブ・エージェントなど）が変わらない。`title`・`busy`・`cwd` は、シェル自身が起動の後に決める値（プロンプトの
+      // タイトル・前面のジョブ・場所）で、判定の周期（0.5〜1 秒）で入ってくる。負荷が高いと、`before` の写しの後に入って、「受け口が書き換えた」と見間違える。
+      // 受け口が変えうるもの（`pane.rename` のラベルなど）は、これらを除いても、すべて比べている。
+      const stable = (panes: typeof before.panes) =>
+        panes.map((p) => {
+          const c: Record<string, unknown> = { ...p };
+          for (const k of ["title", "busy", "cwd"]) delete c[k];
+          return c;
+        });
+      expect(stable(after.panes)).toEqual(stable(before.panes));
       // 後から pane へ実際に書いたものが画面に出た時点で、受け口へ送った文字列は出ていない（書かれていれば、こちらより先に出る）
       host.write("echo PANE-SOCKET-$((40+2))-DIRECT\n");
       await vi.waitFor(() => expect(host.mirror.plainText()).toContain("PANE-SOCKET-42-DIRECT"), {

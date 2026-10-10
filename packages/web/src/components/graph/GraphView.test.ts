@@ -191,9 +191,11 @@ describe("GraphView（上限のため出ていない pane。20261008-graph-first
       links: [],
     });
     useSessionStore(pinia).panes.set("extra", paneOf("extra", "t1"));
-    await flush();
+    // 504 ノードの描画は、負荷のもとで nextTick の固定回数では終わらないことがある。出るのを条件で待つ（出ないことの確認は上の最初の部分）。
+    await vi.waitFor(() => {
+      expect(t.wrapper.find('[data-testid="graph-hidden-panes"]').exists()).toBe(true);
+    });
     const note = t.wrapper.find('[data-testid="graph-hidden-panes"]');
-    expect(note.exists()).toBe(true);
     expect(note.text()).toContain("上限のため、出ていない pane が 3 個");
     t.wrapper.unmount();
   });
