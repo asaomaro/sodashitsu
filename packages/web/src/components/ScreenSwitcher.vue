@@ -3,10 +3,15 @@
  * 画面の切り替えの部品（20261008-graph-first の AC-S3・AC-S6）。サイドバーの上に置く。**ボタンは画面の一覧（`screens/screens.ts`）から作る**——3 つ目以降の画面が一覧に
  * 足されれば、ここに自然に増える。押すと `view.setScreen`。選んでいる workspace・tab・pane は変わらない（同じ実体の見せ方）。
  */
-import { SCREENS } from "../screens/screens.js";
+import { SCREENS, type ScreenDef } from "../screens/screens.js";
 import { useViewStore } from "../store/view.js";
 
 const view = useViewStore();
+
+/** 正式な名前（`title` が無ければ `label`）。短い名前のボタンに、正式な名前を添える。 */
+function fullName(def: ScreenDef): string {
+  return def.title ?? def.label;
+}
 </script>
 
 <template>
@@ -19,11 +24,11 @@ const view = useViewStore();
       :class="{ 'screen-switcher-btn-active': view.screen === def.id }"
       :data-screen-id="def.id"
       :aria-pressed="view.screen === def.id"
-      :aria-label="view.sidebarCollapsed ? def.label : undefined"
-      :title="def.label"
+      :aria-label="(def as ScreenDef).title ?? (view.sidebarCollapsed ? def.label : undefined)"
+      :title="fullName(def)"
       @click="view.setScreen(def.id)"
     >
-      {{ view.sidebarCollapsed ? def.shortLabel : def.label }}
+      <span class="screen-switcher-label">{{ view.sidebarCollapsed ? def.shortLabel : def.label }}</span>
     </button>
   </div>
 </template>
@@ -61,12 +66,14 @@ const view = useViewStore();
   display: none;
 }
 .screen-switcher-btn {
+  /* 前の 2 つ（基本画面・グラフ）は、今までどおり、縮めない（文字を切らない）。3 つ目以降は、下の `:not(:nth-child(-n + 2))` で縮められる。 */
   flex: none;
   display: flex;
   align-items: center;
   align-self: stretch;
   min-width: 0;
-  padding: 0 1em;
+  /* 左右の余白は 0.6em: 既定の 240px で、3 つの名前（基本画面・グラフ・利用状況＝11 字）が切れずに並ぶ最大の余白（1em だと 272px 要る）。tab の余白（1em）より狭い。 */
+  padding: 0 0.6em;
   font: inherit;
   color: var(--soda-fg, #f8f8f2);
   background: none;
@@ -76,6 +83,17 @@ const view = useViewStore();
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 3 つ目以降の画面のボタンは、狭いサイドバー（160px・大きい文字）で、前の 2 つを先に守って縮む（はみ出して端末の領域に隠れない。名前は省略記号）。 */
+.screen-switcher-btn:not(:nth-child(-n + 2)) {
+  flex: 0 1 auto;
+}
+/* 名前が入りきらないとき（縮んだ 3 つ目）は、省略記号で切る（ボタンは flex なので、名前を包んで効かせる）。 */
+.screen-switcher-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .screen-switcher-collapsed .screen-switcher-btn {
   /* たたんだ幅（縦並び）は、これまでの箱の大きさを保つ（0.8em の文字・上下 0.2em・線 1px）。塗りだけを tab の言葉に（平ら・区切りは下の線）。 */

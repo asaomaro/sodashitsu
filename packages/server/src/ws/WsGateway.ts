@@ -108,8 +108,10 @@ export class WsGateway {
       },
     };
 
-    // イベントは全クライアントへ配る（design「WebSocket の通信」のイベント表）。
+    // イベントは全クライアントへ配る（design「WebSocket の通信」のイベント表）。**例外**: 利用状況の配信は、見ていると知らせた接続（`agent.usage_watch`）にだけ送る
+    // （見ていない接続へ、毎回の差分を送らない。20261010-agent-usage PR3 の AC2）。
     const unsubscribe = this.bus.subscribe((event) => {
+      if (event.event === "agent.usage_changed" && this.clients.get(clientId)?.watchingUsage !== true) return;
       conn.sendText(JSON.stringify(event));
     });
 

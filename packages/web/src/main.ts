@@ -18,7 +18,7 @@ import { focusPaneIfShown } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
-import { isAllowedOnGraphScreen } from "./keys/graphScreenKeys.js";
+import { isAllowedOnNonBaseScreen } from "./keys/graphScreenKeys.js";
 import { isAllowedInTerminalWindow } from "./keys/graphTerminalKeys.js";
 import { mobileViewportQuery, trackMediaQuery } from "./mobile/detect.js";
 import { MachineSummaryClient } from "@sodashitsu/client-core";
@@ -52,6 +52,8 @@ import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
 import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { documentTitle } from "./serverSession/documentTitle.js";
 import { StoreAdapter } from "./store/StoreAdapter.js";
+import { useUsageStore } from "./store/usage.js";
+import { UsageController } from "./usage/UsageController.js";
 import { useNotificationsStore } from "./store/notifications.js";
 import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
@@ -140,6 +142,8 @@ const storeAdapter = new StoreAdapter({
   onSnapshotApplied: (panes, first) => notificationsBox.current?.onSnapshotApplied(panes, first),
   onPaneClosed: (paneId) => notificationsBox.current?.onPaneClosed(paneId),
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
+  // 利用状況の差分（20261010-agent-usage PR3）。ダッシュボードが見えている間（`agent.usage_watch` で頼んだ間）だけ届く。
+  onUsageChanged: (data) => useUsageStore(pinia).applyChanged(data),
   // 画面の接続がローカルを向いているときだけ、手元の `soda serve` の一覧（リモートを向いていればそのマシンの登録簿なので捨てる）。
   onMachinesChanged: (list) => machineWiringBox.current?.onMainMachinesChanged(list),
   // 共有の設定（20260927-cli-mode）。`prefsSync` はこの後で作るので、遅延で参照する。
@@ -340,6 +344,18 @@ const viewSync = new ViewSync({ conn, registry, getScrollbackLines });
 // 新しい接続の `client.hello` が通るたび（初回・自動の再接続・503 等からの再試行・再ログイン・「再接続」ボタン）に、表示と
 // 購読を張り直す（D107）。サーバは接続ごとに新しい clientId を振り、前の接続の購読・表示・fit を引き継がない。
 connection.onOpened(() => viewSync.onConnectionOpened());
+// 利用状況の配信（20261010-agent-usage PR3）。ダッシュボードが見えていて、タブが前面で、接続が開いている間だけ、サーバへ頼む。
+const usageController = new UsageController({
+  conn,
+  store: useUsageStore(pinia),
+  isDashboardVisible: () => view.dashboardVisible,
+  isPageVisible: () => document.visibilityState !== "hidden",
+  machineId: () => machines.selectedId,
+});
+connection.onOpened(() => usageController.onOpened());
+connection.onClosed(() => usageController.onClosed());
+watch(() => view.dashboardVisible, () => usageController.sync());
+document.addEventListener("visibilitychange", () => usageController.sync());
 // 窓が出ていれば、購読と直結をし直す（サーバは接続ごとに新しい clientId を振り、前の接続の直結を外す。20261008-graph-first の X4・X7）。`viewSync` の後（端末を「未購読」に戻してから）。
 connection.onOpened(() => void graphTerminal.onReconnected());
 // サーバは接続ごとに新しい clientId を振り、前の接続のテーマを持たない（色の問い合わせの答えに使う。20260921-theme-settings の design D6）。
@@ -497,7 +513,7 @@ watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
 // 1 列の画面でも連携のグラフ画面を開いている間は、別のマシンのノードの状態を出すため一覧と軽い接続を保つ（統合レビュー R1）。
 watch(() => view.graphVisible, (open) => machineWiring.onGraphOpenChanged(open));
 // デスクトップのグラフの画面が出ている間は、グラフの面の外にフォーカスがあるときの prefix の 2 打目を、グラフの画面で意味のあるものだけに絞る（見えない基本画面を変えない。D52）。
-keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnGraphScreen(decision));
+keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnNonBaseScreen(decision));
 // グラフの上の端末の窓にフォーカスがある間（端末の道）は、見えない基本画面の構成を変える操作と、選んでいる pane を動かす操作を食う（X2）。`prefix+a` は「グラフの面へ戻る」に読み替える（X1）。
 keys.setTerminalKeyFilter((paneId, decision) => {
   if (!terminalHost.heldByWindow(paneId)) return true;

@@ -50,6 +50,13 @@
 - **R5**: 走査の生涯の読む量（512 MiB）を、書き換え（reset）での数え直しに**引き継ぐ**（`new ClaudeSessionScan(id, limits, carriedRead)`）。上限に達したら更新を止め、`partial` と `updatesStopped`（protocol の `AgentUsage` に足した省略可の項目）を立てる。
 - **R1・R3・R4・R6**: 直さずに、`docs/agent-usage.md` の限界に書いた（先頭の行を取る・`CLAUDE_CONFIG_DIR` が違うと黙って無い・`cost-state` の遅れて書かれたサブエージェントの分・5000 フォルダで探索が打ち切られる）。
 
+## D7 PR3（ダッシュボード）の決め
+- **見ている、の知らせ方**: `agent.usage_watch {on: boolean}`（`ClientRecord.watchingUsage`）。`client.view` は PTY の大きさの権限（SizeAuthority）の入力なので、載せない（見えている画面の情報とは別の関心）。サーバは、`WsGateway` の配信で `agent.usage_changed` を `watchingUsage` の接続だけに送る。印は接続の寿命と同じ（接続が切れたら消える。ブラウザは、開き直したら送り直す）。
+- **配信の中身**: `agent.usage_changed {panes: Record<paneId, AgentUsage|null>, accounts?: AccountUsage[]}`。前回の確かめと比べて、変わった pane だけ（取れなくなったものは null）。アカウントは、変わったときだけ全部。1 回の確かめで 1 つのできごと。
+- **確かめ**: `UsageFeed` が、見ている接続が居る間だけ 5 秒おきに `UsageService.get()` を呼ぶ（中の `stat` の決まりは PR1 のまま）。前の確かめが終わっていなければ飛ばす。見ている接続が 0 になったらタイマーを止め、前回の控えを捨てる（次に始まったときは全部を配る）。サーバの終了で止める。
+- **別のマシン**: 画面の接続が向いているマシンの分だけ（`requirements.md` の「決めたこと」）。
+- **画面の一般化**: `view.screen` の判定は「基本画面か」に寄せる。グラフ専用の所（グラフの窓の層・空間のタグ・サイドバーの空間の見出し）は、そのまま `=== "graph"`。
+- **モバイルの入口**: `MobileShell.vue` に触れない決まりなので、pane のピッカー（全画面の `PanePicker`）に「ダッシュボード」のボタンを足す。全体のメニューには足さない（クラシックの基本画面の画像を変えないため）。
 ## D7 Codex（AC4。`feature/agent-usage-codex`）
 - **探し方は #132 の `agent/codexSession.ts` に寄せた（別に作らない）**: `lookupCodexRecord` の中の日付フォルダの歩きを `findUnbounded` に切り出し、`findCodexRecordFile`（場所だけ返す）を足した。時間切れの包みも共通（`withLookupTimeout`）。アカウントの枠のための `newestCodexRecordFiles`（新しい日付のフォルダから・`maxDayDirs`・`maxFiles` の上限・時間切れつき）も同じファイルに置いた。
 - **読み**: `usage/codexRollout.ts`（末尾の窓を逆に・増分・大きく増えたら末尾の窓だけ・小さくなったらやり直し。開くのは `safeFile.openVerified`）。累計は最後の `token_count` の `total_token_usage` 1 つ（足し合わせない）。`info` が null の行は、累計をそのままに、制限だけ新しくする。
@@ -74,3 +81,5 @@
 | F5 | 待っているだけで「届いていません」 | 検出の後に working になったことのある Claude Code だけを対象にし、最初に動いてから 2 分で判定する。文言は「まだ報告がありません」。 |
 | F6 | configKey | 報告が言うままに使う（今回は絞らない）。枠は最新の報告が勝つ。別の pane が既存の鍵で報告したとき、鍵・pane の id・他の pane の数 をログに残す。pane の記録と照らす絞りは後続。文書の限界に書いた。 |
 | F7・F8 | stdin・起動の費用 | 3 秒の上限は残す。費用（約 45〜60 ms。送りは並行で最大 200 ms）を文書に。 |
+- **クラシックの切り替えのボタンの左右の余白は、3 つ（基本画面・グラフ・利用状況）を既定の 240px に収めるため、1em → 0.6em（tab の 1em より詰まる）。** モダンの余白は元のまま（`--soda-shape-seg-pad-x`。origin/main と同じ）。
+- **比べる道具の基準（元）は、基準のコミットの `appServer.ts` を使う**ので、E2E の環境の隔離（`CODEX_HOME`・`CLAUDE_CONFIG_DIR` を空へ）の前後では、その機械の `~/.claude` に依る差（`08-settings-4`。エージェント連携の導入状態）が出る。画面の変更ではない。
