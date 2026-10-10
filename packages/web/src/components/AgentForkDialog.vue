@@ -295,7 +295,9 @@ function dismissRun(): void {
   font-size: 0.85em;
   min-height: 1.2em;
 }
-.fork-disabled {
+/* 選べない行（無効な部品。`uiTokens.test.ts` の薄さの検査は `:disabled` を除く） */
+.fork-radio:has(input:disabled),
+.fork-check:has(input:disabled) {
   opacity: 0.55;
 }
 .fork-run-stage {
