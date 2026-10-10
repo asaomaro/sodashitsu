@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FrameInfo } from "@sodashitsu/client-core";
-import { dropTargetFor, MACHINE_BLOCK, REMOTE_NODE_BLOCK, type DropTargetInput } from "./moveTarget.js";
+import { CLOSED_NODE_BLOCK, dropTargetFor, MACHINE_BLOCK, REMOTE_NODE_BLOCK, UNKNOWN_SOURCE_BLOCK, type DropTargetInput } from "./moveTarget.js";
 
 const ws = (id: string, wk: string, active = `${id}-t1`) => ({ id, cwd: `/${wk}`, git: { repoKey: "/r", worktreeKey: wk } as never, activeTabId: active, tabIds: [`${id}-t1`] });
 const info = (id: string, kind: FrameInfo["kind"], parentId: string | null = null): FrameInfo => ({ id, kind, parentId, spaceId: "u", title: `T-${id}`, folder: null, branch: null, tabs: [], worktreeCount: null, memberIds: [id] });
@@ -8,7 +8,7 @@ const rect = (x: number, y: number) => ({ x, y, w: 300, h: 200 });
 
 function base(over: Partial<DropTargetInput> = {}): DropTargetInput {
   return {
-    node: { local: true, workspaceId: "a", tabId: "a-t1" },
+    node: { state: "open", workspaceId: "a", tabId: "a-t1" },
     center: { x: 1000, y: 1000 },
     tag: null,
     frames: [
@@ -67,7 +67,20 @@ describe("dropTargetFor（20261008-graph-first PR4）", () => {
     expect(dropTargetFor(base({ tag: { workspaceId: "c", tabId: "c-t1" } }))).toMatchObject({ kind: "blocked", frameId: "c" });
   });
   it("別のマシンの pane（手元でない）は、どの workspace の囲いの上でも落とせない", () => {
-    const t = dropTargetFor(base({ ...at(500, 100), node: { local: false, workspaceId: "m:x", tabId: null } }));
+    const t = dropTargetFor(base({ ...at(500, 100), node: { state: "remote", workspaceId: "m:x", tabId: null } }));
     expect(t).toEqual({ kind: "blocked", frameId: "b", reason: REMOTE_NODE_BLOCK });
+  });
+  it("手元の pane だが、いま開いていない（閉じた直後）ときは、別のマシンとは違う理由で落とせない", () => {
+    const t = dropTargetFor(base({ ...at(500, 100), node: { state: "closed", workspaceId: "a", tabId: null } }));
+    expect(t).toEqual({ kind: "blocked", frameId: "b", reason: CLOSED_NODE_BLOCK });
+    expect(CLOSED_NODE_BLOCK).not.toBe(REMOTE_NODE_BLOCK);
+  });
+  it("つかんだノードの所属が解けない（同期の途中）ときは、ほかの囲いの上では位置の変更にせず、落とせない。自分の側・空いた所は位置の変更のまま", () => {
+    const unknown = { state: "open" as const, workspaceId: undefined, tabId: null };
+    expect(dropTargetFor(base({ ...at(500, 100), node: unknown }))).toEqual({ kind: "blocked", frameId: "b", reason: UNKNOWN_SOURCE_BLOCK });
+    expect(dropTargetFor(base({ ...at(1000, 1000), node: unknown }))).toEqual({ kind: "position" });
+    // 元の workspace が session に無い場合も同じ
+    const missing = { state: "open" as const, workspaceId: "zzz", tabId: null };
+    expect(dropTargetFor(base({ ...at(500, 100), node: missing }))).toMatchObject({ kind: "blocked", reason: UNKNOWN_SOURCE_BLOCK });
   });
 });

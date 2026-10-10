@@ -16,8 +16,11 @@ export type DropTarget =
 type Ws = Pick<Workspace, "id" | "cwd" | "git" | "activeTabId" | "tabIds">;
 
 export interface DropTargetInput {
-  /** つかんでいるノード。手元で開いている pane だけが移せる。 */
-  node: { local: boolean; workspaceId: string | undefined; tabId: string | null };
+  /**
+   * つかんでいるノード。手元で開いている pane（`open`）だけが移せる。`remote`: 別のマシンの pane。`closed`: 手元の鍵だが、いま開いていない
+   * （閉じた直後・まだ届いていない）。
+   */
+  node: { state: "open" | "remote" | "closed"; workspaceId: string | undefined; tabId: string | null };
   /** ノードの中心（世界の座標）。 */
   center: { x: number; y: number };
   /** 指の下にある tab のタグ（無ければ null）。 */
@@ -29,13 +32,17 @@ export interface DropTargetInput {
 
 export const MACHINE_BLOCK = "別のマシンの囲いへは、pane を移せません（そのマシンで操作してください）";
 export const REMOTE_NODE_BLOCK = "別のマシンの pane は移せません";
+export const CLOSED_NODE_BLOCK = "この pane は、いま開いていないため、移せません";
+export const UNKNOWN_SOURCE_BLOCK = "pane の所属を確かめられないため、移せません";
 export const OUTER_BLOCK = "ここには移せません（同じ worktree の workspace の囲いの上へ落としてください）";
 
 function evalWorkspace(input: DropTargetInput, target: Ws, frameId: string, tabId: string, viaTag: boolean): DropTarget {
   const { node } = input;
-  if (!node.local) return { kind: "blocked", frameId, reason: REMOTE_NODE_BLOCK };
+  if (node.state === "remote") return { kind: "blocked", frameId, reason: REMOTE_NODE_BLOCK };
+  if (node.state === "closed") return { kind: "blocked", frameId, reason: CLOSED_NODE_BLOCK };
+  // 所属が解けない（同期の途中）ときは、位置だけが変わって pane は移らない、という取り違えを避けて、落とせないことにする。
   const source = node.workspaceId === undefined ? undefined : input.workspaces.get(node.workspaceId);
-  if (source === undefined) return { kind: "position" };
+  if (source === undefined) return { kind: "blocked", frameId, reason: UNKNOWN_SOURCE_BLOCK };
   const block = paneMoveBlock(source, target, { lenient: true });
   if (block !== null) return { kind: "blocked", frameId, reason: paneMoveBlockMessage(block) };
   // 同じ tab（自分の tab のタグ・自分の workspace の囲い）への移動は、何も起きない（位置の変更）。

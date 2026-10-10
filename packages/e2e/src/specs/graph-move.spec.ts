@@ -36,12 +36,41 @@ async function watchSent(page: Page): Promise<() => { method: string; params: un
   return () => [...sent];
 }
 
-async function setup(page: Page, appServer: AppServer) {
+/**
+ * `fakeMove`: ブラウザが送る `pane.move_to_tab` を、サーバへ流さずに、このテストが答える（`page.routeWebSocket`）。
+ * `decline`: サーバだけが断る道（画面の判定を通った後の `ok: false`・理由つき）。`ok_not_moved`: 「移した」と答えるが、実際は移らない（所属の変化が届かない道）。
+ */
+async function setup(page: Page, appServer: AppServer, opts: { fakeMove?: "decline" | "ok_not_moved" } = {}) {
+  // `routeWebSocket` の下では、ページの WebSocket は CDP の `webSocketFrameSent` に出ない。送ったものは、ここ（ルート）で数える。
+  const routed: { method: string; params: unknown }[] = [];
+  if (opts.fakeMove) {
+    await page.routeWebSocket(/\/ws$/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((m) => {
+        if (typeof m === "string") {
+          try {
+            const j = JSON.parse(m) as { id?: string; method?: string; params?: unknown };
+            if (typeof j.method === "string") routed.push({ method: j.method, params: j.params });
+            if (j.method === "pane.move_to_tab" && typeof j.id === "string") {
+              const result = opts.fakeMove === "decline" ? { ok: false, reason: "different_worktree" } : { ok: true };
+              ws.send(JSON.stringify({ id: j.id, result }));
+              return;
+            }
+          } catch {
+            // JSON でないものは、そのまま流す
+          }
+        }
+        server.send(m);
+      });
+      server.onMessage((m) => ws.send(m));
+    });
+  }
   const client = await appServer.openClient();
   const snap = client.helloSnapshot()!;
   const ws0 = snap.workspaces[0]!;
   const p0 = snap.panes[0]!.id;
-  const sent = await watchSent(page);
+  const cdpSent = await watchSent(page);
+  const sent = opts.fakeMove ? () => [...routed] : cdpSent;
   const views = await watchClientViews(page);
   await page.setViewportSize({ width: 1500, height: 900 });
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
@@ -200,6 +229,37 @@ test.describe("グラフで pane を別の workspace へ移す（T15a）", () =>
     await expect.poll(() => sent().slice(sent0).filter((m) => m.method === "graph.update").length).toBeGreaterThan(0);
     expect(sent().slice(sent0).filter((m) => m.method === "pane.move_to_tab")).toHaveLength(0);
     expect((await placeOf(appServer, pX)).workspaceId).toBe(ws0.id);
+  });
+});
+
+test.describe("サーバの答えが正（T15a。応答を差し替える）", () => {
+  test("画面の判定を通った後、サーバだけが断ると、元の位置へ戻り、理由のトーストが 1 つ出て、位置も書かない", async ({ page, appServer }) => {
+    const { pX, ws0, b, sent } = await setup(page, appServer, { fakeMove: "decline" });
+    await openGraph(page);
+    const node = nodeOf(page, pX);
+    const before = await center(page, node);
+    const sent0 = sent().length;
+    const target = await center(page, frameOf(page, b.workspace.id));
+    await grabAndMove(page, before, { x: target.x, y: target.y + 40 });
+    await expect(frameOf(page, b.workspace.id)).toHaveClass(/graph-frame-drop/); // 画面の判定は「移せる」
+    await page.mouse.up();
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "別の worktree の workspace へは移せません" })).toHaveCount(1);
+    expect(sent().slice(sent0).filter((m) => m.method === "pane.move_to_tab")).toHaveLength(1);
+    expect(sent().slice(sent0).filter((m) => m.method === "graph.update")).toHaveLength(0);
+    await expect.poll(async () => Math.round((await center(page, node)).x)).toBe(Math.round(before.x)); // 元の位置へ戻る
+    expect((await placeOf(appServer, pX)).workspaceId).toBe(ws0.id);
+  });
+
+  test("「移した」と答えても所属の変化が届かないとき（待ちが切れる）は、位置を書かず、知らせる", async ({ page, appServer }) => {
+    const { pX, b, sent } = await setup(page, appServer, { fakeMove: "ok_not_moved" });
+    await openGraph(page);
+    const node = nodeOf(page, pX);
+    const sent0 = sent().length;
+    const target = await center(page, frameOf(page, b.workspace.id));
+    await grabAndMove(page, await center(page, node), { x: target.x, y: target.y + 40 });
+    await page.mouse.up();
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "表示が追いついたら、置き場所は自動で決まります" })).toHaveCount(1, { timeout: 10_000 });
+    expect(sent().slice(sent0).filter((m) => m.method === "graph.update")).toHaveLength(0);
   });
 });
 

@@ -31,7 +31,7 @@ interface MenuItem {
 }
 
 /** 移せない理由の文言（移せるなら null）。判定は D&D・サーバと同じ `paneMoveBlock`。 */
-function paneMoveBlockMessage2(source: Parameters<typeof paneMoveBlock>[0], target: Parameters<typeof paneMoveBlock>[1]): string | null {
+function paneMoveBlockMessageFor(source: Parameters<typeof paneMoveBlock>[0], target: Parameters<typeof paneMoveBlock>[1]): string | null {
   const block = paneMoveBlock(source, target, { lenient: true });
   return block === null ? null : paneMoveBlockMessage(block);
 }
@@ -281,7 +281,7 @@ const items = computed<MenuItem[]>(() => {
     };
     for (const ws of session.workspaces.values()) {
       const title = graphSpaces.infoMap.get(ws.id)?.title ?? ws.label;
-      const reason = ws.id === source.id ? null : paneMoveBlockMessage2(source, ws);
+      const reason = ws.id === source.id ? null : paneMoveBlockMessageFor(source, ws);
       const tabs = graphSpaces.infoMap.get(ws.id)?.tabs ?? [];
       const move = (tabId: string) => (): void => graphSpaces.requestCommand("moveNode", JSON.stringify({ key: target.key, workspaceId: ws.id, tabId }));
       if (ws.id !== source.id) {

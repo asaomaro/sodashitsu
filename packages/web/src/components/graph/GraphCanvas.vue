@@ -57,6 +57,7 @@ import { useViewStore } from "../../store/view.js";
 import GraphAddForm, { type AddFormKind, type AddFormSubmit } from "./GraphAddForm.vue";
 import { AddPaneError, addPane, type AddPaneDeps } from "./addPane.js";
 import { moveToGroup } from "./moveToGroup.js";
+import { moveNodeTo as runMoveNode } from "./moveNodeTo.js";
 import { dropTargetFor, type DropTarget } from "./moveTarget.js";
 import GraphConfirm from "./GraphConfirm.vue";
 import GraphEdge from "./GraphEdge.vue";
@@ -648,11 +649,12 @@ function overHeadBand(pos: { x: number; y: number }): boolean {
 /** ノード `key` を `pos` に置いて、ポインタ `ev` で離したときの行き先（`moveTarget.ts`）。 */
 function dropTargetOf(key: string, pos: { x: number; y: number }, ev: PointerEvent): DropTarget {
   // 動かすたびに呼ぶので、ノードの中身（`nodeInfo`）は作らず、鍵と今のセッションだけで見る（ノードのドラッグの毎回にはノードの中身を作り直さない）。
+  const remoteKey = !isLocalNodeKey(key) || machines.selectedId !== LOCAL_MACHINE_ID;
   const paneId = isLocalNodeKey(key) ? key.slice("local:".length) : null;
-  const open = paneId !== null && machines.selectedId === LOCAL_MACHINE_ID && session.panes.has(paneId);
+  const open = !remoteKey && paneId !== null && session.panes.has(paneId);
   const paneTab = open && paneId !== null ? (session.panes.get(paneId)?.tabId ?? null) : null;
   return dropTargetFor({
-    node: { local: open, workspaceId: spaces.memberOfNode.get(key), tabId: paneTab },
+    node: { state: remoteKey ? "remote" : open ? "open" : "closed", workspaceId: spaces.memberOfNode.get(key), tabId: paneTab },
     center: { x: pos.x + GRAPH_NODE_WIDTH / 2, y: pos.y + GRAPH_NODE_HEIGHT / 2 },
     // 指の下のタグは、ノードが囲いの見出しの帯に掛かっているときだけ確かめる（`elementsFromPoint` は毎回の動きで呼ぶと重い）。
     tag: overHeadBand(pos) ? tagUnder(ev) : null,
@@ -706,8 +708,7 @@ async function waitUntil(cond: () => boolean, ms: number): Promise<boolean> {
   return true;
 }
 /**
- * pane を別の workspace の tab へ移す（PR4 T15a・T15c）。サーバの `pane.move_to_tab` の答えが正（断られたら、元へ戻してトースト）。
- * 成功したら、サーバの構成が変わるのを待って、`dropPos`（無ければ囲いの中の最初の場所）に近い空きへ置く（`resolveDrop`）。線・端末の窓は pane の id のまま付いていく。
+ * pane を別の workspace の tab へ移す（PR4 T15a・T15c）。進行は `moveNodeTo.ts`（単体試験あり）。サーバの `pane.move_to_tab` の答えが正。線・端末の窓は pane の id のまま付いていく。
  */
 async function moveNodeTo(key: string, t: Extract<DropTarget, { kind: "move" }>, dropPos: { x: number; y: number } | null): Promise<void> {
   const info = graph.nodeInfo(key as NodeKey);
@@ -715,20 +716,20 @@ async function moveNodeTo(key: string, t: Extract<DropTarget, { kind: "move" }>,
     graph.setDragPosition(key, null);
     return;
   }
-  const r = await actions.movePaneToTab(info.paneId, t.tabId, { follow: false });
-  if (r === null || !r.ok) {
-    graph.setDragPosition(key, null);
-    // 理由があるときは、`movePaneToTab` がトーストを出している。
-    if (r === null || !r.reason) view.toast("pane を移せませんでした。元の位置へ戻しました。");
-    return;
-  }
-  await waitUntil(() => spaces.memberOfNode.get(key) === t.workspaceId, 3000);
-  spaces.flash(t.frameId);
-  liveMessage.value = `${info.name} を ${t.label} へ移しました。`;
-  // 囲いが見えていない（別の空間）ときは、位置はサーバの置き場所（移ってきたノードの置き直し）に任せる。
-  const pos = dropPos ?? bodyPositionOf(t.frameId);
-  if (pos !== null) await graph.moveNodes([{ key, ...pos }]);
-  graph.setDragPosition(key, null);
+  await runMoveNode(
+    {
+      movePaneToTab: (paneId, tabId) => actions.movePaneToTab(paneId, tabId, { follow: false }),
+      waitMember: (workspaceId) => waitUntil(() => spaces.memberOfNode.get(key) === workspaceId, 3000),
+      placeNode: (pos) => graph.moveNodes([{ key, ...pos }]),
+      // 囲いが見えていない（別の空間）ときは、位置はサーバの置き場所（移ってきたノードの置き直し）に任せる。
+      bodyPosition: bodyPositionOf,
+      clearDrag: () => graph.setDragPosition(key, null),
+      toast: (m) => view.toast(m),
+      announce: (m) => (liveMessage.value = m),
+      flash: (id) => spaces.flash(id),
+    },
+    { paneId: info.paneId, name: info.name, target: t, dropPos },
+  );
 }
 
 // --- 囲いのドラッグ（見出しをつかんで、中のノードをまとめて平行移動。20261008-graph-first の T11f）------------------------
