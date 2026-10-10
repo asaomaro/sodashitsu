@@ -22,6 +22,7 @@ import {
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import { mobileViewportQuery } from "../mobile/detect.js";
+import { resolveTabBarAlways } from "../composables/useUiStyle.js";
 import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
 import ExtensionSettings from "./ExtensionSettings.vue";
 import KeySettings from "./KeySettings.vue";
@@ -225,8 +226,10 @@ function toggleTabBarAlways(): void {
 function resetTabBarAlways(): void {
   settings.setTabBarAlways(null);
 }
-/** 画面に効いている値（選んだ値、無ければ様式に従う。`useUiStyle().tabBarAlways` と同じ規則。この画面は 1 列の判定を持たない）。 */
-const tabBarAlwaysEffective = computed(() => settings.tabBarAlways ?? settings.uiStyle === "modern");
+/** 画面に効いている値（`useUiStyle().tabBarAlways` と同じ規則 `resolveTabBarAlways`。1 列かは、リスナーを増やさず、その場で読む）。 */
+const tabBarAlwaysEffective = computed(() =>
+  resolveTabBarAlways(settings.tabBarAlways, settings.uiStyle === "modern", typeof window.matchMedia === "function" && mobileViewportQuery().matches),
+);
 
 function togglePaneGaps(): void {
   settings.setPaneGaps(!settings.paneGaps);

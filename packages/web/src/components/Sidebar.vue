@@ -786,7 +786,15 @@ function sectionsChrome(): { lead: number; trim: number } {
   const pt = parseFloat(cs.paddingTop) || 0;
   const pb = parseFloat(cs.paddingBottom) || 0;
   const gap = parseFloat(cs.rowGap) || 0;
-  return { lead: pt + gap, trim: pt + pb + gap * 2 };
+  // カードの縁（上下の線。区画の高さは、中身に縁が足されるため、配れる高さから引く）。クラシックは 0。
+  const edges = (e: HTMLElement | null): number => {
+    if (!e) return 0;
+    const s = getComputedStyle(e);
+    return (parseFloat(s.borderTopWidth) || 0) + (parseFloat(s.borderBottomWidth) || 0);
+  };
+  const spacesEdge = edges(spacesEl.value);
+  const agentsEdge = edges(agentsEl.value);
+  return { lead: pt + gap + spacesEdge, trim: pt + pb + gap * 2 + spacesEdge + agentsEdge };
 }
 
 /** 配れる高さ（境目の 1px と、モダンのカードの余白・すき間を除く）と、区画ごとの最小（`min-height` の実測）。測れない（描画前・jsdom）ときは total 0＝`clampRatio` が 0.5 を返す。 */

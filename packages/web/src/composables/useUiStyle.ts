@@ -11,11 +11,19 @@ import { useSettingsStore } from "../store/settings.js";
  * - `tabBarAlways`: tab が 1 つのときも tab バーを出すか（20261008-ui-style の AC24）。利用者が選んだ値（設定「tab が 1 つのときも tab バーを出す」）があればそれ、
  *   無ければ様式に従う（モダンの配置: 出す・クラシック: 出さない）。
  */
+/**
+ * tab が 1 つのときも tab バーを出すかの規則（1 か所）。選んだ値があればそれ、無ければ様式に従う（モダンの配置〔モダンで、1 列でない〕: 出す・クラシック: 出さない）。
+ * `useUiStyle().tabBarAlways` と、設定の画面（リスナーを増やさないよう、自分で 1 列かを渡す）が使う。
+ */
+export function resolveTabBarAlways(pref: boolean | null, isModern: boolean, mobile: boolean): boolean {
+  return pref ?? (isModern && !mobile);
+}
+
 export function useUiStyle() {
   const settings = useSettingsStore();
   const mobile = isMobileViewport();
   const isModern = computed(() => settings.uiStyle === "modern");
   const modernLayout = computed(() => isModern.value && !mobile.value);
-  const tabBarAlways = computed(() => settings.tabBarAlways ?? modernLayout.value);
+  const tabBarAlways = computed(() => resolveTabBarAlways(settings.tabBarAlways, isModern.value, mobile.value));
   return { isModern, modernLayout, tabBarAlways };
 }

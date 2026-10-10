@@ -512,6 +512,16 @@ function onWheel(ev: WheelEvent): void {
   border: var(--soda-shape-seg-border) solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-seg-radius);
 }
+/* 余白だけは、切り替えのボタンと分ける（短い名前の tab が細くならないよう、最小の幅と、広めの左右の余白）。角・線・高さ・文字は共有。 */
+:root[data-ui-style="modern"] .tab-bar-item {
+  min-width: var(--soda-shape-control-h);
+  padding-inline: var(--soda-shape-seg-tab-pad-x);
+  justify-content: center;
+}
+:root[data-ui-style="modern"] .tab-bar-new {
+  min-width: var(--soda-shape-control-h);
+  justify-content: center;
+}
 :root[data-ui-style="modern"] .tab-bar-item:hover,
 :root[data-ui-style="modern"] .tab-bar-new:hover:not(:disabled) {
   background: var(--soda-menu-hover-bg, #343746);

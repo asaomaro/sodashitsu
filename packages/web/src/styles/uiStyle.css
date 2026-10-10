@@ -44,6 +44,7 @@
   --soda-shape-seg-pad-y: 0.2em;
   --soda-shape-seg-pad-x: 0.3em;
   --soda-shape-seg-gap: 2px;
+  --soda-shape-seg-tab-pad-x: 0.7em; /* tab の左右の余白（切り替えのボタンは 0.3em。短い名前の tab が細くならないよう、余白だけ分ける。角・線・高さ・文字は共有） */
   --soda-shape-seg-radius: var(--soda-shape-radius-s);
   --soda-shape-seg-border: 1px;
   --soda-shape-seg-bar-pad-y: 0.3em; /* ボタンの並びを載せる帯の、上下の余白 */

@@ -1742,3 +1742,5 @@ copy モードの中でも prefix になる）。M7・M11 のマウス報告は�
 - [ ] `sodactl agent fork <名前>`: 同じフォルダの新しい pane に、会話を覚えたエージェントが起動する（応答に合言葉が出る）。元のエージェントは止まらない。（2026-10-10 実機で確認: 約 6.6 秒。）
 - [ ] `sodactl agent fork <名前> --worktree fork/e2e`: 新しい worktree と workspace ができ、最初の知らせが届き（`noteStatus: sent`）、新しいエージェントが「作業フォルダを切り替えた」と答える。元のフォルダは変わらない。（同日確認: 約 7 秒。リポジトリが信頼済みなら worktree の信頼の確認は出なかった。）
 - [ ] 古い Claude Code（`--fork-session` を知らない版）・記録が無い id: `failed` で理由が出て、pane は閉じない（偽の `claude` の試験で確認。実機は未確認）。
+
+- 強制モダン（`UI_STYLE_E2E=modern`）で流す E2E（20261008-ui-style PR4〜PR6）: `ui-style-pane-actions`・`tab-dnd`・`sidebar-sections`（クラシックの `.sidebar-section-footer` を探す 1 本〔最下部のボタンの位置〕は、モダンでは出ないので落ちる。元からの前提）・`display-script-noreturn`（幅のつまみの縦の中央に、モダンの境の印があるため 2 本落ちる。元からの前提）。`ui-style-layout` は、最初にクラシックを確かめる試験を含むので、強制モダンでは流さない（既定の環境で流す）。
