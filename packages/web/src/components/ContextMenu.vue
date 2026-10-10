@@ -178,6 +178,8 @@ const items = computed<MenuItem[]>(() => {
       { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       ...forkItem(target.paneId, true),
+      // そのセッションの利用状況（20261010-agent-usage PR4。エージェントの居る pane だけ。クラシック・モダンとも）。
+      ...(pane?.agent ? [{ label: "利用状況…", run: () => actions.showPaneInfo(target.paneId) }] : []),
       // 表示の面（パネル・帯）があるときだけ（20261007-soda-extensions）。
       ...(displays.hasAny(target.paneId)
         ? [
@@ -276,6 +278,7 @@ const items = computed<MenuItem[]>(() => {
     return [
       { label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) },
       ...forkItem(info.paneId, info.local && info.exists === true),
+      ...(session.panes.get(info.paneId)?.agent ? [{ label: "利用状況…", run: () => actions.showPaneInfo(info.paneId) }] : []),
       { label: "別の workspace へ移す…", run: () => view.openContextMenu({ kind: "graphMoveTo", key: target.key }, menuAt) },
     ];
   }

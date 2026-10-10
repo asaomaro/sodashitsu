@@ -8,6 +8,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { paneNameOf } from "@sodashitsu/client-core";
 import StateIcon from "../components/StateIcon.vue";
+import AccountCard from "./AccountCard.vue";
 import { ConnectionKey } from "../injection.js";
 import { displayStateFor, useSeenStore } from "../store/seen.js";
 import { useSessionStore } from "../store/session.js";
@@ -281,33 +282,7 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
       <h3 class="dash-sub">アカウントの利用枠</h3>
       <p v-if="accountGroups.length === 0" class="dash-muted" data-dash-no-accounts>まだ値がありません</p>
       <div v-for="g in accountGroups" :key="g.kind" class="dash-account-group" :data-dash-account-kind="g.kind">
-        <div v-for="a in g.accounts" :key="a.accountKey" class="dash-account" :class="{ 'dash-stale': isStale(a.asOf, now) }" :data-dash-account="a.accountKey">
-          <div class="dash-account-head">
-            <span class="dash-account-name">{{ a.label }}</span>
-            <span v-if="a.plan" class="dash-chip">{{ a.plan }}</span>
-            <span class="dash-muted dash-account-ago" :title="new Date(a.asOf).toLocaleString()">{{ formatAgo(a.asOf, now) }}</span>
-          </div>
-          <p v-if="a.windows.length === 0" class="dash-muted">枠の値がありません</p>
-          <ul v-else class="dash-windows">
-            <li v-for="w in a.windows" :key="w.label + String(w.windowMinutes ?? '')" class="dash-window" :class="{ 'dash-stale': windowDisplay(w, now).past }" data-dash-window>
-              <span class="dash-window-label">{{ w.label }}</span>
-              <span
-                class="dash-bar"
-                role="progressbar"
-                :aria-label="`${a.label} ${w.label}の使用率`"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                :aria-valuenow="windowDisplay(w, now).pct ?? undefined"
-                :aria-valuetext="windowDisplay(w, now).text"
-              >
-                <span class="dash-bar-fill" :style="{ width: `${windowDisplay(w, now).pct ?? 0}%` }" />
-              </span>
-              <span class="dash-window-pct">{{ windowDisplay(w, now).text }}</span>
-              <span v-if="windowDisplay(w, now).spend" class="dash-muted dash-window-spend" data-dash-spend>{{ windowDisplay(w, now).spend }}</span>
-              <span v-if="windowDisplay(w, now).reset" class="dash-muted dash-window-reset">{{ windowDisplay(w, now).reset }}</span>
-            </li>
-          </ul>
-        </div>
+        <AccountCard v-for="a in g.accounts" :key="a.accountKey" :account="a" :now="now" />
       </div>
     </section>
 
@@ -443,10 +418,6 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
   font-weight: normal;
   opacity: 0.7;
 }
-.dash-muted {
-  opacity: 0.65;
-  font-size: 0.9em;
-}
 .dash-note {
   margin: 0.4em 0;
   font-size: 0.9em;
@@ -456,86 +427,10 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
   color: var(--soda-warn-fg, #ffb86c);
   opacity: 1;
 }
-.dash-chip {
-  display: inline-block;
-  padding: 0 0.4em;
-  border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: var(--soda-shape-radius-s, 3px);
-  font-size: 0.8em;
-  line-height: 1.4;
-}
-/* 古い値（更新が 1 分より前・リセットを過ぎた枠・更新停止）は薄く（時刻は文字でも出す） */
-.dash-stale {
-  opacity: 0.6;
-}
 
 /* アカウントの枠 */
 .dash-accounts {
   margin-bottom: 0.8em;
-}
-.dash-account-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6em 1.2em;
-}
-.dash-account {
-  min-width: 18em;
-  flex: 1 1 18em;
-  border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: var(--soda-shape-radius, 4px);
-  padding: 0.4em 0.7em 0.5em;
-}
-.dash-account-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6em;
-  margin-bottom: 0.3em;
-}
-.dash-account-name {
-  font-weight: 600;
-}
-.dash-account-ago {
-  margin-left: auto;
-}
-.dash-windows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.3em;
-}
-.dash-window {
-  display: grid;
-  grid-template-columns: 4.5em minmax(6em, 1fr) 6.5em;
-  align-items: center;
-  gap: 0.2em 0.6em;
-}
-.dash-window-reset,
-.dash-window-spend {
-  grid-column: 2 / 4;
-}
-.dash-window-pct {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.dash-bar {
-  position: relative;
-  display: block;
-  height: 0.6em;
-  border-radius: 0.3em;
-  background: color-mix(in srgb, var(--soda-fg, #f8f8f2) 18%, transparent);
-  overflow: hidden;
-}
-.dash-bar-small {
-  display: inline-block;
-  width: 4.5em;
-  vertical-align: middle;
-  margin-right: 0.4em;
-}
-.dash-bar-fill {
-  display: block;
-  height: 100%;
-  background: var(--soda-accent, #6070a1);
 }
 
 /* 一覧（クラシック: 端末らしい表） */
@@ -692,10 +587,6 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 }
 :root[data-ui-style="modern"] .dash-row-head {
   border-bottom: none;
-}
-:root[data-ui-style="modern"] .dash-account {
-  border-radius: var(--soda-shape-card-radius, 12px);
-  background: color-mix(in srgb, var(--soda-fg, #f8f8f2) var(--soda-shape-card-tint, 5%), transparent);
 }
 :root[data-ui-style="modern"] .dash-select {
   border-radius: var(--soda-shape-radius-s, 6px);

@@ -9,8 +9,8 @@ import type { useUsageStore } from "../store/usage.js";
 export interface UsageControllerDeps {
   conn: Pick<ConnectionPort, "request">;
   store: Pick<ReturnType<typeof useUsageStore>, "setSnapshot" | "markUnsupported" | "markFailed" | "clear">;
-  /** ダッシュボードが見えているか（`view.dashboardVisible`）。 */
-  isDashboardVisible: () => boolean;
+  /** 配信を受けたいか: ダッシュボードか、pane の利用状況の窓が見えているか（`view.usageWatchWanted`。見ている、の数え方は 1 つ）。 */
+  isWanted: () => boolean;
   /** タブが前面か（`document.visibilityState === "visible"`）。 */
   isPageVisible: () => boolean;
   /** 画面の接続が向いているマシン（`machines.selectedId`）。替わったら値を捨てる。 */
@@ -29,7 +29,7 @@ export class UsageController {
 
   /** 見る必要があるか。 */
   private wanted(): boolean {
-    return this.open && this.deps.isDashboardVisible() && this.deps.isPageVisible();
+    return this.open && this.deps.isWanted() && this.deps.isPageVisible();
   }
 
   /** 見えている・前面・接続の状態のどれかが変わったとき。 */

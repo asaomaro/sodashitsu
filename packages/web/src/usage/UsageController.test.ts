@@ -17,7 +17,7 @@ function make(opts: { visible?: boolean; page?: boolean; machine?: string } = {}
   const c = new UsageController({
     conn: conn as never,
     store,
-    isDashboardVisible: () => state.visible,
+    isWanted: () => state.visible,
     isPageVisible: () => state.page,
     machineId: () => state.machine,
   });

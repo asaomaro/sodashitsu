@@ -97,6 +97,7 @@ export type Action =
   | { type: "focusDisplay" } // focus_display（フォーカス中の pane のパネル・帯の枠へ移る。端末版は知らせだけ）
   // 20261004-subagent-display（本製品の追加）。
   | { type: "toggleSidebarSection"; section: "spaces" | "agents" } // toggle_spaces_section / toggle_agents_section（20261004-ui-interaction-polish。区画の折りたたみ）
+  | { type: "showUsage" } // show_usage（フォーカスしている pane のエージェントの利用状況の窓。20261010-agent-usage PR4。端末版は知らせだけ）
   | { type: "showSubagents" } // show_subagents（フォーカスしている pane のエージェントが動かしているサブエージェントの一覧を開く）
   // 20261005-notify-bell（本製品の追加）。
   | { type: "openNotificationHistory" }; // open_notification_history（応答せずに閉じた知らせの一覧を開く。端末版は既存の「知らせの一覧」）

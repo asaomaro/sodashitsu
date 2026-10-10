@@ -260,6 +260,10 @@ export class TuiDispatcher {
         // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
         this.ui.toast("グラフの画面はブラウザで開けます。");
         return;
+      case "showUsage":
+        // pane の利用状況の窓はブラウザにだけある（20261010-agent-usage PR4）。端末版は `sodactl agent usage` で見られる。
+        this.ui.toast("利用状況の窓はブラウザで開けます（sodactl agent usage でも見られます）。");
+        return;
       case "displayMenu":
       case "focusDisplay":
         // 表示の面（パネル・帯）はブラウザにだけある（20261007-soda-extensions）。

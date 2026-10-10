@@ -3037,6 +3037,57 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     });
   });
 
+  // 20261010-agent-usage PR4（show_usage）。
+  describe("showUsage（show_usage）", () => {
+    function setup(agent: AgentInfo | null) {
+      const session = useSessionStore(pinia);
+      const view = useViewStore(pinia);
+      session.workspaceUpserted(makeWorkspace("w1", ["t1"]));
+      session.tabUpserted(makeTab("t1", "w1"));
+      session.paneUpserted({ ...makePane("p1", "t1"), agent });
+      view.setView("w1", "t1");
+      view.focusPane("p1");
+      return { view };
+    }
+
+    it("フォーカスしている pane の利用状況の窓を開く。もう一度で閉じる。何も送らない", () => {
+      const { view } = setup(makeAgent());
+      const conn = makeConnection();
+      const { dispatcher } = makeDispatcher(conn);
+      dispatcher.run({ type: "showUsage" });
+      expect(view.paneInfoPaneId).toBe("p1");
+      expect(view.usageWatchWanted).toBe(true);
+      dispatcher.run({ type: "showUsage" });
+      expect(view.paneInfoPaneId).toBeNull();
+      expect(view.usageWatchWanted).toBe(false);
+      expect(conn.requests).toEqual([]);
+    });
+
+    it("エージェントが居ない・フォーカスが無いときは何もしない（否定の対照）", () => {
+      const { view } = setup(null);
+      const { dispatcher } = makeDispatcher(makeConnection());
+      dispatcher.run({ type: "showUsage" });
+      expect(view.paneInfoPaneId).toBeNull();
+      pinia = createPinia();
+      const v2 = useViewStore(pinia);
+      makeDispatcher(makeConnection()).dispatcher.run({ type: "showUsage" });
+      expect(v2.paneInfoPaneId).toBeNull();
+    });
+
+    it("showPaneInfo（メニュー）: エージェントの居る pane だけ。1 列の画面では全面のダイアログ", () => {
+      const { view } = setup(makeAgent());
+      const { dispatcher } = makeDispatcher(makeConnection());
+      dispatcher.showPaneInfo("p1");
+      expect(view.paneInfoPaneId).toBe("p1");
+      view.closePaneInfo();
+      view.setMobileViewport(true);
+      dispatcher.showPaneInfo("p1");
+      expect(view.paneInfoPaneId).toBeNull();
+      expect(view.dialogContext).toEqual({ kind: "paneInfo", paneId: "p1" });
+      expect(view.paneInfoVisible).toBe(true);
+    });
+  });
+
   describe("focusDisplay（focus_display。20261007-soda-extensions）", () => {
     const disp = (id: string, kind: "panel" | "band") => ({ id, paneId: "p1", name: id, kind, format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x" });
     it("パネルがあれば選ばれているパネルの枠へ、パネルが無ければ最初の帯へ移る。面が無ければトースト", async () => {

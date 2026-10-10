@@ -299,12 +299,18 @@ const showPaneButtons = computed(() => !!props.enabled && modern?.value === true
 /** 名前の行（確保した上の余白）の右端に出すか。そうでなければ、右上の隅に重ねる。 */
 const buttonsInRow = computed(() => reserveNameSpace.value);
 const widthFor = (n: number): number => n * BTN + (n - 1) * BTN_GAP + CLOSE_GAP + ACTIONS_PAD;
-/** pane が小さくて入りきらないとき、分割の 2 つを先に隠す（最大化と閉じるは残す）。箱の幅が分からない間（0）は、全部出す。 */
-const showSplitButtons = computed(() => {
+/** エージェントの居る pane か（［情報］を出す。20261010-agent-usage PR4）。 */
+const hasAgent = computed(() => !!session?.panes.get(props.paneId)?.agent);
+const infoAvailable = computed(() => showPaneButtons.value && hasAgent.value);
+/** ボタンが n 個並んで入る幅か。箱の幅が分からない間（0）は、全部出す。 */
+const fits = (n: number): boolean => {
   const w = bodySize.value.w;
   if (w <= 0) return true;
-  return w >= widthFor(4) + (buttonsInRow.value && paneName.value ? NAME_MIN_PX : 0) + 12;
-});
+  return w >= widthFor(n) + (buttonsInRow.value && paneName.value ? NAME_MIN_PX : 0) + 12;
+};
+/** pane が小さくて入りきらないとき、隠す順は 分割の 2 つ → ［情報］（最大化と閉じるは残す）。 */
+const showSplitButtons = computed(() => fits(infoAvailable.value ? 5 : 4));
+const showInfoButton = computed(() => infoAvailable.value && fits(3));
 /** 極端に狭い pane（最大化と閉じるだけで、名前の入る幅が残らない）では、名前を出さない（ボタンに重なって押せなくなるため）。名前の行にボタンが並ぶときだけ。 */
 const nameFits = computed(() => {
   if (!(showPaneButtons.value && buttonsInRow.value)) return true;
@@ -312,7 +318,9 @@ const nameFits = computed(() => {
   return w <= 0 || w >= widthFor(2) + NAME_BOX_SLACK + 24;
 });
 /** 名前の行のとき、名前の最大の幅から引く、ボタンの分（px）。 */
-const actionsWidthPx = computed(() => (showPaneButtons.value && buttonsInRow.value ? widthFor(showSplitButtons.value ? 4 : 2) + NAME_BOX_SLACK : 0));
+const actionsWidthPx = computed(() =>
+  showPaneButtons.value && buttonsInRow.value ? widthFor(2 + (showSplitButtons.value ? 2 : 0) + (showInfoButton.value ? 1 : 0)) + NAME_BOX_SLACK : 0,
+);
 const zoomed = computed(() => {
   const tabId = session?.panes.get(props.paneId)?.tabId;
   return tabId !== undefined && session?.tabs.get(tabId)?.zoomedPaneId === props.paneId;
@@ -326,6 +334,12 @@ function paneAction(run: () => void): void {
 const onSplit = (dir: "right" | "down"): void => paneAction(() => actions?.splitPane(props.paneId, dir));
 const onZoom = (): void => paneAction(() => actions?.zoomPane(props.paneId));
 const onClosePane = (): void => paneAction(() => actions?.closePaneWithConfirm(props.paneId));
+/** ［情報］: その pane の利用状況の窓を開く／閉じる（端末のフォーカスは動かさない。窓が開くと窓が受け取り、閉じると端末へ戻す）。 */
+const onInfo = (): void => {
+  view?.focusPane(props.paneId);
+  view?.togglePaneInfo(props.paneId);
+};
+const infoOpen = computed(() => view?.paneInfoPaneId === props.paneId);
 
 const DRAG_THRESHOLD_PX = 6;
 let dragStart: { x: number; y: number; pointerId: number } | null = null;
@@ -543,7 +557,10 @@ function onKeydown(ev: KeyboardEvent): void {
             :zoomed="zoomed"
             :selected="selected"
             :pane-label="paneLabel"
+            :show-info="showInfoButton"
+            :info-open="infoOpen"
             @split="onSplit"
+            @info="onInfo"
             @zoom="onZoom"
             @close="onClosePane"
           />
@@ -586,7 +603,10 @@ function onKeydown(ev: KeyboardEvent): void {
       :zoomed="zoomed"
       :selected="selected"
       :pane-label="paneLabel"
+      :show-info="showInfoButton"
+      :info-open="infoOpen"
       @split="onSplit"
+      @info="onInfo"
       @zoom="onZoom"
       @close="onClosePane"
     />

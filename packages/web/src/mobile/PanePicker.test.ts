@@ -147,3 +147,30 @@ describe("PanePicker — ダッシュボードの入口（20261010-agent-usage P
     expect(view.dashboardVisible).toBe(true);
   });
 });
+
+describe("PanePicker — pane の利用状況の入口（20261010-agent-usage PR4 の AC2）", () => {
+  it("エージェントの行の［利用状況］を押すと、ピッカーを閉じて全面のダイアログを開く（pane は選ばない）", async () => {
+    const session = useSessionStore(pinia);
+    const view = useViewStore(pinia);
+    view.setMobileViewport(true);
+    session.workspaceUpserted(makeWorkspace("w1", ["t1"]));
+    session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1", makeAgent()));
+    const conn = makeConnection();
+    const wrapper = mountPicker(conn);
+    await wrapper.get("[data-picker-pane-info]").trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    expect(view.dialogContext).toEqual({ kind: "paneInfo", paneId: "p1" });
+    expect(view.usageWatchWanted).toBe(true);
+    expect(conn.requests).toEqual([]);
+  });
+
+  it("エージェントの居ない pane の行は出ない（否定の対照）", () => {
+    const session = useSessionStore(pinia);
+    session.workspaceUpserted(makeWorkspace("w1", ["t1"]));
+    session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1", null));
+    const wrapper = mountPicker(makeConnection());
+    expect(wrapper.find("[data-picker-pane-info]").exists()).toBe(false);
+  });
+});

@@ -364,6 +364,45 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
 
   // 20261010-agent-usage PR3：3 つ目の画面（ダッシュボード）。デスクトップは画面、1 列は重ねるダイアログ（ダイアログの 1 枠）。
   describe("ダッシュボード", () => {
+    it("pane の利用状況の窓（20261010-agent-usage PR4）: 開く・閉じる・もう一度で閉じる。配信の数え方はダッシュボードと 1 つ（どちらかが見えていれば true）", () => {
+      const store = useViewStore();
+      expect(store.usageWatchWanted).toBe(false);
+      store.openPaneInfo("p1");
+      expect(store.paneInfoPaneId).toBe("p1");
+      expect(store.paneInfoVisible).toBe(true);
+      expect(store.usageWatchWanted).toBe(true);
+      expect(store.dashboardVisible).toBe(false);
+      // ダッシュボードも見えている間に窓を閉じても、配信は続く（ダッシュボードが見ている）。
+      store.openDashboard();
+      store.closePaneInfo();
+      expect(store.paneInfoVisible).toBe(false);
+      expect(store.usageWatchWanted).toBe(true);
+      store.closeDashboard();
+      expect(store.usageWatchWanted).toBe(false);
+      store.togglePaneInfo("p1");
+      expect(store.paneInfoPaneId).toBe("p1");
+      store.togglePaneInfo("p2"); // 別の pane の窓へは、開き替える
+      expect(store.paneInfoPaneId).toBe("p2");
+      store.togglePaneInfo("p2");
+      expect(store.paneInfoPaneId).toBeNull();
+    });
+
+    it("pane の利用状況: 1 列の画面では全面のダイアログ。デスクトップへ戻ったら閉じる。1 列になったらデスクトップの窓は閉じる", () => {
+      const store = useViewStore();
+      store.openPaneInfo("p1");
+      store.setMobileViewport(true);
+      expect(store.paneInfoPaneId).toBeNull();
+      store.openPaneInfo("p1");
+      expect(store.dialogContext).toEqual({ kind: "paneInfo", paneId: "p1" });
+      expect(store.usageWatchWanted).toBe(true);
+      store.togglePaneInfo("p1");
+      expect(store.dialogContext).toBeNull();
+      expect(store.usageWatchWanted).toBe(false);
+      store.openPaneInfo("p1");
+      store.setMobileViewport(false);
+      expect(store.dialogContext).toBeNull();
+    });
+
     it("openDashboard / closeDashboard はデスクトップでは screen を dashboard / base にする。見えている間だけ dashboardVisible", () => {
       const store = useViewStore(pinia);
       expect(store.dashboardVisible).toBe(false);
