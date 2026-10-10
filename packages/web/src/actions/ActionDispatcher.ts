@@ -819,6 +819,15 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     return this.conn.request("agent_integration.uninstall", { kind });
   }
 
+  /** Claude Code のステータスラインの包み（20261010-agent-usage の PR2。フックの導入とは別。押したときだけ書き換える）。 */
+  installStatusLineWrap(): Promise<AgentIntegrationInstallResult> {
+    return this.conn.request("agent_integration.statusline_install", {});
+  }
+
+  uninstallStatusLineWrap(): Promise<AgentIntegrationInstallResult> {
+    return this.conn.request("agent_integration.statusline_uninstall", {});
+  }
+
   async setAgentIntegrationAutoResume(enabled: boolean): Promise<void> {
     await this.conn.request("agent_integration.set_auto_resume", { enabled });
   }

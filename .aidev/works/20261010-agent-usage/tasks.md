@@ -12,3 +12,12 @@
 - [x] T8 試験（集計・場所・安全の結合・否定の対照 2 つ）。AC8
 - [x] T9 文書（`docs/agent-usage.md`・`docs/sodactl.md`・`AGENTS.md`）。AC9
 - [x] T10 ★ Codex の集計（AC4。`usage/codexRollout.ts`・`codexAdapter.ts`・`agent/codexSession.ts` の共通化）。`feature/agent-usage-codex`
+
+## PR2: ステータスラインの包み
+
+- [x] T11 ★ 包みのスクリプト（`assets/soda-statusline.cjs`）。AC1・AC2
+- [x] T12 ★ 導入・外す・状態（`agent/statusLineEdit.ts`・`statusLineWrap.ts`。文字列のまま 1 項目だけ差し替える。導入 → 外す で 1 バイトも違わず戻る）。AC2・AC3
+- [x] T13 ★ 受け口と、誰の報告か（`AgentReportSocket` の `usage`・`SessionService.usageReportVerdict`・`usage/reportedUsage.ts`・`UsageService` の重ね方・`composeServer`）。AC4
+- [x] T14 方式と画面（`agent_integration.statusline_*`・設定の項目・`sodactl agent usage` の表）。AC5
+- [x] T15 試験（包みの結合・導入の往復・受け口・実物の包みを偽の claude の子として動かす結合・否定の対照）と文書。AC6・AC7
+

@@ -78,11 +78,14 @@ export function formatUsageTable(
 
 function formatAccounts(accounts: readonly AccountUsage[], now: number): string {
   const rows: string[][] = [];
-  for (const a of accounts) {
+  // 種類ごとに並べる（同じ種類の中は、受けた順のまま）。
+  const sorted = [...accounts].sort((x, y) => (x.kind < y.kind ? -1 : x.kind > y.kind ? 1 : 0));
+  for (const a of sorted) {
     const name = a.plan !== undefined ? `${a.label}（${a.plan}）` : a.label;
     for (const w of a.windows) {
+      const usd = w.usedUsd !== undefined || w.limitUsd !== undefined ? `（$${(w.usedUsd ?? 0).toFixed(2)} / ${w.limitUsd !== undefined ? `$${w.limitUsd.toFixed(2)}` : "—"}）` : "";
       const reset = w.resetsAt === undefined ? "—" : w.stale === true ? `${clock(w.resetsAt, now).replace(/（.*）/, "")}（過ぎた。値は古い）` : clock(w.resetsAt, now).replace(/（.*）/, "");
-      rows.push([name, w.label, `${w.usedPct}%${w.stale === true ? "（古い）" : ""}`, reset, clock(a.asOf, now)]);
+      rows.push([name, w.label, `${w.usedPct}%${usd}${w.stale === true ? "（古い）" : ""}`, reset, clock(a.asOf, now)]);
     }
   }
   return formatTable(["アカウント", "枠", "使用率", "リセット", "取得"], rows);

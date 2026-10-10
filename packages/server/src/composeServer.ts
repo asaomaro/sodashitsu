@@ -89,6 +89,8 @@ import { GraphMaintainer } from "./graph/GraphMaintainer.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
 import { UsageService } from "./usage/UsageService.js";
+import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
+import { StatusLineWrapper } from "./agent/statusLineWrap.js";
 import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
 import { CodexUsageAdapter } from "./usage/codexAdapter.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
@@ -158,6 +160,11 @@ function manifestDirFor(): string {
 function agentHookScriptFor(): string {
   // packages/server/dist/composeServer.js から見て ../assets/agent-hook-report.cjs
   return join(import.meta.dirname, "..", "assets", "agent-hook-report.cjs");
+}
+
+/** Claude Code のステータスラインの包み（20261010-agent-usage の PR2）のスクリプト本体の場所。 */
+function statusLineScriptFor(): string {
+  return join(import.meta.dirname, "..", "assets", "soda-statusline.cjs");
 }
 
 /** 連携の実行（`GraphEngine`）が方式を中から呼ぶときの clientId（20260927-agent-graph。`SizeAuthority` は登録の無い clientId を無視する）。 */
@@ -265,7 +272,42 @@ export async function composeServer(
   const paneSocketPath = paneSocketPathFor(options.stateDir);
   const integrationFile = new FsIntegrationFile(options.stateDir);
   const agentIntegrationInstaller = new FsAgentIntegrationInstaller(agentHookScriptFor());
-  const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus);
+  // ステータスラインの包みの報告（20261010-agent-usage の PR2）。受けた値と、「報告が届いていません」の判定の材料（動いている Claude Code の検出の時刻）。
+  const reportedUsage = new ReportedUsage(Date.now, (i) =>
+    logger.info("usage account key shared by another pane", { accountKey: i.accountKey, paneId: i.paneId, otherPanes: i.otherPanes }),
+  );
+  const claudeSeen = new Map<string, { instanceId: string; at: number; workedAt?: number }>();
+  const claudeSeenSub = bus.subscribe((e) => {
+    if (e.event === "pane.closed") claudeSeen.delete(e.data.paneId);
+    else if (e.event === "pane.agent_status_changed") {
+      const a = e.data.agent;
+      if (a !== null && a.kind === "claude") {
+        let seen = claudeSeen.get(e.data.paneId);
+        if (seen?.instanceId !== a.instanceId) {
+          seen = { instanceId: a.instanceId, at: Date.now() };
+          claudeSeen.set(e.data.paneId, seen);
+        }
+        // 検出の後に、最初に動いた時刻（待っているだけの間は、ステータスラインが呼ばれない）。
+        if (a.state === "working" && seen.workedAt === undefined) seen.workedAt = Date.now();
+      } else claudeSeen.delete(e.data.paneId);
+    }
+  });
+  const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus, {
+    statusLine: new StatusLineWrapper(statusLineScriptFor()),
+    health: {
+      lastReportAt: () => reportedUsage.lastReportAt(),
+      claudeRunningSince: () => {
+        let min: number | undefined;
+        for (const v of claudeSeen.values()) if (v.workedAt !== undefined && (min === undefined || v.at < min)) min = v.at;
+        return min;
+      },
+      claudeWorkedSince: () => {
+        let min: number | undefined;
+        for (const v of claudeSeen.values()) if (v.workedAt !== undefined && (min === undefined || v.workedAt < min)) min = v.workedAt;
+        return min;
+      },
+    },
+  });
   /** pane の環境の `SODA_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
   let paneUrl: string | undefined;
   const session = new SessionService({
@@ -494,15 +536,24 @@ export async function composeServer(
     logger,
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
-  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter()], logger });
+  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter()], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。
   session.onReportAccepted((paneId, kind, sessionId, ctx) => {
     if (kind === "claude") usage.noteTranscript(paneId, sessionId, ctx.transcriptPath);
   });
+  // 包みの報告: #128 の確かめ（pid）と、報告の会話の id が、その pane の今の参照と一致すること。合わなければ、短く保留して確かめ直し、それでも合わなければ捨てる（理由の種類だけをログに）。
+  const usageIntake = new UsageReportIntake({
+    verdict: (r) => session.usageReportVerdict(r.paneId, "claude", r.agentPid, r.sessionId),
+    sink: reportedUsage,
+    log: (reason, r) => logger.info("usage report ignored", { paneId: r.paneId, kind: "claude", reason }),
+  });
   const usageSub = bus.subscribe((e) => {
-    if (e.event === "pane.closed") usage.forgetPane(e.data.paneId);
+    if (e.event === "pane.closed") {
+      usage.forgetPane(e.data.paneId);
+      usageIntake.forgetPane(e.data.paneId);
+    }
   });
   registerAllMethods(surface, {
     session,
@@ -785,6 +836,26 @@ export async function composeServer(
             if (report.type === "session") {
               // 連携の kind の全部（20261007-agent-hook-drift research X1）。報告したプロセスの確かめは `reportAgentSession` の中（20261009-agent-session-attribution）。
               if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source, transcriptPath: report.transcriptPath });
+            } else if (report.type === "usage") {
+              // ステータスラインの包みの利用状況（Claude Code だけ。20261010-agent-usage の PR2）。確かめは `UsageReportIntake` の中。
+              if (report.kind === "claude") {
+                usageIntake.offer({
+                  paneId: report.paneId,
+                  sessionId: report.sessionId,
+                  ...(report.agentPid !== undefined ? { agentPid: report.agentPid } : {}),
+                  ...(report.model !== undefined ? { model: report.model } : {}),
+                  ...(report.modelName !== undefined ? { modelName: report.modelName } : {}),
+                  ...(report.costUsd !== undefined ? { costUsd: report.costUsd } : {}),
+                  ...(report.contextUsedPct !== undefined ? { contextUsedPct: report.contextUsedPct } : {}),
+                  ...(report.contextWindowSize !== undefined ? { contextWindowSize: report.contextWindowSize } : {}),
+                  ...(report.contextTokens !== undefined ? { contextTokens: report.contextTokens } : {}),
+                  ...(report.fiveHour !== undefined ? { fiveHour: report.fiveHour } : {}),
+                  ...(report.sevenDay !== undefined ? { sevenDay: report.sevenDay } : {}),
+                  ...(report.spendLimit !== undefined ? { spendLimit: report.spendLimit } : {}),
+                  ...(report.configKey !== undefined ? { configKey: report.configKey } : {}),
+                  ...(report.configDirName !== undefined ? { configDirName: report.configDirName } : {}),
+                });
+              }
             } else if (report.kind === "claude") {
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
@@ -887,6 +958,8 @@ export async function composeServer(
         graphEngine.stop();
         lineage.close();
         usageSub.dispose();
+        claudeSeenSub.dispose();
+        usageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -924,6 +997,8 @@ export async function composeServer(
         graphEngine.stop();
         lineage.close();
         usageSub.dispose();
+        claudeSeenSub.dispose();
+        usageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
