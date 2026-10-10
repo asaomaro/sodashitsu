@@ -496,7 +496,8 @@ test("見た目の言葉をそろえる（AC25・AC26）: モダンは tab が�
   // クラシック: 切り替えのボタンは、tab の見た目（選んでいない tab と選んでいないボタンを比べる）。
   const tabC = await lookOf(page, ".tab-bar-item:not(.tab-bar-item-active)");
   const btnC = await lookOf(page, ".screen-switcher-btn:not(.screen-switcher-btn-active)");
-  for (const k of ["fontSize", "paddingTop", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "backgroundColor", "color"] as const) {
+  // 上下の余白は比べない: 帯の外形の高さを、これまでと同じに保つため（U2）、ボタンは帯の高さいっぱいに伸びる（tab も帯の高さいっぱいに伸びる）。
+  for (const k of ["fontSize", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "backgroundColor", "color"] as const) {
     expect(btnC[k], `クラシック: ${k}`).toBe(tabC[k]);
   }
   const tabActiveC = await lookOf(page, ".tab-bar-item-active");
