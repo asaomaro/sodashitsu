@@ -53,7 +53,7 @@ setInterval(() => {}, 1000);
     const codexWrapper = join(dir, "bin", "codex");
     await writeFile(
       codexWrapper,
-      `#!/bin/bash\nexec -a codex ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`,
+      `#!/bin/bash\necho "$@" >> ${JSON.stringify(join(dir, "codex-args.log"))}\nexec -a codex ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`,
     );
     await chmod(codexWrapper, 0o755);
     savedEnv = { HOME: process.env["HOME"], PATH: process.env["PATH"], ENV: process.env["ENV"], CODEX_HOME: process.env["CODEX_HOME"] };
@@ -329,6 +329,28 @@ setInterval(() => {}, 1000);
       expect(refOf(server, paneId)).toBeNull();
       server.terminals.get(paneId)!.write("q");
       await vi.waitFor(() => expect(refOf(server, paneId)).toBe(ID3), { timeout: 15_000 });
+    });
+    it("(AC4) 再起動の後、参照のある Codex の pane すべてに `codex resume <id>` が打ち込まれ、参照はそのまま保たれる（報告が来なくても捨てられない・替わらない）", async () => {
+      const first = await bootTwo();
+      await writeRecord(ID1, first.cwd);
+      await writeRecord(ID2, first.cwd);
+      submit(first.server, first.p2);
+      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd: first.cwd });
+      await vi.waitFor(() => expect(refOf(first.server, first.p2)).toBe(ID1));
+      submit(first.server, first.p1);
+      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd: first.cwd });
+      await vi.waitFor(() => expect(refOf(first.server, first.p1)).toBe(ID2));
+      const log = join(dir, "codex-args.log");
+      const countOf = async (id: string) => (existsSync(log) ? (await readFile(log, "utf8")).split("\n").filter((l) => l === `resume ${id}`).length : 0);
+      const before = [await countOf(ID1), await countOf(ID2)];
+      await first.server.close();
+      const again = await boot(first.stateDir);
+      await vi.waitFor(async () => expect([await countOf(ID1), await countOf(ID2)]).toEqual([before[0]! + 1, before[1]! + 1]), { timeout: 20_000 });
+      const panes = again.session.snapshot().panes;
+      for (const p of panes) await vi.waitFor(() => expect(agentOf(again, p.id)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      await sleep(1_500);
+      expect(refOf(again, first.p2)).toBe(ID1);
+      expect(refOf(again, first.p1)).toBe(ID2);
     });
   });
 });
