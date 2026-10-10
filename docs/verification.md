@@ -34,7 +34,11 @@ function soda { node "C:\src\sodashitsu\packages\server\dist\main.js" @args }
 （Windows ネイティブでは `node-pty` の ConPTY 経由になるため、Linux の PTY 実装との違いが無いかの手がかりにもなる。
 WSL2 ではサーバは WSL の中で Linux として動き、Linux と同じ Unix の PTY を使う——design「WSL2」）。初回は Playwright の Chromium を入れておく（`pnpm --filter @sodashitsu/e2e exec playwright install chromium`）。
 spec は 1 つずつ走る（`playwright.config.ts` の `workers: 1`。並列にすると CPU を取り合って落ち、性能計測の値も汚れる。
-decisions.md D104）ので、全体で数分かかる：
+decisions.md D104）ので、全体で数分かかる。
+**E2E の pane のシェルは、利用者の rc を読まない**（`--norc --noprofile` の bash。偽のエージェントを PATH の先頭に置く試験が、rc の足す `~/.local/bin` の実物の `claude` を起動しないため。
+`packages/e2e/src/support/appServer.ts`。製品の既定は変えない）。偽の `claude` を打ち込む試験は、打ち込みの前に `assertPaneResolvesFake` で、pane の `command -v claude` が偽物を指すことを確かめる（違えば落ちる）。
+**守りは、打ち込んだ後の PATH の変化は見ない**（確かめた時点の解決だけ）：
+
 
 ```sh
 pnpm --filter @sodashitsu/e2e test
