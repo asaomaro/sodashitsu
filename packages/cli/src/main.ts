@@ -13,6 +13,7 @@ import {
   runAgentSendKeys,
   runAgentWait,
 } from "./commands/agent.js";
+import { runAgentFork } from "./commands/agentFork.js";
 import { runAgentStart } from "./commands/agentStart.js";
 import { runAsk } from "./commands/ask.js";
 import { runDisplay } from "./commands/display.js";
@@ -146,6 +147,8 @@ async function main(): Promise<void> {
       return runAgentRename(cmd, store);
     case "agent-start":
       return runAgentStart(cmd, store);
+    case "agent-fork":
+      return runAgentFork(cmd, store);
     case "graph":
       return runGraph(cmd, store);
     default: {

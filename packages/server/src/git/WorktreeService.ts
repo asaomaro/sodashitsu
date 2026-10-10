@@ -14,9 +14,28 @@ const GIT_TIMEOUT_MS = 10_000; // `worktree add` は大きな repo だと数秒�
  */
 export interface WorktreeService {
   list(workspaceId: string): Promise<WorktreeListResult>;
-  create(workspaceId: string, branch: string): Promise<WorktreeCreateResult>;
+  /** `fromDir` を渡すと、workspace の場所ではなく、そのフォルダ（リポジトリの中）の `HEAD` から枝を切る（fork が元の pane のリポジトリの根を使う。20261009-agent-fork の A10）。 */
+  create(workspaceId: string, branch: string, fromDir?: string): Promise<WorktreeCreateResult>;
+  /** fork の確定の前の読み取り（何も作らない）。git のリポジトリでなければ `not_a_git_repository`。 */
+  inspectForFork(dir: string, branch?: string): Promise<ForkSourceInfo>;
   remove(workspaceId: string, path: string, force: boolean): Promise<void>;
 }
+
+/** `inspectForFork` の結果。 */
+export interface ForkSourceInfo {
+  /** `dir` の属するリポジトリの根（`git rev-parse --show-toplevel`）。新しい worktree は、ここの `HEAD` から切る。 */
+  repoRoot: string;
+  repoName: string;
+  suggestedBranch: string;
+  /** `branch` を渡したとき、その名前のブランチが既にあるか。 */
+  branchExists: boolean | null;
+  /** `branch` を渡したときの作成先。 */
+  targetPath: string | null;
+  /** まだコミットしていない変更の数（`git status --porcelain` の行数。2 秒で数えられなければ null）。 */
+  dirtyCount: number | null;
+}
+
+const DIRTY_COUNT_TIMEOUT_MS = 2_000;
 
 /** 作成先の根。herdr は `~/.herdr/worktrees`。`/` 区切りに正規化して返す（web がそのまま連結する）。 */
 export function defaultWorktreeRoot(home = homedir()): string {
@@ -134,8 +153,31 @@ export class DefaultWorktreeService implements WorktreeService {
     };
   }
 
-  async create(workspaceId: string, branch: string): Promise<WorktreeCreateResult> {
-    const cwd = await this.cwdOf(workspaceId);
+  async inspectForFork(dir: string, branch?: string): Promise<ForkSourceInfo> {
+    const top = await this.run(dir, ["rev-parse", "--show-toplevel"]);
+    if (top.code !== 0 || !top.stdout.trim()) throw new RpcError("not_a_git_repository", `not a git repository: ${dir}`);
+    const repoRoot = top.stdout.trim();
+    const repoName = await this.repoNameOf(repoRoot);
+    let branchExists: boolean | null = null;
+    let targetPath: string | null = null;
+    if (branch !== undefined && branch !== "") {
+      const ref = await this.run(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]);
+      branchExists = ref.code === 0;
+      targetPath = defaultCheckoutPath(this.root, repoName, branch);
+    }
+    // 件数は表示用。数えられなくても（時間切れ・git の失敗）fork は止めない。
+    let dirtyCount: number | null = null;
+    try {
+      const st = await this.git.run(repoRoot, ["status", "--porcelain"], DIRTY_COUNT_TIMEOUT_MS);
+      if (st.code === 0) dirtyCount = st.stdout.split("\n").filter((l) => l.length > 0).length;
+    } catch {
+      dirtyCount = null;
+    }
+    return { repoRoot, repoName, suggestedBranch: generatedBranchSlug(this.now()), branchExists, targetPath, dirtyCount };
+  }
+
+  async create(workspaceId: string, branch: string, fromDir?: string): Promise<WorktreeCreateResult> {
+    const cwd = fromDir ?? (await this.cwdOf(workspaceId));
     const repoName = await this.repoNameOf(cwd); // 名前だけ要るので一覧は取らない（git かどうかもここで分かる）
     const path = defaultCheckoutPath(this.root, repoName, branch);
 

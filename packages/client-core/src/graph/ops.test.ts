@@ -15,6 +15,7 @@ import {
 } from "./defaults.js";
 import { layoutOverlaps, nodePositions } from "./graphLayout.js";
 import { addMissingNodeOps, applyGraphOps, checkGraphOps, type GraphDraftState } from "./ops.js";
+import { validateGraph } from "./validate.js";
 
 // 20260927-agent-graph の T2（ops）：graph.update の操作をまとめて当てる。
 const A = "local:p1";
@@ -407,5 +408,40 @@ describe("addMissingNodeOps（構成つき。20261008-graph-first）", () => {
     const ops = addMissingNodeOps(graph, [R], structure);
     expect(ops).toHaveLength(1);
     expect(ops[0]).toMatchObject({ op: "add_node", key: R });
+  });
+});
+
+// 20261009-agent-fork の T4：ノードの注記（forkedFrom）の掃除と付け替え（A5）。
+describe("forkedFrom（fork の注記）", () => {
+  const C = "local:p3";
+  const withFork = (): GraphDraftState => state({ nodes: [{ key: A, x: 0, y: 0 }, { key: B, x: 240, y: 0, forkedFrom: A }, { key: C, x: 480, y: 0, forkedFrom: B }] });
+
+  it("元のノードを remove_node で消すと、それを指す注記も外れる（利用者の削除・pane を閉じた後始末のどちらも同じ操作）", () => {
+    const r = ok(withFork(), [{ op: "remove_node", key: A }]);
+    expect(r.graph.nodes.find((n) => n.key === B)).not.toHaveProperty("forkedFrom");
+    expect(r.graph.nodes.find((n) => n.key === C)?.forkedFrom).toBe(B); // 別の元を指す注記は残る
+  });
+
+  it("rekey_node で元のノードの鍵が替わると、注記も新しい鍵へ付け替わる", () => {
+    const D = "local:p9";
+    const r = ok(withFork(), [{ op: "rekey_node", key: A, newKey: D }]);
+    expect(r.graph.nodes.find((n) => n.key === B)?.forkedFrom).toBe(D);
+    // fork した側のノードの鍵が替わっても、そのノード自身の注記（元）は保つ。
+    const r2 = ok(withFork(), [{ op: "rekey_node", key: B, newKey: D }]);
+    expect(r2.graph.nodes.find((n) => n.key === D)?.forkedFrom).toBe(A);
+    expect(r2.graph.nodes.find((n) => n.key === C)?.forkedFrom).toBe(D);
+  });
+
+  it("move_node・add_link・remove_link は注記を落とさない。入力は書き換えない", () => {
+    const s0 = withFork();
+    const before = JSON.stringify(s0);
+    const r = ok(s0, [{ op: "move_node", key: B, x: 10, y: 10 }, { op: "add_link", kind: "trigger", from: B, to: C, trigger: defaultTriggerConfig() }]);
+    expect(r.graph.nodes.find((n) => n.key === B)?.forkedFrom).toBe(A);
+    expect(JSON.stringify(s0)).toBe(before);
+  });
+
+  it("線の検証は、注記が載っていないノードを指していても落とさない（落とすと壊れたファイルとして退避される）", () => {
+    const g: Graph = { ...emptyGraph(), nodes: [{ key: B, x: 0, y: 0, forkedFrom: A }] };
+    expect(validateGraph(g)).toEqual([]);
   });
 });

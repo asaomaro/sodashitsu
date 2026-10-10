@@ -81,6 +81,8 @@ export function applyGraphOps(
         graph.nodes = graph.nodes.filter((n) => n.key !== op.key);
         // 線も一緒に消える（design「異常系」）。
         graph.links = graph.links.filter((l) => l.from !== op.key && l.to !== op.key);
+        // このノードを指す fork の注記も外す（元が無くなれば、見るだけの線は消える。20261009-agent-fork の A5）。
+        for (const n of graph.nodes) if (n.forkedFrom === op.key) delete n.forkedFrom;
         break;
       case "rekey_node": {
         const node = findNode(op.key);
@@ -101,6 +103,8 @@ export function applyGraphOps(
           });
         }
         node.key = op.newKey;
+        // fork の注記も新しい鍵へ付け替える（他のノードがこのノードを指していたもの）。
+        for (const n of graph.nodes) if (n.forkedFrom === op.key) n.forkedFrom = op.newKey;
         for (const l of graph.links) {
           if (l.from === op.key) l.from = op.newKey;
           if (l.to === op.key) l.to = op.newKey;
