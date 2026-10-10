@@ -77,7 +77,6 @@ for (const { key, theme } of THEMES)
       await prefixKey(page, "s");
       const dialog = page.locator("dialog.settings-dialog");
       await expect(dialog).toBeVisible();
-      await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
       await dialog.locator('[data-setting="tab-bar-always"]').scrollIntoViewIfNeeded();
       await shot(page, `${prefix}-4-settings`);
       await page.keyboard.press("Escape");
