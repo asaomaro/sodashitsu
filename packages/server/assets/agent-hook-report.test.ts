@@ -466,6 +466,21 @@ describe("agent-hook-report.cjs", () => {
       expect(await runHook("codex", JSON.stringify({ session_id: "s1", cwd: 5, source: 7 }))).toEqual({ paneId: "p1", kind: "codex", sessionId: "s1" });
     });
 
+    it("フックの入力の transcript_path（会話の記録の場所）は、形が正しいときだけ報告に載る（利用状況の材料。中身は読まない。20261010-agent-usage）", async () => {
+      const path = "/home/u/.claude/projects/-work/s1.jsonl";
+      expect(await runHook("claude", JSON.stringify({ session_id: "s1", transcript_path: path, hook_event_name: "SessionStart", source: "startup" }))).toEqual({
+        paneId: "p1",
+        kind: "claude",
+        sessionId: "s1",
+        source: "startup",
+        transcriptPath: path,
+      });
+      expect(await runHook("codex", JSON.stringify({ session_id: "s1", transcript_path: path }))).toEqual({ paneId: "p1", kind: "codex", sessionId: "s1", transcriptPath: path });
+      for (const bad of ["x".repeat(1025), "a\u0000b", "", 5, null]) {
+        expect(await runHook("codex", JSON.stringify({ session_id: "s1", transcript_path: bad })), JSON.stringify(bad).slice(0, 20)).toEqual({ paneId: "p1", kind: "codex", sessionId: "s1" });
+      }
+    });
+
     it("kind が claude でなければ type つきを送らない（Agent 以外の PreToolUse でも、今までどおりセッション ID の報告）", async () => {
       expect(
         await runHook(

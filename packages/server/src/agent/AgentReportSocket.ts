@@ -26,6 +26,8 @@ export type AgentReport = AgentReportBody & {
   cwd?: string;
   /** 会話が始まった理由（フックの入力の `source`。`startup`・`resume`・`clear`・`compact`・`fork`）。 */
   source?: string;
+  /** 会話の記録の場所（フックの入力の `transcript_path`。中身ではない）。**信用しない**——使う側が、根の下・名前の形を確かめる（利用状況。20261010-agent-usage）。 */
+  transcriptPath?: string;
 };
 type AgentReportBody =
   | { type: "session"; paneId: string; kind: string; sessionId: string }
@@ -161,6 +163,7 @@ function parseReport(v: unknown): AgentReport | undefined {
   const agentPid = typeof pid === "number" && Number.isInteger(pid) && pid > 0 && pid <= 0x7fffffff ? pid : undefined;
   const cwd = pathOf(o.cwd);
   const source = typeof o.source === "string" && /^[a-z_]{1,16}$/.test(o.source) ? o.source : undefined;
+  const baseTranscriptPath = pathOf(o.transcriptPath);
   const base = {
     paneId: o.paneId,
     kind: o.kind,
@@ -168,6 +171,7 @@ function parseReport(v: unknown): AgentReport | undefined {
     ...(agentPid !== undefined ? { agentPid } : {}),
     ...(cwd !== undefined ? { cwd } : {}),
     ...(source !== undefined ? { source } : {}),
+    ...(baseTranscriptPath !== undefined ? { transcriptPath: baseTranscriptPath } : {}),
   };
   if (o.type === undefined) return { type: "session", ...base };
   switch (o.type) {

@@ -851,3 +851,15 @@ describe("parseArgs — agent fork（20261009-agent-fork）", () => {
     expect(() => parseArgs(["agent", "fork", "p1", "--worktree", ""], env)).toThrow(CliUsageError);
   });
 });
+
+describe("parseArgs — agent usage（20261010-agent-usage）", () => {
+  const env = {} as NodeJS.ProcessEnv;
+  it("target は省ける（全部）。--json で JSON", () => {
+    expect(parseArgs(["agent", "usage"], env)).toMatchObject({ kind: "agent-usage", paneId: undefined, json: false });
+    expect(parseArgs(["agent", "usage", "p1", "--json"], env)).toMatchObject({ kind: "agent-usage", paneId: "p1", json: true });
+  });
+  it("target を 2 つ・知らない旗は使用誤り", () => {
+    expect(() => parseArgs(["agent", "usage", "a", "b"], env)).toThrow();
+    expect(() => parseArgs(["agent", "usage", "--path", "/x"], env)).toThrow();
+  });
+});

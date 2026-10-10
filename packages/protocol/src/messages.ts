@@ -22,6 +22,7 @@ import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE
 import type { ExtensionListResult, ExtensionLogResult } from "./extension.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
+import type { AgentUsageResult } from "./usage.js";
 import type { ForkCreated, ForkNoteStatus, ForkUnavailableReason } from "./agentFork.js";
 import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
 
@@ -780,6 +781,8 @@ export interface SharedPrefs {
   paneFrameThickness?: "thin" | "default" | "thick";
   paneAgentNameVisible?: boolean;
   tabBarPosition?: "top" | "bottom";
+  /** tab が 1 つのときも tab バーを出すか（20261008-ui-style の AC24。無い・`null`＝様式に従う）。端末版は読まず、知らない項目として保つ。 */
+  tabBarAlways?: boolean | null;
   /** tab バーの右端（client-core の `TabBarRightEntry[]`）。 */
   tabBarRight?: unknown[];
   tabBarRightSeparator?: string;
@@ -984,6 +987,13 @@ export interface AgentSubagentTranscriptResult {
   /** そのサブエージェントを、エージェントがいま動かしていると報告しているか（終わった後も、窓を閉じるまでは読める）。 */
   running: boolean;
 }
+
+/**
+ * エージェントの利用状況（20261010-agent-usage）。`paneId` を省くと、利用状況を取れる全部の pane。**入力は pane の id だけ**（記録の場所はサーバが決める）。
+ * 答えは数字・モデル名・時刻・ラベルだけ（`AgentUsageResult`）。ログイン済みの `/ws` の方式で、`pane.sock` には載せない。
+ */
+export const AgentUsageParams = z.object({ paneId: paneId.optional() });
+export type AgentUsageParams = z.infer<typeof AgentUsageParams>;
 
 /**
  * 空いているシェル pane でエージェントを起動する（20260926-agent-start。herdr の agent.start）。名前の書式・kind・引数・timeout の範囲は
@@ -1267,6 +1277,7 @@ export const METHOD_SCHEMAS = {
   "agent.fork_preview": AgentForkPreviewParams,
   "agent.kinds": AgentKindsParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
+  "agent.usage": AgentUsageParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
@@ -1388,6 +1399,7 @@ export interface MethodResultMap {
   "agent.fork_preview": AgentForkPreviewResult;
   "agent.kinds": AgentKindsResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
+  "agent.usage": AgentUsageResult;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;

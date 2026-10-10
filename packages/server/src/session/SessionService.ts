@@ -33,6 +33,7 @@ import type { EventBus } from "../bus/EventBus.js";
 import { gitIdentityChanged, NotFoundError, SessionModel, type GitJudgement } from "./SessionModel.js";
 import * as Layout from "./LayoutTree.js";
 import { resumeCommandFor } from "../agent/resumeCommand.js";
+import { codexExitSessionId, isCodexSessionId } from "../agent/codexSession.js";
 import { procAncestors } from "./procAncestors.js";
 import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
 import { buildPaneEnv } from "./paneEnv.js";
@@ -141,6 +142,14 @@ export interface SessionServiceOptions {
   ancestorsOf?: ((pid: number) => number[] | null) | undefined;
   /** プロセスが生きているか（期限・停止で「確かめずに受ける」前に、終わったプロセスの報告を捨てる）。既定は `kill(pid, 0)`。テストが差し替える。 */
   pidAlive?: ((pid: number) => boolean) | undefined;
+  /**
+   * Codex の会話の記録（`$CODEX_HOME/sessions/…/rollout-…-<id>.jsonl`）の先頭を調べる（20261010-codex-multi-pane）。あれば `{ cwd, originator }`・
+   * 無ければ null・確かめられなければ undefined。`attempt` は 0 から（再試行では、最近の数日だけ見ればよい）。
+   * 常駐のプロセスの報告・終了の文言を pane に付ける前の検算に使う。省略時は、確かめられない（undefined）として扱う。
+   */
+  codexRecordLookup?: ((id: string, attempt: number) => Promise<CodexRecordInfo | null | undefined>) | undefined;
+  /** 記録がまだ無いときの再試行（回数・間隔）。既定は 6 回・500ms。テストが縮める。 */
+  codexRecordRetry?: { times: number; delayMs: number } | undefined;
 }
 
 /**
@@ -172,13 +181,42 @@ type ReportVerdict =
   /** `recheck`: 前面の記録が古いだけかもしれない（前面のエージェントは居るが、報告した pid が含まれない）。次の判定で確かめ直す。 */
   | { verdict: "reject"; reason: string; recheck?: true };
 
+/** 会話の記録の先頭から読んだもの（`agent/codexSession.ts` の `CodexRecord`）。 */
+export interface CodexRecordInfo {
+  cwd: string | null;
+  /** 会話を始めた道具。pane の TUI は `codex-tui`。 */
+  originator: string | null;
+  /** 記録の先頭の行の時刻（epoch ms。新しい会話では、最初の入力〔Enter〕の時刻に近い。前からある会話では古い）。読めなければ null。 */
+  startedAt: number | null;
+}
+
+/** 検算を挟む間に、その pane が変わっていないかを見るための控え（前面のエージェントの instanceId・今の参照の会話の id）。 */
+interface PaneStamp {
+  instance: string | null;
+  ref: string | null;
+}
+
+/** 新しい会話の記録の時刻が、最初の入力（Enter）の時刻の、この範囲に入るときだけ、その入力が作った会話とみなす（実測: +21ms）。 */
+const START_BEFORE_ENTER_MS = 2_000;
+const START_AFTER_ENTER_MS = 5_000;
+
 /** 報告に添えられる、判定の材料（フックの入力から）。 */
 export interface AgentReportContext {
   /** 報告したエージェントの作業フォルダ（フックの入力の `cwd`）。常駐のプロセスの報告を、pane に結ぶのに使う。 */
   cwd?: string | undefined;
   /** 会話が始まった理由（`startup`・`resume`・`clear`・`compact`・`fork`）。`clear` のときは、前の参照を履歴に積まない。 */
   source?: string | undefined;
+  /** 会話の記録の場所（フックの入力の `transcript_path`。信用しない）。受け入れられた報告のものだけが、`onReportAccepted` の聞き手へ渡る（利用状況。20261010-agent-usage）。 */
+  transcriptPath?: string | undefined;
+  /** どの手がかりで付けたか（ログ用。`hook`・`sole-codex`・`first-turn`・`argv`・`exit-text`）。 */
+  via?: string | undefined;
 }
+
+/** Codex の最初の入力（Enter）から、常駐の daemon の報告が届くまでの上限（実測: 約 0.4 秒。負荷の余裕を見て）。 */
+const FIRST_TURN_WINDOW_MS = 6_000;
+/** 記録（rollout）がまだ書かれていないときの、確かめの再試行。 */
+const RECORD_RETRY_MS = 500;
+const RECORD_RETRIES = 6;
 
 /** 場所の比較（末尾の区切りの違いだけを許す。大文字小文字・シンボリックリンクは解決しない）。 */
 function sameDir(a: string, b: string): boolean {
@@ -241,7 +279,13 @@ export class SessionService {
   /** エージェントが居なくなったと見えた時刻（`clock`。会話の参照を捨てる猶予の起点。20261009-agent-resume-lost）。 */
   private readonly agentGoneAt = new Map<PaneId, number>();
   /** 前面のエージェント（`AgentMonitor` が判定ごとに知らせる）。会話の参照の報告の確かめに使う（20261009-agent-session-attribution）。 */
-  private readonly frontAgents = new Map<PaneId, { kind: string; pids: ReadonlySet<number>; verifiable: boolean }>();
+  private readonly frontAgents = new Map<PaneId, { kind: string; pids: ReadonlySet<number>; verifiable: boolean; resumeId?: string }>();
+  /** 前面のエージェントの引数の会話の id を、いつの検出（instanceId）に適用したか（同じ検出では 1 回だけ。あとの報告・終了の文言が優先する）。 */
+  private readonly argvApplied = new Map<PaneId, string>();
+  /** 報告に結んだ最初の入力の時刻（pane ごと）。1 回の入力から出る報告は 1 つなので、同じ入力を別の報告の候補にしない。 */
+  private readonly submitConsumed = new Map<PaneId, number>();
+  /** 検出の時点で、画面に既にあった終了の文言の id（前の実行のもの。終了のときに、これは拾わない）。 */
+  private readonly staleExitIds = new Map<PaneId, ReadonlySet<string>>();
   /** その pane で最後に見えたエージェントのプロセス（居なくなった後に検出されたものが、同じエージェントか別のものかを見分ける）。 */
   private readonly lastSeenAgentPids = new Map<PaneId, ReadonlySet<number>>();
   /** 居なくなったと見えたときの、そのエージェントのプロセス（`agentGoneAt` と同じ間だけ）。 */
@@ -255,6 +299,8 @@ export class SessionService {
   private readonly resumeAttempts = new Map<PaneId, { at: number; sessionId: string; settled: boolean }>();
   private readonly ancestorsOf: (pid: number) => number[] | null;
   private readonly pidAlive: (pid: number) => boolean;
+  private readonly codexRecordLookup: ((id: string, attempt: number) => Promise<CodexRecordInfo | null | undefined>) | undefined;
+  private readonly codexRecordRetry: { times: number; delayMs: number };
   /** サーバが止まる処理に入った後は、会話の参照を捨てない（止まる途中で先に終わった PTY・エージェントの巻き添えにしない）。 */
   private shuttingDown = false;
 
@@ -278,6 +324,8 @@ export class SessionService {
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
     this.sessionName = opts.sessionName;
     this.ancestorsOf = opts.ancestorsOf ?? ((pid) => procAncestors(pid));
+    this.codexRecordLookup = opts.codexRecordLookup;
+    this.codexRecordRetry = opts.codexRecordRetry ?? { times: RECORD_RETRIES, delayMs: RECORD_RETRY_MS };
     this.pidAlive =
       opts.pidAlive ??
       ((pid) => {
@@ -1189,8 +1237,14 @@ export class SessionService {
   }
 
   updatePaneRuntime(paneId: PaneId, patch: PaneRuntimePatch): void {
-    const pane = this.model.getPane(paneId);
+    let pane = this.model.getPane(paneId);
     if (!pane) return;
+    // Codex が終わった（TUI が終了の文言 `codex resume <id>` を画面に出す）: その pane の会話の参照を、画面の文言で付ける・直す
+    // （20261010-codex-multi-pane。kill・サーバが先に止まる、では出ないので補助）。居なくなった猶予の判定より前に反映する。
+    if (patch.agent === null && pane.agent !== null && pane.agent.kind === "codex") {
+      this.captureCodexExitText(paneId);
+      pane = this.model.getPane(paneId) ?? pane;
+    }
     // 値が実際に変わったときだけ発行する（レビュー指摘：以前は busy/title が「渡されただけ」で毎回
     // 発行していたため、AgentMonitor の周期呼び出し（500ms〜1s毎）のたびに変化が無くても全クライアントへ
     // ブロードキャストしていた）。
@@ -1301,9 +1355,75 @@ export class SessionService {
     if (busyChanged || titleChanged || cwdChanged) {
       this.bus.publish({ event: "pane.updated", data: { pane: updated } });
     }
+    // Codex が新しく検出されたら、前面のプロセスの引数の会話の id（`codex resume <id>`）を、その pane の会話にする。同じ検出では 1 回だけ
+    // （アプリの中の `/resume` で替わった後の報告・終了の文言が、あとから優先する）。画面に既にある終了の文言（前の実行のもの）は覚えておく。
+    if (patch.agent && patch.agent.kind === "codex" && this.argvApplied.get(paneId) !== patch.agent.instanceId) {
+      this.argvApplied.set(paneId, patch.agent.instanceId);
+      this.staleExitIds.set(paneId, this.exitIdsOnScreen(paneId));
+      const resumeId = this.frontAgents.get(paneId)?.resumeId;
+      if (resumeId !== undefined && isCodexSessionId(resumeId)) this.attachByEvidence(paneId, "codex", resumeId, "argv");
+    }
     // 会話参照の消滅も保存契機にする（design D8）——さもないと、サーバが不意に落ちたときに
     // 「もう有効ではない」という事実が session.json に反映されないまま残ることがある。
     if (cwdChanged || clearsAgentSession || droppedForNewAgent) this.persist.touch();
+  }
+
+  private get codexLookup(): boolean {
+    return this.codexRecordLookup !== undefined;
+  }
+
+  /**
+   * 会話の記録で検算する。`ok`・`unavailable`（`CODEX_HOME` が見つからない・検算の部品が無い）・付けない理由（文字列）。
+   * 記録は、最初の入力のすぐ後に書かれるので、無ければ（`retry`）少し待って、最近の数日だけをやり直す。
+   */
+  private async checkCodexRecord(sessionId: string, paneId: PaneId, retry: boolean): Promise<{ ok: true; record: CodexRecordInfo | undefined } | { ok: false; reason: string }> {
+    if (!this.codexRecordLookup) return { ok: true, record: undefined };
+    let record: CodexRecordInfo | null | undefined;
+    const times = retry ? this.codexRecordRetry.times : 0;
+    for (let i = 0; i <= times; i++) {
+      record = await this.codexRecordLookup(sessionId, i).catch(() => undefined);
+      if (record !== null) break;
+      if (i < times) await new Promise((r) => setTimeout(r, this.codexRecordRetry.delayMs));
+    }
+    if (record === null) return { ok: false, reason: "no session record was found for the conversation" };
+    if (record === undefined) return { ok: true, record: undefined };
+    if (record.originator !== "codex-tui") return { ok: false, reason: `the session was not started by a pane's codex TUI (originator: ${record.originator ?? "unknown"})` };
+    const paneCwd = this.model.getPane(paneId)?.cwd ?? "";
+    if (record.cwd === null) return { ok: false, reason: "the session record has no readable cwd" };
+    if (!sameDir(record.cwd, paneCwd)) return { ok: false, reason: "the session record's cwd is not the pane's" };
+    return { ok: true, record };
+  }
+
+  private screenTail(paneId: PaneId): string {
+    const text = this.terminals.get(paneId)?.mirror.plainText?.();
+    return typeof text === "string" ? text.slice(-4000) : "";
+  }
+
+  private exitIdsOnScreen(paneId: PaneId): ReadonlySet<string> {
+    const id = codexExitSessionId(this.screenTail(paneId));
+    return new Set(id !== undefined ? [id] : []);
+  }
+
+  /**
+   * 終了の文言の id を、その pane の会話にする。**画面の文言は、pane の中のプログラムなら誰でも出せる**ので、記録で検算してから付ける
+   * （実在・cwd が pane と一致・`codex-tui`）。合わなければ付けず、直前の参照はそのまま残す。
+   */
+  private captureCodexExitText(paneId: PaneId): void {
+    const id = codexExitSessionId(this.screenTail(paneId));
+    if (id === undefined || this.staleExitIds.get(paneId)?.has(id)) return;
+    // 検算を挟む間に、同じ pane で別のエージェントが起動した・別の参照が付いたら、古い結果で上書きしない。
+    // 控えは、終わった（いま消えようとしている）エージェントの instanceId と、今の参照。
+    const stamp = this.paneStamp(paneId);
+    const ignored = (reason: string): void =>
+      this.logger.info("agent report ignored", { paneId, kind: "codex", session: id.slice(0, 8), reason: `exit text not used: ${reason}` });
+    void this.checkCodexRecord(id, paneId, false).then((checked) => {
+      if (!checked.ok) return ignored(checked.reason);
+      if (checked.record === undefined) return ignored("the session record could not be checked");
+      const pane = this.model.getPane(paneId);
+      const nowInstance = pane?.agent?.instanceId ?? null;
+      if (!pane || (nowInstance !== null && nowInstance !== stamp.instance) || (pane.agentSession?.sessionId ?? null) !== stamp.ref) return ignored("the pane changed while the record was checked");
+      this.attachByEvidence(paneId, "codex", id, "exit-text");
+    });
   }
 
   /**
@@ -1441,16 +1561,22 @@ export class SessionService {
    * 報告の中の pid は、pane の中のプログラムが好きに書けるので、**これは、取り違えを防ぐ仕組みで、安全の境界ではない**。
    */
   reportAgentSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid?: number, ctx: AgentReportContext = {}): void {
+    // Codex 0.162 のフックは、常駐の daemon の中で動く（報告した pid が、その pane のシェルの子孫でない）。`paneId` は、daemon を最初に起動した
+    // pane のもので当てにならない（閉じていることもある）ので、手がかりから、どの pane の会話かを決める（20261010-codex-multi-pane）。
+    if (kind === "codex" && agentPid !== undefined && this.isResidentReporter(paneId, agentPid)) {
+      void this.reportFromResident(paneId, sessionId, agentPid, ctx);
+      return;
+    }
     const pane = this.model.getPane(paneId);
     if (!pane) return;
     if (agentPid === undefined) {
-      this.applyReportedSession(paneId, kind, sessionId, ctx);
+      this.applyReportedSession(paneId, kind, sessionId, { ...ctx, via: "hook" });
       return;
     }
     const v = this.attribute(paneId, kind, agentPid, ctx);
     if (v.verdict === "accept") {
       this.dropPending(paneId);
-      this.applyReportedSession(paneId, kind, sessionId, ctx);
+      this.applyReportedSession(paneId, kind, sessionId, { ...ctx, via: "hook" });
     } else if (v.verdict === "reject" && !v.recheck) {
       this.logIgnoredReport(paneId, kind, sessionId, agentPid, v.reason);
     } else {
@@ -1474,10 +1600,15 @@ export class SessionService {
   }
 
   /** 前面のエージェント（その pane の前面のジョブのエージェント自身のプロセス）を知らせる。`null` は、居ない。保留した報告があれば、ここで決める。 */
-  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number>; verifiable?: boolean } | null): void {
+  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number>; verifiable?: boolean; resumeId?: string } | null): void {
     if (front) {
       // `verifiable` が偽: 親子の情報が取れない環境（pid が前面のエージェントに含まれるかを、確かめられない）。種類の確かめだけにする。
-      this.frontAgents.set(paneId, { kind: front.kind, pids: front.pids, verifiable: front.verifiable !== false });
+      this.frontAgents.set(paneId, {
+        kind: front.kind,
+        pids: front.pids,
+        verifiable: front.verifiable !== false,
+        ...(front.resumeId !== undefined ? { resumeId: front.resumeId } : {}),
+      });
       this.lastSeenAgentPids.set(paneId, front.pids);
     } else {
       this.frontAgents.delete(paneId);
@@ -1490,6 +1621,15 @@ export class SessionService {
   agentSessionHistoryOf(paneId: PaneId): AgentSessionRef[] {
     return this.model.agentSessionHistory(paneId);
   }
+
+  /**
+   * 会話の参照の報告が**受け入れられた**とき（保留の後で受けた場合も。捨てた報告・別の pane の報告・子のエージェントの報告は呼ばれない）に呼ぶ聞き手を足す。
+   * 利用状況（20261010-agent-usage）が、受け入れた報告の記録の場所だけを覚えるのに使う。聞き手が投げても、受け入れは変わらない。
+   */
+  onReportAccepted(listener: (paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext) => void): void {
+    this.reportAcceptedListeners.push(listener);
+  }
+  private readonly reportAcceptedListeners: ((paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext) => void)[] = [];
 
   private applyReportedSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext = {}): void {
     const pane = this.model.getPane(paneId);
@@ -1505,6 +1645,138 @@ export class SessionService {
     else this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
     this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
     this.persist.touch();
+    this.logAttached(paneId, kind, sessionId, ctx.via ?? "hook");
+    this.notifyAccepted(paneId, kind, sessionId, ctx);
+  }
+
+  /** 受け入れた（会話の参照を付けた）ことを、聞き手へ知らせる。聞き手の失敗で、受け入れを壊さない。 */
+  private notifyAccepted(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext): void {
+    for (const l of this.reportAcceptedListeners) {
+      try {
+        l(paneId, kind, sessionId, ctx);
+      } catch {
+        // 聞き手の失敗で、受け入れを壊さない。
+      }
+    }
+  }
+
+  private logAttached(paneId: PaneId, kind: string, sessionId: string, via: string): void {
+    this.logger.info("agent session attached", { paneId, kind, session: sessionId.slice(0, 8), source: via });
+  }
+
+  /**
+   * フックの報告以外の手がかり（引数・終了の文言）で、会話の参照を付ける・直す。居なくなった猶予・再開の記録には触らない。
+   * 同じ参照なら何もしない。前の参照は、一つ前として履歴に積む。
+   */
+  private attachByEvidence(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, via: "argv" | "exit-text"): void {
+    const pane = this.model.getPane(paneId);
+    if (!pane) return;
+    const prev = pane.agentSession;
+    if (prev && prev.kind === kind && prev.sessionId === sessionId) return;
+    if (prev) this.pushHistory(paneId, prev);
+    this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
+    this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
+    this.persist.touch();
+    this.logAttached(paneId, kind, sessionId, via);
+    // 引数・終了の文言で付けた（フックの報告ではない）: 記録の場所は無い。聞き手は、前の覚えを捨てるだけ。
+    this.notifyAccepted(paneId, kind, sessionId, { via });
+  }
+
+  /** 報告したプロセスが、報告の pane のシェルの子孫でない（pane が閉じていて、シェルが分からないときも）。 */
+  private isResidentReporter(paneId: PaneId, agentPid: number): boolean {
+    const ancestors = this.ancestorsOf(agentPid);
+    if (ancestors === null) return false;
+    const shell = this.terminals.get(paneId)?.pid;
+    return shell === undefined || !ancestors.includes(shell);
+  }
+
+  private logResidentIgnored(paneId: PaneId, sessionId: string, agentPid: number, reason: string): void {
+    this.logger.info("agent report ignored", { paneId, kind: "codex", session: sessionId.slice(0, 8), reason: `the reporting process is a resident codex process (not a descendant of the pane's shell): ${reason}`, agentPid });
+  }
+
+  /**
+   * 常駐の daemon の `codex` の報告を、どの pane の会話かを決めて付ける。**間違った pane に付けるくらいなら、付けない。**
+   * 1. その会話の参照を、すでに持つ pane があれば、それ（引数・終了の文言で付いている）。
+   * 2. 前面の `codex` が、サーバ全体で 1 つだけなら、その pane（cwd が一致するときだけ。#128 の条件）。
+   * 3. 2 つ以上なら、報告の直前（`FIRST_TURN_WINDOW_MS`）に、最初の入力（Enter）が届いた pane が、cwd が一致し・参照が無い 1 つだけのとき。
+   * 付ける前に、会話の記録（`codexRecordLookup`）で検算する（記録が無い・cwd が違う・確かめられない〔3 の場合〕なら付けない）。
+   * 報告の `cwd` が無いものは受けない（Sodashitsu の外で動いた、同じ daemon を使う Codex を取り違えないため）。
+   */
+  private async reportFromResident(reportedPaneId: PaneId, sessionId: string, agentPid: number, ctx: AgentReportContext): Promise<void> {
+    const codexPanes = [...this.frontAgents.entries()].filter(([id, f]) => f.kind === "codex" && this.model.getPane(id) !== undefined).map(([id]) => id);
+    const holder = codexPanes.find((id) => this.model.getPane(id)?.agentSession?.sessionId === sessionId);
+    if (holder !== undefined) return; // すでに、この会話が付いている（引数・終了の文言）
+    if (ctx.cwd === undefined) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the report carries no cwd");
+    if (codexPanes.length === 0) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "no front codex is detected");
+    // 新しい会話（`startup`・`/clear` の後）か。前からある会話の再開（`resume`・`fork`・`compact`・source が無い古いフック）は、始まりの時刻が古いので、
+    // 時刻では結べない。そのときは、**参照の無い pane だけ**を候補にする。
+    const startsNew = ctx.source === "startup" || ctx.source === "clear";
+    let owner: PaneId | undefined;
+    let via: "sole-codex" | "first-turn";
+    if (codexPanes.length === 1) {
+      owner = codexPanes[0]!;
+      via = "sole-codex";
+      if (!sameDir(ctx.cwd, this.model.getPane(owner)!.cwd)) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "its cwd is not the pane's");
+    } else {
+      via = "first-turn";
+      const now = Date.now();
+      const candidates = codexPanes.filter((id) => {
+        const pane = this.model.getPane(id)!;
+        if (!sameDir(ctx.cwd!, pane.cwd)) return false;
+        if (pane.agentSession !== null && !startsNew) return false;
+        const at = this.terminals.get(id)?.lastSubmitAt?.() ?? 0;
+        return at > 0 && at > (this.submitConsumed.get(id) ?? 0) && now - at <= FIRST_TURN_WINDOW_MS && at <= now + 1_000;
+      });
+      if (candidates.length !== 1) {
+        return this.logResidentIgnored(
+          reportedPaneId,
+          sessionId,
+          agentPid,
+          `${codexPanes.length} front codex agents exist and ${candidates.length} of them took a first input just before the report (cannot tell which one owns it)`,
+        );
+      }
+      owner = candidates[0]!;
+    }
+    // 検算を挟む前の、その pane の控え（待つ間に、別のエージェントが起動した・別の参照が付いた、ときは付けない）。
+    const stamp = this.paneStamp(owner);
+    const submitAt = this.terminals.get(owner)?.lastSubmitAt?.() ?? 0;
+    // 記録の始まりの時刻が、その pane の入力に近いこと（新しい会話の最初の入力が作った会話であること）。次のとき必須:
+    // 複数の pane で、新しい会話の報告を結ぶとき（別の pane の会話を、参照のある pane に付けないため）・
+    // 1 つだけの codex でも、すでに参照のある pane を付け替えるとき（外の Codex の会話で、上書きしないため）。
+    const needsTime = (via === "first-turn" && startsNew) || (via === "sole-codex" && stamp.ref !== null);
+    // 検算: 会話の記録が実在して、cwd が pane の場所と一致し、pane の TUI（`originator` が `codex-tui`）が始めた会話であること。
+    // Sodashitsu の外の Codex（同じ daemon を使う VS Code の拡張・`codex exec`・リモート）の会話は、付けない。
+    // 記録を確かめられない（`CODEX_HOME` が見つからない）ときは、`sole-codex` の（参照の無い pane の）道だけ、今までどおり付ける。
+    const checked = this.codexRecordLookup ? await this.checkCodexRecord(sessionId, owner, true) : ({ ok: true, record: undefined } as const);
+    if (!checked.ok) return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, checked.reason);
+    if (checked.record === undefined && (via === "first-turn" || needsTime))
+      return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the session record could not be checked");
+    if (needsTime) {
+      const startedAt = checked.record?.startedAt ?? null;
+      if (startedAt === null || submitAt <= 0)
+        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the start time of the conversation or the pane's input time is unknown");
+      const delta = startedAt - submitAt;
+      if (delta < -START_BEFORE_ENTER_MS || delta > START_AFTER_ENTER_MS)
+        return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the conversation did not start at the pane's last input (it belongs to another pane or another tool)");
+    }
+    // 待つ間に、状況が変わっていないこと（pane・前面の codex・参照・ほかの pane が同じ会話を持った）。
+    if (!this.stampMatches(owner, stamp) || this.frontAgents.get(owner)?.kind !== "codex")
+      return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "the pane changed while the record was checked");
+    if ([...this.frontAgents.keys()].some((id) => id !== owner && this.model.getPane(id)?.agentSession?.sessionId === sessionId))
+      return this.logResidentIgnored(reportedPaneId, sessionId, agentPid, "another pane got the same conversation while the record was checked");
+    if (submitAt > 0) this.submitConsumed.set(owner, submitAt);
+    this.applyReportedSession(owner, "codex", sessionId, { ...ctx, via });
+  }
+
+  private paneStamp(paneId: PaneId): PaneStamp {
+    const pane = this.model.getPane(paneId);
+    return { instance: pane?.agent?.instanceId ?? null, ref: pane?.agentSession?.sessionId ?? null };
+  }
+
+  private stampMatches(paneId: PaneId, stamp: PaneStamp): boolean {
+    const pane = this.model.getPane(paneId);
+    if (!pane) return false;
+    return (pane.agent?.instanceId ?? null) === stamp.instance && (pane.agentSession?.sessionId ?? null) === stamp.ref;
   }
 
   private pushHistory(paneId: PaneId, ref: AgentSessionRef): void {
@@ -1537,8 +1809,6 @@ export class SessionService {
     const shell = this.terminals.get(paneId)?.pid;
     const ancestors = this.ancestorsOf(agentPid);
     if (ancestors !== null && shell !== undefined && !ancestors.includes(shell)) {
-      // Codex 0.162 のフックは、pane の中ではなく、常駐の app-server daemon の中で動く（シェルの子孫でない）。
-      if (kind === "codex") return this.daemonVerdict(paneId, ctx);
       return { verdict: "reject", reason: "the reporting process is not a descendant of the pane's shell" };
     }
     const front = this.frontAgents.get(paneId);
@@ -1548,26 +1818,6 @@ export class SessionService {
       return { verdict: "reject", reason: "the reporting process is not the pane's front agent (a nested or unrelated process)", recheck: true };
     }
     return { verdict: "hold" };
-  }
-
-  /**
-   * 常駐のプロセス（Codex の daemon）の報告を、報告の `paneId` の pane の会話として受けてよいか。daemon の環境の `SODA_PANE_ID` は
-   * 最初に daemon を起動した pane のものなので、`paneId` は当てにならない。**取り違えが起きない形のときだけ**受ける:
-   * その pane に前面の codex が検出されていて、かつ、サーバ全体で、前面の codex がその 1 つだけ（複数なら、どれの報告か分からないので捨てる）。
-   * さらに、報告の作業フォルダ（フックの入力の `cwd`）が、その pane の場所と同じであること（Sodashitsu の外で動いた、同じ daemon を使う
-   * Codex——VS Code など——の会話を取り違えない）。`cwd` が付いていない古い報告は、この道では受けない。
-   */
-  private daemonVerdict(paneId: PaneId, ctx: AgentReportContext): ReportVerdict {
-    const notMember = "the reporting process is not a descendant of the pane's shell";
-    const front = this.frontAgents.get(paneId);
-    if (!front || front.kind !== "codex") return { verdict: "reject", reason: `${notMember} (a resident codex process; no front codex is detected in the reported pane)` };
-    let codexPanes = 0;
-    for (const f of this.frontAgents.values()) if (f.kind === "codex") codexPanes++;
-    if (codexPanes !== 1) return { verdict: "reject", reason: `${notMember} (a resident codex process; ${codexPanes} front codex agents exist, so the owner cannot be told)` };
-    const pane = this.model.getPane(paneId);
-    if (ctx.cwd === undefined) return { verdict: "reject", reason: `${notMember} (a resident codex process; the report carries no cwd)` };
-    if (!pane || !sameDir(ctx.cwd, pane.cwd)) return { verdict: "reject", reason: `${notMember} (a resident codex process; its cwd is not the pane's)` };
-    return { verdict: "accept" };
   }
 
   private logIgnoredReport(paneId: PaneId, kind: string, sessionId: string, agentPid: number, reason: string): void {
@@ -1623,7 +1873,7 @@ export class SessionService {
       }
       this.logger.info("agent report accepted without verification (no front agent was detected in time)", { paneId, kind: p.kind, session: p.sessionId.slice(0, 8), agentPid: p.agentPid });
     }
-    this.applyReportedSession(paneId, p.kind as AgentIntegrationKind, p.sessionId, p.ctx);
+    this.applyReportedSession(paneId, p.kind as AgentIntegrationKind, p.sessionId, { ...p.ctx, via: p.ctx.via ?? "hook" });
   }
 
   /** 再開を打ち込んでから `RESUME_PENDING_MS` の間にエージェントが検出されなければ、再開の失敗として、一つ前へ戻す（検出の前に終わる速い失敗）。 */
@@ -1653,6 +1903,9 @@ export class SessionService {
     this.lastSeenAgentPids.delete(paneId);
     this.goneAgentPids.delete(paneId);
     this.resumeAttempts.delete(paneId);
+    this.argvApplied.delete(paneId);
+    this.submitConsumed.delete(paneId);
+    this.staleExitIds.delete(paneId);
     this.dropPending(paneId);
   }
 

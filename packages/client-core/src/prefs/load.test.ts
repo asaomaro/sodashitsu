@@ -9,6 +9,7 @@ import {
   loadPaneAgentNameVisible,
   loadPaneBorders,
   loadPaneGaps,
+  loadTabBarAlways,
   loadUiStyle,
   loadDisplayBandEdge,
   loadDisplayPanelDock,
@@ -163,5 +164,15 @@ describe("loadUiStyle（20261008-ui-style。既定は classic）", () => {
     expect(loadUiStyle("modern")).toBe("modern");
     expect(loadUiStyle("classic")).toBe("classic");
     for (const v of [undefined, null, "Modern", "MODERN", "x", "", 1, true, {}, []]) expect(loadUiStyle(v), String(v)).toBe("classic");
+  });
+});
+
+describe("loadTabBarAlways（20261008-ui-style の AC24。無い・壊れた値は null＝様式に従う）", () => {
+  it("true・false はその値", () => {
+    expect(loadTabBarAlways(true)).toBe(true);
+    expect(loadTabBarAlways(false)).toBe(false);
+  });
+  it("無い・null・壊れた値は null（保存値は書き換えない）", () => {
+    for (const v of [undefined, null, "true", "false", 0, 1, {}, []]) expect(loadTabBarAlways(v), String(v)).toBeNull();
   });
 });

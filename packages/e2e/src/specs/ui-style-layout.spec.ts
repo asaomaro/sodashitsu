@@ -396,3 +396,201 @@ test("畳んだサイドバー: 境の印（縦の中央）は、行の印〔状
   expect(r.width).toBeGreaterThanOrEqual(16);
   client.close();
 });
+
+test("設定「tab が 1 つのときも tab バーを出す」（AC24）: 選んだ値が様式より優先され、様式を切り替えても残る。出る・消えるときの桁・行は落ち着き、「既定に戻す」で様式に従う", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const views = await watchClientViews(page);
+  await open(page, appServer);
+  const settle = async (): Promise<void> => {
+    let last = -1;
+    for (let i = 0; i < 40; i++) {
+      const c = views.count();
+      if (c === last) return;
+      last = c;
+      await page.waitForTimeout(300);
+    }
+  };
+  const bar = page.locator(".tab-bar");
+  const boxH = () => page.locator("[data-pane-frame-main]").first().evaluate((e) => e.getBoundingClientRect().height);
+  await settle();
+  const h0 = await boxH();
+  await expect(bar).toHaveCount(0); // クラシック・既定: 出さない（今のまま）
+
+  // 設定の画面から「出す」を入れる（クラシックのまま）。
+  await focusTerminal(page);
+  await prefixKey(page, "s");
+  const dialog = page.locator("dialog.settings-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
+  const sw = dialog.locator('[data-setting="tab-bar-always"]');
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toHaveCount(0); // 様式に従っている間は、戻す道は出ない
+  let before = views.count();
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toBeVisible();
+  await expect(bar).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await settle();
+  expect(views.count() - before, "tab バーが出た後に送られた client.view").toBeLessThanOrEqual(2);
+  expect(await boxH(), "tab バーの分、箱が低くなる").toBeLessThan(h0);
+  // サーバの共有の設定に、選んだ値が書かれている（様式に関わらない）。
+  const stored = async (): Promise<unknown> => (await client.request("prefs.get", {}))["prefs"]["tabBarAlways"] ?? null;
+  await expect.poll(stored).toBe(true);
+
+  // モダンへ切り替えても、選んだ値のまま（出ている）。クラシックへ戻しても出たまま。
+  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  await expect(bar).toHaveCount(1);
+  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  await expect(bar).toHaveCount(1);
+
+  // 「出さない」を選ぶと、モダンでも出ない。
+  before = views.count();
+  await client.request("prefs.set", { patch: { tabBarAlways: false } });
+  await expect(bar).toHaveCount(0);
+  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  await expect(bar, "モダンでも、選んだ「出さない」が効く").toHaveCount(0);
+  await settle();
+  expect(await boxH(), "出さないので、箱は元の高さ（モダンの角・余白の分は、すき間の表で変わる）").toBeGreaterThan(0);
+
+  // 「既定に戻す」（設定の画面から）: 様式に従う（モダンなので出る）。
+  await focusTerminal(page);
+  await prefixKey(page, "s");
+  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await dialog.locator('[data-setting="tab-bar-always-reset"]').click();
+  await expect(bar).toHaveCount(1);
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toHaveCount(0);
+  await expect.poll(stored).toBeNull();
+  await page.keyboard.press("Escape");
+  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  await expect(bar, "既定に戻した後は、様式に従う（クラシックは出さない）").toHaveCount(0);
+  await settle();
+  expect(await boxH()).toBeCloseTo(h0, 0);
+  client.close();
+});
+
+/** 見た目の言葉（AC25・AC26）を比べるための、計算済みの値。 */
+const LOOK = ["fontSize", "paddingTop", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "minHeight", "backgroundColor", "color"] as const;
+async function lookOf(page: Page, selector: string): Promise<Record<string, string>> {
+  return page.locator(selector).first().evaluate((el, keys) => {
+    const s = getComputedStyle(el);
+    return Object.fromEntries(keys.map((k) => [k, (s as unknown as Record<string, string>)[k] ?? ""]));
+  }, [...LOOK]);
+}
+
+test("見た目の言葉をそろえる（AC25・AC26）: モダンは tab が切り替えのボタンと同じ形（角・高さ・余白・文字・線）。クラシックは切り替えのボタンが tab と同じ見た目。tab の働きは変わらない", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  // tab を 2 つに（クラシックでも tab バーが出る）。
+  const hello = client.helloSnapshot()!;
+  await client.request("tab.create", { workspaceId: hello.workspaces[0]!.id, label: "second" } as never).catch(() => undefined);
+  await open(page, appServer);
+  await expect(page.locator(".tab-bar-item")).toHaveCount(2);
+  await expect(page.locator(".screen-switcher-btn")).toHaveCount(2);
+
+  // クラシック: 切り替えのボタンは、tab の見た目（選んでいない tab と選んでいないボタンを比べる）。
+  const tabC = await lookOf(page, ".tab-bar-item:not(.tab-bar-item-active)");
+  const btnC = await lookOf(page, ".screen-switcher-btn:not(.screen-switcher-btn-active)");
+  // 上下の余白は比べない: 帯の外形の高さを、これまでと同じに保つため（U2）、ボタンは帯の高さいっぱいに伸びる（tab も帯の高さいっぱいに伸びる）。
+  for (const k of ["fontSize", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "backgroundColor", "color"] as const) {
+    expect(btnC[k], `クラシック: ${k}`).toBe(tabC[k]);
+  }
+  const tabActiveC = await lookOf(page, ".tab-bar-item-active");
+  const btnActiveC = await lookOf(page, ".screen-switcher-btn-active");
+  expect(btnActiveC["backgroundColor"], "クラシック: 選んでいるものの示し方").toBe(tabActiveC["backgroundColor"]);
+
+  // モダン: tab が、切り替えのボタンの形。
+  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  const tabM = await lookOf(page, ".tab-bar-item:not(.tab-bar-item-active)");
+  const btnM = await lookOf(page, ".screen-switcher-btn:not(.screen-switcher-btn-active)");
+  // 左右の余白だけは、tab が広い（短い名前の tab が細くならないよう。F3）。角・線・高さ・文字・地・色は共有。
+  for (const k of ["fontSize", "paddingTop", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "minHeight", "backgroundColor", "color"] as const) {
+    expect(tabM[k], `モダン: ${k}`).toBe(btnM[k]);
+  }
+  expect(parseFloat(tabM["paddingLeft"]!), "tab の左右の余白は、切り替えのボタンより広い").toBeGreaterThan(parseFloat(btnM["paddingLeft"]!));
+  const tabBox = (await page.locator(".tab-bar-item").first().boundingBox())!;
+  expect(tabBox.width, "tab の最小の幅（control-h）").toBeGreaterThanOrEqual(32);
+  expect(parseFloat(tabM["borderTopLeftRadius"]!), "モダンの角は丸い（検査が、何も変わらない状態で通っていない）").toBeGreaterThan(0);
+  expect(parseFloat(tabM["borderTopWidth"]!)).toBeGreaterThan(0);
+  const tabActiveM = await lookOf(page, ".tab-bar-item-active");
+  const btnActiveM = await lookOf(page, ".screen-switcher-btn-active");
+  expect(tabActiveM["backgroundColor"], "モダン: 選んでいるものの示し方").toBe(btnActiveM["backgroundColor"]);
+
+  // tab の働き: クリックで選ぶ・右クリックのメニュー・「＋」。
+  await page.locator(".tab-bar-item").nth(1).click();
+  await expect(page.locator(".tab-bar-item").nth(1)).toHaveAttribute("aria-selected", "true");
+  await page.locator(".tab-bar-item").nth(1).click({ button: "right" });
+  await expect(page.locator(".context-menu").getByRole("menuitem", { name: "名前の変更", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".tab-bar .tab-bar-new")).toBeVisible();
+  client.close();
+});
+
+test("モダン: サイドバーの区画（spaces・agents）がカードになる。クラシックは変わらない。畳む・つまみ（境目が指に付いてくる）・たたんだサイドバー・選んでいる行の枠が破綻しない（AC27）", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  for (let i = 0; i < 4; i++) await client.request("workspace.create", { cwd: process.cwd(), label: `w${i}` });
+  await open(page, appServer);
+  const card = (sel: string) =>
+    page.locator(sel).evaluate((e) => {
+      const s = getComputedStyle(e);
+      return { radius: parseFloat(s.borderTopLeftRadius), border: parseFloat(s.borderTopWidth), bg: s.backgroundColor, overflow: s.overflow };
+    });
+  // クラシック: 今のまま（角なし・agents の上の線だけ・地なし）。
+  const c1 = await card(".sidebar-spaces");
+  expect(c1).toMatchObject({ radius: 0, border: 0, bg: "rgba(0, 0, 0, 0)" });
+  expect((await card(".sidebar-agents")).radius).toBe(0);
+  await setStyle(page, client, "modern");
+  for (const sel of [".sidebar-spaces", ".sidebar-agents"]) {
+    const m = await card(sel);
+    expect(m.radius, `${sel}: 角が丸い`).toBeGreaterThanOrEqual(8);
+    expect(m.border, `${sel}: 縁`).toBeGreaterThan(0);
+    expect(m.bg, `${sel}: 薄い地`).not.toBe("rgba(0, 0, 0, 0)");
+  }
+  // 面の間にすき間があり、サイドバーの端にも余白がある（カードが端に付かない）。
+  const sidebar = (await page.locator(".sidebar").boundingBox())!;
+  const sp = (await page.locator(".sidebar-spaces").boundingBox())!;
+  const ag = (await page.locator(".sidebar-agents").boundingBox())!;
+  expect(ag.y - (sp.y + sp.height), "区画の間のすき間").toBeGreaterThanOrEqual(6);
+  expect(sp.x - sidebar.x, "左の余白").toBeGreaterThanOrEqual(6);
+  // 見出し・並び順のボタン・折りたたみがカードの中に収まる。
+  const head = (await page.locator(".sidebar-spaces .sidebar-section-header").boundingBox())!;
+  expect(head.x).toBeGreaterThanOrEqual(sp.x);
+  expect(head.x + head.width).toBeLessThanOrEqual(sp.x + sp.width + 0.5);
+  await page.locator(".sidebar-agents .sidebar-section-toggle").click();
+  await expect(page.locator(".sidebar-agents.sidebar-section-folded")).toHaveCount(1);
+  await page.locator(".sidebar-agents .sidebar-section-toggle").click();
+  await expect(page.locator(".sidebar-agents.sidebar-section-folded")).toHaveCount(0);
+
+  // 区画の高さのつまみ: 境目が、ポインタの動いた分だけ付いてくる（余白・すき間の分の誤差が無い）。
+  const div = (await page.locator(".sidebar-section-divider").boundingBox())!;
+  const spBefore = (await page.locator(".sidebar-spaces").boundingBox())!;
+  const dy = 60;
+  await page.mouse.move(div.x + 40, div.y + div.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(div.x + 40, div.y + div.height / 2 + dy, { steps: 5 });
+  await page.mouse.up();
+  const spAfter = (await page.locator(".sidebar-spaces").boundingBox())!;
+  const delta = spAfter.height - spBefore.height;
+  expect(delta, `境目が ${dy}px 動いたとき、spaces が増えた分（誤差は小さい）`).toBeGreaterThan(dy - 6);
+  expect(delta).toBeLessThan(dy + 6);
+  // 選んでいる行の枠（PR1f）が、カードの中で欠けない。
+  const current = page.locator(".sidebar-spaces .sidebar-row-current, .sidebar-spaces .sidebar-row[aria-current]").first();
+  if (await current.count()) {
+    const r = (await current.boundingBox())!;
+    const cardBox = (await page.locator(".sidebar-spaces").boundingBox())!;
+    expect(r.x).toBeGreaterThanOrEqual(cardBox.x);
+    expect(r.x + r.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 0.5);
+  }
+  // たたんだサイドバーは、カードにしない（幅が無い）。
+  await page.locator(".sidebar-edge-toggle").click();
+  await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
+  expect((await card(".sidebar-spaces")).border).toBe(0);
+  expect(await page.locator(".sidebar").evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+  client.close();
+});

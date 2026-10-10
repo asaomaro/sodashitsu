@@ -24,6 +24,7 @@ import {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadTabBarAlways,
   loadUiStyle,
   useSettingsStore,
 } from "./settings.js";
@@ -48,6 +49,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("paneFrameThickness", loadPaneFrameThickness(raw["paneFrameThickness"]));
   set("paneAgentNameVisible", loadPaneAgentNameVisible(raw["paneAgentNameVisible"]));
   set("tabBarPosition", loadTabBarPosition(raw["tabBarPosition"]));
+  set("tabBarAlways", loadTabBarAlways(raw["tabBarAlways"]));
   set("tabBarRight", loadTabBarRightEntries(raw["tabBarRight"]));
   set("tabBarRightSeparator", loadTabBarRightSeparator(raw["tabBarRightSeparator"]));
   set("paneOuterBorders", loadPaneOuterBorders(raw["paneOuterBorders"]));

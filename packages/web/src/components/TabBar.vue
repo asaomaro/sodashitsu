@@ -28,8 +28,11 @@ const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
 const conn = inject(ConnectionKey);
 const registry = inject(TerminalRegistryKey, undefined);
-/** モダンの配置では、tab が 1 つだけのときも tab バー（と「＋」）を出す（20261008-ui-style AC17）。 */
-const { modernLayout } = useUiStyle();
+/**
+ * tab が 1 つだけのときも tab バー（と「＋」）を出すか（20261008-ui-style AC17・AC24）。設定の値があればそれ、無ければ様式に従う
+ * （モダンの配置: 出す・クラシック: 出さない）。
+ */
+const { tabBarAlways } = useUiStyle();
 
 const tabs = computed(() => {
   const ws = view.workspaceId ? session.workspaces.get(view.workspaceId) : undefined;
@@ -40,7 +43,7 @@ const tabs = computed(() => {
 const root = ref<HTMLElement | null>(null);
 const tabsEl = ref<HTMLElement | null>(null);
 /** tab バーが見えているか（`v-if` と同じ条件をここにも持つ）。 */
-const visible = computed(() => modernLayout.value || tabs.value.length !== 1);
+const visible = computed(() => tabBarAlways.value || tabs.value.length !== 1);
 
 /**
  * tab バーの中にフォーカスがあるまま非表示になるとき（自動非表示。AC-I6）、選ばれている pane の
@@ -489,5 +492,42 @@ function onWheel(ev: WheelEvent): void {
   color: var(--soda-fg, #f8f8f2);
   opacity: 0.75;
   font-size: 0.9em;
+}
+/*
+ * モダン（20261008-ui-style PR6 の AC25）: tab を、画面の切り替えのボタン（`ScreenSwitcher.vue`）と同じ形の言葉にする——区切られた丸いボタンの並び。
+ * 数値は `uiStyle.css` の `--soda-shape-seg-*` を、切り替えのボタンと共有する。働き（クリック・D&D・右クリック・ホイール・「＋」・あふれたときのスクロール）は変えない。
+ * クラシックでは、この規則は当たらない（上の規則のまま）。
+ */
+:root[data-ui-style="modern"] .tab-bar {
+  padding: var(--soda-shape-seg-bar-pad-y) var(--soda-shape-seg-bar-pad-x);
+  gap: var(--soda-shape-seg-gap);
+}
+:root[data-ui-style="modern"] .tab-bar-tabs {
+  gap: var(--soda-shape-seg-gap);
+}
+:root[data-ui-style="modern"] .tab-bar-item,
+:root[data-ui-style="modern"] .tab-bar-new {
+  font-size: var(--soda-shape-seg-font);
+  padding: var(--soda-shape-seg-pad-y) var(--soda-shape-seg-pad-x);
+  border: var(--soda-shape-seg-border) solid var(--soda-menu-border, #44475a);
+  border-radius: var(--soda-shape-seg-radius);
+}
+/* 余白だけは、切り替えのボタンと分ける（短い名前の tab が細くならないよう、最小の幅と、広めの左右の余白）。角・線・高さ・文字は共有。 */
+:root[data-ui-style="modern"] .tab-bar-item {
+  min-width: var(--soda-shape-control-h);
+  padding-inline: var(--soda-shape-seg-tab-pad-x);
+  justify-content: center;
+}
+:root[data-ui-style="modern"] .tab-bar-new {
+  min-width: var(--soda-shape-control-h);
+  justify-content: center;
+}
+:root[data-ui-style="modern"] .tab-bar-item:hover,
+:root[data-ui-style="modern"] .tab-bar-new:hover:not(:disabled) {
+  background: var(--soda-menu-hover-bg, #343746);
+}
+:root[data-ui-style="modern"] .tab-bar-item-active,
+:root[data-ui-style="modern"] .tab-bar-item-active:hover {
+  background: var(--soda-menu-active-bg, #44475a);
 }
 </style>

@@ -167,7 +167,7 @@ async function main() {
   const raw = await readStdin();
   let sessionId;
   let extra;
-  let origin = {}; // 作業フォルダと、会話が始まった理由（サーバが、報告の持ち主を確かめる材料）
+  let origin = {}; // 作業フォルダ・会話が始まった理由（サーバが、報告の持ち主を確かめる材料）・会話の記録の場所（利用状況の材料）
   try {
     const payload = JSON.parse(raw);
     // `session_id`（snake_case。Claude Code・Codex・Cursor・Devin・Droid・Qwen Code）と
@@ -178,6 +178,8 @@ async function main() {
       origin = compact({
         cwd: typeof payload.cwd === "string" && payload.cwd !== "" && payload.cwd.length <= 1024 && !payload.cwd.includes("\0") ? payload.cwd : undefined,
         source: typeof payload.source === "string" && /^[a-z_]{1,16}$/.test(payload.source) ? payload.source : undefined,
+        // 会話の記録の場所（中身ではない）。利用状況（20261010-agent-usage）が、サーバの側で場所を確かめて、記録を読む材料にする。
+        transcriptPath: pathOf(payload.transcript_path),
       });
     }
     if (payload && typeof payload === "object" && kind === "claude") {
