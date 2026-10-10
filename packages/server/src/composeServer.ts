@@ -55,6 +55,7 @@ import { FsIntegrationFile } from "./persist/IntegrationFile.js";
 import { FsAgentIntegrationInstaller, isAgentIntegrationKind } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
 import { startAgentReportSocket, type AgentReportSocket } from "./agent/AgentReportSocket.js";
+import { lookupCodexRecord } from "./agent/codexSession.js";
 import { HttpServer } from "./http/HttpServer.js";
 import { WsServerWs } from "./ws/WsServerWs.js";
 import { WsGateway } from "./ws/WsGateway.js";
@@ -269,6 +270,8 @@ export async function composeServer(
     terminals,
     bus,
     persist,
+    // Codex の会話の記録（常駐の daemon の報告を pane に付ける前の検算。20261010-codex-multi-pane）。場所は Codex と同じ規則（`CODEX_HOME`・無ければ `~/.codex`）。
+    codexRecordLookup: (id) => lookupCodexRecord(process.env["CODEX_HOME"] || join(osHomedir(), ".codex"), id),
     serverVersion: SERVER_VERSION,
     host,
     scrollbackLines: options.scrollbackLines,

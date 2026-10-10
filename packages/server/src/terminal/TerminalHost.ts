@@ -44,6 +44,11 @@ export interface TerminalHost {
   writeModal(input: ModalInput): Promise<void>;
   resize(cols: number, rows: number): void;
   lastOutputAt(): number;
+  /**
+   * 利用者の入力（Enter＝改行を含む入力）が最後に届いた時刻（`Date.now()`。無ければ 0）。Codex の最初の入力（`SessionStart` が出る）が、
+   * どの pane に届いたかを知る（20261010-codex-multi-pane）。テストの偽物は持たなくてよい。
+   */
+  lastSubmitAt?(): number;
   onExit(cb: (code: number) => void): Disposable;
   dispose(): void;
   /**
@@ -66,6 +71,12 @@ export interface HandoffHold {
   rows: number;
   /** ミラーの `historyAnsi()`（通常の画面とスクロールバック）。 */
   screen: string;
+}
+
+/** 入力に改行（CR・LF）が含まれるか（Enter＝送信）。 */
+function hasSubmit(input: Uint8Array | string): boolean {
+  if (typeof input === "string") return input.includes("\r") || input.includes("\n");
+  return input.includes(13) || input.includes(10);
 }
 
 const PAUSE_THRESHOLD_BYTES = 1024 * 1024; // 1MB（design「流量制御」）
@@ -94,6 +105,7 @@ export class DefaultTerminalHost implements TerminalHost {
   readonly mirror: Mirror;
   readonly fanout: OutputFanout;
   private lastOutput = Date.now();
+  private lastSubmit = 0;
   private readonly exitListeners = new Set<(code: number) => void>();
   /** 出力の Kitty graphics を読み分ける（20260926-kitty-graphics design「4.」）。 */
   private readonly kitty = new KittyGraphicsTranslator();
@@ -192,6 +204,7 @@ export class DefaultTerminalHost implements TerminalHost {
   }
 
   writeInput(input: Uint8Array | string): boolean {
+    if (hasSubmit(input)) this.lastSubmit = Date.now();
     if (this.inputClosed) {
       this.write(input); // 終了した端末は今までどおり（PTY が捨てる）。知らせない
       return true;
@@ -258,6 +271,7 @@ export class DefaultTerminalHost implements TerminalHost {
           await this.delay(job.input.delayMs);
           if (this.activeModal !== job) return;
         }
+        if (hasSubmit(parts[i]!)) this.lastSubmit = Date.now();
         this.pty.write(parts[i]!);
       }
       this.activeModal = null;
@@ -376,6 +390,10 @@ export class DefaultTerminalHost implements TerminalHost {
 
   lastOutputAt(): number {
     return this.lastOutput;
+  }
+
+  lastSubmitAt(): number {
+    return this.lastSubmit;
   }
 
   onExit(cb: (code: number) => void): Disposable {
