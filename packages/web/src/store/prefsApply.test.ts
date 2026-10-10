@@ -23,6 +23,7 @@ const raw = {
   paneFrameThickness: "thick",
   paneAgentNameVisible: true,
   tabBarPosition: "bottom",
+  tabBarAlways: true,
   tabBarRight: [{ kind: "hostname" }],
   tabBarRightSeparator: " | ",
   paneOuterBorders: true,
@@ -63,6 +64,7 @@ describe("applyPrefsToStores", () => {
     expect(settings.paneFrameThickness).toBe("thick");
     expect(settings.paneAgentNameVisible).toBe(true);
     expect(settings.tabBarPosition).toBe("bottom");
+    expect(settings.tabBarAlways).toBe(true);
     expect(settings.tabBarRight).toEqual([{ kind: "hostname" }]);
     expect(settings.tabBarRightSeparator).toBe(" | ");
     expect(settings.paneOuterBorders).toBe(true);
@@ -101,6 +103,7 @@ describe("applyPrefsToStores", () => {
     expect(settings.displayPanelInitial).toBe("open");
     expect(settings.displayPanelDock).toBe("right");
     expect(settings.uiStyle).toBe("classic");
+    expect(settings.tabBarAlways).toBeNull(); // 無い項目は、様式に従う
     expect(settings.displayBandEdge).toBe("top");
     expect(settings.paneBorders).toBe("always");
     expect(settings.theme).not.toBe("nord");

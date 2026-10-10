@@ -32,6 +32,7 @@ import {
   loadDisplayScriptEnabled,
   loadShellCwdTracking,
   loadStatusSymbols,
+  loadTabBarAlways,
   loadUiStyle,
   useSettingsStore,
 } from "../store/settings.js";
@@ -1658,6 +1659,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.settings.paneAgentNameVisible = loadPaneAgentNameVisible(raw["paneAgentNameVisible"]);
     // 20260922-tabbar-pane-appearance（PR #12 から取り込み）分。
     this.settings.tabBarPosition = loadTabBarPosition(raw["tabBarPosition"]);
+    this.settings.tabBarAlways = loadTabBarAlways(raw["tabBarAlways"]); // 20261008-ui-style AC24
     this.settings.tabBarRight = loadTabBarRightEntries(raw["tabBarRight"]);
     this.settings.tabBarRightSeparator = loadTabBarRightSeparator(raw["tabBarRightSeparator"]);
     this.settings.paneOuterBorders = loadPaneOuterBorders(raw["paneOuterBorders"]);

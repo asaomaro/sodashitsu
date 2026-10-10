@@ -15,7 +15,7 @@ import type { ForegroundJob, ProcessInspector } from "../platform/ProcessInspect
 import { AgentTracker, type Clock, type TrackerUpdateInput } from "./AgentTracker.js";
 import { evaluate, type DetectionSnapshot } from "./ManifestEngine.js";
 import type { ManifestStore } from "./ManifestStore.js";
-import { agentProcessPids, match } from "./ProcessMatcher.js";
+import { agentProcessPids, agentResumeSessionId, match } from "./ProcessMatcher.js";
 
 /** 出力があった pane の判定間隔（design「判定の周期」）。 */
 const ACTIVE_INTERVAL_MS = 500;
@@ -215,7 +215,12 @@ export class AgentMonitor {
     this.session.setFrontAgent(
       paneId,
       kind !== null && job
-        ? { kind, pids: new Set(agentProcessPids(job, kind)), verifiable: job.processes.every((p) => p.ppid !== undefined) }
+        ? {
+            kind,
+            pids: new Set(agentProcessPids(job, kind)),
+            verifiable: job.processes.every((p) => p.ppid !== undefined),
+            ...(agentResumeSessionId(job, kind) !== undefined ? { resumeId: agentResumeSessionId(job, kind)! } : {}),
+          }
         : null,
     );
     const trackerResult = tracker.update(kind, judgment);

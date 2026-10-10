@@ -55,6 +55,7 @@ import { FsIntegrationFile } from "./persist/IntegrationFile.js";
 import { FsAgentIntegrationInstaller, isAgentIntegrationKind } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
 import { startAgentReportSocket, type AgentReportSocket } from "./agent/AgentReportSocket.js";
+import { lookupCodexRecord } from "./agent/codexSession.js";
 import { HttpServer } from "./http/HttpServer.js";
 import { WsServerWs } from "./ws/WsServerWs.js";
 import { WsGateway } from "./ws/WsGateway.js";
@@ -271,6 +272,9 @@ export async function composeServer(
     terminals,
     bus,
     persist,
+    // Codex の会話の記録（常駐の daemon の報告を pane に付ける前の検算。20261010-codex-multi-pane）。場所は Codex と同じ規則（`CODEX_HOME`・無ければ `~/.codex`）。
+    // 最初の試行は日付のフォルダを新しい順に（見つかれば止める）、再試行は、最近の数日だけ。
+    codexRecordLookup: (id, attempt) => lookupCodexRecord(process.env["CODEX_HOME"] || join(osHomedir(), ".codex"), id, attempt === 0 ? undefined : 3),
     serverVersion: SERVER_VERSION,
     host,
     scrollbackLines: options.scrollbackLines,
@@ -492,7 +496,10 @@ export async function composeServer(
   const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter()], logger });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
-  session.onReportAccepted((paneId, _kind, sessionId, ctx) => usage.noteTranscript(paneId, sessionId, ctx.transcriptPath));
+  // Claude Code の分だけ（Codex の利用状況は次の PR。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕ので、そのとき同じ形で足す）。
+  session.onReportAccepted((paneId, kind, sessionId, ctx) => {
+    if (kind === "claude") usage.noteTranscript(paneId, sessionId, ctx.transcriptPath);
+  });
   const usageSub = bus.subscribe((e) => {
     if (e.event === "pane.closed") usage.forgetPane(e.data.paneId);
   });
