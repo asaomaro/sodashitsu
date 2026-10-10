@@ -286,7 +286,10 @@ test.describe("キーだけで移す（T15c）", () => {
     let idx = -1;
     for (let i = 0; i < n; i++) if ((await items.nth(i).innerText()).trim() === "move-b") idx = i;
     expect(idx).toBeGreaterThanOrEqual(0);
-    for (let i = 0; i < idx; i++) await page.keyboard.press("ArrowDown");
+    // いま強調されている行（開いた位置の下にマウスがあると、その行）から、move-b まで矢印で進む。
+    const active = await page.locator(".context-menu .context-menu-active").evaluate((el) => [...(el.parentElement?.children ?? [])].indexOf(el));
+    for (let i = 0; i < (idx - active + n) % n; i++) await page.keyboard.press("ArrowDown");
+    await expect(page.locator(".context-menu .context-menu-active")).toHaveText(/^move-b$/);
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await placeOf(appServer, pX)).workspaceId, { timeout: 15_000 }).toBe(b.workspace.id);
     expect(sent().filter((m) => m.method === "pane.move_to_tab")).toHaveLength(1);
