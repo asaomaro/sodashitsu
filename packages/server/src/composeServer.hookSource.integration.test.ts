@@ -45,9 +45,15 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
 
   /** Claude Code の matcher: 設定の文字列を、`source` に全体一致させる（`|` で区切った候補）。空は全部。 */
   const matches = (source: string): boolean => matcher === "" || matcher.split("|").includes(source);
+  /** この試験は pid の無い報告（従来どおり受ける）を確かめる。試験を Claude Code の中から流しても、その `CLAUDE_PID` を、フックの報告の pid に使わせない。 */
+  function envWithoutAgentPid(): NodeJS.ProcessEnv {
+    const { CLAUDE_PID: _drop, ...rest } = process.env;
+    void _drop;
+    return rest;
+  }
   function runHook(sessionId: string, source: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [script, "claude"], { env: { ...process.env, SODA_PANE_ID: paneId, SODA_AGENT_REPORT_SOCKET: agentReportSocketPathFor(stateDir) }, stdio: ["pipe", "ignore", "ignore"] });
+      const child = spawn(process.execPath, [script, "claude"], { env: { ...envWithoutAgentPid(), SODA_PANE_ID: paneId, SODA_AGENT_REPORT_SOCKET: agentReportSocketPathFor(stateDir) }, stdio: ["pipe", "ignore", "ignore"] });
       child.on("error", reject);
       child.on("close", () => resolve());
       child.stdin.end(JSON.stringify({ session_id: sessionId, hook_event_name: "SessionStart", source }));
@@ -68,6 +74,21 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     await sessionStart("33333333-3333-4333-8333-333333333333", "compact");
     await new Promise((r) => setTimeout(r, 300));
     expect(idOf()).toBe("33333333-3333-4333-8333-333333333333");
+  });
+
+  it("#128 との合成: /clear の前の会話は履歴に積まない（戻り先にしない）。fork の最初の報告（source: fork・pid なし）は受けられ、その前の会話は履歴に積む", async () => {
+    const hist = () => server.session.agentSessionHistoryOf(paneId).map((h) => h.sessionId);
+    const base = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+    const cleared = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
+    const forked = "cccccccc-3333-4333-8333-cccccccccccc";
+    await sessionStart(base, "startup");
+    await vi.waitFor(() => expect(idOf()).toBe(base), { timeout: 10_000 });
+    await sessionStart(cleared, "clear"); // matcher が clear を拾い、フックが source を載せ、サーバが「消した会話」を積まない
+    await vi.waitFor(() => expect(idOf()).toBe(cleared), { timeout: 10_000 });
+    expect(hist(), "/clear で消した会話は、履歴に積まない").not.toContain(base);
+    await sessionStart(forked, "fork");
+    await vi.waitFor(() => expect(idOf()).toBe(forked), { timeout: 10_000 });
+    expect(hist(), "fork（clear 以外）では、前の会話を積む").toContain(cleared);
   });
 
   it("知らない source は、matcher が拾わない（空の matcher にしていない）", () => {

@@ -24,7 +24,7 @@
 
 | # | 事項 | 決定 |
 | :- | :- | :- |
-| C1 | R1（#122 の猶予で残った古い会話 id が、フックの報告をしない別のエージェントに引き継がれる） | **直さない**（**R1 は `fix/agent-session-attribution` の AC9 で直す**）。`SessionService` の側で別の作業 `fix/agent-session-attribution` が直すため、ここで触ると衝突する。fork 側の防御（報告の `instanceId` を持たせる）も入れていない。その作業が入るまで、この穴は残る。 |
+| C1 | R1（#122 の猶予で残った古い会話 id が、フックの報告をしない別のエージェントに引き継がれる） | **fork 側では直さない**（**R1 は #128（`fix/agent-session-attribution`）の AC9 で直った**）。`SessionService` の側で別の作業 `fix/agent-session-attribution` が直すため、ここで触ると衝突する。fork 側の防御（報告の `instanceId` を持たせる）も入れていない。その作業が入るまで、この穴は残る。 |
 | C2 | R2（手が空いたの判定が、確認の描かれる前の idle に頼る） | 知らせを送る前に、**入力欄が出ている証拠**を求める（`promptReady`）: 画面の末尾に `❯` の行があり、`esc to cancel`・`enter to confirm` が無い、**または**元と違う会話の id が報告された（フックは確認の後に走る）。settle（800 ms）は据え置き。証拠が出ないまま上限（10 分）になれば `timed_out`。否定の対照: 証拠の判定を外すと、結合テスト（確認が 6 秒後に描かれる版）が落ちる（確認済み）。 |
 | C3 | R3（`follow` で場所を引き継げなかったときの死んだ分岐） | 死んだ `cwdFallback` の分岐を、「新しい pane の場所が、元の pane の場所と違えば止める（閉じる）」に替える。 |
 | C4 | R4（abort 済みの signal） | `waitForAgent` は、中断済みなら即 `aborted`。`fork()` は、閉じた後は `fork_failed` で断る。 |
