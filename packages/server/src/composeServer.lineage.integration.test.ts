@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import type { Graph, GraphLink } from "@sodashitsu/protocol";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
+import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 
 /**
  * 20261003-graph-auto-nodes の T6：エージェントが起動したエージェントの自動載せを、実物の `composeServer`（空きポート・自前の一時 stateDir）・
@@ -195,6 +196,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         timeout: 10_000,
         interval: 50,
       });
+      await assertPaneResolvesFake({ write: (input) => server.terminals.get(paneId)!.write(input), name: "claude", fakeDir: join(dir, "bin"), scratchDir: dir });
     }
     const agentOf = (server: ComposedServer, paneId: string) =>
       server.session.getPane(paneId)?.agent ?? null;

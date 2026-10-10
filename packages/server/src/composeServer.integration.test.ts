@@ -16,6 +16,7 @@ import { STATE_DIR_LOCK_FILE, StateDirLock } from "./persist/StateDirLock.js";
 import { DefaultAuthService } from "./auth/AuthService.js";
 import { FsAuthFile } from "./persist/AuthFile.js";
 import { ChildProcessGitRunner } from "./infra/GitRunner.js";
+import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 
 // どの it も実サーバを組み立て、多くは実 PTY・scrypt・git を使う。負荷の下で、上限を持たない it が最大 5.3 秒かかって既定の 5 秒で
 // 落ちた。上限を持たない it の既定を 15 秒にする（このファイルにだけ効く。20260926-load-flaky-tests の D5）。
@@ -661,8 +662,17 @@ describe("composeServer (integration)", () => {
 
       const originalPath = process.env["PATH"];
       process.env["PATH"] = `${binDir}:${originalPath ?? ""}`;
+      // pane のシェルは利用者の rc を読む（製品の既定）。この機械の `~/.bashrc` は PATH の先頭へ実物の `claude` のある `~/.local/bin` を足し直すので、
+      // HOME を一時のフォルダにして rc を読ませない（偽の `claude` を指させる。20261010-e2e-fake-agent）。
+      const originalHome = process.env["HOME"];
+      const originalEnvFile = process.env["ENV"];
+      process.env["HOME"] = stateDir;
+      delete process.env["ENV"];
       cleanups.push(async () => {
         process.env["PATH"] = originalPath;
+        if (originalHome === undefined) delete process.env["HOME"];
+        else process.env["HOME"] = originalHome;
+        if (originalEnvFile !== undefined) process.env["ENV"] = originalEnvFile;
       });
       cleanups.push(() => rm(binDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));
 
@@ -693,6 +703,13 @@ describe("composeServer (integration)", () => {
       };
       await requestUntilMatchingId(ws, "s1", "pane.subscribe", { paneId: created.pane.id, scrollbackLines: 200 });
 
+      // 打ち込みの前に、pane のシェルが偽の `claude` を指すことを確かめる（違えば、実物を起動せずに落とす）。
+      await assertPaneResolvesFake({
+        write: (input) => ws.send(encodeInputFrame(created.pane.id, new TextEncoder().encode(input))),
+        name: "claude",
+        fakeDir: binDir,
+        scratchDir: stateDir,
+      });
       ws.send(encodeInputFrame(created.pane.id, new TextEncoder().encode("claude\n")));
 
       const event = await waitForEvent(

@@ -11,6 +11,7 @@ import type { AgentInfo } from "@sodashitsu/protocol";
 import { agentReportSocketPathFor, paneSocketPathFor } from "./config.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
+import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 
 /**
  * 20261004-subagent-display の T15。実物のフックのスクリプト（子プロセス。stdin にフックの入力・環境変数に `SODA_PANE_ID` と受け口のパス）→ 実 socket →
@@ -229,6 +230,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
         timeout: 10_000,
         interval: 50,
       });
+      await assertPaneResolvesFake({ write: (input) => server.terminals.get(paneId)!.write(input), name: "claude", fakeDir: join(dir, "bin"), scratchDir: dir });
     }
     async function typeClaude(server: ComposedServer, paneId: string): Promise<void> {
       const prev = agentOf(server, paneId)?.instanceId;

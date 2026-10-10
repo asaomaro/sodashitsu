@@ -35,3 +35,9 @@ export { PaneSocket, type PaneSocketDeps, type PaneSocketLimits } from "./paneso
 export { PaneOpRegistry, type PaneOpContext, type PaneOpDef } from "./panesocket/PaneOpRegistry.js";
 /** 表示の面の台帳（20261007-soda-extensions）。結合テストが、時計や id を差し替えて組み立てるのに使う。 */
 export { DisplayService, type DisplayClock, type DisplayServiceOptions } from "./display/DisplayService.js";
+
+/**
+ * 偽のエージェントを使う試験の守り（20261010-e2e-fake-agent）。pane のシェルが、PATH の先頭の偽の `claude` を指すことを、打ち込みの前に確かめる
+ * （利用者の rc が PATH を並べ替えて、実物の `claude` が起動するのを防ぐ）。
+ */
+export { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";

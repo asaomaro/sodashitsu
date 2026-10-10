@@ -8,6 +8,7 @@ import WebSocket from "ws";
 import type { AgentForkProgress } from "@sodashitsu/protocol";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
+import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 
 /**
  * 20261009-agent-fork の T2・T3。実物の `composeServer`（自前の一時 stateDir）・実 PTY の bash・偽の `claude` の上で、`agent.fork` の手順を確かめる。
@@ -158,6 +159,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     const marker = join(dir, `ready-${server.options.port}-${paneId}`);
     server.terminals.get(paneId)!.write(`touch ${JSON.stringify(marker)}\r`);
     await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 10_000, interval: 50 });
+    await assertPaneResolvesFake({ write: (input) => server.terminals.get(paneId)!.write(input), name: "claude", fakeDir: join(dir, "bin"), scratchDir: dir });
   }
   /** 元のエージェントを起動して、会話の id `A` が報告されるのを待つ。 */
   async function bootWithAgent(sessionId = A, extraBoot?: () => Promise<{ server: ComposedServer; stateDir: string; client: Client }>) {

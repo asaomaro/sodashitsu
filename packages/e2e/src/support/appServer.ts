@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { composeServer, type ComposedServer, type ImageFetcher } from "@sodashitsu/server";
@@ -49,11 +50,28 @@ async function login(origin: string, token: string): Promise<string> {
 /** 拡張（20261007-ext-host）の差し替えの口。`composeServer` の `internal.extensions` と同じ型（`timings` で起動し直しの間隔を縮める、など）。 */
 export type ExtensionsInternal = NonNullable<NonNullable<Parameters<typeof composeServer>[1]>["extensions"]>;
 
+/**
+ * pane のシェルを、**利用者の rc を読まない bash**（`--norc --noprofile`）にする包み（20261010-e2e-fake-agent）。製品の既定（利用者のシェルは rc を読む）は変えず、
+ * 試験の道具だけで差し替える。この機械の `~/.bashrc` は PATH の先頭へ `~/.local/bin`（実物の `claude`）を足し直すので、PATH の先頭に偽の `claude` を
+ * 置いた試験が、実物の Claude Code を起動してしまう。名前は `bash`（シェルの種類を名前で見分ける処理に合わせる）。bash が無い環境（Windows など）は null。
+ */
+async function rcLessShell(stateDir: string): Promise<string | null> {
+  if (process.platform === "win32" || !existsSync("/bin/bash")) return null;
+  const dir = join(stateDir, "test-shell");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "bash");
+  await writeFile(path, '#!/bin/sh\nexec /bin/bash --norc --noprofile "$@"\n');
+  await chmod(path, 0o755);
+  return path;
+}
+
 async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; extensions?: ExtensionsInternal }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
+  const shell = await rcLessShell(stateDir);
   const composed: ComposedServer = await composeServer({
     host: "127.0.0.1",
     port: String(port),
     stateDir,
+    ...(shell !== null ? { shell } : {}),
     // `exposed`: 外向きに公開した構成の対照（`--origin` つき＝リバースプロキシ・ポート転送の先。ask のメディアの上限を外さない）。
     origin: opts.exposed === true ? ["https://soda.example.test"] : [],
     ...(opts.scrollback !== undefined ? { scrollback: String(opts.scrollback) } : {}),
