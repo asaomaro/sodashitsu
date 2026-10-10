@@ -81,19 +81,18 @@ export interface CodexRecord {
  */
 export async function lookupCodexRecord(codexHome: string, id: string, maxDayDirs = MAX_DAY_DIRS): Promise<CodexRecord | null | undefined> {
   // 全体を時間切れで包む（探索の途中で止まったら「見つからない」＝付けない。確かめられない〔undefined〕にはしない）。
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), LOOKUP_TIMEOUT_MS);
-    timer.unref?.();
-  });
-  try {
-    return await Promise.race([lookupUnbounded(codexHome, id, maxDayDirs), timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
+  return withLookupTimeout(lookupUnbounded(codexHome, id, maxDayDirs), null);
 }
 
 async function lookupUnbounded(codexHome: string, id: string, maxDayDirs: number): Promise<CodexRecord | null | undefined> {
+  const file = await findUnbounded(codexHome, id, maxDayDirs);
+  if (typeof file !== "string") return file;
+  const head = await readHead(file, id);
+  return head === undefined ? null : head;
+}
+
+/** 日付のフォルダを新しい順に歩いて、会話の id の記録のファイルの場所を探す（読まない）。見つからなければ null。`sessions` が無ければ undefined。 */
+async function findUnbounded(codexHome: string, id: string, maxDayDirs: number): Promise<string | null | undefined> {
   if (!isCodexSessionId(id)) return null;
   const root = join(codexHome, "sessions");
   const years = await subdirs(root);
@@ -107,13 +106,62 @@ async function lookupUnbounded(codexHome: string, id: string, maxDayDirs: number
         const dir = join(root, y, m, d);
         const names = await readdir(dir).catch(() => [] as string[]);
         const hit = names.find((n) => n.startsWith("rollout-") && n.toLowerCase().endsWith(wanted));
-        if (hit === undefined) continue;
-        const head = await readHead(join(dir, hit), id);
-        return head === undefined ? null : head;
+        if (hit !== undefined) return join(dir, hit);
       }
     }
   }
   return null;
+}
+
+/** 全体を時間切れで包む（`lookupCodexRecord` と同じ）。 */
+async function withLookupTimeout<T>(work: Promise<T>, onTimeout: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(onTimeout), LOOKUP_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * 会話の id の記録のファイルの場所（読まない）。**`lookupCodexRecord` と同じ歩き方・同じ上限・同じ時間切れ**（利用状況が、記録の末尾を読むために使う。
+ * 20261010-agent-usage）。見つからない・時間切れは null、`sessions` が無ければ undefined。場所を見つけただけで、読む側が、通常のファイル・リンク 1 つを確かめて開く。
+ */
+export async function findCodexRecordFile(codexHome: string, id: string, maxDayDirs = MAX_DAY_DIRS): Promise<string | null | undefined> {
+  return withLookupTimeout(findUnbounded(codexHome, id, maxDayDirs), null);
+}
+
+/**
+ * 記録のファイルを、**新しい日付のフォルダから**数件だけ集める（総当たりしない。`maxDayDirs` と `maxFiles` の上限・時間切れつき）。名前（`rollout-<日時>-<id>.jsonl`）の
+ * 新しい順。アカウント全体の制限の枠を、いちばん新しい記録から取るために使う。`sessions` が無ければ空。
+ */
+export async function newestCodexRecordFiles(codexHome: string, maxFiles = 12, maxDayDirs = 14): Promise<string[]> {
+  const walk = async (): Promise<string[]> => {
+    const root = join(codexHome, "sessions");
+    const years = await subdirs(root);
+    if (years === undefined) return [];
+    const out: string[] = [];
+    let visited = 0;
+    for (const y of years.filter((n) => /^\d{4}$/.test(n)).sort().reverse()) {
+      for (const m of ((await subdirs(join(root, y))) ?? []).filter((n) => /^\d{2}$/.test(n)).sort().reverse()) {
+        for (const d of ((await subdirs(join(root, y, m))) ?? []).filter((n) => /^\d{2}$/.test(n)).sort().reverse()) {
+          if (visited++ >= maxDayDirs) return out;
+          const dir = join(root, y, m, d);
+          const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.startsWith("rollout-") && n.endsWith(".jsonl")).sort().reverse();
+          for (const n of names) {
+            out.push(join(dir, n));
+            if (out.length >= maxFiles) return out;
+          }
+        }
+      }
+    }
+    return out;
+  };
+  return withLookupTimeout(walk(), []);
 }
 
 /** 通常のディレクトリ（リンクでない）の名前。読めなければ undefined。 */

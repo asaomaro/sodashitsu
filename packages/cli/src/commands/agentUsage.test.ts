@@ -36,4 +36,30 @@ describe("formatUsageTable（20261010-agent-usage）", () => {
     const t = formatUsageTable({ panes: { "p": { ...result.panes["aaaaaaaa-1111"]!, paneId: "p" } }, accounts: [] }, new Map([["p", "evil\u001b[2Jname"]]), now);
     expect(t).not.toContain("\u001b");
   });
+
+  it("アカウントの枠: プラン・枠のラベル・リセットを過ぎた枠は古い印（20261010-agent-usage の Codex）", () => {
+    const r: AgentUsageResult = {
+      panes: {},
+      accounts: [
+        {
+          kind: "codex",
+          accountKey: "k",
+          label: "codex",
+          plan: "pro",
+          windows: [
+            { label: "5 時間", usedPct: 42, resetsAt: now + 3_600_000 },
+            { label: "週", usedPct: 17, resetsAt: now - 60_000, stale: true },
+          ],
+          source: "rollout",
+          asOf: now - 120_000,
+        },
+      ],
+    };
+    const t = formatUsageTable(r, new Map(), now);
+    expect(t).toContain("codex（pro）");
+    expect(t).toContain("5 時間");
+    expect(t).toContain("42%");
+    expect(t).toContain("17%（古い）");
+    expect(t).toContain("過ぎた");
+  });
 });
