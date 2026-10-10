@@ -360,11 +360,20 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
           参照を捨てる（履歴には一つ前として残す。ログに `agent session dropped (a different agent started without reporting)`）。
         - **フックのスクリプトが新しくなった**ので、導入済みの利用者は設定の「エージェント連携」が「更新が必要」になる。押したときだけ書き換える。
           更新するまでは pid が付かず、今までどおりの受け方になる（取り違えは防げない）。
-        - **Codex の今の限界**：Codex 0.162 はフックを pane の中ではなく、常駐の app-server daemon の中で動かし、daemon の環境の `SODA_PANE_ID` は
-          最初に daemon を起動した pane のものになる。この変更で、別の pane の参照を上書きしなくなった（daemon はどの pane の前面にも居ない）が、
-          **正しい pane にも付かない**（Codex の会話は再起動で再開されない。今までと同じ。上書きの害だけが消える）。手当て：Codex を使う最初の
-          pane が daemon の環境を決めるので、daemon を止めて、使う pane で `codex` を起動し直す。2 つ目以降の pane は付かない。
-          正しい pane に付ける案（終了の文言 `codex resume <id>` を画面から拾う・daemon の接続の突き合わせ）は別の作業。
+        - **Codex（20261009-agent-session-attribution の S1）**：Codex 0.162 はフックを pane の中ではなく、常駐の app-server daemon の中で動かす
+          （daemon の環境の `SODA_PANE_ID` は、最初に daemon を起動した pane のもの。報告したプロセスは、どの pane のシェルの子孫でもない）。
+          この報告は、次の**全部**を満たすときだけ、報告の pane に付ける：その pane に前面の `codex` が検出されている・**サーバ全体で、前面の `codex` が
+          その 1 つだけ**・報告の `cwd`（フックの入力の作業フォルダ）がその pane の場所と同じ（Sodashitsu の外で動いた、同じ daemon を使う
+          VS Code などの会話を取り違えないため。`cwd` の無い古いフックの報告は、この道では受けない）。
+          結果：**Codex の pane が 1 つなら、今までどおり再開される。2 つ以上あると、どれにも付かない**（別の pane を上書きしない代わりに、再開もされない）。
+          複数の pane で Codex を使う人の手当ては無い（daemon の環境は変えられない）。正しい pane に付ける案（終了の文言 `codex resume <id>` を
+          画面から拾う・daemon の接続の突き合わせ）は別の作業。
+        - 前面のエージェントは居るが、報告した pid が含まれないとき（終わって、すぐ別のエージェントが報告した、など）は、前面の記録が古いだけかもしれないので、
+          次の 2 回の判定まで保留して確かめ直し、それでも含まれなければ捨てる（S2）。期限（15 秒）・停止で「確かめずに受ける」前に、報告したプロセスが
+          まだ居るかを見て、終わっていれば捨てる（S3。ログ `the reporting process had already exited`）。
+        - 報告にフックの入力の `source` と `cwd` を載せる。`source` が `clear`（利用者が会話を消した）のとき、前の会話を「一つ前」に積まない
+          （再開の失敗で、消した会話に戻らないため。S4）。
+        - 親子の情報（`ppid`）が取れない環境（Windows）では、報告した pid が前面のエージェントに含まれるかは確かめない（種類とシェルの子孫の確かめだけ。S5）。
       - 復元のたびに、pane ごとにログが 1 行出る：`agent resume command written`（種類と会話 id の先頭 8 文字）か、
         `agent resume skipped`（`reason`: `no-session-ref`・`auto-resume-disabled`・`no-command-for-kind`・`invalid-session-id`）。
         再開されなかった pane の理由は、ここで分かる。判定の失敗（`agent judgment failed`）は、同じ pane・同じ理由が続くときは
