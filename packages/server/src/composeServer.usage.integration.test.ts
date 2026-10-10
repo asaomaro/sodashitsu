@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
+import { connect as netConnect } from "node:net";
+import { agentReportSocketPathFor } from "./config.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
 
@@ -252,5 +254,22 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     expect((await client.request("agent.usage", { paneId })).result.panes[paneId].tokens.output).toBe(10);
     await writeFile(f, assistant("m1", 10) + assistant("m2", 5));
     await vi.waitFor(async () => expect((await client.request("agent.usage", { paneId })).result.panes[paneId].tokens.output).toBe(15), { timeout: 10_000, interval: 500 });
+  });
+
+  it("捨てた報告の記録の場所は覚えない: 同じ会話の id で、シェルの子孫でない報告（別の写しを指す）が来ても、読まれるのは受け入れた報告の場所（U1）", async () => {
+    const { server, client, paneId } = await boot();
+    const real = await writeRecord(assistant("real", 5), "proj-a");
+    await runAgent(server, paneId, { FAKE_SESSION_ID: SID, FAKE_TRANSCRIPT: real });
+    // 別のプロジェクトにある、同じ名前の別の写し（数字が違う）。
+    const copy = await writeRecord(assistant("copy", 4242), "proj-b");
+    // 偽の報告: 会話の id は同じ・pid はシェルの子孫でない（このテストのプロセス）・場所は別の写し。受け入れられない。
+    await new Promise<void>((resolve, reject) => {
+      const c = netConnect(agentReportSocketPathFor(server.options.stateDir), () => c.end(JSON.stringify({ paneId, kind: "claude", sessionId: SID, agentPid: process.pid, transcriptPath: copy }) + "\n"));
+      c.on("close", () => resolve());
+      c.on("error", reject);
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    const u = (await client.request("agent.usage", { paneId })).result.panes[paneId];
+    expect(u.tokens.output).toBe(5); // 別の写し（4242）ではない
   });
 });

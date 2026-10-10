@@ -23,8 +23,10 @@ export interface UsageAdapter {
   usageFor(source: UsageSourceInfo): Promise<Omit<AgentUsage, "paneId" | "kind"> | null>;
   /** アカウント全体（制限の枠）。無ければ空。 */
   accounts?(): Promise<AccountUsage[]>;
-  /** その pane の状態を捨てる（pane が閉じた・会話が替わった）。 */
+  /** その pane の状態を捨てる（pane が閉じた・会話が替わった）。走っている読みも止める。 */
   forget?(paneId: string): void;
+  /** サーバが止まる処理。全部の読みを止める。 */
+  close?(): void;
 }
 
 export interface UsageServiceDeps {
@@ -48,11 +50,19 @@ export class UsageService {
 
   /** フックの `session` の報告の記録の場所を覚える（pane ごとに最新の 1 件）。使うとき、アダプタが確かめる。 */
   noteTranscript(paneId: string, sessionId: string, path: string | undefined): void {
-    if (path === undefined) return;
     this.transcripts.delete(paneId);
+    if (path === undefined) return; // 場所の無い報告が受け入れられた: 前の場所は、もう使わない
     this.transcripts.set(paneId, { sessionId, path });
     while (this.transcripts.size > TRANSCRIPT_NOTES_MAX) this.transcripts.delete(this.transcripts.keys().next().value as string);
   }
+
+  /** サーバが止まる処理: 以後は何も読まず、走っている読みも止める。 */
+  close(): void {
+    this.closed = true;
+    this.transcripts.clear();
+    for (const a of this.adapters.values()) a.close?.();
+  }
+  private closed = false;
 
   /** pane が閉じた。 */
   forgetPane(paneId: string): void {
@@ -62,6 +72,7 @@ export class UsageService {
 
   /** `paneId` を省くと、利用状況を取れる全部の pane。 */
   async get(paneId?: string): Promise<AgentUsageResult> {
+    if (this.closed) return { panes: {}, accounts: [] };
     const panes: Pane[] = paneId !== undefined ? [this.deps.session.getPane(paneId)].filter((p): p is Pane => p !== undefined) : this.deps.session.snapshot().panes;
     const out: Record<string, AgentUsage | null> = {};
     if (paneId !== undefined) out[paneId] = null;

@@ -60,15 +60,19 @@ export interface ScanLimits {
   chunkBytes: number;
   maxInitialBytes: number;
   lineMaxBytes: number;
+  /** 1 つの会話の走査で、生涯（書き換えでの数え直しをまたいで）に読む量の上限。 */
+  readTotalMax: number;
 }
-const DEFAULT_LIMITS: ScanLimits = { chunkBytes: CHUNK_BYTES, maxInitialBytes: MAX_INITIAL_BYTES, lineMaxBytes: LINE_MAX_BYTES };
+const DEFAULT_LIMITS: ScanLimits = { chunkBytes: CHUNK_BYTES, maxInitialBytes: MAX_INITIAL_BYTES, lineMaxBytes: LINE_MAX_BYTES, readTotalMax: READ_TOTAL_MAX_BYTES };
 
 export type AdvanceResult = { more: boolean; reset: boolean };
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
 
+/** モデルの id の形: 先頭が英数字で、英数字と `.`・`_`・`-`・`:` と、末尾の `[1m]` の類だけ（`/`・`..` 始まり・空白は通さない）。 */
+const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*(\[[A-Za-z0-9]{1,8}\])?$/;
 function safeModel(v: unknown): string | null {
-  if (typeof v !== "string" || v === "" || v.length > MODEL_MAX || !/^[A-Za-z0-9._:/@[\]-]+$/.test(v)) return null;
+  if (typeof v !== "string" || v.length > MODEL_MAX || !MODEL_RE.test(v)) return null;
   return v;
 }
 
@@ -83,15 +87,32 @@ export class ClaudeSessionScan {
   private lastTs = 0;
   /** 一部しか読めていない（大きな記録の末尾だけ・サブエージェントのファイルの数の上限）。 */
   partial = false;
-  private readTotal = 0;
+  private readTotal: number;
+  /** 生涯の読む量の上限に達した（その会話の更新を止めた）。 */
+  stopped = false;
 
   private readonly lim: ScanLimits;
 
+  /**
+   * `carriedRead`: 数え直し（記録が書き換えられて、新しい集計に替えるとき）の前の集計が読んだ量。**引き継ぐ**ので、書き換えを繰り返しても、
+   * 生涯の上限が効かなくならない（20261010-agent-usage の R5）。
+   */
   constructor(
     private readonly sessionId: string,
     limits: Partial<ScanLimits> = {},
+    carriedRead = 0,
   ) {
     this.lim = { ...DEFAULT_LIMITS, ...limits };
+    this.readTotal = carriedRead;
+    if (this.readTotal >= this.lim.readTotalMax) {
+      this.stopped = true;
+      this.partial = true;
+    }
+  }
+
+  /** ここまでに（引き継ぎを含めて）読んだ量。 */
+  get bytesRead(): number {
+    return this.readTotal;
   }
 
   /** ファイルを足す（すでにあれば何もしない）。 */
@@ -101,19 +122,21 @@ export class ClaudeSessionScan {
   }
 
   /** 全部のファイルを、上限の範囲で進める。 */
-  async advance(budgetBytes: number = BYTES_PER_ADVANCE): Promise<AdvanceResult> {
-    if (this.readTotal >= READ_TOTAL_MAX_BYTES) {
+  async advance(budgetBytes: number = BYTES_PER_ADVANCE, shouldStop: () => boolean = () => false): Promise<AdvanceResult> {
+    if (this.readTotal >= this.lim.readTotalMax) {
       this.partial = true;
+      this.stopped = true;
       return { more: false, reset: false };
     }
     let left = budgetBytes;
     let more = false;
     for (const cur of this.files.values()) {
+      if (shouldStop()) return { more: false, reset: false };
       if (left <= 0) {
         more = true;
         break;
       }
-      const r = await this.advanceFile(cur, left);
+      const r = await this.advanceFile(cur, left, shouldStop);
       if (r.reset) return { more: false, reset: true };
       left -= r.read;
       this.readTotal += r.read;
@@ -122,7 +145,7 @@ export class ClaudeSessionScan {
     return { more, reset: false };
   }
 
-  private async advanceFile(cur: FileCursor, budget: number): Promise<{ read: number; more: boolean; reset: boolean }> {
+  private async advanceFile(cur: FileCursor, budget: number, shouldStop: () => boolean): Promise<{ read: number; more: boolean; reset: boolean }> {
     let opened;
     try {
       opened = await openVerified(cur.path);
@@ -146,7 +169,7 @@ export class ClaudeSessionScan {
           cur.offset = skip;
         }
       }
-      while (cur.offset < size && read < budget) {
+      while (cur.offset < size && read < budget && !shouldStop()) {
         const want = Math.min(this.lim.chunkBytes, size - cur.offset);
         let buf = await readRange(fd, cur.offset, want);
         let nl = buf.lastIndexOf(0x0a);

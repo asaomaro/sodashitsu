@@ -1,4 +1,4 @@
-import { readdir, realpath } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { isNotFound, lstatRegular, realRootsOf, underRoot } from "../agent/safeFile.js";
@@ -39,9 +39,13 @@ async function verifyCandidate(candidate: string, sessionId: string, realRoots: 
   return (await lstatRegular(file)) === "ok" ? file : null;
 }
 
-/** 根の下を、会話の id の名前で探す（上限つき）。 */
+/**
+ * 根の下を、会話の id の名前で探す（上限つき）。**同じ id が複数のプロジェクトにあるとき（cwd をまたいで再開すると複製ができる）は、更新の時刻が新しいほう**
+ * （20261010-agent-usage の R2）。上限（`PROJECT_DIRS_MAX`）を超えるフォルダがあると、残りは探さない（R6。記録の無い、と同じ扱い）。
+ */
 async function searchRoots(sessionId: string, realRoots: readonly string[]): Promise<string | null> {
   let budget = PROJECT_DIRS_MAX;
+  let best: { file: string; mtime: number } | null = null;
   for (const root of realRoots) {
     let names: string[];
     try {
@@ -50,17 +54,23 @@ async function searchRoots(sessionId: string, realRoots: readonly string[]): Pro
       continue;
     }
     for (const name of names) {
-      if (budget-- <= 0) return null;
+      if (budget-- <= 0) return best?.file ?? null;
       if (name.includes(sep) || name === "." || name === "..") continue;
       const file = join(root, name, `${sessionId}.jsonl`);
-      if ((await lstatRegular(file)) === "ok") {
-        // 実体のフォルダが根の直下であることを、もう一度（リンクのフォルダを通らない）。
-        const dir = await realpath(dirname(file)).catch(() => null);
-        if (dir !== null && underRoot(dir, [root]) !== null && dir.slice(root.length + 1).split(sep).length === 1) return join(dir, `${sessionId}.jsonl`);
+      let st;
+      try {
+        st = await lstat(file);
+      } catch {
+        continue;
       }
+      if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1) continue;
+      // 実体のフォルダが根の直下であることを、もう一度（リンクのフォルダを通らない）。
+      const dir = await realpath(dirname(file)).catch(() => null);
+      if (dir === null || underRoot(dir, [root]) === null || dir.slice(root.length + 1).split(sep).length !== 1) continue;
+      if (best === null || st.mtimeMs > best.mtime) best = { file: join(dir, `${sessionId}.jsonl`), mtime: st.mtimeMs };
     }
   }
-  return null;
+  return best?.file ?? null;
 }
 
 export interface ClaudeFiles {

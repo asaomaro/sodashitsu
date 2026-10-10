@@ -178,6 +178,8 @@ export interface AgentReportContext {
   cwd?: string | undefined;
   /** 会話が始まった理由（`startup`・`resume`・`clear`・`compact`・`fork`）。`clear` のときは、前の参照を履歴に積まない。 */
   source?: string | undefined;
+  /** 会話の記録の場所（フックの入力の `transcript_path`。信用しない）。受け入れられた報告のものだけが、`onReportAccepted` の聞き手へ渡る（利用状況。20261010-agent-usage）。 */
+  transcriptPath?: string | undefined;
 }
 
 /** 場所の比較（末尾の区切りの違いだけを許す。大文字小文字・シンボリックリンクは解決しない）。 */
@@ -1491,6 +1493,15 @@ export class SessionService {
     return this.model.agentSessionHistory(paneId);
   }
 
+  /**
+   * 会話の参照の報告が**受け入れられた**とき（保留の後で受けた場合も。捨てた報告・別の pane の報告・子のエージェントの報告は呼ばれない）に呼ぶ聞き手を足す。
+   * 利用状況（20261010-agent-usage）が、受け入れた報告の記録の場所だけを覚えるのに使う。聞き手が投げても、受け入れは変わらない。
+   */
+  onReportAccepted(listener: (paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext) => void): void {
+    this.reportAcceptedListeners.push(listener);
+  }
+  private readonly reportAcceptedListeners: ((paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext) => void)[] = [];
+
   private applyReportedSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext = {}): void {
     const pane = this.model.getPane(paneId);
     if (!pane) return;
@@ -1505,6 +1516,13 @@ export class SessionService {
     else this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
     this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
     this.persist.touch();
+    for (const l of this.reportAcceptedListeners) {
+      try {
+        l(paneId, kind, sessionId, ctx);
+      } catch {
+        // 聞き手の失敗で、受け入れを壊さない。
+      }
+    }
   }
 
   private pushHistory(paneId: PaneId, ref: AgentSessionRef): void {

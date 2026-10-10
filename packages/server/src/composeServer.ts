@@ -490,6 +490,9 @@ export async function composeServer(
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（今は Claude Code）。pane が閉じたら、その pane の集計を捨てる。
   const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter()], logger });
+  // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
+  // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
+  session.onReportAccepted((paneId, _kind, sessionId, ctx) => usage.noteTranscript(paneId, sessionId, ctx.transcriptPath));
   const usageSub = bus.subscribe((e) => {
     if (e.event === "pane.closed") usage.forgetPane(e.data.paneId);
   });
@@ -773,9 +776,7 @@ export async function composeServer(
           (report) => {
             if (report.type === "session") {
               // 連携の kind の全部（20261007-agent-hook-drift research X1）。報告したプロセスの確かめは `reportAgentSession` の中（20261009-agent-session-attribution）。
-              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source });
-              // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる。20261010-agent-usage）。
-              usage.noteTranscript(report.paneId, report.sessionId, report.transcriptPath);
+              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source, transcriptPath: report.transcriptPath });
             } else if (report.kind === "claude") {
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
@@ -878,6 +879,7 @@ export async function composeServer(
         graphEngine.stop();
         lineage.close();
         usageSub.dispose();
+        usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
@@ -914,6 +916,7 @@ export async function composeServer(
         graphEngine.stop();
         lineage.close();
         usageSub.dispose();
+        usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();

@@ -65,6 +65,8 @@ export interface AgentUsage {
   partial?: boolean;
   /** まだ記録を読んでいる途中（次に呼ぶと、増える）。 */
   scanning?: boolean;
+  /** この会話の記録を読む量の生涯の上限に達したので、**更新を止めた**（数字は止まった時点のもの。`partial` も付く）。 */
+  updatesStopped?: boolean;
 }
 
 /** アカウント全体の、制限の 1 つの枠。 */
