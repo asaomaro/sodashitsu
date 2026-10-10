@@ -88,7 +88,7 @@ const ID_C = "01a12326-c9f9-7773-8000-6bde9e00ac25";
 describe("SessionService — Codex の複数の pane の会話の参照", () => {
   let service: SessionService;
   let logger: MemoryLogger;
-  let records: Record<string, { cwd: string | null } | null | undefined>;
+  let records: Record<string, { cwd: string | null; originator: string | null } | null | undefined>;
   let lookups: string[];
   let now: number;
 
@@ -171,15 +171,14 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
       expect(refOf("p1")?.sessionId).toBe(ID_B);
     });
 
-    it("引数の id は、報告より優先する: 引数のある pane には、別の id の daemon の報告は付かない（複数の pane）", async () => {
+    it("引数の id は、入力の裏づけの無い別の id の daemon の報告より優先する（複数の pane）", async () => {
       detectCodex("p1", 100, ID_A);
       detectCodex("p2", 200);
-      submits.set("p1", Date.now() - 500);
-      records[ID_B] = { cwd: "/r" };
+      records[ID_B] = { cwd: "/r", originator: "codex-tui" };
       resident(ID_B);
       await flush();
       expect(refOf("p1")?.sessionId).toBe(ID_A);
-      expect(refOf("p2")).toBeNull(); // p2 は最初の入力が無い
+      expect(refOf("p2")).toBeNull(); // どちらにも最初の入力が無い
     });
   });
 
@@ -190,7 +189,7 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
     });
 
     it("(a) 片方が最初の入力を送った直後の報告は、その pane に付く（報告の paneId が別の pane でも）。検算の記録を見る", async () => {
-      records[ID_A] = { cwd: "/r" };
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
       submits.set("p2", Date.now() - 400);
       service.reportAgentSession("p1", "codex", ID_A, DAEMON, { cwd: "/r", source: "startup" }); // 報告の paneId は p1（daemon を起動した pane）
       await flush();
@@ -201,8 +200,8 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
     });
 
     it("(a') 続けて、もう片方が送って報告が届けば、それぞれに正しい id が付く", async () => {
-      records[ID_A] = { cwd: "/r" };
-      records[ID_B] = { cwd: "/r" };
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
+      records[ID_B] = { cwd: "/r", originator: "codex-tui" };
       submits.set("p2", Date.now() - 300);
       resident(ID_A);
       await flush();
@@ -214,7 +213,7 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
     });
 
     it("(b) ほぼ同時に両方が送ったら、どちらにも付けない", async () => {
-      records[ID_A] = { cwd: "/r" };
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
       submits.set("p1", Date.now() - 500);
       submits.set("p2", Date.now() - 800);
       resident(ID_A);
@@ -225,7 +224,7 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
     });
 
     it("入力が窓（6 秒）より前なら付けない。入力が一度も無い pane にも付けない", async () => {
-      records[ID_A] = { cwd: "/r" };
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
       submits.set("p2", Date.now() - 20_000);
       resident(ID_A);
       await flush();
@@ -234,7 +233,7 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
     });
 
     it("(c) Sodashitsu の外の Codex（cwd が違う）の報告は、直前に入力のあった pane にも付かない", async () => {
-      records[ID_A] = { cwd: "/elsewhere" };
+      records[ID_A] = { cwd: "/elsewhere", originator: "codex-tui" };
       submits.set("p2", Date.now() - 300);
       resident(ID_A, "/elsewhere");
       await flush();
@@ -249,7 +248,7 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
       await flush();
       expect(refOf("p2")).toBeNull();
       expect(String(logs("agent report ignored").at(-1)!.fields?.["reason"])).toContain("no session record");
-      records[ID_B] = { cwd: "/other" };
+      records[ID_B] = { cwd: "/other", originator: "codex-tui" };
       resident(ID_B);
       await flush();
       expect(refOf("p2")).toBeNull();
@@ -260,15 +259,56 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
       expect(String(logs("agent report ignored").at(-1)!.fields?.["reason"])).toContain("could not be checked");
     });
 
-    it("すでに別の参照のある pane は候補にしない（別の pane が 1 つだけなら、そちらに付く）", async () => {
+    it("（レビュー指摘 2）pane の TUI（originator: codex-tui）が始めた会話だけを付ける: codex_exec・リモート・VS Code の拡張などの会話は付けない（sole-codex でも）", async () => {
+      submits.set("p2", Date.now() - 300);
+      for (const originator of ["codex_exec", "codex_chatgpt_android_remote", "codex_cli_rs", null]) {
+        records[ID_A] = { cwd: "/r", originator };
+        resident(ID_A);
+        await flush();
+        expect(refOf("p2")).toBeNull();
+      }
+      service.setFrontAgent("p1", null); // p2 だけが codex（sole-codex の道）
+      for (const originator of ["codex_exec", null]) {
+        records[ID_A] = { cwd: "/r", originator };
+        resident(ID_A);
+        await flush();
+        expect(refOf("p2")).toBeNull();
+      }
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
+      resident(ID_A);
+      await flush();
+      expect(refOf("p2")?.sessionId).toBe(ID_A);
+    });
+
+    it("（レビュー指摘 5）参照のある pane（引数で付いた）が /new で会話を替えたら、新しい会話に付け替える。前の参照は一つ前へ", async () => {
+      detectCodex("p1", 100, ID_C, "i-p1-resumed");
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
+      submits.set("p1", Date.now() - 300);
+      resident(ID_A);
+      await flush();
+      expect(refOf("p1")?.sessionId).toBe(ID_A);
+      expect(service.agentSessionHistoryOf("p1").map((h) => h.sessionId)).toEqual([ID_C]);
+    });
+
+    it("（レビュー指摘 5）報告の会話が、ほかの pane の今の参照と同じなら、付けない（その会話は、そちらのもの）", async () => {
+      detectCodex("p2", 200, ID_A, "i-p2-resumed"); // p2 の参照は ID_A
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
+      submits.set("p1", Date.now() - 300);
+      resident(ID_A);
+      await flush();
+      expect(refOf("p1")).toBeNull();
+      expect(refOf("p2")?.sessionId).toBe(ID_A);
+    });
+
+    it("すでに別の参照のある pane も候補にする。入力の窓に両方の pane が入れば、どちらにも付けない", async () => {
       detectCodex("p1", 100, ID_C, "i-p1-resumed"); // 引数の参照（codex resume <id> で立ち上がり直した）
-      records[ID_A] = { cwd: "/r" };
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
       submits.set("p1", Date.now() - 300);
       submits.set("p2", Date.now() - 300);
       resident(ID_A);
       await flush();
       expect(refOf("p1")?.sessionId).toBe(ID_C);
-      expect(refOf("p2")?.sessionId).toBe(ID_A);
+      expect(refOf("p2")).toBeNull();
     });
   });
 
@@ -283,7 +323,7 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
 
     it("記録があって cwd が違うなら付けない。cwd の無い報告は付けない", async () => {
       detectCodex("p1", 100);
-      records[ID_A] = { cwd: "/other" };
+      records[ID_A] = { cwd: "/other", originator: "codex-tui" };
       resident(ID_A);
       service.reportAgentSession("p1", "codex", ID_B, DAEMON, { source: "startup" }); // cwd が無い古い報告
       await flush();
@@ -297,27 +337,51 @@ describe("SessionService — Codex の複数の pane の会話の参照", () => 
     it("終了の文言の id を、その pane の会話にする（時刻の一致で付いたものを、打ち消す）。前の参照は一つ前に残る", async () => {
       detectCodex("p1", 100);
       detectCodex("p2", 200);
-      records[ID_A] = { cwd: "/r" };
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
       submits.set("p1", Date.now() - 300);
       resident(ID_A);
       await flush();
       expect(refOf("p1")?.sessionId).toBe(ID_A);
+      records[ID_B] = { cwd: "/r", originator: "codex-tui" };
       screens.set("p1", EXIT(ID_B));
       goneCodex("p1");
+      await flush();
       expect(refOf("p1")?.sessionId).toBe(ID_B);
       expect(service.agentSessionHistoryOf("p1").map((h) => h.sessionId)).toEqual([ID_A]);
       expect(logs("agent session attached").at(-1)!.fields).toMatchObject({ paneId: "p1", source: "exit-text" });
     });
 
-    it("参照が無かった pane にも付く。検出の時点で画面にあった文言（前の実行のもの）は拾わない", () => {
+    it("参照が無かった pane にも付く。検出の時点で画面にあった文言（前の実行のもの）は拾わない", async () => {
+      records[ID_A] = { cwd: "/r", originator: "codex-tui" };
+      records[ID_C] = { cwd: "/r", originator: "codex-tui" };
       screens.set("p1", EXIT(ID_C)); // 前の実行の終了の文言が残っている
       detectCodex("p1", 100);
       goneCodex("p1"); // 今回は、文言を出さずに終わった（kill など）
+      await flush();
       expect(refOf("p1")).toBeNull();
       detectCodex("p1", 101, undefined, "i-second");
       screens.set("p1", EXIT(ID_C) + "\n" + EXIT(ID_A));
       goneCodex("p1");
+      await flush();
       expect(refOf("p1")?.sessionId).toBe(ID_A);
+    });
+
+    it("（レビュー指摘 1）画面の文言は誰でも出せるので、記録で検算する: 記録が無い・cwd が違う・別の道具の記録・確かめられないときは付けず、直前の参照を残す", async () => {
+      detectCodex("p1", 100, ID_A);
+      for (const [id, rec] of [
+        [ID_B, null],
+        [ID_C, { cwd: "/elsewhere", originator: "codex-tui" }],
+        ["01a12399-aaaa-7aaa-8aaa-aaaaaaaaaaaa", { cwd: "/r", originator: "codex_exec" }],
+        ["01a12399-bbbb-7bbb-8bbb-bbbbbbbbbbbb", undefined],
+      ] as const) {
+        records[id] = rec as never;
+        screens.set("p1", EXIT(id));
+        goneCodex("p1");
+        await flush();
+        expect(refOf("p1")?.sessionId).toBe(ID_A);
+        detectCodex("p1", 100, undefined, `i-${id}`);
+      }
+      expect(logs("agent report ignored").filter((l) => String(l.fields?.["reason"]).includes("exit text not used")).length).toBe(4);
     });
   });
 

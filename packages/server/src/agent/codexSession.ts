@@ -1,3 +1,4 @@
+import { constants as fsConstants } from "node:fs";
 import { open, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -44,65 +45,97 @@ export function codexExitSessionId(text: string): string | undefined {
   return last;
 }
 
-/** 記録の先頭から読む量（先頭の 1 行は 20 KiB を超えるが、id・cwd は先頭の数百バイトにある）。 */
+/** 記録の先頭から読む量（先頭の 1 行は 20 KiB を超えるが、id・cwd・originator は先頭の数百バイトにある。実測の最大は 480 バイト付近）。 */
 const HEAD_BYTES = 8192;
-/** 記録を探すときに見る日付のフォルダの上限（新しい順）。 */
-const MAX_DAY_DIRS = 400;
+/** 記録を探すときに見る日付のフォルダの上限（新しい順に、見つかったら止める）。 */
+export const MAX_DAY_DIRS = 400;
+/** 記録を 1 件読む時間の上限（FIFO・止まった fs で、固まらないため）。 */
+const READ_TIMEOUT_MS = 1_000;
 
 export interface CodexRecord {
   /** 記録の `cwd`（読めなければ null）。 */
   cwd: string | null;
+  /**
+   * 記録の `originator`（会話を始めた道具。pane の TUI は `codex-tui`。`codex_exec`・`codex_cli_rs`・`codex_chatgpt_android_remote` などは別。
+   * 読めなければ null）。`source` は、pane の TUI でも環境（`TERM_PROGRAM=vscode`）で `vscode` になるので使えない。
+   */
+  originator: string | null;
 }
 
 /**
- * 会話の id の記録を探して、先頭の `cwd` を返す。無ければ null。`codexHome` の下の `sessions` だけを見る（読むだけ）。
+ * 会話の id の記録を探して、先頭の `cwd`・`originator` を返す。無ければ null。`codexHome` の下の `sessions` だけを見る（読むだけ）。
  * `sessions` が無い（Codex を使っていない・場所が違う）ときは undefined（確かめられない）。id は UUID の形だけを受ける。
+ * 日付のフォルダは新しい順に、見つかったら止める。`maxDayDirs` で、見るフォルダの数を縮められる（再試行は、最近の数日だけでよい）。
+ * 読み方は、リンクを辿らず・通常のファイルだけ・時間切れつき（#126 の `SubagentTranscript` と同じ守り）。
  */
-export async function lookupCodexRecord(codexHome: string, id: string): Promise<CodexRecord | null | undefined> {
+export async function lookupCodexRecord(codexHome: string, id: string, maxDayDirs = MAX_DAY_DIRS): Promise<CodexRecord | null | undefined> {
   if (!isCodexSessionId(id)) return null;
   const root = join(codexHome, "sessions");
-  const years = await readdir(root).catch(() => undefined);
+  const years = await subdirs(root);
   if (years === undefined) return undefined;
   const wanted = `-${id.toLowerCase()}.jsonl`;
-  const days: string[] = [];
+  let visited = 0;
   for (const y of years.filter((n) => /^\d{4}$/.test(n)).sort().reverse()) {
-    for (const m of (await readdir(join(root, y)).catch(() => [])).filter((n) => /^\d{2}$/.test(n)).sort().reverse()) {
-      for (const d of (await readdir(join(root, y, m)).catch(() => [])).filter((n) => /^\d{2}$/.test(n)).sort().reverse()) {
-        days.push(join(root, y, m, d));
-        if (days.length >= MAX_DAY_DIRS) break;
+    for (const m of ((await subdirs(join(root, y))) ?? []).filter((n) => /^\d{2}$/.test(n)).sort().reverse()) {
+      for (const d of ((await subdirs(join(root, y, m))) ?? []).filter((n) => /^\d{2}$/.test(n)).sort().reverse()) {
+        if (visited++ >= maxDayDirs) return null;
+        const dir = join(root, y, m, d);
+        const names = await readdir(dir).catch(() => [] as string[]);
+        const hit = names.find((n) => n.startsWith("rollout-") && n.toLowerCase().endsWith(wanted));
+        if (hit === undefined) continue;
+        const head = await readHead(join(dir, hit), id);
+        return head === undefined ? null : head;
       }
-      if (days.length >= MAX_DAY_DIRS) break;
     }
-    if (days.length >= MAX_DAY_DIRS) break;
-  }
-  for (const dir of days) {
-    const names = await readdir(dir).catch(() => [] as string[]);
-    const hit = names.find((n) => n.startsWith("rollout-") && n.toLowerCase().endsWith(wanted));
-    if (hit === undefined) continue;
-    const head = await readHeadCwd(join(dir, hit), id);
-    return head === undefined ? null : { cwd: head };
   }
   return null;
 }
 
-/** 先頭の `cwd`。`id` が合わない・読めない記録は undefined（無いものとして扱う）。`cwd` が読めないだけなら null。 */
-async function readHeadCwd(path: string, id: string): Promise<string | null | undefined> {
+/** 通常のディレクトリ（リンクでない）の名前。読めなければ undefined。 */
+async function subdirs(path: string): Promise<string[] | undefined> {
   try {
-    const fh = await open(path, "r");
+    return (await readdir(path, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return undefined;
+  }
+}
+
+/** 先頭の `cwd`・`originator`。`id` が合わない・通常のファイルでない・読めない記録は undefined（無いものとして扱う）。 */
+async function readHead(path: string, id: string): Promise<CodexRecord | undefined> {
+  let fh: Awaited<ReturnType<typeof open>> | undefined;
+  const work = (async (): Promise<CodexRecord | undefined> => {
     try {
+      fh = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+      const st = await fh.stat();
+      if (!st.isFile() || st.nlink !== 1) return undefined;
       const buf = Buffer.alloc(HEAD_BYTES);
       const { bytesRead } = await fh.read(buf, 0, HEAD_BYTES, 0);
       const head = buf.subarray(0, bytesRead).toString("utf8");
-      // 先頭の 1 行（session_meta）の `id` が、探している id であること。`cwd` は JSON の文字列として読む。
+      // 先頭の 1 行（session_meta）の `id` が、探している id であること。値は JSON の文字列として読む。
       if (!new RegExp(`"id"\\s*:\\s*"${id}"`, "i").test(head)) return undefined;
-      const m = /"cwd"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(head);
-      if (!m) return null;
-      const v: unknown = JSON.parse(m[1]!);
-      return typeof v === "string" && v !== "" ? v : null;
-    } finally {
-      await fh.close();
+      return { cwd: stringField(head, "cwd"), originator: stringField(head, "originator") };
+    } catch {
+      return undefined;
     }
+  })();
+  const timeout = new Promise<undefined>((resolve) => {
+    const t = setTimeout(() => resolve(undefined), READ_TIMEOUT_MS);
+    t.unref?.();
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    void work.finally(() => fh?.close().catch(() => undefined));
+  }
+}
+
+function stringField(head: string, key: string): string | null {
+  const m = new RegExp(`"${key}"\\s*:\\s*("(?:[^"\\\\]|\\\\.)*")`).exec(head);
+  if (!m) return null;
+  try {
+    const v: unknown = JSON.parse(m[1]!);
+    return typeof v === "string" && v !== "" ? v : null;
   } catch {
-    return undefined;
+    return null;
   }
 }

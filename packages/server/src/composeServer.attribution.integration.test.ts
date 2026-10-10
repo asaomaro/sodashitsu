@@ -185,7 +185,7 @@ setInterval(() => {}, 1000);
     async function record(id: string, cwd: string): Promise<void> {
       const day = join(dir, "codex-home", "sessions", "2026", "10", "10");
       await mkdir(day, { recursive: true });
-      await writeFile(join(day, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify({ type: "session_meta", payload: { id, cwd } })}\n`);
+      await writeFile(join(day, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify({ type: "session_meta", payload: { id, cwd, originator: "codex-tui" } })}\n`);
     }
     async function bootWithCodex() {
       const stateDir = await mkdtemp(join(dir, "state-"));
@@ -239,7 +239,7 @@ setInterval(() => {}, 1000);
     async function writeRecord(id: string, cwd: string): Promise<void> {
       const day = join(dir, "codex-home", "sessions", "2026", "10", "10");
       await mkdir(day, { recursive: true });
-      const meta = { timestamp: "2026-10-10T01:11:52.954Z", type: "session_meta", payload: { session_id: id, id, cwd, base_instructions: { text: "x".repeat(20_000) } } };
+      const meta = { timestamp: "2026-10-10T01:11:52.954Z", type: "session_meta", payload: { session_id: id, id, cwd, originator: "codex-tui", base_instructions: { text: "x".repeat(20_000) } } };
       await writeFile(join(day, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify(meta)}\n`);
     }
     async function bootTwo() {
@@ -324,6 +324,7 @@ setInterval(() => {}, 1000);
       const server = await boot(stateDir);
       const paneId = server.session.snapshot().panes[0]!.id;
       await shellReady(server, paneId);
+      await writeRecord(ID3, server.session.getPane(paneId)!.cwd); // 終了の文言は、記録で検算してから付く
       await startAgent(server, paneId, null, `FAKE_EXIT_ID=${ID3} codex`);
       await vi.waitFor(() => expect(agentOf(server, paneId)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
       expect(refOf(server, paneId)).toBeNull();

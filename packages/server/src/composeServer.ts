@@ -271,7 +271,8 @@ export async function composeServer(
     bus,
     persist,
     // Codex の会話の記録（常駐の daemon の報告を pane に付ける前の検算。20261010-codex-multi-pane）。場所は Codex と同じ規則（`CODEX_HOME`・無ければ `~/.codex`）。
-    codexRecordLookup: (id) => lookupCodexRecord(process.env["CODEX_HOME"] || join(osHomedir(), ".codex"), id),
+    // 最初の試行は日付のフォルダを新しい順に（見つかれば止める）、再試行は、最近の数日だけ。
+    codexRecordLookup: (id, attempt) => lookupCodexRecord(process.env["CODEX_HOME"] || join(osHomedir(), ".codex"), id, attempt === 0 ? undefined : 3),
     serverVersion: SERVER_VERSION,
     host,
     scrollbackLines: options.scrollbackLines,

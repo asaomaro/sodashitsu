@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -48,16 +48,16 @@ describe("lookupCodexRecord", () => {
     await rm(home, { recursive: true, force: true });
   });
 
-  async function writeRollout(day: string, id: string, cwd: string, padding = 22_000): Promise<void> {
+  async function writeRollout(day: string, id: string, cwd: string, padding = 22_000, originator = "codex-tui"): Promise<void> {
     const dir = join(home, "sessions", day);
     await mkdir(dir, { recursive: true });
-    const meta = { timestamp: "2026-10-10T01:11:52.954Z", ordinal: 0, type: "session_meta", payload: { session_id: id, id, timestamp: "2026-10-10T01:11:42.720Z", cwd, base_instructions: { text: "x".repeat(padding) } } };
+    const meta = { timestamp: "2026-10-10T01:11:52.954Z", ordinal: 0, type: "session_meta", payload: { session_id: id, id, timestamp: "2026-10-10T01:11:42.720Z", cwd, originator, source: "vscode", base_instructions: { text: "x".repeat(padding) } } };
     await writeFile(join(dir, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify(meta)}\n{"type":"event"}\n`);
   }
 
   it("日付のフォルダの中の記録を id で探し、先頭の cwd を返す（先頭の行が 20 KiB を超えても）", async () => {
     await writeRollout("2026/10/10", ID, "/workspaces/yukkuri-work");
-    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/workspaces/yukkuri-work" });
+    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/workspaces/yukkuri-work", originator: "codex-tui" });
   });
   it("記録が無ければ null。sessions が無ければ undefined（確かめられない）。UUID の形でない id は null", async () => {
     expect(await lookupCodexRecord(home, ID)).toBeUndefined();
@@ -70,6 +70,29 @@ describe("lookupCodexRecord", () => {
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, `rollout-2026-10-10T10-11-42-${ID}.jsonl`), `{"payload":{"id":"01a1234a-1768-7210-befd-023a395239b0","cwd":"/x"}}\n`);
     expect(await lookupCodexRecord(home, ID)).toBeNull();
+  });
+  it("originator を返す（source は pane の TUI でも vscode になりうるので使わない）", async () => {
+    await writeRollout("2026/10/10", ID, "/x", 22_000, "codex_exec");
+    expect(await lookupCodexRecord(home, ID)).toEqual({ cwd: "/x", originator: "codex_exec" });
+  });
+  it("リンク・通常でないファイルは読まない（シンボリックリンク・ハードリンク）", async () => {
+    const dir = join(home, "sessions", "2026", "10", "10");
+    await mkdir(dir, { recursive: true });
+    const real = join(home, "real.jsonl");
+    await writeFile(real, `{"payload":{"id":"${ID}","cwd":"/x","originator":"codex-tui"}}\n`);
+    await symlink(real, join(dir, `rollout-2026-10-10T10-11-42-${ID}.jsonl`));
+    expect(await lookupCodexRecord(home, ID)).toBeNull();
+    await rm(join(dir, `rollout-2026-10-10T10-11-42-${ID}.jsonl`));
+    await link(real, join(dir, `rollout-2026-10-10T10-11-42-${ID}.jsonl`));
+    expect(await lookupCodexRecord(home, ID)).toBeNull(); // リンクが 2 つ
+  });
+  it("日付のフォルダは新しい順に、見つかったら止める。maxDayDirs で見る数を縮められる", async () => {
+    await writeRollout("2026/10/10", ID, "/new");
+    for (let d = 1; d <= 9; d++) await mkdir(join(home, "sessions", "2026", "09", String(d).padStart(2, "0")), { recursive: true });
+    await writeRollout("2026/09/01", "01a1234a-1768-7210-befd-023a395239b0", "/old");
+    expect(await lookupCodexRecord(home, ID, 1)).toEqual({ cwd: "/new", originator: "codex-tui" });
+    expect(await lookupCodexRecord(home, "01a1234a-1768-7210-befd-023a395239b0", 3)).toBeNull(); // 3 日では届かない
+    expect(await lookupCodexRecord(home, "01a1234a-1768-7210-befd-023a395239b0")).toEqual({ cwd: "/old", originator: "codex-tui" });
   });
   it("isCodexSessionId", () => {
     expect(isCodexSessionId(ID)).toBe(true);
