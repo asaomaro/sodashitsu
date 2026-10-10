@@ -161,6 +161,19 @@ describe("利用状況の窓（PaneInfoPopover）", () => {
     expect(registry.focus).not.toHaveBeenCalled();
   });
 
+  it("キーのもう一度などで閉じて、フォーカスが窓と一緒に消えたら、端末へ戻す", async () => {
+    const { wrapper, registry, view } = mountPopover();
+    view.openPaneInfo("p1");
+    await nextTick();
+    await nextTick();
+    await nextTick();
+    (wrapper.get("[data-pane-info-window]").element as HTMLElement).focus();
+    view.togglePaneInfo("p1");
+    await nextTick();
+    await nextTick();
+    expect(registry.focus).toHaveBeenCalledWith("p1");
+  });
+
   it("開いている間、配信を受ける（usageWatchWanted）。閉じたら止まる（ダッシュボードが見えていなければ）", async () => {
     const { view } = mountPopover();
     expect(view.usageWatchWanted).toBe(false);

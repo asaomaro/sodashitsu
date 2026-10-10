@@ -78,9 +78,19 @@ function onOutside(ev: Event): void {
 
 watch(
   paneId,
-  (id) => {
+  (id, old) => {
     pos.value = null;
-    if (id === null) return;
+    if (id === null) {
+      // どの道で閉じても（キーのもう一度・［情報］・メニュー・Esc）、フォーカスが窓と一緒に消えて `body` に落ちたら、端末へ戻す。
+      // 外を押して閉じたとき（押した先がフォーカスを持つ）は、動かさない。
+      if (old !== null && old !== undefined) {
+        void nextTick(() => {
+          const a = document.activeElement;
+          if (a === null || a === document.body || !a.isConnected) restoreFocus(old);
+        });
+      }
+      return;
+    }
     // 位置を決めて（`visibility: hidden` が外れて）から、フォーカスを入れる（隠れている要素にはフォーカスできない）。
     void nextTick(() => {
       layout();
