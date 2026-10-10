@@ -87,6 +87,8 @@ import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
 import { GraphMaintainer } from "./graph/GraphMaintainer.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
+import { UsageService } from "./usage/UsageService.js";
+import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
 import type { ClientSink } from "./terminal/OutputFanout.js";
@@ -486,6 +488,11 @@ export async function composeServer(
     agentInstanceOf: (paneId) => session.getPane(paneId)?.agent?.instanceId ?? null,
     logger,
   });
+  // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（今は Claude Code）。pane が閉じたら、その pane の集計を捨てる。
+  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter()], logger });
+  const usageSub = bus.subscribe((e) => {
+    if (e.event === "pane.closed") usage.forgetPane(e.data.paneId);
+  });
   registerAllMethods(surface, {
     session,
     clients,
@@ -497,6 +504,7 @@ export async function composeServer(
     agentStarter,
     agentFork,
     subagentTranscripts,
+    usage,
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
     machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
     commands,
@@ -766,6 +774,8 @@ export async function composeServer(
             if (report.type === "session") {
               // 連携の kind の全部（20261007-agent-hook-drift research X1）。報告したプロセスの確かめは `reportAgentSession` の中（20261009-agent-session-attribution）。
               if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source });
+              // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる。20261010-agent-usage）。
+              usage.noteTranscript(report.paneId, report.sessionId, report.transcriptPath);
             } else if (report.kind === "claude") {
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
@@ -867,6 +877,7 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        usageSub.dispose();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
@@ -902,6 +913,7 @@ export async function composeServer(
         // machine_unavailable として履歴に残してしまう。止める＝待ちは履歴に残さず取り消し、送っている途中の結果も書かない）。graph.close の前。
         graphEngine.stop();
         lineage.close();
+        usageSub.dispose();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();

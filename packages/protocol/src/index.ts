@@ -3,6 +3,7 @@ export * from "./model.js";
 export * from "./agentName.js";
 export * from "./agentStart.js";
 export * from "./agentFork.js";
+export * from "./usage.js";
 export * from "./color.js";
 export * from "./theme.js";
 export * from "./errors.js";

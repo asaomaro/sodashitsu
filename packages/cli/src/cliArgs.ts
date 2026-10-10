@@ -65,6 +65,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl watch [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent list [--url <URL>] [--token <TOKEN>]",
   "sodactl agent get <target> [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent usage [<target>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
@@ -304,6 +305,8 @@ export type Command =
   | { kind: "agent-list"; opts: GlobalOpts }
   // agent-* の paneId は pane ID かエージェントの名前（`agentTarget.ts` の `resolveAgentTarget` で解決する。20260926-agent-start-rename）。
   | { kind: "agent-get"; opts: GlobalOpts; paneId: string }
+  /** 20261010-agent-usage。`paneId` を省くと、利用状況を取れる全部のエージェント。 */
+  | { kind: "agent-usage"; opts: GlobalOpts; paneId: string | undefined; json: boolean }
   | { kind: "agent-wait"; opts: GlobalOpts; paneId: string; until: AgentStatus[]; timeoutMs: number | undefined }
   | { kind: "agent-read"; opts: GlobalOpts; paneId: string; lines: number; raw: boolean; timeoutMs: number }
   | {
@@ -965,6 +968,11 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
     const paneId = requirePositional(positionals, 0, "target", USAGE);
     rejectExtra(positionals, 1, USAGE);
     return { kind: "agent-get", opts: globalOptsFrom(values, env), paneId };
+  }
+  if (sub === "usage") {
+    const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!], bools: ["--json"] });
+    rejectExtra(positionals, 1, USAGE);
+    return { kind: "agent-usage", opts: globalOptsFrom(values, env), paneId: positionals[0], json: bools.has("--json") };
   }
   if (sub === "wait") {
     const { positionals, values, multi } = parseFlags(rest, { values: [...URL_TOKEN.values!, "--timeout"], multi: ["--until"] });

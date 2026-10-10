@@ -1,6 +1,7 @@
 import {
   AgentPromptParams,
   AgentSubagentTranscriptParams,
+  AgentUsageParams,
   AgentRenameParams,
   AgentSendKeysParams,
   AgentKindsParams,
@@ -141,6 +142,16 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
     surface.register("agent.subagent_transcript", {
       schema: AgentSubagentTranscriptParams,
       handler: (_ctx, params) => transcripts.read(params.paneId, params.agentId, params.offset),
+    });
+  }
+
+  // エージェントの利用状況（20261010-agent-usage）。入力は pane の id だけ（記録の場所はサーバが決める）。数字・モデル名・時刻・ラベルだけを返す。
+  // ログイン済みの `/ws` の方式だけ（`pane.sock` には載せない）。
+  const usage = deps.usage;
+  if (usage) {
+    surface.register("agent.usage", {
+      schema: AgentUsageParams,
+      handler: (_ctx, params) => usage.get(params.paneId),
     });
   }
 
