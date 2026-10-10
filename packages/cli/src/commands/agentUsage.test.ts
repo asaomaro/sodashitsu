@@ -36,6 +36,32 @@ describe("formatUsageTable（20261010-agent-usage）", () => {
     const t = formatUsageTable({ panes: { "p": { ...result.panes["aaaaaaaa-1111"]!, paneId: "p" } }, accounts: [] }, new Map([["p", "evil\u001b[2Jname"]]), now);
     expect(t).not.toContain("\u001b");
   });
+
+  it("アカウントの枠: プラン・枠のラベル・リセットを過ぎた枠は古い印（20261010-agent-usage の Codex）", () => {
+    const r: AgentUsageResult = {
+      panes: {},
+      accounts: [
+        {
+          kind: "codex",
+          accountKey: "k",
+          label: "codex",
+          plan: "pro",
+          windows: [
+            { label: "5 時間", usedPct: 42, resetsAt: now + 3_600_000 },
+            { label: "週", usedPct: 17, resetsAt: now - 60_000, stale: true },
+          ],
+          source: "rollout",
+          asOf: now - 120_000,
+        },
+      ],
+    };
+    const t = formatUsageTable(r, new Map(), now);
+    expect(t).toContain("codex（pro）");
+    expect(t).toContain("5 時間");
+    expect(t).toContain("42%");
+    expect(t).toContain("17%（古い）");
+    expect(t).toContain("過ぎた");
+  });
 });
 
 describe("アカウントの枠（ステータスラインの包みの報告。20261010-agent-usage PR2）", () => {
@@ -48,7 +74,29 @@ describe("アカウントの枠（ステータスラインの包みの報告。2
       new Map(),
       1_000_000,
     );
-    expect(out).toContain("12%・古い");
+    expect(out).toContain("12%（古い）");
     expect(out).toContain("5%（$10.00 / $200.00）");
+  });
+});
+
+describe("Codex と Claude の枠は、同じ表に、同じ列の決まりで、種類ごとに並ぶ", () => {
+  it("claude（古い・使用額／上限）と codex（プラン・古い）が 1 つの表に出る。並びは種類の順", () => {
+    const out = formatUsageTable(
+      {
+        panes: {},
+        accounts: [
+          { kind: "codex", accountKey: "c", label: "codex", plan: "pro", source: "rollout", asOf: 1_000_000, windows: [{ label: "週", usedPct: 20, resetsAt: 900_000, stale: true }] },
+          { kind: "claude", accountKey: "k", label: "Claude Code", source: "statusline", asOf: 1_000_000, windows: [{ label: "組織の枠", usedPct: 5, usedUsd: 10, limitUsd: 200 }] },
+        ],
+      },
+      new Map(),
+      1_000_000,
+    );
+    const lines = out.split("\n").filter((l) => /Claude Code|codex/.test(l));
+    expect(lines[0]).toContain("Claude Code");
+    expect(lines[1]).toContain("codex（pro）");
+    expect(lines[0]).toContain("5%（$10.00 / $200.00）");
+    expect(lines[1]).toContain("20%（古い）");
+    expect(out.match(/アカウント/g)?.length).toBe(1); // 見出しは 1 つ
   });
 });

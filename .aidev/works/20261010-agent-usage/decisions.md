@@ -50,6 +50,21 @@
 - **R5**: 走査の生涯の読む量（512 MiB）を、書き換え（reset）での数え直しに**引き継ぐ**（`new ClaudeSessionScan(id, limits, carriedRead)`）。上限に達したら更新を止め、`partial` と `updatesStopped`（protocol の `AgentUsage` に足した省略可の項目）を立てる。
 - **R1・R3・R4・R6**: 直さずに、`docs/agent-usage.md` の限界に書いた（先頭の行を取る・`CLAUDE_CONFIG_DIR` が違うと黙って無い・`cost-state` の遅れて書かれたサブエージェントの分・5000 フォルダで探索が打ち切られる）。
 
+## D7 Codex（AC4。`feature/agent-usage-codex`）
+- **探し方は #132 の `agent/codexSession.ts` に寄せた（別に作らない）**: `lookupCodexRecord` の中の日付フォルダの歩きを `findUnbounded` に切り出し、`findCodexRecordFile`（場所だけ返す）を足した。時間切れの包みも共通（`withLookupTimeout`）。アカウントの枠のための `newestCodexRecordFiles`（新しい日付のフォルダから・`maxDayDirs`・`maxFiles` の上限・時間切れつき）も同じファイルに置いた。
+- **読み**: `usage/codexRollout.ts`（末尾の窓を逆に・増分・大きく増えたら末尾の窓だけ・小さくなったらやり直し。開くのは `safeFile.openVerified`）。累計は最後の `token_count` の `total_token_usage` 1 つ（足し合わせない）。`info` が null の行は、累計をそのままに、制限だけ新しくする。
+- **トークンの割り当て**: `input` = `input_tokens − cached − cache_write`（Claude と同じく、キャッシュでない入力）・`cacheRead` = `cached_input_tokens`・`cacheWrite` = `cache_write_input_tokens`・`reasoning` = `reasoning_output_tokens`・`total` は記録の `total_tokens`。
+- **コンテキスト**: 最後の `last_token_usage.total_tokens` ÷ `model_context_window`（式は Codex 自身と違いうる。文書に）。
+- **アカウント**: 鍵は `sha256(hostname + "\0" + CODEX_HOME の根)` の先頭 16 桁。ラベルは種類名（`codex`）。いちばん新しい記録は、候補（新しい日付から最大 12 件）を `lstat` の更新時刻で並べた上位 4 件の、最初に `rate_limits` を持つもの。pane の会話の記録が、もっと新しい値を持てば、そちら。結果は 10 秒覚える。`resets_at` を過ぎた枠は `stale`（`UsageWindow` の省略可の項目を足した）。
+- **Claude の側の動きは変えない**。`composeServer.ts` は、受け入れた報告の記録の場所を覚えるのを、Claude の分だけにしたまま（Codex は、記録を id で探す。場所は報告から取らない）。
+
+## D8 Codex のレビューの直し（`usage-codex-review-result.md`）
+- **指摘 1**: `rate_limits` は `limit_id` が無いか `"codex"` の行だけ使う。ほかは無い扱い（累計の行と別の行に枠がある場合に備え、枠が見つかるまで、小さい窓〔1 MiB まで〕の中では累計の行より前も見る）。
+- **指摘 2**: pane ごとに、探索（`locating`）と読み（`reading`）を 1 つの約束として共有する。2 秒で見捨てた読みが続く間は、次の読みを重ねず、同じものを待つ。
+- **指摘 3（軽く）**: アカウントの枠の読みは `limitsOnly`（`model`・累計を探さず、枠が見つかった時点で止まる）。枠が無かった記録は、更新の時刻つきで 60 秒覚えて飛ばす。行を文字にする前の絞り・前の窓を読み直さない作りは、記録のまま（文書の限界）。
+- **指摘 6**: 読みが投げたとき `refresh()` は false を返す（投げない）。アカウントの枠の探索が失敗したら 3 秒あけてやり直す（前の値は出し続ける）。「大きく増えたとき、窓に無い項目は前の値のまま」と、日数の上限の境界（`findCodexRecordFile` の `maxDayDirs`）の試験を足した。
+- **指摘 4・5**: 直さず、`docs/agent-usage.md` の限界に書いた。
+
 ## PR2 レビューの直し（usage-pr2-review-result.md）
 | # | 事項 | 決定 |
 | :- | :- | :- |
