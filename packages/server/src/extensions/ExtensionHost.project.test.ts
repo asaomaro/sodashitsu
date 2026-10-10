@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { RpcError } from "@sodashitsu/protocol";
 import { entryDigest, instanceKey } from "./approval.js";
 import type { ExtensionEntry } from "./extensionConfig.js";
-import { ext, makeHost, sleep, type HostHarness } from "./hostHarness.js";
+import { assertFsResourceNamesVisible, ext, makeHost, sleep, type HostHarness } from "./hostHarness.js";
 
 // 20261007-ext-host T22・T22-2・T22-3：プロジェクトの拡張。承認していないものは、どのきっかけでも実行されない。
 let h: HostHarness | undefined;
@@ -30,6 +30,10 @@ async function withRepo(entries: unknown[] | null = [ext("a")], o: Parameters<ty
 }
 
 describe("プロジェクトの拡張の状態（T22）", () => {
+  it("harness の settleIo が見る FS の資源の名前が、この Node の版で見える（変わったら、ここで気づく）", async () => {
+    await assertFsResourceNamesVisible();
+  });
+
   it("記録なし → pending で、spawn が呼ばれない", async () => {
     const { x, root } = await withRepo();
     await x.host.start();

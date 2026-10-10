@@ -324,6 +324,10 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
       }
     }
     expect(busy).toMatchObject({ code: "display_busy" });
+    // display_busy が「量の桶」で出たことの確かめ: 通った数（最初の 4 つ + 続きの分）は、満タン 8 MiB ÷ 2 MiB = 4 に、補充（毎秒 2 MiB = 1 個）の 1〜2 個が足されるだけ。
+    // 回数の桶（10 回）が先に効いたのなら、10 以上になる。量の桶を外すと、ここが落ちる。
+    expect(4 + accepted).toBeGreaterThanOrEqual(4);
+    expect(4 + accepted).toBeLessThanOrEqual(8);
     // 拒まれた set は、面を変えない（rev は、通った回数だけ進んでいる）。
     expect(await cli.request("display.list", { paneId: paneA })).toMatchObject({ displays: [{ name: "p0", rev: 1 + accepted }, { name: "p1", rev: 1 }, { name: "p2", rev: 1 }, { name: "p3", rev: 1 }] });
     // pane 3 つぶんでさらに 24 MiB（合計 32 MiB）

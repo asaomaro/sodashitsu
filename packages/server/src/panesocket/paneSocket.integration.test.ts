@@ -343,12 +343,15 @@ describe.skipIf(process.platform === "win32")(
     });
 
     it("/ws の方式は通さない: pane.write・workspace.create 等は unknown_op で、pane の画面と workspace の数が変わらない（AC3）", async () => {
-      const { server, paneId, sockPath, open } = await start();
+      const { server, stateDir, paneId, sockPath, open } = await start();
       const before = server.session.snapshot();
       const host = server.terminals.get(paneId)!;
+      // 画面の文字列に頼らない確かめ: 書かれていれば、シェルがこのファイルを作る（絶対パス。pane の作業フォルダに依らない）
+      const marker = join(stateDir, "pane-socket-leak-marker");
       // `/ws` に実在する方式の名前（`workspace.create`・`pane.rename`・`agent.send_keys`）と、実在しない名前（`pane.write`）のどちらも同じ
       for (const [op, params] of [
         ["pane.write", { data: "echo PANE-SOCKET-LEAK-1\n" }],
+        ["pane.write", { data: `touch '${marker}'\n` }],
         ["agent.send_keys", { paneId, keys: ["echo PANE-SOCKET-LEAK-2", "Enter"] }],
         ["workspace.create", {}],
         ["pane.rename", { paneId, label: "PANE-SOCKET-LEAK-3" }],
@@ -381,6 +384,8 @@ describe.skipIf(process.platform === "win32")(
         interval: 20,
       });
       expect(host.mirror.plainText()).not.toContain("PANE-SOCKET-LEAK");
+      // 同じ pane のシェルは、あとから送った DIRECT を実行済み。先に送られた touch が実行されていれば、ファイルが出来ている
+      expect(existsSync(marker)).toBe(false);
       // 同じ名前は `/ws`（ログイン済み）では通る——受け口が断ったのは名前の誤りではない
       const cli = await open("external");
       await cli.request("workspace.create", {});

@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises
 import { open as fsOpen } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ServerEvent } from "@sodashitsu/protocol";
 import { EventBus } from "../bus/EventBus.js";
 import { DisplayService } from "../display/DisplayService.js";
@@ -25,9 +26,24 @@ const FS_RESOURCES: ReadonlySet<string> = new Set(["FSReqPromise", "FSReqCallbac
 export async function settleIo(maxMs = 10_000): Promise<void> {
   const deadline = Date.now() + maxMs;
   let quiet = 0;
-  while (quiet < 3 && Date.now() < deadline) {
+  while (quiet < 3) {
+    if (Date.now() >= deadline) throw new Error(`settleIo: ファイルの I/O が ${maxMs}ms 経っても落ち着きませんでした`);
     await new Promise<void>((r) => setImmediate(r));
     quiet = process.getActiveResourcesInfo().some((n) => FS_RESOURCES.has(n)) ? 0 : quiet + 1;
+  }
+}
+
+/**
+ * `settleIo` が見ている資源の名前（`getActiveResourcesInfo` の FS の要求）が、この Node の版で実際に見えることの確かめ。
+ * 名前が変わると、`settleIo` は何も待たずに通り抜ける（黙って弱くなる）ので、それに気づけるよう、試験の初めに 1 回呼ぶ。
+ */
+export async function assertFsResourceNamesVisible(): Promise<void> {
+  const { readFile } = await import("node:fs/promises");
+  const pending = readFile(fileURLToPath(import.meta.url));
+  const names = process.getActiveResourcesInfo();
+  await pending;
+  if (!names.some((n) => FS_RESOURCES.has(n))) {
+    throw new Error(`settleIo が見る FS の資源の名前（${[...FS_RESOURCES].join("・")}）が、この Node の版では見えません: ${names.join(",")}`);
   }
 }
 

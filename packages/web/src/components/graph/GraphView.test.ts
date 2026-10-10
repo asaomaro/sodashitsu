@@ -194,7 +194,7 @@ describe("GraphView（上限のため出ていない pane。20261008-graph-first
     // 504 ノードの描画は、負荷のもとで nextTick の固定回数では終わらないことがある。出るのを条件で待つ（出ないことの確認は上の最初の部分）。
     await vi.waitFor(() => {
       expect(t.wrapper.find('[data-testid="graph-hidden-panes"]').exists()).toBe(true);
-    });
+    }, { timeout: 10_000, interval: 20 });
     const note = t.wrapper.find('[data-testid="graph-hidden-panes"]');
     expect(note.text()).toContain("上限のため、出ていない pane が 3 個");
     t.wrapper.unmount();
