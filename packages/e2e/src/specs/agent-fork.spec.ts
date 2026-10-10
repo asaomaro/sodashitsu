@@ -207,3 +207,67 @@ test.describe("メニュー → ダイアログ → fork（T6）", () => {
     }
   });
 });
+
+test("スクリーンショット（PR2）: メニュー・ダイアログ（2 つの行き先）・進み具合・グラフの線（クラシック・モダン）", async ({ page, appServer }) => {
+  test.setTimeout(180_000);
+  const out = process.env["FORK_SHOTS_DIR"];
+  test.skip(out === undefined, "FORK_SHOTS_DIR を渡したときだけ撮る");
+  const repo = await mkdtemp(join(tmpdir(), "soda-e2e-forkshots-"));
+  const git = (args: string[]) => exec("git", args, { cwd: repo, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" } });
+  try {
+    await git(["init", "-q", "-b", "main"]);
+    await git(["config", "user.email", "e2e@example.com"]);
+    await git(["config", "user.name", "soda e2e"]);
+    await writeFile(join(repo, "a.txt"), "1\n");
+    await git(["add", "."]);
+    await git(["commit", "-q", "-m", "init"]);
+    await writeFile(join(repo, "a.txt"), "2\n");
+    await writeFile(join(repo, "b.txt"), "x\n");
+    const client = await appServer.openClient();
+    const r = await client.request("workspace.create", { cwd: repo, label: "my-repo" });
+    await startAgent(appServer, client, r.pane.id, "lead");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await open(page, appServer);
+    await page.locator(".sidebar-row").filter({ hasText: "my-repo" }).first().click();
+    const styles = ["classic", "modern"] as const;
+    const setStyle = (st: string) => page.evaluate((v) => document.documentElement.setAttribute("data-ui-style", v), st);
+    for (const st of styles) {
+      await setStyle(st);
+      await page.locator(".terminal-pane").first().click({ button: "right" });
+      await expect(menu(page)).toBeVisible();
+      await page.screenshot({ path: join(out!, `fork-menu-${st}.png`) });
+      await menu(page).getByRole("menuitem", { name: "会話を fork…" }).click();
+      await expect(dlg(page)).toBeVisible();
+      await page.screenshot({ path: join(out!, `fork-dialog-same-${st}.png`) });
+      await dlg(page).locator("[data-fork-target='worktree']").check();
+      await dlg(page).locator("[data-fork-branch]").fill("main");
+      await expect(dlg(page).locator("[data-fork-branch-msg]")).toContainText("既にあります");
+      await page.screenshot({ path: join(out!, `fork-dialog-worktree-exists-${st}.png`) });
+      await dlg(page).locator("[data-fork-branch]").fill(`try-${st}`);
+      await expect(dlg(page).locator("[data-fork-submit]")).toBeEnabled();
+      await page.screenshot({ path: join(out!, `fork-dialog-worktree-${st}.png`) });
+      await page.keyboard.press("Escape");
+    }
+    // 進み具合（確定した直後）と、グラフの線。
+    await setStyle("classic");
+    await page.locator(".terminal-pane").first().click({ button: "right" });
+    await menu(page).getByRole("menuitem", { name: "会話を fork…" }).click();
+    await dlg(page).locator("[data-fork-target='worktree']").check();
+    await dlg(page).locator("[data-fork-branch]").fill("shots-fork");
+    await expect(dlg(page).locator("[data-fork-submit]")).toBeEnabled();
+    await dlg(page).locator("[data-fork-submit]").click();
+    await expect(dlg(page).locator("[data-fork-run]")).toBeVisible();
+    await page.screenshot({ path: join(out!, "fork-progress-classic.png") });
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "fork しました" })).toHaveCount(1, { timeout: 90_000 });
+    await page.keyboard.press("Escape");
+    await prefixKey(page, "a");
+    await expect(graphView(page).locator(".graph-fork-line")).toHaveCount(1, { timeout: 15_000 });
+    for (const st of styles) {
+      await setStyle(st);
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: join(out!, `fork-graph-${st}.png`) });
+    }
+  } finally {
+    await rm(repo, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
