@@ -71,6 +71,9 @@ function keepFocus(ev: MouseEvent): void {
   top: 0;
   right: 6px;
   height: var(--soda-shape-name-h, 28px);
+  pointer-events: none;
+}
+.pane-actions-row .pane-actions-btn {
   pointer-events: auto;
 }
 /* 端末の領域の右上の隅。ふだんは見えず（押せもしない）、ポインタが載っている間・pane が選ばれている間・ボタンにフォーカスがある間だけ出す。 */

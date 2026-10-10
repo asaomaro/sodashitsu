@@ -44,10 +44,36 @@ test("名前の行がある: 右端に［右へ分割］［下へ分割］［最
   expect(gaps[2], "閉じるの前は、ほかより広く空ける").toBeGreaterThan(gaps[0]! + 3);
   // 名前の行の内側（pane の枠の上端〜行の高さ）で、枠の右端の内側にある。名前（`.pane-frame-name`）と重ならない。
   const frame = (await page.locator(".pane-frame").first().boundingBox())!;
+  const body = (await page.locator(".pane-frame-body").first().boundingBox())!;
+  const topSpace = boxes[3]!.y - frame.y;
+  const bottomSpace = body.y - (boxes[3]!.y + boxes[3]!.height);
+  expect(Math.abs(topSpace - bottomSpace), "閉じるボタンの上下の余白は揃う").toBeLessThan(1);
   expect(boxes[3]!.right).toBeLessThanOrEqual(frame.x + frame.width + 0.5);
   expect(boxes[0]!.y).toBeGreaterThanOrEqual(frame.y - 0.5);
   const name = (await page.locator(".pane-frame-name").first().boundingBox())!;
   expect(name.x + name.width, "名前は、ボタンの手前で終わる").toBeLessThanOrEqual(boxes[0]!.x + 0.5);
+  // ボタンの間の空白も掴める（操作の group 全体でポインタを遮らない）。
+  await page.mouse.move(boxes[3]!.x - 4, boxes[3]!.y + boxes[3]!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(boxes[3]!.x - 20, boxes[3]!.y + boxes[3]!.height / 2);
+  await expect(page.locator(".pane-frame-header-dragging")).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(page.locator(".pane-frame-header-dragging")).toHaveCount(0);
+  client.close();
+});
+
+test("名前のないペインも見出しの空白からドラッグして別のペインへ移せる", async ({ page, appServer }) => {
+  const client = await setup(appServer, page, MODERN_NAMED, { splits: 1 });
+  const header = (await page.locator(".pane-frame-header-drag").first().boundingBox())!;
+  const target = (await page.locator(".pane-frame-body").nth(1).boundingBox())!;
+  await page.mouse.move(header.x + header.width / 2, header.y + header.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
+  await expect(page.locator(".pane-frame-header-dragging")).toHaveCount(1);
+  await page.mouse.up();
+  await expect.poll(() => paneCount(page)).toBe(1);
+  await expect(page.locator(".pane-frame-header-dragging")).toHaveCount(0);
   client.close();
 });
 

@@ -34,6 +34,8 @@ describe("uiStyle.css（20261008-ui-style の角のトークン）", () => {
       "--soda-shape-pane-radius-per-gap": "1.5",
       "--soda-shape-row-h": "36px",
       "--soda-shape-control-h": "32px",
+      "--soda-shape-sidebar-row-h": "28px",
+      "--soda-shape-sidebar-control-h": "24px",
       "--soda-shape-pad-x": "12px",
       "--soda-shape-row-inset": "6px",
       "--soda-shape-row-radius": "var(--soda-shape-radius)",

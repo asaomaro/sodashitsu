@@ -15,6 +15,7 @@ import { type AgentSort, SIDEBAR_WIDTH, type WorkspaceSort, useViewStore } from 
 import { useSettingsStore } from "../store/settings.js";
 import { type ResolvedLine, resolveAgentLines, resolveSpaceLines, tokenStyleAttr } from "@sodashitsu/client-core";
 import StateIcon from "./StateIcon.vue";
+import DragPreview from "./DragPreview.vue";
 import MachineHeader from "./MachineHeader.vue";
 import MachineRows from "./MachineRows.vue";
 import ScreenSwitcher from "./ScreenSwitcher.vue";
@@ -543,6 +544,7 @@ watch(
 
 const WORKSPACE_DRAG_THRESHOLD_PX = 6;
 let workspaceDragStart: { x: number; y: number; pointerId: number; row: SpaceRow } | null = null;
+const workspaceDragPreview = ref<{ x: number; y: number; label: string; kind: string; count: number; key: string } | null>(null);
 
 function onEscapeDuringWorkspaceDrag(ev: KeyboardEvent): void {
   if (ev.key !== "Escape") return;
@@ -551,6 +553,7 @@ function onEscapeDuringWorkspaceDrag(ev: KeyboardEvent): void {
 
 function cancelWorkspaceDrag(): void {
   workspaceDragStart = null;
+  workspaceDragPreview.value = null;
   if (view.workspaceDrag) view.endWorkspaceDrag();
   window.removeEventListener("keydown", onEscapeDuringWorkspaceDrag);
 }
@@ -615,7 +618,14 @@ function onRowPointerMove(ev: PointerEvent): void {
     view.startWorkspaceDrag(workspaceDragStart.row.dragIds);
     window.addEventListener("keydown", onEscapeDuringWorkspaceDrag);
   }
-  const state = dropStateFor(workspaceDragStart.row, workspaceRowKeyAt(ev.clientX, ev.clientY));
+  const source = workspaceDragStart.row;
+  workspaceDragPreview.value = {
+    x: ev.clientX, y: ev.clientY, key: source.key,
+    label: source.workspace?.label || source.groupLabel || 'ワークスペース',
+    kind: source.isGroupHead || source.dragIds.length > 1 ? 'グループ' : 'ワークスペース',
+    count: source.dragIds.length,
+  };
+  const state = dropStateFor(source, workspaceRowKeyAt(ev.clientX, ev.clientY));
   if (!state || state.self) view.setWorkspaceDragOver(null);
   else view.setWorkspaceDragOver(state.row.key, state.reason !== null);
 }
@@ -633,6 +643,7 @@ function onRowPointerUp(ev: PointerEvent, row: SpaceRow): void {
   const draggedRow = workspaceDragStart.row;
   const drop = wasDragging ? dropStateFor(draggedRow, workspaceRowKeyAt(ev.clientX, ev.clientY)) : null;
   workspaceDragStart = null;
+  workspaceDragPreview.value = null;
   if (wasDragging) {
     view.endWorkspaceDrag();
     window.removeEventListener("keydown", onEscapeDuringWorkspaceDrag);
@@ -890,6 +901,7 @@ watchDragInterrupt(view, () => {
 
 <template>
   <nav ref="el" class="sidebar" :class="{ 'sidebar-collapsed': view.sidebarCollapsed }" :style="view.sidebarCollapsed ? {} : { width: `${view.sidebarWidth}px` }">
+    <DragPreview v-if="view.workspaceDrag && workspaceDragPreview" :x="workspaceDragPreview.x" :y="workspaceDragPreview.y" :label="workspaceDragPreview.label" :kind="workspaceDragPreview.kind" :count="workspaceDragPreview.count" />
     <div v-if="sessionLabel !== null" class="sidebar-session">
       <button
         type="button"
@@ -935,6 +947,7 @@ watchDragInterrupt(view, () => {
               class="sidebar-row"
               :class="{
                 'sidebar-row-current': row.isCurrent,
+                'sidebar-row-drag-source': !!view.workspaceDrag && workspaceDragPreview?.key === row.key,
                 'sidebar-row-depth-2': row.depth === 2,
                 'sidebar-row-selected': view.mode === 'navigate' && view.navigateSelection === row.key,
                 'sidebar-row-indent': row.indent,
@@ -1225,8 +1238,17 @@ watchDragInterrupt(view, () => {
  * 区画の高さのつまみ（`sectionDrag`）の計算は、ここの余白・すき間の分を `sectionsChrome` で引く。クラシックでは、この規則は当たらない。
  */
 :root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-sections {
-  padding: var(--soda-shape-card-gap);
-  gap: var(--soda-shape-card-gap);
+  --soda-shape-row-h: var(--soda-shape-sidebar-row-h);
+  --soda-shape-control-h: var(--soda-shape-sidebar-control-h);
+  padding: calc(var(--soda-shape-card-gap) / 2) var(--soda-shape-card-gap);
+  gap: calc(var(--soda-shape-card-gap) / 2);
+}
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-section-header {
+  padding-block: 0.1em;
+}
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-row {
+  padding-block: 0.2em;
+  gap: 0.1em;
 }
 :root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-spaces,
 :root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-agents,
@@ -1321,6 +1343,12 @@ watchDragInterrupt(view, () => {
 /* 3 つの状態を別の表し方に分ける（20260920-ui-selection-visuals の AC2）。以前は hover と
  * navigate の選択が同じ宣言で、しかもタブのアクティブと同じ色だったので見分けが付かなかった。
  * 持続する状態（表示中）は面、一時的なカーソル（navigate）は線にして、重なっても両方読めるようにする。 */
+.sidebar-row-drag-source {
+  outline: 2px dashed var(--soda-accent, #8be9fd);
+  outline-offset: -2px;
+  opacity: 0.75;
+  cursor: grabbing;
+}
 .sidebar-row:hover {
   background: var(--soda-menu-hover-bg, #343746);
 }

@@ -13,6 +13,9 @@ import { useSessionStore } from "../store/session.js";
 import DisplayDropZones from "./DisplayDropZones.vue";
 import DisplayFloat from "./DisplayFloat.vue";
 import PaneActions from "./PaneActions.vue";
+import DragPreview from "./DragPreview.vue";
+import StateIcon from "./StateIcon.vue";
+import { useSeenStore, displayStateFor } from "../store/seen.js";
 import PaneBands from "./PaneBands.vue";
 import PanePanel from "./PanePanel.vue";
 import { useSettingsStore } from "../store/settings.js";
@@ -58,6 +61,11 @@ const registry = inject(TerminalRegistryKey, undefined);
 const session = props.enabled ? useSessionStore() : null;
 const view = props.enabled ? useViewStore() : null;
 const settings = props.enabled ? useSettingsStore() : null;
+const seen = props.enabled ? useSeenStore() : null;
+const agentState = computed(() => {
+  const agent = session?.panes.get(props.paneId)?.agent;
+  return agent ? displayStateFor(agent, seen!.getSeenSeq(agent.instanceId, agent.serverSeenSeq)) : null;
+});
 const edge = ref<HTMLElement | null>(null);
 /** モダンの**配置**か（pane の枠の操作ボタン。20261008-ui-style PR4）。1 列の画面では様式の配置を使わない（`useUiStyle` の `modernLayout`）。`enabled` でないとき（モバイル・単体テスト）は、ストアに触れない。 */
 const modern = props.enabled ? useUiStyle().modernLayout : null;
@@ -262,7 +270,7 @@ const padStyle = computed(() => {
   const side = (s: PaneSide): string => (c.padded[s] ? PANE_GAP : "0px");
   return {
     // 名前の行の高さ。クラシックは 1.2em（`--soda-shape-name-h` は未定義）。モダンは、操作ボタンが並ぶ高さ。
-    paddingTop: reserveNameSpace.value ? (c.padded.top ? `calc(${PANE_GAP} + ${nameRowH.value})` : nameRowH.value) : side("top"),
+    paddingTop: reserveNameSpace.value ? (c.padded.top && !modern?.value ? `calc(${PANE_GAP} + ${nameRowH.value})` : nameRowH.value) : side("top"),
     paddingRight: side("right"),
     paddingBottom: side("bottom"),
     paddingLeft: side("left"),
@@ -343,6 +351,7 @@ const infoOpen = computed(() => view?.paneInfoPaneId === props.paneId);
 
 const DRAG_THRESHOLD_PX = 6;
 let dragStart: { x: number; y: number; pointerId: number } | null = null;
+const dragPointer = ref<{ x: number; y: number } | null>(null);
 
 function onEscapeDuringDrag(ev: KeyboardEvent): void {
   if (ev.key !== "Escape") return;
@@ -351,6 +360,7 @@ function onEscapeDuringDrag(ev: KeyboardEvent): void {
 
 function cancelDrag(): void {
   dragStart = null;
+  dragPointer.value = null;
   if (view?.paneDrag) view.endPaneDrag();
   window.removeEventListener("keydown", onEscapeDuringDrag);
 }
@@ -382,6 +392,7 @@ function dropTargetAt(x: number, y: number): DropHit | null {
 
 /** 名前ラベルの押し下げ。まだドラッグ扱いにしない（閾値を超えるまでは「ただのクリック」。AC-I1・AC-I5）。 */
 function onNamePointerDown(ev: PointerEvent): void {
+  if (ev.button !== 0) return;
   dragStart = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId };
   (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
 }
@@ -395,6 +406,7 @@ function onNamePointerMove(ev: PointerEvent): void {
     view?.startPaneDrag(props.paneId);
     window.addEventListener("keydown", onEscapeDuringDrag);
   }
+  dragPointer.value = { x: ev.clientX, y: ev.clientY };
   const hit = dropTargetAt(ev.clientX, ev.clientY);
   // 自分が今いる tab 自身は、ドロップしても何も起きない（サーバ側の自分自身ガード。AC9）ので
   // 候補として光らせない（review round1 の nit 指摘——見た目と実際の挙動を一致させる）。
@@ -414,6 +426,7 @@ function onNamePointerUp(ev: PointerEvent): void {
   // 再計算する（design「クライアント側: ドロップ確定」。20260924-pane-dnd-split-move）。
   const hit = wasDragging ? dropTargetAt(ev.clientX, ev.clientY) : null;
   dragStart = null;
+  dragPointer.value = null;
   if (wasDragging) {
     view?.endPaneDrag();
     window.removeEventListener("keydown", onEscapeDuringDrag);
@@ -507,7 +520,7 @@ function onKeydown(ev: KeyboardEvent): void {
   <div
     ref="root"
     class="pane-frame"
-    :class="{ 'pane-frame-enabled': enabled, 'pane-frame-enabled-named': reserveNameSpace }"
+    :class="{ 'pane-frame-enabled': enabled, 'pane-frame-enabled-named': reserveNameSpace, 'pane-frame-drag-source': isDragSource }"
     :data-pane-id="enabled ? paneId : undefined"
     :role="enabled ? 'group' : undefined"
     :aria-label="enabled ? paneLabel : undefined"
@@ -582,10 +595,10 @@ function onKeydown(ev: KeyboardEvent): void {
     <!-- `.pane-frame-body`（端末。DOM 順で後）より後に置く——z-index:auto の重なりは DOM 順で
          後のものが上に来るため、`.pane-frame-edge` の中に置くと端末の不透明な内容の下に隠れて
          見えなくなる（taskcheck が実際のスクリーンショットで発見。review.md 参照）。 -->
-    <span
-      v-if="showBorder && nameFits"
-      class="pane-frame-name"
-      :class="{ 'pane-frame-name-current': selected, 'pane-frame-name-dragging': isDragSource }"
+    <div
+      v-if="modern && reserveNameSpace"
+      class="pane-frame-header-drag"
+      :class="{ 'pane-frame-header-dragging': isDragSource }"
       aria-hidden="true"
       @pointerdown="onNamePointerDown"
       @pointermove="onNamePointerMove"
@@ -593,7 +606,19 @@ function onKeydown(ev: KeyboardEvent): void {
       @pointercancel="onNamePointerCancel"
       @lostpointercapture="onNamePointerCancel"
       @contextmenu="onContextMenu"
-      >{{ paneName }}</span
+    />
+    <span
+      v-if="showBorder && nameFits"
+      class="pane-frame-name"
+      :class="{ 'pane-frame-name-current': selected, 'pane-frame-name-dragging': isDragSource }"
+      :aria-hidden="modern ? undefined : 'true'"
+      @pointerdown="onNamePointerDown"
+      @pointermove="onNamePointerMove"
+      @pointerup="onNamePointerUp"
+      @pointercancel="onNamePointerCancel"
+      @lostpointercapture="onNamePointerCancel"
+      @contextmenu="onContextMenu"
+      ><StateIcon v-if="modern && agentState" class="pane-frame-agent-state" :state="agentState" @pointerdown.stop @pointerup.stop />{{ paneName }}</span
     >
     <!-- 操作ボタン（モダンだけ）。名前の行があるときは、その右端（名前の後ろ。`.pane-frame-name` と同じ理由で端末より後ろに置く）。 -->
     <PaneActions
@@ -610,6 +635,7 @@ function onKeydown(ev: KeyboardEvent): void {
       @zoom="onZoom"
       @close="onClosePane"
     />
+    <DragPreview v-if="isDragSource && dragPointer" v-bind="dragPointer" :label="paneName || '名前なしのペイン'" kind="ペイン" />
   </div>
 </template>
 
@@ -764,6 +790,32 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 .pane-frame-name-dragging {
   cursor: grabbing;
+}
+.pane-frame-drag-source::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--soda-accent, #8be9fd);
+  border-radius: var(--soda-shape-pane-radius, 0px);
+  pointer-events: none;
+  z-index: 25;
+}
+.pane-frame-header-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--soda-shape-name-h, 28px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.pane-frame-header-dragging {
+  cursor: grabbing;
+}
+.pane-frame-agent-state {
+  margin-right: 0.4em;
+  vertical-align: middle;
 }
 /* 枠（absolute）より後に描くよう relative にして、端末を枠の上に重ねる（中央の押下・右クリックは端末へ届く）。 */
 .pane-frame-body {

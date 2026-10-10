@@ -305,6 +305,49 @@ describe("PaneFrame — 枠の中にフォーカスがあるまま消えたら�
 // 20260923-pane-name-dnd-swap：herdr 風の legend 表示（AC1〜AC3）。ドラッグの本体は
 // 20260924-pane-dnd-split-move で「入れ替え」から「縁での分割/中央での分割解除」へ置き換わった
 // （decisions.md D4）——下の describe を参照。
+describe("PaneFrame — モダンの見出し", () => {
+  it("名前がなくても見出しの空白からドラッグでき、ボタンからは始まらない", async () => {
+    const settings = useSettingsStore(pinia);
+    settings.setUiStyle("modern");
+    settings.setPaneAgentNameVisible(true);
+    useSessionStore(pinia).paneUpserted(makePane("p1"));
+    const { wrapper } = mountFrame();
+    const header = wrapper.get(".pane-frame-header-drag");
+    await header.trigger("pointerdown", { button: 0, pointerId: 1, clientX: 100, clientY: 10 });
+    await header.trigger("pointermove", { pointerId: 1, clientX: 110, clientY: 10 });
+    expect(useViewStore(pinia).paneDrag?.sourcePaneId).toBe("p1");
+    await header.trigger("pointercancel", { pointerId: 1 });
+    const button = wrapper.get('[data-pane-action="close"]');
+    await button.trigger("pointerdown", { button: 0, pointerId: 2, clientX: 100, clientY: 10 });
+    await button.trigger("pointermove", { pointerId: 2, clientX: 110, clientY: 10 });
+    expect(useViewStore(pinia).paneDrag).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("エージェントの状態と未読の完了を名前の前に表示し、終了したら外す", async () => {
+    const settings = useSettingsStore(pinia);
+    settings.setUiStyle("modern");
+    settings.setPaneAgentNameVisible(true);
+    const session = useSessionStore(pinia);
+    const agent = { instanceId: "agent1", kind: "claude", label: "Claude", state: "working" as const, completionSeq: 0, serverSeenSeq: 0, verified: true, since: 1 };
+    session.paneUpserted(makePane("p1", { label: "build", agent }));
+    const { wrapper } = mountFrame();
+    expect(wrapper.get(".pane-frame-name .state-icon").attributes("data-state")).toBe("working");
+    const stateIcon = wrapper.get(".pane-frame-name .state-icon");
+    await stateIcon.trigger("pointerdown", { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    await stateIcon.trigger("pointermove", { pointerId: 1, clientX: 20, clientY: 10 });
+    expect(useViewStore(pinia).paneDrag).toBeNull();
+    await stateIcon.trigger("pointerup", { pointerId: 1, clientX: 20, clientY: 10 });
+    session.paneUpserted(makePane("p1", { label: "build", agent: { ...agent, state: "idle", completionSeq: 1 } }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get(".pane-frame-name .state-icon").attributes("data-state")).toBe("done");
+    session.paneUpserted(makePane("p1", { label: "build" }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".pane-frame-name .state-icon").exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
 describe("PaneFrame — 名前の legend 表示（AC1〜AC3）", () => {
   it("名前があり設定が有効なら、枠に legend 用のクラスが付く（AC1）", async () => {
     const settings = useSettingsStore(pinia);
