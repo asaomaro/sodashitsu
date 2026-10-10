@@ -20,6 +20,8 @@ export interface SessionFilePane {
    * 「optional 追加・schema 番号は据え置き」方式。design D2）。
    */
   agentSession?: { kind: string; sessionId: string; reportedAt: number } | undefined;
+  /** 前の会話の参照（最新が先頭。最大 2 件。再開の失敗のとき、一つ前へ戻す。20261009-agent-session-attribution。古い保存には無い）。 */
+  agentSessionHistory?: { kind: string; sessionId: string; reportedAt: number }[] | undefined;
 }
 export interface SessionFileTab {
   id: string;
@@ -113,6 +115,7 @@ const SessionFilePaneSchema: z.ZodType<SessionFilePane> = z.object({
   shell: z.string(),
   status: z.enum(["running", "failed"]).optional(),
   agentSession: z.object({ kind: z.string(), sessionId: z.string(), reportedAt: z.number() }).optional(),
+  agentSessionHistory: z.array(z.object({ kind: z.string(), sessionId: z.string(), reportedAt: z.number() })).max(8).optional(),
 });
 const SessionFileTabSchema: z.ZodType<SessionFileTab> = z.object({
   id: z.string(),
