@@ -779,6 +779,8 @@ export interface SharedPrefs {
   paneFrameThickness?: "thin" | "default" | "thick";
   paneAgentNameVisible?: boolean;
   tabBarPosition?: "top" | "bottom";
+  /** tab が 1 つのときも tab バーを出すか（20261008-ui-style の AC24。無い・`null`＝様式に従う）。端末版は読まず、知らない項目として保つ。 */
+  tabBarAlways?: boolean | null;
   /** tab バーの右端（client-core の `TabBarRightEntry[]`）。 */
   tabBarRight?: unknown[];
   tabBarRightSeparator?: string;

@@ -396,3 +396,81 @@ test("畳んだサイドバー: 境の印（縦の中央）は、行の印〔状
   expect(r.width).toBeGreaterThanOrEqual(16);
   client.close();
 });
+
+test("設定「tab が 1 つのときも tab バーを出す」（AC24）: 選んだ値が様式より優先され、様式を切り替えても残る。出る・消えるときの桁・行は落ち着き、「既定に戻す」で様式に従う", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const views = await watchClientViews(page);
+  await open(page, appServer);
+  const settle = async (): Promise<void> => {
+    let last = -1;
+    for (let i = 0; i < 40; i++) {
+      const c = views.count();
+      if (c === last) return;
+      last = c;
+      await page.waitForTimeout(300);
+    }
+  };
+  const bar = page.locator(".tab-bar");
+  const boxH = () => page.locator("[data-pane-frame-main]").first().evaluate((e) => e.getBoundingClientRect().height);
+  await settle();
+  const h0 = await boxH();
+  await expect(bar).toHaveCount(0); // クラシック・既定: 出さない（今のまま）
+
+  // 設定の画面から「出す」を入れる（クラシックのまま）。
+  await focusTerminal(page);
+  await prefixKey(page, "s");
+  const dialog = page.locator("dialog.settings-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
+  const sw = dialog.locator('[data-setting="tab-bar-always"]');
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toHaveCount(0); // 様式に従っている間は、戻す道は出ない
+  let before = views.count();
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toBeVisible();
+  await expect(bar).toHaveCount(1);
+  await page.keyboard.press("Escape");
+  await settle();
+  expect(views.count() - before, "tab バーが出た後に送られた client.view").toBeLessThanOrEqual(2);
+  expect(await boxH(), "tab バーの分、箱が低くなる").toBeLessThan(h0);
+  // サーバの共有の設定に、選んだ値が書かれている（様式に関わらない）。
+  const stored = async (): Promise<unknown> => (await client.request("prefs.get", {}))["prefs"]["tabBarAlways"] ?? null;
+  await expect.poll(stored).toBe(true);
+
+  // モダンへ切り替えても、選んだ値のまま（出ている）。クラシックへ戻しても出たまま。
+  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  await expect(bar).toHaveCount(1);
+  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  await expect(bar).toHaveCount(1);
+
+  // 「出さない」を選ぶと、モダンでも出ない。
+  before = views.count();
+  await client.request("prefs.set", { patch: { tabBarAlways: false } });
+  await expect(bar).toHaveCount(0);
+  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
+  await expect(bar, "モダンでも、選んだ「出さない」が効く").toHaveCount(0);
+  await settle();
+  expect(await boxH(), "出さないので、箱は元の高さ（モダンの角・余白の分は、すき間の表で変わる）").toBeGreaterThan(0);
+
+  // 「既定に戻す」（設定の画面から）: 様式に従う（モダンなので出る）。
+  await focusTerminal(page);
+  await prefixKey(page, "s");
+  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
+  await expect(sw).toHaveAttribute("aria-checked", "false");
+  await dialog.locator('[data-setting="tab-bar-always-reset"]').click();
+  await expect(bar).toHaveCount(1);
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toHaveCount(0);
+  await expect.poll(stored).toBeNull();
+  await page.keyboard.press("Escape");
+  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  await expect(bar, "既定に戻した後は、様式に従う（クラシックは出さない）").toHaveCount(0);
+  await settle();
+  expect(await boxH()).toBeCloseTo(h0, 0);
+  client.close();
+});

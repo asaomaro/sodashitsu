@@ -28,8 +28,11 @@ const settings = useSettingsStore();
 const actions = inject(ActionDispatcherKey);
 const conn = inject(ConnectionKey);
 const registry = inject(TerminalRegistryKey, undefined);
-/** モダンの配置では、tab が 1 つだけのときも tab バー（と「＋」）を出す（20261008-ui-style AC17）。 */
-const { modernLayout } = useUiStyle();
+/**
+ * tab が 1 つだけのときも tab バー（と「＋」）を出すか（20261008-ui-style AC17・AC24）。設定の値があればそれ、無ければ様式に従う
+ * （モダンの配置: 出す・クラシック: 出さない）。
+ */
+const { tabBarAlways } = useUiStyle();
 
 const tabs = computed(() => {
   const ws = view.workspaceId ? session.workspaces.get(view.workspaceId) : undefined;
@@ -40,7 +43,7 @@ const tabs = computed(() => {
 const root = ref<HTMLElement | null>(null);
 const tabsEl = ref<HTMLElement | null>(null);
 /** tab バーが見えているか（`v-if` と同じ条件をここにも持つ）。 */
-const visible = computed(() => modernLayout.value || tabs.value.length !== 1);
+const visible = computed(() => tabBarAlways.value || tabs.value.length !== 1);
 
 /**
  * tab バーの中にフォーカスがあるまま非表示になるとき（自動非表示。AC-I6）、選ばれている pane の
