@@ -271,7 +271,7 @@
       依存: T19a, T19b
       AC: AC-U4, AC-U5, AC-U6, AC-U7
 
-- [ ] T15: PR4 グラフで移す（下の T15a〜T15e に分ける。この行は、まとめ）
+- [x] T15: PR4 グラフで移す（下の T15a〜T15e に分ける。この行は、まとめ）
       依存: T11
       AC: AC-M1, AC-M2, AC-M3, AC-M4, AC-X2
 
@@ -279,19 +279,19 @@
 
 方針: **サーバの新しい方式は足さない**。pane の移動は `pane.move_to_tab`、workspace・worktree グループのグループ間の移動は今のサイドバーの操作と同じ道。断りの理由はサーバの答えを正とし、画面の「落とせない」表示は同じ判定（`paneMoveBlock`）を先に見せるだけ。位置（`graph.update`）と所属の移動は別（囲いの外へ出るまでは位置の変更。**別の囲いの上で離したときだけ**移動）。モバイルは対象外。
 
-- [ ] T15a: ノードを別の workspace の囲い・tab のタグへ落とす（**独立点検あり**。AC-M1・M2）。つかんだ時点で、落とせる囲い（同じ worktree の workspace）と落とせない囲いを見分けられる見た目にし、落とせない囲いの上では理由を出す。離すと `pane.move_to_tab`（囲い→選んでいる tab・タグ→その tab）。`Esc`・構成の変化で取りやめ。成功したら、落とした囲いの中の離した場所に近い空きへ置く（`resolveDrop`）。失敗・取りやめはつかむ前の位置へ。元が空になる扱いは、サイドバーの D&D と同じ（同じ RPC）。
+- [x] T15a: ノードを別の workspace の囲い・tab のタグへ落とす（**独立点検あり**。AC-M1・M2）。つかんだ時点で、落とせる囲い（同じ worktree の workspace）と落とせない囲いを見分けられる見た目にし、落とせない囲いの上では理由を出す。離すと `pane.move_to_tab`（囲い→選んでいる tab・タグ→その tab）。`Esc`・構成の変化で取りやめ。成功したら、落とした囲いの中の離した場所に近い空きへ置く（`resolveDrop`）。失敗・取りやめはつかむ前の位置へ。元が空になる扱いは、サイドバーの D&D と同じ（同じ RPC）。
       依存: なし
       AC: AC-M1, AC-M2
-- [ ] T15b: workspace・worktree グループを別のグループへ（**独立点検あり**。AC-M3）。囲いの見出しをつかんで、空間の見出し・サイドバーのグループの行へ落とす。見出しのメニューの「別のグループへ移す…」。worktree グループはひとかたまり。中の workspace だけを移す操作は出さない。
+- [x] T15b: workspace・worktree グループを別のグループへ（**独立点検あり**。AC-M3）。囲いの見出しをつかんで、空間の見出し・サイドバーのグループの行へ落とす。見出しのメニューの「別のグループへ移す…」。worktree グループはひとかたまり。中の workspace だけを移す操作は出さない。
       依存: T15a
       AC: AC-M3
-- [ ] T15c: キーだけの道（AC-X2）。ノードのメニューに「別の workspace へ移す…」（落とせる先の一覧。落とせない先は理由つきで薄く）。
+- [x] T15c: キーだけの道（AC-X2）。ノードのメニューに「別の workspace へ移す…」（落とせる先の一覧。落とせない先は理由つきで薄く）。
       依存: T15a
       AC: AC-X2, AC-M2
-- [ ] T15d: 取り違えの守りと E2E（AC-M4）。`graph-move.spec.ts`: 落とす（囲い・タグ）→ 新しい接続のスナップショットで確かめる／落とせない囲い（別の worktree）→ 何も送られず元へ戻る／`Esc`／サーバが断ったとき／線が残る／端末の窓が開いたまま／キーだけ。否定の対照。既存の `graph-spaces`・`graph-screen`・`graph-add`・`graph-terminal`・`graph-subagent-nodes` が通る。
+- [x] T15d: 取り違えの守りと E2E（AC-M4）。`graph-move.spec.ts`: 落とす（囲い・タグ）→ 新しい接続のスナップショットで確かめる／落とせない囲い（別の worktree）→ 何も送られず元へ戻る／`Esc`／サーバが断ったとき／線が残る／端末の窓が開いたまま／キーだけ。否定の対照。既存の `graph-spaces`・`graph-screen`・`graph-add`・`graph-terminal`・`graph-subagent-nodes` が通る。
       依存: T15a, T15c
       AC: AC-M4
-- [ ] T15e: 文書と絵（`docs/agent-graph.md`。絵は `graph-pr4-shots/`）。
+- [x] T15e: 文書と絵（`docs/agent-graph.md`。絵は `graph-pr4-shots/`）。
       依存: T15d
       AC: AC-M1, AC-M2, AC-X2
 - [ ] T16: PR5 処理のノード
