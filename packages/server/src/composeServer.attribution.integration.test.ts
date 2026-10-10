@@ -35,7 +35,12 @@ import { writeFileSync } from "node:fs";
 writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.stdin.setRawMode(true);
 process.stdout.write("\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n");
-process.stdin.on("data", (d) => { if (String(d).includes("q")) process.exit(0); });
+process.stdin.on("data", (d) => {
+  if (!String(d).includes("q")) return;
+  const id = process.env.FAKE_EXIT_ID;
+  if (id) process.stdout.write("Disconnected from this task. Any running work continues.\\r\\nTo reconnect, run:\\r\\n  codex resume " + id + "\\r\\n");
+  setTimeout(() => process.exit(0), 50);
+});
 setInterval(() => {}, 1000);
 `,
     );
@@ -48,16 +53,18 @@ setInterval(() => {}, 1000);
     const codexWrapper = join(dir, "bin", "codex");
     await writeFile(
       codexWrapper,
-      `#!/bin/bash\nexec -a codex ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`,
+      `#!/bin/bash\necho "$@" >> ${JSON.stringify(join(dir, "codex-args.log"))}\nexec -a codex ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`,
     );
     await chmod(codexWrapper, 0o755);
-    savedEnv = { HOME: process.env["HOME"], PATH: process.env["PATH"], ENV: process.env["ENV"] };
+    savedEnv = { HOME: process.env["HOME"], PATH: process.env["PATH"], ENV: process.env["ENV"], CODEX_HOME: process.env["CODEX_HOME"] };
     process.env["HOME"] = dir;
+    process.env["CODEX_HOME"] = join(dir, "codex-home"); // 会話の記録の検算（lookupCodexRecord）が見る場所
     process.env["PATH"] = `${join(dir, "bin")}:${process.env["PATH"] ?? "/usr/bin:/bin"}`;
     delete process.env["ENV"];
   });
   afterEach(async () => {
     for (const fn of cleanups.splice(0).reverse()) await fn();
+    await rm(join(dir, "codex-home"), { recursive: true, force: true }); // 会話の記録（検算）は、試験ごとに作る
   });
   afterAll(async () => {
     for (const [k, v] of Object.entries(savedEnv)) {
@@ -172,6 +179,14 @@ setInterval(() => {}, 1000);
   // レビュー S1: Codex 0.162 のフックは常駐の daemon の中で動く（シェルの子孫でない）。pane が 1 つだけなら、今までどおり付く。
   describe("Codex の daemon の報告（S1）", () => {
     const daemonPid = process.pid; // この試験のプロセス: どの pane のシェルの子孫でもない
+    const U1 = "01a1235d-a77d-7e90-9c85-266bd8da0aa1";
+    const U2 = "01a1235d-a77d-7e90-9c85-266bd8da0aa2";
+    const U3 = "01a1235d-a77d-7e90-9c85-266bd8da0aa3";
+    async function record(id: string, cwd: string): Promise<void> {
+      const day = join(dir, "codex-home", "sessions", "2026", "10", "10");
+      await mkdir(day, { recursive: true });
+      await writeFile(join(day, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify({ type: "session_meta", payload: { id, cwd, originator: "codex-tui" } })}\n`);
+    }
     async function bootWithCodex() {
       const stateDir = await mkdtemp(join(dir, "state-"));
       const server = await boot(stateDir);
@@ -184,18 +199,21 @@ setInterval(() => {}, 1000);
 
     it("前面の codex がサーバ全体で 1 つで、cwd が pane の場所と同じなら、daemon の報告が pane に付く", async () => {
       const { server, stateDir, paneId, cwd } = await bootWithCodex();
-      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-one", agentPid: daemonPid, cwd });
-      await vi.waitFor(() => expect(refOf(server, paneId)).toBe("codex-one"));
+      await record(U1, cwd);
+      await report(stateDir, { paneId, kind: "codex", sessionId: U1, agentPid: daemonPid, cwd });
+      await vi.waitFor(() => expect(refOf(server, paneId)).toBe(U1));
     });
 
     it("cwd が違う（Sodashitsu の外の Codex）・cwd が無い報告は付かない", async () => {
       const { server, stateDir, paneId, cwd } = await bootWithCodex();
-      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-far", agentPid: daemonPid, cwd: "/somewhere/else" });
-      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-nocwd", agentPid: daemonPid });
+      await record(U2, cwd);
+      await record(U3, cwd);
+      await report(stateDir, { paneId, kind: "codex", sessionId: U2, agentPid: daemonPid, cwd: "/somewhere/else" });
+      await report(stateDir, { paneId, kind: "codex", sessionId: U3, agentPid: daemonPid });
       await sleep(500);
       expect(refOf(server, paneId)).toBeNull();
-      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-ok", agentPid: daemonPid, cwd });
-      await vi.waitFor(() => expect(refOf(server, paneId)).toBe("codex-ok"));
+      await report(stateDir, { paneId, kind: "codex", sessionId: U2, agentPid: daemonPid, cwd });
+      await vi.waitFor(() => expect(refOf(server, paneId)).toBe(U2));
     });
 
     it("前面の codex が 2 つあれば、どちらにも付かない（別の pane の上書きもしない）", async () => {
@@ -209,6 +227,131 @@ setInterval(() => {}, 1000);
       await sleep(500);
       expect(refOf(server, paneId)).toBeNull();
       expect(refOf(server, second)).toBeNull();
+    });
+  });
+  // 20261010-codex-multi-pane: Codex の pane が複数あっても、会話の参照が正しい pane に付く（付けられないときは付けない）。
+  describe("複数の Codex の pane（20261010-codex-multi-pane）", () => {
+    const daemonPid = process.pid;
+    const ID1 = "01a12341-547a-7191-8f4e-75de3ffa2434";
+    const ID2 = "01a1234a-1768-7210-befd-023a395239b0";
+    const ID3 = "01a12326-c9f9-7773-8000-6bde9e00ac25";
+
+    async function writeRecord(id: string, cwd: string): Promise<void> {
+      const day = join(dir, "codex-home", "sessions", "2026", "10", "10");
+      await mkdir(day, { recursive: true });
+      const meta = { timestamp: new Date().toISOString(), type: "session_meta", payload: { session_id: id, id, cwd, originator: "codex-tui", base_instructions: { text: "x".repeat(20_000) } } };
+      await writeFile(join(day, `rollout-2026-10-10T10-11-42-${id}.jsonl`), `${JSON.stringify(meta)}\n`);
+    }
+    async function bootTwo() {
+      const stateDir = await mkdtemp(join(dir, "state-"));
+      const server = await boot(stateDir);
+      const p1 = server.session.snapshot().panes[0]!.id;
+      await shellReady(server, p1);
+      const p2 = (await server.session.splitPane(p1, "right", undefined)).pane.id;
+      await shellReady(server, p2);
+      await startAgent(server, p1, null, "codex");
+      await vi.waitFor(() => expect(agentOf(server, p1)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      await startAgent(server, p2, null, "codex");
+      await vi.waitFor(() => expect(agentOf(server, p2)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      return { server, stateDir, p1, p2, cwd: server.session.getPane(p1)!.cwd };
+    }
+    const submit = (server: ComposedServer, paneId: string) => server.terminals.get(paneId)!.writeInput?.("hello\r");
+
+    it("(a) 同じ cwd の 2 つの Codex: 片方が最初の入力を送った直後の daemon の報告は、その pane に付く。もう片方も、同じように付く", async () => {
+      const { server, stateDir, p1, p2, cwd } = await bootTwo();
+      await writeRecord(ID1, cwd);
+      await writeRecord(ID2, cwd);
+      submit(server, p2);
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd, source: "startup" }); // 報告の paneId は p1（daemon を起動した pane）
+      await vi.waitFor(() => expect(refOf(server, p2)).toBe(ID1));
+      expect(refOf(server, p1)).toBeNull();
+      submit(server, p1);
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd, source: "startup" });
+      await vi.waitFor(() => expect(refOf(server, p1)).toBe(ID2));
+      expect(refOf(server, p2)).toBe(ID1);
+    });
+
+    it("(b) ほぼ同時に両方が送ったら、どちらにも付かない", async () => {
+      const { server, stateDir, p1, p2, cwd } = await bootTwo();
+      await writeRecord(ID1, cwd);
+      submit(server, p1);
+      submit(server, p2);
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd, source: "startup" });
+      await sleep(800);
+      expect(refOf(server, p1)).toBeNull();
+      expect(refOf(server, p2)).toBeNull();
+    });
+
+    it("(c) 記録の無い・cwd の違う会話（Sodashitsu の外の Codex）は、直前に入力のあった pane にも付かない", async () => {
+      const { server, stateDir, p1, p2, cwd } = await bootTwo();
+      submit(server, p2);
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID3, agentPid: daemonPid, cwd: "/somewhere/else" });
+      await writeRecord(ID1, cwd);
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd, source: "startup" }); // 記録が無い
+      await sleep(1_500);
+      expect(refOf(server, p2)).toBeNull();
+      expect(refOf(server, p1)).toBeNull();
+    });
+
+    it("引数（codex resume <id>）: 復元で打ち込まれる・利用者が打った pane は、報告を待たずに会話が決まる", async () => {
+      const stateDir = await mkdtemp(join(dir, "state-"));
+      const server = await boot(stateDir);
+      const paneId = server.session.snapshot().panes[0]!.id;
+      await shellReady(server, paneId);
+      await startAgent(server, paneId, null, `codex resume ${ID1}`);
+      await vi.waitFor(() => expect(refOf(server, paneId)).toBe(ID1), { timeout: 10_000 });
+    });
+
+    it("終了の文言: 時刻の一致で付いた参照は、終了のときの `codex resume <id>` で直る。次の起動の引数と同じ pane で別の会話に替わる（d）", async () => {
+      const { server, stateDir, p1, p2, cwd } = await bootTwo();
+      await writeRecord(ID1, cwd);
+      submit(server, p2);
+      await report(stateDir, { paneId: p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd, source: "startup" });
+      await vi.waitFor(() => expect(refOf(server, p2)).toBe(ID1));
+      // p2 の codex を、終了の文言つきで終わらせる（本当は ID2 の会話だった）
+      server.terminals.get(p2)!.write("q");
+      await vi.waitFor(() => expect(agentOf(server, p2)).toBeNull(), { timeout: 15_000, interval: 50 });
+      // この偽の codex は FAKE_EXIT_ID が無いので文言を出さない → 参照は、猶予の間は残る（文言で直るのは、次のテスト）
+      expect(refOf(server, p2)).toBe(ID1);
+      // 同じ pane で、別の会話を始める（引数）
+      await startAgent(server, p2, null, `codex resume ${ID2}`);
+      await vi.waitFor(() => expect(refOf(server, p2)).toBe(ID2), { timeout: 10_000 });
+      expect(server.session.agentSessionHistoryOf(p2).map((h) => h.sessionId)).toEqual([ID1]);
+    });
+
+    it("終了の文言: codex が `To reconnect, run: codex resume <id>` を出して終わると、その pane の会話の参照が、その id になる", async () => {
+      const stateDir = await mkdtemp(join(dir, "state-"));
+      const server = await boot(stateDir);
+      const paneId = server.session.snapshot().panes[0]!.id;
+      await shellReady(server, paneId);
+      await writeRecord(ID3, server.session.getPane(paneId)!.cwd); // 終了の文言は、記録で検算してから付く
+      await startAgent(server, paneId, null, `FAKE_EXIT_ID=${ID3} codex`);
+      await vi.waitFor(() => expect(agentOf(server, paneId)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      expect(refOf(server, paneId)).toBeNull();
+      server.terminals.get(paneId)!.write("q");
+      await vi.waitFor(() => expect(refOf(server, paneId)).toBe(ID3), { timeout: 15_000 });
+    });
+    it("(AC4) 再起動の後、参照のある Codex の pane すべてに `codex resume <id>` が打ち込まれ、参照はそのまま保たれる（報告が来なくても捨てられない・替わらない）", async () => {
+      const first = await bootTwo();
+      await writeRecord(ID1, first.cwd);
+      await writeRecord(ID2, first.cwd);
+      submit(first.server, first.p2);
+      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID1, agentPid: daemonPid, cwd: first.cwd, source: "startup" });
+      await vi.waitFor(() => expect(refOf(first.server, first.p2)).toBe(ID1));
+      submit(first.server, first.p1);
+      await report(first.stateDir, { paneId: first.p1, kind: "codex", sessionId: ID2, agentPid: daemonPid, cwd: first.cwd, source: "startup" });
+      await vi.waitFor(() => expect(refOf(first.server, first.p1)).toBe(ID2));
+      const log = join(dir, "codex-args.log");
+      const countOf = async (id: string) => (existsSync(log) ? (await readFile(log, "utf8")).split("\n").filter((l) => l === `resume ${id}`).length : 0);
+      const before = [await countOf(ID1), await countOf(ID2)];
+      await first.server.close();
+      const again = await boot(first.stateDir);
+      await vi.waitFor(async () => expect([await countOf(ID1), await countOf(ID2)]).toEqual([before[0]! + 1, before[1]! + 1]), { timeout: 20_000 });
+      const panes = again.session.snapshot().panes;
+      for (const p of panes) await vi.waitFor(() => expect(agentOf(again, p.id)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      await sleep(1_500);
+      expect(refOf(again, first.p2)).toBe(ID1);
+      expect(refOf(again, first.p1)).toBe(ID2);
     });
   });
 });
