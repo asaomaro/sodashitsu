@@ -1,6 +1,7 @@
 import type { AgentInfo, AgentIntegrationStatusResult, AskClosedEvent, AskOpenedEvent, DisplayMessageEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
+import { useAgentForkStore } from "./agentFork.js";
 import { useCommandsStore } from "./commands.js";
 import { useSessionStore } from "./session.js";
 import { useViewStore } from "./view.js";
@@ -214,6 +215,10 @@ export class StoreAdapter implements StorePort {
         return;
       case "extension.changed":
         this.opts.onExtensionChanged?.();
+        return;
+      // エージェントの fork の進み具合（20261009-agent-fork）。古いサーバは送らない（応答だけで終われる）。
+      case "agent.fork_progress":
+        useAgentForkStore(this.opts.pinia).apply(e.data);
         return;
       case "display.updated":
       case "display.removed":
