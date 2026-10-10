@@ -493,4 +493,31 @@ function onWheel(ev: WheelEvent): void {
   opacity: 0.75;
   font-size: 0.9em;
 }
+/*
+ * モダン（20261008-ui-style PR6 の AC25）: tab を、画面の切り替えのボタン（`ScreenSwitcher.vue`）と同じ形の言葉にする——区切られた丸いボタンの並び。
+ * 数値は `uiStyle.css` の `--soda-shape-seg-*` を、切り替えのボタンと共有する。働き（クリック・D&D・右クリック・ホイール・「＋」・あふれたときのスクロール）は変えない。
+ * クラシックでは、この規則は当たらない（上の規則のまま）。
+ */
+:root[data-ui-style="modern"] .tab-bar {
+  padding: var(--soda-shape-seg-bar-pad-y) var(--soda-shape-seg-bar-pad-x);
+  gap: var(--soda-shape-seg-gap);
+}
+:root[data-ui-style="modern"] .tab-bar-tabs {
+  gap: var(--soda-shape-seg-gap);
+}
+:root[data-ui-style="modern"] .tab-bar-item,
+:root[data-ui-style="modern"] .tab-bar-new {
+  font-size: var(--soda-shape-seg-font);
+  padding: var(--soda-shape-seg-pad-y) var(--soda-shape-seg-pad-x);
+  border: var(--soda-shape-seg-border) solid var(--soda-menu-border, #44475a);
+  border-radius: var(--soda-shape-seg-radius);
+}
+:root[data-ui-style="modern"] .tab-bar-item:hover,
+:root[data-ui-style="modern"] .tab-bar-new:hover:not(:disabled) {
+  background: var(--soda-menu-hover-bg, #343746);
+}
+:root[data-ui-style="modern"] .tab-bar-item-active,
+:root[data-ui-style="modern"] .tab-bar-item-active:hover {
+  background: var(--soda-menu-active-bg, #44475a);
+}
 </style>

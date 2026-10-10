@@ -36,6 +36,22 @@
   --soda-shape-section-font: 0.95em; /* サイドバーの区画の見出しのボタンと、その右の並び順のボタンの文字の大きさ（クラシックは 0.85em。workspace の行は 1em）。目安: 行の 0.9 倍以上 */
   --soda-shape-section-inner: 1em; /* 見出しのボタンの中の題・印・件数の、ボタンに対する大きさ（クラシックは 0.85em＝ボタンの 0.85em の中でさらに小さい。実効は行の 0.72 倍） */
   --soda-shape-section-opacity: 0.9; /* 見出しの題・印・件数の濃さ（クラシックは 0.75）。文字と地の色の比を、今より下げない */
+  /*
+   * 「区切られた丸いボタンの並び」（画面の切り替えのボタンと、tab バーの tab が共有する形。PR6 の AC25）。クラシックは未定義（部品の側が今の見た目）。
+   * 値は、PR4 までの切り替えのボタンの数値のまま（font 0.8em・余白 0.2em 0.3em・すき間 2px・角 radius-s・線 1px・高さは control-h）。
+   */
+  --soda-shape-seg-font: 0.8em;
+  --soda-shape-seg-pad-y: 0.2em;
+  --soda-shape-seg-pad-x: 0.3em;
+  --soda-shape-seg-gap: 2px;
+  --soda-shape-seg-radius: var(--soda-shape-radius-s);
+  --soda-shape-seg-border: 1px;
+  --soda-shape-seg-bar-pad-y: 0.3em; /* ボタンの並びを載せる帯の、上下の余白 */
+  --soda-shape-seg-bar-pad-x: 0.4em; /* 同じく左右 */
+  /* サイドバーの区画（spaces・agents）のカード（PR6 の AC27）。面の間のすき間・角・地（`--soda-fg` を薄く混ぜる割合。色の値は足さない）。クラシックは未定義＝今の見せ方（区画は線で区切る） */
+  --soda-shape-card-gap: 8px;
+  --soda-shape-card-radius: var(--soda-shape-radius-l);
+  --soda-shape-card-tint: 5%;
   --soda-shape-name-h: 28px; /* pane の名前の行の高さ（右端に操作ボタン〔24px〕が並ぶので、クラシックの 1.2em より高い） */
   --soda-shape-name-top: 6px; /* 名前の行の中で、名前の文字の上の位置 */
   --soda-shape-tag-h: 28px; /* グラフの囲いの見出しの tab のタグの高さ（見出しの帯は、置き場所の計算の定数 40px のまま） */
