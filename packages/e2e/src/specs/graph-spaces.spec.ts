@@ -640,7 +640,7 @@ test.describe("囲いのドラッグ・ノードのドラッグの寄せ（T11f�
     await page.mouse.up();
     await expect(node).not.toHaveClass(/graph-node-blocked/);
     await expect(frameOf(page, w.ws.get("wt-a-ws")!.id)).not.toHaveClass(/graph-frame-blocked/);
-    await expect(page.locator(".toast-list .toast").filter({ hasText: "ほかの workspace の囲いの上には置けません" })).toHaveCount(1);
+    await expect(page.locator(".toast-list .toast").filter({ hasText: "別の worktree の workspace へは移せません" })).toHaveCount(1);
     expect(updatesSent(w).length).toBe(sent0);
     expect(await serverPositions(w)).toEqual(before);
     // 自分の囲いの中・空いた所へは動かせる（落とせない印は出ない）
@@ -1459,8 +1459,8 @@ test.describe("サイドバーの選んでいる行・面の点の格子（PR1f�
     await openGraph(page);
     const g = await rowStyle(rowOf(page, "beta"));
     expect(g.shadow).toContain(accent);
-    // 畳んだサイドバー: 内側の余白は無く、枠・角は破綻しない
-    await page.locator(".sidebar-collapse-btn").click();
+    // 畳んだサイドバー: 内側の余白は無く、枠・角は破綻しない。モダンの配置では、畳むボタンは縁のつまみ（`.sidebar-edge-toggle`。#123）。
+    await page.locator(".sidebar-edge-toggle").click();
     await expect(page.locator(".sidebar-collapsed")).toBeVisible();
     const collapsed = await rowStyle(page.locator(".sidebar-collapsed .sidebar-row-current").first());
     expect(collapsed.margin).toBe("0px");
