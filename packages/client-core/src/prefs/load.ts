@@ -49,6 +49,14 @@ export function loadUiStyle(raw: unknown): UiStyle {
   return raw === "modern" ? "modern" : "classic";
 }
 
+/**
+ * tab が 1 つのときも tab バーを出すか（20261008-ui-style の AC24）。**`true`・`false` のときはその値、それ以外（無い・`null`・壊れた値）は `null`＝様式に従う**
+ * （クラシック: 出さない・モダン: 出す）。保存値は書き換えない。
+ */
+export function loadTabBarAlways(raw: unknown): boolean | null {
+  return typeof raw === "boolean" ? raw : null;
+}
+
 /** 通知の設定（`notify`。20260920-agent-notifications）。値ごとに既定へ落とす。 */
 export function loadNotifyPrefs(raw: unknown): NotifyPrefs {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...DEFAULT_NOTIFY_PREFS };

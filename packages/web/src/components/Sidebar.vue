@@ -775,20 +775,42 @@ const spacesEl = ref<HTMLElement | null>(null);
 const agentsEl = ref<HTMLElement | null>(null);
 const showSectionDivider = computed(() => !view.sidebarCollapsed && !spacesFolded.value && !agentsFolded.value);
 
-/** 配れる高さ（境目の 1px を除く）と、区画ごとの最小（`min-height` の実測）。測れない（描画前・jsdom）ときは total 0＝`clampRatio` が 0.5 を返す。 */
+/**
+ * 区画の入れ物（`.sidebar-sections`）の上下の余白と、区画の間のすき間（モダンのカード。クラシックは 0）。配れる高さから引く分（`trim`）と、
+ * 境目の位置を測るときの、入れ物の上端から最初の区画の上端までの分（`lead`＝上の余白＋すき間 1 つ）。
+ */
+function sectionsChrome(): { lead: number; trim: number } {
+  const el = sectionsEl.value;
+  if (!el) return { lead: 0, trim: 0 };
+  const cs = getComputedStyle(el);
+  const pt = parseFloat(cs.paddingTop) || 0;
+  const pb = parseFloat(cs.paddingBottom) || 0;
+  const gap = parseFloat(cs.rowGap) || 0;
+  // カードの縁（上下の線。区画の高さは、中身に縁が足されるため、配れる高さから引く）。クラシックは 0。
+  const edges = (e: HTMLElement | null): number => {
+    if (!e) return 0;
+    const s = getComputedStyle(e);
+    return (parseFloat(s.borderTopWidth) || 0) + (parseFloat(s.borderBottomWidth) || 0);
+  };
+  const spacesEdge = edges(spacesEl.value);
+  const agentsEdge = edges(agentsEl.value);
+  return { lead: pt + gap + spacesEdge, trim: pt + pb + gap * 2 + spacesEdge + agentsEdge };
+}
+
+/** 配れる高さ（境目の 1px と、モダンのカードの余白・すき間を除く）と、区画ごとの最小（`min-height` の実測）。測れない（描画前・jsdom）ときは total 0＝`clampRatio` が 0.5 を返す。 */
 function measureBox(): SectionBox {
   const px = (e: HTMLElement | null): number => {
     if (!e) return 0;
     const v = parseFloat(getComputedStyle(e).minHeight);
     return Number.isFinite(v) ? v : 0;
   };
-  return { total: Math.max(0, (sectionsEl.value?.clientHeight ?? 0) - 1), minTop: px(spacesEl.value), minBottom: px(agentsEl.value) };
+  return { total: Math.max(0, (sectionsEl.value?.clientHeight ?? 0) - 1 - sectionsChrome().trim), minTop: px(spacesEl.value), minBottom: px(agentsEl.value) };
 }
 
 /** 自動の配分のときの aria-valuenow 用: spaces の実際の高さ / 配れる高さ。比があるときはその比。 */
 const measuredRatio = ref(0.5);
 function measureRatio(): void {
-  const total = (sectionsEl.value?.clientHeight ?? 0) - 1;
+  const total = (sectionsEl.value?.clientHeight ?? 0) - 1 - sectionsChrome().trim;
   const h = spacesEl.value?.offsetHeight ?? 0;
   if (total > 0 && h > 0) measuredRatio.value = Math.min(1, h / total);
 }
@@ -812,7 +834,7 @@ const sectionDrag = useResizeDrag<{ ratio: number | null }>({
   begin: () => ({ ratio: view.sidebarSectionRatio }),
   move: (ev) => {
     const top = sectionsEl.value?.getBoundingClientRect().top ?? 0;
-    view.setSectionRatio(ratioFromOffset(ev.clientY - top, measureBox()));
+    view.setSectionRatio(ratioFromOffset(ev.clientY - top - sectionsChrome().lead, measureBox()));
   },
   commit: () => view.commitSectionRatio(),
   // 始めた比（null＝自動を含む）へ戻す。保存はしない（始める前から保存済みの値のまま）。
@@ -1197,6 +1219,26 @@ watchDragInterrupt(view, () => {
 .sidebar-agents {
   flex: 1 1 0;
   border-top: 1px solid var(--soda-menu-border, #44475a);
+}
+/*
+ * モダン（20261008-ui-style PR6 の AC27）: 区画（spaces・agents）をカードにする——角の丸い面・薄い地と縁・面の間のすき間。たたんだサイドバーは、今のまま（幅が無いので）。
+ * 区画の高さのつまみ（`sectionDrag`）の計算は、ここの余白・すき間の分を `sectionsChrome` で引く。クラシックでは、この規則は当たらない。
+ */
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-sections {
+  padding: var(--soda-shape-card-gap);
+  gap: var(--soda-shape-card-gap);
+}
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-spaces,
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-agents,
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-sections-split .sidebar-agents {
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: var(--soda-shape-card-radius);
+  background: color-mix(in srgb, var(--soda-fg, #f8f8f2) var(--soda-shape-card-tint), transparent);
+  overflow: hidden;
+}
+/* カードの間は、すき間が区切る（線は引かない）。つまみの当たり判定・強調は `resize-handle`。 */
+:root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-section-divider {
+  background: transparent;
 }
 /* 両方を開いているときの境目: 高さ 1px（agents の `border-top` の代わり）。当たり判定と強調の線は `resize-handle`。 */
 .sidebar-sections-split .sidebar-agents {
