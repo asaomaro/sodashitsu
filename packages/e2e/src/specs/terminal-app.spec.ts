@@ -290,8 +290,10 @@ test("tab バーの ＋ は帯を高くしない。サイドバーは折りた�
   // 折りたたむと帯が 2 つ消えるので、Tab で最初に来るサイドバーのボタンは折りたたみだけになる
   // （展開時は 新規 → メニュー → ソート → 折りたたみ の 4 つ。`keys-mouse-dialogs.spec.ts` で確認）。
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  // サイドバーの前には、画面の切り替えのボタンと通知のベルが先に来る（20261009 の graph-first PR1b 以降）ので、4 回では届かない。届いたもののうち
+  // サイドバーのボタンと tab だけを順に見る（下の `filter`）ので、多めに押しても確かめる中身は同じ。
   const reached: string[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 16; i++) {
     await page.keyboard.press("Tab");
     reached.push(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.className ?? ""));
   }

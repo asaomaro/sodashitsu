@@ -75,7 +75,18 @@ test.describe("面が既に落としている状態で、利用者が操作す�
     await page.locator(".xterm-screen").first().click();
     await setScriptOk(appServer, paneId, "g", slow);
     await expect(scriptFrameEl(page)).toHaveCount(1);
-    await page.mouse.click(2, 2); // 左上の隅（フォーカスを受けない余白）
+    // フォーカスを受けない余白: 画面の切り替えの帯（サイドバーの上。tab が 1 つだと tab バーは出ない）自身の、どのボタンも載っていない場所（右から探す）。
+    // 左上の隅（2, 2）は、クラシックの切り替えのボタンが帯いっぱいに伸びる（20261008-ui-style PR6 の AC25）ので、もう余白ではない。
+    const blank = await page.evaluate(() => {
+      const bar = document.querySelector(".screen-switcher");
+      if (bar === null) return null;
+      const r = bar.getBoundingClientRect();
+      const y = r.top + r.height / 2;
+      for (let x = r.right - 2; x > r.left; x -= 2) if (document.elementFromPoint(x, y) === bar) return { x, y };
+      return null;
+    });
+    expect(blank, "画面の切り替えの帯に、ボタンの載っていない場所がある").not.toBeNull();
+    await page.mouse.click(blank!.x, blank!.y);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("BODY");
     expect(await typeAndCount(page, input, paneId)).toBeGreaterThanOrEqual(26);

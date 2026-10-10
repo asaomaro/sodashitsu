@@ -90,11 +90,12 @@ test("マウスでの選択は選択終了時に自動でクリップボード�
   await typeLine(page, `echo ${marker}`);
   await client.waitForOutput(p1, marker);
 
-  const paneEl = page.locator(".terminal-pane").first();
-  const box = await paneEl.boundingBox();
-  if (!box) throw new Error("terminal-pane に boundingBox が無い");
+  // 基準は pane の枠ではなく、xterm の画面（`.xterm-screen`）。pane の枠の上には、画面より外の余白がある（枠・隙間）ので、枠の上端からの固定の距離だと
+  // 画面の外（xterm が受けない場所）を掴むことがある。
+  const box = await page.locator(".xterm-screen").first().boundingBox();
+  if (!box) throw new Error(".xterm-screen に boundingBox が無い");
   // xterm.js は canvas 描画なので、文字がどのピクセル位置にあるかは DOM から分からない。この pane は
-  // つないだ直後で内容がまだ少ないため、実際の文字は pane の上のほうの数行にしか無い
+  // つないだ直後で内容がまだ少ないため、実際の文字は画面の上のほうの数行にしか無い
   // （下の方はまだ何も描かれていない空行）——「最終行付近」を狙うと実際には空行を掴んでしまい、
   // 選択が一切発生しないことを実地の Playwright で確認した。プロンプト＋打ち込んだコマンドが必ずある
   // 先頭付近を、複数行にまたいでドラッグすることで確実に文字を拾う。

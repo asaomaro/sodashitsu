@@ -125,19 +125,24 @@ test("引き継ぐ（何も設定していない利用者の既定）：cd し�
   await o.context.close();
 });
 
-test("ホーム・サーバを起動した場所・指定した場所を選ぶと、そこで開く（AC6〜AC8）", async ({ browser, appServer }) => {
-  test.setTimeout(60_000); // ブラウザを 3 回開き直すので、既定の 30 秒では混んだマシンで足りない
-  const elsewhere = await tempDir("elsewhere");
+// 方針は共有の設定（サーバが持つ。20260927-cli-mode）。**1 つのサーバの中では、最初のブラウザが移した値が後のブラウザの localStorage に勝つ**
+// （「サーバに無い項目だけを移す」。`PrefsSync`）ので、方針ごとに別のサーバ（＝別のテスト）で確かめる。
 
-  // AC6：ホーム（新しい tab）。
+test("ホームを選ぶと、新しい tab はホームで開く（AC6）", async ({ browser, appServer }) => {
+  test.setTimeout(60_000);
+  const elsewhere = await tempDir("elsewhere");
   const home = await openBrowser(browser, appServer, { newCwdPolicy: "home" });
   await focusTerminal(home.page);
   await cdIn(home, home.shown()[0]!, elsewhere, "h");
   const homePane = await openNewPane(home, newTab(home.page));
   await expectPwd(home, homePane, await realpath(homedir()), "ホームで開く");
   await home.context.close();
+});
 
-  // AC7：サーバを起動した場所（E2E のサーバはテストのプロセスの中で動くので `process.cwd()`。appServer.ts）。**分割で見分ける**——
+test("サーバを起動した場所を選ぶと、分割はそこで開く（cd した先ではない。AC7）", async ({ browser, appServer }) => {
+  test.setTimeout(60_000);
+  const elsewhere = await tempDir("elsewhere");
+  // サーバを起動した場所（E2E のサーバはテストのプロセスの中で動くので `process.cwd()`。appServer.ts）。**分割で見分ける**——
   // 新しい tab・workspace は以前からそこで開いていたが、分割は以前なら元の pane の記録された場所で開いていた。その記録が `cd` した先へ
   // 追従した（エージェントの監視が `Pane.cwd` を書き換えた）のを**サーバの状態として**待ってから分割する（前提を作るための確認。条項が
   // 認めるテストのクライアントの使い方）——待たないと、以前の振る舞いでも記録がまだ起動した場所のままで通りうる。
@@ -150,8 +155,11 @@ test("ホーム・サーバを起動した場所・指定した場所を選ぶ�
   const currentPane = await openNewPane(current, split(current.page));
   await expectPwd(current, currentPane, await realpath(process.cwd()), "サーバを起動した場所で開く（cd した先ではない）");
   await current.context.close();
+});
 
-  // AC8：指定した場所（新しい workspace）。`~` の展開と相対パスの拒否はサーバの単体（newCwd.test.ts）。
+test("指定した場所を選ぶと、新しい workspace はそこで開く（AC8）", async ({ browser, appServer }) => {
+  test.setTimeout(60_000);
+  // `~` の展開と相対パスの拒否はサーバの単体（newCwd.test.ts）。
   const picked = await tempDir("picked");
   const path = await openBrowser(browser, appServer, { newCwdPolicy: "path", newCwdPath: picked });
   await focusTerminal(path.page);
