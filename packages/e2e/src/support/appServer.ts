@@ -60,7 +60,9 @@ async function rcLessShell(stateDir: string): Promise<string | null> {
   const dir = join(stateDir, "test-shell");
   await mkdir(dir, { recursive: true });
   const path = join(dir, "bash");
-  await writeFile(path, '#!/bin/sh\nexec /bin/bash --norc --noprofile "$@"\n');
+  // プロンプトは、Debian・Ubuntu の既定の `.bashrc` と同じ（端末のタイトル `user@host: dir` と `user@host:dir$ `）。rc を読まないと既定の `bash-5.2$ ` になり、
+  // タイトルが無く・カーソルの位置も違うので、pane の見出し・端末の大きさに依る試験の結果が、rc の有無で変わる。
+  await writeFile(path, `#!/bin/sh\nPS1='\\[\\e]0;\\u@\\h: \\w\\a\\]\\u@\\h:\\w\\$ '\nexport PS1\nexec /bin/bash --norc --noprofile "$@"\n`);
   await chmod(path, 0o755);
   return path;
 }
