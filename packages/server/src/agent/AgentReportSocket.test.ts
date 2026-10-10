@@ -1,7 +1,7 @@
 import { connect } from "node:net";
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTempDir } from "../persist/atomicFile.js";
 import { MemoryLogger } from "../log/Logger.js";
 import { startAgentReportSocket, type AgentReport, type AgentReportSocket } from "./AgentReportSocket.js";
@@ -72,6 +72,18 @@ describe("AgentReportSocket", () => {
     await writeFile(socketPath, "stale");
     socket = await startAgentReportSocket(socketPath, () => undefined, logger);
     expect(logger.lines.filter((e) => e.level === "warn")).toEqual([]);
+  });
+
+  it("session の報告の transcriptPath（記録の場所）は、形が正しいときだけ通す（20261010-agent-usage）", async () => {
+    const got: AgentReport[] = [];
+    socket = await startAgentReportSocket(socketPath, (r) => got.push(r), logger);
+    for (const [sid, p] of [["s1", "/a/b/s1.jsonl"], ["s2", "x".repeat(2000)], ["s3", "a\u0000b"]] as const) {
+      await send(socketPath, JSON.stringify({ paneId: "p1", kind: "claude", sessionId: sid, transcriptPath: p }) + "\n");
+    }
+    await vi.waitFor(() => expect(got).toHaveLength(3));
+    expect(got[0]).toMatchObject({ type: "session", sessionId: "s1", transcriptPath: "/a/b/s1.jsonl" });
+    expect(got[1]).not.toHaveProperty("transcriptPath");
+    expect(got[2]).not.toHaveProperty("transcriptPath");
   });
 
   describe("type つきの報告（20261004-subagent-display）", () => {

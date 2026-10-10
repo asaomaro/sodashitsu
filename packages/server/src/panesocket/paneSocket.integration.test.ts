@@ -355,6 +355,7 @@ describe.skipIf(process.platform === "win32")(
         ["ask.subscribe", {}],
         ["agent.fork", { paneId, target: { kind: "same" } }], // 20261009-agent-fork（A3）
         ["agent.fork_preview", { paneId }],
+        ["agent.usage", { paneId }], // 20261010-agent-usage（ログイン済みの `/ws` だけ）
       ] as const) {
         expect(await call(sockPath, op, paneId, params), op).toEqual({
           ok: false,

@@ -48,6 +48,7 @@ sodactl agent send-keys <target> <key>...
 sodactl agent rename <target> <name>|--clear
 sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [-- <args>...]
 sodactl agent fork <target> [--worktree <branch>] [--no-note] [--no-wait] [--timeout <ms>] [--json]   # 会話を引き継いだエージェントを起こす（docs/agent-fork.md）
+sodactl agent usage [<target>] [--json]                               # エージェントの利用状況（トークン・コスト・コンテキスト。docs/agent-usage.md）
 sodactl graph show [--json]                 # 連携のグラフ（下の「連携のグラフ」）。graph のコマンドは既定が表、--json で JSON
 sodactl graph link add <from> <to> [--kind trigger|supervise|approval] [--on done|blocked] [--prompt <text>] [--output <N>|--no-output] [--when-busy wait|skip] [--mode notify|delegate] [--lines <N>] [--limit <N>] [--json]
 sodactl graph link set <linkId> [--on …] [--prompt …] [--output <N>|--no-output] [--when-busy …] [--mode …] [--lines <N>] [--limit <N>] [--json]
@@ -603,6 +604,12 @@ pane の中で検出されたコーディングエージェント（Claude Code�
     `agent_start_failed`。`--timeout`（既定 30000。3000 より大きく 300000 以下。範囲外は `invalid_agent_timeout`、0 以上の整数でなければ使用誤り）を
     過ぎた → `timeout`（検出されて名前が付いていれば、名前は付いたまま）。
 - 他の code: `unsupported_agent_kind`（サーバ）・`agent_pane_not_found`・`agent_start_input_failed`（端末に書けなかった）。
+
+### 利用状況（`agent usage`）
+
+`sodactl agent usage [<target>] [--json]` は、エージェントの利用状況を出します。`<target>` を省くと、利用状況を取れる全部のエージェント（今は Claude Code）。人が読む表は、pane・種類・名前・モデル・トークン（**数え方の印つき**: 「累計」〔記録の会計の行〕か「記録に残る分」〔記録に残っている分の合計。下限〕。大きな記録の末尾だけのときは「一部」）・コスト（記録の会計の行がある時だけ。時点つき）・コンテキスト（窓の大きさが分かるときだけ率）・更新の時刻。取れない項目は「—」。`--json` は `{ panes: { <paneId>: AgentUsage | null }, accounts: [] }`。
+
+答えは数字・モデル名・時刻・ラベルだけです（会話の中身・記録の場所・セッションの名前は出ません）。ログイン済みの接続の方式 `agent.usage` で、`pane.sock` には載せません。何が出るか・限界は `docs/agent-usage.md`。
 
 ### 会話を引き継いで起こす（`agent fork`）
 

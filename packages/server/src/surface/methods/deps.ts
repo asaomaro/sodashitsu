@@ -8,6 +8,7 @@ import type { AgentIntegrationService } from "../../agent/AgentIntegrationServic
 import type { AgentStarter } from "../../agent/AgentStarter.js";
 import type { AgentForkRunner } from "../../agent/AgentForkRunner.js";
 import type { SubagentTranscriptReader } from "../../agent/SubagentTranscript.js";
+import type { UsageService } from "../../usage/UsageService.js";
 import type { MetadataService } from "../../metadata/MetadataService.js";
 import type { MachineStatus, ServerSessionEntry } from "@sodashitsu/protocol";
 import type { CommandService } from "../../commands/CommandService.js";
@@ -42,6 +43,8 @@ export interface MethodDeps {
   agentFork?: AgentForkRunner;
   /** サブエージェントの記録を読む（20261008-graph-first の PR6c）。無ければ `agent.subagent_transcript` を登録しない。 */
   subagentTranscripts?: Pick<SubagentTranscriptReader, "read">;
+  /** エージェントの利用状況（20261010-agent-usage）。無ければ `agent.usage` を登録しない。 */
+  usage?: Pick<UsageService, "get">;
   /** `server.sessions`（20260926-named-session-ui）。無ければ空の一覧を返す。 */
   serverSessions?: () => Promise<ServerSessionEntry[]>;
   /** `machine.list`（20260927-multi-host-machines）。無ければ空の一覧を返す。 */

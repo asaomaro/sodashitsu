@@ -1,5 +1,4 @@
-import { constants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import {
@@ -8,6 +7,7 @@ import {
   type SubagentTranscriptEntry,
 } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
+import { isNotFound, lstatRegular, openVerified, readRange, realRootsOf } from "./safeFile.js";
 
 /**
  * サブエージェントの記録を読む（20261008-graph-first の PR6c・AC-U4/U5。調査 `subagent-research.md` の 2.2・2.3）。
@@ -75,14 +75,7 @@ export async function resolveTranscriptFile(
     const lexical = roots.some((r) => dir.startsWith(r + sep));
     return { ok: false, reason: isNotFound(err) && lexical ? "missing" : isNotFound(err) ? "outside" : "unreadable" };
   }
-  const realRoots: string[] = [];
-  for (const r of roots) {
-    try {
-      realRoots.push(await realpath(r));
-    } catch {
-      // 根が無い（Claude Code を使っていない）ものは飛ばす。
-    }
-  }
+  const realRoots = await realRootsOf(roots);
   const inside = realRoots.some((root) => {
     if (!realDir.startsWith(root + sep)) return false;
     // 根の直下の `<プロジェクト>/<セッション>/subagents` の形（3 段以上）。実体になった後も `subagents` で終わる。
@@ -90,17 +83,9 @@ export async function resolveTranscriptFile(
   });
   if (!inside) return { ok: false, reason: "outside" };
   const file = join(realDir, `agent-${agentId}.jsonl`);
-  try {
-    const st = await lstat(file);
-    if (st.isSymbolicLink() || !st.isFile() || st.nlink !== 1) return { ok: false, reason: "unreadable" };
-  } catch (err) {
-    return { ok: false, reason: isNotFound(err) ? "missing" : "unreadable" };
-  }
+  const kind = await lstatRegular(file);
+  if (kind !== "ok") return { ok: false, reason: kind };
   return { ok: true, file };
-}
-
-function isNotFound(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "ENOENT";
 }
 
 // --- 整形 --------------------------------------------------------------------------------------------------------
@@ -229,25 +214,13 @@ function parseLines(buf: Buffer, limit: number): ParsedLines {
   return { entries, consumed, clipped };
 }
 
-async function readRange(fd: Awaited<ReturnType<typeof open>>, start: number, length: number): Promise<Buffer> {
-  const buf = Buffer.alloc(length);
-  let got = 0;
-  while (got < length) {
-    const { bytesRead } = await fd.read(buf, got, length - got, start + got);
-    if (bytesRead === 0) break;
-    got += bytesRead;
-  }
-  return got === length ? buf : buf.subarray(0, got);
-}
-
 /** 読んだ結果（ファイルを開いて、位置から抜粋を返す）。 */
 export async function readTranscriptWindow(file: string, offset: number | undefined): Promise<Omit<AgentSubagentTranscriptResult, "running">> {
-  // O_NONBLOCK: 開く間にすり替えられた FIFO で、書き手を待って固まらない（開いた後に `isFile()` で断る）。
-  const fd = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  // 安全な開き方は `safeFile.ts`（O_NOFOLLOW・O_NONBLOCK・開いた fd で通常のファイル・リンク 1 つを確かめ直す）。
+  const opened = await openVerified(file);
+  if (opened === null) return { status: "unreadable", reason: "記録のファイルを読めません", entries: [], offset: 0, reset: false, omittedBefore: false };
+  const { fd, st } = opened;
   try {
-    const st = await fd.stat();
-    // ハードリンク（nlink > 1）は断る（Claude Code の記録は通常 1 つのリンクしか持たない。根の外のファイルを根の中へ繋いで読ませない）。
-    if (!st.isFile() || st.nlink !== 1) return { status: "unreadable", reason: "記録のファイルを読めません", entries: [], offset: 0, reset: false, omittedBefore: false };
     const size = st.size;
     const reset = offset !== undefined && offset > size;
     if (offset !== undefined && !reset) {

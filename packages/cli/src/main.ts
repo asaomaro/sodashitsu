@@ -13,6 +13,7 @@ import {
   runAgentSendKeys,
   runAgentWait,
 } from "./commands/agent.js";
+import { runAgentUsage } from "./commands/agentUsage.js";
 import { runAgentFork } from "./commands/agentFork.js";
 import { runAgentStart } from "./commands/agentStart.js";
 import { runAsk } from "./commands/ask.js";
@@ -135,6 +136,8 @@ async function main(): Promise<void> {
       return runAgentList(cmd, store);
     case "agent-get":
       return runAgentGet(cmd, store);
+    case "agent-usage":
+      return runAgentUsage(cmd, store);
     case "agent-wait":
       return runAgentWait(cmd, store);
     case "agent-read":
