@@ -207,12 +207,13 @@ const EFFECTS: Record<
   focus_display: { toast: true },
   // 20261008-display-layout。
   display_menu: { toast: true },
+  show_usage: { toast: true },
 };
 
-describe("TuiDispatcher — 全操作の効果（web の 63 操作と同じ RPC・引数・ダイアログ）", () => {
+describe("TuiDispatcher — 全操作の効果（web の 64 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(63);
+    expect(ACTIONS).toHaveLength(64);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {

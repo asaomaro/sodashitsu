@@ -271,6 +271,8 @@ export type DialogContext =
   | { kind: "goto" }
   // ダッシュボード（20261010-agent-usage PR3）。1 列の画面だけ、重ねるダイアログとして開く（デスクトップは主な領域の画面）。
   | { kind: "dashboard" }
+  // pane の利用状況（情報。20261010-agent-usage PR4）。1 列の画面だけ、全面のダイアログとして開く（デスクトップは pane の近くの窓）。
+  | { kind: "paneInfo"; paneId: string }
   // worktree（20260920-git-worktree-actions）。**サーバへ聞いてから開く**ので、開く時点で中身が揃っている。
   | { kind: "worktreeCreate"; workspaceId: string; info: WorktreeListResult }
   // エージェントの fork（20261009-agent-fork PR2）。中身（確定の前の画面）はダイアログが `agent.fork_preview` で取る。
@@ -369,6 +371,15 @@ export const useViewStore = defineStore("view", () => {
    * 見えている間だけ、サーバへ利用状況の配信を頼む（`UsageController`）。
    */
   const dashboardVisible = computed(() => screen.value === "dashboard" || dialogContext.value?.kind === "dashboard");
+  /**
+   * pane の利用状況の窓（20261010-agent-usage PR4）。デスクトップでは、pane の近くの小さな窓（非モーダル）の対象の pane の id（無ければ null）。
+   * 1 列の画面では、全面のダイアログ（`dialogContext.kind === "paneInfo"`）。
+   */
+  const paneInfoPaneId = ref<string | null>(null);
+  /** 利用状況の窓が見えている（デスクトップの窓か、1 列のダイアログ）。 */
+  const paneInfoVisible = computed(() => paneInfoPaneId.value !== null || dialogContext.value?.kind === "paneInfo");
+  /** 利用状況の配信を受けたいか（ダッシュボードか、pane の窓が見えている間。`UsageController` が 1 つの数え方で見る）。 */
+  const usageWatchWanted = computed(() => dashboardVisible.value || paneInfoVisible.value);
   /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
   const preGraphFocusPaneId = ref<string | null>(null);
   /** サイドバーの行（workspace・agent）を押すたびに進む。選びが変わらない押下も知らせる（グラフの画面が面へフォーカスを戻す。`GraphCanvas`）。 */
@@ -667,6 +678,29 @@ export const useViewStore = defineStore("view", () => {
     if (dialogContext.value?.kind === "dashboard") closeDialog();
   }
 
+  /** pane の利用状況の窓を開く。デスクトップでは pane の近くの窓、1 列の画面では全面のダイアログ。 */
+  function openPaneInfo(paneId: string): void {
+    if (mobileViewport.value) {
+      paneInfoPaneId.value = null;
+      openDialogWithContext({ kind: "paneInfo", paneId });
+    } else {
+      paneInfoPaneId.value = paneId;
+    }
+  }
+
+  /** 閉じる（開いていなければ何もしない）。 */
+  function closePaneInfo(): void {
+    if (paneInfoPaneId.value !== null) paneInfoPaneId.value = null;
+    else if (dialogContext.value?.kind === "paneInfo") closeDialog();
+  }
+
+  /** 同じ pane の窓が開いていれば閉じ、そうでなければ開く（［情報］をもう一度押すと閉じる）。 */
+  function togglePaneInfo(paneId: string): void {
+    const open = paneInfoPaneId.value === paneId || (dialogContext.value?.kind === "paneInfo" && dialogContext.value.paneId === paneId);
+    if (open) closePaneInfo();
+    else openPaneInfo(paneId);
+  }
+
   /**
    * 窓の幅が 1 列の画面になった・戻った（`main.ts` が書く）。1 列になったら画面を基本画面へ戻す（1 列の画面は画面を持たない。D13）。デスクトップに戻ったときに
    * 重ねるダイアログが開いていたら閉じる（グラフの画面として開き直しはしない）。
@@ -681,7 +715,10 @@ export const useViewStore = defineStore("view", () => {
       if (graphDialogOpen.value) closeGraph();
       // ダッシュボードの重ねるダイアログも、デスクトップに戻ったら閉じる（画面として開き直しはしない）。
       if (dialogContext.value?.kind === "dashboard") closeDialog();
+      if (dialogContext.value?.kind === "paneInfo") closeDialog();
     }
+    // 1 列になったら、pane の近くの窓は閉じる（1 列は全面のダイアログで開く）。
+    if (mobile) paneInfoPaneId.value = null;
   }
 
   /** グラフ画面を開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由。焦点を直接変えると端末がグラフ画面からフォーカスを奪う）。 */
@@ -933,6 +970,12 @@ export const useViewStore = defineStore("view", () => {
     setMobileViewport,
     openGraph,
     dashboardVisible,
+    paneInfoPaneId,
+    paneInfoVisible,
+    usageWatchWanted,
+    openPaneInfo,
+    closePaneInfo,
+    togglePaneInfo,
     openDashboard,
     closeDashboard,
     closeGraph,

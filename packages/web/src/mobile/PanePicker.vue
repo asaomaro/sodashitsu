@@ -59,6 +59,12 @@ function openDashboard(): void {
   view.openDashboard();
 }
 
+/** その pane のエージェントの利用状況（全面のダイアログ。20261010-agent-usage PR4。1 列の画面は pane の右クリックのメニューが無いので、ここから開く）。 */
+function openPaneInfo(paneId: string): void {
+  emit("close");
+  view.openPaneInfo(paneId);
+}
+
 function selectWorkspace(workspaceId: string): void {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return;
@@ -104,16 +110,13 @@ function selectPane(paneId: string, tabId: string, workspaceId: string): void {
       </div>
     </section>
     <section class="pane-picker-section" aria-label="agents">
-      <button
-        v-for="{ pane, tab, workspace, agent, state } in agents"
-        :key="pane.id"
-        type="button"
-        class="pane-picker-row"
-        @click="selectPane(pane.id, pane.tabId, workspace?.id ?? '')"
-      >
-        <StateIcon class="pane-picker-state" :state="state" />
-        <span class="pane-picker-label">{{ workspace?.label }} / {{ tab?.label }} — {{ agent.name ? `${agent.name}（${agent.label}）` : agent.label }}</span>
-      </button>
+      <div v-for="{ pane, tab, workspace, agent, state } in agents" :key="pane.id" class="pane-picker-agent">
+        <button type="button" class="pane-picker-row" @click="selectPane(pane.id, pane.tabId, workspace?.id ?? '')">
+          <StateIcon class="pane-picker-state" :state="state" />
+          <span class="pane-picker-label">{{ workspace?.label }} / {{ tab?.label }} — {{ agent.name ? `${agent.name}（${agent.label}）` : agent.label }}</span>
+        </button>
+        <button type="button" class="pane-picker-info" data-picker-pane-info :aria-label="`${agent.name ?? agent.label}の利用状況`" @click="openPaneInfo(pane.id)">利用状況</button>
+      </div>
     </section>
     <!-- ダッシュボード（20261010-agent-usage PR3 の AC4。MobileShell には入口を足せないので、ここから開く）。重ねるダイアログで、選んだ pane へ移れる。 -->
     <section class="pane-picker-section" aria-label="ダッシュボード">
@@ -167,6 +170,26 @@ function selectPane(paneId: string, tabId: string, workspaceId: string): void {
   color: inherit;
   background: none;
   border: none;
+}
+.pane-picker-agent {
+  display: flex;
+  align-items: stretch;
+}
+.pane-picker-agent .pane-picker-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pane-picker-info {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.8em;
+  font: inherit;
+  font-size: 0.85em;
+  color: inherit;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--soda-menu-border, #44475a);
 }
 .pane-picker-dashboard {
   min-height: 44px;

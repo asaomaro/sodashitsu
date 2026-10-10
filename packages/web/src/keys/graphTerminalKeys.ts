@@ -75,6 +75,7 @@ function isAllowedAction(action: Action): boolean {
     // --- 食う: 基本画面の中のもの（窓には出ない・画面を移す）---------------------------------------------------------------
     case "displayMenu":
     case "focusDisplay":
+    case "showUsage": // 利用状況の窓は基本画面の pane に付く（20261010-agent-usage PR4）。窓の下は見えない基本画面なので出さない
     case "runCommand":
     case "openGraph": // 窓にフォーカスがあるとき、グラフの面へ戻る操作に読み替える（`main.ts`）。ここへ来る前に処理される
       return false;

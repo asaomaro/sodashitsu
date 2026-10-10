@@ -7,6 +7,8 @@ import DetachedView from "./components/DetachedView.vue";
 import GotoPicker from "./components/GotoPicker.vue";
 import GraphDialog from "./components/graph/GraphDialog.vue";
 import DashboardDialog from "./components/DashboardDialog.vue";
+import PaneInfoDialog from "./components/PaneInfoDialog.vue";
+import PaneInfoPopover from "./components/PaneInfoPopover.vue";
 import AgentForkDialog from "./components/AgentForkDialog.vue";
 import GroupPickerDialog from "./components/GroupPickerDialog.vue";
 import HelpDialog from "./components/HelpDialog.vue";
@@ -93,6 +95,9 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
     <GotoPicker />
     <GraphDialog v-if="isMobile" />
     <DashboardDialog v-if="isMobile" />
+    <!-- pane の利用状況（20261010-agent-usage PR4）。デスクトップは pane の近くの窓、1 列の画面は全面のダイアログ。 -->
+    <PaneInfoPopover v-if="!isMobile" />
+    <PaneInfoDialog v-if="isMobile" />
     <CommandPopup />
     <!-- 質問のフォーム（`sodactl ask`。20261002-sodactl-ask）。ほかのダイアログとは別の枠で、後から開くので上に重なる。 -->
     <AskDialog />

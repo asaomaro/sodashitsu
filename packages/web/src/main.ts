@@ -344,17 +344,17 @@ const viewSync = new ViewSync({ conn, registry, getScrollbackLines });
 // 新しい接続の `client.hello` が通るたび（初回・自動の再接続・503 等からの再試行・再ログイン・「再接続」ボタン）に、表示と
 // 購読を張り直す（D107）。サーバは接続ごとに新しい clientId を振り、前の接続の購読・表示・fit を引き継がない。
 connection.onOpened(() => viewSync.onConnectionOpened());
-// 利用状況の配信（20261010-agent-usage PR3）。ダッシュボードが見えていて、タブが前面で、接続が開いている間だけ、サーバへ頼む。
+// 利用状況の配信（20261010-agent-usage PR3・PR4）。ダッシュボードか pane の利用状況の窓が見えていて、タブが前面で、接続が開いている間だけ、サーバへ頼む（見ている、の数え方は 1 つ）。
 const usageController = new UsageController({
   conn,
   store: useUsageStore(pinia),
-  isDashboardVisible: () => view.dashboardVisible,
+  isWanted: () => view.usageWatchWanted,
   isPageVisible: () => document.visibilityState !== "hidden",
   machineId: () => machines.selectedId,
 });
 connection.onOpened(() => usageController.onOpened());
 connection.onClosed(() => usageController.onClosed());
-watch(() => view.dashboardVisible, () => usageController.sync());
+watch(() => view.usageWatchWanted, () => usageController.sync());
 document.addEventListener("visibilitychange", () => usageController.sync());
 // 窓が出ていれば、購読と直結をし直す（サーバは接続ごとに新しい clientId を振り、前の接続の直結を外す。20261008-graph-first の X4・X7）。`viewSync` の後（端末を「未購読」に戻してから）。
 connection.onOpened(() => void graphTerminal.onReconnected());

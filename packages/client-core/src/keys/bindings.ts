@@ -474,6 +474,15 @@ export const ACTIONS = [
     defaults: ["prefix+shift+s"],
     action: { type: "showSubagents" },
   },
+  // 20261010-agent-usage PR4（本製品の追加）。フォーカスしている pane の、そのセッションの利用状況の窓。モダンの pane の隅の［情報］・右クリックのメニュー「利用状況…」と同じ。
+  // 端末版には窓が無く、「ブラウザで使えます（sodactl agent usage でも見られます）」と知らせる。
+  {
+    id: "show_usage",
+    label: "pane の利用状況（情報）",
+    group: "pane",
+    defaults: ["prefix+shift+u"],
+    action: { type: "showUsage" },
+  },
   // 20261004-ui-interaction-polish（本製品の追加）。サイドバーの区画（spaces・agents）の折りたたみ。prefix+b（サイドバー全体）の shift を spaces に、agents は頭文字。
   {
     id: "toggle_spaces_section",

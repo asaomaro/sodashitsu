@@ -36,3 +36,12 @@
 - [x] T14 方式と画面（`agent_integration.statusline_*`・設定の項目・`sodactl agent usage` の表）。AC5
 - [x] T15 試験（包みの結合・導入の往復・受け口・実物の包みを偽の claude の子として動かす結合・否定の対照）と文書。AC6・AC7
 
+---
+
+# タスク: PR4 pane の情報（`feature/agent-usage-4`）
+
+- [x] T18 共有の部品（`AccountCard.vue` の切り出し・`view.ts` の窓の状態と `usageWatchWanted`・`UsageController` の 1 つの数え方）。AC3
+- [x] T19 窓の中身と入れ物（`PaneInfoView`・`PaneInfoPopover`・`PaneInfoDialog`）。AC1・AC3
+- [x] T20 入口（`PaneActions` の［情報］・`PaneFrame` の隠す順・右クリックのメニュー・グラフのノードのメニュー・操作 `show_usage`・端末版の知らせ・ピッカー）。AC2
+- [x] T21 試験（単体・E2E `pane-info.spec.ts`・否定の対照・比べる道具）と文書・絵。AC4〜AC6
+

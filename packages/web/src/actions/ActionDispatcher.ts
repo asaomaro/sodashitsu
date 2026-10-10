@@ -294,6 +294,13 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "focusDisplay":
         void this.focusDisplay();
         return;
+      // 20261010-agent-usage PR4。フォーカスしている pane の、そのセッションの利用状況の窓（もう一度で閉じる）。エージェントが居ないときは何もしない。
+      case "showUsage": {
+        const paneId = this.view.focusedPaneId;
+        if (!paneId || !this.session.panes.get(paneId)?.agent) return;
+        this.view.togglePaneInfo(paneId);
+        return;
+      }
       // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く。件数が 0・分からない（報告を受けていない）・
       // エージェントが居ないときは何もしない（開いても見るものが無い。サイドバーの件数のボタンが 1 件以上のときだけ出るのと同じ）。
       case "showSubagents": {
@@ -305,6 +312,12 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         return;
       }
     }
+  }
+
+  /** pane の右クリックのメニュー・グラフのノードのメニューの「利用状況…」（20261010-agent-usage PR4）。エージェントの居る pane だけ。 */
+  showPaneInfo(paneId: string): void {
+    if (!this.session.panes.get(paneId)?.agent) return;
+    this.view.openPaneInfo(paneId);
   }
 
   /** T23（`NameDialog`）が新規 tab の名前を確定したときに呼ぶ。 */
