@@ -124,12 +124,12 @@ describe("GraphScreen", () => {
     wrapper.unmount();
   });
 
-  it("ツールバー: 左に「線を結ぶ」「並びを整える」「そのほか」、右に探す・拡大縮小・「全体を表示」。個別の一時停止・履歴・載せるボタンは無い（そのほかのメニューへ）", async () => {
+  it("ツールバー: 左に「＋ pane」「＋ workspace」（PR3）「線を結ぶ」「並びを整える」「そのほか」、右に探す・拡大縮小・「全体を表示」。個別の一時停止・履歴・載せるボタンは無い（そのほかのメニューへ）", async () => {
     const { wrapper, view } = mountScreen();
     view.setScreen("graph");
     await flush();
     const labels = wrapper.findAll(".graph-toolbar > .graph-tool").map((b) => b.text());
-    expect(labels).toEqual(["線を結ぶ", "並びを整える", "そのほか ▾", "−", "＋", "全体を表示"]);
+    expect(labels).toEqual(["＋ pane", "＋ workspace ▾", "線を結ぶ", "並びを整える", "そのほか ▾", "−", "＋", "全体を表示"]);
     expect(wrapper.find(".graph-find-input").exists()).toBe(true);
     for (const cls of [".graph-pause-all", ".graph-history", ".graph-add-panes"]) expect(wrapper.find(cls).exists(), cls).toBe(false);
     expect(wrapper.find(".graph-paused-badge").exists()).toBe(false);

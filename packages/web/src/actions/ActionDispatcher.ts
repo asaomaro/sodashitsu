@@ -1206,7 +1206,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /** herdr の `prompt_new_workspace_name`（既定 false）：名前を尋ねずすぐ作る（design「ダイアログ」）。 */
-  private newWorkspace(): void {
+  private newWorkspace(onCreated?: (workspaceId: string) => void): void {
     const hold = this.input?.holdInput(this.view.focusedPaneId); // D99：応答までに打った文字は新しい pane へ
     // 「引き継ぐ」の元は**このブラウザの焦点の pane**（サーバはクライアントごとの焦点を知らない。design D7）。
     this.conn
@@ -1216,11 +1216,20 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
         this.view.focusPane(r.pane.id);
         this.releaseHold(hold, r.pane.id);
         this.noteCwdFallback(r);
+        onCreated?.(r.workspace.id);
       })
       .catch(() => {
         hold?.cancel();
         this.view.toast("workspace を作成できませんでした");
       });
+  }
+
+  /**
+   * グラフの「＋ workspace」（20261008-graph-first PR3）: 基本画面の「新しい workspace」と同じ作り方で、**作った workspace の id を受け取る**
+   * （グラフが、その workspace だけを表示中のグループへ入れる。ほかの接続が同じ時間に作ったものは、推測で動かさない）。
+   */
+  newWorkspaceThen(onCreated: (workspaceId: string) => void): void {
+    this.newWorkspace(onCreated);
   }
 
   // --- T18: navigate・resize・copy・名前の変更・その他 ----------------------
