@@ -637,6 +637,14 @@ function tagUnder(ev: PointerEvent): { workspaceId: string; tabId: string } | nu
   }
   return null;
 }
+/** ノード（左上 `pos`）が、どれかの囲いの見出しの帯（上の 40px）に掛かっているか。 */
+function overHeadBand(pos: { x: number; y: number }): boolean {
+  for (const f of spaces.frames) {
+    const r = f.rect;
+    if (pos.x < r.x + r.w && pos.x + GRAPH_NODE_WIDTH > r.x && pos.y < r.y + 40 && pos.y + GRAPH_NODE_HEIGHT > r.y) return true;
+  }
+  return false;
+}
 /** ノード `key` を `pos` に置いて、ポインタ `ev` で離したときの行き先（`moveTarget.ts`）。 */
 function dropTargetOf(key: string, pos: { x: number; y: number }, ev: PointerEvent): DropTarget {
   // 動かすたびに呼ぶので、ノードの中身（`nodeInfo`）は作らず、鍵と今のセッションだけで見る（ノードのドラッグの毎回にはノードの中身を作り直さない）。
@@ -646,7 +654,8 @@ function dropTargetOf(key: string, pos: { x: number; y: number }, ev: PointerEve
   return dropTargetFor({
     node: { local: open, workspaceId: spaces.memberOfNode.get(key), tabId: paneTab },
     center: { x: pos.x + GRAPH_NODE_WIDTH / 2, y: pos.y + GRAPH_NODE_HEIGHT / 2 },
-    tag: tagUnder(ev),
+    // 指の下のタグは、ノードが囲いの見出しの帯に掛かっているときだけ確かめる（`elementsFromPoint` は毎回の動きで呼ぶと重い）。
+    tag: overHeadBand(pos) ? tagUnder(ev) : null,
     frames: spaces.frames,
     infos: spaces.infoMap,
     workspaces: session.workspaces,
