@@ -41,7 +41,8 @@ function report() {
   const c = connect(sock, () => c.end(JSON.stringify({ paneId: pane, kind: "claude", sessionId }) + "\\n"));
   c.on("error", () => {});
 }
-function bare() { process.stdout.write("\\u001b[2J\\u001b[H\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n"); }
+// 画面を消さない版（本物の claude はインライン描画で、起動に打った行がシェルの画面に残る）。
+function bare() { process.stdout.write((existsSync(DIR + "/no-clear") ? "" : "\\u001b[2J\\u001b[H") + "\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n"); }
 // 入力欄（live_prompt_box と同じ行）が出た画面。
 function idle() { bare(); process.stdout.write("\\u276f \\r\\n"); }
 const confirmScreen = ["\\u2500".repeat(40), " Bash command", "", "   curl -sS https://example.com", "", " This command requires approval", "", " Do you want to proceed?", " \\u276f 1. Yes", "   2. No", "", " Esc to cancel \\u00b7 Tab to amend \\u00b7 ctrl+e to explain"].join("\\r\\n") + "\\r\\n";
@@ -54,7 +55,7 @@ if (existsSync(lateFile)) {
   setTimeout(() => {
     process.stdout.write(confirmScreen);
     writeFileSync(DIR + "/drawn-confirm", "");
-    const t = setInterval(() => { if (!existsSync(lateFile)) { clearInterval(t); idle(); report(); } }, 100);
+    const t = setInterval(() => { if (!existsSync(lateFile)) { clearInterval(t); process.stdout.write("\\u001b[2J\\u001b[H"); idle(); report(); } }, 100);
   }, ms);
 } else {
   if (existsSync(blockFile)) {
@@ -96,7 +97,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
   });
   afterEach(async () => {
     for (const fn of cleanups.splice(0).reverse()) await fn();
-    for (const f of ["no-conversation", "die-soon", "block-main", "block-fork", "late-block-main", "late-block-fork", "drawn-confirm", "launches.log"]) await rm(join(dir, f), { force: true });
+    for (const f of ["no-clear", "late-block-fork", "no-conversation", "die-soon", "block-main", "block-fork", "late-block-main", "late-block-fork", "drawn-confirm", "launches.log"]) await rm(join(dir, f), { force: true });
   });
   afterAll(async () => {
     for (const [k, v] of Object.entries(savedEnv)) {
@@ -106,9 +107,9 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     if (dir) await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   });
 
-  async function boot(): Promise<{ server: ComposedServer; stateDir: string; client: Client }> {
+  async function boot(shell = "/bin/bash"): Promise<{ server: ComposedServer; stateDir: string; client: Client }> {
     const stateDir = await mkdtemp(join(dir, "state-"));
-    const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [], shell: "/bin/bash", worktreeDir: join(dir, "worktrees") });
+    const server = await composeServerOnFreePort({ host: "127.0.0.1", stateDir, origin: [], shell, worktreeDir: join(dir, "worktrees") });
     let closed = false;
     const close = server.close.bind(server);
     server.close = async () => {
@@ -314,8 +315,10 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     return realpath(repo);
   }
   /** そのリポジトリの中で始まる workspace の pane で、元のエージェントを起動する。 */
-  async function bootInRepo(repo: string) {
-    const b = await boot();
+  async function bootInRepo(repo: string, shell?: string) {
+    // 守り（R4 の再発防止）: worktree を作る fork は、一時のフォルダの下のリポジトリだけで行う（利用者の共有のリポジトリにブランチを残さない）。
+    expect(repo.startsWith(`${await realpath(dir)}/`), `repoRoot が一時のフォルダの下でない: ${repo}`).toBe(true);
+    const b = await boot(shell);
     const ws = await ok<{ workspace: { id: string }; pane: { id: string } }>(b.client.request("workspace.create", { cwd: repo, label: "src" }));
     const paneId = ws.pane.id;
     await shellReady(b.server, paneId);
@@ -394,6 +397,29 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     expect(existsSync(input)).toBe(false);
     expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(false);
     await rm(join(dir, "late-block-fork")); // 利用者が確認に答えた
+    await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(true), { timeout: 30_000 });
+    expect(await readFile(input, "utf8")).toContain("作業フォルダは");
+  });
+
+  it("シェルのプロンプトが ❯ の利用者でも、起動に打った行（❯ claude --resume … --fork-session）を入力欄と取り違えず、確認の前に知らせを送らない（再レビューの指摘 1）", async () => {
+    // シェルのプロンプトを `❯ ` にする（starship・pure・p10k の既定）。新しい pane のシェルにも効くよう、シェルの起動を包む。
+    const rc = join(dir, "ps1.rc");
+    await writeFile(rc, "PS1='❯ '\n");
+    const wrapper = join(dir, "bin", "bash-ps1");
+    await writeFile(wrapper, `#!/bin/bash\nexec /bin/bash --rcfile ${JSON.stringify(rc)} -i\n`);
+    await chmod(wrapper, 0o755);
+    const repo = await makeRepo();
+    const { server, client, paneId } = await bootInRepo(repo, wrapper);
+    await writeFile(join(dir, "late-block-fork"), "6000");
+    await writeFile(join(dir, "no-clear"), ""); // 起動に打った行が、画面に残る
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/ps1-prompt" } }));
+    const input = join(dir, `input-${result.paneId}`);
+    // 検査が空振りしていない: 新しい pane の画面に、起動に打った行が、`❯ ` のプロンプトつきで残っている。
+    await vi.waitFor(() => expect(server.terminals.get(result.paneId)!.mirror.plainText()).toMatch(/❯ claude .*--fork-session/), { timeout: 20_000, interval: 50 });
+    await vi.waitFor(() => expect(existsSync(join(dir, "drawn-confirm"))).toBe(true), { timeout: 20_000, interval: 20 });
+    // 確認が描かれた時点で、本文も Enter も、まだ届いていない（入力欄の証拠を、打った行で立てていない）。
+    expect(existsSync(input)).toBe(false);
+    await rm(join(dir, "late-block-fork")); // 利用者が確認に答えた → その後に送る。
     await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(true), { timeout: 30_000 });
     expect(await readFile(input, "utf8")).toContain("作業フォルダは");
   });

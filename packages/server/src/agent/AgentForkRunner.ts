@@ -463,7 +463,16 @@ export class AgentForkRunner {
   private promptReady(paneId: string, sourceSessionId: string): boolean {
     const reported = this.deps.session.getPane(paneId)?.agentSession?.sessionId;
     if (reported !== undefined && reported !== sourceSessionId) return true;
-    const tail = (this.deps.terminals.get(paneId)?.mirror.plainText() ?? "").slice(-PROMPT_EVIDENCE_TAIL);
+    const text = this.deps.terminals.get(paneId)?.mirror.plainText() ?? "";
+    // 起動に打った行（`--fork-session` を含む最後の行）より後ろだけを見る。シェルのプロンプトが `❯` の利用者では、その行（`❯ claude --resume … --fork-session`）
+    // 自体が入力欄の行に見えるため。見つからなければ（スクロールで消えた）、末尾をそのまま見る。
+    const launched = text.lastIndexOf("--fork-session");
+    let after = text;
+    if (launched >= 0) {
+      const eol = text.indexOf("\n", launched);
+      after = eol >= 0 ? text.slice(eol + 1) : "";
+    }
+    const tail = after.slice(-PROMPT_EVIDENCE_TAIL);
     if (/esc to cancel|enter to confirm/i.test(tail)) return false;
     return /^\s*❯/m.test(tail);
   }
