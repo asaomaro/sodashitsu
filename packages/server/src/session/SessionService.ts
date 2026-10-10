@@ -139,6 +139,8 @@ export interface SessionServiceOptions {
    * （20261009-agent-session-attribution）。既定は Linux の `/proc`。テストが差し替える。
    */
   ancestorsOf?: ((pid: number) => number[] | null) | undefined;
+  /** プロセスが生きているか（期限・停止で「確かめずに受ける」前に、終わったプロセスの報告を捨てる）。既定は `kill(pid, 0)`。テストが差し替える。 */
+  pidAlive?: ((pid: number) => boolean) | undefined;
 }
 
 /**
@@ -164,7 +166,25 @@ const REPORT_HOLD_MS = 15_000;
 const AGENT_SESSION_HISTORY_MAX = 2;
 
 /** 会話の参照の報告の判定。 */
-type ReportVerdict = { verdict: "accept" } | { verdict: "hold" } | { verdict: "reject"; reason: string };
+type ReportVerdict =
+  | { verdict: "accept" }
+  | { verdict: "hold" }
+  /** `recheck`: 前面の記録が古いだけかもしれない（前面のエージェントは居るが、報告した pid が含まれない）。次の判定で確かめ直す。 */
+  | { verdict: "reject"; reason: string; recheck?: true };
+
+/** 報告に添えられる、判定の材料（フックの入力から）。 */
+export interface AgentReportContext {
+  /** 報告したエージェントの作業フォルダ（フックの入力の `cwd`）。常駐のプロセスの報告を、pane に結ぶのに使う。 */
+  cwd?: string | undefined;
+  /** 会話が始まった理由（`startup`・`resume`・`clear`・`compact`・`fork`）。`clear` のときは、前の参照を履歴に積まない。 */
+  source?: string | undefined;
+}
+
+/** 場所の比較（末尾の区切りの違いだけを許す。大文字小文字・シンボリックリンクは解決しない）。 */
+function sameDir(a: string, b: string): boolean {
+  const trim = (p: string): string => (p.length > 1 ? p.replace(/[\\/]+$/, "") : p);
+  return trim(a) === trim(b);
+}
 
 export class SessionService {
   private readonly model: SessionModel;
@@ -221,16 +241,20 @@ export class SessionService {
   /** エージェントが居なくなったと見えた時刻（`clock`。会話の参照を捨てる猶予の起点。20261009-agent-resume-lost）。 */
   private readonly agentGoneAt = new Map<PaneId, number>();
   /** 前面のエージェント（`AgentMonitor` が判定ごとに知らせる）。会話の参照の報告の確かめに使う（20261009-agent-session-attribution）。 */
-  private readonly frontAgents = new Map<PaneId, { kind: string; pids: ReadonlySet<number> }>();
+  private readonly frontAgents = new Map<PaneId, { kind: string; pids: ReadonlySet<number>; verifiable: boolean }>();
   /** その pane で最後に見えたエージェントのプロセス（居なくなった後に検出されたものが、同じエージェントか別のものかを見分ける）。 */
   private readonly lastSeenAgentPids = new Map<PaneId, ReadonlySet<number>>();
   /** 居なくなったと見えたときの、そのエージェントのプロセス（`agentGoneAt` と同じ間だけ）。 */
   private readonly goneAgentPids = new Map<PaneId, ReadonlySet<number>>();
   /** 保留した会話の参照の報告（pane ごとに 1 件。新しいものが勝つ）。 */
-  private readonly pendingReports = new Map<PaneId, { kind: string; sessionId: string; agentPid: number; at: number; timer: ReturnType<typeof setTimeout> }>();
+  private readonly pendingReports = new Map<
+    PaneId,
+    { kind: string; sessionId: string; agentPid: number; ctx: AgentReportContext; at: number; rechecks: number; timer: ReturnType<typeof setTimeout> }
+  >();
   /** 復元で再開コマンドを打ち込んだ記録（再開の失敗を見分ける。`settled` はエージェントが立ち上がった印）。 */
   private readonly resumeAttempts = new Map<PaneId, { at: number; sessionId: string; settled: boolean }>();
   private readonly ancestorsOf: (pid: number) => number[] | null;
+  private readonly pidAlive: (pid: number) => boolean;
   /** サーバが止まる処理に入った後は、会話の参照を捨てない（止まる途中で先に終わった PTY・エージェントの巻き添えにしない）。 */
   private shuttingDown = false;
 
@@ -254,6 +278,16 @@ export class SessionService {
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
     this.sessionName = opts.sessionName;
     this.ancestorsOf = opts.ancestorsOf ?? ((pid) => procAncestors(pid));
+    this.pidAlive =
+      opts.pidAlive ??
+      ((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch (err) {
+          return (err as NodeJS.ErrnoException).code === "EPERM"; // 居るが、権限が無い
+        }
+      });
     this.scrollbackEditorEnv = {
       tmpRoot: opts.scrollbackEditor?.tmpRoot,
       platform: opts.scrollbackEditor?.platform ?? process.platform,
@@ -1406,21 +1440,22 @@ export class SessionService {
    * - 前面のエージェントが、まだ検出されていない: `REPORT_HOLD_MS` の間、保留して、検出されたときに決める。
    * 報告の中の pid は、pane の中のプログラムが好きに書けるので、**これは、取り違えを防ぐ仕組みで、安全の境界ではない**。
    */
-  reportAgentSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid?: number): void {
+  reportAgentSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid?: number, ctx: AgentReportContext = {}): void {
     const pane = this.model.getPane(paneId);
     if (!pane) return;
     if (agentPid === undefined) {
-      this.applyReportedSession(paneId, kind, sessionId);
+      this.applyReportedSession(paneId, kind, sessionId, ctx);
       return;
     }
-    const v = this.attribute(paneId, kind, agentPid);
+    const v = this.attribute(paneId, kind, agentPid, ctx);
     if (v.verdict === "accept") {
       this.dropPending(paneId);
-      this.applyReportedSession(paneId, kind, sessionId);
-    } else if (v.verdict === "reject") {
+      this.applyReportedSession(paneId, kind, sessionId, ctx);
+    } else if (v.verdict === "reject" && !v.recheck) {
       this.logIgnoredReport(paneId, kind, sessionId, agentPid, v.reason);
     } else {
-      this.holdReport(paneId, kind, sessionId, agentPid);
+      // 前面が未検出、または前面の記録が古いだけかもしれない（終わって、すぐ別のエージェントが報告したとき）: 保留して確かめ直す。
+      this.holdReport(paneId, kind, sessionId, agentPid, ctx);
     }
   }
 
@@ -1439,9 +1474,10 @@ export class SessionService {
   }
 
   /** 前面のエージェント（その pane の前面のジョブのエージェント自身のプロセス）を知らせる。`null` は、居ない。保留した報告があれば、ここで決める。 */
-  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number> } | null): void {
+  setFrontAgent(paneId: PaneId, front: { kind: string; pids: ReadonlySet<number>; verifiable?: boolean } | null): void {
     if (front) {
-      this.frontAgents.set(paneId, front);
+      // `verifiable` が偽: 親子の情報が取れない環境（pid が前面のエージェントに含まれるかを、確かめられない）。種類の確かめだけにする。
+      this.frontAgents.set(paneId, { kind: front.kind, pids: front.pids, verifiable: front.verifiable !== false });
       this.lastSeenAgentPids.set(paneId, front.pids);
     } else {
       this.frontAgents.delete(paneId);
@@ -1455,7 +1491,7 @@ export class SessionService {
     return this.model.agentSessionHistory(paneId);
   }
 
-  private applyReportedSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string): void {
+  private applyReportedSession(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext = {}): void {
     const pane = this.model.getPane(paneId);
     if (!pane) return;
     // `reportedAt` は壁時計の epoch ms（protocol の doc comment）。`this.clock` は復元の期限計測用の
@@ -1464,7 +1500,8 @@ export class SessionService {
     this.goneAgentPids.delete(paneId);
     this.resumeAttempts.delete(paneId); // 報告が届いた＝エージェントが立ち上がった
     const prev = pane.agentSession;
-    if (prev && prev.sessionId !== sessionId) this.pushHistory(paneId, prev);
+    // `/clear` は、利用者が前の会話を消した操作。戻り先（一つ前）にしない（再開の失敗で、消した会話に戻らないため）。
+    if (prev && prev.sessionId !== sessionId && ctx.source !== "clear") this.pushHistory(paneId, prev);
     else this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
     this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
     this.persist.touch();
@@ -1496,30 +1533,52 @@ export class SessionService {
     return false;
   }
 
-  private attribute(paneId: PaneId, kind: string, agentPid: number): ReportVerdict {
+  private attribute(paneId: PaneId, kind: string, agentPid: number, ctx: AgentReportContext = {}): ReportVerdict {
     const shell = this.terminals.get(paneId)?.pid;
     const ancestors = this.ancestorsOf(agentPid);
     if (ancestors !== null && shell !== undefined && !ancestors.includes(shell)) {
+      // Codex 0.162 のフックは、pane の中ではなく、常駐の app-server daemon の中で動く（シェルの子孫でない）。
+      if (kind === "codex") return this.daemonVerdict(paneId, ctx);
       return { verdict: "reject", reason: "the reporting process is not a descendant of the pane's shell" };
     }
     const front = this.frontAgents.get(paneId);
     if (front) {
       if (front.kind !== kind) return { verdict: "reject", reason: `the pane's front agent is another kind (${front.kind})` };
-      if (front.pids.has(agentPid)) return { verdict: "accept" };
-      return { verdict: "reject", reason: "the reporting process is not the pane's front agent (a nested or unrelated process)" };
+      if (!front.verifiable || front.pids.has(agentPid)) return { verdict: "accept" };
+      return { verdict: "reject", reason: "the reporting process is not the pane's front agent (a nested or unrelated process)", recheck: true };
     }
     return { verdict: "hold" };
+  }
+
+  /**
+   * 常駐のプロセス（Codex の daemon）の報告を、報告の `paneId` の pane の会話として受けてよいか。daemon の環境の `SODA_PANE_ID` は
+   * 最初に daemon を起動した pane のものなので、`paneId` は当てにならない。**取り違えが起きない形のときだけ**受ける:
+   * その pane に前面の codex が検出されていて、かつ、サーバ全体で、前面の codex がその 1 つだけ（複数なら、どれの報告か分からないので捨てる）。
+   * さらに、報告の作業フォルダ（フックの入力の `cwd`）が、その pane の場所と同じであること（Sodashitsu の外で動いた、同じ daemon を使う
+   * Codex——VS Code など——の会話を取り違えない）。`cwd` が付いていない古い報告は、この道では受けない。
+   */
+  private daemonVerdict(paneId: PaneId, ctx: AgentReportContext): ReportVerdict {
+    const notMember = "the reporting process is not a descendant of the pane's shell";
+    const front = this.frontAgents.get(paneId);
+    if (!front || front.kind !== "codex") return { verdict: "reject", reason: `${notMember} (a resident codex process; no front codex is detected in the reported pane)` };
+    let codexPanes = 0;
+    for (const f of this.frontAgents.values()) if (f.kind === "codex") codexPanes++;
+    if (codexPanes !== 1) return { verdict: "reject", reason: `${notMember} (a resident codex process; ${codexPanes} front codex agents exist, so the owner cannot be told)` };
+    const pane = this.model.getPane(paneId);
+    if (ctx.cwd === undefined) return { verdict: "reject", reason: `${notMember} (a resident codex process; the report carries no cwd)` };
+    if (!pane || !sameDir(ctx.cwd, pane.cwd)) return { verdict: "reject", reason: `${notMember} (a resident codex process; its cwd is not the pane's)` };
+    return { verdict: "accept" };
   }
 
   private logIgnoredReport(paneId: PaneId, kind: string, sessionId: string, agentPid: number, reason: string): void {
     this.logger.info("agent report ignored", { paneId, kind, session: sessionId.slice(0, 8), reason, agentPid });
   }
 
-  private holdReport(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid: number): void {
+  private holdReport(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, agentPid: number, ctx: AgentReportContext): void {
     this.dropPending(paneId);
     const timer = setTimeout(() => this.settlePending(paneId, true), REPORT_HOLD_MS);
     timer.unref?.();
-    this.pendingReports.set(paneId, { kind, sessionId, agentPid, at: this.clock.now(), timer });
+    this.pendingReports.set(paneId, { kind, sessionId, agentPid, ctx, at: this.clock.now(), rechecks: 0, timer });
   }
 
   private dropPending(paneId: PaneId): void {
@@ -1541,19 +1600,30 @@ export class SessionService {
       this.dropPending(paneId);
       return;
     }
-    const v = this.attribute(paneId, p.kind, p.agentPid);
+    const v = this.attribute(paneId, p.kind, p.agentPid, p.ctx);
+    const expired = this.clock.now() - p.at >= REPORT_HOLD_MS;
     if (v.verdict === "reject") {
+      // 前面の記録が古いだけかもしれない: 次の判定で、もう 1 回だけ確かめ直す（判定の途中の古い読みを挟むことがあるので、2 回目で決める）。
+      if (v.recheck && !force && !expired && p.rechecks < 1) {
+        p.rechecks++;
+        return;
+      }
       this.dropPending(paneId);
       this.logIgnoredReport(paneId, p.kind, p.sessionId, p.agentPid, v.reason);
       return;
     }
-    const expired = this.clock.now() - p.at >= REPORT_HOLD_MS;
     if (v.verdict === "hold" && !force && !expired) return;
     this.dropPending(paneId);
     if (v.verdict === "hold") {
+      // 確かめずに受ける前に、報告したプロセスがまだ居るかを見る。終わっているもの（短い `claude -p` など）の参照は、
+      // 「居なくなった」の仕組みが働かないまま残って、次の起動で再開されてしまう。
+      if (!this.pidAlive(p.agentPid)) {
+        this.logIgnoredReport(paneId, p.kind, p.sessionId, p.agentPid, "the reporting process had already exited before it could be verified");
+        return;
+      }
       this.logger.info("agent report accepted without verification (no front agent was detected in time)", { paneId, kind: p.kind, session: p.sessionId.slice(0, 8), agentPid: p.agentPid });
     }
-    this.applyReportedSession(paneId, p.kind as AgentIntegrationKind, p.sessionId);
+    this.applyReportedSession(paneId, p.kind as AgentIntegrationKind, p.sessionId, p.ctx);
   }
 
   /** 再開を打ち込んでから `RESUME_PENDING_MS` の間にエージェントが検出されなければ、再開の失敗として、一つ前へ戻す（検出の前に終わる速い失敗）。 */

@@ -212,7 +212,12 @@ export class AgentMonitor {
 
     // 会話の参照の報告が、この pane の前面のエージェント自身のものかを確かめる材料（20261009-agent-session-attribution）。
     // 先に知らせる（検出の更新で、別のエージェントかを、プロセスで見分けるため）。
-    this.session.setFrontAgent(paneId, kind !== null && job ? { kind, pids: new Set(agentProcessPids(job, kind)) } : null);
+    this.session.setFrontAgent(
+      paneId,
+      kind !== null && job
+        ? { kind, pids: new Set(agentProcessPids(job, kind)), verifiable: job.processes.every((p) => p.ppid !== undefined) }
+        : null,
+    );
     const trackerResult = tracker.update(kind, judgment);
     const patch: PaneRuntimePatch = { busy, title };
     if (cwd !== undefined) patch.cwd = cwd;

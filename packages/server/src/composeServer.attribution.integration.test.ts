@@ -45,6 +45,12 @@ setInterval(() => {}, 1000);
       `#!/bin/bash\nexec -a claude ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`,
     );
     await chmod(wrapper, 0o755);
+    const codexWrapper = join(dir, "bin", "codex");
+    await writeFile(
+      codexWrapper,
+      `#!/bin/bash\nexec -a codex ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`,
+    );
+    await chmod(codexWrapper, 0o755);
     savedEnv = { HOME: process.env["HOME"], PATH: process.env["PATH"], ENV: process.env["ENV"] };
     process.env["HOME"] = dir;
     process.env["PATH"] = `${join(dir, "bin")}:${process.env["PATH"] ?? "/usr/bin:/bin"}`;
@@ -86,9 +92,9 @@ setInterval(() => {}, 1000);
     server.terminals.get(paneId)!.write(`touch ${JSON.stringify(marker)}\r`);
     await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 10_000, interval: 50 });
   }
-  async function startAgent(server: ComposedServer, paneId: string, previous: unknown = null): Promise<number> {
+  async function startAgent(server: ComposedServer, paneId: string, previous: unknown = null, command = "claude"): Promise<number> {
     await rm(pidFile, { force: true });
-    server.terminals.get(paneId)!.write("claude\r");
+    server.terminals.get(paneId)!.write(`${command}\r`);
     await vi.waitFor(() => expect(agentOf(server, paneId)).not.toBe(previous), { timeout: 15_000, interval: 50 });
     await vi.waitFor(() => expect(existsSync(pidFile)).toBe(true), { timeout: 5_000, interval: 50 });
     return Number((await readFile(pidFile, "utf8")).trim());
@@ -162,5 +168,47 @@ setInterval(() => {}, 1000);
     // 猶予の切れ（10 秒）を待たずに、別のエージェントが動いている間に捨てられる
     await vi.waitFor(() => expect(refOf(server, paneId)).toBeNull(), { timeout: 8_000, interval: 100 });
     expect(agentOf(server, paneId)).not.toBeNull();
+  });
+  // レビュー S1: Codex 0.162 のフックは常駐の daemon の中で動く（シェルの子孫でない）。pane が 1 つだけなら、今までどおり付く。
+  describe("Codex の daemon の報告（S1）", () => {
+    const daemonPid = process.pid; // この試験のプロセス: どの pane のシェルの子孫でもない
+    async function bootWithCodex() {
+      const stateDir = await mkdtemp(join(dir, "state-"));
+      const server = await boot(stateDir);
+      const paneId = server.session.snapshot().panes[0]!.id;
+      await shellReady(server, paneId);
+      await startAgent(server, paneId, null, "codex");
+      await vi.waitFor(() => expect(agentOf(server, paneId)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      return { server, stateDir, paneId, cwd: server.session.getPane(paneId)!.cwd };
+    }
+
+    it("前面の codex がサーバ全体で 1 つで、cwd が pane の場所と同じなら、daemon の報告が pane に付く", async () => {
+      const { server, stateDir, paneId, cwd } = await bootWithCodex();
+      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-one", agentPid: daemonPid, cwd });
+      await vi.waitFor(() => expect(refOf(server, paneId)).toBe("codex-one"));
+    });
+
+    it("cwd が違う（Sodashitsu の外の Codex）・cwd が無い報告は付かない", async () => {
+      const { server, stateDir, paneId, cwd } = await bootWithCodex();
+      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-far", agentPid: daemonPid, cwd: "/somewhere/else" });
+      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-nocwd", agentPid: daemonPid });
+      await sleep(500);
+      expect(refOf(server, paneId)).toBeNull();
+      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-ok", agentPid: daemonPid, cwd });
+      await vi.waitFor(() => expect(refOf(server, paneId)).toBe("codex-ok"));
+    });
+
+    it("前面の codex が 2 つあれば、どちらにも付かない（別の pane の上書きもしない）", async () => {
+      const { server, stateDir, paneId, cwd } = await bootWithCodex();
+      const second = (await server.session.splitPane(paneId, "right", undefined)).pane.id;
+      await shellReady(server, second);
+      await startAgent(server, second, null, "codex");
+      await vi.waitFor(() => expect(agentOf(server, second)?.kind).toBe("codex"), { timeout: 15_000, interval: 50 });
+      await report(stateDir, { paneId, kind: "codex", sessionId: "codex-two", agentPid: daemonPid, cwd });
+      await report(stateDir, { paneId: second, kind: "codex", sessionId: "codex-two-b", agentPid: daemonPid, cwd: server.session.getPane(second)!.cwd });
+      await sleep(500);
+      expect(refOf(server, paneId)).toBeNull();
+      expect(refOf(server, second)).toBeNull();
+    });
   });
 });

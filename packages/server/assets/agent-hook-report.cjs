@@ -167,12 +167,19 @@ async function main() {
   const raw = await readStdin();
   let sessionId;
   let extra;
+  let origin = {}; // 作業フォルダと、会話が始まった理由（サーバが、報告の持ち主を確かめる材料）
   try {
     const payload = JSON.parse(raw);
     // `session_id`（snake_case。Claude Code・Codex・Cursor・Devin・Droid・Qwen Code）と
     // `sessionId`（camelCase。Grok CLI・GitHub Copilot CLI の一部）の両方を受ける
     // （20260923-other-agents-session-resume design「hook スクリプト」・research.md F4）。
     sessionId = payload && (payload.session_id || payload.sessionId);
+    if (payload && typeof payload === "object") {
+      origin = compact({
+        cwd: typeof payload.cwd === "string" && payload.cwd !== "" && payload.cwd.length <= 1024 && !payload.cwd.includes("\0") ? payload.cwd : undefined,
+        source: typeof payload.source === "string" && /^[a-z_]{1,16}$/.test(payload.source) ? payload.source : undefined,
+      });
+    }
     if (payload && typeof payload === "object" && kind === "claude") {
       extra = typedFields(payload);
       if (extra === null) return;
@@ -185,7 +192,7 @@ async function main() {
   await new Promise((resolve) => {
     const conn = net.connect(sock, () => {
       const agentPid = agentPidOf(kind);
-      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...extra })}\n`);
+      conn.end(`${JSON.stringify({ paneId, kind, sessionId, ...(agentPid !== undefined ? { agentPid } : {}), ...origin, ...extra })}\n`);
     });
     conn.on("error", () => resolve()); // サーバが落ちている等 → 黙って諦める（report は best-effort）
     conn.on("close", () => resolve());

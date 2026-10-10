@@ -450,8 +450,20 @@ describe("agent-hook-report.cjs", () => {
           "claude",
           JSON.stringify({ ...base, hook_event_name: "SessionStart", source: "startup" }),
         ),
-      ).toEqual(common);
+      ).toEqual({ ...common, source: "startup" }); // 会話が始まった理由は、報告に載る（`clear` を履歴に積まないため）
       expect(await runHook("claude", JSON.stringify(base))).toEqual(common);
+    });
+
+    it("フックの入力の cwd・source は、形が正しいときだけ報告に載る（常駐のプロセスの報告を pane に結ぶ・clear の扱い。20261009-agent-session-attribution）", async () => {
+      expect(await runHook("codex", JSON.stringify({ session_id: "s1", cwd: "/work/a", hook_event_name: "SessionStart", source: "clear" }))).toEqual({
+        paneId: "p1",
+        kind: "codex",
+        sessionId: "s1",
+        cwd: "/work/a",
+        source: "clear",
+      });
+      expect(await runHook("codex", JSON.stringify({ session_id: "s1", cwd: "x".repeat(1025), source: "Not A Source!" }))).toEqual({ paneId: "p1", kind: "codex", sessionId: "s1" });
+      expect(await runHook("codex", JSON.stringify({ session_id: "s1", cwd: 5, source: 7 }))).toEqual({ paneId: "p1", kind: "codex", sessionId: "s1" });
     });
 
     it("kind が claude でなければ type つきを送らない（Agent 以外の PreToolUse でも、今までどおりセッション ID の報告）", async () => {

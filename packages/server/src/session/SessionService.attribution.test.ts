@@ -78,6 +78,7 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
   let logger: MemoryLogger;
   let ancestors: Record<number, number[] | null>;
   let persistCalls: number;
+  let deadPids: Set<number>;
 
   /** 親が shell なら、shell の子孫（自分から shell まで）。 */
   const underShell = (pid: number): number[] => [pid, SHELL_PID, 1];
@@ -87,6 +88,7 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
   async function build(opts: Opts = {}, saved?: { kind: string; sessionId: string; reportedAt: number }[]): Promise<void> {
     now = 1_000_000;
     persistCalls = 0;
+    deadPids = new Set();
     ancestors = opts.ancestors ?? {};
     service = new SessionService({
       model: new SessionModel(),
@@ -101,6 +103,7 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
       logger: (logger = new MemoryLogger()),
       clock: { now: () => now },
       ancestorsOf: (pid) => (pid in ancestors ? ancestors[pid]! : underShell(pid)),
+      pidAlive: (pid) => !deadPids.has(pid),
     });
     await service.restore({
       schema: 1,
@@ -158,6 +161,11 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
     expect(refOf()?.sessionId).toBe("aaaaaaaa-1111");
     service.reportAgentSession("p1", "claude", "bbbbbbbb-2222", 200);
     expect(refOf()?.sessionId).toBe("aaaaaaaa-1111");
+    // 前面の記録が古いだけかもしれないので、次の 2 回の判定で確かめ直してから捨てる（S2）
+    detect([100]);
+    expect(logs("agent report ignored")).toHaveLength(0);
+    detect([100]);
+    expect(refOf()?.sessionId).toBe("aaaaaaaa-1111");
     const l = logs("agent report ignored");
     expect(l).toHaveLength(1);
     expect(l[0]!.fields).toMatchObject({ paneId: "p1", kind: "claude", session: "bbbbbbbb", agentPid: 200 });
@@ -198,6 +206,7 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
 
   it("保留した報告は、検出されたエージェントの pid が違えば捨てる", () => {
     service.reportAgentSession("p1", "claude", "bbbbbbbb-2222", 200);
+    detect([100]);
     detect([100]);
     expect(refOf()).toBeNull();
     expect(logs("agent report ignored")).toHaveLength(1);
