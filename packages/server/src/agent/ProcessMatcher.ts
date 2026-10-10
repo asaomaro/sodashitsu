@@ -15,6 +15,7 @@
  * - `Agent::Omp`・`Agent::Mastracode`：画面マニフェストが無いので対象外のまま（D46）。
  */
 import type { ForegroundJob, ForegroundProcess } from "../platform/ProcessInspector.js";
+import { codexResumeIdFromArgv } from "./codexSession.js";
 import { lookupAgentKind, normalizedAgentLookupName, pathBasename } from "./agents.js";
 
 /** 前面プロセスグループ（ジョブ）からエージェントの種類を決める。見つからなければ null。 */
@@ -60,6 +61,21 @@ export function agentProcessPids(job: ForegroundJob, kind: string): number[] {
   const cluster = new Set(matched.filter((p) => !hasMatchedAncestor(p)).map((p) => p.pid));
   for (const p of matched) if (p.ppid !== undefined && cluster.has(p.ppid)) cluster.add(p.pid);
   return [...cluster];
+}
+
+/**
+ * 前面のジョブの、`kind` のエージェントのプロセスの引数にある、会話の id（Codex の `codex resume <id>`）。無ければ undefined。
+ * 復元で打ち込んだ・利用者が打った `codex resume <id>` の pane は、daemon の報告を待たずに、どの会話かが分かる（20261010-codex-multi-pane）。
+ */
+export function agentResumeSessionId(job: ForegroundJob, kind: string): string | undefined {
+  if (kind !== "codex") return undefined;
+  const pids = new Set(agentProcessPids(job, kind));
+  for (const p of job.processes) {
+    if (!pids.has(p.pid)) continue;
+    const id = codexResumeIdFromArgv(p.argv);
+    if (id !== undefined) return id;
+  }
+  return undefined;
 }
 
 /**

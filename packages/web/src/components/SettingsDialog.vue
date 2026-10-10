@@ -22,6 +22,7 @@ import {
 import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import { mobileViewportQuery } from "../mobile/detect.js";
+import { resolveTabBarAlways } from "../composables/useUiStyle.js";
 import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
 import ExtensionSettings from "./ExtensionSettings.vue";
 import KeySettings from "./KeySettings.vue";
@@ -217,6 +218,18 @@ const uiStyleChoices: readonly { value: UiStyle; label: string }[] = [
 function chooseUiStyle(v: UiStyle): void {
   settings.setUiStyle(v);
 }
+
+/** tab が 1 つのときも tab バーを出すか（20261008-ui-style の AC24）。選ぶと、様式に関わらずその値になる。「既定に戻す」で、様式に従う。 */
+function toggleTabBarAlways(): void {
+  settings.setTabBarAlways(!tabBarAlwaysEffective.value);
+}
+function resetTabBarAlways(): void {
+  settings.setTabBarAlways(null);
+}
+/** 画面に効いている値（`useUiStyle().tabBarAlways` と同じ規則 `resolveTabBarAlways`。1 列かは、リスナーを増やさず、その場で読む）。 */
+const tabBarAlwaysEffective = computed(() =>
+  resolveTabBarAlways(settings.tabBarAlways, settings.uiStyle === "modern", typeof window.matchMedia === "function" && mobileViewportQuery().matches),
+);
 
 function togglePaneGaps(): void {
   settings.setPaneGaps(!settings.paneGaps);
@@ -1161,6 +1174,16 @@ function onNativeCancel(ev: Event): void {
           </button>
         </li>
         <li class="settings-row">
+          <button type="button" role="switch" class="settings-switch" data-setting="tab-bar-always" :aria-checked="tabBarAlwaysEffective" @click="toggleTabBarAlways">
+            <span class="settings-mark">{{ tabBarAlwaysEffective ? "入" : "切" }}</span>
+            <span>tab が 1 つのときも tab バーを出す</span>
+          </button>
+          <span class="settings-sub">
+            <template v-if="settings.tabBarAlways === null">様式に従っています（クラシック: 出さない・モダン: 出す）</template>
+            <button v-else type="button" class="settings-btn" data-setting="tab-bar-always-reset" @click="resetTabBarAlways">既定に戻す</button>
+          </span>
+        </li>
+        <li class="settings-row">
           <label class="settings-select-row">
             <span>tab バーの位置</span>
             <select class="settings-select" :value="settings.tabBarPosition" @change="onTabBarPositionChange">
@@ -1732,6 +1755,13 @@ function onNativeCancel(ev: Event): void {
   font: inherit;
   min-height: var(--soda-shape-control-h, 1.75rem);
   max-width: 100%;
+}
+/* 項目のすぐ下の、小さな補足（20261008-ui-style AC24）。 */
+.settings-sub {
+  display: block;
+  margin: 0.2em 0 0;
+  font-size: 0.85em;
+  opacity: 0.7;
 }
 .settings-hint {
   margin: 1em 0 0;

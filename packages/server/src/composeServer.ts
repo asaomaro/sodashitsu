@@ -55,6 +55,7 @@ import { FsIntegrationFile } from "./persist/IntegrationFile.js";
 import { FsAgentIntegrationInstaller, isAgentIntegrationKind } from "./agent/AgentIntegrationInstaller.js";
 import { DefaultAgentIntegrationService } from "./agent/AgentIntegrationService.js";
 import { startAgentReportSocket, type AgentReportSocket } from "./agent/AgentReportSocket.js";
+import { lookupCodexRecord } from "./agent/codexSession.js";
 import { HttpServer } from "./http/HttpServer.js";
 import { WsServerWs } from "./ws/WsServerWs.js";
 import { WsGateway } from "./ws/WsGateway.js";
@@ -300,6 +301,9 @@ export async function composeServer(
     terminals,
     bus,
     persist,
+    // Codex の会話の記録（常駐の daemon の報告を pane に付ける前の検算。20261010-codex-multi-pane）。場所は Codex と同じ規則（`CODEX_HOME`・無ければ `~/.codex`）。
+    // 最初の試行は日付のフォルダを新しい順に（見つかれば止める）、再試行は、最近の数日だけ。
+    codexRecordLookup: (id, attempt) => lookupCodexRecord(process.env["CODEX_HOME"] || join(osHomedir(), ".codex"), id, attempt === 0 ? undefined : 3),
     serverVersion: SERVER_VERSION,
     host,
     scrollbackLines: options.scrollbackLines,
@@ -519,6 +523,12 @@ export async function composeServer(
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（今は Claude Code）。pane が閉じたら、その pane の集計を捨てる。
   const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter()], logger, reported: reportedUsage });
+  // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
+  // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
+  // Claude Code の分だけ（Codex の利用状況は次の PR。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕ので、そのとき同じ形で足す）。
+  session.onReportAccepted((paneId, kind, sessionId, ctx) => {
+    if (kind === "claude") usage.noteTranscript(paneId, sessionId, ctx.transcriptPath);
+  });
   // 包みの報告: #128 の確かめ（pid）と、報告の会話の id が、その pane の今の参照と一致すること。合わなければ、短く保留して確かめ直し、それでも合わなければ捨てる（理由の種類だけをログに）。
   const usageIntake = new UsageReportIntake({
     verdict: (r) => session.usageReportVerdict(r.paneId, "claude", r.agentPid, r.sessionId),
@@ -811,9 +821,7 @@ export async function composeServer(
           (report) => {
             if (report.type === "session") {
               // 連携の kind の全部（20261007-agent-hook-drift research X1）。報告したプロセスの確かめは `reportAgentSession` の中（20261009-agent-session-attribution）。
-              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source });
-              // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる。20261010-agent-usage）。
-              usage.noteTranscript(report.paneId, report.sessionId, report.transcriptPath);
+              if (isAgentIntegrationKind(report.kind)) session.reportAgentSession(report.paneId, report.kind, report.sessionId, report.agentPid, { cwd: report.cwd, source: report.source, transcriptPath: report.transcriptPath });
             } else if (report.type === "usage") {
               // ステータスラインの包みの利用状況（Claude Code だけ。20261010-agent-usage の PR2）。確かめは `UsageReportIntake` の中。
               if (report.kind === "claude") {
@@ -938,6 +946,7 @@ export async function composeServer(
         usageSub.dispose();
         claudeSeenSub.dispose();
         usageIntake.close();
+        usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
@@ -976,6 +985,7 @@ export async function composeServer(
         usageSub.dispose();
         claudeSeenSub.dispose();
         usageIntake.close();
+        usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();

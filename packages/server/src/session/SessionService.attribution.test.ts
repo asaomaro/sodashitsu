@@ -259,6 +259,57 @@ describe("SessionService — 会話の参照は、その pane の前面のエー
     expect(service.acceptsReporter("p1", "claude", 100)).toBe(true); // まだ分からない間は、今までどおり受ける
   });
 
+  describe("受け入れた報告の聞き手（onReportAccepted。利用状況の記録の場所を、受け入れた報告のものだけ覚える。20261010-agent-usage の U1）", () => {
+    const accepted = (): { paneId: string; sessionId: string; path: string | undefined }[] => {
+      const out: { paneId: string; sessionId: string; path: string | undefined }[] = [];
+      service.onReportAccepted((paneId, _k, sessionId, ctx) => out.push({ paneId, sessionId, path: ctx.transcriptPath }));
+      return out;
+    };
+
+    it("受け入れた報告（pid の無い・前面のエージェント自身）の場所は届く。捨てた報告（子の claude・シェルの子孫でない）の場所は届かない", () => {
+      const got = accepted();
+      detect([100]);
+      service.reportAgentSession("p1", "claude", "aaaaaaaa-1111", 100, { transcriptPath: "/a/aaaaaaaa-1111.jsonl" });
+      service.reportAgentSession("p1", "claude", "bbbbbbbb-2222", 200, { transcriptPath: "/evil/bbbbbbbb-2222.jsonl" }); // 子の claude
+      ancestors[900] = [900, 301, 1];
+      service.reportAgentSession("p1", "claude", "cccccccc-3333", 900, { transcriptPath: "/evil/cccccccc-3333.jsonl" }); // シェルの子孫でない
+      service.reportAgentSession("p1", "claude", "dddddddd-4444", undefined, { transcriptPath: "/b/dddddddd-4444.jsonl" }); // pid の無い報告は、今までどおり受ける
+      expect(got).toEqual([
+        { paneId: "p1", sessionId: "aaaaaaaa-1111", path: "/a/aaaaaaaa-1111.jsonl" },
+        { paneId: "p1", sessionId: "dddddddd-4444", path: "/b/dddddddd-4444.jsonl" },
+      ]);
+    });
+
+    it("保留の後で受けた報告の場所は、受け入れた時に届く。保留の後で捨てた報告の場所は届かない。保留の間は届かない", () => {
+      const got = accepted();
+      service.reportAgentSession("p1", "claude", "aaaaaaaa-1111", 100, { transcriptPath: "/a/aaaaaaaa-1111.jsonl" });
+      expect(got).toEqual([]); // まだ保留
+      detect([100]);
+      expect(got).toEqual([{ paneId: "p1", sessionId: "aaaaaaaa-1111", path: "/a/aaaaaaaa-1111.jsonl" }]);
+      got.length = 0;
+      service.reportAgentSession("p1", "claude", "bbbbbbbb-2222", 300, { transcriptPath: "/evil/b.jsonl" });
+      front([100]);
+      front([100]); // 前の記録が古いだけ、の確かめ直しの後に捨てる
+      tick();
+      expect(got).toEqual([]);
+    });
+
+    it("実在しない pane の報告（偽の paneId）は届かない（覚えの上限を、偽の paneId で押し出せない）", () => {
+      const got = accepted();
+      for (let i = 0; i < 600; i++) service.reportAgentSession(`fake-${i}`, "claude", `s-${i}`, undefined, { transcriptPath: `/x/${i}.jsonl` });
+      expect(got).toEqual([]);
+    });
+
+    it("聞き手が投げても、報告の受け入れは変わらない", () => {
+      service.onReportAccepted(() => {
+        throw new Error("boom");
+      });
+      detect([100]);
+      service.reportAgentSession("p1", "claude", "aaaaaaaa-1111", 100, { transcriptPath: "/a.jsonl" });
+      expect(refOf()?.sessionId).toBe("aaaaaaaa-1111");
+    });
+  });
+
   describe("再開の失敗（AC4）", () => {
     it("再開を打ち込んだ後、手が空く前に居なくなったら、参照を捨てる代わりに一つ前へ戻す（ログに、会話の id・時間・理由）。次の再開は一つ前", async () => {
       await build({}, [

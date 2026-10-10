@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -38,6 +38,18 @@ describe("locateClaudeMain", () => {
     const f = mk(root, "proj-b", `${SID}.jsonl`);
     expect(await locateClaudeMain(SID, undefined, [root])).toBe(f);
     expect(await locateClaudeMain(SID, join(outside, `${SID}.jsonl`), [root])).toBe(f);
+  });
+
+  it("同じ id が複数のプロジェクトにあるときは、更新の時刻が新しいほう（readdir の順ではない。R2）", async () => {
+    const old = mk(root, "p1-old", `${SID}.jsonl`);
+    const fresh = mk(root, "p2-new", `${SID}.jsonl`);
+    const older = mk(root, "p0-oldest", `${SID}.jsonl`);
+    utimesSync(old, 1_000, 1_000);
+    utimesSync(older, 500, 500);
+    utimesSync(fresh, 2_000, 2_000);
+    expect(await locateClaudeMain(SID, undefined, [root])).toBe(fresh);
+    utimesSync(old, 3_000, 3_000); // 古かった写しが新しくなれば、そちら
+    expect(await locateClaudeMain(SID, undefined, [root])).toBe(old);
   });
 
   it("根の外の場所は読まない（同じ名前のファイルが外に有っても）。探しても無ければ null", async () => {

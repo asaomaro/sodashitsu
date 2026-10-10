@@ -360,14 +360,40 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
           参照を捨てる（履歴には一つ前として残す。ログに `agent session dropped (a different agent started without reporting)`）。
         - **フックのスクリプトが新しくなった**ので、導入済みの利用者は設定の「エージェント連携」が「更新が必要」になる。押したときだけ書き換える。
           更新するまでは pid が付かず、今までどおりの受け方になる（取り違えは防げない）。
-        - **Codex（20261009-agent-session-attribution の S1）**：Codex 0.162 はフックを pane の中ではなく、常駐の app-server daemon の中で動かす
-          （daemon の環境の `SODA_PANE_ID` は、最初に daemon を起動した pane のもの。報告したプロセスは、どの pane のシェルの子孫でもない）。
-          この報告は、次の**全部**を満たすときだけ、報告の pane に付ける：その pane に前面の `codex` が検出されている・**サーバ全体で、前面の `codex` が
-          その 1 つだけ**・報告の `cwd`（フックの入力の作業フォルダ）がその pane の場所と同じ（Sodashitsu の外で動いた、同じ daemon を使う
-          VS Code などの会話を取り違えないため。`cwd` の無い古いフックの報告は、この道では受けない）。
-          結果：**Codex の pane が 1 つなら、今までどおり再開される。2 つ以上あると、どれにも付かない**（別の pane を上書きしない代わりに、再開もされない）。
-          複数の pane で Codex を使う人の手当ては無い（daemon の環境は変えられない）。正しい pane に付ける案（終了の文言 `codex resume <id>` を
-          画面から拾う・daemon の接続の突き合わせ）は別の作業。
+        - **Codex（20261009-agent-session-attribution の S1・20261010-codex-multi-pane）**：Codex 0.162 はフックを pane の中ではなく、常駐の
+          app-server daemon の中で動かす（daemon の環境の `SODA_PANE_ID` は、最初に daemon を起動した pane のもの。報告したプロセスは、どの pane の
+          シェルの子孫でもない）ので、報告の `paneId` は当てにならない。**Codex の pane がいくつあっても（同じフォルダでも）**、pane ごとに、
+          次の手がかりで会話の参照を付ける（ログ `agent session attached` の `source`）。**間違った pane に付けるくらいなら、付けない。**
+          1. `argv`（最優先）: 前面の `codex` の引数に `codex resume <id>` の id がある pane（復元で打ち込んだもの・利用者が打ったもの）。
+             daemon の報告を待たず、検出の時点で付く（同じ検出では 1 回だけ。アプリの中の `/resume` で替わった後は、あとの手がかりが直す）。
+             `codex resume`（選ぶ画面）・`--last`・ただの `codex` は、これでは分からない。
+          2. `first-turn`: daemon の報告（`SessionStart`。最初の入力を送ったとき、約 0.4 秒後に出る）の直前（6 秒以内）に、最初の入力（Enter）が届いた
+             `codex` の pane が、**1 つだけ**で、報告の `cwd`（フックの入力の作業フォルダ）がその pane の場所と同じで、まだ参照が無いとき、その pane に付ける。
+             2 つ以上が同時（窓の中）なら、どちらにも付けない。**参照のある pane も候補にする**（引数で付いた pane が、アプリの中の `/new` で会話を
+             替えたとき、新しい会話に付け替える。前の参照は一つ前へ）。ただし、その会話が**ほかの pane の今の参照**と同じなら付けない。
+             1 回の入力から出る報告は 1 つなので、報告に結んだ入力は、別の報告の候補にしない。
+             **新しい会話（`startup`・`/clear`）は、記録の先頭の行の時刻が、その pane の最後の入力（Enter）の −2 秒〜+5 秒**のときだけ付ける
+             （別の pane・外の Codex の、前に始まった会話を、参照のある pane に付けないため）。**前からある会話の再開（`resume`・source が無い古いフック）は、
+             時刻では結べないので、参照の無い pane だけ**を候補にする。1 つだけの codex でも、参照のある pane の付け替えは、同じ時刻の条件を掛ける。
+             検算（記録の確認）の間に、その pane の前面のエージェント・参照が変わったら、付けない。
+          3. `sole-codex`: 前面の `codex` がサーバ全体で 1 つだけなら、`cwd` が一致するとき、その pane（#128 の道）。
+          4. `exit-text`（補助）: `codex` が終わるとき、TUI が画面に出す `To reconnect, run:`（または `To continue this session, run:`）の次の行の
+             `codex resume <id>` を、検出が外れた直後に拾い、その pane の会話にする（時刻の一致で付けたものも、これが直す）。
+             kill・サーバが先に止まる、では出ないので、補助。前の実行のものが残った画面の文言は拾わない。
+          2・3・4 は、付ける前に、会話の記録（`$CODEX_HOME`〔無ければ `~/.codex`〕の `sessions/YYYY/MM/DD/rollout-…-<id>.jsonl` の先頭。
+          読むだけ。リンクは辿らず、通常のファイルだけ・1 秒の時間切れ・日付のフォルダは新しい順に、見つかったら止める）が、**実在して、その `cwd` が
+          pane の場所と一致し、`originator` が `codex-tui`（pane の TUI が始めた会話）**かを確かめる。無い・違う・確かめられない〔2 と 4 の場合〕なら付けない
+          （ログに理由。4 は、直前の参照をそのまま残す。画面の文言は、pane の中のプログラムなら誰でも出せるため）。
+          `originator` が `codex_exec`（`codex exec`）・`codex_chatgpt_android_remote`（リモート）・`codex_cli_rs`（古い版）などの会話は付けない。
+          `source` は見ない（pane の TUI でも、環境〔`TERM_PROGRAM=vscode`〕で `vscode` になるため）。
+          再起動の後は、参照のある Codex の pane すべてに `codex resume <id>` が打ち込まれ、引数に id があるので、参照はそのまま保たれる。
+          **付かない場合**: 同じ pane の最初の入力がほぼ同時に 2 つの pane に届いた・`cwd` が違う（アプリの中で `/cd` した）・記録が読めない・
+          `codex resume`（id なし）で始めて、別の pane と同時に最初の入力を送った、など。その場合も、終了の文言・次の起動の引数で、あとから付くことがある。
+          **限界**: 検算で記録が見つからない（pane の `codex` の `CODEX_HOME` がサーバの環境と違う・記録がまだ書かれていない）と、`sole-codex` でも付かない
+          （#128 では付いていた。ログに `no session record`。確かめられない〔`sessions` が無い〕ときだけ `sole-codex` は付く）。入力の窓（6 秒）の中に、本物の
+          所有者の入力ではない別の pane の入力（`sodactl agent prompt` など）が 1 つだけあると、取り違えうる（窓の外の本物の最初の入力と、窓の中の別の入力）。
+          引数で付いた pane は、`/new` で替えた後、新しい会話の最初の入力が窓に入らなければ、古い id のままになる（終了の文言で直る）。
+          **対象外**: Codex の中の `sodactl --current` が、別の pane（daemon を最初に起動した pane）を指しうること（daemon の環境のため。直せない）。
         - 前面のエージェントは居るが、報告した pid が含まれないとき（終わって、すぐ別のエージェントが報告した、など）は、前面の記録が古いだけかもしれないので、
           次の 2 回の判定まで保留して確かめ直し、それでも含まれなければ捨てる（S2）。期限（15 秒）・停止で「確かめずに受ける」前に、報告したプロセスが
           まだ居るかを見て、終わっていれば捨てる（S3。ログ `the reporting process had already exited`）。
@@ -1742,3 +1768,5 @@ copy モードの中でも prefix になる）。M7・M11 のマウス報告は�
 - [ ] `sodactl agent fork <名前>`: 同じフォルダの新しい pane に、会話を覚えたエージェントが起動する（応答に合言葉が出る）。元のエージェントは止まらない。（2026-10-10 実機で確認: 約 6.6 秒。）
 - [ ] `sodactl agent fork <名前> --worktree fork/e2e`: 新しい worktree と workspace ができ、最初の知らせが届き（`noteStatus: sent`）、新しいエージェントが「作業フォルダを切り替えた」と答える。元のフォルダは変わらない。（同日確認: 約 7 秒。リポジトリが信頼済みなら worktree の信頼の確認は出なかった。）
 - [ ] 古い Claude Code（`--fork-session` を知らない版）・記録が無い id: `failed` で理由が出て、pane は閉じない（偽の `claude` の試験で確認。実機は未確認）。
+
+- 強制モダン（`UI_STYLE_E2E=modern`）で流す E2E（20261008-ui-style PR4〜PR6）: `ui-style-pane-actions`・`tab-dnd`・`sidebar-sections`（クラシックの `.sidebar-section-footer` を探す 1 本〔最下部のボタンの位置〕は、モダンでは出ないので落ちる。元からの前提）・`display-script-noreturn`（幅のつまみの縦の中央に、モダンの境の印があるため 2 本落ちる。元からの前提）。`ui-style-layout` は、最初にクラシックを確かめる試験を含むので、強制モダンでは流さない（既定の環境で流す）。

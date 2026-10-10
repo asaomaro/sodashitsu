@@ -213,4 +213,64 @@ describe("ClaudeSessionScan", () => {
     expect(json).not.toContain("SECRET-CONTENT-MARKER");
     expect(json).not.toContain(dir);
   });
+
+  it("model の絞り: 先頭が英数字で、/ を含まない。/etc/passwd・../x・空白・65 文字以上は null（今のモデルの id と [1m] の形は通る）", async () => {
+    const f = join(dir, `${SID}.jsonl`);
+    const model = async (m: string): Promise<string | null> => {
+      writeFileSync(f, assistant({ id: `x${Math.random()}`, model: m }));
+      const scan = new ClaudeSessionScan(SID);
+      scan.addFile(f, false);
+      await run(scan);
+      return scan.result().model;
+    };
+    expect(await model("claude-opus-5-5[1m]")).toBe("claude-opus-5-5[1m]");
+    expect(await model("claude-haiku-4-5-20251001")).toBe("claude-haiku-4-5-20251001");
+    expect(await model("gpt-6.1-sol")).toBe("gpt-6.1-sol");
+    for (const bad of ["/etc/passwd", "../../x", "a/b", "-x", ".hidden", "a b", "x".repeat(65), "", "m\u0000x", "claude[1m", "claude[]"]) {
+      expect(await model(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it("生涯の読む量の上限は、数え直し（書き換え）をまたいで数える。上限に達したら、更新を止め、partial と stopped を立てる（R5）", async () => {
+    const f = join(dir, `${SID}.jsonl`);
+    const lines = (k: number, tag: string): string => Array.from({ length: k }, (_, i) => assistant({ id: `${tag}${i}` })).join("");
+    const first = lines(20, "a");
+    writeFileSync(f, first);
+    const limits = { readTotalMax: first.length * 3 };
+    let scan = new ClaudeSessionScan(SID, limits);
+    scan.addFile(f, false);
+    await run(scan);
+    expect(scan.bytesRead).toBe(first.length);
+    expect(scan.stopped).toBe(false);
+    // 書き換えを繰り返す（そのたびに小さくなって、数え直しになる）。数え直しのたびに、読んだ量を引き継ぐ。
+    for (let k = 19; k >= 1 && !scan.stopped; k--) {
+      writeFileSync(f, lines(k, `r${k}`));
+      const r = await scan.advance();
+      if (r.reset) {
+        const fresh = new ClaudeSessionScan(SID, limits, scan.bytesRead);
+        fresh.addFile(f, false);
+        scan = fresh;
+      }
+      await run(scan);
+    }
+    expect(scan.stopped).toBe(true);
+    expect(scan.result().partial).toBe(true);
+    const before = scan.bytesRead;
+    appendFileSync(f, assistant({ id: "later", o: 999 }));
+    await run(scan);
+    expect(scan.bytesRead).toBe(before); // 止まった後は、読まない
+    expect(scan.result().tokens.output).not.toBe(999);
+  });
+
+  it("shouldStop が真になったら、次の行の読みの前で止まる（閉じた pane・サーバの停止）", async () => {
+    const f = join(dir, `${SID}.jsonl`);
+    let body = "";
+    for (let i = 0; i < 400; i++) body += assistant({ id: `m${i}`, o: 1 });
+    writeFileSync(f, body);
+    const scan = new ClaudeSessionScan(SID, { chunkBytes: 2048 });
+    scan.addFile(f, false);
+    let calls = 0;
+    await scan.advance(undefined, () => ++calls > 3);
+    expect(scan.bytesRead).toBeLessThan(body.length / 2);
+  });
 });

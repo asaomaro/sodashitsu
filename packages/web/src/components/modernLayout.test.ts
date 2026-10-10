@@ -267,6 +267,39 @@ describe("モダンの配置 — tab バー（AC17）", () => {
     expect(w.find(".tab-bar").exists()).toBe(false);
   });
 
+  it("設定「tab が 1 つのときも tab バーを出す」（AC24）: 選んだ値が様式より優先され、様式を切り替えても残る。null で様式に従う", async () => {
+    seed(1);
+    const settings = useSettingsStore(pinia);
+    setStyle("classic");
+    const w = mountOf(TabBar, makeActions());
+    expect(w.find(".tab-bar").exists()).toBe(false);
+    settings.setTabBarAlways(true); // クラシックでも出す
+    await nextTick();
+    expect(w.find(".tab-bar").exists()).toBe(true);
+    setStyle("modern");
+    settings.setTabBarAlways(false); // モダンでも出さない
+    await nextTick();
+    expect(w.find(".tab-bar").exists()).toBe(false);
+    setStyle("classic");
+    settings.setTabBarAlways(true);
+    setStyle("modern"); // 様式を切り替えても、選んだ値のまま
+    await nextTick();
+    expect(w.find(".tab-bar").exists()).toBe(true);
+    settings.setTabBarAlways(null); // 既定に戻す: モダンなので出す
+    await nextTick();
+    expect(w.find(".tab-bar").exists()).toBe(true);
+    setStyle("classic"); // 既定に戻した後は、様式に従う
+    await nextTick();
+    expect(w.find(".tab-bar").exists()).toBe(false);
+  });
+
+  it("tab が 2 つ以上のときは、設定が「出さない」でも出る（切り替える先があるため）", () => {
+    seed(2);
+    setStyle("modern");
+    useSettingsStore(pinia).setTabBarAlways(false);
+    expect(mountOf(TabBar, makeActions()).find(".tab-bar").exists()).toBe(true);
+  });
+
   it("tab が 2 つ以上のときは、どちらの様式でも出る", () => {
     seed(2);
     setStyle("classic");

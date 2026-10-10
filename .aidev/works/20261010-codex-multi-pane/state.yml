@@ -1,0 +1,10 @@
+schema: 11
+slug: codex-multi-pane
+current: requirements
+approved: []
+mode: autonomous
+profile: light
+humanGates: []
+maxSendBacks: 3
+dependsOn: []
+harnessRev: unknown

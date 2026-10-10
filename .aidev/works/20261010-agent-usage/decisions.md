@@ -41,3 +41,11 @@
 | P5 | 「報告が届いていません」 | 導入済みで、動いている Claude Code の検出から 2 分たち、その後の報告が無いとき。検出の時刻はサーバが覚える（`AgentInfo.since` は状態の変化で変わるため使わない）。 |
 | P6 | tokens | 報告の `total_input_tokens` は、いま文脈にある分（累計でない）なので、`contextTokens` に持つ。記録がある pane の `tokens`（transcript）は置き換えない。記録が読めない pane だけ、`tokens` は `basis: "context"`。 |
 | P7 | 端末版 | 設定の項目は、ブラウザの設定画面だけ（端末版の設定には出さない。`sodactl agent usage` の表には、出る）。 |
+
+## D6 レビューの直し（U1〜U3・R1〜R6。`usage-pr1-review-result.md`）
+- **U1**: 記録の場所は、`reportAgentSession` が**受け入れた**報告のものだけ覚える。`SessionService.onReportAccepted(listener)` を足し、`applyReportedSession`（pid の無い・前面が合う・保留の後で受けた・Codex の daemon の条件つき受け入れの、全部の経路が通る所）の後に呼ぶ。報告の場所は `AgentReportContext.transcriptPath` で運ぶ（保留の間も）。捨てた報告・子の claude・別の pane の分は届かない。実在しない pane の報告は受け入れられないので、覚えの上限（512）を偽の paneId で押し出せない。受け入れた報告に場所が無いときは、前の覚えを捨てる。Codex の PR で、daemon の報告は「受け入れの結果の pane」に結ばれる（同じ形）。
+- **U2**: 場所の探索も `PaneState.locating`（約束）を共有する。付ける値は探索の中で 1 回（後から終わった探索が、先の値を null で上書きしない）。`forget`・会話が替わったとき・サーバの停止（`UsageService.close` → アダプタの `close`）で `closed` の印を立て、`drive` のループと `advance` の各ファイル・各チャンクの前で見て止める。
+- **U3**: `model` は、先頭が英数字で、英数字と `.`・`_`・`-`・`:` と末尾の `[…]`（英数字 1〜8 文字）だけ。`/` は通さない。
+- **R2**: 探索は全部の候補を見て、更新の時刻（`mtime`）が新しいほうを選ぶ。
+- **R5**: 走査の生涯の読む量（512 MiB）を、書き換え（reset）での数え直しに**引き継ぐ**（`new ClaudeSessionScan(id, limits, carriedRead)`）。上限に達したら更新を止め、`partial` と `updatesStopped`（protocol の `AgentUsage` に足した省略可の項目）を立てる。
+- **R1・R3・R4・R6**: 直さずに、`docs/agent-usage.md` の限界に書いた（先頭の行を取る・`CLAUDE_CONFIG_DIR` が違うと黙って無い・`cost-state` の遅れて書かれたサブエージェントの分・5000 フォルダで探索が打ち切られる）。

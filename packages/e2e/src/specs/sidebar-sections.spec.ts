@@ -250,7 +250,12 @@ test("自動の配分: workspace が少ないと spaces は中身の高さで ag
   expect(Math.abs(sFew - (await natural())), "spaces は中身の高さ").toBeLessThan(4);
   const aFew = await height(page, ".sidebar-agents");
   const total = await page.locator(".sidebar-sections").evaluate((el) => el.clientHeight);
-  expect(sFew + aFew + 1, "agents が残りを使う").toBeGreaterThan(total - 3);
+  // モダンのカード（20261008-ui-style PR6）の、入れ物の上下の余白と、区画の間のすき間は、配れる高さに入らない（クラシックは 0）。期待は緩めず、その分を正確に足す。
+  const chrome = await page.locator(".sidebar-sections").evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.rowGap) || 0) * 2;
+  });
+  expect(sFew + aFew + 1 + chrome, "agents が残りを使う").toBeGreaterThan(total - 3);
   expect(aFew).toBeGreaterThan(sFew);
   // 多い（15 件）: spaces は中身より小さく（スクロール）、agents に最小が残る。
   await addWorkspaces(appServer, 15);
