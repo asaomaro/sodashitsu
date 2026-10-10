@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises
 import { open as fsOpen } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ServerEvent } from "@sodashitsu/protocol";
 import { EventBus } from "../bus/EventBus.js";
 import { DisplayService } from "../display/DisplayService.js";
@@ -13,6 +14,38 @@ import { FakeExtChild, FakeGroups } from "./testing.js";
 
 /** ExtensionHost の単体テスト用の組み立て（偽の子・偽の時計・本物の台帳と bus・一時ディレクトリの設定）。 */
 export const sleep = (ms = 5): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** ファイルの I/O（`fs`・`fs/promises` の未完了の要求）。 */
+const FS_RESOURCES: ReadonlySet<string> = new Set(["FSReqPromise", "FSReqCallback", "CloseReq"]);
+
+/**
+ * ファイルの I/O が落ち着くのを待つ（要求が 1 つも残らない状態が、続けて 3 回の macrotask の間続くまで。上限 10 秒）。
+ * 偽の時計を進めたあとの、`ApprovalStore` などの実ファイルの読み書き（reconcile・見張りの 1 回）は、実時間で終わる。固定の短い待ち（`sleep(2)`）だけでは、
+ * 負荷が高い（ディスク・CPU を取り合っている）と、終わる前に次の確認に進んで落ちる。「終わった」を、待つ側が見て決める。
+ */
+export async function settleIo(maxMs = 10_000): Promise<void> {
+  const deadline = Date.now() + maxMs;
+  let quiet = 0;
+  while (quiet < 3) {
+    if (Date.now() >= deadline) throw new Error(`settleIo: ファイルの I/O が ${maxMs}ms 経っても落ち着きませんでした`);
+    await new Promise<void>((r) => setImmediate(r));
+    quiet = process.getActiveResourcesInfo().some((n) => FS_RESOURCES.has(n)) ? 0 : quiet + 1;
+  }
+}
+
+/**
+ * `settleIo` が見ている資源の名前（`getActiveResourcesInfo` の FS の要求）が、この Node の版で実際に見えることの確かめ。
+ * 名前が変わると、`settleIo` は何も待たずに通り抜ける（黙って弱くなる）ので、それに気づけるよう、試験の初めに 1 回呼ぶ。
+ */
+export async function assertFsResourceNamesVisible(): Promise<void> {
+  const { readFile } = await import("node:fs/promises");
+  const pending = readFile(fileURLToPath(import.meta.url));
+  const names = process.getActiveResourcesInfo();
+  await pending;
+  if (!names.some((n) => FS_RESOURCES.has(n))) {
+    throw new Error(`settleIo が見る FS の資源の名前（${[...FS_RESOURCES].join("・")}）が、この Node の版では見えません: ${names.join(",")}`);
+  }
+}
 
 export interface HostHarness {
   dir: string;
@@ -186,6 +219,7 @@ export async function makeHost(
         if (cond()) return;
         if (advanceMs > 0) clock.advance(advanceMs);
         await sleep(3);
+        await settleIo();
       }
       throw new Error("until: 条件が成り立ちませんでした");
     },
@@ -204,6 +238,7 @@ export async function makeHost(
       for (let i = 0; i < 1500 && !done; i++) {
         clock.advance(50);
         await sleep(2);
+        await settleIo();
       }
       if (!done) throw new Error("run: 決まりませんでした");
       if (failed) throw failure;
@@ -213,8 +248,10 @@ export async function makeHost(
       for (let t = 0; t < ms; t += step) {
         clock.advance(Math.min(step, ms - t));
         await sleep(2);
+        await settleIo(); // 偽の時計を進めて起きた実ファイルの I/O が終わってから、次の一歩へ（負荷が高くても、終わる前に進まない）
       }
       await sleep(5);
+      await settleIo();
     },
     async cleanup() {
       host.dispose();

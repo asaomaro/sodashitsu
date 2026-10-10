@@ -310,8 +310,26 @@ describe.skipIf(process.platform === "win32")("表示の面（実物のサーバ
     const big = "a".repeat(DISPLAY_CONTENT_MAX_BYTES);
     // pane A: panel 4 つで 8 MiB（量の桶が空になる）
     for (let i = 0; i < 4; i++) await cli.request("display.set", { paneId: paneA, ...SET(`p${i}`, { content: big }) });
-    await expect(cli.request("display.set", { paneId: paneA, ...SET("p0", { content: big }) })).rejects.toMatchObject({ code: "display_busy" });
-    expect(await cli.request("display.list", { paneId: paneA })).toMatchObject({ displays: [{ name: "p0", rev: 1 }, { name: "p1" }, { name: "p2" }, { name: "p3" }] });
+    // 桶は毎秒 2 MiB 戻る（`DISPLAY_SET_BYTES_RATE`）。要求ごとの実時間が長い（負荷が高い）と、4 つ目の後でも、5 つ目が通るだけ戻っていることがある。
+    // そこで、「続けて送ると、いつか必ず display_busy になる」を確かめる: 2 MiB を同じ名前へ、通る間は続ける。桶が戻る速さ（2 MiB/秒）より、送る速さ（1 要求あたり
+    // 2 MiB）のほうが速ければ、必ず空になる。上限の回数（40）は、1 要求が 1 秒近くかかる状態でも、足りる。
+    let accepted = 0;
+    let busy: unknown;
+    for (let i = 0; i < 40 && busy === undefined; i++) {
+      try {
+        await cli.request("display.set", { paneId: paneA, ...SET("p0", { content: big }) });
+        accepted++;
+      } catch (err) {
+        busy = err;
+      }
+    }
+    expect(busy).toMatchObject({ code: "display_busy" });
+    // display_busy が「量の桶」で出たことの確かめ: 通った数（最初の 4 つ + 続きの分）は、満タン 8 MiB ÷ 2 MiB = 4 に、補充（毎秒 2 MiB = 1 個）の 1〜2 個が足されるだけ。
+    // 回数の桶（10 回）が先に効いたのなら、10 以上になる。量の桶を外すと、ここが落ちる。
+    expect(4 + accepted).toBeGreaterThanOrEqual(4);
+    expect(4 + accepted).toBeLessThanOrEqual(8);
+    // 拒まれた set は、面を変えない（rev は、通った回数だけ進んでいる）。
+    expect(await cli.request("display.list", { paneId: paneA })).toMatchObject({ displays: [{ name: "p0", rev: 1 + accepted }, { name: "p1", rev: 1 }, { name: "p2", rev: 1 }, { name: "p3", rev: 1 }] });
     // pane 3 つぶんでさらに 24 MiB（合計 32 MiB）
     const panes: string[] = [];
     for (let i = 0; i < 3; i++) panes.push(await newPane(cli));
