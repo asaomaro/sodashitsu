@@ -79,3 +79,43 @@
 - 件 B の案 A の `CLAUDE_PID` が公式の値かどうか（このセッションでは、実際の pid と一致した）。無ければ、`/proc` の祖先をたどる。
 - Windows での pid・制御端末の確認。
 - 子の `claude` の実物（tmux 内）での再現は、していない（偽の報告での再現）。
+
+---
+
+# 追補: AC7 の確かめ（Codex 0.162 のフックと daemon。実物で）
+
+
+## 先に報告: 調べの途中で、利用者の環境に 1 つ、意図しない変更をした
+- Codex の対話画面（TUI）を、擬似端末から動かしたとき、**起動の最初の画面の「更新しますか」に、自分が Enter を送ってしまい、「Update now」が選ばれた**（`npm install -g @openai/codex`）。
+- 結果: **fnm の Node 24 の全体の置き場（`~/.local/share/fnm/node-versions/v24.15.0/installation/lib/node_modules/@openai/codex` と `…/bin/codex`）の Codex が、0.162.1 に入れ替わった**（`~/.npm/_logs/2026-10-09T23_54_11_707Z-debug-0.log` に記録。もとの版は、その時点で消えたので、確かでない）。
+- 影響: シェルで fnm の Node が PATH の先頭にあるとき、`codex` はこの 0.162.1 になる（`/usr/bin/codex`＝システムの 0.162.0 とは別）。daemon の自動更新が使っているのも 0.162.1（動いている daemon の releases に `0.162.1` がある）なので、実害は小さいはずだが、**私が起こした変更なので、報告する**。元に戻す必要があれば、`npm install -g @openai/codex@<元の版>`（fnm の Node で）。`~/.codex` と `/usr/lib/node_modules` は、変えていない（`auth.json`・`hooks.json`・`config.toml` は読んだだけ）。
+- 一時の `CODEX_HOME`（`/tmp/claude-1000/cx`）に、`auth.json` の**複製**を作って使った。終わって、`shred` で消し、ディレクトリごと消した。そこで起動した daemon・待ち受けは、止めた。
+
+## 確かめた事実（実物の Codex 0.162.0/0.162.1 で）
+一時の `CODEX_HOME` に、利用者の `hooks.json` と同じ内容を置き（信頼のハッシュは、`hooks.json` のパスに依らず同じ値で通った）、フックの `command` の `node` を、記録する包みに差し替えて、観察した。
+
+1. **対話画面の `codex` は、daemon の窓口（クライアント）で、会話は daemon が持つ。**
+   - `codex --help`: `agents  Browse all agent sessions on the shared local app-server daemon`（公式の説明）。
+   - 最初の `codex`（`SODA_PANE_ID=PANE-TUI-A`）が、daemon（`codex app-server --listen unix:// --managed-daemon` と `daemon pid-update-loop`）を起動した。**daemon の環境は、`SODA_PANE_ID=PANE-TUI-A`・`SODA_AGENT_REPORT_SOCKET=…`（起動した `codex` から受け継いだもの）**（`/proc/<pid>/environ`）。daemon は、init の子（ppid 301）になって残る。
+   - TUI は、daemon に `thread/start`（会話の開始）などを要求するだけ（daemon のログ: `app-server request: thread/start … transport=unix_socket`）。`hooks/list` も、daemon が答える。終了のとき「Disconnected from this task. Any running work continues.」と出て、会話は daemon に残る。
+2. **2 つ目の `codex`（`SODA_PANE_ID=PANE-TUI-B`）のフックの報告は、`paneId: PANE-TUI-A`（daemon の環境）で届いた。**
+   - 本物のスクリプト（`soda-agent-report.cjs`）の報告: `{"paneId":"PANE-TUI-A","kind":"codex","sessionId":"01a12318-…"}`（実行したのは B の `codex` の会話）。
+   - 包みの記録: `SODA_PANE_ID=PANE-TUI-A`。フックの祖先: `node(フック) ← codex(daemon, tty0) ← init の中継（301）`。**B の `codex`（TUI）は、祖先に居ない。**
+3. **フックの入力（stdin）の形**: `{"session_id","transcript_path","cwd","hook_event_name":"SessionStart","model","permission_mode","source":"startup"}`。`cwd` は、その会話の作業ディレクトリ。**`SessionStart` は、TUI を起動した直後ではなく、最初のターン（最初の入力を送ったとき）に出る**（TUI 起動の約 18 秒後。入力を送った時刻）。
+4. **`codex exec`（非対話）は、daemon を使わない**（プロセス内で動く）。フックは、実行した本人の環境で動く（`SODA_PANE_ID=PANE-EXEC` で届いた）。
+5. 実際の事故の記録（`~/.codex/sessions/…01a12154….jsonl`）と一致する: 会話の中の `sodactl pane current --current` が、daemon の `SODA_PANE_ID`（閉じた pane）を返した。**会話の中のツールの環境も、daemon の環境**。
+6. app-server の API（`codex app-server generate-json-schema`）: `thread/start` の引数に、`cwd`・`config`（任意の object）・`serviceName`・`threadSource` はあるが、**クライアント（TUI）の環境変数・pane・pid を渡す項目は無い**。
+
+## 推測（確かめていない）
+- `-c shell_environment_policy.set.SODA_PANE_ID="…"`（`codex` の起動引数）が、会話の**ツール**の環境に効けば、`sodactl --current` の取り違えは直せる。ただし、フックの環境にも効くかは不明（フックの環境は daemon のものに見える）。利用者が自分で `codex` を打つ場合は、引数を足せない（サーバが `codex` の起動を包む `agent start` の経路だけ）。
+- TUI → daemon の接続の相手の pid（`ss -xp` で、daemon の control socket の接続元）と、daemon の `thread/loaded/list` を、サーバが読めれば、「どの pid の TUI が、どの thread か」を対応づけられるかもしれない（未調査。API の `thread/loaded/list` に接続の情報があるか）。
+
+## 正しい pane に付ける方法（案。実装していない）
+- **前提（AC1）**: 報告のフックの親をたどって、pane の前面の `codex` の子孫でなければ捨てる。daemon（init の子。tty なし）は、どの pane の前面にも居ないので、**別の pane を上書きしなくなる**。ただし、正しい pane にも付かない（結果: Codex の会話は、再起動で再開されない。今と同じ。上書きの害だけが消える）。
+- **案 1（突き合わせ）**: 報告の `cwd`（フックの入力）・時刻と、`kind: codex` で `agentSession` が無い（または、報告の `session_id` が違う）pane を、サーバが突き合わせる。**1 つに決まるときだけ付ける**（決まらなければ捨てて、ログ）。
+  - 穴: 実際の事故は、**同じ cwd（`/workspaces/yukkuri-work`）の 2 つの Codex pane**。cwd では決まらない。`SessionStart` は最初のターンに出る（起動直後でない）ので、時刻（`agent.since`）での絞り込みも、粗い（先に起動した pane が、あとで最初のターンを打つこともある）。→ **案 1 は、この利用者の使い方では、決まらないことが多い。**
+- **案 2（pane の TUI から、会話を知る）**: サーバが、pane の前面の `codex`（TUI）の pid と、その TUI が daemon に張っている接続（`ss -xp`／`/proc/<pid>/fd` の unix socket）を、daemon の thread（`thread/loaded/list` ほか）と突き合わせる。**未調査**。daemon の control socket を、サーバが読む形になり、Codex の内部 API に依存する（実験的な機能）。壊れやすい。
+- **案 3（会話の開始を、サーバが包む）**: `sodactl agent start`（サーバが pane に `codex` を打ち込む経路）では、`codex --config 'shell_environment_policy.set.SODA_PANE_ID="…"'`（ツールの環境）を足せる可能性。利用者が手で打つ `codex` には効かない。
+- **案 4（終了のときの `codex resume <id>` を拾う）**: TUI は、終了のとき画面に `codex resume <thread id>` と出す（今回の実験で確認）。**サーバが、pane の画面（mirror）の終了の文言から、参照を得る**。終了のとき（居なくなる直前）だけなので、サーバが止まる処理の前に Codex が先に終わる（#122 で直した形）場合や、kill のときは、得られない。補助としては使える（`codex resume` の画面表示は、安定した文言）。
+- **勧め（監督役の決定）**: まず AC1（誤った pane に付けない）。そのうえで、**案 4（終了の文言を拾う）＋案 2 の調査**を、別の作業として。案 1 は、同じ cwd の複数 pane で決まらないので、勧めない。daemon の環境を直す案（daemon を、pane ごとに別の `CODEX_HOME` で動かす）は、利用者の `~/.codex` の履歴を分けてしまうので勧めない。
+- **すぐできる運用上の手当て（利用者向け）**: Codex を使う最初の pane が daemon の環境を決める。daemon を、いまのサーバの pane から起動し直す（`kill` して、使う pane で `codex` を起動する）と、その pane の報告は正しく付く。2 つ目以降の pane は、それでも誤る（AC1 後は、捨てる）。
