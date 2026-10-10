@@ -1459,8 +1459,8 @@ test.describe("サイドバーの選んでいる行・面の点の格子（PR1f�
     await openGraph(page);
     const g = await rowStyle(rowOf(page, "beta"));
     expect(g.shadow).toContain(accent);
-    // 畳んだサイドバー: 内側の余白は無く、枠・角は破綻しない
-    await page.locator(".sidebar-collapse-btn").click();
+    // 畳んだサイドバー: 内側の余白は無く、枠・角は破綻しない。モダンの配置では、畳むボタンは縁のつまみ（`.sidebar-edge-toggle`。#123）。
+    await page.locator(".sidebar-edge-toggle").click();
     await expect(page.locator(".sidebar-collapsed")).toBeVisible();
     const collapsed = await rowStyle(page.locator(".sidebar-collapsed .sidebar-row-current").first());
     expect(collapsed.margin).toBe("0px");
