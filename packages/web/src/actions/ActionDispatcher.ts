@@ -1,4 +1,4 @@
-import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, WorkspaceGroup } from "@sodashitsu/protocol";
+import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, PaneMoveBlock, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick } from "vue";
 import { openDisplayMenu, pickFocusTarget, withDisplayChange } from "../display/displayOps.js";
@@ -712,6 +712,28 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     void this.addItemToGroupLegacy(groupId, ctx.workspaceId).catch(failed);
   }
 
+  /**
+   * 項目（workspace・worktree グループはひとかたまり）を、別のグループへ入れる・「グループなし」へ出す（`groupId` が null）。
+   * グラフの画面（20261008-graph-first PR4 T15b）から呼ぶ。サイドバーの「グループへ追加…」「グループから外す」と同じ方式で、結果を返す
+   * （失敗したときは、トーストを出して false）。
+   */
+  async moveItemToGroup(workspaceId: string, groupId: string | null): Promise<boolean> {
+    try {
+      if (groupId === null) {
+        if (this.session.hasServerLayout) await this.conn.request("group.remove_member", { workspaceId });
+        else for (const id of this.itemWorkspaceIds(workspaceId)) await this.conn.request("group.remove_member", { workspaceId: id });
+      } else if (this.session.hasServerLayout) {
+        await this.conn.request("group.add_member", { groupId, workspaceId });
+      } else {
+        await this.addItemToGroupLegacy(groupId, workspaceId);
+      }
+      return true;
+    } catch {
+      this.view.toast(groupId === null ? "グループから外せませんでした" : "グループへ追加できませんでした");
+      return false;
+    }
+  }
+
   /** 「グループから外す」（項目がグループに入っているときだけ `ContextMenu` が出す）。古いサーバは項目の workspace 全部に順に送る。 */
   removeWorkspaceFromGroup(workspaceId: string): void {
     if (this.session.hasServerLayout) {
@@ -955,27 +977,34 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * （review round1 の should 指摘）——移動自体は成立させるが、応答到着時に無関係な画面から
    * 強制的に移動先へ視点を引き戻さない。
    */
-  movePaneToTab(paneId: string, targetTabId: string): void {
+  movePaneToTab(
+    paneId: string,
+    targetTabId: string,
+    /** `follow: false`（グラフの画面から。20261008-graph-first PR4）: 移した後に、見ている workspace・tab を移動先へ切り替えない。 */
+    opts: { follow?: boolean } = {},
+  ): Promise<{ ok: boolean; reason?: PaneMoveBlock } | null> {
     const originWorkspaceId = this.view.workspaceId;
     const originTabId = this.view.tabId;
-    void this.conn
+    return this.conn
       .request("pane.move_to_tab", { paneId, targetTabId })
       .then((r) => {
         if (!r.ok) {
           // サーバが断った（別の worktree の workspace。20261008-web-tab-dnd）。理由の無い ok:false は今までどおり黙る。
           if (r.reason) this.view.toast(paneMoveBlockMessage(r.reason));
-          return;
+          return r;
         }
-        if (this.view.workspaceId !== originWorkspaceId || this.view.tabId !== originTabId) return;
+        if (opts.follow === false) return r;
+        if (this.view.workspaceId !== originWorkspaceId || this.view.tabId !== originTabId) return r;
         const targetTab = this.session.tabs.get(targetTabId);
         // 移動先 tab がまだ同期されていなければ何もしない（`movePaneToNewTab` の `!r.tab` と対称。
         // 表示を切り替えないのに focus だけ動くと、キー入力の宛先が画面と食い違う）。
-        if (!targetTab) return;
+        if (!targetTab) return r;
         this.view.setView(targetTab.workspaceId, targetTabId);
         this.view.focusPane(paneId);
         this.registry.focus(paneId);
+        return r;
       })
-      .catch(() => undefined);
+      .catch(() => null);
   }
 
   /**
