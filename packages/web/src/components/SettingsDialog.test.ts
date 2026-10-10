@@ -373,10 +373,10 @@ describe("SettingsDialog — 利用状況（ステータスライン）の包み
     }
   });
 
-  it("報告が届いていない（silent）ときは、一言（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定）を出す", async () => {
+  it("まだ報告がない（silent）ときは、一言（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定）を出す", async () => {
     const m = make({ state: "installed", silent: true });
     const { wrapper } = await openDialog(makeController(), undefined, m.actions);
-    expect(rowOf(wrapper).text()).toContain("報告が届いていません");
+    expect(rowOf(wrapper).text()).toContain("まだ報告がありません");
     expect(rowOf(wrapper).text()).toContain("管理された設定");
   });
 

@@ -122,6 +122,63 @@ describe("元の控え（横のファイルと、command の引数）", () => {
   });
 });
 
+describe("横のファイルが無くても、1 バイトも違わず戻る（控えの引数に、元の値の文字列そのものがある）", () => {
+  const side = (): string => statusLinePaths({ CLAUDE_CONFIG_DIR: cfg }, "").sidecar;
+  const TEXTS: { name: string; text: string }[] = [
+    { name: "複数行のファイルの中の、1 行の statusLine", text: '{\n  "a": 1,\n  "statusLine": {"type": "command",   "command": "echo hi"},\n  "b": 2\n}\n' },
+    { name: "キーの順・空白が独特の statusLine", text: '{\n\t"statusLine" :{ "command":"x","type":"command" ,"padding":0 }\n}' },
+    { name: "CRLF", text: '{\r\n  "a": 1,\r\n  "statusLine": {"type":"command","command":"x"}\r\n}\r\n' },
+  ];
+  for (const c of TEXTS) {
+    it(`${c.name}: 導入 → 横のファイルを消す → 外す`, async () => {
+      await writeFile(settingsPath(), c.text);
+      const w = make();
+      await w.install();
+      await rm(side());
+      expect(await w.uninstall()).toEqual({ ok: true, message: null });
+      expect(await readFile(settingsPath(), "utf8")).toBe(c.text);
+    });
+  }
+
+  it("引数が長すぎる元（8 KiB 超）は、引数に載せず、横のファイルに頼る（横のファイルがあれば 1 バイトも違わず戻る）", async () => {
+    const long = "x".repeat(10_000);
+    const text = `{\n  "statusLine": {"type": "command", "command": "echo ${long}"}\n}\n`;
+    await writeFile(settingsPath(), text);
+    const w = make();
+    await w.install();
+    const installed = JSON.parse(await readFile(settingsPath(), "utf8")) as { statusLine: { command: string } };
+    expect(installed.statusLine.command.length).toBeLessThan(9_000); // 引数は上限（8 KiB）を超えない
+    expect(await w.uninstall()).toEqual({ ok: true, message: null });
+    expect(await readFile(settingsPath(), "utf8")).toBe(text);
+  });
+});
+
+describe("足す行の改行は、ファイルの行の終わりに合わせる（CRLF の設定に導入しても CR が混ざらない）", () => {
+  const CRLF_CASES: { name: string; text: string }[] = [
+    { name: "項目があり、statusLine が無い", text: '{\r\n  "theme": "dark"\r\n}\r\n' },
+    { name: "空の複数行", text: "{\r\n}\r\n" },
+    { name: "statusLine がある（値を差し替える）", text: '{\r\n  "statusLine": {\r\n    "type": "command",\r\n    "command": "x"\r\n  }\r\n}\r\n' },
+  ];
+  for (const c of CRLF_CASES) {
+    it(`${c.name}: 導入 → 行の終わりが全部 CRLF → 外すと元`, async () => {
+      await writeFile(settingsPath(), c.text);
+      const w = make();
+      await w.install();
+      const installed = await readFile(settingsPath(), "utf8");
+      expect(installed.replace(/\r\n/g, ""), "LF だけの改行が混ざっている").not.toContain("\n");
+      expect(await w.uninstall()).toEqual({ ok: true, message: null });
+      expect(await readFile(settingsPath(), "utf8")).toBe(c.text);
+    });
+  }
+  it("LF のファイルは LF のまま", async () => {
+    const text = '{\n  "a": 1\n}\n';
+    await writeFile(settingsPath(), text);
+    const w = make();
+    await w.install();
+    expect(await readFile(settingsPath(), "utf8")).not.toContain("\r");
+  });
+});
+
 describe("利用者が、後から statusLine を替えたとき", () => {
   it("状態は「外れています」。外すは何もしない。導入は、今の値を新しい元として控える", async () => {
     await writeFile(settingsPath(), '{\n  "statusLine": { "type": "command", "command": "A" }\n}\n');

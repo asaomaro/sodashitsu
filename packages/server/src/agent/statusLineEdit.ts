@@ -130,7 +130,13 @@ export function indentUnitOf(text: string): string | null {
   return m ? m[1]! : "  ";
 }
 
-/** 値（オブジェクト）を、その項目の位置のインデントで文字列にする。コンパクトなファイルは 1 行。 */
+/** ファイルの行の終わり（最初の改行が CRLF なら CRLF。それ以外は LF）。足す行の改行を、これに合わせる。 */
+export function eolOf(text: string): "\r\n" | "\n" {
+  const i = text.indexOf("\n");
+  return i > 0 && text[i - 1] === "\r" ? "\r\n" : "\n";
+}
+
+/** 値（オブジェクト）を、その項目の位置のインデントで文字列にする。コンパクトなファイルは 1 行。改行はファイルの行の終わりに合わせる。 */
 export function renderValue(value: unknown, text: string, memberKeyStart: number | null): string {
   const unit = indentUnitOf(text);
   if (unit === null) return JSON.stringify(value);
@@ -138,7 +144,7 @@ export function renderValue(value: unknown, text: string, memberKeyStart: number
   return JSON.stringify(value, null, unit)
     .split("\n")
     .map((l, i) => (i === 0 ? l : base + l))
-    .join("\n");
+    .join(eolOf(text));
 }
 
 /** 値の範囲を差し替える。 */
@@ -167,8 +173,9 @@ export function appendMember(text: string, obj: TopObject, key: string, value: u
   const body = unit === null || !inner.includes("\n") && !text.includes("\n") ? `${keyText}: ${renderValue(value, text, null)}` : null;
   if (body !== null && unit === null) return text.slice(0, obj.open + 1) + body + text.slice(obj.close);
   const u = unit ?? "  ";
-  const rendered = JSON.stringify(value, null, u).split("\n").map((l, i) => (i === 0 ? l : u + l)).join("\n");
-  return `${text.slice(0, obj.open + 1)}\n${u}${keyText}: ${rendered}\n${text.slice(obj.close)}`;
+  const eol = eolOf(text);
+  const rendered = JSON.stringify(value, null, u).split("\n").map((l, i) => (i === 0 ? l : u + l)).join(eol);
+  return `${text.slice(0, obj.open + 1)}${eol}${u}${keyText}: ${rendered}${eol}${text.slice(obj.close)}`;
 }
 
 /** 項目を、取り除く。 */

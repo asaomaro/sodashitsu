@@ -48,6 +48,22 @@ describe("ReportedUsage", () => {
   });
 });
 
+describe("ReportedUsage: 鍵が別の pane と重なったとき（指摘 6）", () => {
+  it("同じ鍵を別の pane が使い始めたら、1 度だけ知らせる（鍵と pane の id だけ）。枠はいちばん新しい報告が勝つ", () => {
+    let now = 1000;
+    const seen: { accountKey: string; paneId: string; otherPanes: number }[] = [];
+    const r = new ReportedUsage(() => now, (i) => seen.push(i));
+    const key = "b".repeat(16);
+    r.note(rep({ paneId: "p1", configKey: key, fiveHour: { usedPct: 10 } }));
+    expect(seen).toEqual([]);
+    now = 2000;
+    r.note(rep({ paneId: "p2", configKey: key, fiveHour: { usedPct: 40 } }));
+    r.note(rep({ paneId: "p2", configKey: key, fiveHour: { usedPct: 41 } }));
+    expect(seen).toEqual([{ accountKey: accountKeyOf("claude", key), paneId: "p2", otherPanes: 1 }]);
+    expect(r.accountList()[0]!.windows[0]!.usedPct).toBe(41);
+  });
+});
+
 describe("UsageReportIntake（確かめ・保留・捨てる）", () => {
   function make(verdicts: UsageVerdict[]) {
     const noted: UsageReport[] = [];

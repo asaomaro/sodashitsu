@@ -10,7 +10,9 @@
  * 2. `SODA_PANE_ID` と `SODA_AGENT_REPORT_SOCKET` があるときだけ、数字と id だけの 1 行（`type: "usage"`）を `agent-report.sock` へ、**待たずに**送る
  *    （接続・書き込みに 200ms の自前の上限。失敗は黙って捨てる）。**包みが原因で、表示が遅くならない・消えない**。
  *    送らないもの: `session_name`・`cwd`・`transcript_path`・リポジトリの情報・会話の中身・設定のフォルダの場所（フォルダの名前の末尾と、場所の一方向の印だけ）。
- * 3. Claude Code が実行中のこのスクリプトを取り消す（SIGTERM）ときは、子へ伝える。`COLUMNS`・`LINES` などの環境は、そのまま元へ渡る。
+ * 3. 元は**新しいプロセスグループ**で起動する（stdio は inherit のまま）。Claude Code が実行中のこのスクリプトを取り消す（SIGTERM・SIGINT・SIGHUP）ときは、
+ *    グループ全体へ伝え、1 秒で終わらなければグループへ SIGKILL する（`sh -c` の下の孫を残さない）。どの道で終わるときも、元がまだ動いていればグループごと止める。
+ *    `COLUMNS`・`LINES` などの環境は、そのまま元へ渡る。
  *
  * 元の控えは、引数（base64url の JSON）を先に読み、読めなければ、横のファイル（`soda-statusline.orig.json`）を読む。
  * Windows（`sh` が無い）は対象外（導入しない）。
@@ -31,7 +33,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function originalCommand() {
   const arg = process.argv[2];
   const fromJson = (text) => {
-    const v = JSON.parse(text);
+    let v = JSON.parse(text);
+    // 控えの形: 古い形は元のオブジェクトそのもの（または null）。新しい形は `{ soda: 1, original, valueText? }`（元の値の文字列そのものも運ぶ）。
+    if (v && typeof v === "object" && v.soda === 1 && "original" in v) v = v.original;
     if (v === null) return null;
     if (v && typeof v === "object" && typeof v.command === "string") return v.command;
     return undefined;
@@ -209,23 +213,43 @@ async function main() {
   const code = await new Promise((resolve) => {
     let child;
     try {
-      child = spawn("sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"], env: process.env });
+      // `detached: true`（setsid）で、元とその子孫を 1 つのプロセスグループにまとめる。stdio は今までどおり（stdin だけ pipe）。
+      child = spawn("sh", ["-c", command], { stdio: ["pipe", "inherit", "inherit"], env: process.env, detached: true });
     } catch {
       return resolve(0);
     }
-    const forward = (sig) => () => {
+    const gid = child.pid;
+    const killGroup = (sig) => {
+      if (typeof gid !== "number") return;
       try {
-        child.kill(sig);
+        process.kill(-gid, sig);
       } catch {
-        /* 既に終わっている */
+        try {
+          child.kill(sig);
+        } catch {
+          /* 既に終わっている */
+        }
       }
-      // 子が取り消しに応じなくても、Claude Code を待たせない。
-      setTimeout(() => process.exit(128 + (os.constants.signals[sig] || 15)), 1000).unref();
+    };
+    let running = true;
+    // どの道で終わるときも（例外・exit）、元が残っていればグループごと止める。
+    process.on("exit", () => {
+      if (running) killGroup("SIGKILL");
+    });
+    const forward = (sig) => () => {
+      killGroup(sig);
+      // 元が取り消しに応じなくても、Claude Code を待たせない。グループへ SIGKILL してから終わる。
+      const t = setTimeout(() => {
+        killGroup("SIGKILL");
+        process.exit(128 + (os.constants.signals[sig] || 15));
+      }, 1000);
+      t.unref();
     };
     for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"]) process.on(sig, forward(sig));
     child.on("error", () => resolve(0));
     child.stdin.on("error", () => undefined);
     child.on("close", (c, signal) => {
+      running = false;
       if (typeof c === "number") return resolve(c);
       const n = signal && os.constants.signals[signal];
       resolve(typeof n === "number" ? 128 + n : 1);

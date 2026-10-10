@@ -269,3 +269,80 @@ describe("取り消し（SIGTERM）は、子へ伝える", () => {
     expect(alive, "元のコマンドが残っている").toBe(false);
   });
 });
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitFile(file: string): Promise<void> {
+  for (let i = 0; i < 100 && !existsSync(file); i++) await new Promise((r) => setTimeout(r, 50));
+}
+
+describe("取り消しは、孫まで届く（元は新しいプロセスグループ。指摘 2）", () => {
+  const readPids = async (file: string): Promise<number[]> => {
+    const { readFileSync } = await import("node:fs");
+    return readFileSync(file, "utf8").split("\n").filter((l) => l.trim() !== "").map(Number);
+  };
+
+  it("元が `sh -c 'sleep 60; echo'` の入れ子のとき、包みへ SIGTERM → 2 秒後に、sleep が残っていない", async () => {
+    const marker = join(dir, "pids");
+    // 外の sh（元）→ 内の sh -c（孫）→ sleep（ひ孫）。内の sh は exec しないよう、`; echo` を続ける。
+    const command = `echo $$ >> ${marker}; sh -c 'echo $$ >> ${marker}; sleep 60; echo x'; echo done`;
+    const child = spawn("node", [script, b64({ type: "command", command })], { env: cleanEnv({}), stdio: ["pipe", "ignore", "ignore"] });
+    child.stdin.end(INPUT);
+    await waitFile(marker);
+    await new Promise((r) => setTimeout(r, 300));
+    const sleepPid = Number(spawnSync("pgrep", ["-n", "-x", "sleep"], { encoding: "utf8" }).stdout.trim());
+    const pids = [...(await readPids(marker)), sleepPid].filter((n) => Number.isInteger(n) && n > 0);
+    expect(pids.length).toBeGreaterThanOrEqual(3);
+    expect(pids.every(alive)).toBe(true);
+    const done = new Promise<void>((r) => child.on("close", () => r()));
+    child.kill("SIGTERM");
+    await Promise.race([done, new Promise((r) => setTimeout(r, 3000))]);
+    await new Promise((r) => setTimeout(r, 2000));
+    for (const pid of pids) expect(alive(pid), `pid ${pid} が残っている`).toBe(false);
+  });
+
+  it("SIGTERM を無視する孫は、1 秒後にグループへの SIGKILL で止まる（包みは遅くとも約 1 秒で終わる）", async () => {
+    const marker = join(dir, "pids2");
+    const command = `trap '' TERM; echo $$ >> ${marker}; sh -c "trap '' TERM; echo \\$\\$ >> ${marker}; while :; do sleep 1; done"`;
+    const child = spawn("node", [script, b64({ type: "command", command })], { env: cleanEnv({}), stdio: ["pipe", "ignore", "ignore"] });
+    child.stdin.end(INPUT);
+    for (let i = 0; i < 100 && (!existsSync(marker) || (await readPids(marker)).length < 2); i++) await new Promise((r) => setTimeout(r, 50));
+    const pids = await readPids(marker);
+    expect(pids.length).toBe(2);
+    const t0 = Date.now();
+    const done = new Promise<void>((r) => child.on("close", () => r()));
+    child.kill("SIGTERM");
+    await Promise.race([done, new Promise((r) => setTimeout(r, 4000))]);
+    expect(Date.now() - t0).toBeLessThan(2500);
+    await new Promise((r) => setTimeout(r, 300));
+    for (const pid of pids) expect(alive(pid), `pid ${pid} が残っている`).toBe(false);
+  });
+
+  it("元は新しいプロセスグループで動く（包みと別のグループ）。出力・終了コードは同じ", async () => {
+    const r = await runWrapper({ type: "command", command: "ps -o pgid= -p $$; ps -o pgid= -p $PPID; exit 4" }, INPUT);
+    expect(r.code).toBe(4);
+    const [self] = r.stdout.trim().split(/\s+/).map(Number);
+    expect(self).toBeGreaterThan(0);
+  });
+});
+
+describe("控えの新しい形（元の値の文字列そのものを運ぶ）", () => {
+  it("`{ soda: 1, original, valueText }` の引数でも、元の command を動かす", async () => {
+    const arg = b64({ soda: 1, original: { type: "command", command: "printf hi" }, valueText: '{"type":"command","command":"printf hi"}' });
+    const r = await runWrapper(undefined, INPUT, {}, arg);
+    expect(r.stdout).toBe("hi");
+    expect(r.code).toBe(0);
+  });
+  it("`{ soda: 1, original: null }` は、元が無い（何も出さずに 0）", async () => {
+    const r = await runWrapper(undefined, INPUT, {}, b64({ soda: 1, original: null }));
+    expect(r.stdout).toBe("");
+    expect(r.code).toBe(0);
+  });
+});

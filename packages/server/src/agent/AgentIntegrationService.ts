@@ -35,11 +35,13 @@ export interface StatusLineControl {
 export interface StatusLineHealth {
   /** 最後に、使える報告を受けた時刻（epoch ms）。無ければ undefined。 */
   lastReportAt(): number | undefined;
-  /** いま動いている Claude Code が、検出され始めた時刻のうち、いちばん早いもの（無ければ undefined）。 */
+  /** いま動いている Claude Code のうち、**検出の後に、動いた（working になった）ことがある**ものの、検出の時刻のいちばん早いもの（無ければ undefined）。 */
   claudeRunningSince(): number | undefined;
+  /** 同じ Claude Code が、検出の後に、最初に動いた時刻のうち、いちばん早いもの（待っているだけの間は undefined）。 */
+  claudeWorkedSince(): number | undefined;
 }
 
-/** 検出されてから、この時間のあいだ報告が無ければ、「届いていません」（ステータスラインは、応答のたびに呼ばれる）。 */
+/** 動いたことのある Claude Code が、最初に動いてから、この時間のあいだ報告が無ければ、「まだ報告がありません」（ステータスラインは、応答のたびに呼ばれる。待っているだけの間は判定しない）。 */
 export const STATUSLINE_SILENT_AFTER_MS = 120_000;
 
 export class DefaultAgentIntegrationService implements AgentIntegrationService {
@@ -86,9 +88,16 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     const s = await this.statusLine.status();
     const lastReportAt = this.health?.lastReportAt();
     const since = this.health?.claudeRunningSince();
+    const workedAt = this.health?.claudeWorkedSince();
     const installed = s.state === "installed" || s.state === "needs_update";
-    // 導入済みで、動いている Claude Code が、検出されてから一定の時間たつのに、その後の報告が無い（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性）。
-    const silent = installed && since !== undefined && this.now() - since >= STATUSLINE_SILENT_AFTER_MS && (lastReportAt === undefined || lastReportAt < since);
+    // 導入済みで、動いている Claude Code が、検出の後に動いた（working になった）ことがあり、それから一定の時間たつのに、検出の後の報告が無い
+    // （信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性）。待っているだけの Claude Code は、ステータスラインが呼ばれないので、判定しない。
+    const silent =
+      installed &&
+      since !== undefined &&
+      workedAt !== undefined &&
+      this.now() - workedAt >= STATUSLINE_SILENT_AFTER_MS &&
+      (lastReportAt === undefined || lastReportAt < since);
     return { state: s.state, ...(s.message !== undefined ? { message: s.message } : {}), ...(silent ? { silent: true } : {}), ...(lastReportAt !== undefined ? { lastReportAt } : {}) };
   }
 

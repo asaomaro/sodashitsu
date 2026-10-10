@@ -473,7 +473,7 @@ const statusLineText = computed((): string => {
     invalid: `使えません（${s.message ?? "設定の形が想定と違います"}）`,
     unsupported: "この OS では使えません",
   };
-  const silent = s.silent ? "。動いている Claude Code から、報告が届いていません（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性があります）" : "";
+  const silent = s.silent ? "。動いた Claude Code から、まだ報告がありません（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性があります。応答が無いと、報告は来ません）" : "";
   return `${base[s.state] ?? s.state}${silent}`;
 });
 async function runStatusLine(action: "install" | "uninstall"): Promise<void> {

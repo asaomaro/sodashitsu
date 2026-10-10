@@ -42,17 +42,24 @@ interface AccountEntry {
   dirName?: string;
   windows: Map<string, { window: UsageWindow; asOf: number }>;
   asOf: number;
+  /** この鍵で報告した pane（上限つき）。鍵は報告が自分で持つ値なので、別の pane が同じ鍵を使い始めたことを、ログに残す（指摘 6）。 */
+  panes: Set<string>;
 }
 
 const PANES_MAX = 256;
 const ACCOUNTS_MAX = 16;
+const KEY_PANES_MAX = 16;
 
 export class ReportedUsage {
   private readonly panes = new Map<string, PaneEntry>();
   private readonly accounts = new Map<string, AccountEntry>();
   private last: number | undefined;
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    /** 別の pane が、すでに使われている鍵で報告したとき（鍵は報告が言うまま。同じアカウントの別の pane でも起きる）。 */
+    private readonly onSharedKey?: (info: { accountKey: string; paneId: string; otherPanes: number }) => void,
+  ) {}
 
   /** 最後に、受けてよい報告を受けた時刻。 */
   lastReportAt(): number | undefined {
@@ -93,9 +100,14 @@ export class ReportedUsage {
     const key = accountKeyOf("claude", r.configKey);
     let e = this.accounts.get(key);
     if (!e) {
-      e = { key, windows: new Map(), asOf: at };
+      e = { key, windows: new Map(), asOf: at, panes: new Set() };
       this.accounts.set(key, e);
       while (this.accounts.size > ACCOUNTS_MAX) this.accounts.delete(this.accounts.keys().next().value as string);
+    }
+    if (!e.panes.has(r.paneId)) {
+      if (e.panes.size > 0) this.onSharedKey?.({ accountKey: key, paneId: r.paneId, otherPanes: e.panes.size });
+      if (e.panes.size >= KEY_PANES_MAX) e.panes.delete(e.panes.values().next().value as string);
+      e.panes.add(r.paneId);
     }
     if (r.configDirName !== undefined) e.dirName = r.configDirName;
     e.asOf = at;

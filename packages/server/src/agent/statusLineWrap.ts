@@ -50,21 +50,42 @@ export function statusLinePaths(env: NodeJS.ProcessEnv, home: string): { configF
   return { configFile: join(root, "settings.json"), hooksDir, script: join(hooksDir, STATUSLINE_SCRIPT_NAME), sidecar: join(hooksDir, STATUSLINE_SIDECAR_NAME) };
 }
 
-/** 包みの command。パスに、シェルが解釈しうる文字があれば undefined（導入しない）。 */
-function wrapperCommand(script: string, original: Record<string, unknown> | null): string | undefined {
+/** 控え（base64url）の最大の長さ。超えるときは、まず元の値の文字列そのものを、それでも超えるなら元のオブジェクトも、引数に載せず、横のファイルだけに頼る（文書に書く）。 */
+export const STATUSLINE_ARG_MAX = 8192;
+
+/**
+ * 包みの command。パスに、シェルが解釈しうる文字があれば undefined（導入しない）。
+ * 引数（控え）は `{ soda: 1, original, valueText }`: 元のオブジェクトと、**元の値の文字列そのもの**（横のファイルが無くても、外すと 1 バイトも違わず戻すため）。
+ */
+function wrapperCommand(script: string, original: Record<string, unknown> | null, valueText: string | null): string | undefined {
   if (/["$`\\\u0000-\u001f]/.test(script)) return undefined;
-  const arg = Buffer.from(JSON.stringify(original), "utf8").toString("base64url");
+  const encode = (v: unknown): string => Buffer.from(JSON.stringify(v), "utf8").toString("base64url");
+  let arg = encode({ soda: 1, original, ...(valueText !== null ? { valueText } : {}) });
+  if (arg.length > STATUSLINE_ARG_MAX) arg = encode({ soda: 1, original });
+  // 元そのものが大きすぎるときは、引数に何も載せない（包みは横のファイルを読む。横のファイルが無いと、外せない旨を返す）。
+  if (arg.length > STATUSLINE_ARG_MAX) arg = encode({ soda: 1 });
   return `node "${script}" ${arg}`;
 }
 
 /** command から、包みの引数（元の控え）を読む。読めなければ undefined。 */
-function originalFromCommand(command: string): { original: Record<string, unknown> | null } | undefined {
+function originalFromCommand(command: string): { original: Record<string, unknown> | null; valueText?: string } | undefined {
   const m = new RegExp(`${STATUSLINE_SCRIPT_NAME.replace(".", "\\.")}"?\\s+([A-Za-z0-9_-]+)\\s*$`).exec(command);
   if (!m) return undefined;
   try {
     const v: unknown = JSON.parse(Buffer.from(m[1]!, "base64url").toString("utf8"));
     if (v === null) return { original: null };
-    if (typeof v === "object" && !Array.isArray(v)) return { original: v as Record<string, unknown> };
+    if (typeof v === "object" && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>;
+      if (o["soda"] === 1 && "original" in o) {
+        const orig = o["original"];
+        const valueText = typeof o["valueText"] === "string" ? o["valueText"] : undefined;
+        if (orig === null) return { original: null };
+        if (typeof orig === "object" && !Array.isArray(orig)) return { original: orig as Record<string, unknown>, ...(valueText !== undefined ? { valueText } : {}) };
+        return undefined;
+      }
+      if (o["soda"] === 1) return undefined; // 引数に載せなかった（大きすぎる）。横のファイルだけが頼り。
+      return { original: o };
+    }
   } catch {
     /* 読めない */
   }
@@ -186,7 +207,7 @@ export class StatusLineWrapper {
       original = v.value;
       originalValueText = text.slice(member.valueStart, member.valueEnd);
     }
-    const command = wrapperCommand(script, original);
+    const command = wrapperCommand(script, original, originalValueText);
     if (command === undefined) return { ok: false, message: "設定のフォルダのパスに、シェルが解釈しうる文字が含まれるため、導入できません" };
     const wrapped: Record<string, unknown> = original ? { ...original, command } : { type: "command", command };
     let newText: string;
@@ -233,7 +254,8 @@ export class StatusLineWrapper {
         await writeConfigFile(configFile, removeMember(parsed.text, parsed.obj, member));
       }
     } else {
-      const valueText = sc?.originalValueText ?? renderValue(original, parsed.text, member.keyStart);
+      // 戻す文字列: 横のファイル → 控え（引数）の元の値の文字列 → 作り直し（書式は整う。意味は同じ）。
+      const valueText = sc?.originalValueText ?? fromArg?.valueText ?? renderValue(original, parsed.text, member.keyStart);
       await writeConfigFile(configFile, replaceValue(parsed.text, member, valueText));
     }
     await rm(sidecar, { force: true });

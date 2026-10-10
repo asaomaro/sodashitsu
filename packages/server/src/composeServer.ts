@@ -272,14 +272,22 @@ export async function composeServer(
   const integrationFile = new FsIntegrationFile(options.stateDir);
   const agentIntegrationInstaller = new FsAgentIntegrationInstaller(agentHookScriptFor());
   // ステータスラインの包みの報告（20261010-agent-usage の PR2）。受けた値と、「報告が届いていません」の判定の材料（動いている Claude Code の検出の時刻）。
-  const reportedUsage = new ReportedUsage();
-  const claudeSeen = new Map<string, { instanceId: string; at: number }>();
+  const reportedUsage = new ReportedUsage(Date.now, (i) =>
+    logger.info("usage account key shared by another pane", { accountKey: i.accountKey, paneId: i.paneId, otherPanes: i.otherPanes }),
+  );
+  const claudeSeen = new Map<string, { instanceId: string; at: number; workedAt?: number }>();
   const claudeSeenSub = bus.subscribe((e) => {
     if (e.event === "pane.closed") claudeSeen.delete(e.data.paneId);
     else if (e.event === "pane.agent_status_changed") {
       const a = e.data.agent;
       if (a !== null && a.kind === "claude") {
-        if (claudeSeen.get(e.data.paneId)?.instanceId !== a.instanceId) claudeSeen.set(e.data.paneId, { instanceId: a.instanceId, at: Date.now() });
+        let seen = claudeSeen.get(e.data.paneId);
+        if (seen?.instanceId !== a.instanceId) {
+          seen = { instanceId: a.instanceId, at: Date.now() };
+          claudeSeen.set(e.data.paneId, seen);
+        }
+        // 検出の後に、最初に動いた時刻（待っているだけの間は、ステータスラインが呼ばれない）。
+        if (a.state === "working" && seen.workedAt === undefined) seen.workedAt = Date.now();
       } else claudeSeen.delete(e.data.paneId);
     }
   });
@@ -289,7 +297,12 @@ export async function composeServer(
       lastReportAt: () => reportedUsage.lastReportAt(),
       claudeRunningSince: () => {
         let min: number | undefined;
-        for (const v of claudeSeen.values()) if (min === undefined || v.at < min) min = v.at;
+        for (const v of claudeSeen.values()) if (v.workedAt !== undefined && (min === undefined || v.at < min)) min = v.at;
+        return min;
+      },
+      claudeWorkedSince: () => {
+        let min: number | undefined;
+        for (const v of claudeSeen.values()) if (v.workedAt !== undefined && (min === undefined || v.workedAt < min)) min = v.workedAt;
         return min;
       },
     },
