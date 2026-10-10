@@ -65,9 +65,15 @@ function tokenUsage(v: unknown): CodexTokenUsage | null {
   };
 }
 
+/**
+ * 制限の枠は、`limit_id` が無いか `"codex"` のものだけを使う（モデルごとの別枠〔`codex_other` など〕を、Codex の枠として出さない）。ほかの `limit_id` の行は、
+ * 無い扱い（アカウントの枠は、次の記録へ）。
+ */
 function rateLimits(v: unknown, at: number): CodexRateLimits | null {
   if (typeof v !== "object" || v === null) return null;
   const o = v as Record<string, unknown>;
+  const limitId = o["limit_id"];
+  if (limitId !== undefined && limitId !== null && limitId !== "codex") return null;
   const windows: CodexRateLimits["windows"] = [];
   for (const slot of ["primary", "secondary"] as const) {
     const w = o[slot];
@@ -118,9 +124,15 @@ export class CodexRolloutTail {
   /** 初回に、末尾の窓だけを読んだ（一部）。 */
   partial = false;
 
-  constructor(readonly file: string) {}
+  /**
+   * `limitsOnly`: アカウントの枠のための読み（`rate_limits` だけ。`model` と累計は探さない。見つかった時点で止める）。
+   */
+  constructor(
+    readonly file: string,
+    private readonly limitsOnly = false,
+  ) {}
 
-  /** 増えた分を読む。読めなければ false（呼び手が、次の機会に）。 */
+  /** 増えた分を読む。読めなければ false（呼び手が、次の機会に。投げない）。 */
   async refresh(): Promise<boolean> {
     let opened;
     try {
@@ -131,33 +143,38 @@ export class CodexRolloutTail {
     if (opened === null) return false;
     const { fd, st } = opened;
     try {
-      const size = st.size;
-      if (!this.started || size < this.offset) {
-        this.reset();
-        await this.readTail(fd, size);
-        this.started = true;
-        return true;
-      }
-      if (size === this.offset) return true;
-      const start = this.offset;
-      if (size - start > INCREMENT_MAX_BYTES) {
-        // 大きく増えた（長い間見ていなかった）: 末尾の窓だけ読み直す。窓に無かった項目は、前の値のまま。
-        const prev = { count: this.count, limits: this.limits, model: this.model };
-        await this.readTail(fd, size);
-        this.count ??= prev.count;
-        this.limits ??= prev.limits;
-        this.model ??= prev.model;
-        return true;
-      }
-      const buf = await readRange(fd, start, size - start);
-      const end = buf.lastIndexOf(0x0a);
-      if (end === -1) return true; // 書き途中の行だけ（次に読む）
-      this.consume(buf.subarray(0, end + 1));
-      this.offset = start + end + 1;
-      return true;
+      return await this.refreshOpen(fd, st.size);
+    } catch {
+      return false; // 読みの途中の I/O エラー。次の機会に
     } finally {
       await fd.close().catch(() => undefined);
     }
+  }
+
+  private async refreshOpen(fd: Parameters<typeof readRange>[0], size: number): Promise<boolean> {
+    if (!this.started || size < this.offset) {
+      this.reset();
+      await this.readTail(fd, size);
+      this.started = true;
+      return true;
+    }
+    if (size === this.offset) return true;
+    const start = this.offset;
+    if (size - start > INCREMENT_MAX_BYTES) {
+      // 大きく増えた（長い間見ていなかった）: 末尾の窓だけ読み直す。窓に無かった項目は、前の値のまま。
+      const prev = { count: this.count, limits: this.limits, model: this.model };
+      await this.readTail(fd, size);
+      this.count ??= prev.count;
+      this.limits ??= prev.limits;
+      this.model ??= prev.model;
+      return true;
+    }
+    const buf = await readRange(fd, start, size - start);
+    const end = buf.lastIndexOf(0x0a);
+    if (end === -1) return true; // 書き途中の行だけ（次に読む）
+    this.consume(buf.subarray(0, end + 1));
+    this.offset = start + end + 1;
+    return true;
   }
 
   private reset(): void {
@@ -190,10 +207,13 @@ export class CodexRolloutTail {
       const lines = splitLines(body);
       let gotCount = false;
       let gotModel = false;
-      for (let i = lines.length - 1; i >= 0 && !(gotCount && gotModel); i--) {
+      // 枠は、累計の行より前にあることがある（新しい行が別枠〔`codex_other`〕のとき）。小さい窓（1 MiB まで）の中では、枠も見つかるまで見る。
+      const needLimits = window <= TAIL_STEP_BYTES * 4;
+      const enough = (): boolean => (this.limitsOnly ? this.limits !== null : gotCount && gotModel && (!needLimits || this.limits !== null));
+      for (let i = lines.length - 1; i >= 0 && !enough(); i--) {
         const line = lines[i]!;
-        const isCount = !gotCount && line.includes('"token_count"');
-        const isTurn = !gotModel && line.includes('"turn_context"');
+        const isCount = (!gotCount || this.limits === null) && line.includes('"token_count"');
+        const isTurn = !this.limitsOnly && !gotModel && line.includes('"turn_context"');
         if (!isCount && !isTurn) continue;
         const o = parse(line);
         if (o === null) continue;
@@ -201,7 +221,7 @@ export class CodexRolloutTail {
           const c = this.countOf(o);
           if (c !== undefined) {
             if (c.limits !== null && this.limits === null) this.limits = c.limits;
-            if (c.count !== null) {
+            if (c.count !== null && !gotCount) {
               this.count = c.count;
               gotCount = true;
             }
@@ -215,8 +235,8 @@ export class CodexRolloutTail {
         }
       }
       this.offset = lastNl === -1 ? start : start + lastNl + 1;
-      if ((gotCount && gotModel) || start === 0 || window >= TAIL_MAX_BYTES) {
-        this.partial = start > 0 && !(gotCount && gotModel);
+      if (enough() || start === 0 || window >= TAIL_MAX_BYTES) {
+        this.partial = start > 0 && !enough();
         return;
       }
       window = Math.min(TAIL_MAX_BYTES, window * 4);

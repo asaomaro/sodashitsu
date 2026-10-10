@@ -21,10 +21,17 @@ const ACCOUNT_CACHE_MS = 10_000;
 /** アカウントの枠を探すとき、更新の新しいものから見る記録の数。 */
 const ACCOUNT_CANDIDATES = 4;
 const READ_DEADLINE_MS = 2_000;
+/** アカウントの枠の読みが失敗したとき、次にやり直すまでの間。 */
+const ACCOUNT_ERROR_BACKOFF_MS = 3_000;
+/** `rate_limits` が見つからなかった記録（同じ更新の時刻のもの）を、飛ばす間。 */
+const NO_LIMITS_MEMO_MS = 60_000;
 
 interface PaneState {
   sessionId: string;
   tail: CodexRolloutTail | null;
+  /** 探索・読みの約束（同じ pane への同時の呼び出しは、同じものを待つ。重ねない）。 */
+  locating: Promise<void> | null;
+  reading: Promise<boolean> | null;
   lastCheckedAt: number;
   missUntil: number;
   closed: boolean;
@@ -45,6 +52,7 @@ export class CodexUsageAdapter implements UsageAdapter {
   private readonly now: () => number;
   private readonly find: typeof findCodexRecordFile;
   private readonly newest: typeof newestCodexRecordFiles;
+  private readonly noLimits = new Map<string, number>();
   private account: { at: number; limits: CodexRateLimits | null } | null = null;
   private accountRunning: Promise<CodexRateLimits | null> | null = null;
   private closed = false;
@@ -76,25 +84,33 @@ export class CodexUsageAdapter implements UsageAdapter {
     let st = this.states.get(source.paneId);
     if (!st || st.sessionId !== source.sessionId) {
       if (st) st.closed = true;
-      st = { sessionId: source.sessionId, tail: null, lastCheckedAt: 0, missUntil: 0, closed: false };
+      st = { sessionId: source.sessionId, tail: null, locating: null, reading: null, lastCheckedAt: 0, missUntil: 0, closed: false };
       this.states.set(source.paneId, st);
     }
     const state = st;
     if (state.tail === null) {
       if (now < state.missUntil) return null;
-      const file = await this.find(this.home(), source.sessionId);
-      if (state.closed) return null;
-      if (typeof file !== "string") {
-        state.missUntil = this.now() + MISS_RETRY_MS;
-        return null;
-      }
-      state.tail ??= new CodexRolloutTail(file);
+      // 同時の呼び出しは、同じ探索を待つ（重ねない。Claude のアダプタの `locating` と同じ形）。
+      state.locating ??= (async () => {
+        const file = await this.find(this.home(), source.sessionId);
+        if (state.closed) return;
+        if (typeof file !== "string") state.missUntil = this.now() + MISS_RETRY_MS;
+        else state.tail ??= new CodexRolloutTail(file);
+      })().finally(() => {
+        state.locating = null;
+      });
+      await state.locating;
+      if (state.closed || state.tail === null) return null;
     }
     const tail = state.tail;
-    if (state.lastCheckedAt === 0 || now - state.lastCheckedAt >= MIN_INTERVAL_MS) {
+    // 読みも、1 つの約束を共有する。2 秒で見捨てた読み（遅いディスク）が続いている間は、次の読みを重ねず、同じものを待つ。
+    if (state.reading === null && (state.lastCheckedAt === 0 || now - state.lastCheckedAt >= MIN_INTERVAL_MS)) {
       state.lastCheckedAt = now;
-      await withDeadline(tail.refresh(), READ_DEADLINE_MS);
+      state.reading = tail.refresh().finally(() => {
+        state.reading = null;
+      });
     }
+    if (state.reading !== null) await withDeadline(state.reading, READ_DEADLINE_MS);
     if (state.closed) return null;
     if (tail.limits) this.paneLimits.set(source.paneId, tail.limits);
     const c = tail.count;
@@ -136,8 +152,14 @@ export class CodexUsageAdapter implements UsageAdapter {
       this.accountRunning ??= this.findNewestLimits().finally(() => {
         this.accountRunning = null;
       });
-      limits = await this.accountRunning;
-      this.account = { at: now, limits };
+      try {
+        limits = await this.accountRunning;
+        this.account = { at: now, limits };
+      } catch {
+        // 探索・読みの失敗: 短く間をあけてから、やり直す（毎回すぐやり直さない）。前の値は、そのまま出す。
+        limits = this.account?.limits ?? null;
+        this.account = { at: now - ACCOUNT_CACHE_MS + ACCOUNT_ERROR_BACKOFF_MS, limits };
+      }
     }
     // pane の会話の記録が、もっと新しい値を持っていれば、そちら。
     for (const l of this.paneLimits.values()) if (limits === null || l.at > limits.at) limits = l;
@@ -170,10 +192,19 @@ export class CodexUsageAdapter implements UsageAdapter {
       }
     }
     stats.sort((a, b) => b.mtime - a.mtime);
-    for (const { file } of stats.slice(0, ACCOUNT_CANDIDATES)) {
-      const tail = new CodexRolloutTail(file);
+    const now = this.now();
+    for (const [k, until] of this.noLimits) if (until <= now) this.noLimits.delete(k);
+    let tried = 0;
+    for (const { file, mtime } of stats) {
+      if (tried >= ACCOUNT_CANDIDATES) break;
+      const memo = `${file}\0${mtime}`;
+      if (this.noLimits.has(memo)) continue; // 同じ更新の時刻で、枠が無かった記録は、短く覚えて飛ばす
+      tried++;
+      const tail = new CodexRolloutTail(file, true); // 枠だけを探す（モデル・累計は探さない）
       if (!(await withDeadline(tail.refresh(), READ_DEADLINE_MS))) continue;
       if (tail.limits) return tail.limits;
+      this.noLimits.set(memo, now + NO_LIMITS_MEMO_MS);
+      if (this.noLimits.size > 64) this.noLimits.delete(this.noLimits.keys().next().value as string);
     }
     return null;
   }

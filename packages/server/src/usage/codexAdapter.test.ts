@@ -156,7 +156,87 @@ describe("CodexUsageAdapter: アカウント全体", () => {
   });
 });
 
+describe("CodexUsageAdapter: 重ならない・失敗のあとの間・別枠（指摘 1・2・3）", () => {
+  it("同じ pane への 8 回の同時の呼び出しは、記録の探索を 1 回だけにし、同じ答えを返す（重ねない）", async () => {
+    put("2026-10-10", A, rollout({ id: A, total: 4000 }));
+    let found = 0;
+    const a = adapter({
+      find: async (...args) => {
+        found++;
+        await new Promise((r) => setTimeout(r, 30));
+        return findCodexRecordFile(...args);
+      },
+    });
+    const rs = await Promise.all(Array.from({ length: 8 }, () => a.usageFor(src())));
+    expect(found).toBe(1);
+    for (const r of rs) expect(r?.tokens.total).toBe(4020);
+  });
+
+  it("見つからなかった結果は、同時の呼び出し全部に null。1 回の探索", async () => {
+    let found = 0;
+    const a = adapter({
+      find: async () => {
+        found++;
+        await new Promise((r) => setTimeout(r, 20));
+        return null;
+      },
+    });
+    expect(await Promise.all([1, 2, 3].map(() => a.usageFor(src())))).toEqual([null, null, null]);
+    expect(found).toBe(1);
+  });
+
+  it("アカウントの枠: 新しい記録の rate_limits が別枠（codex_other）なら使わず、次の記録の codex の枠を出す", async () => {
+    const older = put("2026-10-09", A, rollout({ id: A, total: 10, at: "2026-10-09T00:00:00.000Z", rl: { limit_id: "codex", primary: { used_percent: 20, window_minutes: 10080, resets_at: 1_792_150_968 }, secondary: null, plan_type: "pro" } }));
+    const newer = put("2026-10-10", B, rollout({ id: B, total: 10, at: "2026-10-10T00:30:00.000Z", rl: { limit_id: "codex_other", limit_name: "GPT-Spark", primary: { used_percent: 3, window_minutes: 300, resets_at: 1_792_150_968 }, secondary: null, plan_type: "plus" } }));
+    utimesSync(older, 1_000, 1_000);
+    utimesSync(newer, 2_000, 2_000);
+    const acc = await adapter().accounts();
+    expect(acc[0]).toMatchObject({ plan: "pro", windows: [{ label: "週", usedPct: 20 }] });
+  });
+
+  it("枠の読みが失敗したとき、短く間をあけてから、やり直す（毎回すぐやり直さない）。前の値は出し続ける", async () => {
+    let n = 0;
+    let now = 1_000_000;
+    const a = adapter({
+      now: () => now,
+      newest: async () => {
+        n++;
+        throw new Error("EIO");
+      },
+    });
+    expect(await a.accounts()).toEqual([]);
+    expect(await a.accounts()).toEqual([]);
+    expect(n).toBe(1);
+    now += 3_100;
+    await a.accounts();
+    expect(n).toBe(2);
+  });
+
+  it("枠が無かった記録（同じ更新の時刻）は、短く覚えて、次は飛ばす", async () => {
+    const f = put("2026-10-10", A, rollout({ id: A })); // token_count が無い
+    let now = Date.parse("2026-10-10T01:00:00.000Z");
+    const a = adapter({ now: () => now });
+    expect(await a.accounts()).toEqual([]);
+    // 記録に枠を足しても、同じ更新の時刻に戻すと（覚えが残る間は）飛ばす。更新の時刻が変われば、また読む。
+    writeFileSync(f, rollout({ id: A, total: 10 }));
+    const t0 = 5_000;
+    utimesSync(f, t0, t0);
+    now += 11_000; // 結果の記憶（10 秒）は切れる
+    expect((await a.accounts())[0]?.windows[0]?.usedPct).toBe(17);
+  });
+});
+
 describe("記録の探し方（#132 の歩き方に揃う）", () => {
+  it("日数の上限の境界: ちょうど上限の日数目にある記録は見つかり、その次の日にある記録は見つからない（歩く日数を縮められる）", async () => {
+    const days = ["2026-10-10", "2026-10-09", "2026-10-08"];
+    const ids = [A, B, "cccccccc-1111-4222-8333-444444444444"];
+    days.forEach((d, i) => put(d, ids[i]!, "{}\n"));
+    expect(await findCodexRecordFile(home, ids[1]!, 2)).toContain("2026-10-09");
+    expect(await findCodexRecordFile(home, ids[2]!, 2)).toBeNull();
+    expect(await findCodexRecordFile(home, ids[2]!, 3)).toContain("2026-10-08");
+    expect(await findCodexRecordFile(home, ids[0]!, 1)).toContain("2026-10-10");
+  });
+
   it("findCodexRecordFile: id の記録の場所を返す（読まない）。無ければ null・sessions が無ければ undefined・id の形が違えば null", async () => {
     const f = put("2026-10-10", A, rollout({ id: A }));
     expect(await findCodexRecordFile(home, A)).toBe(f);

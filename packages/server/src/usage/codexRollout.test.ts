@@ -125,4 +125,45 @@ describe("CodexRolloutTail", () => {
     expect(t.model).toBeNull();
     expect(JSON.stringify({ c: t.count, l: t.limits, m: t.model })).not.toContain("SECRET-CONTENT");
   });
+
+  it("limit_id が codex でない行（モデルごとの別枠）の rate_limits は使わない。無いか codex のものだけ（指摘 1）", async () => {
+    const other = { limit_id: "codex_other", limit_name: "GPT-Spark", primary: { used_percent: 3, window_minutes: 300, resets_at: 5 }, secondary: null, plan_type: "plus" };
+    writeFileSync(file, tokenCount("2026-10-10T00:00:02.000Z", 1000, 100, weekly(20)) + tokenCount("2026-10-10T00:00:09.000Z", 2000, 200, other));
+    const t = new CodexRolloutTail(file);
+    await t.refresh();
+    expect(t.count?.total?.input).toBe(2000); // 累計は新しい行
+    expect(t.limits?.windows[0]?.usedPct).toBe(20); // 枠は、codex の行（新しい行の別枠は使わない）
+    expect(t.limits?.plan).toBe("pro");
+    // limit_id が無い行は使う。別枠だけの記録は、枠が無い。
+    writeFileSync(file, tokenCount("2026-10-10T00:00:02.000Z", 5, 1, { primary: { used_percent: 9, window_minutes: 300, resets_at: 5 } }));
+    const t2 = new CodexRolloutTail(file);
+    await t2.refresh();
+    expect(t2.limits?.windows[0]?.usedPct).toBe(9);
+    writeFileSync(file, tokenCount("2026-10-10T00:00:02.000Z", 5, 1, other));
+    const t3 = new CodexRolloutTail(file);
+    await t3.refresh();
+    expect(t3.limits).toBeNull();
+  });
+
+  it("limitsOnly（アカウントの枠）は、model を探さない・枠が見つかった時点で止まる", async () => {
+    writeFileSync(file, turn("gpt-x") + tokenCount("2026-10-10T00:00:02.000Z", 1000, 100, weekly(20)));
+    const t = new CodexRolloutTail(file, true);
+    await t.refresh();
+    expect(t.limits?.windows[0]?.usedPct).toBe(20);
+    expect(t.model).toBeNull();
+  });
+
+  it("大きく増えたとき（1 MiB 超）は末尾の窓だけ読み直し、窓に無い項目（model・累計）は前の値のまま（指摘 6）", async () => {
+    writeFileSync(file, turn("gpt-keep") + tokenCount("2026-10-10T00:00:02.000Z", 1234, 12, weekly(7)));
+    const t = new CodexRolloutTail(file);
+    await t.refresh();
+    expect(t.model).toBe("gpt-keep");
+    // token_count・turn_context の無い大きな追記（1 MiB 超 かつ 末尾の窓 256 KB より大きい。窓を 16 MiB まで広げても見つからない量は避ける）。
+    const filler = j({ type: "response_item", payload: { type: "message", text: "q".repeat(10_000) } });
+    appendFileSync(file, filler.repeat(Math.ceil((1.5 * 1024 * 1024) / filler.length)));
+    await t.refresh();
+    expect(t.count?.total?.input).toBe(1234);
+    expect(t.model).toBe("gpt-keep");
+    expect(t.limits?.windows[0]?.usedPct).toBe(7);
+  });
 });
