@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { StatusLineWrapper, statusLinePaths } from "./statusLineWrap.js";
 import { appendMember, findMember, removeMember, scanTopObject } from "./statusLineEdit.js";
 
@@ -151,6 +153,54 @@ describe("横のファイルが無くても、1 バイトも違わず戻る（�
     expect(await w.uninstall()).toEqual({ ok: true, message: null });
     expect(await readFile(settingsPath(), "utf8")).toBe(text);
   });
+});
+
+describe("大きな元（引数に載らない）・信じる順（引数が先）・空のオブジェクト", () => {
+  const side = (): string => statusLinePaths({ CLAUDE_CONFIG_DIR: cfg }, "").sidecar;
+  const REAL = fileURLToPath(new URL("../../assets/soda-statusline.cjs", import.meta.url));
+  const realWrapper = (): StatusLineWrapper => {
+    const env = { CLAUDE_CONFIG_DIR: cfg } as NodeJS.ProcessEnv;
+    assertSandboxed(statusLinePaths(env, join(work, "home")).configFile);
+    return new StatusLineWrapper(REAL, env, join(work, "home"), "linux");
+  };
+
+  it("約 9 KB の command の statusLine: 導入 → 包みを動かすと、元の出力が出る（横のファイルを読む）。外すと元", async () => {
+    const big = `printf '%s' ok # ${"x".repeat(9000)}`;
+    const text = `{\n  "statusLine": {"type": "command", "command": ${JSON.stringify(big)}}\n}\n`;
+    await writeFile(settingsPath(), text);
+    const w = realWrapper();
+    expect(await w.install()).toEqual({ ok: true, message: null });
+    const cmd = (JSON.parse(await readFile(settingsPath(), "utf8")) as { statusLine: { command: string } }).statusLine.command;
+    expect(cmd.length).toBeLessThan(1000); // 引数には何も載らない（{soda:1} だけ）
+    const r = spawnSync("sh", ["-c", cmd], { input: "{}", encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } });
+    expect(r.stdout).toBe("ok");
+    expect(await w.uninstall()).toEqual({ ok: true, message: null });
+    expect(await readFile(settingsPath(), "utf8")).toBe(text);
+  });
+
+  it("外すは、引数を先に信じる（横のファイルの original が食い違っていても、引数の元へ戻る）", async () => {
+    const text = '{\n  "statusLine": {"type":"command","command":"orig-arg"}\n}\n';
+    await writeFile(settingsPath(), text);
+    const w = make();
+    await w.install();
+    const sc = JSON.parse(await readFile(side(), "utf8")) as Record<string, unknown>;
+    sc["original"] = { type: "command", command: "tampered" };
+    sc["originalValueText"] = '{"type":"command","command":"tampered"}';
+    await writeFile(side(), JSON.stringify(sc));
+    expect(await w.uninstall()).toEqual({ ok: true, message: null });
+    expect(await readFile(settingsPath(), "utf8")).toBe(text);
+  });
+
+  for (const text of ["{\r\n}\r\n", "{\n}\n", "{ }", "{}\n", "{\n\n}"]) {
+    it(`空のオブジェクト ${JSON.stringify(text)}: 横のファイルが無くても、外すと元`, async () => {
+      await writeFile(settingsPath(), text);
+      const w = make();
+      await w.install();
+      await rm(side());
+      expect(await w.uninstall()).toEqual({ ok: true, message: null });
+      expect(await readFile(settingsPath(), "utf8")).toBe(text);
+    });
+  }
 });
 
 describe("足す行の改行は、ファイルの行の終わりに合わせる（CRLF の設定に導入しても CR が混ざらない）", () => {

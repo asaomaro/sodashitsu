@@ -52,15 +52,18 @@ export function statusLinePaths(env: NodeJS.ProcessEnv, home: string): { configF
 
 /** 控え（base64url）の最大の長さ。超えるときは、まず元の値の文字列そのものを、それでも超えるなら元のオブジェクトも、引数に載せず、横のファイルだけに頼る（文書に書く）。 */
 export const STATUSLINE_ARG_MAX = 8192;
+/** 引数に載せる、元のファイル全体（項目の無いオブジェクトのとき）の最大の長さ。 */
+const FILE_BEFORE_ARG_MAX = 512;
 
 /**
  * 包みの command。パスに、シェルが解釈しうる文字があれば undefined（導入しない）。
  * 引数（控え）は `{ soda: 1, original, valueText }`: 元のオブジェクトと、**元の値の文字列そのもの**（横のファイルが無くても、外すと 1 バイトも違わず戻すため）。
  */
-function wrapperCommand(script: string, original: Record<string, unknown> | null, valueText: string | null): string | undefined {
+function wrapperCommand(script: string, original: Record<string, unknown> | null, valueText: string | null, fileBefore: string | null = null): string | undefined {
   if (/["$`\\\u0000-\u001f]/.test(script)) return undefined;
   const encode = (v: unknown): string => Buffer.from(JSON.stringify(v), "utf8").toString("base64url");
-  let arg = encode({ soda: 1, original, ...(valueText !== null ? { valueText } : {}) });
+  // `fileBefore`: 元に項目が無く、設定が「項目の無いオブジェクト」だったときの、元のファイル全体（小さいときだけ。横のファイルが無くても戻せるように）。
+  let arg = encode({ soda: 1, original, ...(valueText !== null ? { valueText } : {}), ...(fileBefore !== null ? { fileBefore } : {}) });
   if (arg.length > STATUSLINE_ARG_MAX) arg = encode({ soda: 1, original });
   // 元そのものが大きすぎるときは、引数に何も載せない（包みは横のファイルを読む。横のファイルが無いと、外せない旨を返す）。
   if (arg.length > STATUSLINE_ARG_MAX) arg = encode({ soda: 1 });
@@ -68,7 +71,7 @@ function wrapperCommand(script: string, original: Record<string, unknown> | null
 }
 
 /** command から、包みの引数（元の控え）を読む。読めなければ undefined。 */
-function originalFromCommand(command: string): { original: Record<string, unknown> | null; valueText?: string } | undefined {
+function originalFromCommand(command: string): { original: Record<string, unknown> | null; valueText?: string; fileBefore?: string } | undefined {
   const m = new RegExp(`${STATUSLINE_SCRIPT_NAME.replace(".", "\\.")}"?\\s+([A-Za-z0-9_-]+)\\s*$`).exec(command);
   if (!m) return undefined;
   try {
@@ -79,7 +82,8 @@ function originalFromCommand(command: string): { original: Record<string, unknow
       if (o["soda"] === 1 && "original" in o) {
         const orig = o["original"];
         const valueText = typeof o["valueText"] === "string" ? o["valueText"] : undefined;
-        if (orig === null) return { original: null };
+        const fileBefore = typeof o["fileBefore"] === "string" ? o["fileBefore"] : undefined;
+        if (orig === null) return { original: null, ...(fileBefore !== undefined ? { fileBefore } : {}) };
         if (typeof orig === "object" && !Array.isArray(orig)) return { original: orig as Record<string, unknown>, ...(valueText !== undefined ? { valueText } : {}) };
         return undefined;
       }
@@ -207,14 +211,14 @@ export class StatusLineWrapper {
       original = v.value;
       originalValueText = text.slice(member.valueStart, member.valueEnd);
     }
-    const command = wrapperCommand(script, original, originalValueText);
+    const wholeNeeded = original === null && (text === null || obj?.members.length === 0);
+    const command = wrapperCommand(script, original, originalValueText, wholeNeeded && text !== null && text.length <= FILE_BEFORE_ARG_MAX ? text : null);
     if (command === undefined) return { ok: false, message: "設定のフォルダのパスに、シェルが解釈しうる文字が含まれるため、導入できません" };
     const wrapped: Record<string, unknown> = original ? { ...original, command } : { type: "command", command };
     let newText: string;
     if (text === null || obj === null) newText = `${JSON.stringify({ statusLine: wrapped }, null, 2)}\n`;
     else if (member) newText = replaceValue(text, member, renderValue(wrapped, text, member.keyStart));
     else newText = appendMember(text, obj, "statusLine", wrapped);
-    const wholeNeeded = original === null && (text === null || obj?.members.length === 0);
     const side: Sidecar = { schema: 1, original, originalValueText, fileBefore: wholeNeeded ? text : null, fileMissing: text === null, installedText: newText };
     await this.writeScript();
     await writeFileAtomic(sidecar, `${JSON.stringify(side, null, 2)}\n`); // 0600
@@ -243,19 +247,25 @@ export class StatusLineWrapper {
       return { ok: true, message: side === "absent" ? "未導入でした" : "外れています（利用者が替えました）。何も変えませんでした" };
     }
     const sc = side !== "absent" && side !== null ? side : undefined;
+    // 信じる順は、包みと同じ: 引数が先・横のファイルが後。
     const fromArg = originalFromCommand(v.command);
-    const original = sc ? sc.original : fromArg ? fromArg.original : undefined;
+    const original = fromArg ? fromArg.original : sc ? sc.original : undefined;
     if (original === undefined) return { ok: false, message: "元の statusLine の控えが読めないため、外せませんでした（設定は変えていません）" };
     if (original === null) {
       if (sc && sc.installedText === parsed.text && (sc.fileMissing || sc.fileBefore !== null)) {
         if (sc.fileMissing) await rm(configFile, { force: true });
         else await writeConfigFile(configFile, sc.fileBefore as string);
       } else {
-        await writeConfigFile(configFile, removeMember(parsed.text, parsed.obj, member));
+        // 横のファイルが無くても、引数に元のファイル全体（項目の無いオブジェクト）があり、今の中身が「それに導入が足したもの」と同じなら、そのまま戻す。
+        const fb = fromArg?.fileBefore;
+        const fbObj = fb !== undefined ? scanTopObject(fb) : null;
+        const expected = fb !== undefined && fbObj !== null ? appendMember(fb, fbObj, "statusLine", { type: "command", command: v.command }) : undefined;
+        if (fb !== undefined && expected === parsed.text) await writeConfigFile(configFile, fb);
+        else await writeConfigFile(configFile, removeMember(parsed.text, parsed.obj, member));
       }
     } else {
-      // 戻す文字列: 横のファイル → 控え（引数）の元の値の文字列 → 作り直し（書式は整う。意味は同じ）。
-      const valueText = sc?.originalValueText ?? fromArg?.valueText ?? renderValue(original, parsed.text, member.keyStart);
+      // 戻す文字列: 控え（引数。包みと同じく先）の元の値の文字列 → 横のファイル → 作り直し（書式は整う。意味は同じ）。
+      const valueText = fromArg?.valueText ?? sc?.originalValueText ?? renderValue(original, parsed.text, member.keyStart);
       await writeConfigFile(configFile, replaceValue(parsed.text, member, valueText));
     }
     await rm(sidecar, { force: true });

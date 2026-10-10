@@ -42,7 +42,9 @@ function originalCommand() {
   };
   if (typeof arg === "string" && arg !== "") {
     try {
-      return fromJson(Buffer.from(arg, "base64url").toString("utf8"));
+      // 引数から command が取れたときだけ、それを使う（大きすぎて引数に載せなかった `{soda:1}` などは、横のファイルへ進む）。
+      const r = fromJson(Buffer.from(arg, "base64url").toString("utf8"));
+      if (r !== undefined) return r;
     } catch {
       /* 次へ */
     }
