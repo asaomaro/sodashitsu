@@ -331,6 +331,69 @@ function makeAgentIntegrationActions(status: AgentIntegrationStatusResult) {
 
 const agentIntegrationSection = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => w.find('section[aria-labelledby="settings-agent-integration"]');
 
+describe("SettingsDialog — 利用状況（ステータスライン）の包み（20261010-agent-usage PR2・AC5）", () => {
+  const base = (): AgentIntegrationStatusResult["agents"] => ({ claude: { cliDetected: true, installed: true }, codex: { cliDetected: true, installed: true }, ...defaultOtherAgentStatuses() });
+  const make = (statusLine: AgentIntegrationStatusResult["statusLine"]) => {
+    const status: AgentIntegrationStatusResult = { autoResumeEnabled: true, agents: base(), ...(statusLine ? { statusLine } : {}) };
+    const m = makeAgentIntegrationActions(status);
+    const installStatusLineWrap = vi.fn(async (): Promise<AgentIntegrationInstallResult> => ({ ok: true, message: null }));
+    const uninstallStatusLineWrap = vi.fn(async (): Promise<AgentIntegrationInstallResult> => ({ ok: true, message: null }));
+    return { ...m, actions: { ...m.actions, installStatusLineWrap, uninstallStatusLineWrap } as Partial<ActionDispatcher>, installStatusLineWrap, uninstallStatusLineWrap };
+  };
+  const rowOf = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => agentIntegrationSection(w).find("[data-statusline-wrap]");
+
+  it("フックの［導入］とは別の項目として出る。サーバが statusLine を返さない（古いサーバ）なら出ない", async () => {
+    const none = make(undefined);
+    const a = await openDialog(makeController(), undefined, none.actions);
+    expect(rowOf(a.wrapper).exists()).toBe(false);
+    const m = make({ state: "none" });
+    const b = await openDialog(makeController(), undefined, m.actions);
+    expect(rowOf(b.wrapper).exists()).toBe(true);
+    expect(rowOf(b.wrapper).text()).toContain("利用状況（ステータスライン）");
+    expect(rowOf(b.wrapper).text()).toContain("未導入");
+  });
+
+  it("状態ごとの文言とボタン: 未導入＝導入／導入済み＝外す／更新が必要＝更新・外す／外れています＝導入だけ／使えない＝押せない", async () => {
+    const cases: [NonNullable<AgentIntegrationStatusResult["statusLine"]>, string, string[], boolean][] = [
+      [{ state: "none" }, "未導入", ["導入"], false],
+      [{ state: "installed" }, "導入済み", ["外す"], false],
+      [{ state: "needs_update" }, "更新が必要", ["更新", "外す"], false],
+      [{ state: "detached" }, "外れています（利用者が替えました）", ["導入"], false],
+      [{ state: "invalid", message: "statusLine の形が想定と違います" }, "statusLine の形が想定と違います", ["導入"], true],
+      [{ state: "unsupported" }, "この OS では使えません", ["導入"], true],
+    ];
+    for (const [sl, text, buttons, disabled] of cases) {
+      const m = make(sl);
+      const { wrapper } = await openDialog(makeController(), undefined, m.actions);
+      const row = rowOf(wrapper);
+      expect(row.text(), sl.state).toContain(text);
+      expect(row.findAll("button").map((b) => b.text()), sl.state).toEqual(buttons);
+      if (disabled) expect(row.get("button").attributes("disabled")).toBeDefined();
+      wrapper.unmount();
+    }
+  });
+
+  it("報告が届いていない（silent）ときは、一言（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定）を出す", async () => {
+    const m = make({ state: "installed", silent: true });
+    const { wrapper } = await openDialog(makeController(), undefined, m.actions);
+    expect(rowOf(wrapper).text()).toContain("報告が届いていません");
+    expect(rowOf(wrapper).text()).toContain("管理された設定");
+  });
+
+  it("導入・外す・更新は、フックの導入の方式ではなく、包みの方式を呼ぶ（kind の導入は呼ばない）", async () => {
+    const m = make({ state: "needs_update" });
+    const { wrapper } = await openDialog(makeController(), undefined, m.actions);
+    const buttons = rowOf(wrapper).findAll("button");
+    await buttons[0]!.trigger("click"); // 更新
+    await buttons[1]!.trigger("click"); // 外す
+    await wrapper.vm.$nextTick();
+    expect(m.installStatusLineWrap).toHaveBeenCalledTimes(1);
+    expect(m.uninstallStatusLineWrap).toHaveBeenCalledTimes(1);
+    expect(m.installAgentIntegration).not.toHaveBeenCalled();
+    expect(m.uninstallAgentIntegration).not.toHaveBeenCalled();
+  });
+});
+
 describe("SettingsDialog — 節「エージェント連携」（20260923-agent-session-resume・AC-I1〜AC-I5）", () => {
   it("開くたびに状態を取得する（client.hello のスナップショットに乗らないため）", async () => {
     const status: AgentIntegrationStatusResult = {

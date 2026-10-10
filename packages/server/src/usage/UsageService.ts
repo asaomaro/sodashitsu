@@ -1,5 +1,6 @@
 import type { AccountUsage, AgentUsage, AgentUsageResult, Pane } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
+import type { ReportedUsage, UsageReport } from "./reportedUsage.js";
 
 /**
  * エージェントの利用状況（20261010-agent-usage）。種類ごとの取り方（アダプタ）を持ち、`agent.usage` の答えを作る。
@@ -34,6 +35,9 @@ export interface UsageServiceDeps {
   };
   adapters: readonly UsageAdapter[];
   logger: Pick<Logger, "debug" | "warn">;
+  /** ステータスラインの包みの報告（20261010-agent-usage の PR2。無ければ、記録だけ）。 */
+  reported?: ReportedUsage;
+  now?: () => number;
 }
 
 const TRANSCRIPT_NOTES_MAX = 512;
@@ -57,6 +61,7 @@ export class UsageService {
   /** pane が閉じた。 */
   forgetPane(paneId: string): void {
     this.transcripts.delete(paneId);
+    this.deps.reported?.forgetPane(paneId);
     for (const a of this.adapters.values()) a.forget?.(paneId);
   }
 
@@ -79,6 +84,9 @@ export class UsageService {
         this.deps.logger.debug("usage: accounts failed", { kind: a.kind });
       }
     }
+    // 包みの報告から（制限の枠。記録には出ない）。同じ鍵のアダプタの値が、既にあれば、そちらを優先する。
+    const seen = new Set(accounts.map((a) => a.accountKey));
+    for (const acc of this.deps.reported?.accountList() ?? []) if (!seen.has(acc.accountKey)) accounts.push(acc);
     return { panes: out, accounts };
   }
 
@@ -91,13 +99,46 @@ export class UsageService {
     if (!ref || ref.kind !== agent.kind) return null;
     const note = this.transcripts.get(pane.id);
     const transcriptPath = note !== undefined && note.sessionId === ref.sessionId ? note.path : undefined;
+    let base: Omit<AgentUsage, "paneId" | "kind"> | null = null;
     try {
-      const r = await adapter.usageFor({ paneId: pane.id, sessionId: ref.sessionId, transcriptPath });
-      return r === null ? null : { paneId: pane.id, kind: agent.kind, ...r };
+      base = await adapter.usageFor({ paneId: pane.id, sessionId: ref.sessionId, transcriptPath });
     } catch {
       // 例外の中身（場所を含みうる）は書かない。
       this.deps.logger.debug("usage: read failed", { kind: agent.kind });
-      return null;
     }
+    const rep = this.deps.reported?.paneReport(pane.id, ref.sessionId);
+    const merged = rep === undefined ? base : mergeReported(base, rep.report, rep.at);
+    return merged === null ? null : { paneId: pane.id, kind: agent.kind, ...merged };
   }
+}
+
+/**
+ * 記録からの値（`base`。無ければ null）に、包みの報告を重ねる。**記録からのトークンの合計は、置き換えない**（報告の `total_input_tokens` は、いま文脈にある分で、
+ * 累計ではない。`contextTokens` として別に持つ）。コストは、報告（見積り）が、記録の `cost-state`（区切りにだけ書かれる）より新しければ、報告を使う。
+ * コンテキストの使用率・窓の大きさは、報告のほうが正確（記録には窓の大きさが出ない）。
+ */
+function mergeReported(base: Omit<AgentUsage, "paneId" | "kind"> | null, r: UsageReport, at: number): Omit<AgentUsage, "paneId" | "kind"> {
+  const out: Omit<AgentUsage, "paneId" | "kind"> =
+    base !== null
+      ? { ...base }
+      : {
+          model: r.model ?? null,
+          tokens: { basis: "context", ...(r.contextTokens !== undefined ? { input: r.contextTokens } : {}) },
+          source: "statusline",
+          updatedAt: at,
+        };
+  if (out.model === null && r.model !== undefined) out.model = r.model;
+  if (r.costUsd !== undefined && (out.costAsOf === undefined || at >= out.costAsOf)) {
+    out.costUsd = r.costUsd;
+    out.costBasis = "reported";
+    out.costAsOf = at;
+  }
+  if (r.contextTokens !== undefined) out.contextTokens = r.contextTokens;
+  if (r.contextWindowSize !== undefined) out.contextWindowTokens = r.contextWindowSize;
+  if (r.contextUsedPct !== undefined) out.contextUsedPct = r.contextUsedPct;
+  if (at >= out.updatedAt) {
+    out.source = "statusline";
+    out.updatedAt = at;
+  }
+  return out;
 }

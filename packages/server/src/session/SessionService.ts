@@ -1460,6 +1460,26 @@ export class SessionService {
   }
 
   /**
+   * ステータスラインの包みの利用状況の報告を、受けてよいか（20261010-agent-usage の PR2。AC4）。#128 の確かめ（`agentPid`）に加えて、
+   * **報告の会話の id が、その pane の今の会話の参照と一致するときだけ**受ける。前面のエージェントが未検出・参照がまだ無い・参照が報告の会話と違う
+   * （`/clear` の直後は、フックの報告より先に届きうる）は `hold`（呼び手が、短く保留して確かめ直す）。pid の確かめで落ちたもの（シェルの子孫でない・
+   * 前面のエージェント自身でない）は `reject`。報告の中の pid・id は pane の中のプログラムが好きに書けるので、取り違えを防ぐ仕組みで、安全の境界ではない。
+   */
+  usageReportVerdict(paneId: PaneId, kind: string, agentPid: number | undefined, sessionId: string): { verdict: "accept" } | { verdict: "hold" } | { verdict: "reject"; reason: string } {
+    const pane = this.model.getPane(paneId);
+    if (!pane) return { verdict: "reject", reason: "the pane no longer exists" };
+    if (agentPid !== undefined) {
+      const v = this.attribute(paneId, kind, agentPid);
+      if (v.verdict === "reject") return v.recheck ? { verdict: "hold" } : { verdict: "reject", reason: v.reason };
+      if (v.verdict === "hold") return { verdict: "hold" };
+    }
+    const ref = pane.agentSession;
+    if (!ref || ref.kind !== kind) return { verdict: "hold" };
+    if (ref.sessionId !== sessionId) return { verdict: "hold" };
+    return { verdict: "accept" };
+  }
+
+  /**
    * サブエージェントの報告などを、受けてよいか（`reportAgentSession` と同じ確かめ。保留はしない。pid の無い報告・前面のエージェントが
    * まだ分からない間は、今までどおり受ける）。
    */

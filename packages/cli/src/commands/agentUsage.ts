@@ -80,7 +80,9 @@ function formatAccounts(accounts: readonly AccountUsage[], now: number): string 
   const rows: string[][] = [];
   for (const a of accounts) {
     for (const w of a.windows) {
-      rows.push([a.label, w.label, `${w.usedPct}%`, w.resetsAt !== undefined ? clock(w.resetsAt, now).replace(/（.*）/, "") : "—", clock(a.asOf, now)]);
+      const usd = w.usedUsd !== undefined || w.limitUsd !== undefined ? `（$${(w.usedUsd ?? 0).toFixed(2)} / ${w.limitUsd !== undefined ? `$${w.limitUsd.toFixed(2)}` : "—"}）` : "";
+      // リセットの時刻を過ぎた枠は、次の報告まで古い（印を付ける）。
+      rows.push([a.label, w.label, `${w.usedPct}%${usd}${w.stale ? "・古い" : ""}`, w.resetsAt !== undefined ? clock(w.resetsAt, now).replace(/（.*）/, "") : "—", clock(a.asOf, now)]);
     }
   }
   return formatTable(["アカウント", "枠", "使用率", "リセット", "取得"], rows);

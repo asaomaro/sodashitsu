@@ -37,3 +37,18 @@ describe("formatUsageTable（20261010-agent-usage）", () => {
     expect(t).not.toContain("\u001b");
   });
 });
+
+describe("アカウントの枠（ステータスラインの包みの報告。20261010-agent-usage PR2）", () => {
+  it("古い枠には「古い」を付け、組織の枠は使った額と上限を添える", () => {
+    const out = formatUsageTable(
+      {
+        panes: {},
+        accounts: [{ kind: "claude", accountKey: "k", label: "Claude Code", source: "statusline", asOf: 1_000_000, windows: [{ label: "5 時間", usedPct: 12, resetsAt: 500_000, stale: true }, { label: "組織の枠", usedPct: 5, usedUsd: 10, limitUsd: 200 }] }],
+      },
+      new Map(),
+      1_000_000,
+    );
+    expect(out).toContain("12%・古い");
+    expect(out).toContain("5%（$10.00 / $200.00）");
+  });
+});

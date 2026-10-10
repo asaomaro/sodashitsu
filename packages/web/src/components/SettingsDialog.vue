@@ -443,6 +443,37 @@ async function updateAgentIntegration(kind: AgentIntegrationKind): Promise<void>
   }
 }
 
+/**
+ * Claude Code のステータスラインの包み（20261010-agent-usage の PR2）。**フックの［導入］とは別の項目**——押したときだけ、`~/.claude/settings.json` の
+ * `statusLine` を差し替える（元は控える。外すと元へ戻る）。状態の文言は、サーバの `statusLine`（`StatusLineWrapStatus`）から。
+ */
+const statusLine = computed(() => agentIntegrations.status?.statusLine);
+const statusLineBusy = ref(false);
+const statusLineText = computed((): string => {
+  const s = statusLine.value;
+  if (!s) return "確認中…";
+  const base: Record<string, string> = {
+    none: "未導入",
+    installed: "導入済み",
+    needs_update: "導入済み（更新が必要）",
+    detached: "外れています（利用者が替えました）",
+    invalid: `使えません（${s.message ?? "設定の形が想定と違います"}）`,
+    unsupported: "この OS では使えません",
+  };
+  const silent = s.silent ? "。動いている Claude Code から、報告が届いていません（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性があります）" : "";
+  return `${base[s.state] ?? s.state}${silent}`;
+});
+async function runStatusLine(action: "install" | "uninstall"): Promise<void> {
+  if (!actions || statusLineBusy.value) return;
+  statusLineBusy.value = true;
+  try {
+    const r = action === "install" ? await actions.installStatusLineWrap() : await actions.uninstallStatusLineWrap();
+    agentIntegrationMessage.value = r.ok ? (r.message ?? (action === "install" ? "導入しました。すでに動いている Claude Code は、起動し直すと効きます。" : "外しました。")) : (r.message ?? "操作に失敗しました");
+  } finally {
+    statusLineBusy.value = false;
+  }
+}
+
 function toggleAgentIntegrationAutoResume(): void {
   const current = agentIntegrations.status?.autoResumeEnabled ?? true;
   void actions?.setAgentIntegrationAutoResume(!current);
@@ -1384,6 +1415,48 @@ function onNativeCancel(ev: Event): void {
           >
             {{ agentIntegrations.status?.agents[k.value].installed ? "解除" : "導入" }}
           </button>
+        </li>
+        <li v-if="agentIntegrations.status?.statusLine" class="settings-row agent-integration-row" data-statusline-wrap>
+          <div class="agent-integration-label">
+            <span>利用状況（ステータスライン）</span>
+            <span class="settings-note agent-integration-status" data-statusline-state>{{ statusLineText }}</span>
+          </div>
+          <button
+            v-if="statusLine?.state === 'needs_update'"
+            type="button"
+            class="settings-btn agent-integration-update"
+            :disabled="statusLineBusy"
+            aria-label="利用状況（ステータスライン）の包みを更新する"
+            @click="runStatusLine('install')"
+          >
+            更新
+          </button>
+          <button
+            v-if="statusLine?.state === 'installed' || statusLine?.state === 'needs_update'"
+            type="button"
+            class="settings-btn"
+            :disabled="statusLineBusy"
+            @click="runStatusLine('uninstall')"
+          >
+            外す
+          </button>
+          <button
+            v-else
+            type="button"
+            class="settings-btn"
+            :disabled="statusLineBusy || statusLine?.state === 'invalid' || statusLine?.state === 'unsupported'"
+            @click="runStatusLine('install')"
+          >
+            導入
+          </button>
+        </li>
+        <li v-if="agentIntegrations.status?.statusLine" class="settings-row">
+          <p class="settings-note">
+            Claude Code の制限（5 時間・週）とコストを見るために、ステータスラインの設定（<code>statusLine</code>）を、元の表示をそのまま返す小さな包みに替えます
+            （元の設定は控え、外すと戻ります。押したときだけ書き換えます）。送るのは、数字（コスト・コンテキストの使用率・制限の使用率とリセットの時刻）と、
+            モデルの名前・会話の id だけです。会話の名前・作業フォルダ・記録の場所・リポジトリの情報は送りません。信頼されていないフォルダや、
+            プロジェクトの設定が <code>statusLine</code> を持つときは、包みが呼ばれず、報告は届きません。
+          </p>
         </li>
         <li class="settings-row">
           <button
