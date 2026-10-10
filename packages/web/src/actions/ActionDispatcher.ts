@@ -1,4 +1,4 @@
-import type { AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, PaneMoveBlock, WorkspaceGroup } from "@sodashitsu/protocol";
+import type { AgentForkPreviewResult, AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, PaneMoveBlock, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick } from "vue";
 import { openDisplayMenu, pickFocusTarget, withDisplayChange } from "../display/displayOps.js";
@@ -13,6 +13,7 @@ import { useSessionStore } from "../store/session.js";
 import { useMachinesStore } from "../store/machines.js";
 import { LOCAL_MACHINE_ID, groupIdOfNavigateKey, paneMoveBlock, paneMoveBlockMessage, isRepresentative, isUngroupedNavigateKey, navigateKeyOfRow, repoMembers } from "@sodashitsu/client-core";
 import { useAgentIntegrationsStore } from "../store/agentIntegrations.js";
+import { useAgentForkStore } from "../store/agentFork.js";
 import { useCommandsStore } from "../store/commands.js";
 import { useSeenStore, displayStateFor } from "../store/seen.js";
 import { orderedAgentPaneIds, type AgentOrderEntry } from "@sodashitsu/client-core";
@@ -81,6 +82,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly machines: ReturnType<typeof useMachinesStore>;
   private readonly settings: ReturnType<typeof useSettingsStore>;
   private readonly commands: ReturnType<typeof useCommandsStore>;
+  private readonly agentFork: ReturnType<typeof useAgentForkStore>;
   private readonly registry: TerminalRegistry;
   private readonly keys: KeyInputController;
   private readonly input: ActionDispatcherOptions["input"];
@@ -102,6 +104,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.machines = useMachinesStore(opts.pinia);
     this.settings = useSettingsStore(opts.pinia);
     this.commands = useCommandsStore(opts.pinia);
+    this.agentFork = useAgentForkStore(opts.pinia);
     this.registry = opts.registry;
     this.keys = opts.keys;
   }
@@ -737,6 +740,38 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     }
   }
 
+  // --- エージェントの fork（20261009-agent-fork PR2）--------------------------------------------------
+
+  /** pane の「会話を fork…」。確定の前の画面（`AgentForkDialog`）を開く。 */
+  openAgentFork(paneId: string): void {
+    this.view.openDialogWithContext({ kind: "agentFork", paneId });
+  }
+
+  /** 確定の前の読み取り（何も作らない）。 */
+  forkPreview(paneId: string, branch?: string): Promise<AgentForkPreviewResult> {
+    return this.conn.request("agent.fork_preview", { paneId, ...(branch !== undefined ? { branch } : {}) });
+  }
+
+  /**
+   * fork する。**ダイアログを閉じても続く**ので、結果は `agentFork` ストアに残し、完了・失敗のトーストもそこから出す。
+   * 新しい pane ができる前の失敗（`fork_unavailable`・`fork_branch_exists`・`fork_in_progress` など）は、ここで返す（呼び手が画面に出す）。
+   */
+  async forkAgent(paneId: string, target: { kind: "same" } | { kind: "worktree"; branch: string }, note: boolean): Promise<{ ok: true } | { ok: false; code: string | null; message: string }> {
+    const store = this.agentFork;
+    store.begin(paneId);
+    try {
+      const r = await this.conn.request("agent.fork", { paneId, target, ...(target.kind === "worktree" ? { note } : {}) });
+      store.started(paneId, r);
+      return { ok: true };
+    } catch (err) {
+      const code = errorCodeOf(err);
+      const message = code ? clientErrorMessage(code) : "fork できませんでした。";
+      // 画面（ダイアログ）に出すだけにして、トーストにはしない（開いたままのダイアログで読める）。
+      store.forget(paneId);
+      return { ok: false, code: code ?? null, message };
+    }
+  }
+
   /** 「グループから外す」（項目がグループに入っているときだけ `ContextMenu` が出す）。古いサーバは項目の workspace 全部に順に送る。 */
   removeWorkspaceFromGroup(workspaceId: string): void {
     if (this.session.hasServerLayout) {
@@ -784,6 +819,15 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
 
   uninstallAgentIntegration(kind: AgentIntegrationKind): Promise<AgentIntegrationInstallResult> {
     return this.conn.request("agent_integration.uninstall", { kind });
+  }
+
+  /** Claude Code のステータスラインの包み（20261010-agent-usage の PR2。フックの導入とは別。押したときだけ書き換える）。 */
+  installStatusLineWrap(): Promise<AgentIntegrationInstallResult> {
+    return this.conn.request("agent_integration.statusline_install", {});
+  }
+
+  uninstallStatusLineWrap(): Promise<AgentIntegrationInstallResult> {
+    return this.conn.request("agent_integration.statusline_uninstall", {});
   }
 
   async setAgentIntegrationAutoResume(enabled: boolean): Promise<void> {

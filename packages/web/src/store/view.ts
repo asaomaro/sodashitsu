@@ -273,6 +273,8 @@ export type DialogContext =
   | { kind: "dashboard" }
   // worktree（20260920-git-worktree-actions）。**サーバへ聞いてから開く**ので、開く時点で中身が揃っている。
   | { kind: "worktreeCreate"; workspaceId: string; info: WorktreeListResult }
+  // エージェントの fork（20261009-agent-fork PR2）。中身（確定の前の画面）はダイアログが `agent.fork_preview` で取る。
+  | { kind: "agentFork"; paneId: string }
   | { kind: "worktreeOpen"; workspaceId: string; entries: WorktreeEntry[] }
   /**
    * worktree の削除の確認（20260924-worktree-remove）。`confirmClose`/`confirmReplacePane` と

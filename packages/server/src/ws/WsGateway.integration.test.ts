@@ -979,6 +979,8 @@ function stubAgentIntegrations(): AgentIntegrationService {
     install: () => Promise.reject(new Error("not used in this test")),
     uninstall: () => Promise.reject(new Error("not used in this test")),
     setAutoResume: () => Promise.reject(new Error("not used in this test")),
+    installStatusLine: () => Promise.reject(new Error("not used in this test")),
+    uninstallStatusLine: () => Promise.reject(new Error("not used in this test")),
   };
 }
 

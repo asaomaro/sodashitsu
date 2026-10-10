@@ -143,6 +143,39 @@ describe("DashboardView（20261010-agent-usage PR3）", () => {
     wrapper.unmount();
   });
 
+  it("入った項目をそのまま出す: Codex の枠・Claude の枠（古い印・組織の額）・報告のコスト（見積り）・コンテキストの率（20261010-agent-usage PR3）", async () => {
+    const { wrapper, usage: store } = setup([pane("p1", agent({ name: "alpha" })), pane("p2", agent({ name: "beta", kind: "codex", instanceId: "i2" }))]);
+    store.setSnapshot({
+      panes: {
+        p1: usage("p1", { costUsd: 0.75, costBasis: "reported", contextUsedPct: 12, contextTokens: 24_000, contextWindowTokens: 200_000, source: "statusline" }),
+        p2: usage("p2", { kind: "codex", model: "gpt-5-codex", tokens: { basis: "cumulative", total: 90_000 }, source: "rollout" }),
+      },
+      accounts: [
+        account({ kind: "claude", accountKey: "c1", label: "Claude Code", plan: "Max", source: "statusline", windows: [{ label: "5 時間", usedPct: 30, resetsAt: NOW + 60 * 60_000 }, { label: "週", usedPct: 55, stale: true }, { label: "組織", usedPct: 25, usedUsd: 12.5, limitUsd: 50 }] }),
+        account({ kind: "codex", accountKey: "x1", label: "Codex", source: "rollout", windows: [{ label: "週", usedPct: 7, windowMinutes: 10080, resetsAt: NOW + 3 * 86_400_000 }] }),
+      ],
+    });
+    await wrapper.vm.$nextTick();
+    const accs = wrapper.findAll("[data-dash-account]");
+    expect(accs).toHaveLength(2);
+    expect(wrapper.get('[data-dash-account-kind="codex"]').text()).toContain("7%");
+    expect(wrapper.get('[data-dash-account-kind="codex"]').text()).toContain("あと 3 日でリセット");
+    const claude = wrapper.get('[data-dash-account-kind="claude"]');
+    const wins = claude.findAll("[data-dash-window]");
+    expect(wins[1]!.text()).toContain("古い値");
+    expect(wins[1]!.classes()).toContain("dash-stale");
+    expect(wins[2]!.get("[data-dash-spend]").text()).toBe("$12.50 / $50.00");
+    const p1 = wrapper.get('[data-dash-row="p1"]');
+    expect(p1.get("[data-dash-cost]").text()).toContain("$0.75");
+    expect(p1.get("[data-dash-cost]").text()).toContain("見積り");
+    expect(p1.get("[data-dash-context]").text()).toContain("12%");
+    const p2 = wrapper.get('[data-dash-row="p2"]');
+    expect(p2.text()).toContain("gpt-5-codex");
+    expect(p2.get("[data-dash-tokens]").text()).toContain("90k");
+    expect(p2.get("[data-dash-cost]").text()).toContain("—"); // Codex のコストは無い
+    wrapper.unmount();
+  });
+
   it("並べ替え（状態・名前・トークン・コスト）と、種類の絞り込み", async () => {
     const { wrapper, usage: store } = setup([
       pane("p1", agent({ name: "bravo", state: "working", instanceId: "i1" })),

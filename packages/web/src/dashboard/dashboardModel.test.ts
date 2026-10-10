@@ -143,6 +143,12 @@ describe("数字の見せ方", () => {
     expect(formatDuration(30_000)).toBe("1 分未満");
     expect(formatDuration(26 * 3600_000)).toBe("1 日 2 時間");
   });
+  it("枠: サーバが古いと印を付けた値は率を出して「古い値」と添え、薄くする。組織の枠の使った額・上限（20261010-agent-usage PR3）", () => {
+    const now = 10_000_000;
+    expect(windowDisplay({ label: "5 時間", usedPct: 60, stale: true }, now)).toMatchObject({ pct: 60, text: "60%", reset: "古い値", past: true, stale: true });
+    expect(windowDisplay({ label: "組織", usedPct: 25, usedUsd: 12.5, limitUsd: 50 }, now).spend).toBe("$12.50 / $50.00");
+    expect(windowDisplay({ label: "組織", usedPct: 25 }, now).spend).toBeNull();
+  });
   it("アカウントは種類ごとにまとめる", () => {
     const a = (kind: string, key: string) => ({ kind, accountKey: key, label: kind, windows: [], source: "statusline" as const, asOf: 1 });
     expect(accountsByKind([a("codex", "1"), a("claude", "2"), a("claude", "3")]).map((g) => [g.kind, g.accounts.length])).toEqual([

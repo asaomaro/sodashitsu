@@ -303,6 +303,7 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
                 <span class="dash-bar-fill" :style="{ width: `${windowDisplay(w, now).pct ?? 0}%` }" />
               </span>
               <span class="dash-window-pct">{{ windowDisplay(w, now).text }}</span>
+              <span v-if="windowDisplay(w, now).spend" class="dash-muted dash-window-spend" data-dash-spend>{{ windowDisplay(w, now).spend }}</span>
               <span v-if="windowDisplay(w, now).reset" class="dash-muted dash-window-reset">{{ windowDisplay(w, now).reset }}</span>
             </li>
           </ul>
@@ -509,7 +510,8 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
   align-items: center;
   gap: 0.2em 0.6em;
 }
-.dash-window-reset {
+.dash-window-reset,
+.dash-window-spend {
   grid-column: 2 / 4;
 }
 .dash-window-pct {

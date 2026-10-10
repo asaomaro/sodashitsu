@@ -50,3 +50,42 @@ describe("DefaultAgentIntegrationService — needsUpdate", () => {
     ).toBe(false);
   });
 });
+
+// 20261010-agent-usage PR2 の指摘 5: 「まだ報告がありません」（silent）は、検出の後に動いた（working になった）ことのある Claude Code だけが対象。
+describe("DefaultAgentIntegrationService — statusLine の silent", () => {
+  async function silentOf(health: { lastReportAt?: number; since?: number; workedAt?: number }, now: number, state: "installed" | "none" = "installed"): Promise<boolean | undefined> {
+    const installer: AgentIntegrationInstaller = {
+      status: async () => ({ cliDetected: true, installed: true, needsUpdate: false }),
+      install: async () => ({ ok: true, message: null }),
+      uninstall: async () => ({ ok: true, message: null }),
+    };
+    const file = { load: async () => ({ kind: "missing" }), save: async () => undefined } as unknown as IntegrationFile;
+    const service = await DefaultAgentIntegrationService.load(installer, file, new EventBus(), {
+      statusLine: { status: async () => ({ state }), install: async () => ({ ok: true, message: null }), uninstall: async () => ({ ok: true, message: null }) },
+      health: {
+        lastReportAt: () => health.lastReportAt,
+        claudeRunningSince: () => health.since,
+        claudeWorkedSince: () => health.workedAt,
+      },
+      now: () => now,
+    });
+    return (await service.status()).statusLine?.silent;
+  }
+  const T = 1_000_000;
+
+  it("検出されて 2 分以上たっても、動いたことが無い（待っているだけ）なら、出さない", async () => {
+    expect(await silentOf({ since: T }, T + 10 * 60_000)).toBeUndefined();
+  });
+  it("動いてから 2 分たち、検出の後の報告が無ければ出す", async () => {
+    expect(await silentOf({ since: T, workedAt: T + 5_000 }, T + 5_000 + 120_000)).toBe(true);
+  });
+  it("動いてから 2 分たっていなければ、出さない", async () => {
+    expect(await silentOf({ since: T, workedAt: T + 5_000 }, T + 5_000 + 119_000)).toBeUndefined();
+  });
+  it("検出の後に報告があれば、出さない", async () => {
+    expect(await silentOf({ since: T, workedAt: T + 5_000, lastReportAt: T + 6_000 }, T + 10 * 60_000)).toBeUndefined();
+  });
+  it("導入していなければ、出さない", async () => {
+    expect(await silentOf({ since: T, workedAt: T + 5_000 }, T + 10 * 60_000, "none")).toBeUndefined();
+  });
+});

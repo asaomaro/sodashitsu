@@ -6,6 +6,8 @@ import { useGraphStore } from "../store/graph.js";
 import type { NodeKey } from "@sodashitsu/protocol";
 import { paneMoveBlock, paneMoveBlockMessage } from "@sodashitsu/client-core";
 import { linksTouching, paneIdsOfTargets } from "./graph/closeLinks.js";
+import { forkReasonText, forkUnavailableReason } from "./agentFork.js";
+import { mobileViewportQuery } from "../mobile/detect.js";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
@@ -142,6 +144,16 @@ function closeFromGraph(t: { type: "pane" | "workspace"; id: string }): void {
   else actions.closePaneById(t.id);
 }
 
+/**
+ * 「会話を fork…」（20261009-agent-fork PR2）。モバイルには出さない。fork できないときは押せない形で、理由を添える（`disabledReason`。メニューは pane が持つ値から同じ種類の理由を先に導き、
+ * 確かめ切れないもの〔シェル・git〕はダイアログの確かめ〔`agent.fork_preview`〕が見せる）。
+ */
+function forkItem(paneId: string, local: boolean): MenuItem[] {
+  if (mobileViewportQuery().matches) return [];
+  const reason = forkUnavailableReason(session.panes.get(paneId), local);
+  return [{ label: "会話を fork…", run: () => actions?.openAgentFork(paneId), ...(reason !== null ? { disabledReason: forkReasonText(reason) } : {}) }];
+}
+
 const items = computed<MenuItem[]>(() => {
   const target = view.contextMenu?.target;
   if (!target) return [];
@@ -165,6 +177,7 @@ const items = computed<MenuItem[]>(() => {
       { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },
       { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
+      ...forkItem(target.paneId, true),
       // 表示の面（パネル・帯）があるときだけ（20261007-soda-extensions）。
       ...(displays.hasAny(target.paneId)
         ? [
@@ -262,6 +275,7 @@ const items = computed<MenuItem[]>(() => {
     if (!info.local || info.exists !== true || !session.panes.has(info.paneId)) return [];
     return [
       { label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) },
+      ...forkItem(info.paneId, info.local && info.exists === true),
       { label: "別の workspace へ移す…", run: () => view.openContextMenu({ kind: "graphMoveTo", key: target.key }, menuAt) },
     ];
   }

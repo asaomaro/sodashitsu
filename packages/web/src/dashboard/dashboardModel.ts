@@ -216,16 +216,23 @@ export interface WindowDisplay {
   text: string;
   /** 「あと 2 時間 10 分でリセット」「リセット済み（次の値を待っています）」。分からなければ null。 */
   reset: string | null;
-  /** リセットの時刻を過ぎている（薄く出す）。 */
+  /** リセットの時刻を過ぎている・サーバが古いと印を付けた（薄く出す）。 */
   past: boolean;
+  /** サーバが「古い」と印を付けた（`UsageWindow.stale`。率は出すが「古い値」と添える）。 */
+  stale: boolean;
+  /** 組織の枠の、使った額・上限（「$12.50 / $50.00」）。無ければ null。 */
+  spend: string | null;
 }
 
 /** 制限の枠 1 つ。リセットの時刻を過ぎた枠は、率を出さず「リセット済み」（Claude 自身も、窓が過ぎると落とす）。 */
 export function windowDisplay(w: UsageWindow, now: number): WindowDisplay {
   const past = w.resetsAt !== undefined && w.resetsAt <= now;
-  if (past) return { label: w.label, pct: null, text: "リセット済み", reset: "リセット済み（次の値を待っています）", past: true };
+  const spend = w.usedUsd !== undefined && w.limitUsd !== undefined ? `${formatCost(w.usedUsd)} / ${formatCost(w.limitUsd)}` : w.usedUsd !== undefined ? formatCost(w.usedUsd) : null;
+  if (past) return { label: w.label, pct: null, text: "リセット済み", reset: "リセット済み（次の値を待っています）", past: true, stale: true, spend };
   const pct = Math.max(0, Math.min(100, Math.round(w.usedPct)));
-  return { label: w.label, pct, text: `${pct}%`, reset: w.resetsAt !== undefined ? `あと ${formatDuration(w.resetsAt - now)}でリセット` : null, past: false };
+  const stale = w.stale === true;
+  const reset = w.resetsAt !== undefined ? `あと ${formatDuration(w.resetsAt - now)}でリセット` : null;
+  return { label: w.label, pct, text: `${pct}%`, reset: stale ? `古い値${reset ? `（${reset}）` : ""}` : reset, past: stale, stale, spend };
 }
 
 /** 「2 時間 10 分」「35 分」「1 分未満」「3 日 4 時間」。 */

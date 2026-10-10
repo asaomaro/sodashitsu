@@ -7,6 +7,7 @@ import DetachedView from "./components/DetachedView.vue";
 import GotoPicker from "./components/GotoPicker.vue";
 import GraphDialog from "./components/graph/GraphDialog.vue";
 import DashboardDialog from "./components/DashboardDialog.vue";
+import AgentForkDialog from "./components/AgentForkDialog.vue";
 import GroupPickerDialog from "./components/GroupPickerDialog.vue";
 import HelpDialog from "./components/HelpDialog.vue";
 import LoginView from "./components/LoginView.vue";
@@ -81,6 +82,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
     <WorktreeCreateDialog />
     <WorktreeOpenDialog />
     <GroupPickerDialog />
+    <AgentForkDialog />
     <SessionSwitchDialog />
     <ConfirmDialog />
     <SubagentListDialog />

@@ -40,6 +40,55 @@ describe("AgentReportSocket", () => {
     expect(reports).toEqual([{ type: "session", paneId: "p1", kind: "claude", sessionId: "abc-123" }]);
   });
 
+  it("type: usage（ステータスラインの包み）: 数字と短い文字列だけを通す。範囲外・形の違う項目は落とし、知らない項目（名前・場所・cwd）は持ち上げない", async () => {
+    const reports: AgentReport[] = [];
+    socket = await startAgentReportSocket(socketPath, (r) => reports.push(r), logger);
+    const ID = "3e81f9a7-a757-461a-b21c-196db1d9196e";
+    const body = {
+      type: "usage",
+      paneId: "p1",
+      kind: "claude",
+      sessionId: ID,
+      agentPid: 4242,
+      model: "claude-opus-5-5",
+      costUsd: 1.5,
+      contextUsedPct: 40,
+      contextWindowSize: 200000,
+      contextTokens: 80000,
+      fiveHour: { usedPct: 12, resetsAt: 1792000000 },
+      sevenDay: { usedPct: "high" },
+      spendLimit: { usedPct: 5, usedUsd: 10, limitUsd: 200, period: "month" },
+      configKey: "0123456789abcdef",
+      configDirName: ".claude-work",
+      sessionName: "SECRET",
+      sessionNameX: "SECRET",
+      transcript_path: "/secret",
+      costBad: 1,
+    };
+    await send(socketPath, `${JSON.stringify(body)}\n`);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ type: "usage", paneId: "p1", kind: "claude", sessionId: ID, agentPid: 4242, costUsd: 1.5, contextUsedPct: 40, fiveHour: { usedPct: 12, resetsAt: 1792000000 }, spendLimit: { usedUsd: 10, limitUsd: 200, period: "month" }, configKey: "0123456789abcdef", configDirName: ".claude-work" });
+    expect((reports[0] as { sevenDay?: unknown }).sevenDay).toBeUndefined(); // 形の違う枠は落とす
+    const json = JSON.stringify(reports[0]);
+    expect(json).not.toContain("SECRET");
+    expect(json).not.toContain("/secret");
+  });
+
+  it("type: usage: 会話の id が UUID の形でなければ捨てる。範囲外の数・不正な configKey は、その項目だけ落とす", async () => {
+    const reports: AgentReport[] = [];
+    socket = await startAgentReportSocket(socketPath, (r) => reports.push(r), logger);
+    await send(socketPath, `${JSON.stringify({ type: "usage", paneId: "p1", kind: "claude", sessionId: "not-uuid", costUsd: 1 })}\n`);
+    expect(reports).toHaveLength(0);
+    const ID = "3e81f9a7-a757-461a-b21c-196db1d9196e";
+    await send(socketPath, `${JSON.stringify({ type: "usage", paneId: "p1", kind: "claude", sessionId: ID, costUsd: -1, contextUsedPct: 1e30, configKey: "../etc", contextTokens: 5 })}\n`);
+    expect(reports).toHaveLength(1);
+    const r = reports[0] as Record<string, unknown>;
+    expect(r["costUsd"]).toBeUndefined();
+    expect(r["contextUsedPct"]).toBeUndefined();
+    expect(r["configKey"]).toBeUndefined();
+    expect(r["contextTokens"]).toBe(5);
+  });
+
   it("ignores invalid JSON without throwing", async () => {
     const reports: unknown[] = [];
     socket = await startAgentReportSocket(socketPath, (...args) => reports.push(args), logger);
