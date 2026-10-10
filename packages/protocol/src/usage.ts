@@ -77,6 +77,8 @@ export interface UsageWindow {
   /** リセットの時刻（epoch ms）。 */
   resetsAt?: number;
   windowMinutes?: number;
+  /** リセットの時刻を過ぎている（この値は古い。次の値を待っている）。 */
+  stale?: boolean;
 }
 
 export interface AccountUsage {

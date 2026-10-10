@@ -79,8 +79,10 @@ export function formatUsageTable(
 function formatAccounts(accounts: readonly AccountUsage[], now: number): string {
   const rows: string[][] = [];
   for (const a of accounts) {
+    const name = a.plan !== undefined ? `${a.label}（${a.plan}）` : a.label;
     for (const w of a.windows) {
-      rows.push([a.label, w.label, `${w.usedPct}%`, w.resetsAt !== undefined ? clock(w.resetsAt, now).replace(/（.*）/, "") : "—", clock(a.asOf, now)]);
+      const reset = w.resetsAt === undefined ? "—" : w.stale === true ? `${clock(w.resetsAt, now).replace(/（.*）/, "")}（過ぎた。値は古い）` : clock(w.resetsAt, now).replace(/（.*）/, "");
+      rows.push([name, w.label, `${w.usedPct}%${w.stale === true ? "（古い）" : ""}`, reset, clock(a.asOf, now)]);
     }
   }
   return formatTable(["アカウント", "枠", "使用率", "リセット", "取得"], rows);

@@ -11,4 +11,4 @@
 - [x] T7 `sodactl agent usage`。AC6
 - [x] T8 試験（集計・場所・安全の結合・否定の対照 2 つ）。AC8
 - [x] T9 文書（`docs/agent-usage.md`・`docs/sodactl.md`・`AGENTS.md`）。AC9
-- [ ] T10 Codex の集計（AC4）。**次の PR**（`fix/codex-multi-pane` の取り込みの後）
+- [x] T10 ★ Codex の集計（AC4。`usage/codexRollout.ts`・`codexAdapter.ts`・`agent/codexSession.ts` の共通化）。`feature/agent-usage-codex`
