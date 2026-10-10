@@ -225,6 +225,25 @@ describe("FsSessionFile", () => {
     expect(result.data.workspaces).toEqual(data.workspaces);
   });
 
+  it("pane の会話の参照の履歴（agentSessionHistory）が往復し、無い古い保存もそのまま読める（20261009-agent-session-attribution）", async () => {
+    const file = new FsSessionFile(dir);
+    const data = sample();
+    const pane = data.workspaces[0]!.tabs[0]!.panes[0]!;
+    pane.agentSession = { kind: "claude", sessionId: "s-new", reportedAt: 3 };
+    pane.agentSessionHistory = [
+      { kind: "claude", sessionId: "s-prev", reportedAt: 2 },
+      { kind: "claude", sessionId: "s-old", reportedAt: 1 },
+    ];
+    await file.save(data);
+    expect(await file.load()).toEqual({ kind: "ok", data });
+    // 履歴の無い保存（これまでの版）
+    delete pane.agentSessionHistory;
+    await file.save(data);
+    const again = await file.load();
+    expect(again.kind).toBe("ok");
+    if (again.kind === "ok") expect(again.data.workspaces[0]!.tabs[0]!.panes[0]!.agentSessionHistory).toBeUndefined();
+  });
+
   it("reports corrupt for an unsupported schema version", async () => {
     const file = new FsSessionFile(dir);
     // 直接壊れたスキーマを書き込む（将来のバージョンからの読み込みなど）。
