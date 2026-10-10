@@ -183,18 +183,63 @@ describe("利用状況の窓（PaneInfoPopover）", () => {
     expect(view.usageWatchWanted).toBe(false);
   });
 
-  it("pane が閉じたら窓も閉じる。ダイアログ（確認など）が開いている間は隠れる", async () => {
+  it("ダイアログ（確認・ヘルプなど）を開いたら、窓は閉じる（隠して後で戻すことはしない）", async () => {
     const { wrapper, view } = mountPopover();
     view.openPaneInfo("p1");
     await nextTick();
     view.openDialogWithContext({ kind: "help" });
     await nextTick();
+    expect(view.paneInfoPaneId).toBeNull();
     expect(wrapper.find("[data-pane-info-window]").exists()).toBe(false);
     view.closeDialog();
     await nextTick();
-    expect(wrapper.find("[data-pane-info-window]").exists()).toBe(true);
+    expect(view.paneInfoPaneId).toBeNull(); // 戻らない
+    expect(wrapper.find("[data-pane-info-window]").exists()).toBe(false);
+  });
+
+  it("pane が閉じたら窓も閉じる", async () => {
+    const { view } = mountPopover();
+    view.openPaneInfo("p1");
+    await nextTick();
     useSessionStore(pinia).panes.delete("p1");
     await nextTick();
+    await nextTick();
+    expect(view.paneInfoPaneId).toBeNull();
+  });
+
+  it("tab（workspace）を切り替えて、対象の pane が今の tab に無くなったら閉じる。同じ tab のままなら残る", async () => {
+    const { view } = mountPopover();
+    view.setView("w1", "t1");
+    view.openPaneInfo("p1");
+    await nextTick();
+    view.setView("w1", "t1"); // 同じ tab
+    await nextTick();
+    expect(view.paneInfoPaneId).toBe("p1");
+    view.setView("w2", "t2"); // 別の workspace・tab
+    await nextTick();
+    expect(view.paneInfoPaneId).toBeNull();
+  });
+
+  it("グラフの画面から開いた窓: 画面の切り替えだけでは閉じない。基本画面へ戻って、その pane の tab が見えていれば残る・見えていなければ閉じる", async () => {
+    const { view } = mountPopover();
+    view.setView("w1", "t1");
+    view.setScreen("graph");
+    view.openPaneInfo("p1");
+    await nextTick();
+    view.setScreen("base");
+    await nextTick();
+    expect(view.paneInfoPaneId).toBe("p1"); // p1 の tab（t1）が見えている
+    view.setScreen("graph");
+    await nextTick();
+    view.setView("w2", "t2"); // 別の tab を選ぶと閉じる
+    await nextTick();
+    expect(view.paneInfoPaneId).toBeNull();
+    // 別の tab を選んだままグラフから開き、基本画面へ戻ると、その pane の tab が見えないので閉じる。
+    view.setScreen("graph");
+    view.openPaneInfo("p1");
+    await nextTick();
+    expect(view.paneInfoPaneId).toBe("p1"); // グラフの上では、tab が替わらない間は残る
+    view.setScreen("base");
     await nextTick();
     expect(view.paneInfoPaneId).toBeNull();
   });

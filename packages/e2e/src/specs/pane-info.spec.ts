@@ -227,4 +227,42 @@ test.describe("pane の情報（PR4）", () => {
     await expect(win(page)).toHaveCount(0);
     await focusInTerminal(page);
   });
+
+  test("グラフのノードのメニュー「利用状況…」: 画面の中央に窓が出て、中身が出る。Esc で閉じる（グラフは開いたまま）。基本画面へ（キーで）戻っても、その pane の tab が見えていれば残る", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    const p0 = client.helloSnapshot()!.panes[0]!.id;
+    await startAgent(appServer, client, p0, "lead");
+    await open(page, appServer, "classic");
+    await prefixKey(page, "a");
+    await expect(page.locator(".graph-view")).toBeVisible();
+    const node = page.locator(`.graph-view [data-node-key="local:${p0}"]`);
+    await expect(node).toBeVisible();
+    await node.click({ button: "right" });
+    const item = page.locator('[role="menuitem"]', { hasText: "利用状況…" });
+    await expect(item).toHaveCount(1);
+    await item.click();
+    await expect(win(page)).toBeVisible();
+    await expect(win(page).locator("[data-pane-info-cost]")).toContainText("$2.50");
+    await expect(win(page).locator("[data-pane-info-tokens]")).toContainText("累計");
+    // 画面の中央（基本画面が見えていないので、pane には付かない）
+    const box = (await win(page).boundingBox())!;
+    const vp = page.viewportSize()!;
+    expect(Math.abs(box.x + box.width / 2 - vp.width / 2)).toBeLessThan(4);
+    await expect(win(page)).not.toHaveClass(/pane-info-popover-anchored/);
+    await expect(page.locator(".graph-view")).toBeVisible();
+    // Esc で閉じる（グラフは開いたまま）
+    await win(page).press("Escape");
+    await expect(win(page)).toHaveCount(0);
+    await expect(page.locator(".graph-view")).toBeVisible();
+    // もう一度開いて、基本画面へ切り替える: その pane の tab が見えているので、窓は残る（pane の右上に付く）
+    await node.click({ button: "right" });
+    await item.click();
+    await expect(win(page)).toBeVisible();
+    // （切り替えのボタンを押すと、窓の外を押したことになって閉じる。キーで戻る）
+    await prefixKey(page, "a");
+    await expect(page.locator(".graph-view")).toBeHidden();
+    await expect(win(page)).toBeVisible();
+    await expect(win(page)).toHaveClass(/pane-info-popover-anchored/);
+  });
 });
+

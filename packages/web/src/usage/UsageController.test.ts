@@ -1,4 +1,7 @@
+import { createPinia, setActivePinia } from "pinia";
 import { describe, expect, it, vi } from "vitest";
+import { watch } from "vue";
+import { useViewStore } from "../store/view.js";
 import { UsageController } from "./UsageController.js";
 
 function make(opts: { visible?: boolean; page?: boolean; machine?: string } = {}) {
@@ -100,5 +103,60 @@ describe("UsageController（20261010-agent-usage PR3 の AC2）", () => {
     t2.c.onOpened();
     await flush();
     expect(t2.store.markFailed).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 20261010-agent-usage PR4: 窓（pane の情報）を閉じたら、配信が止まる。ダッシュボードが見えていれば、止めない（見ている、の数え方は 1 つ）。
+describe("UsageController × view.usageWatchWanted（20261010-agent-usage PR4 の AC3）", () => {
+  function wired() {
+    setActivePinia(createPinia());
+    localStorage.clear();
+    const view = useViewStore();
+    const requests: [string, unknown][] = [];
+    const conn = {
+      request: vi.fn(async (method: string, params: unknown) => {
+        requests.push([method, params]);
+        return method === "agent.usage" ? { panes: {}, accounts: [] } : {};
+      }),
+    };
+    const c = new UsageController({
+      conn: conn as never,
+      store: { setSnapshot: vi.fn(), markUnsupported: vi.fn(), markFailed: vi.fn(), clear: vi.fn() },
+      isWanted: () => view.usageWatchWanted,
+      isPageVisible: () => true,
+      machineId: () => "local",
+    });
+    watch(() => view.usageWatchWanted, () => c.sync(), { flush: "sync" }); // main.ts と同じ
+    c.onOpened();
+    return { view, requests };
+  }
+
+  it("窓を開くと on・閉じると off（usageWatchWanted が偽に戻る）", async () => {
+    const { view, requests } = wired();
+    expect(view.usageWatchWanted).toBe(false);
+    view.openPaneInfo("p1");
+    await flush();
+    expect(view.usageWatchWanted).toBe(true);
+    expect(watchCalls(requests)).toEqual([true]);
+    view.closePaneInfo();
+    await flush();
+    expect(view.usageWatchWanted).toBe(false);
+    expect(watchCalls(requests)).toEqual([true, false]);
+  });
+
+  it("ダッシュボードが見えているときに窓を閉じても、off は送らない（続けて見ている）。ダッシュボードを閉じて初めて off", async () => {
+    const { view, requests } = wired();
+    view.openDashboard();
+    await flush();
+    view.openPaneInfo("p1");
+    await flush();
+    expect(watchCalls(requests)).toEqual([true]); // 重ねて頼まない
+    view.closePaneInfo();
+    await flush();
+    expect(view.usageWatchWanted).toBe(true);
+    expect(watchCalls(requests)).toEqual([true]);
+    view.closeDashboard();
+    await flush();
+    expect(watchCalls(requests)).toEqual([true, false]);
   });
 });

@@ -100,6 +100,34 @@ watch(
   { flush: "post" },
 );
 
+// 画面（基本画面⇄グラフ）が替わったら、置き場所を決め直す（基本画面が見えれば pane の右上、見えなければ中央）。
+watch(
+  () => view.screen,
+  () => void nextTick(() => void nextTick(layout)),
+  { flush: "post" },
+);
+
+// workspace・tab を切り替えて、対象の pane が今の画面の tab に無くなったら閉じる。基本画面へ戻ったときも、その pane の tab が見えていなければ閉じる
+// （グラフのノードのメニューから開いた窓は、tab が替わらない間・基本画面へ戻っても、その pane の tab が見えていれば残る）。
+watch(
+  () => [view.tabId, view.screen] as const,
+  ([tabId, screen], [prevTab, prevScreen]) => {
+    const id = paneId.value;
+    if (id === null) return;
+    const paneTab = session.panes.get(id)?.tabId;
+    if (paneTab === undefined || paneTab === tabId) return;
+    if (tabId !== prevTab || (screen === "base" && prevScreen !== "base")) view.closePaneInfo();
+  },
+);
+
+// ダイアログ（確認・ヘルプ・設定・質問など）を開いたら、窓は閉じる（隠して後で戻す、はしない）。
+watch(
+  () => view.modalOpen || view.dialogContext !== null,
+  (open) => {
+    if (open && paneId.value !== null) view.closePaneInfo();
+  },
+);
+
 // pane が閉じたら窓も閉じる。
 watch(
   () => (paneId.value !== null ? session.panes.has(paneId.value) : true),
@@ -128,7 +156,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="paneId !== null && !view.dialogContext"
+    v-if="paneId !== null"
     ref="el"
     class="pane-info-popover"
     :class="{ 'pane-info-popover-anchored': pos?.anchored }"
