@@ -551,12 +551,12 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
   }
 
   /**
-   * 導入済みで、本製品のフックが足りない（追加のエントリのどれかの経路に自分のエントリが無い）か、写した先のスクリプトが古い。
-   * 追加のエントリを持たない kind は常に false。同梱のスクリプトが読めないときも false（押しても直らない「更新が必要」を出さない）。
+   * 導入済みで、本製品のフックが足りない（追加のエントリのどれかの経路に自分のエントリが無い）か、写した先のスクリプトが、同梱のものと違う（古い）。
+   * スクリプトの差は、追加のエントリを持たない kind でも見る（20261009-agent-session-attribution: フックのスクリプトが、報告したプロセスの pid を足す版に
+   * 変わったので、導入済みは「更新が必要」になる。押したときだけ書き換える）。同梱のスクリプトが読めないときは false（押しても直らない「更新が必要」を出さない）。
    */
   private async needsUpdate(spec: HookSpec, root: JsonObject): Promise<boolean> {
-    const extras = spec.extraEntries;
-    if (!extras || extras.length === 0) return false;
+    const extras = spec.extraEntries ?? [];
     let bundled: Buffer;
     try {
       bundled = await readFile(this.hookScriptSource);
