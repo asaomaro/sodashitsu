@@ -342,6 +342,38 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
         システムの停止（WSL の再起動など）でエージェントのプロセスがサーバより先に終わっても、参照は残り、次の起動で再開される。
         **限界**：エージェントを終了して**10 秒以内に**サーバを止めた場合は、参照が残るので次の起動で再開されることがある（受け入れる）。
         判定が失敗した周期（高負荷での時間切れなど）は「居ない」と数えないので、判定が失敗し続けても、居るエージェントの参照は捨てない。
+      - **何の報告で参照が変わるか（20261009-agent-session-attribution）**：会話の参照は、**その pane の前面で動いているエージェント自身**の
+        報告（フックの `SessionStart`）でだけ変わる。フックのスクリプトは報告にエージェントのプロセスの pid（`CLAUDE_PID`。無ければ親をたどって
+        種類が合う祖先。取れなければ付けない）を足し、サーバは、それが「その pane のシェルの子孫」で「前面のエージェントのプロセス
+        （またはその直の子）」であることを確かめる。違えば参照を変えず、捨てて、ログに残る（`agent report ignored`。pane・種類・会話 id の先頭 8 文字・
+        理由・pid）。同じプロセスの中の替わり（`/resume`・`/clear`・fork）は pid が同じなので受ける。pid の付かない報告（古い版のフック・
+        pid の取れない OS）は今までどおり受ける。サブエージェントの件数（`SubagentStart` など）にも同じ確かめを掛ける。
+        **これは安全の境界ではない**：報告の pid は pane の中のプログラムが好きに書けるので、取り違えを防ぐ仕組みである
+        （Node に接続の相手の pid を取る API が無いため、`SO_PEERCRED` は使わない）。
+        - 起動の直後は報告が検知より先に届くので、前面のエージェントがまだ検知されていなければ、報告を 15 秒まで保留し
+          （pane ごとに 1 件。新しいものが勝つ）、検知されたときに確かめる。期限が切れたとき・サーバが止まる処理に入ったときは、
+          確かめずに受けた扱いにして保存する（再開できないより良い。ログに `accepted without verification`）。
+        - pane ごとに直近の参照を最大 2 件、一つ前として覚える（保存にも。古い保存はそのまま読める。`sodactl agent get` などには最新だけを出す）。
+          再開のコマンドを打ち込んだ後、エージェントが手が空く前に居なくなった・30 秒検出されなかったときは、参照を捨てずに一つ前へ戻す
+          （次の起動で一つ前を試す。ログに `agent resume failed; reverted to the previous session`。会話 id・再開を打ち込んでからの時間・理由）。
+        - エージェントが居なくなった猶予（10 秒）の間に、**報告しない別のエージェント**が検出されたら、その後に報告が来ない限り
+          参照を捨てる（履歴には一つ前として残す。ログに `agent session dropped (a different agent started without reporting)`）。
+        - **フックのスクリプトが新しくなった**ので、導入済みの利用者は設定の「エージェント連携」が「更新が必要」になる。押したときだけ書き換える。
+          更新するまでは pid が付かず、今までどおりの受け方になる（取り違えは防げない）。
+        - **Codex（20261009-agent-session-attribution の S1）**：Codex 0.162 はフックを pane の中ではなく、常駐の app-server daemon の中で動かす
+          （daemon の環境の `SODA_PANE_ID` は、最初に daemon を起動した pane のもの。報告したプロセスは、どの pane のシェルの子孫でもない）。
+          この報告は、次の**全部**を満たすときだけ、報告の pane に付ける：その pane に前面の `codex` が検出されている・**サーバ全体で、前面の `codex` が
+          その 1 つだけ**・報告の `cwd`（フックの入力の作業フォルダ）がその pane の場所と同じ（Sodashitsu の外で動いた、同じ daemon を使う
+          VS Code などの会話を取り違えないため。`cwd` の無い古いフックの報告は、この道では受けない）。
+          結果：**Codex の pane が 1 つなら、今までどおり再開される。2 つ以上あると、どれにも付かない**（別の pane を上書きしない代わりに、再開もされない）。
+          複数の pane で Codex を使う人の手当ては無い（daemon の環境は変えられない）。正しい pane に付ける案（終了の文言 `codex resume <id>` を
+          画面から拾う・daemon の接続の突き合わせ）は別の作業。
+        - 前面のエージェントは居るが、報告した pid が含まれないとき（終わって、すぐ別のエージェントが報告した、など）は、前面の記録が古いだけかもしれないので、
+          次の 2 回の判定まで保留して確かめ直し、それでも含まれなければ捨てる（S2）。期限（15 秒）・停止で「確かめずに受ける」前に、報告したプロセスが
+          まだ居るかを見て、終わっていれば捨てる（S3。ログ `the reporting process had already exited`）。
+        - 報告にフックの入力の `source` と `cwd` を載せる。`source` が `clear`（利用者が会話を消した）のとき、前の会話を「一つ前」に積まない
+          （再開の失敗で、消した会話に戻らないため。S4）。
+        - 親子の情報（`ppid`）が取れない環境（Windows）では、報告した pid が前面のエージェントに含まれるかは確かめない（種類とシェルの子孫の確かめだけ。S5）。
       - 復元のたびに、pane ごとにログが 1 行出る：`agent resume command written`（種類と会話 id の先頭 8 文字）か、
         `agent resume skipped`（`reason`: `no-session-ref`・`auto-resume-disabled`・`no-command-for-kind`・`invalid-session-id`）。
         再開されなかった pane の理由は、ここで分かる。判定の失敗（`agent judgment failed`）は、同じ pane・同じ理由が続くときは
@@ -1025,6 +1057,7 @@ pnpm --filter @sodashitsu/e2e exec playwright test src/specs/subagents.spec.ts  
 
 - [ ] 導入: 設定画面の「エージェント連携」で Claude Code を［導入］。期待: `settings.json` の `hooks` に `SessionStart`・`PreToolUse`（matcher `Agent|Task`）・`SubagentStart`・`Stop`・`SubagentStop`・`SessionEnd` の 6 つが入り（ほかのフックは変わらない）、すでに動いている Claude Code は起動し直すと効く。
 - [ ] 更新: 旧版（`SessionStart` だけ）の導入済みの環境で設定画面を開く。期待: 「更新が必要」と［更新］が出る。押す前は設定ファイルが変わらない。押すと足りない 5 つだけが足りる（重ならない・ほかのフックが残る）。
+- [ ] 更新（matcher）: 以前の版（`SessionStart` の matcher が `startup|resume`）の導入済みの環境で設定画面を開く。期待: 「更新が必要」と［更新］が出る。押すと matcher だけが `startup|resume|fork|clear|compact` に替わる（ほかのフックは変わらない）。入れ直すまでは、`/clear` の後・fork の後の会話の id が追えない（再起動の後の再開が古い会話になる。fork の孫が作れない）。入れ直した後は、Claude Code を起動し直すと効く（`/clear` の後に pane の会話の id が替わる）。
 - [ ] 前面のサブエージェント: pane の Claude Code に「Agent ツールで 2 つのサブエージェントを並行に動かして、それぞれ 20 秒待ってから終わって」と頼む。期待: サイドバーの行（と、グラフを開いていればそのノード）に件数 `2` が出て、一覧に種類・短い説明・経過時間が並び、終わると 0 になってボタンが消える。
 - [ ] バックグラウンドのサブエージェント: 「バックグラウンドで 1 つ動かして、すぐ次の話をして」と頼む。期待: 親の作業が終わった後も件数が残り（バックグラウンドの印つき）、サブエージェントが終わると消える。
 - [ ] 並行・入れ子: 1 つのメッセージで複数のサブエージェントを起動させる。期待: 件数が同じだけ増え、それぞれに短い説明が付く（付かないものは種類だけ）。サブエージェントの中のサブエージェントは、フックが出す範囲だけが数に入る（出さなければ数えない）。
@@ -1700,3 +1733,12 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
 decisions.md D63）ので、確かめる対象ではない（copy モードでは、`ctrl+b` 以外は押しても何も起きず、`ctrl+b` は
 copy モードの中でも prefix になる）。M7・M11 のマウス報告は「Linux（CI・手元）」の
 手元の項目で、IME の候補窓の見た目も同じ所で確かめる。
+
+## エージェントの fork（20261009-agent-fork）の実機での確認
+
+偽の `claude` の結合試験（`composeServer.fork.integration.test.ts`）では確かめられない、本物の Claude Code での手順。**利用者の設定・導入済みのフックには触らない**ため、`--settings` で記録用のフックだけを足し、サーバは一時の状態ディレクトリ・`worktreeDir` で起こす（`CLAUDE*` の環境変数は外す。外さないと「Transcript saving is off」で記録が残らず fork できない）。
+
+- [ ] 元のエージェントを `claude --settings <SessionStart の matcher が startup|resume|fork|clear|compact のフック> --model claude-haiku-5-5` で起動し、短い会話をする。`pane.agentSession` に会話の id が入る。
+- [ ] `sodactl agent fork <名前>`: 同じフォルダの新しい pane に、会話を覚えたエージェントが起動する（応答に合言葉が出る）。元のエージェントは止まらない。（2026-10-10 実機で確認: 約 6.6 秒。）
+- [ ] `sodactl agent fork <名前> --worktree fork/e2e`: 新しい worktree と workspace ができ、最初の知らせが届き（`noteStatus: sent`）、新しいエージェントが「作業フォルダを切り替えた」と答える。元のフォルダは変わらない。（同日確認: 約 7 秒。リポジトリが信頼済みなら worktree の信頼の確認は出なかった。）
+- [ ] 古い Claude Code（`--fork-session` を知らない版）・記録が無い id: `failed` で理由が出て、pane は閉じない（偽の `claude` の試験で確認。実機は未確認）。

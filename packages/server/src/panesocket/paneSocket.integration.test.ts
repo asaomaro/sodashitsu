@@ -353,6 +353,8 @@ describe.skipIf(process.platform === "win32")(
         ["workspace.create", {}],
         ["pane.rename", { paneId, label: "PANE-SOCKET-LEAK-3" }],
         ["ask.subscribe", {}],
+        ["agent.fork", { paneId, target: { kind: "same" } }], // 20261009-agent-fork（A3）
+        ["agent.fork_preview", { paneId }],
       ] as const) {
         expect(await call(sockPath, op, paneId, params), op).toEqual({
           ok: false,

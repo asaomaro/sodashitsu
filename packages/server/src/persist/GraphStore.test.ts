@@ -536,6 +536,63 @@ describe("GraphStore", () => {
     expect(contents).toContain(original);
     expect(names.filter((n) => !n.startsWith("pre-migration-")).length).toBeLessThanOrEqual(3);
   });
+
+  // 20261009-agent-fork の T4：fork の注記（forkedFrom）。
+  describe("forkedFrom（fork の注記。20261009-agent-fork）", () => {
+    it("setForkedFrom：ノードに書いて保存し（rev +1・変更を知らせる）、再読み込みしても残る。同じ内容や無いノードでは何もしない", async () => {
+      const dir = await tempDir();
+      const store = await loaded(dir);
+      await store.update(0, build, "c1");
+      const seen: number[] = [];
+      store.onChange((g) => seen.push(g.rev));
+      expect(await store.setForkedFrom(B, A)).toBe(true);
+      expect(store.get().rev).toBe(2);
+      expect(store.get().nodes.find((n) => n.key === B)?.forkedFrom).toBe(A);
+      expect(seen).toEqual([2]);
+      expect(await store.setForkedFrom(B, A)).toBe(false); // 既に同じ
+      expect(await store.setForkedFrom("local:nope", A)).toBe(false); // 子のノードが無い
+      expect(await store.setForkedFrom(B, "local:nope")).toBe(false); // 指す先が無い注記は書かない
+      expect(store.get().rev).toBe(2);
+      const again = await loaded(dir); // ファイルから読み直す
+      expect(again.get().nodes.find((n) => n.key === B)?.forkedFrom).toBe(A);
+      expect(await store.setForkedFrom(B, null)).toBe(true); // 外す
+      expect(store.get().nodes.find((n) => n.key === B)).not.toHaveProperty("forkedFrom");
+    });
+
+    it("元のノードを消す更新（pane を閉じた後始末と同じ remove_node）で、それを指す注記も外れて保存される", async () => {
+      const store = await loaded();
+      await store.update(0, build, "c1");
+      await store.setForkedFrom(B, A);
+      await store.update(2, [{ op: "remove_node", key: A }], "c1");
+      expect(store.get().nodes.find((n) => n.key === B)).not.toHaveProperty("forkedFrom");
+    });
+
+    it("利用者の graph.update の操作には forkedFrom の項目が無い（add_node に付けても、保存されない）", async () => {
+      const store = await loaded();
+      await store.update(0, [{ op: "add_node", key: A, x: 0, y: 0 }, { op: "add_node", key: B, x: 1, y: 1, forkedFrom: A } as unknown as GraphOp], "c1");
+      expect(store.get().nodes.find((n) => n.key === B)).not.toHaveProperty("forkedFrom");
+    });
+
+    it("この変更の前の GraphSchema（forkedFrom を知らない・凍結したコピー）で、注記のあるファイルが読める。古い版は注記を落とすだけで、退避しない", async () => {
+      const { z } = await import("zod");
+      const nodeKey = z.string().regex(/^[A-Za-z0-9_-]+:[A-Za-z0-9._-]+$/);
+      const coord = z.number().finite();
+      // 凍結: forkedFrom を足す前の GraphNodeSchema と GraphSchema（形だけ。z.object は知らない項目を落とす）。
+      const OldNode = z.object({ key: nodeKey, x: coord, y: coord });
+      const OldGraph = z.object({ rev: z.number().int(), paused: z.boolean(), nodes: z.array(OldNode), links: z.array(z.any()) });
+      const dir = await tempDir();
+      const store = await loaded(dir);
+      await store.update(0, build, "c1");
+      await store.setForkedFrom(B, A);
+      const file = JSON.parse(await readFile(join(dir, GRAPH_FILE_NAME), "utf8")) as { graph: object; rev: number };
+      expect(JSON.stringify(file)).toContain("forkedFrom");
+      const parsed = OldGraph.safeParse({ rev: file.rev, ...file.graph });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) expect(parsed.data.nodes.every((n) => !("forkedFrom" in n))).toBe(true);
+      // 実物の読み込みは、注記を保つ。
+      expect((await loaded(dir)).get().nodes.find((n) => n.key === B)?.forkedFrom).toBe(A);
+    });
+  });
 });
 
 function v1FileForBackup(rev = 7): string {

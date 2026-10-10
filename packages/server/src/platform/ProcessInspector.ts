@@ -4,6 +4,8 @@ export interface ForegroundProcess {
   exe: string;
   argv: string[];
   cwd: string | null;
+  /** 親の pid（取れた環境だけ。Linux）。会話の参照の報告が、前面のエージェント自身のものかを確かめる（20261009-agent-session-attribution）。 */
+  ppid?: number;
 }
 
 export interface DefaultShell {

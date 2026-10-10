@@ -60,7 +60,12 @@ export class AgentStarter {
   }
 
   /** `onAccepted` は検査を全部通って予約した直後・書き込みの前に呼ぶ（拒否した要求は呼ばない。agent.prompt の記録の順に合わせる）。 */
-  async start(params: AgentStartParams, onAccepted?: () => void): Promise<AgentStartResult> {
+  async start(
+    params: AgentStartParams,
+    onAccepted?: () => void,
+    /** `skipInterrupt`: 先頭の Ctrl-C を送らない（作ったばかりの pane。fork が使う。20261009-agent-fork の A2）。 */
+    opts: { skipInterrupt?: boolean } = {},
+  ): Promise<AgentStartResult> {
     const { name, kind, paneId, args } = params;
     if (!isValidAgentName(name))
       throw new RpcError("invalid_agent_name", INVALID_AGENT_NAME_MESSAGE);
@@ -118,7 +123,7 @@ export class AgentStarter {
         build: (modes) => {
           // 他の入力の後ろで待つ間にエージェントが検出されていたら、その入力欄に打ち込まない（agent.prompt と同じ）。
           if (this.opts.session.getPane(paneId)?.agent !== null) throw busy(paneId);
-          return startInput(line, modes.bracketedPaste);
+          return startInput(line, modes.bracketedPaste, opts.skipInterrupt === true);
         },
         delayMs: START_INTERRUPT_DELAY_MS,
       });
@@ -133,6 +138,17 @@ export class AgentStarter {
     const timer = setTimeout(() => this.opts.session.endAgentLaunch(paneId, token), timeoutMs);
     timer.unref?.();
     return { paneId, name, kind, argv: [executable, ...args] };
+  }
+
+  /**
+   * その pane が、いま「起動できる pane」（前面がシェルだけで、POSIX 系）か。確かめられなければ false。作ったばかりの pane の入力待ちの判定に使う（fork の A2）。
+   * Windows のサーバでは常に false。
+   */
+  async isShellAvailable(paneId: string): Promise<boolean> {
+    if (this.platform === "win32") return false;
+    const host = this.opts.terminals.get(paneId);
+    if (!host) return false;
+    return checkShell(await this.foregroundJob(host.pid), host.pid).kind === "available";
   }
 
   private requireIdlePane(paneId: string): TerminalHost {

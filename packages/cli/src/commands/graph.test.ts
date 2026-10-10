@@ -414,6 +414,13 @@ describe("runGraph", () => {
     expect(layoutOverlaps(structure, nodePositions(after)).size).toBe(0);
   });
 
+  it("show --json: ノードの forkedFrom（fork の注記。20261009-agent-fork）はそのまま出る", async () => {
+    const client = fakeClient({ "graph.get": () => graph({ nodes: [{ key: "local:p1", x: 40, y: 40 }, { key: "local:p2", x: 300, y: 40, forkedFrom: "local:p1" }] }) });
+    await run(client, cmd({ kind: "show" }, true));
+    const out = vi.mocked(printJson).mock.calls.at(-1)![0] as { graph: { nodes: Record<string, unknown>[] } };
+    expect(out.graph.nodes.map((n) => n["forkedFrom"])).toEqual([undefined, "local:p1"]);
+  });
+
   it("show --json: graph の形は変えず、ノードに workspaceId・tabId を足し、spaces（グループの id・名前・含む workspace）を足す", async () => {
     const client = fakeClient({
       "graph.get": () =>

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { connect as netConnect } from "node:net";
@@ -173,6 +173,15 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))(
       for (const k of Object.keys(env)) if (k.startsWith("SODA_")) delete env[k];
       env["SODA_PANE_ID"] = paneId;
       env["SODA_AGENT_REPORT_SOCKET"] = agentReportSocketPathFor(stateDir);
+      // 実物のフックは、報告したエージェントの pid（CLAUDE_PID）を足す。この試験を動かしている環境の CLAUDE_PID（あれば）は
+      // 別の claude のものなので外し、居れば、その pane の偽のエージェントの pid に置き換える（20261009-agent-session-attribution）。
+      delete env["CLAUDE_PID"];
+      try {
+        const pid = execFileSync("pgrep", ["-f", join(dir, "fake-agent.mjs")], { encoding: "utf8" }).trim().split("\n")[0];
+        if (pid) env["CLAUDE_PID"] = pid;
+      } catch {
+        /* 偽のエージェントが居なければ（検出より前の報告の試験）pid は付けない */
+      }
       return new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [SCRIPT, kind], {
           env,
