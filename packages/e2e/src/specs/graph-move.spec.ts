@@ -250,6 +250,41 @@ test.describe("キーだけで移す（T15c）", () => {
   });
 });
 
+test("スクリーンショット（PR4）: つかんでいる途中（落とせる・落とせない）・移した後（クラシック・モダン）", async ({ page, appServer }) => {
+  const dir = process.env["GRAPH_SHOTS_DIR"];
+  test.skip(dir === undefined, "GRAPH_SHOTS_DIR を渡したときだけ撮る");
+  const { pX, b, c } = await setup(page, appServer);
+  await openGraph(page);
+  const node = nodeOf(page, pX);
+  for (const style of ["classic", "modern"] as const) {
+    await page.evaluate((st) => document.documentElement.setAttribute("data-ui-style", st), style);
+    const from = await center(page, node);
+    const tb = await center(page, frameOf(page, b.workspace.id));
+    await grabAndMove(page, from, { x: tb.x, y: tb.y + 40 });
+    await expect(hint(page)).toBeVisible();
+    await page.screenshot({ path: join(dir!, `graph-move-ok-${style}.png`) });
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    const from2 = await center(page, node);
+    const tc = await center(page, frameOf(page, c.workspace.id));
+    await grabAndMove(page, from2, { x: tc.x, y: tc.y + 40 });
+    await expect(hint(page)).toBeVisible();
+    await page.screenshot({ path: join(dir!, `graph-move-blocked-${style}.png`) });
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+  }
+  const from3 = await center(page, node);
+  const tb3 = await center(page, frameOf(page, b.workspace.id));
+  await grabAndMove(page, from3, { x: tb3.x, y: tb3.y + 40 });
+  await page.mouse.up();
+  await expect.poll(async () => (await placeOf(appServer, pX)).workspaceId, { timeout: 15_000 }).toBe(b.workspace.id);
+  for (const style of ["classic", "modern"] as const) {
+    await page.evaluate((st) => document.documentElement.setAttribute("data-ui-style", st), style);
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(dir!, `graph-move-after-${style}.png`) });
+  }
+});
+
 // --- グループへ移す（T15b）---------------------------------------------------------------------------------------
 
 const exec = promisify(execFile);

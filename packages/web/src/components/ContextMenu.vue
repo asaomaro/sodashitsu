@@ -504,7 +504,8 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   cursor: pointer;
 }
-.context-menu-disabled {
+/* 選べない行（理由つき。無効な部品として薄くする。`uiTokens.test.ts` の薄さの検査は `[aria-disabled="true"]` を除く） */
+.context-menu li[aria-disabled="true"] {
   opacity: 0.55;
 }
 .context-menu-reason {
