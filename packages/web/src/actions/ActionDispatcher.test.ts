@@ -1019,6 +1019,20 @@ describe("ActionDispatcher — help/goto/toggleSidebar/detach", () => {
     expect(view.dialogContext).toEqual({ kind: "goto" });
   });
 
+  // 20261010-agent-usage PR3：画面が 3 つになったので、`openGraph`（prefix+a）は「基本画面以外なら基本画面へ戻す」。
+  it("openGraph: 基本画面ではグラフを開き、グラフでは閉じ、ダッシュボードでは基本画面へ戻す", () => {
+    const view = useViewStore(pinia);
+    const { dispatcher } = makeDispatcher(makeConnection());
+    dispatcher.run({ type: "openGraph" });
+    expect(view.screen).toBe("graph");
+    dispatcher.run({ type: "openGraph" });
+    expect(view.screen).toBe("base");
+    view.setScreen("dashboard");
+    dispatcher.run({ type: "openGraph" });
+    expect(view.screen).toBe("base");
+    expect(view.graphVisible).toBe(false);
+  });
+
   it("toggleSidebar", () => {
     const conn = makeConnection();
     const view = useViewStore(pinia);

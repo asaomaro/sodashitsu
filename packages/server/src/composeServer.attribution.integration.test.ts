@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { agentReportSocketPathFor } from "./config.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
+import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 
 /**
  * 20261009-agent-session-attribution の結合テスト。実物の `composeServer`（自前の一時 stateDir）・実 PTY の bash・偽の `claude`
@@ -98,6 +99,7 @@ setInterval(() => {}, 1000);
     const marker = join(dir, `ready-${server.options.port}-${paneId}`);
     server.terminals.get(paneId)!.write(`touch ${JSON.stringify(marker)}\r`);
     await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 10_000, interval: 50 });
+    await assertPaneResolvesFake({ write: (input) => server.terminals.get(paneId)!.write(input), name: "claude", fakeDir: join(dir, "bin"), scratchDir: dir });
   }
   async function startAgent(server: ComposedServer, paneId: string, previous: unknown = null, command = "claude"): Promise<number> {
     await rm(pidFile, { force: true });

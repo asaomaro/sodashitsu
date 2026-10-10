@@ -54,6 +54,11 @@ const agents = computed(() =>
     }),
 );
 
+function openDashboard(): void {
+  emit("close");
+  view.openDashboard();
+}
+
 function selectWorkspace(workspaceId: string): void {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return;
@@ -110,6 +115,12 @@ function selectPane(paneId: string, tabId: string, workspaceId: string): void {
         <span class="pane-picker-label">{{ workspace?.label }} / {{ tab?.label }} — {{ agent.name ? `${agent.name}（${agent.label}）` : agent.label }}</span>
       </button>
     </section>
+    <!-- ダッシュボード（20261010-agent-usage PR3 の AC4。MobileShell には入口を足せないので、ここから開く）。重ねるダイアログで、選んだ pane へ移れる。 -->
+    <section class="pane-picker-section" aria-label="ダッシュボード">
+      <button type="button" class="pane-picker-row pane-picker-dashboard" data-picker-dashboard @click="openDashboard">
+        <span class="pane-picker-label">ダッシュボード（利用状況の一覧）</span>
+      </button>
+    </section>
   </div>
 </template>
 
@@ -156,6 +167,10 @@ function selectPane(paneId: string, tabId: string, workspaceId: string): void {
   color: inherit;
   background: none;
   border: none;
+}
+.pane-picker-dashboard {
+  min-height: 44px;
+  border-top: 1px solid var(--soda-menu-border, #44475a);
 }
 .pane-picker-row-tab {
   padding-left: 2.5em;

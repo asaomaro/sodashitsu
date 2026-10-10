@@ -12,6 +12,7 @@ import type { AgentForkProgress, AgentIntegrationStatusResult, SharedPrefs } fro
 import type { Graph, LinkRun } from "./graph.js";
 import type { CommandListResult } from "./commands.js";
 import type { DisplayClosedReasonValue, DisplayInfo } from "./display.js";
+import type { AccountUsage, AgentUsage } from "./usage.js";
 
 /**
  * イベント（design.md「WebSocket の通信」のイベント表。architecture.md の独立点検で data の形を確定）。
@@ -107,6 +108,14 @@ export interface PaneAgentStatusChangedEvent {
 export interface AgentForkProgressEvent {
   event: "agent.fork_progress";
   data: AgentForkProgress;
+}
+/**
+ * エージェントの利用状況が変わった（20261010-agent-usage PR3）。**`agent.usage_watch` で見ていると知らせた接続にだけ**配る（全クライアントへは配らない）。
+ * `panes` は、前回の確かめから変わった pane だけ（`null`＝取れなくなった）。`accounts` は、変わったときだけ全部。中身は `agent.usage` の答えと同じ形（数字・モデル名・時刻・ラベルだけ）。
+ */
+export interface AgentUsageChangedEvent {
+  event: "agent.usage_changed";
+  data: { panes: Record<string, AgentUsage | null>; accounts?: AccountUsage[] };
 }
 export interface PaneSizeChangedEvent {
   event: "pane.size_changed";
@@ -246,6 +255,7 @@ export type ServerEvent =
   | PaneClosedEvent
   | PaneAgentStatusChangedEvent
   | AgentForkProgressEvent
+  | AgentUsageChangedEvent
   | PaneSizeChangedEvent
   | PaneAttachChangedEvent
   | SessionFocusChangedEvent

@@ -9,6 +9,7 @@ import { connect as netConnect } from "node:net";
 import { agentReportSocketPathFor } from "./config.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
+import { assertPaneResolvesFake } from "./testing/fakeAgentGuard.js";
 
 /**
  * 20261010-agent-usage の AC2・AC3・AC5・AC7・AC8。実物の `composeServer`（自前の一時 stateDir・HOME も一時）・実 PTY の bash・偽の `claude` の上で、
@@ -143,6 +144,8 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     const marker = join(dir, `ready-${server.options.port}`);
     server.terminals.get(paneId)!.write(`touch ${JSON.stringify(marker)}\r`);
     await vi.waitFor(() => expect(existsSync(marker)).toBe(true), { timeout: 10_000, interval: 50 });
+    // 打ち込みの前に、pane のシェルが偽の `claude` を指すことを確かめる（違えば、実物を起動せずに落とす。20261010-e2e-fake-agent）。
+    await assertPaneResolvesFake({ write: (input) => server.terminals.get(paneId)!.write(input), name: "claude", fakeDir: join(dir, "bin"), scratchDir: dir });
     const assigns = Object.entries(env)
       .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
       .join(" ");

@@ -1022,6 +1022,13 @@ export const AgentUsageParams = z.object({ paneId: paneId.optional() });
 export type AgentUsageParams = z.infer<typeof AgentUsageParams>;
 
 /**
+ * 利用状況の配信を、この接続に送るか（20261010-agent-usage PR3）。ダッシュボードが見えている間だけ `on: true`（見えなくなる・タブが裏へ回る・画面を離れるで `false`）。
+ * 印は接続ごと（接続が切れたら消える）。見ている接続が 1 つも居ないとき、サーバは利用状況を確かめない。`agent.usage_changed` を、印のある接続にだけ送る。
+ */
+export const AgentUsageWatchParams = z.object({ on: z.boolean() });
+export type AgentUsageWatchParams = z.infer<typeof AgentUsageWatchParams>;
+
+/**
  * 空いているシェル pane でエージェントを起動する（20260926-agent-start。herdr の agent.start）。名前の書式・kind・引数・timeout の範囲は
  * スキーマでは弾かない（サーバが herdr と同じ code で返す）。打ち込んだ時点で応答し、起動完了は呼び出し側がイベントで待つ。
  */
@@ -1306,6 +1313,7 @@ export const METHOD_SCHEMAS = {
   "agent.kinds": AgentKindsParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
   "agent.usage": AgentUsageParams,
+  "agent.usage_watch": AgentUsageWatchParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
@@ -1430,6 +1438,7 @@ export interface MethodResultMap {
   "agent.kinds": AgentKindsResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
   "agent.usage": AgentUsageResult;
+  "agent.usage_watch": Record<string, never>;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;

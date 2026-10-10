@@ -2,6 +2,7 @@ import {
   AgentPromptParams,
   AgentSubagentTranscriptParams,
   AgentUsageParams,
+  AgentUsageWatchParams,
   AgentRenameParams,
   AgentSendKeysParams,
   AgentKindsParams,
@@ -152,6 +153,18 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
     surface.register("agent.usage", {
       schema: AgentUsageParams,
       handler: (_ctx, params) => usage.get(params.paneId),
+    });
+  }
+
+  // 利用状況の配信を受けるか（20261010-agent-usage PR3）。接続ごとの印。見えている間だけ on にする（`sodactl` など画面のないクライアントは使わない）。
+  const usageWatch = deps.usageWatch;
+  if (usageWatch) {
+    surface.register("agent.usage_watch", {
+      schema: AgentUsageWatchParams,
+      handler: (ctx, params) => {
+        usageWatch.set(ctx.clientId, params.on);
+        return {};
+      },
     });
   }
 

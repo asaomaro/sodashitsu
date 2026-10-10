@@ -269,6 +269,8 @@ export type DialogContext =
   | { kind: "confirmReplacePane"; paneId: string; targetPaneId: string }
   | { kind: "help" }
   | { kind: "goto" }
+  // ダッシュボード（20261010-agent-usage PR3）。1 列の画面だけ、重ねるダイアログとして開く（デスクトップは主な領域の画面）。
+  | { kind: "dashboard" }
   // worktree（20260920-git-worktree-actions）。**サーバへ聞いてから開く**ので、開く時点で中身が揃っている。
   | { kind: "worktreeCreate"; workspaceId: string; info: WorktreeListResult }
   // エージェントの fork（20261009-agent-fork PR2）。中身（確定の前の画面）はダイアログが `agent.fork_preview` で取る。
@@ -362,6 +364,11 @@ export const useViewStore = defineStore("view", () => {
   const graphDialogOpen = ref(false);
   /** グラフが見えている（デスクトップの画面か、1 列の重ねるダイアログ）。 */
   const graphVisible = computed(() => screen.value === "graph" || graphDialogOpen.value);
+  /**
+   * ダッシュボード（利用状況の一覧。20261010-agent-usage PR3）が見えている（デスクトップの画面か、1 列の重ねるダイアログ）。
+   * 見えている間だけ、サーバへ利用状況の配信を頼む（`UsageController`）。
+   */
+  const dashboardVisible = computed(() => screen.value === "dashboard" || dialogContext.value?.kind === "dashboard");
   /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
   const preGraphFocusPaneId = ref<string | null>(null);
   /** サイドバーの行（workspace・agent）を押すたびに進む。選びが変わらない押下も知らせる（グラフの画面が面へフォーカスを戻す。`GraphCanvas`）。 */
@@ -643,6 +650,24 @@ export const useViewStore = defineStore("view", () => {
   }
 
   /**
+   * ダッシュボードを開く。デスクトップでは `screen` を `dashboard` にする。1 列の画面では重ねるダイアログ（`openDialogWithContext`）。既に見えていれば何もしない。
+   */
+  function openDashboard(): void {
+    if (dashboardVisible.value) return;
+    if (mobileViewport.value) openDialogWithContext({ kind: "dashboard" });
+    else screen.value = "dashboard";
+  }
+
+  /** ダッシュボードを閉じる。デスクトップでは基本画面へ戻る（焦点の pane はそのまま）。1 列の画面ではダイアログを閉じる。 */
+  function closeDashboard(): void {
+    if (screen.value === "dashboard") {
+      screen.value = "base";
+      return;
+    }
+    if (dialogContext.value?.kind === "dashboard") closeDialog();
+  }
+
+  /**
    * 窓の幅が 1 列の画面になった・戻った（`main.ts` が書く）。1 列になったら画面を基本画面へ戻す（1 列の画面は画面を持たない。D13）。デスクトップに戻ったときに
    * 重ねるダイアログが開いていたら閉じる（グラフの画面として開き直しはしない）。
    */
@@ -652,7 +677,11 @@ export const useViewStore = defineStore("view", () => {
     if (mobile) {
       screen.value = "base";
       preGraphFocusPaneId.value = null;
-    } else if (graphDialogOpen.value) closeGraph();
+    } else {
+      if (graphDialogOpen.value) closeGraph();
+      // ダッシュボードの重ねるダイアログも、デスクトップに戻ったら閉じる（画面として開き直しはしない）。
+      if (dialogContext.value?.kind === "dashboard") closeDialog();
+    }
   }
 
   /** グラフ画面を開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由。焦点を直接変えると端末がグラフ画面からフォーカスを奪う）。 */
@@ -903,6 +932,9 @@ export const useViewStore = defineStore("view", () => {
     setScreen,
     setMobileViewport,
     openGraph,
+    dashboardVisible,
+    openDashboard,
+    closeDashboard,
     closeGraph,
     retargetPreGraphFocus,
     setNavigateSelection,

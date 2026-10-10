@@ -135,3 +135,15 @@ describe("PanePicker — 選択", () => {
     expect(wrapper.emitted("close")).toHaveLength(1);
   });
 });
+
+describe("PanePicker — ダッシュボードの入口（20261010-agent-usage PR3 の AC4）", () => {
+  it("［ダッシュボード］を押すと、ピッカーを閉じて、重ねるダイアログ（dialogContext）を開く", async () => {
+    const view = useViewStore(pinia);
+    view.setMobileViewport(true);
+    const wrapper = mountPicker(makeConnection());
+    await wrapper.get("[data-picker-dashboard]").trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    expect(view.dialogContext).toEqual({ kind: "dashboard" });
+    expect(view.dashboardVisible).toBe(true);
+  });
+});

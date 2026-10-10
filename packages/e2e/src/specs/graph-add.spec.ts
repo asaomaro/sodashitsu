@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { Page } from "@playwright/test";
+import { assertPaneResolvesFake } from "@sodashitsu/server";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { prefixKey } from "../support/keys.js";
@@ -25,7 +26,8 @@ const IDLE = [
 ];
 const binDir = await mkdtemp(join(tmpdir(), "soda-e2e-bin-"));
 await mkdir(binDir, { recursive: true });
-const inner = ["printf '\\033]0;project\\007'", ...IDLE.map((l) => `printf '%s\\n' ${JSON.stringify(l)}`), "sleep 600"].join("; ");
+// 末尾の `:` は、`bash -c` が最後のコマンド（`sleep`）を直接 exec して、プロセスの名前が `claude` でなくなる（検出されない）のを防ぐ。
+const inner = ["printf '\\033]0;project\\007'", ...IDLE.map((l) => `printf '%s\\n' ${JSON.stringify(l)}`), "sleep 600", ":"].join("; ");
 await writeFile(join(binDir, "claude"), `#!/bin/bash\nexec -a claude bash -c ${JSON.stringify(inner)}\n`);
 await chmod(join(binDir, "claude"), 0o755);
 process.env["PATH"] = `${binDir}${delimiter}${process.env["PATH"] ?? ""}`;
@@ -58,6 +60,8 @@ async function boot(page: Page, appServer: AppServer) {
   const snap = client.helloSnapshot()!;
   const ws0 = snap.workspaces[0]!;
   const p0 = snap.panes[0]!.id;
+  // 偽の `claude` を指すことを確かめてから、エージェントを起動する操作をする（利用者の rc が PATH を並べ替えて、実物が起動するのを防ぐ）。
+  await assertPaneResolvesFake({ write: (input) => client.sendInput(p0, input), name: "claude", fakeDir: binDir, scratchDir: binDir });
   const sent = await watchSent(page);
   const views = await watchClientViews(page);
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);

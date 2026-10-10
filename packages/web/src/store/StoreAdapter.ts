@@ -1,4 +1,4 @@
-import type { AgentInfo, AgentIntegrationStatusResult, AskClosedEvent, AskOpenedEvent, DisplayMessageEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type { AgentInfo, AgentIntegrationStatusResult, AgentUsageChangedEvent, AskClosedEvent, AskOpenedEvent, DisplayMessageEvent, DisplayRemovedEvent, DisplayUpdatedEvent, GraphChangedEvent, GraphFiredEvent, MachineStatus, PrefsChangedEvent, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import type { ConnectionState, StorePort } from "@sodashitsu/client-core";
 import { useAgentForkStore } from "./agentFork.js";
@@ -54,6 +54,11 @@ export interface StoreAdapterOptions {
   onAskEvent?: (e: AskOpenedEvent | AskClosedEvent) => void;
   /** 表示の面のイベント（`display.updated`・`display.removed`。20261007-soda-extensions）。**見出しだけ**——`DisplayController` が中身を `display.get` で取る。省略可。 */
   onDisplayEvent?: (e: DisplayUpdatedEvent | DisplayRemovedEvent | DisplayMessageEvent) => void;
+  /**
+   * 利用状況の差分（`agent.usage_changed`。20261010-agent-usage PR3）。**見ていると知らせた接続（`agent.usage_watch`）にだけ**届く。
+   * 画面の接続（選択中のマシン）のものだけが来る。省略可。
+   */
+  onUsageChanged?: (data: AgentUsageChangedEvent["data"]) => void;
   /** 拡張の一覧・状態が変わった（`extension.changed`。20261007-ext-host）。**中身は載っていない**——`ExtensionController` が `extension.list` で取り直す。省略可。 */
   onExtensionChanged?: () => void;
 }
@@ -224,6 +229,9 @@ export class StoreAdapter implements StorePort {
       case "display.removed":
       case "display.message":
         this.opts.onDisplayEvent?.(e);
+        return;
+      case "agent.usage_changed":
+        this.opts.onUsageChanged?.(e.data);
         return;
     }
   }

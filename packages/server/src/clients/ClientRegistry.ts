@@ -34,6 +34,11 @@ export interface ClientRecord {
    * 色の問い合わせへの答えにだけ使う（`answerPalette.ts`）。
    */
   theme: ThemeName | null;
+  /**
+   * 利用状況の配信（`agent.usage_changed`）を送るか（`agent.usage_watch`。20261010-agent-usage PR3）。ダッシュボードが見えている間だけ true。
+   * 接続の寿命と同じ（切れたら消える）。`WsGateway` が、できごとをこの印のある接続にだけ送る。
+   */
+  watchingUsage?: boolean;
   /** ほかのマシンの `soda serve` の中継（bridge）越しの接続（手元の画面ではない）。`WsGateway` が接続の入口で立てる。 */
   viaBridge?: boolean;
 }
@@ -52,6 +57,7 @@ export interface ClientRegistry {
   setView(clientId: string, view: ClientView): void;
   setFit(clientId: string, on: boolean): void;
   setTheme(clientId: string, theme: ThemeName): void;
+  setUsageWatch(clientId: string, on: boolean): void;
   touch(clientId: string): void;
   addSubscription(clientId: string, paneId: PaneId): void;
   removeSubscription(clientId: string, paneId: PaneId): void;
@@ -97,6 +103,11 @@ export class DefaultClientRegistry implements ClientRegistry {
   setTheme(clientId: string, theme: ThemeName): void {
     const client = this.clients.get(clientId);
     if (client) client.theme = theme;
+  }
+
+  setUsageWatch(clientId: string, on: boolean): void {
+    const client = this.clients.get(clientId);
+    if (client) client.watchingUsage = on;
   }
 
   touch(clientId: string): void {
