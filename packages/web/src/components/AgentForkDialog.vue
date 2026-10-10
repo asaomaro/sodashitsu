@@ -60,8 +60,11 @@ async function loadPreview(branchName?: string): Promise<void> {
 
 watch(
   () => view.dialogContext,
-  (next) => {
+  (next, prev) => {
+    // 閉じたとき・別の pane へ替わったとき: 終わった記録は忘れる（同じ pane でもう一度開いたとき、前の結果が出ないように）。進行中のものは残す。
+    if (prev?.kind === "agentFork" && (next?.kind !== "agentFork" || next.paneId !== prev.paneId)) forkStore.forgetFinished(prev.paneId);
     if (next?.kind === "agentFork") {
+      forkStore.forgetFinished(next.paneId);
       preview.value = null;
       previewError.value = null;
       targetKind.value = "same";
@@ -139,7 +142,7 @@ function onNativeCancel(ev: Event): void {
   cancel();
 }
 function dismissRun(): void {
-  if (paneId.value) forkStore.forget(paneId.value);
+  // 進行中のものは記録を残す（裏で続き、終わったらトーストが出る）。終わったものは、閉じたときに忘れる（上の watch）。
   view.closeDialog();
 }
 </script>

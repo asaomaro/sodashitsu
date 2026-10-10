@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import GraphForkLayer from "./GraphForkLayer.vue";
 
 const nodes = [
@@ -33,5 +33,19 @@ describe("GraphForkLayer（見るだけの fork の線。20261009-agent-fork PR2
     const w = mount(GraphForkLayer, { props: { nodes: [{ key: "local:a", x: 0, y: 0 }], known: new Set<string>(), nameOf: name } });
     expect(w.find("line").exists()).toBe(false);
     expect(w.find(".graph-fork-mark").exists()).toBe(false);
+  });
+
+  it("ノードの位置が変わるだけのときは、名前を引き直さない（ドラッグの毎回に nodeInfo を作らない）。fork 元が変わったら引く", async () => {
+    const nameOf = vi.fn(name);
+    const w = mount(GraphForkLayer, { props: { nodes, known: new Set(["local:a", "local:b"]), nameOf } });
+    const first = nameOf.mock.calls.length;
+    expect(first).toBeGreaterThan(0);
+    for (let i = 1; i <= 5; i++) {
+      await w.setProps({ nodes: nodes.map((n) => (n.key === "local:b" ? { ...n, x: 400 + i * 30 } : n)) });
+    }
+    expect(nameOf.mock.calls.length).toBe(first);
+    expect(w.get(".graph-fork-line").attributes("data-fork-to")).toBe("local:b");
+    await w.setProps({ nodes: [...nodes, { key: "local:e", x: 800, y: 0, forkedFrom: "local:b" }] });
+    expect(nameOf.mock.calls.some(([k]) => k === "local:b")).toBe(true);
   });
 });

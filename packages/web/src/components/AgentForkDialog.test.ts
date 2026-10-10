@@ -108,4 +108,54 @@ describe("AgentForkDialog（20261009-agent-fork PR2）", () => {
     expect(wrapper.get("[data-fork-submit-error]").text()).toContain("すでに進んでいます");
     expect(view.dialogContext?.kind).toBe("agentFork");
   });
+
+  it("終わった記録は、閉じたら消える。同じ pane で開き直したとき、前の結果ではなく確かめの画面になる", async () => {
+    const { wrapper, view } = setup(async () => preview());
+    await flushPromises();
+    const store = useAgentForkStore(pinia);
+    store.begin("p1");
+    store.apply({ sourcePaneId: "p1", paneId: "p2", stage: "done", noteStatus: "sent" });
+    await flushPromises();
+    expect(wrapper.find("[data-fork-run]").exists()).toBe(true);
+    view.closeDialog();
+    await flushPromises();
+    expect(store.runs["p1"]).toBeUndefined();
+    view.openDialogWithContext({ kind: "agentFork", paneId: "p1" });
+    await flushPromises();
+    expect(wrapper.find("[data-fork-run]").exists()).toBe(false);
+    expect(wrapper.find("[data-fork-submit]").exists()).toBe(true);
+  });
+
+  it("進行中のまま閉じても、記録は残る（裏で続き、終わったらトースト）", async () => {
+    const { wrapper, view } = setup(async () => preview());
+    await flushPromises();
+    const store = useAgentForkStore(pinia);
+    store.begin("p1");
+    store.apply({ sourcePaneId: "p1", paneId: "p2", stage: "launched" });
+    await flushPromises();
+    await wrapper.get(".fork-run .fork-primary").trigger("click");
+    await flushPromises();
+    expect(view.dialogContext).toBeNull();
+    expect(store.runs["p1"]).toMatchObject({ finished: false, mine: true });
+    store.apply({ sourcePaneId: "p1", paneId: "p2", stage: "done", noteStatus: "sent" });
+    expect(view.toasts.at(-1)!.message).toContain("fork しました");
+  });
+
+  it("ブランチ名の確かめが入力に追いつくまでは、確定を押せない（追いついたら押せる）", async () => {
+    let release: (() => void) | undefined;
+    const { wrapper } = setup(async (_id, branch) => {
+      if (branch === "slow") await new Promise<void>((r) => (release = r));
+      return preview({ targetPath: branch ? `/wt/${branch}` : null, branchExists: branch === undefined ? null : false });
+    });
+    await flushPromises();
+    await wrapper.get('[data-fork-target="worktree"]').setValue(true);
+    await flushPromises();
+    const submit = () => wrapper.get("[data-fork-submit]").element as HTMLButtonElement;
+    await wrapper.get("[data-fork-branch]").setValue("slow");
+    await new Promise((r) => setTimeout(r, 330)); // 確かめを始めた（まだ答えが来ていない）
+    expect(submit().disabled).toBe(true);
+    release?.();
+    await flushPromises();
+    expect(submit().disabled).toBe(false);
+  });
 });

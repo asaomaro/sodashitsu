@@ -48,6 +48,22 @@ function edgePoint(c: { x: number; y: number }, dx: number, dy: number): { x: nu
   return { x: c.x + dx * s, y: c.y + dy * s };
 }
 
+/**
+ * fork 元の鍵（並べて 1 つの文字列にする）。ノードの位置が変わっても同じ文字列なので、下の `names` は作り直さない
+ * （ノードのドラッグの毎回に `nodeInfo` を作り直さない。名前は線・印を描くときだけ・変わったときだけ引く）。
+ */
+const sourceKeys = computed(() => {
+  const set = new Set<string>();
+  for (const n of props.nodes) if (n.forkedFrom !== undefined && n.forkedFrom !== n.key) set.add(n.forkedFrom);
+  return [...set].sort().join("\n");
+});
+const names = computed(() => {
+  const m = new Map<string, string>();
+  if (sourceKeys.value === "") return m;
+  for (const k of sourceKeys.value.split("\n")) m.set(k, props.nameOf(k));
+  return m;
+});
+
 const derived = computed(() => {
   const byKey = new Map(props.nodes.map((n) => [n.key, n]));
   const lines: Line[] = [];
@@ -56,7 +72,7 @@ const derived = computed(() => {
     const f = n.forkedFrom;
     if (f === undefined || f === n.key) continue;
     const src = byKey.get(f);
-    const name = props.nameOf(f);
+    const name = names.value.get(f) ?? f;
     if (src === undefined) {
       const why = props.known.has(f) ? "別の空間にあります" : "無くなりました";
       marks.push({ key: n.key, x: n.x, y: n.y, title: `fork 元: ${name}（${why}）` });
