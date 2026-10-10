@@ -1,13 +1,11 @@
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import type { AgentForkProgress } from "@sodashitsu/protocol";
-import { agentReportSocketPathFor } from "./config.js";
 import { composeServerOnFreePort } from "./composeServerOnFreePort.js";
 import type { ComposedServer } from "./composeServer.js";
 
@@ -20,7 +18,7 @@ import type { ComposedServer } from "./composeServer.js";
 vi.setConfig({ testTimeout: 60_000 });
 
 const fakeAgent = (dir: string) => `
-import { appendFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { randomUUID } from "node:crypto";
 const DIR = ${JSON.stringify(dir)};
@@ -43,13 +41,28 @@ function report() {
   const c = connect(sock, () => c.end(JSON.stringify({ paneId: pane, kind: "claude", sessionId }) + "\\n"));
   c.on("error", () => {});
 }
-function idle() { process.stdout.write("\\u001b[2J\\u001b[H\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n"); }
+function bare() { process.stdout.write("\\u001b[2J\\u001b[H\\u001b]0;\\u2733 fake\\u0007fake agent ready\\r\\n"); }
+// 入力欄（live_prompt_box と同じ行）が出た画面。
+function idle() { bare(); process.stdout.write("\\u276f \\r\\n"); }
+const confirmScreen = ["\\u2500".repeat(40), " Bash command", "", "   curl -sS https://example.com", "", " This command requires approval", "", " Do you want to proceed?", " \\u276f 1. Yes", "   2. No", "", " Esc to cancel \\u00b7 Tab to amend \\u00b7 ctrl+e to explain"].join("\\r\\n") + "\\r\\n";
 const blockFile = DIR + (fork ? "/block-fork" : "/block-main");
-if (existsSync(blockFile)) {
-  process.stdout.write(["\\u2500".repeat(40), " Bash command", "", "   curl -sS https://example.com", "", " This command requires approval", "", " Do you want to proceed?", " \\u276f 1. Yes", "   2. No", "", " Esc to cancel \\u00b7 Tab to amend \\u00b7 ctrl+e to explain"].join("\\r\\n") + "\\r\\n");
-  const t = setInterval(() => { if (!existsSync(blockFile)) { clearInterval(t); idle(); } }, 100);
-} else idle();
-report();
+const lateFile = DIR + (fork ? "/late-block-fork" : "/late-block-main");
+if (existsSync(lateFile)) {
+  // 読み込みの画面（入力欄なし）のあと、ms 後に確認を描く（R2 の再現）。答える（ファイルを消す）まで確認のまま。フックの報告は答えた後。
+  bare();
+  const ms = Number(readFileSync(lateFile, "utf8")) || 6000;
+  setTimeout(() => {
+    process.stdout.write(confirmScreen);
+    writeFileSync(DIR + "/drawn-confirm", "");
+    const t = setInterval(() => { if (!existsSync(lateFile)) { clearInterval(t); idle(); report(); } }, 100);
+  }, ms);
+} else {
+  if (existsSync(blockFile)) {
+    process.stdout.write(confirmScreen);
+    const t = setInterval(() => { if (!existsSync(blockFile)) { clearInterval(t); idle(); } }, 100);
+  } else idle();
+  report();
+}
 process.stdin.on("data", (d) => {
   appendFileSync(DIR + "/input-" + pane, String(d));
   if (String(d).includes("\\u0004")) process.exit(0);
@@ -83,7 +96,7 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
   });
   afterEach(async () => {
     for (const fn of cleanups.splice(0).reverse()) await fn();
-    for (const f of ["no-conversation", "die-soon", "block-main", "block-fork", "launches.log"]) await rm(join(dir, f), { force: true });
+    for (const f of ["no-conversation", "die-soon", "block-main", "block-fork", "late-block-main", "late-block-fork", "drawn-confirm", "launches.log"]) await rm(join(dir, f), { force: true });
   });
   afterAll(async () => {
     for (const [k, v] of Object.entries(savedEnv)) {
@@ -367,6 +380,35 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     await rm(join(dir, "block-fork")); // 利用者が確認に答えた
     await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(true), { timeout: 30_000 });
     expect(await readFile(join(dir, `input-${result.paneId}`), "utf8")).toContain("fork されました");
+  });
+
+  it("読み込みの画面で手が空いたように見えても、確認が後から描かれるなら、知らせは確認の前に送らない（R2。確認に Enter が届かない）", async () => {
+    const repo = await makeRepo();
+    const { client, paneId } = await bootInRepo(repo);
+    // 新しい claude は、入力欄の無い読み込みの画面のあと 6 秒後に確認を描く。利用者が答える（ファイルを消す）まで確認のまま。
+    await writeFile(join(dir, "late-block-fork"), "6000");
+    const result = await ok<ForkResult>(client.request("agent.fork", { paneId, target: { kind: "worktree", branch: "fork/late-confirm" } }));
+    const input = join(dir, `input-${result.paneId}`);
+    await vi.waitFor(() => expect(existsSync(join(dir, "drawn-confirm"))).toBe(true), { timeout: 20_000, interval: 20 });
+    // 確認が描かれた時点で、新しい pane へは本文も Enter も届いていない（確認に勝手に答えない）。
+    expect(existsSync(input)).toBe(false);
+    expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(false);
+    await rm(join(dir, "late-block-fork")); // 利用者が確認に答えた
+    await vi.waitFor(() => expect(progressOf(client, result.paneId).some((p) => p.stage === "note" && p.noteStatus === "sent")).toBe(true), { timeout: 30_000 });
+    expect(await readFile(input, "utf8")).toContain("作業フォルダは");
+  });
+
+  it("起動の直前に会話の id を読み直す: 新しい pane の準備の間に元の会話が替わったら（/clear 相当）、替わった後の id で起動する（R6）", async () => {
+    const { server, client, paneId } = await bootWithAgent();
+    const before = (await launches()).length;
+    const replaced = "7c0a3f2e-1b7d-4e8a-9c3f-2d5a6b7c8d9e";
+    const pending = client.request("agent.fork", { paneId, target: { kind: "same" } });
+    // 新しい pane ができたら、元の pane の会話が替わる（フックの報告）。起動はシェルの準備の後なので、読み直しで拾う。
+    await vi.waitFor(() => expect(client.events.some((e) => e.event === "agent.fork_progress" && e.data.stage === "pane_created")).toBe(true), { timeout: 10_000, interval: 10 });
+    server.session.reportAgentSession(paneId, "claude", replaced);
+    await ok(pending);
+    await vi.waitFor(async () => expect((await launches()).length).toBe(before + 1), { timeout: 20_000 });
+    expect((await launches()).at(-1)!.args).toEqual(["--resume", replaced, "--fork-session"]);
   });
 
   it("ブランチ名が既にあれば断り（fork_branch_exists）、何も作らない（A6）", async () => {

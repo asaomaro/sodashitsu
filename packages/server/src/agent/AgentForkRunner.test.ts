@@ -61,3 +61,12 @@ describe("AgentForkRunner.preview（読み取りだけ）", () => {
     expect(await runner.preview({ paneId: "p1", branch: "b" })).toMatchObject({ noteUnsafe: true });
   });
 });
+
+describe("AgentForkRunner.fork（閉じた後は断る。R4）", () => {
+  it("close の後の fork は、何も作らずに fork_failed で断る", async () => {
+    const { runner, calls } = make(pane(), async () => info());
+    runner.close();
+    await expect(runner.fork({ paneId: "p1", target: { kind: "worktree", branch: "b" } })).rejects.toMatchObject({ code: "fork_failed" });
+    expect(calls).toEqual([]); // git には触れない
+  });
+});

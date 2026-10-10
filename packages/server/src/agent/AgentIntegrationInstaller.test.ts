@@ -307,6 +307,26 @@ describe("FsAgentIntegrationInstaller — Claude Code のフックの追加と�
     expect(after.hooks.SessionStart[1]).toEqual(mine);
   });
 
+  it("matcher が期待の値を含む（`\"\"` は全部）なら「更新が必要」にしない。利用者のフックと同じエントリは、古い matcher でも直さない（20261009-agent-fork R6）", async () => {
+    const installer = makeInstaller();
+    await installer.install("claude");
+    const fresh = await readSettings();
+    for (const m of ["", "startup|resume|fork|clear|compact|extra"]) {
+      fresh.hooks.SessionStart[0].matcher = m;
+      await writeFile(settingsPath, JSON.stringify(fresh));
+      expect(await installer.status("claude"), m).toMatchObject({ installed: true, needsUpdate: false });
+    }
+    // 利用者のフックと同じエントリ（matcher が古い）: 直さず、「更新が必要」にもしない（文書に書く）。
+    fresh.hooks.SessionStart[0].matcher = "startup|resume";
+    fresh.hooks.SessionStart[0].hooks.push({ type: "command", command: "echo mine" });
+    await writeFile(settingsPath, JSON.stringify(fresh));
+    expect(await installer.status("claude")).toMatchObject({ needsUpdate: false });
+    expect(await installer.install("claude")).toEqual({ ok: true, message: "既に導入済みです" });
+    const after = await readSettings();
+    expect(after.hooks.SessionStart[0].matcher).toBe("startup|resume");
+    expect(after.hooks.SessionStart[0].hooks).toHaveLength(2);
+  });
+
   it("旧版の導入済み → needsUpdate が true → install で更新される（スクリプトを写し直し、足りない分だけ足す）", async () => {
     await installOldVersion();
     const installer = makeInstaller();

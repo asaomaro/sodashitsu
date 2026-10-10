@@ -26,6 +26,8 @@ export function waitForAgent<T>(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<AgentWaitResult<T>> {
+  // 中断済みの signal は、購読も上限のタイマーも作らずに返す（後から聞いても発火しないため。R4）。
+  if (signal?.aborted) return Promise.resolve({ ok: false, reason: "aborted" });
   return new Promise((resolve) => {
     let done = false;
     const finish = (r: AgentWaitResult<T>): void => {

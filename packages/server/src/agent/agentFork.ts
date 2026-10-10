@@ -43,10 +43,20 @@ export function forkNameCandidates(sourceName: string | undefined, sourcePaneId:
   return out.filter(isValidAgentName);
 }
 
-/** 文面に埋めるパスが、そのまま打ち込んでよい形か（制御文字・行の区切り〔U+2028/2029〕・長さ）。 */
+/**
+ * 文面に埋めるパスが、そのまま打ち込んでよい形か（制御文字・行の区切り〔U+2028/2029〕・長さ）。さらに、文面の囲み（バッククォート）を崩すもの、
+ * 見た目だけ入れ替える文字（双方向の制御・ゼロ幅）を断る（R6）。
+ */
 export const NOTE_PATH_MAX = 1000;
+const NOTE_PATH_VISUAL_TRICKS = /[`\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/;
 export function isSafeNotePath(path: string): boolean {
-  return path.length > 0 && path.length <= NOTE_PATH_MAX && !hasControlChar(path) && ![...path].some((c) => c.codePointAt(0) === 0x2028 || c.codePointAt(0) === 0x2029);
+  return (
+    path.length > 0 &&
+    path.length <= NOTE_PATH_MAX &&
+    !hasControlChar(path) &&
+    !NOTE_PATH_VISUAL_TRICKS.test(path) &&
+    ![...path].some((c) => c.codePointAt(0) === 0x2028 || c.codePointAt(0) === 0x2029)
+  );
 }
 
 /**

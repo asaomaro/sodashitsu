@@ -143,6 +143,25 @@ function matcherOf(entry: unknown): string | undefined {
   const m = typeof entry === "object" && entry !== null ? (entry as JsonObject).matcher : undefined;
   return typeof m === "string" ? m : undefined;
 }
+/**
+ * 現在の matcher が期待の値を**含む**か（`|` で区切った項目ごと）。`""`（全部）は、どの値も含む（機能の上では上位）。
+ * 含むなら「更新が必要」にしない（20261009-agent-fork の R6）。
+ */
+function matcherCovers(current: string | undefined, expected: string): boolean {
+  if (current === undefined) return false;
+  if (current === "") return true;
+  const have = new Set(current.split("|"));
+  return expected.split("|").every((t) => have.has(t));
+}
+/** 自分のエントリに、利用者のほかのフックが同じエントリで入っているか。matcher を直すと、利用者のフックの動きも変わるので、直さない（文書に書く）。 */
+function sharesEntryWithOthers(spec: HookSpec, entry: unknown): boolean {
+  const hooks = typeof entry === "object" && entry !== null ? (entry as JsonObject).hooks : undefined;
+  return Array.isArray(hooks) && hooks.some((h) => !spec.isOurs({ hooks: [h] }));
+}
+/** 自分のエントリで、matcher が期待の値を含まず、かつ利用者のフックと同じエントリではない（＝［更新］で直す対象）。 */
+function matcherStale(spec: HookSpec, entry: unknown, expected: string): boolean {
+  return spec.isOurs(entry) && !sharesEntryWithOthers(spec, entry) && !matcherCovers(matcherOf(entry), expected);
+}
 function isOursNested(entry: unknown): boolean {
   return nestedCommandsOf(entry).some((c) => c.includes(HOOK_SCRIPT_NAME));
 }
@@ -547,7 +566,8 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     // 経路の値が配列でないとき、`install()` は断る（直せない）ので、「更新が必要」は出さない。
     if (extras.some((e) => pathShape(root, e.path) === "invalid")) return false;
     if (extras.some((e) => !getPath(root, e.path).some(spec.isOurs))) return true;
-    if (spec.expectedMatcher !== undefined && getPath(root, spec.entriesPath).some((e) => spec.isOurs(e) && matcherOf(e) !== spec.expectedMatcher)) return true;
+    const expected = spec.expectedMatcher;
+    if (expected !== undefined && getPath(root, spec.entriesPath).some((e) => matcherStale(spec, e, expected))) return true;
     const installedScript = await readFile(
       hookScriptPathFor(spec.hooksDir(this.env, this.home)),
     ).catch(() => undefined);
@@ -586,11 +606,12 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
       if (hit.file === configFile)
         updated = removeOurs(updated, hit.legacy.entriesPath, hit.legacy.isOurs).root;
     }
+    const expected = spec.expectedMatcher;
     for (const t of targets) {
       const entries = getPath(updated, t.path);
-      if (t.path === spec.entriesPath && spec.expectedMatcher !== undefined && entries.some((e) => spec.isOurs(e) && matcherOf(e) !== spec.expectedMatcher)) {
-        // 自分のエントリの matcher だけを直す（ほかの項目・利用者のほかのフックは保つ）。
-        updated = setPath(updated, t.path, entries.map((e) => (spec.isOurs(e) ? { ...(e as JsonObject), matcher: spec.expectedMatcher } : e)));
+      if (t.path === spec.entriesPath && expected !== undefined && entries.some((e) => matcherStale(spec, e, expected))) {
+        // 自分のエントリの matcher だけを直す（ほかの項目・利用者のほかのフックは保つ）。利用者のフックと同じエントリは直さない（下の `matcherStale`）。
+        updated = setPath(updated, t.path, entries.map((e) => (matcherStale(spec, e, expected) ? { ...(e as JsonObject), matcher: expected } : e)));
         continue;
       }
       if (entries.some(spec.isOurs)) continue; // 足りない経路にだけ足す（重ねない。利用者のほかのフックは保つ）

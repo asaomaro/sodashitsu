@@ -115,3 +115,13 @@ describe("waitForShellReady（作ったばかりの pane の入力待ち。A2）
     }
   });
 });
+
+describe("waitForAgent — 中断（R4）", () => {
+  it("すでに中断された signal なら、購読せずに aborted で返る（後から聞いても発火しないため）", async () => {
+    const bus = new EventBus();
+    const ac = new AbortController();
+    ac.abort();
+    const r = await waitForAgent({ bus, agentOf: () => agent("working") }, "p1", handsFree("i1"), 60_000, ac.signal);
+    expect(r).toEqual({ ok: false, reason: "aborted" });
+  });
+});

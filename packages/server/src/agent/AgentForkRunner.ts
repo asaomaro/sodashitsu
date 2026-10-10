@@ -50,7 +50,7 @@ export interface ForkTiming {
   readyWaitMs: number;
   /** 手が空いたと見えてから、まだ空いているか見直すまでの間。 */
   settleMs: number;
-  /** 新しい pane のシェルの入力待ちの上限（A2。5 秒）。 */
+  /** 新しい pane のシェルの入力待ちの上限（A2。rc の重いシェルのため 15 秒）。 */
   shellMaxMs: number;
   shellQuietMs: number;
   shellMinWaitMs: number;
@@ -60,7 +60,7 @@ const DEFAULT_TIMING: ForkTiming = {
   noteWaitMs: 10 * 60_000,
   readyWaitMs: 2 * 60_000,
   settleMs: 800,
-  shellMaxMs: 5000,
+  shellMaxMs: 15_000,
   shellQuietMs: 300,
   shellMinWaitMs: 2000,
 };
@@ -70,7 +70,9 @@ export interface ForkHooks {
   onPaneCreated?: (paneId: string) => void;
 }
 
-const SOURCE_AGENT_CHANGED = "元の pane のエージェントが、入れ替わった（または居なくなった）ため、止めました";
+const SOURCE_AGENT_CHANGED = "元の pane のエージェントか会話が、入れ替わった（または無くなった）ため、止めました";
+/** 入力欄が出ていることの証拠を、画面の末尾のどこまで見るか（文字数）。 */
+const PROMPT_EVIDENCE_TAIL = 2000;
 
 export class AgentForkRunner {
   private readonly platform: NodeJS.Platform;
@@ -145,6 +147,8 @@ export class AgentForkRunner {
    * 何が残ったかをメッセージと `agent.fork_progress`（`failed`）に載せる（A11）。
    */
   async fork(params: AgentForkParams, hooks: ForkHooks = {}): Promise<AgentForkResult> {
+    // 閉じた後（サーバが止まる途中）は、新しい pane も裏の続きも作らない（R4）。
+    if (this.aborter.signal.aborted) throw new RpcError("fork_failed", "the server is shutting down; the fork was not started");
     const { paneId: sourcePaneId } = params;
     if (this.inProgress.has(sourcePaneId)) throw new RpcError("fork_in_progress", `a fork of pane ${sourcePaneId} is already in progress`);
     this.inProgress.add(sourcePaneId);
@@ -163,7 +167,8 @@ export class AgentForkRunner {
     const forkable = checkForkable(source);
     if (!forkable.ok) throw new RpcError("fork_unavailable", `${forkable.reason}: this agent cannot be forked`);
     if (this.shellUnsupported(forkable.pane.shell)) throw new RpcError("fork_unavailable", "unsupported_shell: this pane's shell cannot start an agent");
-    const { sessionId, agent: sourceAgent, pane } = forkable;
+    let { sessionId } = forkable; // 起動の直前に読み直す（手順 4）
+    const { agent: sourceAgent, pane } = forkable;
     const sourceInstance = sourceAgent.instanceId;
     const worktree = params.target.kind === "worktree" ? params.target : null;
     let info: ForkSourceInfo | null = null;
@@ -201,7 +206,8 @@ export class AgentForkRunner {
       }
       newPaneId = split.pane.id;
       created.paneId = newPaneId;
-      if (split.cwdFallback) {
+      // 場所を引き継げなかったとき（元の場所が使えず、サーバの起動場所に落ちたとき）は、別のフォルダで始めないよう止める（R3）。
+      if (split.pane.cwd !== pane.cwd) {
         await session.closePane(newPaneId).catch(() => undefined);
         throw new RpcError("fork_failed", "元の pane の場所を引き継げなかったため、止めました（新しい pane は閉じました）");
       }
@@ -248,16 +254,25 @@ export class AgentForkRunner {
         })
       : false;
     if (!ready) {
+      // 待っている間に新しい pane が閉じられたら、その理由を言う（シェルの上限と取り違えない。R6）。
+      if (!session.getPane(newPaneId)) {
+        const closed = new RpcError("fork_failed", "新しい pane が閉じられたため、起動しませんでした");
+        this.progress({ sourcePaneId, paneId: newPaneId, stage: "failed", code: closed.code, message: closed.message, created });
+        throw closed;
+      }
       const err = new RpcError("fork_shell_not_ready", `the shell of the new pane did not become ready (pane ${newPaneId} is left open)`);
       this.progress({ sourcePaneId, paneId: newPaneId, stage: "failed", code: err.code, message: err.message, created });
       throw err;
     }
 
-    // 4. 起動の直前に、元のエージェントが同じままか確かめる。
-    if (session.getPane(sourcePaneId)?.agent?.instanceId !== sourceInstance) {
+    // 4. 起動の直前に、元のエージェントが同じままか、会話の id を読み直す。`/clear` で会話の id が替わっていたら、新しい id を使う。
+    //    会話が無くなっていたら止める（シェルの待ちの間に、消した会話を fork しないため）。
+    const fresh = checkForkable(session.getPane(sourcePaneId));
+    if (!fresh.ok || fresh.agent.instanceId !== sourceInstance) {
       await this.discardIfSame(!worktree, newPaneId);
       throw this.stopped(SOURCE_AGENT_CHANGED, created, !worktree, sourcePaneId, newPaneId);
     }
+    sessionId = fresh.sessionId;
 
     // 5. 起動。固定の表の実行ファイルと、既存の引用の関数だけを使う（`--resume <id> --fork-session`）。
     let usedName = name;
@@ -274,7 +289,7 @@ export class AgentForkRunner {
       this.deps.logger.warn("agent.fork: annotate failed", { error: String(err) });
     }
     this.progress({ sourcePaneId, paneId: newPaneId, stage: "launched", noteStatus, ...(noteReason ? { noteReason } : {}), created });
-    void this.continueInBackground({ sourcePaneId, newPaneId, created, noteText, noteStatus }).catch((err) => {
+    void this.continueInBackground({ sourcePaneId, newPaneId, created, noteText, noteStatus, sourceSessionId: sessionId }).catch((err) => {
       this.deps.logger.warn("agent.fork: background failed", { error: String(err) });
     });
     return {
@@ -334,7 +349,7 @@ export class AgentForkRunner {
   }
 
   /** 検知 → 手が空く → 最初の知らせ。応答の後に裏で続け、進み具合をできごとで配る。 */
-  private async continueInBackground(ctx: { sourcePaneId: string; newPaneId: string; created: ForkCreated; noteText: string | null; noteStatus: ForkNoteStatus }): Promise<void> {
+  private async continueInBackground(ctx: { sourcePaneId: string; newPaneId: string; created: ForkCreated; noteText: string | null; noteStatus: ForkNoteStatus; sourceSessionId: string }): Promise<void> {
     const { sourcePaneId, newPaneId, created } = ctx;
     let noteStatus = ctx.noteStatus;
     let noteReason: string | undefined;
@@ -372,7 +387,18 @@ export class AgentForkRunner {
     emit("detected");
     // 手が空くのを待つ。blocked（初めてのフォルダの信頼の確認など）の間は、知らせを送らず、待ち続ける（A8）。
     const wantNote = noteStatus === "pending" && ctx.noteText !== null;
+    // 上限は、手順全体で 1 つ（手が空く・入力欄を確かめるのを繰り返しても、ここを超えない。R6）。
+    const deadline = Date.now() + (wantNote ? this.timing.noteWaitMs : this.timing.readyWaitMs);
+    const timedOut = (): void => {
+      if (wantNote && noteStatus === "pending") {
+        noteStatus = "timed_out";
+        noteReason = "10 分待っても、入力欄が確かめられなかったため、送っていません";
+      }
+      emit("done");
+    };
     for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return timedOut();
       const free = await waitForAgent(
         waitDeps,
         newPaneId,
@@ -382,16 +408,17 @@ export class AgentForkRunner {
             emit("note");
           }
         }),
-        wantNote ? this.timing.noteWaitMs : this.timing.readyWaitMs,
+        remaining,
         signal,
       );
       if (!free.ok) {
         if (free.reason === "aborted") return;
+        if (free.reason === "timeout") return timedOut();
         if (wantNote && noteStatus === "pending") {
-          noteStatus = free.reason === "timeout" ? "timed_out" : "skipped";
-          noteReason = free.reason === "timeout" ? "10 分待っても手が空かなかったため、送っていません" : "pane が閉じられたため、送っていません";
+          noteStatus = "skipped";
+          noteReason = "pane が閉じられたため、送っていません";
         }
-        emit(free.reason === "pane_closed" ? "failed" : "done", free.reason === "pane_closed" ? { code: "fork_failed", message: "新しい pane が閉じられました" } : {});
+        emit("failed", { code: "fork_failed", message: "新しい pane が閉じられました" });
         return;
       }
       if (free.value.kind === "gone") {
@@ -409,6 +436,8 @@ export class AgentForkRunner {
       const again = this.deps.session.getPane(newPaneId)?.agent;
       if (!again || again.instanceId !== instanceId) continue;
       if (again.state !== "idle") continue;
+      // 知らせを送るときは、入力欄が出ている証拠を待つ。idle は確認の画面が描かれる前にも成り立つため（R2）。
+      if (wantNote && !this.promptReady(newPaneId, ctx.sourceSessionId)) continue;
       break;
     }
     emit("ready");
@@ -424,6 +453,19 @@ export class AgentForkRunner {
       emit("note");
     }
     emit("done");
+  }
+
+  /**
+   * 入力欄が出ていることの積極的な証拠（R2）。「手が空いた（idle）」は、確認の画面が描かれる前の読み込みの画面でも成り立つので、これだけに頼らない。
+   * (a) 画面の末尾に入力欄の行（`❯`。`live_prompt_box` と同じ信号）があり、確認の文言（esc to cancel・enter to confirm）が無い、
+   * または (b) 元と違う会話の id が報告された（フックは確認の後に走る。フックの matcher が古いと届かないので、(a) と並ぶ）。
+   */
+  private promptReady(paneId: string, sourceSessionId: string): boolean {
+    const reported = this.deps.session.getPane(paneId)?.agentSession?.sessionId;
+    if (reported !== undefined && reported !== sourceSessionId) return true;
+    const tail = (this.deps.terminals.get(paneId)?.mirror.plainText() ?? "").slice(-PROMPT_EVIDENCE_TAIL);
+    if (/esc to cancel|enter to confirm/i.test(tail)) return false;
+    return /^\s*❯/m.test(tail);
   }
 
   /** `agent.prompt` と同じ書き込み（貼り付けの印つきで本文を送り、遅れて Enter）。blocked・別のエージェントには送らない。 */
@@ -444,7 +486,8 @@ export class AgentForkRunner {
   /** 打ち込んだのにエージェントが検出されなかったとき、画面の末尾から理由を拾う（A11・S6）。 */
   private launchFailureReason(paneId: string): string {
     const tail = (this.deps.terminals.get(paneId)?.mirror.plainText() ?? "").slice(-4000);
-    if (/No conversation found/i.test(tail)) return "会話の記録が見つかりません（Claude Code の設定の場所〔CLAUDE_CONFIG_DIR〕が違う可能性があります）";
+    if (/No conversation found/i.test(tail))
+      return "会話の記録が見つかりません（Claude Code の設定の場所〔CLAUDE_CONFIG_DIR〕が違うか、親の Claude Code の環境変数〔CLAUDE_CODE_*〕を引き継いでいる可能性があります。後者は、soda serve を Claude Code の中から起動したときに起きます）";
     if (/unknown option|unrecognized option|Unknown argument/i.test(tail)) return "この Claude Code は、会話の fork（--fork-session）に対応していない版のようです";
     if (/command not found/i.test(tail)) return "claude コマンドが見つかりません";
     return "エージェントが検出されませんでした（画面を確かめてください）";

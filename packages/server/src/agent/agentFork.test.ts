@@ -62,3 +62,9 @@ describe("最初の知らせ", () => {
     }
   });
 });
+
+describe("最初の知らせのパス（R6）", () => {
+  it("バッククォート（文面の囲みを崩す）と、見た目だけ入れ替える文字（双方向の制御・ゼロ幅・BOM）は、打ち込まない", () => {
+    for (const bad of ["/a/`b`", "/a/‮b", "/a/⁦b", "/a/​b", "/a/﻿b"]) expect(isSafeNotePath(bad), JSON.stringify(bad)).toBe(false);
+  });
+});
