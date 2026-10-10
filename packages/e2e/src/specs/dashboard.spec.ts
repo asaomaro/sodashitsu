@@ -2,6 +2,7 @@ import { appendFile, chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } f
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { Page } from "@playwright/test";
+import { assertPaneResolvesFake } from "@sodashitsu/server";
 import type { AppServer } from "../support/appServer.js";
 import { expect, test } from "../support/fixtures.js";
 import { watchReceivedEvents } from "../support/frames.js";
@@ -47,12 +48,11 @@ setInterval(() => {}, 1000);
 await writeFile(join(dir, "fake-agent.mjs"), FAKE);
 await writeFile(join(dir, "bin", "claude"), `#!/bin/bash\nexec -a claude ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`);
 await chmod(join(dir, "bin", "claude"), 0o755);
-await writeFile(join(dir, "bin", "shell"), `#!/bin/bash\nexec /bin/bash --norc --noprofile "$@"\n`);
-await chmod(join(dir, "bin", "shell"), 0o755);
-const savedEnv = { PATH: process.env["PATH"], SHELL: process.env["SHELL"], CLAUDE_CONFIG_DIR: process.env["CLAUDE_CONFIG_DIR"] };
+// pane のシェルが rc を読んで PATH の先頭へ実物の `claude` を足し直さないことは、共通の道具（`startAppServer` の既定の、rc を読まない bash）に任せる。
+// 打ち込みの前に、pane の中で `command -v claude` が偽のものを指すことを `assertPaneResolvesFake` が確かめる（違えば打ち込まずに落ちる）。
+const savedEnv = { PATH: process.env["PATH"], CLAUDE_CONFIG_DIR: process.env["CLAUDE_CONFIG_DIR"] };
 test.beforeAll(() => {
   process.env["PATH"] = `${join(dir, "bin")}${delimiter}${savedEnv.PATH ?? ""}`;
-  process.env["SHELL"] = join(dir, "bin", "shell");
   process.env["CLAUDE_CONFIG_DIR"] = configDir;
 });
 test.afterAll(async () => {
@@ -96,6 +96,7 @@ async function snapshot(appServer: AppServer) {
 }
 /** pane でエージェントを起こし、フックの報告（会話の id）が届くまで待つ。記録のファイルの場所を返す。 */
 async function startAgent(appServer: AppServer, client: Awaited<ReturnType<AppServer["openClient"]>>, paneId: string, name: string): Promise<string> {
+  await assertPaneResolvesFake({ write: (input: string) => client.sendInput(paneId, input), name: "claude", fakeDir: join(dir, "bin"), scratchDir: dir });
   await client.request("agent.start", { name, kind: "claude", paneId, args: [] });
   await expect.poll(async () => (await snapshot(appServer)).panes.find((p) => p.id === paneId)?.agentSession?.sessionId ?? null, { timeout: 30_000 }).not.toBeNull();
   const sid = (await snapshot(appServer)).panes.find((p) => p.id === paneId)!.agentSession!.sessionId;
