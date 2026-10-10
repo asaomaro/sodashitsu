@@ -29,9 +29,16 @@ test("scrollback: copy モードで遡り、選択・yank した内容がクリ�
   // （D94：CopyTarget.resetCursor が pane acquire 時点ではなく「今」の位置へ合わせ直す）。
   await prefixKey(page, "[");
 
-  // 1 行ずつ確実に 5 行だけ遡る（PageUp は端末の行数に依存して移動量が変わるため使わない——
+  // 「新しいプロンプトの行から何行上」は、プロンプトの行数（rc の PS1）に依る。そこで基準を、出力の最後の行（LINE_marker_80）へ後方検索で飛んで取る
+  // （コマンドのエコーには `LINE_${marker}_$i` とあり、`_80` の文字列そのものは出力の行にだけある）。
+  await page.keyboard.press("?");
+  await page.keyboard.type(`LINE_${marker}_80`);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300); // SearchAddon の検索・スクロールを待つ
+
+  // そこから 1 行ずつ確実に 4 行だけ遡る（PageUp は端末の行数に依存して移動量が変わるため使わない——
   // 何行分動くかを厳密に予測できる k（1 行単位）のほうが、この検証には向く）。
-  for (let i = 0; i < 5; i++) await page.keyboard.press("k");
+  for (let i = 0; i < 4; i++) await page.keyboard.press("k");
 
   // 現在行を選択（V＝行単位）して yank（y）。design「選択とコピー」：v・Space・V で選択、y・Enter でコピー。
   await page.keyboard.press("V");
@@ -39,8 +46,7 @@ test("scrollback: copy モードで遡り、選択・yank した内容がクリ�
   await page.waitForTimeout(200); // クリップボードへの書き込み（Promise）を待つ
 
   const copied = await page.evaluate(() => navigator.clipboard.readText());
-  // 新しいプロンプトの行から 5 行上＝LINE_marker_76（新プロンプト行の 1 つ上が LINE_80、そこから
-  // さらに 4 行、の計 5 行分上）。
+  // LINE_marker_80 から 4 行上＝LINE_marker_76。
   expect(copied.trim()).toBe(`LINE_${marker}_76`);
 });
 

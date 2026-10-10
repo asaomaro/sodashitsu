@@ -17,6 +17,28 @@ const DROPS: Record<string, { script: string; breaker: boolean }> = {
 const html = (script: string): string => `<!doctype html><body><p>H</p><script>${script}</script></body>`;
 const REPS = 5;
 
+/**
+ * フォーカスを受けない余白: サイドバーの中で、ボタン・リンク・入力・tab 停止の要素の上でも中でもない点（`fromBottom` なら下から探す）。
+ * 隅（2, 2）は、クラシックの画面の切り替えのボタンが帯いっぱいに伸びる（20261008-ui-style PR6 の AC25）ので、もう余白ではない。
+ * 見つからなければ null（呼ぶ側が失敗にする）。
+ */
+async function findSidebarBlank(page: import("@playwright/test").Page, fromBottom: boolean): Promise<{ x: number; y: number } | null> {
+  return page.evaluate((bottom) => {
+    const sb = document.querySelector(".sidebar");
+    if (sb === null) return null;
+    const r = sb.getBoundingClientRect();
+    const focusable = "button, a, input, select, textarea, [tabindex], [role='button'], [draggable='true']";
+    for (const x of [r.left + r.width / 2, r.left + r.width - 6]) {
+      for (let i = 0; i < r.height / 2; i++) {
+        const y = bottom ? r.bottom - 2 - i * 2 : r.top + 2 + i * 2;
+        const e = document.elementFromPoint(x, y);
+        if (e !== null && sb.contains(e) && e.closest(focusable) === null) return { x, y };
+      }
+    }
+    return null;
+  }, fromBottom);
+}
+
 test.describe("面を先に出す → 本物のクリック → すぐ 80 キー", () => {
   test.describe.configure({ timeout: 90_000 });
   for (const [kind, d] of Object.entries(DROPS)) {
@@ -75,17 +97,21 @@ test.describe("面が既に落としている状態で、利用者が操作す�
     await page.locator(".xterm-screen").first().click();
     await setScriptOk(appServer, paneId, "g", slow);
     await expect(scriptFrameEl(page)).toHaveCount(1);
-    // フォーカスを受けない余白: 画面の切り替えの帯（サイドバーの上。tab が 1 つだと tab バーは出ない）自身の、どのボタンも載っていない場所（右から探す）。
-    // 左上の隅（2, 2）は、クラシックの切り替えのボタンが帯いっぱいに伸びる（20261008-ui-style PR6 の AC25）ので、もう余白ではない。
-    const blank = await page.evaluate(() => {
-      const bar = document.querySelector(".screen-switcher");
-      if (bar === null) return null;
-      const r = bar.getBoundingClientRect();
-      const y = r.top + r.height / 2;
-      for (let x = r.right - 2; x > r.left; x -= 2) if (document.elementFromPoint(x, y) === bar) return { x, y };
-      return null;
-    });
-    expect(blank, "画面の切り替えの帯に、ボタンの載っていない場所がある").not.toBeNull();
+    const blank = await findSidebarBlank(page, false);
+    expect(blank, "サイドバーに、ボタンの載っていない場所がある").not.toBeNull();
+    await page.mouse.click(blank!.x, blank!.y);
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("BODY");
+    expect(await typeAndCount(page, input, paneId)).toBeGreaterThanOrEqual(26);
+  });
+
+  test("サイドバーの空き（区画の下）を押す: 端末へ戻る", async ({ page, appServer }) => {
+    const { paneId, input } = await openScriptBrowser(page, appServer);
+    await page.locator(".xterm-screen").first().click();
+    await setScriptOk(appServer, paneId, "g", slow);
+    await expect(scriptFrameEl(page)).toHaveCount(1);
+    const blank = await findSidebarBlank(page, true);
+    expect(blank, "サイドバーに、ボタンの載っていない場所がある").not.toBeNull();
     await page.mouse.click(blank!.x, blank!.y);
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("BODY");
