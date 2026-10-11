@@ -88,7 +88,7 @@ export class Renderer {
       };
     }
     let sidebarHits =
-      layout.sidebar && !layout.sidebarOverlay ? paintSidebar(grid, layout.sidebar, ctx) : [];
+      layout.sidebar && !layout.sidebarOverlay ? paintSidebar(grid, layout.sidebar, {...ctx,sidebarCollapsed:layout.sidebarCollapsed === true}) : [];
     // 狭い幅は tab バーの代わりに 1 列表示の上辺（herdr の mobile）。
     const narrow = layout.narrow ? paintNarrowHeader(grid, layout.tabBar, ctx) : null;
     const tabBar: TabBarHits = narrow
@@ -118,6 +118,9 @@ export class Renderer {
           focused,
           cropped: term ? isCropped(term, box.content) : false,
           symbols: ctx.prefs.statusSymbols,
+          controls: ctx.chromeControls === true,
+          hasAgent: !!pane?.agent,
+          zoomed: model.currentTab()?.zoomedPaneId === box.paneId,
         },
         theme,
         box.sides,
@@ -147,7 +150,7 @@ export class Renderer {
     if (!layout.narrow && layout.tabBar.h === 0 && paintHiddenBarBadge(grid, layout.paneArea, ctx))
       covered = true;
     if (layout.sidebar && layout.sidebarOverlay) {
-      sidebarHits = paintSidebar(grid, layout.sidebar, ctx);
+      sidebarHits = paintSidebar(grid, layout.sidebar, {...ctx,sidebarCollapsed:layout.sidebarCollapsed === true});
       covered = true;
     }
     const decoCursor = extras.decorate?.(grid);

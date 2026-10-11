@@ -863,3 +863,12 @@ describe("parseArgs — agent usage（20261010-agent-usage）", () => {
     expect(() => parseArgs(["agent", "usage", "--path", "/x"], env)).toThrow();
   });
 });
+
+
+describe("agent prompt expected scope",()=>{
+ const expected={paneId:"pane",instanceId:"instance",tabId:"tab",projectDir:"/pj",name:"task-one"};
+ it("parses a complete expectation and rejects malformed or incomplete guards",()=>{
+  expect(parseArgs(["agent","prompt","task-one","update","--expect",JSON.stringify(expected)],noEnv)).toMatchObject({kind:"agent-prompt",expect:expected});
+  for(const json of ["bad","{}",JSON.stringify({...expected,extra:true})])expect(()=>parseArgs(["agent","prompt","task-one","update","--expect",json],noEnv)).toThrow(CliUsageError);
+ });
+});

@@ -25,9 +25,9 @@ export const defaultProjectRootDeps: ProjectRootDeps = {
  * 絶対パス・1024 文字以下・禁止する文字（`command` と同じ。承認の画面で正しく見せられない）を含まないものだけ。満たさなければ `null`。
  * 読めない（`ENOENT` 以外の誤り）ときは投げる（呼ぶ側が「今回は引けなかった」として扱い、覚えない）。
  */
-export async function resolveProjectRoot(cwd: string, deps: Partial<ProjectRootDeps> = {}): Promise<string | null> {
+export async function resolveProjectRoot(cwd: string, deps: Partial<ProjectRootDeps> = {}, explicitFolder = false): Promise<string | null> {
   const d = { ...defaultProjectRootDeps, ...deps };
-  const gitRoot = await findGitRoot(cwd, d.label);
+  const gitRoot = explicitFolder ? cwd : await findGitRoot(cwd, d.label);
   if (gitRoot === null) return null;
   let real: string;
   try {

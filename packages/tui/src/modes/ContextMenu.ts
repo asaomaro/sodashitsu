@@ -53,6 +53,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
       ...(swappable
         ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }]
         : []),
+
       { label: "右へ分割", run: () => actions.splitPane(target.paneId, "right") },
       { label: "下へ分割", run: () => actions.splitPane(target.paneId, "down") },
       { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },
@@ -70,6 +71,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         : []),
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
+
     ];
   }
   if (target.kind === "tab") {
@@ -117,10 +119,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         : hasOtherGroup
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
-      {
-        label: "新しいグループを作る…",
-        run: () => actions.createGroupForWorkspace(target.workspaceId),
-      },
+
     ];
   }
   if (target.kind === "group") {
@@ -145,13 +144,18 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         ]
       : [];
   }
+  if (target.kind === "new") return [
+    {label:"workspace",run:()=>actions.run({type:"newWorkspace"})},
+    ...(deps.ui.screen === "base" && model.focusedPaneId ? [{label:"pane",run:()=>actions.run({type:"split",dir:"right"})}] : []),
+    ...(model.workspaceId ? [{label:"グループ…",run:()=>actions.createGroupForWorkspace(model.workspaceId!)}] : []),
+  ];
   target satisfies { kind: "global" };
   return [
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
     { label: "設定", run: () => actions.run({ type: "settings" }) },
     // 端末版だけ：未処理の知らせの一覧（design の「通知の一覧」。web は知らせのトーストが残るので一覧を持たない）。
-    { label: "知らせの一覧", run: () => deps.ui.openDialogWithContext({ kind: "notifications" }) },
+
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
   ];
 }

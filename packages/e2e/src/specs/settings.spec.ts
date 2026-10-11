@@ -281,7 +281,7 @@ test("設定：prefix+s とサイドバーの［メニュー］で開け、7 節
   await page.keyboard.press("Escape");
   await expect(dialog(page)).not.toHaveAttribute("open", "");
 
-  await page.locator(".sidebar-section-footer button", { hasText: "メニュー" }).click();
+  await page.locator('[data-sidebar-act="menu"]').click();
   await page.locator(".context-menu li", { hasText: /^設定$/ }).click();
   await expect(dialog(page)).toHaveAttribute("open", "");
   await expect(dialog(page).locator("section h3")).toHaveText(["通知", "テーマ", "表示", "端末", "エージェント連携", "拡張", "キー"]);

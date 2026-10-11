@@ -7,6 +7,8 @@
 - 拡張は**隔離されない**（利用者の権限で動く。下の「安全と限界」）。登録したものは、利用者が自分で実行するのと同じ。
 - 登録は 2 か所: **利用者の設定**（状態ディレクトリの `extensions.json`。自分が書いたものなので、そのまま動く）と、**リポジトリの設定**（`<リポジトリの根>/.soda/extensions.json`。**他人が書いたものかもしれないので、あなたが承認したものだけ動く**。下の「プロジェクトの拡張と承認」）。
 
+配布できるパッケージの作成・導入・管理と、動画制作向けの利用例は [拡張パッケージ](plugin-packages.md)。
+
 ## 拡張とは
 
 - `soda` が起動するプログラム 1 つ。起動した時点から、標準入力に `soda` からの行（挨拶・pane の一覧・出来事）が届き、標準出力へ要求の行を書く。標準エラーは記録される（`sodactl ext log`）。
@@ -55,7 +57,7 @@
 - 1 つのファイルは 16 件まで・64 KiB まで。同時に動かす拡張は合計 32 まで（超えた分は `over_limit`）。
 - 持ち主が自分でない・グループかその他が書き込める・シンボリックリンク・通常のファイルでないものは読まない（`commands.json` と同じ）。
 - 設定は、サーバが起動するときと `sodactl ext reload` のときに読む。変わった拡張だけを入れ替える（中身が同じなら、動き続ける）。
-- `soda` を動かす環境変数（API の鍵など）は、拡張にも渡る。渡さないのは、`SODACTL_TOKEN`・`SODACTL_URL`・`SODA_PANE_ID`・`SODA_SERVER_URL`・`SODA_PANE_SOCKET`・`SODA_AGENT_REPORT_SOCKET`・`SODA_SESSION` など。
+- `soda` を動かす環境変数（API の鍵など）は、拡張にも渡る。渡さないのは、`SODACTL_TOKEN`・`SODACTL_URL`・`SODA_PANE_ID`・`SODA_SERVER_URL`・`SODA_PANE_SOCKET`・`SODA_AGENT_REPORT_SOCKET`・`SODA_SESSION` など。`SODA_SERVER_URL` は継承値を落とした後、実際に待ち受けた自サーバのURLを渡す（sodactlの接続先）。認証tokenは追加しない。
   足すのは `SODA_EXTENSION_ID`・`SODA_EXTENSION_SCOPE`（`user`）・`SODA_EXTENSION_RUN_ID`（起動 1 回ごとの UUID）。
 - **コマンドに秘密（token・パスワード）を書かない**。シェルの誤りの文として、コマンドの断片が標準エラーの記録に出うる。
 
@@ -67,7 +69,7 @@
 2. **承認したものと、実行するものが、同じ**（承認した登録の 1 件と同じ鍵のときだけ動く。登録を変えれば、止まって、聞き直される）。
 3. **承認を取り消したら、止まる**。
 
-- **根**: workspace を**開いた場所**（`Workspace.cwd`。pane の中で `cd` しても変わらない）から、`.git` をたどって見つけた、worktree ごとの根（`git` のコマンドは呼ばない。実体のパス）。git の外の workspace には、プロジェクトの拡張は無い。
+- **根**: PJフォルダを設定したworkspaceは、そのフォルダ自体（実体のパス）を使う。Git外でも利用できる。PJ未設定の場合はworkspaceを**開いた場所**（`Workspace.cwd`。paneの中で `cd` しても変わらない）から `.git` をたどり、worktreeごとの根を使う（`git` のコマンドは呼ばない）。PJ未設定かつGit外ならプロジェクト拡張は無い。
   根のパスに制御文字・書字方向の制御などを含むものは、承認の画面で正しく見せられないので、扱わない。
 - **書き方**は利用者の設定と同じ（`id`・`command`・`description`・`enabled`・`allow`・`onUnresponsive`）。**`cwd` は書けない**（作業ディレクトリは根）。誤りがあるファイルは、1 件も採らない（`problems` に出る）。
   作業ディレクトリは根。環境変数に `SODA_EXTENSION_SCOPE=project` と `SODA_PROJECT_ROOT=<根>` が足される。
@@ -273,3 +275,11 @@ process.on("SIGTERM", () => process.exit(0)); // 止めるとき、soda は標�
 - ネイティブの Windows では、実機で確かめていない。起動は `%ComSpec% /d /s /c "<command>"`、止めるのは `%SystemRoot%\System32\taskkill.exe /pid <pid> /T /F`（絶対パス）。
 - **親が先に終わった後の孫は止められない**（pid が再利用されうるので、`taskkill` を動かさない）。
 - 結合テスト・起動確認は Windows ではスキップする。
+
+`tabView` を設定した拡張は、タブ作成時の種類に表示できる。`ext.panes` には任意の `projectDir` と `plugin`（主画面アンカーの拡張keyとname）、`virtual`、`views`、`agentState` が含まれる。`views` を宣言すると、通常の端末タブにも追加できるビューを提供する。PJフォルダを設定したworkspaceのプロジェクト拡張は、そのフォルダ自体から読む（gitリポジトリは不要）。PJ未設定の場合は従来どおりworkspace.cwdのgitの根から読む。詳しくは [拡張パッケージ](plugin-packages.md)。
+
+## 新しい作業ペインへの制作依頼
+
+`agent-start` 許可を登録した稼働中の拡張は `task.kinds {}` と `task.start {paneId,kind,taskFile}` を利用できる。未許可の拡張には機能を告知せず拒否する。kindは初期プロンプト起動を確認したclaude/codex、taskFileはPJ内の相対パスの64KiB以下の通常ファイル。paneIdはその拡張自身のアプリ/追加ビューに属するものだけ。既存の端末へ任意入力するAPIではなく、同じタブの新しい作業ペインでPJ cwdから起動する。
+
+戻り値は `{paneId,kind,name,status:"submitted"}`。CLIの起動指示を送ったことを表し、ログイン・利用者の確認・スキルや依存の不足などで作業が始まらない場合は新しいペインで確認する。起動待ち中も、拡張の稼働・PJ範囲・ペインの所属を入力直前に再確認する。同じ稼働ペインへの重複依頼はまとめ、異なるkindの重複依頼は拒否する。失敗して生成済みのペインは調査のため残す。

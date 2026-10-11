@@ -1,5 +1,6 @@
 import { COMMAND_ID_RE } from "./commands.js";
-import type { DisplayLimits } from "./display.js";
+import { z } from "zod";
+import { DISPLAY_NAME_RE, type DisplayLimits } from "./display.js";
 
 /**
  * 拡張（設定に登録した別プロセスのプログラムを Sodashitsu が起動・停止し、標準入出力の NDJSON でやり取りする）の型と定数。
@@ -21,7 +22,7 @@ export const EXTENSIONS_PER_FILE_MAX = 16;
 export const EXTENSION_PROJECT_ROOTS_MAX = 32;
 /** 同時に動かす合計。 */
 export const EXTENSIONS_RUNNING_MAX = 32;
-export const EXTENSION_ALLOW_VALUES = ["script-html"] as const;
+export const EXTENSION_ALLOW_VALUES = ["script-html", "agent-start"] as const;
 export const EXTENSION_UNRESPONSIVE_VALUES = ["pass", "block"] as const;
 /** 拡張 → サーバの 1 行（受け口の 1 行と同じ）。 */
 export const EXTENSION_LINE_MAX_BYTES = 4 * 1024 * 1024;
@@ -77,6 +78,20 @@ export const EXTENSION_PANES_DEBOUNCE_MS = 100;
 export const EXTENSION_APPROVE_DELAY_MS = 1_000;
 
 export type ExtensionScope = "user" | "project";
+export interface ExtensionViewDefinition {
+  id: string;
+  title: string;
+  placements: import("./model.js").TabViewInstance["placement"][];
+  requiresProject?: boolean | undefined;
+}
+const ViewTitle = z.string().min(1).max(80).refine(v => !hasForbiddenChars(v));
+export const ExtensionTabViewSchema = z.strictObject({ title: ViewTitle, display: z.string().regex(DISPLAY_NAME_RE), requiresProject: z.boolean().optional() });
+export const ViewPlacementSchema = z.enum(["right", "left", "top", "bottom", "float", "band-top", "band-bottom"]);
+export const ExtensionViewsSchema = z.array(z.strictObject({
+  id: z.string().regex(COMMAND_ID_RE), title: ViewTitle,
+  placements: z.array(ViewPlacementSchema).min(1).max(7).refine(v => new Set(v).size === v.length),
+  requiresProject: z.boolean().optional(),
+})).max(16).refine(v => new Set(v.map(d => d.id)).size === v.length);
 export type ExtensionRunState =
   | "running" // 動作中
   | "backoff" // 落ちた。起動し直しを待っている
@@ -118,6 +133,10 @@ export interface ExtensionInfo {
   description?: string;
   allow: string[];
   onUnresponsive: "pass" | "block";
+  tabView?: { title: string; display: string; requiresProject?: boolean | undefined };
+  views?: ExtensionViewDefinition[];
+  /** プロジェクト拡張が利用できるワークスペース（サーバ側の根判定）。 */
+  workspaceIds?: string[];
   state: ExtensionRunState;
   enabledInConfig: boolean;
   disabledByUser: boolean;
@@ -174,6 +193,12 @@ export interface ExtPane {
   workspaceId: string;
   workspaceLabel: string;
   workspaceCwd: string;
+  projectDir?: string;
+  tabId?: string;
+  plugin?: import("./model.js").PluginTab;
+  virtual?: true;
+  views?: import("./model.js").TabViewInstance[];
+  agentState?: import("./model.js").AgentState;
   agent: string | null;
 }
 

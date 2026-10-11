@@ -3,6 +3,8 @@ import { lstat as fsLstat, open as fsOpen, realpath as fsRealpath, stat as fsSta
 import { dirname, isAbsolute, join } from "node:path";
 import {
   EXTENSIONS_FILE_MAX_BYTES,
+  ExtensionViewsSchema,
+  ExtensionTabViewSchema,
   EXTENSIONS_FILE_NAME,
   EXTENSIONS_PER_FILE_MAX,
   EXTENSION_ALLOW_VALUES,
@@ -31,6 +33,8 @@ export interface ExtensionEntry {
   enabled: boolean;
   /** 並べ替え済み（辞書順）。 */
   allow: string[];
+  tabView?: { title: string; display: string; requiresProject?: boolean | undefined };
+  views?: import("@sodashitsu/protocol").ExtensionViewDefinition[];
   onUnresponsive: "pass" | "block";
   /** プロジェクトでは常に null。 */
   cwd: string | null;
@@ -56,6 +60,8 @@ const Entry = z.strictObject({
     .max(EXTENSION_DESCRIPTION_MAX, { message: `説明は ${EXTENSION_DESCRIPTION_MAX} 文字までです` })
     .refine((v) => !hasForbiddenChars(v), { message: "説明に使えない文字（制御文字・見えない文字・U+0020 以外の空白など）が含まれます" })
     .optional(),
+  tabView: ExtensionTabViewSchema.optional(),
+  views: ExtensionViewsSchema.optional(),
   enabled: z.boolean({ message: "enabled は真偽にしてください" }).optional(),
   allow: z.array(z.enum(EXTENSION_ALLOW_VALUES, { message: "知らない許可の値です" })).optional(),
   onUnresponsive: z.enum(EXTENSION_UNRESPONSIVE_VALUES, { message: "onUnresponsive は pass か block にしてください" }).optional(),
@@ -125,6 +131,8 @@ export function parseExtensionsJson(text: string, scope: ExtensionScope): Extens
     description: e.description === undefined || e.description === "" ? null : e.description,
     enabled: e.enabled ?? true,
     allow: [...(e.allow ?? [])].sort(),
+    ...(e.tabView ? { tabView: e.tabView } : {}),
+    ...(e.views ? { views: e.views } : {}),
     onUnresponsive: e.onUnresponsive ?? "pass",
     cwd: scope === "project" ? null : (e.cwd ?? null),
   }));

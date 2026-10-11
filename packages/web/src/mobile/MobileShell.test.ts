@@ -316,3 +316,19 @@ describe("MobileShell — 連携（グラフ）への入口", () => {
     wrapper.unmount();
   });
 });
+
+it("keeps app view outside terminal scaling and lets swipes use native scrolling",async()=>{
+ const {session,registry,wrapper}=seedAndMount();await wrapper.vm.$nextTick();await wrapper.vm.$nextTick();
+ const term=registry.get("p1")!.term, scroll=vi.spyOn(term,"scrollLines");
+ session.paneUpserted({...makePane("anchor","t1"),virtual:true});
+ session.tabUpserted({...makeTab("t1","w1","p1"),plugin:{extensionKey:"user:test",display:"main"},perspective:"app",displayPaneId:"anchor"});
+ await wrapper.vm.$nextTick();await wrapper.vm.$nextTick();
+ expect(wrapper.get(".mobile-app-view").element.parentElement).toBe(wrapper.get(".mobile-shell-pane").element);
+ expect(wrapper.get(".mobile-shell-pane").attributes("style")).toContain("touch-action: auto");
+ const el=wrapper.get(".mobile-shell-pane").element;
+ for(const [type,y] of [["touchstart",300],["touchmove",260],["touchend",260]] as const){const t=new Touch({identifier:1,target:el,clientX:50,clientY:y});const ev=new TouchEvent(type,{touches:type==="touchend"?[]:[t],changedTouches:[t],cancelable:true,bubbles:true});el.dispatchEvent(ev);expect(ev.defaultPrevented).toBe(false);}
+ expect(scroll).not.toHaveBeenCalled();
+ session.tabUpserted({...session.tabs.get("t1")!,perspective:"terminal"});await wrapper.vm.$nextTick();await wrapper.vm.$nextTick();
+ expect(wrapper.find(".mobile-app-view").exists()).toBe(false);expect(wrapper.find(".xterm").exists()).toBe(true);
+ wrapper.unmount();
+});

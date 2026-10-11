@@ -60,7 +60,7 @@ export interface HostHarness {
   host: ExtensionHost;
   panes: Map<string, { workspaceId: string; label?: string }>;
   /** workspace（id → 開いた場所）。`snapshot()` が返す。 */
-  workspaces: Map<string, { cwd: string }>;
+  workspaces: Map<string, { cwd: string; projectDir?: string }>;
   scriptEnabled: { value: boolean };
   /** 同じ session の承認の記録（直接書く・読む）。 */
   approvalStore: ApprovalStore;
@@ -85,6 +85,8 @@ export interface HostHarness {
 
 export async function makeHost(
   o: {
+    tasks?: ExtensionHostOptions["tasks"];
+    tabPlugins?: Record<string,{extensionKey:string;display:string}>;
     timings?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["timings"]>;
     limits?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["limits"]>;
     open?: (path: string, flags: number) => Promise<import("node:fs/promises").FileHandle>;
@@ -98,6 +100,7 @@ export async function makeHost(
     approvalDeps?: Partial<import("./ApprovalStore.js").ApprovalFileDeps>;
     /** 拡張の起動に渡る元の環境変数（既定は PATH=/usr/bin と秘密）。 */
     baseEnv?: NodeJS.ProcessEnv;
+    serverUrlForExtensions?: ExtensionHostOptions["serverUrlForExtensions"];
     pathExists?: (path: string) => Promise<boolean>;
     projectFile?: NonNullable<ExtensionHostOptions["deps"]>["projectFile"];
     projectRoot?: NonNullable<ExtensionHostOptions["deps"]>["projectRoot"];
@@ -114,7 +117,7 @@ export async function makeHost(
   const logger = new MemoryLogger();
   const panes = new Map<string, { workspaceId: string; label?: string }>();
   for (const p of o.panes ?? ["p1", "p2"]) panes.set(p, { workspaceId: "w1" });
-  const workspaces = new Map<string, { cwd: string }>([["w1", { cwd: "/w1" }]]);
+  const workspaces = new Map<string, { cwd: string; projectDir?: string }>([["w1", { cwd: "/w1" }]]);
   const scriptEnabled = { value: true };
   const displays = new DisplayService({ bus, paneExists: (id) => panes.has(id), isScreenKind: () => true, scriptEnabled: () => scriptEnabled.value });
   groups.onCall = (pid, sig) => {
@@ -128,8 +131,8 @@ export async function makeHost(
   const session = {
     snapshot: () =>
       ({
-        workspaces: [...workspaces.entries()].map(([id, w]) => ({ id, label: id.toUpperCase(), cwd: w.cwd })),
-        tabs: [...workspaces.keys()].map((id) => ({ id: `t-${id}`, workspaceId: id })),
+        workspaces: [...workspaces.entries()].map(([id, w]) => ({ id, label: id.toUpperCase(), cwd: w.cwd, ...(w.projectDir ? { projectDir: w.projectDir } : {}) })),
+        tabs: [...workspaces.keys()].map((id) => ({ id: `t-${id}`, workspaceId: id, ...(o.tabPlugins?.[id] ? {plugin:o.tabPlugins[id],focusedPaneId:[...panes.entries()].find(([,p])=>p.workspaceId===id)?.[0]} : {}) })),
         panes: [...panes.entries()].map(([id, p]) => ({ id, tabId: `t-${p.workspaceId}`, label: p.label ?? null, agent: null })),
       }) as never,
     commandContext: ((id: string) => {
@@ -143,9 +146,11 @@ export async function makeHost(
     sessionRoot: dir,
     session,
     displays,
+    ...(o.tasks ? {tasks:o.tasks} : {}),
     bus,
     isScreenKind: o.isScreenKind ?? ((id) => id !== "external"),
     baseEnv: o.baseEnv ?? { PATH: "/usr/bin", SODACTL_TOKEN: "TOKEN-SECRET", SODA_PANE_ID: "pane-x" },
+    ...(o.serverUrlForExtensions ? {serverUrlForExtensions:o.serverUrlForExtensions} : {}),
     homeDir: "/home/test",
     logger,
     clock,

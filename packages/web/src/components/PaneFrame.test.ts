@@ -24,13 +24,14 @@ function makePane(id: string, overrides: Partial<Pane> = {}): Pane {
   return { id, tabId: "t1", label: null, cwd: "/", shell: "/bin/bash", cols: 80, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr", agent: null, agentSession: null, ...overrides };
 }
 
-function mountFrame(opts: { enabled?: boolean; withPinia?: boolean; multiPane?: boolean; neighbors?: PaneSides } = {}) {
+function mountFrame(opts: { presentationOnly?: boolean; enabled?: boolean; withPinia?: boolean; multiPane?: boolean; neighbors?: PaneSides } = {}) {
   const actions = { openContextMenu: vi.fn(), movePaneToEdge: vi.fn(), replacePaneWithDrag: vi.fn(), movePaneToTab: vi.fn(), movePaneToNewTab: vi.fn() };
   const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
   const wrapper = mount(PaneFrame, {
     attachTo: document.body,
     props: {
       paneId: "p1",
+      ...(opts.presentationOnly ? { presentationOnly: true } : {}),
       ...(opts.enabled === false ? {} : { enabled: true }),
       ...(opts.multiPane === undefined ? {} : { multiPane: opts.multiPane }),
       ...(opts.neighbors ? { neighbors: opts.neighbors } : {}),
@@ -750,7 +751,7 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
     const { wrapper } = mountFrame({ multiPane: true, neighbors: { ...NO_NEIGHBORS, right: true } });
     useSettingsStore(pinia).setPaneAgentNameVisible(true);
     await wrapper.vm.$nextTick();
-    expect(padding(wrapper)).toEqual([`calc(${GAP} + 1.2em)`, GAP, GAP, GAP]);
+    expect(padding(wrapper)).toEqual(["28px", GAP, GAP, GAP]);
     expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
   });
 
@@ -780,7 +781,7 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
     settings.setPaneAgentNameVisible(true);
     useSessionStore(pinia).paneUpserted(makePane("p1", { label: "build" }));
     const { wrapper } = mountFrame({ multiPane: true, neighbors: { ...NO_NEIGHBORS, top: true } });
-    expect(padding(wrapper)).toEqual(["1.2em", GAP, GAP, GAP]);
+    expect(padding(wrapper)).toEqual(["28px", GAP, GAP, GAP]);
     expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
     expect(wrapper.get(".pane-frame-edge").classes()).toContain("pane-frame-edge-flush");
   });
@@ -981,6 +982,16 @@ describe("PaneFrame — 表示の面（パネル・帯。20261007-soda-extension
     d.setFocused("a");
     await settle(wrapper);
     expect(wrapper.get(".pane-frame-main").classes()).toContain("pane-frame-main-dimmed");
+  });
+
+  it("アプリの外枠は表示にフォーカスがあっても減光しない", async () => {
+    const { wrapper } = mountFrame({presentationOnly:true});
+    const d = useDisplayStore(pinia);
+    d.upsert(disp("app", "panel"));
+    await settle(wrapper);
+    d.setFocused("app");
+    await settle(wrapper);
+    expect(wrapper.get(".pane-frame-main").classes()).not.toContain("pane-frame-main-dimmed");
   });
 
   it("たたむとパネルは外れてトレイのボタンになる。帯は、上と下が別の入れ物（別の PaneBands）", async () => {

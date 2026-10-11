@@ -14,7 +14,7 @@ import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { installKeepFocusRelease } from "./display/displayOps.js";
 import { installEngageGuard } from "./display/engageGuard.js";
 import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, type DisplayHost, DeviceKindKey, FileTransferKey, GraphTerminalControllerKey, KeyInputControllerKey, TerminalHostKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
-import { focusPaneIfShown } from "./actions/paneFocus.js";
+import { focusPaneIfShown, workPaneForDisplay } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
 import { PrefsSync } from "./actions/PrefsSync.js";
@@ -630,18 +630,16 @@ app.provide(AskControllerKey, askController);
 app.provide(ExtensionControllerKey, extensionController);
 app.provide(DisplayControllerKey, displayController);
 const displayHost: DisplayHost = {
-  focusTerminal: (paneId) =>
-    void focusPaneIfShown(
-      {
-        paneTab: (id) => session.panes.get(id)?.tabId,
-        shownTab: () => view.tabId,
-        focus: (id) => {
-          view.focusPane(id);
-          registry.focus(id);
-        },
-      },
-      paneId,
-    ),
+  focusTerminal: (paneId) => {
+    const id=workPaneForDisplay(session.panes,session.tabs,paneId);
+    if(!id)return;
+    const tab=session.tabs.get(session.panes.get(id)!.tabId);
+    if(tab?.id !== view.tabId)return;
+    const focus=()=> { if(session.panes.get(id)?.tabId===view.tabId){ view.focusPane(id); registry.focus(id); } };
+    if(tab.plugin && tab.perspective!=="terminal") {
+      void conn.request("tab.set_perspective",{tabId:tab.id,perspective:"terminal"}).then(()=>nextTick()).then(focus).catch(()=>undefined);
+    } else focus();
+  },
   focusedPaneId: () => view.focusedPaneId ?? null,
   focusSelectedTerminal: () => {
     const id = view.focusedPaneId;

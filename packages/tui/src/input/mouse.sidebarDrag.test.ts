@@ -3,9 +3,9 @@ import { startedApp } from "../testing/appHarness.js";
 import { snapshot, workspace } from "../testing/fixtures.js";
 import { REFUSE_BY_NAME, REFUSE_CONTAINER } from "./sidebarDrag.js";
 
-const down = (x: number, y: number, b = 0) => `\x1b[<${b};${x + 1};${y + 1}M`;
-const up = (x: number, y: number, b = 0) => `\x1b[<${b};${x + 1};${y + 1}m`;
-const drag = (x: number, y: number) => `\x1b[<32;${x + 1};${y + 1}M`;
+const down = (x: number, y: number, b = 0) => `\x1b[<${b};${x + 1};${y + 2}M`;
+const up = (x: number, y: number, b = 0) => `\x1b[<${b};${x + 1};${y + 2}m`;
+const drag = (x: number, y: number) => `\x1b[<32;${x + 1};${y + 2}M`;
 const X = 8; // 名前の上（見出しの「▸/▾」〔x=1〕・先頭の行の記号の外）
 
 const git = (linked: boolean) => ({

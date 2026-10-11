@@ -55,6 +55,7 @@ export const EXTENSION_ENV_DROPPED: readonly string[] = [...PANE_ENV_DROPPED];
  * `SODA_EXTENSION_RUN_ID` と、プロジェクトなら `SODA_PROJECT_ROOT` を足す。`SODA_PANE_ID`・`SODA_SERVER_URL`・`SODA_PANE_SOCKET`・
  * `SODA_AGENT_REPORT_SOCKET`・`SODACTL_TOKEN`・`SODACTL_URL` は、落としたまま足さない。
  */
+// ExtensionHost subsequently supplies the actual listening URL as SODA_SERVER_URL.
 export function buildExtensionEnv(
   base: NodeJS.ProcessEnv,
   ext: { id: string; scope: ExtensionScope; root: string | null; runId: string },

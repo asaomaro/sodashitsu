@@ -64,7 +64,7 @@ export class AgentStarter {
     params: AgentStartParams,
     onAccepted?: () => void,
     /** `skipInterrupt`: 先頭の Ctrl-C を送らない（作ったばかりの pane。fork が使う。20261009-agent-fork の A2）。 */
-    opts: { skipInterrupt?: boolean } = {},
+    opts: { skipInterrupt?: boolean; beforeWrite?: () => void } = {},
   ): Promise<AgentStartResult> {
     const { name, kind, paneId, args } = params;
     if (!isValidAgentName(name))
@@ -121,6 +121,7 @@ export class AgentStarter {
           if (again.kind !== "available") throw busy(paneId);
         },
         build: (modes) => {
+          opts.beforeWrite?.();
           // 他の入力の後ろで待つ間にエージェントが検出されていたら、その入力欄に打ち込まない（agent.prompt と同じ）。
           if (this.opts.session.getPane(paneId)?.agent !== null) throw busy(paneId);
           return startInput(line, modes.bracketedPaste, opts.skipInterrupt === true);

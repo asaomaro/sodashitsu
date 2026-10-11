@@ -22,6 +22,7 @@ import { useUiStyle } from "../composables/useUiStyle.js";
  * （利用者が設定で日時エントリを足せば同じ見た目になる。既定を維持するために `loadTabBarRightEntries`
  * 側の「空なら空」という素直な読み込みは変えない）。
  */
+const props = defineProps<{ viewActions?: boolean }>();
 const session = useSessionStore();
 const view = useViewStore();
 const settings = useSettingsStore();
@@ -43,7 +44,7 @@ const tabs = computed(() => {
 const root = ref<HTMLElement | null>(null);
 const tabsEl = ref<HTMLElement | null>(null);
 /** tab バーが見えているか（`v-if` と同じ条件をここにも持つ）。 */
-const visible = computed(() => tabBarAlways.value || tabs.value.length !== 1);
+const visible = computed(() => tabBarAlways.value || tabs.value.length !== 1 || (props.viewActions && !!view.tabId));
 
 /**
  * tab バーの中にフォーカスがあるまま非表示になるとき（自動非表示。AC-I6）、選ばれている pane の
@@ -388,8 +389,9 @@ function onWheel(ev: WheelEvent): void {
         <span v-if="tab.zoomedPaneId" class="tab-bar-zoomed">Z</span>
       </button>
     </div>
-    <button type="button" class="tab-bar-new" :disabled="!view.workspaceId" aria-label="新しいタブ" @click="onNewTab" @keydown="onButtonKeydown">＋</button>
+    <button type="button" class="tab-bar-new tab-bar-action" :disabled="!view.workspaceId" aria-label="新しいタブ" @click="onNewTab" @keydown="onButtonKeydown">＋</button>
     <span v-if="rightText" class="tab-bar-right" aria-hidden="true">{{ rightText }}</span>
+    <button v-if="viewActions && currentTab" type="button" class="tab-bar-action tab-bar-add-view" @click="view.openDialogWithContext({ kind: 'addView', tabId: currentTab.id })" @keydown="onButtonKeydown">ビューを追加</button>
   </div>
 </template>
 
@@ -419,7 +421,8 @@ function onWheel(ev: WheelEvent): void {
 }
 /* 高さをタブと揃える。`font: inherit` を落とすと既定のボタンフォントで行の高さが変わり、
  * 帯が高くなって PTY の行が減る（AC14）。 */
-.tab-bar-new {
+.tab-bar-add-view { margin-left:auto; white-space:nowrap; }
+.tab-bar-action {
   flex: none;
   padding: 0.5em var(--soda-shape-pad-x, 0.8em);
   /* 画面の様式（20261008-ui-style）。クラシックでは変数が無く、今の値（auto＝何もしない）。 */
@@ -431,10 +434,10 @@ function onWheel(ev: WheelEvent): void {
   border: none;
   cursor: pointer;
 }
-.tab-bar-new:hover:not(:disabled) {
+.tab-bar-action:hover:not(:disabled) {
   background: var(--soda-menu-hover-bg, #343746);
 }
-.tab-bar-new:disabled {
+.tab-bar-action:disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -506,7 +509,7 @@ function onWheel(ev: WheelEvent): void {
   gap: var(--soda-shape-seg-gap);
 }
 :root[data-ui-style="modern"] .tab-bar-item,
-:root[data-ui-style="modern"] .tab-bar-new {
+:root[data-ui-style="modern"] .tab-bar-action {
   font-size: var(--soda-shape-seg-font);
   padding: var(--soda-shape-seg-pad-y) var(--soda-shape-seg-pad-x);
   border: var(--soda-shape-seg-border) solid var(--soda-menu-border, #44475a);
@@ -518,12 +521,12 @@ function onWheel(ev: WheelEvent): void {
   padding-inline: var(--soda-shape-seg-tab-pad-x);
   justify-content: center;
 }
-:root[data-ui-style="modern"] .tab-bar-new {
+:root[data-ui-style="modern"] .tab-bar-action {
   min-width: var(--soda-shape-control-h);
   justify-content: center;
 }
 :root[data-ui-style="modern"] .tab-bar-item:hover,
-:root[data-ui-style="modern"] .tab-bar-new:hover:not(:disabled) {
+:root[data-ui-style="modern"] .tab-bar-action:hover:not(:disabled) {
   background: var(--soda-menu-hover-bg, #343746);
 }
 :root[data-ui-style="modern"] .tab-bar-item-active,

@@ -1,4 +1,4 @@
-import type { AgentInfo, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type { AgentPromptParams, AgentInfo, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
 import { resolveAgentTarget, type AgentPane } from "../agentTarget.js";
 import {
   currentScreen,
@@ -203,6 +203,7 @@ function promptAndWait(
   text: string,
   until: readonly AgentStatus[],
   deadline: number | undefined,
+  expectation?: AgentPromptParams["expect"],
 ): Promise<AgentView> {
   let tabId = target.tabId;
   return new Promise<AgentView>((resolve, reject) => {
@@ -282,7 +283,7 @@ function promptAndWait(
     }
     submitted = true;
     client
-      .request("agent.prompt", { paneId: target.paneId, instanceId: target.agent.instanceId, text })
+      .request(expectation ? "agent.prompt_checked" : "agent.prompt", { paneId: target.paneId, instanceId: target.agent.instanceId, text, ...(expectation ? {expect:expectation} : {}) })
       .then(
         (result) => {
           if (settled) return;
@@ -318,10 +319,11 @@ export async function runAgentPrompt(cmd: AgentPromptCmd, store: SessionStore): 
     assertNotSelfPane(cmd.opts, target.paneId, "send a prompt to the agent in"); // 名前で指しても自分の pane なら断る（20260926-agent-skill-file）
     const workspaces = workspacesByTab(hello.snapshot);
     if (!cmd.wait) {
-      const result = await client.request("agent.prompt", {
+      const result = await client.request(cmd.expect ? "agent.prompt_checked" : "agent.prompt", {
         paneId: target.paneId,
         instanceId: target.agent.instanceId,
         text: cmd.text,
+        ...(cmd.expect ? {expect:cmd.expect} : {}),
       });
       return viewOf({ ...target, agent: result.agent }, workspaces);
     }
@@ -333,6 +335,7 @@ export async function runAgentPrompt(cmd: AgentPromptCmd, store: SessionStore): 
       cmd.text,
       resolveUntil(cmd.until),
       deadline,
+      cmd.expect,
     );
   });
   printJson({ agent });

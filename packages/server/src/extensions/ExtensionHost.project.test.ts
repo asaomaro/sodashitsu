@@ -747,3 +747,47 @@ describe("プロジェクトの拡張に渡す PATH（D13 の 3）", () => {
     expect(byId("u").env["PATH"]).toBe(unsafe);
   });
 });
+
+
+describe("PJフォルダ変更と根の時間切れ", () => {
+  it("immediately denies the old root, does not cache it after timeout, and retries the new folder", async () => {
+    let hang = true, release!: () => void;
+    const gate = new Promise<void>(r => { release=r; });
+    const {x,root}=await withRepo([ext("a",{tabView:{title:"A",display:"a"}})],{projectRoot:{realpath:async p=>{if(hang && p.includes("new-folder"))await gate;return (await import("node:fs/promises")).realpath(p);}}});
+    const next=await x.makeRepo("new-folder",[ext("b",{tabView:{title:"B",display:"b"}})]);
+    await approve(x,root,full("a",{tabView:{title:"A",display:"a"}}));await approve(x,next,full("b",{tabView:{title:"B",display:"b"}}));
+    await x.host.start();const old=x.children[0]!;
+    expect(x.host.canOpenTab(pkey(root,"a"),"w1")).toBe(true);
+    x.workspaces.set("w1",{cwd:root,projectDir:next});
+    old.say({id:901,method:"display.set",params:{paneId:"p1",name:"after",kind:"panel",format:"html",content:"old root"}});
+    await x.until(()=>old.lines().some(l=>l["id"]===901));
+    expect(old.lines().find(l=>l["id"]===901)).toMatchObject({ok:false,error:{code:"not_found"}});
+    expect(x.host.canOpenTab(pkey(root,"a"),"w1")).toBe(false);
+    await x.run(x.host.reload());
+    expect(x.host.canOpenTab(pkey(root,"a"),"w1")).toBe(false);
+    hang=false;release();await x.drive(7000);
+    await x.until(()=>info(x,next,"b")?.state==="running",100);
+    expect(x.host.canOpenTab(pkey(next,"b"),"w1")).toBe(true);
+    expect(info(x,next,"b")?.workspaceIds).toEqual(["w1"]);
+  });
+});
+
+it("discovers and scopes explicit non-Git PJ extensions and waits for approval",async()=>{
+ const {x,root}=await withRepo([ext("a",{views:[{id:"history",title:"履歴",placements:["right"]}]})]);
+ await rm(join(root,".git"),{recursive:true,force:true});
+ x.workspaces.set("w1",{cwd:"/unrelated",projectDir:root});x.workspaces.set("w2",{cwd:"/elsewhere"});
+ await x.host.start();expect(info(x,root,"a")?.state).toBe("pending");expect(x.spawnCalls).toHaveLength(0);
+ await approve(x,root,full("a",{views:[{id:"history",title:"履歴",placements:["right"]}]}));await x.run(x.host.reload());
+ expect(info(x,root,"a")?.workspaceIds).toEqual(["w1"]);
+ expect(x.host.canUseExtension(pkey(root,"a"),"w1")).toBe(true);expect(x.host.canUseExtension(pkey(root,"a"),"w2")).toBe(false);
+});
+
+it("invalidates cached Git roots when the same cwd becomes an explicit PJ and when it is cleared",async()=>{
+ const {x,root}=await withRepo([ext("a",{tabView:{title:"A",display:"a"}})]);await rm(join(root,".git"),{recursive:true,force:true});
+ await approve(x,root,full("a",{tabView:{title:"A",display:"a"}}));
+ await x.host.start();expect(info(x,root,"a")).toBeUndefined();
+ x.workspaces.set("w1",{cwd:root,projectDir:root});x.bus.publish({event:"workspace.updated",data:{workspace:{id:"w1",cwd:root,projectDir:root} as never}});await x.drive(1500);await x.until(()=>info(x,root,"a")?.state==="running",100);
+ expect(x.host.canOpenTab(pkey(root,"a"),"w1")).toBe(true);
+ x.workspaces.set("w1",{cwd:root});expect(x.host.canOpenTab(pkey(root,"a"),"w1")).toBe(false);x.bus.publish({event:"workspace.updated",data:{workspace:{id:"w1",cwd:root} as never}});await x.drive(1500);
+ expect(info(x,root,"a")).toBeUndefined();
+});

@@ -714,3 +714,9 @@ describe("ExtensionHost: 設定・無効の記録が読めないとき（時間�
     expect(h.children[0]!.exited).toBe(true);
   });
 });
+
+
+it("passes its actual listening URL to sodactl without inherited tokens",async()=>{
+ const h=await makeHost({baseEnv:{PATH:"/usr/bin",SODA_SERVER_URL:"http://wrong:1",SODACTL_TOKEN:"secret"},serverUrlForExtensions:()=>"http://127.0.0.1:17780"});
+ try {await h.writeConfig([{id:"a",command:"node a.mjs"}]);await h.host.start();await h.until(()=>h.spawnCalls.length===1);expect(h.spawnCalls[0]!.env["SODA_SERVER_URL"]).toBe("http://127.0.0.1:17780");expect(h.spawnCalls[0]!.env["SODACTL_TOKEN"]).toBeUndefined();}finally{await h.cleanup();}
+});

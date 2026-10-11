@@ -239,6 +239,8 @@ test("pane の枠はキーボードでも開ける：tab バーから Tab で枠
   await page.keyboard.press("Tab"); // tab バーの「＋」（20260920-sidebar-tabbar-controls で足した）
   await expect(page.locator(".tab-bar-new")).toBeFocused();
   await page.keyboard.press("Tab");
+  await expect(page.locator(".tab-bar-action").last()).toBeFocused();
+  await page.keyboard.press("Tab");
   const edge = page.locator(".pane-frame-edge").first();
   await expect(edge).toBeFocused();
   await expect(edge).toHaveAttribute("aria-haspopup", "menu");
@@ -259,7 +261,7 @@ function describeFocus(page: Page): Promise<string> {
   return page.evaluate(() => {
     const active = document.activeElement as HTMLElement | null;
     if (!active || active === document.body) return "body";
-    const frames = Array.from(document.querySelectorAll(".pane-frame"));
+    const frames = Array.from(document.querySelectorAll("[data-pane-id].pane-frame"));
     const index = frames.findIndex((frame) => frame.contains(active));
     const where = index >= 0 ? `@pane${index + 1}` : "";
     if (active.classList.contains("pane-frame-edge")) return `frame${where}`;
@@ -270,6 +272,7 @@ function describeFocus(page: Page): Promise<string> {
     if (active.getAttribute("role") === "separator") return "splitter";
     if (active.classList.contains("tab-bar-item")) return "tab";
     if (active.classList.contains("tab-bar-new")) return "newTab";
+    if (active.classList.contains("tab-bar-action")) return "addView";
     return active.tagName.toLowerCase();
   });
 }
@@ -331,7 +334,7 @@ test("分割した 2 つ目の pane も、prefix のキーで選んでから、t
   }
   // 先頭の「＋」は tab バーの新しいタブのボタン（20260920-sidebar-tabbar-controls の AC6）。
   // 境界（Splitter）の次が p2 の枠で、p1 の枠・端末には止まらない。
-  expect(order).toEqual(["newTab", "splitter", "frame@pane2"]);
+  expect(order).toEqual(["newTab", "addView", "splitter", "frame@pane2"]);
   await expect(edges.nth(1)).toHaveAttribute("tabindex", "0"); // 選ばれている p2 の枠だけが Tab で止まる
   await expect(edges.nth(0)).toHaveAttribute("tabindex", "-1");
   await expect(page.locator(".xterm-helper-textarea").nth(0)).toHaveAttribute("tabindex", "-1"); // 選ばれていない p1 の端末も
@@ -528,17 +531,17 @@ test("全体のメニュー：キーボードだけで開いて閉じ、開い�
   // 20261004-ui-interaction-polish: 区画の見出しのボタン（`sidebar-section-toggle`）と 2 つの境目（`resize-handle`）も Tab で止まる。この順で挟まる:
   // spaces の見出し → spaces の並び順 → ＋ → メニュー → 区画の境目 → agents の見出し → agents の並び順 → 通知のベル（20261005-notify-bell。サイドバーの下端）→ 折りたたみ → サイドバーの幅の境目。
   // 20261008-graph-first: サイドバーの上に画面の切り替え（基本画面・グラフの 2 つのボタン）が増え、Tab の最初の 2 つになった（先頭に足しただけで、あとの並びは同じ）。
-  expect(reached.filter((c) => c !== "").slice(0, 12).map((c) => (c.includes("screen-switcher") ? "screen" : c.includes("section-toggle") ? "toggle" : c.includes("resize-handle") ? "divider" : c.includes("notify-bell") ? "bell" : c.includes("sort-btn") ? "sort" : c.includes("sidebar-btn-right") ? "menu" : c.includes("collapse") ? "collapse" : "plus")), trail).toEqual(["screen", "screen", "screen", "toggle", "sort", "plus", "menu", "divider", "toggle", "sort", "bell", "collapse"]); // 20261010-agent-usage PR3: 画面の切り替えが 3 つになった（基本画面・グラフ・利用状況）
-  const btns = reached.filter((c) => (c.includes("sidebar-btn") && !c.includes("section-toggle")) || c.includes("tab-bar-item"));
+  expect(reached.filter((c) => c !== "").slice(0, 12).map((c) => (c.includes("screen-switcher") ? "screen" : c.includes("section-toggle") ? "toggle" : c.includes("resize-handle") ? "divider" : c.includes("notify-bell") ? "bell" : c.includes("sort-btn") ? "sort" : c.includes("sidebar-footer-menu") ? "menu" : c.includes("sidebar-edge-toggle") ? "collapse" : "plus")), trail).toEqual(["screen", "screen", "screen", "toggle", "sort", "divider", "toggle", "sort", "plus", "menu", "bell", "collapse"]); // 20261010-agent-usage PR3: 画面の切り替えが 3 つになった（基本画面・グラフ・利用状況）
+  const btns = reached.filter((c) => (c.includes("sidebar-btn") && !c.includes("section-toggle")) || c.includes("sidebar-edge-toggle") || c.includes("tab-bar-item"));
   expect(btns[0], trail).toContain("sidebar-sort-btn"); // spaces の並び順
-  expect(btns[1], trail).toBe("sidebar-btn"); // ＋ 新規
-  expect(btns[2], trail).toContain("sidebar-btn-right"); // メニュー
-  expect(btns[3], trail).toContain("sidebar-sort-btn"); // agents の並び順
-  expect(btns[4], trail).toContain("sidebar-collapse-btn");
+  expect(btns[1], trail).toContain("sidebar-sort-btn"); // ＋ 新規
+  expect(btns[2], trail).toContain("sidebar-footer-new"); // メニュー
+  expect(btns[3], trail).toContain("sidebar-footer-menu"); // agents の並び順
+  expect(btns[4], trail).toContain("sidebar-edge-toggle");
   expect(btns[5], trail).toContain("tab-bar-item"); // サイドバーを抜けるとタブへ
 
   // 「メニュー」へ戻って Enter で開く。
-  const menuBtn = page.locator(".sidebar-section-footer .sidebar-btn-right");
+  const menuBtn = page.locator('[data-sidebar-act="menu"]');
   await menuBtn.focus();
   await expect(menuBtn).toBeFocused();
   await page.keyboard.press("Enter");

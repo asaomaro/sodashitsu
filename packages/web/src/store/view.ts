@@ -256,7 +256,9 @@ export interface ToastOptions {
  * `KeyRouter`/`KeyInputController` へ渡すモード名（"dialog"）との対応用の軽い印。
  */
 export type DialogContext =
+  | { kind: "addView"; tabId: string }
   | { kind: "newTab"; workspaceId: string }
+  | { kind: "projectFolder"; workspaceId: string; currentPath: string }
   | { kind: "renamePane"; paneId: string; currentLabel: string }
   | { kind: "renameTab"; tabId: string; currentLabel: string }
   // `currentAutoLabel` は開いた時点で名前が自動だったか（20260921-workspace-auto-label。変えずに確定したら送らない判定に使う）。

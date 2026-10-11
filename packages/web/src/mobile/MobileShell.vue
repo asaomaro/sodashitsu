@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PaneLayout from "../components/PaneLayout.vue";
+import PluginView from "../components/PluginView.vue";
+import TabViews from "../components/TabViews.vue";
 import TerminalPane from "../components/TerminalPane.vue";
 import { ConnectionKey, TerminalRegistryKey, ViewSyncKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
@@ -64,6 +66,10 @@ const paneLayout = ref<{ commitView: () => void } | null>(null);
 let touchScroll: TouchScroll | null = null;
 
 const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
+const appActive = computed(() => !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal");
+const tabDisplayPane = computed(() => currentTab.value?.displayPaneId);
+const tabPanelCount = computed(() => tabDisplayPane.value ? displays.panelsOf(tabDisplayPane.value).filter(d => d.name !== currentTab.value?.plugin?.display).length : 0);
+const sheetPane = ref<string | null>(null);
 const currentPaneId = computed(() => view.focusedPaneId);
 const currentPaneLayout = computed(() => (currentPaneId.value ? ({ type: "pane" as const, paneId: currentPaneId.value }) : null));
 const workspaceLabel = computed(() => (view.workspaceId ? (session.workspaces.get(view.workspaceId)?.label ?? "") : ""));
@@ -87,6 +93,7 @@ const viewportHeight = useVisualViewportHeight();
 function rebindTouchScroll(): void {
   touchScroll?.dispose();
   touchScroll = null;
+  if (appActive.value) return;
   const paneId = currentPaneId.value;
   const el = paneContainer.value;
   const term = paneId && registry ? registry.get(paneId)?.term : undefined;
@@ -94,7 +101,7 @@ function rebindTouchScroll(): void {
 }
 
 // `flush: "post"` ＝ DOM 更新後（`TerminalPane` が新しい pane を acquire し終えた後）に取り付け直す。
-watch([currentPaneId, paneContainer], rebindTouchScroll, { flush: "post" });
+watch([currentPaneId, paneContainer, appActive], rebindTouchScroll, { flush: "post" });
 onBeforeUnmount(() => touchScroll?.dispose());
 </script>
 
@@ -111,11 +118,14 @@ onBeforeUnmount(() => touchScroll?.dispose());
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
       <NotificationBell variant="mobile" />
       <button v-if="panelCount > 0" type="button" class="mobile-shell-display-btn" data-mobile-display-btn @click="showDisplaySheet = true">表示{{ panelCount }}</button>
+      <button v-if="tabPanelCount > 0" type="button" @click="sheetPane = tabDisplayPane ?? null; showDisplaySheet = true">タブの表示{{ tabPanelCount }}</button>
       <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
       <button type="button" class="mobile-shell-settings-btn" @click="view.openDialogWithContext({ kind: 'settings' })">設定</button>
     </header>
+    <TabViews v-if="currentTab" :tab="currentTab" show-add-button />
+    <PaneBands v-if="tabDisplayPane" :pane-id="tabDisplayPane" :pane-height-px="viewportHeight" />
     <PaneBands v-if="currentPaneId && bandCount > 0" :pane-id="currentPaneId" :pane-height-px="viewportHeight" />
-    <main ref="paneContainer" class="mobile-shell-pane">
+    <main ref="paneContainer" class="mobile-shell-pane" :style="appActive ? { touchAction: 'auto' } : undefined">
       <div
         class="mobile-shell-pane-scale"
         :style="naturalSize ? { width: `${naturalSize.width}px`, height: `${naturalSize.height}px`, transform: `scale(${scale})` } : {}"
@@ -127,20 +137,24 @@ onBeforeUnmount(() => touchScroll?.dispose());
           :tab-id="view.tabId"
           :layout="currentPaneLayout"
           :measure-single-pane="measureSinglePane"
+          :style="appActive ? { visibility: 'hidden' } : undefined"
+          :inert="appActive || undefined"
         >
           <template #pane="{ paneId }">
             <TerminalPane :pane-id="paneId" />
           </template>
         </PaneLayout>
       </div>
+      <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view"><PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" /></div>
     </main>
-    <ExtraKeys v-if="showKeyboard" />
+    <ExtraKeys v-if="showKeyboard && !appActive" />
     <PanePicker v-if="showPicker" @close="showPicker = false" />
-    <MobileDisplaySheet v-if="showDisplaySheet && currentPaneId" :pane-id="currentPaneId" @close="showDisplaySheet = false" />
+    <MobileDisplaySheet v-if="showDisplaySheet && (sheetPane || currentPaneId)" :pane-id="sheetPane || currentPaneId!" :exclude-name="sheetPane === tabDisplayPane ? currentTab?.plugin?.display : undefined" @close="showDisplaySheet = false; sheetPane = null" />
   </div>
 </template>
 
 <style scoped>
+.mobile-app-view { position:absolute; inset:0; }
 .mobile-shell {
   display: flex;
   flex-direction: column;
@@ -207,12 +221,14 @@ onBeforeUnmount(() => touchScroll?.dispose());
  * （`flex: 1`・`min-height: 0`・`overflow: hidden`）が、申告と PTY の大きさの循環を起こさない前提。
  */
 .mobile-shell-pane {
+  position: relative;
   flex: 1;
   min-height: 0;
   touch-action: pan-x; /* 縦方向のネイティブジェスチャを避け、TouchScroll に譲る（design「スクロールと入力」） */
   overflow: hidden;
 }
 .mobile-shell-pane-scale {
+  position:relative;
   transform-origin: top left;
 }
 </style>

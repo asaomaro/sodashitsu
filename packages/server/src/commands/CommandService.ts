@@ -140,6 +140,7 @@ export class CommandService {
         `custom command not found: ${params.commandId} (reload the configuration)`,
       );
     const ctx = this.opts.session.commandContext(params.paneId); // pane が無ければ not_found（モデルから引き直す）
+    if (ctx.virtual) throw new RpcError("invalid_params", "表示専用アンカーからコマンドは起動できません");
     const cwd = (await this.isDirectory(ctx.cwd)) ? ctx.cwd : ctx.defaultCwd;
     // 待つ間に読み直されていたら、今の一覧で引き直す（捨てた・書き換わった定義を走らせない）。
     const def = this.commands.find((c) => c.id === params.commandId);

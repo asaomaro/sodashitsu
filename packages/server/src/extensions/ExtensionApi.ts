@@ -47,6 +47,7 @@ export interface ExtensionApiDeps {
   /** その拡張が、その pane を扱えるか。pane が無ければ false。 */
   inScope(ext: ApiExtension, paneId: string): boolean;
   logger: Pick<Logger, "warn">;
+  taskMethods?: readonly string[];
 }
 
 const SCRIPT_HTML = "script-html";
@@ -78,7 +79,7 @@ export function createExtensionApi(deps: ExtensionApiDeps) {
   }
 
   function methods(ext: ApiExtension): string[] {
-    return mayScript(ext) ? [...METHODS_ALWAYS, "display.send"] : [...METHODS_ALWAYS];
+    return [...METHODS_ALWAYS, ...(mayScript(ext) ? ["display.send"] : []), ...(ext.allow.includes("agent-start") ? deps.taskMethods ?? [] : [])];
   }
 
   function helloLine(ext: ApiExtension): ExtLine {

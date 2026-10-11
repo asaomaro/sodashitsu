@@ -38,6 +38,14 @@ describe("resolveProjectRoot", () => {
     expect(await resolveProjectRoot(wt)).toBe(wt);
   });
 
+  it("uses an explicit PJ folder outside Git or inside a larger repository", async()=>{
+    const plain=join(tmp,"plain");await mkdir(plain);
+    expect(await resolveProjectRoot(plain,{},true)).toBe(plain);
+    const root=await repo(join(tmp,"repo"));const sub=join(root,"video");await mkdir(sub);
+    expect(await resolveProjectRoot(sub,{},true)).toBe(sub);
+    expect(await resolveProjectRoot(sub)).toBe(root);
+  });
+
   it("git の外 → null", async () => {
     await mkdir(join(tmp, "plain"));
     expect(await resolveProjectRoot(join(tmp, "plain"))).toBeNull();

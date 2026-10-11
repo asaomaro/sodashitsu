@@ -14,6 +14,7 @@
 - pane の中のプログラムが画面に出し続けるパネル・帯（表示の面。`sodactl display`。中身の形式・操作・幅のつまみ・隔離のしくみ・限界）は `docs/display.md`、コマンドの形は `docs/sodactl.md`。
 - pane の表示の面の置き場所とたたみ（面ごとのたたみ・帯の行のボタン〔トレイ〕・帯の上下・表示のメニュー `prefix+shift+i`・記憶と優先・フォーカスの扱い・限界）は `docs/display.md`「たたむ・置き場所・帯の行のボタン」、パネルの上下左右の置き場所・並び・端末の最小・D&D・各側のつまみは同「パネルの置き場所と並び」「D&D」「つまみ（各側）」、浮いた窓（出し方・閉じて始まる・動かす・大きさ・キーボード・重なり・限界）は同「浮いた窓」「浮いた窓の限界」、`--dock`・`--edge`・`--collapsed` は `docs/sodactl.md`。
 - 拡張（設定に登録したプログラムを Sodashitsu が動かす。置き場所と書き方・やり取りの型・上限・安全と限界・`sodactl ext`。**リポジトリの `.soda/extensions.json` に書いた拡張は、承認したものだけ動く**〔承認の流れ・鍵・範囲・寿命・承認の記録〕）は `docs/extensions.md`「プロジェクトの拡張と承認」。
+- 配布できる拡張パッケージ（`sodactl plugin pack/install/list/enable/disable/remove`。導入時は無効、素材・スキルは別途）と動画制作UIの Yukkuri Studio は `docs/plugin-packages.md`、プラグイン本体と利用手順は別PJの `yukkuri-work/plugins/yukkuri-studio/` で管理する。連携テストは `YUKKURI_STUDIO_SOURCE` で外部ソースを指定する。
 - 画面の様式（クラシック／モダン。設定「表示」のラジオ。モダンが変えるもの・数値を決めてある場所・対象外）は `docs/ui-style.md`。変更の前後を画素まで比べる道具は `docs/verification.md`「画面の見た目を、変更の前後で画素まで比べる」。
 - ブラウザ版の端末のファイルのリンクとドロップ（同じマシンかの判定・開き方・送ったファイルの置き場所）は `docs/file-links.md`。
 - グラフの上の端末の窓（ノードを押すと開く・キーの線引き・直結と大きさ・閉じる道。`docs/agent-graph.md`「端末の窓」）。

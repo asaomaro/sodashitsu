@@ -66,7 +66,7 @@ test("workspace が多いと spaces の区画の中だけがスクロールし�
   expect(scrolls, "spaces の body がスクロールする").toBe(true);
   // サイドバー全体はスクロールしない。見出し・フッタ・畳むボタンは画面の中（ビューポートの下端を越えない）。
   const vh = page.viewportSize()!.height;
-  for (const sel of [".sidebar-spaces .sidebar-section-header", ".sidebar-spaces .sidebar-section-footer", ".sidebar-spaces .sidebar-section-footer .sidebar-btn-right", ".sidebar-agents .sidebar-section-header", ".sidebar-footer .sidebar-collapse-btn"]) {
+  for (const sel of [".sidebar-spaces .sidebar-section-header", ".sidebar-footer", ".sidebar-footer-menu", ".sidebar-agents .sidebar-section-header", ".sidebar-edge-toggle"]) {
     const box = (await page.locator(sel).first().boundingBox())!;
     expect(box.y, sel).toBeGreaterThanOrEqual(0);
     expect(box.y + box.height, sel).toBeLessThanOrEqual(vh + 0.5);

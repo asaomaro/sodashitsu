@@ -3512,3 +3512,69 @@ describe("SessionService — 移行の確定（仮の状態 → confirmLayout）
     expect(g.service.persistedLayout()).not.toBeNull();
   });
 });
+
+
+describe("PJフォルダとプラグインタブ", () => {
+  it("pins new terminal tabs and splits to the PJ folder without changing existing terminals", async () => {
+    const root = await mkdtemp(join(tmpdir(), "soda-project-folder-"));
+    try {
+      const terminals = new FakeTerminalManager(), bus = new EventBus(), persist = new FakePersistScheduler();
+      const service = makeService(terminals, bus, persist);
+      const first = await service.createWorkspace("/server-start", "PJ");
+      await service.setWorkspaceProjectFolder(first.workspace.id, root);
+      expect(first.pane.cwd).toBe("/server-start");
+      const tab = await service.createTab(first.workspace.id, "terminal", { policy: "home" });
+      const split = await service.splitPane(first.pane.id, "right", undefined, { policy: "current" });
+      expect(tab.pane.cwd).toBe(root); expect(split.pane.cwd).toBe(root);
+      expect(terminals.createOptions.slice(1).map(o => o.cwd)).toEqual([root, root]);
+      expect(service.identityCwdOf(first.workspace.id)).toBe(root);
+      await expect(service.setWorkspaceProjectFolder(first.workspace.id, join(root,"missing"))).rejects.toThrow();
+      expect(first.workspace.projectDir).toBe(root);
+      await service.setWorkspaceProjectFolder(first.workspace.id, null);
+      expect(service.snapshot().workspaces.find(w=>w.id===first.workspace.id)?.projectDir).toBeUndefined();
+    } finally { await rm(root, { recursive:true, force:true }); }
+  });
+
+  it("keeps work terminals alive across perspectives and restores only work panes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "soda-plugin-perspective-"));
+    try {
+      const terminals = new FakeTerminalManager(); const service=makeService(terminals,new EventBus(),new FakePersistScheduler());
+      const first=await service.createWorkspace("/server-start","PJ");
+      const plugin={extensionKey:"user:yukkuri-studio",display:"yukkuri-studio"};
+      await service.setWorkspaceProjectFolder(first.workspace.id,root);
+      const tab=await service.createTab(first.workspace.id,"studio",undefined,plugin);
+      expect(terminals.createOptions).toHaveLength(2);
+      const anchorId=tab.tab.displayPaneId!;
+      expect(service.snapshot().panes.find(p=>p.id===anchorId)?.virtual).toBe(true);
+      expect(terminals.get(anchorId)).toBeUndefined();
+      expect(terminals.get(tab.pane.id)).toBeDefined();
+      const split=await service.splitPane(tab.pane.id,"right",undefined);
+      const original=terminals.get(tab.pane.id);
+      service.setTabPerspective(tab.tab.id,"terminal");service.setTabPerspective(tab.tab.id,"app");
+      expect(terminals.get(tab.pane.id)).toBe(original);
+      expect(terminals.createOptions).toHaveLength(3);
+      await expect(service.splitPane(anchorId,"right",undefined)).rejects.toThrow();
+      expect(()=>service.focusPane(anchorId)).toThrow();
+      expect(()=>service.moveToTab(anchorId,first.tab.id)).toThrow();
+      expect(()=>service.zoomPane(anchorId,"on")).toThrow();
+      await expect(service.openCommandPane(anchorId,root,{shell:"/bin/sh",args:[],env:{}})).rejects.toThrow();
+      const added=service.addTabView(tab.tab.id,{extensionKey:"user:graph",viewId:"history",target:"tab",placement:"right"});
+      expect(added.paneId).toBe(anchorId);
+      service.addTabView(tab.tab.id,{extensionKey:"user:graph",viewId:"history",target:"pane",placement:"left"},split.pane.id);
+      service.addTabView(first.tab.id,{extensionKey:"user:graph",viewId:"history",target:"pane",placement:"right"},first.pane.id);
+      expect(service.getTab(first.tab.id)?.displayPaneId).toBeUndefined();
+      const {toSessionFileData}=await import("../composeServer.js");
+      const {FsSessionFile}=await import("../persist/SessionFile.js");
+      const file=new FsSessionFile(root);await file.save(toSessionFileData(service));const loaded=await file.load();
+      if(loaded.kind!=="ok")throw new Error(JSON.stringify(loaded));
+      const restoredTerminals=new FakeTerminalManager();const restored=makeService(restoredTerminals,new EventBus(),new FakePersistScheduler());
+      await restored.restore(loaded.data);
+      const savedTab=restored.snapshot().tabs.find(t=>t.id===tab.tab.id)!;
+      expect(savedTab.plugin).toEqual(plugin);expect(savedTab.perspective).toBe("app");expect(savedTab.displayPaneId).toBe(anchorId);
+      expect(savedTab.views).toHaveLength(2);
+      expect(restoredTerminals.createOptions).toHaveLength(3);expect(restoredTerminals.get(anchorId)).toBeUndefined();
+      await restored.closeTab(tab.tab.id);
+      expect(restored.snapshot().panes.some(p=>p.tabId===tab.tab.id)).toBe(false);
+    }finally{await rm(root,{recursive:true,force:true});}
+  });
+});

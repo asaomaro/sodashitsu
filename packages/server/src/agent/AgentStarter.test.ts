@@ -365,3 +365,7 @@ describe("AgentStarter", () => {
     expect(h.session.endAgentLaunch).toHaveBeenCalledWith("p1", 7);
   });
 });
+
+it("checks an optional task scope guard immediately before writing startup input",async()=>{
+ const h=harness();await expect(h.starter.start(PARAMS,undefined,{skipInterrupt:true,beforeWrite:()=>{throw new Error("task scope revoked");}})).rejects.toMatchObject({code:"agent_start_input_failed"});expect(h.written).toEqual([]);expect(h.session.endAgentLaunch).toHaveBeenCalled();
+});

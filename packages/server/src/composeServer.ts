@@ -1,3 +1,4 @@
+import { createAgentKindsLister } from "./agent/agentKinds.js";
 import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -434,6 +435,7 @@ export async function composeServer(
   // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
   const extensions = new ExtensionHost({
+    tasks:{session,starter:agentStarter,kinds:createAgentKindsLister()},
     stateDir: options.stateDir,
     sessionRoot: options.sessionRoot,
     session,
@@ -444,6 +446,7 @@ export async function composeServer(
       return kind === "desktop" || kind === "mobile";
     },
     baseEnv: process.env,
+    serverUrlForExtensions: () => paneUrl,
     homeDir: osHomedir(),
     logger,
     ...(internal.extensions ? { deps: internal.extensions } : {}),
@@ -1138,6 +1141,7 @@ export function toSessionFileData(session: SessionService): SessionFileData {
       ...(typeof ws.git?.worktreeKey === "string" ? { worktreeKey: ws.git.worktreeKey } : {}),
       ...(typeof ws.git?.worktreeKey === "string" && typeof ws.representative === "boolean" ? { representative: ws.representative } : {}),
       cwd: ws.cwd,
+      ...(ws.projectDir ? { projectDir: ws.projectDir } : {}),
       activeTabId: ws.activeTabId,
       // tab は並べ替えた順（`ws.tabIds`）で保存する——復元の tab の並びと、最初の tab（名前と git を決める場所。20260926-workspace-label-follow-cwd）が保たれる。
       tabs: ws.tabIds
@@ -1145,6 +1149,10 @@ export function toSessionFileData(session: SessionService): SessionFileData {
         .map((tab) => ({
           id: tab.id,
           label: tab.label,
+          ...(tab.plugin ? { plugin: tab.plugin } : {}),
+          ...(tab.perspective ? { perspective: tab.perspective } : {}),
+          ...(tab.displayPaneId ? { displayPaneId: tab.displayPaneId } : {}),
+          ...(tab.views ? { views: tab.views } : {}),
           focusedPaneId: tab.focusedPaneId,
           zoomedPaneId: tab.zoomedPaneId,
           layout: tab.layout,
@@ -1152,6 +1160,7 @@ export function toSessionFileData(session: SessionService): SessionFileData {
             .filter((p) => p.tabId === tab.id)
             .map((p) => ({
               id: p.id,
+              ...(p.virtual ? { virtual: true as const } : {}),
               label: p.label,
               cwd: p.cwd,
               shell: p.shell,

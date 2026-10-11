@@ -1,3 +1,4 @@
+import { TaskAgentLauncher, TaskStartSchema, type TaskAgentDeps } from "./TaskAgentLauncher.js";
 import { randomUUID } from "node:crypto";
 import { stat as fsStat } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -63,9 +64,11 @@ export interface ExtensionHostOptions {
   sessionRoot: string;
   session: Pick<SessionService, "snapshot" | "commandContext" | "hasPane">;
   displays: DisplayService;
+  tasks?: TaskAgentDeps;
   bus: EventBus;
   isScreenKind(clientId: string): boolean;
   baseEnv: NodeJS.ProcessEnv;
+  serverUrlForExtensions?: () => string | undefined;
   homeDir: string;
   logger: Logger;
   clock?: Clock;
@@ -179,9 +182,11 @@ class Debouncer {
   }
 }
 
-const PANE_EVENTS = new Set(["pane.created", "pane.closed", "tab.created", "tab.closed", "layout.updated", "workspace.updated", "workspace.created", "workspace.closed", "pane.updated"]);
+const PANE_EVENTS = new Set(["pane.created", "pane.closed", "tab.created", "tab.closed", "tab.updated", "layout.updated", "workspace.updated", "workspace.created", "workspace.closed", "pane.updated"]);
 /** workspace の増減（プロジェクトの根・設定を読み直すきっかけ）。 */
-const WORKSPACE_EVENTS = new Set(["workspace.created", "workspace.closed"]);
+const WORKSPACE_EVENTS = new Set(["workspace.created", "workspace.closed", "workspace.updated"]);
+
+function workspaceFolderKey(ws: { projectDir?: string | undefined; cwd: string }): string { return JSON.stringify([!!ws.projectDir,ws.projectDir ?? ws.cwd]); }
 
 export class ExtensionHost {
   private readonly clock: Clock;
@@ -199,6 +204,8 @@ export class ExtensionHost {
 
   /** workspace の id → プロジェクトの根（null は git の外）。引けなかった workspace は入れない。作り終えてから差し替える。 */
   private workspaceRoots = new Map<string, string | null>();
+  private taskLauncher?: TaskAgentLauncher;
+  private workspaceFolders = new Map<string, string>();
   /** 根を、覚えを使わずに全部引き直す（`reload`）。 */
   private forceRoots = false;
   /** 最後に読んだ承認の記録。 */
@@ -247,11 +254,15 @@ export class ExtensionHost {
     this.approvals = new ApprovalStore(opts.sessionRoot, opts.deps?.approvalFile);
     // 利用者の拡張は、pane が実在すれば範囲の中。プロジェクトの拡張は、pane のある workspace の根が、拡張の根と文字列として等しいときだけ（要求のたびに引く）。
     this.inScopeFn = opts.deps?.inScope ?? ((ext, paneId) => this.defaultInScope(ext, paneId));
+    if(opts.tasks){
+      this.taskLauncher=new TaskAgentLauncher(opts.tasks);
+    }
     this.api = createExtensionApi({
       displays: opts.displays,
       panes: (ext) => this.panesFor(ext),
       inScope: (ext, paneId) => this.inScopeFn(ext, paneId),
       logger: opts.logger,
+      ...(this.taskLauncher ? {taskMethods:["task.kinds","task.start"]} : {}),
     });
     this.panesDebounce = new Debouncer(this.clock, EXTENSION_PANES_DEBOUNCE_MS, 500, () => this.refreshPanes());
     this.workspaceDebounce = new Debouncer(this.clock, 200, 1_000, () => this.scheduleReconcile());
@@ -268,6 +279,8 @@ export class ExtensionHost {
     } catch {
       return false;
     }
+    const ws = this.opts.session.snapshot().workspaces.find(w => w.id === workspaceId);
+    if (!ws || this.workspaceFolders.get(workspaceId) !== workspaceFolderKey(ws)) return false;
     const root = this.workspaceRoots.get(workspaceId);
     return root !== undefined && root !== null && root === ext.root;
   }
@@ -366,9 +379,9 @@ export class ExtensionHost {
           try {
             if (this.stopped) return;
             if (PANE_EVENTS.has(e.event)) this.panesDebounce.poke();
-            if (WORKSPACE_EVENTS.has(e.event)) {
+            if (WORKSPACE_EVENTS.has(e.event) && (e.event !== "workspace.updated" || this.workspaceFolders.get(e.data.workspace.id) !== workspaceFolderKey(e.data.workspace))) {
               // 消えた workspace の pane はもう無いので、根の覚えはその場で消してよい。差を埋めるのは、まとめてから。
-              if (e.event === "workspace.closed") this.workspaceRoots.delete(e.data.workspaceId);
+              if (e.event === "workspace.closed") { this.workspaceRoots.delete(e.data.workspaceId); this.workspaceFolders.delete(e.data.workspaceId); }
               this.workspaceDebounce.poke();
             }
           } catch {
@@ -465,6 +478,18 @@ export class ExtensionHost {
 
   // --- 一覧 ---------------------------------------------------------------------------------------------------------
 
+  canOpenTab(key: string, workspaceId: string): boolean {
+    const ext = this.list().extensions.find(e => e.key === key);
+    return !!ext?.tabView && this.canUseExtension(key, workspaceId);
+  }
+  canUseExtension(key: string, workspaceId: string): boolean {
+    const ext = this.list().extensions.find(e => e.key === key);
+    if (!ext || ext.state !== "running") return false;
+    if (ext.scope === "user") return true;
+    const ws = this.opts.session.snapshot().workspaces.find(w => w.id === workspaceId);
+    return !!ws && this.workspaceFolders.get(ws.id) === workspaceFolderKey(ws) && ext.root === this.workspaceRoots.get(ws.id);
+  }
+
   list(): ExtensionListResult {
     const extensions: ExtensionInfo[] = [];
     for (const d of this.desired.values()) {
@@ -481,9 +506,12 @@ export class ExtensionHost {
         key: d.key,
         id: d.entry.id,
         scope: d.scope,
+        ...(d.scope === "project" ? { workspaceIds: this.opts.session.snapshot().workspaces.filter(w => this.workspaceFolders.get(w.id) === workspaceFolderKey(w) && this.workspaceRoots.get(w.id) === d.root).map(w => w.id) } : {}),
         ...(d.root !== null ? { root: d.root } : {}),
         configPath: d.configPath,
         allow: [...d.entry.allow],
+        ...(d.entry.tabView ? { tabView: d.entry.tabView } : {}),
+        ...(d.entry.views ? { views: d.entry.views } : {}),
         onUnresponsive: d.entry.onUnresponsive,
         state,
         enabledInConfig: d.entry.enabled,
@@ -618,10 +646,13 @@ export class ExtensionHost {
     const workspaces = this.opts.session.snapshot().workspaces;
     const prev = this.workspaceRoots;
     const map = new Map<string, string | null>();
-    const todo: { id: string; cwd: string }[] = [];
+    const todo: { id: string; cwd: string; explicit: boolean; key: string }[] = [];
     for (const ws of workspaces) {
-      if (!force && prev.has(ws.id)) map.set(ws.id, prev.get(ws.id) ?? null);
-      else todo.push({ id: ws.id, cwd: ws.cwd });
+      const folder = workspaceFolderKey(ws);
+      const same = this.workspaceFolders.get(ws.id) === folder;
+      if (!same) { this.workspaceRoots.delete(ws.id); this.workspaceFolders.delete(ws.id); }
+      if (!force && same && prev.has(ws.id)) map.set(ws.id, prev.get(ws.id) ?? null);
+      else todo.push({ id: ws.id, cwd: ws.projectDir ?? ws.cwd, explicit: !!ws.projectDir, key: folder });
     }
     if (todo.length === 0) return map;
     const results = new Map<string, string | null>();
@@ -632,7 +663,7 @@ export class ExtensionHost {
         if (cut) return;
         const ws = queue.shift();
         if (!ws) return;
-        const r = await this.readTimed(`root:${ws.id}`, () => resolveProjectRoot(ws.cwd, this.opts.deps?.projectRoot));
+        const r = await this.readTimed(`root:${ws.id}`, () => resolveProjectRoot(ws.cwd, this.opts.deps?.projectRoot, ws.explicit));
         if (r.ok && !cut) results.set(ws.id, r.value);
       }
     };
@@ -648,10 +679,10 @@ export class ExtensionHost {
       this.sawTimeout = true;
     }
     for (const ws of todo) {
-      if (results.has(ws.id)) map.set(ws.id, results.get(ws.id) ?? null);
+      if (results.has(ws.id)) { map.set(ws.id, results.get(ws.id) ?? null); this.workspaceFolders.set(ws.id, ws.key); }
       else {
         // 引けなかった（時間切れ・読めない）: 根なしとして覚えない。前の値があれば、そのまま。
-        if (prev.has(ws.id)) map.set(ws.id, prev.get(ws.id) ?? null);
+        if (this.workspaceFolders.get(ws.id) === ws.key && prev.has(ws.id)) map.set(ws.id, prev.get(ws.id) ?? null);
         this.sawTimeout = true;
       }
     }
@@ -975,6 +1006,8 @@ export class ExtensionHost {
     const tag = `ext:${key}:${runId}`;
     const ext: ApiExtension = { key, id: entry.id, scope, root, runId, tag, allow: entry.allow, onUnresponsive: entry.onUnresponsive };
     const env = buildExtensionEnv(this.opts.baseEnv, { id: entry.id, scope, root, runId }, this.platform);
+    const serverUrl = this.opts.serverUrlForExtensions?.();
+    if (serverUrl) env["SODA_SERVER_URL"] = serverUrl;
     const cwd = scope === "project" && root !== null ? root : (entry.cwd ?? this.opts.homeDir);
     const proc = new ExtensionProcess(
       { key, id: entry.id, scope, root, command: entry.command, cwd, runId },
@@ -984,6 +1017,22 @@ export class ExtensionHost {
           // finishRun の後に、遅れて処理された 1 行が、だれも消さない面を作らない。
           const r = this.runs.get(key);
           if (!r || r.runId !== runId) return;
+          if(this.taskLauncher && (req.method==="task.kinds"||req.method==="task.start")){
+            const target=()=>{
+              if(this.runs.get(key)?.runId!==r.runId || !r.ext.allow.includes("agent-start"))throw new RpcError("invalid_params","agent-start の許可が必要です");
+              const pane=this.panesFor(r.ext).find(p=>p.id===(req.params as {paneId?:string})?.paneId);
+              if(!pane || !(pane.plugin?.extensionKey===key || pane.views?.some(v=>v.extensionKey===key)))throw new RpcError("not_found","この拡張の制作環境が見つかりません");
+              return pane;
+            };
+            const operation=async()=>{
+              if(!r.ext.allow.includes("agent-start"))throw new RpcError("invalid_params","agent-start の許可が必要です");
+              if(req.method==="task.kinds")return this.taskLauncher!.kinds();
+              const parsed=TaskStartSchema.safeParse(req.params);if(!parsed.success)throw new RpcError("invalid_params","制作依頼の指定が不正です");
+              return this.taskLauncher!.start(key,parsed.data,target);
+            };
+            void operation().then(result=>{if(req.id!==undefined && this.runs.get(key)?.runId===r.runId)r.proc.send({type:"ext.result",id:req.id,ok:true,result});}).catch(err=>{if(req.id!==undefined && this.runs.get(key)?.runId===r.runId)r.proc.send({type:"ext.result",id:req.id,ok:false,error:{code:err instanceof RpcError?err.code:"internal",message:err instanceof RpcError?err.message:"依頼の起動に失敗しました"}});});
+            return;
+          }
           const line = this.api.handle(r.ext, req);
           if (line) r.proc.send(line);
         },
@@ -1159,7 +1208,9 @@ export class ExtensionHost {
       const ws = tab ? workspaces.get(tab.workspaceId) : undefined;
       if (!ws) continue;
       if (!this.inScopeFn(ext, p.id)) continue;
-      out.push({ id: p.id, label: p.label, workspaceId: ws.id, workspaceLabel: ws.label, workspaceCwd: ws.cwd, agent: p.agent?.kind ?? null });
+      const isAppAnchor = tab!.plugin && (tab!.displayPaneId ? tab!.displayPaneId === p.id : tab!.focusedPaneId === p.id);
+      const views = tab!.views?.filter(v => v.paneId === p.id && v.extensionKey === ext.key);
+      out.push({ id: p.id, label: p.label, workspaceId: ws.id, workspaceLabel: ws.label, workspaceCwd: ws.cwd, ...(ws.projectDir ? { projectDir: ws.projectDir } : {}), tabId: tab!.id, ...(isAppAnchor ? { plugin: tab!.plugin! } : {}), ...(p.virtual ? { virtual: true } : {}), ...(views?.length ? { views } : {}), ...(p.agent ? { agentState: p.agent.state } : {}), agent: p.agent?.kind ?? null });
     }
     return out;
   }

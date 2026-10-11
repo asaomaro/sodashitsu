@@ -558,6 +558,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
     `agent_prompt_stalled` ではなく締め切りで `timeout`。省略すると、活動を確かめた後は無期限に待つ。
   - 待っている間にエージェントが終了した・入れ替わった・pane が閉じたら `agent_not_running`。
   - `timeout`・`agent_prompt_stalled`・`agent_prompt_failed`・`agent_not_running`・`connection_closed` は「送られなかった」ことを意味しない。送り直す前に `agent read` で確かめる（二重に送らないため）。
+- `agent prompt --expect <JSON>` は `paneId`・`instanceId`・`tabId`・`projectDir`・`name` を指定する。一致を受け付け時と本文の書き込み直前に確認し、別ペインへの名前の付け替えや、タブ/PJ移動があれば `agent_not_found` で送らない。自動連携用。対応するサーバ専用の `agent.prompt_checked` を使い、旧サーバでは未知の操作として送信せず失敗する。
 - `agent send-keys <target> <key>...` … エージェントの UI（承認ダイアログ・メニュー）へキーを送る。`blocked` でも送れる。`{"ok":true,"paneId":…}` を出す（名前で指しても `paneId` は解決した pane の ID）。
   - キー名: `enter`/`return`・`esc`/`escape`・`tab`・`shift+tab`・`backspace`/`bs`・`space`・`up`/`down`/`left`/`right`・`f1`〜`f12`・1 文字
     （`y` 等。大文字は shift つき）・記号名（`minus` `comma` `period` `slash` `backslash` `quote` `double_quote` `semicolon` `colon`
@@ -981,3 +982,9 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
     pane を別の workspace へ移す RPC（`pane.move_to_tab`・`pane.move_to_new_tab`）は、移動元と移動先が同じ worktree（`worktreeKey` が同じ）のときだけ通り、別の worktree へは何も動かさず `{ok: false, reason: "different_worktree"}` を返す（管理外・判定前の workspace どうしは、開いた場所が同じときだけ。同じ workspace の中は今までどおり）。作った直後で判定が入る前に断られることがあるので、続けて移すスクリプトは `reason` がある間、待って試し直す。
 - 自分の pane への操作を断る `self_target` は本製品だけ（herdr は断らない）。
 - サーバを起動した環境の `SODACTL_URL`・`SODACTL_TOKEN` を pane に渡さない（herdr は管理する変数を上書きするが、token に当たるものは無い）。
+
+## 拡張パッケージ（ローカル）
+
+`plugin pack <directory> --out <file.sodaplugin>`、`plugin install <file.sodaplugin> --state-dir <directory>`、`plugin list --state-dir <directory>`、`plugin enable <id> --state-dir <directory>`、`plugin disable <id> --state-dir <directory>`、`plugin remove <id> --state-dir <directory>`。サーバへ接続せず、そのOSの設定と導入したファイルを扱う。導入は無効、有効化と読み直しは別の操作。配布形式・整合性・制限は [拡張パッケージ](plugin-packages.md)。
+
+パッケージの install/list/enable/disable/remove は `--project-dir <PJフォルダ>` でも使える。`--state-dir` と同時指定不可。PJ導入先は `.soda/`、実行にはプロジェクト拡張の承認が別途必要。ビューの導線とパースペクティブは [拡張パッケージ](plugin-packages.md) を参照。

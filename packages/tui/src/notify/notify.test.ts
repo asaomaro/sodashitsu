@@ -227,7 +227,7 @@ describe("端末版の通知（組み立て）", () => {
     // 知らせの一覧（全体のメニュー）。
     h.app.ui.openContextMenu({ kind: "global" }, { x: 40, y: 10 });
     h.app.renderNow();
-    expect(await h.screen()).toContain("知らせの一覧");
+    expect(await h.screen()).not.toContain("知らせの一覧");
     h.app.ui.closeContextMenu();
     h.app.ui.openDialogWithContext({ kind: "notifications" });
     h.app.renderNow();

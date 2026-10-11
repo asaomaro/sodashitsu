@@ -1,3 +1,4 @@
+import { RpcError } from "@sodashitsu/protocol";
 import type {
   AgentInfo,
   AgentIntegrationKind,
@@ -240,6 +241,16 @@ export class SessionModel {
   listPanes(): Pane[] {
     return [...this.panes.values()];
   }
+  createDisplayAnchor(tabId: TabId): Pane {
+    const tab = this.requireTab(tabId);
+    if (tab.displayPaneId) return this.requirePane(tab.displayPaneId);
+    const ws = this.requireWorkspace(tab.workspaceId);
+    const pane = this.makePane(this.newId(), tabId, { cwd: ws.projectDir ?? ws.cwd, shell: "", cols: 120, rows: 40 });
+    pane.virtual = true;
+    this.panes.set(pane.id, pane);
+    tab.displayPaneId = pane.id;
+    return pane;
+  }
   getFocus(): SessionFocus | null {
     return this.focus;
   }
@@ -417,8 +428,14 @@ export class SessionModel {
   }
 
   /** `pane.split`。`newPaneId` は呼び出し側が発行済みの id（`SessionService` が spawn 前に確保する）。 */
+  private requireTerminalPane(paneId: PaneId): Pane {
+    const pane = this.requirePane(paneId);
+    if (pane.virtual) throw new RpcError("invalid_params", "表示専用アンカーには端末操作できません");
+    return pane;
+  }
+
   splitPane(paneId: PaneId, direction: SplitDirection, ratio: number | undefined, newPaneId: PaneId, init: NewPaneInit): SplitPaneResult {
-    const target = this.requirePane(paneId);
+    const target = this.requireTerminalPane(paneId);
     const tab = this.requireTab(target.tabId);
     const splitId = this.newId();
 
@@ -440,6 +457,7 @@ export class SessionModel {
   /** `preferredSuccessor`: 閉じた後の tab に残っていれば、焦点の後継と `successorPaneId` にする（20260926-edit-scrollback）。 */
   closePane(paneId: PaneId, preferredSuccessor?: PaneId): RemovalResult {
     const pane = this.requirePane(paneId);
+    if (pane.virtual) throw new RpcError("invalid_params", "表示専用アンカーはタブと一緒に閉じてください");
     const tab = this.requireTab(pane.tabId);
     const newLayout = Layout.remove(tab.layout, paneId);
     if (newLayout === null) {
@@ -454,6 +472,7 @@ export class SessionModel {
     this.tabs.set(tab.id, {
       ...tab,
       layout: newLayout,
+      ...(tab.views ? { views: tab.views.filter(v => v.paneId !== paneId) } : {}),
       focusedPaneId: nextFocused,
       zoomedPaneId: null, // pane を閉じたら zoom を解除する（herdr の `Tab::detach_pane` と同じ。D100）
     });
@@ -815,7 +834,7 @@ export class SessionModel {
   private closeTabInternal(id: TabId): RemovalResult {
     const tab = this.requireTab(id);
     const ws = this.requireWorkspace(tab.workspaceId);
-    const removedPaneIds = Layout.leaves(tab.layout);
+    const removedPaneIds = [...Layout.leaves(tab.layout), ...(tab.displayPaneId ? [tab.displayPaneId] : [])];
     for (const pid of removedPaneIds) this.panes.delete(pid);
     this.tabs.delete(id);
 
@@ -848,8 +867,9 @@ export class SessionModel {
       for (const tabId of ws.tabIds) {
         const tab = this.tabs.get(tabId);
         if (!tab) continue;
-        removedPaneIds.push(...Layout.leaves(tab.layout));
-        for (const pid of Layout.leaves(tab.layout)) this.panes.delete(pid);
+        const ids = [...Layout.leaves(tab.layout), ...(tab.displayPaneId ? [tab.displayPaneId] : [])];
+        removedPaneIds.push(...ids);
+        for (const pid of ids) this.panes.delete(pid);
         this.tabs.delete(tabId);
         removedTabIds.push(tabId);
       }
@@ -893,6 +913,7 @@ export class SessionModel {
   private closeEmptyTabShell(tabId: TabId): { removedTabId: TabId; closedWorkspaceId: WorkspaceId | null } {
     const tab = this.requireTab(tabId);
     const ws = this.requireWorkspace(tab.workspaceId);
+    if (tab.displayPaneId) this.panes.delete(tab.displayPaneId);
     this.tabs.delete(tabId);
     const remainingTabIds = ws.tabIds.filter((t) => t !== tabId);
     if (remainingTabIds.length === 0) {
@@ -932,10 +953,11 @@ export class SessionModel {
    * 作らない。移動元の tab が空になったら `closeEmptyTabShell` で自動的に閉じる。
    */
   moveToTab(paneId: PaneId, targetTabId: TabId): boolean {
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     if (pane.tabId === targetTabId) return false; // 自分自身の tab（AC9）
     const targetTab = this.tabs.get(targetTabId); // 未検証のドロップ先。requireTab ではなく .get()
     if (!targetTab) return false;
+    if (pane.virtual) throw new RpcError("invalid_params", "表示専用アンカーは移動できません");
     // 別の worktree の workspace へは移さない（20261008-web-tab-dnd）。書き換えの前に断る。
     if (this.paneMoveBlockFor(paneId, targetTab.workspaceId) !== null) return false;
     const sourceTab = this.requireTab(pane.tabId);
@@ -950,7 +972,7 @@ export class SessionModel {
       this.closeEmptyTabShell(sourceTab.id);
     } else {
       const nextFocused = sourceTab.focusedPaneId === paneId ? Layout.leaves(withoutPane)[0]! : sourceTab.focusedPaneId;
-      this.tabs.set(sourceTab.id, { ...sourceTab, layout: withoutPane, focusedPaneId: nextFocused, zoomedPaneId: null });
+      this.tabs.set(sourceTab.id, { ...sourceTab, layout: withoutPane, focusedPaneId: nextFocused, zoomedPaneId: null, ...(sourceTab.views ? { views: sourceTab.views.filter(v => v.paneId !== paneId) } : {}) });
     }
     // グローバル focus を移動先へ（20260925-pane-move-global-focus。design「設計方針」）。
     // `closeEmptyTabShell` の後に置く——先に置くと、移動元 tab が移動元 workspace の
@@ -965,7 +987,7 @@ export class SessionModel {
    * 同じ label 既定値ロジックを使うが、新しい pane は作らない（既存の pane をそのまま運ぶ）。
    */
   moveToNewTab(paneId: PaneId, targetWorkspaceId: WorkspaceId): { tab: Tab } | null {
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     const ws = this.workspaces.get(targetWorkspaceId); // 未検証のドロップ先
     if (!ws) return null;
     // 別の worktree の workspace へは移さない（20261008-web-tab-dnd）。書き換えの前に断る。
@@ -991,7 +1013,7 @@ export class SessionModel {
       this.closeEmptyTabShell(sourceTab.id);
     } else {
       const nextFocused = sourceTab.focusedPaneId === paneId ? Layout.leaves(withoutPane)[0]! : sourceTab.focusedPaneId;
-      this.tabs.set(sourceTab.id, { ...sourceTab, layout: withoutPane, focusedPaneId: nextFocused, zoomedPaneId: null });
+      this.tabs.set(sourceTab.id, { ...sourceTab, layout: withoutPane, focusedPaneId: nextFocused, zoomedPaneId: null, ...(sourceTab.views ? { views: sourceTab.views.filter(v => v.paneId !== paneId) } : {}) });
     }
     // グローバル focus を移動先へ（20260925-pane-move-global-focus。design「設計方針」）。
     // `closeEmptyTabShell` の後に置く——先に置くと（元の実装のとおり）、移動元 tab が
@@ -1005,6 +1027,7 @@ export class SessionModel {
 
   focusPane(paneId: PaneId): void {
     const pane = this.requirePane(paneId);
+    if (pane.virtual) throw new RpcError("invalid_params", "表示専用アンカーはフォーカスできません");
     const tab = this.requireTab(pane.tabId);
     this.tabs.set(tab.id, { ...tab, focusedPaneId: paneId });
     const ws = this.requireWorkspace(tab.workspaceId);
@@ -1034,7 +1057,7 @@ export class SessionModel {
   }
 
   swapPane(paneId: PaneId, direction: Dir): PaneId {
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     const tab = this.requireTab(pane.tabId);
     const neighbor = Layout.neighbor(tab.layout, paneId, direction);
     if (!neighbor) return paneId;
@@ -1049,9 +1072,9 @@ export class SessionModel {
    */
   swapPaneWith(paneId: PaneId, otherPaneId: PaneId): boolean {
     if (paneId === otherPaneId) return false;
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     const other = this.panes.get(otherPaneId);
-    if (!other || other.tabId !== pane.tabId) return false;
+    if (!other || other.virtual || other.tabId !== pane.tabId) return false;
     const tab = this.requireTab(pane.tabId);
     this.tabs.set(tab.id, { ...tab, layout: Layout.swap(tab.layout, paneId, otherPaneId) });
     // グローバル focus を動かした pane（paneId）へ（20260925-pane-move-global-focus。design「設計方針」）。
@@ -1066,9 +1089,9 @@ export class SessionModel {
    */
   moveToEdge(paneId: PaneId, targetPaneId: PaneId, edge: Layout.Edge): boolean {
     if (paneId === targetPaneId) return false;
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     const target = this.panes.get(targetPaneId);
-    if (!target || target.tabId !== pane.tabId) return false;
+    if (!target || target.virtual || target.tabId !== pane.tabId) return false;
     const tab = this.requireTab(pane.tabId);
     const withoutSource = Layout.remove(tab.layout, paneId);
     // `paneId` が tab で唯一の pane なら `targetPaneId` は同じ tab に存在しえない（上のガードで
@@ -1090,9 +1113,9 @@ export class SessionModel {
    */
   replacePane(paneId: PaneId, targetPaneId: PaneId): RemovalResult | null {
     if (paneId === targetPaneId) return null;
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     const target = this.panes.get(targetPaneId);
-    if (!target || target.tabId !== pane.tabId) return null;
+    if (!target || target.virtual || target.tabId !== pane.tabId) return null;
     const tab = this.requireTab(pane.tabId);
     const swapped = Layout.swap(tab.layout, paneId, targetPaneId);
     const newLayout = Layout.remove(swapped, targetPaneId);
@@ -1104,6 +1127,7 @@ export class SessionModel {
     this.tabs.set(tab.id, {
       ...tab,
       layout: newLayout,
+      ...(tab.views ? { views: tab.views.filter(v => v.paneId !== targetPaneId) } : {}),
       focusedPaneId: nextFocused,
       zoomedPaneId: null, // pane を閉じたら zoom を解除する（closePane と同じ。D100）
     });
@@ -1115,7 +1139,7 @@ export class SessionModel {
   }
 
   zoomPane(paneId: PaneId, mode: "toggle" | "on" | "off"): void {
-    const pane = this.requirePane(paneId);
+    const pane = this.requireTerminalPane(paneId);
     const tab = this.requireTab(pane.tabId);
     const next = mode === "toggle" ? (tab.zoomedPaneId === paneId ? null : paneId) : mode === "on" ? paneId : null;
     this.tabs.set(tab.id, { ...tab, zoomedPaneId: next });
@@ -1428,6 +1452,7 @@ export class SessionModel {
       id: data.id,
       label: data.label,
       cwd: data.cwd,
+      ...(data.projectDir ? { projectDir: data.projectDir } : {}),
       tabIds: data.tabs.map((t) => t.id),
       activeTabId: data.activeTabId,
       // 以前の版の保存には無い——無ければ null（`autoLabel`/`agentSession` と同じ「optional 追加」方式。
@@ -1457,6 +1482,10 @@ export class SessionModel {
         id: tabData.id,
         workspaceId: workspace.id,
         label: tabData.label,
+        ...(tabData.plugin ? { plugin: tabData.plugin } : {}),
+        ...(tabData.perspective ? { perspective: tabData.perspective } : {}),
+        ...(tabData.displayPaneId ? { displayPaneId: tabData.displayPaneId } : {}),
+        ...(tabData.views ? { views: tabData.views } : {}),
         layout: tabData.layout,
         focusedPaneId: tabData.focusedPaneId,
         zoomedPaneId: tabData.zoomedPaneId,
@@ -1471,6 +1500,7 @@ export class SessionModel {
           cols: 120,
           rows: 40,
         });
+        if (paneData.virtual) pane.virtual = true;
         // 会話参照は `makePane` の対象外（新規作成では持たない情報）なので、復元のときだけ載せる
         // （20260923-agent-session-resume design D2。無ければ以前の版の保存データ、または
         // そもそも報告が無かった pane で、null のままでよい）。

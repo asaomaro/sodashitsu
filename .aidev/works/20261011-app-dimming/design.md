@@ -1,0 +1,5 @@
+# アプリ画面操作時の減光を止める
+
+表示にフォーカスがある間、PaneFrameはmain slotをopacity 0.55にする。TabWorkspaceのpresentationOnly外枠にはアプリ自身が入り、アプリ操作で自分自身を減光していた。presentationOnlyでは減光を適用しない。作業用の個々のPaneFrameの減光は維持する。
+
+単一の表示判定の修正。関連コンポーネントテストと既存パースペクティブE2Eを使い、クリック/文字入力後のiframeフォーカスと全先祖要素の実opacityを確認する。独立最終レビューを実施。

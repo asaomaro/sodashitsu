@@ -54,7 +54,7 @@ import { zoneAt, type Zone } from "../term/paneDragZone.js";
  * `neighbors`（どの辺に隣の pane があるか）は `PaneLayout` が渡す。枠を描かない（`framed` が偽）ときは外周の余白・選択の強調・
  * 名前を描かない。tabindex とメニューを開くキーは枠の有無に関わらず同じ。
  */
-const props = defineProps<{ paneId: string; enabled?: boolean; multiPane?: boolean; neighbors?: PaneSides }>();
+const props = defineProps<{ paneId: string; enabled?: boolean; presentationOnly?: boolean; multiPane?: boolean; neighbors?: PaneSides }>();
 
 const actions = inject(ActionDispatcherKey, undefined);
 const registry = inject(TerminalRegistryKey, undefined);
@@ -66,15 +66,18 @@ const agentState = computed(() => {
   const agent = session?.panes.get(props.paneId)?.agent;
   return agent ? displayStateFor(agent, seen!.getSeenSeq(agent.instanceId, agent.serverSeenSeq)) : null;
 });
+const pluginTab = computed(() => { const pane = session?.panes.get(props.paneId); const tab = pane ? session?.tabs.get(pane.tabId) : undefined; return pane?.virtual || !tab?.displayPaneId ? tab?.plugin : undefined; });
 const edge = ref<HTMLElement | null>(null);
 /** モダンの**配置**か（pane の枠の操作ボタン。20261008-ui-style PR4）。1 列の画面では様式の配置を使わない（`useUiStyle` の `modernLayout`）。`enabled` でないとき（モバイル・単体テスト）は、ストアに触れない。 */
-const modern = props.enabled ? useUiStyle().modernLayout : null;
+const modern = props.enabled && !props.presentationOnly ? useUiStyle().modernLayout : null;
 
 // --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
 const displays = props.enabled ? useDisplayStore() : null;
 const displayHost = inject(DisplayHostKey, undefined);
 /** その pane のどれかの面にフォーカスがある（操作中。端末を薄くする）。 */
 const displayEngaged = computed(() => {
+  // Presentation containers hold the app itself, rather than a background terminal.
+  if (props.presentationOnly) return false;
   const id = displays?.focusedDisplayId;
   return !!displays && id != null && displays.infos.get(id)?.paneId === props.paneId;
 });
@@ -111,7 +114,7 @@ const cellSize = computed(() => {
 const layout = computed<LayoutResult | null>(() => {
   if (!displays || bodySize.value.w <= 0 || bodySize.value.h <= 0) return null;
   try {
-    const all = displays.all.filter((d) => d.paneId === props.paneId);
+    const all = displays.all.filter((d) => d.paneId === props.paneId && d.name !== pluginTab.value?.display);
     if (all.length === 0) return null;
     const bands: Parameters<typeof resolvePaneDisplays>[0]["bands"] = [];
     const panels: Parameters<typeof resolvePaneDisplays>[0]["panels"] = [];
@@ -253,7 +256,7 @@ const flush = computed(() => !!chrome.value && Object.values(chrome.value.padded
  * 有効な間はすべての pane に同じ余白を入れる**——pane ごとに有無が割れると、隣り合う pane の上端が
  * そろわなくなる（同じ tab 内の分割は上端をそろえる前提のレイアウトのため）。
  */
-const reserveNameSpace = computed(() => !!(props.enabled && settings?.paneAgentNameVisible && framed.value));
+const reserveNameSpace = computed(() => !!(props.enabled && !props.presentationOnly && settings?.paneAgentNameVisible && framed.value));
 /**
  * 枠線に埋め込む名前表示を出すか（20260923-pane-name-dnd-swap。herdr の見た目に寄せた。design「4.」）。
  * 名前が無ければ枠も出さない——空の legend は意味が無い（decisions.md D9）。
@@ -261,20 +264,21 @@ const reserveNameSpace = computed(() => !!(props.enabled && settings?.paneAgentN
 const showBorder = computed(() => !!(reserveNameSpace.value && paneName.value));
 
 const PANE_GAP = "var(--soda-pane-gap, 4px)";
-/** 名前の行の高さ。クラシックは、今までの値の文字列のまま（インラインの style も変えない）。モダンは、トークン（操作ボタンが並ぶ高さ）。 */
-const nameRowH = computed(() => (modern?.value ? "var(--soda-shape-name-h, 1.2em)" : "1.2em"));
+/** 名前の行の高さ。クラシックは操作ボタンに合わせて28px、モダンはテーマの値を使う。 */
+const nameRowH = computed(() => (modern?.value ? "var(--soda-shape-name-h, 1.2em)" : (showPaneButtons.value ? "28px" : "1.2em")));
 /** 辺ごとの余白。値そのもの（px）は `App.vue` が `settings.paneFrameThickness` から配る CSS 変数。 */
 const padStyle = computed(() => {
+  if (props.presentationOnly) return { padding: "0px" };
   const c = chrome.value;
   if (!c) return undefined;
   const side = (s: PaneSide): string => (c.padded[s] ? PANE_GAP : "0px");
   return {
-    // 名前の行の高さ。クラシックは 1.2em（`--soda-shape-name-h` は未定義）。モダンは、操作ボタンが並ぶ高さ。
-    paddingTop: reserveNameSpace.value ? (c.padded.top && !modern?.value ? `calc(${PANE_GAP} + ${nameRowH.value})` : nameRowH.value) : side("top"),
+    // 操作ボタンの上下に同じ余白を残す名前の行の高さ。
+    paddingTop: reserveNameSpace.value ? (c.padded.top && !showPaneButtons.value ? `calc(${PANE_GAP} + ${nameRowH.value})` : nameRowH.value) : side("top"),
     paddingRight: side("right"),
     paddingBottom: side("bottom"),
     paddingLeft: side("left"),
-    // 名前の行の右端に操作ボタンが並ぶとき（モダン）だけ、名前の最大の幅から引く分。クラシックでは付けない。
+    // 名前の行に操作ボタンが並ぶとき、名前の最大幅から引く分。
     ...(actionsWidthPx.value > 0 ? { "--soda-pane-actions-w": `${actionsWidthPx.value}px` } : {}),
   };
 });
@@ -303,7 +307,7 @@ const ACTIONS_PAD = 6;
 const NAME_MIN_PX = 48;
 /** 名前の箱の左右の余白（0.6em・0.4em×2）が、最大の幅の外に足されるぶんの余裕（px）。名前がボタンに重ならないようにする。 */
 const NAME_BOX_SLACK = 8;
-const showPaneButtons = computed(() => !!props.enabled && modern?.value === true);
+const showPaneButtons = computed(() => !!props.enabled && !props.presentationOnly && !pluginTab.value);
 /** 名前の行（確保した上の余白）の右端に出すか。そうでなければ、右上の隅に重ねる。 */
 const buttonsInRow = computed(() => reserveNameSpace.value);
 const widthFor = (n: number): number => n * BTN + (n - 1) * BTN_GAP + CLOSE_GAP + ACTIONS_PAD;
@@ -392,6 +396,7 @@ function dropTargetAt(x: number, y: number): DropHit | null {
 
 /** 名前ラベルの押し下げ。まだドラッグ扱いにしない（閾値を超えるまでは「ただのクリック」。AC-I1・AC-I5）。 */
 function onNamePointerDown(ev: PointerEvent): void {
+  if (pluginTab.value) return;
   if (ev.button !== 0) return;
   dragStart = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId };
   (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
@@ -521,14 +526,14 @@ function onKeydown(ev: KeyboardEvent): void {
     ref="root"
     class="pane-frame"
     :class="{ 'pane-frame-enabled': enabled, 'pane-frame-enabled-named': reserveNameSpace, 'pane-frame-drag-source': isDragSource }"
-    :data-pane-id="enabled ? paneId : undefined"
+    :data-pane-id="enabled && !presentationOnly ? paneId : undefined"
     :role="enabled ? 'group' : undefined"
     :aria-label="enabled ? paneLabel : undefined"
     :aria-current="enabled && selected ? 'true' : undefined"
     :style="padStyle"
   >
     <div
-      v-if="enabled"
+      v-if="enabled && !presentationOnly"
       ref="edge"
       class="pane-frame-edge"
       :class="{

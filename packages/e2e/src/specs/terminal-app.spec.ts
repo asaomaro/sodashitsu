@@ -285,7 +285,7 @@ test("tab バーの ＋ は帯を高くしない。サイドバーは折りた�
     return { scroll: el.scrollWidth, client: el.clientWidth };
   });
   expect(widths.scroll, `折りたたみ時（実測 ${JSON.stringify(widths)}）`).toBeLessThanOrEqual(widths.client);
-  await expect(page.locator(".sidebar-footer .sidebar-collapse-btn")).toBeVisible(); // 畳んでも戻せる
+  await expect(page.locator(".sidebar-edge-toggle")).toBeVisible(); // 畳んでも戻せる
 
   // 折りたたむと帯が 2 つ消えるので、Tab で最初に来るサイドバーのボタンは折りたたみだけになる
   // （展開時は 新規 → メニュー → ソート → 折りたたみ の 4 つ。`keys-mouse-dialogs.spec.ts` で確認）。
@@ -297,7 +297,9 @@ test("tab バーの ＋ は帯を高くしない。サイドバーは折りた�
     await page.keyboard.press("Tab");
     reached.push(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.className ?? ""));
   }
-  const btns = reached.filter((c) => c.includes("sidebar-btn") || c.includes("tab-bar-item"));
-  expect(btns[0], `到達順: ${reached.join(" → ")}`).toContain("sidebar-collapse-btn");
-  expect(btns[1], `到達順: ${reached.join(" → ")}`).toContain("tab-bar-item");
+  const btns = reached.filter((c) => c.includes("sidebar-btn") || c.includes("sidebar-edge-toggle") || c.includes("tab-bar-item"));
+  expect(btns[0], `到達順: ${reached.join(" → ")}`).toContain("sidebar-footer-new");
+  expect(btns[1], `到達順: ${reached.join(" → ")}`).toContain("sidebar-footer-menu");
+  expect(btns[2], `到達順: ${reached.join(" → ")}`).toContain("sidebar-edge-toggle");
+  expect(btns[3], `到達順: ${reached.join(" → ")}`).toContain("tab-bar-item");
 });

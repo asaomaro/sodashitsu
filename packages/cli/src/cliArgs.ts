@@ -1,5 +1,7 @@
 import {
   AGENT_START_KINDS,
+  AgentPromptExpectation,
+  type AgentPromptParams,
   ENTITY_ID_RE,
   GRAPH_HISTORY_RESPONSE_MAX,
   LINK_LIMIT_MAX,
@@ -68,7 +70,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl agent usage [<target>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
-  "sodactl agent prompt <target> <text> [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent prompt <target> <text> [--expect <JSON>] [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent send-keys <target> <key>... [--url <URL>] [--token <TOKEN>]",
   "sodactl agent rename <target> <name>|--clear [--url <URL>] [--token <TOKEN>]",
   "sodactl agent start <name> --kind <KIND> --pane <paneId> [--timeout <ms>] [--url <URL>] [--token <TOKEN>] [-- <args>...]",
@@ -93,6 +95,12 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl display wait [<name>] [--since <seq> --epoch <epoch>] [--timeout <ms>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display events [<name>...] [--since <seq> --epoch <epoch>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display --features [--url <URL>] [--token <TOKEN>]",
+  "sodactl plugin pack <directory> --out <file.sodaplugin>",
+  "sodactl plugin install <file.sodaplugin> (--state-dir <directory>|--project-dir <PJ folder>)",
+  "sodactl plugin list (--state-dir <directory>|--project-dir <PJ folder>)",
+  "sodactl plugin enable <id> (--state-dir <directory>|--project-dir <PJ folder>)",
+  "sodactl plugin disable <id> (--state-dir <directory>|--project-dir <PJ folder>)",
+  "sodactl plugin remove <id> (--state-dir <directory>|--project-dir <PJ folder>)",
   "sodactl ext list [--url <URL>] [--token <TOKEN>]",
   "sodactl ext log <id|key> [--url <URL>] [--token <TOKEN>]",
   "sodactl ext reload [--url <URL>] [--token <TOKEN>]",
@@ -274,6 +282,7 @@ export type DisplayAction =
 export type Command =
   | { kind: "help" }
   | { kind: "skill" }
+  | { kind: "plugin"; action: "pack" | "install" | "list" | "remove" | "enable" | "disable"; target: string | undefined; stateDir: string | undefined; projectDir?: string | undefined; out: string | undefined }
   | { kind: "login"; opts: GlobalOpts }
   | { kind: "workspace-create"; opts: GlobalOpts; cwd: string | undefined; label: string | undefined }
   | { kind: "workspace-close"; opts: GlobalOpts; workspaceId: string }
@@ -311,6 +320,7 @@ export type Command =
   | { kind: "agent-read"; opts: GlobalOpts; paneId: string; lines: number; raw: boolean; timeoutMs: number }
   | {
       kind: "agent-prompt";
+      expect?: AgentPromptParams["expect"];
       opts: GlobalOpts;
       paneId: string;
       text: string;
@@ -507,6 +517,18 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
     }
     case "display":
       return parseDisplay(word1, rest0, env);
+    case "plugin": {
+      const usage = USAGE_LINES.filter((l) => l.startsWith("sodactl plugin")).join("\n");
+      if (!["pack", "install", "list", "remove", "enable", "disable"].includes(word1 ?? "")) throw new CliUsageError("unknown plugin operation", usage);
+      const action = word1 as "pack" | "install" | "list" | "remove" | "enable" | "disable";
+      const { positionals, values } = parseFlags(rest0, { values: action === "pack" ? ["--out"] : ["--state-dir", "--project-dir"] });
+      const target = action === "list" ? undefined : requirePositional(positionals, 0, "package or id", usage);
+      rejectExtra(positionals, action === "list" ? 0 : 1, usage);
+      const required = action === "pack" ? "--out" : "--state-dir";
+      if (!values.get(required) && !(action !== "pack" && values.get("--project-dir"))) throw new CliUsageError(`${required} or --project-dir is required`, usage);
+      if (values.has("--state-dir") && values.has("--project-dir")) throw new CliUsageError("choose --state-dir or --project-dir", usage);
+      return { kind: "plugin", action, target, stateDir: values.get("--state-dir"), ...(values.has("--project-dir") ? { projectDir: values.get("--project-dir") } : {}), out: values.get("--out") };
+    }
     case "ext":
       return parseExt(word1, rest0, env);
     case "workspace":
@@ -1005,7 +1027,7 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
   // 20260926-agent-prompt-send-keys。`<text>` が `--` で始まると未知のオプションとして拒否される（`pane input` と同じ既知の制約）。
   if (sub === "prompt") {
     const { positionals, values, bools, multi } = parseFlags(rest, {
-      values: [...URL_TOKEN.values!, "--timeout"],
+      values: [...URL_TOKEN.values!, "--timeout", "--expect"],
       bools: ["--wait"],
       multi: ["--until"],
     });
@@ -1019,8 +1041,14 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
     if (!wait && (timeoutRaw !== undefined || untilRaw.length > 0)) {
       throw new CliUsageError("--until and --timeout require --wait", "--until・--timeout は --wait と一緒に指定してください。");
     }
+    let expectation: AgentPromptParams["expect"];
+    if (values.has("--expect")) {
+      try { expectation = AgentPromptExpectation.parse(JSON.parse(values.get("--expect")!)); }
+      catch { throw new CliUsageError("invalid --expect", "--expect は paneId/instanceId/tabId/projectDir/name のJSONを指定してください。"); }
+    }
     return {
       kind: "agent-prompt",
+      ...(expectation ? { expect: expectation } : {}),
       opts: globalOptsFrom(values, env),
       paneId,
       text,

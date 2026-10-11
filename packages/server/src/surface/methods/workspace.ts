@@ -1,3 +1,4 @@
+import { WorkspaceProjectFolderParams } from "@sodashitsu/protocol";
 import {
   WorkspaceCloseParams,
   WorkspaceCreateParams,
@@ -11,6 +12,10 @@ import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerWorkspaceMethods(surface: ControlSurface, deps: MethodDeps): void {
+  surface.register("workspace.set_project_folder", {
+    schema: WorkspaceProjectFolderParams,
+    handler: async (_ctx, params) => { await deps.session.setWorkspaceProjectFolder(params.workspaceId, params.path); return {}; },
+  });
   surface.register("workspace.create", {
     schema: WorkspaceCreateParams,
     handler: async (ctx, params) => {

@@ -215,7 +215,7 @@ for (const { key, theme } of THEMES) {
 
     // 畳んだサイドバー。
     // たたむ・広げるの印は、クラシックは最下部の［«］、モダンは境の線の上の印（20261008-ui-style PR4）。
-    const collapseBtn = page.locator(".sidebar-collapse-btn, .sidebar-edge-toggle").first();
+    const collapseBtn = page.locator(".sidebar-edge-toggle").first();
     await collapseBtn.click();
     await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
     await page.mouse.move(900, 500);
@@ -225,7 +225,7 @@ for (const { key, theme } of THEMES) {
     await page.mouse.move(900, 500);
 
     // 「新規」のメニュー（モダン）。クラシックは、spaces の区画の中の［メニュー］（モダンの新しい配置の画面を足した。元の側にも同じ spec を使うので、クラシックは同じ画面が撮れる）。
-    await page.locator(STYLE === "modern" ? '[data-sidebar-act="new"]' : ".sidebar-section-footer .sidebar-btn-right").click();
+    await page.locator(STYLE === "modern" ? '[data-sidebar-act="new"]' : '[data-sidebar-act="menu"]').click();
     await expect(page.getByRole("menu")).toBeVisible();
     await shot("sidebar-new-menu");
     await page.keyboard.press("Escape");

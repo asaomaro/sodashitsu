@@ -1,5 +1,8 @@
 import {
   AgentPromptParams,
+  AgentPromptCheckedParams,
+  type AgentPromptResult,
+  type AgentPromptParams as PromptParams,
   AgentSubagentTranscriptParams,
   AgentUsageParams,
   AgentUsageWatchParams,
@@ -58,6 +61,17 @@ function requireSameAgent(deps: MethodDeps, paneId: string, expected: AgentInfo)
   return now;
 }
 
+function requirePromptExpectation(deps: MethodDeps, params: PromptParams): void {
+  const e = params.expect;
+  if (!e) return;
+  const pane = deps.session.getPane(params.paneId);
+  const tab = pane && deps.session.getTab(pane.tabId);
+  const workspace = tab && deps.session.getWorkspace(tab.workspaceId);
+  if (params.paneId !== e.paneId || pane?.agent?.instanceId !== e.instanceId || pane?.agent?.name !== e.name || pane?.tabId !== e.tabId || workspace?.projectDir !== e.projectDir) {
+    throw new RpcError("agent_not_found", "agent prompt target no longer matches its expected pane, instance, tab, project or name");
+  }
+}
+
 function blockedError(paneId: string): RpcError {
   return new RpcError(
     "agent_blocked",
@@ -71,6 +85,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
     handler: async (ctx, params) => {
       if (params.text === "")
         throw new RpcError("empty_agent_prompt", "agent prompt must not be empty");
+      requirePromptExpectation(deps, params);
       const { agent, host } = requireAgent(deps, params.paneId, params.instanceId);
       // blocked（承認・質問の入力待ち）には何も書かない。答えるなら agent.send_keys で意図して送る。
       if (agent.state === "blocked") throw blockedError(params.paneId);
@@ -83,6 +98,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
           build: (modes) => {
             // 別の入力の後ろで待っている間に状態が変わりうるので、書く直前にもう一度確かめる
             // （承認ダイアログへの誤答・終了したエージェントの後のシェルへの誤入力を防ぐ。decisions.md D7）。
+            requirePromptExpectation(deps, params);
             const now = requireSameAgent(deps, params.paneId, agent);
             if (now.state === "blocked") throw blockedError(params.paneId);
             sentTo = now;
@@ -95,6 +111,16 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
         throw new RpcError("agent_prompt_failed", err instanceof Error ? err.message : String(err));
       }
       return { agent: sentTo };
+    },
+  });
+
+  // A separate method fails closed on servers that predate expectation checks.
+  surface.register("agent.prompt_checked", {
+    schema: AgentPromptCheckedParams,
+    handler: async (ctx, params) => {
+      const result = await surface.invoke(ctx, "agent.prompt", params);
+      if (!result.ok) throw new RpcError(result.error.code, result.error.message);
+      return result.result as AgentPromptResult;
     },
   });
 

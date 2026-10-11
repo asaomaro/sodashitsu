@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  AgentUsageChangedEvent,
   AgentIntegrationStatusResult,
   CommandListResult,
   MachineStatus,
@@ -32,6 +33,7 @@ import {
  * 表示（workspace / tab / 焦点の pane）はクライアントごと（web の `store/view` と同じ）。既読（`done`）もクライアントごとに手元のメモリへ持つ（design D-3）。
  */
 export interface SessionModelHooks {
+  onUsageChanged?(data:AgentUsageChangedEvent["data"]):void;
   onPaneClosed?(paneId: string): void;
   onPaneExited?(paneId: string, exitCode: number): void;
   onClientError?(code: string, message: string): void;
@@ -168,6 +170,7 @@ export class SessionModel {
 
   private applyToSession(e: ServerEvent): void {
     switch (e.event) {
+      case "agent.usage_changed": this.hooks.onUsageChanged?.(e.data); return;
       case "workspace.created":
       case "workspace.updated":
         this.workspaces.set(e.data.workspace.id, e.data.workspace);

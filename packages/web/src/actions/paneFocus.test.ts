@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { focusPaneIfShown } from "./paneFocus.js";
+import { focusPaneIfShown, workPaneForDisplay } from "./paneFocus.js";
 
 // 20260927-agent-graph の 04（g04 点検）：切り替えの後の pane の焦点。
 describe("focusPaneIfShown", () => {
@@ -25,4 +25,14 @@ describe("focusPaneIfShown", () => {
     expect(focusPaneIfShown(c.ports, "p1")).toBe(false);
     expect([...b.focused, ...c.focused]).toEqual([]);
   });
+});
+
+it("maps display anchors to their own live work pane",()=>{
+ const worker={id:"w",tabId:"t"},anchor={id:"a",tabId:"t",virtual:true},foreign={id:"f",tabId:"other"};
+ const panes=new Map([["w",worker],["a",anchor],["f",foreign]]) as Parameters<typeof workPaneForDisplay>[0];
+ const tabs=new Map([["t",{focusedPaneId:"w"}]]) as Parameters<typeof workPaneForDisplay>[1];
+ expect(workPaneForDisplay(panes,tabs,"a")).toBe("w");
+ expect(workPaneForDisplay(panes,tabs,"w")).toBe("w");
+ expect(workPaneForDisplay(panes,tabs,"missing")).toBeNull();
+ for(const focusedPaneId of ["a","f","missing"]){expect(workPaneForDisplay(panes,new Map([["t",{focusedPaneId}]]) as Parameters<typeof workPaneForDisplay>[1],"a")).toBeNull();}
 });

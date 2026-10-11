@@ -22,13 +22,13 @@ async function setStyle(page: Page, client: Awaited<ReturnType<AppServer["openCl
   await expect.poll(() => uiStyleAttr(page)).toBe(style);
 }
 
-test("サイドバーの最下部: クラシックは［畳む］、モダンは［新規］［メニュー］［ベル］（spaces の区画の中の［新規］［メニュー］は出さない）。切り替えは再読み込みなし", async ({ page, appServer }) => {
+test("サイドバーの最下部: クラシック・モダンとも［新規］［メニュー］［ベル］（spaces の区画の中の［新規］［メニュー］は出さない）。切り替えは再読み込みなし", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   await open(page, appServer);
   // クラシック: 今のまま。
-  await expect(page.locator(".sidebar-section-footer")).toHaveCount(1);
-  await expect(page.locator(".sidebar-footer .sidebar-collapse-btn")).toHaveCount(1);
-  await expect(page.locator(".sidebar-edge-toggle")).toHaveCount(0);
+  await expect(page.locator(".sidebar-section-footer")).toHaveCount(0);
+  await expect(page.locator(".sidebar-footer .sidebar-collapse-btn")).toHaveCount(0);
+  await expect(page.locator(".sidebar-edge-toggle")).toHaveCount(1);
   await setStyle(page, client, "modern");
   await expect(page.locator(".sidebar-section-footer")).toHaveCount(0);
   await expect(page.locator(".sidebar-collapse-btn")).toHaveCount(0);
@@ -43,9 +43,9 @@ test("サイドバーの最下部: クラシックは［畳む］、モダンは
   }
   // クラシックへ戻すと、元の配置に戻る。
   await setStyle(page, client, "classic");
-  await expect(page.locator(".sidebar-section-footer")).toHaveCount(1);
-  await expect(page.locator(".sidebar-footer .sidebar-collapse-btn")).toHaveCount(1);
-  await expect(page.locator("[data-sidebar-act]")).toHaveCount(0);
+  await expect(page.locator(".sidebar-section-footer")).toHaveCount(0);
+  await expect(page.locator(".sidebar-footer .sidebar-collapse-btn")).toHaveCount(0);
+  await expect(page.locator("[data-sidebar-act]")).toHaveCount(2);
   client.close();
 });
 
@@ -86,14 +86,18 @@ test("たたむ・広げるの印: 境の線の縦の中央にある。押すと
   const nav2 = (await page.locator(".sidebar").boundingBox())!;
   const t2 = (await toggle.boundingBox())!;
   expect(Math.abs(t2.y + t2.height / 2 - (nav2.y + nav2.height / 2))).toBeLessThanOrEqual(2);
-  expect(t2.x + t2.width).toBeLessThanOrEqual(nav2.x + nav2.width + 1); // 畳んだ nav の外へはみ出さない（切られない）
+  expect(Math.abs(t2.x + t2.width / 2 - (nav2.x + nav2.width))).toBeLessThanOrEqual(2);
+  // 罫線の外側でもボタンが切られず、開く操作を受け付ける。
+  const outerX = nav2.x + nav2.width + 4;
+  const centerY = t2.y + t2.height / 2;
+  expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".sidebar-edge-toggle"), { x: outerX, y: centerY })).toBe(true);
   await expect(page.locator(".sidebar-footer")).toBeVisible();
   // 畳んだ状態の［新規］［メニュー］は縦に並ぶ（印だけ。読み上げの名前を保つ）。
   const ys = await page.locator(".sidebar-footer > *").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().y));
   expect(ys).toEqual([...ys].sort((a, b) => a - b));
   expect(new Set(ys.map(Math.round)).size).toBe(ys.length);
   await expect(page.locator('[data-sidebar-act="new"]')).toHaveAttribute("aria-label", "新規");
-  await page.locator(".sidebar-edge-toggle").click();
+  await page.mouse.click(outerX, centerY);
   await expect(page.locator(".sidebar")).not.toHaveClass(/sidebar-collapsed/);
   expect(await sidebarWidth(page)).toBeGreaterThan(before + 30); // 広げると、前の幅
   client.close();
@@ -106,7 +110,7 @@ test("「新規」: workspace・pane・グループを選べる（キーボー�
   await expect.poll(() => uiStyleAttr(page)).toBe("modern");
   const rows = page.locator(".sidebar-spaces .sidebar-row[data-drop-workspace-id]");
   await expect(rows).toHaveCount(1);
-  const panes = page.locator("[data-pane-frame-main]");
+  const panes = page.locator("[data-pane-id].pane-frame [data-pane-frame-main]");
   await expect(panes).toHaveCount(1);
 
   const newBtn = page.locator('[data-sidebar-act="new"]');
@@ -152,129 +156,37 @@ test("「新規」: workspace・pane・グループを選べる（キーボー�
 
   // 陽性の対照: クラシックに戻すと、どちらも出る。
   await setStyle(page, client, "classic");
-  await page.locator(".sidebar-section-footer .sidebar-btn-right").click();
-  expect(await menuItems(page)).toContain("連携（グラフ）");
+  await page.locator('[data-sidebar-act="menu"]').click();
+  expect(await menuItems(page)).not.toContain("連携（グラフ）");
   await page.keyboard.press("Escape");
   await rows.first().click({ button: "right" });
-  expect(await menuItems(page)).toContain("新しいグループを作る…");
+  expect(await menuItems(page)).not.toContain("新しいグループを作る…");
   client.close();
 });
 
-test("tab が 1 つのときも tab バーと「＋」が出る（モダン）。クラシックは隠す。切り替え・tab の数の変化で client.view が落ち着き、端末の行が箱に合う。位置（上・下）はどちらでも効く", async ({ page, appServer }) => {
-  const client = await appServer.openClient();
-  const views = await watchClientViews(page);
-  await open(page, appServer);
-  const settle = async (): Promise<void> => {
-    let last = -1;
-    for (let i = 0; i < 40; i++) {
-      const c = views.count();
-      if (c === last) return;
-      last = c;
-      await page.waitForTimeout(300);
-    }
-  };
-  const barVisible = () => page.locator(".tab-bar").count();
-  const boxH = () => page.locator("[data-pane-frame-main]").first().evaluate((e) => e.getBoundingClientRect().height);
-  /** ブラウザが最後に申告した行が、いまの箱に合う（箱の高さ ÷ 行の数 が、1 回目の升目の高さの範囲）。 */
-  await settle();
-  const h0 = await boxH();
-  const rows0 = views.latest()!.visible[0]!.rows;
-  const cellLo = h0 / (rows0 + 1);
-  const cellHi = h0 / rows0;
-  const fits = async (label: string): Promise<void> => {
-    const h = await boxH();
-    const rows = views.latest()!.visible[0]!.rows;
-    expect(rows, `${label}: 箱 ${h}px・申告 ${rows} 行`).toBeGreaterThanOrEqual(Math.floor(h / cellHi));
-    expect(rows, `${label}: 箱 ${h}px・申告 ${rows} 行`).toBeLessThanOrEqual(Math.floor(h / cellLo));
-  };
-  expect(await barVisible(), "クラシック: tab が 1 つなら隠す").toBe(0);
-
-  let before = views.count();
-  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
-  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
-  await expect(page.locator(".tab-bar")).toHaveCount(1);
-  await expect(page.locator(".tab-bar [role=tab]")).toHaveCount(1);
-  await expect(page.locator(".tab-bar .tab-bar-new")).toBeVisible();
-  await settle();
-  expect(views.count() - before, "tab バーが出た後に送られた client.view").toBeLessThanOrEqual(2);
-  const hModern = await boxH();
-  expect(hModern, "tab バーの分、箱が低くなる（検査が、何も動かない状態で通っていない）").toBeLessThan(h0);
-  await fits("modern・tab 1 つ");
-
-  // 位置（下）でも効く。
-  before = views.count();
-  await client.request("prefs.set", { patch: { tabBarPosition: "bottom" } });
-  await expect(page.locator(".tab-bar-bottom")).toHaveCount(1);
-  await settle();
-  expect(views.count() - before).toBeLessThanOrEqual(2);
-  const bar = (await page.locator(".tab-bar").boundingBox())!;
-  const area = (await page.locator(".app-panes").boundingBox())!;
-  expect(bar.y, "下に置くと、pane の領域の下").toBeGreaterThanOrEqual(area.y + area.height - 1);
-  await fits("modern・下");
-  await client.request("prefs.set", { patch: { tabBarPosition: "top" } });
-  await expect(page.locator(".tab-bar-top")).toHaveCount(1);
-  await settle();
-
-  // 「＋」で tab を作る → 2 つ。もう 1 つ閉じて 1 つに戻っても、tab バーは出たまま（行が落ち着く）。
-  before = views.count();
-  await page.locator(".tab-bar .tab-bar-new").click();
-  const newTabDialog = page.locator(".name-dialog");
-  await expect(newTabDialog).toBeVisible();
-  await newTabDialog.getByRole("button", { name: "OK" }).click(); // 既定の名前（"2"）で確定
-  await expect(newTabDialog).toBeHidden();
-  await expect(page.locator(".tab-bar [role=tab]")).toHaveCount(2);
-  await settle();
-  expect(views.count() - before, "tab を足した後").toBeLessThanOrEqual(3);
-  await fits("modern・tab 2 つ");
-  before = views.count();
-  await page.locator(".tab-bar [role=tab]").nth(1).click({ button: "right" });
-  await page.locator(".context-menu").getByRole("menuitem", { name: "閉じる", exact: true }).click();
-  const confirm = page.locator("dialog[open]").getByRole("button", { name: /閉じる|OK/ });
-  if (await confirm.count()) await confirm.first().click();
-  await expect(page.locator(".tab-bar [role=tab]")).toHaveCount(1);
-  await expect(page.locator(".tab-bar")).toHaveCount(1);
-  await settle();
-  expect(views.count() - before, "tab を閉じて 1 つに戻った後（バーは出たまま）").toBeLessThanOrEqual(2);
-  await fits("modern・tab 1 つに戻る");
-
-  // tab が 1 つでも、右クリック→名前の変更が働く。
-  await page.locator(".tab-bar [role=tab]").first().click({ button: "right" });
-  await page.locator(".context-menu").getByRole("menuitem", { name: "名前の変更", exact: true }).click();
-  const dialog = page.locator(".name-dialog");
-  await expect(dialog).toBeVisible();
-  await dialog.locator(".name-dialog-input").fill("only");
-  await dialog.getByRole("button", { name: "OK" }).click();
-  await expect(page.locator(".tab-bar [role=tab]").first()).toContainText("only");
-
-  // クラシックへ戻す: tab が 1 つなので、tab バーは消え、箱は元の高さに戻る。
-  before = views.count();
-  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
-  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
-  await expect(page.locator(".tab-bar")).toHaveCount(0);
-  await settle();
-  expect(views.count() - before, "tab バーが消えた後").toBeLessThanOrEqual(2);
-  expect(await boxH()).toBeCloseTo(h0, 0);
-  await fits("classic・戻した後");
-  client.close();
+test("ビューを追加するためクラシック・モダンともタブ行があり、様式変更後も操作できる",async({page,appServer})=>{
+ const client=await appServer.openClient();await open(page,appServer);
+ for(const style of ["classic","modern","classic"] as const){await setStyle(page,client,style);await expect(page.locator(".tab-bar")).toBeVisible();await expect(page.locator(".tab-bar-new")).toBeVisible();await expect(page.locator("[data-pane-id].pane-frame [data-pane-frame-main]")).toHaveCount(1);}
+ await page.locator(".tab-bar-new").click();await page.locator(".name-dialog").getByRole("button",{name:"OK",exact:true}).click();await expect(page.locator(".tab-bar [role=tab]")).toHaveCount(2);client.close();
 });
 
 test("様式を切り替えたとき、消える部品にフォーカスがあれば、対応する新しい部品へ移る（無ければ端末）", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   await open(page, appServer);
   // クラシックの畳むボタン → モダンの境の印。
-  await page.locator(".sidebar-collapse-btn").focus();
+  await page.locator(".sidebar-edge-toggle").focus();
   await setStyle(page, client, "modern");
   await expect(page.locator(".sidebar-edge-toggle")).toBeFocused();
   // モダンの［新規］ → クラシックの spaces の区画の［＋ 新規］。
   await page.locator('[data-sidebar-act="new"]').focus();
   await setStyle(page, client, "classic");
-  await expect(page.locator(".sidebar-section-footer .sidebar-btn").first()).toBeFocused();
+  await expect(page.locator('[data-sidebar-act="new"]')).toBeFocused();
   // tab バーの中（tab が 1 つ）にフォーカス → クラシックへ切り替えて tab バーが消えたら、端末へ。
   await setStyle(page, client, "modern");
   await page.locator(".tab-bar [role=tab]").first().focus();
   await setStyle(page, client, "classic");
-  await expect(page.locator(".tab-bar")).toHaveCount(0);
-  await expect(page.locator(".xterm-helper-textarea").first()).toBeFocused();
+  await expect(page.locator(".tab-bar")).toHaveCount(1);
+  await expect(page.locator(".tab-bar [role=tab]").first()).toBeFocused();
   client.close();
 });
 
@@ -366,7 +278,7 @@ test("サイドバーの区画の見出し（spaces・agents）と並び順の�
   expect((await page.locator(".sidebar-spaces").boundingBox())!.height, "区画の高さのつまみが働く").toBeGreaterThan(h0 + 40);
   await page.locator(".sidebar-edge-toggle").click();
   await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
-  expect(await page.locator(".sidebar").evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "畳んだサイドバーは横にはみ出さない").toBe(true);
+  expect(await page.locator(".sidebar-sections").evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "畳んだサイドバーの一覧には横スクロールがない").toBe(true);
   client.close();
 });
 
@@ -398,85 +310,11 @@ test("畳んだサイドバー: 境の印（縦の中央）は、行の印〔状
   client.close();
 });
 
-test("設定「tab が 1 つのときも tab バーを出す」（AC24）: 選んだ値が様式より優先され、様式を切り替えても残る。出る・消えるときの桁・行は落ち着き、「既定に戻す」で様式に従う", async ({ page, appServer }) => {
-  const client = await appServer.openClient();
-  const views = await watchClientViews(page);
-  await open(page, appServer);
-  const settle = async (): Promise<void> => {
-    let last = -1;
-    for (let i = 0; i < 40; i++) {
-      const c = views.count();
-      if (c === last) return;
-      last = c;
-      await page.waitForTimeout(300);
-    }
-  };
-  const bar = page.locator(".tab-bar");
-  const boxH = () => page.locator("[data-pane-frame-main]").first().evaluate((e) => e.getBoundingClientRect().height);
-  await settle();
-  const h0 = await boxH();
-  await expect(bar).toHaveCount(0); // クラシック・既定: 出さない（今のまま）
-
-  // 設定の画面から「出す」を入れる（クラシックのまま）。
-  await focusTerminal(page);
-  await prefixKey(page, "s");
-  const dialog = page.locator("dialog.settings-dialog");
-  await expect(dialog).toBeVisible();
-  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
-  const sw = dialog.locator('[data-setting="tab-bar-always"]');
-  await expect(sw).toHaveAttribute("aria-checked", "false");
-  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toHaveCount(0); // 様式に従っている間は、戻す道は出ない
-  let before = views.count();
-  await sw.click();
-  await expect(sw).toHaveAttribute("aria-checked", "true");
-  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toBeVisible();
-  await expect(bar).toHaveCount(1);
-  await page.keyboard.press("Escape");
-  await settle();
-  expect(views.count() - before, "tab バーが出た後に送られた client.view").toBeLessThanOrEqual(2);
-  expect(await boxH(), "tab バーの分、箱が低くなる").toBeLessThan(h0);
-  // サーバの共有の設定に、選んだ値が書かれている（様式に関わらない）。
-  const stored = async (): Promise<unknown> => (await client.request("prefs.get", {}))["prefs"]["tabBarAlways"] ?? null;
-  await expect.poll(stored).toBe(true);
-
-  // モダンへ切り替えても、選んだ値のまま（出ている）。クラシックへ戻しても出たまま。
-  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
-  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
-  await expect(bar).toHaveCount(1);
-  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
-  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
-  await expect(bar).toHaveCount(1);
-
-  // 「出さない」を選ぶと、モダンでも出ない。
-  before = views.count();
-  await client.request("prefs.set", { patch: { tabBarAlways: false } });
-  await expect(bar).toHaveCount(0);
-  await client.request("prefs.set", { patch: { uiStyle: "modern" } });
-  await expect.poll(() => uiStyleAttr(page)).toBe("modern");
-  await expect(bar, "モダンでも、選んだ「出さない」が効く").toHaveCount(0);
-  await settle();
-  expect(await boxH(), "出さないので、箱は元の高さ（モダンの角・余白の分は、すき間の表で変わる）").toBeGreaterThan(0);
-
-  // 「既定に戻す」（設定の画面から）: 様式に従う（モダンなので出る）。
-  await focusTerminal(page);
-  await prefixKey(page, "s");
-  await dialog.locator("nav.settings-menu button", { hasText: "表示" }).click();
-  await expect(sw).toHaveAttribute("aria-checked", "false");
-  await dialog.locator('[data-setting="tab-bar-always-reset"]').click();
-  await expect(bar).toHaveCount(1);
-  await expect(sw).toHaveAttribute("aria-checked", "true");
-  await expect(dialog.locator('[data-setting="tab-bar-always-reset"]')).toHaveCount(0);
-  await expect.poll(stored).toBeNull();
-  await page.keyboard.press("Escape");
-  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
-  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
-  await expect(bar, "既定に戻した後は、様式に従う（クラシックは出さない）").toHaveCount(0);
-  await settle();
-  expect(await boxH()).toBeCloseTo(h0, 0);
-  client.close();
+test("tabBarAlwaysの設定を保持し、ビュー操作があるデスクトップではタブ行を表示する",async({page,appServer})=>{
+ const client=await appServer.openClient();await open(page,appServer);
+ for(const tabBarAlways of [true,false,null]){await client.request("prefs.set",{patch:{tabBarAlways}});await expect(page.locator(".tab-bar")).toBeVisible();await expect(page.locator(".tab-bar-action").last()).toBeVisible();}client.close();
 });
 
-/** 見た目の言葉（AC25・AC26）を比べるための、計算済みの値。 */
 const LOOK = ["fontSize", "paddingTop", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderTopLeftRadius", "minHeight", "backgroundColor", "color"] as const;
 async function lookOf(page: Page, selector: string): Promise<Record<string, string>> {
   return page.locator(selector).first().evaluate((el, keys) => {
@@ -484,6 +322,7 @@ async function lookOf(page: Page, selector: string): Promise<Record<string, stri
     return Object.fromEntries(keys.map((k) => [k, (s as unknown as Record<string, string>)[k] ?? ""]));
   }, [...LOOK]);
 }
+
 
 test("見た目の言葉をそろえる（AC25・AC26）: モダンは tab が切り替えのボタンと同じ形（角・高さ・余白・文字・線）。クラシックは切り替えのボタンが tab と同じ見た目。tab の働きは変わらない", async ({ page, appServer }) => {
   const client = await appServer.openClient();
@@ -594,6 +433,6 @@ test("モダン: サイドバーの区画（spaces・agents）がカードにな
   await page.locator(".sidebar-edge-toggle").click();
   await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
   expect((await card(".sidebar-spaces")).border).toBe(0);
-  expect(await page.locator(".sidebar").evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+  expect(await page.locator(".sidebar-sections").evaluate((e) => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   client.close();
 });

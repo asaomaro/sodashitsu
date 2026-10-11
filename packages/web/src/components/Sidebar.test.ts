@@ -300,36 +300,36 @@ describe("Sidebar — ボタン", () => {
     const view = useViewStore(pinia);
     const actions = makeActions();
     const wrapper = mountSidebar(makeConnection(), actions);
-    const btn = wrapper.get(".sidebar-collapse-btn");
+    const btn = wrapper.get(".sidebar-edge-toggle");
     expect(btn.attributes("aria-expanded")).toBe("true");
     await btn.trigger("click");
     expect(actions.run).toHaveBeenCalledWith({ type: "toggleSidebar" });
 
     view.toggleSidebar(); // 畳んだ状態でも押せないと戻れなくなる
     await wrapper.vm.$nextTick();
-    expect(wrapper.find(".sidebar-collapse-btn").exists()).toBe(true);
-    expect(wrapper.get(".sidebar-collapse-btn").attributes("aria-expanded")).toBe("false");
+    expect(wrapper.find(".sidebar-edge-toggle").exists()).toBe(true);
+    expect(wrapper.get(".sidebar-edge-toggle").attributes("aria-expanded")).toBe("false");
   });
 
   it("「新規」はキーの prefix+shift+N と同じ action を送る（AC3）", async () => {
     const actions = makeActions();
     const wrapper = mountSidebar(makeConnection(), actions);
-    await wrapper.findAll(".sidebar-section-footer .sidebar-btn")[0]!.trigger("click");
-    expect(actions.run).toHaveBeenCalledWith({ type: "newWorkspace" });
+    await wrapper.findAll('[data-sidebar-act="new"]')[0]!.trigger("click");
+    expect(actions.openContextMenu).toHaveBeenCalledWith({kind:"new"},expect.anything());
   });
 
   it("「メニュー」は global のメニューを開き、開いている間は aria-expanded が true（AC4）", async () => {
     const view = useViewStore(pinia);
     const actions = makeActions();
     const wrapper = mountSidebar(makeConnection(), actions);
-    const btn = wrapper.get(".sidebar-section-footer .sidebar-btn-right");
+    const btn = wrapper.get('[data-sidebar-act="menu"]');
     expect(btn.attributes("aria-expanded")).toBe("false");
     await btn.trigger("click");
     expect(actions.openContextMenu).toHaveBeenCalledWith({ kind: "global" }, expect.anything());
     // 実際に開くのは `ActionDispatcher` なので、ここではストアを直接動かして表示を確かめる。
     view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     await wrapper.vm.$nextTick();
-    expect(wrapper.get(".sidebar-section-footer .sidebar-btn-right").attributes("aria-expanded")).toBe("true");
+    expect(wrapper.get('[data-sidebar-act="menu"]').attributes("aria-expanded")).toBe("true");
   });
 
   // 帯ごとに分けて確かめる。1 つの it にまとめると、片方の `v-if` を外しても
@@ -337,10 +337,10 @@ describe("Sidebar — ボタン", () => {
   it("折りたたむと spaces のフッタが消える（AC11）", async () => {
     const view = useViewStore(pinia);
     const wrapper = mountSidebar(makeConnection());
-    expect(wrapper.find(".sidebar-section-footer").exists()).toBe(true);
+    expect(wrapper.find('[data-sidebar-act="new"]').exists()).toBe(true);
     view.toggleSidebar();
     await wrapper.vm.$nextTick();
-    expect(wrapper.find(".sidebar-section-footer").exists()).toBe(false);
+    expect(wrapper.find('[data-sidebar-act="new"]').exists()).toBe(true);
   });
 
   it("折りたたむと agents の見出しが消える（AC11）", async () => {
@@ -359,7 +359,7 @@ describe("Sidebar — ボタン", () => {
     view.toggleSidebar();
     await wrapper.vm.$nextTick();
     expect(wrapper.find(".sidebar-footer").exists()).toBe(true);
-    await wrapper.get(".sidebar-collapse-btn").trigger("click"); // 畳んだ状態からも戻せる
+    await wrapper.get(".sidebar-edge-toggle").trigger("click"); // 畳んだ状態からも戻せる
     expect(actions.run).toHaveBeenCalledWith({ type: "toggleSidebar" });
   });
 
@@ -431,12 +431,12 @@ describe("Sidebar — ボタンの keydown：無修飾の Enter/Space だけ win
 
   it("＋新規", () => {
     const wrapper = mountSidebar(makeConnection(), undefined, { attachTo: true });
-    expectStopsOnlyUnmodifiedEnterSpace(wrapper.findAll(".sidebar-section-footer .sidebar-btn")[0]!.element);
+    expectStopsOnlyUnmodifiedEnterSpace(wrapper.findAll('[data-sidebar-act="new"]')[0]!.element);
   });
 
   it("メニュー", () => {
     const wrapper = mountSidebar(makeConnection(), undefined, { attachTo: true });
-    expectStopsOnlyUnmodifiedEnterSpace(wrapper.get(".sidebar-section-footer .sidebar-btn-right").element);
+    expectStopsOnlyUnmodifiedEnterSpace(wrapper.get('[data-sidebar-act="menu"]').element);
   });
 
   it("並び順（agents）", () => {
@@ -446,7 +446,7 @@ describe("Sidebar — ボタンの keydown：無修飾の Enter/Space だけ win
 
   it("サイドバー折りたたみ«/»", () => {
     const wrapper = mountSidebar(makeConnection(), undefined, { attachTo: true });
-    expectStopsOnlyUnmodifiedEnterSpace(wrapper.get(".sidebar-collapse-btn").element);
+    expectStopsOnlyUnmodifiedEnterSpace(wrapper.get(".sidebar-edge-toggle").element);
   });
 });
 
@@ -1003,7 +1003,7 @@ describe("Sidebar — 区画の構造", () => {
     expect(sections.findAll(":scope > section").map((e) => e.classes()[0])).toEqual(["sidebar-spaces", "sidebar-agents"]);
     expect(section(wrapper, "spaces").find(":scope > .sidebar-section-header").exists()).toBe(true);
     expect(section(wrapper, "spaces").find(":scope > .sidebar-section-body .sidebar-row").exists()).toBe(true);
-    expect(section(wrapper, "spaces").find(":scope > .sidebar-section-footer").exists()).toBe(true);
+    expect(section(wrapper, "spaces").find(":scope > .sidebar-section-footer").exists()).toBe(false);
     expect(section(wrapper, "agents").find(":scope > .sidebar-section-body").exists()).toBe(true);
     expect(wrapper.find(".sidebar-sections .sidebar-footer").exists()).toBe(false);
     expect(wrapper.find(":scope > .sidebar-footer").exists()).toBe(true);

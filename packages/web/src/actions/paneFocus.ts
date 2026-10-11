@@ -1,3 +1,4 @@
+import type { Pane, Tab } from "@sodashitsu/protocol";
 /**
  * 切り替えの後に pane へ焦点を置く（20260927-agent-graph の 04・g04 点検）。切り替えの間にその pane が閉じた・別の tab へ移ったなら何もしない
  * （表示中でない pane に焦点を置いて、画面とサーバの焦点がずれないように）。
@@ -16,4 +17,13 @@ export function focusPaneIfShown(ports: PaneFocusPorts, paneId: string): boolean
   if (tab === undefined || tab !== ports.shownTab()) return false;
   ports.focus(paneId);
   return true;
+}
+
+/** Display anchors never become terminal focus targets. */
+export function workPaneForDisplay(panes: ReadonlyMap<string, Pick<Pane,"id"|"tabId"|"virtual">>, tabs: ReadonlyMap<string, Pick<Tab,"focusedPaneId">>, paneId: string): string | null {
+  const pane=panes.get(paneId);
+  if(!pane)return null;
+  if(!pane.virtual)return pane.id;
+  const tab=tabs.get(pane.tabId), worker=tab && panes.get(tab.focusedPaneId);
+  return worker && !worker.virtual && worker.tabId===pane.tabId ? worker.id : null;
 }

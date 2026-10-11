@@ -290,3 +290,9 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 - この説明: `sodactl skill`
 - 別のマシン: 前置き `sodactl --machine <名前|id> <コマンド> …`（手元の soda serve に `soda machine add` で登録したマシンへ送る。login・skill 以外）。
   id（pane・エージェントの名前を含む）はマシンごとに別なので、そのマシンの `snapshot`・`agent list` で調べた id を使う。`--machine` のときは自分の pane の歯止めは効かない。
+
+## 拡張パッケージ（サーバに接続しないローカル操作）
+
+`sodactl plugin pack <directory> --out <file.sodaplugin>` で配布物を作る。`sodactl plugin install <file.sodaplugin> --state-dir <directory>` は無効の状態で登録する。`sodactl plugin list --state-dir <directory>` で導入済みを確認し、`sodactl plugin remove <id> --state-dir <directory>` で登録を外す。持ち主がパッケージを確認し、`sodactl plugin enable <id> --state-dir <directory>` で有効にする。`sodactl plugin disable <id> --state-dir <directory>` で無効にする。どちらも `sodactl ext reload` の後に反映される。
+
+パッケージの install/list/enable/disable/remove は `--project-dir <PJフォルダ>` でも使える。`--state-dir` と同時指定不可。PJ導入先は `.soda/`、実行にはプロジェクト拡張の承認が別途必要。タブの［ビューを追加］は通常の端末タブとアプリタブの両方から使える。

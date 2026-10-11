@@ -81,11 +81,10 @@ test("開く（prefix+a）: ノードが 2 つ出る。Esc・切り替えの「�
   await expect.poll(() => activeIsTerminal(page)).toBe(true);
 });
 
-test("開く（右クリックのメニュー「連携（グラフ）」）", async ({ page, appServer }) => {
+test("開く（サイドバー上部のグラフ切り替え）", async ({ page, appServer }) => {
   await setup(page, appServer);
-  // どこにも属さない全体のメニュー: サイドバーの［メニュー］ボタン
-  await page.locator(".sidebar-btn-right").click();
-  await page.getByRole("menuitem", { name: "連携（グラフ）" }).click();
+  // 専用の切り替えから開く。
+  await switcherBtn(page, "graph").click();
   await expect(graphView(page)).toBeVisible();
   await closeByEsc(page);
 });

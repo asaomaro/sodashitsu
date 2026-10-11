@@ -28,7 +28,11 @@ import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
 import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename, runWorkspaceReportMetadata } from "./commands/workspace.js";
 import { reportAndExit } from "./output.js";
 import { FsSessionStore } from "./session.js";
+import { changePlugin, listPlugins, packPlugin } from "./pluginPackage.js";
+import { printJson } from "./output.js";
 import { runSkill } from "./skill.js";
+import { join } from "node:path";
+import { realpath, stat, lstat, mkdir } from "node:fs/promises";
 
 function printHelp(): void {
   console.log(
@@ -94,6 +98,22 @@ async function main(): Promise<void> {
       // 終了コードは 0 か 1（`events` の `connection_closed` は終わりの行を出して 1）。使い方の誤り・サーバのエラーは投げて `reportAndExit` へ。
       process.exitCode = await runDisplay(cmd, store);
       return;
+    case "plugin": {
+      if (cmd.action === "pack") { const bundle = await packPlugin(cmd.target!, cmd.out!); printJson({ id: bundle.manifest.id, version: bundle.manifest.version, out: cmd.out }); }
+      else {
+        let base = cmd.stateDir!;
+        if (cmd.projectDir) {
+          const root = await realpath(cmd.projectDir);
+          if (!(await stat(root)).isDirectory()) throw new Error("project folder must be a directory");
+          base = join(root, ".soda");
+          await mkdir(base, { recursive: true, mode: 0o700 });
+          if ((await lstat(base)).isSymbolicLink()) throw new Error("project plugin directory must not be a symlink");
+        }
+        if (cmd.action === "list") printJson(await listPlugins(base));
+        else printJson(await changePlugin(base, cmd.action, cmd.target!, !!cmd.projectDir));
+      }
+      return;
+    }
     case "ext":
       return runExt(cmd, store);
     case "workspace-create":

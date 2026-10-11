@@ -294,7 +294,7 @@ describe("HttpServer — 表示の面の枠のページ（/display-view/*。2026
       expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
       const csp = res.headers.get("content-security-policy")!;
       expect(csp).toBe(
-        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'",
+        "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-src blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'",
       );
       expect(csp).toBe(DISPLAY_SCRIPT_VIEW_CSP);
       expect(csp.match(/script-src ([^;]*)/)?.[1]).toBe("'unsafe-inline' 'unsafe-eval'");

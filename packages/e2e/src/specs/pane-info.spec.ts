@@ -175,8 +175,8 @@ test.describe("pane の情報（PR4）", () => {
     const sent = await watchSent(page);
     await open(page, appServer, "classic");
     const watches = () => sent().filter((s) => s.method === "agent.usage_watch").map((s) => (s.params as { on: boolean }).on);
-    await expect(page.locator("[data-pane-actions]")).toHaveCount(0);
-    await expect(infoBtn(page)).toHaveCount(0);
+    await expect(page.locator("[data-pane-actions]")).toHaveCount(1);
+    await expect(infoBtn(page)).toHaveCount(1);
     // 右クリックのメニュー
     await page.locator(".terminal-pane").first().click({ button: "right" });
     const item = page.locator('[role="menuitem"]', { hasText: "利用状況…" });

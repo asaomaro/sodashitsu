@@ -1,0 +1,5 @@
+review_studio_notificationsによる独立レビュー: CLI getとpromptの間の名前付替え/ペイン移動の誤送信を指摘。--expect条件をCLI/RPCへ追加し、サーバ受付時とwriteModal.build直前で検証。通常/--waitの伝達と回帰テストを再レビューし追加指摘なし。通知の保存維持/明示再送/シェル無し/URL環境の説明を確認。
+
+旧サーバが未知のexpect字段を捨てることを避け、expect必須のagent.prompt_checkedを追加。CLI --expect指定時にこのRPCだけ使い、旧サーバでは通常送信へfallbackしない。差分再レビューで追加指摘なし。
+
+旧仕様のenv統合テストも、秘密変数の未設定確認を維持し実際の待受URLとの一致を確認する差分を独立再レビューし指摘なし。

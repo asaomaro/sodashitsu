@@ -103,10 +103,12 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     h.io.type(down(70, 10) + up(70, 10));
     expect(h.app.model.focusedPaneId).toBe("p2");
     expect(h.ws.requests("pane.focus").map((r) => r.params)).toEqual([{ paneId: "p2" }]);
-    h.io.type(down(5, 2) + up(5, 2));
+    h.io.type(down(5, 3) + up(5, 3));
     expect(h.app.model.workspaceId).toBe("w2");
     expect(h.ws.requests("workspace.focus").map((r) => r.params)).toEqual([{ workspaceId: "w2" }]);
-    h.io.type(down(23, 0) + up(23, 0));
+    h.io.type(down(1, 28) + up(1, 28));
+    expect(h.app.ui.contextMenu?.target).toEqual({kind:"new"});
+    h.io.type("\r");
     expect(h.ws.requests("workspace.create")).toHaveLength(1);
   });
 
@@ -130,18 +132,18 @@ describe("マウスの操作（AC9・AC-I5）", () => {
       respond: { "prefs.set": (p: { patch: unknown }) => ({ prefs: p.patch, rev: 1 }) },
     });
     // 先頭の行の「▸/▾」の桁（x=1）：畳む（共有の設定 collapsedAutoGroups）。workspace へは移らない。
-    h.io.type(down(1, 1) + up(1, 1));
+    h.io.type(down(1, 2) + up(1, 2));
     expect(h.ws.requests("prefs.set").map((r) => r.params)).toEqual([
       { patch: { collapsedAutoGroups: ["r1"] } },
     ]);
     expect(h.ws.requests("workspace.focus")).toEqual([]);
     // 記号の外（名前の上）は workspace の行：その workspace へ。
-    h.io.type(down(8, 1) + up(8, 1));
+    h.io.type(down(8, 2) + up(8, 2));
     expect(h.app.model.workspaceId).toBe("w1");
     expect(h.ws.requests("workspace.focus").map((r) => r.params)).toEqual([{ workspaceId: "w1" }]);
     expect(h.ws.requests("prefs.set")).toHaveLength(1);
     // 右クリックは記号の上でも workspace のメニュー。
-    h.io.type(down(1, 1, 2));
+    h.io.type(down(1, 2, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "workspace", workspaceId: "w1" });
   });
 
@@ -155,7 +157,7 @@ describe("マウスの操作（AC9・AC-I5）", () => {
       respond: { "prefs.set": (p: { patch: unknown }) => ({ prefs: p.patch, rev: 1 }) },
     });
     // 行: 1 = グループ G の見出し、2 = w1、3 = 「グループなし」の見出し、4 = w2。
-    h.io.type(down(1, 3) + up(1, 3));
+    h.io.type(down(1, 4) + up(1, 4));
     expect(h.ws.requests("prefs.set").map((r) => r.params)).toEqual([
       { patch: { ungroupedCollapsed: true } },
     ]);
@@ -175,13 +177,13 @@ describe("マウスの操作（AC9・AC-I5）", () => {
       });
     // 行: 1 = グループ G の見出し、2 = w1、3 = 「グループなし」の見出し、4 = w2。
     const h = await start({ snapshot: snap(true) });
-    h.io.type(down(8, 1, 2));
+    h.io.type(down(8, 2, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "group", groupId: "g1" });
     h.app.ui.closeContextMenu();
-    h.io.type(down(8, 3, 2));
+    h.io.type(down(8, 4, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "ungrouped" });
     const old = await start({ snapshot: snap(false) });
-    old.io.type(down(8, 3, 2));
+    old.io.type(down(8, 4, 2));
     expect(old.app.ui.contextMenu).toBeNull();
   });
 
@@ -190,13 +192,13 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     h.io.type(down(28, 0, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "tab", tabId: "t1" });
     h.app.ui.closeContextMenu();
-    h.io.type(down(5, 1, 2));
+    h.io.type(down(5, 2, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "workspace", workspaceId: "w1" });
     h.app.ui.closeContextMenu();
     h.io.type(down(40, 10, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "pane", paneId: "p1" });
     h.app.ui.closeContextMenu();
-    h.io.type(down(5, 20, 2));
+    h.io.type(down(5, 21, 2));
     expect(h.app.ui.contextMenu?.target).toEqual({ kind: "global" });
   });
 
@@ -253,7 +255,7 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     expect(h.ws.requests("pane.replace").map((r) => r.params)).toEqual([
       { paneId: "p2", targetPaneId: "p1" },
     ]);
-    h.io.type(down(70, 1) + drag(5, 2) + up(5, 2));
+    h.io.type(down(70, 1) + drag(5, 3) + up(5, 3));
     expect(h.ws.requests("pane.move_to_new_tab").map((r) => r.params)).toEqual([
       { paneId: "p2", targetWorkspaceId: "w2" },
     ]);
@@ -285,7 +287,7 @@ describe("マウスの操作（AC9・AC-I5）", () => {
 
   it("サイドバーの workspace の行のドラッグで並べ替え", async () => {
     const h = await start();
-    h.io.type(down(5, 2) + drag(5, 1) + up(5, 1));
+    h.io.type(down(5, 3) + drag(5, 2) + up(5, 2));
     expect(h.ws.requests("workspace.move_to").map((r) => r.params)).toEqual([
       { workspaceIds: ["w2"], beforeWorkspaceId: "w1" },
     ]);
@@ -416,7 +418,7 @@ describe("マウスの操作（AC9・AC-I5）", () => {
     const hits = (h.app as unknown as { sidebarHits: { kind: string; y: number }[] }).sidebarHits;
     const div = hits.find((x) => x.kind === "sectionDivider")!;
     h.io.type(down(3, div.y) + drag(3, div.y + 5) + up(3, div.y + 5));
-    expect(h.app.prefs.sidebarSpacesRows).toBe(div.y + 5);
+    expect(h.app.prefs.sidebarSpacesRows).toBe(div.y + 4);
     // 描き直すと区切りがその位置へ動く（上の区画が 5 行広がる）。
     h.app.renderNow();
     const after = (h.app as unknown as { sidebarHits: { kind: string; y: number }[] }).sidebarHits;
@@ -460,7 +462,7 @@ describe("マウスの操作（AC9・AC-I5）", () => {
       const h = await start({ snapshot: agentSnap() });
       const div = hitsOf(h).find((x) => x.kind === "sectionDivider")!;
       h.io.type(down(3, div.y) + drag(3, div.y + 2) + up(3, div.y + 2));
-      expect(h.app.prefs.sidebarSpacesRows).toBe(div.y + 2);
+      expect(h.app.prefs.sidebarSpacesRows).toBe(div.y + 1);
       expect(h.app.prefs.sectionsCollapsed).toEqual({ spaces: false, agents: false });
     });
 

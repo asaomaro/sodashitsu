@@ -35,7 +35,7 @@ describe("TuiApp：モード（navigate・copy・resize・goto。AC5・AC7・AC-
     await vi.waitFor(() =>
       expect(h.app.ui.contextMenu?.target).toEqual({ kind: "workspace", workspaceId: "w1" }),
     );
-    await vi.waitFor(async () => expect(await h.screen()).toContain("新しいグループを作る…"));
+    await vi.waitFor(async () => expect(await h.screen()).toContain("名前の変更"));
   });
 
   it("navigate の Space で、選んだ見出しのメニューを開く（グループ・「グループなし」）。見出しが消えていれば何も開かず選択を外す（T17）", async () => {

@@ -1,0 +1,1 @@
+review_studio_searchによる独立レビュー: レビュー保存時updatedAtが無い点、消えたseries候補と有効条件の表示不一致を指摘。setReview/依頼開始と完了のupdatedAt更新、該当なし候補の保持へ修正。回帰テストとaria-labelを再レビューし追加指摘なし。

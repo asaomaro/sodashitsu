@@ -350,8 +350,9 @@ async function chooseMenu(page: Page, name: string): Promise<void> {
 
 /** 「新しいグループを作る…」で名前を入れて確定する。 */
 async function createGroupVia(page: Page, rowLabel: string, groupName: string): Promise<void> {
-  await openMenuOn(page, rowOf(page, rowLabel));
-  await chooseMenu(page, "新しいグループを作る…");
+  await rowOf(page,rowLabel).click();
+  await page.locator('[data-sidebar-act="new"]').click();
+  await chooseMenu(page,"グループ…");
   const dialog = page.locator(".name-dialog");
   await expect(dialog).toBeVisible();
   await dialog.locator(".name-dialog-input").fill(groupName);
@@ -415,8 +416,11 @@ test.describe("グループの作成と出入り", () => {
 
     // 作る：右クリックした workspace が入る。新しいグループは「グループなし」の直前。
     await openMenuOn(page, rowOf(page, "alpha"));
-    expect(await menuItems(page)).toEqual(["名前の変更", "閉じる", "新しいグループを作る…"]);
-    await chooseMenu(page, "新しいグループを作る…");
+    expect(await menuItems(page)).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる"]);
+    await page.keyboard.press("Escape");
+    await rowOf(page,"alpha").click();
+    await page.locator('[data-sidebar-act="new"]').click();
+    await chooseMenu(page,"グループ…");
     const dialog = page.locator(".name-dialog");
     await dialog.locator(".name-dialog-input").fill("g1");
     await dialog.getByRole("button", { name: "OK" }).click();
@@ -432,9 +436,9 @@ test.describe("グループの作成と出入り", () => {
     await openMenuOn(page, rowOf(page, "beta"));
     expect(await menuItems(page)).toEqual([
       "名前の変更",
+      "PJフォルダを設定…",
       "閉じる",
       "グループへ追加…",
-      "新しいグループを作る…",
     ]);
     await chooseMenu(page, "グループへ追加…");
     expect(await pickGroup(page, "g1")).toEqual(["g1"]);
@@ -450,9 +454,9 @@ test.describe("グループの作成と出入り", () => {
     await openMenuOn(page, rowOf(page, "beta"));
     expect(await menuItems(page)).toEqual([
       "名前の変更",
+      "PJフォルダを設定…",
       "閉じる",
       "グループから外す",
-      "新しいグループを作る…",
     ]);
     await chooseMenu(page, "グループから外す");
     await expectOutline(page, [
@@ -478,10 +482,10 @@ test.describe("グループの作成と出入り", () => {
     await openMenuOn(page, rowOf(page, "alpha"));
     expect(await menuItems(page)).toEqual([
       "名前の変更",
+      "PJフォルダを設定…",
       "閉じる",
       "別のグループへ移す…",
       "グループから外す",
-      "新しいグループを作る…",
     ]);
     await chooseMenu(page, "別のグループへ移す…");
     await expect(page.locator(".group-picker-dialog-title")).toHaveText("別のグループへ移す");
@@ -1334,7 +1338,8 @@ test.describe("同じフォルダの 2 つ目の workspace（追補 01 A・AC19�
     // フォルダで開く（同じフォルダの 2 つ目）。名前は自動で付くので、3 行目に出た行の名前を読む。
     await rowOf(page, "same-1").click();
     await expect(rowOf(page, "same-1")).toHaveAttribute("aria-current", "true");
-    await page.getByRole("button", { name: "＋ 新規" }).click();
+    await page.locator('[data-sidebar-act="new"]').click();
+    await chooseMenu(page,"workspace");
     await expect.poll(async () => (await outline(page)).length, { timeout: SETTLE }).toBe(3);
     const rows = await rowsOf(page);
     const second = rows[2]!;
@@ -1346,7 +1351,7 @@ test.describe("同じフォルダの 2 つ目の workspace（追補 01 A・AC19�
     expect(second.toggleName).toBeNull();
     // メニューは通常の行のもの（グループへの出入りは項目＝この workspace 単体）。
     await openMenuOn(page, rowOf(page, secondLabel));
-    expect(await menuItems(page)).toContain("新しいグループを作る…");
+    expect(await menuItems(page)).not.toContain("新しいグループを作る…");
     await page.keyboard.press("Escape");
 
     // 代表を閉じる：同じフォルダの次の workspace が代表になり、worktree グループの子として並ぶ。
@@ -1386,7 +1391,8 @@ test.describe("同じフォルダの 2 つ目の workspace（追補 01 A・AC19�
       (e) => !known.has(e.data.workspace.id) && typeof e.data.workspace.git?.worktreeKey === "string",
       SETTLE,
     );
-    await page.getByRole("button", { name: "＋ 新規" }).click();
+    await page.locator('[data-sidebar-act="new"]').click();
+    await chooseMenu(page,"workspace");
     const created = (await judged).data.workspace;
     await env.client.request("workspace.rename", { workspaceId: created.id, label: "second-ws" });
     await expect(rowOf(page, "second-ws")).toBeVisible({ timeout: SETTLE });
@@ -1430,7 +1436,8 @@ test.describe("同じフォルダの 2 つ目の workspace（追補 01 A・AC19�
       (e) => !known.has(e.data.workspace.id) && typeof e.data.workspace.git?.worktreeKey === "string",
       SETTLE,
     );
-    await page.getByRole("button", { name: "＋ 新規" }).click();
+    await page.locator('[data-sidebar-act="new"]').click();
+    await chooseMenu(page,"workspace");
     const created = (await judged).data.workspace;
     await env.client.request("workspace.rename", { workspaceId: created.id, label: "second-ws" });
     await expect(rowOf(page, "second-ws")).toBeVisible({ timeout: SETTLE });
@@ -1878,8 +1885,11 @@ test.describe("キーだけの操作", () => {
     await expectOutline(page, ["alpha", "beta", "gamma", "delta"]);
 
     // 作る（名前のダイアログにも打って Enter）。
-    await openMenuByKeys(page, "alpha");
-    await chooseMenuByKeys(page, "新しいグループを作る…");
+    await navigateTo(page,"alpha");
+    await page.keyboard.press("Enter");
+    await page.locator('[data-sidebar-act="new"]').focus();
+    await page.keyboard.press("Enter");
+    await chooseMenuByKeys(page,"グループ…");
     await nameByKeys(page, "g1");
     await expectOutline(page, [
       "[g] g1 (1)",
@@ -1890,8 +1900,11 @@ test.describe("キーだけの操作", () => {
       "  delta",
     ]);
     await leaveNavigate(page);
-    await openMenuByKeys(page, "beta");
-    await chooseMenuByKeys(page, "新しいグループを作る…");
+    await navigateTo(page,"beta");
+    await page.keyboard.press("Enter");
+    await page.locator('[data-sidebar-act="new"]').focus();
+    await page.keyboard.press("Enter");
+    await chooseMenuByKeys(page,"グループ…");
     await nameByKeys(page, "g2");
     await expectOutline(page, [
       "[g] g1 (1)",

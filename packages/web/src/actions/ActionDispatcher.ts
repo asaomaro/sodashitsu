@@ -321,7 +321,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /** T23（`NameDialog`）が新規 tab の名前を確定したときに呼ぶ。 */
-  confirmNewTab(label: string): void {
+  confirmNewTab(label: string, plugin?: import("@sodashitsu/protocol").PluginTab): void {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "newTab") return;
     this.view.closeDialog();
@@ -331,7 +331,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     // **ダイアログを閉じた後に読む**——開いている間に焦点の pane が閉じられたら、閉じたときに戻す先へ差し替わっている（D97）。
     const newCwd = this.newCwdFor(this.focusedPaneIn(ctx.workspaceId));
     this.conn
-      .request("tab.create", { workspaceId: ctx.workspaceId, ...(trimmed ? { label: trimmed } : {}), newCwd })
+      .request("tab.create", { workspaceId: ctx.workspaceId, ...(trimmed ? { label: trimmed } : {}), ...(plugin ? { plugin } : { newCwd }) })
       .then((result) => {
         this.view.setView(ctx.workspaceId, result.tab.id);
         this.view.focusPane(result.pane.id);
@@ -1649,6 +1649,19 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
    * Enter だけで自動の名前が付けた名前として固定され、以後追従しなくなるのを防ぐ（20260921-workspace-auto-label の design D7。新しい tab の D75 と同じ考え）。
    * 自動かどうかは開いた時点の値で見る（開いている間にほかのブラウザで変わっても、変えずに確定したことに変わりはない）。
    */
+  setProjectFolder(workspaceId: string): void {
+    const ws = this.session.workspaces.get(workspaceId);
+    if (ws) this.view.openDialogWithContext({ kind: "projectFolder", workspaceId, currentPath: ws.projectDir ?? "" });
+  }
+
+  confirmProjectFolder(path: string): void {
+    const ctx = this.view.dialogContext;
+    if (ctx?.kind !== "projectFolder") return;
+    void this.conn.request("workspace.set_project_folder", { workspaceId: ctx.workspaceId, path: path.trim() || null })
+      .then(() => { if (this.view.dialogContext === ctx) this.view.closeDialog(); })
+      .catch(() => this.view.toast("PJフォルダを設定できません。サーバ側に存在する絶対パスを指定してください"));
+  }
+
   confirmRenameWorkspace(label: string): void {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "renameWorkspace") return;

@@ -9,6 +9,8 @@ import type {
   ItemTarget,
   NewCwd,
   Pane,
+  PluginTab,
+  TabViewInstance,
   PaneMoveBlock,
   PaneId,
   RightClickTarget,
@@ -39,8 +41,10 @@ import { resolveNewCwd, type NewCwdDeps } from "./newCwd.js";
 import { buildPaneEnv } from "./paneEnv.js";
 import { AUTO_LABEL_TIMEOUT_MS, autoWorkspaceLabel, defaultWorkspaceLabelDeps, folderLabelOf, type WorkspaceLabelDeps } from "./workspaceLabel.js";
 import { withTimeout } from "./withTimeout.js";
-import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, resolve, isAbsolute } from "node:path";
+import { realpath, stat } from "node:fs/promises";
+import { expandHome } from "./newCwd.js";
 import { monotonicNow } from "../log/LogThrottle.js";
 import type { PersistScheduler } from "./PersistScheduler.js";
 import type { Logger } from "../log/Logger.js";
@@ -516,6 +520,7 @@ export class SessionService {
   identityCwdOf(id: WorkspaceId): string | undefined {
     const ws = this.model.getWorkspace(id);
     if (!ws) return undefined;
+    if (ws.projectDir) return ws.projectDir;
     const tab = ws.tabIds[0] !== undefined ? this.model.getTab(ws.tabIds[0]) : undefined;
     const paneId = tab ? Layout.leaves(tab.layout)[0] : undefined;
     return (paneId !== undefined ? this.model.getPane(paneId)?.cwd : undefined) ?? ws.cwd;
@@ -602,6 +607,37 @@ export class SessionService {
    * 無ければ `RpcError("not_found")` で拒否する**（待つ前に確かめる）。自動の名前は最初の pane のいまの場所（`identityCwdOf`）から決め直し、待っている間に別の名前変更が来たら
    * そちらが勝つ（design D9）。待っている間に workspace が閉じられたら何もしない（保存も予約しない）。
    */
+  async setWorkspaceProjectFolder(id: WorkspaceId, path: string | null): Promise<void> {
+    this.requireWorkspace(id);
+    let folder: string | undefined;
+    if (path !== null) {
+      const expanded = expandHome(path, homedir());
+      if (!isAbsolute(expanded)) throw new RpcError("invalid_params", "PJフォルダは絶対パスで指定してください");
+      try {
+        const actual = await withTimeout(async () => {
+          const resolved = await realpath(expanded);
+          if (!(await stat(resolved)).isDirectory()) throw new Error("not directory");
+          return resolved;
+        }, 2000);
+        if (!actual) throw new Error("unavailable");
+        folder = actual;
+      } catch {
+        throw new RpcError("invalid_params", "PJフォルダを確認できません。サーバ側に存在するフォルダを指定してください");
+      }
+    }
+    const ws = this.requireWorkspace(id);
+    if (folder) ws.projectDir = folder; else delete ws.projectDir;
+    // 表示専用のアンカーも新しい根へ移す。動いている端末には触れない。
+    for (const tabId of ws.tabIds) {
+      const tab = this.model.getTab(tabId);
+      if (!tab?.displayPaneId) continue;
+      const pane = this.model.getPane(tab.displayPaneId);
+      if (pane) { pane.cwd = folder ?? ws.cwd; this.bus.publish({ event: "pane.updated", data: { pane } }); }
+    }
+    this.bus.publish({ event: "workspace.updated", data: { workspace: ws } });
+    this.persist.touch();
+  }
+
   async renameWorkspace(id: WorkspaceId, label: string | null): Promise<void> {
     this.requireWorkspace(id);
     const gen = (this.labelGen.get(id) ?? 0) + 1;
@@ -759,15 +795,20 @@ export class SessionService {
     workspaceId: WorkspaceId | undefined,
     label: string | undefined,
     newCwd?: NewCwd,
+    plugin?: PluginTab,
   ): Promise<{ tab: Tab; pane: Pane; cwdFallback?: true }> {
     const wsId = workspaceId ?? this.model.getFocus()?.workspaceId;
     if (!wsId) throw new RpcError("not_found", "no workspace to create a tab in");
     const ws = this.requireWorkspace(wsId);
     // 1 段目の代わりは workspace の場所（以前と同じ）。**`Workspace.cwd` は書き換えない**（git の情報と worktree が使う）。
-    const pending = this.placeFor(newCwd, followSource(newCwd), ws.cwd);
+    const pending = ws.projectDir ? { cwd: ws.projectDir, fellBack: false } : this.placeFor(newCwd, followSource(newCwd), ws.cwd);
     const place = pending instanceof Promise ? await pending : pending;
     // 新しい pane の記録（`Pane.cwd`）も決めた場所にする——起動の場所と記録を食い違わせない（design「振る舞いの詳細」）。
     const reserved = this.model.reserveTab(ws.id, label, { cwd: place.cwd, shell: this.shell ?? "", cols: HEADLESS_COLS, rows: HEADLESS_ROWS });
+    if (plugin) {
+      reserved.tab.plugin = plugin;
+      reserved.tab.perspective = "app";
+    }
     const spawn = await this.spawnForPane(reserved.pane.id, place.cwd);
     if (!spawn.ok) {
       throw new RpcError("spawn_failed", `failed to start a shell for tab ${reserved.tab.id}`);
@@ -778,8 +819,10 @@ export class SessionService {
       this.terminals.dispose(reserved.pane.id); // 孤児化した PTY を破棄してから伝える
       throw err;
     }
+    const anchor = plugin ? this.model.createDisplayAnchor(reserved.tab.id) : undefined;
     this.bus.publish({ event: "tab.created", data: { tab: reserved.tab } });
     this.bus.publish({ event: "pane.created", data: { pane: reserved.pane } });
+    if (anchor) this.bus.publish({ event: "pane.created", data: { pane: anchor } });
     // `commitTab` は workspace の `tabIds`/`activeTabId` も更新する（`SessionModel.commitTab`）が、
     // それを知らせる `workspace.updated` が無かった——サイドバー・tab バー等、`workspace.tabIds` を
     // 読む側（`TabBar.vue` 等）が新しい tab を認識できないまま止まっていた（同上・D88）。
@@ -794,6 +837,41 @@ export class SessionService {
     const tab = this.model.renameTab(id, label);
     this.bus.publish({ event: "tab.updated", data: { tab } });
     this.persist.touch();
+  }
+  setTabPerspective(id: TabId, perspective: "terminal" | "app"): void {
+    const tab = this.requireTab(id);
+    if (perspective === "app" && !tab.plugin) throw new RpcError("invalid_params", "このタブにはアプリ画面がありません");
+    tab.perspective = perspective;
+    this.bus.publish({ event: "tab.updated", data: { tab } });
+    this.persist.touch();
+  }
+  addTabView(id: TabId, definition: Omit<TabViewInstance, "id" | "display" | "paneId">, paneId?: PaneId): TabViewInstance {
+    const tab = this.requireTab(id);
+    if ((tab.views?.length ?? 0) >= 16) throw new RpcError("invalid_params", "ビューはタブごとに16件までです");
+    let pane: Pane;
+    if (definition.target === "pane") {
+      pane = this.requirePane(paneId ?? tab.focusedPaneId);
+      if (pane.tabId !== id || pane.virtual) throw new RpcError("invalid_params", "作業ペインを指定してください");
+    } else {
+      const existed = !!tab.displayPaneId;
+      pane = this.model.createDisplayAnchor(id);
+      if (!existed) this.bus.publish({ event: "pane.created", data: { pane } });
+    }
+    const viewId = this.model.reserveNextPaneId();
+    const instance: TabViewInstance = { ...definition, id: viewId, paneId: pane.id, display: `view-${viewId.replaceAll("-", "").slice(0,27)}` };
+    tab.views = [...(tab.views ?? []), instance];
+    this.bus.publish({ event: "tab.updated", data: { tab } });
+    this.persist.touch();
+    return instance;
+  }
+  removeTabView(id: TabId, viewInstanceId: string): TabViewInstance {
+    const tab = this.requireTab(id);
+    const instance = tab.views?.find(v => v.id === viewInstanceId);
+    if (!instance) throw new RpcError("not_found", "ビューが見つかりません");
+    tab.views = tab.views!.filter(v => v.id !== viewInstanceId);
+    this.bus.publish({ event: "tab.updated", data: { tab } });
+    this.persist.touch();
+    return instance;
   }
 
   focusTab(id: TabId): void {
@@ -844,7 +922,10 @@ export class SessionService {
   ): Promise<{ pane: Pane; cwdFallback?: true }> {
     const source = this.requirePane(paneId);
     // 「引き継ぐ」の元は分割する pane そのもの。1 段目の代わりはその記録された場所（以前と同じ）。
-    const pending = this.placeFor(newCwd, paneId, source.cwd);
+    const tab = this.requireTab(source.tabId);
+    if (source.virtual) throw new RpcError("invalid_params", "表示専用アンカーは分割できません");
+    const ws = this.requireWorkspace(tab.workspaceId);
+    const pending = ws.projectDir ? { cwd: ws.projectDir, fellBack: false } : this.placeFor(newCwd, paneId, source.cwd);
     const place = pending instanceof Promise ? await pending : pending;
     // 場所を決める間（await の間）に分割元が閉じられていたら、シェルを起動する前に失敗する（`createTab` は `reserveTab` で確かめ直す）。
     this.requirePane(paneId);
@@ -923,6 +1004,7 @@ export class SessionService {
     record: (newPaneId: PaneId) => void,
   ): Promise<{ pane: Pane }> {
     const current = this.requirePane(paneId);
+    if (current.virtual) throw new RpcError("invalid_params", "表示専用アンカーから端末コマンドを起動できません");
     const newPaneId = this.model.reserveNextPaneId();
     const spawn = await this.spawnForPane(newPaneId, cwd, command);
     if (!spawn.ok) throw new RpcError("spawn_failed", failure);
@@ -951,10 +1033,10 @@ export class SessionService {
    * 独自コマンドを走らせる文脈（20260927-custom-command-keys）。pane・tab・workspace・作業場所は**モデルから引く**（ブラウザの値をそのまま使わない）。
    * pane が無ければ `NotFoundError`（方式の層で `not_found`）。
    */
-  commandContext(paneId: PaneId): { workspaceId: WorkspaceId; tabId: TabId; paneId: PaneId; cwd: string; defaultCwd: string } {
+  commandContext(paneId: PaneId): { workspaceId: WorkspaceId; tabId: TabId; paneId: PaneId; cwd: string; defaultCwd: string; virtual?: true } {
     const pane = this.requirePane(paneId);
     const tab = this.requireTab(pane.tabId);
-    return { workspaceId: tab.workspaceId, tabId: tab.id, paneId: pane.id, cwd: pane.cwd, defaultCwd: this.defaultCwd };
+    return { workspaceId: tab.workspaceId, tabId: tab.id, paneId: pane.id, cwd: pane.cwd, defaultCwd: this.defaultCwd, ...(pane.virtual ? { virtual:true as const } : {}) };
   }
 
   /** 独自コマンドの環境（pane と同じ規則。`ownPaneId` を省くと `SODA_PANE_ID` を入れない）。20260927-custom-command-keys。 */
@@ -1149,6 +1231,7 @@ export class SessionService {
   moveToTab(paneId: PaneId, targetTabId: TabId): boolean {
     const sourceTabId = this.requirePane(paneId).tabId;
     const sourceWorkspaceId = this.requireTab(sourceTabId).workspaceId;
+    const sourceAnchorId = this.requireTab(sourceTabId).displayPaneId;
     const ok = this.model.moveToTab(paneId, targetTabId);
     if (!ok) return false;
     this.bus.publish({ event: "pane.updated", data: { pane: this.requirePane(paneId) } });
@@ -1156,6 +1239,7 @@ export class SessionService {
     if (sourceTab) {
       this.bus.publish({ event: "layout.updated", data: { tab: sourceTab } });
     } else {
+      if (sourceAnchorId) this.publishPaneClosed(sourceAnchorId, undefined);
       this.bus.publish({ event: "tab.closed", data: { tabId: sourceTabId } });
       const sourceWs = this.model.getWorkspace(sourceWorkspaceId);
       if (sourceWs) {
@@ -1178,6 +1262,7 @@ export class SessionService {
   moveToNewTab(paneId: PaneId, targetWorkspaceId: WorkspaceId): Tab | null {
     const sourceTabId = this.requirePane(paneId).tabId;
     const sourceWorkspaceId = this.requireTab(sourceTabId).workspaceId;
+    const sourceAnchorId = this.requireTab(sourceTabId).displayPaneId;
     const result = this.model.moveToNewTab(paneId, targetWorkspaceId);
     if (!result) return null;
     this.bus.publish({ event: "pane.updated", data: { pane: this.requirePane(paneId) } });
@@ -1187,6 +1272,7 @@ export class SessionService {
     if (sourceTab) {
       this.bus.publish({ event: "layout.updated", data: { tab: sourceTab } });
     } else {
+      if (sourceAnchorId) this.publishPaneClosed(sourceAnchorId, undefined);
       this.bus.publish({ event: "tab.closed", data: { tabId: sourceTabId } });
       const sourceWs = this.model.getWorkspace(sourceWorkspaceId);
       if (sourceWs) {
@@ -2025,6 +2111,7 @@ export class SessionService {
     for (const wsData of data.workspaces) {
       for (const tabData of wsData.tabs) {
         for (const paneData of tabData.panes) {
+          if (paneData.virtual) continue;
           const adopted = opts.adopted?.get(paneData.id);
           if (adopted !== undefined && this.adoptForPane(paneData.id, adopted)) {
             adoptedPaneIds.add(paneData.id);
@@ -2032,6 +2119,14 @@ export class SessionService {
           }
           await this.restorePaneProcess(paneData.id, paneData.cwd, paneData.agentSession, opts.paneHistory?.get(paneData.id));
         }
+      }
+    }
+    // 0.2以前のアプリタブはlayoutのpane自体が表示専用だった。
+    // 同じidを作業ペインとして復元し、別の表示アンカーを作る。
+    for (const tab of this.model.listTabs()) {
+      if (tab.plugin && !tab.displayPaneId) {
+        this.model.createDisplayAnchor(tab.id);
+        tab.perspective = "app";
       }
     }
     if (data.focus) {

@@ -20,6 +20,7 @@ import {
 } from "./display.js";
 import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE_MAX_PATHS, type ResolvedFile } from "./file.js";
 import type { ExtensionListResult, ExtensionLogResult } from "./extension.js";
+import { ViewPlacementSchema } from "./extension.js";
 import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
 import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
 import type { AgentUsageResult } from "./usage.js";
@@ -182,6 +183,9 @@ export interface WorkspaceCreateResult extends CwdFallbackResult {
 export const WorkspaceRenameParams = z.object({ workspaceId, label: z.string().min(1).nullable() });
 export type WorkspaceRenameParams = z.infer<typeof WorkspaceRenameParams>;
 
+export const WorkspaceProjectFolderParams = z.object({ workspaceId, path: z.string().min(1).max(4096).nullable() });
+export type WorkspaceProjectFolderParams = z.infer<typeof WorkspaceProjectFolderParams>;
+
 export const WorkspaceFocusParams = z.object({ workspaceId });
 export type WorkspaceFocusParams = z.infer<typeof WorkspaceFocusParams>;
 
@@ -264,7 +268,9 @@ export const SidebarLayoutSchema = z.object({
 
 // --- tab ------------------------------------------------------------------
 
+export const PluginTabSchema = z.object({ extensionKey: z.string().min(1).max(4096), display: z.string().regex(DISPLAY_NAME_RE) });
 export const TabCreateParams = z.object({
+  plugin: PluginTabSchema.optional(),
   /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
   callerPaneId: paneId.optional(),
   workspaceId: workspaceId.optional(),
@@ -272,6 +278,10 @@ export const TabCreateParams = z.object({
   newCwd: NewCwd.optional(),
 });
 export type TabCreateParams = z.infer<typeof TabCreateParams>;
+export const TabPerspectiveParams = z.object({ tabId, perspective: z.enum(["terminal", "app"]) });
+export const TabAddViewParams = z.object({ tabId, extensionKey: z.string().min(1).max(4096), viewId: z.string().regex(COMMAND_ID_RE), target: z.enum(["tab", "pane"]), paneId: paneId.optional(), placement: ViewPlacementSchema });
+export const TabRemoveViewParams = z.object({ tabId, viewInstanceId: z.string().uuid() });
+export const TabViewInstanceSchema = z.object({ id: z.string().uuid(), extensionKey: z.string().min(1).max(4096), viewId: z.string().regex(COMMAND_ID_RE), display: z.string().regex(DISPLAY_NAME_RE), paneId, target: z.enum(["tab", "pane"]), placement: ViewPlacementSchema });
 export interface TabCreateResult extends CwdFallbackResult {
   tab: Tab;
   pane: Pane;
@@ -940,12 +950,21 @@ export const MAX_AGENT_PROMPT_BYTES = 1024 * 1024;
  * `instanceId` を渡すと、その pane のエージェントがそれと違えば何も書かずに `agent_not_found`（呼び出し側が見た
  * エージェントから入れ替わっていたら送らない）。
  */
+export const AgentPromptExpectation = z.object({
+  paneId: z.string().min(1),
+  instanceId: z.string().min(1),
+  tabId: z.string().min(1),
+  projectDir: z.string().min(1),
+  name: z.string().min(1),
+}).strict();
 export const AgentPromptParams = z.object({
+  expect: AgentPromptExpectation.optional(),
   paneId,
   instanceId: z.string().min(1).optional(),
   text: z.string().refine((t) => new TextEncoder().encode(t).byteLength <= MAX_AGENT_PROMPT_BYTES, "text too large"),
 });
 export type AgentPromptParams = z.infer<typeof AgentPromptParams>;
+export const AgentPromptCheckedParams = AgentPromptParams.extend({expect: AgentPromptExpectation});
 export interface AgentPromptResult {
   /** 送信を始める時点のエージェント。 */
   agent: AgentInfo;
@@ -1229,6 +1248,7 @@ export const METHOD_SCHEMAS = {
   "pane.attach_resize": PaneAttachResizeParams,
   "pane.detach": PaneDetachParams,
   "workspace.create": WorkspaceCreateParams,
+  "workspace.set_project_folder": WorkspaceProjectFolderParams,
   "workspace.rename": WorkspaceRenameParams,
   "workspace.focus": WorkspaceFocusParams,
   "workspace.close": WorkspaceCloseParams,
@@ -1244,6 +1264,9 @@ export const METHOD_SCHEMAS = {
   "item.move": ItemMoveParams,
   "item.move_by": ItemMoveByParams,
   "tab.create": TabCreateParams,
+  "tab.set_perspective": TabPerspectiveParams,
+  "tab.add_view": TabAddViewParams,
+  "tab.remove_view": TabRemoveViewParams,
   "tab.rename": TabRenameParams,
   "tab.focus": TabFocusParams,
   "tab.close": TabCloseParams,
@@ -1305,6 +1328,7 @@ export const METHOD_SCHEMAS = {
   "agent_integration.statusline_install": AgentIntegrationStatusLineParams,
   "agent_integration.statusline_uninstall": AgentIntegrationStatusLineParams,
   "agent.prompt": AgentPromptParams,
+  "agent.prompt_checked": AgentPromptCheckedParams,
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
@@ -1353,6 +1377,7 @@ export interface MethodResultMap {
   "pane.attach_resize": Record<string, never>;
   "pane.detach": Record<string, never>;
   "workspace.create": WorkspaceCreateResult;
+  "workspace.set_project_folder": Record<string, never>;
   "workspace.rename": Record<string, never>;
   "workspace.focus": Record<string, never>;
   "workspace.close": Record<string, never>;
@@ -1368,6 +1393,9 @@ export interface MethodResultMap {
   "item.move": ItemMoveResult;
   "item.move_by": ItemMoveResult;
   "tab.create": TabCreateResult;
+  "tab.set_perspective": Record<string, never>;
+  "tab.add_view": import("./model.js").TabViewInstance;
+  "tab.remove_view": Record<string, never>;
   "tab.rename": Record<string, never>;
   "tab.focus": Record<string, never>;
   "tab.close": Record<string, never>;
@@ -1430,6 +1458,7 @@ export interface MethodResultMap {
   "agent_integration.statusline_install": AgentIntegrationInstallResult;
   "agent_integration.statusline_uninstall": AgentIntegrationInstallResult;
   "agent.prompt": AgentPromptResult;
+  "agent.prompt_checked": AgentPromptResult;
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;

@@ -71,20 +71,20 @@ for (const { key, theme } of THEMES)
       await expect(page.locator(".tab-bar-item")).toHaveCount(3);
       await shot(page, `${prefix}-2-tabs`);
       // 3: 畳んだサイドバー。
-      await page.locator(".sidebar-collapse-btn, .sidebar-edge-toggle").first().click();
+      await page.locator(".sidebar-edge-toggle").first().click();
       await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
       await page.mouse.move(900, 500);
       await shot(page, `${prefix}-3-collapsed`);
-      await page.locator(".sidebar-collapse-btn, .sidebar-edge-toggle").first().click();
+      await page.locator(".sidebar-edge-toggle").first().click();
       await expect(page.locator(".sidebar-collapsed")).toHaveCount(0);
       await page.mouse.move(900, 500);
       // 4: 「新規」のメニュー（クラシックは、spaces の区画の中の［メニュー］）。
-      await page.locator(style === "modern" ? '[data-sidebar-act="new"]' : ".sidebar-section-footer .sidebar-btn-right").click();
+      await page.locator(style === "modern" ? '[data-sidebar-act="new"]' : '[data-sidebar-act="menu"]').click();
       await expect(page.getByRole("menu")).toBeVisible();
       await shot(page, `${prefix}-4-new-menu`);
       await page.keyboard.press("Escape");
       // 5: 全体のメニュー。
-      await page.locator(style === "modern" ? '[data-sidebar-act="menu"]' : ".sidebar-section-footer .sidebar-btn-right").click();
+      await page.locator(style === "modern" ? '[data-sidebar-act="menu"]' : '[data-sidebar-act="menu"]').click();
       await expect(page.getByRole("menu")).toBeVisible();
       await shot(page, `${prefix}-5-global-menu`);
       await page.keyboard.press("Escape");

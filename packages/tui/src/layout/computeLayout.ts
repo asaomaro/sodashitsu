@@ -42,6 +42,7 @@ export interface LayoutInput {
   cols: number;
   rows: number;
   sidebarVisible: boolean;
+  collapsedSidebarStrip?: boolean;
   /** サイドバーの幅（右の境界の 1 桁を含む）。 */
   sidebarCols: number;
   /** これより狭ければ 1 列表示（サイドバーを隠し、焦点の pane だけを出す）。 */
@@ -51,6 +52,7 @@ export interface LayoutInput {
   /** pane の枠（always・分割しているときだけ・無し）と、分割の間の隙間（偽なら左右の隣は罫線 1 本を分け合う）。既定は always・true。 */
   paneBorders?: PaneBorders;
   paneGaps?: boolean;
+  paneControls?: boolean;
   /** tab バーの位置（共有の設定 `tabBarPosition`。既定は上）。 */
   tabBarPosition?: "top" | "bottom";
   /** tab バーを隠す（tab が 1 つで、`tui.hideTabBarWhenSingle`。狭い幅では隠さない）。 */
@@ -69,6 +71,7 @@ export interface LayoutResult {
   tooSmall: boolean;
   narrow: boolean;
   sidebar?: Rect;
+  sidebarCollapsed?: boolean;
   /** サイドバーを pane の上に重ねて出している（狭い幅の navigate モード）。 */
   sidebarOverlay?: boolean;
   tabBar: Rect;
@@ -112,6 +115,10 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     sidebar = { x: 0, y: 0, w, h: rows };
     left = w;
   }
+  if (input.collapsedSidebarStrip && !input.sidebarVisible && !narrow) {
+    sidebar = { x: 0, y: 0, w: 3, h: rows };
+    left = 3;
+  }
   // tab バー：上か下の 1 行（狭い幅は 1 列表示の上辺で、いつも上）。隠すときは高さ 0（当たりも無い）。
   const hidden = !narrow && input.hideTabBar === true;
   const bottomBar = !narrow && input.tabBarPosition === "bottom";
@@ -128,6 +135,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
   const chrome: ChromeRule = {
     borders: input.paneBorders ?? "always",
     gaps: input.paneGaps ?? true,
+    controls: input.paneControls === true,
   };
   const panes: PaneBox[] = [];
   const dividers: Divider[] = [];
@@ -154,6 +162,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     tooSmall: false,
     narrow,
     ...(sidebar ? { sidebar } : overlay ? { sidebar: overlay, sidebarOverlay: true } : {}),
+    sidebarCollapsed: input.collapsedSidebarStrip === true && !input.sidebarVisible && !narrow,
     tabBar,
     paneArea,
     panes,
@@ -164,6 +173,7 @@ export function computeLayout(input: LayoutInput): LayoutResult {
 interface ChromeRule {
   borders: PaneBorders;
   gaps: boolean;
+  controls: boolean;
 }
 
 const NO_NEIGHBORS: PaneSides = { top: false, right: false, bottom: false, left: false };
@@ -175,7 +185,7 @@ const NO_NEIGHBORS: PaneSides = { top: false, right: false, bottom: false, left:
  */
 function sidesOf(rule: ChromeRule, multi: boolean, n: PaneSides): PaneSides {
   const framed = rule.borders === "always" || (rule.borders === "auto" && multi);
-  if (!framed) return { top: false, left: false, right: n.right, bottom: n.bottom };
+  if (!framed) return { top: rule.controls, left: false, right: n.right, bottom: n.bottom };
   return { top: true, bottom: true, left: true, right: !(n.right && !rule.gaps) };
 }
 
@@ -203,7 +213,7 @@ function place(
   area: Rect,
   out: PaneBox[],
   dividers: Divider[],
-  rule: ChromeRule = { borders: "always", gaps: true },
+  rule: ChromeRule = { borders: "always", gaps: true, controls: false },
   multi = true,
   n: PaneSides = NO_NEIGHBORS,
 ): void {

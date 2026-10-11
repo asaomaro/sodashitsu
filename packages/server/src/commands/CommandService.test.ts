@@ -43,6 +43,7 @@ function setup(
     isDirectory?: () => Promise<boolean>;
     load?: CommandServiceOptions["load"];
     unknownClient?: boolean;
+    virtual?: boolean;
   } = {},
 ) {
   const events: ServerEvent[] = [];
@@ -76,6 +77,7 @@ function setup(
           paneId: "p1",
           cwd: "/home/u/api",
           defaultCwd: "/start",
+          ...(o.virtual ? { virtual:true as const } : {}),
         };
       },
       commandEnv: (own: string | undefined, extra: Readonly<Record<string, string>>) => ({
@@ -520,4 +522,10 @@ describe("CommandService — 点検で足した場面（T5 の独立点検）", 
       (await s.service.run("c1", { commandId: "git", paneId: "p1", cols: 40, rows: 20 })).type,
     ).toBe("popup");
   });
+});
+
+it('does not start popup, detached shell or pane commands from a display anchor',async()=>{
+ const f=setup({virtual:true});await f.service.reload();
+ for(const commandId of ['git','htop','build'])await expect(f.service.run('c1',{commandId,paneId:'p1'})).rejects.toMatchObject({code:'invalid_params'});
+ expect(f.created).toEqual([]);expect(f.spawned).toEqual([]);expect(f.panes).toEqual([]);
 });

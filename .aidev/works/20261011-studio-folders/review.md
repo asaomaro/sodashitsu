@@ -1,0 +1,1 @@
+review_studio_folders: ジョブ台本/cwdの読取り時点の競合とtaskフォルダ/prefix不整合を指摘。同じsnapshotと予約時再比較、taskの排他保存へ修正し、実子プロセス回帰を追加。artifactPathもsnapshotを受け同じpのdir/prefixを解決。最終再レビューで追加指摘なし。

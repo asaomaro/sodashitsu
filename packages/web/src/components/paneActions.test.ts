@@ -46,8 +46,8 @@ function mountFrame(style: "classic" | "modern", opts: { named?: boolean; enable
 
 describe("pane の枠の操作ボタン（モダン）", () => {
   it("クラシックでは出ない。モダンでも、枠を使わない（enabled でない。モバイル・単体テスト）ときは出ない", () => {
-    expect(mountFrame("classic", { named: true }).wrapper.find("[data-pane-actions]").exists()).toBe(false);
-    expect(mountFrame("classic").wrapper.find("[data-pane-actions]").exists()).toBe(false);
+    expect(mountFrame("classic", { named: true }).wrapper.find("[data-pane-actions]").exists()).toBe(true);
+    expect(mountFrame("classic").wrapper.find("[data-pane-actions]").exists()).toBe(true);
     expect(mountFrame("modern", { enabled: false }).wrapper.find("[data-pane-actions]").exists()).toBe(false);
   });
 
@@ -108,11 +108,11 @@ describe("pane の枠の操作ボタン（モダン）", () => {
     expect(actions.openContextMenu).not.toHaveBeenCalled();
   });
 
-  it("様式を切り替えると、再読み込みなしで出る・消える", async () => {
+  it("様式を切り替えると、再読み込みなしで操作ボタンを維持する", async () => {
     const { wrapper } = mountFrame("modern", { named: true });
     expect(wrapper.find("[data-pane-actions]").exists()).toBe(true);
     useSettingsStore(pinia).setUiStyle("classic");
     await nextTick();
-    expect(wrapper.find("[data-pane-actions]").exists()).toBe(false);
+    expect(wrapper.find("[data-pane-actions]").exists()).toBe(true);
   });
 });

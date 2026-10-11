@@ -22,7 +22,7 @@ async function setup(appServer: AppServer, page: Page, prefs: Record<string, unk
 }
 const actionsOf = (page: Page, n = 0) => page.locator("[data-pane-actions]").nth(n);
 const btn = (page: Page, action: string, n = 0) => page.locator(`[data-pane-action="${action}"]`).nth(n);
-const paneCount = (page: Page) => page.locator("[data-pane-frame-main]").count();
+const paneCount = (page: Page) => page.locator("[data-pane-id].pane-frame [data-pane-frame-main]").count();
 /** フォーカスが body に落ちていない（端末の入力欄にある）。 */
 const focusInTerminal = (page: Page) => expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains("xterm-helper-textarea") === true)).toBe(true);
 
@@ -43,8 +43,8 @@ test("名前の行がある: 右端に［右へ分割］［下へ分割］［最
   const gaps = boxes.slice(1).map((b, i) => b.x - boxes[i]!.right);
   expect(gaps[2], "閉じるの前は、ほかより広く空ける").toBeGreaterThan(gaps[0]! + 3);
   // 名前の行の内側（pane の枠の上端〜行の高さ）で、枠の右端の内側にある。名前（`.pane-frame-name`）と重ならない。
-  const frame = (await page.locator(".pane-frame").first().boundingBox())!;
-  const body = (await page.locator(".pane-frame-body").first().boundingBox())!;
+  const frame = (await page.locator("[data-pane-id].pane-frame").first().boundingBox())!;
+  const body = (await page.locator("[data-pane-id].pane-frame .pane-frame-body").first().boundingBox())!;
   const topSpace = boxes[3]!.y - frame.y;
   const bottomSpace = body.y - (boxes[3]!.y + boxes[3]!.height);
   expect(Math.abs(topSpace - bottomSpace), "閉じるボタンの上下の余白は揃う").toBeLessThan(1);
@@ -63,10 +63,37 @@ test("名前の行がある: 右端に［右へ分割］［下へ分割］［最
   client.close();
 });
 
+test("クラシック・名前の行がある: 右端に［右へ分割］［下へ分割］［最大化］［閉じる］の順。24px 以上・閉じるは間を空けて最後・名前の行の内側", async ({ page, appServer }) => {
+  const client = await setup(appServer, page, {...MODERN_NAMED,uiStyle:"classic"}, { name: "alpha", splits: 1 });
+  await expect(page.locator("[data-pane-actions]")).toHaveCount(2);
+  const g = actionsOf(page);
+  await expect(g).toHaveClass(/pane-actions-row/);
+  expect(await g.locator("button").evaluateAll((bs) => bs.map((b) => b.getAttribute("data-pane-action")))).toEqual(["split-right", "split-down", "zoom", "close"]);
+  expect(await g.locator("button").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")))).toEqual(["右へ分割", "下へ分割", "最大化", "閉じる"]);
+  const boxes = await g.locator("button").evaluateAll((bs) => bs.map((b) => b.getBoundingClientRect().toJSON() as { x: number; y: number; width: number; height: number; right: number }));
+  for (const b of boxes) {
+    expect(b.width).toBeGreaterThanOrEqual(24);
+    expect(b.height).toBeGreaterThanOrEqual(24);
+  }
+  const gaps = boxes.slice(1).map((b, i) => b.x - boxes[i]!.right);
+  expect(gaps[2], "閉じるの前は、ほかより広く空ける").toBeGreaterThan(gaps[0]! + 3);
+  // 名前の行の内側（pane の枠の上端〜行の高さ）で、枠の右端の内側にある。名前（`.pane-frame-name`）と重ならない。
+  const frame = (await page.locator("[data-pane-id].pane-frame").first().boundingBox())!;
+  const body = (await page.locator("[data-pane-id].pane-frame .pane-frame-body").first().boundingBox())!;
+  const topSpace = boxes[3]!.y - frame.y;
+  const bottomSpace = body.y - (boxes[3]!.y + boxes[3]!.height);
+  expect(Math.abs(topSpace - bottomSpace), "閉じるボタンの上下の余白は揃う").toBeLessThan(1);
+  expect(boxes[3]!.right).toBeLessThanOrEqual(frame.x + frame.width + 0.5);
+  expect(boxes[0]!.y).toBeGreaterThanOrEqual(frame.y - 0.5);
+  const name = (await page.locator(".pane-frame-name").first().boundingBox())!;
+  expect(name.x + name.width, "名前は、ボタンの手前で終わる").toBeLessThanOrEqual(boxes[0]!.x + 0.5);
+  client.close();
+});
+
 test("名前のないペインも見出しの空白からドラッグして別のペインへ移せる", async ({ page, appServer }) => {
   const client = await setup(appServer, page, MODERN_NAMED, { splits: 1 });
   const header = (await page.locator(".pane-frame-header-drag").first().boundingBox())!;
-  const target = (await page.locator(".pane-frame-body").nth(1).boundingBox())!;
+  const target = (await page.locator("[data-pane-id].pane-frame .pane-frame-body").nth(1).boundingBox())!;
   await page.mouse.move(header.x + header.width / 2, header.y + header.height / 2);
   await page.mouse.down();
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
@@ -143,8 +170,8 @@ test("小さな pane: 入りきらないとき、分割の 2 つを先に隠す�
   const client = await setup(appServer, page, MODERN_NAMED, { name: "a-fairly-long-pane-name", splits: 3 });
   await expect(page.locator("[data-pane-actions]")).toHaveCount(4);
   // 狭い pane（幅 240px 未満）には分割が無く、広い pane（300px 以上）には、ある。最大化と閉じるは、どの pane にも残る。
-  await expect.poll(() => page.locator(".pane-frame").evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width < 240).length)).toBeGreaterThanOrEqual(3);
-  const perPane = await page.locator(".pane-frame").evaluateAll((els) => els.map((e) => ({ w: e.getBoundingClientRect().width, split: e.querySelectorAll('[data-pane-action^="split"]').length })));
+  await expect.poll(() => page.locator("[data-pane-id].pane-frame").evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width < 240).length)).toBeGreaterThanOrEqual(3);
+  const perPane = await page.locator("[data-pane-id].pane-frame").evaluateAll((els) => els.map((e) => ({ w: e.getBoundingClientRect().width, split: e.querySelectorAll('[data-pane-action^="split"]').length })));
   for (const p of perPane) {
     if (p.w < 240) expect(p.split, `幅 ${p.w}px`).toBe(0);
     if (p.w >= 300) expect(p.split, `幅 ${p.w}px`).toBe(2);
@@ -153,7 +180,7 @@ test("小さな pane: 入りきらないとき、分割の 2 つを先に隠す�
   await expect(page.locator('[data-pane-action="zoom"]')).toHaveCount(4);
   await expect(page.locator('[data-pane-action="close"]')).toHaveCount(4);
   // 名前は省略記号で切れ、ボタンと重ならない（pane ごとに、名前の右端がその pane の最初のボタンの手前）。極端に狭い pane は、名前を出さない。
-  const overlaps = await page.locator(".pane-frame").evaluateAll((els) =>
+  const overlaps = await page.locator("[data-pane-id].pane-frame").evaluateAll((els) =>
     els.map((f) => {
       const name = f.querySelector(".pane-frame-name");
       const first = f.querySelector("[data-pane-actions] button");
@@ -181,7 +208,7 @@ test("名前の行が無い設定: 右上の隅に、ポインタが載ってい
   const other = selectedIdx === 0 ? 1 : 0;
   expect(await opacity(other)).toBe(0);
   expect(await actionsOf(page, other).evaluate((e) => getComputedStyle(e).pointerEvents)).toBe("none");
-  const frame = page.locator(".pane-frame-center").nth(other);
+  const frame = page.locator("[data-pane-id].pane-frame .pane-frame-center").nth(other);
   const fb = (await frame.boundingBox())!;
   await page.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2);
   await expect.poll(() => opacity(other)).toBe(1);
@@ -199,24 +226,30 @@ test("名前の行が無い設定: 右上の隅に、ポインタが載ってい
   client.close();
 });
 
-test("クラシックでは出ない。名前の行の高さも今のまま。モダンへ切り替えると出て、戻すと消える（再読み込みなし）", async ({ page, appServer }) => {
+test("クラシックでも操作ボタンがあり、様式を切り替えても操作できる（再読み込みなし）", async ({ page, appServer }) => {
   const client = await setup(appServer, page, { uiStyle: "classic", paneAgentNameVisible: true }, { name: "alpha", splits: 1 });
-  await expect(page.locator("[data-pane-actions]")).toHaveCount(0);
-  const topPad = () => page.locator(".pane-frame").first().evaluate((e) => parseFloat(getComputedStyle(e).paddingTop));
+  await expect(page.locator("[data-pane-actions]")).toHaveCount(2);
+  const topPad = () => page.locator("[data-pane-id].pane-frame").first().evaluate((e) => parseFloat(getComputedStyle(e).paddingTop));
   const classicPad = await topPad();
   await client.request("prefs.set", { patch: { uiStyle: "modern" } });
   await expect(page.locator("[data-pane-actions]")).toHaveCount(2);
-  expect(await topPad(), "モダンは、名前の行がボタンの高さ分ある").toBeGreaterThan(classicPad);
+  await expect(page.locator("html")).toHaveAttribute("data-ui-style","modern");
+  expect(await topPad()).toBeGreaterThanOrEqual(24);
   await client.request("prefs.set", { patch: { uiStyle: "classic" } });
-  await expect(page.locator("[data-pane-actions]")).toHaveCount(0);
+  await expect(page.locator("[data-pane-actions]")).toHaveCount(2);
   expect(await topPad()).toBeCloseTo(classicPad, 1);
+  await btn(page,"zoom").click();await expect.poll(()=>paneCount(page)).toBe(1);await expect(btn(page,"zoom")).toHaveAttribute("aria-label","元に戻す");
+  await btn(page,"zoom").click();await expect.poll(()=>paneCount(page)).toBe(2);
+  await btn(page,"split-right").click();await expect.poll(()=>paneCount(page)).toBe(3);
+  await btn(page,"close").click();await page.locator("dialog[open]").getByRole("button",{name:"閉じる",exact:true}).click();await expect.poll(()=>paneCount(page)).toBe(2);
+
   client.close();
 });
 
 test("名前の D&D・右クリックのメニューと取り違えない: ボタンの上の押下は D&D を始めず、右クリックのメニューは名前・枠で今までどおり開く", async ({ page, appServer }) => {
   const client = await setup(appServer, page, MODERN_NAMED, { name: "alpha", splits: 1 });
   const z = (await btn(page, "zoom").boundingBox())!;
-  const other = (await page.locator(".pane-frame").nth(1).boundingBox())!;
+  const other = (await page.locator("[data-pane-id].pane-frame").nth(1).boundingBox())!;
   await page.mouse.move(z.x + z.width / 2, z.y + z.height / 2);
   await page.mouse.down();
   await page.mouse.move(other.x + other.width / 2, other.y + other.height / 2, { steps: 6 });
@@ -231,7 +264,7 @@ test("名前の D&D・右クリックのメニューと取り違えない: ボ�
 
 test("名前の行が無い設定: 隅のボタンが覆うのは、ボタンの大きさだけ（帯にしない）。ボタンの間・ボタンの外では、端末が押せる", async ({ page, appServer }) => {
   const client = await setup(appServer, page, { uiStyle: "modern", paneAgentNameVisible: false }, { splits: 1 });
-  const frame = page.locator(".pane-frame-center").nth(0);
+  const frame = page.locator("[data-pane-id].pane-frame .pane-frame-center").nth(0);
   const fb = (await frame.boundingBox())!;
   await page.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2);
   const g = actionsOf(page, 0);
@@ -268,7 +301,7 @@ async function splitWhileZoomed(page: Page, appServer: AppServer, how: "button" 
     await page.keyboard.press("v");
   }
   await created;
-  await expect.poll(() => page.locator("[data-pane-frame-main]").count()).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => page.locator("[data-pane-id].pane-frame [data-pane-frame-main]").count()).toBeGreaterThanOrEqual(1);
   await page.waitForTimeout(500);
   const result = { panes: await paneCount(page), zoomLabel: await btn(page, "zoom").getAttribute("aria-label"), terminals: await page.locator(".xterm-helper-textarea").count() };
   client.close();

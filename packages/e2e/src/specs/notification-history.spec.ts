@@ -290,7 +290,7 @@ test.describe("モバイルの幅", () => {
 test("ベル：畳んだサイドバーでも見える（AC9）", async ({ page, appServer }) => {
   await seedNotifyPrefs(page);
   await openApp(page, appServer);
-  await page.locator(".sidebar-collapse-btn").click();
+  await page.locator(".sidebar-edge-toggle").click();
   await expect(page.locator(".sidebar")).toHaveClass(/sidebar-collapsed/);
   await expect(page.locator("[data-notification-bell]")).toBeInViewport();
   const bell = await rectOf(page, "[data-notification-bell]");

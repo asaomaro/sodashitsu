@@ -442,7 +442,7 @@ test("サイドバーとタブバーのボタンが、キー操作と同じ結�
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
 
   // 折りたたみ：ボタンで畳んで、畳んだ状態のボタンで戻す（戻せないと行き止まりになる）。
-  const collapse = page.locator(".sidebar-footer .sidebar-collapse-btn");
+  const collapse = page.locator(".sidebar-edge-toggle");
   await expect(collapse).toHaveAttribute("aria-expanded", "true");
   await collapse.click();
   await expect(page.locator(".sidebar-collapsed")).toHaveCount(1);
@@ -453,7 +453,8 @@ test("サイドバーとタブバーのボタンが、キー操作と同じ結�
   // 「新規」：workspace が 1 つ増える（prefix+shift+N と同じ）。
   await expect(page.locator(".sidebar-spaces .sidebar-row")).toHaveCount(1);
   const created = client.waitForEvent("workspace.created");
-  await page.locator(".sidebar-section-footer .sidebar-btn").first().click();
+  await page.locator('[data-sidebar-act="new"]').click();
+  await page.getByRole("menuitem",{name:"workspace",exact:true}).click();
   await created;
   await expect(page.locator(".sidebar-spaces .sidebar-row")).toHaveCount(2);
 

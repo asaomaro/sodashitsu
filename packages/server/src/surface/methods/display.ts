@@ -64,7 +64,16 @@ export function registerDisplayMethods(surface: ControlSurface, deps: MethodDeps
   });
   surface.register("display.dismiss", {
     schema: DisplayDismissParams,
-    handler: (ctx, p) => displays.dismiss(ctx.clientId, p),
+    handler: (ctx, p) => {
+      const instances = deps.session.snapshot().tabs.flatMap(tab => (tab.views ?? []).flatMap(v => {
+        if (!deps.session.hasPane(v.paneId)) return [];
+        const display = displays.list(v.paneId).displays.find(d => d.name === v.display);
+        return display ? [{ tabId:tab.id, viewId:v.id, displayId:display.id }] : [];
+      }));
+      const result = displays.dismiss(ctx.clientId, p);
+      for (const v of instances) if (result.closed.includes(v.displayId)) deps.session.removeTabView(v.tabId, v.viewId);
+      return result;
+    },
   });
   surface.register("display.report", {
     schema: DisplayReportParams,

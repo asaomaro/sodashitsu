@@ -39,6 +39,8 @@ export interface Workspace {
   id: WorkspaceId;
   label: string;
   cwd: string;
+  /** 明示的なPJフォルダ。設定時は新規ターミナルとプラグインの根に使う。 */
+  projectDir?: string;
   tabIds: TabId[];
   /** サーバ全体で最後に選ばれた tab（design.md「フォーカスと表示」）。 */
   activeTabId: TabId;
@@ -65,7 +67,24 @@ export interface Workspace {
   representative?: boolean;
 }
 
+export interface PluginTab { extensionKey: string; display: string }
+
+export interface TabViewInstance {
+  id: string;
+  extensionKey: string;
+  viewId: string;
+  display: string;
+  paneId: PaneId;
+  target: "tab" | "pane";
+  placement: "right" | "left" | "top" | "bottom" | "float" | "band-top" | "band-bottom";
+}
+
 export interface Tab {
+  /** アプリのパースペクティブ。作業ペインと独立して維持する。 */
+  plugin?: PluginTab;
+  perspective?: "terminal" | "app";
+  displayPaneId?: PaneId;
+  views?: TabViewInstance[];
   id: TabId;
   workspaceId: WorkspaceId;
   label: string;
@@ -84,6 +103,8 @@ export type LayoutNode =
 export type PaneStatus = "running" | "failed";
 
 export interface Pane {
+  /** タブ全体の表示専用アンカー。端末プロセス・フォーカスを持たない。 */
+  virtual?: true;
   id: PaneId;
   tabId: TabId;
   label: string | null;

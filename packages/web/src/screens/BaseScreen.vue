@@ -4,9 +4,9 @@
  * `inert` で見えなくするだけ。`display: none`・`v-show`・`v-if` で隠すと、pane の箱が 0×0 になり、`client.view` が 1×1 を申告して全部の PTY が縮む。D11）。
  */
 import { computed } from "vue";
-import PaneLayout from "../components/PaneLayout.vue";
 import TabBar from "../components/TabBar.vue";
-import TerminalPane from "../components/TerminalPane.vue";
+import TabWorkspace from "../components/TabWorkspace.vue";
+import TabViews from "../components/TabViews.vue";
 import { useSessionStore } from "../store/session.js";
 import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
@@ -20,23 +20,17 @@ const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : u
 
 <template>
   <div class="base-screen">
-    <TabBar />
+    <TabBar view-actions />
+    <TabViews v-if="currentTab" :tab="currentTab" />
     <div class="app-panes" :class="{ 'app-panes-outer-borders': settings.paneOuterBorders }">
       <!-- 窓の大きさ・サイドバーの幅や折りたたみの変化に client.view を追従させる（D107）。pane ごとに枠を描く（右クリックで
            常にメニューを開く縁。D110）。どちらもモバイルの MobileShell には付けない -->
-      <PaneLayout
+      <TabWorkspace
         v-if="currentTab && view.workspaceId"
-        :workspace-id="view.workspaceId"
-        :tab-id="currentTab.id"
-        :layout="currentTab.layout"
-        :zoomed-pane-id="currentTab.zoomedPaneId"
+        :tab="currentTab"
         follow-resize
         pane-frames
-      >
-        <template #pane="{ paneId }">
-          <TerminalPane :pane-id="paneId" />
-        </template>
-      </PaneLayout>
+      />
     </div>
   </div>
 </template>

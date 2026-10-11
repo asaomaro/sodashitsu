@@ -99,6 +99,11 @@ export class TuiDispatcher {
     this.conn = host.conn;
   }
 
+  showUsageOf(paneId: string): void {
+    if(this.model.panes.get(paneId)?.agent) this.ui.openDialogWithContext({kind:"usage",paneId});
+    else this.ui.toast("このペインにはエージェントがいません。");
+  }
+
   /** 旧名（03）。 */
   dispatch(action: Action): void {
     this.run(action);
@@ -261,8 +266,7 @@ export class TuiDispatcher {
         this.ui.toast("グラフの画面はブラウザで開けます。");
         return;
       case "showUsage":
-        // pane の利用状況の窓はブラウザにだけある（20261010-agent-usage PR4）。端末版は `sodactl agent usage` で見られる。
-        this.ui.toast("利用状況の窓はブラウザで開けます（sodactl agent usage でも見られます）。");
+        if (this.model.focusedPaneId) this.showUsageOf(this.model.focusedPaneId);
         return;
       case "displayMenu":
       case "focusDisplay":
@@ -1115,6 +1119,7 @@ export class TuiDispatcher {
 
   /** pane の属する tab・workspace へ表示を移して焦点を合わせる（サイドバー・エージェント・直前の pane）。 */
   focusPaneAcrossViews(paneId: string): void {
+    this.ui.setScreen("base");
     const pane = this.model.panes.get(paneId);
     if (!pane || !this.model.tabs.get(pane.tabId)) return;
     this.model.focusPane(paneId);

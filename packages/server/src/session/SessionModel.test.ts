@@ -2222,3 +2222,15 @@ describe("SessionModel — pane の移動の範囲（20261008-web-tab-dnd）", (
     expect(stateOf(model)).toBe(before);
   });
 });
+
+it('rejects display anchors as swap and edge-drop targets without losing work panes',()=>{
+ const model=new SessionModel();const first=model.createWorkspace('/a','a',init);
+ const second=model.splitPane(first.pane.id,'right',undefined,model.reserveNextPaneId(),init);
+ const anchor=model.createDisplayAnchor(first.tab.id);const before=model.getTab(first.tab.id)!.layout;
+ expect(model.swapPaneWith(first.pane.id,anchor.id)).toBe(false);
+ expect(model.moveToEdge(first.pane.id,anchor.id,'right')).toBe(false);
+ expect(model.replacePane(first.pane.id,anchor.id)).toBeNull();
+ expect(model.getTab(first.tab.id)!.layout).toEqual(before);
+ expect(Layout.leaves(model.getTab(first.tab.id)!.layout)).toEqual([first.pane.id,second.pane.id]);
+ expect(()=>model.focusPane(anchor.id)).toThrow();
+});

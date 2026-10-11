@@ -1,3 +1,5 @@
+import {UsageModel} from "../model/UsageModel.js";
+import {UsageDialog,UsageDashboard} from "../modes/UsageView.js";
 import {
   CopyMode,
   InputGate,
@@ -163,6 +165,8 @@ export class TuiApp {
   private escTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly dispatcher: TuiDispatcher;
   readonly ui: UiState;
+  readonly usage: UsageModel;
+  private readonly dashboard:UsageDashboard;
   /**
    * 共有の設定（`prefs.*`）の口：**いつもローカルのサーバ**（ローカルを見ていれば画面の接続、ほかのマシンを見ていればローカルの軽い接続。
    * web の PrefsSync の `isLocal` と同じく、ほかのマシンのサーバの設定は読み書きしない。decisions D7.4）。
@@ -248,6 +252,7 @@ export class TuiApp {
   ) {
     this.modes = new TerminalModes(io);
     this.model = new SessionModel({
+      onUsageChanged: (data) => this.usage?.apply(data),
       onPaneClosed: (paneId) => {
         this.panes.paneClosed(paneId);
         this.notify?.onPaneClosed(paneId);
@@ -320,6 +325,8 @@ export class TuiApp {
       this.scheduleRender();
     });
     this.ui = new UiState(this.model);
+    this.usage=new UsageModel(this.rpc,()=>this.scheduleRender());
+    this.dashboard=new UsageDashboard(this.model,this.ui,this.usage,(id)=>this.dispatcher.focusPaneAcrossViews(id));
     this.settingsWriter = new SettingsWriter({
       prefs: this.prefs,
       conn: this.prefsPort,
@@ -328,7 +335,9 @@ export class TuiApp {
     });
     this.disposers.push(
       this.ui.onChange(() => {
-        if (this.ui.overlayOpen)
+        this.usage.sync(this.ui.screen === "dashboard" || ["usage","usageAccounts"].includes(this.ui.dialogContext?.kind??""));
+        this.commitView();
+        if (this.ui.overlayOpen || this.ui.screen === "dashboard")
           this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
         else this.maybeOpenOnboarding(); // 案内をほかのダイアログが閉じるまで待っていた
         this.scheduleRender();
@@ -390,7 +399,7 @@ export class TuiApp {
       env: io.env,
       hasFocus: () => this.outerFocused,
       // 今の割り付けで見る（前の描画の割り付けだと、同じ打鍵の中の切り替えを取り違える）。
-      isPaneVisible: (paneId) => this.layout().panes.some((b) => b.paneId === paneId),
+      isPaneVisible: (paneId) => this.visiblePanes().some((b) => b.paneId === paneId),
       write: (seq) => this.io.write(seq),
       focusPane: (paneId) => this.dispatcher.focusPaneAcrossViews(paneId),
     });
@@ -407,6 +416,8 @@ export class TuiApp {
       ui: this.ui,
       actions: this.dispatcher,
       layout: () => this.lastLayout,
+      paneControls: true,
+      dashboardMouse: (ev) => this.dashboard.handleMouse(ev),
       sidebarHits: () => this.sidebarHits,
       tabHits: () => this.tabBarHits,
       switchButton: () => this.switchButton,
@@ -592,6 +603,7 @@ export class TuiApp {
 
   protected onConnectionOpened(_clientId: string): void {
     this.panes.connectionOpened();
+    this.usage.connected();
     this.commitView();
     this.scheduleRender();
     const net = this.net;
@@ -640,6 +652,7 @@ export class TuiApp {
       this.popup.onDisconnected();
       this.popup = null;
     }
+    this.usage.disconnected();
     this.panes.connectionClosed();
   }
 
@@ -759,6 +772,10 @@ export class TuiApp {
       this.scheduleRender();
       return;
     }
+    if(this.ui.screen === "dashboard" && (ev.kind === "paste" || ev.kind === "key")) {
+      if(ev.kind === "key")this.dashboard.handleKey(ev.key);
+      this.scheduleRender();return;
+    }
     switch (ev.kind) {
       case "key":
         if (ev.key.key === "Escape" && this.mouse.itemDragging) {
@@ -791,7 +808,7 @@ export class TuiApp {
         const term = this.model.focusedPaneId
           ? this.panes.get(this.model.focusedPaneId)
           : undefined;
-        if (term?.modes.sendFocusMode) this.sendToFocusedPane(ev.focused ? "\x1b[I" : "\x1b[O");
+        if (this.ui.screen === "base" && term?.modes.sendFocusMode) this.sendToFocusedPane(ev.focused ? "\x1b[I" : "\x1b[O");
         this.scheduleRender();
         return;
       }
@@ -806,7 +823,7 @@ export class TuiApp {
    * 今の画面に見えているときだけ。続けて鳴っても {@link BELL_INTERVAL_MS} に 1 回。
    */
   protected onPaneBell(paneId: string): void {
-    if (this.ended || !this.prefs.forwardBell || !this.outerFocused) return;
+    if (this.ui.screen !== "base" || this.ended || !this.prefs.forwardBell || !this.outerFocused) return;
     if (!this.layout().panes.some((b) => b.paneId === paneId)) return;
     const now = performance.now();
     if (now - this.lastBellAt < BELL_INTERVAL_MS) return;
@@ -913,6 +930,8 @@ export class TuiApp {
         hintFor: (id) => this.keymap.hintFor(id),
         complete: () => this.completeOnboarding(),
       });
+    if (ctx.kind === "usageAccounts") return new UsageDialog(null,this.model,this.ui,this.usage);
+    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId,this.model,this.ui,this.usage);
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
     if (ctx.kind === "commandPopup") {
       const popup = new CommandPopup(ctx, {
@@ -1132,6 +1151,7 @@ export class TuiApp {
       cols,
       rows,
       sidebarVisible: !this.prefs.sidebarCollapsed,
+      collapsedSidebarStrip: true,
       sidebarCols: this.prefs.sidebarCols,
       narrowThreshold: this.prefs.narrowThreshold,
       tab: tab ? { layout: tab.layout, zoomedPaneId: tab.zoomedPaneId } : null,
@@ -1139,6 +1159,7 @@ export class TuiApp {
       navigateOverlay: this.keys.mode === "navigate",
       paneBorders: this.prefs.paneBorders,
       paneGaps: this.prefs.paneGaps,
+      paneControls: true,
       tabBarPosition: this.prefs.tabBarPosition,
       // tab が 1 つなら隠す（herdr の hide_tab_bar_when_single_tab）。サイドバーを畳んでいる間は開く「»」が tab バーにあるので隠さない。
       hideTabBar:
@@ -1150,6 +1171,7 @@ export class TuiApp {
 
   /** 見えている pane と、自分の割り付けで決まる大きさ（申告する値。design「pane の大きさ」）。 */
   protected visiblePanes(layout = this.layout()): VisiblePane[] {
+    if (this.ui.screen === "dashboard") return [];
     return layout.panes
       .filter((b) => this.model.panes.has(b.paneId))
       .map((b) => ({ paneId: b.paneId, ...clampTerminalSize(b.content.w, b.content.h) }));
@@ -1183,6 +1205,10 @@ export class TuiApp {
     this.revealChanges();
     const ctx: ChromeContext = {
       model: this.model,
+      screen: this.ui.screen,
+      chromeControls: true,
+      notificationCount: this.notify.queued.length,
+      sidebarCollapsed: layout.sidebarCollapsed === true,
       prefs: this.prefs,
       theme: this.theme,
       mode: this.keyMode(),
@@ -1196,7 +1222,10 @@ export class TuiApp {
       tabScroll: this.tabScroll,
     };
     const result = this.renderer.render(layout, ctx, this.panes, {
-      decorate: (grid) => this.decorate(grid, layout),
+      decorate: (grid) => {
+        if(this.ui.screen === "dashboard"){this.dashboard.render(grid,layout.paneArea,this.theme);return {x:0,y:0,visible:false,style:"block",blink:false};}
+        return this.decorate(grid, layout);
+      },
       toasts: this.ui.toasts.map((t) => ({ id: t.id, message: t.message, clickable: !!t.onClick })),
       overlay: (grid) => this.overlays.render(grid, this.theme),
     });

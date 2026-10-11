@@ -140,7 +140,7 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
 
   // サイドバーを畳んでいれば左端に「»」（押すと開く）。
   let expandSidebar: TabBarHits["expandSidebar"] = null;
-  if (ctx.prefs.sidebarCollapsed && x + 2 < end) {
+  if (ctx.prefs.sidebarCollapsed && ctx.sidebarCollapsed !== true && x + 2 < end) {
     grid.set(x, rect.y, "»", 1, fg, activeBg);
     expandSidebar = { x };
     x += 2;

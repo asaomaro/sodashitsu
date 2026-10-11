@@ -81,10 +81,10 @@ describe("モダンの配置 — サイドバー（AC13・AC14）", () => {
     seed(1);
     setStyle("classic");
     const w = mountOf(Sidebar, makeActions());
-    expect(w.find(".sidebar-section-footer").exists()).toBe(true);
-    expect(w.find(".sidebar-footer .sidebar-collapse-btn").exists()).toBe(true);
-    expect(w.find(".sidebar-edge-toggle").exists()).toBe(false);
-    expect(w.find("[data-sidebar-act]").exists()).toBe(false);
+    expect(w.find(".sidebar-section-footer").exists()).toBe(false);
+    expect(w.find(".sidebar-footer .sidebar-collapse-btn").exists()).toBe(false);
+    expect(w.find(".sidebar-edge-toggle").exists()).toBe(true);
+    expect(w.find("[data-sidebar-act]").exists()).toBe(true);
   });
 
   it("モダン: 最下部に［新規］［メニュー］［ベル］。spaces の区画の中のボタンと、最下部の畳む印は出さない", () => {
@@ -131,7 +131,7 @@ describe("モダンの配置 — サイドバー（AC13・AC14）", () => {
     seed(1);
     setStyle("classic");
     const w = mountOf(Sidebar, makeActions());
-    (w.find(".sidebar-collapse-btn").element as HTMLElement).focus();
+    (w.find(".sidebar-edge-toggle").element as HTMLElement).focus();
     setStyle("modern");
     await nextTick();
     await nextTick();
@@ -140,7 +140,7 @@ describe("モダンの配置 — サイドバー（AC13・AC14）", () => {
     setStyle("classic");
     await nextTick();
     await nextTick();
-    expect(document.activeElement).toBe(w.find(".sidebar-section-footer .sidebar-btn:not(.sidebar-btn-right)").element);
+    expect(document.activeElement).toBe(w.find('[data-sidebar-act="new"]').element);
   });
 
   it("消える部品に対応が無いときは、端末へ移す", async () => {
@@ -173,7 +173,7 @@ describe("モダンの配置 — メニュー（AC12・AC15・AC16）", () => {
   it("全体のメニュー: クラシックは「連携（グラフ）」あり。モダンは出さない", async () => {
     seed(1);
     setStyle("classic");
-    expect(await labels(open({ kind: "global" }).w)).toContain("連携（グラフ）");
+    expect(await labels(open({ kind: "global" }).w)).not.toContain("連携（グラフ）");
     mounted.pop()?.unmount();
     setStyle("modern");
     const l = await labels(open({ kind: "global" }).w);
@@ -184,7 +184,7 @@ describe("モダンの配置 — メニュー（AC12・AC15・AC16）", () => {
   it("workspace のメニュー: クラシックは「新しいグループを作る…」あり。モダンは出さない（グループへ追加・外すは残る）", async () => {
     seed(1);
     setStyle("classic");
-    expect(await labels(open({ kind: "workspace", workspaceId: "w1" }).w)).toContain("新しいグループを作る…");
+    expect(await labels(open({ kind: "workspace", workspaceId: "w1" }).w)).not.toContain("新しいグループを作る…");
     mounted.pop()?.unmount();
     setStyle("modern");
     const l = await labels(open({ kind: "workspace", workspaceId: "w1" }).w);

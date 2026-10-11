@@ -1,3 +1,4 @@
+import {paneButtons} from "../render/chrome/frame.js";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { Divider, LayoutResult, PaneBox, Rect } from "../layout/computeLayout.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -75,6 +76,8 @@ export interface MouseHost {
   /** 1 列表示の「switch」（狭い幅のときだけ）。 */
   switchButton?(): { x: number; w: number } | null;
   pane(paneId: string): PaneTerminal | undefined;
+  dashboardMouse?(ev: MouseEv): boolean;
+  paneControls?: boolean;
   sendToPane(paneId: string, bytes: string | Uint8Array): void;
   writeClipboard(text: string): Promise<boolean>;
   /** サイドバーの幅を変える（`persist` なら `tui-state.json` に残す）。 */
@@ -184,6 +187,7 @@ export class MouseController {
   private motion(ev: MouseEv): void {
     const layout = this.host.layout();
     if (!layout || ev.mods.shift) return;
+    if(this.host.ui.screen === "dashboard") {this.host.dashboardMouse?.(ev);return;}
     const box = this.paneAt(layout, ev.x, ev.y);
     if (!box || !this.inContent(box, ev.x, ev.y)) return;
     const term = this.host.pane(box.paneId);
@@ -264,12 +268,13 @@ export class MouseController {
       row.find(
         (h) =>
           ((h.kind === "newWorkspace" || h.kind === "collapse") && h.x === x) ||
-          ((h.kind === "sort" || h.kind === "subagents") && x >= h.x && x < h.x + h.w),
+          ((h.kind === "sort" || h.kind === "subagents" || h.kind === "control") && x >= h.x && x < h.x + h.w),
       ) ??
       row.find(
         (h) =>
           h.kind !== "newWorkspace" &&
           h.kind !== "collapse" &&
+          h.kind !== "control" &&
           h.kind !== "sort" &&
           h.kind !== "subagents",
       )
@@ -297,7 +302,7 @@ export class MouseController {
     // サイドバー
     if (layout.sidebar && x >= layout.sidebar.x && x < layout.sidebar.x + layout.sidebar.w) {
       if (x === layout.sidebar.x + layout.sidebar.w - 1) {
-        if (left && !layout.sidebarOverlay) this.drag = { kind: "sidebar" };
+        if (left && !layout.sidebarOverlay && !layout.sidebarCollapsed) this.drag = { kind: "sidebar" };
         return;
       }
       const hit = this.sidebarAt(x, y, layout);
@@ -343,6 +348,11 @@ export class MouseController {
         };
       } else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "subagents") actions.showSubagentsOf(hit.paneId);
+      else if(hit.kind === "control") {
+        if(hit.action === "new" || hit.action === "menu") ui.openContextMenu({kind:hit.action === "new"?"new":"global"},{x,y:Math.max(0,y-6)});
+        else if(hit.action === "bell") ui.openDialogWithContext({kind:"notifications"});
+        else ui.setScreen(hit.action);
+      }
       else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {
         if (hit.section === "spaces") actions.toggleWorkspaceSort();
@@ -358,12 +368,13 @@ export class MouseController {
           tabId: hit.tabId,
         });
       else if (hit.kind === "sectionDivider")
-        this.drag = { kind: "section", top: layout.sidebar.y, startY: y, moved: false };
+        this.drag = { kind: "section", top: layout.sidebar.y + (this.host.paneControls ? 1 : 0), startY: y, moved: false };
       else if (hit.kind === "sectionHeader") this.host.toggleSidebarSection?.(hit.section);
       return;
     }
 
     // 1 列表示の上辺：「switch」で選び直しの一覧（goto）。右クリックは全体のメニュー。
+    if (ui.screen === "dashboard") {this.host.dashboardMouse?.(ev);return;}
     if (layout.narrow && y === layout.tabBar.y) {
       const sw = this.host.switchButton?.() ?? null;
       if (right) ui.openContextMenu({ kind: "global" }, { x, y: y + 1 });
@@ -451,6 +462,17 @@ export class MouseController {
         return;
       }
       if (!left) return;
+      if (y === box.frame.y && this.host.paneControls) {
+        const pane=model.panes.get(paneId);
+        const button=paneButtons(box.frame,!!pane?.agent,model.tabs.get(pane?.tabId??"")?.zoomedPaneId===paneId).find(b=>x>=b.x&&x<b.x+b.w);
+        if(button) {
+          if(button.action==="right"||button.action==="down") actions.splitPane(paneId,button.action);
+          else if(button.action==="info") actions.showUsageOf(paneId);
+          else if(button.action==="zoom") actions.zoomPane(paneId);
+          else actions.closePaneById(paneId);
+          return;
+        }
+      }
       if (y === box.frame.y) {
         this.drag = { kind: "paneName", paneId, startX: x, startY: y, moved: false };
         return;
@@ -693,6 +715,7 @@ export class MouseController {
         this.host.scrollSidebar?.(section, down ? WHEEL_LINES : -WHEEL_LINES);
       return;
     }
+    if(this.host.ui.screen === "dashboard") {this.host.dashboardMouse?.(ev);return;}
     const box = this.paneAt(layout, ev.x, ev.y);
     if (!box || !this.inContent(box, ev.x, ev.y)) return;
     const term = this.host.pane(box.paneId);

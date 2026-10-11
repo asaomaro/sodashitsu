@@ -1,0 +1,1 @@
+ブラウザはPaneActionsと既存ActionDispatcherを両様式で使用。名前行28pxを確保し重なりを避ける。新規・メニュー・ベルを共通フッタへ。端末版は描画とマウスで同じpaneButtons座標を用い、枠offでも上辺を確保。閉じたサイドバーは3桁の帯、開閉は最下行。狭いサイドバーはアイコン、短い画面では区画を省略。UsageModelは接続generation、pane別revision、accountRevision、updatedAtで初期取得と配信を合成。利用状況表示中だけ購読。入力・paste・mouse・focus報告・BELを隠れたPTYへ送らずvisible=[]を申告。スクロール付きアカウント一覧、並び順、行からペインへ。通知は既存のクライアント固有の一覧をベルから開く。

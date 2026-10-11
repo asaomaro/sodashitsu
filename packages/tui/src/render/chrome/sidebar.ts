@@ -50,6 +50,7 @@ export type SidebarTarget =
   | { kind: "agent"; paneId: string }
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
   | { kind: "newWorkspace"; x: number }
+  | { kind: "control"; action: "new" | "menu" | "bell" | "base" | "dashboard"; x: number; w: number }
   /** spaces と agents の区切りの行（ドラッグで spaces の区画の高さ。動かさずに離せば agents の折りたたみ。herdr の H19b）。 */
   | { kind: "sectionDivider" }
   /** spaces の見出しの行（押すと spaces の折りたたみ。「＋」と並び順の桁は別の当たり。20261004-ui-interaction-polish）。 */
@@ -192,6 +193,36 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   grid.fill({ x: rect.x, y: rect.y, w: inner, h: rect.h }, fg, bg);
   for (let y = rect.y; y < rect.y + rect.h; y++) grid.set(rect.x + inner, y, "│", 1, border, bg);
 
+  const controls: SidebarHit[] = [];
+  const control = (y: number, x: number, text: string, action: "new" | "menu" | "bell" | "base" | "dashboard") => {
+    const width = Math.min(stringWidth(text), rect.x + inner - x);
+    if (y < rect.y || y >= rect.y + rect.h || width <= 0) return;
+    grid.text(x, y, truncate(text, width), fg, (ctx.screen ?? "base") === action ? activeBg : bg, 0, width);
+    controls.push({kind:"control",action,x,w:width,y});
+  };
+  if(ctx.chromeControls && ctx.sidebarCollapsed) {
+    control(rect.y,rect.x,"▣","base");control(rect.y+1,rect.x,"%","dashboard");
+    if(rect.h>=7){control(rect.y+rect.h-4,rect.x,"＋","new");control(rect.y+rect.h-3,rect.x,"⋯","menu");}
+    control(rect.y+rect.h-2,rect.x,"🔔","bell");
+    grid.set(rect.x,rect.y+rect.h-1,"»",1,fg,activeBg);
+    controls.push({kind:"collapse",x:rect.x,y:rect.y+rect.h-1});return controls;
+  }
+  if(ctx.chromeControls) {
+  control(rect.y,rect.x+1,"基本","base");control(rect.y,rect.x+7,"利用状況","dashboard");
+  const footerY=rect.y+rect.h-2;
+  if(inner>=16) {
+    control(footerY,rect.x+1,"＋新規","new");control(footerY,rect.x+8,"⋯","menu");
+    control(footerY,rect.x+inner-5,"🔔"+String(ctx.notificationCount??0),"bell");
+  } else {
+    control(footerY,rect.x+1,"＋","new");control(footerY,rect.x+4,"⋯","menu");control(footerY,rect.x+inner-2,"🔔","bell");
+  }
+  if(rect.h<8) {
+    const x=rect.x+inner-2,y=rect.y+rect.h-1;
+    grid.set(x,y,"«",1,fg,activeBg);controls.push({kind:"collapse",x,y});return controls;
+  }
+  // Keep the switcher and footer outside the scrolling sections.
+  rect={...rect,y:rect.y+1,h:Math.max(0,rect.h-2)};
+  }
   const lines: Line[] = [];
   const workspaces = [...model.workspaces.values()];
   const tree = currentSidebarTree(model, prefs);
@@ -451,7 +482,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   // 区画の高さ：見出し 1 行＋spaces。agents があれば区切り 1 行＋agents、最下行は開閉のボタン。
   const scroll = ctx.sidebarScroll ?? { spaces: 0, agents: 0, reveal: null };
   const bodyH = rect.h - 1; // 最下行は「«」
-  const hits: SidebarHit[] = [];
+  const hits: SidebarHit[] = controls;
   const visual = (list: Line[]): VisualRow[] =>
     list.flatMap((line) => line.rows.map((_, sub) => ({ line, sub })));
   const spacesLines = visual(lines);
@@ -528,8 +559,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   // 「＋」は題（8 桁）の次の桁から（`inner - 2 > 9`）。それより狭いと題の末尾に重なるので出さない。
   if (inner >= 12) {
     const x = rect.x + inner - 2;
-    grid.set(x, headerY, "+", 1, fg, activeBg);
-    hits.push({ y: headerY, kind: "newWorkspace", x });
+    if(!ctx.chromeControls) {grid.set(x,headerY,"+",1,fg,activeBg);hits.push({kind:"newWorkspace",x,y:headerY});}
     if (!spacesFolded) {
       const label = WORKSPACE_SORT_LABEL[prefs.workspaceSort];
       const lw = stringWidth(label);
@@ -585,7 +615,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   }
 
   // 最下行：畳む「«」
-  const by = rect.y + rect.h - 1;
+  const by = rect.y + rect.h - (ctx.chromeControls ? 0 : 1);
   const bx = rect.x + inner - 2;
   if (rect.h >= 3 && bx > rect.x) {
     grid.set(bx, by, "«", 1, fg, activeBg);

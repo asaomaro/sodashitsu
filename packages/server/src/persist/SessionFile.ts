@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import { SidebarLayoutSchema, type SidebarLayout } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -9,6 +9,7 @@ import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFi
  * id（workspace・tab・pane・分割・手動グループ）は UUID で、保存した id をそのまま復元する（採番の続きは持たない。連番だった以前の `nextId` は読み捨てる）。
  */
 export interface SessionFilePane {
+  virtual?: true | undefined;
   id: string;
   label: string | null;
   cwd: string;
@@ -26,6 +27,10 @@ export interface SessionFilePane {
 export interface SessionFileTab {
   id: string;
   label: string;
+  plugin?: import("@sodashitsu/protocol").PluginTab | undefined;
+  perspective?: "terminal" | "app" | undefined;
+  displayPaneId?: string | undefined;
+  views?: import("@sodashitsu/protocol").TabViewInstance[] | undefined;
   focusedPaneId: string;
   zoomedPaneId: string | null;
   layout: LayoutNode;
@@ -61,6 +66,7 @@ export interface SessionFileWorkspace {
    */
   representative?: boolean | undefined;
   cwd: string;
+  projectDir?: string | undefined;
   activeTabId: string;
   tabs: SessionFileTab[];
 }
@@ -109,6 +115,7 @@ const LayoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
   ]),
 );
 const SessionFilePaneSchema: z.ZodType<SessionFilePane> = z.object({
+  virtual: z.literal(true).optional(),
   id: z.string(),
   label: z.string().nullable(),
   cwd: z.string(),
@@ -123,8 +130,21 @@ const SessionFileTabSchema: z.ZodType<SessionFileTab> = z.object({
   focusedPaneId: z.string(),
   zoomedPaneId: z.string().nullable(),
   layout: LayoutNodeSchema,
+  plugin: z.object({ extensionKey: z.string().min(1).max(4096), display: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/) }).optional(),
+  perspective: z.enum(["terminal", "app"]).optional(),
+  displayPaneId: z.string().optional(),
+  views: z.array(TabViewInstanceSchema).max(16).optional(),
   panes: z.array(SessionFilePaneSchema),
-});
+}).refine(t => {
+  if (!t.displayPaneId && !t.views?.length) return !t.panes.some(p => p.virtual);
+  const leaves = (node: LayoutNode): string[] => node.type === "pane" ? [node.paneId] : [...leaves(node.a), ...leaves(node.b)];
+  const ids = leaves(t.layout), workers = t.panes.filter(p => !p.virtual).map(p => p.id);
+  return (t.displayPaneId ? t.panes.filter(p => p.virtual).length === 1 && t.panes.some(p => p.id === t.displayPaneId && p.virtual) : !t.panes.some(p => p.virtual))
+    && new Set(t.panes.map(p => p.id)).size === t.panes.length && ids.length === workers.length && new Set(ids).size === ids.length
+    && ids.every(id => workers.includes(id)) && ids.includes(t.focusedPaneId) && (t.zoomedPaneId === null || ids.includes(t.zoomedPaneId))
+    && (t.views ?? []).every(v => v.target === "tab" ? !!t.displayPaneId && v.paneId === t.displayPaneId : ids.includes(v.paneId))
+    && new Set((t.views ?? []).map(v => v.id)).size === (t.views?.length ?? 0);
+}, { message: "invalid work panes or display anchor" });
 const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
   id: z.string(),
   label: z.string(),
@@ -137,6 +157,7 @@ const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
   worktreeKey: z.string().optional(),
   representative: z.boolean().optional(),
   cwd: z.string(),
+  projectDir: z.string().min(1).max(4096).optional(),
   activeTabId: z.string(),
   tabs: z.array(SessionFileTabSchema),
 });

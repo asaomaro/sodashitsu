@@ -170,8 +170,8 @@ describe("マウス（04 ラウンド 2）", () => {
     h.app.renderNow();
     const screen = (await h.screen()).split("\n");
     // 末尾にいるので、つまみは溝（2〜28 行）の下の端。
-    expect(screen[28]![62]).toBe("┃");
-    expect(screen[2]![62]).toBe("│");
+    expect(h.outer.term.buffer.active.getLine(28)?.getCell(62)?.getChars()).toBe("┃");
+    expect(h.outer.term.buffer.active.getLine(2)?.getCell(62)?.getChars()).toBe("│");
     // 溝の上の端を押す → いちばん上の近くへ。
     h.io.type(down(62, 2));
     expect(t.term.buffer.active.viewportY).toBeLessThan(10);
@@ -211,8 +211,8 @@ describe("マウス（04 ラウンド 2）", () => {
     h.io.type(down(collapse.x!, collapse.y) + up(collapse.x!, collapse.y));
     expect(h.app.prefs.sidebarCollapsed).toBe(true);
     h.app.renderNow();
-    expect((await h.screen()).split("\n")[0]!.startsWith("»")).toBe(true);
-    h.io.type(down(0, 0) + up(0, 0));
+    expect((await h.screen()).split("\n")[29]!.startsWith("»")).toBe(true);
+    h.io.type(down(0, 29) + up(0, 29));
     expect(h.app.prefs.sidebarCollapsed).toBe(false);
   });
 
@@ -232,15 +232,15 @@ describe("マウス（04 ラウンド 2）", () => {
     expect(text).toContain("space-w1");
     // spaces の区画（見出しの次の 5 行）には w1〜w5 だけ（通常の行は折りたたみの桁の 2 桁を空ける。追補 01 の T4）。agents の項目は 2 行（印・workspace・tab／エージェント名）。
     const rows = text.split("\n").map((l) => l.slice(0, l.indexOf("│")).trimEnd());
-    expect(rows.slice(1, 5)).toEqual([
+    expect(rows.slice(2, 6)).toEqual([
       "     space-w1",
       "     space-w2",
       "     space-w3",
       "     space-w4",
     ]);
-    expect(rows[5]).toMatch(/^ {5}space-w5 +↓$/);
-    expect(rows[7]).toBe(" ○ space-w20 t-w20");
-    expect(rows[8]).toBe("   Claude");
+    expect(rows[6]).toMatch(/^ {5}space-w5 +↓$/);
+    expect(rows[8]).toBe(" ○ space-w20 t-w20");
+    expect(rows[9]).toBe("   Claude");
     // navigate モードで下の workspace を選ぶと、そこまでずれる。
     h.io.type("\x02w");
     await vi.waitFor(() => expect(h.app.keys.mode).toBe("navigate"));

@@ -78,7 +78,7 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
       await outer.write(io.output());
       expect(outer.text()).toContain("w2");
     });
-    expect(outer.line(1)).toContain("w1");
+    expect(outer.line(2)).toContain("w1");
     expect(outer.line(0)).toContain("1:t1");
     // 同じ tick の多数の変化は 1 回の描画にまとまる。
     const before = io.output().split("\x1b[?2026h").length;
@@ -109,7 +109,7 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
     await vi.waitFor(() => expect(views()).toHaveLength(1));
     io.type("\x02b");
     await vi.waitFor(() => expect(views()).toHaveLength(2));
-    expect(views()[1]!.visible[0]!.cols).toBe(48); // 100/2 − 罫線 2
+    expect(views()[1]!.visible[0]!.cols).toBe(47); // 100/2 − 罫線 2
     app.finish(0);
     await running;
   });

@@ -33,6 +33,8 @@ export type DialogContext =
   | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
+  | { kind: "usage"; paneId: string }
+  | { kind: "usageAccounts" }
   /**
    * エージェントが動かしているサブエージェントの一覧（20261004-subagent-display）。`instanceId` は開いた時点のエージェント（入れ替わったら閉じる）。
    * 対象は今つないでいるマシンの pane（端末版の model はそのマシンの snapshot とイベントをそのまま受ける）。
@@ -78,7 +80,8 @@ export type MenuTarget =
   | { kind: "group"; groupId: string }
   /** 「グループなし」の見出し（上へ／下へ移動だけ。追補 01 B）。 */
   | { kind: "ungrouped" }
-  | { kind: "global" };
+  | { kind: "global" }
+  | { kind: "new" };
 
 export interface ContextMenuState {
   target: MenuTarget;
@@ -103,6 +106,12 @@ export interface ToastOptions {
 export const TOAST_MS = 4000;
 
 export class UiState {
+  screen: "base" | "dashboard" = "base";
+  setScreen(screen: "base" | "dashboard"): void {
+    if (this.screen === screen) return;
+    this.screen = screen;
+    this.emit();
+  }
   dialogContext: DialogContext | null = null;
   /** ダイアログを開く前に焦点のあった pane（閉じたら戻す。web の `preDialogFocusPaneId`）。 */
   preDialogFocusPaneId: string | null = null;

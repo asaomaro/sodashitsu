@@ -14,7 +14,7 @@ import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
 import { dismissWithFocus, headFocusTarget, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
-import { useUiStyle } from "../composables/useUiStyle.js";
+
 
 /**
  * 右クリックのメニュー（M3。APG の Menu。D56 の訂正 10）。`view.contextMenu` が開閉を持つ
@@ -43,7 +43,7 @@ const view = useViewStore();
 const displays = useDisplayStore();
 const graphStore = useGraphStore();
 const graphSpaces = useGraphSpacesStore();
-const { modernLayout } = useUiStyle();
+
 const actions = inject(ActionDispatcherKey);
 if (!actions) throw new Error("ContextMenu: ActionDispatcherKey が provide されていません");
 const displayController = inject(DisplayControllerKey, null);
@@ -172,6 +172,7 @@ const items = computed<MenuItem[]>(() => {
       ...(pane?.label ? [{ label: "名前の消去", run: () => actions.clearPaneName(target.paneId) }] : []),
       // herdr の「Swap with focused pane」（20260927-cli-mode の design D-7）。焦点の pane 以外の、同じ tab の pane のメニューにだけ出す。
       ...(swappableWithFocused(target.paneId) ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }] : []),
+
       { label: "右へ分割", run: () => actions.splitPane(target.paneId, "right") },
       { label: "下へ分割", run: () => actions.splitPane(target.paneId, "down") },
       { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },
@@ -187,6 +188,7 @@ const items = computed<MenuItem[]>(() => {
             { label: "表示をすべて閉じる", run: () => actions.dismissDisplays(target.paneId) },
           ]
         : []),
+
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
     ];
     return list;
@@ -216,6 +218,7 @@ const items = computed<MenuItem[]>(() => {
     const hasOtherGroup = session.groups.size - (inGroup && session.groups.has(currentGroupId) ? 1 : 0) > 0;
     return [
       { label: "名前の変更", run: () => actions.renameWorkspaceById(target.workspaceId) },
+      { label: "PJフォルダを設定…", run: () => actions.setProjectFolder(target.workspaceId) },
       { label: "閉じる", run: () => actions.closeWorkspaceById(target.workspaceId) },
       ...(isGit
         ? [
@@ -234,7 +237,7 @@ const items = computed<MenuItem[]>(() => {
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
       // モダンの配置では、グループは「新規」のメニューから作る（20261008-ui-style AC16）。
-      ...(modernLayout.value ? [] : [{ label: "新しいグループを作る…", run: () => actions.createGroupForWorkspace(target.workspaceId) }]),
+
     ];
   }
   if (target.kind === "group") {
@@ -368,7 +371,7 @@ const items = computed<MenuItem[]>(() => {
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
     // 連携のグラフ画面（20260927-agent-graph の design「入口」。キーの open_graph と同じ操作）。モダンの配置では、サイドバーの上の切り替えとキーで足りるので出さない（AC12）。
-    ...(modernLayout.value ? [] : [{ label: "連携（グラフ）", run: () => actions.run({ type: "openGraph" }) }]),
+
     { label: "設定", run: () => actions.run({ type: "settings" }) },
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
   ];

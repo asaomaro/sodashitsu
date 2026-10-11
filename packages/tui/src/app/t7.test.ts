@@ -244,7 +244,7 @@ describe("T7 の画面", () => {
     prefs(h, { paneBorders: "auto" });
     h.app.renderNow();
     const box = h.app["lastLayout"]!.panes[0]!;
-    expect(box.content).toEqual(box.frame);
+    expect(box.content).toEqual({...box.frame,y:box.frame.y+1,h:box.frame.h-1});
     expect(await h.screen()).not.toContain("┌");
   });
 
@@ -258,7 +258,7 @@ describe("T7 の画面", () => {
     const x = a!.frame.x + a!.frame.w - 1;
     expect(b!.frame.x).toBe(x + 1);
     const lines = text.split("\n");
-    for (let y = a!.frame.y; y < a!.frame.y + a!.frame.h; y++) expect([...lines[y]!][x]).toBe("│");
+    for (let y = a!.frame.y+1; y < a!.frame.y + a!.frame.h; y++) expect(h.outer.term.buffer.active.getLine(y)?.getCell(x)?.getChars()).toBe("│");
   });
 
   it("H23：computeLayout：auto は分割のときだけ枠・off は右と下の境目だけ・隙間なしは縦の罫線を 1 本に", () => {

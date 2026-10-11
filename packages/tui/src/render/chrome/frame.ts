@@ -14,6 +14,21 @@ export interface FrameInfo {
   cropped: boolean;
   /** 状態を記号でも示すか（共有の設定 `statusSymbols`。省略は入）。 */
   symbols?: boolean;
+  controls?: boolean;
+  hasAgent?: boolean;
+  zoomed?: boolean;
+}
+
+export type PaneButtonAction = "right" | "down" | "info" | "zoom" | "close";
+export function paneButtons(frame: Rect, hasAgent: boolean, zoomed: boolean): {x:number;w:number;action:PaneButtonAction;text:string}[] {
+  const actions: [PaneButtonAction,string][] = [
+    ...(frame.w>=22 ? [["right","[│]"],["down","[─]"]] as [PaneButtonAction,string][] : []),
+    ...(hasAgent && frame.w>=13 ? [["info","[i]"]] as [PaneButtonAction,string][] : []),
+    ["zoom",zoomed?"[↙]":"[□]"],["close","[×]"],
+  ];
+  if(frame.w<8)return [];
+  let x=frame.x+frame.w-1-actions.length*3;
+  return actions.map(([action,text])=>{const hit={x,w:3,action,text};x+=3;return hit;});
 }
 
 /**
@@ -50,7 +65,9 @@ export function paintFrame(
 
   // 上辺の名前：`┌─ ◐ name ─…┐`
   let cx = x + (sides.left ? 2 : 1);
-  const limit = right - 1;
+  const buttons=info.controls ? paneButtons(frame, info.hasAgent===true, info.zoomed===true) : [];
+  for(const button of buttons) grid.text(button.x,y,button.text,theme.ui("--soda-fg"),theme.ground("--soda-menu-bg"),0,button.w);
+  const limit = buttons[0]?.x ?? right - 1;
   if (cx >= limit) return;
   cx += grid.text(cx, y, " ", color, bg, 0, limit - cx);
   const glyph = glyphFor(info.state, info.symbols !== false);

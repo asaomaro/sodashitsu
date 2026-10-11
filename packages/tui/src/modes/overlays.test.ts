@@ -302,7 +302,6 @@ describe("右クリックのメニュー：グループ・「グループなし�
       "名前の変更",
       "閉じる",
       "グループへ追加…",
-      "新しいグループを作る…",
     ]);
     const inGroup = [
       "名前の変更",
@@ -311,7 +310,6 @@ describe("右クリックのメニュー：グループ・「グループなし�
       "worktree を開く…",
       "別のグループへ移す…",
       "グループから外す",
-      "新しいグループを作る…",
     ];
     expect(labels(s, { kind: "workspace", workspaceId: "w1" })).toEqual(inGroup);
     expect(labels(s, { kind: "workspace", workspaceId: "w2" })).toEqual(inGroup); // 子の行
@@ -329,7 +327,6 @@ describe("右クリックのメニュー：グループ・「グループなし�
       "名前の変更",
       "閉じる",
       "グループから外す",
-      "新しいグループを作る…",
     ]);
   });
 

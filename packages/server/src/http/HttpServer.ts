@@ -84,7 +84,7 @@ export const DISPLAY_VIEW_CSP =
  * - `default-src 'none'`（外へ繋がない）・`webrtc 'block'`（解釈するブラウザだけ止まる）。
  */
 export const DISPLAY_SCRIPT_VIEW_CSP =
-  "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'";
+  "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; frame-src blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; webrtc 'block'";
 /** スクリプトの枠に付ける `Permissions-Policy`（解釈するブラウザだけ効く）。`focus-without-user-activation=()` は、利用者の操作なしの `focus()` そのものを止める（効くかは実測）。 */
 export const DISPLAY_SCRIPT_VIEW_PERMISSIONS =
   "camera=(), microphone=(), geolocation=(), display-capture=(), clipboard-read=(), clipboard-write=(), fullscreen=(), picture-in-picture=(), focus-without-user-activation=()";

@@ -2,6 +2,7 @@
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
+import { useExtensionsStore } from "../store/extensions.js";
 import { useViewStore } from "../store/view.js";
 
 /**
@@ -16,7 +17,7 @@ import { useViewStore } from "../store/view.js";
  */
 // `createGroup`/`renameGroup`（20260923-workspace-grouping）もこのダイアログを再利用する——
 // どちらも「1行で名前を決める」という点で `renameWorkspace` 等と同じ形だから。
-const NAME_KINDS = new Set(["newTab", "renamePane", "renameTab", "renameWorkspace", "createGroup", "renameGroup"]);
+const NAME_KINDS = new Set(["projectFolder", "newTab", "renamePane", "renameTab", "renameWorkspace", "createGroup", "renameGroup"]);
 
 const session = useSessionStore();
 const view = useViewStore();
@@ -26,12 +27,22 @@ if (!actions) throw new Error("NameDialog: ActionDispatcherKey が provide さ�
 const dialogEl = ref<HTMLDialogElement | null>(null);
 const inputEl = ref<HTMLInputElement | null>(null);
 const value = ref("");
+const pluginKey = ref("");
+const extensions = useExtensionsStore();
+const plugins = computed(() => {
+  const ctx = view.dialogContext;
+  if (ctx?.kind !== "newTab") return [];
+  const ws = session.workspaces.get(ctx.workspaceId);
+  return (extensions.list?.extensions ?? []).filter(e => e.tabView && e.state === "running" && (e.scope === "user" || (e.workspaceIds ? e.workspaceIds.includes(ctx.workspaceId) : e.root === (ws?.projectDir ?? ws?.cwd))));
+});
+const projectDir = computed(() => { const ctx = view.dialogContext; return ctx?.kind === "newTab" ? session.workspaces.get(ctx.workspaceId)?.projectDir : undefined; });
 /** 開いたときのプリフィル値（newTab の「変更なし」判定用。D75）。 */
 let openedWithValue = "";
 
 function initialValue(): string {
   const ctx = view.dialogContext;
   if (!ctx) return "";
+  if (ctx.kind === "projectFolder") return ctx.currentPath;
   if (ctx.kind === "newTab") {
     const ws = session.workspaces.get(ctx.workspaceId);
     return ws ? String(ws.tabIds.length + 1) : "";
@@ -42,6 +53,8 @@ function initialValue(): string {
 
 function title(): string {
   switch (view.dialogContext?.kind) {
+    case "projectFolder":
+      return "PJフォルダを設定";
     case "newTab":
       return "新しい tab の名前";
     case "renamePane":
@@ -63,6 +76,7 @@ watch(
   () => view.dialogContext,
   (ctx) => {
     if (ctx && NAME_KINDS.has(ctx.kind)) {
+      pluginKey.value = "";
       value.value = initialValue();
       openedWithValue = value.value;
       void nextTick(() => {
@@ -83,8 +97,13 @@ const confirm = (): void => {
   if (ctx.kind === "newTab") {
     const trimmed = value.value.trim();
     // プリフィルから変更していなければ、送信対象を空文字にして「送らない」判定へ合流させる（D75）。
-    actions.confirmNewTab(trimmed === openedWithValue.trim() ? "" : value.value);
-  } else if (ctx.kind === "renamePane") actions.confirmRenamePane(value.value);
+    const ext = plugins.value.find(e => e.key === pluginKey.value);
+    if (pluginKey.value && (!ext || (ext.tabView?.requiresProject !== false && !projectDir.value))) return;
+    const plugin = ext?.tabView ? { extensionKey: ext.key, display: ext.tabView.display } : undefined;
+    const label = trimmed === openedWithValue.trim() ? (ext?.tabView?.title ?? "") : value.value;
+    if (plugin) actions.confirmNewTab(label, plugin); else actions.confirmNewTab(label);
+  } else if (ctx.kind === "projectFolder") actions.confirmProjectFolder(value.value);
+  else if (ctx.kind === "renamePane") actions.confirmRenamePane(value.value);
   else if (ctx.kind === "renameTab") actions.confirmRenameTab(value.value);
   else if (ctx.kind === "renameWorkspace") actions.confirmRenameWorkspace(value.value);
   else if (ctx.kind === "createGroup") actions.confirmCreateGroup(value.value);
@@ -123,6 +142,18 @@ function onNativeCancel(ev: Event): void {
           :aria-describedby="workspaceHint ? 'name-dialog-hint' : undefined"
         />
       </label>
+      <label v-if="view.dialogContext?.kind === 'newTab'" class="name-dialog-label">
+        <span>タブの種類</span>
+        <select v-model="pluginKey" aria-label="タブの種類">
+          <option value="">ターミナル</option>
+          <option v-for="ext in plugins" :key="ext.key" :value="ext.key" :disabled="!projectDir && ext.tabView?.requiresProject !== false">{{ ext.tabView?.title }}（{{ ext.scope === 'user' ? 'ユーザー' : 'PJ' }}）</option>
+        </select>
+      </label>
+      <p v-if="view.dialogContext?.kind === 'newTab'" class="name-dialog-hint name-dialog-project">
+        <template v-if="projectDir"><span>PJフォルダ</span><span class="name-dialog-path">{{ projectDir }}</span></template>
+        <template v-else>プラグインを使うには、spaces のメニューでPJフォルダを設定してください。</template>
+      </p>
+      <p v-if="view.dialogContext?.kind === 'projectFolder'" class="name-dialog-hint">サーバ側の絶対パスを指定してください。新しいターミナルとプラグインはこのフォルダを使います。空欄で設定を解除します。</p>
       <!-- workspace の名前を変えるときだけ（tab・pane の見た目は変えない。20260921-workspace-auto-label の design D8）。 -->
       <p v-if="workspaceHint" id="name-dialog-hint" class="name-dialog-hint">{{ workspaceHint }}</p>
       <div class="name-dialog-actions">
@@ -135,12 +166,13 @@ function onNativeCancel(ev: Event): void {
 
 <style scoped>
 .name-dialog {
+  box-sizing: border-box;
   box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border-radius: var(--soda-shape-radius);
-  min-width: 20em;
+  min-width: min(20em, calc(100% - 16px));
   /* workspace の名前変更の手掛かり（1 行の文）がダイアログを横に広げすぎないよう、上限を置いて折り返させる（20260921-workspace-auto-label）。 */
   max-width: min(30em, calc(100% - 16px));
   padding: var(--soda-shape-pad, 1em);
@@ -148,28 +180,46 @@ function onNativeCancel(ev: Event): void {
 .name-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));
 }
+.name-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9em;
+}
 .name-dialog-label {
   display: flex;
   flex-direction: column;
   gap: 0.4em;
 }
-.name-dialog-input {
+.name-dialog-input,
+.name-dialog select {
+  box-sizing: border-box;
+  width: 100%;
   font: inherit;
   padding: 0.3em 0.5em;
 }
 .name-dialog-hint {
-  margin: 0.4em 0 0;
+  margin: 0;
   font-size: 0.85em;
+  line-height: 1.5;
   opacity: 0.8;
+}
+.name-dialog-project {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+}
+.name-dialog-path {
+  overflow-wrap: anywhere;
 }
 .name-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5em;
-  margin-top: 1em;
+  margin-top: 0.25em;
 }
 /* 押せる部品の高さ（20261008-ui-style。クラシックでは変数が無く、何もしない） */
 .name-dialog button,
+.name-dialog select,
 .name-dialog input:not([type="checkbox"]):not([type="radio"]) {
   min-height: var(--soda-shape-control-h, auto);
 }

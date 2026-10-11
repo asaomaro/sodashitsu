@@ -494,16 +494,11 @@ function openSubagents(paneId: string): void {
   view.openDialogWithContext({ kind: "subagents", machineId: machines.selectedId, paneId, opener: "button" });
 }
 
-/** 新しい workspace を作る。キーの `prefix+shift+n` と同じ経路（`ActionDispatcher.run`）を通す。 */
-function onNewWorkspace(): void {
-  actions?.run({ type: "newWorkspace" });
-}
-
 /** 全体のメニューを、押したボタンの位置に開く（`ContextMenu` が中身と操作を引き受ける）。 */
 function onOpenGlobalMenu(ev: MouseEvent): void {
   const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
   // モダンの配置では最下部のボタンなので、メニューはボタンの上に開く（下へ開くとボタンに重なる）。
-  actions?.openContextMenu({ kind: "global" }, { x: rect.left, y: modernLayout.value ? rect.top - 4 : rect.top, ...(modernLayout.value ? { flipUp: true } : {}) });
+  actions?.openContextMenu({ kind: "global" }, { x: rect.left, y: rect.top - 4, flipUp: true });
 }
 
 /** 「新規」のメニュー（モダンの配置。workspace・pane・グループ）を、押したボタンの位置に開く。中身は `ContextMenu`。 */
@@ -531,7 +526,7 @@ watch(
     if (role === null) return;
     void nextTick(() => {
       const next = el.value?.querySelector<HTMLElement>(
-        role === "collapse" ? ".sidebar-collapse-btn, .sidebar-edge-toggle" : modernLayout.value ? `[data-sidebar-act="${role}"]` : `.sidebar-section-footer .sidebar-btn${role === "menu" ? ".sidebar-btn-right" : ":not(.sidebar-btn-right)"}`,
+        role === "collapse" ? ".sidebar-collapse-btn, .sidebar-edge-toggle" : `[data-sidebar-act="${role}"]`,
       );
       if (next) next.focus();
       else if (view.focusedPaneId) registry?.focus(view.focusedPaneId);
@@ -1028,19 +1023,7 @@ watchDragInterrupt(view, () => {
       </template>
       </div>
 
-      <div v-if="!view.sidebarCollapsed && !modernLayout" class="sidebar-section-footer">
-        <button type="button" class="sidebar-btn" @click="onNewWorkspace" @keydown="onButtonKeydown">＋ 新規</button>
-        <button
-          type="button"
-          class="sidebar-btn sidebar-btn-right"
-          aria-haspopup="menu"
-          :aria-expanded="globalMenuOpen ? 'true' : 'false'"
-          @click="onOpenGlobalMenu"
-          @keydown="onButtonKeydown"
-        >
-          メニュー
-        </button>
-      </div>
+
     </section>
 
     <div
@@ -1117,34 +1100,21 @@ watchDragInterrupt(view, () => {
     </section>
     </div>
 
-    <div class="sidebar-footer" :class="{ 'sidebar-footer-modern': modernLayout }">
+    <div class="sidebar-footer sidebar-footer-modern">
       <!-- モダンの配置（20261008-ui-style AC14・AC15）: 「新規」と「メニュー」を、通知のベルと並べて最下部に置く（spaces の区画の中の同じボタンは出さない）。畳んだサイドバーでは縦に並ぶ（印だけ。読み上げの名前は保つ）。 -->
-      <template v-if="modernLayout">
         <button type="button" class="sidebar-btn sidebar-footer-new" data-sidebar-act="new" aria-label="新規" title="新規" aria-haspopup="menu" :aria-expanded="newMenuOpen ? 'true' : 'false'" @click="onOpenNewMenu" @keydown="onButtonKeydown">
           {{ view.sidebarCollapsed ? "＋" : "＋ 新規" }}
         </button>
         <button type="button" class="sidebar-btn sidebar-footer-menu" data-sidebar-act="menu" aria-label="メニュー" title="メニュー" aria-haspopup="menu" :aria-expanded="globalMenuOpen ? 'true' : 'false'" @click="onOpenGlobalMenu" @keydown="onButtonKeydown">
           {{ view.sidebarCollapsed ? "⋯" : "メニュー" }}
         </button>
-      </template>
       <!-- 通知のベル（20261005-notify-bell）。畳んでも見える帯なので、先送りした件数のバッヂがいつでも見える。 -->
       <NotificationBell variant="sidebar" />
-      <button
-        v-if="!modernLayout"
-        type="button"
-        class="sidebar-btn sidebar-collapse-btn"
-        :aria-expanded="!view.sidebarCollapsed"
-        :aria-label="view.sidebarCollapsed ? 'サイドバーを開く' : 'サイドバーを畳む'"
-        @click="actions?.run({ type: 'toggleSidebar' })"
-        @keydown="onButtonKeydown"
-      >
-        {{ view.sidebarCollapsed ? "»" : "«" }}
-      </button>
+
     </div>
 
     <!-- モダンの配置（AC13）: たたむ・広げるの印を、サイドバーと主な領域の境の線の、縦の中央に置く（小さな丸＋矢印。押せる当たりは 24px）。幅のつまみ（下）の上にあり、この上では幅のドラッグは始まらない。 -->
     <button
-      v-if="modernLayout"
       type="button"
       class="sidebar-edge-toggle"
       :aria-expanded="!view.sidebarCollapsed"
@@ -1721,6 +1691,24 @@ watchDragInterrupt(view, () => {
 .sidebar-collapsed .sidebar-edge-toggle-mark {
   width: 16px;
   height: 16px;
+}
+/* モダンでは開く印も罫線をまたぐ。スクロールは内側の一覧が受け持つ。 */
+:root[data-ui-style="modern"] .sidebar-collapsed {
+  overflow: visible;
+}
+:root[data-ui-style="modern"] .sidebar-collapsed .sidebar-sections {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+:root[data-ui-style="modern"] .sidebar-collapsed .sidebar-edge-toggle {
+  right: -12px;
+  width: 24px;
+}
+:root[data-ui-style="modern"] .sidebar-collapsed .sidebar-edge-toggle-mark {
+  width: 18px;
+  height: 18px;
 }
 .sidebar-divider {
   position: absolute;

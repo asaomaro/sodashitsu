@@ -31,6 +31,7 @@ function makeActions() {
     renameTabById: vi.fn(),
     closeTabById: vi.fn(),
     renameWorkspaceById: vi.fn(),
+    setProjectFolder: vi.fn(),
     closeWorkspaceById: vi.fn(),
     run: vi.fn(),
     newWorktree: vi.fn(),
@@ -183,7 +184,7 @@ describe("ContextMenu — workspace", () => {
     session.workspaceUpserted(makeWorkspace("w1")); // git: null
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しいグループを作る…"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる"]);
   });
 
   it("git リポジトリなら worktree の 2 項目が増える（AC1・AC8）", () => {
@@ -192,7 +193,7 @@ describe("ContextMenu — workspace", () => {
     session.workspaceUpserted(makeWorkspace("w1", { git: { branch: "main", ahead: 0, behind: 0, repoKey: null, isLinkedWorktree: false } }));
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しい worktree", "worktree を開く…", "新しいグループを作る…"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "新しい worktree", "worktree を開く…"]);
   });
 
   it("worktree の項目は、それぞれの入口を呼ぶ", async () => {
@@ -202,12 +203,12 @@ describe("ContextMenu — workspace", () => {
     session.workspaceUpserted(makeWorkspace("w1", { git: { branch: "main", ahead: 0, behind: 0, repoKey: null, isLinkedWorktree: false } }));
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
-    await wrapper.findAll("li")[2]!.trigger("click");
+    await wrapper.findAll("li")[3]!.trigger("click");
     expect(actions.newWorktree).toHaveBeenCalledWith("w1");
 
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const reopened = mountMenu(actions);
-    await reopened.findAll("li")[3]!.trigger("click");
+    await reopened.findAll("li")[4]!.trigger("click");
     expect(actions.openWorktree).toHaveBeenCalledWith("w1");
   });
 
@@ -222,12 +223,11 @@ describe("ContextMenu — workspace", () => {
     const wrapper = mountMenu(actions);
     const labels = wrapper.findAll("li").map((li) => li.text());
     // design「画面」：所属なし →「グループへ追加…」「新しいグループを作る…」の順。
-    expect(labels).toEqual(["名前の変更", "閉じる", "グループへ追加…", "新しいグループを作る…"]);
-    await wrapper.findAll("li")[3]!.trigger("click");
-    expect(actions.createGroupForWorkspace).toHaveBeenCalledWith("w1");
+    expect(labels).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "グループへ追加…"]);
+    expect(labels).not.toContain("新しいグループを作る…");
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const reopened = mountMenu(actions);
-    await reopened.findAll("li")[2]!.trigger("click");
+    await reopened.findAll("li")[3]!.trigger("click");
     expect(actions.openGroupPicker).toHaveBeenCalledWith("w1");
   });
 
@@ -239,15 +239,15 @@ describe("ContextMenu — workspace", () => {
     session.groupUpserted({ id: "g1", label: "backend", collapsed: false });
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "グループから外す", "新しいグループを作る…"]);
-    await wrapper.findAll("li")[2]!.trigger("click");
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "グループから外す"]);
+    await wrapper.findAll("li")[3]!.trigger("click");
     expect(actions.removeWorkspaceFromGroup).toHaveBeenCalledWith("w1");
 
     session.groupUpserted({ id: "g2", label: "frontend", collapsed: false });
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const withOther = mountMenu(actions);
-    expect(withOther.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "別のグループへ移す…", "グループから外す", "新しいグループを作る…"]);
-    await withOther.findAll("li")[2]!.trigger("click");
+    expect(withOther.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "別のグループへ移す…", "グループから外す"]);
+    await withOther.findAll("li")[3]!.trigger("click");
     expect(actions.openGroupPicker).toHaveBeenCalledWith("w1");
   });
 
@@ -262,7 +262,7 @@ describe("ContextMenu — workspace", () => {
     session.layoutChanged({ top: ["g:g1"], groups: { g1: ["r:/r/.git"] }, ungrouped: [] });
     view.openContextMenu({ kind: "workspace", workspaceId: "w2" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しい worktree", "worktree を開く…", "グループから外す", "新しいグループを作る…"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "新しい worktree", "worktree を開く…", "グループから外す"]);
   });
 
   it("グループが0件なら「グループへ追加…」は出ない", () => {
@@ -271,7 +271,7 @@ describe("ContextMenu — workspace", () => {
     session.workspaceUpserted(makeWorkspace("w1"));
     view.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "新しいグループを作る…"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる"]);
   });
 });
 
@@ -285,7 +285,7 @@ describe("ContextMenu — 「グループなし」の項目の出入り（追補
   it("「グループなし」の項目は「グループへ追加…」「新しいグループを作る…」（「外す」「移す」は出ない）", () => {
     layoutWithUngrouped();
     useViewStore(pinia).openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
-    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "グループへ追加…", "新しいグループを作る…"]);
+    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "グループへ追加…"]);
   });
   it("グループの中の項目は「グループから外す」を出す（移し先が他に無ければ「移す」は出ない）", () => {
     const session = useSessionStore(pinia);
@@ -293,7 +293,7 @@ describe("ContextMenu — 「グループなし」の項目の出入り（追補
     session.groupUpserted({ id: "g1", label: "a", collapsed: false });
     session.layoutChanged({ top: ["g:g1", "u"], groups: { g1: ["w:w1"] }, ungrouped: [] });
     useViewStore(pinia).openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
-    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる", "グループから外す", "新しいグループを作る…"]);
+    expect(mountMenu(makeActions()).findAll("li").map((li) => li.text())).toEqual(["名前の変更", "PJフォルダを設定…", "閉じる", "グループから外す"]);
   });
 });
 
@@ -358,7 +358,7 @@ describe("ContextMenu — global", () => {
     const view = useViewStore(pinia);
     view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["キー割り当て", "移動", "連携（グラフ）", "設定", "切り離し"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["キー割り当て", "移動", "設定", "切り離し"]);
   });
 
   it("「設定」を選ぶと、キー操作と同じ action が渡る", async () => {
@@ -366,17 +366,13 @@ describe("ContextMenu — global", () => {
     const actions = makeActions();
     view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     const wrapper = mountMenu(actions);
-    await wrapper.findAll("li")[3]!.trigger("click");
+    await wrapper.findAll("li")[2]!.trigger("click");
     expect(actions.run).toHaveBeenCalledWith({ type: "settings" });
   });
 
-  it("「連携（グラフ）」を選ぶと、キーの open_graph と同じ action が渡る（20260927-agent-graph）", async () => {
-    const view = useViewStore(pinia);
-    const actions = makeActions();
-    view.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
-    const wrapper = mountMenu(actions);
-    await wrapper.findAll("li")[2]!.trigger("click");
-    expect(actions.run).toHaveBeenCalledWith({ type: "openGraph" });
+  it("連携（グラフ）は先頭の切替へ集約し全体メニューから外す", () => {
+    const view=useViewStore(pinia);view.openContextMenu({kind:"global"},{x:0,y:0});
+    expect(mountMenu(makeActions()).findAll("li").map(li=>li.text())).not.toContain("連携（グラフ）");
   });
 
   it("選ぶと、キー操作と同じ action が `run` に渡る", async () => {
@@ -418,7 +414,8 @@ describe("ContextMenu — キーボード（APG の Menu）", () => {
     const actions = makeActions();
     const wrapper = mountMenu(actions);
     const menu = wrapper.get('[role="menu"]');
-    await menu.trigger("keydown", { key: "ArrowDown" }); // 名前の変更 → 閉じる
+    await menu.trigger("keydown", { key: "ArrowDown" }); // 名前の変更 → PJフォルダ
+    await menu.trigger("keydown", { key: "ArrowDown" }); // PJフォルダ → 閉じる
     await menu.trigger("keydown", { key: "Enter" });
     expect(actions.closeWorkspaceById).toHaveBeenCalledWith("w1");
   });
