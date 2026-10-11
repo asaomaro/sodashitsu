@@ -4,7 +4,7 @@ import type { Divider, LayoutResult, PaneBox, Rect } from "../layout/computeLayo
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { SidebarDragInfo, SidebarHit } from "../render/chrome/sidebar.js";
-import { canGrab } from "./sidebarDrag.js";
+import { canGrab, type DropPlan } from "./sidebarDrag.js";
 import type { TabBarHits, TabHit } from "../render/chrome/tabBar.js";
 import type { RequestPort } from "../term/PaneRegistry.js";
 import {
@@ -163,6 +163,7 @@ export class MouseController {
   private drag: Drag | null = null;
   selection: MouseSelection | null = null;
   dropTarget: PaneDropTarget | null = null;
+  sidebarFeedback: { source: SidebarDragInfo; target: SidebarDragInfo | undefined; y: number; plan: DropPlan } | null = null;
   private lastClick: { at: number; paneId: string; row: number; col: number } | null = null;
 
   constructor(private readonly host: MouseHost) {}
@@ -675,10 +676,16 @@ export class MouseController {
       }
       case "item": {
         if (ev.y !== drag.startY && drag.grabbable) drag.moved = true;
+        if (drag.moved && drag.source) {
+          const target = this.sidebarAt(ev.x, ev.y, layout)?.drag;
+          this.sidebarFeedback = { source: drag.source, target, y: ev.y, plan: this.host.actions.sidebarDropPlan(drag.source, target) };
+        }
         if (done) {
           if (drag.moved) this.dropItem(drag.source, ev.x, ev.y, layout);
           else drag.onClick?.();
+          this.sidebarFeedback = null;
         }
+        this.host.scheduleRender();
         break;
       }
       case "paneName": {
@@ -854,6 +861,8 @@ export class MouseController {
     // 途中の境界の比率は捨てる（離していない。送る時計も止める）。
     if (drag?.kind === "divider" && drag.timer !== null) clearTimeout(drag.timer);
     this.dropTarget = null;
+    this.sidebarFeedback = null;
+    this.host.scheduleRender();
     // pane へ押下を渡していたなら離しも送る（押したままのアプリを残さない。04 ラウンド 2 の点検）。
     if (drag?.kind === "forward") {
       const term = this.host.pane(drag.paneId);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onUnmounted, ref, watch } from "vue";
 import { edgeScrollDelta, reorderSteps, slotAt, TAB_DRAG_THRESHOLD_PX } from "../layout/tabReorder.js";
 import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
@@ -385,10 +386,12 @@ function onWheel(ev: WheelEvent): void {
         @click="selectTab(tab.id)"
         @contextmenu="onContextMenu($event, tab.id)"
       >
+        <ShortcutNumber :number="index+1" target="tab" />
         <span class="tab-bar-label">{{ tab.label }}</span>
         <span v-if="tab.zoomedPaneId" class="tab-bar-zoomed">Z</span>
       </button>
     </div>
+    <span v-if="view.paneDrag?.overTabId" class="tab-bar-drop-hint" role="status">ここへ移動：{{ tabs.find(t => t.id === view.paneDrag?.overTabId)?.label }}（離して確定）</span>
     <button type="button" class="tab-bar-new tab-bar-action" :disabled="!view.workspaceId" aria-label="新しいタブ" @click="onNewTab" @keydown="onButtonKeydown">＋</button>
     <span v-if="rightText" class="tab-bar-right" aria-hidden="true">{{ rightText }}</span>
     <button v-if="viewActions && currentTab" type="button" class="tab-bar-action tab-bar-add-view" @click="view.openDialogWithContext({ kind: 'addView', tabId: currentTab.id })" @keydown="onButtonKeydown">ビューを追加</button>
@@ -400,6 +403,7 @@ function onWheel(ev: WheelEvent): void {
  * Splitter.vue と同様。D92）。`.base-screen`（screens/BaseScreen.vue）が `flex-direction:column` なので、ここは
  * 横並びの帯として `flex:none` で高さだけ確保する。 */
 .tab-bar {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
@@ -442,6 +446,7 @@ function onWheel(ev: WheelEvent): void {
   cursor: default;
 }
 .tab-bar-item {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
@@ -462,9 +467,23 @@ function onWheel(ev: WheelEvent): void {
 /* D&D でのドロップ候補（20260924-pane-move-cross-tab。design「クライアント側: ドロップ先の拡張」）。
  * `PaneFrame.vue` の `.pane-frame-edge-drop-target` と同じ強調色。 */
 .tab-bar-item-drop-target {
-  outline: 2px dashed var(--soda-accent, #8be9fd);
+  background: var(--soda-accent, #8be9fd);
+  color: var(--soda-accent-fg, #282a36);
+  outline: 2px solid var(--soda-accent, #8be9fd);
   outline-offset: -2px;
 }
+.tab-bar-drop-hint {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+  z-index: 5;
+  padding: 4px 8px;
+  background: var(--soda-accent, #8be9fd);
+  color: var(--soda-accent-fg, #282a36);
+  font-weight: bold;
+  pointer-events: none;
+}
+.tab-bar-bottom .tab-bar-drop-hint { top: auto; bottom: 100%; }
 /* tab のドラッグ（20261008-web-tab-dnd）。線は box-shadow なので tab の幅は変わらない。動き（transition）は足さない。 */
 .tab-bar-dragging,
 .tab-bar-dragging .tab-bar-item {
@@ -532,5 +551,11 @@ function onWheel(ev: WheelEvent): void {
 :root[data-ui-style="modern"] .tab-bar-item-active,
 :root[data-ui-style="modern"] .tab-bar-item-active:hover {
   background: var(--soda-menu-active-bg, #44475a);
+}
+/* ドロップ候補は選択・hoverより優先し、文字と背景の組を保つ。 */
+.tab-bar-item.tab-bar-item-drop-target,
+:root[data-ui-style="modern"] .tab-bar-item.tab-bar-item-drop-target:hover {
+  background: var(--soda-accent, #8be9fd);
+  color: var(--soda-accent-fg, #282a36);
 }
 </style>

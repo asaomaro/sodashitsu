@@ -1,3 +1,4 @@
+import { AgentForkDialog } from "../modes/AgentForkDialog.js";
 import {UsageModel} from "../model/UsageModel.js";
 import {UsageDialog,UsageDashboard} from "../modes/UsageView.js";
 import {
@@ -352,7 +353,7 @@ export class TuiApp {
       prefs: this.prefs,
       conn: this.rpc,
       input: { holdInput: (source) => (this.gate ? this.gate.holdInput(source) : NO_HOLD) },
-      keys: { setMode: (m) => this.keys.router.setMode(m) },
+      keys: { setMode: (m) => this.keys.router.setMode(m), selectNumbers:target=>{this.keys.router.selectNumbers(target);} },
       copyTarget: (paneId) => this.copyTargetOf(paneId),
       writeClipboard: (text) => this.writeClipboard(text),
       readClipboard: () => readClipboardText(this.clipboardEnv),
@@ -397,6 +398,7 @@ export class TuiApp {
       ui: this.ui,
       prefs: this.prefs,
       env: io.env,
+      queueChanged: () => this.scheduleRender(),
       hasFocus: () => this.outerFocused,
       // 今の割り付けで見る（前の描画の割り付けだと、同じ打鍵の中の切り替えを取り違える）。
       isPaneVisible: (paneId) => this.visiblePanes().some((b) => b.paneId === paneId),
@@ -915,6 +917,7 @@ export class TuiApp {
 
   /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
   protected extraOverlay(ctx: DialogContext): Overlay | null {
+    if (ctx.kind === "agentFork") return new AgentForkDialog(ctx.paneId,this.ui,this.rpc,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id));
     if (ctx.kind === "goto")
       return new GotoDialog({
         ui: this.ui,
@@ -1208,10 +1211,14 @@ export class TuiApp {
       screen: this.ui.screen,
       chromeControls: true,
       notificationCount: this.notify.queued.length,
+      sidebarDrag: this.mouse.sidebarFeedback,
+      dropTabId: this.mouse.dropTarget?.kind === "tab" ? this.mouse.dropTarget.tabId : undefined,
+      dragNotice: this.mouse.sidebarFeedback ? (this.mouse.sidebarFeedback.plan.kind === "refuse" ? "移動不可: " + this.mouse.sidebarFeedback.plan.reason : this.mouse.sidebarFeedback.plan.kind === "move" ? "移動中 · ▶ ここへ配置" : "移動中 · 移動先を選択") : this.mouse.dropTarget?.kind === "tab" ? "ペインを別タブへ移動 · 離して確定" : undefined,
       sidebarCollapsed: layout.sidebarCollapsed === true,
       prefs: this.prefs,
       theme: this.theme,
       mode: this.keyMode(),
+      numberTarget: this.keys.router.numberTarget,
       navigateSelection: this.ui.navigateSelection,
       connection: this.connectionState,
       notice: this.notice,
@@ -1271,12 +1278,12 @@ export class TuiApp {
       this.titleTemplate = { source: template, parts };
     }
     const parts = this.titleTemplate.parts;
-    if (!parts) return null;
+    if (!parts) return this.notify.queued.length > 0 ? "🔔 " + FALLBACK_WINDOW_TITLE : null;
     const m = this.model;
     const ws = m.workspaceId ? m.workspaces.get(m.workspaceId) : undefined;
     const tab = m.currentTab();
     const pane = m.focusedPaneId ? m.panes.get(m.focusedPaneId) : undefined;
-    return (
+    return (this.notify.queued.length > 0 ? "🔔 " : "") + (
       renderWindowTitle(parts, {
         hostname: m.host?.hostname ?? "",
         workspace: ws?.label ?? "",

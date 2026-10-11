@@ -56,7 +56,7 @@ export interface DispatcherHost {
   conn: RequestPort;
   /** 新しい pane へ焦点を移す操作の応答を待つ間の入力を溜める関所（web の D99。client-core の `InputGate`）。 */
   input?: { holdInput(sourcePaneId: string | null): InputHold };
-  keys: { setMode(m: Mode): void };
+  keys: { setMode(m: Mode): void; selectNumbers?(target:"pane"|"workspace"|"agent"): void };
   copyTarget(paneId: string): CopyTargetPort | undefined;
   writeClipboard(text: string): Promise<boolean>;
   /** 手元のクリップボードの文字（読めなければ null）。メニューの「貼り付け」（`pasteClipboard` が無いとき）。 */
@@ -99,6 +99,10 @@ export class TuiDispatcher {
     this.conn = host.conn;
   }
 
+  openAgentFork(paneId: string): void {
+    this.ui.openDialogWithContext({kind:"agentFork",paneId});
+  }
+
   showUsageOf(paneId: string): void {
     if(this.model.panes.get(paneId)?.agent) this.ui.openDialogWithContext({kind:"usage",paneId});
     else this.ui.toast("このペインにはエージェントがいません。");
@@ -134,6 +138,13 @@ export class TuiDispatcher {
         return;
       case "tabDelta":
         this.tabDelta(action.delta);
+        return;
+      case "selectNumbers":
+        if(this.host.keys.selectNumbers)this.host.keys.selectNumbers(action.target);
+        else this.host.keys.setMode("prefix");
+        return;
+      case "paneIndex":
+        this.paneIndex(action.index);
         return;
       case "tabIndex":
         this.tabIndex(action.index);
@@ -1036,6 +1047,17 @@ export class TuiDispatcher {
     if (nextTabId) this.switchToTab(ws.id, nextTabId);
   }
 
+  private paneIndex(index: number): void {
+    const tab = this.model.currentTab();
+    if(!tab)return;
+    const ids=depthFirstPaneIds(tab.layout).filter(id=>{const pane=this.model.panes.get(id);return pane && !pane.virtual;});
+    const id=ids[index-1];
+    if(!id)return;
+    if(tab.zoomedPaneId && tab.zoomedPaneId!==id) {
+      void this.conn.request("pane.zoom",{paneId:id,mode:"off"}).then(()=>this.focusPaneAcrossViews(id)).catch(()=>undefined);
+    } else this.focusPaneAcrossViews(id);
+  }
+
   private tabIndex(index: number): void {
     const workspaceId = this.model.workspaceId;
     if (!workspaceId) return;
@@ -1149,11 +1171,12 @@ export class TuiDispatcher {
    * （行の外なら undefined で何もしない）。落とせるのは同じ入れ物の中の項目の間だけで、落とせないときは知らせる。
    * `layout` を持つサーバには `item.move`、無いサーバには今までの `workspace.move_to`（web の `moveItemByDrag` と同じ）。
    */
+  sidebarDropPlan(source: SidebarDragInfo, target: SidebarDragInfo | undefined) {
+    return planDrop(source, target, { hasServerLayout: this.model.hasServerLayout, sortByName: this.host.prefs.workspaceSort === "name" });
+  }
+
   dropSidebarItem(source: SidebarDragInfo, target: SidebarDragInfo | undefined): void {
-    const plan = planDrop(source, target, {
-      hasServerLayout: this.model.hasServerLayout,
-      sortByName: this.host.prefs.workspaceSort === "name",
-    });
+    const plan = this.sidebarDropPlan(source, target);
     if (plan.kind === "none") return;
     if (plan.kind === "refuse") {
       this.ui.toast(plan.reason);

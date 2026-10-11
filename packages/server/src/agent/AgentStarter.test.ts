@@ -353,10 +353,10 @@ describe("AgentStarter", () => {
       expect(await codeOf(h.starter.start(PARAMS))).toBe("unsupported_agent_shell");
       expect(h.written).toEqual([]);
     }
-    const w = harness({ platform: "win32" });
-    expect(await codeOf(w.starter.start(PARAMS))).toBe("unsupported_agent_shell");
-    expect(w.written).toEqual([]);
-    expect(w.foregroundJob).not.toHaveBeenCalled();
+    const w = harness({ platform: "win32", job:()=>Promise.resolve(idleJob("powershell.exe")) });
+    await w.starter.start(PARAMS);
+    expect(w.written).toHaveLength(2);
+    expect(w.written[1]).toContain("windowsAgentLaunch.js");
   });
 
   it("書き込みが失敗したら予約を解いて agent_start_input_failed", async () => {

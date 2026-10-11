@@ -59,6 +59,22 @@ describe.skipIf(process.platform === "win32")("startHandoffSocket", () => {
     return { requests, stops };
   }
 
+  it("秘密鍵が違う要求は処理せず接続を閉じ、正しい鍵だけを受け付ける", async () => {
+    dir = await makeTempDir("soda-handoff-auth-");
+    const path = handoffSocketPathFor(dir);
+    let calls = 0;
+    socket = await startHandoffSocket(path, {
+      request: async send => { calls++; await send({ok:true,id:"ab",panes:0}); },
+      status: () => ({lastHandoff:null}), stop: async () => undefined,
+    }, new MemoryLogger(), {secret:"a".repeat(64)});
+    for (const secret of [undefined,"b".repeat(64),"short"]) {
+      expect(JSON.parse(await ask(path, JSON.stringify({op:"handoff",secret})+"\n"))).toMatchObject({ok:false});
+    }
+    expect(calls).toBe(0);
+    expect(JSON.parse(await ask(path, JSON.stringify({op:"handoff",secret:"a".repeat(64)})+"\n"))).toMatchObject({ok:true});
+    expect(calls).toBe(1);
+  });
+
   it("状態ディレクトリの handoff.sock を 0600 で待ち受ける", async () => {
     await start({ ok: true, id: "ab", panes: 1 });
     const st = await stat(join(dir, "handoff.sock"));

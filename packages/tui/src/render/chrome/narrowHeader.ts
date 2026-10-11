@@ -8,7 +8,7 @@ import { ATTR } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
 import { glyphFor, stateColor, type ChromeContext } from "./context.js";
-import { MODE_BADGES, statusText } from "./tabBar.js";
+import { modeBadge, statusText } from "./tabBar.js";
 
 /** 1 列表示の上辺の「switch」（押すと選び直しの一覧。herdr の mobile の `mobile_switch`）。 */
 export interface NarrowHeaderHits {
@@ -38,7 +38,7 @@ export function paintNarrowHeader(grid: Grid, rect: Rect, ctx: ChromeContext): N
     ATTR.bold,
   );
   let x = rect.x;
-  const badge = MODE_BADGES[ctx.mode];
+  const badge = modeBadge(ctx);
   if (badge)
     x +=
       grid.text(

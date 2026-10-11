@@ -473,6 +473,7 @@ describe("TabBar — pane D&D のドロップ先", () => {
     const items = wrapper.findAll(".tab-bar-item");
     expect(items[0]!.classes()).not.toContain("tab-bar-item-drop-target");
     expect(items[1]!.classes()).toContain("tab-bar-item-drop-target");
+    expect(wrapper.get(".tab-bar-drop-hint").text()).toContain("ここへ移動");
   });
 
   it("ドラッグしていなければどの tab にもハイライトが付かない", () => {

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { isMainThread, parentPort, workerData } from "node:worker_threads";
+import { WorkerPtyBackend } from "./pty/WorkerPtyBackend.js";
+import { HANDOFF_NONCE_ENV } from "./handoff/HandoffManifest.js";
+import { runWindowsSupervisor } from "./pty/WindowsServerSupervisor.js";
 import { bindFailureHint, defaultStateDir, ConfigError } from "./config.js";
 import { composeServer } from "./composeServer.js";
 import type { RawServeArgs } from "./config.js";
@@ -36,8 +40,18 @@ function printHelp(): void {
   );
 }
 
-async function runServe(args: RawServeArgs): Promise<void> {
-  const server = await composeServer(args);
+async function runServe(args: RawServeArgs, rollbackError?:string): Promise<void> {
+  let preparing = !!process.env[HANDOFF_NONCE_ENV];
+  const broker = !isMainThread && workerData?.sodaSupervisor ? new WorkerPtyBackend() : undefined;
+  const server = await composeServer(args, broker ? {
+    workerPty:broker,
+    retainEditors:()=>broker.retained || preparing,
+    handoffPreflight:()=>new Promise(resolve=>{
+      const id=crypto.randomUUID();const on=(m:{type:string;id:string;ok:boolean})=>{if(m.type==="preflight-result"&&m.id===id){parentPort!.off("message",on);resolve(m.ok?{ok:true}:{ok:false,message:"the updated Windows server could not be loaded"});}};
+      parentPort!.on("message",on);parentPort!.postMessage({type:"preflight",id});
+    }),
+    replaceWorker:nonce=>{broker.retained=true;parentPort!.postMessage({type:"replace",nonce,path:join(server.options.stateDir,"handoff.json")});},
+  } : {});
   const { sessionName, stateDir, sessionSource, portSource } = server.options;
   const sessionInfo =
     sessionName !== undefined
@@ -79,6 +93,18 @@ async function runServe(args: RawServeArgs): Promise<void> {
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => stopper.signal(signal));
   // 制御の socket（handoff.sock）の止める指示（`soda session stop`）も同じ手順で止める。止まる途中の指示は何もしない（AC7）。
   server.onStopRequest((source) => stopper.stopRequest(source));
+  if(broker){
+    const on=async(m:{type:string;nonce?:string;signal?:"SIGINT"|"SIGTERM"|"SIGHUP";error?:string})=>{
+      if(m.type==="commit-replace") preparing=false;
+      else if(m.type==="stop-supervised")stopper.signal(m.signal??"SIGTERM");
+      else if(m.type==="close-for-replace") {
+        try { await server.close(); parentPort!.postMessage({type:"closed-for-replace"}); }
+        catch(error) { parentPort!.postMessage({type:"closed-for-replace",error:String(error)}); }
+      }
+      else if(m.type==="replacement-error"){broker.retained=false;await server.recoverWorkerReplacement("Windows supervisor could not replace the server");}
+      else if(m.type==="rollback-replace"){parentPort!.off("message",on);process.env[HANDOFF_NONCE_ENV]=m.nonce;await runServe(args,m.error);}
+    };parentPort!.on("message",on);
+  }
 
   let listening = false;
   try {
@@ -114,10 +140,13 @@ async function runServe(args: RawServeArgs): Promise<void> {
     for (const line of lines) console.log(line);
     // 更新時の引き継ぎで起動したときの結果（20260926-live-handoff）。
     const handoff = server.handoffResult;
+    if(broker && preparing && !handoff)throw new Error("Windows replacement could not adopt the handoff manifest");
     if (handoff !== undefined) {
       console.log(`soda: handoff complete: ${handoff.adopted} pane(s) kept running`);
       if (handoff.dropped > 0) console.error(`soda: ${handoff.dropped} handed-off pane(s) could not be kept (see server.log)`);
     }
+    if(rollbackError) await server.markWorkerRollback(rollbackError);
+    if(broker) parentPort!.postMessage({type:"server-ready"});
     tokenShown = true; // `startupLines` は作った token を必ず含む（URL が 1 つも無くても）
   } catch (err) {
     showTokenIfUnshown(); // close() を待つ前に表示する
@@ -133,6 +162,8 @@ async function runServe(args: RawServeArgs): Promise<void> {
 const consoleIo: CommandIo = { out: (line) => console.log(line), err: (line) => console.error(line) };
 
 async function main(): Promise<void> {
+  if(!isMainThread && workerData?.sodaProbe){parentPort!.postMessage({type:"probe-ready"});parentPort!.close();return;}
+  if(!isMainThread && workerData?.nonce) process.env[HANDOFF_NONCE_ENV]=workerData.nonce;
   try {
     // 引数の誤り（未知のオプション・値の無いオプション）も ConfigError として終了コード 2 にする（以前は try の外で
     // 投げていたため、スタックトレースつきの終了コード 1 になっていた。D102 の実物の CLI の確認で発見）。
@@ -151,7 +182,8 @@ async function main(): Promise<void> {
         mainPath: process.argv[1]!,
       });
     } else if (parsed.command === "serve") {
-      await runServe(parsed.serve);
+      if(process.platform === "win32" && isMainThread) process.exitCode=await runWindowsSupervisor(new URL("./main.js",import.meta.url),process.argv.slice(2));
+      else await runServe(parsed.serve);
     } else if (parsed.command === "token-reset") {
       await runTokenReset(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
     } else if (parsed.command === "session-list") {

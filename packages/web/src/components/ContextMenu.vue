@@ -196,9 +196,7 @@ const items = computed<MenuItem[]>(() => {
   if (target.kind === "displays") return displaysItems(target.paneId);
   if (target.kind === "display") return displayItems(target.id);
   if (target.kind === "tab") {
-    const tab = session.tabs.get(target.tabId);
     return [
-      { label: "新規", run: () => tab && actions.newTabInWorkspace(tab.workspaceId) },
       { label: "名前の変更", run: () => actions.renameTabById(target.tabId) },
       { label: "閉じる", run: () => actions.closeTabById(target.tabId) },
     ];

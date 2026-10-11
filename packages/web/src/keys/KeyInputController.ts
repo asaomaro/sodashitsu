@@ -16,7 +16,7 @@ export interface FocusPort {
   focusedPaneId(): string | null;
 }
 export interface ModeSink {
-  onModeChange(m: Mode): void;
+  onModeChange(m: Mode, target?: "tab"|"pane"|"workspace"|"agent"): void;
 }
 /**
  * クリップボードの画像の貼り付け（20260927-clipboard-image-paste。`term/ImagePaster` が実装する）。`keys/` は `term/` を import しない（port 越し）。
@@ -87,6 +87,8 @@ export interface PendingModifier {
 export class KeyInputController {
   private action: ActionPort | null = null;
   private focus: FocusPort | null = null;
+  selectNumbers(target: "pane"|"workspace"|"agent"): void { this.router.selectNumbers(target); }
+
   private modeSink: ModeSink | null = null;
   private imagePaste: ImagePastePort | null = null;
   private pendingModifier: PendingModifier | null = null;
@@ -98,7 +100,7 @@ export class KeyInputController {
     private readonly router: KeyRouter,
     private readonly connection: ConnectionPort,
   ) {
-    this.router.onModeChange((m) => this.modeSink?.onModeChange(m));
+    this.router.onModeChange((m,target) => this.modeSink?.onModeChange(m,target));
   }
 
   bind(ports: { action: ActionPort; focus: FocusPort; mode: ModeSink; imagePaste?: ImagePastePort }): void {

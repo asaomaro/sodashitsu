@@ -145,6 +145,7 @@ const EFFECTS: Record<
   toggle_spaces_section: { host: "toggleSidebarSection" },
   toggle_agents_section: { host: "toggleSidebarSection" },
   workspace_picker: { mode: true },
+  number_pane:{mode:true},number_workspace:{mode:true},number_agent:{mode:true},
   goto: { dialog: "goto" },
   new_workspace: {
     rpc: ["workspace.create", { newCwd: { policy: "follow", sourcePaneId: "p1" } }],
@@ -213,7 +214,7 @@ const EFFECTS: Record<
 describe("TuiDispatcher — 全操作の効果（web の 64 操作と同じ RPC・引数・ダイアログ）", () => {
   it("表はカタログの全操作をちょうど覆う", () => {
     expect(Object.keys(EFFECTS).sort()).toEqual(ACTIONS.map((d) => d.id).sort());
-    expect(ACTIONS).toHaveLength(64);
+    expect(ACTIONS).toHaveLength(67);
   });
 
   it.each(ACTIONS.map((d) => [d.id, d as ActionDef] as const))("%s", (id, def) => {

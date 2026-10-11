@@ -1,4 +1,4 @@
-import type { Action, KeyDecision, KeyInput, Mode } from "./actions.js";
+import type { Action, KeyDecision, KeyInput, Mode, NumberTarget } from "./actions.js";
 import { chordOf, chordToKeyInput, isAltGrComposed, MODIFIER_ONLY_KEYS, PREFIX_CANCEL_CHORD } from "./chord.js";
 import type { ResolvedKeymap } from "./keymap.js";
 
@@ -47,7 +47,9 @@ export class KeyRouter {
    * 次の（繰り返しでない）keydown で忘れる。
    */
   private directHeld: string | null = null;
-  private readonly modeListeners = new Set<(m: Mode) => void>();
+  private readonly modeListeners = new Set<(m: Mode, target: NumberTarget) => void>();
+  private selectedNumbers: NumberTarget = "tab";
+  get numberTarget(): NumberTarget { return this.selectedNumbers; }
 
   constructor(
     private keymap: ResolvedKeymap,
@@ -114,7 +116,7 @@ export class KeyRouter {
     this.setModeInternal(m);
   }
 
-  onModeChange(cb: (m: Mode) => void): void {
+  onModeChange(cb: (m: Mode, target: NumberTarget) => void): void {
     this.modeListeners.add(cb);
   }
 
@@ -130,6 +132,7 @@ export class KeyRouter {
     if (action === undefined) return { kind: "pass" };
     if (k.repeat === true) return { kind: "consume" };
     this.directHeld = chord;
+    if (action.type === "selectNumbers") { this.returnMode=this.currentMode; return this.selectNumbers(action.target); }
     if (action.type === "enterMode") this.setModeInternal(action.mode);
     return { kind: "action", action };
   }
@@ -147,7 +150,14 @@ export class KeyRouter {
       this.setModeInternal(this.returnMode);
       return { kind: "consume" };
     }
+    if (this.selectedNumbers !== "tab" && chord !== null && /^[1-9]$/.test(chord)) {
+      const index = Number(chord), target = this.selectedNumbers;
+      this.setModeInternal(this.returnMode);
+      return {kind:"action",action:target === "pane" ? {type:"paneIndex",index} : target === "workspace" ? {type:"workspaceIndex",index} : {type:"focusAgentIndex",index:index-1}};
+    }
     const action = chord === null ? undefined : this.keymap.prefixMap.get(chord);
+    if (action?.type === "selectNumbers") return this.selectNumbers(action.target);
+    if (this.selectedNumbers !== "tab") { this.setModeInternal(this.returnMode); return {kind:"consume"}; }
     if (!action) {
       this.setModeInternal(this.returnMode);
       return { kind: "consume" };
@@ -156,8 +166,19 @@ export class KeyRouter {
     return { kind: "action", action };
   }
 
+  selectNumbers(target: Exclude<NumberTarget,"tab">): KeyDecision {
+    this.clearPrefixTimer();
+    if(this.currentMode!=="prefix")this.returnMode=this.currentMode;
+    this.selectedNumbers=target;
+    if(this.currentMode!=="prefix")this.setModeInternal("prefix");
+    else for(const cb of this.modeListeners)cb("prefix",target);
+    this.prefixTimer=this.clock.setTimeout(()=>{this.prefixTimer=null;this.setModeInternal(this.returnMode);},PREFIX_TIMEOUT_MS);
+    return {kind:"consume"};
+  }
+
   private enterPrefix(): KeyDecision {
     this.returnMode = this.currentMode;
+    this.selectedNumbers="tab";
     this.setModeInternal("prefix");
     this.prefixTimer = this.clock.setTimeout(() => {
       this.prefixTimer = null;
@@ -182,7 +203,8 @@ export class KeyRouter {
   private setModeInternal(m: Mode): void {
     if (this.currentMode === m) return;
     this.currentMode = m;
-    for (const cb of this.modeListeners) cb(m);
+    if(m!=="prefix")this.selectedNumbers="tab";
+    for (const cb of this.modeListeners) cb(m,this.selectedNumbers);
   }
 
   private clearPrefixTimer(): void {

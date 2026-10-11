@@ -1,6 +1,7 @@
 import { createServer, type Socket } from "node:net";
 import { chmod } from "node:fs/promises";
-import { join } from "node:path";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { join, resolve } from "node:path";
 import { listenUnixSocketReplacingStale } from "../agent/AgentReportSocket.js";
 import type { Logger } from "../log/Logger.js";
 import type { HandoffReply, HandoffStatus } from "./HandoffController.js";
@@ -15,7 +16,8 @@ import type { HandoffReply, HandoffStatus } from "./HandoffController.js";
 export const HANDOFF_SOCKET_FILE_NAME = "handoff.sock";
 const MAX_LINE_BYTES = 4096;
 
-export function handoffSocketPathFor(stateDir: string): string {
+export function handoffSocketPathFor(stateDir: string, platform:NodeJS.Platform=process.platform): string {
+  if(platform === "win32") return `\\\\.\\pipe\\sodashitsu-control-${createHash("sha256").update(resolve(stateDir).toLowerCase()).digest("hex").slice(0,32)}`;
   return join(stateDir, HANDOFF_SOCKET_FILE_NAME);
 }
 
@@ -50,8 +52,11 @@ export async function startHandoffSocket(
   path: string,
   handler: HandoffRequestHandler,
   logger: Logger,
+  options:{secret?:string} = {},
 ): Promise<HandoffSocket> {
+  const sockets=new Set<Socket>();
   const server = createServer((sock) => {
+    sockets.add(sock);sock.on("close",()=>sockets.delete(sock));sock.setTimeout(5000,()=>sock.destroy());
     let buf = "";
     let handled = false;
     sock.setEncoding("utf8");
@@ -68,7 +73,8 @@ export async function startHandoffSocket(
       }
       if (nl < 0) return;
       handled = true;
-      void handleLine(buf.slice(0, nl), sock, handler, logger);
+      sock.setTimeout(0);
+      void handleLine(buf.slice(0, nl), sock, handler, logger, options.secret);
     });
   });
   await listenUnixSocketReplacingStale(server, path);
@@ -76,7 +82,7 @@ export async function startHandoffSocket(
   server.on("error", (err) => logger.warn("handoff socket error", { path, error: String(err) }));
   // listen から chmod までの間は umask の権限で見えるが、状態ディレクトリの中なので、そのディレクトリを読める人に限られる（AgentReportSocket と同じ）。
   try {
-    await chmod(path, 0o600);
+    if(!options.secret) await chmod(path, 0o600);
   } catch (err) {
     // 権限を絞れない受け口は置かない（同じ利用者に限る根拠が権限だけのため。decisions D3）。
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -85,7 +91,7 @@ export async function startHandoffSocket(
   return {
     path,
     close(): Promise<void> {
-      return new Promise((resolve) => server.close(() => resolve()));
+      return new Promise((resolve) => {for(const s of sockets)s.destroy();server.close(() => resolve());});
     },
   };
 }
@@ -95,6 +101,7 @@ async function handleLine(
   sock: Socket,
   handler: HandoffRequestHandler,
   logger: Logger,
+  secret?:string,
 ): Promise<void> {
   let op: unknown;
   try {
@@ -103,6 +110,10 @@ async function handleLine(
     op = undefined;
   }
   try {
+  if(secret){
+    let candidate:unknown;try{candidate=(JSON.parse(line) as {secret?:unknown}).secret;}catch{}
+    if(typeof candidate!=="string"||Buffer.byteLength(candidate)!==Buffer.byteLength(secret)||!timingSafeEqual(Buffer.from(candidate),Buffer.from(secret))){await writeLine(sock,{ok:false,reason:"bad_request",message:"unauthenticated control request"});return;}
+  }
     if (op === "status") {
       await writeLine(sock, handler.status());
     } else if (op === "handoff") {

@@ -224,6 +224,7 @@ describe("端末版の通知（組み立て）", () => {
     h.app.model.focusPane("p1");
     done(2);
     await vi.waitFor(() => expect(h.app.notify.queued).toHaveLength(1));
+    h.app.renderNow();expect(h.io.output()).toContain("\x1b]2;🔔 ");
     // 知らせの一覧（全体のメニュー）。
     h.app.ui.openContextMenu({ kind: "global" }, { x: 40, y: 10 });
     h.app.renderNow();
@@ -240,6 +241,7 @@ describe("端末版の通知（組み立て）", () => {
     await vi.waitFor(() => expect(h.app.notify.queued).toHaveLength(1));
     h.io.type("\x02o");
     await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p3"));
+    h.app.renderNow();expect((h.io.output().match(/\x1b\]2;[^\x07\x1b]*(?:\x07|\x1b\\)/g)??[]).at(-1)).not.toContain("🔔");
   });
 
   it("見えているかは今の割り付けで判定する（同じ打鍵の中で移った先の pane の完了は知らせない）", async () => {

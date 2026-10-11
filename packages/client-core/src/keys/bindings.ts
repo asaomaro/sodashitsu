@@ -166,6 +166,8 @@ export const ACTIONS = [
     indexed: true,
     action: (index: number): Action => ({ type: "tabIndex", index }),
   },
+  { id: "number_workspace", label: "番号でworkspaceを選ぶ", group: "workspace / tab", defaults: ["prefix+u"], action: {type: "selectNumbers", target: "workspace"} },
+  { id: "number_agent", label: "番号でagentを選ぶ", group: "workspace / tab", defaults: ["prefix+d"], action: {type: "selectNumbers", target: "agent"} },
   {
     id: "rename_tab",
     label: "tab の名前を変更",
@@ -271,6 +273,7 @@ export const ACTIONS = [
     action: { type: "removeWorktree" },
   },
   // pane
+  { id: "number_pane", label: "番号でペインを選ぶ", group: "pane", defaults: ["prefix+f"], action: {type: "selectNumbers", target: "pane"} },
   {
     id: "split_vertical",
     label: "右へ分割",

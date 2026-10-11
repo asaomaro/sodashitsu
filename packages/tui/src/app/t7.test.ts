@@ -203,7 +203,7 @@ describe("T7 の画面", () => {
     prefs(h, { tabBarPosition: "top", tui: { hideTabBarWhenSingle: true } }, 2);
     h.app.renderNow();
     lines = (await h.screen()).split("\n");
-    expect(lines.join("\n")).not.toContain("1:t1");
+    expect(lines.join("\n")).not.toContain("t1");
     expect(h.app["lastLayout"]!.paneArea).toMatchObject({ y: 0, h: 20 });
     h.io.type("\x02");
     h.app.renderNow();
@@ -213,7 +213,7 @@ describe("T7 の画面", () => {
     await esc(h);
     h.app.prefs.setLocal({ ...h.app.prefs.localState, sidebarCollapsed: true });
     h.app.renderNow();
-    expect(await h.screen()).toContain("1:t1");
+    expect(await h.screen()).toContain("t1");
   });
 
   it("H22：日時を出していれば毎秒描き直す", async () => {

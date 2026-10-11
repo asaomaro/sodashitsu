@@ -46,9 +46,9 @@ describe("AgentForkRunner.preview（読み取りだけ）", () => {
       if (reason !== "unsupported_shell") expect(calls).toEqual([]);
     }
   });
-  it("Windows のサーバは unsupported_shell", async () => {
-    const { runner } = make(pane(), async () => info(), "win32");
-    expect(await runner.preview({ paneId: "p1" })).toMatchObject({ available: false, reason: "unsupported_shell" });
+  it("Windows のPowerShellサーバも fork できる", async () => {
+    const { runner } = make(pane({shell:"powershell.exe"}), async () => info(), "win32");
+    expect(await runner.preview({ paneId: "p1" })).toMatchObject({ available: true });
   });
   it("git のリポジトリでなければ、同じフォルダの fork はできるが worktree はできない（理由つき）", async () => {
     const { runner } = make(pane(), async () => {
@@ -69,4 +69,26 @@ describe("AgentForkRunner.fork（閉じた後は断る。R4）", () => {
     await expect(runner.fork({ paneId: "p1", target: { kind: "worktree", branch: "b" } })).rejects.toMatchObject({ code: "fork_failed" });
     expect(calls).toEqual([]); // git には触れない
   });
+});
+
+describe("fork のエージェント別起動",()=>{
+ it.each(["codex","copilot"] as const)("%s: 元の種類と正しい分岐IDで新しいペインを起動する",async(kind)=>{
+  const freshId="83bdf6b3-e111-42e3-adea-10e1b241cc91";
+  const source=pane({agent:{...agent,kind},agentSession:{kind,sessionId:ID,reportedAt:1}});
+  const next=pane({id:"p2",agent:null,agentSession:null});
+  const starts:unknown[]=[];const clones:unknown[]=[];
+  const runner=new AgentForkRunner({
+   session:{getPane:(id:string)=>id==="p1"?source:next,getTab:()=>({workspaceId:"w1"}),splitPane:async()=>({pane:next}),assertAgentNameAvailable:()=>{},closePane:async()=>{}} as unknown as AgentForkRunnerDeps["session"],
+   worktrees:{} as AgentForkRunnerDeps["worktrees"],
+   terminals:{get:()=>({lastOutputAt:()=>0,mirror:{plainText:()=>""}})} as unknown as AgentForkRunnerDeps["terminals"],
+   starter:{start:async(p)=>{starts.push(p);return {} as never;},isShellAvailable:async()=>true},
+   forkCopilot:async(id,cwd)=>{clones.push([id,cwd]);return freshId;},
+   bus:{subscribe:()=>({dispose:()=>{}}),publish:()=>{}},logger:new MemoryLogger(),timing:{shellMinWaitMs:0,shellQuietMs:0},
+  });
+  try {
+   await runner.fork({paneId:"p1",target:{kind:"same"}});
+   expect(starts).toEqual([expect.objectContaining({kind,paneId:"p2",args:kind==="codex"?["fork",ID,"--cd","/repo/sub"]:["--resume",freshId]})]);
+   expect(clones).toEqual(kind==="copilot"?[[ID,"/repo/sub"]]:[]);
+  } finally {runner.close();}
+ });
 });

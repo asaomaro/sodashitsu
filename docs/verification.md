@@ -62,7 +62,7 @@ pnpm --filter @sodashitsu/e2e test
   pane に前回の画面と「前回のセッションの画面」の区切りの行が出る。付けずに起動すると `session-history.json` を消す（詳しくは
   `docs/tls-setup.md`「画面履歴の保存と再生」）。
 - **更新時の引き継ぎ**（`soda handoff`。Linux・macOS。20260926-live-handoff）：新しい版をビルドしてから `soda handoff` を打つと、pane のプロセスを
-  止めずに動いている `soda serve` がディスク上の soda に入れ替わる（詳しくは `docs/tls-setup.md`「更新時の引き継ぎ」。Windows は非対応・macOS は未検証）。
+  止めずに動いている `soda serve` がディスク上の soda に入れ替わる（詳しくは `docs/tls-setup.md`「更新時の引き継ぎ」。Windowsは親プロセス保持方式に対応・macOSは未検証）。
 - **`soda token reset` は `soda serve` を止めてから**（動いている間は断る。終了コード 2）。
 - **`soda serve` を起動した端末を閉じると soda も終わる**（SIGHUP。`nohup` でも同じ）。検証の途中で端末を閉じるなら
   tmux の中で動かす。
@@ -1653,7 +1653,7 @@ pnpm --filter @sodashitsu/e2e exec playwright test performance agent-detection -
 確かめる途中で出会っても、不具合ではなく今の版の限界として扱うもの（直すなら後続の work）。herdr との機能の差と、確かめずに
 見送った項目は `docs/herdr-parity.md`「未検証のまま見送った項目」。
 
-- **更新時の引き継ぎ（`soda handoff`）**：Windows は非対応、macOS は未検証。引き継いだ pane のシェルは終わるとサーバが終わるまで
+- **更新時の引き継ぎ（`soda handoff`）**：Windowsは親プロセス保持方式に対応（下記の実機チェック）、macOS は未検証。引き継いだ pane のシェルは終わるとサーバが終わるまで
   `<defunct>` で残る。確かめの後に新しい版が起動の途中で落ちると pane のプロセスは終わる（`docs/tls-setup.md`「更新時の引き継ぎ」）。
 - **接続が黙って切れている間（TCP の半開き）に打った文字は、黙って消える**（decisions.md D95）。スマートフォンのスリープ・
   Wi-Fi とモバイル回線の切り替え・ノート PC のスリープ等で、接続が実際には切れているのにブラウザがまだ気づいていない間は、
@@ -1774,3 +1774,19 @@ copy モードの中でも prefix になる）。M7・M11 のマウス報告は�
 - [ ] 古い Claude Code（`--fork-session` を知らない版）・記録が無い id: `failed` で理由が出て、pane は閉じない（偽の `claude` の試験で確認。実機は未確認）。
 
 - 強制モダン（`UI_STYLE_E2E=modern`）で流す E2E（20261008-ui-style PR4〜PR6）: `ui-style-pane-actions`・`tab-dnd`・`sidebar-sections`（クラシックの `.sidebar-section-footer` を探す 1 本〔最下部のボタンの位置〕は、モダンでは出ないので落ちる。元からの前提）・`display-script-noreturn`（幅のつまみの縦の中央に、モダンの境の印があるため 2 本落ちる。元からの前提）。`ui-style-layout` は、最初にクラシックを確かめる試験を含むので、強制モダンでは流さない（既定の環境で流す）。
+
+
+## Windowsの自動起動・fork・handoffの実機チェック（2026-10-11）
+
+WindowsネイティブのNode 24でビルド済みのリポジトリから実行します。一時ディレクトリの状態と偽Claudeを使い、利用者の会話は変更しません。
+
+```powershell
+node scripts/windows-live-check.mjs
+$env:SODA_WINDOWS_CHECK_SHELL = "cmd.exe"
+node scripts/windows-live-check.mjs
+Remove-Item Env:SODA_WINDOWS_CHECK_SHELL
+```
+
+PowerShell・cmdで、自動起動（空引数・引用符・`&`・`%PATH%`の保持）、会話ID報告、別プロセスへのfork、handoff後のペインID・エージェントPID維持、期限切れの引き継ぎ情報の更新、更新先だけを故障させた際の旧サーバ復旧とCLI失敗コード、正常停止を確認しました。ネイティブのプロセス検出モジュールが導入できない環境で、Windows標準CIMへの代替経路も使用しています。実物の各エージェントでの会話分岐、pwshでの実機一巡は別途確認が必要です。
+
+IPCの単体試験では、UTF8を途中で分割したバイト列を変更せず渡すこと、親への未送信分を入力待ち量に含めること、hold完了より前の出力を子へ届けることを確認します。制御パイプ相当の試験では秘密鍵なし・不一致の要求を拒否し、接続を閉じることを確認します。

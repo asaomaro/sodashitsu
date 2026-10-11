@@ -350,10 +350,11 @@ export class DefaultTerminalHost implements TerminalHost {
     if (fd === undefined || this.pty.holdReading === undefined) return undefined;
     this.heldForHandoff = true;
     // 読み取り済みの分は `holdReading` の中で onData（→ ミラー）へ流し切られる。
-    if (!this.pty.holdReading()) {
+    if (!(await this.pty.holdReading())) {
       this.heldForHandoff = false;
       return undefined;
     }
+    if (this.disposed || !this.heldForHandoff) return undefined;
     await this.mirror.flush();
     // 待っている間に pane が終わった（捨てられた）なら、fd は閉じられている——渡さない。
     if (this.disposed) return undefined;

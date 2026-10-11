@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ActionDispatcherKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
 import { isScriptFormat } from "../display/framePage.js";
@@ -6,7 +7,7 @@ import { floatZ } from "../display/floatGeometry.js";
 import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
 import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
 import type { Side as PaneSide2 } from "../display/paneDisplayLayout.js";
-import { paneNameOf } from "@sodashitsu/client-core";
+import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import { getCellSize } from "../term/measure.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSessionStore } from "../store/session.js";
@@ -59,6 +60,12 @@ const props = defineProps<{ paneId: string; enabled?: boolean; presentationOnly?
 const actions = inject(ActionDispatcherKey, undefined);
 const registry = inject(TerminalRegistryKey, undefined);
 const session = props.enabled ? useSessionStore() : null;
+const shortcutNumber = computed(()=>{
+  const tab=view?.tabId ? session?.tabs.get(view.tabId) : undefined;
+  if(!tab || props.presentationOnly)return undefined;
+  const ids=depthFirstPaneIds(tab.layout).filter(id=>{const p=session?.panes.get(id);return p && !p.virtual;});
+  const index=ids.indexOf(props.paneId);return index>=0?index+1:undefined;
+});
 const view = props.enabled ? useViewStore() : null;
 const settings = props.enabled ? useSettingsStore() : null;
 const seen = props.enabled ? useSeenStore() : null;
@@ -532,6 +539,7 @@ function onKeydown(ev: KeyboardEvent): void {
     :aria-current="enabled && selected ? 'true' : undefined"
     :style="padStyle"
   >
+    <ShortcutNumber v-if="enabled && !presentationOnly" :number="shortcutNumber" target="pane" />
     <div
       v-if="enabled && !presentationOnly"
       ref="edge"

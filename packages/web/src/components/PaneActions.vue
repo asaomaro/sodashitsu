@@ -2,7 +2,7 @@
 /**
  * pane の枠の操作ボタン（クラシック・モダン共通。20261008-ui-style PR4 の AC19〜AC22）。［右へ分割］［下へ分割］［最大化／元に戻す］［閉じる］（閉じるは、いちばん右で、少し間を空ける）。
  * 押したときの処理は `PaneFrame` が持つ（今ある操作を呼ぶだけ）。ここは見た目と読み上げの名前だけ。
- * ［情報］（20261010-agent-usage PR4。エージェントの居る pane だけ。`showInfo`）は、分割と最大化の間。そのセッションの利用状況の窓を開く／閉じる。
+ * ［情報］（20261010-agent-usage PR4。エージェントの居る pane だけ。`showInfo`）は、操作ボタンの先頭。そのセッションの利用状況の窓を開く／閉じる。
  *
  * - 置き場所は 2 通り（`variant`）: `row`＝pane の名前の行の右端（いつも見える）、`corner`＝端末の領域の右上の隅（ポインタが載っている間・pane が選ばれている間だけ見える）。
  * - ボタンは Tab の順に入れない（`tabindex="-1"`）。キーボードでは、いまのキー（分割・拡大表示・閉じる）と、pane の枠の Tab・Enter で開くメニューで足りる。
@@ -18,14 +18,6 @@ function keepFocus(ev: MouseEvent): void {
 
 <template>
   <div class="pane-actions" :class="[`pane-actions-${variant}`, { 'pane-actions-selected': selected }]" role="group" :aria-label="`${paneLabel}の操作`" data-pane-actions @mousedown="keepFocus">
-    <template v-if="showSplit">
-      <button type="button" class="pane-actions-btn" tabindex="-1" data-pane-action="split-right" aria-label="右へ分割" title="右へ分割" @click="$emit('split', 'right')">
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 3v10" stroke="currentColor" stroke-width="1.3" /></svg>
-      </button>
-      <button type="button" class="pane-actions-btn" tabindex="-1" data-pane-action="split-down" aria-label="下へ分割" title="下へ分割" @click="$emit('split', 'down')">
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M2 8h12" stroke="currentColor" stroke-width="1.3" /></svg>
-      </button>
-    </template>
     <button
       v-if="showInfo"
       type="button"
@@ -39,6 +31,14 @@ function keepFocus(ev: MouseEvent): void {
     >
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 7.2v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /><circle cx="8" cy="5" r="0.9" fill="currentColor" /></svg>
     </button>
+    <template v-if="showSplit">
+      <button type="button" class="pane-actions-btn" tabindex="-1" data-pane-action="split-right" aria-label="右へ分割" title="右へ分割" @click="$emit('split', 'right')">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 3v10" stroke="currentColor" stroke-width="1.3" /></svg>
+      </button>
+      <button type="button" class="pane-actions-btn" tabindex="-1" data-pane-action="split-down" aria-label="下へ分割" title="下へ分割" @click="$emit('split', 'down')">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M2 8h12" stroke="currentColor" stroke-width="1.3" /></svg>
+      </button>
+    </template>
     <button
       type="button"
       class="pane-actions-btn"

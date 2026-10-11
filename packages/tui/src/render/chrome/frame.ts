@@ -22,8 +22,8 @@ export interface FrameInfo {
 export type PaneButtonAction = "right" | "down" | "info" | "zoom" | "close";
 export function paneButtons(frame: Rect, hasAgent: boolean, zoomed: boolean): {x:number;w:number;action:PaneButtonAction;text:string}[] {
   const actions: [PaneButtonAction,string][] = [
-    ...(frame.w>=22 ? [["right","[│]"],["down","[─]"]] as [PaneButtonAction,string][] : []),
     ...(hasAgent && frame.w>=13 ? [["info","[i]"]] as [PaneButtonAction,string][] : []),
+    ...(frame.w>=22 ? [["right","[│]"],["down","[─]"]] as [PaneButtonAction,string][] : []),
     ["zoom",zoomed?"[↙]":"[□]"],["close","[×]"],
   ];
   if(frame.w<8)return [];

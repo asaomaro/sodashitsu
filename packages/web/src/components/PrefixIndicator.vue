@@ -6,7 +6,7 @@ const view = useViewStore();
 </script>
 
 <template>
-  <div v-if="view.isPrefixWaiting" class="prefix-indicator" role="status">PREFIX</div>
+  <div v-if="view.isPrefixWaiting" class="prefix-indicator" role="status">{{ view.numberTarget === "tab" ? "数字: タブ · f→数字: ペイン · u→数字: PJ · d→数字: Agent" : `${view.numberTarget === "pane" ? "ペイン" : view.numberTarget === "workspace" ? "PJ" : "Agent"}を選択: 1〜9 · Esc: 取消` }}</div>
 </template>
 
 <style scoped>

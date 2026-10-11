@@ -19,6 +19,7 @@ import type { TerminalManager } from "../terminal/TerminalManager.js";
 import { AGENT_PROMPT_SUBMIT_DELAY_MS, pastePayload } from "./agentInput.js";
 import { OTHER_SHELLS, shellNameOf } from "./agentStart.js";
 import { checkForkable, forkArgs, forkNameCandidates, forkNoteText, isSafeNotePath } from "./agentFork.js";
+import { forkCopilotSession } from "./copilotFork.js";
 import type { AgentStarter } from "./AgentStarter.js";
 import { detectedAgent, handsFree, waitForAgent, waitForShellReady } from "./agentWait.js";
 
@@ -37,6 +38,7 @@ export interface AgentForkRunnerDeps {
   /** 新しい pane のノードに、fork の注記を書く（T4）。書けたら true。無ければ書かない。 */
   annotate?: (newPaneId: string, sourcePaneId: string) => Promise<boolean>;
   platform?: NodeJS.Platform;
+  forkCopilot?: typeof forkCopilotSession;
   /** 待ちの長さ（テストで縮める）。 */
   timing?: Partial<ForkTiming>;
 }
@@ -91,9 +93,9 @@ export class AgentForkRunner {
     this.aborter.abort();
   }
 
-  /** 元の pane のシェルが、起動に使えない種類（fish・pwsh など）か、Windows のサーバか。作る前に断るための確かめ（S5）。 */
+  /** 元のpaneのシェルが起動に使えない種類か。WindowsではPowerShell・pwsh・cmdも対応する。作る前に断るための確かめ（S5）。 */
   protected shellUnsupported(shell: string): boolean {
-    if (this.platform === "win32") return true;
+    if (this.platform === "win32" && ["powershell", "pwsh", "cmd"].includes(shellNameOf(shell))) return false;
     return shell !== "" && OTHER_SHELLS.has(shellNameOf(shell));
   }
 
@@ -277,10 +279,15 @@ export class AgentForkRunner {
     // 5. 起動。固定の表の実行ファイルと、既存の引用の関数だけを使う（`--resume <id> --fork-session`）。
     let usedName = name;
     try {
-      usedName = await this.start(newPaneId, name, sourceAgent.name, sourcePaneId, sessionId);
+      const forkId = sourceAgent.kind === "copilot"
+        ? await (this.deps.forkCopilot ?? forkCopilotSession)(sessionId, session.getPane(newPaneId)!.cwd, this.aborter.signal)
+        : sessionId;
+      const current = checkForkable(session.getPane(sourcePaneId));
+      if (!current.ok || current.agent.instanceId !== sourceInstance || current.sessionId !== sessionId) throw new RpcError("fork_failed", SOURCE_AGENT_CHANGED);
+      usedName = await this.start(newPaneId, name, sourceAgent.name, sourcePaneId, forkId, sourceAgent.kind);
     } catch (err) {
       await this.discardIfSame(!worktree, newPaneId);
-      throw this.stopped(`起動のコマンドを打ち込めませんでした（${err instanceof RpcError ? err.code : "error"}）`, created, !worktree, sourcePaneId, newPaneId);
+      throw this.stopped(err instanceof RpcError ? `起動できませんでした: ${err.message}` : "起動のコマンドを打ち込めませんでした", created, !worktree, sourcePaneId, newPaneId);
     }
     let annotated = false;
     try {
@@ -289,7 +296,7 @@ export class AgentForkRunner {
       this.deps.logger.warn("agent.fork: annotate failed", { error: String(err) });
     }
     this.progress({ sourcePaneId, paneId: newPaneId, stage: "launched", noteStatus, ...(noteReason ? { noteReason } : {}), created });
-    void this.continueInBackground({ sourcePaneId, newPaneId, created, noteText, noteStatus, sourceSessionId: sessionId }).catch((err) => {
+    void this.continueInBackground({ sourcePaneId, newPaneId, created, noteText, noteStatus, sourceSessionId: sessionId, kind: sourceAgent.kind }).catch((err) => {
       this.deps.logger.warn("agent.fork: background failed", { error: String(err) });
     });
     return {
@@ -318,11 +325,11 @@ export class AgentForkRunner {
   }
 
   /** 起動のコマンドを打ち込む。名前が取り合いで取られたときだけ、次の候補で 3 回までやり直す。 */
-  private async start(newPaneId: string, firstName: string, sourceName: string | undefined, sourcePaneId: string, sessionId: string): Promise<string> {
+  private async start(newPaneId: string, firstName: string, sourceName: string | undefined, sourcePaneId: string, sessionId: string, kind: string): Promise<string> {
     let name = firstName;
     for (let attempt = 0; ; attempt++) {
       try {
-        await this.deps.starter.start({ name, kind: "claude", paneId: newPaneId, args: forkArgs(sessionId) }, undefined, { skipInterrupt: true });
+        await this.deps.starter.start({ name, kind, paneId: newPaneId, args: forkArgs(sessionId, kind, this.deps.session.getPane(newPaneId)?.cwd) }, undefined, { skipInterrupt: true });
         return name;
       } catch (err) {
         if (!(err instanceof RpcError) || err.code !== "agent_name_taken" || attempt >= 2) throw err;
@@ -349,7 +356,7 @@ export class AgentForkRunner {
   }
 
   /** 検知 → 手が空く → 最初の知らせ。応答の後に裏で続け、進み具合をできごとで配る。 */
-  private async continueInBackground(ctx: { sourcePaneId: string; newPaneId: string; created: ForkCreated; noteText: string | null; noteStatus: ForkNoteStatus; sourceSessionId: string }): Promise<void> {
+  private async continueInBackground(ctx: { sourcePaneId: string; newPaneId: string; created: ForkCreated; noteText: string | null; noteStatus: ForkNoteStatus; sourceSessionId: string; kind: string }): Promise<void> {
     const { sourcePaneId, newPaneId, created } = ctx;
     let noteStatus = ctx.noteStatus;
     let noteReason: string | undefined;
@@ -364,7 +371,7 @@ export class AgentForkRunner {
     };
     const signal = this.aborter.signal;
     // 検知。
-    const detected = await waitForAgent(waitDeps, newPaneId, detectedAgent("claude"), this.timing.detectMs, signal);
+    const detected = await waitForAgent(waitDeps, newPaneId, detectedAgent(ctx.kind), this.timing.detectMs, signal);
     if (!detected.ok) {
       if (detected.reason === "aborted") return;
       const message = detected.reason === "pane_closed" ? "新しい pane が閉じられました" : this.launchFailureReason(newPaneId);
@@ -378,9 +385,9 @@ export class AgentForkRunner {
     if (detected.value.kind === "kind_mismatch") {
       if (noteStatus === "pending") {
         noteStatus = "skipped";
-        noteReason = "起動したのが Claude Code ではなかったため、送っていません";
+        noteReason = "起動したエージェントの種類が違ったため、送っていません";
       }
-      emit("failed", { code: "fork_failed", message: `Claude Code ではない ${detected.value.found} が検出されました` });
+      emit("failed", { code: "fork_failed", message: `期待した ${ctx.kind} と異なる ${detected.value.found} が検出されました` });
       return;
     }
     const instanceId = detected.value.agent.instanceId;
@@ -437,7 +444,7 @@ export class AgentForkRunner {
       if (!again || again.instanceId !== instanceId) continue;
       if (again.state !== "idle") continue;
       // 知らせを送るときは、入力欄が出ている証拠を待つ。idle は確認の画面が描かれる前にも成り立つため（R2）。
-      if (wantNote && !this.promptReady(newPaneId, ctx.sourceSessionId)) continue;
+      if (wantNote && !this.promptReady(newPaneId, ctx.sourceSessionId, ctx.kind)) continue;
       break;
     }
     emit("ready");
@@ -460,9 +467,11 @@ export class AgentForkRunner {
    * (a) 画面の末尾に入力欄の行（`❯`。`live_prompt_box` と同じ信号）があり、確認の文言（esc to cancel・enter to confirm）が無い、
    * または (b) 元と違う会話の id が報告された（フックは確認の後に走る。フックの matcher が古いと届かないので、(a) と並ぶ）。
    */
-  private promptReady(paneId: string, sourceSessionId: string): boolean {
+  private promptReady(paneId: string, sourceSessionId: string, kind: string): boolean {
     const reported = this.deps.session.getPane(paneId)?.agentSession?.sessionId;
     if (reported !== undefined && reported !== sourceSessionId) return true;
+    // Claude 以外はシェルの記号を入力欄と取り違えないよう、新しい会話IDの報告を待つ。
+    if (kind !== "claude") return false;
     const text = this.deps.terminals.get(paneId)?.mirror.plainText() ?? "";
     // 起動に打った行（`--fork-session` を含む最後の行）より後ろだけを見る。シェルのプロンプトが `❯` の利用者では、その行（`❯ claude --resume … --fork-session`）
     // 自体が入力欄の行に見えるため。見つからなければ（スクロールで消えた）、末尾をそのまま見る。
@@ -497,8 +506,8 @@ export class AgentForkRunner {
     const tail = (this.deps.terminals.get(paneId)?.mirror.plainText() ?? "").slice(-4000);
     if (/No conversation found/i.test(tail))
       return "会話の記録が見つかりません（Claude Code の設定の場所〔CLAUDE_CONFIG_DIR〕が違うか、親の Claude Code の環境変数〔CLAUDE_CODE_*〕を引き継いでいる可能性があります。後者は、soda serve を Claude Code の中から起動したときに起きます）";
-    if (/unknown option|unrecognized option|Unknown argument/i.test(tail)) return "この Claude Code は、会話の fork（--fork-session）に対応していない版のようです";
-    if (/command not found/i.test(tail)) return "claude コマンドが見つかりません";
+    if (/unknown option|unrecognized option|Unknown argument/i.test(tail)) return "この CLI は、会話の fork の起動引数に対応していない版のようです";
+    if (/command not found/i.test(tail)) return "エージェントのコマンドが見つかりません";
     return "エージェントが検出されませんでした（画面を確かめてください）";
   }
 }

@@ -18,6 +18,9 @@ export interface ChromeContext {
   theme: ThemeColors;
   /** キーのモード（prefix 待ちなら tab バーに `PREFIX`）。 */
   mode: Mode;
+  numberTarget?: "tab"|"pane"|"workspace"|"agent";
+  numberWorkspaceIds?: readonly string[];
+  numberAgentIds?: readonly string[];
   connection: ConnectionState;
   /** 右上に出す知らせ（初回の token 等。無ければ null）。 */
   notice: string | null;
@@ -32,6 +35,9 @@ export interface ChromeContext {
   sidebarScroll?: SidebarScroll;
   /** tab バーのあふれたときの表示の位置（同上）。 */
   tabScroll?: TabScroll;
+  dropTabId?: string | undefined;
+  dragNotice?: string | undefined;
+  sidebarDrag?: import("../../input/mouse.js").MouseController["sidebarFeedback"];
 }
 
 /**

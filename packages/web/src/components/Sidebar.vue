@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { AgentInfo, ItemTarget, Workspace } from "@sodashitsu/protocol";
 import { ActionDispatcherKey, ConnectionKey, TerminalRegistryKey } from "../injection.js";
@@ -352,6 +353,8 @@ function textTokenAttrs(t: { token: string; style: Parameters<typeof tokenStyleA
 }
 
 /** 並び順の表示名。内部の値（`grouped` / `priority`）をそのまま出さない（decisions.md D6）。 */
+const workspaceNumbers=computed(()=>new Map(spaces.value.filter(r=>r.workspace).map((r,i)=>[r.workspace!.id,i+1])));
+const agentNumbers=computed(()=>new Map(agents.value.map((a,i)=>[a.pane.id,i+1])));
 const AGENT_SORT_LABEL: Record<AgentSort, string> = { grouped: "グループ順", priority: "優先度順" };
 
 const agents = computed(() => {
@@ -989,7 +992,8 @@ watchDragInterrupt(view, () => {
                 <StateIcon v-if="i === 0 && !row.workspace" class="sidebar-state-icon sidebar-group-state" :state="row.state" />
                 <!-- 種類の印（グループの見出し・worktree グループの先頭の行と子）。「グループなし」には付けない。畳んだサイドバーではアイコンだけ。 -->
                 <SidebarKindIcon v-if="i === 0 && (row.kind === 'group' || row.kind === 'worktreeHead' || row.kind === 'worktreeChild')" :kind="row.kind === 'group' ? 'group' : 'worktreeGroup'" :compact="view.sidebarCollapsed" />
-                <template v-if="line === null">
+                <ShortcutNumber v-if="row.workspace && i === 0" :number="workspaceNumbers.get(row.workspace.id)" target="workspace" />
+              <template v-if="line === null">
                   <StateIcon v-if="row.workspace" class="sidebar-state-icon" :state="row.state" />
                   <span v-if="!view.sidebarCollapsed" class="sidebar-label" :class="{ 'sidebar-group-label': !row.workspace }">{{ row.workspace ? row.workspace.label : row.groupLabel }}</span>
                   <span v-if="!view.sidebarCollapsed && !row.workspace" class="sidebar-group-rule" aria-hidden="true" />
@@ -1070,6 +1074,7 @@ watchDragInterrupt(view, () => {
       <!-- `tabindex="-1"` と `data-agent-pane` は、一覧のダイアログを閉じたときのフォーカスの戻り先（ボタンが無ければ行。20261004-subagent-display）。Tab の順には入れない。 -->
       <div v-for="{ pane, workspace, state, lines, agent } in agents" :key="pane.id" class="sidebar-row" tabindex="-1" :data-agent-pane="pane.id" @click="focusPane(pane.id, pane.tabId, workspace?.id ?? '')">
         <!-- 畳んだサイドバーは今までどおり状態の印だけ（20260927-sidebar-row-tokens）。 -->
+        <ShortcutNumber :number="agentNumbers.get(pane.id)" target="agent" />
         <div v-if="view.sidebarCollapsed" class="sidebar-row-line1">
           <StateIcon class="sidebar-state-icon" :state="state" />
         </div>
@@ -1217,6 +1222,7 @@ watchDragInterrupt(view, () => {
   padding-block: 0.1em;
 }
 :root[data-ui-style="modern"] .sidebar:not(.sidebar-collapsed) .sidebar-row {
+  position: relative;
   padding-block: 0.2em;
   gap: 0.1em;
 }
@@ -1273,6 +1279,7 @@ watchDragInterrupt(view, () => {
   overflow: visible;
 }
 .sidebar-row {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.2em;
@@ -1682,33 +1689,13 @@ watchDragInterrupt(view, () => {
 .sidebar-edge-toggle:hover .sidebar-edge-toggle-mark {
   background: var(--soda-menu-hover-bg, #343746);
 }
-/* 畳んだサイドバーは `overflow-x: hidden` で外へはみ出せない。印は nav の内側の右端に、同じ縦の中央で置く。 */
-.sidebar-collapsed .sidebar-edge-toggle {
-  right: 0;
-  /* 畳んだ幅（48px）では、行の印（左から約 13〜29px）に重ならないよう、当たりを右の 18px に絞る（広い幅では 24px）。 */
-  width: 18px;
-}
-.sidebar-collapsed .sidebar-edge-toggle-mark {
-  width: 16px;
-  height: 16px;
-}
-/* モダンでは開く印も罫線をまたぐ。スクロールは内側の一覧が受け持つ。 */
-:root[data-ui-style="modern"] .sidebar-collapsed {
-  overflow: visible;
-}
-:root[data-ui-style="modern"] .sidebar-collapsed .sidebar-sections {
+/* 開閉とも罫線上に配置する。畳んだ一覧だけをスクロールさせ、印を切らない。 */
+.sidebar-collapsed { overflow: visible; }
+.sidebar-collapsed .sidebar-sections {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-}
-:root[data-ui-style="modern"] .sidebar-collapsed .sidebar-edge-toggle {
-  right: -12px;
-  width: 24px;
-}
-:root[data-ui-style="modern"] .sidebar-collapsed .sidebar-edge-toggle-mark {
-  width: 18px;
-  height: 18px;
 }
 .sidebar-divider {
   position: absolute;

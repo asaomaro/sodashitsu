@@ -238,8 +238,8 @@ describe("右クリックのメニュー（M3）", () => {
     s.screen();
     s.overlays.handleMouse({ action: "up", button: 2, x: 12, y: 6 });
     expect(s.ui.contextMenu).not.toBeNull();
-    s.overlays.handleMouse({ action: "down", button: 0, x: 12, y: 7 });
-    s.overlays.handleMouse({ action: "up", button: 0, x: 12, y: 7 });
+    s.overlays.handleMouse({ action: "down", button: 0, x: 12, y: 6 });
+    s.overlays.handleMouse({ action: "up", button: 0, x: 12, y: 6 });
     expect(s.ui.dialogContext).toEqual({ kind: "renameTab", tabId: "t1", currentLabel: "t1" });
     s.ui.closeDialog();
     s.ui.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
@@ -590,4 +590,14 @@ describe("入力欄の Alt+B・Alt+F（readline。04 review）", () => {
     expect(input.cursor).toBe(7); // bar の終わり
     expect(input.value).toBe("foo bar-baz qux");
   });
+});
+
+it("ペインのメニューからfork・利用状況を開き、タブには新規を重複表示しない",()=>{
+ const s=setup(snapshot());const p=s.model.panes.get("p1")!;
+ p.agent={instanceId:"a1",kind:"codex",label:"Codex",state:"idle",completionSeq:0,serverSeenSeq:0,verified:true,since:0};
+ s.ui.openContextMenu({kind:"pane",paneId:"p1"},{x:0,y:0});
+ const items=menuItems(s.ui.contextMenu!,{ui:s.ui,model:s.model,actions:s.actions});
+ items.find(i=>i.label==="エージェントを fork…")!.run();expect(s.ui.dialogContext).toEqual({kind:"agentFork",paneId:"p1"});
+ s.ui.closeDialog();items.find(i=>i.label==="利用状況…")!.run();expect(s.ui.dialogContext).toEqual({kind:"usage",paneId:"p1"});
+ s.ui.closeDialog();s.ui.openContextMenu({kind:"tab",tabId:"t1"},{x:0,y:0});expect(menuItems(s.ui.contextMenu!,{ui:s.ui,model:s.model,actions:s.actions}).map(i=>i.label)).toEqual(["名前の変更","閉じる"]);
 });

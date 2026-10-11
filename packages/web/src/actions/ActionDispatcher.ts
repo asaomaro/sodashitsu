@@ -149,6 +149,10 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
       case "tabDelta":
         this.tabDelta(action.delta);
         return;
+      case "selectNumbers": this.keys.selectNumbers(action.target); return;
+      case "paneIndex":
+        this.paneIndex(action.index);
+        return;
       case "tabIndex":
         this.tabIndex(action.index);
         return;
@@ -1144,6 +1148,17 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     const idx = ws.tabIds.indexOf(tab.id);
     const nextTabId = ws.tabIds[(idx === -1 ? 0 : idx + delta + ws.tabIds.length) % ws.tabIds.length];
     if (nextTabId) this.switchToTab(ws.id, nextTabId);
+  }
+
+  private paneIndex(index: number): void {
+    const tab = this.view.tabId ? this.session.tabs.get(this.view.tabId) : undefined;
+    if(!tab)return;
+    const ids=depthFirstPaneIds(tab.layout).filter(id=>{const pane=this.session.panes.get(id);return pane && !pane.virtual;});
+    const id=ids[index-1];
+    if(!id)return;
+    if(tab.zoomedPaneId && tab.zoomedPaneId!==id) {
+      void this.conn.request("pane.zoom",{paneId:id,mode:"off"}).then(()=>this.focusPaneAcrossViews(id)).catch(()=>undefined);
+    } else this.focusPaneAcrossViews(id);
   }
 
   private tabIndex(index: number): void {

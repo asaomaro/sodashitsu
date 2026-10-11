@@ -1,3 +1,4 @@
+import { controlSecret } from "./handoff/windowsControl.js";
 import { createAgentKindsLister } from "./agent/agentKinds.js";
 import { X509Certificate } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -136,6 +137,8 @@ export interface ComposedServer {
   close(): Promise<void>;
   /** 更新時の引き継ぎ（20260926-live-handoff）で起動したときの結果（`listen()` の後。引き継ぎでない起動は undefined）。 */
   readonly handoffResult: HandoffResult | undefined;
+  recoverWorkerReplacement(message:string):Promise<void>;
+  markWorkerRollback(message:string):void;
   /**
    * 制御の socket（`handoff.sock`）の止める指示（`soda session stop`。20260927-session-stop）を受けたときに呼ぶものを登録する。`main.ts` が停止の手順を渡す。
    * 登録しなければ止める指示は `unsupported` で断る（smoke・テストで組み立てだけを使うとき）。呼ぶのは 1 回だけ（止まる途中の指示は呼ばずに答える）。
@@ -190,6 +193,9 @@ export async function composeServer(
      * 差し替えなければ本物の `process.execve`（成功すればこのプロセスを置き換える）。
      */
     handoffExecve?: (nonce: string) => void;
+    workerPty?: import("./pty/WorkerPtyBackend.js").WorkerPtyBackend;
+    replaceWorker?: (nonce:string)=>void;
+    retainEditors?: ()=>boolean;
     /** 保存した SSH のマシンへの ssh の起動の差し替え（結合テストがリモートの bridge.sock へ直接繋ぐ偽の子を渡す。20260927-multi-host-machines）。 */
     machineSpawn?: SpawnFn;
     /** ファイルを開く係の差し替え（結合テスト・E2E が実物のアプリを起動させない）。 */
@@ -251,7 +257,7 @@ export async function composeServer(
   const palettes = createPaletteSource();
   // シェルの場所の知らせ（20260928-windows-pane-cwd の D-6）：pane を開くたびに共有の設定 `shellCwdTracking` の今の値を読む（boolean の false のときだけ切。
   // client-core の `loadShellCwdTracking` と同じ規則）。`prefs` は下で作る——読むのは pane を開くとき（`listen()` で読み込んだ後）。
-  const terminals = new DefaultTerminalManager(new NodePtyBackend(), processInspector, options.scrollbackLines, palettes.paletteFor, palettes.appearanceFor, {
+  const terminals = new DefaultTerminalManager(internal.workerPty ?? new NodePtyBackend(), processInspector, options.scrollbackLines, palettes.paletteFor, palettes.appearanceFor, {
     platform: platform(),
     enabled: () => prefs.get().prefs.shellCwdTracking !== false,
   });
@@ -704,6 +710,7 @@ export async function composeServer(
       paneSocket.resume();
     },
     flushLog: () => logger.flush(),
+    ...(internal.replaceWorker ? {replaceWorker:internal.replaceWorker} : {}),
     preflight: internal.handoffPreflight ?? (() => runPreflight()),
     // 同じ Node・同じ引数（ディスク上の同じ入口）で自分を置き換える。PTY の master は close-on-exec が無いので残る（research F2.2）。
     execve:
@@ -761,6 +768,8 @@ export async function composeServer(
     get freshToken(): string | undefined {
       return freshToken;
     },
+    markWorkerRollback:message=>handoff.markWorkerRollback(message),
+    recoverWorkerReplacement:message=>handoff.recoverWorkerReplacement(message),
     get handoffResult(): HandoffResult | undefined {
       return handoffResult;
     },
@@ -782,7 +791,7 @@ export async function composeServer(
       }
       // 0''. 更新時の引き継ぎ（20260926-live-handoff）の受け取り。環境変数と handoff.json は使っても使わなくても消す（AC8）。
       //      自分で PTY を開く（復元）より前に行う——壊れた受け渡しのときに、このプロセスに残った master を閉じるため。
-      const taken = await takeHandoff(options.stateDir, process.env).catch((err: unknown): { kind: "broken"; reason: string } => ({
+      const taken = await takeHandoff(options.stateDir, process.env, internal.workerPty ? {isPtyMaster:fd=>internal.workerPty!.valid(fd)} : {}).catch((err: unknown): { kind: "broken"; reason: string } => ({
         kind: "broken",
         reason: err instanceof Error ? err.message : String(err),
       }));
@@ -793,7 +802,7 @@ export async function composeServer(
       }
       if (taken.kind === "taken") {
         // 確かめに通らなかった fd は、自分で PTY を開く前に手放す——後にすると、同じ番号を新しいシェルの master が使っていて、それを閉じてしまう。
-        if (taken.rejected.length > 0) discardRejectedPanes(taken.rejected, { logger });
+        if (taken.rejected.length > 0) discardRejectedPanes(taken.rejected, { logger, ...(internal.workerPty ? {isPtyMaster:()=>false} : {}) });
         // 受け渡しに載らなかった master（古い版で読み取りを止めた後に作られた pane 等）も、見えないシェルとして残さない（Linux）。
         // これも PTY を開く前に行う——この時点でこのプロセスにある master は古い版から残ったものだけなので、受け渡しの fd 以外を閉じればよい
         // （復元の後だと、閉じかけの端末の fd と取り違えうる。review ラウンド 1）。
@@ -903,7 +912,7 @@ export async function composeServer(
           const finished = takenPending;
           takenPending = undefined; // 以後の失敗で二度閉じない
           if (loaded.kind !== "ok") logger.error("handoff: session.json could not be restored; closing the handed-off terminals");
-          handoffResult = finishTakenHandoff(finished, adoptedPaneIds, { logger });
+          handoffResult = finishTakenHandoff(finished, adoptedPaneIds, { logger, ...(internal.workerPty ? {closeFd:(fd:number)=>internal.workerPty!.discard(fd),kill:()=>{}} : {}) });
           await session.adoptScrollbackEditors(finished.scrollbackEditors, adoptedPaneIds);
           handoff.recordTaken(handoffResult);
         }
@@ -940,8 +949,8 @@ export async function composeServer(
         agentMonitor.start();
         // 4.5. 更新時の引き継ぎの指示の受け口（Linux/macOS。20260926-live-handoff）。復元と poller の開始の後に置く——起動の途中の指示で、
         //      復元の途中の session.json を保存したり、まだ始めていない poller を「再開」したりしないため。置けなくても起動は続ける。
-        if (platform() !== "win32") {
-          handoffSocket = await startHandoffSocket(handoffSocketPathFor(options.stateDir), control, logger).catch((err: unknown) => {
+        if (platform() !== "win32" || internal.workerPty) {
+          handoffSocket = await startHandoffSocket(handoffSocketPathFor(options.stateDir), control, logger, internal.workerPty ? {secret:await controlSecret(options.stateDir,true)} : {}).catch((err: unknown) => {
             logger.warn("cannot start the handoff socket; live handoff is unavailable", { error: err instanceof Error ? err.message : String(err) });
             return undefined;
           });
@@ -995,7 +1004,7 @@ export async function composeServer(
         if (bridgeListening) await bridgeEndpoint.close();
         await localLogin.stop();
         // 引き継いだのに使う前に失敗した PTY は手放す（見えないプロセスを残さない）。
-        if (takenPending !== undefined) discardHandedOffPanes(takenPending.panes, { logger }); // 復元に入る前の失敗だけ
+        if (takenPending !== undefined) discardHandedOffPanes(takenPending.panes, { logger, ...(internal.workerPty ? {closeFd:(fd:number)=>internal.workerPty!.discard(fd),kill:()=>{}} : {}) }); // 復元に入る前の失敗だけ
         await lock.release();
         throw err;
       }
@@ -1056,6 +1065,21 @@ export async function composeServer(
         await bridgeEndpoint.close();
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
+        if(internal.workerPty) {
+          // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
+          // 旧待ち受け・周期処理を残して新サーバと競合させない。
+          graphEngine.stop();lineage.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
+          usageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
+          remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
+          await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
+          await graph.close().catch(()=>undefined);
+          wsServer.setReady(false);bridgeEndpoint.setReady(false);
+          wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
+          await agentReportSocket?.close().catch(()=>undefined);
+          await new Promise<void>(resolve=>httpServer.server.close(()=>resolve()));
+          for(const pane of session.snapshot().panes)terminals.dispose(pane.id);
+          internal.workerPty.dispose();
+        }
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
         commands.dispose();
         // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
@@ -1074,7 +1098,7 @@ export async function composeServer(
         dropSweeper?.stop();
         await fileUploads.dispose(); // 受け取り中のファイルの書きかけを消してから（ロックを放す前に）
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
-        await session.disposeScrollbackEditors();
+        if(!internal.retainEditors?.()) await session.disposeScrollbackEditors();
         // 制御の socket はロックを放す直前まで開けておく——止まる途中に届いた 2 回目の `soda session stop` が「既に止まる途中」と答えを受けて待てる
         // （20260927-session-stop の decisions D4）。止まる途中の引き継ぎは `beginClosing` で断っている。
         // （`HandoffSocket.close()` は今は reject しないが、将来 reject してもロックを残さないよう握る）

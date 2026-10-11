@@ -83,10 +83,10 @@ const LEGACY_DEFAULT_PREFIX_MAP: ReadonlyArray<readonly [string, Action]> = [
 ];
 
 describe("既定の表は旧 DEFAULT_KEYMAP と 1:1（AC1・AC2）", () => {
-  it("prefix の後のキーが 52 個、旧表を固定した値と完全に一致する", () => {
+  it("旧表の52キーを維持し、番号選択の3キーだけ追加する", () => {
     expect(LEGACY_DEFAULT_PREFIX_MAP).toHaveLength(52);
     expect([...DEFAULT_KEYMAP.prefixMap.entries()].sort(([a], [b]) => a.localeCompare(b))).toEqual(
-      [...LEGACY_DEFAULT_PREFIX_MAP]
+      [...LEGACY_DEFAULT_PREFIX_MAP, ["f", {type:"selectNumbers",target:"pane"}], ["u", {type:"selectNumbers",target:"workspace"}], ["d", {type:"selectNumbers",target:"agent"}]]
         .map(([k, v]) => [k, v])
         .sort(([a], [b]) => (a as string).localeCompare(b as string)),
     );
@@ -391,6 +391,6 @@ describe("resolveKeymap — edit_scrollback（20260926-edit-scrollback。「後�
   it("prefix が alt+e でも、e（修飾が違う別の chord）は edit_scrollback のまま", () => {
     const { keymap } = resolveKeymap(prefs({ prefix: "alt+e" }));
     expect(keymap.prefixMap.get("e")).toEqual({ type: "editScrollback" });
-    expect(keymap.prefixMap.size).toBe(52);
+    expect(keymap.prefixMap.size).toBe(55);
   });
 });

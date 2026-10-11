@@ -154,16 +154,16 @@ describe("ContextMenu — pane", () => {
 });
 
 describe("ContextMenu — tab", () => {
-  it("新規・名前の変更・閉じるの 3 項目", () => {
+  it("名前の変更・閉じるの 2 項目", () => {
     const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
     session.tabUpserted(makeTab("t1", "w1"));
     view.openContextMenu({ kind: "tab", tabId: "t1" }, { x: 0, y: 0 });
     const wrapper = mountMenu(makeActions());
-    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["新規", "名前の変更", "閉じる"]);
+    expect(wrapper.findAll("li").map((li) => li.text())).toEqual(["名前の変更", "閉じる"]);
   });
 
-  it("「新規」はその tab の workspace を対象にする", async () => {
+  it("「名前の変更」はその tab を対象にする", async () => {
     const session = useSessionStore(pinia);
     const view = useViewStore(pinia);
     session.tabUpserted(makeTab("t1", "w9"));
@@ -171,7 +171,7 @@ describe("ContextMenu — tab", () => {
     const actions = makeActions();
     const wrapper = mountMenu(actions);
     await wrapper.findAll("li")[0]!.trigger("click");
-    expect(actions.newTabInWorkspace).toHaveBeenCalledWith("w9");
+    expect(actions.renameTabById).toHaveBeenCalledWith("t1");
   });
 });
 

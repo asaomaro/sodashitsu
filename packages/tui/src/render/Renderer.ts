@@ -1,5 +1,5 @@
 import { shortId } from "@sodashitsu/protocol";
-import { paneNameOf } from "@sodashitsu/client-core";
+import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import type { LayoutResult, PaneBox } from "../layout/computeLayout.js";
 import type { PaneRegistry } from "../term/PaneRegistry.js";
 import type { PaneTerminal } from "../term/PaneTerminal.js";
@@ -104,6 +104,8 @@ export class Renderer {
         : null;
     const painted = new Map<string, string>();
     let cursor: CursorState | null = null;
+    const tab = model.currentTab();
+    const numberedPanes = tab ? depthFirstPaneIds(tab.layout).filter(id=>{const p=model.panes.get(id);return p && !p.virtual;}) : [];
     for (const box of layout.panes) {
       const pane = model.panes.get(box.paneId);
       const term = panes.get(box.paneId);
@@ -113,7 +115,7 @@ export class Renderer {
         box.frame,
         {
           // エージェント名を枠に出すか（共有の設定 `paneAgentNameVisible`。herdr の show_agent_labels_on_pane_borders）。
-          name: pane ? frameNameOf(pane, ctx.prefs.paneAgentNameVisible) : box.paneId,
+          name: (ctx.mode === "prefix" && numberedPanes.indexOf(box.paneId)>=0 && numberedPanes.indexOf(box.paneId)<9 ? `${numberedPanes.indexOf(box.paneId)+1}: ` : "") + (pane ? frameNameOf(pane, ctx.prefs.paneAgentNameVisible) : box.paneId),
           state: pane ? model.displayStateOf(pane) : null,
           focused,
           cropped: term ? isCropped(term, box.content) : false,

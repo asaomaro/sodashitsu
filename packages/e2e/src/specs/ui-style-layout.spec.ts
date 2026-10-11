@@ -103,6 +103,60 @@ test("たたむ・広げるの印: 境の線の縦の中央にある。押すと
   client.close();
 });
 
+test("クラシックの罫線上の開閉: 境の線の縦の中央にある。押すと畳み・広がる。印の上では幅のドラッグが始まらず、つまみの別の場所では今までどおり動く。畳んだ状態にも同じ印", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  await client.request("prefs.set", { patch: { uiStyle: "classic" } });
+  await open(page, appServer);
+  await expect.poll(() => uiStyleAttr(page)).toBe("classic");
+  const toggle = page.locator(".sidebar-edge-toggle");
+  await expect(toggle).toHaveCount(1);
+  // 位置: 境の線（nav の右端）の上で、縦の中央（±数画素）。当たりは 24px 以上。
+  const nav = (await page.locator(".sidebar").boundingBox())!;
+  const t = (await toggle.boundingBox())!;
+  expect(Math.abs(t.x + t.width / 2 - (nav.x + nav.width))).toBeLessThanOrEqual(2);
+  expect(Math.abs(t.y + t.height / 2 - (nav.y + nav.height / 2))).toBeLessThanOrEqual(2);
+  expect(t.width).toBeGreaterThanOrEqual(24);
+  expect(t.height).toBeGreaterThanOrEqual(24);
+  // 印の上でドラッグしても、幅は変わらない（印の押下は、つまみへ届かない）。
+  const before = await sidebarWidth(page);
+  await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(t.x + t.width / 2 + 80, t.y + t.height / 2 + 10, { steps: 4 });
+  await page.mouse.up();
+  expect(await sidebarWidth(page), "印の上のドラッグでは、幅が動かない").toBeCloseTo(before, 0);
+  await expect(page.locator(".sidebar")).not.toHaveClass(/sidebar-collapsed/);
+  // 陽性の対照: つまみの別の場所（印の上 100px）では、今までどおり幅が動く。
+  const hy = t.y + t.height / 2 - 100;
+  const hx = nav.x + nav.width;
+  await page.mouse.move(hx, hy);
+  await page.mouse.down();
+  await page.mouse.move(hx + 60, hy, { steps: 4 });
+  await expect.poll(() => sidebarWidth(page)).toBeGreaterThan(before + 30);
+  await page.mouse.up();
+  // 押すと畳む（印は読み上げの名前が変わる）。畳んだ状態でも、印が同じ縦の中央にあり、押すと広がる。
+  await page.locator(".sidebar-edge-toggle").click();
+  await expect(page.locator(".sidebar")).toHaveClass(/sidebar-collapsed/);
+  await expect(toggle).toHaveAttribute("aria-label", "サイドバーを開く");
+  const nav2 = (await page.locator(".sidebar").boundingBox())!;
+  const t2 = (await toggle.boundingBox())!;
+  expect(Math.abs(t2.y + t2.height / 2 - (nav2.y + nav2.height / 2))).toBeLessThanOrEqual(2);
+  expect(Math.abs(t2.x + t2.width / 2 - (nav2.x + nav2.width))).toBeLessThanOrEqual(2);
+  // 罫線の外側でもボタンが切られず、開く操作を受け付ける。
+  const outerX = nav2.x + nav2.width + 4;
+  const centerY = t2.y + t2.height / 2;
+  expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest(".sidebar-edge-toggle"), { x: outerX, y: centerY })).toBe(true);
+  await expect(page.locator(".sidebar-footer")).toBeVisible();
+  // 畳んだ状態の［新規］［メニュー］は縦に並ぶ（印だけ。読み上げの名前を保つ）。
+  const ys = await page.locator(".sidebar-footer > *").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().y));
+  expect(ys).toEqual([...ys].sort((a, b) => a - b));
+  expect(new Set(ys.map(Math.round)).size).toBe(ys.length);
+  await expect(page.locator('[data-sidebar-act="new"]')).toHaveAttribute("aria-label", "新規");
+  await page.mouse.click(outerX, centerY);
+  await expect(page.locator(".sidebar")).not.toHaveClass(/sidebar-collapsed/);
+  expect(await sidebarWidth(page)).toBeGreaterThan(before + 30); // 広げると、前の幅
+  client.close();
+});
+
 test("「新規」: workspace・pane・グループを選べる（キーボードでも）。メニューに「連携（グラフ）」は無く、workspace の右クリックに「新しいグループを作る…」は無い", async ({ page, appServer }) => {
   const client = await appServer.openClient();
   await client.request("prefs.set", { patch: { uiStyle: "modern" } });
