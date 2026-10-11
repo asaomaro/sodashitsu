@@ -51,6 +51,7 @@ export interface StoreAdapterOptions {
    * 質問のフォームのイベント（`ask.opened`・`ask.closed`。20261002-sodactl-ask）。**中身は載っていない**（id だけ）——`AskController` が `ask.get` で取る。
    * 画面の接続（選択中のマシン）のイベントだけが来る。省略可。
    */
+  onNotificationState?:(state:import("@sodashitsu/protocol").NotificationState)=>void;
   onAskEvent?: (e: AskOpenedEvent | AskClosedEvent) => void;
   /** 表示の面のイベント（`display.updated`・`display.removed`。20261007-soda-extensions）。**見出しだけ**——`DisplayController` が中身を `display.get` で取る。省略可。 */
   onDisplayEvent?: (e: DisplayUpdatedEvent | DisplayRemovedEvent | DisplayMessageEvent) => void;
@@ -131,6 +132,7 @@ export class StoreAdapter implements StorePort {
   private applyEventToSession(e: ServerEvent): void {
     const session = useSessionStore(this.opts.pinia);
     switch (e.event) {
+      case "notification.changed": this.opts.onNotificationState?.(e.data); return;
       case "workspace.created":
       case "workspace.updated":
         session.workspaceUpserted(e.data.workspace);

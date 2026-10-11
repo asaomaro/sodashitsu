@@ -237,6 +237,7 @@ export interface DisplayMessageEvent {
 }
 
 export type ServerEvent =
+  | {event:"notification.changed";data:import("./notifications.js").NotificationState}
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent
   | WorkspaceClosedEvent

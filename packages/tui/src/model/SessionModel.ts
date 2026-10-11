@@ -37,6 +37,7 @@ export interface SessionModelHooks {
   onPaneClosed?(paneId: string): void;
   onPaneExited?(paneId: string, exitCode: number): void;
   onClientError?(code: string, message: string): void;
+  onNotificationState?(state:import("@sodashitsu/protocol").NotificationState):void;
   onPrefsChanged?(data: PrefsChangedEvent["data"]): void;
   onAgentChanged?(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void;
   /** 独自コマンドの popup が閉じた（`command.popup_closed`）。 */
@@ -170,6 +171,7 @@ export class SessionModel {
 
   private applyToSession(e: ServerEvent): void {
     switch (e.event) {
+      case "notification.changed": this.hooks.onNotificationState?.(e.data); return;
       case "agent.usage_changed": this.hooks.onUsageChanged?.(e.data); return;
       case "workspace.created":
       case "workspace.updated":

@@ -1,0 +1,9 @@
+/* Only private-use icon ranges; ordinary text keeps the existing monospace font. */
+@font-face {
+  font-family: "Sodashitsu Nerd Symbols";
+  src: url("/fonts/nerd-symbols/SymbolsNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+E000-F8FF, U+F0000-FFFFD, U+100000-10FFFD;
+}

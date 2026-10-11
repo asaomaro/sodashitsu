@@ -1,3 +1,4 @@
+import {PluginOperationsParams,PluginCallParams} from "@sodashitsu/protocol";
 import {
   ExtensionApproveParams,
   ExtensionDenyParams,
@@ -20,6 +21,8 @@ import type { MethodDeps } from "./deps.js";
 export function registerExtensionMethods(surface: ControlSurface, deps: MethodDeps): void {
   const extensions = deps.extensions;
   if (!extensions) return;
+  surface.register("plugin.operations", {schema:PluginOperationsParams,handler:(_ctx,p)=>extensions.pluginOperations.list(p)});
+  surface.register("plugin.call", {schema:PluginCallParams,handler:(_ctx,p)=>extensions.pluginOperations.call(p)});
   surface.register("extension.list", {
     schema: ExtensionListParams,
     handler: () => extensions.list(),

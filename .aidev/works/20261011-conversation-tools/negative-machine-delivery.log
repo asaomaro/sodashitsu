@@ -1,0 +1,37 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/tui
+
+ ❯ src/notify/notify.test.ts (14 tests | 1 failed | 13 skipped) 8ms
+   ❯ NotificationController（web と同じ判定） (8)
+     × マシンを切り替えると予約済みの完了配送を無効化する 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/notify/notify.test.ts > NotificationController（web と同じ判定） > マシンを切り替えると予約済みの完了配送を無効化する
+AssertionError: expected [ { key: 'done:a3:1', …(5) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/notify/notify.test.ts:197:127
+    195|   });
+    196|   it("マシンを切り替えると予約済みの完了配送を無効化する",async()=>{
+    197|     const s=setup();s.change("p3",{state:"idle",completionSeq:1});s.n.…
+       |                                                                                                                               ^
+    198|   });
+    199|   it("作業再開済みの先送り完了通知は復元しない",()=>{
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 skipped (14)
+   Start at  19:48:01
+   Duration  1.38s (transform 82%, import 17%, tests 1%)
+
+undefined
+/workspaces/sodashitsu/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/notify/notify.test.ts -t マシンを切り替えると予約済み

@@ -67,7 +67,7 @@ export interface Workspace {
   representative?: boolean;
 }
 
-export interface PluginTab { extensionKey: string; display: string }
+export interface PluginTab { extensionKey: string; display: string; mobileDisplay?:string|undefined }
 
 export interface TabViewInstance {
   id: string;

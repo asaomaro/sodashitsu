@@ -988,3 +988,7 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
 `plugin pack <directory> --out <file.sodaplugin>`、`plugin install <file.sodaplugin> --state-dir <directory>`、`plugin list --state-dir <directory>`、`plugin enable <id> --state-dir <directory>`、`plugin disable <id> --state-dir <directory>`、`plugin remove <id> --state-dir <directory>`。サーバへ接続せず、そのOSの設定と導入したファイルを扱う。導入は無効、有効化と読み直しは別の操作。配布形式・整合性・制限は [拡張パッケージ](plugin-packages.md)。
 
 パッケージの install/list/enable/disable/remove は `--project-dir <PJフォルダ>` でも使える。`--state-dir` と同時指定不可。PJ導入先は `.soda/`、実行にはプロジェクト拡張の承認が別途必要。ビューの導線とパースペクティブは [拡張パッケージ](plugin-packages.md) を参照。
+
+## プラグインアプリの操作
+
+`sodactl plugin operations <id|key> (--pane <id>|--tab <id>|--workspace <id>)` は公開操作の一覧、`sodactl plugin call <id|key> <operation> (--pane <id>|--tab <id>|--workspace <id>) [--params <JSON object>]` はその実行です。どちらも認証済みサーバへ接続しJSONを返します。`--url`、`--token`、前置の `--machine` に対応します。導入操作の `--state-dir` は使いません。上限・応答・拡張側の実装は [プラグインアプリのCLI操作](plugin-cli.md) を参照してください。

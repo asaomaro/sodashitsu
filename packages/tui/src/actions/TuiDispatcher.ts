@@ -1,3 +1,4 @@
+import {headerActionsFor,loadAgentHeaderActions} from "@sodashitsu/protocol";
 import type { CommandListResult, ItemTarget, WorkspaceGroup } from "@sodashitsu/protocol";
 import {
   LOCAL_MACHINE_ID,
@@ -99,6 +100,12 @@ export class TuiDispatcher {
     this.conn = host.conn;
   }
 
+  agentActionsFor(paneId:string){const pane=this.model.panes.get(paneId);return headerActionsFor(pane?.agent?.kind??"",!!pane?.agentSession,loadAgentHeaderActions(this.host.prefs.shared.agentHeaderActions));}
+  agentPaneAction(paneId:string,action:import("@sodashitsu/protocol").AgentHeaderAction):void {
+    if(action==='messages'||action==='summary'){this.ui.openDialogWithContext({kind:'conversation',paneId,mode:action});return;}
+    if(action==='fork'){this.openAgentFork(paneId);return;}
+    void this.conn.request('agent.command',{paneId,action}).catch(()=>this.ui.toast('エージェントの処理完了を待ってください。'));
+  }
   openAgentFork(paneId: string): void {
     this.ui.openDialogWithContext({kind:"agentFork",paneId});
   }

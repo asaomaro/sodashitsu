@@ -82,6 +82,7 @@ describe("TerminalRegistry", () => {
     const { registry } = makeRegistry({ capacity: 24 });
     const entry = registry.acquire("p1");
     expect(entry.paneId).toBe("p1");
+    expect(entry.term.options.fontFamily).toBe('"Sodashitsu Nerd Symbols", monospace');
     expect(registry.takePendingSubscriptions(["p1"])).toEqual(["p1"]);
     entry.term.dispose();
   });

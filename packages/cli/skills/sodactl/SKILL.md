@@ -296,3 +296,11 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 `sodactl plugin pack <directory> --out <file.sodaplugin>` で配布物を作る。`sodactl plugin install <file.sodaplugin> --state-dir <directory>` は無効の状態で登録する。`sodactl plugin list --state-dir <directory>` で導入済みを確認し、`sodactl plugin remove <id> --state-dir <directory>` で登録を外す。持ち主がパッケージを確認し、`sodactl plugin enable <id> --state-dir <directory>` で有効にする。`sodactl plugin disable <id> --state-dir <directory>` で無効にする。どちらも `sodactl ext reload` の後に反映される。
 
 パッケージの install/list/enable/disable/remove は `--project-dir <PJフォルダ>` でも使える。`--state-dir` と同時指定不可。PJ導入先は `.soda/`、実行にはプロジェクト拡張の承認が別途必要。タブの［ビューを追加］は通常の端末タブとアプリタブの両方から使える。
+
+## プラグインアプリを操作する
+
+実行中のアプリの操作は `sodactl plugin operations <id|key> --tab <tabId>` で一覧を取得する。`--tab` の代わりに `--pane` または `--workspace` を1つ指定できる。対象はそのプラグインを追加した画面。同名のプラグインや複数の画面がある場合は `sodactl ext list` のkeyとペインIDで絞る。
+
+`sodactl plugin call <id|key> <operation> --tab <tabId> --params '<JSON object>'` で呼び、`{"result":...}` を受け取る。公開された `description` と `inputSchema` に従う。例: `sodactl plugin call commit-graph history --pane <paneId> --params '{"limit":20}'`。未承認・無効なプラグインの起動は行わない。
+
+応答待ちは30秒。タイムアウトや切断でも操作が実行済みの場合がある。作成・削除を重ねて再試行せず、取得操作で状態を確認する。

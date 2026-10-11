@@ -20,3 +20,9 @@ export * from "./paneSocket.js";
 export * from "./events.js";
 export * from "./frames.js";
 export * from "./terminalLimits.js";
+
+export * from "./conversation.js";
+
+export * from "./notifications.js";
+
+export * from "./pluginOperations.js";

@@ -1350,6 +1350,7 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
       // 同じ pane の出し直しは置き換え（押し出しではない）。履歴は増えない。
       // **置き換えられる古い件が「まだ解消していない」状態で確かめる**（解消済みなら `isResolved` に弾かれて、条件の有無を区別できない）——
       // session の agent は入力待ちのまま（since 5）で、同じ pane へ別の鍵（完了）を直に配送する。
+      const p9=useSessionStore(pinia).panes.get("p9")!;p9.agent!.completionSeq=1;
       h.c.deliver("done", "p9", "done:a-p9:1");
       expect(store.queue.filter((q) => q.paneId === "p9").map((q) => q.key)).toEqual(["done:a-p9:1"]);
       expect(history().map((e) => e.paneId)).toEqual(["p1"]);
@@ -1363,6 +1364,7 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
       expect(history()).toHaveLength(1);
       // 古い履歴（入力待ち since 5）は**解消していない**まま（session の agent は入力待ちのまま）、同じ pane へ別の鍵を直に配送する。
       // 履歴の置き換え（`removeHistoryPane`）が無ければ、古い履歴が残る。
+      const p1=useSessionStore(pinia).panes.get("p1")!;p1.agent!.completionSeq=1;
       h.c.deliver("done", "p1", "done:a-p1:1");
       expect(history(), "新しい知らせはトースト中なので、古い履歴は置き換わって 0 件").toHaveLength(0);
     });
@@ -1621,4 +1623,22 @@ describe("NotificationController — 履歴（AC5・AC13〜AC15・AC18）", () =
       expect(useNotificationsStore(pinia).history).toHaveLength(0);
     });
   });
+});
+
+
+describe("shared notification state",()=>{
+ it("never revives resolved notifications from an older deferred response",()=>{
+  const a=makeAgent({completionSeq:1});seedSession(a);const h=makeController();const key="done:a1:1",now=Date.now();
+  h.c.onSharedNotification({notices:[{key,paneId:"p1",status:"resolved",at:now}]});
+  h.c.onSharedNotification({notices:[{key,paneId:"p1",status:"deferred",at:now-10}]});
+  expect(useNotificationsStore(pinia).history).toHaveLength(0);expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+ });
+ it("rechecks shared decisions after nextTick and cancels old-machine delivery",async()=>{
+  const a=makeAgent({completionSeq:1});seedSession(a);const h=makeController();
+  h.c.onAgentChanged("p1",makeAgent({state:"working"}),a);
+  h.c.onSharedNotification({notices:[{key:"done:a1:1",paneId:"p1",status:"resolved",at:Date.now()}]});
+  await Promise.resolve();await Promise.resolve();expect(useNotificationsStore(pinia).queue).toHaveLength(0);expect(h.desktop.shown).toHaveLength(0);
+  const b=makeAgent({completionSeq:2});useSessionStore(pinia).panes.get("p1")!.agent=b;h.c.onAgentChanged("p1",a,b);h.c.resetForMachineSwitch();
+  await Promise.resolve();await Promise.resolve();expect(useNotificationsStore(pinia).queue).toHaveLength(0);
+ });
 });

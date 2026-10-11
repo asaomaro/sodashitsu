@@ -7,6 +7,8 @@ import "@xterm/xterm/css/xterm.css";
 import "./styles/resizeHandle.css";
 import "./styles/displayDrag.css";
 import "./styles/uiStyle.css";
+import "./styles/terminalFonts.css";
+import { loadTerminalFonts } from "./term/terminalFonts.js";
 import { createPinia } from "pinia";
 import { createApp, nextTick, toRef, watch } from "vue";
 import App from "./App.vue";
@@ -162,6 +164,7 @@ const storeAdapter = new StoreAdapter({
     if (acceptsMainGraphEvent(machines.selectedId)) graph.applyEvent(e);
   },
   // 質問のフォーム（20261002-sodactl-ask）。`askController` はこの後で作るので、遅延で参照する。
+  onNotificationState:state=>notifications.onSharedNotification(state),
   onAskEvent: (e) => askController.onEvent(e),
   // 拡張（20261007-ext-host）。`extensionController` はこの後で作るので、遅延で参照する。
   onExtensionChanged: () => extensionController.onChanged(),
@@ -401,6 +404,8 @@ connection.onClosed(() => prefsSync.onClosed());
 // 通知（20260920-agent-notifications）。`registry`（表示中の pane を引く）より後、
 // `ActionDispatcher`（`prefix+o` の行き先に使う）より前にしか置けない。
 const notifications = new NotificationController({
+  loadShared:()=>conn.request("notification.state",{}),
+  updateShared:n=>conn.request("notification.update",n),
   pinia,
   desktop: new DesktopNotifier(),
   sound: new ToneSound(),
@@ -669,6 +674,7 @@ app.provide(ViewSyncKey, viewSync);
 app.provide(DeviceKindKey, kind);
 app.provide(KeyInputControllerKey, keys);
 app.provide(NotificationControllerKey, notifications);
+await loadTerminalFonts(() => registry.refreshFonts());
 app.mount("#app");
 
 conn.connect();

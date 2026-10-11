@@ -1,3 +1,6 @@
+import {SharedNotifications} from "./notify/SharedNotifications.js";
+import {SummaryService} from "./conversation/SummaryService.js";
+import {ConversationService} from "./conversation/ConversationService.js";
 import { controlSecret } from "./handoff/windowsControl.js";
 import { createAgentKindsLister } from "./agent/agentKinds.js";
 import { X509Certificate } from "node:crypto";
@@ -575,7 +578,10 @@ export async function composeServer(
       usageIntake.forgetPane(e.data.paneId);
     }
   });
+  const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
+  const summaries=new SummaryService(conversations, options.stateDir);
   registerAllMethods(surface, {
+    conversations,summaries,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
     session,
     clients,
     sizeAuthority,
@@ -1011,6 +1017,7 @@ export async function composeServer(
     },
 
     async close(): Promise<void> {
+      summaries.close();
       try {
         // 止まり始めた印（以後の止める指示は「既に止まる途中」、引き継ぎの指示は断る。20260927-session-stop）。受け付け済みの引き継ぎの
         // 最中（Ctrl+C 等のシグナル）なら、それが終わる（元に戻す）まで待つ——以前は最初に制御の socket を閉じ、その接続の終わりを待つことで同じ順序になっていた。

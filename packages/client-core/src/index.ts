@@ -55,3 +55,5 @@ export * from "./prefs/types.js";
 export * from "./prefs/load.js";
 export * from "./prefs/scrollback.js";
 export * from "./theme/themeOverrides.js";
+
+export * from "./term/findMessageLine.js";

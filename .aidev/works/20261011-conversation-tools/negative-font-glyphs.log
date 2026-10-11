@@ -1,0 +1,41 @@
+
+Running 1 test using 1 worker
+
+(node:1374785) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-11T11:16:56.677Z","level":"info","msg":"agent manifests loaded","ok":22,"total":22}
+{"ts":"2026-10-11T11:16:56.678Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-eV7ugG/commands.json","count":0}
+  ✘  1 src/specs/terminal-fonts.spec.ts:3:1 › browser terminal loads bundled Nerd Font icons without changing ordinary text (1.4s)
+
+
+  1) src/specs/terminal-fonts.spec.ts:3:1 › browser terminal loads bundled Nerd Font icons without changing ordinary text 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      23 |     };
+      24 |   });
+    > 25 |   expect(result.loaded).toBe(true);
+         |                         ^
+      26 |   expect(result.iconDifferences).toEqual([true, true, true, true, true]);
+      27 |   expect(result.ordinaryUnchanged).toBe(true);
+      28 | });
+        at /workspaces/sodashitsu/packages/e2e/src/specs/terminal-fonts.spec.ts:25:25
+
+    Error Context: test-results/terminal-fonts-browser-ter-6db8c-hout-changing-ordinary-text/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/terminal-fonts-browser-ter-6db8c-hout-changing-ordinary-text/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/terminal-fonts-browser-ter-6db8c-hout-changing-ordinary-text/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/terminal-fonts.spec.ts:3:1 › browser terminal loads bundled Nerd Font icons without changing ordinary text 
+undefined
+/workspaces/sodashitsu/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test terminal-fonts.spec.ts

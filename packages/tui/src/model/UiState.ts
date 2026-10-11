@@ -33,6 +33,8 @@ export type DialogContext =
   | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
+  | {kind:"conversation";paneId:string;mode:"messages"|"summary"}
+  | {kind:"pastSessions"}
   | { kind: "agentFork"; paneId: string }
   | { kind: "usage"; paneId: string }
   | { kind: "usageAccounts" }
@@ -75,6 +77,7 @@ export type DialogContext =
 
 /** 右クリックのメニューの対象（web の `MenuTarget` と同じ）。 */
 export type MenuTarget =
+  | {kind:"agent-tools";paneId:string}
   | { kind: "pane"; paneId: string }
   | { kind: "tab"; tabId: string }
   | { kind: "workspace"; workspaceId: string }

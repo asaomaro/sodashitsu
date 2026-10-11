@@ -1,4 +1,5 @@
 import { Terminal } from "@xterm/xterm";
+import { TERMINAL_FONT_FAMILY } from "./terminalFonts.js";
 import type { ITerminalAddon, ITerminalOptions, ITheme } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
@@ -250,10 +251,19 @@ export class TerminalRegistry implements TerminalSinkPort {
     this.entries.get(paneId)?.term.resize(Math.max(1, cols), Math.max(1, rows));
   }
 
+  /** Discard missing-glyph entries when the bundled icon font finishes loading late. */
+  refreshFonts(): void {
+    for (const { term } of this.entries.values()) {
+      term.clearTextureAtlas();
+      term.refresh(0, term.rows - 1);
+    }
+  }
+
   private create(paneId: string): TermEntry {
     const scrollback = this.opts.getScrollbackLines?.();
     const term = new Terminal({
       allowProposedApi: true,
+      fontFamily: TERMINAL_FONT_FAMILY,
       theme: this.opts.getTheme?.() ?? toXtermTheme(),
       ...(scrollback !== undefined ? { scrollback } : {}),
       ...this.opts.terminalOptions,

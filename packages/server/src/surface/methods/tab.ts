@@ -8,15 +8,18 @@ export function registerTabMethods(surface: ControlSurface, deps: MethodDeps): v
     handler: async (ctx, params) => {
       // 作る操作も操作——作った pane のシェルが起動の直後に色を問い合わせたら、作った人の配色で答える（20260921-theme-settings の decisions D13）。
       deps.clients.touch(ctx.clientId);
+      let plugin=params.plugin;
       if (params.plugin) {
         const available = deps.extensions?.list().extensions.find(e => e.key === params.plugin!.extensionKey);
         if (!available || available.state !== "running" || available.tabView?.display !== params.plugin.display) throw new RpcError("invalid_params", "選択したプラグインビューは利用できません");
+        if(params.plugin.mobileDisplay && params.plugin.mobileDisplay!==available.tabView.mobileDisplay)throw new RpcError("invalid_params","モバイルビューがプラグインの登録と一致しません");
+        plugin={extensionKey:available.key,display:available.tabView.display,...(available.tabView.mobileDisplay?{mobileDisplay:available.tabView.mobileDisplay}:{})};
         const wsId = params.workspaceId ?? deps.session.snapshot().focus?.workspaceId;
         const ws = deps.session.snapshot().workspaces.find(w => w.id === wsId);
         if (!ws || !deps.extensions?.canOpenTab(available.key, ws.id)) throw new RpcError("invalid_params", "別のPJのプラグインは開けません");
         if (available.tabView?.requiresProject !== false && !ws.projectDir) throw new RpcError("invalid_params", "先にワークスペースのPJフォルダを設定してください");
       }
-      const result = await deps.session.createTab(params.workspaceId, params.label, params.newCwd, params.plugin);
+      const result = await deps.session.createTab(params.workspaceId, params.label, params.newCwd, plugin);
       deps.lineage?.noteCreated(result.pane.id, params.callerPaneId); // 20261003-graph-auto-nodes
       return result;
     },

@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import {pluginMobileDisplay} from "../display/pluginDisplay.js";
+import {useExtensionsStore} from "../store/extensions.js";
+import {headerActionsFor,type AgentHeaderAction} from "@sodashitsu/protocol";
+import {useConversationWindowStore} from "../store/conversationWindow.js";
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ActionDispatcherKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
+import { ActionDispatcherKey, ConnectionKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
 import { isScriptFormat } from "../display/framePage.js";
 import { floatZ } from "../display/floatGeometry.js";
 import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
@@ -58,6 +62,8 @@ import { zoneAt, type Zone } from "../term/paneDragZone.js";
 const props = defineProps<{ paneId: string; enabled?: boolean; presentationOnly?: boolean; multiPane?: boolean; neighbors?: PaneSides }>();
 
 const actions = inject(ActionDispatcherKey, undefined);
+const connection=inject(ConnectionKey,null);
+const conversationWindow=props.enabled?useConversationWindowStore():null;
 const registry = inject(TerminalRegistryKey, undefined);
 const session = props.enabled ? useSessionStore() : null;
 const shortcutNumber = computed(()=>{
@@ -80,6 +86,7 @@ const modern = props.enabled && !props.presentationOnly ? useUiStyle().modernLay
 
 // --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
 const displays = props.enabled ? useDisplayStore() : null;
+const extensions=props.enabled?useExtensionsStore():null;
 const displayHost = inject(DisplayHostKey, undefined);
 /** その pane のどれかの面にフォーカスがある（操作中。端末を薄くする）。 */
 const displayEngaged = computed(() => {
@@ -121,7 +128,7 @@ const cellSize = computed(() => {
 const layout = computed<LayoutResult | null>(() => {
   if (!displays || bodySize.value.w <= 0 || bodySize.value.h <= 0) return null;
   try {
-    const all = displays.all.filter((d) => d.paneId === props.paneId && d.name !== pluginTab.value?.display);
+    const all = displays.all.filter((d) => d.paneId === props.paneId && d.name !== pluginTab.value?.display && d.name !== pluginMobileDisplay(pluginTab.value,extensions?.list?.extensions));
     if (all.length === 0) return null;
     const bands: Parameters<typeof resolvePaneDisplays>[0]["bands"] = [];
     const panels: Parameters<typeof resolvePaneDisplays>[0]["panels"] = [];
@@ -320,6 +327,14 @@ const buttonsInRow = computed(() => reserveNameSpace.value);
 const widthFor = (n: number): number => n * BTN + (n - 1) * BTN_GAP + CLOSE_GAP + ACTIONS_PAD;
 /** エージェントの居る pane か（［情報］を出す。20261010-agent-usage PR4）。 */
 const hasAgent = computed(() => !!session?.panes.get(props.paneId)?.agent);
+const agentActions=computed(()=>{const pane=session?.panes.get(props.paneId);return pane?.agent?headerActionsFor(pane.agent.kind,!!pane.agentSession,settings?.agentHeaderActions??[]):[];});
+const agentSlots=computed(()=>bodySize.value.w<=0?agentActions.value.length:Math.max(1,Math.floor((bodySize.value.w-widthFor(5)-NAME_MIN_PX)/26)));
+const agentActionCount=computed(()=>Math.min(agentActions.value.length,agentSlots.value));
+function onAgentAction(action:AgentHeaderAction):void {
+ if(action==='messages'||action==='summary'){conversationWindow?.open(props.paneId,action);return;}
+ if(action==='fork'){actions?.openAgentFork(props.paneId);return;}
+ void connection?.request('agent.command',{paneId:props.paneId,action}).catch(()=>view?.toast('操作できません。エージェントの処理が終わっているか確認してください。'));
+}
 const infoAvailable = computed(() => showPaneButtons.value && hasAgent.value);
 /** ボタンが n 個並んで入る幅か。箱の幅が分からない間（0）は、全部出す。 */
 const fits = (n: number): boolean => {
@@ -328,17 +343,17 @@ const fits = (n: number): boolean => {
   return w >= widthFor(n) + (buttonsInRow.value && paneName.value ? NAME_MIN_PX : 0) + 12;
 };
 /** pane が小さくて入りきらないとき、隠す順は 分割の 2 つ → ［情報］（最大化と閉じるは残す）。 */
-const showSplitButtons = computed(() => fits(infoAvailable.value ? 5 : 4));
-const showInfoButton = computed(() => infoAvailable.value && fits(3));
+const showSplitButtons = computed(() => fits((infoAvailable.value ? 5 : 4)+agentActionCount.value));
+const showInfoButton = computed(() => infoAvailable.value && fits(3+agentActionCount.value));
 /** 極端に狭い pane（最大化と閉じるだけで、名前の入る幅が残らない）では、名前を出さない（ボタンに重なって押せなくなるため）。名前の行にボタンが並ぶときだけ。 */
 const nameFits = computed(() => {
   if (!(showPaneButtons.value && buttonsInRow.value)) return true;
   const w = bodySize.value.w;
-  return w <= 0 || w >= widthFor(2) + NAME_BOX_SLACK + 24;
+  return w <= 0 || w >= actionsWidthPx.value + 24;
 });
 /** 名前の行のとき、名前の最大の幅から引く、ボタンの分（px）。 */
 const actionsWidthPx = computed(() =>
-  showPaneButtons.value && buttonsInRow.value ? widthFor(2 + (showSplitButtons.value ? 2 : 0) + (showInfoButton.value ? 1 : 0)) + NAME_BOX_SLACK : 0,
+  showPaneButtons.value && buttonsInRow.value ? widthFor(2 + agentActionCount.value + (showSplitButtons.value ? 2 : 0) + (showInfoButton.value ? 1 : 0)) + NAME_BOX_SLACK : 0,
 );
 const zoomed = computed(() => {
   const tabId = session?.panes.get(props.paneId)?.tabId;
@@ -585,6 +600,9 @@ function onKeydown(ev: KeyboardEvent): void {
             :pane-label="paneLabel"
             :show-info="showInfoButton"
             :info-open="infoOpen"
+            :agent-actions="agentActions"
+            :max-agent-actions="agentSlots"
+            @agent="onAgentAction"
             @split="onSplit"
             @info="onInfo"
             @zoom="onZoom"
@@ -643,6 +661,9 @@ function onKeydown(ev: KeyboardEvent): void {
       :pane-label="paneLabel"
       :show-info="showInfoButton"
       :info-open="infoOpen"
+            :agent-actions="agentActions"
+            :max-agent-actions="agentSlots"
+            @agent="onAgentAction"
       @split="onSplit"
       @info="onInfo"
       @zoom="onZoom"

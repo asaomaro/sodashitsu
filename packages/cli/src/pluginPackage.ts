@@ -6,7 +6,7 @@ import { dirname, join, resolve, sep, relative } from "node:path";
 /** Portable, inert bundle. Installing never executes code or package hooks. */
 export interface PluginManifest {
   schemaVersion: 1; id: string; version: string; name: string; description: string;
-  entry: string; files: string[]; allow: ("script-html" | "agent-start")[]; tabView?: { title: string; display: string; requiresProject?: boolean | undefined }; views?: ExtensionViewDefinition[];
+  entry: string; files: string[]; allow: ("script-html" | "agent-start")[]; tabView?: { title: string; display: string; mobileDisplay?:string|undefined; requiresProject?: boolean | undefined }; views?: ExtensionViewDefinition[];
 }
 export interface PluginBundle { format: "sodashitsu-plugin"; version: 1; manifest: PluginManifest; files: { path: string; sha256: string; data: string }[] }
 interface Installed { id: string; version: string; digest: string; path: string; command: string; manifest: PluginManifest }

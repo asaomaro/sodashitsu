@@ -1,3 +1,4 @@
+import {PluginOperations} from "./PluginOperations.js";
 import { TaskAgentLauncher, TaskStartSchema, type TaskAgentDeps } from "./TaskAgentLauncher.js";
 import { randomUUID } from "node:crypto";
 import { stat as fsStat } from "node:fs/promises";
@@ -235,6 +236,11 @@ export class ExtensionHost {
   private readonly inflight = new Set<string>();
   private lastEmitted: string | null = null;
   private readonly panesDebounce: Debouncer;
+
+  readonly pluginOperations = new PluginOperations(key => {
+    const r=this.runs.get(key);if(!r)return undefined;
+    return {runId:r.runId,panes:this.panesFor(r.ext),send:(line:ExtLine)=>{r.proc.send(line);return this.runs.get(key)?.runId===r.runId;}};
+  });
 
   constructor(private readonly opts: ExtensionHostOptions) {
     this.clock = opts.clock ?? realClock;
@@ -1017,6 +1023,7 @@ export class ExtensionHost {
           // finishRun の後に、遅れて処理された 1 行が、だれも消さない面を作らない。
           const r = this.runs.get(key);
           if (!r || r.runId !== runId) return;
+          if(this.pluginOperations.handle(key,runId,req))return;
           if(this.taskLauncher && (req.method==="task.kinds"||req.method==="task.start")){
             const target=()=>{
               if(this.runs.get(key)?.runId!==r.runId || !r.ext.allow.includes("agent-start"))throw new RpcError("invalid_params","agent-start の許可が必要です");
@@ -1129,6 +1136,7 @@ export class ExtensionHost {
   private finishRun(key: string, runId: string, reason: ExtExit["reason"]): void {
     const run = this.runs.get(key);
     if (!run || run.runId !== runId) return;
+    this.pluginOperations.stopped(key,runId);
     this.runs.delete(key);
     this.closing.add(run.proc);
     void run.proc.settled.then(() => this.closing.delete(run.proc));
@@ -1209,8 +1217,10 @@ export class ExtensionHost {
       if (!ws) continue;
       if (!this.inScopeFn(ext, p.id)) continue;
       const isAppAnchor = tab!.plugin && (tab!.displayPaneId ? tab!.displayPaneId === p.id : tab!.focusedPaneId === p.id);
+      const appDefinition=tab!.plugin?this.desired.get(tab!.plugin.extensionKey)?.entry.tabView:undefined;
+      const appPlugin=tab!.plugin && appDefinition?.display===tab!.plugin.display?{...tab!.plugin,mobileDisplay:appDefinition.mobileDisplay}:tab!.plugin;
       const views = tab!.views?.filter(v => v.paneId === p.id && v.extensionKey === ext.key);
-      out.push({ id: p.id, label: p.label, workspaceId: ws.id, workspaceLabel: ws.label, workspaceCwd: ws.cwd, ...(ws.projectDir ? { projectDir: ws.projectDir } : {}), tabId: tab!.id, ...(isAppAnchor ? { plugin: tab!.plugin! } : {}), ...(p.virtual ? { virtual: true } : {}), ...(views?.length ? { views } : {}), ...(p.agent ? { agentState: p.agent.state } : {}), agent: p.agent?.kind ?? null });
+      out.push({ id: p.id, label: p.label, workspaceId: ws.id, workspaceLabel: ws.label, workspaceCwd: ws.cwd, ...(ws.projectDir ? { projectDir: ws.projectDir } : {}), tabId: tab!.id, ...(isAppAnchor ? { plugin: appPlugin! } : {}), ...(p.virtual ? { virtual: true } : {}), ...(views?.length ? { views } : {}), ...(p.agent ? { agentState: p.agent.state } : {}), agent: p.agent?.kind ?? null });
     }
     return out;
   }

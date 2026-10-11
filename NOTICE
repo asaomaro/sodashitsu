@@ -75,3 +75,10 @@ file, per Apache License 2.0 section 4(b).
     packages/tui/src/notify/notify.test.ts             (from src/terminal_notify.rs tests)
     packages/tui/src/app/t7.test.ts                    (from src/config/window_title.rs and
                                                           src/terminal/title.rs tests)
+
+This product includes the unmodified Symbols Nerd Font Mono v3.4.0 font from
+Nerd Fonts (https://github.com/ryanoasis/nerd-fonts).
+
+  Location: packages/web/public/fonts/nerd-symbols/
+  License:  LICENSE (MIT), LICENSE-collections (included glyph collections)
+  Source and checksum: README.md in that directory

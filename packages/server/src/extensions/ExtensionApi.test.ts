@@ -199,7 +199,7 @@ describe("ExtensionApi: helloLine", () => {
     const h = s.api.helloLine(ext({ scope: "project", root: "/r", onUnresponsive: "block", allow: ["script-html"] })) as Extract<ExtLine, { type: "ext.hello" }>;
     expect(h).toMatchObject({ type: "ext.hello", v: 1, runId: "run1", extension: { id: "a", scope: "project", root: "/r" }, allow: ["script-html"], onUnresponsive: "block" });
     expect(h.methods).toEqual(expect.arrayContaining(["ext.features", "ext.panes", "display.set", "display.close", "display.list", "display.features", "display.send"]));
-    expect(h.events).toEqual(["ext.hello", "ext.result", "ext.error", "ext.dropped", "ext.panes", "display.action", "display.closed"]);
+    expect(h.events).toEqual(["ext.hello", "ext.result", "ext.error", "ext.dropped", "ext.panes", "display.action", "display.closed", "app.call"]);
     expect(h.display.limits.contentBytes).toBeGreaterThan(0);
     expect(h.limits.displayBytes).toBe(EXTENSION_DISPLAY_BYTES_MAX);
     expect(h.limits.displays).toBe(16);
