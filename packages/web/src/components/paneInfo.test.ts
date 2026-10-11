@@ -54,7 +54,7 @@ describe("［情報］ボタン（モダン）", () => {
   it("エージェントの居る pane: 分割と最大化の間に［情報］。読み上げのラベル・Tab の順に入れない・押すと窓が開き、もう一度で閉じる（aria-pressed）", async () => {
     const { wrapper } = mountFrame("modern", true);
     const g = wrapper.get("[data-pane-actions]");
-    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual(["split-right", "split-down", "info", "zoom", "close"]);
+    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual(["info", "split-right", "split-down", "zoom", "close"]);
     const info = wrapper.get('[data-pane-action="info"]');
     expect(info.attributes("aria-label")).toBe("利用状況（情報）");
     expect(info.attributes("tabindex")).toBe("-1");
@@ -68,13 +68,13 @@ describe("［情報］ボタン（モダン）", () => {
     expect(view.paneInfoPaneId).toBeNull();
   });
 
-  it("エージェントの居ない pane では出さない（否定の対照）。クラシックでは、エージェントが居ても、隅のボタン自体が出ない", () => {
+  it("エージェントの居ない pane では出さない（否定の対照）。クラシックでもエージェントが居れば情報が先頭に出る", () => {
     expect(mountFrame("modern", false).wrapper.find('[data-pane-action="info"]').exists()).toBe(false);
     pinia = createPinia();
     document.body.innerHTML = "";
     const c = mountFrame("classic", true);
-    expect(c.wrapper.find("[data-pane-actions]").exists()).toBe(false);
-    expect(c.wrapper.find('[data-pane-action="info"]').exists()).toBe(false);
+    expect(c.wrapper.find("[data-pane-actions] button").attributes("data-pane-action")).toBe("info");
+    expect(c.wrapper.find('[data-pane-action="info"]').exists()).toBe(true);
   });
 
   it("押してもフォーカスは端末のまま（mousedown を止める）", async () => {

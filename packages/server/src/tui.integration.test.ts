@@ -349,7 +349,10 @@ describe("runTui（実サーバ・偽の外側の端末）", () => {
     try {
       const before = session.snapshot();
       await vi.waitFor(async () => expect(await s.text()).toContain("Spaces"), { timeout: 15_000 });
-      await vi.waitFor(() => expect(io.output()).toContain("1:"), { timeout: 15_000 });
+      io.type("\x02");
+      await vi.waitFor(async () => expect(await s.text()).toContain("1:"), { timeout: 15_000 });
+      io.type("\x1b");
+      await vi.waitFor(async () => expect((await s.text()).split("\n")[0]).not.toMatch(/1:/));
       // 分割（prefix+v）→ 新しい pane へ焦点
       io.type("\x02v");
       await vi.waitFor(
@@ -393,9 +396,12 @@ describe("runTui（実サーバ・偽の外側の端末）", () => {
       await vi.waitFor(() => expect(session.snapshot().workspaces.length).toBe(wsCount + 1), {
         timeout: 15_000,
       });
+      io.type("\x02");
       await vi.waitFor(async () => expect((await s.text()).split("\n")[0]).toMatch(/1:/), {
         timeout: 10_000,
       });
+      io.type("\x1b");
+      await vi.waitFor(async () => expect((await s.text()).split("\n")[0]).not.toMatch(/1:/));
       io.type("\x02D");
       await vi.waitFor(async () => expect(await s.text()).toContain("閉じますか？（workspace）"), {
         timeout: 10_000,

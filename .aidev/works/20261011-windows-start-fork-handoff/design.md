@@ -1,0 +1,23 @@
+# Windowsの自動起動・fork・handoff
+
+依頼: Windowsネイティブの自動起動、Claude/Codex/Copilotのfork、実行中ペインを維持するhandoffに対応する。
+
+## 起動とfork
+
+PowerShell/pwsh/cmdの空きシェルをプロセス走査で確かめ、書き込み直前にも再検査する。Base64 JSONで固定のNodeランチャーへ渡し、引数をシェル構文にしない。exeとnpm標準shim（参照先JSをNodeから直接起動）に対応し、未知のbatchは拒否。cmdはEncodedCommandのPowerShell経由。WindowsにはCtrl-E/Ctrl-Uを送らない。コマンド行の4000byte上限、制御文字拒否、種類の許可表は維持。
+
+Copilotのheadless stdio helperにも同じWindowsランチャーを使い、終了時はtaskkill /Tで孫も停止する。forkは元の会話IDを新IDへ分岐し、その新IDだけをresumeする。プロセス検出のoptional native moduleを導入できなければWindows標準CIMを使い、判定不能時はbusyとする。
+
+## handoff
+
+Windowsは更新されない親NodeプロセスがConPTYを所有し、サーバをWorkerで動かす。handoffはサーバWorkerだけを置き換える。親PID、shell/agent PID、pane IDを維持。IPCは私的MessagePort/SABで、公開された制御用名前付きパイプは状態ディレクトリの秘密鍵で認証する。
+
+入力のrawバイトをIPCで変更しない。IPC内の未処理入力とnode-pty内の待ち量を合わせて数え、既存の入力上限を適用する。読み取り停止は親がackを送り、それ以前の出力を旧WorkerのMirrorへ渡した後に画面を保存する。
+
+候補Workerが起動するまでは元PTYのkillを保留する。候補の失敗は候補だけを停止し、状態ファイルと信頼済みmanifestを戻し、旧Workerのキャッシュ済みコードで旧サーバを再構成する。元PTYを維持し、CLIは失敗コードを返す。旧close完了と復旧を競合させず、長いclose後は候補開始前にmanifestの期限を更新する。manifestの引き継ぎに失敗した候補は普通restoreを成功扱いにしない。
+
+状態ファイル自体を復旧できない場合は最終catchで診断し、親はPTYをheldのまま保持する。旧版からの初回移行・親の実装自体の変更にはサーバの再起動が必要。
+
+## 点検範囲
+
+状態・プロトコル・入力・復旧の変更なので独立レビューを適用。Windows起動/forkはreview_fork_multi、handoffはreview_windows_handoff。見た目のみの以前の差分は前の作業記録で点検済み。

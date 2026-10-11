@@ -55,6 +55,8 @@ export type Action =
   | { type: "newTab" }
   | { type: "tabDelta"; delta: 1 | -1 }
   | { type: "tabIndex"; index: number }
+  | { type: "paneIndex"; index: number }
+  | { type: "selectNumbers"; target: "pane" | "workspace" | "agent" }
   | { type: "renameTab" }
   | { type: "closeTab" }
   | { type: "newWorkspace" }
@@ -101,3 +103,5 @@ export type Action =
   | { type: "showSubagents" } // show_subagents（フォーカスしている pane のエージェントが動かしているサブエージェントの一覧を開く）
   // 20261005-notify-bell（本製品の追加）。
   | { type: "openNotificationHistory" }; // open_notification_history（応答せずに閉じた知らせの一覧を開く。端末版は既存の「知らせの一覧」）
+
+export type NumberTarget = "tab" | "pane" | "workspace" | "agent";

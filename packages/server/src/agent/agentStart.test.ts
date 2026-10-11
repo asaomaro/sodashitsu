@@ -132,3 +132,14 @@ describe("shellNameOf / checkShell", () => {
     expect(checkShell(job(10, [10, "claude"]), 10)).toEqual({ kind: "busy" });
   });
 });
+
+it("Windowsの起動は引数をBase64で渡し、制御キーをコマンドへ混ぜない",async()=>{
+ const {buildShellStartLine}=await import("./agentStart.js");
+ const args=["",'with"quote',"with'quote","%PATH%","$(danger)","& literal"];
+ const line=buildShellStartLine("codex",args,"powershell");
+ const payload=/'([A-Za-z0-9+/]+=*)'$/.exec(line)![1]!;
+ expect(JSON.parse(Buffer.from(payload,"base64").toString())).toEqual({executable:"codex",args});
+ expect(line).not.toContain("%PATH%");
+ expect(startInput(line,false,true,true)).toEqual([line+"\r"]);
+ expect(startInput(line,false,false,true)).toEqual(["\x03",line+"\r"]);
+});

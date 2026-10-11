@@ -211,7 +211,7 @@ describe("runHandoff", () => {
       ),
     ).rejects.toThrow(ConfigError);
     const d = deps([], { platform: "win32" });
-    await expect(runHandoff(dir, undefined, io().io, undefined, d)).rejects.toThrow(ConfigError);
+    expect(await runHandoff(dir, undefined, io().io, undefined, d)).toBe(1);
     expect(d.asked).toEqual([]);
   });
 

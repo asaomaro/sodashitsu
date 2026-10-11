@@ -652,7 +652,7 @@ soda serve --pane-history
   新しいシェルへの入力に化けない）。
 - 名前付き session（`--session`）では session ごとの状態ディレクトリに置く（`soda session delete` で一緒に消える）。
 
-### 更新時の引き継ぎ（`soda handoff`。Linux・macOS）
+### 更新時の引き継ぎ（`soda handoff`。Linux・macOS・Windows）
 
 soda を新しい版に入れ替える（`git pull` して `pnpm build` した等）とき、`soda serve` を止めて起動し直すと、各 pane のプロセス（シェル・
 実行中のビルドやテスト・Claude Code 等のエージェント）はすべて終わる。**`soda handoff` を使うと、pane のプロセスを止めずに、動いている
@@ -672,17 +672,20 @@ soda handoff --session work     # 名前付き session（SODA_SESSION でもよ�
   （`--pane-history`）も流さない（プロセスが続いているため）。全画面のアプリ（vim・エージェントの TUI）は大きさの変化の合図で描き直す。
 - **入れ替える前に、新しい版を同じ Node で確かめる**（読み込めるか・引き継ぎの形式の版が合うか・その Node で PTY が入れ替わりをまたいで残るか）。
   確かめられなければ何も変えずに断り、`soda serve` はそのまま動き続ける（`soda handoff` は理由を表示して終了コード 1）。
-- 終了コード：0 成功／1 断った・失敗・一部の pane を引き継げなかった／2 指定の誤り・非対応（Windows・`process.execve` の無い Node）／3 `soda serve` が動いていない。
-- 指示の経路は状態ディレクトリの `handoff.sock`（0600。同じ利用者だけ）で、新しいネットワークの待ち受けは作らない。入れ替えの間だけ、
+- 終了コード：0 成功／1 断った・失敗・一部の pane を引き継げなかった／2 指定の誤り・非対応（POSIXで `process.execve` の無いNode）／3 `soda serve` が動いていない。
+- POSIXでの指示の経路は状態ディレクトリの `handoff.sock`（0600。同じ利用者だけ）で、新しいネットワークの待ち受けは作らない。入れ替えの間だけ、
   状態ディレクトリに `handoff.json`（0600。直前の画面の内容を含む）ができ、新しい版が読んだらすぐ消す。
-- 仕組み：Node.js の `process.execve`（Experimental）で同じプロセスを新しい版に置き換え、PTY の端末（close-on-exec の付いていない fd）を
+- POSIXの仕組み：Node.js の `process.execve`（Experimental）で同じプロセスを新しい版に置き換え、PTY の端末（close-on-exec の付いていない fd）を
   そのまま持ち越す。herdr のように別のプロセスへ fd を送る（`SCM_RIGHTS`）のではない。
+- WindowsではConPTYを親プロセスに保持し、サーバのWorkerだけを新しい版へ入れ替えます。ペインのプロセスと親PIDは維持します。制御は状態ディレクトリごとの名前付きパイプと `windows-control.key` の秘密鍵で認証します。秘密鍵・状態ディレクトリを他の利用者と共有しないでください。
+- Windowsの更新先が起動に失敗した場合は、保持したPTYを旧サーバに戻します。CLIは成功扱いにせず終了コード1を返します。状態ファイル自体を書き戻せない障害では、診断を出してPTYを保持したまま復旧を停止します。
+- この方式より前のWindows版から移行する最初の一回は、サーバを再起動してください。また、ConPTYを所有する親プロセス自身の変更には再起動が必要です。通常のサーバ・UI変更は `soda handoff` で反映できます。
 - 既知の制約：
-  - **Windows では使えない**（`process.execve` が無く、ConPTY は fd でもない。herdr も非対応）。**macOS は未検証**（同じ仕組みで動く設計。
+  - **macOS は未検証**（POSIXの仕組みで動く設計。
     PTY の確かめは master と slave を区別できない弱いもの）。
   - 引き継いだ pane のシェルが後で終わると、サーバが終わるまで `<defunct>`（ゾンビ）として残る（Node から回収できない。数は引き継いだ pane の数まで。
     メモリは使わない）。その pane は今までどおり閉じる。終了コードは Linux では正しく出るが、macOS では 0 になる。
-  - 確かめの後に新しい版が起動の途中で落ちると、pane のプロセスは終わる（普通に起動し直したのと同じ結果。`session.json` は入れ替える前に保存済みなので、
+  - POSIXでは、確かめの後に新しい版が起動の途中で落ちると、pane のプロセスは終わる（普通に起動し直したのと同じ結果。`session.json` は入れ替える前に保存済みなので、
     次の起動でレイアウトは戻る）。
   - 入れ替えの瞬間に多バイト文字の出力の途中だった pane では、その 1 文字が化けることがある。Kitty graphics の画像は引き継がない：
     転送の途中だった画像は出ず、その残り（base64 の文字）が画面に文字として出ることがある。入れ替えの前に送った画像を、後から配置し直すこともできない。実行中の要求・購読・`sodactl pane attach` の接続は切れる（繋ぎ直す）。

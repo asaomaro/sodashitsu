@@ -11,6 +11,10 @@ export const MODE_BADGES: Partial<Record<ChromeContext["mode"], string>> = {
   resize: "RESIZE",
 };
 
+export function modeBadge(ctx:ChromeContext): string | undefined {
+  return ctx.mode === "prefix" && ctx.numberTarget && ctx.numberTarget !== "tab" ? `${ctx.numberTarget.toUpperCase()} 1-9` : MODE_BADGES[ctx.mode];
+}
+
 /** tab バーの tab の位置（04 のクリック・ドラッグが使う）。 */
 export interface TabHit {
   tabId: string;
@@ -72,7 +76,7 @@ export function statusText(ctx: ChromeContext): string {
     case "rejected":
       return "接続できません";
     default:
-      return ctx.notice ?? (ctx.session ? `session: ${ctx.session}` : "");
+      return ctx.dragNotice ?? ctx.notice ?? (ctx.session ? `session: ${ctx.session}` : "");
   }
 }
 
@@ -82,7 +86,7 @@ export function statusText(ctx: ChromeContext): string {
  */
 export function paintHiddenBarBadge(grid: Grid, area: Rect, ctx: ChromeContext): boolean {
   const { theme } = ctx;
-  const badge = MODE_BADGES[ctx.mode];
+  const badge = modeBadge(ctx);
   const status = ctx.alert || ctx.connection !== "open" || ctx.notice ? statusText(ctx) : "";
   const parts: { text: string; fg: number; bg: number; attrs: number }[] = [];
   if (badge)
@@ -124,7 +128,7 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
   const end = rect.x + rect.w;
   let x = rect.x;
   // prefix 待ち・モードの印（AC-I1。web の PrefixIndicator と同じく左端に）。
-  const badge = MODE_BADGES[ctx.mode];
+  const badge = modeBadge(ctx);
   if (badge) {
     x += grid.text(
       x,
@@ -147,13 +151,13 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
   }
 
   // 右端：短い警告 → 接続の状態 → 知らせ → session 名。
-  const status = statusText(ctx);
+  const status = statusText({ ...ctx, dragNotice: undefined });
   const statusColor = ctx.connection === "open" && !ctx.alert ? fg : theme.ui("--soda-warn-fg");
   let rightStart = end;
   if (status !== "") {
     const text = truncate(status, Math.max(0, Math.floor(rect.w / 2)));
     rightStart = end - stringWidth(text) - 1;
-    grid.text(rightStart, rect.y, text, statusColor, bg, 0, end - rightStart);
+    grid.text(rightStart, rect.y, ctx.dragNotice && !ctx.alert && ctx.connection === "open" ? truncate(ctx.dragNotice, stringWidth(text)) : text, statusColor, bg, 0, end - rightStart);
   }
   // 右端の表示（共有の設定 `tabBarRight`。herdr の tab_bar_right：拡大の状態・ホスト名・日時・固定文字列を区切り文字でつなぐ）。
   const right = rightEntriesText(ctx);
@@ -169,7 +173,7 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
   const hits: TabHit[] = [];
   if (!model.workspaceId) return { tabs: hits, newTab: null, expandSidebar };
   const tabs = model.tabsOf(model.workspaceId);
-  const labels = tabs.map((t, i) => ` ${i + 1}:${t.label} `);
+  const labels = tabs.map((t, i) => `${ctx.dropTabId === t.id ? "▶" : " "}${ctx.mode === "prefix" && i<9 ? `${i+1}:` : ""}${t.label} `);
   const widths = labels.map((l) => stringWidth(l));
   // あふれるなら「‹」「›」を出し、先頭の tab をずらす（今の tab が見えるように。herdr の tab_scroll。H22b）。
   const PLUS_W = 4; // 「 + 」と前の空き
@@ -208,9 +212,9 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
       x,
       rect.y,
       truncate(labels[i]!, limit - x),
-      fg,
-      active ? activeBg : bg,
-      active ? ATTR.bold : 0,
+      ctx.dropTabId === t.id ? theme.ui("--soda-accent-fg") : fg,
+      ctx.dropTabId === t.id ? theme.ui("--soda-accent") : active ? activeBg : bg,
+      active || ctx.dropTabId === t.id ? ATTR.bold : 0,
       limit - x,
     );
     hits.push({ tabId: t.id, x, w });

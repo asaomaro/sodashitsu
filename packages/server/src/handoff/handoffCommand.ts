@@ -1,3 +1,4 @@
+import { controlSecret } from "./windowsControl.js";
 import { connect as netConnect } from "node:net";
 import { ConfigError, sessionFromEnvNote } from "../config.js";
 import { resolveSessionStateDir } from "../persist/namedSession.js";
@@ -79,12 +80,6 @@ export async function runHandoff(
   sessionSource?: "flag" | "env",
   deps: HandoffCommandDeps = defaultHandoffCommandDeps(),
 ): Promise<number> {
-  if (deps.platform === "win32") {
-    throw new ConfigError(
-      "soda handoff is not supported on Windows",
-      "更新時の引き継ぎ（live handoff）は Linux と macOS だけで使えます（docs/verification.md）。",
-    );
-  }
   const dir = resolveSessionStateDir(base, session);
   const fromEnv = sessionSource === "env" && dir !== base ? session : undefined;
   if (dir !== base && !(await isDirectory(dir))) {
@@ -105,11 +100,14 @@ export async function runHandoff(
     );
     return 1;
   }
-  const socketPath = handoffSocketPathFor(dir);
+  const socketPath = handoffSocketPathFor(dir,deps.platform);
+  let secret:string|undefined;
+  const line=(op:string)=>JSON.stringify({op,...(secret?{secret}:{})});
   let reply: HandoffReply;
   try {
+    if(deps.platform === "win32") secret=await controlSecret(dir);
     reply = JSON.parse(
-      await deps.ask(socketPath, '{"op":"handoff"}', deps.replyTimeoutMs ?? 150_000),
+      await deps.ask(socketPath, line("handoff"), deps.replyTimeoutMs ?? 150_000),
     ) as HandoffReply;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -145,7 +143,7 @@ export async function runHandoff(
     await deps.sleep(200);
     let status: HandoffStatus;
     try {
-      status = JSON.parse(await deps.ask(socketPath, '{"op":"status"}', 2_000)) as HandoffStatus;
+      status = JSON.parse(await deps.ask(socketPath, line("status"), 2_000)) as HandoffStatus;
     } catch {
       continue; // 入れ替わりの途中（まだ待ち受けていない・古い socket の残り）
     }

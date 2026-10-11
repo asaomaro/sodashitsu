@@ -7,6 +7,9 @@ const pane = (over: Partial<Pane> = {}): Pane =>
   ({ id: "p1", agent: { kind: "claude", state: "idle" }, agentSession: { kind: "claude", sessionId: UUID, reportedAt: 1 }, ...over }) as unknown as Pane;
 
 describe("forkUnavailableReason（メニューの項目の理由。20261009-agent-fork PR2）", () => {
+  it.each(["codex","copilot"] as const)("%s が一致する会話IDを持てば fork できる",kind=>{
+    expect(forkUnavailableReason(pane({agent:{kind} as never,agentSession:{kind,sessionId:UUID,reportedAt:1}}),true)).toBeNull();
+  });
   it("fork できる（Claude Code・会話の id が UUID）なら null", () => {
     expect(forkUnavailableReason(pane(), true)).toBeNull();
   });
@@ -14,7 +17,7 @@ describe("forkUnavailableReason（メニューの項目の理由。20261009-agen
     expect(forkUnavailableReason(pane(), false)).toBe("remote");
     expect(forkUnavailableReason(undefined, true)).toBe("pane_not_found");
     expect(forkUnavailableReason(pane({ agent: null }), true)).toBe("no_agent");
-    expect(forkUnavailableReason(pane({ agent: { kind: "codex" } as never }), true)).toBe("not_claude");
+    expect(forkUnavailableReason(pane({ agent: { kind: "other" } as never }), true)).toBe("not_claude");
     expect(forkUnavailableReason(pane({ agentSession: null }), true)).toBe("no_session_id");
     expect(forkUnavailableReason(pane({ agentSession: { kind: "claude", sessionId: "../x", reportedAt: 1 } }), true)).toBe("bad_session_id");
   });

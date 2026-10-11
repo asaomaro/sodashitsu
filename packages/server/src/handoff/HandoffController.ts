@@ -64,6 +64,7 @@ export interface HandoffControllerDeps {
   preflight(): Promise<PreflightResult>;
   /** 新しい版に入れ替える。成功すれば戻らない。戻った（投げた）ら失敗。 */
   execve(nonce: string): void;
+  replaceWorker?: (nonce:string)=>void;
   platform: NodeJS.Platform;
   /** この Node に `process.execve` があるか。 */
   hasExecve: boolean;
@@ -88,8 +89,14 @@ export class HandoffController {
   private busy = false;
   private running: Promise<void> | undefined;
   private last: LastHandoff | null = null;
+  private workerResult: LastHandoff | undefined;
+  private workerRollback: (()=>Promise<void>) | undefined;
+  async recoverWorkerReplacement(message:string):Promise<void>{await this.workerRollback?.();this.workerRollback=undefined;if(this.workerResult)this.last={...this.workerResult,error:message};}
+
 
   constructor(private readonly deps: HandoffControllerDeps) {}
+
+  markWorkerRollback(message:string):void {if(this.last)this.last={...this.last,error:message};}
 
   /** 引き継ぎの最中か（受け付けてから、元に戻すか execve するまで）。止める指示を断るのに使う（20260927-session-stop）。 */
   get isBusy(): boolean {
@@ -110,7 +117,7 @@ export class HandoffController {
    */
   async request(reply: (r: HandoffReply) => Promise<void>): Promise<void> {
     const d = this.deps;
-    if (d.platform === "win32" || !d.hasExecve) {
+    if (!d.replaceWorker && (d.platform === "win32" || !d.hasExecve)) {
       await reply({
         ok: false,
         reason: "unsupported",
@@ -239,6 +246,7 @@ export class HandoffController {
     });
     try {
       await d.flushLog();
+      if (d.replaceWorker) { this.workerRollback=rollback;this.workerResult={id,adopted:0,dropped:0,at:new Date().toISOString()};d.replaceWorker(nonce); return; }
       d.execve(nonce);
       // 戻ってきた＝入れ替わらなかった（実物の execve は成功すれば戻らない）。
       throw new Error("execve returned");

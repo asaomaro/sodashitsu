@@ -104,6 +104,7 @@ test("履歴：閉じた知らせがベルの件数に数えられ、ポップ�
   await openApp(page, appServer);
   const toast = await blockedToast(page, client, p1);
 
+  await expect(page).toHaveTitle(/^🔔 /);
   const bell = page.locator("[data-notification-bell]");
   await expect(bell, "閉じる前は数えない（二重に数えない）").toHaveAttribute("aria-label", "通知の一覧");
   await expect(bell.locator(".notify-bell-badge")).toHaveCount(0);
@@ -133,6 +134,7 @@ test("履歴：閉じた知らせがベルの件数に数えられ、ポップ�
   await page.keyboard.press("Enter");
   await expect(dialog).toBeHidden();
   await expect(page.locator(".tab-bar-item").first(), "知らせの pane の tab へ移った").toHaveClass(/tab-bar-item-active/);
+  await expect(page).not.toHaveTitle(/^🔔 /);
   await expect(bell.locator(".notify-bell-badge"), "移った知らせは履歴から消える").toHaveCount(0);
 });
 

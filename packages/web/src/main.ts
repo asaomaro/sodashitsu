@@ -524,7 +524,7 @@ keys.setTerminalKeyFilter((paneId, decision) => {
   }
   return isAllowedInTerminalWindow(decision);
 });
-keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m) => view.onModeChange(m) }, imagePaste: imagePaster });
+keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m,target) => {view.numberTarget=target??"tab";view.onModeChange(m); } }, imagePaste: imagePaster });
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
 watch(
@@ -601,9 +601,9 @@ window.addEventListener("focus", markVisibleAgentsSeen);
 // ブラウザのタブのタイトル（H14／AC4）：`{hostname}: {workspace}`。どちらか欠けていれば既定の製品名 "Sodashitsu"。
 // 名前付き session はその名前を添える（20260926-named-session-ui の AC3。`documentTitle`）。
 watch(
-  () => [session.host?.hostname, session.host?.sessionName, view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null] as const,
-  ([hostname, sessionName, workspaceLabel]) => {
-    document.title = documentTitle(hostname, sessionName, workspaceLabel);
+  () => [session.host?.hostname, session.host?.sessionName, view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null, useNotificationsStore(pinia).queueLength + useNotificationsStore(pinia).historyCount] as const,
+  ([hostname, sessionName, workspaceLabel, count]) => {
+    document.title = (count > 0 ? "🔔 " : "") + documentTitle(hostname, sessionName, workspaceLabel);
   },
 );
 

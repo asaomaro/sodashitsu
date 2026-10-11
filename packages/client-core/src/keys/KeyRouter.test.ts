@@ -520,3 +520,33 @@ describe("KeyRouter.setKeymap — 割り当ての差し替え（AC8）", () => {
     expect(router.mode).toBe("terminal");
   });
 });
+
+describe("prefix中の番号選択", () => {
+  it.each([
+    ["f","pane",{type:"paneIndex",index:2}],
+    ["u","workspace",{type:"workspaceIndex",index:2}],
+    ["d","agent",{type:"focusAgentIndex",index:1}],
+  ] as const)("%sで対象を選び、数字をPTYへ流さず確定する", (selector,target,action) => {
+    const router=new KeyRouter(DEFAULT_KEYMAP,realClock());
+    const events:string[]=[];router.onModeChange((mode,scope)=>events.push(`${mode}:${scope}`));
+    router.handle(ctrlB());expect(router.handle(key({key:selector}))).toEqual({kind:"consume"});
+    expect(router.mode).toBe("prefix");expect(router.numberTarget).toBe(target);
+    expect(router.handle(key({key:"2"}))).toEqual({kind:"action",action});
+    expect(router.mode).toBe("terminal");expect(router.numberTarget).toBe("tab");
+    expect(events).toContain(`prefix:${target}`);
+  });
+  it("取消・範囲外のキー・タイムアウトで選択を解除し、次のprefixはtabへ戻る", () => {
+    vi.useFakeTimers();
+    try {
+      const router=new KeyRouter(DEFAULT_KEYMAP,realClock());
+      router.handle(ctrlB());router.handle(key({key:"f"}));
+      expect(router.handle(key({key:"x"}))).toEqual({kind:"consume"});
+      expect(router.mode).toBe("terminal");
+      router.handle(ctrlB());router.handle(key({key:"d"}));router.handle(key({key:"Escape"}));
+      expect(router.numberTarget).toBe("tab");
+      router.handle(ctrlB());router.handle(key({key:"u"}));vi.advanceTimersByTime(3001);
+      expect(router.mode).toBe("terminal");expect(router.numberTarget).toBe("tab");
+      router.handle(ctrlB());expect(router.handle(key({key:"1"}))).toEqual({kind:"action",action:{type:"tabIndex",index:1}});
+    } finally {vi.useRealTimers();}
+  });
+});

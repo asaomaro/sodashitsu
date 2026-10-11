@@ -15,7 +15,7 @@ describe("checkForkable（会話の id は、pane の記録だけから引く。
   it("理由の種類: pane が無い・エージェントが居ない・Claude Code でない・会話の id が分からない", () => {
     expect(checkForkable(undefined)).toEqual({ ok: false, reason: "pane_not_found" });
     expect(checkForkable(pane({ agent: null }))).toEqual({ ok: false, reason: "no_agent" });
-    expect(checkForkable(pane({ agent: agent("codex"), agentSession: { kind: "codex", sessionId: ID, reportedAt: 1 } }))).toEqual({ ok: false, reason: "not_claude" });
+    expect(checkForkable(pane({ agent: agent("other"), agentSession: { kind: "codex", sessionId: ID, reportedAt: 1 } }))).toEqual({ ok: false, reason: "not_claude" });
     expect(checkForkable(pane({ agentSession: null }))).toEqual({ ok: false, reason: "no_session_id" });
     // 検出は claude だが、会話の記録が別の種類（取り違え）
     expect(checkForkable(pane({ agentSession: { kind: "codex", sessionId: ID, reportedAt: 1 } }))).toEqual({ ok: false, reason: "no_session_id" });
@@ -28,6 +28,13 @@ describe("checkForkable（会話の id は、pane の記録だけから引く。
 });
 
 describe("起動の引数", () => {
+  it.each(["codex", "copilot"] as const)("%s の会話参照を受け付ける", kind => {
+    expect(checkForkable(pane({agent:agent(kind), agentSession:{kind,sessionId:ID,reportedAt:1}}))).toMatchObject({ok:true,sessionId:ID});
+  });
+  it("Codex は fork と作業フォルダ、Copilot は分岐後の ID を resume する",()=>{
+    expect(forkArgs(ID,"codex","/new dir")).toEqual(["fork",ID,"--cd","/new dir"]);
+    expect(forkArgs(ID,"copilot")).toEqual(["--resume",ID]);
+  });
   it("--resume <id> --fork-session。既存の引用の関数で、1 行に組む（引数ごとに単一引用符で包む）", () => {
     expect(forkArgs(ID)).toEqual(["--resume", ID, "--fork-session"]);
     expect(buildStartLine("claude", forkArgs(ID))).toBe(`claude '--resume' '${ID}' '--fork-session'`);

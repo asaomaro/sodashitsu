@@ -14,6 +14,7 @@ import type { SessionService } from "../session/SessionService.js";
 import type { TerminalHost } from "../terminal/TerminalHost.js";
 import type { TerminalManager } from "../terminal/TerminalManager.js";
 import {
+  buildShellStartLine,
   buildStartLine,
   checkShell,
   hasControlChar,
@@ -81,23 +82,11 @@ export class AgentStarter {
     const timeoutMs = params.timeoutMs ?? AGENT_START_DEFAULT_TIMEOUT_MS;
     if (!isValidAgentStartTimeout(timeoutMs))
       throw new RpcError("invalid_agent_timeout", INVALID_AGENT_TIMEOUT_MESSAGE);
-    const line = buildStartLine(executable, args);
-    if (Buffer.byteLength(line, "utf8") > MAX_START_LINE_BYTES) {
-      throw new RpcError(
-        "invalid_agent_argument",
-        `agent command line exceeds ${MAX_START_LINE_BYTES} bytes`,
-      );
-    }
+    if(this.platform !== "win32" && Buffer.byteLength(buildStartLine(executable,args),"utf8") > MAX_START_LINE_BYTES) throw new RpcError("invalid_agent_argument",`agent command line exceeds ${MAX_START_LINE_BYTES} bytes`);
     this.opts.session.assertAgentNameAvailable(name, null);
     const host = this.requireIdlePane(paneId);
-    if (this.platform === "win32") {
-      throw new RpcError(
-        "unsupported_agent_shell",
-        "agent start is not supported on a Windows server yet",
-      );
-    }
 
-    const shell = checkShell(await this.foregroundJob(host.pid), host.pid);
+    const shell = checkShell(await this.foregroundJob(host.pid), host.pid, this.platform);
     if (shell.kind === "busy") throw busy(paneId);
     if (shell.kind === "unsupported") {
       throw new RpcError(
@@ -105,6 +94,9 @@ export class AgentStarter {
         `agent start does not support shell ${shell.shell} yet`,
       );
     }
+
+    const line = buildShellStartLine(executable,args,shell.shell);
+    if (Buffer.byteLength(line,"utf8") > MAX_START_LINE_BYTES) throw new RpcError("invalid_agent_argument",`agent command line exceeds ${MAX_START_LINE_BYTES} bytes`);
 
     // 前面を待つ間に pane の close・他の起動・rename が割り込みうるので、同期のまま確かめ直してから予約する
     // （名前は beginAgentLaunch の中で assertAgentNameAvailable がもう一度検査する）。
@@ -117,14 +109,14 @@ export class AgentStarter {
         // 書く直前（他の入力を後回しにしている間）に前面をもう一度確かめる。最初の確認の後にブラウザ等から始まった
         // プログラム（vim 等）に Ctrl-C とコマンド行を打ち込まない（review ラウンド 1）。
         prepare: async () => {
-          const again = checkShell(await this.foregroundJob(host.pid), host.pid);
+          const again = checkShell(await this.foregroundJob(host.pid), host.pid, this.platform);
           if (again.kind !== "available") throw busy(paneId);
         },
         build: (modes) => {
           opts.beforeWrite?.();
           // 他の入力の後ろで待つ間にエージェントが検出されていたら、その入力欄に打ち込まない（agent.prompt と同じ）。
           if (this.opts.session.getPane(paneId)?.agent !== null) throw busy(paneId);
-          return startInput(line, modes.bracketedPaste, opts.skipInterrupt === true);
+          return startInput(line, modes.bracketedPaste, opts.skipInterrupt === true, this.platform === "win32");
         },
         delayMs: START_INTERRUPT_DELAY_MS,
       });
@@ -142,14 +134,13 @@ export class AgentStarter {
   }
 
   /**
-   * その pane が、いま「起動できる pane」（前面がシェルだけで、POSIX 系）か。確かめられなければ false。作ったばかりの pane の入力待ちの判定に使う（fork の A2）。
-   * Windows のサーバでは常に false。
+   * その pane が、いま「起動できる pane」（前面が対応シェルだけ）か。確かめられなければ false。作ったばかりの pane の入力待ちの判定に使う（fork の A2）。
+   * WindowsではPowerShell・pwsh・cmdを対象にする。
    */
   async isShellAvailable(paneId: string): Promise<boolean> {
-    if (this.platform === "win32") return false;
     const host = this.opts.terminals.get(paneId);
     if (!host) return false;
-    return checkShell(await this.foregroundJob(host.pid), host.pid).kind === "available";
+    return checkShell(await this.foregroundJob(host.pid), host.pid, this.platform).kind === "available";
   }
 
   private requireIdlePane(paneId: string): TerminalHost {

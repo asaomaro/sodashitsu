@@ -107,7 +107,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     const sidebarOf = (l: string) => l.slice(0, l.indexOf("│")).trimEnd();
     expect(sidebarOf(lines[agents + 1]!)).toBe(" ◐ beta t2");
     expect(sidebarOf(lines[agents + 2]!)).toBe("   Claude");
-    expect(outer.line(0)).toContain("1:t1");
+    expect(outer.line(0)).toContain("t1");
     expect(outer.line(0)).toContain("session: work");
     expect(outer.line(1)).toContain("shell-1");
     expect(outer.line(2)).toContain("hello from p1");

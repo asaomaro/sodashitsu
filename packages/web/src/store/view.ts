@@ -907,6 +907,7 @@ export const useViewStore = defineStore("view", () => {
     toasts.value = toasts.value.filter((t) => t.id !== id);
   }
 
+  const numberTarget = ref<"tab"|"pane"|"workspace"|"agent">("tab");
   const isPrefixWaiting = computed(() => mode.value === "prefix");
 
   return {
@@ -956,6 +957,7 @@ export const useViewStore = defineStore("view", () => {
     toggleWorkspaceSort,
     toasts,
     isPrefixWaiting,
+    numberTarget,
     restoreView,
     setMachineScope,
     rememberView,

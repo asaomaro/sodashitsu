@@ -65,6 +65,8 @@ function isAllowedAction(action: Action): boolean {
     case "agentDelta":
     case "focusAgentIndex":
     case "tabDelta":
+    case "paneIndex":
+    case "selectNumbers":
     case "tabIndex":
     case "goto":
     case "nextNotification":

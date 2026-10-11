@@ -275,8 +275,11 @@ test("(5) サーバで断る：画面の確認を通らない入口（直接の 
   expect(events().some((e) => e.event === "pane.updated" && (e.data as { pane: { id: string } }).pane.id === p)).toBe(true);
 });
 
-test("(6) 同じ workspace の中：別の tab へ移り、自分の workspace の行へ落とすと新しい tab へ切り出される（AC15）", async ({ page, appServer }) => {
+for (const style of ["classic", "modern"] as const) {
+test(`(6) ${style}: 同じ workspace の中：別の tab へ移り、自分の workspace の行へ落とすと新しい tab へ切り出される（AC15）`, async ({ page, appServer }) => {
   const w = await boot(page, appServer, { record: true });
+  await w.client.request("prefs.set", {patch:{uiStyle:style}});
+  await expect(page.locator("html")).toHaveAttribute("data-ui-style",style);
   // A1 に 2 つ目の tab を足す。
   await w.client.request("tab.create", { workspaceId: w.ws.A1 });
   await row(page, w.ws.A1).click();
@@ -289,6 +292,9 @@ test("(6) 同じ workspace の中：別の tab へ移り、自分の workspace �
   // 別の tab へ（pane の名前を tab バーの 2 番目の tab へ）。
   await grabAndMoveTo(page, items.nth(1));
   await expect(items.nth(1)).toHaveClass(/tab-bar-item-drop-target/);
+  await expect(page.locator(".tab-bar-drop-hint")).toContainText("ここへ移動");
+  const colors = await items.nth(1).evaluate(el => ({ bg: getComputedStyle(el).backgroundColor, color:getComputedStyle(el).color, expectedBg:(()=>{const probe=document.createElement("span");probe.style.backgroundColor="var(--soda-accent)";el.append(probe);const v=getComputedStyle(probe).backgroundColor;probe.remove();return v;})(), expectedColor:(()=>{const probe=document.createElement("span");probe.style.color="var(--soda-accent-fg)";el.append(probe);const v=getComputedStyle(probe).color;probe.remove();return v;})() }));
+  expect(colors.bg).toBe(colors.expectedBg);expect(colors.color).toBe(colors.expectedColor);
   await page.mouse.up();
   await expect.poll(() => sentCount(w.rec!, "pane.move_to_tab")).toBe(1);
   await expect(items.nth(1)).toHaveClass(/tab-bar-item-active/);
@@ -305,6 +311,8 @@ test("(6) 同じ workspace の中：別の tab へ移り、自分の workspace �
   await expect(mover(page)).toBeVisible();
   await expect(page.locator(".toast", { hasText: MESSAGE })).toHaveCount(0);
 });
+
+}
 
 // 見た目の確認（明るい配色・暗い配色。落とせる行が 2 つの場面と、自分の行しか無い場面）。クラスの有無・opacity は、`getComputedStyle` で見る。
 for (const scheme of ["light", "dark"] as const) {

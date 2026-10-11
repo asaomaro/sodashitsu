@@ -579,21 +579,22 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 - `KIND` は次の表からだけ選ぶ。打ち込む実行ファイルは表で決まっていて、任意のコマンド行は受け付けない（表に無いものは使用誤り＝終了コード 2）。
   `pi` `claude` `codex` `gemini` `cursor`（`cursor-agent`）`devin` `agy` `cline` `opencode` `copilot` `kimi` `kiro`（`kiro-cli`）`droid` `amp`
   `grok` `hermes` `kilo` `qodercli` `qwen` `letta` `maki` `muse`（括弧の無いものは kind と同じ名前）。
-- `--` の後はすべてエージェントへの引数（`--kind` 等もオプションとして読まない）。各引数は**単一引用符で包んで**打ち込むので、
+- `--` の後はすべてエージェントへの引数（`--kind` 等もオプションとして読まない）。POSIXでは各引数を**単一引用符で包んで**打ち込むので、
   `;`・`$(…)`・バッククォート・`'`・`"`・`*`・`~`・`!` 等を含んでもそのまま 1 つの引数として届き、シェルの構文として解釈されない。
   **制御文字（改行・タブ・ESC 等）を含む引数**と、打ち込む 1 行が 4000 バイトを超えるものは `invalid_agent_argument` で何も送らない。
 - 打ち込むのは、Ctrl-C（継続行＝引用符が開いたままの入力を捨てさせる）→ 200 ms 後に Ctrl-E・Ctrl-U（打ちかけの行を消す）＋コマンド行
   （シェルが bracketed paste を有効にしていれば貼り付けとして）＋Enter。**シェルがまだ読んでいない打鍵は Ctrl-C で消える**（シェルの起動直後に
   打った内容等）。Ctrl-C を受けたシェルは新しいプロンプトを出し、`$?` は 130 になる。vi の編集モードのシェルでは打ちかけの消去が
   効かないことがある。200 ms は保証ではなく、極端な高負荷でシェルが Ctrl-C を処理する前に行を読み始めると、行の先頭が落ちうる。
-- 起動できる pane: サーバが Linux／WSL2 で、pane の前面プロセスグループがシェル自身だけで、そのシェルが `sh`・`bash`・`dash`・`zsh`・`ksh`・
+- 起動できる pane: Linux／WSL2では、pane の前面プロセスグループがシェル自身だけで、そのシェルが `sh`・`bash`・`dash`・`zsh`・`ksh`・
   `mksh` のどれか。エージェントが検出されている・同じ pane で別の起動中・サーバの復元で会話の再開コマンドを打ち込んでから 30 秒以内でまだ
   検出されていない・前面が別のコマンド（エディタ等）・前面を確かめられないときは
-  `agent_pane_busy`（CLI は 2 秒まで 100 ms おきに再試行する）。fish・csh・tcsh・nu・elvish・xonsh・pwsh・powershell・cmd の pane と、
-  Windows で動くサーバでは `unsupported_agent_shell`。どれも**何も打ち込まない**。macOS 等（`/proc` が無い）では前面を確かめられないので
+  `agent_pane_busy`（CLI は 2 秒まで 100 ms おきに再試行する）。WindowsではPowerShell・pwsh・cmdの空いているシェルに対応します。
+  fish・csh・tcsh・nu・elvish・xonshなど対象外のシェルでは `unsupported_agent_shell`。どれも**何も打ち込まない**。macOS 等（`/proc` が無い）では前面を確かめられないので
   常に `agent_pane_busy`。前面は受け付けた時点と、書き込む直前（ブラウザ等からの他の入力を後回しにしている間）の 2 回確かめる。
   それでも、書き込む直前の確認の少し前に打たれたコマンドがまだ起動し終えていない（シェルが fork・exec している途中の）瞬間には
   見分けられず、そのコマンドに Ctrl-C と行が届きうる（herdr も同じ）。確かめ直しの間（最長 2 秒）は、その pane への他の入力が遅れて届く。
+- Windowsでは引数をBase64のJSONとして固定のNodeランチャーへ渡し、エージェントをシェルを介さず起動します。空引数・引用符・`%PATH%`・`&`もそのまま届きます。Ctrl-C後に起動行を送り、POSIX用のCtrl-E・Ctrl-Uは送りません。サーバのPATHにあるexe、またはnpm標準のcmd shimに対応し、未知のbatchラッパーは拒否します。cmdのペインでもWindows標準PowerShellが必要です。
 - 名前: 書式と一意性は `agent rename` と同じ（`invalid_agent_name`・`agent_name_taken`）。起動中（まだ検出されていない）の名前も予約され、
   他の `agent start`・`agent rename` には使えない。期待した種類のエージェントがその pane で検出された時点で名前が付き、以後は `agent rename` で
   付けた名前と同じ（終了・入れ替わり・pane の close で消える）。サーバは打ち込んだ時点から `--timeout` の間に検出されなければ予約を解く
@@ -614,7 +615,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 ### 会話を引き継いで起こす（`agent fork`）
 
-`sodactl agent fork <target> [--worktree <ブランチ>] [--no-note] [--no-wait] [--timeout <ms>] [--json]` は、動いている **Claude Code** のエージェントを、ここまでの会話を引き継いだ別のエージェントとして、同じフォルダの新しい pane（`--worktree` なし）か、新しい worktree と workspace（`--worktree <ブランチ>`）に起こします。元のエージェントは止まりません。
+`sodactl agent fork <target> [--worktree <ブランチ>] [--no-note] [--no-wait] [--timeout <ms>] [--json]` は、動いている **Claude Code・Codex・GitHub Copilot CLI** のエージェントを、ここまでの会話を引き継いだ別のエージェントとして、同じフォルダの新しい pane（`--worktree` なし）か、新しい worktree と workspace（`--worktree <ブランチ>`）に起こします。元のエージェントは止まりません。
 **会話の id・起動するコマンドは送れません**（サーバが pane の記録から引きます。余計な項目は断られます）。既定で最後まで待ち（`--no-wait` で、起動のコマンドを打ち込んだところで返す）、結果は新しい pane の id・名前・worktree のパス・最初の知らせの状態（`noteStatus`）です。
 使える条件・引き継がれないもの（権限のモード・追加フォルダ）・最初の知らせ・失敗したとき・フックの更新が要ること・限界は **`docs/agent-fork.md`**。code: `fork_unavailable`・`fork_branch_exists`・`fork_shell_not_ready`・`fork_in_progress`・`fork_failed`（ほか worktree の作成の code〔`worktree_*`・`not_a_git_repository`〕）。`<target>` の解決は他の `agent` のコマンドと同じ。
 
@@ -930,8 +931,7 @@ herdr の `agent list` / `agent get` / `agent wait` / `agent read` / `agent prom
   外れると別のエージェントとして数え直すので消える）と、保存しないこと（herdr は session に保存して復元する）。
 - `agent start`: 空いているシェルの判定・kind の表と実行ファイル・`--` の後の引数・制御文字の拒否・起動中の名前の予約・`blocked` で
   `agent_not_ready`・既定 30 秒と範囲・`agent_pane_busy` の 2 秒の再試行・code は herdr と同じ。違い:
-  - 対応するシェルは POSIX 系（sh・bash・dash・zsh・ksh・mksh）だけで、それ以外と Windows のサーバは `unsupported_agent_shell`（herdr に無い code。
-    herdr は fish・csh 等にも POSIX のクォートを使い、Windows は PowerShell／cmd.exe 向けに組み立てる）。
+  - 対応するシェルはPOSIX系（sh・bash・dash・zsh・ksh・mksh）とWindowsのPowerShell・pwsh・cmd。それ以外は `unsupported_agent_shell`。
   - 引数は全部を単一引用符で包む（herdr は安全な文字だけの引数を裸で出す）。打ち込む前に Ctrl-C と Ctrl-E・Ctrl-U を送る（herdr は送らない）。
     打ち込む 1 行は 4000 バイトまで。
   - `--kind` は正規の名前だけ（herdr は `claude-code` 等の別名も受ける）。`omp`・`mastracode` は無い（本製品が検出できない）。

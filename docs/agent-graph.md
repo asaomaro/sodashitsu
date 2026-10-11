@@ -171,7 +171,7 @@ pane の中のエージェントが `sodactl` で別のエージェントを起�
   手元の開いている pane のノードは、利用者も外せない（`node_required`）。
 - 「誰が起動したか」の記録はサーバのメモリだけ。サーバの再起動・`soda handoff` による引き継ぎで消える（再起動の前に作った pane は、後からエージェントが現れても載らない）。
   グラフに載ったノード・線は保存されるので消えない。
-- Windows のサーバでは `agent start` を使えない（`unsupported_agent_shell`）。自動載せの対象になるのは、`pane split` 等で作った pane に、エージェントを打ち込みで起動した場合になる。
+- WindowsのサーバでもPowerShell・pwsh・cmdのペインで `agent start` を利用できます。起動できるCLIの形式は `docs/sodactl.md` を参照してください。
 - 呼び出し元を名乗る仕組みは `docs/sodactl.md`「グラフの自動載せのための名乗り」。
 
 ## 空間と囲い（20261008-graph-first PR1c）

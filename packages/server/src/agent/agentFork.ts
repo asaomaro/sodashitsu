@@ -17,15 +17,17 @@ export function checkForkable(pane: Pane | undefined): Forkable {
   if (!pane) return { ok: false, reason: "pane_not_found" };
   const agent = pane.agent;
   if (!agent) return { ok: false, reason: "no_agent" };
-  if (agent.kind !== "claude") return { ok: false, reason: "not_claude" };
+  if (!["claude", "codex", "copilot"].includes(agent.kind)) return { ok: false, reason: "not_claude" };
   const ref = pane.agentSession;
-  if (!ref || ref.kind !== "claude") return { ok: false, reason: "no_session_id" };
+  if (!ref || ref.kind !== agent.kind) return { ok: false, reason: "no_session_id" };
   if (!isForkSessionId(ref.sessionId)) return { ok: false, reason: "bad_session_id" };
   return { ok: true, pane, agent, sessionId: ref.sessionId };
 }
 
 /** `--resume <id> --fork-session`。引数の引用は `buildStartLine`（固定の表の実行ファイルと、単一引用符で包む既存の関数）に任せる。 */
-export function forkArgs(sessionId: string): string[] {
+export function forkArgs(sessionId: string, kind = "claude", cwd?: string): string[] {
+  if (kind === "codex") return ["fork", sessionId, ...(cwd ? ["--cd", cwd] : [])];
+  if (kind === "copilot") return ["--resume", sessionId];
   return ["--resume", sessionId, "--fork-session"];
 }
 

@@ -40,18 +40,18 @@ export interface PtyProcess {
   resume(): void;
   kill(): void;
   /**
-   * 更新時の引き継ぎ（20260926-live-handoff）で新しい版へ渡す PTY の master の fd。渡せない実装（Windows の ConPTY・テストの偽物）は
+   * 更新時の引き継ぎ（20260926-live-handoff）で新しい版へ渡す PTY の master の fd。WindowsのWorker backendでは親が保持するPTYの私的識別子。渡せない実装（直接のConPTY・テストの偽物）は
    * 持たないか undefined を返す。
    */
   handoffFd?(): number | undefined;
   /** 引き継ぎの前に読み取りを止め、読み取り済みの分を `onData` へ流し切る（止められなければ false）。`socketReading.ts`。 */
-  holdReading?(): boolean;
+  holdReading?(): boolean | Promise<boolean>;
   /** `holdReading` を戻す（一時停止は解かない。呼び出し側が `resume` する）。 */
   releaseReading?(): void;
 }
 
 export interface PtyBackend {
   spawn(opts: PtySpawnOptions): PtyProcess;
-  /** execve をまたいで引き継いだ PTY の master の fd から作る（Unix だけ。20260926-live-handoff）。 */
+  /** execve をまたいで引き継いだ PTY の masterのfd、またはWindows親プロセスの私的PTY識別子から作る。 */
   adopt?(opts: { fd: number; pid: number }): PtyProcess;
 }

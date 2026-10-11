@@ -69,15 +69,17 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
       ...((pane?.agent?.subagents?.count ?? 0) > 0
         ? [{ label: "サブエージェントの一覧", run: () => actions.showSubagentsOf(target.paneId) }]
         : []),
+      ...(pane?.agent ? [
+        {label:"エージェントを fork…",run:()=>actions.openAgentFork(target.paneId)},
+        {label:"利用状況…",run:()=>actions.showUsageOf(target.paneId)},
+      ] : []),
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
 
     ];
   }
   if (target.kind === "tab") {
-    const tab = model.tabs.get(target.tabId);
     return [
-      { label: "新規", run: () => tab && actions.newTabInWorkspace(tab.workspaceId) },
       { label: "名前の変更", run: () => actions.renameTabById(target.tabId) },
       { label: "閉じる", run: () => actions.closeTabById(target.tabId) },
     ];

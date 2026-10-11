@@ -1,10 +1,11 @@
+import { windowsAgentExecutable } from "./windowsAgentLaunch.js";
 import { access, constants } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { AGENT_START_EXECUTABLES, agentStartLabel, type AgentKindsResult } from "@sodashitsu/protocol";
 
 /**
  * 起動できるエージェントの種類の一覧（`agent.kinds`。20261008-graph-first の PR3）。表（`AGENT_START_EXECUTABLES`）の種類のうち、サーバのプロセスの `PATH` に実行ファイルがあるもの
- * を `available` にする。**実行ファイルの名前・パスは返さない**。Windows のサーバは、`agent.start` が未対応なので、すべて `available: false`。
+ * を `available` にする。**実行ファイルの名前・パスは返さない**。Windows はネイティブ実行ファイルまたは標準npm shimを確認する。
  * 検索は 5 秒だけ覚える（フォームを開くたびに呼ばれても、ディスクを何度も見ない）。
  */
 const CACHE_MS = 5_000;
@@ -32,14 +33,13 @@ export function createAgentKindsLister(opts: AgentKindsOptions = {}): () => Prom
   /** 検索の途中の約束。終わる前に来た呼び出しは、同じものを待つ（連打で同じ検索を重ねない）。 */
   let inflight: Promise<AgentKindsResult> | null = null;
   const scan = async (): Promise<AgentKindsResult> => {
-    const dirs = (env["PATH"] ?? "").split(delimiter).filter((d) => d !== "");
+    const pathValue = platform === "win32" ? Object.entries(env).find(([k])=>k.toUpperCase()==="PATH")?.[1] : env["PATH"];
+    const dirs = (pathValue ?? "").split(platform === "win32" ? ";" : delimiter).filter((d) => d !== "");
     // 種類ごと・ディレクトリごとに並べて確かめる（WSL の `PATH` には Windows 側の `/mnt/c/…` が数十個あり、1 つずつ確かめると数秒かかる）。
     const kinds: AgentKindsResult["kinds"] = await Promise.all(
       Object.entries(AGENT_START_EXECUTABLES).map(async ([kind, executable]) => {
         const available =
-          platform === "win32"
-            ? false
-            : (await Promise.all(dirs.map((dir) => isExecutable(join(dir, executable))))).some(Boolean);
+          platform === "win32" ? await windowsAgentExecutable(executable,env).then(()=>true,()=>false) : (await Promise.all(dirs.map(dir=>isExecutable(join(dir,executable))))).some(Boolean);
         return { kind, label: agentStartLabel(kind), available };
       }),
     );

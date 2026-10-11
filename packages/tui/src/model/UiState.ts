@@ -33,6 +33,7 @@ export type DialogContext =
   | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
+  | { kind: "agentFork"; paneId: string }
   | { kind: "usage"; paneId: string }
   | { kind: "usageAccounts" }
   /**

@@ -1,6 +1,6 @@
 # エージェントの fork（会話を引き継いだエージェントを、もう 1 つ起こす）
 
-動いている Claude Code のエージェントを、**ここまでの会話の記憶を持ったまま**、別の pane にもう 1 つ起こします。別の案を並べて試したいとき、同じ調査をやり直させずに済みます。リポジトリの fork（GitHub の上の写し）ではなく、**会話（セッション）の fork** です。
+動いている Claude Code・Codex・GitHub Copilot CLI のエージェントを、**ここまでの会話の記憶を持ったまま**、別の pane にもう 1 つ起こします。別の案を並べて試したいとき、同じ調査をやり直させずに済みます。リポジトリの fork（GitHub の上の写し）ではなく、**会話（セッション）の fork** です。
 
 - 起こす先は、**同じフォルダの新しい pane**、または**新しい worktree（新しいブランチ）の workspace**。
 - 元のエージェントは止まらず、そのまま続きます。元の会話の記録は書き換わりません。
@@ -13,11 +13,11 @@
 
 | 条件 | 外れたときの理由 |
 | :- | :- |
-| その pane に Claude Code のエージェントが検出されている | `no_agent` |
-| Claude Code である（今は Claude Code だけ。Codex などは対象外） | `not_claude` |
+| その pane にエージェントが検出されている | `no_agent` |
+| Claude Code・Codex・GitHub Copilot CLI のいずれかである | `not_claude` |
 | 会話の id が分かる（**フックの報告**〔`SessionStart`〕で知る。設定の「エージェント連携」でフックを入れて、エージェントを起動し直すと使える） | `no_session_id` |
 | 会話の id が UUID の形（名前・パス・引数に化ける値は通さない） | `bad_session_id` |
-| 前面がシェルだけの pane を作れる（POSIX 系のシェル。fish・pwsh などと Windows のサーバは使えない） | `unsupported_shell` |
+| 前面がシェルだけの pane を作れる（POSIX 系、またはWindowsのPowerShell・pwsh・cmd。fishなどは対象外） | `unsupported_shell` |
 | 新しい worktree で fork するとき、元の pane が git のリポジトリの中にある | `not_a_git_repository` |
 
 会話の id は、**サーバが pane の記録（フックの報告）から引きます**。プロセスの引数・記録のファイルの更新時刻から推すことはしません（別の会話を fork してしまうため）。ブラウザ・`sodactl` から、会話の id・起動するコマンドは送れません（余計な項目は `invalid_params` で断ります）。
@@ -102,7 +102,7 @@ sodactl agent fork <target> [--worktree <ブランチ>] [--no-note] [--no-wait] 
 
 ブラウザ（デスクトップ）から、メニューとダイアログで fork できます（モバイルにはメニューの項目を出しません。端末版は `sodactl`）。
 
-- **メニュー**: pane の右クリックのメニューと、グラフのノードのメニューに「会話を fork…」。fork できない pane では、**押せない形**（薄く・`aria-disabled`）で理由が添えられ、押すと理由のトーストだけが出ます（ダイアログは開きません）。理由は「使える条件」の表と同じ種類です: エージェントが検出されていない・Claude Code でない・会話の id が分からない（フックを入れていない）・別のマシンの pane。シェルが POSIX 系でない（`unsupported_shell`）は、メニューでは分からないので、ダイアログの確かめ（`agent.fork_preview`）が出します。
+- **メニュー**: pane の右クリックのメニューと、グラフのノードのメニューに「会話を fork…」。fork できない pane では、**押せない形**（薄く・`aria-disabled`）で理由が添えられ、押すと理由のトーストだけが出ます（ダイアログは開きません）。理由は「使える条件」の表と同じ種類です: エージェントが検出されていない・Claude Code でない・会話の id が分からない（フックを入れていない）・別のマシンの pane。シェルが対応する種類でない（`unsupported_shell`）は、メニューでは分からないので、ダイアログの確かめ（`agent.fork_preview`）が出します。
 - **ダイアログ**（確定の前に `agent.fork_preview` で確かめる。何も作らず、何も打ち込まない）:
   - 行き先: 同じフォルダの新しい pane／新しい worktree（新しいブランチ）。git のリポジトリの中の pane でなければ、worktree は選べず、理由が出ます。
   - ブランチ名（worktree のとき。候補が入ります）: **既にあるブランチ名では、確定を押せません**（理由が出ます。サーバも `fork_branch_exists` で断ります）。作成先（見るだけ）と、元のフォルダ。
@@ -129,6 +129,16 @@ fork した pane のノードに、元のノードを指す**注記**（`forkedF
 - `agent.fork` は `/ws` の認証済みの接続から使えます（`agent.start` と同じ）。ログイン不要の `pane.sock` には載せません。
 - 会話の id の出どころはフックの報告で、**同じ OS の利用者のプログラムが偽の報告を送れば、その利用者の別の会話を fork させることができます**。同じ利用者のプログラムを信頼する、という今の前提の中です。確定の前の画面には、会話の id の先頭 8 文字を出します（取り違えに気づけるように）。
 - fork した会話の記録は、その利用者の `~/.claude` に残ります（worktree を消しても残ります）。
-- Claude Code だけ。フックが要る。別のマシンの pane は対象外（記録はそのマシンにあるため）。端末版（`soda`）の画面にメニューはなく、`sodactl` を使います。
+- 会話IDの連携が要ります。別のマシンの pane は対象外。端末版もペインの右クリック「エージェントを fork…」から、同じフォルダ／新しい worktree を選べます。
 - Claude Code の版の下限は確かめていません。会話の id で別のフォルダから fork できるのは Claude Code 2.1.223 以降で、それより古い版では、`unknown option` や `No conversation found` の理由が出ます。
 - **親の Claude Code の環境変数を引き継いだ pane では fork できません**。`soda serve` を Claude Code の pane の中から起動すると、子の pane に `CLAUDE_CODE_*`（例: `CLAUDE_CODE_CHILD_SESSION`）が入り、`claude --resume --fork-session` の会話が保存されず、`No conversation found` になります（確かめた例）。`soda` を別の端末（Claude Code の外）から起動し直してください。
+
+## Codex・GitHub Copilot CLI
+
+Codex は `codex fork <会話ID> --cd <新しいペインのフォルダ>` で会話を分岐します。会話IDはそのペインで報告されたものを使用します。
+Copilot は公式 SDK と同じ stdio 接続（`copilot --headless --stdio --no-auto-update`）で `sessions.fork` を呼び、新しいIDだけを `session.resume` と `workingDirectory` で作業先に合わせてから、ペインで `copilot --resume <新ID>` を開きます。元のIDをresumeする代替処理はありません。分岐APIに対応しない古いCLIでは更新を案内して停止します。
+
+Codex・Copilotへの最初の知らせは、新しい会話IDの報告を確認してから送ります。報告が来ない場合は待ちが切れ、送信されません。
+WindowsネイティブでもPowerShell・pwsh・cmdのペインで、自動起動とforkを利用できます。CLIはサーバのPATHにあるネイティブexe、またはnpm標準のcmd shimが対象です。任意の自作batchラッパーは実行しません。Codex・Copilotも同じ起動経路を使います。会話IDの報告と、各CLI側のfork機能は引き続き必要です。
+
+仕様の参照: [Codex CLI](https://developers.openai.com/codex/cli/reference)、[Copilot SDK互換性](https://docs.github.com/en/copilot/how-tos/copilot-sdk/troubleshooting/compatibility)、[公式SDKのRPC定義](https://github.com/github/copilot-sdk/blob/main/nodejs/src/generated/rpc.ts)。

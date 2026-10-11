@@ -18,7 +18,7 @@ describe("PrefixIndicator", () => {
     view.onModeChange("prefix");
     await wrapper.vm.$nextTick();
     expect(wrapper.find(".prefix-indicator").exists()).toBe(true);
-    expect(wrapper.text()).toBe("PREFIX");
+    expect(wrapper.text()).toContain("数字: タブ");
 
     view.onModeChange("terminal");
     await wrapper.vm.$nextTick();

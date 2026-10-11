@@ -1,0 +1,5 @@
+# 独立レビュー
+
+review_classic_controls: 共通sidebar-rowをposition:relativeにしてclassicの番号位置を修正。再レビュー追加指摘なし。
+review_tui_controls: narrowHeaderも共通modeBadgeを使い、選択対象を表示。再レビュー追加指摘なし。
+review_fork_multi: 初期ブランチ提案が空の編集を上書きする問題、Copilotの具体的失敗原因がcatchで失われる問題を指摘。初期ロードだけ提案を設定し、独自RpcError.messageを保持。TextInput.viewと編集カーソルを使用。カーソル移動だけのRPCも削減。再レビュー追加の重大指摘なし。

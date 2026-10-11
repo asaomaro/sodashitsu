@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import type { ForegroundJob } from "../platform/ProcessInspector.js";
 import { pastePayload } from "./agentInput.js";
 
@@ -65,12 +66,13 @@ export type ShellCheck =
   { kind: "available"; shell: string } | { kind: "busy" } | { kind: "unsupported"; shell: string };
 
 /** 前面プロセスグループがシェル自身だけか（herdr の `available_pane_shell_from_job`）。確かめられなければ busy。 */
-export function checkShell(job: ForegroundJob | null, shellPid: number): ShellCheck {
+export function checkShell(job: ForegroundJob | null, shellPid: number, platform: NodeJS.Platform = process.platform): ShellCheck {
   if (job === null || job.processGroupId !== shellPid) return { kind: "busy" };
   if (job.processes.some((p) => p.pid !== shellPid)) return { kind: "busy" };
   const shell = job.processes.find((p) => p.pid === shellPid);
   if (shell === undefined) return { kind: "busy" };
   const name = shellNameOf(shell.exe);
+  if (platform === "win32" && ["powershell", "pwsh", "cmd"].includes(name)) return { kind: "available", shell: name };
   if (POSIX_START_SHELLS.has(name)) return { kind: "available", shell: name };
   if (OTHER_SHELLS.has(name)) return { kind: "unsupported", shell: name };
   return { kind: "busy" };
@@ -82,8 +84,17 @@ export function buildStartLine(executable: string, args: readonly string[]): str
 }
 
 /** 書き込みの部分（`START_INTERRUPT_DELAY_MS` ずつ空けて順に書く）。 */
-export function startInput(line: string, bracketedPaste: boolean, skipInterrupt = false): string[] {
-  const body = `${LINE_CLEAR}${pastePayload(line, bracketedPaste)}\r`;
+export function startInput(line: string, bracketedPaste: boolean, skipInterrupt = false, windows = false): string[] {
+  const body = `${windows ? "" : LINE_CLEAR}${pastePayload(line, bracketedPaste)}\r`;
   // 作ったばかりの pane（fork。打ちかけが無い）は、先頭の Ctrl-C を送らない: シェルが入力を受けられる前だと、Ctrl-C が打鍵ごと捨てることがある（20261009-agent-fork の A2）。
   return skipInterrupt ? [body] : [INTERRUPT, body];
+}
+
+/** PowerShellでは単一引用符を二重にし、cmdではEncodedCommand経由にして%等の展開を避ける。 */
+export function buildShellStartLine(executable: string, args: readonly string[], shell: string): string {
+  if (!["powershell", "pwsh", "cmd"].includes(shell)) return buildStartLine(executable,args);
+  const literal = (s: string): string => "'" + s.replaceAll("'", "''") + "'";
+  const payload=Buffer.from(JSON.stringify({executable,args}),"utf8").toString("base64");
+  const script = ["&",literal(process.execPath),literal(fileURLToPath(new URL("./windowsAgentLaunch.js",import.meta.url))),literal(payload)].join(" ");
+  return shell === "cmd" ? `powershell.exe -NoLogo -NoProfile -EncodedCommand ${Buffer.from(script,"utf16le").toString("base64")}` : script;
 }

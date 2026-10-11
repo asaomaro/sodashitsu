@@ -4,7 +4,7 @@
  * **会話の id・起動するコマンドの文字列は受け取らない**（会話の id はサーバが pane の `agentSession` から引き、起動は固定の表から）。
  */
 
-/** 会話の id（Claude Code の UUID）の形。fork に使えるのはこの形だけ（名前・パス・コマンド行に化ける文字を通さない。A7）。 */
+/** 会話の id（対応 CLI の UUID）の形。fork に使えるのはこの形だけ（名前・パス・コマンド行に化ける文字を通さない。A7）。 */
 export const FORK_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function isForkSessionId(id: string): boolean {
   return FORK_SESSION_ID_RE.test(id);
@@ -16,7 +16,7 @@ export type ForkUnavailableReason =
   | "pane_not_found"
   /** その pane にエージェントが居ない。 */
   | "no_agent"
-  /** Claude Code ではない（今は Claude Code だけ）。 */
+  /** 対応するエージェントではない（旧プロトコル名を互換性のため維持）。 */
   | "not_claude"
   /** 会話の id が分からない（フックを入れていない・フックを入れる前に起動した）。 */
   | "no_session_id"

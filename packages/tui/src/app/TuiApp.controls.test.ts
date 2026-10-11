@@ -1,6 +1,7 @@
+import { stateGlyph } from "@sodashitsu/client-core";
 import { afterEach, expect, it, vi } from "vitest";
 import { startedApp } from "../testing/appHarness.js";
-import { snapshot, pane, agent } from "../testing/fixtures.js";
+import { snapshot, pane, agent, tab, workspace, leaf } from "../testing/fixtures.js";
 import { paneButtons } from "../render/chrome/frame.js";
 import type { SidebarHit } from "../render/chrome/sidebar.js";
 import type { LayoutResult } from "../layout/computeLayout.js";
@@ -94,6 +95,7 @@ it("利用状況画面を配信で更新し、入力をPTYへ送らず、一覧�
   await vi.waitFor(() => expect(h.app.usage.status).toBe("ready"));
   h.app.renderNow();
   expect(await h.screen()).toContain("コンテキスト");
+  expect(paneButtons({x:0,y:0,w:40,h:10},true,false)[0]!.action).toBe("info");
 });
 it("幅10のサイドバーでもベルは新規と重ならず、短い画面でもペイン一覧へ移れる", async () => {
   const u = {
@@ -150,4 +152,32 @@ it("幅10のサイドバーでもベルは新規と重ならず、短い画面�
   expect(await h.screen()).toContain("worker");
   h.io.type("\r");
   expect(h.app.ui.screen).toBe("base");
+});
+
+it("畳んだ帯にworkspace集約とagentの状態を描き、agentの印からペインへ戻れる", async () => {
+  const h=await startedApp({snapshot:snapshot({panes:[pane("p1","t1",{agent:agent({state:"blocked"})}),pane("p2","t1"),pane("p3","t2")]})});close.push(h.close);
+  await vi.waitFor(()=>expect(h.ws.requests("client.view")).toHaveLength(1));
+  h.io.type("\x02b");h.app.renderNow();
+  const hits=(h.app as unknown as {sidebarHits:SidebarHit[]}).sidebarHits;
+  const agentHit=hits.find(h=>h.kind==="agent")!;
+  expect(agentHit).toMatchObject({kind:"agent",paneId:"p1",section:"agents"});
+  expect((await h.screen()).split("\n")[agentHit.y]!).toContain(stateGlyph("blocked"));
+  h.app.model.focusPane("p3");h.app.renderNow();
+  h.io.type(click(0,agentHit.y));expect(h.app.model.focusedPaneId).toBe("p1");
+});
+it("workspaceの掴みと配置先を描き、別タブへのペイン移動先も強調する",async()=>{
+ const h=await startedApp({snapshot:snapshot({workspaces:[workspace("w1",["t1","dest"]),workspace("w2",["t2"])],tabs:[tab("t1","w1",leaf("p1")),tab("dest","w1",leaf("pd"),{label:"destination"}),tab("t2","w2",leaf("p3"))],panes:[pane("p1","t1"),pane("pd","dest"),pane("p3","t2")]})});close.push(h.close);
+ await vi.waitFor(()=>expect(h.ws.requests("client.view")).toHaveLength(1));h.app.renderNow();
+ const state=()=>h.app as unknown as {sidebarHits:SidebarHit[];tabBarHits:{tabs:{tabId:string;x:number;w:number}[]};lastLayout:LayoutResult};
+ const ws=state().sidebarHits.filter(h=>h.kind==="workspace");
+ const move=(x:number,y:number)=>`\x1b[<32;${x+1};${y+1}M`;
+ h.io.type(`\x1b[<0;9;${ws[0]!.y+1}M`+move(8,ws[1]!.y));h.app.renderNow();
+ expect(await h.screen()).toContain("↕");expect(await h.screen()).toContain("▶");
+ h.io.type("\x1b");await vi.waitFor(async()=>{h.app.renderNow();expect(await h.screen()).not.toContain("↕");});
+ const frame=state().lastLayout.panes[0]!.frame;
+ const dest=state().tabBarHits.tabs.find(t=>t.tabId==="dest")!;
+ h.io.type(`\x1b[<0;${frame.x+3};${frame.y+1}M`+move(dest.x+1,state().lastLayout.tabBar.y));h.app.renderNow();
+ expect(await h.screen()).toContain("▶destination");
+ h.io.type(`\x1b[<0;${dest.x+2};${state().lastLayout.tabBar.y+1}m`);
+ expect(h.ws.requests("pane.move_to_tab").at(-1)?.params).toMatchObject({paneId:"p1",targetTabId:"dest"});
 });

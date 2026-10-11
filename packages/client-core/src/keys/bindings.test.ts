@@ -42,17 +42,17 @@ describe("操作のカタログ（design「操作のカタログ」）", () => {
   // 20261005-notify-bell で open_notification_history（全体。既定は prefix+shift+o）を追加し 61 個になった。
   // 20261007-soda-extensions で focus_display（pane。既定は prefix+i）を追加し 62 個に、20261008-display-layout で display_menu（pane。既定は prefix+shift+i）を追加し 63 個になった。
   // 20261010-agent-usage PR4 で show_usage（pane。既定は prefix+shift+u）を追加し 64 個になった。
-  it("64 個あり、id は重複しない・表示名は空でない", () => {
-    expect(ACTIONS).toHaveLength(64);
-    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(64);
+  it("67 個あり、id は重複しない・表示名は空でない", () => {
+    expect(ACTIONS).toHaveLength(67);
+    expect(new Set(ACTIONS.map((a) => a.id)).size).toBe(67);
     for (const a of ACTIONS) expect(a.label.length, a.id).toBeGreaterThan(0);
   });
 
-  it("群は 全体 8・workspace / tab 24・pane 32（この順に並ぶ）", () => {
+  it("群は 全体 8・workspace / tab 26・pane 33（この順に並ぶ）", () => {
     const groups = ACTIONS.map((a) => a.group);
     expect(groups.filter((g) => g === "全体")).toHaveLength(8);
-    expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(24);
-    expect(groups.filter((g) => g === "pane")).toHaveLength(32);
+    expect(groups.filter((g) => g === "workspace / tab")).toHaveLength(26);
+    expect(groups.filter((g) => g === "pane")).toHaveLength(33);
     // 群ごとにまとまっている（全体 → workspace / tab → pane）
     expect(groups.join(",")).toBe(
       [...groups]

@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import type { IProcessTreeNode } from "@vscode/windows-process-tree";
 import type { DefaultShell, ForegroundJob, ForegroundProcess, ProcessInspector } from "./ProcessInspector.js";
 import { isBusyFromForeground } from "./ProcessInspector.js";
@@ -19,7 +20,8 @@ export class NativeWindowsProcessTreeProvider implements WindowsProcessTreeProvi
       throw new Error("NativeWindowsProcessTreeProvider is only available on win32");
     }
     // 動的 import：Linux/macOS のビルドでこのモジュールの読み込みに失敗しても、他プラットフォームの起動を妨げない。
-    const mod = await import("@vscode/windows-process-tree");
+    let mod:typeof import("@vscode/windows-process-tree");
+    try{mod=await import("@vscode/windows-process-tree");}catch{return cimProcessTree(rootPid);}
     return new Promise((resolve) => {
       mod.getProcessTree(rootPid, resolve, mod.ProcessDataFlag.CommandLine);
     });
@@ -124,4 +126,18 @@ export function parseWindowsCommandLine(commandLine: string | undefined, fallbac
   }
   if (current.length > 0) out.push(current);
   return out.length > 0 ? out : [fallbackExe];
+}
+
+/** ネイティブbindingが入らない環境でも、Windows標準CIMでプロセスツリーを読める。 */
+async function cimProcessTree(rootPid:number):Promise<WindowsProcessTreeNode|undefined>{
+ if(!Number.isSafeInteger(rootPid)||rootPid<1)return undefined;
+ const script=`Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress`;
+ return new Promise(resolve=>execFile("powershell.exe",["-NoLogo","-NoProfile","-EncodedCommand",Buffer.from(script,"utf16le").toString("base64")],{timeout:1800,maxBuffer:8*1024*1024,windowsHide:true},(error,stdout)=>{
+  if(error)return resolve(undefined);
+  try{const rows=JSON.parse(stdout) as {ProcessId:number;ParentProcessId:number;Name:string;CommandLine?:string}[];
+   const nodes=new Map<number,WindowsProcessTreeNode>(rows.map(p=>[p.ProcessId,{pid:p.ProcessId,name:p.Name,commandLine:p.CommandLine??"",children:[]}]));
+   for(const p of rows)if(p.ProcessId!==p.ParentProcessId){const parent=nodes.get(p.ParentProcessId),child=nodes.get(p.ProcessId);if(parent&&child)parent.children.push(child);}
+   resolve(nodes.get(rootPid));
+  }catch{resolve(undefined);}
+ }));
 }

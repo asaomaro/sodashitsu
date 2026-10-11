@@ -153,13 +153,13 @@ describe("マウス（04 ラウンド 2）", () => {
     h.app.renderNow();
     const shifted = (await h.screen()).split("\n")[0]!;
     expect(shifted).toContain("‹");
-    expect(shifted).not.toContain("1:long-tab-name-t1 ");
+    expect(shifted).not.toContain("long-tab-name-t1 ");
     expect(h.app.model.tabId).toBe("t1"); // ずらすだけで tab は替えない
     // 9 番目の tab へ移ると、それが見えるまでずれる。
     h.io.type("\x029");
     await vi.waitFor(() => expect(h.app.model.tabId).toBe("t9"));
     h.app.renderNow();
-    expect((await h.screen()).split("\n")[0]).toContain("9:long-tab-name-t9");
+    expect((await h.screen()).split("\n")[0]).toContain("long-tab-name-t9");
   });
 
   it("pane の右の罫線のスクロールバー（M9）：つまみを出し、溝を押すと飛び、つまみを動かすとスクロールする", async () => {

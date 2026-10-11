@@ -39,6 +39,7 @@ export interface NotifyHost {
   env: Readonly<Record<string, string | undefined>>;
   /** 外側の端末にフォーカスがあるか（フォーカスの報告。来ない端末ではあり）。 */
   hasFocus(): boolean;
+  queueChanged?(): void;
   /** その pane が今の割り付けで見えているか。 */
   isPaneVisible(paneId: string): boolean;
   /** 外側の端末へ書く（デスクトップ通知の列・ベル）。 */
@@ -153,6 +154,7 @@ export class NotificationController {
       : null;
     const r = enqueue(this.queue, { key, kind, paneId, label, at: Date.now(), toastId });
     this.queue = r.queue;
+    this.host.queueChanged?.();
     for (const e of r.removed) this.cleanup(e);
     let out = "";
     let belled = false;
@@ -212,12 +214,14 @@ export class NotificationController {
   private drop(key: NotifyKey): void {
     const r = removeByKey(this.queue, key);
     this.queue = r.queue;
+    this.host.queueChanged?.();
     for (const e of r.removed) this.cleanup(e);
   }
 
   private dropPane(paneId: string): void {
     const r = removeByPane(this.queue, paneId);
     this.queue = r.queue;
+    this.host.queueChanged?.();
     for (const e of r.removed) this.cleanup(e);
   }
 

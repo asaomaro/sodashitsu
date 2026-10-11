@@ -79,7 +79,7 @@ describe("TuiApp：大きさの申告と描画の予約（AC2・AC11）", () => 
       expect(outer.text()).toContain("w2");
     });
     expect(outer.line(2)).toContain("w1");
-    expect(outer.line(0)).toContain("1:t1");
+    expect(outer.line(0)).toContain("t1");
     // 同じ tick の多数の変化は 1 回の描画にまとまる。
     const before = io.output().split("\x1b[?2026h").length;
     for (let i = 0; i < 50; i++) app.scheduleRender();

@@ -2,6 +2,7 @@ import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@s
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
   aggregate,
+  sameItemTarget,
   depthFirstPaneIds,
   displayStateFor,
   LOCAL_MACHINE_ID,
@@ -19,7 +20,7 @@ import {
   type ItemRow,
   UNGROUPED_REF,
 } from "@sodashitsu/client-core";
-import { currentSidebarTree } from "../../model/sidebarTree.js";
+import { currentSidebarTree, currentVisibleWorkspaceIds } from "../../model/sidebarTree.js";
 import { ATTR, hexColor, type PackedColor } from "../color.js";
 import type { Grid, Rect } from "../Screen.js";
 import { stringWidth, truncate } from "../width.js";
@@ -185,6 +186,7 @@ function segsOf(lines: ResolvedLine[], state: DisplayState | null, ctx: ChromeCo
  */
 export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): SidebarHit[] {
   const { theme, model, prefs } = ctx;
+  ctx = {...ctx, numberWorkspaceIds:currentVisibleWorkspaceIds(model,prefs), numberAgentIds:orderedAgentPaneIds([...model.panes.values()].filter(p=>p.agent).map(p=>({paneId:p.id,state:model.displayStateOf(p),since:p.agent!.since})),prefs.agentSort)};
   const bg = theme.ground("--soda-menu-bg");
   const fg = theme.ui("--soda-menu-fg");
   const activeBg = theme.ui("--soda-menu-active-bg");
@@ -205,7 +207,25 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     if(rect.h>=7){control(rect.y+rect.h-4,rect.x,"＋","new");control(rect.y+rect.h-3,rect.x,"⋯","menu");}
     control(rect.y+rect.h-2,rect.x,"🔔","bell");
     grid.set(rect.x,rect.y+rect.h-1,"»",1,fg,activeBg);
-    controls.push({kind:"collapse",x:rect.x,y:rect.y+rect.h-1});return controls;
+    controls.push({kind:"collapse",x:rect.x,y:rect.y+rect.h-1});
+    const workspaces = currentVisibleWorkspaceIds(model, prefs).map(id => model.workspaces.get(id)!);
+    const agents = orderedAgentPaneIds([...model.panes.values()].filter(p => p.agent).map(p => ({paneId:p.id,state:model.displayStateOf(p),since:p.agent?.since??0})), prefs.agentSort);
+    const spaceRows = workspaces.map(w => ({state:model.workspaceState(w.id),hit:{kind:"workspace",workspaceId:w.id} as SidebarTarget,selected:w.id===model.workspaceId}));
+    const agentRows = agents.map(id => ({state:model.displayStateOf(model.panes.get(id)!),hit:{kind:"agent",paneId:id} as SidebarTarget,selected:id===model.focusedPaneId}));
+    const slots = Math.max(0,rect.h-6);
+    const spacesH = agentRows.length ? Math.min(spaceRows.length,Math.ceil(slots/2)) : slots;
+    let y=rect.y+2;
+    for(const [section, rows, height] of [["spaces",spaceRows,spacesH],["agents",agentRows,slots-spacesH]] as const) {
+      const offset = Math.min(ctx.sidebarScroll?.[section]??0,Math.max(0,rows.length-height));
+      if(ctx.sidebarScroll)ctx.sidebarScroll[section]=offset;
+      for(const row of rows.slice(offset,offset+height)) {
+        const rank=row.hit.kind === "workspace" ? ctx.numberWorkspaceIds!.indexOf(row.hit.workspaceId)+1 : row.hit.kind === "agent" ? ctx.numberAgentIds!.indexOf(row.hit.paneId)+1 : 0;
+        const glyph=ctx.mode === "prefix" && rank>0 && rank<=9 ? `${rank}:` : glyphFor(row.state,prefs.statusSymbols)||"○";
+        grid.text(rect.x,y,truncate(glyph,inner),stateColor(theme,row.state),row.selected?activeBg:bg,0,inner);
+        controls.push({y,section,...row.hit}); y++;
+      }
+    }
+    return controls;
   }
   if(ctx.chromeControls) {
   control(rect.y,rect.x+1,"基本","base");control(rect.y,rect.x+7,"利用状況","dashboard");
@@ -450,7 +470,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   const agentLines: Line[] = [];
   if (agentPanes.length > 0) {
     const order = orderedAgentPaneIds(
-      agentPanes.map((p) => ({
+      [...model.panes.values()].filter(p=>p.agent).map((p) => ({
         paneId: p.id,
         state: model.displayStateOf(p),
         since: p.agent?.since ?? 0,
@@ -749,9 +769,12 @@ function paintSection(
     }
     const { line, sub } = row;
     // navigate モードで選んでいる行はアクセントの色で（今の workspace の強調より優先）。
-    const rowBg = line.navigated ? theme.ui("--soda-accent") : line.selected ? activeBg : bg;
-    const rowFg = line.navigated ? theme.ui("--soda-accent-fg") : fg;
-    if (line.selected || line.navigated) grid.fill({ x: rect.x, y, w: inner, h: 1 }, rowFg, rowBg);
+    const feedback = ctx.sidebarDrag;
+    const held = !!(feedback && line.drag && sameItemTarget(feedback.source.item, line.drag.item));
+    const drop = !!(feedback?.plan.kind === "move" && feedback.target && line.drag && sameItemTarget(feedback.target.item, line.drag.item));
+    const rowBg = drop ? theme.ui("--soda-accent") : held ? activeBg : line.navigated ? theme.ui("--soda-accent") : line.selected ? activeBg : bg;
+    const rowFg = drop ? theme.ui("--soda-accent-fg") : line.navigated ? theme.ui("--soda-accent-fg") : fg;
+    if (line.selected || line.navigated || held || drop) grid.fill({ x: rect.x, y, w: inner, h: 1 }, rowFg, rowBg);
     if (line.hit) hits.push({ y, section, ...line.hit, ...(line.drag ? { drag: line.drag } : {}) });
     else hits.push({ y, kind: "area", section });
     // 1 行目は項目の頭から、2 行目からは状態の印の幅（2 桁）だけ下げる（web の line2 と同じ）。
@@ -768,6 +791,9 @@ function paintSection(
       grid.text(bx, y, badge!.text, rowFg, rowBg, ATTR.underline, badgeW);
       hits.push({ y, section, kind: "subagents", paneId: badge!.paneId, x: bx, w: badgeW });
     }
+    if (sub === 0 && (held || drop)) grid.set(rect.x,y,held?"↕":"▶",1,rowFg,rowBg);
+    const rank = line.hit?.kind === "workspace" || line.hit?.kind === "autoGroup" ? ctx.numberWorkspaceIds?.indexOf(line.hit.workspaceId) : line.hit?.kind === "agent" ? ctx.numberAgentIds?.indexOf(line.hit.paneId) : undefined;
+    if(sub===0 && ctx.mode === "prefix" && rank!==undefined && rank>=0 && rank<9) x+=grid.text(x,y,`${rank+1}: `,rowFg,rowBg,ATTR.bold,Math.max(0,end-x));
     const segs = line.rows[sub]!;
     // 1 行目の右端の部品（ブランチ名・数）。右へ寄せ、広くても残りの半分まで（左の名前を先に残す）。
     let right: { seg: Seg; text: string; x: number } | null = null;

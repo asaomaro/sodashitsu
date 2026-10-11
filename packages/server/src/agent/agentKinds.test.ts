@@ -34,9 +34,9 @@ describe("agent.kinds の一覧", () => {
   });
 
   it("PATH が空・Windows なら、すべて available でない。5 秒は覚える", async () => {
-    const d = await binDir({ claude: 0o755 });
+    const d = await binDir({ claude: 0o755, "claude.exe":0o755 });
     expect((await createAgentKindsLister({ env: { PATH: "" }, platform: "linux" })()).kinds.some((k) => k.available)).toBe(false);
-    expect((await createAgentKindsLister({ env: { PATH: d }, platform: "win32" })()).kinds.some((k) => k.available)).toBe(false);
+    expect((await createAgentKindsLister({ env: { Path: d }, platform: "win32" })()).kinds.find(k=>k.kind==="claude")?.available).toBe(true);
     let t = 1000;
     const env = { PATH: d };
     const list = createAgentKindsLister({ env, platform: "linux", now: () => t });
