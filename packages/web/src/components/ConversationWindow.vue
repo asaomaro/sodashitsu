@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { findMessageLine } from "@sodashitsu/client-core";
-import { computed, inject, nextTick, ref, watch } from "vue";
+import { findMessageLine, clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
+import { computed, inject, nextTick, onUnmounted, ref, watch } from "vue";
 import type { ConversationMessage, ConversationSummary } from "@sodashitsu/protocol";
 import { ConnectionKey, TerminalRegistryKey } from "../injection.js";
 import { useConversationWindowStore } from "../store/conversationWindow.js";
@@ -60,6 +60,7 @@ watch(
     note.value = "";
     selected.value = null;
     if (target.value?.mode === "messages") void load();
+    else if (target.value?.mode === "summary") void cached();
   },
   { immediate: true },
 );
@@ -89,7 +90,22 @@ watch(
   },
   { immediate: true },
 );
-async function generate() {
+async function cached() {
+  const t = target.value,
+    g = generation;
+  if (!t || t.mode !== "summary" || !conn || busy.value) return;
+  try {
+    const r = await conn.request("agent.summary_cached", { paneId: t.paneId, offset: 0 });
+    if (g === generation && !busy.value) summary.value = r.summary;
+  } catch {
+    /* A missing cache does not block manual generation. */
+  }
+}
+const refresh = setInterval(() => {
+  if (settings.summarySettings.autoUpdate) void cached();
+}, 5000);
+onUnmounted(() => clearInterval(refresh));
+async function generate(mode: "update" | "rebuild" = "update") {
   const t = target.value,
     g = generation;
   if (!t || !conn || busy.value) return;
@@ -98,13 +114,16 @@ async function generate() {
   try {
     const r = await conn.request("agent.summary", {
       paneId: t.paneId,
-      settings: settings.summarySettings,
+      settings: { ...settings.summarySettings, sessionId: "" },
+      mode,
     });
     if (g === generation) summary.value = r;
-  } catch {
+  } catch (e) {
     if (g === generation)
       error.value =
-        "要約できません。要約用エージェントのログイン、モデル、専用セッションの設定を確認してください。";
+        errorCodeOf(e) === "summary_model_unavailable"
+          ? clientErrorMessage("summary_model_unavailable")
+          : "要約できません。要約用エージェントのログイン、モデル、専用セッションの設定を確認してください。";
   } finally {
     if (g === generation) busy.value = false;
   }
@@ -186,18 +205,33 @@ function close() {
           </article>
         </div>
       </div>
-      <p role="status">{{ note }}</p>
+      <p v-if="note" class="conversation-footer" role="status" :title="note">{{ note }}</p>
     </template>
     <template v-else
       ><p>
         {{ settings.summarySettings.kind }} · {{ settings.summarySettings.model || "既定モデル" }} ·
-        {{ settings.summarySettings.sessionId ? "専用セッションを継続" : "新しい専用セッション" }}
+        要約セッションは自動管理
       </p>
-      <button :disabled="busy" @click="generate">{{ busy ? "要約中…" : "要約を生成" }}</button>
+      <div class="summary-actions">
+        <button :disabled="busy" @click="generate()">
+          {{ busy ? "要約中…" : summary ? "要約を更新" : "要約を生成" }}
+        </button>
+        <button v-if="summary" :disabled="busy" @click="generate('rebuild')">
+          履歴から作り直す
+        </button>
+      </div>
+      <p v-if="summary?.updatedAt">
+        更新: {{ new Date(summary.updatedAt).toLocaleString()
+        }}{{ summary.stale ? " · 新しい会話があります" : "" }}
+      </p>
       <pre class="summary-result">{{ summary?.text }}</pre>
-      <p v-if="summary?.sessionId">
-        要約セッションID: <code>{{ summary.sessionId }}</code>
-      </p></template
+      <p v-if="summary?.partial">記録の一部を省略して要約しています。</p>
+      <details v-if="summary?.sessionId" class="conversation-footer">
+        <summary>要約の詳細</summary>
+        <p>
+          要約セッションID: <code>{{ summary.sessionId }}</code>
+        </p>
+      </details></template
     >
   </section>
 </template>
@@ -207,12 +241,18 @@ function close() {
   top: 10vh;
   left: 10vw;
   width: 80vw;
-  max-width: 1000px;
+
   height: 72vh;
+  resize: both;
+  overflow: hidden;
+  min-width: min(320px, 90vw);
+  min-height: 240px;
+  max-width: 90vw;
+  max-height: 85vh;
   z-index: 130;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 6px 8px;
   box-sizing: border-box;
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
@@ -221,10 +261,37 @@ function close() {
   box-shadow: 0 8px 32px #0006;
 }
 header {
+  flex: none;
+  min-height: 24px;
+  align-items: center;
+  font-size: 14px;
   display: flex;
   justify-content: space-between;
   cursor: move;
   touch-action: none;
+}
+header button {
+  min-height: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+}
+.conversation-window > p,
+.conversation-footer {
+  flex: none;
+  margin: 3px 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+p.conversation-footer {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.conversation-footer p {
+  margin: 2px 0;
 }
 button {
   background: var(--soda-input-bg, #343746);
@@ -273,5 +340,14 @@ article {
 }
 .summary-result {
   flex: 1;
+  min-height: 0;
+}
+</style>
+
+<style scoped>
+.summary-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

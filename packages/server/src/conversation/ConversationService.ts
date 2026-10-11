@@ -1,4 +1,5 @@
 import { readdir, realpath, lstat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type {
@@ -99,6 +100,24 @@ export class ConversationService {
       throw new RpcError("not_found", "このペインの会話記録は取得できません");
     return { kind: ref.kind as ConversationKind, sessionId: ref.sessionId, pane };
   }
+  async revision(kind: ConversationKind, sessionId: string, checkpoint?: number) {
+    const f = await openVerified(await this.locate(kind, sessionId));
+    if (!f) throw new RpcError("not_found", "会話記録を読めません");
+    try {
+      const size = f.st.size;
+      const end = Math.min(checkpoint ?? size, size);
+      const head = await readRange(f.fd, 0, Math.min(4096, end));
+      const tail = await readRange(f.fd, Math.max(0, end - 4096), Math.min(end, 4096));
+      const identity = createHash("sha256")
+        .update(`${f.st.dev}:${f.st.ino}:`)
+        .update(head)
+        .update(tail)
+        .digest("hex");
+      return { size, identity };
+    } finally {
+      await f.fd.close();
+    }
+  }
   async page(paneId: string, offset = 0): Promise<ConversationPage> {
     const source = this.source(paneId);
     const page = await this.read(source.kind, source.sessionId, offset);
@@ -107,7 +126,12 @@ export class ConversationService {
       throw new RpcError("not_found", "会話が切り替わりました。読み直してください");
     return page;
   }
-  async read(kind: ConversationKind, sessionId: string, offset = 0): Promise<ConversationPage> {
+  async read(
+    kind: ConversationKind,
+    sessionId: string,
+    offset = 0,
+    maxBytes = 16 * WINDOW,
+  ): Promise<ConversationPage> {
     const opened = await openVerified(await this.locate(kind, sessionId));
     if (!opened) throw new RpcError("not_found", "会話記録を読めません");
     try {
@@ -116,7 +140,8 @@ export class ConversationService {
         throw new RpcError("invalid_params", "会話記録が更新されました。読み直してください");
       if (offset && (await readRange(fd, offset - 1, 1))[0] !== 10)
         throw new RpcError("invalid_params", "会話記録の位置が正しくありません");
-      const bytes = await readRange(fd, offset, Math.min(WINDOW, st.size - offset));
+      const limit = Math.min(st.size, offset + maxBytes);
+      const bytes = await readRange(fd, offset, Math.min(WINDOW, limit - offset));
       const messages: ConversationMessage[] = [];
       let used = 0,
         partial = false;
@@ -136,13 +161,35 @@ export class ConversationService {
         used = end + 1;
         if (messages.length >= MESSAGE_MAX) break;
       }
-      if (!used && bytes.length && offset + bytes.length < st.size)
-        throw new RpcError("invalid_params", "会話記録の行が読み取り上限を超えています");
+      if (!used && bytes.length && offset + bytes.length < st.size) {
+        // Skip oversized records (images/tool output can exceed a page) without retaining them.
+        // Only return a continuation at a complete newline; cap scanning at 16 MiB per record.
+        let cursor = offset + bytes.length;
+        for (let scan = 1; scan < 16 && cursor < limit; scan++) {
+          const chunk = await readRange(fd, cursor, Math.min(WINDOW, limit - cursor));
+          if (!chunk.length) break;
+          const end = chunk.indexOf(10);
+          if (end >= 0) {
+            const next = cursor + end + 1;
+            return {
+              kind,
+              sessionId,
+              messages,
+              nextOffset: next < st.size ? next : null,
+              endOffset: next,
+              partial: true,
+            };
+          }
+          cursor += chunk.length;
+        }
+        return { kind, sessionId, messages, nextOffset: null, partial: true, endOffset: offset };
+      }
       return {
         kind,
         sessionId,
         messages,
         nextOffset: used && offset + used < st.size ? offset + used : null,
+        endOffset: offset + used,
         partial: partial || (bytes.length > used && offset + bytes.length === st.size),
       };
     } finally {

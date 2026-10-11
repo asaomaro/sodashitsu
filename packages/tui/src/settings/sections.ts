@@ -903,7 +903,7 @@ function agentToolsSection(env:SettingsEnv):SettingsSection{
    ...AGENT_HEADER_ACTIONS.map(action=>toggleItem(HEADER_ACTION_LABELS[action],enabled.includes(action),value=>env.write.setShared({agentHeaderActions:value?[...enabled,action]:enabled.filter(x=>x!==action)}),"対応するエージェントだけに表示します。")),
    choiceItem("要約エージェント",[{value:"claude" as const,label:"Claude Code"},{value:"codex" as const,label:"Codex"}],summary.kind,kind=>setSummary({kind,sessionId:""})),
    {label:"要約モデル",value:summary.model||"エージェントの既定",activate:()=>({kind:"edit",title:"要約モデル（空欄は既定）",initial:summary.model,commit:model=>setSummary({model})})},
-   {label:"要約専用セッション",value:summary.sessionId||"新規作成",note:"このサーバで作成した要約専用IDのみ再利用できます。",activate:()=>({kind:"edit",title:"専用ID（空欄は新規）",initial:summary.sessionId,commit:sessionId=>setSummary({sessionId})})}
+   {label:"要約の自動更新",value:summary.autoUpdate?"有効":"無効",note:"ターン終了後に差分から更新。モデルの利用が増えます。",activate:()=>setSummary({autoUpdate:!summary.autoUpdate,sessionId:""})}
   ];
  }};
 }

@@ -1,3 +1,5 @@
+import { OtpAuth } from "./auth/OtpAuth.js";
+import { loadSummarySettings } from "@sodashitsu/protocol";
 import {SharedNotifications} from "./notify/SharedNotifications.js";
 import {SummaryService} from "./conversation/SummaryService.js";
 import {ConversationService} from "./conversation/ConversationService.js";
@@ -221,6 +223,8 @@ export async function composeServer(
   // 名前付き session の Cookie の名前は session ごと（Cookie はポートで分かれない。20260926-named-session-ui の design「Cookie」）。
   const auth = new DefaultAuthService(authFile, { cookieName: sessionCookieName(options.sessionName) });
 
+  const otpAuth = new OtpAuth(options.stateDir, () => auth.credentialVersion());
+
   // 証明書の読み込み・解釈の失敗は設定の誤りとして終了コード 2 にする。token はまだ作っていないので失わない（D102）。
   const cert = options.cert ? await readPem(options.cert, "--cert") : undefined;
   const key = options.key ? await readPem(options.key, "--key") : undefined;
@@ -238,7 +242,7 @@ export async function composeServer(
   const localLogin = new LocalLogin(options.stateDir);
   let httpServer: HttpServer;
   try {
-    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin });
+    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin, otpAuth });
   } catch (err) {
     // `https.createServer` は証明書と秘密鍵をその場で解釈する（PEM でない・鍵が合わない等で投げる）。
     if (!secure) throw err;
@@ -580,6 +584,18 @@ export async function composeServer(
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
   const summaries=new SummaryService(conversations, options.stateDir);
+  const summaryWorking = new Set<string>();
+  const summarySub = bus.subscribe((e) => {
+    if (e.event === "pane.closed") summaryWorking.delete(e.data.paneId);
+    if (e.event !== "pane.agent_status_changed") return;
+    const id = e.data.paneId,
+      agent = e.data.agent;
+    if (agent?.state === "working") summaryWorking.add(id);
+    else if (agent?.state === "idle" && summaryWorking.delete(id)) {
+      summaries.scheduleAuto(id, () => loadSummarySettings(prefs.get().prefs.summarySettings));
+    } else if (!agent) summaryWorking.delete(id);
+  });
+
   registerAllMethods(surface, {
     conversations,summaries,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
     session,
@@ -990,6 +1006,8 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        summarySub.dispose();
+        summaries.close();
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
@@ -1017,6 +1035,7 @@ export async function composeServer(
     },
 
     async close(): Promise<void> {
+      summarySub.dispose();
       summaries.close();
       try {
         // 止まり始めた印（以後の止める指示は「既に止まる途中」、引き継ぎの指示は断る。20260927-session-stop）。受け付け済みの引き継ぎの
@@ -1075,7 +1094,7 @@ export async function composeServer(
         if(internal.workerPty) {
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
-          graphEngine.stop();lineage.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
+          graphEngine.stop();lineage.close();summarySub.dispose();summaries.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
           usageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();

@@ -14,7 +14,12 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
   if (deps.summaries)
     surface.register("agent.summary", {
       schema: AgentSummaryParams,
-      handler: (_, p) => deps.summaries!.generate(p.paneId, p.settings),
+      handler: (_, p) => deps.summaries!.generate(p.paneId, p.settings, p.mode),
+    });
+  if (deps.summaries)
+    surface.register("agent.summary_cached", {
+      schema: AgentConversationParams,
+      handler: async (_, p) => ({ summary: await deps.summaries!.cached(p.paneId) }),
     });
   if (deps.notifications) {
     surface.register("notification.state", {

@@ -1,3 +1,4 @@
+import { OtpAuthChangedError, type OtpAuth } from "../auth/OtpAuth.js";
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServerType, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { readFile, stat } from "node:fs/promises";
@@ -11,6 +12,7 @@ import { LogThrottle } from "../log/LogThrottle.js";
 import { requestPathname } from "../util/net.js";
 
 export interface HttpServerOptions {
+  otpAuth?: OtpAuth;
   webDistDir: string;
   /** TLS の PEM の中身（main.ts がファイルから読んで渡す。パスではない）。両方揃えば HTTPS。 */
   cert?: string | undefined;
@@ -154,6 +156,7 @@ export class HttpServer {
       res.end();
       return;
     }
+    if (pathname === "/api/login-settings" && this.opts.otpAuth && ["GET", "POST"].includes(req.method ?? "")) return this.handleLoginSettings(req, res);
     if (req.method === "POST" && pathname === "/api/login") return this.handleLogin(req, res);
     if (req.method === "POST" && pathname === "/api/local-login") return this.handleLocalLogin(req, res);
     if (req.method === "POST" && pathname === "/api/logout") return this.handleLogout(req, res);
@@ -210,6 +213,93 @@ export class HttpServer {
     return req.socket.remoteAddress ?? "unknown";
   }
 
+  private async handleLoginSettings(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const otp = this.opts.otpAuth!;
+    if (
+      req.method === "POST" &&
+      !this.originGate.admit(
+        {
+          path: "/api/login-settings",
+          remoteAddress: this.clientIp(req),
+          origin: req.headers.origin,
+          host: req.headers.host,
+        },
+        () => {
+          res.statusCode = 403;
+          res.end();
+        },
+      )
+    )
+      return;
+    const owner = this.auth.parseSessionIdFromCookie(req.headers.cookie);
+    if (!owner || !this.auth.verifySession(owner)) {
+      res.statusCode = 401;
+      res.end();
+      return;
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", "application/json");
+    if (req.method === "GET") {
+      res.end(JSON.stringify(await otp.status()));
+      return;
+    }
+    const version = otp.currentVersion();
+    const body = (await readJsonBody(req).catch(() => null)) as Record<string, unknown> | null;
+    if (!this.auth.verifySession(owner) || !version || version !== otp.currentVersion()) { res.statusCode = 401; res.end(); return; }
+    if (!body || typeof body.action !== "string") {
+      res.statusCode = 400;
+      res.end();
+      return;
+    }
+    try {
+    let result: unknown;
+    switch (body.action) {
+      case "issue":
+        result = await otp.issue();
+        break;
+      case "revoke":
+        result = await otp.revokeCode();
+        break;
+      case "begin":
+        if (typeof body.label !== "string" || !body.label.trim() || body.label.length > 64) {
+          res.statusCode = 400;
+          res.end();
+          return;
+        }
+        result = await otp.begin(owner, body.label);
+        break;
+      case "cancel": result = await otp.cancel(owner); break;
+      case "confirm":
+        if (typeof body.code !== "string" || !/^\d{6}$/.test(body.code)) {
+          res.statusCode = 400;
+          res.end();
+          return;
+        }
+        if (!(await otp.confirm(owner, body.code))) {
+          res.statusCode = 400;
+          res.end();
+          return;
+        }
+        result = {};
+        break;
+      case "remove":
+        if (typeof body.id !== "string" || !/^[a-f0-9-]{36}$/i.test(body.id)) {
+          res.statusCode = 400;
+          res.end();
+          return;
+        }
+        result = await otp.remove(body.id);
+        break;
+      default:
+        res.statusCode = 400;
+        res.end();
+        return;
+    }
+    if (!this.auth.verifySession(owner) || version !== otp.currentVersion()) { res.statusCode = 401; res.end(); return; }
+    res.end(JSON.stringify(result));
+    } catch (e) { if (e instanceof OtpAuthChangedError) { res.statusCode = 401; res.end(); return; } throw e; }
+  }
+
   private async handleLogin(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const ip = this.clientIp(req);
     if (this.rateLimiter.isBlocked(ip)) {
@@ -231,7 +321,21 @@ export class HttpServer {
       res.end();
       return;
     }
-    const result = await this.auth.login(token);
+    const method =
+      body && typeof body === "object" && "method" in body
+        ? (body as { method: unknown }).method
+        : "token";
+    if (!["token", "otp", "totp"].includes(String(method))) {
+      res.statusCode = 400;
+      res.end();
+      return;
+    }
+    const version = this.opts.otpAuth?.currentVersion();
+    let result: { ok: true; sessionId: string } | { ok: false };
+    try {
+      const accepted = method !== "token" && this.opts.otpAuth ? await this.opts.otpAuth.verify(method as "otp" | "totp", token) : false;
+      result = method === "token" ? await this.auth.login(token) : accepted && version && version === this.opts.otpAuth?.currentVersion() ? { ok: true, sessionId: await this.auth.issueSession(version) } : { ok: false };
+    } catch (e) { if (e instanceof OtpAuthChangedError || (e instanceof Error && e.message === "authentication changed")) result = { ok: false }; else throw e; }
     if (!result.ok) {
       this.rateLimiter.registerFailure(ip);
       res.statusCode = 401;

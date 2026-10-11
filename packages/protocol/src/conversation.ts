@@ -13,6 +13,8 @@ export interface ConversationPage {
   messages: ConversationMessage[];
   nextOffset: number | null;
   partial: boolean;
+  /** Byte position after the last complete record. */
+  endOffset?: number;
 }
 export interface PastAgentSession {
   kind: ConversationKind;
@@ -58,8 +60,10 @@ export interface SummarySettings {
   kind: ConversationKind;
   model: string;
   sessionId: string;
+  autoUpdate?: boolean | undefined;
 }
 export const SummarySettingsSchema = z.object({
+  autoUpdate: z.boolean().optional(),
   kind: ConversationKind,
   model: z
     .string()
@@ -71,10 +75,14 @@ export const SummarySettingsSchema = z.object({
     .regex(/^[a-zA-Z0-9_-]*$/),
 });
 export const AgentSummaryParams = z.object({
+  mode: z.enum(["update", "rebuild"]).default("update"),
   paneId: z.string().min(1),
   settings: SummarySettingsSchema,
 });
 export interface ConversationSummary {
+  updatedAt?: number;
+  stale?: boolean;
+  sourceSessionId?: string;
   text: string;
   sessionId: string | null;
   model: string;

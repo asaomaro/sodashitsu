@@ -115,13 +115,13 @@ export class Connection implements ConnectionPort {
    * Origin／Host の検査（403）→ 本文（400）→ token（401）→ 204。fetch 自体の失敗（サーバに届かない）は reject せず
    * `network_error` にする。
    */
-  async login(token: string): Promise<LoginResult> {
+  async login(token: string, method: "token" | "otp" | "totp" = "token"): Promise<LoginResult> {
     let res: Response;
     try {
       res = await this.fetchImpl(`${this.httpOrigin}/api/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify(method === "token" ? { token } : { token, method }),
       });
     } catch {
       return { ok: false, reason: "network_error" };

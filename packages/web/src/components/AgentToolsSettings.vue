@@ -53,12 +53,24 @@ function update(key: "kind" | "model" | "sessionId", event: Event) {
       >モデル（空欄はエージェントの既定）
       <input :value="settings.summarySettings.model" @change="update('model', $event)"
     /></label>
+    <p v-if="settings.summarySettings.kind === 'codex'">
+      モデルIDの例: gpt-6-luna。GPT系のモデル名は小文字にそろえて実行します。
+    </p>
     <label
-      >要約専用セッションID（空欄は新規）
-      <input :value="settings.summarySettings.sessionId" @change="update('sessionId', $event)"
-    /></label>
+      ><input
+        type="checkbox"
+        :checked="settings.summarySettings.autoUpdate === true"
+        @change="
+          settings.setSummarySettings({
+            ...settings.summarySettings,
+            autoUpdate: ($event.target as HTMLInputElement).checked,
+            sessionId: '',
+          })
+        "
+      />ターン終了後に要約を自動更新</label
+    >
     <p>
-      会話記録を読む別セッションで要約します。元の会話には送信しません。既存の要約専用セッションを続ける場合は、結果に表示されたIDを指定します。
+      要約は会話ごとに保存します。更新は前回の要約と追加分から行い、作業中の会話には送信しません。要約用セッションは自動管理します。自動更新を有効にするとモデルの利用が増えます。
     </p>
     <p v-if="error" role="alert">{{ error }}</p>
   </section>

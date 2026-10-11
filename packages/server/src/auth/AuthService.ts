@@ -51,7 +51,7 @@ export interface AuthService {
    * token を照合せずにセッションを発行する（手元からのログイン `POST /api/local-login` 専用。20260927-cli-mode）。照合（同じマシン・秘密の一致）は
    * 呼び出し側の責任。発行したセッションは `login` のものと同じ扱い（14 日・ログアウト・token の作り直しで失効）。
    */
-  issueSession(): Promise<string>;
+  issueSession(expectedVersion?: string): Promise<string>;
   logout(sessionId: string): Promise<void>;
   /** 高速な確認（ディスクへの書き込みはしない）。有効なら内部の最終利用時刻だけ延ばす。 */
   verifySession(sessionId: string | undefined): boolean;
@@ -73,6 +73,9 @@ interface SessionMemo {
 export class DefaultAuthService implements AuthService {
   private data: AuthFileData = emptyAuthFileData();
   private loaded = false;
+  private rotating = false;
+  private authWrites: Promise<void> = Promise.resolve();
+  private resets: Promise<void> = Promise.resolve();
   /** idHash → セッションの記録（in-memory）。 */
   private readonly sessions = new Map<string, SessionMemo>();
   /** 生のセッション id を覚えておく（失効の通知に使う。auth.json には idHash しか持たない）。 */
@@ -94,6 +97,11 @@ export class DefaultAuthService implements AuthService {
     return { ok: true, sessionId };
   };
 
+  /** Server-only binding for revoking alternative credentials when the token rotates. */
+  credentialVersion(): string {
+    return this.rotating ? "" : (this.data.token?.hash ?? "");
+  }
+
   async initialize(): Promise<void> {
     await this.ensureLoaded();
   }
@@ -109,7 +117,7 @@ export class DefaultAuthService implements AuthService {
     }
     this.loaded = true;
     // 期限の切れたセッションを捨てる（20260927-cli-mode の 02 の review。引数なしの soda は起動のたびにセッションを作るので、捨てないと auth.json が伸び続ける）。
-    if (this.pruneExpired(now)) await this.file.save(this.data);
+    if (this.pruneExpired(now)) await this.saveAuth();
   }
 
   async ensureToken(): Promise<{ created: boolean; token: string | undefined }> {
@@ -119,8 +127,15 @@ export class DefaultAuthService implements AuthService {
     return { created: true, token };
   }
 
-  async resetToken(): Promise<string> {
+  resetToken(): Promise<string> {
+    const job = this.resets.then(() => this.performReset());
+    this.resets = job.then(() => {}, () => {});
+    return job;
+  }
+  private async performReset(): Promise<string> {
     await this.ensureLoaded();
+    this.rotating = true;
+    try {
     const revokedSessionIds = [...this.liveSessionIds.entries()];
     this.sessions.clear();
     this.liveSessionIds.clear();
@@ -128,6 +143,7 @@ export class DefaultAuthService implements AuthService {
     const token = await this.issueAndStoreToken();
     for (const [sessionId] of revokedSessionIds) this.emitRevoked(sessionId);
     return token;
+    } finally { this.rotating = false; }
   }
 
   private async issueAndStoreToken(): Promise<string> {
@@ -135,22 +151,32 @@ export class DefaultAuthService implements AuthService {
     const salt = randomBytes(16);
     const hash = (await scrypt(token, salt, SCRYPT_KEYLEN)) as Buffer;
     this.data = { ...this.data, token: { salt: salt.toString("hex"), hash: hash.toString("hex"), createdAt: new Date().toISOString() } };
-    await this.file.save(this.data);
+    await this.saveAuth();
     return token;
   }
 
   async login(token: string): Promise<{ ok: true; sessionId: string } | { ok: false }> {
     await this.ensureLoaded();
-    if (!this.data.token) return { ok: false };
+    const version = this.credentialVersion();
+    if (!this.data.token || !version) return { ok: false };
     const salt = Buffer.from(this.data.token.salt, "hex");
     const expected = Buffer.from(this.data.token.hash, "hex");
     const actual = (await scrypt(token, salt, SCRYPT_KEYLEN)) as Buffer;
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return { ok: false };
-    return { ok: true, sessionId: await this.issueSession() };
+    if (version !== this.credentialVersion()) return { ok: false };
+    try { return { ok: true, sessionId: await this.issueSession(version) }; }
+    catch (e) { if (e instanceof Error && e.message === "authentication changed") return { ok: false }; throw e; }
   }
 
-  async issueSession(): Promise<string> {
+  private async saveAuth() {
+    const data = structuredClone(this.data);
+    const job = this.authWrites.then(() => this.file.save(data));
+    this.authWrites = job.catch(() => undefined);
+    await job;
+  }
+  async issueSession(expectedVersion?: string): Promise<string> {
     await this.ensureLoaded();
+    if (expectedVersion !== undefined && (!expectedVersion || expectedVersion !== this.credentialVersion())) throw new Error("authentication changed");
     this.pruneExpired(Date.now()); // 下の保存で一緒に書く
     const sessionId = randomBytes(SESSION_ID_BYTES).toString("base64url");
     const idHash = sha256Hex(sessionId);
@@ -161,7 +187,11 @@ export class DefaultAuthService implements AuthService {
       ...this.data,
       sessions: [...this.data.sessions, { idHash, createdAt: new Date(now).toISOString(), lastSeenAt: new Date(now).toISOString() }],
     };
-    await this.file.save(this.data);
+    await this.saveAuth();
+    if (expectedVersion !== undefined && expectedVersion !== this.credentialVersion()) {
+      await this.logout(sessionId);
+      throw new Error("authentication changed");
+    }
     return sessionId;
   }
 
@@ -192,7 +222,7 @@ export class DefaultAuthService implements AuthService {
     // 以前は 1 リクエストごとに書き直していた）。
     if (this.data.sessions.some((s) => s.idHash === idHash)) {
       this.data = { ...this.data, sessions: this.data.sessions.filter((s) => s.idHash !== idHash) };
-      await this.file.save(this.data);
+      await this.saveAuth();
     }
     this.emitRevoked(sessionId);
   }
@@ -228,7 +258,7 @@ export class DefaultAuthService implements AuthService {
     }
     if (!changed) return;
     this.data = { ...this.data, sessions: [...byHash.values()] };
-    await this.file.save(this.data);
+    await this.saveAuth();
   }
 
   parseSessionIdFromCookie(cookieHeader: string | undefined): string | undefined {

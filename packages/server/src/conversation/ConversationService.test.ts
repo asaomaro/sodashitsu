@@ -29,6 +29,36 @@ const row = (text: string, role = "user") =>
     cwd: "/work/test",
     message: { role, content: [{ type: "text", text }] },
   }) + "\n";
+it("skips oversized records and continues with stable byte offsets after them", async () => {
+  const first = row("前の質問"),
+    oversized = row("x".repeat(1500000), "system"),
+    last = row("後の質問");
+  const f = await fixture(first + oversized + last);
+  const before = await f.service.read("claude", "session-1");
+  expect(before.messages.map((m) => m.text)).toEqual(["前の質問"]);
+  const skipped = await f.service.read("claude", "session-1", before.nextOffset!);
+  expect(skipped.partial).toBe(true);
+  expect(skipped.messages).toEqual([]);
+  expect(skipped.nextOffset).toBe(Buffer.byteLength(first + oversized));
+  const after = await f.service.read("claude", "session-1", skipped.nextOffset!);
+  expect(after.messages[0]?.text).toBe("後の質問");
+  expect(after.messages[0]?.id).toBe(`claude:session-1:${Buffer.byteLength(first + oversized)}`);
+  expect(after.nextOffset).toBeNull();
+});
+it("bounds oversized record scanning and reports truncation instead of rejecting the conversation", async () => {
+  const f = await fixture(row("x".repeat(17 * 1024 * 1024), "system") + row("未読"));
+  const page = await f.service.read("claude", "session-1");
+  expect(page.messages).toEqual([]);
+  expect(page.partial).toBe(true);
+  expect(page.nextOffset).toBeNull();
+});
+it("keeps oversized record scanning within the caller's remaining prefix budget", async () => {
+  const f = await fixture(row("x".repeat(1500000), "system") + row("予算外"));
+  const page = await f.service.read("claude", "session-1", 0, 1100000);
+  expect(page.messages).toEqual([]);
+  expect(page.nextOffset).toBeNull();
+  expect(page.partial).toBe(true);
+});
 it("paginates at byte boundaries with stable message IDs and excludes tool/system content", async () => {
   const text = Array.from({ length: 105 }, (_, i) => row(`質問${i}`)).join("");
   const f = await fixture(text);

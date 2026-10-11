@@ -1,4 +1,11 @@
-import type { ClientHelloParams, MethodName, ParamsOf, ResultOf, ServerEvent, SessionSnapshot } from "@sodashitsu/protocol";
+import type {
+  ClientHelloParams,
+  MethodName,
+  ParamsOf,
+  ResultOf,
+  ServerEvent,
+  SessionSnapshot,
+} from "@sodashitsu/protocol";
 
 /**
  * Web の port の型（architecture.md「Web の主要な型と port」）。Vue と Pinia を import しない
@@ -49,7 +56,7 @@ export interface ConnectionPort {
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
   sendInput(paneId: string, bytes: string | Uint8Array, origin?: InputOrigin): void;
   /** `POST /api/login`。成功（204）か、失敗の理由（`LoginResult`。D105）を返す。reject しない。 */
-  login(token: string): Promise<LoginResult>;
+  login(token: string, method?: "token" | "otp" | "totp"): Promise<LoginResult>;
   /** `POST /api/logout`。 */
   logout(): Promise<void>;
   /** 初回・ログイン後・「再接続」ボタン・`rejected` の「再試行」ボタン（D107）。 */
