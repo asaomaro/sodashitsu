@@ -1352,6 +1352,7 @@ export const METHOD_SCHEMAS = {
   "agent.resume": AgentResumeParams,
   "agent.command": AgentCommandParams,
   "agent.summary": AgentSummaryParams,
+  "agent.summary_cached": AgentConversationParams,
   "agent.usage_watch": AgentUsageWatchParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
@@ -1491,6 +1492,7 @@ export interface MethodResultMap {
   "agent.resume": Record<string,never>;
   "agent.command": Record<string,never>;
   "agent.summary": ConversationSummary;
+  "agent.summary_cached": { summary: ConversationSummary | null };
   "agent.usage_watch": Record<string, never>;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;

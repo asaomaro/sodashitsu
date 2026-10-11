@@ -1,4 +1,5 @@
 import type { Pinia } from "pinia";
+import { loadAgentHeaderActions, loadSummarySettings } from "@sodashitsu/protocol";
 import {
   loadKeyPrefs,
   loadSidebarRows,
@@ -45,6 +46,8 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
     if (JSON.stringify(settings[key]) !== JSON.stringify(value)) settings[key] = value;
   };
   set("statusSymbols", loadStatusSymbols(raw["statusSymbols"]));
+  set("agentHeaderActions", loadAgentHeaderActions(raw["agentHeaderActions"]));
+  set("summarySettings", loadSummarySettings(raw["summarySettings"]));
   set("keyboardLockInFullscreen", loadKeyboardLockInFullscreen(raw["keyboardLockInFullscreen"]));
   set("paneFrameThickness", loadPaneFrameThickness(raw["paneFrameThickness"]));
   set("paneAgentNameVisible", loadPaneAgentNameVisible(raw["paneAgentNameVisible"]));

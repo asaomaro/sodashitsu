@@ -29,6 +29,7 @@ const view = useViewStore();
 type LoginFailure = Extract<LoginResult, { ok: false }> | { ok: false; reason: "session_rejected" };
 
 const token = ref("");
+const loginMethod = ref<"token" | "otp" | "totp">("token");
 const failure = ref<LoginFailure | null>(null);
 /** `POST /api/login` の応答待ち。 */
 const pending = ref(false);
@@ -41,7 +42,10 @@ const attemptLogin = async (value: string): Promise<void> => {
   pending.value = true;
   failure.value = null;
   try {
-    const result = await conn.login(value);
+    const result =
+      loginMethod.value === "token"
+        ? await conn.login(value)
+        : await conn.login(value, loginMethod.value);
     if (result.ok) {
       connecting.value = true;
       conn.connect();
@@ -90,7 +94,8 @@ function failureMessage(f: LoginFailure, origin: string): { text: string; comman
       };
     case "rate_limited": {
       // 読めない・信じられない値（0・過去・「Infinity」等）は `normalizeRetryAfterSeconds` が 1 秒か null にする。
-      const wait = f.retryAfterSeconds === null ? null : normalizeRetryAfterSeconds(f.retryAfterSeconds);
+      const wait =
+        f.retryAfterSeconds === null ? null : normalizeRetryAfterSeconds(f.retryAfterSeconds);
       return {
         text:
           wait !== null
@@ -99,9 +104,13 @@ function failureMessage(f: LoginFailure, origin: string): { text: string; comman
       };
     }
     case "network_error":
-      return { text: "サーバに接続できません。soda serve が動いているか、開いているアドレス（URL）が正しいかを確かめてください。" };
+      return {
+        text: "サーバに接続できません。soda serve が動いているか、開いているアドレス（URL）が正しいかを確かめてください。",
+      };
     case "http_error":
-      return { text: `ログインできませんでした（HTTP ${f.status}）。サーバのログを確かめてください。` };
+      return {
+        text: `ログインできませんでした（HTTP ${f.status}）。サーバのログを確かめてください。`,
+      };
     case "session_rejected":
       return {
         text: "ログインはできましたが、接続の確認でサーバがログインを受け付けませんでした（ブラウザが Cookie を保存していない、またはその間に token が作り直された等）。もう一度ログインしてください。",
@@ -109,7 +118,13 @@ function failureMessage(f: LoginFailure, origin: string): { text: string; comman
   }
 }
 
-const message = computed(() => (failure.value ? failureMessage(failure.value, window.location.origin) : null));
+const message = computed(() =>
+  failure.value?.reason === "bad_token" && loginMethod.value !== "token"
+    ? { text: "コードが違う、使用済み、または期限切れです。新しいコードでやり直してください。" }
+    : failure.value
+      ? failureMessage(failure.value, window.location.origin)
+      : null,
+);
 
 function tokenFromHash(): string | null {
   const match = /^#token=(.+)$/.exec(window.location.hash);
@@ -139,13 +154,47 @@ function onSubmit(): void {
 <template>
   <div class="login-view">
     <form class="login-view-form" @submit.prevent="onSubmit">
-      <h1 class="login-view-title"><img class="login-view-logo" src="/logo.svg" alt="" width="40" height="40" />Sodashitsu</h1>
+      <h1 class="login-view-title">
+        <img class="login-view-logo" src="/logo.svg" alt="" width="40" height="40" />Sodashitsu
+      </h1>
+      <label class="login-view-label"
+        ><span>ログイン方法</span
+        ><select
+          aria-label="ログイン方法"
+          v-model="loginMethod"
+          :disabled="busy"
+          @change="
+            token = '';
+            failure = null;
+          "
+        >
+          <option value="token">トークン</option>
+          <option value="otp">使い切りコード</option>
+          <option value="totp">認証アプリ</option>
+        </select></label
+      >
       <label class="login-view-label">
-        <span>token</span>
-        <input v-model="token" type="password" autocomplete="off" :disabled="busy" />
+        <span>{{
+          loginMethod === "token"
+            ? "token"
+            : loginMethod === "otp"
+              ? "使い切りコード（12桁）"
+              : "認証アプリのコード（6桁）"
+        }}</span>
+        <input
+          v-model="token"
+          :type="loginMethod === 'token' ? 'password' : 'text'"
+          :inputmode="loginMethod === 'token' ? 'text' : 'numeric'"
+          :autocomplete="loginMethod === 'token' ? 'off' : 'one-time-code'"
+          :disabled="busy"
+        />
       </label>
       <button type="submit" :disabled="busy || !token">ログイン</button>
-      <p v-if="connecting" class="login-view-status" role="status" aria-live="polite">接続中…<span class="login-view-status-note">（サーバが起動の途中なら、つながるまで少しかかります）</span></p>
+      <p v-if="connecting" class="login-view-status" role="status" aria-live="polite">
+        接続中…<span class="login-view-status-note"
+          >（サーバが起動の途中なら、つながるまで少しかかります）</span
+        >
+      </p>
       <div v-if="message" class="login-view-error" role="alert">
         <p class="login-view-error-text">{{ message.text }}</p>
         <code v-if="message.command" class="login-view-error-command">{{ message.command }}</code>

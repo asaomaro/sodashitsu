@@ -1,7 +1,9 @@
 import type { KeyInput } from "@sodashitsu/client-core";
+import { clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
 import {
   loadSummarySettings,
   type ConversationMessage,
+  type ConversationSummary,
   type PastAgentSession,
 } from "@sodashitsu/protocol";
 import type { UiState } from "../model/UiState.js";
@@ -50,6 +52,7 @@ export class ConversationDialog implements Overlay {
     private readonly jump: (paneId: string, text: string) => void,
   ) {
     if (mode !== "summary") void this.load();
+    else void this.cached();
   }
   private async load() {
     if (this.busy) return;
@@ -80,21 +83,51 @@ export class ConversationDialog implements Overlay {
       if (!this.dead) this.redraw();
     }
   }
-  private async summarize() {
+  private summaryText(r: ConversationSummary) {
+    return (
+      (r.partial ? "記録の一部を省略して要約しています。\n" : "") +
+      (r.stale ? "未反映の会話記録があります。\n" : "") +
+      (r.updatedAt ? "更新: " + new Date(r.updatedAt).toLocaleString() + "\n" : "") +
+      r.kind +
+      " · " +
+      (r.model || "既定モデル") +
+      "\n\n" +
+      r.text
+    );
+  }
+  private async cached() {
+    if (!this.paneId) return;
+    try {
+      const r = await this.conn.request("agent.summary_cached", { paneId: this.paneId, offset: 0 });
+      if (!this.dead && !this.busy && r.summary) {
+        this.detail = this.summaryText(r.summary);
+        this.redraw();
+      }
+    } catch {
+      /* Manual generation remains available. */
+    }
+  }
+  private async summarize(mode: "update" | "rebuild" = "update") {
     if (!this.paneId || this.busy) return;
     this.busy = true;
+    this.error = "";
     this.redraw();
     try {
       const r = await this.conn.request("agent.summary", {
         paneId: this.paneId,
-        settings: loadSummarySettings(this.prefs.shared.summarySettings),
+        settings: { ...loadSummarySettings(this.prefs.shared.summarySettings), sessionId: "" },
+        mode,
       });
       if (!this.dead) {
-        this.detail = r.text + "\n\n要約専用セッションID: " + (r.sessionId ?? "不明");
+        this.detail = this.summaryText(r);
         this.scroll = 0;
       }
-    } catch {
-      if (!this.dead) this.error = "要約できません。設定・ログインを確認してください。";
+    } catch (e) {
+      if (!this.dead)
+        this.error =
+          errorCodeOf(e) === "summary_model_unavailable"
+            ? clientErrorMessage("summary_model_unavailable")
+            : "要約できません。設定・ログインを確認してください。";
     } finally {
       this.busy = false;
       if (!this.dead) this.redraw();
@@ -142,12 +175,42 @@ export class ConversationDialog implements Overlay {
       if (!this.dead) this.redraw();
     }
   }
+  private openSelected() {
+    if (this.mode === "summary") {
+      void this.cached();
+      return;
+    }
+    if (this.mode === "sessions") {
+      void this.resume();
+      return;
+    }
+    const selected = this.users()[this.selected];
+    if (!selected) return;
+    if (this.paneId) this.jump(this.paneId, selected.text);
+    const index = this.messages.findIndex((m) => m.id === selected.id);
+    this.detail = this.messages
+      .slice(index)
+      .map((m) => (m.role === "user" ? "あなた" : "エージェント") + "\n" + m.text)
+      .join("\n\n");
+    this.scroll = 0;
+  }
   handleKey(k: KeyInput): void {
     if (isEsc(k)) {
       if (this.detail) {
         this.detail = null;
         this.scroll = 0;
       } else this.cancel();
+      return;
+    }
+    if (k.key === " " || k.key === "Space") {
+      this.openSelected();
+      return;
+    }
+    if (
+      this.mode !== "sessions" &&
+      (isEnter(k) || (this.mode === "summary" && (k.key === "r" || k.key === "R")))
+    ) {
+      void this.summarize(k.key === "R" ? "rebuild" : "update");
       return;
     }
     if (this.detail) {
@@ -159,39 +222,16 @@ export class ConversationDialog implements Overlay {
     if (isUp(k)) this.selected = Math.max(0, this.selected - 1);
     else if (isDown(k)) this.selected = Math.min(count - 1, this.selected + 1);
     else if (k.key === "r" || k.key === "n") void this.load();
-    else if (isEnter(k)) {
-      if (this.mode === "summary") void this.summarize();
-      else if (this.mode === "sessions") void this.resume();
-      else {
-        const selected = this.users()[this.selected];
-        if (selected) {
-          if (this.paneId) this.jump(this.paneId, selected.text);
-          const index = this.messages.findIndex((m) => m.id === selected.id);
-          this.detail = this.messages
-            .slice(index)
-            .map((m) => (m.role === "user" ? "あなた" : "エージェント") + "\n" + m.text)
-            .join("\n\n");
-          this.scroll = 0;
-        }
-      }
-    }
+    else if (isEnter(k)) this.openSelected();
   }
+
   handleMouse(ev: OverlayMouse): boolean {
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "down" && ev.button === 0 && !this.detail) {
       const hit = this.hits.find((h) => h.y === ev.y);
       if (hit) {
         this.selected = hit.index;
-        this.handleKey({
-          key: "Enter",
-          code: "Enter",
-          type: "keydown",
-          composing: false,
-          ctrl: false,
-          alt: false,
-          shift: false,
-          meta: false,
-        });
+        this.openSelected();
       }
     }
     if (ev.action === "wheel")
@@ -230,7 +270,7 @@ export class ConversationDialog implements Overlay {
     const rows = this.detail
       ? wrapText(plainText(this.detail), area.w)
       : this.mode === "summary"
-        ? ["Enterで要約を生成。エージェント・モデル・専用セッションは設定で選択します。"]
+        ? ["Enterで要約を生成。専用セッションは自動管理します。"]
         : this.mode === "sessions"
           ? this.sessions.map((r) => `${r.kind} · ${r.title} · ${r.cwd ?? ""}`)
           : this.users().map((m) => (m.at ? m.at + " " : "") + m.text.replace(/\s+/g, " "));
@@ -261,7 +301,11 @@ export class ConversationDialog implements Overlay {
     grid.text(
       area.x,
       area.y + area.h - 1,
-      "↑↓選択/スクロール・Enter表示/実行・n続き・Esc戻る",
+      this.mode === "summary"
+        ? "↑↓スクロール・Enter要約・Space開く・Shift+R作り直す・Esc戻る"
+        : this.mode === "messages"
+          ? "↑↓選択・Enter要約・Space/クリック開く・n続き・Esc戻る"
+          : "↑↓選択・Enter/Space再開・n続き・Esc戻る",
       c.dim,
       c.bg,
       0,

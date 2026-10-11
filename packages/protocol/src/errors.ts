@@ -26,6 +26,7 @@ export type ErrorCode =
   | "empty_agent_prompt"
   | "invalid_key"
   | "agent_prompt_failed"
+  | "summary_model_unavailable"
   // エージェントの名前（20260926-agent-start-rename）。herdr と同じ code。
   | "invalid_agent_name"
   | "agent_name_taken"

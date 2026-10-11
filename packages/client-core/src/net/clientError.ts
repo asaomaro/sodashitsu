@@ -41,6 +41,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   empty_agent_prompt: "送る内容が空です。",
   invalid_key: "知らないキーの名前が含まれていたため、何も送りませんでした。",
   agent_prompt_failed: "エージェントへの送信に失敗しました（端末が閉じた等）。",
+  summary_model_unavailable: "指定した要約モデルを利用できません。モデルIDと、ログイン中のアカウントで利用できるモデルを確認してください。",
   // エージェントの名前（20260926-agent-start-rename）。今は sodactl agent rename だけが送る方式で、ブラウザには通常来ない。
   invalid_agent_name: "エージェントの名前は英小文字で始まり、英小文字・数字・-・_ の 1〜32 文字にしてください。",
   agent_name_taken: "その名前は別のエージェントが使っています。",

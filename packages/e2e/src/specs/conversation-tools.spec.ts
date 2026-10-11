@@ -25,7 +25,10 @@ test.beforeAll(async () => {
           content: [{ type: "text", text: i % 2 ? "回答" + i : "会話E2E質問" + i }],
         },
       }),
-    ).join("\n") + "\n",
+    ).join("\n") +
+      "\n" +
+      JSON.stringify({ message: { role: "system", content: "x".repeat(1500000) } }) +
+      "\n",
   );
   const fake = join(dir, "agent.mjs");
   await writeFile(
@@ -37,6 +40,11 @@ test.beforeAll(async () => {
     `#!/bin/bash\nexec -a claude ${JSON.stringify(process.execPath)} ${JSON.stringify(fake)} "$@"\n`,
   );
   await chmod(join(dir, "bin", "claude"), 0o755);
+  await writeFile(
+    join(dir, "bin", "codex"),
+    `#!${process.execPath}\nconsole.log(JSON.stringify({type:'turn.failed',error:{message:"The 'gpt-6-luna' model is not supported when using Codex with a ChatGPT account. private-diagnostic"}}));process.exitCode=1;`,
+  );
+  await chmod(join(dir, "bin", "codex"), 0o755);
   process.env["PATH"] = join(dir, "bin") + delimiter + (saved.PATH ?? "");
   process.env["CLAUDE_CONFIG_DIR"] = join(dir, "config");
 });
@@ -47,6 +55,39 @@ test.afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 test.setTimeout(90000);
+test("Codexの要約モデルが使えない理由を画面に表示し、生の診断を公開しない", async ({
+  page,
+  appServer,
+}) => {
+  const client = await appServer.openClient(),
+    pane = client.helloSnapshot()!.panes[0]!;
+  await client.request("prefs.set", {
+    patch: {
+      agentHeaderActions: ["summary"],
+      summarySettings: { kind: "codex", model: "GPT-6-Luna", sessionId: "" },
+    },
+  });
+  await assertPaneResolvesFake({
+    write: (input) => client.sendInput(pane.id, input),
+    name: "claude",
+    fakeDir: join(dir, "bin"),
+    scratchDir: dir,
+  });
+  await client.request("agent.start", {
+    paneId: pane.id,
+    name: "summary-model-error",
+    kind: "claude",
+    args: [],
+  });
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  await page.getByRole("button", { name: "会話の要約", exact: true }).click();
+  const window = page.locator(".conversation-window");
+  await expect(window).toContainText("codex · GPT-6-Luna");
+  await window.getByRole("button", { name: "要約を生成", exact: true }).click();
+  await expect(window.getByRole("alert")).toContainText("指定した要約モデルを利用できません");
+  await expect(window).not.toContainText("private-diagnostic");
+  client.close();
+});
 test("会話窓へフォーカス、メッセージ選択、要約、過去一覧を画面で確認する", async ({
   page,
   appServer,
@@ -73,6 +114,28 @@ test("会話窓へフォーカス、メッセージ選択、要約、過去一�
   await page.getByRole("button", { name: "送信メッセージ", exact: true }).click();
   await expect(window).toBeVisible();
   await expect(window).toBeFocused();
+  await expect
+    .poll(async () => (await window.locator("header").boundingBox())!.height)
+    .toBeLessThanOrEqual(28);
+  const beforeResize = await window.boundingBox();
+  expect(beforeResize).not.toBeNull();
+  await page.mouse.move(
+    beforeResize!.x + beforeResize!.width - 3,
+    beforeResize!.y + beforeResize!.height - 3,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    beforeResize!.x + beforeResize!.width - 123,
+    beforeResize!.y + beforeResize!.height - 83,
+  );
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await window.boundingBox())!.width)
+    .toBeLessThan(beforeResize!.width - 50);
+  await expect
+    .poll(async () => (await window.boundingBox())!.height)
+    .toBeLessThan(beforeResize!.height - 30);
+
   await expect(
     window.getByRole("navigation").getByRole("button").filter({ hasText: "会話E2E質問" }),
   ).toHaveCount(6);
@@ -86,6 +149,14 @@ test("会話窓へフォーカス、メッセージ選択、要約、過去一�
   await expect(window).toBeHidden();
   await page.getByRole("button", { name: "会話の要約", exact: true }).click();
   await window.getByRole("button", { name: "要約を生成", exact: true }).click();
+  await expect(window.locator(".summary-result")).toContainText("会話E2Eの要約");
+  await expect(window).toContainText("記録の一部を省略して要約しています。");
+  await window.getByRole("button", { name: "閉じる", exact: true }).click();
+  await page.getByRole("button", { name: "会話の要約", exact: true }).click();
+  await expect(window.locator(".summary-result")).toContainText("会話E2Eの要約");
+  await expect(window.getByRole("button", { name: "要約を更新", exact: true })).toBeVisible();
+  await window.getByRole("button", { name: "履歴から作り直す", exact: true }).click();
+  await expect(window.getByRole("button", { name: "要約を更新", exact: true })).toBeEnabled();
   await expect(window.locator(".summary-result")).toContainText("会話E2Eの要約");
   await window.getByRole("button", { name: "閉じる", exact: true }).click();
   await page.locator("[data-screen-id=dashboard]").first().click();

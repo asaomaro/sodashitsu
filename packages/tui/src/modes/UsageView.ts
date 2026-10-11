@@ -24,6 +24,20 @@ import { truncate } from "../render/width.js";
 
 const num = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString("ja-JP"));
 const basis = { cumulative: "累計", transcript: "記録に残る分", context: "文脈内" };
+/** ASCII cells remain readable without an icon font. Percent is used capacity. */
+export function usageGauge(percent: number | undefined, cells = 10): string {
+  if (percent === undefined || !Number.isFinite(percent)) return "[" + "?".repeat(cells) + "] —";
+  const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * cells);
+  return "[" + "#".repeat(filled) + "-".repeat(cells - filled) + "] " + percent.toFixed(1) + "%";
+}
+function contextPercent(u: AgentUsage): number | undefined {
+  return (
+    u.contextUsedPct ??
+    (u.contextTokens !== undefined && u.contextWindowTokens && u.contextWindowTokens > 0
+      ? (u.contextTokens / u.contextWindowTokens) * 100
+      : undefined)
+  );
+}
 export function usageLines(u: AgentUsage | null | undefined): string[] {
   if (!u) return ["利用状況を取得できません（記録・会話ID・対応状況を確認してください）"];
   return [
@@ -31,7 +45,7 @@ export function usageLines(u: AgentUsage | null | undefined): string[] {
     `トークン 合計 ${num(u.tokens.total)} / 入力 ${num(u.tokens.input)} / 出力 ${num(u.tokens.output)}`,
     `キャッシュ 読み ${num(u.tokens.cacheRead)} / 書き ${num(u.tokens.cacheWrite)} · 推論 ${num(u.tokens.reasoning)}`,
     `コスト ${u.costUsd === undefined ? "—" : "$" + u.costUsd.toFixed(4)}${u.costBasis ? " (" + u.costBasis + ")" : ""}`,
-    `コンテキスト ${num(u.contextTokens)} / ${num(u.contextWindowTokens)}${u.contextUsedPct === undefined ? "" : " (" + u.contextUsedPct.toFixed(1) + "%)"}`,
+    `コンテキスト ${usageGauge(contextPercent(u))} · ${num(u.contextTokens)} / ${num(u.contextWindowTokens)}`,
     `更新 ${new Date(u.updatedAt).toLocaleString("ja-JP")} · ${u.source}`,
     ...(u.partial ? ["一部の記録のみ"] : []),
     ...(u.scanning ? ["記録を読み取り中"] : []),
@@ -100,7 +114,7 @@ export class UsageDialog implements Overlay {
               a.label,
               ...a.windows.map(
                 (w) =>
-                  `${w.label}: ${w.usedPct}% · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
+                  `${w.label}: ${usageGauge(w.usedPct)} · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
               ),
             ])),
       "↑↓ スクロール · Esc 閉じる",
@@ -144,7 +158,10 @@ export class UsageDashboard {
       });
   }
   handleKey(k: KeyInput): void {
-    if(k.key==='h'){this.ui.openDialogWithContext({kind:'pastSessions'});return;}
+    if (k.key === "h") {
+      this.ui.openDialogWithContext({ kind: "pastSessions" });
+      return;
+    }
     if (isEsc(k)) {
       this.ui.setScreen("base");
       return;
@@ -197,14 +214,19 @@ export class UsageDashboard {
         );
     };
     let y = area.y;
-    put(y++, "利用状況 · s:並び順 " + this.sort + " · a:アカウント · h:過去セッション · ↑↓ / Enter:ペインへ · Esc:基本");
+    put(
+      y++,
+      "利用状況 · s:並び順 " +
+        this.sort +
+        " · a:アカウント · h:過去セッション · ↑↓ / Enter:ペインへ · Esc:基本",
+    );
     const status = statusText(this.usage);
     if (status) put(y++, status);
     const accountLines = this.usage.data.accounts.flatMap((a) => [
       `${a.label}${a.plan ? " · " + a.plan : ""} · ${new Date(a.asOf).toLocaleString("ja-JP")}`,
       ...a.windows.map(
         (w) =>
-          `  ${w.label}: ${w.usedPct.toFixed(1)}%${w.resetsAt ? " · リセット " + new Date(w.resetsAt).toLocaleString("ja-JP") : ""}${w.stale ? "（古い値）" : ""}`,
+          `  ${w.label}: ${usageGauge(w.usedPct)}${w.resetsAt ? " · リセット " + new Date(w.resetsAt).toLocaleString("ja-JP") : ""}${w.stale ? "（古い値）" : ""}`,
       ),
     ]);
     const accountRoom = Math.max(0, Math.min(Math.floor(area.h / 3), area.y + area.h - y - 4));
@@ -233,13 +255,22 @@ export class UsageDashboard {
       put(
         y,
         u
-          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(u.tokens.total)} · $${u.costUsd === undefined ? "—" : u.costUsd.toFixed(4)} · 文脈 ${u.contextUsedPct === undefined ? "—" : u.contextUsedPct.toFixed(1) + "%"}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
+          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(u.tokens.total)} · $${u.costUsd === undefined ? "—" : u.costUsd.toFixed(4)}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
           : "利用状況を取得できません",
         bg,
       );
       this.hits.push({ y, paneId: p.id });
       y++;
-      put(y++, u ? "更新 " + new Date(u.updatedAt).toLocaleString("ja-JP") : "", bg);
+      put(
+        y++,
+        u
+          ? "文脈 " +
+              usageGauge(contextPercent(u)) +
+              " · 更新 " +
+              new Date(u.updatedAt).toLocaleString("ja-JP")
+          : "",
+        bg,
+      );
     }
     put(
       area.y + area.h - 1,

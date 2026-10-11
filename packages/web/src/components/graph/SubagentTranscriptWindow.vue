@@ -130,7 +130,10 @@ function clampPos(x: number, y: number): { x: number; y: number } {
   const b = boxOfParent();
   const w = root.value?.offsetWidth ?? W;
   const h = root.value?.offsetHeight ?? H;
-  return { x: Math.max(0, Math.min(x, Math.max(0, b.w - w))), y: Math.max(0, Math.min(y, Math.max(0, b.h - h))) };
+  return {
+    x: Math.max(0, Math.min(x, Math.max(0, b.w - w))),
+    y: Math.max(0, Math.min(y, Math.max(0, b.h - h))),
+  };
 }
 function onGripDown(ev: PointerEvent): void {
   if (ev.button !== 0) return;
@@ -211,9 +214,18 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
         @pointercancel="onGripUp"
       >
         <span class="sat-name" :title="heading">{{ heading }}</span>
-        <span class="sat-state" data-subagent-transcript-state>{{ running ? "実行中" : "終了" }}</span>
+        <span class="sat-state" data-subagent-transcript-state>{{
+          running ? "実行中" : "終了"
+        }}</span>
       </div>
-      <button type="button" class="sat-btn sat-close" aria-label="記録の窓を閉じる" @click="emit('close')">×</button>
+      <button
+        type="button"
+        class="sat-btn sat-close"
+        aria-label="記録の窓を閉じる"
+        @click="emit('close')"
+      >
+        ×
+      </button>
     </header>
     <div ref="scroller" class="sat-body" role="log" aria-live="off" tabindex="0" aria-label="記録">
       <p v-if="omittedBefore" class="sat-note">長いので、先頭のほうを省いています</p>
@@ -229,7 +241,9 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
         </div>
         <div v-else-if="r.e.kind === 'tool'" class="sat-row sat-tool" data-kind="tool">
           <span class="sat-tag">道具</span>
-          <span class="sat-text"><strong>{{ r.e.name }}</strong> {{ r.e.text }}</span>
+          <span class="sat-text"
+            ><strong>{{ r.e.name }}</strong> {{ r.e.text }}</span
+          >
         </div>
         <details v-else class="sat-row sat-result" data-kind="result">
           <summary>
@@ -274,8 +288,9 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
   align-items: center;
   gap: 6px;
   flex: none;
-  min-height: var(--soda-shape-control-h, 0px);
-  padding: 2px var(--soda-shape-pad-x, 6px);
+  min-height: 0;
+  height: 24px;
+  padding: 0 6px;
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   font-size: 0.9em;
@@ -304,8 +319,9 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
 }
 .sat-btn {
   flex: none;
-  min-height: var(--soda-shape-control-h, 0px);
-  padding: 1px 8px;
+  min-height: 0;
+  height: 20px;
+  padding: 0 6px;
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius-s, 3px);
   background: transparent;
@@ -380,7 +396,8 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
 }
 .sat-foot {
   flex: none;
-  padding: 3px var(--soda-shape-pad-x, 8px);
+  padding: 1px 6px;
+  line-height: 1.25;
   border-top: 1px solid var(--soda-menu-border, #44475a);
   background: var(--soda-menu-bg, #282a36);
   color: color-mix(in srgb, var(--soda-fg, #f8f8f2) 70%, transparent);

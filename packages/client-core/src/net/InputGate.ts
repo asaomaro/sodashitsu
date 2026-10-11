@@ -75,15 +75,16 @@ export class InputGate implements ConnectionPort {
   ) {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.setTimer = opts.setTimeout ?? ((fn, ms) => setTimeout(fn, ms));
-    this.clearTimer = opts.clearTimeout ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    this.clearTimer =
+      opts.clearTimeout ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   }
 
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
     return this.conn.request(method, params);
   }
 
-  login(token: string): Promise<LoginResult> {
-    return this.conn.login(token);
+  login(token: string, method?: "token" | "otp" | "totp"): Promise<LoginResult> {
+    return method ? this.conn.login(token, method) : this.conn.login(token);
   }
 
   logout(): Promise<void> {
@@ -117,8 +118,18 @@ export class InputGate implements ConnectionPort {
     const id = ++this.seq;
     const sources = new Set<string>();
     if (sourcePaneId) sources.add(sourcePaneId);
-    const hold: Hold = { id, sources, chunks: [], timer: undefined, target: undefined, first: undefined };
-    hold.timer = this.setTimer(() => this.finish(id, sourcePaneId), opts.timeoutMs ?? this.timeoutMs);
+    const hold: Hold = {
+      id,
+      sources,
+      chunks: [],
+      timer: undefined,
+      target: undefined,
+      first: undefined,
+    };
+    hold.timer = this.setTimer(
+      () => this.finish(id, sourcePaneId),
+      opts.timeoutMs ?? this.timeoutMs,
+    );
     this.holds.push(hold);
     return {
       release: (toPaneId, first) => this.finish(id, toPaneId, first),
@@ -139,7 +150,9 @@ export class InputGate implements ConnectionPort {
     hold.target = target;
     hold.first = first;
     // 焦点はこの流し先へ移る——まだ応答待ちの後の保持は、そこ宛ての入力も溜める。
-    if (target) for (const later of this.holds) if (later.id > id && later.target === undefined) later.sources.add(target);
+    if (target)
+      for (const later of this.holds)
+        if (later.id > id && later.target === undefined) later.sources.add(target);
     // 古いほうから順に、流し先が決まったものだけ流す（打った順番を保つ）。
     while (this.holds[0] && this.holds[0].target !== undefined) {
       const done = this.holds.shift()!;

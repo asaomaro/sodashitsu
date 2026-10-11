@@ -2,3 +2,6 @@
 third_party/ask-form/** -text
 packages/web/public/fonts/nerd-symbols/LICENSE* -text whitespace=-blank-at-eol
 .aidev/works/20261011-conversation-tools/negative-*.log -text whitespace=-blank-at-eol
+
+# Preserve raw terminal-grid output in regression records.
+.aidev/works/20261011-history-usage-otp/test-result.md whitespace=-blank-at-eol
