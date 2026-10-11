@@ -1,0 +1,277 @@
+<script setup lang="ts">
+import { findMessageLine } from "@sodashitsu/client-core";
+import { computed, inject, nextTick, ref, watch } from "vue";
+import type { ConversationMessage, ConversationSummary } from "@sodashitsu/protocol";
+import { ConnectionKey, TerminalRegistryKey } from "../injection.js";
+import { useConversationWindowStore } from "../store/conversationWindow.js";
+import { useSessionStore } from "../store/session.js";
+import { useSettingsStore } from "../store/settings.js";
+const store = useConversationWindowStore(),
+  session = useSessionStore(),
+  settings = useSettingsStore();
+const conn = inject(ConnectionKey, null),
+  registry = inject(TerminalRegistryKey, undefined);
+const messages = ref<ConversationMessage[]>([]),
+  next = ref<number | null>(0),
+  error = ref(""),
+  busy = ref(false),
+  partial = ref(false),
+  summary = ref<ConversationSummary | null>(null),
+  selected = ref<string | null>(null),
+  body = ref<HTMLElement | null>(null),
+  note = ref("");
+const target = computed(() => store.target),
+  users = computed(() => messages.value.filter((m) => m.role === "user"));
+const sessionId = computed(() =>
+  target.value ? session.panes.get(target.value.paneId)?.agentSession?.sessionId : null,
+);
+const windowRoot = ref<HTMLElement | null>(null);
+let generation = 0;
+async function load() {
+  const t = target.value,
+    offset = next.value,
+    g = generation;
+  if (!t || offset === null || !conn || busy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    const r = await conn.request("agent.conversation", { paneId: t.paneId, offset });
+    if (g !== generation) return;
+    messages.value.push(...r.messages);
+    next.value = r.nextOffset;
+    partial.value ||= r.partial;
+  } catch {
+    if (g === generation)
+      error.value = "会話記録を取得できません。対応エージェント・会話IDを確認してください。";
+  } finally {
+    if (g === generation) busy.value = false;
+  }
+}
+watch(
+  [target, sessionId],
+  () => {
+    generation++;
+    messages.value = [];
+    next.value = 0;
+    summary.value = null;
+    partial.value = false;
+    error.value = "";
+    busy.value = false;
+    note.value = "";
+    selected.value = null;
+    if (target.value?.mode === "messages") void load();
+  },
+  { immediate: true },
+);
+async function show(m: ConversationMessage) {
+  selected.value = m.id;
+  await nextTick();
+  body.value
+    ?.querySelector<HTMLElement>(`[data-message="${CSS.escape(m.id)}"]`)
+    ?.scrollIntoView({ block: "start" });
+  const term = target.value ? registry?.get(target.value.paneId)?.term : undefined;
+  const buffer = term?.buffer.active;
+  const line = buffer ? findMessageLine(buffer, m.text) : null;
+  if (line !== null && term) {
+    term.scrollToLine(line);
+    note.value = "端末も該当箇所に移動しました。";
+  } else
+    note.value =
+      "会話記録の該当箇所を表示しました。端末履歴にない、または位置を一意に特定できないため、端末の位置は変えていません。";
+}
+watch(
+  target,
+  async (t) => {
+    if (t) {
+      await nextTick();
+      windowRoot.value?.focus();
+    }
+  },
+  { immediate: true },
+);
+async function generate() {
+  const t = target.value,
+    g = generation;
+  if (!t || !conn || busy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    const r = await conn.request("agent.summary", {
+      paneId: t.paneId,
+      settings: settings.summarySettings,
+    });
+    if (g === generation) summary.value = r;
+  } catch {
+    if (g === generation)
+      error.value =
+        "要約できません。要約用エージェントのログイン、モデル、専用セッションの設定を確認してください。";
+  } finally {
+    if (g === generation) busy.value = false;
+  }
+}
+const position = ref({ x: 0, y: 0 });
+let grip: { x: number; y: number; ox: number; oy: number } | null = null;
+function drag(e: PointerEvent) {
+  if ((e.target as HTMLElement).closest("button")) return;
+  grip = { x: e.clientX, y: e.clientY, ox: position.value.x, oy: position.value.y };
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+}
+function move(e: PointerEvent) {
+  if (grip)
+    position.value = {
+      x: Math.max(
+        -window.innerWidth * 0.4,
+        Math.min(window.innerWidth * 0.4, grip.ox + e.clientX - grip.x),
+      ),
+      y: Math.max(
+        -window.innerHeight * 0.1,
+        Math.min(window.innerHeight * 0.6, grip.oy + e.clientY - grip.y),
+      ),
+    };
+}
+function close() {
+  const id = target.value?.paneId;
+  store.target = null;
+  if (id) registry?.focus(id);
+}
+</script>
+<template>
+  <section
+    v-if="target"
+    ref="windowRoot"
+    tabindex="-1"
+    class="conversation-window"
+    role="dialog"
+    :aria-label="target.mode === 'messages' ? '送信メッセージ' : '会話の要約'"
+    :style="{ transform: `translate(${position.x}px,${position.y}px)` }"
+    @keydown.stop="$event.key === 'Escape' && close()"
+  >
+    <header
+      @pointerdown="drag"
+      @pointermove="move"
+      @pointerup="grip = null"
+      @pointercancel="grip = null"
+    >
+      <strong>{{ target.mode === "messages" ? "送信メッセージ" : "会話の要約" }}</strong
+      ><button type="button" aria-label="閉じる" @click="close">×</button>
+    </header>
+    <p v-if="error" role="alert">{{ error }}</p>
+    <template v-if="target.mode === 'messages'">
+      <p v-if="partial">記録の一部、または長いメッセージの先頭のみ表示しています。</p>
+      <div class="conversation-columns">
+        <nav aria-label="送信メッセージ一覧">
+          <button
+            v-for="m in users"
+            :key="m.id"
+            type="button"
+            :aria-current="selected === m.id"
+            @click="show(m)"
+          >
+            <time v-if="m.at">{{ new Date(m.at).toLocaleString() }}</time
+            >{{ m.text.slice(0, 100) }}</button
+          ><button v-if="next !== null" :disabled="busy" @click="load">
+            {{ busy ? "読み込み中…" : "続きを読む" }}
+          </button>
+          <p v-if="!busy && !users.length">送信メッセージはありません。</p>
+        </nav>
+        <div ref="body" class="conversation-record">
+          <article
+            v-for="m in messages"
+            :key="m.id"
+            :data-message="m.id"
+            :class="{ 'message-selected': selected === m.id }"
+          >
+            <strong>{{ m.role === "user" ? "あなた" : "エージェント" }}</strong>
+            <pre>{{ m.text }}</pre>
+          </article>
+        </div>
+      </div>
+      <p role="status">{{ note }}</p>
+    </template>
+    <template v-else
+      ><p>
+        {{ settings.summarySettings.kind }} · {{ settings.summarySettings.model || "既定モデル" }} ·
+        {{ settings.summarySettings.sessionId ? "専用セッションを継続" : "新しい専用セッション" }}
+      </p>
+      <button :disabled="busy" @click="generate">{{ busy ? "要約中…" : "要約を生成" }}</button>
+      <pre class="summary-result">{{ summary?.text }}</pre>
+      <p v-if="summary?.sessionId">
+        要約セッションID: <code>{{ summary.sessionId }}</code>
+      </p></template
+    >
+  </section>
+</template>
+<style scoped>
+.conversation-window {
+  position: fixed;
+  top: 10vh;
+  left: 10vw;
+  width: 80vw;
+  max-width: 1000px;
+  height: 72vh;
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  box-sizing: border-box;
+  background: var(--soda-menu-bg, #282a36);
+  color: var(--soda-fg, #f8f8f2);
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px #0006;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  cursor: move;
+  touch-action: none;
+}
+button {
+  background: var(--soda-input-bg, #343746);
+  color: inherit;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: 4px;
+  padding: 5px;
+  cursor: pointer;
+}
+.conversation-columns {
+  display: grid;
+  grid-template-columns: minmax(130px, 30%) 1fr;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+nav,
+.conversation-record,
+.summary-result {
+  overflow: auto;
+}
+nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 4px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+time {
+  display: block;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.message-selected {
+  background: var(--soda-menu-active-bg, #44475a);
+  outline: 2px solid var(--soda-accent, #8be9fd);
+}
+article {
+  padding: 8px;
+}
+.summary-result {
+  flex: 1;
+}
+</style>

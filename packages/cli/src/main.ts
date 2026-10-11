@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {runPluginApp} from "./commands/pluginApp.js";
 /**
  * `sodactl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
  * `parseArgs` → 対応する `commands/*` を呼ぶ → 例外は `reportAndExit` が終了コードへ変換する（T11）。
@@ -98,6 +99,7 @@ async function main(): Promise<void> {
       // 終了コードは 0 か 1（`events` の `connection_closed` は終わりの行を出して 1）。使い方の誤り・サーバのエラーは投げて `reportAndExit` へ。
       process.exitCode = await runDisplay(cmd, store);
       return;
+    case "plugin-app": return runPluginApp(cmd,store);
     case "plugin": {
       if (cmd.action === "pack") { const bundle = await packPlugin(cmd.target!, cmd.out!); printJson({ id: bundle.manifest.id, version: bundle.manifest.version, out: cmd.out }); }
       else {

@@ -16,13 +16,20 @@ export interface FrameInfo {
   symbols?: boolean;
   controls?: boolean;
   hasAgent?: boolean;
+  agentActions?:import("@sodashitsu/protocol").AgentHeaderAction[];
   zoomed?: boolean;
 }
 
-export type PaneButtonAction = "right" | "down" | "info" | "zoom" | "close";
-export function paneButtons(frame: Rect, hasAgent: boolean, zoomed: boolean): {x:number;w:number;action:PaneButtonAction;text:string}[] {
+export type PaneButtonAction = "agent-more" | "right" | "down" | "info" | "zoom" | "close" | import("@sodashitsu/protocol").AgentHeaderAction;
+export function paneButtons(frame: Rect, hasAgent: boolean, zoomed: boolean,extras:import("@sodashitsu/protocol").AgentHeaderAction[]=[]): {x:number;w:number;action:PaneButtonAction;text:string}[] {
+  const marks={messages:"[≡]",summary:"[Σ]",compact:"[↘]",clear:"[↺]",usage:"[%]",permissions:"[✓]",fork:"[⑂]"};
+  const room=Math.max(0,Math.floor((frame.w-25)/3));
+  const overflow=extras.length>room;
+  const extraButtons=extras.slice(0,Math.max(0,room-(overflow?1:0)));
   const actions: [PaneButtonAction,string][] = [
     ...(hasAgent && frame.w>=13 ? [["info","[i]"]] as [PaneButtonAction,string][] : []),
+    ...extraButtons.map(action=>[action,marks[action]] as [PaneButtonAction,string]),
+    ...(overflow&&frame.w>=16?[["agent-more","[⋯]"]] as [PaneButtonAction,string][]:[]),
     ...(frame.w>=22 ? [["right","[│]"],["down","[─]"]] as [PaneButtonAction,string][] : []),
     ["zoom",zoomed?"[↙]":"[□]"],["close","[×]"],
   ];
@@ -65,7 +72,7 @@ export function paintFrame(
 
   // 上辺の名前：`┌─ ◐ name ─…┐`
   let cx = x + (sides.left ? 2 : 1);
-  const buttons=info.controls ? paneButtons(frame, info.hasAgent===true, info.zoomed===true) : [];
+  const buttons=info.controls ? paneButtons(frame, info.hasAgent===true, info.zoomed===true,info.agentActions) : [];
   for(const button of buttons) grid.text(button.x,y,button.text,theme.ui("--soda-fg"),theme.ground("--soda-menu-bg"),0,button.w);
   const limit = buttons[0]?.x ?? right - 1;
   if (cx >= limit) return;

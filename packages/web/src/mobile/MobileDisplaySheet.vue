@@ -11,14 +11,14 @@ import { useDisplayStore } from "../store/display.js";
  * モバイルの表示のパネルの重ね表示（20261007-soda-extensions の design「ブラウザ」）。モバイルには端末の横に置く場所が無いので、バーのボタンから `<dialog>` で開く。
  * 上に固定のラベル・タブ・［閉じる］（シートだけ閉じる。面は残る）・［この表示を消す］（`dismiss`）、下に枠。幅のつまみは出さない。
  */
-const props = defineProps<{ paneId: string; excludeName?: string | undefined }>();
+const props = defineProps<{ paneId: string; excludeName?: string | undefined;excludeNames?:string[] }>();
 const emit = defineEmits<{ close: [] }>();
 
 const store = useDisplayStore();
 const controller = inject(DisplayControllerKey, null);
 const dlg = ref<HTMLDialogElement | null>(null);
 
-const panels = computed(() => store.panelsOf(props.paneId).filter(d => d.name !== props.excludeName));
+const panels = computed(() => store.panelsOf(props.paneId).filter(d => d.name !== props.excludeName && !props.excludeNames?.includes(d.name)));
 const active = computed(() => { const selected = store.activePanelOf(props.paneId); return panels.value.find(d => d.id === selected?.id) ?? panels.value[0]; });
 const content = computed(() => (active.value ? store.contents.get(active.value.id) : undefined));
 const engaged = computed(() => store.focusedDisplayId !== null && panels.value.some((p) => p.id === store.focusedDisplayId));

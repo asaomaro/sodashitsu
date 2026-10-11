@@ -3540,7 +3540,7 @@ describe("PJフォルダとプラグインタブ", () => {
     try {
       const terminals = new FakeTerminalManager(); const service=makeService(terminals,new EventBus(),new FakePersistScheduler());
       const first=await service.createWorkspace("/server-start","PJ");
-      const plugin={extensionKey:"user:yukkuri-studio",display:"yukkuri-studio"};
+      const plugin={extensionKey:"user:yukkuri-studio",display:"yukkuri-studio",mobileDisplay:"yukkuri-studio-mobile"};
       await service.setWorkspaceProjectFolder(first.workspace.id,root);
       const tab=await service.createTab(first.workspace.id,"studio",undefined,plugin);
       expect(terminals.createOptions).toHaveLength(2);

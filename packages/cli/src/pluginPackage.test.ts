@@ -88,3 +88,10 @@ it('keeps PJ packages manageable after moving the project folder',async()=>{
  await changePlugin(base,'disable','demo',true);expect((await listPlugins(base))[0]?.enabled).toBe(false);
  await changePlugin(base,'remove','demo',true);expect(await listPlugins(base)).toEqual([]);
 });
+
+it('preserves optional mobile app definitions across pack/install and rejects invalid display names',async()=>{
+ const f=await fixture();const manifest=JSON.parse(await readFile(join(f.source,'soda-plugin.json'),'utf8'));manifest.tabView={title:'Demo',display:'demo',mobileDisplay:'demo-mobile'};await writeFile(join(f.source,'soda-plugin.json'),JSON.stringify(manifest));
+ const bundle=await packPlugin(f.source,f.bundle);expect(bundle.manifest.tabView?.mobileDisplay).toBe('demo-mobile');await changePlugin(f.state,'install',f.bundle);
+ expect(JSON.parse(await readFile(join(f.state,'extensions.json'),'utf8')).extensions[0].tabView.mobileDisplay).toBe('demo-mobile');
+ bundle.manifest.tabView!.mobileDisplay='../outside';expect(()=>validateBundle(bundle)).toThrow();
+});

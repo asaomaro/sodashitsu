@@ -79,7 +79,7 @@ export function createExtensionApi(deps: ExtensionApiDeps) {
   }
 
   function methods(ext: ApiExtension): string[] {
-    return [...METHODS_ALWAYS, ...(mayScript(ext) ? ["display.send"] : []), ...(ext.allow.includes("agent-start") ? deps.taskMethods ?? [] : [])];
+    return [...METHODS_ALWAYS, "app.register", "app.result", ...(mayScript(ext) ? ["display.send"] : []), ...(ext.allow.includes("agent-start") ? deps.taskMethods ?? [] : [])];
   }
 
   function helloLine(ext: ApiExtension): ExtLine {

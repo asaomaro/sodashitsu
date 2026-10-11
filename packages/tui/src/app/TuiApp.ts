@@ -1,3 +1,6 @@
+import {findMessageLine} from "@sodashitsu/client-core";
+import {ConversationDialog} from "../modes/ConversationDialog.js";
+import {headerActionsFor,loadAgentHeaderActions} from "@sodashitsu/protocol";
 import { AgentForkDialog } from "../modes/AgentForkDialog.js";
 import {UsageModel} from "../model/UsageModel.js";
 import {UsageDialog,UsageDashboard} from "../modes/UsageView.js";
@@ -263,6 +266,7 @@ export class TuiApp {
       onMachinesChanged: (list) => this.wiring?.onMainMachinesChanged(list),
       onPopupClosed: (popupId, exitCode) => this.onPopupClosed(popupId, exitCode),
       // 共有の設定はローカルのサーバのものだけ（ほかのマシンを見ている間の画面の接続の知らせは当てない。decisions D7.4）。
+      onNotificationState:state=>this.notify.onSharedNotification(state),
       onPrefsChanged: (data) => {
         if (this.machines.selectedId === LOCAL_MACHINE_ID) this.prefs.apply(data.prefs, data.rev);
       },
@@ -394,6 +398,8 @@ export class TuiApp {
       readTimeoutMs: imageReadTimeoutMs(this.clipboardEnv),
     });
     this.notify = new NotificationController({
+      loadShared:()=>this.rpc.request("notification.state",{}),
+      updateShared:n=>this.rpc.request("notification.update",n),
       model: this.model,
       ui: this.ui,
       prefs: this.prefs,
@@ -419,6 +425,7 @@ export class TuiApp {
       actions: this.dispatcher,
       layout: () => this.lastLayout,
       paneControls: true,
+      agentActions:id=>{const p=this.model.panes.get(id);return p?.agent?headerActionsFor(p.agent.kind,!!p.agentSession,loadAgentHeaderActions(this.prefs.shared.agentHeaderActions)):[];},
       dashboardMouse: (ev) => this.dashboard.handleMouse(ev),
       sidebarHits: () => this.sidebarHits,
       tabHits: () => this.tabBarHits,
@@ -917,6 +924,7 @@ export class TuiApp {
 
   /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
   protected extraOverlay(ctx: DialogContext): Overlay | null {
+    if(ctx.kind==='conversation'||ctx.kind==='pastSessions')return new ConversationDialog(ctx.kind==='pastSessions'?'sessions':ctx.mode,ctx.kind==='pastSessions'?null:ctx.paneId,this.ui,this.rpc,this.prefs,this.model,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id),(id,text)=>{const terminal=this.panes.get(id)?.term;if(terminal){const line=findMessageLine(terminal.buffer.active,text);if(line!==null){terminal.scrollToLine(line);this.scheduleRender();}}});
     if (ctx.kind === "agentFork") return new AgentForkDialog(ctx.paneId,this.ui,this.rpc,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id));
     if (ctx.kind === "goto")
       return new GotoDialog({
@@ -1202,6 +1210,7 @@ export class TuiApp {
   /** 今すぐ 1 フレーム描く。 */
   renderNow(): void {
     if (this.ended) return;
+    this.notify.syncToasts();
     this.lastRenderAt = performance.now();
     const layout = this.layout();
     this.lastLayout = layout;

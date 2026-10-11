@@ -85,7 +85,7 @@ export interface ExtensionViewDefinition {
   requiresProject?: boolean | undefined;
 }
 const ViewTitle = z.string().min(1).max(80).refine(v => !hasForbiddenChars(v));
-export const ExtensionTabViewSchema = z.strictObject({ title: ViewTitle, display: z.string().regex(DISPLAY_NAME_RE), requiresProject: z.boolean().optional() });
+export const ExtensionTabViewSchema = z.strictObject({ title: ViewTitle, display: z.string().regex(DISPLAY_NAME_RE), mobileDisplay:z.string().regex(DISPLAY_NAME_RE).optional(), requiresProject: z.boolean().optional() });
 export const ViewPlacementSchema = z.enum(["right", "left", "top", "bottom", "float", "band-top", "band-bottom"]);
 export const ExtensionViewsSchema = z.array(z.strictObject({
   id: z.string().regex(COMMAND_ID_RE), title: ViewTitle,
@@ -133,7 +133,7 @@ export interface ExtensionInfo {
   description?: string;
   allow: string[];
   onUnresponsive: "pass" | "block";
-  tabView?: { title: string; display: string; requiresProject?: boolean | undefined };
+  tabView?: { title: string; display: string; mobileDisplay?:string|undefined; requiresProject?: boolean | undefined };
   views?: ExtensionViewDefinition[];
   /** プロジェクト拡張が利用できるワークスペース（サーバ側の根判定）。 */
   workspaceIds?: string[];
@@ -230,6 +230,7 @@ export type ExtDisplayEvent =
 
 /** サーバ → 拡張の行。 */
 export type ExtLine =
+  | {type: "app.call";callId:string;operation:string;params:Record<string,unknown>;target:{paneId:string;tabId:string;workspaceId:string}}
   | {
       type: "ext.hello";
       v: 1;
@@ -260,7 +261,7 @@ export type ExtRequestParse =
   | { ok: true; request: ExtRequest }
   | { ok: false; code: "bad_line" | "bad_request"; message: string };
 
-export const EXT_EVENT_TYPES = ["ext.hello", "ext.result", "ext.error", "ext.dropped", "ext.panes", "display.action", "display.closed"] as const;
+export const EXT_EVENT_TYPES = ["ext.hello", "ext.result", "ext.error", "ext.dropped", "ext.panes", "display.action", "display.closed", "app.call"] as const;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "commit-graph",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "name": "Commit Graph",
   "description": "PJのコミット履歴を読み取り専用で表示する汎用ビュー",
   "entry": "extension.mjs",
   "files": ["extension.mjs", "README.md", "LICENSE"],
   "allow": [],
-  "tabView": { "title": "コミットグラフ", "display": "commit-graph" },
+  "tabView": { "title": "コミットグラフ", "display": "commit-graph", "mobileDisplay": "commit-graph-mobile" },
   "views": [{ "id": "history", "title": "コミットグラフ", "placements": ["right", "left", "top", "bottom", "float"] }]
 }

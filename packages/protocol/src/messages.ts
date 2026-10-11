@@ -1,3 +1,6 @@
+import {PluginOperationsParams,PluginCallParams,type PluginOperationsResult} from "./pluginOperations.js";
+import {NotificationUpdateParams,NotificationStateParams,type NotificationState,type SharedNotice} from "./notifications.js";
+import { AgentConversationParams,AgentSessionsParams,AgentResumeParams,AgentCommandParams,AgentSummaryParams,type ConversationPage,type PastAgentSession,type ConversationSummary,type AgentHeaderAction,type SummarySettings } from "./conversation.js";
 import { z } from "zod";
 import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
 import { THEME_NAMES, type ThemeName } from "./theme.js";
@@ -268,7 +271,7 @@ export const SidebarLayoutSchema = z.object({
 
 // --- tab ------------------------------------------------------------------
 
-export const PluginTabSchema = z.object({ extensionKey: z.string().min(1).max(4096), display: z.string().regex(DISPLAY_NAME_RE) });
+export const PluginTabSchema = z.object({ extensionKey: z.string().min(1).max(4096), display: z.string().regex(DISPLAY_NAME_RE),mobileDisplay:z.string().regex(DISPLAY_NAME_RE).optional() });
 export const TabCreateParams = z.object({
   plugin: PluginTabSchema.optional(),
   /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
@@ -786,6 +789,9 @@ export interface SharedPrefs {
   themeOverrides?: Record<string, unknown>;
   /** 画面の様式（20261008-ui-style。web だけが使う。端末版は読まず、知らない項目として保つ）。知らない値・無い値は `classic`。 */
   uiStyle?: "classic" | "modern";
+  notificationStates?: SharedNotice[];
+  agentHeaderActions?: AgentHeaderAction[];
+  summarySettings?: SummarySettings;
   statusSymbols?: boolean;
   keyboardLockInFullscreen?: boolean;
   paneFrameThickness?: "thin" | "default" | "thick";
@@ -1336,7 +1342,16 @@ export const METHOD_SCHEMAS = {
   "agent.fork_preview": AgentForkPreviewParams,
   "agent.kinds": AgentKindsParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
+  "notification.state": NotificationStateParams,
+  "notification.update": NotificationUpdateParams,
   "agent.usage": AgentUsageParams,
+  "plugin.operations": PluginOperationsParams,
+  "plugin.call": PluginCallParams,
+  "agent.conversation": AgentConversationParams,
+  "agent.sessions": AgentSessionsParams,
+  "agent.resume": AgentResumeParams,
+  "agent.command": AgentCommandParams,
+  "agent.summary": AgentSummaryParams,
   "agent.usage_watch": AgentUsageWatchParams,
   "server.sessions": ServerSessionsParams,
   "machine.list": MachineListParams,
@@ -1466,7 +1481,16 @@ export interface MethodResultMap {
   "agent.fork_preview": AgentForkPreviewResult;
   "agent.kinds": AgentKindsResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
+  "notification.state": NotificationState;
+  "notification.update": NotificationState;
   "agent.usage": AgentUsageResult;
+  "plugin.operations": PluginOperationsResult;
+  "plugin.call": {result:unknown};
+  "agent.conversation": ConversationPage;
+  "agent.sessions": {sessions:PastAgentSession[];partial:boolean};
+  "agent.resume": Record<string,never>;
+  "agent.command": Record<string,never>;
+  "agent.summary": ConversationSummary;
   "agent.usage_watch": Record<string, never>;
   "server.sessions": ServerSessionsResult;
   "machine.list": MachineListResult;

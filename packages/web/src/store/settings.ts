@@ -1,3 +1,4 @@
+import {loadAgentHeaderActions,loadSummarySettings,type AgentHeaderAction,type SummarySettings} from "@sodashitsu/protocol";
 import type { DisplayDock, DisplayEdge, ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
@@ -150,6 +151,11 @@ export function loadPaneOuterBorders(raw: unknown): boolean {
 
 export const useSettingsStore = defineStore("settings", () => {
   const initial = readPrefs();
+  const agentHeaderActions=ref(loadAgentHeaderActions(initial["agentHeaderActions"]));
+  const summarySettings=ref(loadSummarySettings(initial["summarySettings"]));
+  function setAgentHeaderActions(v:AgentHeaderAction[]):void {agentHeaderActions.value=loadAgentHeaderActions(v);writePrefs({agentHeaderActions:agentHeaderActions.value});}
+  function setSummarySettings(v:SummarySettings):void {summarySettings.value=loadSummarySettings(v);writePrefs({summarySettings:summarySettings.value});}
+
   /** 状態を色に加えて記号でも示すか（`StateIcon.vue` が読む）。 */
   const statusSymbols = ref(loadStatusSymbols(initial["statusSymbols"]));
   /** 全画面のときブラウザ予約キーも Keyboard Lock で受け取るか（`KeyboardLockController` が読む）。 */
@@ -522,6 +528,8 @@ export const useSettingsStore = defineStore("settings", () => {
    */
   window.addEventListener("storage", () => {
     const prefs = readPrefs();
+    agentHeaderActions.value=loadAgentHeaderActions(prefs["agentHeaderActions"]);
+    summarySettings.value=loadSummarySettings(prefs["summarySettings"]);
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
     if (nextPosition !== tabBarPosition.value) tabBarPosition.value = nextPosition;
     const nextAlways = loadTabBarAlways(prefs["tabBarAlways"]);
@@ -618,6 +626,7 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   return {
+    agentHeaderActions,summarySettings,setAgentHeaderActions,setSummarySettings,
     statusSymbols,
     keyboardLockInFullscreen,
     paneFrameThickness,

@@ -54,7 +54,7 @@ describe("［情報］ボタン（モダン）", () => {
   it("エージェントの居る pane: 分割と最大化の間に［情報］。読み上げのラベル・Tab の順に入れない・押すと窓が開き、もう一度で閉じる（aria-pressed）", async () => {
     const { wrapper } = mountFrame("modern", true);
     const g = wrapper.get("[data-pane-actions]");
-    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual(["info", "split-right", "split-down", "zoom", "close"]);
+    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual(["info", "compact", "usage", "permissions", "split-right", "split-down", "zoom", "close"]);
     const info = wrapper.get('[data-pane-action="info"]');
     expect(info.attributes("aria-label")).toBe("利用状況（情報）");
     expect(info.attributes("tabindex")).toBe("-1");

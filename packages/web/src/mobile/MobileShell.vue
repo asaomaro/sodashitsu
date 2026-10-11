@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {pluginMobileDisplay} from "../display/pluginDisplay.js";
+import {useExtensionsStore} from "../store/extensions.js";
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PaneLayout from "../components/PaneLayout.vue";
 import PluginView from "../components/PluginView.vue";
@@ -41,6 +43,7 @@ const viewSync = inject(ViewSyncKey);
 
 // 表示の面（20261007-soda-extensions）。帯はバーと pane の間に出し、パネルはバーのボタンから重ね表示（端末の横には出さない）。
 const displays = useDisplayStore();
+const extensions=useExtensionsStore();
 const showDisplaySheet = ref(false);
 // `prefix+i`（focus_display）は、モバイルでは重ね表示を開く（パネルの枠が端末の横に無いため）。
 onMounted(() => {
@@ -68,7 +71,8 @@ let touchScroll: TouchScroll | null = null;
 const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
 const appActive = computed(() => !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal");
 const tabDisplayPane = computed(() => currentTab.value?.displayPaneId);
-const tabPanelCount = computed(() => tabDisplayPane.value ? displays.panelsOf(tabDisplayPane.value).filter(d => d.name !== currentTab.value?.plugin?.display).length : 0);
+const appMobileDisplay=computed(()=>pluginMobileDisplay(currentTab.value?.plugin,extensions.list?.extensions));
+const tabPanelCount = computed(() => tabDisplayPane.value ? displays.panelsOf(tabDisplayPane.value).filter(d => d.name !== currentTab.value?.plugin?.display && d.name !== appMobileDisplay.value).length : 0);
 const sheetPane = ref<string | null>(null);
 const currentPaneId = computed(() => view.focusedPaneId);
 const currentPaneLayout = computed(() => (currentPaneId.value ? ({ type: "pane" as const, paneId: currentPaneId.value }) : null));
@@ -145,11 +149,11 @@ onBeforeUnmount(() => touchScroll?.dispose());
           </template>
         </PaneLayout>
       </div>
-      <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view"><PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" /></div>
+      <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view"><PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" mobile /></div>
     </main>
     <ExtraKeys v-if="showKeyboard && !appActive" />
     <PanePicker v-if="showPicker" @close="showPicker = false" />
-    <MobileDisplaySheet v-if="showDisplaySheet && (sheetPane || currentPaneId)" :pane-id="sheetPane || currentPaneId!" :exclude-name="sheetPane === tabDisplayPane ? currentTab?.plugin?.display : undefined" @close="showDisplaySheet = false; sheetPane = null" />
+    <MobileDisplaySheet v-if="showDisplaySheet && (sheetPane || currentPaneId)" :pane-id="sheetPane || currentPaneId!" :exclude-names="sheetPane === tabDisplayPane ? [currentTab?.plugin?.display,appMobileDisplay].filter((x):x is string=>!!x) : []" @close="showDisplaySheet = false; sheetPane = null" />
   </div>
 </template>
 

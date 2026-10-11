@@ -25,6 +25,7 @@ import { mobileViewportQuery } from "../mobile/detect.js";
 import { resolveTabBarAlways } from "../composables/useUiStyle.js";
 import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
 import ExtensionSettings from "./ExtensionSettings.vue";
+import AgentToolsSettings from "./AgentToolsSettings.vue";
 import KeySettings from "./KeySettings.vue";
 import SidebarRowsSettings from "./SidebarRowsSettings.vue";
 
@@ -1497,6 +1498,7 @@ function onNativeCancel(ev: Event): void {
       <p v-if="agentIntegrationMessage" class="settings-note" role="status" aria-live="polite">{{ agentIntegrationMessage }}</p>
     </section>
     <ExtensionSettings />
+    <AgentToolsSettings />
     <KeySettings v-model:capturing="keysCapturing" :kind="kind" />
     <!-- はじめの案内を開き直す（20260926-settings-onboarding の AC6）。設定画面は自分の watch で閉じる（kind が変わるので）。 -->
     <p class="settings-reopen-onboarding">

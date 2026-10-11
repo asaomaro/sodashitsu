@@ -78,6 +78,7 @@ export interface MouseHost {
   pane(paneId: string): PaneTerminal | undefined;
   dashboardMouse?(ev: MouseEv): boolean;
   paneControls?: boolean;
+  agentActions?:(paneId:string)=>import("@sodashitsu/protocol").AgentHeaderAction[];
   sendToPane(paneId: string, bytes: string | Uint8Array): void;
   writeClipboard(text: string): Promise<boolean>;
   /** サイドバーの幅を変える（`persist` なら `tui-state.json` に残す）。 */
@@ -465,12 +466,14 @@ export class MouseController {
       if (!left) return;
       if (y === box.frame.y && this.host.paneControls) {
         const pane=model.panes.get(paneId);
-        const button=paneButtons(box.frame,!!pane?.agent,model.tabs.get(pane?.tabId??"")?.zoomedPaneId===paneId).find(b=>x>=b.x&&x<b.x+b.w);
+        const button=paneButtons(box.frame,!!pane?.agent,model.tabs.get(pane?.tabId??"")?.zoomedPaneId===paneId,this.host.agentActions?.(paneId)).find(b=>x>=b.x&&x<b.x+b.w);
         if(button) {
           if(button.action==="right"||button.action==="down") actions.splitPane(paneId,button.action);
           else if(button.action==="info") actions.showUsageOf(paneId);
           else if(button.action==="zoom") actions.zoomPane(paneId);
-          else actions.closePaneById(paneId);
+          else if(button.action==='close')actions.closePaneById(paneId);
+          else if(button.action==='agent-more')ui.openContextMenu({kind:"agent-tools",paneId},{x,y:y+1});
+          else actions.agentPaneAction(paneId,button.action);
           return;
         }
       }

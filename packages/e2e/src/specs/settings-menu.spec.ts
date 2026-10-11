@@ -16,8 +16,8 @@ const dialog = (page: Page) => page.locator("dialog.settings-dialog");
 const menu = (page: Page) => dialog(page).locator("nav.settings-menu");
 const items = (page: Page) => menu(page).locator("button");
 const currentItems = (page: Page) => menu(page).locator('button[aria-current="true"]');
-const SECTIONS = ["通知", "テーマ", "表示", "端末", "エージェント連携", "拡張", "キー"];
-const HEADING_IDS = ["settings-notify", "settings-theme", "settings-display", "settings-terminal", "settings-agent-integration", "settings-extensions", "settings-keys"];
+const SECTIONS = ["通知", "テーマ", "表示", "端末", "エージェント連携", "拡張", "ペインのエージェント操作", "キー"];
+const HEADING_IDS = ["settings-notify", "settings-theme", "settings-display", "settings-terminal", "settings-agent-integration", "settings-extensions", "settings-agent-tools", "settings-keys"];
 
 async function openApp(page: Page, appServer: AppServer) {
   const sent = await watchSentInput(page);
@@ -27,11 +27,11 @@ async function openApp(page: Page, appServer: AppServer) {
 }
 
 async function openSettings(page: Page): Promise<void> {
-  await focusTerminal(page);
+  await page.locator(".xterm-screen").first().click();
   await prefixKey(page, "s");
   await expect(dialog(page)).toHaveAttribute("open", "");
   // 開いた直後のフォーカスは通知の最初の switch（今までどおり）。メニューの項目が作られるまで待つ。
-  await expect(items(page)).toHaveCount(7);
+  await expect(items(page)).toHaveCount(8);
 }
 
 const activeId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? "");
@@ -57,7 +57,7 @@ async function wheelBody(page: Page, dy: number): Promise<void> {
 }
 
 test.describe("設定のサイドメニュー（幅 1280×720）", () => {
-  test("AC1・AC6：左に名前付きのナビゲーションで 7 節が並び、いちばん下までスクロールしても見えたまま。題名の行も固定。幅はメニューの分だけ広い", async ({ page, appServer }) => {
+  test("AC1・AC6：左に名前付きのナビゲーションで 8 節が並び、いちばん下までスクロールしても見えたまま。題名の行も固定。幅はメニューの分だけ広い", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
     await expect(menu(page)).toBeVisible();
@@ -100,7 +100,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await page.keyboard.press("Escape");
     await expect(dialog(page)).not.toHaveAttribute("open", "");
     await page.evaluate(() => (document.getElementById("settings-terminal")!.textContent = "ターミナル"));
-    await focusTerminal(page);
+    await page.locator(".xterm-screen").first().click();
     await prefixKey(page, "s");
     await expect(items(page).nth(3)).toHaveText("ターミナル");
   });
@@ -153,7 +153,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC2：末尾の節（キー）はスクロールしきれる所まで。見出しが見える", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(6).click();
+    await items(page).last().click();
     expect(await activeId(page)).toBe("settings-keys");
     const gap = await headingBelowHeader(page, "settings-keys");
     expect(gap).toBeGreaterThanOrEqual(0);
@@ -220,10 +220,10 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await expect.poll(() => currentLabel(page)).toEqual(["通知"]);
   });
 
-  test("AC4・AC-I3・AC-I4：Alt+PageDown を 6 回で 7 節を 1 つずつ。最後で何も起きない。Alt+PageUp も同じ", async ({ page, appServer }) => {
+  test("AC4・AC-I3・AC-I4：Alt+PageDown を 7 回で 8 節を 1 つずつ。最後で何も起きない。Alt+PageUp も同じ", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    for (let n = 1; n <= 6; n++) {
+    for (let n = 1; n < SECTIONS.length; n++) {
       await page.keyboard.press("Alt+PageDown");
       await expect.poll(() => currentLabel(page), `${n} 回目`).toEqual([SECTIONS[n]!]);
       expect(await activeId(page), "フォーカスは見出し").toBe(HEADING_IDS[n]);
@@ -233,7 +233,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await settle(page);
     expect(await currentLabel(page)).toEqual(["キー"]);
     expect(await scrollTop(page)).toBe(top);
-    for (let n = 5; n >= 0; n--) {
+    for (let n = SECTIONS.length - 2; n >= 0; n--) {
       await page.keyboard.press("Alt+PageUp");
       await expect.poll(() => currentLabel(page)).toEqual([SECTIONS[n]!]);
     }
@@ -255,8 +255,8 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await dialog(page).locator("[data-open-onboarding]").focus();
     await expect.poll(() => currentLabel(page)).toEqual(["キー"]);
     await page.keyboard.press("Alt+PageUp");
-    await expect.poll(() => currentLabel(page)).toEqual(["拡張"]);
-    expect(await activeId(page)).toBe("settings-extensions");
+    await expect.poll(() => currentLabel(page)).toEqual(["ペインのエージェント操作"]);
+    expect(await activeId(page)).toBe("settings-agent-tools");
   });
 
   test("AC4・AC-I5：<select> にフォーカスがあっても節は移り（印と見出しのフォーカスが次の節へ）、<select> の値は変わらない。端末へ漏れない", async ({ page, appServer }) => {
@@ -268,7 +268,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     // <select> の入っている節（フォーカスしたので、その節が今の節）。
     const idx = await select.evaluate((el, ids) => ids.indexOf(el.closest("section")!.getAttribute("aria-labelledby")!), HEADING_IDS);
     expect(idx, "<select> は最後の節以外にある").toBeGreaterThanOrEqual(0);
-    expect(idx).toBeLessThan(6);
+    expect(idx).toBeLessThan(SECTIONS.length - 1);
     await expect.poll(() => currentLabel(page)).toEqual([SECTIONS[idx]!]);
     const n = sent().length;
     // ダイアログ自身の listener（Vue の後に登録）で、既定の動作が止められているかを見る（Chromium は元から値を変えないので、値だけでは見えない）。
@@ -348,9 +348,9 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     await expect(items(page).nth(2)).toBeFocused();
     expect(await currentLabel(page), "矢印だけでは節は移らない").toEqual(["通知"]);
     await page.keyboard.press("End");
-    await expect(items(page).nth(6)).toBeFocused();
+    await expect(items(page).last()).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect(items(page).nth(6)).toBeFocused();
+    await expect(items(page).last()).toBeFocused();
     await page.keyboard.press("Home");
     await expect(items(page).nth(0)).toBeFocused();
     await page.keyboard.press("ArrowDown");
@@ -389,7 +389,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC8：キーの取り込み待ちの間の Alt+PageUp（最後の節に居るので、取り込まれなければ前の節へ移る）は、節を移さず取り込まれる。メニューの項目を押すと取り込みは元のまま終わり、節へ移る", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(6).click();
+    await items(page).last().click();
     await dialog(page).locator("[data-prefix-change]").click();
     const capture = dialog(page).locator(".keys-capture");
     await expect(capture).toBeVisible();
@@ -423,7 +423,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC8：「すべて既定に戻す」の確認の表示中にメニューの項目を押すと、節へ移り、確認は今までの決まりのまま（壊れた状態で残らない）", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(6).click();
+    await items(page).last().click();
     await dialog(page).locator("[data-reset-all]").click();
     const confirm = dialog(page).locator('[role="group"][aria-label="すべて既定に戻す確認"]');
     await expect(confirm).toBeVisible();
@@ -433,7 +433,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
     expect(await prefsJson(page), "確認の表示中に移っても、設定は変わらない").toBe(before);
     await expect(dialog(page)).toHaveAttribute("open", "");
     // 確認はそのまま操作できる（［やめる］で閉じる）。
-    await items(page).nth(6).click();
+    await items(page).last().click();
     await dialog(page).locator("[data-confirm-no]").click();
     await expect(confirm).toHaveCount(0);
   });
@@ -441,7 +441,7 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
   test("AC8：キーの節の下の帯（結果の文）は、メニューが付いても見える範囲の中に固定される", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
-    await items(page).nth(6).click();
+    await items(page).last().click();
     await dialog(page).locator("[data-prefix-change]").click();
     await page.keyboard.press("Escape"); // 取り込みを取り消す → 帯に結果の文
     const band = dialog(page).locator(".keys-status-band");
@@ -466,13 +466,13 @@ test.describe("設定のサイドメニュー（幅 1280×720）", () => {
 test.describe("設定のサイドメニュー（高い画面）", () => {
   test.use({ viewport: { width: 1280, height: 1400 } });
 
-  test("AC4：キーの絞り込みで末尾の 2 節が 1 画面に収まる状態でも、7 節を 1 つずつ通る（選んだ節が位置より優先される）", async ({ page, appServer }) => {
+  test("AC4：キーの絞り込みで末尾の 2 節が 1 画面に収まる状態でも、8 節を 1 つずつ通る（選んだ節が位置より優先される）", async ({ page, appServer }) => {
     await openApp(page, appServer);
     await openSettings(page);
     // 何も当たらない絞り込み。高い画面（1400px）では「エージェント連携」と「キー」が 1 画面に収まり、位置だけで決めると末尾の節を飛ばす。
     await dialog(page).locator("#keys-filter-input").fill("zzzzzzzz");
     await dialog(page).locator("#settings-notify").focus();
-    for (let n = 1; n <= 6; n++) {
+    for (let n = 1; n < SECTIONS.length; n++) {
       await page.keyboard.press("Alt+PageDown");
       await expect.poll(() => currentLabel(page), `${n} 回目`).toEqual([SECTIONS[n]!]);
     }
@@ -499,7 +499,7 @@ test.describe("設定のサイドメニュー（低い画面）", () => {
     // 今の節の項目はメニューの見える位置にある。
     await page.keyboard.press("Escape");
     await openSettings(page);
-    for (let n = 0; n < 6; n++) await page.keyboard.press("Alt+PageDown");
+    for (let n = 0; n < 7; n++) await page.keyboard.press("Alt+PageDown");
     await expect.poll(() => currentLabel(page)).toEqual(["キー"]);
     await expect
       .poll(async () => {
@@ -522,8 +522,7 @@ test.describe("設定のサイドメニュー（幅）", () => {
     await expect(menu(page)).toBeVisible();
     await page.keyboard.press("Escape");
     await page.setViewportSize({ width: 767, height: 720 });
-    await focusTerminal(page);
-    await prefixKey(page, "s");
+    await page.getByRole("button", { name: "設定", exact: true }).click();
     await expect(dialog(page)).toHaveAttribute("open", "");
     await expect(menu(page)).toBeHidden();
     const d767 = (await dialog(page).boundingBox())!;

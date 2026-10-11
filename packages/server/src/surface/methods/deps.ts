@@ -27,6 +27,9 @@ import type { LinkRun } from "@sodashitsu/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
+  notifications?: import("../../notify/SharedNotifications.js").SharedNotifications;
+  summaries?: import("../../conversation/SummaryService.js").SummaryService;
+  conversations?: import("../../conversation/ConversationService.js").ConversationService;
   session: SessionService;
   clients: ClientRegistry;
   sizeAuthority: SizeAuthority;

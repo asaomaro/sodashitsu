@@ -157,6 +157,7 @@ describe("NotificationController（web と同じ判定）", () => {
     s.n.onSnapshotApplied([withDone], true);
     await tick();
     expect(s.ui.toasts).toHaveLength(0);
+    s.model.panes.get("p3")!.agent=agent({instanceId:"a3",completionSeq:4});
     s.n.onSnapshotApplied(
       [{ paneId: "p3", agent: agent({ instanceId: "a3", completionSeq: 4 }) }],
       false,
@@ -187,6 +188,18 @@ describe("NotificationController（web と同じ判定）", () => {
     expect(s.n.queued).toHaveLength(0);
     expect(s.ui.toasts).toHaveLength(0);
   });
+  it("共有の対応済みは古い先送り応答で復活しない",async()=>{
+    const s=setup();s.change("p3",{state:"idle",completionSeq:1});await tick();const key=s.n.queued[0]!.key,at=Date.now();
+    s.n.onSharedNotification({notices:[{key,paneId:"p3",status:"resolved",at}]});
+    s.n.onSharedNotification({notices:[{key,paneId:"p3",status:"deferred",at:at-1}]});expect(s.n.queued).toHaveLength(0);
+  });
+  it("マシンを切り替えると予約済みの完了配送を無効化する",async()=>{
+    const s=setup();s.change("p3",{state:"idle",completionSeq:1});s.n.resetForMachineSwitch();await tick();expect(s.n.queued).toHaveLength(0);expect(s.written).toHaveLength(0);
+  });
+  it("作業再開済みの先送り完了通知は復元しない",()=>{
+    const s=setup();s.change("p3",{state:"working",completionSeq:1});s.n.onSharedNotification({notices:[{key:"done:a3:1",paneId:"p3",status:"deferred",at:Date.now()}]});expect(s.n.queued).toHaveLength(0);
+  });
+
 });
 
 describe("端末版の通知（組み立て）", () => {

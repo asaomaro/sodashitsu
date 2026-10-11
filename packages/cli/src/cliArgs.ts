@@ -95,6 +95,8 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl display wait [<name>] [--since <seq> --epoch <epoch>] [--timeout <ms>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display events [<name>...] [--since <seq> --epoch <epoch>] [--pane <paneId>] [--url <URL>] [--token <TOKEN>]",
   "sodactl display --features [--url <URL>] [--token <TOKEN>]",
+  "sodactl plugin operations <id|key> (--pane <id>|--tab <id>|--workspace <id>) [--url <URL>] [--token <TOKEN>]",
+  "sodactl plugin call <id|key> <operation> (--pane <id>|--tab <id>|--workspace <id>) [--params <JSON object>] [--url <URL>] [--token <TOKEN>]",
   "sodactl plugin pack <directory> --out <file.sodaplugin>",
   "sodactl plugin install <file.sodaplugin> (--state-dir <directory>|--project-dir <PJ folder>)",
   "sodactl plugin list (--state-dir <directory>|--project-dir <PJ folder>)",
@@ -282,6 +284,7 @@ export type DisplayAction =
 export type Command =
   | { kind: "help" }
   | { kind: "skill" }
+  | {kind:"plugin-app";action:"operations"|"call";ref:string;operation?:string;params:Record<string,unknown>;pane?:string;tab?:string;workspace?:string;opts:GlobalOpts}
   | { kind: "plugin"; action: "pack" | "install" | "list" | "remove" | "enable" | "disable"; target: string | undefined; stateDir: string | undefined; projectDir?: string | undefined; out: string | undefined }
   | { kind: "login"; opts: GlobalOpts }
   | { kind: "workspace-create"; opts: GlobalOpts; cwd: string | undefined; label: string | undefined }
@@ -519,6 +522,17 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
       return parseDisplay(word1, rest0, env);
     case "plugin": {
       const usage = USAGE_LINES.filter((l) => l.startsWith("sodactl plugin")).join("\n");
+      if(word1==="operations"||word1==="call"){
+        const {positionals,values}=parseFlags(rest0,{values:["--pane","--tab","--workspace","--params","--url","--token"]});
+        const ref=requirePositional(positionals,0,"plugin id or key",usage);
+        const operation=word1==="call"?requirePositional(positionals,1,"operation",usage):undefined;
+        rejectExtra(positionals,word1==="call"?2:1,usage);
+        if(["--pane","--tab","--workspace"].filter(k=>values.has(k)).length!==1)throw new CliUsageError("specify one of --pane, --tab, --workspace",usage);
+        if(word1==="operations"&&values.has("--params"))throw new CliUsageError("--params is only for call",usage);
+        let params:Record<string,unknown>={};
+        try{params=JSON.parse(values.get("--params")??"{}");if(!params||Array.isArray(params)||typeof params!=="object"||new TextEncoder().encode(JSON.stringify(params)).length>65536)throw new Error();}catch{throw new CliUsageError("--params must be a JSON object of at most 64 KiB",usage);}
+        return {kind:"plugin-app",action:word1,ref,params,opts:globalOptsFrom(values,env),...(operation?{operation}:{}),...(values.has("--pane")?{pane:values.get("--pane")!}:{}),...(values.has("--tab")?{tab:values.get("--tab")!}:{}),...(values.has("--workspace")?{workspace:values.get("--workspace")!}:{})};
+      }
       if (!["pack", "install", "list", "remove", "enable", "disable"].includes(word1 ?? "")) throw new CliUsageError("unknown plugin operation", usage);
       const action = word1 as "pack" | "install" | "list" | "remove" | "enable" | "disable";
       const { positionals, values } = parseFlags(rest0, { values: action === "pack" ? ["--out"] : ["--state-dir", "--project-dir"] });

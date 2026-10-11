@@ -1,0 +1,38 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/server
+
+ ❯ src/conversation/ConversationService.test.ts (4 tests | 1 failed | 3 skipped) 18ms
+   × refuses a linked Codex record before returning its path for resume 17ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/conversation/ConversationService.test.ts > refuses a linked Codex record before returning its path for resume
+AssertionError: promise resolved "'/tmp/soda-conversation-test-nbQfRH/pr…'" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+"/tmp/soda-conversation-test-nbQfRH/projects/codex/sessions/2026/10/11/rollout-2026-10-11T00-00-00-11111111-1111-4111-8111-111111111111.jsonl"
+
+ ❯ src/conversation/ConversationService.test.ts:87:44
+     85|   await symlink(f.file, join(records, `rollout-2026-10-11T00-00-00-${i…
+     86|   const service = new ConversationService(() => undefined, { codexHome…
+     87|   await expect(service.locate("codex", id)).rejects.toThrow();
+       |                                            ^
+     88| });
+     89|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  20:14:44
+   Duration  509ms (transform 74%, import 21%, tests 4%, worker 1%)
+
+undefined
+/workspaces/sodashitsu/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/conversation/ConversationService.test.ts -t refuses a linked Codex

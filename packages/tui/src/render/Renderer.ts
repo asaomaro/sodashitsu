@@ -1,3 +1,4 @@
+import {headerActionsFor,loadAgentHeaderActions} from "@sodashitsu/protocol";
 import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import type { LayoutResult, PaneBox } from "../layout/computeLayout.js";
@@ -122,6 +123,7 @@ export class Renderer {
           symbols: ctx.prefs.statusSymbols,
           controls: ctx.chromeControls === true,
           hasAgent: !!pane?.agent,
+          agentActions:pane?.agent?headerActionsFor(pane.agent.kind,!!pane.agentSession,loadAgentHeaderActions(ctx.prefs.shared.agentHeaderActions)):[],
           zoomed: model.currentTab()?.zoomedPaneId === box.paneId,
         },
         theme,

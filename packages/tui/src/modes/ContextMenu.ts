@@ -1,3 +1,4 @@
+import {HEADER_ACTION_LABELS} from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -37,6 +38,7 @@ export interface MenuDeps {
 export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   const { model, actions } = deps;
   const target = menu.target;
+  if(target.kind === "agent-tools")return actions.agentActionsFor(target.paneId).map(action=>({label:HEADER_ACTION_LABELS[action],run:()=>actions.agentPaneAction(target.paneId,action)}));
   if (target.kind === "pane") {
     const pane = model.panes.get(target.paneId);
     const focused = model.focusedPaneId;

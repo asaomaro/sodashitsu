@@ -1,3 +1,4 @@
+import type { NotificationState,SharedNotice } from "@sodashitsu/protocol";
 import type { AgentInfo } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick, watch } from "vue";
@@ -28,6 +29,8 @@ const BLOCKED_DELAY_MS = 1000;
 
 export interface NotificationControllerOptions {
   pinia: Pinia;
+  loadShared?:()=>Promise<NotificationState>;
+  updateShared?:(n:Omit<SharedNotice,"at">)=>Promise<NotificationState>;
   desktop: DesktopNotifierPort;
   sound: SoundPort;
   /** その pane が画面に出ているか（`TerminalRegistry.isVisible`）。 */
@@ -64,6 +67,21 @@ function hintMessage(settingsKey: string | null): string {
  */
 export class NotificationController {
   readonly #opts: NotificationControllerOptions;
+  #shared=new Map<string,SharedNotice>();
+  #sharedScope=0;
+  #share(q:{key:string;paneId:string},status:"deferred"|"resolved"):void {const scope=this.#sharedScope;void this.#opts.updateShared?.({...q,status}).then(state=>{if(scope===this.#sharedScope)this.onSharedNotification(state);}).catch(()=>undefined);}
+  onSharedNotification(state:NotificationState):void {
+    for(const n of state.notices){const old=this.#shared.get(n.key);if(old&&(old.status==='resolved'||old.at>n.at))continue;this.#shared.set(n.key,n);}
+    for(const [key,n] of this.#shared)if(Date.now()-n.at>7*86400000)this.#shared.delete(key);
+    for(const n of this.#shared.values()){
+      if(n.status==='resolved'){this.#store.markJudged(n.paneId,n.key);this.#drop(n.key,false);continue;}
+      const agent=this.#session.panes.get(n.paneId)?.agent,kind=n.key.startsWith('blocked:')?'blocked':'done';
+      if(!agent||notifyKeyOf(kind,agent)!==n.key)continue;
+      for(const q of this.#store.removeKey(n.key))this.#cleanup(q.toastId,q.paneId);
+      this.#toHistory({key:n.key,paneId:n.paneId,kind,label:describeTarget(this.#session,n.paneId),at:n.at,toastId:null},'dismissed');
+    }
+  }
+
   /** 遅延中の鍵（`blocked` の 1 秒待ち）。同じ鍵で 2 本目を立てない。 */
   readonly #pending = new Map<NotifyKey, ReturnType<typeof setTimeout>>();
   /**
@@ -122,6 +140,8 @@ export class NotificationController {
   /** スナップショットを適用した（`StoreAdapter.onSnapshotApplied`）。 */
   onSnapshotApplied(panes: { paneId: string; agent: AgentInfo | null }[], first: boolean): void {
     const store = this.#store;
+    const scope=this.#sharedScope;
+    void this.#opts.loadShared?.().then(state=>{if(scope===this.#sharedScope)this.onSharedNotification(state);}).catch(()=>undefined);
     this.#snapshotApplied = true;
     this.#pruneMissingPanes(new Set(panes.map((p) => p.paneId)));
     // **履歴の掃除は基準線の `return` より前**（最初のスナップショットでも掃除する）。再読み込みで localStorage から戻した履歴・切断中に解消した出来事を、
@@ -160,6 +180,7 @@ export class NotificationController {
    * （`StoreAdapter.resetBaseline`）。
    */
   resetForMachineSwitch(): void {
+    this.#sharedScope++;this.#shared.clear();
     const clearT = this.#opts.clearTimeoutFn ?? clearTimeout;
     for (const h of this.#pending.values()) clearT(h);
     this.#pending.clear();
@@ -214,12 +235,22 @@ export class NotificationController {
    * mount/unmount に連動し、そのフックは Vue のパッチ後に走る。途中で読むと切り替え中の値を拾う。
    */
   async #deliverAfterTick(kind: NotifyKind, paneId: string, key: NotifyKey): Promise<void> {
+    const shared=this.#shared.get(key);if(shared?.status==='resolved')return;
+    if(shared?.status==='deferred'){this.onSharedNotification({notices:[...this.#shared.values()]});return;}
+    const scope=this.#sharedScope;
     await nextTick();
+    if(scope!==this.#sharedScope)return;
+    const agent=this.#session.panes.get(paneId)?.agent;
+    if(!agent||notifyKeyOf(kind,agent)!==key||kind==='blocked'&&agent.state!=='blocked'||kind==='done'&&(agent.state==='working'||agent.state==='blocked'||Math.max(agent.serverSeenSeq,this.#seen.getSeenSeq(agent.instanceId,agent.serverSeenSeq))>=agent.completionSeq))return;
     this.deliver(kind, paneId, key);
   }
 
   /** 配送の本体。3 経路 ＋ 待ち行列。 */
   deliver(kind: NotifyKind, paneId: string, key: NotifyKey): void {
+    const shared=this.#shared.get(key);if(shared?.status==='resolved')return;
+    if(shared?.status==='deferred'){this.onSharedNotification({notices:[...this.#shared.values()]});return;}
+    const agent=this.#session.panes.get(paneId)?.agent;
+    if(!agent||notifyKeyOf(kind,agent)!==key)return;
     const store = this.#store;
     const audience: Audience = {
       windowFocused: (this.#opts.hasFocus ?? (() => document.hasFocus()))(),
@@ -293,7 +324,9 @@ export class NotificationController {
    * 待ち行列から外し、**残っていればトーストを消し**、OS 通知も閉じる。
    * 置き換え・上限超過・pane 閉鎖・`prefix+o`・OS 通知のクリックは、すべてここを通る。
    */
-  #drop(key: NotifyKey): void {
+  #drop(key: NotifyKey,sync=true): void {
+    const entry=this.#store.queue.find(q=>q.key===key)??this.#store.history.find(q=>q.key===key);
+    if(sync&&entry)this.#share({key:entry.key,paneId:entry.paneId},'resolved');
     for (const e of this.#store.removeKey(key)) this.#cleanup(e.toastId, e.paneId);
     // 行き先へ移った（`prefix+o`・［移動］・OS 通知のクリック・ポップアップの行）知らせは履歴からも消える（二重に数えない。AC18）。
     this.#store.removeHistory(key);
@@ -308,6 +341,7 @@ export class NotificationController {
     const alive = new Set(this.#view.toasts.map((t) => t.id));
     for (const e of this.#store.dropMissingToasts(alive)) {
       this.#opts.desktop.closeByTag(e.paneId);
+      this.#share({key:e.key,paneId:e.paneId},"deferred");
       this.#toHistory(e, "dismissed"); // 応答せずに閉じた＝判断の先送り（解消済みなら入らない）
     }
     this.#syncHint();
@@ -350,11 +384,12 @@ export class NotificationController {
 
   /** ポップアップの行の［×］。履歴から消すだけ（待ち行列は触らない）。 */
   dismissHistoryEntry(key: NotifyKey): void {
-    this.#store.removeHistory(key);
+    this.#drop(key);
   }
 
   /** ポップアップの［すべて削除］。履歴だけを空にする（待ち行列＝`prefix+o` の行き先は触らない）。 */
   clearHistory(): void {
+    for(const n of [...this.#store.history])this.#drop(n.key);
     this.#store.clearHistory();
   }
 

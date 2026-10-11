@@ -1,0 +1,37 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu/packages/web
+
+ ❯ src/notify/NotificationController.test.ts (108 tests | 1 failed | 107 skipped) 17ms
+   ❯ shared notification state (2)
+     × never revives resolved notifications from an older deferred response 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/notify/NotificationController.test.ts > shared notification state > never revives resolved notifications from an older deferred response
+AssertionError: expected [ { key: 'done:a1:1', …(7) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/notify/NotificationController.test.ts:1634:48
+    1632|   h.c.onSharedNotification({notices:[{key,paneId:"p1",status:"resolved…
+    1633|   h.c.onSharedNotification({notices:[{key,paneId:"p1",status:"deferred…
+    1634|   expect(useNotificationsStore(pinia).history).toHaveLength(0);expect(…
+       |                                                ^
+    1635|  });
+    1636|  it("rechecks shared decisions after nextTick and cancels old-machine …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 107 skipped (108)
+   Start at  19:48:00
+   Duration  1.21s (transform 69%, import 16%, environment 13%, tests 1%)
+
+undefined
+/workspaces/sodashitsu/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/notify/NotificationController.test.ts -t never revives resolved

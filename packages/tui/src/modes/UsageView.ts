@@ -144,6 +144,7 @@ export class UsageDashboard {
       });
   }
   handleKey(k: KeyInput): void {
+    if(k.key==='h'){this.ui.openDialogWithContext({kind:'pastSessions'});return;}
     if (isEsc(k)) {
       this.ui.setScreen("base");
       return;
@@ -196,7 +197,7 @@ export class UsageDashboard {
         );
     };
     let y = area.y;
-    put(y++, "利用状況 · s:並び順 " + this.sort + " · a:アカウント · ↑↓ / Enter:ペインへ · Esc:基本");
+    put(y++, "利用状況 · s:並び順 " + this.sort + " · a:アカウント · h:過去セッション · ↑↓ / Enter:ペインへ · Esc:基本");
     const status = statusText(this.usage);
     if (status) put(y++, status);
     const accountLines = this.usage.data.accounts.flatMap((a) => [

@@ -119,3 +119,17 @@ Yukkuri Studioのソース・プラグイン単体テストはyukkuri-work側の
 ```sh
 YUKKURI_STUDIO_SOURCE=/path/to/yukkuri-work/plugins/yukkuri-studio pnpm --filter @sodashitsu/e2e exec playwright test plugin-perspectives.spec.ts yukkuri-studio.spec.ts studio-agent-request.spec.ts studio-notifications.spec.ts
 ```
+
+実行中のプラグインアプリをエージェントから操作する `plugin operations`／`plugin call` と、プラグイン側の公開方法は [プラグインアプリのCLI操作](plugin-cli.md) を参照してください。
+
+## モバイル専用アプリビュー
+
+プラグインの `tabView` に任意の `mobileDisplay` を指定すると、モバイル画面ではその name の表示を主画面に使う。指定しなければ従来の `display` を使う。
+
+```json
+{"tabView":{"title":"My App","display":"my-app","mobileDisplay":"my-app-mobile"}}
+```
+
+拡張は `ext.panes` の主画面アンカーの `plugin.display` と `plugin.mobileDisplay` を参照し、同じ pane に両方の HTML 表示を公開する。両方で同じ制作データ・操作を扱い、配置だけを変える。専用表示が指定されているのに未公開の場合は準備中と表示する。公開後に画面幅を変えると切り替わり、作業ペインやプロセスは維持する。既存タブにも稼働中のプラグイン定義を反映し、設定は保存・復元する。主画面の二つの表示は追加パネル一覧から除外する。
+
+[Commit Graph](../plugins/commit-graph/README.md) が実装例。モバイル側の HTML は viewport に応じた幅・折り返し・指で押せるボタンを備える。汎用の追加パネル・帯は従来のモバイル表示一覧で開く。ask-form は既存のモバイル対応を使用する。

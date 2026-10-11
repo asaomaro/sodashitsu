@@ -1,3 +1,4 @@
+import type {NotificationState,SharedNotice} from "@sodashitsu/protocol";
 import type { AgentInfo } from "@sodashitsu/protocol";
 import {
   describeParts,
@@ -33,6 +34,8 @@ export const CLOSED_TARGET_MESSAGE = "知らせの対象はすでに閉じられ
 export const NO_NOTIFICATION_MESSAGE = "未処理の知らせはありません。";
 
 export interface NotifyHost {
+  loadShared?:()=>Promise<NotificationState>;
+  updateShared?:(n:Omit<SharedNotice,"at">)=>Promise<NotificationState>;
   model: SessionModel;
   ui: UiState;
   prefs: PrefsModel;
@@ -57,6 +60,19 @@ export interface NotifyHost {
  * `prefix+o`（`focusNext`）は未処理の知らせの対象へ移る（最大 8 件）。OS の通知の許可は要らないので、web の「許可しますか」の案内は出さない。
  */
 export class NotificationController {
+  private shared=new Map<string,SharedNotice>();private scope=0;
+  private share(q:{key:string;paneId:string},status:"deferred"|"resolved"){const scope=this.scope;void this.host.updateShared?.({...q,status}).then(state=>{if(scope===this.scope)this.onSharedNotification(state);}).catch(()=>undefined);}
+  onSharedNotification(state:NotificationState):void {
+    for(const n of state.notices){const old=this.shared.get(n.key);if(old&&(old.status==='resolved'||old.at>n.at))continue;this.shared.set(n.key,n);}
+    for(const [key,n] of this.shared)if(Date.now()-n.at>7*86400000)this.shared.delete(key);
+    for(const n of this.shared.values()){
+      if(n.status==='resolved'){this.mark(n.paneId,n.key);this.drop(n.key,false);continue;}
+      const agent=this.host.model.panes.get(n.paneId)?.agent,kind=n.key.startsWith('blocked:')?'blocked':'done';
+      if(!agent||notifyKeyOf(kind,agent)!==n.key||kind==='blocked'&&agent.state!=='blocked'||kind==='done'&&(agent.state==='working'||agent.state==='blocked'||this.host.model.seenSeqOf(agent)>=agent.completionSeq))continue;
+      const old=this.queue.find(q=>q.key===n.key);if(old){this.cleanup(old);old.toastId=null;}else{const r=enqueue(this.queue,{paneId:n.paneId,key:n.key,kind,label:describeTarget(this.host.model,n.paneId),at:n.at,toastId:null});this.queue=r.queue;for(const q of r.removed)this.cleanup(q);}
+    }this.host.queueChanged?.();
+  }
+  syncToasts():void {for(const q of this.queue)if(q.toastId!==null&&!this.host.ui.toasts.some(t=>t.id===q.toastId)){q.toastId=null;this.share({key:q.key,paneId:q.paneId},'deferred');}}
   private readonly judged = new Map<string, Set<NotifyKey>>();
   private queue: QueuedNotification[] = [];
   private readonly pending = new Map<NotifyKey, ReturnType<typeof setTimeout>>();
@@ -69,6 +85,7 @@ export class NotificationController {
   }
 
   onAgentChanged(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void {
+    for(const q of [...this.queue])if(q.paneId===paneId&&(!next||notifyKeyOf(q.kind,next)!==q.key||q.kind==='blocked'&&next.state!=='blocked'||q.kind==='done'&&(next.state==='working'||next.state==='blocked'||this.host.model.seenSeqOf(next)>=next.completionSeq)))this.drop(q.key);
     if (!next) return;
     if (next.state === "blocked" && prev?.state !== "blocked")
       this.consider("blocked", paneId, next);
@@ -80,6 +97,7 @@ export class NotificationController {
    * 出来事を知らせる（web と同じ）。
    */
   onSnapshotApplied(panes: { paneId: string; agent: AgentInfo | null }[], first: boolean): void {
+    const scope=this.scope;void this.host.loadShared?.().then(state=>{if(scope===this.scope)this.onSharedNotification(state);}).catch(()=>undefined);
     const alive = new Set(panes.map((p) => p.paneId));
     for (const paneId of [...this.judged.keys()])
       if (!alive.has(paneId)) this.judged.delete(paneId);
@@ -97,6 +115,7 @@ export class NotificationController {
 
   /** マシンを切り替える（web の `resetForMachineSwitch`）：遅延中の入力待ちと判定の印・行き先を捨てる。 */
   resetForMachineSwitch(): void {
+    this.scope++;this.shared.clear();
     const clearT = this.host.clearTimer ?? ((h) => clearTimeout(h));
     for (const h of this.pending.values()) clearT(h);
     this.pending.clear();
@@ -123,7 +142,7 @@ export class NotificationController {
     this.mark(paneId, key);
     if (kind === "done") {
       // 焦点の移り（同じ打鍵の中の表示の修復）を待ってから、見えているかを判定する（web の nextTick と同じ役）。
-      queueMicrotask(() => this.deliver(kind, paneId, key));
+      const scope=this.scope;queueMicrotask(() => {const now=this.host.model.panes.get(paneId)?.agent;if(scope===this.scope&&now&&notifyKeyOf(kind,now)===key&&now.state!=='working'&&now.state!=='blocked'&&this.host.model.seenSeqOf(now)<now.completionSeq)this.deliver(kind, paneId, key);});
       return;
     }
     const setT = this.host.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
@@ -138,6 +157,7 @@ export class NotificationController {
   }
 
   deliver(kind: NotifyKind, paneId: string, key: NotifyKey): void {
+    const shared=this.shared.get(key);if(shared?.status==='resolved')return;if(shared?.status==='deferred'){this.onSharedNotification({notices:[...this.shared.values()]});return;}
     const { host } = this;
     const audience: Audience = {
       windowFocused: host.hasFocus(),
@@ -211,7 +231,8 @@ export class NotificationController {
     this.drop(key);
   }
 
-  private drop(key: NotifyKey): void {
+  private drop(key: NotifyKey,sync=true): void {
+    const q=this.queue.find(n=>n.key===key);if(sync&&q)this.share({key:q.key,paneId:q.paneId},'resolved');
     const r = removeByKey(this.queue, key);
     this.queue = r.queue;
     this.host.queueChanged?.();
