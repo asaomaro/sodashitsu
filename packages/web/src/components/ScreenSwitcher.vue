@@ -46,8 +46,8 @@ function fullName(def: ScreenDef): string {
  * 右に区切りの線・選んでいるものは `--soda-menu-active-bg`・帯の地は `--soda-menu-bg`・角なし・押さえた時の地の変化なし。**モダンは逆に、tab のほうがこのボタンの形**
  * （区切られた丸いボタンの並び）で、数値は `uiStyle.css` の `--soda-shape-seg-*` を、このボタンと tab が共有する（下の `:root[data-ui-style="modern"]` の規則）。
  *
- * **クラシックで変えてよいのは、このボタンの矩形の中だけ**。そこで、帯の外形の高さは、これまでの形（上下 0.3em の余白＋ 0.8em の文字のボタン＋線）と**同じ**に保つ:
- * `::before` に、これまでと同じ箱（見えない。幅 0）を 1 つ置き、帯の高さをそれが決める。ボタンはその高さいっぱいに伸びる（tab が帯の高さいっぱいに伸びるのと同じ）。
+ * クラシックは tab と同じ 1em の文字・上下 0.5em の余白で高さを決める。
+ * 幅に合わせてラベルを縮めても高さが変わらないよう、幅0の ::before が基準の箱を持つ。
  */
 .screen-switcher {
   display: flex;
@@ -60,12 +60,8 @@ function fullName(def: ScreenDef): string {
   flex: none;
   width: 0;
   visibility: hidden;
-  font-size: 0.8em;
-  /* これまでの帯: 上下 0.3em（親の文字の大きさ）の余白の中に、0.8em の文字・上下 0.2em の余白・線 1px のボタン。この箱は 0.8em の文字なので、余白は 0.3/0.8 em。 */
-  margin: 0.375em 0;
-  padding: 0.2em 0;
-  border: 1px solid transparent;
-  border-inline-width: 0;
+  font: inherit;
+  padding: 0.5em 0;
 }
 .screen-switcher-collapsed {
   flex-direction: column;
