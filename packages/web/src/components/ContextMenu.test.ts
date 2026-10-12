@@ -665,7 +665,7 @@ describe("ContextMenu — 表示の面（20261008-display-layout）", () => {
     d.upsert(b);
     view.openContextMenu({ kind: "display", id: "bar" }, { x: 0, y: 0 });
     let w = mountMenu(makeActions());
-    expect(labels(w)).toEqual(["開く", "下に置く", "この表示を閉じる"]);
+    expect(labels(w)).toEqual(["帯を高くする", "帯を低くする", "開く", "下に置く", "この表示を閉じる"]);
     await w.findAll("li").find((li) => li.text() === "下に置く")!.trigger("click");
     await Promise.resolve();
     expect(d.effectiveOf(b)).toEqual({ dock: null, edge: "bottom", collapsed: false });
@@ -673,7 +673,7 @@ describe("ContextMenu — 表示の面（20261008-display-layout）", () => {
     document.body.innerHTML = "";
     view.openContextMenu({ kind: "display", id: "bar" }, { x: 0, y: 0 });
     w = mountMenu(makeActions());
-    expect(labels(w)).toEqual(["たたむ", "上に置く", "プログラムの指定に戻す", "この表示を閉じる"]);
+    expect(labels(w)).toEqual(["帯を高くする", "帯を低くする", "たたむ", "上に置く", "プログラムの指定に戻す", "この表示を閉じる"]);
     await w.findAll("li").find((li) => li.text() === "プログラムの指定に戻す")!.trigger("click");
     await Promise.resolve();
     expect(d.effectiveOf(b)).toEqual({ dock: null, edge: "top", collapsed: true });

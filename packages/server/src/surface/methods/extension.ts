@@ -1,4 +1,4 @@
-import {PluginOperationsParams,PluginCallParams} from "@sodashitsu/protocol";
+import {METHOD_SCHEMAS,RpcError,PluginOperationsParams,PluginCallParams} from "@sodashitsu/protocol";
 import {
   ExtensionApproveParams,
   ExtensionDenyParams,
@@ -21,6 +21,10 @@ import type { MethodDeps } from "./deps.js";
 export function registerExtensionMethods(surface: ControlSurface, deps: MethodDeps): void {
   const extensions = deps.extensions;
   if (!extensions) return;
+  if(deps.pluginDiscovery){
+    surface.register('plugin.discover',{schema:METHOD_SCHEMAS['plugin.discover'],handler:()=>deps.pluginDiscovery!.discover()});
+    surface.register('plugin.register',{schema:METHOD_SCHEMAS['plugin.register'],handler:async(ctx,p)=>{const kind=deps.clients.get(ctx.clientId)?.kind;if(kind!=='desktop'&&kind!=='mobile')throw new RpcError('invalid_params','画面から許可してください');await deps.pluginDiscovery!.register(ctx.clientId,p.key,p.digest);return {};}});
+  }
   surface.register("plugin.operations", {schema:PluginOperationsParams,handler:(_ctx,p)=>extensions.pluginOperations.list(p)});
   surface.register("plugin.call", {schema:PluginCallParams,handler:(_ctx,p)=>extensions.pluginOperations.call(p)});
   surface.register("extension.list", {

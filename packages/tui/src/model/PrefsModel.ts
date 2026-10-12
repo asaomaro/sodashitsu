@@ -232,6 +232,9 @@ export class PrefsModel {
   }
 
   /** 枠にエージェント名を出すか（web の `paneAgentNameVisible`。既定は切）。 */
+  get viewTitleVisible(): boolean {
+    return this.raw.viewTitleVisible !== false;
+  }
   get paneAgentNameVisible(): boolean {
     return loadPaneAgentNameVisible(this.raw.paneAgentNameVisible);
   }

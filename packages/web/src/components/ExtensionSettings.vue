@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onBeforeUnmount, reactive, ref } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, onMounted } from "vue";
+import {useViewStore} from "../store/view.js";
+import {useMachinesStore} from "../store/machines.js";
+import PluginPackages from "./PluginPackages.vue";
 import { ExtensionControllerKey } from "../injection.js";
 import { approvalStatusText, showPath } from "../extensions/approvalView.js";
 import { lastExitText, problemView, scopeText, scriptDisabledNote, sanitizeLogLine, stateMark, stateText, stateTone } from "../extensions/extensionView.js";
@@ -19,6 +22,7 @@ import { useSettingsStore } from "../store/settings.js";
  */
 
 const store = useExtensionsStore();
+const view=useViewStore(),machines=useMachinesStore();
 const settings = useSettingsStore();
 const controller = inject(ExtensionControllerKey, null);
 
@@ -132,6 +136,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
 <template>
   <section class="settings-section" aria-labelledby="settings-extensions">
     <h3 id="settings-extensions" class="settings-heading">拡張</h3>
+    <PluginPackages v-if="view.dialogContext?.kind==='settings'" :key="machines.selectedId" />
     <p class="settings-note">
       設定に登録したプログラム（拡張）を Sodashitsu が起動し、表示の面などを出せるようにします。拡張はあなたの OS の利用者の権限で動き、隔離されません。
       この設定は<strong>サーバ全体</strong>で共有されます（ブラウザごとではありません）。書き方は docs/extensions.md。

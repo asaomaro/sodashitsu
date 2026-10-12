@@ -9,7 +9,18 @@ import { useDisplayStore } from "../store/display.js";
 import DisplayFloat from "./DisplayFloat.vue";
 
 const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({
-  id, paneId: "p1", name: id, kind: "panel", format: "text", title: `title-${id}`, size: 320, rev: 1, bytes: 1, updatedAt: "x", dock: "float", ...over,
+  id,
+  paneId: "p1",
+  name: id,
+  kind: "panel",
+  format: "text",
+  title: `title-${id}`,
+  size: 320,
+  rev: 1,
+  bytes: 1,
+  updatedAt: "x",
+  dock: "float",
+  ...over,
 });
 const AREA = { w: 800, h: 500 };
 const RECT = { x: 100, y: 80, w: 300, h: 200 };
@@ -23,17 +34,36 @@ function setup(over: { info?: DisplayInfo; z?: number } = {}) {
   store.upsert(i);
   store.setLayoutSnapshot("p1", { auto: [], floatArea: AREA });
   store.setFaceDock(i, "float", RECT); // 窓は開いている（置き場所 float・collapsed: false・記憶に矩形あり）
-  const host: DisplayHost = { focusTerminal: vi.fn(), injectPrefix: vi.fn(), focusSelectedTerminal: vi.fn(), prefixKey: () => ({ key: "b", ctrl: true, alt: false, shift: false, meta: false }) };
-  const controller = { dismiss: vi.fn(), report: vi.fn(), sendAction: vi.fn(), ensureContent: vi.fn(async () => undefined) };
+  const host: DisplayHost = {
+    focusTerminal: vi.fn(),
+    injectPrefix: vi.fn(),
+    focusSelectedTerminal: vi.fn(),
+    prefixKey: () => ({ key: "b", ctrl: true, alt: false, shift: false, meta: false }),
+  };
+  const controller = {
+    dismiss: vi.fn(),
+    report: vi.fn(),
+    sendAction: vi.fn(),
+    ensureContent: vi.fn(async () => undefined),
+  };
   const w = mount(DisplayFloat, {
     props: { info: i, rect: RECT, area: AREA, z: over.z ?? 20 },
     attachTo: document.body,
-    global: { plugins: [pinia], provide: { [DisplayControllerKey as symbol]: controller, [DisplayHostKey as symbol]: host }, stubs: { DisplayFrame: true } },
+    global: {
+      plugins: [pinia],
+      provide: { [DisplayControllerKey as symbol]: controller, [DisplayHostKey as symbol]: host },
+      stubs: { DisplayFrame: true },
+    },
   });
   mounted.push(w);
   return { w, store, host, controller, info: i };
 }
-const ptr = (_type: string, init: { x?: number; y?: number } = {}) => ({ button: 0, pointerId: 1, clientX: init.x ?? 0, clientY: init.y ?? 0 });
+const ptr = (_type: string, init: { x?: number; y?: number } = {}) => ({
+  button: 0,
+  pointerId: 1,
+  clientX: init.x ?? 0,
+  clientY: init.y ?? 0,
+});
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -66,14 +96,26 @@ describe("DisplayFloat — 層の属性・位置", () => {
     const { w } = setup({ info: info("a", { title: "<b>evil</b>" }) });
     expect(w.find("[data-display-head]").exists()).toBe(true);
     expect(w.get("[data-display-grip]").attributes("data-display-keepfocus")).toBeDefined();
-    expect(w.get("[data-display-float-title]").text()).toBe("<b>evil</b>");
-    expect(w.find("[data-display-float-title] b").exists()).toBe(false);
+    expect(w.get(".display-head-label").text()).toBe(
+      "pane のプログラムの表示（隔離）· a: <b>evil</b>",
+    );
+    expect(w.find("[data-display-float-title]").exists()).toBe(false);
+    expect(w.find("[data-display-head] b").exists()).toBe(false);
   });
   it("枠以外の部分（題・縁と角の 8 つ）は、押してもフォーカスを取らない（data-display-keepfocus）", () => {
     const { w } = setup();
-    expect(w.get("[data-display-float-title]").attributes("data-display-keepfocus")).toBeDefined();
+    expect(w.get("[data-display-grip]").attributes("data-display-keepfocus")).toBeDefined();
     const handles = w.findAll("[data-display-float-handle]");
-    expect(handles.map((h) => h.attributes("data-display-float-handle")).sort()).toEqual(["e", "n", "ne", "nw", "s", "se", "sw", "w"]);
+    expect(handles.map((h) => h.attributes("data-display-float-handle")).sort()).toEqual([
+      "e",
+      "n",
+      "ne",
+      "nw",
+      "s",
+      "se",
+      "sw",
+      "w",
+    ]);
     for (const hdl of handles) expect(hdl.attributes("data-display-keepfocus")).toBeDefined();
   });
   it("操作中の文言の行に data-display-chrome（知らせが避ける）。操作中でなければ出ない", async () => {
@@ -107,16 +149,37 @@ describe("DisplayFloat — 重なり（z-index だけが変わり、DOM の順�
     store.setFaceDock(b, "float", RECT);
     store.syncFloatOrder("p1", ["a", "b"]);
     const Host = defineComponent({
-      setup: () => () => h("div", [a, b].map((i) => h(DisplayFloat, { key: i.id, info: i, rect: RECT, area: AREA, z: floatZ(store.floatOrder.get("p1") ?? [], i.id) }))),
+      setup: () => () =>
+        h(
+          "div",
+          [a, b].map((i) =>
+            h(DisplayFloat, {
+              key: i.id,
+              info: i,
+              rect: RECT,
+              area: AREA,
+              z: floatZ(store.floatOrder.get("p1") ?? [], i.id),
+            }),
+          ),
+        ),
     });
-    const w = mount(Host, { attachTo: document.body, global: { plugins: [pinia], provide: { [DisplayControllerKey as symbol]: { dismiss: vi.fn() } }, stubs: { DisplayFrame: true } } });
+    const w = mount(Host, {
+      attachTo: document.body,
+      global: {
+        plugins: [pinia],
+        provide: { [DisplayControllerKey as symbol]: { dismiss: vi.fn() } },
+        stubs: { DisplayFrame: true },
+      },
+    });
     mounted.push(w as unknown as VueWrapper);
-    const order = () => w.findAll("[data-display-float]").map((e) => e.attributes("data-display-root"));
-    const z = (id: string) => Number((w.get(`[data-display-root="${id}"]`).element as HTMLElement).style.zIndex);
+    const order = () =>
+      w.findAll("[data-display-float]").map((e) => e.attributes("data-display-root"));
+    const z = (id: string) =>
+      Number((w.get(`[data-display-root="${id}"]`).element as HTMLElement).style.zIndex);
     expect(order()).toEqual(["a", "b"]);
     expect(z("b")).toBeGreaterThan(z("a"));
     const aEl = w.get('[data-display-root="a"]').element;
-    await w.get('[data-display-root="a"] [data-display-float-title]').trigger("pointerdown");
+    await w.get('[data-display-root="a"] [data-display-grip]').trigger("pointerdown");
     await nextTick();
     expect(order()).toEqual(["a", "b"]); // 並べ替えない
     expect(w.get('[data-display-root="a"]').element).toBe(aEl); // 同じ要素のまま
@@ -166,7 +229,17 @@ describe("DisplayFloat — 移動・大きさ", () => {
     const { w, store, info: i } = setup();
     const body = document.createElement("div");
     body.className = "pane-frame-body-displays";
-    body.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600, x: 0, y: 0, toJSON: () => ({}) });
+    body.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 600,
+      right: 1000,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
     body.appendChild(w.element);
     document.body.appendChild(body);
     const grip = w.get("[data-display-grip]");
@@ -185,7 +258,17 @@ describe("DisplayFloat — 移動・大きさ", () => {
     const { w, store } = setup();
     const body = document.createElement("div");
     body.className = "pane-frame-body-displays";
-    body.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600, x: 0, y: 0, toJSON: () => ({}) });
+    body.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 600,
+      right: 1000,
+      bottom: 600,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
     body.appendChild(w.element);
     document.body.appendChild(body);
     const grip = w.get("[data-display-grip]");
@@ -297,4 +380,13 @@ describe("DisplayFloat — キーで動かす・大きさを変える", () => {
     expect(store.faceRectOf(i)).toEqual({ ...RECT, x: 116 });
     expect(document.activeElement).toBe(before);
   });
+});
+
+it("Escape closes a floating view from its content and header", async () => {
+  const { w, controller } = setup();
+  await w.get("[data-display-float]").trigger("keydown", { key: "Escape" });
+  expect(controller.dismiss).toHaveBeenCalledWith({ id: "a" });
+  controller.dismiss.mockClear();
+  await w.get("[data-display-head]").trigger("keydown", { key: "Escape" });
+  expect(controller.dismiss).toHaveBeenCalledWith({ id: "a" });
 });

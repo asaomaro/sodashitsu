@@ -240,7 +240,7 @@ describe("右クリックのメニュー（M3）", () => {
     expect(s.ui.contextMenu).not.toBeNull();
     s.overlays.handleMouse({ action: "down", button: 0, x: 12, y: 6 });
     s.overlays.handleMouse({ action: "up", button: 0, x: 12, y: 6 });
-    expect(s.ui.dialogContext).toEqual({ kind: "renameTab", tabId: "t1", currentLabel: "t1" });
+    expect(s.ui.dialogContext).toEqual({ kind: "workspaceView", tabId: "t1" });
     s.ui.closeDialog();
     s.ui.openContextMenu({ kind: "global" }, { x: 0, y: 0 });
     s.screen();
@@ -300,11 +300,13 @@ describe("右クリックのメニュー：グループ・「グループなし�
     const s = setup(snap(true));
     expect(labels(s, { kind: "workspace", workspaceId: "w3" })).toEqual([
       "名前の変更",
+      "PJフォルダを設定…",
       "閉じる",
       "グループへ追加…",
     ]);
     const inGroup = [
       "名前の変更",
+      "PJフォルダを設定…",
       "閉じる",
       "新しい worktree",
       "worktree を開く…",
@@ -325,6 +327,7 @@ describe("右クリックのメニュー：グループ・「グループなし�
     );
     expect(labels(s, { kind: "workspace", workspaceId: "w1" })).toEqual([
       "名前の変更",
+      "PJフォルダを設定…",
       "閉じる",
       "グループから外す",
     ]);
@@ -562,15 +565,15 @@ describe("オーバーレイの点検の指摘（04）", () => {
     s.overlays.handleMouse({ action: "down", button: 0, x: 3, y: 5 });
     s.overlays.handleMouse({ action: "up", button: 0, x: 3, y: 5 });
     expect(s.calls).toEqual([]);
-    for (let i = 0; i < 2; i++) s.overlays.handleKey(key("down"));
+    for (let i = 0; i < 3; i++) s.overlays.handleKey(key("down"));
     s.overlays.render(small, theme);
     const rows = Array.from({ length: 6 }, (_, y) => small.rowText(y)).join("\n");
-    expect(rows).toContain("閉じる"); // 7 番目（0 始まりの 6）が見えている
+    expect(rows).toContain("貼り付け"); // ビュー追加後の8番目（0始まり7）が見えている
     expect(rows).not.toContain("名前の変更");
     s.overlays.handleMouse({ action: "down", button: 0, x: 3, y: 1 });
     s.overlays.handleMouse({ action: "up", button: 0, x: 3, y: 1 });
-    // いちばん上に見えている項目（拡大表示）を実行した
-    expect(s.calls).toEqual([["pane.zoom", { paneId: "p1", mode: "toggle" }]]);
+    // いちばん上に見えている項目（右クリックを pane に送る）を実行した
+    expect(s.calls).toEqual([["pane.input.set", { paneId: "p1", rightClick: "pane" }]]);
   });
 });
 
@@ -592,12 +595,64 @@ describe("入力欄の Alt+B・Alt+F（readline。04 review）", () => {
   });
 });
 
-it("ペインのメニューからfork・利用状況を開き、タブには新規を重複表示しない",()=>{
- const s=setup(snapshot());const p=s.model.panes.get("p1")!;
- p.agent={instanceId:"a1",kind:"codex",label:"Codex",state:"idle",completionSeq:0,serverSeenSeq:0,verified:true,since:0};
- s.ui.openContextMenu({kind:"pane",paneId:"p1"},{x:0,y:0});
- const items=menuItems(s.ui.contextMenu!,{ui:s.ui,model:s.model,actions:s.actions});
- items.find(i=>i.label==="エージェントを fork…")!.run();expect(s.ui.dialogContext).toEqual({kind:"agentFork",paneId:"p1"});
- s.ui.closeDialog();items.find(i=>i.label==="利用状況…")!.run();expect(s.ui.dialogContext).toEqual({kind:"usage",paneId:"p1"});
- s.ui.closeDialog();s.ui.openContextMenu({kind:"tab",tabId:"t1"},{x:0,y:0});expect(menuItems(s.ui.contextMenu!,{ui:s.ui,model:s.model,actions:s.actions}).map(i=>i.label)).toEqual(["名前の変更","閉じる"]);
+it("ペインのメニューからfork・利用状況を開き、タブには新規を重複表示しない", () => {
+  const s = setup(snapshot());
+  const p = s.model.panes.get("p1")!;
+  p.agent = {
+    instanceId: "a1",
+    kind: "codex",
+    label: "Codex",
+    state: "idle",
+    completionSeq: 0,
+    serverSeenSeq: 0,
+    verified: true,
+    since: 0,
+  };
+  s.ui.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 0, y: 0 });
+  const items = menuItems(s.ui.contextMenu!, { ui: s.ui, model: s.model, actions: s.actions });
+  items.find((i) => i.label === "エージェントを fork…")!.run();
+  expect(s.ui.dialogContext).toEqual({ kind: "agentFork", paneId: "p1" });
+  s.ui.closeDialog();
+  items.find((i) => i.label === "利用状況…")!.run();
+  expect(s.ui.dialogContext).toEqual({ kind: "usage", paneId: "p1" });
+  s.ui.closeDialog();
+  s.ui.openContextMenu({ kind: "tab", tabId: "t1" }, { x: 0, y: 0 });
+  expect(
+    menuItems(s.ui.contextMenu!, { ui: s.ui, model: s.model, actions: s.actions }).map(
+      (i) => i.label,
+    ),
+  ).toEqual(["ビューを追加…", "名前の変更", "閉じる"]);
+});
+
+it("ワークスペースの右クリックからPJフォルダを変更・解除できる", async () => {
+  const s = setup(
+    snapshot({ workspaces: [workspace("w1", ["t1"], { projectDir: "/old/project" })] }),
+  );
+  s.ui.openContextMenu({ kind: "workspace", workspaceId: "w1" }, { x: 0, y: 0 });
+  menuItems(s.ui.contextMenu!, { ui: s.ui, model: s.model, actions: s.actions })
+    .find((i) => i.label === "PJフォルダを設定…")!
+    .run();
+  expect(s.screen()).toContain("/old/project");
+  s.overlays.handleKey(key("ctrl+u"));
+  s.overlays.handlePaste("/workspaces/sodashitsu");
+  s.overlays.handleKey(key("enter"));
+  await Promise.resolve();
+  expect(s.calls.at(-1)).toEqual([
+    "workspace.set_project_folder",
+    { workspaceId: "w1", path: "/workspaces/sodashitsu" },
+  ]);
+  expect(s.ui.dialogContext).toBeNull();
+  s.actions.setProjectFolder("w1");
+  s.screen();
+  s.overlays.handleKey(key("ctrl+u"));
+  s.overlays.handleKey(key("enter"));
+  await Promise.resolve();
+  expect(s.calls.at(-1)).toEqual([
+    "workspace.set_project_folder",
+    { workspaceId: "w1", path: null },
+  ]);
+});
+it('a native app tab offers a terminal perspective escape through its context menu',async()=>{
+ const s=setup(snapshot({tabs:[tab('t1','w1',leaf('p1'),{plugin:{extensionKey:'e',display:'app',terminalDisplay:'tui'},perspective:'app'})]}));
+ const request=vi.fn(async()=>({}));s.ui.openContextMenu({kind:'tab',tabId:'t1'},{x:0,y:0});const item=menuItems(s.ui.contextMenu!,{ui:s.ui,model:s.model,actions:s.actions,conn:{request} as never}).find(i=>i.label==='端末画面へ')!;expect(item).toBeDefined();item.run();await Promise.resolve();expect(request).toHaveBeenCalledWith('tab.set_perspective',{tabId:'t1',perspective:'terminal'});
 });

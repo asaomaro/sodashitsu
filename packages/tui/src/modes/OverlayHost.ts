@@ -21,6 +21,9 @@ export interface OverlayHostDeps {
   ui: UiState;
   model: SessionModel;
   actions: TuiDispatcher;
+  viewItems?:(id:string)=>import("./ContextMenu.js").MenuItem[];
+  conn?: import("../term/PaneRegistry.js").RequestPort;
+  redraw?:()=>void;
   helpGroups(): HelpGroup[];
   /** ほかの種類（goto 等。T3 で足す）の部品を作る。作れなければ null（そのダイアログは閉じる）。 */
   extra?(ctx: DialogContext): Overlay | null;

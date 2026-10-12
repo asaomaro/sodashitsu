@@ -1,4 +1,4 @@
-import {paneButtons} from "../render/chrome/frame.js";
+import { paneButtons } from "../render/chrome/frame.js";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { Divider, LayoutResult, PaneBox, Rect } from "../layout/computeLayout.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -78,7 +78,7 @@ export interface MouseHost {
   pane(paneId: string): PaneTerminal | undefined;
   dashboardMouse?(ev: MouseEv): boolean;
   paneControls?: boolean;
-  agentActions?:(paneId:string)=>import("@sodashitsu/protocol").AgentHeaderAction[];
+  agentActions?: (paneId: string) => import("@sodashitsu/protocol").AgentHeaderAction[];
   sendToPane(paneId: string, bytes: string | Uint8Array): void;
   writeClipboard(text: string): Promise<boolean>;
   /** サイドバーの幅を変える（`persist` なら `tui-state.json` に残す）。 */
@@ -164,7 +164,12 @@ export class MouseController {
   private drag: Drag | null = null;
   selection: MouseSelection | null = null;
   dropTarget: PaneDropTarget | null = null;
-  sidebarFeedback: { source: SidebarDragInfo; target: SidebarDragInfo | undefined; y: number; plan: DropPlan } | null = null;
+  sidebarFeedback: {
+    source: SidebarDragInfo;
+    target: SidebarDragInfo | undefined;
+    y: number;
+    plan: DropPlan;
+  } | null = null;
   private lastClick: { at: number; paneId: string; row: number; col: number } | null = null;
 
   constructor(private readonly host: MouseHost) {}
@@ -189,7 +194,10 @@ export class MouseController {
   private motion(ev: MouseEv): void {
     const layout = this.host.layout();
     if (!layout || ev.mods.shift) return;
-    if(this.host.ui.screen === "dashboard") {this.host.dashboardMouse?.(ev);return;}
+    if (this.host.ui.screen === "dashboard") {
+      this.host.dashboardMouse?.(ev);
+      return;
+    }
     const box = this.paneAt(layout, ev.x, ev.y);
     if (!box || !this.inContent(box, ev.x, ev.y)) return;
     const term = this.host.pane(box.paneId);
@@ -270,7 +278,9 @@ export class MouseController {
       row.find(
         (h) =>
           ((h.kind === "newWorkspace" || h.kind === "collapse") && h.x === x) ||
-          ((h.kind === "sort" || h.kind === "subagents" || h.kind === "control") && x >= h.x && x < h.x + h.w),
+          ((h.kind === "sort" || h.kind === "subagents" || h.kind === "control") &&
+            x >= h.x &&
+            x < h.x + h.w),
       ) ??
       row.find(
         (h) =>
@@ -304,7 +314,8 @@ export class MouseController {
     // サイドバー
     if (layout.sidebar && x >= layout.sidebar.x && x < layout.sidebar.x + layout.sidebar.w) {
       if (x === layout.sidebar.x + layout.sidebar.w - 1) {
-        if (left && !layout.sidebarOverlay && !layout.sidebarCollapsed) this.drag = { kind: "sidebar" };
+        if (left && !layout.sidebarOverlay && !layout.sidebarCollapsed)
+          this.drag = { kind: "sidebar" };
         return;
       }
       const hit = this.sidebarAt(x, y, layout);
@@ -350,12 +361,16 @@ export class MouseController {
         };
       } else if (hit.kind === "agent") actions.focusPaneAcrossViews(hit.paneId);
       else if (hit.kind === "subagents") actions.showSubagentsOf(hit.paneId);
-      else if(hit.kind === "control") {
-        if(hit.action === "new" || hit.action === "menu") ui.openContextMenu({kind:hit.action === "new"?"new":"global"},{x,y:Math.max(0,y-6)});
-        else if(hit.action === "bell") ui.openDialogWithContext({kind:"notifications"});
+      else if (hit.kind === "control") {
+        if (hit.action === "new" || hit.action === "menu")
+          ui.openContextMenu(
+            { kind: hit.action === "new" ? "new" : "global" },
+            { x, y: Math.max(0, y - 6) },
+          );
+        else if (hit.action === "bell") ui.openDialogWithContext({ kind: "notifications" });
+        else if (hit.action === "graph") actions.run({ type: "openGraph" });
         else ui.setScreen(hit.action);
-      }
-      else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
+      } else if (hit.kind === "newWorkspace") actions.run({ type: "newWorkspace" });
       else if (hit.kind === "sort") {
         if (hit.section === "spaces") actions.toggleWorkspaceSort();
         else actions.toggleAgentSort();
@@ -370,13 +385,21 @@ export class MouseController {
           tabId: hit.tabId,
         });
       else if (hit.kind === "sectionDivider")
-        this.drag = { kind: "section", top: layout.sidebar.y + (this.host.paneControls ? 1 : 0), startY: y, moved: false };
+        this.drag = {
+          kind: "section",
+          top: layout.sidebar.y + (this.host.paneControls ? 1 : 0),
+          startY: y,
+          moved: false,
+        };
       else if (hit.kind === "sectionHeader") this.host.toggleSidebarSection?.(hit.section);
       return;
     }
 
     // 1 列表示の上辺：「switch」で選び直しの一覧（goto）。右クリックは全体のメニュー。
-    if (ui.screen === "dashboard") {this.host.dashboardMouse?.(ev);return;}
+    if (ui.screen === "dashboard") {
+      this.host.dashboardMouse?.(ev);
+      return;
+    }
     if (layout.narrow && y === layout.tabBar.y) {
       const sw = this.host.switchButton?.() ?? null;
       if (right) ui.openContextMenu({ kind: "global" }, { x, y: y + 1 });
@@ -410,6 +433,11 @@ export class MouseController {
         const t = model.tabs.get(tab.tabId);
         if (t) actions.switchToTab(t.workspaceId, t.id);
         this.drag = { kind: "tab", tabId: tab.tabId, startX: x, moved: false };
+        return;
+      }
+      const viewButton = this.host.tabHits().addView;
+      if (viewButton && x >= viewButton.x && x < viewButton.x + viewButton.w && model.tabId) {
+        ui.openDialogWithContext({ kind: "workspaceView", tabId: model.tabId });
         return;
       }
       const plus = this.host.tabHits().newTab;
@@ -465,15 +493,27 @@ export class MouseController {
       }
       if (!left) return;
       if (y === box.frame.y && this.host.paneControls) {
-        const pane=model.panes.get(paneId);
-        const button=paneButtons(box.frame,!!pane?.agent,model.tabs.get(pane?.tabId??"")?.zoomedPaneId===paneId,this.host.agentActions?.(paneId)).find(b=>x>=b.x&&x<b.x+b.w);
-        if(button) {
-          if(button.action==="right"||button.action==="down") actions.splitPane(paneId,button.action);
-          else if(button.action==="info") actions.showUsageOf(paneId);
-          else if(button.action==="zoom") actions.zoomPane(paneId);
-          else if(button.action==='close')actions.closePaneById(paneId);
-          else if(button.action==='agent-more')ui.openContextMenu({kind:"agent-tools",paneId},{x,y:y+1});
-          else actions.agentPaneAction(paneId,button.action);
+        const pane = model.panes.get(paneId);
+        const button = paneButtons(
+          box.frame,
+          !!pane?.agent,
+          model.tabs.get(pane?.tabId ?? "")?.zoomedPaneId === paneId,
+          this.host.agentActions?.(paneId),
+        ).find((b) => x >= b.x && x < b.x + b.w);
+        if (button) {
+          if (button.action === "right" || button.action === "down")
+            actions.splitPane(paneId, button.action);
+          else if (button.action === "add-view") {
+            if (pane)
+              ui.openDialogWithContext({ kind: "workspaceView", tabId: pane.tabId, paneId });
+          } else if (button.action === "menu")
+            ui.openContextMenu({ kind: "pane", paneId }, { x: button.x, y: y + 1 });
+          else if (button.action === "info") actions.showUsageOf(paneId);
+          else if (button.action === "zoom") actions.zoomPane(paneId);
+          else if (button.action === "close") actions.closePaneById(paneId);
+          else if (button.action === "agent-more")
+            ui.openContextMenu({ kind: "agent-tools", paneId }, { x, y: y + 1 });
+          else actions.agentPaneAction(paneId, button.action);
           return;
         }
       }
@@ -681,7 +721,12 @@ export class MouseController {
         if (ev.y !== drag.startY && drag.grabbable) drag.moved = true;
         if (drag.moved && drag.source) {
           const target = this.sidebarAt(ev.x, ev.y, layout)?.drag;
-          this.sidebarFeedback = { source: drag.source, target, y: ev.y, plan: this.host.actions.sidebarDropPlan(drag.source, target) };
+          this.sidebarFeedback = {
+            source: drag.source,
+            target,
+            y: ev.y,
+            plan: this.host.actions.sidebarDropPlan(drag.source, target),
+          };
         }
         if (done) {
           if (drag.moved) this.dropItem(drag.source, ev.x, ev.y, layout);
@@ -725,7 +770,10 @@ export class MouseController {
         this.host.scrollSidebar?.(section, down ? WHEEL_LINES : -WHEEL_LINES);
       return;
     }
-    if(this.host.ui.screen === "dashboard") {this.host.dashboardMouse?.(ev);return;}
+    if (this.host.ui.screen === "dashboard") {
+      this.host.dashboardMouse?.(ev);
+      return;
+    }
     const box = this.paneAt(layout, ev.x, ev.y);
     if (!box || !this.inContent(box, ev.x, ev.y)) return;
     const term = this.host.pane(box.paneId);

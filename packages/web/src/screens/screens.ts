@@ -1,3 +1,4 @@
+import ScheduleScreen from "./ScheduleScreen.vue";
 import type { Component } from "vue";
 import BaseScreen from "./BaseScreen.vue";
 import DashboardScreen from "./DashboardScreen.vue";
@@ -24,11 +25,24 @@ export interface ScreenDef {
 }
 
 export const SCREENS = [
-  { id: "base", label: "基本画面", shortLabel: "基", component: BaseScreen },
+  { id: "base", label: "端末", shortLabel: "端", component: BaseScreen },
   { id: "graph", label: "グラフ", shortLabel: "グ", component: GraphScreen },
   // 3 つ目の画面（20261010-agent-usage PR3）。起動しているエージェントの利用状況の一覧とアカウントの枠。
   // ボタンの名前は短く「利用状況」（既定の 240px のサイドバーで、前の 2 つと並んで切れない）。画面の中の見出し・文書・モバイルの入口は「ダッシュボード」。
-  { id: "dashboard", label: "利用状況", shortLabel: "利", title: "利用状況（ダッシュボード）", component: DashboardScreen },
+  {
+    id: "dashboard",
+    label: "状況",
+    shortLabel: "状",
+    title: "状況（ダッシュボード）",
+    component: DashboardScreen,
+  },
+  {
+    id: "schedule",
+    label: "予約",
+    shortLabel: "予",
+    title: "処理の予約",
+    component: ScheduleScreen,
+  },
 ] as const satisfies readonly ScreenDef[];
 
 export type ScreenId = (typeof SCREENS)[number]["id"];

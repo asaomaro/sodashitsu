@@ -180,6 +180,11 @@ rl.on("close", () => process.exit(0));
       { internal: { extensions: { timings: { backoffMinMs: 20, backoffMaxMs: 80, scopeReviewMs: 100, ...(o.timings ?? {}) }, ...(o.file ? { file: o.file as never } : {}) } } },
     );
     cleanups.push(() => server.close());
+    // Default test workspaces must not discover plugins installed in the developer checkout.
+    if (o.session === undefined) {
+      const ws = server.session.snapshot().workspaces[0]!;
+      await server.session.setWorkspaceProjectFolder(ws.id, stateDir);
+    }
     const paneA = server.session.snapshot().panes[0]!.id;
     const sockPath = join(stateDir, "pane.sock");
     const myToken = server.freshToken ?? o.token ?? lastToken;
@@ -189,6 +194,7 @@ rl.on("close", () => process.exit(0));
       cleanups.push(() => c.ws.close());
       return c;
     };
+    if (o.session === undefined) await (await open("external")).request("extension.reload", {});
     const list = async (c?: Client) => (await (c ?? (await open("external"))).request<ExtensionListResult>("extension.list", {}));
     const info = async (id: string) => (await list()).extensions.find((e) => e.id === id);
     const stateOf = (id: string) => info(id).then((i) => i?.state);

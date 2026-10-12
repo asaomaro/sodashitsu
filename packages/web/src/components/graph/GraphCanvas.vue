@@ -2133,9 +2133,7 @@ function selectLikeSidebar(target: { kind: "node"; key: string } | { kind: "work
   if (target.kind === "workspace") {
     const ws = session.workspaces.get(target.workspaceId);
     if (!ws) return;
-    const tab = session.tabs.get(ws.activeTabId);
-    view.setView(ws.id, ws.activeTabId);
-    if (tab) view.focusPane(tab.focusedPaneId);
+    view.selectWorkspace(ws.id);
     void conn?.request("workspace.focus", { workspaceId: ws.id }).catch(() => undefined);
     return;
   }

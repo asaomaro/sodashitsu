@@ -1,0 +1,2 @@
+DockedViewsにpreview描画を集約し、通常ビュー/WindowOverlayのfloatから呼ぶ。zone判定は確定時と共通。移動先領域の背景色と日本語名で表す。
+view-split dividersはlayoutに残し、DockedViews.mouseが通常paneのmouseより先に処理してローカルratioへ反映。ドラッグ開始ratioを保存しEsc/releaseで復元。redrawはclient.viewを更新し隣のPTYサイズも変更する。

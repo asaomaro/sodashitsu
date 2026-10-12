@@ -61,7 +61,6 @@ test("モバイルのエミュレーションで1列レイアウトが出て、p
 
   // 「この端末に合わせる」：押すと押下状態（`aria-pressed`）になる（`useFitToScreen.ts` は 04-mobile の
   // 単体テストで `client.fit` の RPC 呼び出し自体を確認済みなので、ここでは UI の状態遷移だけを見る）。
-  await page.locator(".mobile-shell-fit-btn").click();
   await expect(page.locator(".mobile-shell-fit-btn")).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -87,7 +86,6 @@ test("表示する pane を切り替えても、隠れた pane の PTY の大き
 
   // 「この端末に合わせる」を押して、このブラウザにサイズ権限を取らせる（`client.fit`。fit していないモバイルは権限を取らず
   // 大きさを変えない——D13・D106）。
-  await page.locator(".mobile-shell-fit-btn").click();
   await expect(page.locator(".mobile-shell-fit-btn")).toHaveAttribute("aria-pressed", "true");
 
   // ブラウザが p1 だけを描いて測った大きさに、サーバの p1 がそろうのを待つ（ここで一致すれば、fit したこのブラウザの
@@ -211,7 +209,6 @@ test("「この端末に合わせる」を有効にしたまま繋ぎ直すと�
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
 
   const fitButton = page.locator(".mobile-shell-fit-btn");
-  await fitButton.click();
   await expect(fitButton).toHaveAttribute("aria-pressed", "true");
 
   /** `connection` 番目の接続でブラウザが最後に申告した p1 の大きさ。 */
@@ -293,7 +290,9 @@ test("表示領域の大きさで client.view を申告して回転・追加キ�
   const views = await watchClientViews(page);
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
-  const initial = client.paneSize(p1)!; // 誰も大きさを決めていない（クライアントが居ないときに作った 120×40）
+  await page.locator(".mobile-shell-fit-btn").click(); // 既定のfitを無効にして、縮小表示の検証へ
+  await expect(page.locator(".mobile-shell-fit-btn")).toHaveAttribute("aria-pressed","false");
+  const initial = client.paneSize(p1)!; // 無効にした時点の大きさを維持
 
   const declared = (): Size | undefined => {
     const entry = views.latest()?.visible.find((v) => v.paneId === p1);
@@ -379,7 +378,6 @@ test("ピンチで拡大しても、fit 中の PTY の大きさは変わらず c
   await page.waitForSelector(".xterm-helper-textarea", { timeout: 15_000 });
 
   const fitButton = page.locator(".mobile-shell-fit-btn");
-  await fitButton.click();
   await expect(fitButton).toHaveAttribute("aria-pressed", "true");
   const settled = async (): Promise<string> => {
     const shown = views.latest()?.visible.find((v) => v.paneId === p1);

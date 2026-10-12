@@ -139,3 +139,32 @@ describe("computeLayout：サイドバーの最小の場所", () => {
     }
   });
 });
+
+it.each([30, 100])("bands can shrink to one row at either edge on a %i-row terminal", (rows) => {
+  for (const top of [true, false]) {
+    const r = computeLayout({
+      ...base,
+      rows,
+      singleRowPanes: ["band"],
+      tab: {
+        layout: split(
+          "down",
+          leaf(top ? "band" : "p1"),
+          leaf(top ? "p1" : "band"),
+          top ? 0 : 1,
+          "s",
+        ),
+        zoomedPaneId: null,
+      },
+    });
+    const band = r.panes.find((p) => p.paneId === "band")!.frame;
+    expect(band.h).toBe(1);
+    expect(top ? band.y : band.y + band.h).toBe(top ? r.paneArea.y : r.paneArea.y + r.paneArea.h);
+  }
+  const ordinary = computeLayout({
+    ...base,
+    rows,
+    tab: { layout: split("down", leaf("p1"), leaf("panel"), 1, "s"), zoomedPaneId: null },
+  });
+  expect(ordinary.panes[1]!.frame.h).toBe(3);
+});

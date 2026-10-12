@@ -469,7 +469,7 @@ describe("PaneLayout — 枠の描画モードと隙間（AC1〜AC5・AC7・AC9�
     const st = (leafOf(paneId).closest(".pane-frame") as HTMLElement).style;
     return [st.paddingTop, st.paddingRight, st.paddingBottom, st.paddingLeft];
   }
-  const ALL = [GAP, GAP, GAP, GAP];
+  const ALL = ["28px", GAP, GAP, GAP];
   const NONE = ["0px", "0px", "0px", "0px"];
 
   it("既定（常に・隙間入）：単一 pane も入れ子の分割も、各 pane の 4 辺に余白・選ばれた pane に強調（今と同じ。AC1）", () => {
@@ -513,9 +513,9 @@ describe("PaneLayout — 枠の描画モードと隙間（AC1〜AC5・AC7・AC9�
 
   it("常に×隙間切：入れ子でも辺ごとに隣を判定し、隣と接する辺だけ 0（AC4・AC9）", () => {
     mountWith(NESTED, { gaps: false });
-    expect(paddingOf("p1")).toEqual([GAP, "0px", GAP, GAP]);
-    expect(paddingOf("p2")).toEqual([GAP, GAP, "0px", "0px"]);
-    expect(paddingOf("p3")).toEqual(["0px", GAP, GAP, "0px"]);
+    expect(paddingOf("p1")).toEqual(["28px", "0px", GAP, GAP]);
+    expect(paddingOf("p2")).toEqual(["28px", GAP, "0px", "0px"]);
+    expect(paddingOf("p3")).toEqual(["28px", GAP, GAP, "0px"]);
   });
 
   it("表示しない×隙間切はすべて 0。zoom 中の pane は root が描くので、隙間切でも辺はすべて外周（AC3・AC4）", () => {

@@ -96,6 +96,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
       try {
         await host.writeModal({
           build: (modes) => {
+            if(ctx.signal?.aborted)throw new RpcError("agent_prompt_failed","指示の送信を中断しました");
             // 別の入力の後ろで待っている間に状態が変わりうるので、書く直前にもう一度確かめる
             // （承認ダイアログへの誤答・終了したエージェントの後のシェルへの誤入力を防ぐ。decisions.md D7）。
             requirePromptExpectation(deps, params);

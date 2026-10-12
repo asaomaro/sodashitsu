@@ -63,6 +63,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl pane observe <paneId> [--url <URL>] [--token <TOKEN>]",
   "sodactl pane control <paneId> [--takeover] [--cols <N>] [--rows <N>] [--url <URL>] [--token <TOKEN>]",
   "sodactl pane report-metadata <paneId> --source <ID> [--token <NAME=VALUE>]... [--clear-token <NAME>]... [--seq <N>] [--ttl-ms <N>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl notification test [--url <URL>] [--token <TOKEN>]",
   "sodactl snapshot [--url <URL>] [--token <TOKEN>]",
   "sodactl watch [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent list [--url <URL>] [--token <TOKEN>]",
@@ -312,6 +313,7 @@ export type Command =
   // 20260926-pane-observe-control（herdr の terminal session observe/control）。
   | { kind: "pane-observe"; opts: GlobalOpts; paneId: string }
   | { kind: "pane-control"; opts: GlobalOpts; paneId: string; takeover: boolean; cols: number; rows: number }
+  | { kind: "notification-test"; opts: GlobalOpts }
   | { kind: "snapshot"; opts: GlobalOpts }
   | { kind: "watch"; opts: GlobalOpts; json: boolean }
   | { kind: "agent-list"; opts: GlobalOpts }
@@ -499,6 +501,12 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
       const opts = globalOptsFrom(values, env);
       if (!opts.token) throw new CliUsageError("missing --token", "sodactl login --url <URL> --token <TOKEN>");
       return { kind: "login", opts };
+    }
+    case "notification": {
+      if (argv[1] !== "test") throw new CliUsageError("expected notification test", "sodactl notification test");
+      const { positionals, values } = parseFlags(argv.slice(2), URL_TOKEN);
+      rejectExtra(positionals, 0, USAGE);
+      return { kind: "notification-test", opts: globalOptsFrom(values, env) };
     }
     case "snapshot": {
       const { positionals, values } = parseFlags(argv.slice(1), URL_TOKEN);

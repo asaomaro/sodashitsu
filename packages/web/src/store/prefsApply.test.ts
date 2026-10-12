@@ -159,3 +159,8 @@ describe("applyPrefsToStores", () => {
     expect(fired).toEqual([]);
   });
 });
+it("applies shared view title visibility immediately and restores its default when removed", () => {
+ const settings=useSettingsStore(pinia);expect(settings.viewTitleVisible).toBe(true);
+ applyPrefsToStores(pinia,{viewTitleVisible:false});expect(settings.viewTitleVisible).toBe(false);
+ applyPrefsToStores(pinia,{});expect(settings.viewTitleVisible).toBe(true);
+});

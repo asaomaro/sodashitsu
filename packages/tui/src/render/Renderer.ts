@@ -1,4 +1,4 @@
-import {headerActionsFor,loadAgentHeaderActions} from "@sodashitsu/protocol";
+import { headerActionsFor, loadAgentHeaderActions } from "@sodashitsu/protocol";
 import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import type { LayoutResult, PaneBox } from "../layout/computeLayout.js";
@@ -89,7 +89,12 @@ export class Renderer {
       };
     }
     let sidebarHits =
-      layout.sidebar && !layout.sidebarOverlay ? paintSidebar(grid, layout.sidebar, {...ctx,sidebarCollapsed:layout.sidebarCollapsed === true}) : [];
+      layout.sidebar && !layout.sidebarOverlay
+        ? paintSidebar(grid, layout.sidebar, {
+            ...ctx,
+            sidebarCollapsed: layout.sidebarCollapsed === true,
+          })
+        : [];
     // 狭い幅は tab バーの代わりに 1 列表示の上辺（herdr の mobile）。
     const narrow = layout.narrow ? paintNarrowHeader(grid, layout.tabBar, ctx) : null;
     const tabBar: TabBarHits = narrow
@@ -106,7 +111,12 @@ export class Renderer {
     const painted = new Map<string, string>();
     let cursor: CursorState | null = null;
     const tab = model.currentTab();
-    const numberedPanes = tab ? depthFirstPaneIds(tab.layout).filter(id=>{const p=model.panes.get(id);return p && !p.virtual;}) : [];
+    const numberedPanes = tab
+      ? depthFirstPaneIds(tab.layout).filter((id) => {
+          const p = model.panes.get(id);
+          return p && !p.virtual;
+        })
+      : [];
     for (const box of layout.panes) {
       const pane = model.panes.get(box.paneId);
       const term = panes.get(box.paneId);
@@ -116,14 +126,25 @@ export class Renderer {
         box.frame,
         {
           // エージェント名を枠に出すか（共有の設定 `paneAgentNameVisible`。herdr の show_agent_labels_on_pane_borders）。
-          name: (ctx.mode === "prefix" && numberedPanes.indexOf(box.paneId)>=0 && numberedPanes.indexOf(box.paneId)<9 ? `${numberedPanes.indexOf(box.paneId)+1}: ` : "") + (pane ? frameNameOf(pane, ctx.prefs.paneAgentNameVisible) : box.paneId),
+          name:
+            (ctx.mode === "prefix" &&
+            numberedPanes.indexOf(box.paneId) >= 0 &&
+            numberedPanes.indexOf(box.paneId) < 9
+              ? `${numberedPanes.indexOf(box.paneId) + 1}: `
+              : "") + (pane ? frameNameOf(pane, ctx.prefs.paneAgentNameVisible) : box.paneId),
           state: pane ? model.displayStateOf(pane) : null,
           focused,
           cropped: term ? isCropped(term, box.content) : false,
           symbols: ctx.prefs.statusSymbols,
           controls: ctx.chromeControls === true,
           hasAgent: !!pane?.agent,
-          agentActions:pane?.agent?headerActionsFor(pane.agent.kind,!!pane.agentSession,loadAgentHeaderActions(ctx.prefs.shared.agentHeaderActions)):[],
+          agentActions: pane?.agent
+            ? headerActionsFor(
+                pane.agent.kind,
+                !!pane.agentSession,
+                loadAgentHeaderActions(ctx.prefs.shared.agentHeaderActions),
+              )
+            : [],
           zoomed: model.currentTab()?.zoomedPaneId === box.paneId,
         },
         theme,
@@ -154,7 +175,10 @@ export class Renderer {
     if (!layout.narrow && layout.tabBar.h === 0 && paintHiddenBarBadge(grid, layout.paneArea, ctx))
       covered = true;
     if (layout.sidebar && layout.sidebarOverlay) {
-      sidebarHits = paintSidebar(grid, layout.sidebar, {...ctx,sidebarCollapsed:layout.sidebarCollapsed === true});
+      sidebarHits = paintSidebar(grid, layout.sidebar, {
+        ...ctx,
+        sidebarCollapsed: layout.sidebarCollapsed === true,
+      });
       covered = true;
     }
     const decoCursor = extras.decorate?.(grid);
@@ -200,7 +224,7 @@ function centerText(
   grid.text(x, y, text, fg, bg, 0, area.x + area.w - x);
 }
 
-/** 右下に知らせを積む（新しいものが下）。 */
+/** 右上に知らせを積む（古いものが上・新しいものが下）。 */
 /** 知らせの当たり（押すと対象へ。通知のトースト）。 */
 export interface ToastHit {
   id: number;
@@ -217,14 +241,16 @@ function paintToasts(
   const hits: ToastHit[] = [];
   const bg = ctx.theme.ui("--soda-menu-active-bg");
   const fg = ctx.theme.ui("--soda-menu-fg");
-  const maxW = Math.max(10, Math.min(60, grid.w - 4));
-  let y = grid.h - 2;
-  for (let i = toasts.length - 1; i >= 0 && y >= 1; i--, y--) {
-    const t = toasts[i]!;
-    const text = ` ${truncate(t.clickable ? `${t.message} ▸` : t.message, maxW - 2)} `;
+  const maxW = Math.max(1, Math.min(60, grid.w - 2));
+  let y = grid.h >= 3 ? 1 : 0;
+  const visible = toasts.slice(-Math.max(1, grid.h - 2));
+  for (const t of visible) {
+    const text = ` ${truncate(t.clickable ? `${t.message} ▸` : t.message, Math.max(0, maxW - 2))} `;
     const w = stringWidth(text);
-    grid.text(grid.w - w - 1, y, text, fg, bg);
-    if (t.clickable) hits.push({ id: t.id, x: grid.w - w - 1, y, w });
+    grid.text(Math.max(0, grid.w - w - 1), y, text, fg, bg, 0, Math.min(w, grid.w));
+    if (t.clickable)
+      hits.push({ id: t.id, x: Math.max(0, grid.w - w - 1), y, w: Math.min(w, grid.w) });
+    y++;
   }
   return hits;
 }

@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import {pluginMobileDisplay} from "../display/pluginDisplay.js";
-import {useExtensionsStore} from "../store/extensions.js";
-import {headerActionsFor,type AgentHeaderAction} from "@sodashitsu/protocol";
-import {useConversationWindowStore} from "../store/conversationWindow.js";
+import { pluginMobileDisplay } from "../display/pluginDisplay.js";
+import { useExtensionsStore } from "../store/extensions.js";
+import { headerActionsFor, type AgentHeaderAction } from "@sodashitsu/protocol";
+import { useConversationWindowStore } from "../store/conversationWindow.js";
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ActionDispatcherKey, ConnectionKey, DisplayHostKey, TerminalRegistryKey } from "../injection.js";
+import {
+  ActionDispatcherKey,
+  ConnectionKey,
+  DisplayHostKey,
+  TerminalRegistryKey,
+} from "../injection.js";
 import { isScriptFormat } from "../display/framePage.js";
 import { floatZ } from "../display/floatGeometry.js";
 import { resolvePaneDisplays, type LayoutResult } from "../display/paneDisplayLayout.js";
-import { NO_NEIGHBORS, resolvePaneChrome, type PaneSide, type PaneSides } from "../layout/paneChrome.js";
+import {
+  NO_NEIGHBORS,
+  resolvePaneChrome,
+  type PaneSide,
+  type PaneSides,
+} from "../layout/paneChrome.js";
 import type { Side as PaneSide2 } from "../display/paneDisplayLayout.js";
 import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import { getCellSize } from "../term/measure.js";
@@ -59,34 +69,50 @@ import { zoneAt, type Zone } from "../term/paneDragZone.js";
  * `neighbors`（どの辺に隣の pane があるか）は `PaneLayout` が渡す。枠を描かない（`framed` が偽）ときは外周の余白・選択の強調・
  * 名前を描かない。tabindex とメニューを開くキーは枠の有無に関わらず同じ。
  */
-const props = defineProps<{ paneId: string; enabled?: boolean; presentationOnly?: boolean; multiPane?: boolean; neighbors?: PaneSides }>();
+const props = defineProps<{
+  paneId: string;
+  enabled?: boolean;
+  presentationOnly?: boolean;
+  multiPane?: boolean;
+  neighbors?: PaneSides;
+}>();
 
 const actions = inject(ActionDispatcherKey, undefined);
-const connection=inject(ConnectionKey,null);
-const conversationWindow=props.enabled?useConversationWindowStore():null;
+const connection = inject(ConnectionKey, null);
+const conversationWindow = props.enabled ? useConversationWindowStore() : null;
 const registry = inject(TerminalRegistryKey, undefined);
 const session = props.enabled ? useSessionStore() : null;
-const shortcutNumber = computed(()=>{
-  const tab=view?.tabId ? session?.tabs.get(view.tabId) : undefined;
-  if(!tab || props.presentationOnly)return undefined;
-  const ids=depthFirstPaneIds(tab.layout).filter(id=>{const p=session?.panes.get(id);return p && !p.virtual;});
-  const index=ids.indexOf(props.paneId);return index>=0?index+1:undefined;
+const shortcutNumber = computed(() => {
+  const tab = view?.tabId ? session?.tabs.get(view.tabId) : undefined;
+  if (!tab || props.presentationOnly) return undefined;
+  const ids = depthFirstPaneIds(tab.layout).filter((id) => {
+    const p = session?.panes.get(id);
+    return p && !p.virtual;
+  });
+  const index = ids.indexOf(props.paneId);
+  return index >= 0 ? index + 1 : undefined;
 });
 const view = props.enabled ? useViewStore() : null;
 const settings = props.enabled ? useSettingsStore() : null;
 const seen = props.enabled ? useSeenStore() : null;
 const agentState = computed(() => {
   const agent = session?.panes.get(props.paneId)?.agent;
-  return agent ? displayStateFor(agent, seen!.getSeenSeq(agent.instanceId, agent.serverSeenSeq)) : null;
+  return agent
+    ? displayStateFor(agent, seen!.getSeenSeq(agent.instanceId, agent.serverSeenSeq))
+    : null;
 });
-const pluginTab = computed(() => { const pane = session?.panes.get(props.paneId); const tab = pane ? session?.tabs.get(pane.tabId) : undefined; return pane?.virtual || !tab?.displayPaneId ? tab?.plugin : undefined; });
+const pluginTab = computed(() => {
+  const pane = session?.panes.get(props.paneId);
+  const tab = pane ? session?.tabs.get(pane.tabId) : undefined;
+  return pane?.virtual || !tab?.displayPaneId ? tab?.plugin : undefined;
+});
 const edge = ref<HTMLElement | null>(null);
 /** モダンの**配置**か（pane の枠の操作ボタン。20261008-ui-style PR4）。1 列の画面では様式の配置を使わない（`useUiStyle` の `modernLayout`）。`enabled` でないとき（モバイル・単体テスト）は、ストアに触れない。 */
 const modern = props.enabled && !props.presentationOnly ? useUiStyle().modernLayout : null;
 
 // --- 表示の面（パネル・帯。20261007-soda-extensions）。`enabled` のときだけ（モバイル・単体テストはストアに触れない）。---------------------------
 const displays = props.enabled ? useDisplayStore() : null;
-const extensions=props.enabled?useExtensionsStore():null;
+const extensions = props.enabled ? useExtensionsStore() : null;
 const displayHost = inject(DisplayHostKey, undefined);
 /** その pane のどれかの面にフォーカスがある（操作中。端末を薄くする）。 */
 const displayEngaged = computed(() => {
@@ -128,16 +154,38 @@ const cellSize = computed(() => {
 const layout = computed<LayoutResult | null>(() => {
   if (!displays || bodySize.value.w <= 0 || bodySize.value.h <= 0) return null;
   try {
-    const all = displays.all.filter((d) => d.paneId === props.paneId && d.name !== pluginTab.value?.display && d.name !== pluginMobileDisplay(pluginTab.value,extensions?.list?.extensions));
+    const all = displays.all.filter(
+      (d) =>
+        d.paneId === props.paneId &&
+        d.name !== pluginTab.value?.display &&
+        d.name !== pluginMobileDisplay(pluginTab.value, extensions?.list?.extensions),
+    );
     if (all.length === 0) return null;
     const bands: Parameters<typeof resolvePaneDisplays>[0]["bands"] = [];
     const panels: Parameters<typeof resolvePaneDisplays>[0]["panels"] = [];
     const floatRects: Parameters<typeof resolvePaneDisplays>[0]["floatRects"] = {};
     all.forEach((d, seq) => {
       const f = displays.effectiveOf(d);
-      if (d.kind === "band") bands.push({ id: d.id, seq, size: d.size, edge: f.edge ?? "top", collapsed: f.collapsed, script: isScriptFormat(d.format) && displays.scriptCapable && settings?.displayScriptEnabled === true });
+      if (d.kind === "band")
+        bands.push({
+          id: d.id,
+          seq,
+          size: displays.bandHeightOf(d),
+          edge: f.edge ?? "top",
+          collapsed: f.collapsed,
+          script:
+            isScriptFormat(d.format) &&
+            displays.scriptCapable &&
+            settings?.displayScriptEnabled === true,
+        });
       else {
-        panels.push({ id: d.id, seq, size: d.size, dock: f.dock ?? "right", collapsed: f.collapsed });
+        panels.push({
+          id: d.id,
+          seq,
+          size: d.size,
+          dock: f.dock ?? "right",
+          collapsed: f.collapsed,
+        });
         const rect = displays.faceRectOf(d); // 記憶の矩形（窓を開く操作が書く）。無ければ割り付けが初めの矩形を使う
         if (rect) floatRects[d.id] = rect;
       }
@@ -169,12 +217,22 @@ const layout = computed<LayoutResult | null>(() => {
   }
 });
 /** 固定の部品の位置が変わる割り付け（帯の上下・たたみ・トレイの行・「ほか N 件」）の署名。 */
-const placementOf = (l: LayoutResult): string => JSON.stringify([l.bands, l.tray.edge, l.tray.row, l.tray.hostBandId, l.tray.buttons.length, l.floats]);
+const placementOf = (l: LayoutResult): string =>
+  JSON.stringify([
+    l.bands,
+    l.tray.edge,
+    l.tray.row,
+    l.tray.hostBandId,
+    l.tray.buttons.length,
+    l.floats,
+  ]);
 const showEdge = (edge: "top" | "bottom"): boolean => {
   const l = layout.value;
   if (!l) return false;
   const here = edge === "top" ? l.bands.top : l.bands.bottom;
-  return here.length > 0 || (l.tray.edge === edge && (l.tray.row === "own" || l.bands.more.length > 0));
+  return (
+    here.length > 0 || (l.tray.edge === edge && (l.tray.row === "own" || l.bands.more.length > 0))
+  );
 };
 const docks = computed(() => layout.value?.docks ?? null);
 /** この pane の面を D&D している間の、落とせる場所の表示（`DisplayDropZones`）。いまの置き場所は、つかんでいる面の側。 */
@@ -184,7 +242,11 @@ const dropZones = computed(() => {
   const cur = displays.infos.get(d.id);
   // 浮いた窓をその場で動かしている間は、縁に寄せたときだけ落とせる場所を出す。
   if (d.floatMove && d.zone === null) return null;
-  return { zone: d.zone, current: cur ? (displays.effectiveOf(cur).dock ?? null) : null, release: d.floatMove === true };
+  return {
+    zone: d.zone,
+    current: cur ? (displays.effectiveOf(cur).dock ?? null) : null,
+    release: d.floatMove === true,
+  };
 });
 /** 中央（浮いた窓）を落とせる場所にするか（窓の動ける領域が分かっている間だけ）。 */
 const floatDroppable = computed(() => !!displays?.canOpenFloat(props.paneId));
@@ -193,10 +255,23 @@ const floats = computed(() => layout.value?.floats ?? []);
 const floatArea = computed(() => layout.value?.floatArea ?? null);
 const floatZOf = (id: string): number => floatZ(displays?.floatOrder.get(props.paneId) ?? [], id);
 /** 開いている窓（pane が小さくて自動でたたまれている窓も）。並びの記憶を捨てないために使う。 */
-const openFloatIds = computed(() => (displays?.all ?? []).filter((d) => d.paneId === props.paneId && d.kind === "panel").filter((d) => { const f = displays!.effectiveOf(d); return f.dock === "float" && !f.collapsed; }).map((d) => d.id));
+const openFloatIds = computed(() =>
+  (displays?.all ?? [])
+    .filter((d) => d.paneId === props.paneId && d.kind === "panel")
+    .filter((d) => {
+      const f = displays!.effectiveOf(d);
+      return f.dock === "float" && !f.collapsed;
+    })
+    .map((d) => d.id),
+);
 watch(
   () => [floats.value.map((f) => f.id).join(","), openFloatIds.value.join(",")],
-  () => displays?.syncFloatOrder(props.paneId, floats.value.map((f) => f.id), openFloatIds.value),
+  () =>
+    displays?.syncFloatOrder(
+      props.paneId,
+      floats.value.map((f) => f.id),
+      openFloatIds.value,
+    ),
   { immediate: true },
 );
 
@@ -211,10 +286,37 @@ const guideStyle = computed(() => {
   const t = l.terminal;
   const topRows = t.y - (l.docks.top?.size ?? 0);
   const bottomRows = bodySize.value.h - (t.y + t.h) - (l.docks.bottom?.size ?? 0);
-  if (g.side === "right") return { right: `${g.px}px`, top: `${t.y}px`, height: `${t.h}px`, width: "3px", marginRight: "-1.5px" };
-  if (g.side === "left") return { left: `${g.px}px`, top: `${t.y}px`, height: `${t.h}px`, width: "3px", marginLeft: "-1.5px" };
-  if (g.side === "top") return { top: `${topRows + g.px}px`, left: "0px", right: "0px", height: "3px", marginTop: "-1.5px" };
-  return { bottom: `${bottomRows + g.px}px`, left: "0px", right: "0px", height: "3px", marginBottom: "-1.5px" };
+  if (g.side === "right")
+    return {
+      right: `${g.px}px`,
+      top: `${t.y}px`,
+      height: `${t.h}px`,
+      width: "3px",
+      marginRight: "-1.5px",
+    };
+  if (g.side === "left")
+    return {
+      left: `${g.px}px`,
+      top: `${t.y}px`,
+      height: `${t.h}px`,
+      width: "3px",
+      marginLeft: "-1.5px",
+    };
+  if (g.side === "top")
+    return {
+      top: `${topRows + g.px}px`,
+      left: "0px",
+      right: "0px",
+      height: "3px",
+      marginTop: "-1.5px",
+    };
+  return {
+    bottom: `${bottomRows + g.px}px`,
+    left: "0px",
+    right: "0px",
+    height: "3px",
+    marginBottom: "-1.5px",
+  };
 });
 
 // --- 割り付けが変わったときの備えと、結果の写し --------------------------------------------------------------------------------
@@ -226,7 +328,10 @@ watch(
   layout,
   () => {
     const a = document.activeElement;
-    focusWasInChrome = a instanceof Element && bodyEl.value?.contains(a) === true && a.closest("[data-display-chrome], [data-display-tray], [data-pane-panel-resize]") !== null;
+    focusWasInChrome =
+      a instanceof Element &&
+      bodyEl.value?.contains(a) === true &&
+      a.closest("[data-display-chrome], [data-display-tray], [data-pane-panel-resize]") !== null;
   },
   { flush: "pre" },
 );
@@ -234,10 +339,19 @@ watch(
   layout,
   (l) => {
     if (displays) {
-      displays.setLayoutSnapshot(props.paneId, l ? { auto: l.auto, floatArea: l.floatArea, placement: placementOf(l) } : null);
+      displays.setLayoutSnapshot(
+        props.paneId,
+        l ? { auto: l.auto, floatArea: l.floatArea, placement: placementOf(l) } : null,
+      );
     }
     const a = document.activeElement;
-    if (focusWasInChrome && (a === null || a === document.body || !a.isConnected) && !view?.modalOpen && (view?.screen ?? "base") === "base") displayHost?.focusTerminal(props.paneId);
+    if (
+      focusWasInChrome &&
+      (a === null || a === document.body || !a.isConnected) &&
+      !view?.modalOpen &&
+      (view?.screen ?? "base") === "base"
+    )
+      displayHost?.focusTerminal(props.paneId);
     focusWasInChrome = false;
   },
   { flush: "post" },
@@ -246,20 +360,30 @@ watch(
 /** 利用者が付けた名前 → エージェント名 → 端末のタイトル の順に拾う。どれも無ければ空。 */
 const paneName = computed(() => {
   const pane = session?.panes.get(props.paneId);
-  // 連鎖の正典は `client-core の workspace/paneName.ts` の `paneNameOf`。ここは**名前が無ければ空**にする
-  // （枠のラベルは名前が無ければ付けない）ので、既定値に空文字を渡す。
-  return pane ? paneNameOf(pane, "") : "";
+  if (!pane) return "";
+  return settings?.paneAgentNameVisible
+    ? paneNameOf(pane)
+    : pane.label || pane.title || `pane ${props.paneId.slice(0, 8)}`;
 });
 /** pane そのものの名前。枠の `aria-label` は**メニューボタン**の名前なので流用しない（AC8）。 */
 const paneLabel = computed(() => (paneName.value ? `pane「${paneName.value}」` : "pane"));
 /** 枠（メニューボタン）の名前。 */
-const label = computed(() => (paneName.value ? `pane「${paneName.value}」のメニュー` : "pane のメニュー"));
+const label = computed(() =>
+  paneName.value ? `pane「${paneName.value}」のメニュー` : "pane のメニュー",
+);
 /** 選ばれている pane の枠だけを Tab で止まる場所にする（roving tabindex。独立点検 #2）。 */
 const selected = computed(() => view?.focusedPaneId === props.paneId);
 const root = ref<HTMLElement | null>(null);
 
 const chrome = computed(() =>
-  settings ? resolvePaneChrome(settings.paneBorders, settings.paneGaps, !!props.multiPane, props.neighbors ?? NO_NEIGHBORS) : null,
+  settings
+    ? resolvePaneChrome(
+        settings.paneBorders,
+        settings.paneGaps,
+        !!props.multiPane,
+        props.neighbors ?? NO_NEIGHBORS,
+      )
+    : null,
 );
 const framed = computed(() => !!chrome.value?.framed);
 /** 余白の無い辺がある：枠のフォーカスの見え方を端末の上に重ねて出す（decisions D4）。 */
@@ -270,7 +394,9 @@ const flush = computed(() => !!chrome.value && Object.values(chrome.value.padded
  * 有効な間はすべての pane に同じ余白を入れる**——pane ごとに有無が割れると、隣り合う pane の上端が
  * そろわなくなる（同じ tab 内の分割は上端をそろえる前提のレイアウトのため）。
  */
-const reserveNameSpace = computed(() => !!(props.enabled && !props.presentationOnly && settings?.paneAgentNameVisible && framed.value));
+const reserveNameSpace = computed(
+  () => !!(props.enabled && !props.presentationOnly && framed.value),
+);
 /**
  * 枠線に埋め込む名前表示を出すか（20260923-pane-name-dnd-swap。herdr の見た目に寄せた。design「4.」）。
  * 名前が無ければ枠も出さない——空の legend は意味が無い（decisions.md D9）。
@@ -279,7 +405,9 @@ const showBorder = computed(() => !!(reserveNameSpace.value && paneName.value));
 
 const PANE_GAP = "var(--soda-pane-gap, 4px)";
 /** 名前の行の高さ。クラシックは操作ボタンに合わせて28px、モダンはテーマの値を使う。 */
-const nameRowH = computed(() => (modern?.value ? "var(--soda-shape-name-h, 1.2em)" : (showPaneButtons.value ? "28px" : "1.2em")));
+const nameRowH = computed(() =>
+  modern?.value ? "var(--soda-shape-name-h, 1.2em)" : showPaneButtons.value ? "28px" : "1.2em",
+);
 /** 辺ごとの余白。値そのもの（px）は `App.vue` が `settings.paneFrameThickness` から配る CSS 変数。 */
 const padStyle = computed(() => {
   if (props.presentationOnly) return { padding: "0px" };
@@ -288,7 +416,11 @@ const padStyle = computed(() => {
   const side = (s: PaneSide): string => (c.padded[s] ? PANE_GAP : "0px");
   return {
     // 操作ボタンの上下に同じ余白を残す名前の行の高さ。
-    paddingTop: reserveNameSpace.value ? (c.padded.top && !showPaneButtons.value ? `calc(${PANE_GAP} + ${nameRowH.value})` : nameRowH.value) : side("top"),
+    paddingTop: reserveNameSpace.value
+      ? c.padded.top && !showPaneButtons.value
+        ? `calc(${PANE_GAP} + ${nameRowH.value})`
+        : nameRowH.value
+      : side("top"),
     paddingRight: side("right"),
     paddingBottom: side("bottom"),
     paddingLeft: side("left"),
@@ -305,7 +437,9 @@ const isDropTarget = computed(() => {
  * ドロップ候補になっているとき、ホバー中のゾーン（縁/中央。20260924-pane-dnd-split-move）。
  * `isDropTarget` が false のときは無意味なので null。
  */
-const overZone = computed<Zone | null>(() => (isDropTarget.value ? (view?.paneDrag?.overZone ?? null) : null));
+const overZone = computed<Zone | null>(() =>
+  isDropTarget.value ? (view?.paneDrag?.overZone ?? null) : null,
+);
 /** 自分がドラッグ元か（ドラッグ中は自分の名前を薄くする等の見た目に使う）。 */
 const isDragSource = computed(() => view?.paneDrag?.sourcePaneId === props.paneId);
 
@@ -321,19 +455,40 @@ const ACTIONS_PAD = 6;
 const NAME_MIN_PX = 48;
 /** 名前の箱の左右の余白（0.6em・0.4em×2）が、最大の幅の外に足されるぶんの余裕（px）。名前がボタンに重ならないようにする。 */
 const NAME_BOX_SLACK = 8;
-const showPaneButtons = computed(() => !!props.enabled && !props.presentationOnly && !pluginTab.value);
+const showPaneButtons = computed(
+  () => !!props.enabled && !props.presentationOnly && !pluginTab.value,
+);
 /** 名前の行（確保した上の余白）の右端に出すか。そうでなければ、右上の隅に重ねる。 */
 const buttonsInRow = computed(() => reserveNameSpace.value);
 const widthFor = (n: number): number => n * BTN + (n - 1) * BTN_GAP + CLOSE_GAP + ACTIONS_PAD;
 /** エージェントの居る pane か（［情報］を出す。20261010-agent-usage PR4）。 */
 const hasAgent = computed(() => !!session?.panes.get(props.paneId)?.agent);
-const agentActions=computed(()=>{const pane=session?.panes.get(props.paneId);return pane?.agent?headerActionsFor(pane.agent.kind,!!pane.agentSession,settings?.agentHeaderActions??[]):[];});
-const agentSlots=computed(()=>bodySize.value.w<=0?agentActions.value.length:Math.max(1,Math.floor((bodySize.value.w-widthFor(5)-NAME_MIN_PX)/26)));
-const agentActionCount=computed(()=>Math.min(agentActions.value.length,agentSlots.value));
-function onAgentAction(action:AgentHeaderAction):void {
- if(action==='messages'||action==='summary'){conversationWindow?.open(props.paneId,action);return;}
- if(action==='fork'){actions?.openAgentFork(props.paneId);return;}
- void connection?.request('agent.command',{paneId:props.paneId,action}).catch(()=>view?.toast('操作できません。エージェントの処理が終わっているか確認してください。'));
+const agentActions = computed(() => {
+  const pane = session?.panes.get(props.paneId);
+  return pane?.agent
+    ? headerActionsFor(pane.agent.kind, !!pane.agentSession, settings?.agentHeaderActions ?? [])
+    : [];
+});
+const agentSlots = computed(() =>
+  bodySize.value.w <= 0
+    ? agentActions.value.length
+    : Math.max(1, Math.floor((bodySize.value.w - widthFor(7) - NAME_MIN_PX) / 26)),
+);
+const agentActionCount = computed(() => Math.min(agentActions.value.length, agentSlots.value));
+function onAgentAction(action: AgentHeaderAction): void {
+  if (action === "messages" || action === "summary") {
+    conversationWindow?.open(props.paneId, action);
+    return;
+  }
+  if (action === "fork") {
+    actions?.openAgentFork(props.paneId);
+    return;
+  }
+  void connection
+    ?.request("agent.command", { paneId: props.paneId, action })
+    .catch(() =>
+      view?.toast("操作できません。エージェントの処理が終わっているか確認してください。"),
+    );
 }
 const infoAvailable = computed(() => showPaneButtons.value && hasAgent.value);
 /** ボタンが n 個並んで入る幅か。箱の幅が分からない間（0）は、全部出す。 */
@@ -343,8 +498,10 @@ const fits = (n: number): boolean => {
   return w >= widthFor(n) + (buttonsInRow.value && paneName.value ? NAME_MIN_PX : 0) + 12;
 };
 /** pane が小さくて入りきらないとき、隠す順は 分割の 2 つ → ［情報］（最大化と閉じるは残す）。 */
-const showSplitButtons = computed(() => fits((infoAvailable.value ? 5 : 4)+agentActionCount.value));
-const showInfoButton = computed(() => infoAvailable.value && fits(3+agentActionCount.value));
+const showSplitButtons = computed(() =>
+  fits((infoAvailable.value ? 7 : 6) + agentActionCount.value),
+);
+const showInfoButton = computed(() => infoAvailable.value && fits(5 + agentActionCount.value));
 /** 極端に狭い pane（最大化と閉じるだけで、名前の入る幅が残らない）では、名前を出さない（ボタンに重なって押せなくなるため）。名前の行にボタンが並ぶときだけ。 */
 const nameFits = computed(() => {
   if (!(showPaneButtons.value && buttonsInRow.value)) return true;
@@ -353,7 +510,14 @@ const nameFits = computed(() => {
 });
 /** 名前の行のとき、名前の最大の幅から引く、ボタンの分（px）。 */
 const actionsWidthPx = computed(() =>
-  showPaneButtons.value && buttonsInRow.value ? widthFor(2 + agentActionCount.value + (showSplitButtons.value ? 2 : 0) + (showInfoButton.value ? 1 : 0)) + NAME_BOX_SLACK : 0,
+  showPaneButtons.value
+    ? widthFor(
+        4 +
+          agentActionCount.value +
+          (showSplitButtons.value ? 2 : 0) +
+          (showInfoButton.value ? 1 : 0),
+      ) + NAME_BOX_SLACK
+    : 0,
 );
 const zoomed = computed(() => {
   const tabId = session?.panes.get(props.paneId)?.tabId;
@@ -365,7 +529,8 @@ function paneAction(run: () => void): void {
   registry?.focus(props.paneId);
   run();
 }
-const onSplit = (dir: "right" | "down"): void => paneAction(() => actions?.splitPane(props.paneId, dir));
+const onSplit = (dir: "right" | "down"): void =>
+  paneAction(() => actions?.splitPane(props.paneId, dir));
 const onZoom = (): void => paneAction(() => actions?.zoomPane(props.paneId));
 const onClosePane = (): void => paneAction(() => actions?.closePaneWithConfirm(props.paneId));
 /** ［情報］: その pane の利用状況の窓を開く／閉じる（端末のフォーカスは動かさない。窓が開くと窓が受け取り、閉じると端末へ戻す）。 */
@@ -392,7 +557,10 @@ function cancelDrag(): void {
 }
 
 /** ドロップ先の3種（20260924-pane-move-cross-tab。design「クライアント側: ドロップ先の拡張」）。 */
-type DropHit = { kind: "pane"; paneId: string; zone: Zone } | { kind: "tab"; tabId: string } | { kind: "workspace"; workspaceId: string };
+type DropHit =
+  | { kind: "pane"; paneId: string; zone: Zone }
+  | { kind: "tab"; tabId: string }
+  | { kind: "workspace"; workspaceId: string };
 
 /**
  * ドロップ先を優先順位付きで探す（`20260924-pane-dnd-split-move` で確立した pane 縁/中央の判定を、
@@ -407,12 +575,17 @@ function dropTargetAt(x: number, y: number): DropHit | null {
   if (!el) return null;
   const paneEl = el.closest("[data-pane-id]") as HTMLElement | null;
   if (paneEl?.dataset.paneId) {
-    return { kind: "pane", paneId: paneEl.dataset.paneId, zone: zoneAt(paneEl.getBoundingClientRect(), x, y) };
+    return {
+      kind: "pane",
+      paneId: paneEl.dataset.paneId,
+      zone: zoneAt(paneEl.getBoundingClientRect(), x, y),
+    };
   }
   const tabEl = el.closest("[data-tab-id]") as HTMLElement | null;
   if (tabEl?.dataset.tabId) return { kind: "tab", tabId: tabEl.dataset.tabId };
   const wsEl = el.closest("[data-drop-workspace-id]") as HTMLElement | null;
-  if (wsEl?.dataset.dropWorkspaceId) return { kind: "workspace", workspaceId: wsEl.dataset.dropWorkspaceId };
+  if (wsEl?.dataset.dropWorkspaceId)
+    return { kind: "workspace", workspaceId: wsEl.dataset.dropWorkspaceId };
   return null;
 }
 
@@ -514,6 +687,10 @@ const menuOpen = computed(() => {
   return target?.kind === "pane" && target.paneId === props.paneId;
 });
 
+function onMenuButton(ev: MouseEvent): void {
+  const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+  openMenu({ x: rect.left, y: rect.bottom });
+}
 function openMenu(at: { x: number; y: number }): void {
   actions?.openContextMenu({ kind: "pane", paneId: props.paneId }, at);
 }
@@ -533,7 +710,12 @@ function onContextMenu(ev: MouseEvent): void {
 
 /** APG の menu button：Enter・Space・↓ で開く。文脈メニューの慣習の Shift+F10・ContextMenu キーでも開く。 */
 function onKeydown(ev: KeyboardEvent): void {
-  const opens = ev.key === "Enter" || ev.key === " " || ev.key === "ArrowDown" || ev.key === "ContextMenu" || (ev.key === "F10" && ev.shiftKey);
+  const opens =
+    ev.key === "Enter" ||
+    ev.key === " " ||
+    ev.key === "ArrowDown" ||
+    ev.key === "ContextMenu" ||
+    (ev.key === "F10" && ev.shiftKey);
   if (!opens || ev.ctrlKey || ev.altKey || ev.metaKey) return;
   ev.preventDefault();
   // `main.ts` の window の keydown（端末の外のキーを `KeyInputController` へ流す）に二重に渡さない。
@@ -547,8 +729,13 @@ function onKeydown(ev: KeyboardEvent): void {
   <div
     ref="root"
     class="pane-frame"
-    :class="{ 'pane-frame-enabled': enabled, 'pane-frame-enabled-named': reserveNameSpace, 'pane-frame-drag-source': isDragSource }"
+    :class="{
+      'pane-frame-enabled': enabled,
+      'pane-frame-enabled-named': reserveNameSpace,
+      'pane-frame-drag-source': isDragSource,
+    }"
     :data-pane-id="enabled && !presentationOnly ? paneId : undefined"
+    :data-display-pane-id="paneId"
     :role="enabled ? 'group' : undefined"
     :aria-label="enabled ? paneLabel : undefined"
     :aria-current="enabled && selected ? 'true' : undefined"
@@ -578,16 +765,44 @@ function onKeydown(ev: KeyboardEvent): void {
     <div v-if="enabled" ref="bodyEl" class="pane-frame-body pane-frame-body-displays">
       <PaneBands v-if="layout && showEdge('top')" edge="top" :pane-id="paneId" :layout="layout" />
       <!-- 4 つの側は、別の位置の `v-if`（1 つの `v-for` にしない。枠〔iframe〕を DOM の中で動かさないため）。 -->
-      <PanePanel v-if="layout && docks?.top" side="top" :pane-id="paneId" :dock="docks.top" @guide="guide = $event" />
+      <PanePanel
+        v-if="layout && docks?.top"
+        side="top"
+        :pane-id="paneId"
+        :dock="docks.top"
+        @guide="guide = $event"
+      />
       <div class="pane-frame-row">
-        <PanePanel v-if="layout && docks?.left" side="left" :pane-id="paneId" :dock="docks.left" @guide="guide = $event" />
+        <PanePanel
+          v-if="layout && docks?.left"
+          side="left"
+          :pane-id="paneId"
+          :dock="docks.left"
+          @guide="guide = $event"
+        />
         <div class="pane-frame-center">
-          <div class="pane-frame-main" :class="{ 'pane-frame-main-dimmed': displayEngaged }" data-pane-frame-main><slot /></div>
+          <div
+            class="pane-frame-main"
+            :class="{ 'pane-frame-main-dimmed': displayEngaged }"
+            data-pane-frame-main
+          >
+            <slot />
+          </div>
           <!-- 浮いた窓の層（端末の領域の箱の中だけ。`.pane-frame-main` の兄弟なので、操作中に端末を薄くする `opacity` が窓に掛からない）。
                `v-for` は出た順のまま（並べ替えない＝枠〔iframe〕を動かさない）。重なりは `z-index`。 -->
-          <div v-if="layout && floats.length > 0 && floatArea" class="pane-frame-floats" data-pane-frame-floats>
+          <div
+            v-if="layout && floats.length > 0 && floatArea"
+            class="pane-frame-floats"
+            data-pane-frame-floats
+          >
             <template v-for="f in floats" :key="f.id">
-              <DisplayFloat v-if="displays?.infos.get(f.id)" :info="displays.infos.get(f.id)!" :rect="f.rect" :area="floatArea" :z="floatZOf(f.id)" />
+              <DisplayFloat
+                v-if="displays?.infos.get(f.id)"
+                :info="displays.infos.get(f.id)!"
+                :rect="f.rect"
+                :area="floatArea"
+                :z="floatZOf(f.id)"
+              />
             </template>
           </div>
           <!-- 操作ボタン（モダンだけ。名前の行が無いときは、端末の領域の右上の隅に重ねる。浮いた窓の層より下） -->
@@ -599,6 +814,16 @@ function onKeydown(ev: KeyboardEvent): void {
             :selected="selected"
             :pane-label="paneLabel"
             :show-info="showInfoButton"
+            :show-add-view="!presentationOnly"
+            :show-menu="!presentationOnly"
+            @menu="onMenuButton"
+            @add-view="
+              view?.openDialogWithContext({
+                kind: 'addView',
+                tabId: session!.panes.get(paneId)!.tabId,
+                paneId,
+              })
+            "
             :info-open="infoOpen"
             :agent-actions="agentActions"
             :max-agent-actions="agentSlots"
@@ -609,12 +834,41 @@ function onKeydown(ev: KeyboardEvent): void {
             @close="onClosePane"
           />
         </div>
-        <PanePanel v-if="layout && docks?.right" side="right" :pane-id="paneId" :dock="docks.right" @guide="guide = $event" />
+        <PanePanel
+          v-if="layout && docks?.right"
+          side="right"
+          :pane-id="paneId"
+          :dock="docks.right"
+          @guide="guide = $event"
+        />
       </div>
-      <PanePanel v-if="layout && docks?.bottom" side="bottom" :pane-id="paneId" :dock="docks.bottom" @guide="guide = $event" />
-      <PaneBands v-if="layout && showEdge('bottom')" edge="bottom" :pane-id="paneId" :layout="layout" />
-      <DisplayDropZones v-if="dropZones" :zone="dropZones.zone" :current="dropZones.current" :float="floatDroppable" :release="dropZones.release" />
-      <div v-if="guideStyle" class="pane-frame-guide" :style="guideStyle" aria-hidden="true" data-pane-frame-guide></div>
+      <PanePanel
+        v-if="layout && docks?.bottom"
+        side="bottom"
+        :pane-id="paneId"
+        :dock="docks.bottom"
+        @guide="guide = $event"
+      />
+      <PaneBands
+        v-if="layout && showEdge('bottom')"
+        edge="bottom"
+        :pane-id="paneId"
+        :layout="layout"
+      />
+      <DisplayDropZones
+        v-if="dropZones"
+        :zone="dropZones.zone"
+        :current="dropZones.current"
+        :float="floatDroppable"
+        :release="dropZones.release"
+      />
+      <div
+        v-if="guideStyle"
+        class="pane-frame-guide"
+        :style="guideStyle"
+        aria-hidden="true"
+        data-pane-frame-guide
+      ></div>
     </div>
     <div v-else class="pane-frame-body">
       <slot />
@@ -622,7 +876,12 @@ function onKeydown(ev: KeyboardEvent): void {
     <!-- ドロップ先のゾーン（縁/中央）表示（20260924-pane-dnd-split-move。design「振る舞いの詳細 >
          視覚フィードバック」AC4）。`.pane-frame-body`（端末）より後に置く理由は下の `.pane-frame-name`
          と同じ（z-index:auto は DOM 順で決まる）。 -->
-    <div v-if="overZone" class="pane-frame-zone" :class="`pane-frame-zone-${overZone}`" aria-hidden="true" />
+    <div
+      v-if="overZone"
+      class="pane-frame-zone"
+      :class="`pane-frame-zone-${overZone}`"
+      aria-hidden="true"
+    />
     <!-- `.pane-frame-body`（端末。DOM 順で後）より後に置く——z-index:auto の重なりは DOM 順で
          後のものが上に来るため、`.pane-frame-edge` の中に置くと端末の不透明な内容の下に隠れて
          見えなくなる（taskcheck が実際のスクリーンショットで発見。review.md 参照）。 -->
@@ -639,9 +898,13 @@ function onKeydown(ev: KeyboardEvent): void {
       @contextmenu="onContextMenu"
     />
     <span
-      v-if="showBorder && nameFits"
+      v-if="(showBorder && nameFits) || (showPaneButtons && !buttonsInRow)"
       class="pane-frame-name"
-      :class="{ 'pane-frame-name-current': selected, 'pane-frame-name-dragging': isDragSource }"
+      :class="{
+        'pane-frame-name-current': selected,
+        'pane-frame-name-dragging': isDragSource,
+        'pane-frame-name-floating': !buttonsInRow,
+      }"
       :aria-hidden="modern ? undefined : 'true'"
       @pointerdown="onNamePointerDown"
       @pointermove="onNamePointerMove"
@@ -649,7 +912,13 @@ function onKeydown(ev: KeyboardEvent): void {
       @pointercancel="onNamePointerCancel"
       @lostpointercapture="onNamePointerCancel"
       @contextmenu="onContextMenu"
-      ><StateIcon v-if="modern && agentState" class="pane-frame-agent-state" :state="agentState" @pointerdown.stop @pointerup.stop />{{ paneName }}</span
+      ><StateIcon
+        v-if="modern && agentState"
+        class="pane-frame-agent-state"
+        :state="agentState"
+        @pointerdown.stop
+        @pointerup.stop
+      />{{ paneName }}</span
     >
     <!-- 操作ボタン（モダンだけ）。名前の行があるときは、その右端（名前の後ろ。`.pane-frame-name` と同じ理由で端末より後ろに置く）。 -->
     <PaneActions
@@ -660,16 +929,31 @@ function onKeydown(ev: KeyboardEvent): void {
       :selected="selected"
       :pane-label="paneLabel"
       :show-info="showInfoButton"
+      :show-add-view="!presentationOnly"
+      :show-menu="!presentationOnly"
+      @menu="onMenuButton"
+      @add-view="
+        view?.openDialogWithContext({
+          kind: 'addView',
+          tabId: session!.panes.get(paneId)!.tabId,
+          paneId,
+        })
+      "
       :info-open="infoOpen"
-            :agent-actions="agentActions"
-            :max-agent-actions="agentSlots"
-            @agent="onAgentAction"
+      :agent-actions="agentActions"
+      :max-agent-actions="agentSlots"
+      @agent="onAgentAction"
       @split="onSplit"
       @info="onInfo"
       @zoom="onZoom"
       @close="onClosePane"
     />
-    <DragPreview v-if="isDragSource && dragPointer" v-bind="dragPointer" :label="paneName || '名前なしのペイン'" kind="ペイン" />
+    <DragPreview
+      v-if="isDragSource && dragPointer"
+      v-bind="dragPointer"
+      :label="paneName || '名前なしのペイン'"
+      kind="ペイン"
+    />
   </div>
 </template>
 
@@ -699,7 +983,10 @@ function onKeydown(ev: KeyboardEvent): void {
   /* 画面の様式（20261008-ui-style）。モダンだけが値を定義する（クラシックは未定義＝角なし。画素が変わらない）。枠（選択の強調・薄い枠・ドロップ候補）の角。
    * 端末の箱（余白の内側）は切らない——枠は余白の外側にあり、端末の角は丸みの内側に収まる。 */
   /* 角は、すき間に合わせて抑える（細い 4px のすき間で 12px の丸みだと、端末の四角い角に重なる。倍率は `uiStyle.css` の 1 か所）。クラシックは、どちらも未定義＝ 0。 */
-  border-radius: min(var(--soda-shape-pane-radius, 0px), calc(var(--soda-pane-gap, 4px) * var(--soda-shape-pane-radius-per-gap, 0)));
+  border-radius: min(
+    var(--soda-shape-pane-radius, 0px),
+    calc(var(--soda-pane-gap, 4px) * var(--soda-shape-pane-radius-per-gap, 0))
+  );
 }
 /* 強調はホバーではなく選択で起きる（20260920-ui-selection-visuals の AC4・AC5）。
  * `inset: 0` の絶対配置なので border は内側に収まり、余白（`padStyle`）の大きさは変わらない
@@ -815,6 +1102,24 @@ function onKeydown(ev: KeyboardEvent): void {
   padding: 0 0.4em;
   background: var(--soda-bg, #1e1f29);
   color: color-mix(in srgb, var(--soda-menu-fg, #f8f8f2) 55%, transparent);
+}
+.pane-frame-name-floating {
+  top: 4px;
+  left: 6px;
+  z-index: 19;
+  max-width: max(24px, calc(100% - 12px - var(--soda-pane-actions-w, 0px)));
+  height: 24px;
+  line-height: 24px;
+  background: var(--soda-menu-bg);
+  box-shadow: inset 0 0 0 1px var(--soda-menu-border);
+  opacity: 0;
+  pointer-events: none;
+}
+.pane-frame:hover > .pane-frame-name-floating,
+.pane-frame-name-floating.pane-frame-name-current,
+.pane-frame-name-floating.pane-frame-name-dragging {
+  opacity: 1;
+  pointer-events: auto;
 }
 .pane-frame-name-current {
   /* herdr の見た目（NAME1 が太字の地の色）に合わせる。`--soda-pane-current` は枠線用に

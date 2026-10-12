@@ -1,0 +1,1 @@
+review_history_usage独立点検でbottom buttons描画とhitのずれを指摘、修正後再レビュー通過。実外側端末の右端7セルを検査して同座標をrawSGRで操作。

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type { DisplayInfo } from "@sodashitsu/protocol";
-import { computed, inject, nextTick, onBeforeUnmount, provide, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
 import { displayLabel, engagedNote } from "../display/displayLabel.js";
 import { floatEdgeZoneAt } from "../display/dockDrag.js";
-import { headFocusTarget, withDisplayChange } from "../display/displayOps.js";
+import { dismissWithFocus, headFocusTarget, withDisplayChange } from "../display/displayOps.js";
 import { placedFrameKey } from "../display/framePage.js";
 import {
   FLOAT_AREA_INSET_PX,
@@ -16,10 +16,10 @@ import {
   type FloatHandle,
   type Rect,
 } from "../display/floatGeometry.js";
-import { DisplayHostKey, FloatGripKey } from "../injection.js";
+import { DisplayControllerKey, DisplayHostKey, FloatGripKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
-import DisplayFrame from "./DisplayFrame.vue";
+import DisplayFrame from "./DisplaySurface.vue";
 import DisplayPanelHead from "./DisplayPanelHead.vue";
 
 /**
@@ -35,6 +35,7 @@ const props = defineProps<{ info: DisplayInfo; rect: Rect; area: Area; z: number
 const store = useDisplayStore();
 const view = useViewStore();
 const host = inject(DisplayHostKey, undefined);
+const controller = inject(DisplayControllerKey, null);
 const rootEl = ref<HTMLElement | null>(null);
 
 const content = computed(() => store.contents.get(props.info.id));
@@ -64,7 +65,8 @@ const stillFloating = (): boolean => {
   const f = store.effectiveOf(info);
   return f.dock === "float" && !f.collapsed;
 };
-const bodyBox = (): DOMRect | null => rootEl.value?.closest(".pane-frame-body-displays")?.getBoundingClientRect() ?? null;
+const bodyBox = (): DOMRect | null =>
+  rootEl.value?.closest(".pane-frame-body-displays")?.getBoundingClientRect() ?? null;
 
 // --- 押した窓を前へ（`z-index` だけ） -----------------------------------------------------------------------------------------------
 function onRaise(): void {
@@ -86,7 +88,23 @@ const moveDrag = useResizeDrag<MoveStart>({
     live.value = moveFloatRect(start.rect, ev.clientX - start.x, ev.clientY - start.y, props.area);
     store.bumpLayoutRev();
     const box = bodyBox();
-    const zone = box ? floatEdgeZoneAt({ left: box.left, top: box.top, width: box.width, height: box.height }, ev.clientX, ev.clientY) : null;
+    const candidate = box
+      ? floatEdgeZoneAt(
+          { left: box.left, top: box.top, width: box.width, height: box.height },
+          ev.clientX,
+          ev.clientY,
+        )
+      : null;
+    let zone: import("../display/dockDrag.js").DockZone | null = candidate;
+    if (
+      box &&
+      (candidate === "top" || candidate === "bottom") &&
+      store.canPlace(props.info, `band-${candidate}`) &&
+      (!store.canPlace(props.info, candidate) ||
+        (candidate === "top" ? ev.clientY - box.top : box.bottom - ev.clientY) < 6)
+    )
+      zone = `band-${candidate}`;
+    if (zone && !store.canPlace(props.info, zone)) zone = null;
     store.setDockDrag({ id: props.info.id, paneId: props.info.paneId, zone, floatMove: true });
   },
   commit: () => {
@@ -100,7 +118,12 @@ const moveDrag = useResizeDrag<MoveStart>({
     const info = store.infos.get(props.info.id)!;
     if (zone !== null && zone !== "float") {
       live.value = null;
-      void withDisplayChange(info, () => store.setFaceDock(info, zone), () => headFocusTarget(info.id), host);
+      void withDisplayChange(
+        info,
+        () => store.setViewPlacement(info, zone),
+        () => headFocusTarget(info.id),
+        host,
+      );
       return;
     }
     if (rect) store.setFaceRect(info, rect);
@@ -123,7 +146,14 @@ interface ResizeStart {
   y: number;
   handle: FloatHandle;
 }
-const axisOf = (h: FloatHandle): "x" | "y" | "nwse" | "nesw" => (h === "e" || h === "w" ? "x" : h === "n" || h === "s" ? "y" : h === "nw" || h === "se" ? "nwse" : "nesw");
+const axisOf = (h: FloatHandle): "x" | "y" | "nwse" | "nesw" =>
+  h === "e" || h === "w"
+    ? "x"
+    : h === "n" || h === "s"
+      ? "y"
+      : h === "nw" || h === "se"
+        ? "nwse"
+        : "nesw";
 const resizeDrag = useResizeDrag<ResizeStart>({
   axis: () => axisOf(handle),
   enabled: () => stillFloating(),
@@ -134,7 +164,13 @@ const resizeDrag = useResizeDrag<ResizeStart>({
   },
   move: (ev, start) => {
     if (!stillFloating()) return;
-    live.value = resizeFloatRect(start.rect, start.handle, ev.clientX - start.x, ev.clientY - start.y, props.area);
+    live.value = resizeFloatRect(
+      start.rect,
+      start.handle,
+      ev.clientX - start.x,
+      ev.clientY - start.y,
+      props.area,
+    );
     store.bumpLayoutRev();
   },
   commit: () => {
@@ -160,7 +196,9 @@ watch(
 );
 
 // --- キーで動かす・大きさを変える（`floatKeyMode`） ---------------------------------------------------------------------------------
-const keyMode = computed(() => (store.floatKeyMode?.id === props.info.id ? store.floatKeyMode.mode : null));
+const keyMode = computed(() =>
+  store.floatKeyMode?.id === props.info.id ? store.floatKeyMode.mode : null,
+);
 let returnFocusTo: HTMLElement | null = null;
 let finishing = false;
 let keyStart: Rect | null = null;
@@ -179,7 +217,9 @@ watch(
   { immediate: true },
 );
 const keyNote = computed(() =>
-  keyMode.value === "resize" ? "矢印キーで大きさを変えます（Enter で確定・Esc で戻す）" : "矢印キーで動かします（Enter で確定・Esc で戻す）",
+  keyMode.value === "resize"
+    ? "矢印キーで大きさを変えます（Enter で確定・Esc で戻す）"
+    : "矢印キーで動かします（Enter で確定・Esc で戻す）",
 );
 /**
  * キーのモードを終える。**先にフォーカスを移してから、`tabindex` を外す**（フォーカスのある要素から `tabindex` を外すと、フォーカスが `body` に落ちる）。
@@ -203,7 +243,14 @@ function endKeys(commit: boolean, moveFocus: boolean): void {
 }
 function onRootKey(ev: KeyboardEvent): void {
   const mode = keyMode.value;
-  if (mode === null) return;
+  if (mode === null) {
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeWindow();
+    }
+    return;
+  }
   if (ev.key === "Tab") {
     // フォーカスが窓から出る＝確定（フォーカスは Tab の行き先に任せる）。
     endKeys(true, false);
@@ -219,17 +266,55 @@ function onRootKey(ev: KeyboardEvent): void {
     endKeys(false, true);
     return;
   }
-  const next = keyAdjustFloatRect(live.value ?? keyStart ?? shown.value, mode, ev.key, ev.shiftKey, props.area);
+  const next = keyAdjustFloatRect(
+    live.value ?? keyStart ?? shown.value,
+    mode,
+    ev.key,
+    ev.shiftKey,
+    props.area,
+  );
   if (next) {
     live.value = next;
     store.bumpLayoutRev();
   }
 }
+function closeWindow(): void {
+  dismissWithFocus(props.info, () => controller?.dismiss({ id: props.info.id }), host);
+}
+function onWindowEscape(ev: KeyboardEvent): void {
+  if (
+    ev.key !== "Escape" ||
+    ev.isComposing ||
+    ev.defaultPrevented ||
+    view.modalOpen ||
+    view.contextMenu ||
+    store.dockDrag ||
+    keyMode.value !== null ||
+    document.documentElement.classList.contains("soda-resizing")
+  )
+    return;
+  const target = ev.target instanceof Element ? ev.target.closest("[data-display-float]") : null;
+  const floats = [...document.querySelectorAll<HTMLElement>("[data-display-float]")].filter(
+    (el) => el.getClientRects().length > 0,
+  );
+  const active =
+    target ?? floats.sort((a, b) => Number(a.style.zIndex) - Number(b.style.zIndex)).at(-1);
+  if (active !== rootEl.value) return;
+  ev.preventDefault();
+  ev.stopImmediatePropagation();
+  closeWindow();
+}
+onMounted(() => window.addEventListener("keydown", onWindowEscape, true));
+onBeforeUnmount(() => window.removeEventListener("keydown", onWindowEscape, true));
 function onFocusOut(ev: FocusEvent): void {
   if (keyMode.value === null || finishing) return;
   const to = ev.relatedTarget;
   if (to instanceof Node && rootEl.value?.contains(to)) return;
-  const outside = (): boolean => keyMode.value !== null && !finishing && !rootEl.value?.contains(document.activeElement) && document.hasFocus();
+  const outside = (): boolean =>
+    keyMode.value !== null &&
+    !finishing &&
+    !rootEl.value?.contains(document.activeElement) &&
+    document.hasFocus();
   // 窓の外の部品（端末など）へ利用者がフォーカスを移した: 確定する。フォーカスは動かさない。
   if (to instanceof Element && !to.matches("iframe[data-display-frame]")) {
     void nextTick(() => {
@@ -240,7 +325,8 @@ function onFocusOut(ev: FocusEvent): void {
   // 表示の枠（iframe）がフォーカスを取った・どこにも移らなかった（body に落ちた）: 利用者が外へ出したのではない。PR3 の見回りが元の場所へ戻す（窓の根は覚えた元の場所）ので、
   // 少し置いて、戻っていなければ（利用者が余白を押した等）確定する。
   setTimeout(() => {
-    if (outside() && !document.activeElement?.matches?.("iframe[data-display-frame]")) endKeys(true, false);
+    if (outside() && !document.activeElement?.matches?.("iframe[data-display-frame]"))
+      endKeys(true, false);
   }, 200);
 }
 onBeforeUnmount(() => {
@@ -265,10 +351,10 @@ onBeforeUnmount(() => {
     :data-display-engaged="engaged ? '1' : '0'"
     @pointerdown.capture="onRaise"
     @keydown="onRootKey"
+    @display-escape.stop="closeWindow"
     @focusout="onFocusOut"
   >
     <div class="display-float-head"><DisplayPanelHead :info="info" collapsible /></div>
-    <div class="display-float-title" data-display-float-title data-display-keepfocus @mousedown.prevent>{{ info.title }}</div>
     <div
       v-if="engaged"
       class="display-float-note"

@@ -1,0 +1,2 @@
+Webは帯高さをfaceKeyのローカル設定に24〜96pxで保存。帯の境界のuseResizeDragでEsc取消・ダブルクリックリセット。D&Dの配置候補にはband-top/band-bottomを加え、ビュー定義のplacementsで制限。
+TUIはDockedViewsが見出し・トレイ・配置・高さの比率を管理し、computeLayoutはトレイの一行を確保。WindowOverlayは登録ビューの操作と実移動後のdropのみを実行。WorkspaceDialog.canLeaveで未保存内容の破棄を拒否。

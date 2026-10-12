@@ -1,0 +1,9 @@
+# テスト通知の外部呼び出し
+
+ユーザーから実画面へ通知テストを出す依頼。従来はエージェントの状態遷移以外に発行導線がなかったため、認証済みRPC notification.test と sodactl notification test を追加。
+
+固定文言を通知イベントとして配信し、Web/TUIの既存toastへ渡す。エージェント状態、未処理通知の対応状況、PTYは変更しない。pane.sockには登録しない。
+
+関連256テストとWeb E2E5件通過、ビルド通過。型チェックはprotocol変更後の再ビルドでserver/cliまで通過、E2EのURLをfixtureのoriginへ修正してE2E型チェックも通過。review_summary_cache独立レビューで重大指摘なし。
+
+稼働サーバをhandoffして9実PTY維持。新しい受信機能のためWeb再読み込み・TUI切り離し再起動を利用者に案内済み。

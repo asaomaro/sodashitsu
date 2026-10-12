@@ -296,8 +296,11 @@ describe("ActionDispatcher — tab の切替（delta/index）", () => {
     const view = useViewStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1", ["t1", "t2", "t3"]));
     session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1"));
     session.tabUpserted(makeTab("t2", "w1", "p2"));
+    session.paneUpserted(makePane("p2", "t2"));
     session.tabUpserted(makeTab("t3", "w1", "p3"));
+    session.paneUpserted(makePane("p3", "t3"));
     view.setView("w1", "t3");
     const { dispatcher } = makeDispatcher(conn);
 
@@ -312,6 +315,7 @@ describe("ActionDispatcher — tab の切替（delta/index）", () => {
     const view = useViewStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1", ["t1", "t2"]));
     session.tabUpserted(makeTab("t2", "w1", "p2"));
+    session.paneUpserted(makePane("p2", "t2"));
     view.setView("w1", "t1");
     makeDispatcher(conn).dispatcher.run({ type: "tabIndex", index: 2 });
     expect(view.tabId).toBe("t2");
@@ -834,6 +838,7 @@ describe("ActionDispatcher — navigate", () => {
     const view = useViewStore(pinia);
     session.workspaceUpserted({ ...makeWorkspace("w1", ["t1"]), activeTabId: "t1" });
     session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1"));
     view.setNavigateSelection("w1");
     makeDispatcher(conn).dispatcher.run({ type: "navigate", op: "activate" });
     expect(view.workspaceId).toBe("w1");
@@ -1459,6 +1464,7 @@ describe("ActionDispatcher — worktree", () => {
     const view = useViewStore(pinia);
     session.workspaceUpserted(makeWorkspace("w9", ["t9"], { cwd: "/w/a" }));
     session.tabUpserted(makeTab("t9", "w9", "p9"));
+    session.paneUpserted(makePane("p9", "t9"));
     view.focusPane("p-elsewhere"); // 別の workspace の pane を見ている状態から移る
     view.openDialogWithContext({ kind: "worktreeOpen", workspaceId: "w1", entries: LIST.entries });
     dispatcher.confirmWorktreeOpen("/w/a");
@@ -2330,7 +2336,9 @@ describe("ActionDispatcher — workspaceDelta（previous_workspace/next_workspac
     session.workspaceUpserted({ ...makeWorkspace("w1", ["t1"]), activeTabId: "t1" });
     session.workspaceUpserted({ ...makeWorkspace("w2", ["t2"]), activeTabId: "t2" });
     session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1"));
     session.tabUpserted(makeTab("t2", "w2", "p2"));
+    session.paneUpserted(makePane("p2", "t2"));
     view.setView("w1", "t1");
     const { dispatcher } = makeDispatcher(conn);
 
@@ -2822,7 +2830,9 @@ describe("ActionDispatcher — D-7 の操作（20260927-cli-mode）", () => {
     session.workspaceUpserted({ ...makeWorkspace("w1", ["t1"]), activeTabId: "t1" });
     session.workspaceUpserted({ ...makeWorkspace("w2", ["t2"]), activeTabId: "t2" });
     session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1"));
     session.tabUpserted(makeTab("t2", "w2", "p2"));
+    session.paneUpserted(makePane("p2", "t2"));
     view.setView("w1", "t1");
     const { dispatcher } = makeDispatcher(conn);
     dispatcher.run({ type: "workspaceIndex", index: 2 });

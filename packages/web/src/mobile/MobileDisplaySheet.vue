@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onMounted, ref } from "vue";
-import DisplayFrame from "../components/DisplayFrame.vue";
+import DisplayFrame from "../components/DisplaySurface.vue";
 import DisplayScriptMark from "../components/DisplayScriptMark.vue";
 import { displayLabel, displayLabelPrefix, engagedNote, DISPLAY_LABEL_PREFIX } from "../display/displayLabel.js";
 import { placedFrameKey } from "../display/framePage.js";

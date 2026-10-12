@@ -59,7 +59,7 @@ export class DisplayController {
   /** `display.message`（`sodactl display send` のデータ）を、その面の枠へ渡す登録（面の id → 受け手）。 */
   private readonly messageHandlers = new Map<string, Set<(data: unknown) => void>>();
 
-  constructor(private readonly opts: DisplayControllerOptions) {}
+  constructor(private readonly opts: DisplayControllerOptions) {opts.store.setViewMover(p=>opts.conn.request("tab.move_view",p));}
 
   private now(): number {
     return (this.opts.now ?? Date.now)();

@@ -26,7 +26,22 @@ afterEach(() => {
 });
 
 function makePane(id: string, cols: number): Pane {
-  return { id, tabId: "t1", label: null, cwd: "/", shell: "/bin/bash", cols, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr", agent: null, agentSession: null };
+  return {
+    id,
+    tabId: "t1",
+    label: null,
+    cwd: "/",
+    shell: "/bin/bash",
+    cols,
+    rows: 24,
+    status: "running",
+    failure: null,
+    busy: false,
+    title: "",
+    rightClick: "herdr",
+    agent: null,
+    agentSession: null,
+  };
 }
 
 function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] } {
@@ -50,8 +65,19 @@ function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] 
 function makeRegistry(): TerminalRegistry {
   const unsubscribed = new Set(["p1"]);
   return {
-    get: (paneId: string) => (paneId === "p1" ? { term, paneId, element: document.createElement("div"), webgl: false, lastUsed: 0, copy: {} } : undefined),
-    takePendingSubscriptions: (shown: Iterable<string>) => [...shown].filter((id) => unsubscribed.delete(id)),
+    get: (paneId: string) =>
+      paneId === "p1"
+        ? {
+            term,
+            paneId,
+            element: document.createElement("div"),
+            webgl: false,
+            lastUsed: 0,
+            copy: {},
+          }
+        : undefined,
+    takePendingSubscriptions: (shown: Iterable<string>) =>
+      [...shown].filter((id) => unsubscribed.delete(id)),
     markAllUnsubscribed: () => unsubscribed.add("p1"),
   } as unknown as TerminalRegistry;
 }
@@ -87,7 +113,10 @@ function mountHost(
   registry: TerminalRegistry,
   paneId: string | null,
   containerWidth: number,
-  opts: { viewSync?: Pick<ViewSync, "onViewEstablished">; connectionState?: "open" | "connecting" | "reconnecting" } = {},
+  opts: {
+    viewSync?: Pick<ViewSync, "onViewEstablished">;
+    connectionState?: "open" | "connecting" | "reconnecting";
+  } = {},
 ) {
   useViewStore(pinia).onConnectionState(opts.connectionState ?? "open");
   const paneIdRef = ref<string | null>(paneId);
@@ -96,7 +125,13 @@ function mountHost(
   let exposed!: ReturnType<typeof useFitToScreen>;
   const Host = defineComponent({
     setup() {
-      exposed = useFitToScreen({ conn, registry, viewSync, paneId: paneIdRef, container: containerRef });
+      exposed = useFitToScreen({
+        conn,
+        registry,
+        viewSync,
+        paneId: paneIdRef,
+        container: containerRef,
+      });
       return () => h("div");
     },
   });
@@ -129,6 +164,9 @@ describe("useFitToScreen", () => {
     toggleFit();
     expect(fitEnabled.value).toBe(true);
     expect(conn.requests).toEqual([["client.fit", { enabled: true }]]);
+    expect(scale.value).toBeLessThan(1); // PTYの更新前もはみ出させない
+    useSessionStore(pinia).paneSizeChanged("p1", 40, 24);
+    await new Promise((r) => setTimeout(r, 0));
     expect(scale.value).toBe(1);
 
     toggleFit();
@@ -137,6 +175,7 @@ describe("useFitToScreen", () => {
       ["client.fit", { enabled: true }],
       ["client.fit", { enabled: false }],
     ]);
+    useSessionStore(pinia).paneSizeChanged("p1", 200, 24);
     await new Promise((r) => setTimeout(r, 0));
     expect(scale.value).toBeLessThan(1);
   });
@@ -170,13 +209,29 @@ describe("useFitToScreen", () => {
  */
 describe("useFitToScreen — 繋ぎ直した後の client.fit の送り直し（D108）", () => {
   const leaf = document.createElement("div");
-  leaf.getBoundingClientRect = () => ({ width: 720, height: 360, x: 0, y: 0, top: 0, left: 0, right: 720, bottom: 360, toJSON: () => ({}) }) as DOMRect;
+  leaf.getBoundingClientRect = () =>
+    ({
+      width: 720,
+      height: 360,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 720,
+      bottom: 360,
+      toJSON: () => ({}),
+    }) as DOMRect;
   const view = { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: leaf }] };
 
   function setup(connectionState: "open" | "connecting" = "open") {
     useSessionStore(pinia).paneUpserted(makePane("p1", 40));
     const conn = makeConnection();
-    const viewSync = new ViewSync({ conn, registry: makeRegistry(), getScrollbackLines: () => 1000, getCellSize: () => ({ width: 9, height: 18 }) });
+    const viewSync = new ViewSync({
+      conn,
+      registry: makeRegistry(),
+      getScrollbackLines: () => 1000,
+      getCellSize: () => ({ width: 9, height: 18 }),
+    });
     const host = mountHost(conn, makeRegistry(), "p1", 400, { viewSync, connectionState });
     return { conn, viewSync, ...host };
   }
@@ -197,7 +252,10 @@ describe("useFitToScreen — 繋ぎ直した後の client.fit の送り直し（
     viewSync.commit(view);
     expect(fitEnabled.value).toBe(true); // 手元の状態は持ち越す（ボタンは押された表示のまま）
     expect(conn.requests).toEqual([
-      ["client.view", { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }] }],
+      [
+        "client.view",
+        { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }] },
+      ],
       ["client.fit", { enabled: true }],
       ["pane.subscribe", { paneId: "p1", scrollbackLines: 1000 }],
     ]);

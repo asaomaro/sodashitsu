@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { DEFAULT_THEME_NAME, isThemeName, THEME_APPEARANCE, THEME_NAMES, type AgentIntegrationKind, type ThemeName } from "@sodashitsu/protocol";
+import {
+  DEFAULT_THEME_NAME,
+  isThemeName,
+  THEME_APPEARANCE,
+  THEME_NAMES,
+  type AgentIntegrationKind,
+  type ThemeName,
+} from "@sodashitsu/protocol";
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { ActionDispatcherKey, DeviceKindKey, NotificationControllerKey } from "../injection.js";
 import type { PaneBorders } from "../layout/paneChrome.js";
@@ -19,11 +26,21 @@ import {
   type TabBarPosition,
   type TabBarRightEntry,
 } from "@sodashitsu/client-core";
-import { CSS_VAR_LABELS, isValidCssColor, type ThemeOverrideBucket } from "../theme/themeOverrides.js";
+import {
+  CSS_VAR_LABELS,
+  isValidCssColor,
+  type ThemeOverrideBucket,
+} from "../theme/themeOverrides.js";
 import { CSS_VARS, type CssVar } from "@sodashitsu/client-core";
 import { mobileViewportQuery } from "../mobile/detect.js";
 import { resolveTabBarAlways } from "../composables/useUiStyle.js";
-import { keepChosen, scrollTopFor, sectionAtScroll, stepSection, type SpyInput } from "../settings/sectionSpy.js";
+import {
+  keepChosen,
+  scrollTopFor,
+  sectionAtScroll,
+  stepSection,
+  type SpyInput,
+} from "../settings/sectionSpy.js";
 import ExtensionSettings from "./ExtensionSettings.vue";
 import LoginSettings from "./LoginSettings.vue";
 import AgentToolsSettings from "./AgentToolsSettings.vue";
@@ -49,7 +66,8 @@ const store = useNotificationsStore();
 const controller = inject(NotificationControllerKey);
 // 既存のダイアログと同じ流儀（`ConfirmDialog.vue`）。握りつぶすと、結線を落としたときに
 // **「この環境では使えません」という嘘の理由**が利用者に出て、誰も気づかない。
-if (!controller) throw new Error("SettingsDialog: NotificationControllerKey が provide されていません");
+if (!controller)
+  throw new Error("SettingsDialog: NotificationControllerKey が provide されていません");
 
 const session = useSessionStore();
 const settings = useSettingsStore();
@@ -115,7 +133,9 @@ const desktopNote = computed(() => {
 
 const soundNote = computed(() => {
   if (!store.soundUsable) return "この環境では音を鳴らせません（ブラウザが対応していません）。";
-  return store.soundBlocked ? "この画面をまだ操作していないため鳴らせませんでした。どこかを押すと鳴るようになります。" : "";
+  return store.soundBlocked
+    ? "この画面をまだ操作していないため鳴らせませんでした。どこかを押すと鳴るようになります。"
+    : "";
 });
 
 watch(
@@ -230,7 +250,11 @@ function resetTabBarAlways(): void {
 }
 /** 画面に効いている値（`useUiStyle().tabBarAlways` と同じ規則 `resolveTabBarAlways`。1 列かは、リスナーを増やさず、その場で読む）。 */
 const tabBarAlwaysEffective = computed(() =>
-  resolveTabBarAlways(settings.tabBarAlways, settings.uiStyle === "modern", typeof window.matchMedia === "function" && mobileViewportQuery().matches),
+  resolveTabBarAlways(
+    settings.tabBarAlways,
+    settings.uiStyle === "modern",
+    typeof window.matchMedia === "function" && mobileViewportQuery().matches,
+  ),
 );
 
 function togglePaneGaps(): void {
@@ -288,7 +312,8 @@ function addTabBarRightEntry(): void {
 function removeTabBarRightEntry(index: number, ev: Event): void {
   // 「追加」ボタンは `<ul class="tabbar-right-list">` の**外**（兄弟の `<div>`）にあるので、フォールバック先も
   // 含めて捜す範囲は fieldset 全体にする（`ul` だけだと「最後の行を消す→追加ボタンへ」が見つからない）。
-  const fieldsetEl = (ev.currentTarget as HTMLElement | null)?.closest("fieldset.tabbar-right-fieldset") ?? null;
+  const fieldsetEl =
+    (ev.currentTarget as HTMLElement | null)?.closest("fieldset.tabbar-right-fieldset") ?? null;
   settings.removeTabBarRightEntry(index);
   void nextTick(() => {
     // 消えた位置に繰り上がった行の［削除］。最後を消したときは無いので［追加］へ。
@@ -302,11 +327,17 @@ function moveTabBarRightEntry(index: number, direction: -1 | 1): void {
 }
 
 function onTabBarRightEntryFormatChange(index: number, ev: Event): void {
-  settings.updateTabBarRightEntry(index, { kind: "datetime", format: (ev.target as HTMLSelectElement).value as DatetimeFormat });
+  settings.updateTabBarRightEntry(index, {
+    kind: "datetime",
+    format: (ev.target as HTMLSelectElement).value as DatetimeFormat,
+  });
 }
 
 function onTabBarRightEntryTextChange(index: number, ev: Event): void {
-  settings.updateTabBarRightEntry(index, { kind: "text", text: (ev.target as HTMLInputElement).value });
+  settings.updateTabBarRightEntry(index, {
+    kind: "text",
+    text: (ev.target as HTMLInputElement).value,
+  });
 }
 
 /**
@@ -316,7 +347,10 @@ function onTabBarRightEntryTextChange(index: number, ev: Event): void {
  */
 function onTabBarRightEntryTextEnter(index: number, ev: KeyboardEvent): void {
   if (ev.isComposing || ev.keyCode === 229) return;
-  settings.updateTabBarRightEntry(index, { kind: "text", text: (ev.target as HTMLInputElement).value });
+  settings.updateTabBarRightEntry(index, {
+    kind: "text",
+    text: (ev.target as HTMLInputElement).value,
+  });
 }
 
 function onTabBarRightSeparatorChange(ev: Event): void {
@@ -332,7 +366,12 @@ function onTabBarRightSeparatorEnter(ev: KeyboardEvent): void {
 const limit = computed(() => session.limits.scrollbackLines);
 /** 「自動」の行に添える、この端末でいま効く行数（モバイルの利用者が「自動＝何行か」を知る手段がほかに無い）。 */
 const autoLines = computed(() => effectiveScrollback("auto", kind, limit.value));
-const choices = computed(() => scrollbackChoices(limit.value, typeof settings.scrollback === "number" ? settings.scrollback : undefined));
+const choices = computed(() =>
+  scrollbackChoices(
+    limit.value,
+    typeof settings.scrollback === "number" ? settings.scrollback : undefined,
+  ),
+);
 /**
  * 選ばれて見える行。**いつもちょうど 1 つ**——上限を超えた保存値は押さえた値（＝上限。必ず選択肢にある）の行、
  * 上限以下で段階に無い保存値は `scrollbackChoices` が選択肢に足している（D5）。保存値そのものは書き換えない。
@@ -353,8 +392,14 @@ function chooseScrollback(v: ScrollbackPref): void {
  */
 const fileLocalityChoices: { value: FileLocality; label: string }[] = [
   { value: "auto", label: "自動（接続元がサーバと同じマシンかで決める）" },
-  { value: "local", label: "同じマシンとして扱う（リンクはサーバのマシンのアプリで開き、ドロップは元のパスを渡す）" },
-  { value: "remote", label: "別のマシンとして扱う（リンクはダウンロードし、ドロップはサーバへ送る）" },
+  {
+    value: "local",
+    label: "同じマシンとして扱う（リンクはサーバのマシンのアプリで開き、ドロップは元のパスを渡す）",
+  },
+  {
+    value: "remote",
+    label: "別のマシンとして扱う（リンクはダウンロードし、ドロップはサーバへ送る）",
+  },
 ];
 
 /**
@@ -391,7 +436,10 @@ const displayPanelInitialChoices: readonly { value: "open" | "collapsed"; label:
   { value: "open", label: "開く" },
   { value: "collapsed", label: "たたむ（帯の行のボタンから開く）" },
 ];
-const displayPanelDockChoices: readonly { value: "right" | "left" | "top" | "bottom" | "float"; label: string }[] = [
+const displayPanelDockChoices: readonly {
+  value: "right" | "left" | "top" | "bottom" | "float";
+  label: string;
+}[] = [
   { value: "right", label: "右" },
   { value: "left", label: "左" },
   { value: "top", label: "上" },
@@ -435,12 +483,19 @@ const AGENT_INTEGRATION_KINDS: readonly { value: AgentIntegrationKind; label: st
 const agentIntegrationBusy = ref<AgentIntegrationKind | null>(null);
 const agentIntegrationMessage = ref<string | null>(null);
 
-async function toggleAgentIntegration(kind: AgentIntegrationKind, installed: boolean): Promise<void> {
+async function toggleAgentIntegration(
+  kind: AgentIntegrationKind,
+  installed: boolean,
+): Promise<void> {
   if (!actions || agentIntegrationBusy.value) return;
   agentIntegrationBusy.value = kind;
   try {
-    const result = installed ? await actions.uninstallAgentIntegration(kind) : await actions.installAgentIntegration(kind);
-    agentIntegrationMessage.value = result.ok ? result.message : (result.message ?? "操作に失敗しました");
+    const result = installed
+      ? await actions.uninstallAgentIntegration(kind)
+      : await actions.installAgentIntegration(kind);
+    agentIntegrationMessage.value = result.ok
+      ? result.message
+      : (result.message ?? "操作に失敗しました");
   } finally {
     agentIntegrationBusy.value = null;
   }
@@ -452,7 +507,12 @@ async function updateAgentIntegration(kind: AgentIntegrationKind): Promise<void>
   agentIntegrationBusy.value = kind;
   try {
     const result = await actions.installAgentIntegration(kind);
-    agentIntegrationMessage.value = result.ok ? (result.message ?? (kind === "claude" ? "更新しました。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。" : "更新しました。")) : (result.message ?? "更新に失敗しました");
+    agentIntegrationMessage.value = result.ok
+      ? (result.message ??
+        (kind === "claude"
+          ? "更新しました。すでに動いている Claude Code は、起動し直すと新しいフックが効きます。"
+          : "更新しました。"))
+      : (result.message ?? "更新に失敗しました");
   } finally {
     agentIntegrationBusy.value = null;
   }
@@ -475,15 +535,25 @@ const statusLineText = computed((): string => {
     invalid: `使えません（${s.message ?? "設定の形が想定と違います"}）`,
     unsupported: "この OS では使えません",
   };
-  const silent = s.silent ? "。動いた Claude Code から、まだ報告がありません（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性があります。応答が無いと、報告は来ません）" : "";
+  const silent = s.silent
+    ? "。動いた Claude Code から、まだ報告がありません（信頼されていないフォルダ・プロジェクトの設定の上書き・管理された設定の可能性があります。応答が無いと、報告は来ません）"
+    : "";
   return `${base[s.state] ?? s.state}${silent}`;
 });
 async function runStatusLine(action: "install" | "uninstall"): Promise<void> {
   if (!actions || statusLineBusy.value) return;
   statusLineBusy.value = true;
   try {
-    const r = action === "install" ? await actions.installStatusLineWrap() : await actions.uninstallStatusLineWrap();
-    agentIntegrationMessage.value = r.ok ? (r.message ?? (action === "install" ? "導入しました。すでに動いている Claude Code は、起動し直すと効きます。" : "外しました。")) : (r.message ?? "操作に失敗しました");
+    const r =
+      action === "install"
+        ? await actions.installStatusLineWrap()
+        : await actions.uninstallStatusLineWrap();
+    agentIntegrationMessage.value = r.ok
+      ? (r.message ??
+        (action === "install"
+          ? "導入しました。すでに動いている Claude Code は、起動し直すと効きます。"
+          : "外しました。"))
+      : (r.message ?? "操作に失敗しました");
   } finally {
     statusLineBusy.value = false;
   }
@@ -501,7 +571,8 @@ function toggleAgentIntegrationAutoResume(): void {
  */
 const darkThemes = THEME_NAMES.filter((n) => THEME_APPEARANCE[n] === "dark");
 const lightThemes = THEME_NAMES.filter((n) => THEME_APPEARANCE[n] === "light");
-const themeLabel = (n: ThemeName): string => (n === DEFAULT_THEME_NAME ? `${THEME_LABELS[n]}（既定）` : THEME_LABELS[n]);
+const themeLabel = (n: ThemeName): string =>
+  n === DEFAULT_THEME_NAME ? `${THEME_LABELS[n]}（既定）` : THEME_LABELS[n];
 /** 明るいとき・暗いときの「既定」（まだ選んでいない間の値＝1 つのテーマの対。design D7）。 */
 const themeSiblings = computed(() => siblingThemes(settings.theme));
 /** いま使っているテーマ（AC7）。自動の切替が入っていれば、どちらの明暗で選んだかを添える。 */
@@ -548,7 +619,8 @@ const confirmingOverrideReset = ref(false);
 function syncOverrideDrafts(): void {
   const drafts: Record<string, string> = {};
   for (const bucket of THEME_OVERRIDE_BUCKETS)
-    for (const key of CSS_VARS) drafts[draftKey(bucket, key)] = settings.themeOverrides[bucket][key] ?? "";
+    for (const key of CSS_VARS)
+      drafts[draftKey(bucket, key)] = settings.themeOverrides[bucket][key] ?? "";
   overrideDrafts.value = drafts;
 }
 
@@ -625,7 +697,9 @@ function openOnboarding(): void {
 /** 画面の節（`.settings-body` の直下の `section[aria-labelledby]`）とその見出し。見出しの無い節は飛ばす。 */
 function sectionHeadings(): { section: HTMLElement; heading: HTMLElement }[] {
   const out: { section: HTMLElement; heading: HTMLElement }[] = [];
-  for (const section of Array.from(bodyEl.value?.querySelectorAll<HTMLElement>(":scope > section[aria-labelledby]") ?? [])) {
+  for (const section of Array.from(
+    bodyEl.value?.querySelectorAll<HTMLElement>(":scope > section[aria-labelledby]") ?? [],
+  )) {
     const heading = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
     if (heading) out.push({ section, heading });
   }
@@ -637,12 +711,20 @@ function sectionHeadings(): { section: HTMLElement; heading: HTMLElement }[] {
 function buildMenu(): void {
   const found = sectionHeadings();
   for (const { heading } of found) heading.setAttribute("tabindex", "-1");
-  menuItems.value = found.map(({ heading }) => ({ id: heading.id, label: heading.textContent?.trim() ?? "" }));
+  menuItems.value = found.map(({ heading }) => ({
+    id: heading.id,
+    label: heading.textContent?.trim() ?? "",
+  }));
 }
 
 /** `<dialog>`（スクロールの入れ物）の中での位置。`scrollTop` と同じ座標。 */
 function topInDialog(el: Element, dialog: HTMLElement): number {
-  return el.getBoundingClientRect().top - dialog.getBoundingClientRect().top - dialog.clientTop + dialog.scrollTop;
+  return (
+    el.getBoundingClientRect().top -
+    dialog.getBoundingClientRect().top -
+    dialog.clientTop +
+    dialog.scrollTop
+  );
 }
 
 /** 題名の行の高さ＋その下の余白（`scroll-padding-top` の式と同じ高さ。その下が「見えている範囲」の上端）。 */
@@ -713,7 +795,8 @@ function keepCurrentItemVisible(): void {
   const item = menu?.children[current.value] as HTMLElement | undefined;
   if (!menu || !item || menu.scrollHeight <= menu.clientHeight) return;
   const margin = 8;
-  if (item.offsetTop < menu.scrollTop + margin) menu.scrollTop = Math.max(0, item.offsetTop - margin);
+  if (item.offsetTop < menu.scrollTop + margin)
+    menu.scrollTop = Math.max(0, item.offsetTop - margin);
   else if (item.offsetTop + item.offsetHeight > menu.scrollTop + menu.clientHeight - margin) {
     menu.scrollTop = item.offsetTop + item.offsetHeight - menu.clientHeight + margin;
   }
@@ -730,7 +813,13 @@ function onBodyFocusin(ev: FocusEvent): void {
 /** 利用者が自分でスクロールし始めたら、選んだ節を外す。**メニューの中で、メニューがスクロールできるときは外さない**（メニューだけが動く）。 */
 function onUserScroll(ev: Event): void {
   const menu = menuEl.value;
-  if (menu && ev.target instanceof Node && menu.contains(ev.target) && menu.scrollHeight > menu.clientHeight) return;
+  if (
+    menu &&
+    ev.target instanceof Node &&
+    menu.contains(ev.target) &&
+    menu.scrollHeight > menu.clientHeight
+  )
+    return;
   if (chosen.value === null) return;
   chosen.value = null;
   schedule();
@@ -760,7 +849,11 @@ function onNarrowChange(ev: MediaQueryListEvent): void {
   // 見出しが見える範囲に無ければ、`go` と同じ位置へスクロールする（フォーカスだけ画面の外へ移さない）。
   const input = readSpyInput(found);
   const top = input?.tops[at];
-  if (input && top !== undefined && (top < input.scrollTop + input.headerHeight - 2 || top >= input.scrollTop + input.viewHeight)) {
+  if (
+    input &&
+    top !== undefined &&
+    (top < input.scrollTop + input.headerHeight - 2 || top >= input.scrollTop + input.viewHeight)
+  ) {
     dialog.scrollTop = scrollTopFor(at, input);
   }
 }
@@ -879,7 +972,8 @@ function onMenuKeydown(ev: KeyboardEvent): void {
 }
 
 /** Tab の停止位置: メニューにフォーカスが無い間は今の節の項目だけ。ある間は、フォーカスのある項目だけ（矢印で動いた後の Tab がメニューの外へ出る）。 */
-const menuStop = (i: number): number => (menuFocus.value !== null ? menuFocus.value : current.value) === i ? 0 : -1;
+const menuStop = (i: number): number =>
+  (menuFocus.value !== null ? menuFocus.value : current.value) === i ? 0 : -1;
 
 function cancel(): void {
   commitNewCwdPath(); // 「指定した場所」以外では入力欄が使えず、下書きは保存値のまま（開くたびに戻す）なので何もしない
@@ -901,7 +995,10 @@ function onNativeCancel(ev: Event): void {
 </script>
 
 <template>
-  <dialog ref="dialogEl" class="settings-dialog" aria-labelledby="settings-title"
+  <dialog
+    ref="dialogEl"
+    class="settings-dialog"
+    aria-labelledby="settings-title"
     @cancel="onNativeCancel"
     @click.self="cancel"
     @keydown="onDialogKeydown"
@@ -919,7 +1016,15 @@ function onNativeCancel(ev: Event): void {
     <!-- 左の列（幅 768px 以上だけ）。**入れ物は grid のセルいっぱいに伸ばす**——`@click.self` は `<dialog>` 自身が押されたときだけ閉じるので、
          メニューを直に grid の子にしてセルより短くすると、その下の空きを押して閉じてしまう。項目は右の節の見出しから作る（20261004-settings-side-menu の design）。 -->
     <div class="settings-menu-col">
-      <nav v-if="menuItems.length > 0" ref="menuEl" class="settings-menu" aria-label="設定の節" @focusin="onMenuFocusin" @focusout="onMenuFocusout" @keydown="onMenuKeydown">
+      <nav
+        v-if="menuItems.length > 0"
+        ref="menuEl"
+        class="settings-menu"
+        aria-label="設定の節"
+        @focusin="onMenuFocusin"
+        @focusout="onMenuFocusout"
+        @keydown="onMenuKeydown"
+      >
         <button
           v-for="(item, i) in menuItems"
           :key="item.id"
@@ -934,581 +1039,777 @@ function onNativeCancel(ev: Event): void {
       </nav>
     </div>
     <div ref="bodyEl" class="settings-body" @focusin="onBodyFocusin">
-    <section class="settings-section" aria-labelledby="settings-notify">
-      <h3 id="settings-notify" class="settings-heading">通知</h3>
-      <ul class="settings-list">
-        <li class="settings-row">
-          <button ref="firstSwitch" type="button" role="switch" class="settings-switch" :aria-checked="store.prefs.toast" @click="toggleToast">
-            <span class="settings-mark">{{ store.prefs.toast ? "入" : "切" }}</span>
-            <span>画面の中で知らせる</span>
-          </button>
-        </li>
-        <li class="settings-row">
+      <section class="settings-section" aria-labelledby="settings-notify">
+        <h3 id="settings-notify" class="settings-heading">通知</h3>
+        <ul class="settings-list">
+          <li class="settings-row">
+            <button
+              ref="firstSwitch"
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="store.prefs.toast"
+              @click="toggleToast"
+            >
+              <span class="settings-mark">{{ store.prefs.toast ? "入" : "切" }}</span>
+              <span>画面の中で知らせる</span>
+            </button>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="store.prefs.desktop && desktopState === 'usable'"
+              :disabled="desktopState === 'denied' || desktopState === 'unusable'"
+              @click="toggleDesktop"
+            >
+              <span class="settings-mark">{{
+                store.prefs.desktop && desktopState === "usable" ? "入" : "切"
+              }}</span>
+              <span>OS の通知で知らせる</span>
+            </button>
+            <p v-if="desktopNote" class="settings-note">{{ desktopNote }}</p>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="store.prefs.sound && store.soundUsable"
+              :disabled="!store.soundUsable"
+              @click="toggleSound"
+            >
+              <span class="settings-mark">{{
+                store.prefs.sound && store.soundUsable ? "入" : "切"
+              }}</span>
+              <span>音で知らせる</span>
+            </button>
+            <p v-if="soundNote" class="settings-note">{{ soundNote }}</p>
+          </li>
+        </ul>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-theme">
+        <h3 id="settings-theme" class="settings-heading">テーマ</h3>
+        <div class="settings-theme">
+          <label class="settings-select-row">
+            <span>テーマ</span>
+            <select
+              class="settings-select"
+              :value="settings.theme"
+              aria-describedby="settings-theme-auto-note settings-theme-note"
+              @change="chooseTheme"
+            >
+              <optgroup label="暗いテーマ">
+                <option v-for="n in darkThemes" :key="n" :value="n">{{ themeLabel(n) }}</option>
+              </optgroup>
+              <optgroup label="明るいテーマ">
+                <option v-for="n in lightThemes" :key="n" :value="n">{{ themeLabel(n) }}</option>
+              </optgroup>
+            </select>
+          </label>
           <button
             type="button"
             role="switch"
             class="settings-switch"
-            :aria-checked="store.prefs.desktop && desktopState === 'usable'"
-            :disabled="desktopState === 'denied' || desktopState === 'unusable'"
-            @click="toggleDesktop"
+            :aria-checked="settings.themeAuto"
+            @click="toggleThemeAuto"
           >
-            <span class="settings-mark">{{ store.prefs.desktop && desktopState === "usable" ? "入" : "切" }}</span>
-            <span>OS の通知で知らせる</span>
+            <span class="settings-mark">{{ settings.themeAuto ? "入" : "切" }}</span>
+            <span>OS の明暗に合わせる</span>
           </button>
-          <p v-if="desktopNote" class="settings-note">{{ desktopNote }}</p>
-        </li>
-        <li class="settings-row">
-          <button
-            type="button"
-            role="switch"
-            class="settings-switch"
-            :aria-checked="store.prefs.sound && store.soundUsable"
-            :disabled="!store.soundUsable"
-            @click="toggleSound"
-          >
-            <span class="settings-mark">{{ store.prefs.sound && store.soundUsable ? "入" : "切" }}</span>
-            <span>音で知らせる</span>
-          </button>
-          <p v-if="soundNote" class="settings-note">{{ soundNote }}</p>
-        </li>
-      </ul>
-    </section>
-    <section class="settings-section" aria-labelledby="settings-theme">
-      <h3 id="settings-theme" class="settings-heading">テーマ</h3>
-      <div class="settings-theme">
-        <label class="settings-select-row">
-          <span>テーマ</span>
-          <select
-            class="settings-select"
-            :value="settings.theme"
-            aria-describedby="settings-theme-auto-note settings-theme-note"
-            @change="chooseTheme"
-          >
-            <optgroup label="暗いテーマ">
-              <option v-for="n in darkThemes" :key="n" :value="n">{{ themeLabel(n) }}</option>
-            </optgroup>
-            <optgroup label="明るいテーマ">
-              <option v-for="n in lightThemes" :key="n" :value="n">{{ themeLabel(n) }}</option>
-            </optgroup>
-          </select>
-        </label>
-        <button type="button" role="switch" class="settings-switch" :aria-checked="settings.themeAuto" @click="toggleThemeAuto">
-          <span class="settings-mark">{{ settings.themeAuto ? "入" : "切" }}</span>
-          <span>OS の明暗に合わせる</span>
-        </button>
-        <!-- 入れて出す欄は切り替えの**下**に置く（上に差し込むと、押した切り替え自身が下へずれて押し直しが外れる）。 -->
-        <template v-if="settings.themeAuto">
-          <p id="settings-theme-auto-note" class="settings-note">
-            入れている間は「テーマ」を使いません。「テーマ」でほかのテーマを選ぶと、合わせるのをやめてそのテーマにします。
+          <!-- 入れて出す欄は切り替えの**下**に置く（上に差し込むと、押した切り替え自身が下へずれて押し直しが外れる）。 -->
+          <template v-if="settings.themeAuto">
+            <p id="settings-theme-auto-note" class="settings-note">
+              入れている間は「テーマ」を使いません。「テーマ」でほかのテーマを選ぶと、合わせるのをやめてそのテーマにします。
+            </p>
+            <label class="settings-select-row">
+              <span>明るいとき</span>
+              <select
+                class="settings-select"
+                :value="settings.themeLight ?? ''"
+                @change="chooseThemeFor('light', $event)"
+              >
+                <option value="">既定（{{ THEME_LABELS[themeSiblings.light] }}）</option>
+                <optgroup label="明るいテーマ">
+                  <option v-for="n in lightThemes" :key="n" :value="n">
+                    {{ THEME_LABELS[n] }}
+                  </option>
+                </optgroup>
+                <optgroup label="暗いテーマ">
+                  <option v-for="n in darkThemes" :key="n" :value="n">{{ THEME_LABELS[n] }}</option>
+                </optgroup>
+              </select>
+            </label>
+            <label class="settings-select-row">
+              <span>暗いとき</span>
+              <select
+                class="settings-select"
+                :value="settings.themeDark ?? ''"
+                @change="chooseThemeFor('dark', $event)"
+              >
+                <option value="">既定（{{ THEME_LABELS[themeSiblings.dark] }}）</option>
+                <optgroup label="暗いテーマ">
+                  <option v-for="n in darkThemes" :key="n" :value="n">{{ THEME_LABELS[n] }}</option>
+                </optgroup>
+                <optgroup label="明るいテーマ">
+                  <option v-for="n in lightThemes" :key="n" :value="n">
+                    {{ THEME_LABELS[n] }}
+                  </option>
+                </optgroup>
+              </select>
+            </label>
+          </template>
+          <p id="settings-theme-note" class="settings-note" aria-live="polite">
+            {{ themeNowNote }}
           </p>
-          <label class="settings-select-row">
-            <span>明るいとき</span>
-            <select class="settings-select" :value="settings.themeLight ?? ''" @change="chooseThemeFor('light', $event)">
-              <option value="">既定（{{ THEME_LABELS[themeSiblings.light] }}）</option>
-              <optgroup label="明るいテーマ">
-                <option v-for="n in lightThemes" :key="n" :value="n">{{ THEME_LABELS[n] }}</option>
-              </optgroup>
-              <optgroup label="暗いテーマ">
-                <option v-for="n in darkThemes" :key="n" :value="n">{{ THEME_LABELS[n] }}</option>
-              </optgroup>
-            </select>
-          </label>
-          <label class="settings-select-row">
-            <span>暗いとき</span>
-            <select class="settings-select" :value="settings.themeDark ?? ''" @change="chooseThemeFor('dark', $event)">
-              <option value="">既定（{{ THEME_LABELS[themeSiblings.dark] }}）</option>
-              <optgroup label="暗いテーマ">
-                <option v-for="n in darkThemes" :key="n" :value="n">{{ THEME_LABELS[n] }}</option>
-              </optgroup>
-              <optgroup label="明るいテーマ">
-                <option v-for="n in lightThemes" :key="n" :value="n">{{ THEME_LABELS[n] }}</option>
-              </optgroup>
-            </select>
-          </label>
-        </template>
-        <p id="settings-theme-note" class="settings-note" aria-live="polite">{{ themeNowNote }}</p>
 
-        <details class="settings-theme-overrides">
-          <summary>色の個別の上書き（上級者向け）</summary>
-          <p class="settings-note">
-            押した色がそのまま反映・保存されます。既定のコントラスト調整はかかりません。空欄にして確定すると既定へ戻ります。
-          </p>
-          <ul class="theme-override-list">
-            <li v-for="key in CSS_VARS" :key="key" class="theme-override-row">
-              <div class="theme-override-label">
-                <code>{{ key }}</code>
-                <span>{{ CSS_VAR_LABELS[key] }}</span>
-              </div>
-              <div v-for="bucket in THEME_OVERRIDE_BUCKETS" :key="bucket" class="theme-override-field">
-                <span class="theme-override-bucket-label">{{ bucketLabel(bucket) }}</span>
-                <input
-                  type="text"
-                  class="theme-override-input"
-                  :data-override-input="draftKey(bucket, key)"
-                  v-model="overrideDrafts[draftKey(bucket, key)]"
-                  :aria-label="`「${CSS_VAR_LABELS[key]}」の${bucketLabel(bucket)}の色`"
-                  autocomplete="off"
-                  spellcheck="false"
-                  @change="commitOverride(bucket, key)"
-                  @keydown.enter="onOverrideEnter(bucket, key, $event)"
-                />
-                <button
-                  v-if="isOverridden(bucket, key)"
-                  type="button"
-                  class="settings-btn"
-                  :aria-label="`「${CSS_VAR_LABELS[key]}」の${bucketLabel(bucket)}を既定に戻す`"
-                  @click="resetOverride(bucket, key)"
+          <details class="settings-theme-overrides">
+            <summary>色の個別の上書き（上級者向け）</summary>
+            <p class="settings-note">
+              押した色がそのまま反映・保存されます。既定のコントラスト調整はかかりません。空欄にして確定すると既定へ戻ります。
+            </p>
+            <ul class="theme-override-list">
+              <li v-for="key in CSS_VARS" :key="key" class="theme-override-row">
+                <div class="theme-override-label">
+                  <code>{{ key }}</code>
+                  <span>{{ CSS_VAR_LABELS[key] }}</span>
+                </div>
+                <div
+                  v-for="bucket in THEME_OVERRIDE_BUCKETS"
+                  :key="bucket"
+                  class="theme-override-field"
                 >
-                  既定に戻す
-                </button>
-              </div>
-            </li>
-          </ul>
-          <button
-            v-if="!confirmingOverrideReset"
-            type="button"
-            class="settings-btn"
-            data-reset-all-overrides
-            @click="askResetAllOverrides"
-          >
-            すべての上書きを既定に戻す
-          </button>
-          <div
-            v-else
-            class="theme-override-confirm"
-            role="group"
-            aria-label="すべての上書きを既定に戻す確認"
-            @keydown.esc.stop.prevent="endResetAllOverridesConfirm"
-          >
-            <span>すべての色の上書きを既定へ戻します。取り消せません。</span>
-            <button type="button" class="settings-btn" data-confirm-yes-overrides @click="confirmResetAllOverrides">
-              戻す
-            </button>
-            <button type="button" class="settings-btn" data-confirm-no-overrides @click="endResetAllOverridesConfirm">
-              やめる
-            </button>
-          </div>
-          <p class="settings-note theme-override-message" role="status" aria-live="polite">{{ overrideMessage }}</p>
-        </details>
-      </div>
-    </section>
-    <section class="settings-section" aria-labelledby="settings-display">
-      <h3 id="settings-display" class="settings-heading">表示</h3>
-      <ul class="settings-list">
-        <li class="settings-row">
-          <button type="button" role="switch" class="settings-switch" :aria-checked="settings.statusSymbols" @click="toggleSymbols">
-            <span class="settings-mark">{{ settings.statusSymbols ? "入" : "切" }}</span>
-            <span>状態を記号でも示す</span>
-          </button>
-          <p class="settings-note">{{ symbolsNote }}</p>
-        </li>
-        <li class="settings-row">
-          <fieldset class="settings-fieldset" aria-describedby="settings-pane-borders-note">
-            <legend class="settings-legend">pane の枠の表示</legend>
-            <label v-for="c in paneBordersChoices" :key="c.value" class="settings-radio">
-              <input
-                type="radio"
-                name="settings-pane-borders"
-                :value="c.value"
-                :checked="settings.paneBorders === c.value"
-                @change="choosePaneBorders(c.value)"
-              />
-              <span>{{ c.label }}</span>
-            </label>
-          </fieldset>
-          <p id="settings-pane-borders-note" class="settings-note">
-            余白の無い辺（枠を表示しないときの外周の辺と、隙間を切ったときの隣と接する辺）では、枠の右クリックでメニューを開けず、選択の強調も出ません。枠を表示しないときは名前の表示（ドラッグの掴み手）も出ません。メニューは選んでいる pane の枠へ Tab で移り、Enter で開けます。
-          </p>
-        </li>
-        <li class="settings-row">
-          <button
-            type="button"
-            role="switch"
-            class="settings-switch"
-            :aria-checked="settings.paneGaps"
-            aria-describedby="settings-pane-borders-note"
-            @click="togglePaneGaps"
-          >
-            <span class="settings-mark">{{ settings.paneGaps ? "入" : "切" }}</span>
-            <span>pane の間に隙間を空ける</span>
-          </button>
-        </li>
-        <li class="settings-row">
-          <fieldset class="settings-fieldset">
-            <legend class="settings-legend">pane の枠・隙間の太さ</legend>
-            <label v-for="c in paneFrameChoices" :key="c.value" class="settings-radio">
-              <input
-                type="radio"
-                name="settings-pane-frame-thickness"
-                :value="c.value"
-                :checked="settings.paneFrameThickness === c.value"
-                @change="choosePaneFrameThickness(c.value)"
-              />
-              <span>{{ c.label }}</span>
-            </label>
-          </fieldset>
-        </li>
-        <li class="settings-row">
-          <fieldset class="settings-fieldset">
-            <legend class="settings-legend">画面の様式</legend>
-            <label v-for="c in uiStyleChoices" :key="c.value" class="settings-radio">
-              <input
-                type="radio"
-                name="settings-ui-style"
-                :value="c.value"
-                :checked="settings.uiStyle === c.value"
-                @change="chooseUiStyle(c.value)"
-              />
-              <span>{{ c.label }}</span>
-            </label>
-          </fieldset>
-        </li>
-        <li class="settings-row">
-          <button type="button" role="switch" class="settings-switch" :aria-checked="settings.paneAgentNameVisible" @click="toggleAgentNameVisible">
-            <span class="settings-mark">{{ settings.paneAgentNameVisible ? "入" : "切" }}</span>
-            <span>pane にエージェント名を表示する</span>
-          </button>
-        </li>
-        <li class="settings-row">
-          <button type="button" role="switch" class="settings-switch" :aria-checked="settings.paneOuterBorders" @click="togglePaneOuterBorders">
-            <span class="settings-mark">{{ settings.paneOuterBorders ? "入" : "切" }}</span>
-            <span>pane 領域の外周の枠</span>
-          </button>
-        </li>
-        <li class="settings-row">
-          <button type="button" role="switch" class="settings-switch" data-setting="tab-bar-always" :aria-checked="tabBarAlwaysEffective" @click="toggleTabBarAlways">
-            <span class="settings-mark">{{ tabBarAlwaysEffective ? "入" : "切" }}</span>
-            <span>tab が 1 つのときも tab バーを出す</span>
-          </button>
-          <span class="settings-sub">
-            <template v-if="settings.tabBarAlways === null">様式に従っています（クラシック: 出さない・モダン: 出す）</template>
-            <button v-else type="button" class="settings-btn" data-setting="tab-bar-always-reset" @click="resetTabBarAlways">既定に戻す</button>
-          </span>
-        </li>
-        <li class="settings-row">
-          <label class="settings-select-row">
-            <span>tab バーの位置</span>
-            <select class="settings-select" :value="settings.tabBarPosition" @change="onTabBarPositionChange">
-              <option v-for="p in TAB_BAR_POSITIONS" :key="p.value" :value="p.value">{{ p.label }}</option>
-            </select>
-          </label>
-        </li>
-        <li class="settings-row">
-          <fieldset class="settings-fieldset tabbar-right-fieldset">
-            <legend class="settings-legend">tab バー右端の表示</legend>
-            <ul class="tabbar-right-list">
-              <li v-for="(entry, index) in settings.tabBarRight" :key="index" class="tabbar-right-entry">
-                <span class="tabbar-right-entry-kind">{{ entryKindLabel(entry.kind) }}</span>
-                <select
-                  v-if="entry.kind === 'datetime'"
-                  class="settings-select"
-                  :value="entry.format"
-                  aria-label="日時の書式"
-                  @change="onTabBarRightEntryFormatChange(index, $event)"
-                >
-                  <option v-for="f in DATETIME_FORMATS" :key="f.value" :value="f.value">{{ f.label }}</option>
-                </select>
-                <input
-                  v-if="entry.kind === 'text'"
-                  type="text"
-                  class="settings-path"
-                  aria-label="固定文字列"
-                  :value="entry.text"
-                  @change="onTabBarRightEntryTextChange(index, $event)"
-                  @keydown.enter="onTabBarRightEntryTextEnter(index, $event)"
-                />
-                <button type="button" class="settings-btn" :disabled="index === 0" @click="moveTabBarRightEntry(index, -1)">上へ</button>
-                <button
-                  type="button"
-                  class="settings-btn"
-                  :disabled="index === settings.tabBarRight.length - 1"
-                  @click="moveTabBarRightEntry(index, 1)"
-                >
-                  下へ
-                </button>
-                <button type="button" class="settings-btn" data-remove-entry @click="removeTabBarRightEntry(index, $event)">削除</button>
+                  <span class="theme-override-bucket-label">{{ bucketLabel(bucket) }}</span>
+                  <input
+                    type="text"
+                    class="theme-override-input"
+                    :data-override-input="draftKey(bucket, key)"
+                    v-model="overrideDrafts[draftKey(bucket, key)]"
+                    :aria-label="`「${CSS_VAR_LABELS[key]}」の${bucketLabel(bucket)}の色`"
+                    autocomplete="off"
+                    spellcheck="false"
+                    @change="commitOverride(bucket, key)"
+                    @keydown.enter="onOverrideEnter(bucket, key, $event)"
+                  />
+                  <button
+                    v-if="isOverridden(bucket, key)"
+                    type="button"
+                    class="settings-btn"
+                    :aria-label="`「${CSS_VAR_LABELS[key]}」の${bucketLabel(bucket)}を既定に戻す`"
+                    @click="resetOverride(bucket, key)"
+                  >
+                    既定に戻す
+                  </button>
+                </div>
               </li>
             </ul>
-            <div class="tabbar-right-add">
-              <label class="settings-select-row">
-                <span>追加する種類</span>
-                <select v-model="newEntryKind" class="settings-select">
-                  <option v-for="k in ENTRY_KINDS" :key="k.value" :value="k.value">{{ k.label }}</option>
-                </select>
-              </label>
+            <button
+              v-if="!confirmingOverrideReset"
+              type="button"
+              class="settings-btn"
+              data-reset-all-overrides
+              @click="askResetAllOverrides"
+            >
+              すべての上書きを既定に戻す
+            </button>
+            <div
+              v-else
+              class="theme-override-confirm"
+              role="group"
+              aria-label="すべての上書きを既定に戻す確認"
+              @keydown.esc.stop.prevent="endResetAllOverridesConfirm"
+            >
+              <span>すべての色の上書きを既定へ戻します。取り消せません。</span>
               <button
                 type="button"
                 class="settings-btn"
-                data-add-entry
-                :disabled="settings.tabBarRight.length >= MAX_TAB_BAR_RIGHT_ENTRIES"
-                @click="addTabBarRightEntry"
+                data-confirm-yes-overrides
+                @click="confirmResetAllOverrides"
               >
-                追加
+                戻す
+              </button>
+              <button
+                type="button"
+                class="settings-btn"
+                data-confirm-no-overrides
+                @click="endResetAllOverridesConfirm"
+              >
+                やめる
               </button>
             </div>
-            <label class="settings-select-row">
-              <span>右端エントリの区切り文字</span>
-              <input
-                type="text"
-                class="settings-path"
-                aria-label="区切り文字"
-                :value="settings.tabBarRightSeparator"
-                @change="onTabBarRightSeparatorChange"
-                @keydown.enter="onTabBarRightSeparatorEnter"
-              />
-            </label>
-          </fieldset>
-        </li>
-        <!-- サイドバーの行の並び・見た目・条件（20260927-sidebar-row-tokens。herdr の [ui.sidebar.*].rows）。 -->
-        <li class="settings-row">
-          <SidebarRowsSettings />
-        </li>
-      </ul>
-    </section>
-    <section class="settings-section" aria-labelledby="settings-terminal">
-      <h3 id="settings-terminal" class="settings-heading">端末</h3>
-      <fieldset class="settings-fieldset">
-        <legend class="settings-legend">scrollback（新しく開く pane から効きます）</legend>
-        <label class="settings-radio">
-          <input type="radio" name="settings-scrollback" value="auto" :checked="selectedScrollback === 'auto'" @change="chooseScrollback('auto')" />
-          <span>自動（この端末では {{ formatLines(autoLines) }} 行）</span>
-        </label>
-        <label v-for="n in choices" :key="n" class="settings-radio">
-          <input type="radio" name="settings-scrollback" :value="n" :checked="selectedScrollback === n" @change="chooseScrollback(n)" />
-          <span>{{ formatLines(n) }} 行</span>
-        </label>
-      </fieldset>
-      <fieldset class="settings-fieldset">
-        <legend class="settings-legend">ファイルのリンクとドロップ（このブラウザだけの設定）</legend>
-        <label v-for="c in fileLocalityChoices" :key="c.value" class="settings-radio">
-          <input
-            type="radio"
-            name="settings-file-locality"
-            :value="c.value"
-            :checked="settings.fileLocality === c.value"
-            @change="settings.setFileLocality(c.value)"
-          />
-          <span>{{ c.label }}</span>
-        </label>
-      </fieldset>
-      <fieldset class="settings-fieldset">
-        <legend class="settings-legend">新しく開く場所（workspace・tab・分割）</legend>
-        <label v-for="c in newCwdChoices" :key="c.value" class="settings-radio">
-          <input
-            type="radio"
-            name="settings-new-cwd"
-            :value="c.value"
-            :checked="settings.newCwdPolicy === c.value"
-            @change="chooseNewCwd(c.value)"
-          />
-          <span>{{ c.label }}</span>
-        </label>
-        <input
-          v-model="pathDraft"
-          type="text"
-          class="settings-path"
-          aria-label="指定した場所のパス"
-          aria-describedby="settings-path-note"
-          placeholder="~/work"
-          autocomplete="off"
-          autocapitalize="off"
-          autocorrect="off"
-          spellcheck="false"
-          :disabled="settings.newCwdPolicy !== 'path'"
-          @change="commitNewCwdPath"
-          @keydown.enter="onPathEnter"
-        />
-        <p id="settings-path-note" class="settings-note">絶対パスか ~/ で始まるパス（~ だけならホーム）。使えない場所なら、代わりの場所で開いて知らせます。</p>
-      </fieldset>
-      <fieldset class="settings-fieldset" data-settings-display-panel-initial>
-        <legend class="settings-legend">表示のパネルの初めの状態</legend>
-        <label v-for="c in displayPanelInitialChoices" :key="c.value" class="settings-radio">
-          <input
-            type="radio"
-            name="settings-display-panel-initial"
-            :value="c.value"
-            :checked="settings.displayPanelInitial === c.value"
-            @change="settings.setDisplayPanelInitial(c.value)"
-          />
-          <span>{{ c.label }}</span>
-        </label>
-        <p class="settings-note">利用者がまだ開閉していない表示のパネルだけに効きます（プログラムが「たたんで始める」と指定した面はたたまれます）。</p>
-      </fieldset>
-      <fieldset class="settings-fieldset" data-settings-display-panel-dock>
-        <legend class="settings-legend">表示のパネルの既定の置き場所</legend>
-        <label v-for="c in displayPanelDockChoices" :key="c.value" class="settings-radio">
-          <input
-            type="radio"
-            name="settings-display-panel-dock"
-            :value="c.value"
-            :checked="settings.displayPanelDock === c.value"
-            @change="settings.setDisplayPanelDock(c.value)"
-          />
-          <span>{{ c.label }}</span>
-        </label>
-        <p class="settings-note">利用者がまだ置き場所を決めていない面だけに効きます（プログラムの指定が先）。パネルの見出しをつかんで動かす・面のメニューで、面ごとに替えられます。</p>
-      </fieldset>
-      <fieldset class="settings-fieldset" data-settings-display-band-edge>
-        <legend class="settings-legend">表示の帯の既定の場所</legend>
-        <label v-for="c in displayBandEdgeChoices" :key="c.value" class="settings-radio">
-          <input
-            type="radio"
-            name="settings-display-band-edge"
-            :value="c.value"
-            :checked="settings.displayBandEdge === c.value"
-            @change="settings.setDisplayBandEdge(c.value)"
-          />
-          <span>{{ c.label }}</span>
-        </label>
-      </fieldset>
-      <ul class="settings-list">
-        <li class="settings-row">
-          <button
-            type="button"
-            role="switch"
-            class="settings-switch"
-            :aria-checked="settings.shellCwdTracking"
-            aria-describedby="settings-shell-cwd-note"
-            @click="toggleShellCwdTracking"
-          >
-            <span class="settings-mark">{{ settings.shellCwdTracking ? "入" : "切" }}</span>
-            <span>シェルの場所を追う（Windows）</span>
-          </button>
-          <p id="settings-shell-cwd-note" class="settings-note">
-            Windows のサーバで、pane の PowerShell・cmd がプロンプトのたびに今の場所を知らせるようにします（cd した場所を再起動後も保ちます）。新しく開く pane から効きます。
-          </p>
-        </li>
-        <li class="settings-row">
-          <button
-            type="button"
-            role="switch"
-            class="settings-switch"
-            :aria-checked="settings.displayScriptEnabled"
-            aria-describedby="settings-display-script-note"
-            data-settings-display-script
-            @click="toggleDisplayScript"
-          >
-            <span class="settings-mark">{{ settings.displayScriptEnabled ? "入" : "切" }}</span>
-            <span>スクリプトが動く表示を許可する</span>
-          </button>
-          <p id="settings-display-script-note" class="settings-note">
-            pane のプログラムや拡張が、スクリプトの動く表示（グラフなど）を出せるようになります。表示の中のスクリプトは、アプリや端末の中身には触れませんが、表示に見えているもの・表示に入力したものを外へ送れます。
-            信頼できるプログラムだけを使うときに有効にしてください（既定は無効。無効にすると、出ている表示は閉じます）。
-            この設定は、不注意やふつうのプログラムが出すのを防ぐものです。同じ OS の利用者で動くプログラムは、認証の情報を読めば自分で有効にできます（悪意のあるプログラムへの防御ではありません）。有効になると、つながっている画面に知らせます。詳しくは docs/display.md。
-          </p>
-        </li>
-      </ul>
-    </section>
-    <section class="settings-section" aria-labelledby="settings-agent-integration">
-      <h3 id="settings-agent-integration" class="settings-heading">エージェント連携</h3>
-      <p class="settings-note">
-        各エージェントの公式フックを使い、サーバの再起動後にその会話を自動で再開します。導入すると、
-        そのエージェントの設定ファイルにフックが追加されます（Codex など: 1 つ。他の設定は変更しません）。
-        <strong>Claude Code はフックが 6 つ</strong>入ります——会話の再開に加えて、エージェントが動かしているサブエージェントの表示に使います。
-        足りないフックがあれば「更新が必要」と出るので、［更新］で足せます（押すまで設定ファイルは書き換えません）。
-        更新と解除は、その後に起動した Claude Code から効きます（すでに動いているものは前のままです）。
-        この設定は<strong>サーバ全体</strong>で共有されます（ほかの節と違い、ブラウザごとではありません）。
-      </p>
-      <ul class="settings-list">
-        <li v-for="k in AGENT_INTEGRATION_KINDS" :key="k.value" class="settings-row agent-integration-row">
-          <div class="agent-integration-label">
-            <span>{{ k.label }}</span>
-            <span class="settings-note agent-integration-status">
-              <template v-if="!agentIntegrations.status">確認中…</template>
-              <template v-else>
-                {{ agentIntegrations.status.agents[k.value].installed ? "導入済み" : "未導入" }}
-                <template v-if="agentIntegrations.status.agents[k.value].needsUpdate">（更新が必要）</template>
-                <template v-if="!agentIntegrations.status.agents[k.value].cliDetected">（この PATH には見つかりません）</template>
-              </template>
+            <p class="settings-note theme-override-message" role="status" aria-live="polite">
+              {{ overrideMessage }}
+            </p>
+          </details>
+        </div>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-display">
+        <h3 id="settings-display" class="settings-heading">表示</h3>
+        <ul class="settings-list">
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.statusSymbols"
+              @click="toggleSymbols"
+            >
+              <span class="settings-mark">{{ settings.statusSymbols ? "入" : "切" }}</span>
+              <span>状態を記号でも示す</span>
+            </button>
+            <p class="settings-note">{{ symbolsNote }}</p>
+          </li>
+          <li class="settings-row">
+            <fieldset class="settings-fieldset" aria-describedby="settings-pane-borders-note">
+              <legend class="settings-legend">pane の枠の表示</legend>
+              <label v-for="c in paneBordersChoices" :key="c.value" class="settings-radio">
+                <input
+                  type="radio"
+                  name="settings-pane-borders"
+                  :value="c.value"
+                  :checked="settings.paneBorders === c.value"
+                  @change="choosePaneBorders(c.value)"
+                />
+                <span>{{ c.label }}</span>
+              </label>
+            </fieldset>
+            <p id="settings-pane-borders-note" class="settings-note">
+              余白の無い辺（枠を表示しないときの外周の辺と、隙間を切ったときの隣と接する辺）では、枠の右クリックでメニューを開けず、選択の強調も出ません。枠を表示しないときは、ペイン名と操作ボタンを浮かせて表示します。ペイン名を掴んで移動できます。メニューは選んでいる
+              pane の枠へ Tab で移り、Enter で開けます。
+            </p>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.paneGaps"
+              aria-describedby="settings-pane-borders-note"
+              @click="togglePaneGaps"
+            >
+              <span class="settings-mark">{{ settings.paneGaps ? "入" : "切" }}</span>
+              <span>pane の間に隙間を空ける</span>
+            </button>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.viewTitleVisible"
+              @click="settings.setViewTitleVisible(!settings.viewTitleVisible)"
+            >
+              <span class="settings-mark">{{ settings.viewTitleVisible ? "入" : "切" }}</span
+              ><span>ビューに機能名を表示する</span>
+            </button>
+          </li>
+          <li class="settings-row">
+            <fieldset class="settings-fieldset">
+              <legend class="settings-legend">pane の枠・隙間の太さ</legend>
+              <label v-for="c in paneFrameChoices" :key="c.value" class="settings-radio">
+                <input
+                  type="radio"
+                  name="settings-pane-frame-thickness"
+                  :value="c.value"
+                  :checked="settings.paneFrameThickness === c.value"
+                  @change="choosePaneFrameThickness(c.value)"
+                />
+                <span>{{ c.label }}</span>
+              </label>
+            </fieldset>
+          </li>
+          <li class="settings-row">
+            <fieldset class="settings-fieldset">
+              <legend class="settings-legend">画面の様式</legend>
+              <label v-for="c in uiStyleChoices" :key="c.value" class="settings-radio">
+                <input
+                  type="radio"
+                  name="settings-ui-style"
+                  :value="c.value"
+                  :checked="settings.uiStyle === c.value"
+                  @change="chooseUiStyle(c.value)"
+                />
+                <span>{{ c.label }}</span>
+              </label>
+            </fieldset>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.paneAgentNameVisible"
+              @click="toggleAgentNameVisible"
+            >
+              <span class="settings-mark">{{ settings.paneAgentNameVisible ? "入" : "切" }}</span>
+              <span>pane にエージェント名を表示する</span>
+            </button>
+            <p class="settings-note">
+              ペイン名にエージェント名を含める設定です。切にしても、手動の名前や端末タイトルとD&amp;D用の名前表示は残ります。
+            </p>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.paneOuterBorders"
+              @click="togglePaneOuterBorders"
+            >
+              <span class="settings-mark">{{ settings.paneOuterBorders ? "入" : "切" }}</span>
+              <span>pane 領域の外周の枠</span>
+            </button>
+            <p class="settings-note">
+              全ペインを囲む領域の外縁に1pxの線を追加します。各ペインの枠・名前・分割線には影響しません。
+            </p>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              data-setting="tab-bar-always"
+              :aria-checked="tabBarAlwaysEffective"
+              @click="toggleTabBarAlways"
+            >
+              <span class="settings-mark">{{ tabBarAlwaysEffective ? "入" : "切" }}</span>
+              <span>tab が 1 つのときも tab バーを出す</span>
+            </button>
+            <span class="settings-sub">
+              <template v-if="settings.tabBarAlways === null"
+                >様式に従っています（クラシック: 出さない・モダン: 出す）</template
+              >
+              <button
+                v-else
+                type="button"
+                class="settings-btn"
+                data-setting="tab-bar-always-reset"
+                @click="resetTabBarAlways"
+              >
+                既定に戻す
+              </button>
             </span>
-          </div>
-          <button
-            v-if="agentIntegrations.status?.agents[k.value].needsUpdate"
-            type="button"
-            class="settings-btn agent-integration-update"
-            :disabled="agentIntegrationBusy === k.value"
-            :aria-label="`${k.label} のフックを更新する`"
-            @click="updateAgentIntegration(k.value)"
-          >
-            更新
-          </button>
-          <button
-            type="button"
-            class="settings-btn"
-            :disabled="!agentIntegrations.status || agentIntegrationBusy === k.value"
-            @click="toggleAgentIntegration(k.value, agentIntegrations.status?.agents[k.value].installed ?? false)"
-          >
-            {{ agentIntegrations.status?.agents[k.value].installed ? "解除" : "導入" }}
-          </button>
-        </li>
-        <li v-if="agentIntegrations.status?.statusLine" class="settings-row agent-integration-row" data-statusline-wrap>
-          <div class="agent-integration-label">
-            <span>利用状況（ステータスライン）</span>
-            <span class="settings-note agent-integration-status" data-statusline-state>{{ statusLineText }}</span>
-          </div>
-          <button
-            v-if="statusLine?.state === 'needs_update'"
-            type="button"
-            class="settings-btn agent-integration-update"
-            :disabled="statusLineBusy"
-            aria-label="利用状況（ステータスライン）の包みを更新する"
-            @click="runStatusLine('install')"
-          >
-            更新
-          </button>
-          <button
-            v-if="statusLine?.state === 'installed' || statusLine?.state === 'needs_update'"
-            type="button"
-            class="settings-btn"
-            :disabled="statusLineBusy"
-            @click="runStatusLine('uninstall')"
-          >
-            外す
-          </button>
-          <button
-            v-else
-            type="button"
-            class="settings-btn"
-            :disabled="statusLineBusy || statusLine?.state === 'invalid' || statusLine?.state === 'unsupported'"
-            @click="runStatusLine('install')"
-          >
-            導入
-          </button>
-        </li>
-        <li v-if="agentIntegrations.status?.statusLine" class="settings-row">
-          <p class="settings-note">
-            Claude Code の制限（5 時間・週）とコストを見るために、ステータスラインの設定（<code>statusLine</code>）を、元の表示をそのまま返す小さな包みに替えます
-            （元の設定は控え、外すと戻ります。押したときだけ書き換えます）。送るのは、数字（コスト・コンテキストの使用率・制限の使用率とリセットの時刻）と、
-            モデルの名前・会話の id だけです。会話の名前・作業フォルダ・記録の場所・リポジトリの情報は送りません。信頼されていないフォルダや、
-            プロジェクトの設定が <code>statusLine</code> を持つときは、包みが呼ばれず、報告は届きません。
+          </li>
+          <li class="settings-row">
+            <label class="settings-select-row">
+              <span>tab バーの位置</span>
+              <select
+                class="settings-select"
+                :value="settings.tabBarPosition"
+                @change="onTabBarPositionChange"
+              >
+                <option v-for="p in TAB_BAR_POSITIONS" :key="p.value" :value="p.value">
+                  {{ p.label }}
+                </option>
+              </select>
+            </label>
+          </li>
+          <li class="settings-row">
+            <fieldset class="settings-fieldset tabbar-right-fieldset">
+              <legend class="settings-legend">tab バー右端の表示</legend>
+              <ul class="tabbar-right-list">
+                <li
+                  v-for="(entry, index) in settings.tabBarRight"
+                  :key="index"
+                  class="tabbar-right-entry"
+                >
+                  <span class="tabbar-right-entry-kind">{{ entryKindLabel(entry.kind) }}</span>
+                  <select
+                    v-if="entry.kind === 'datetime'"
+                    class="settings-select"
+                    :value="entry.format"
+                    aria-label="日時の書式"
+                    @change="onTabBarRightEntryFormatChange(index, $event)"
+                  >
+                    <option v-for="f in DATETIME_FORMATS" :key="f.value" :value="f.value">
+                      {{ f.label }}
+                    </option>
+                  </select>
+                  <input
+                    v-if="entry.kind === 'text'"
+                    type="text"
+                    class="settings-path"
+                    aria-label="固定文字列"
+                    :value="entry.text"
+                    @change="onTabBarRightEntryTextChange(index, $event)"
+                    @keydown.enter="onTabBarRightEntryTextEnter(index, $event)"
+                  />
+                  <button
+                    type="button"
+                    class="settings-btn"
+                    :disabled="index === 0"
+                    @click="moveTabBarRightEntry(index, -1)"
+                  >
+                    上へ
+                  </button>
+                  <button
+                    type="button"
+                    class="settings-btn"
+                    :disabled="index === settings.tabBarRight.length - 1"
+                    @click="moveTabBarRightEntry(index, 1)"
+                  >
+                    下へ
+                  </button>
+                  <button
+                    type="button"
+                    class="settings-btn"
+                    data-remove-entry
+                    @click="removeTabBarRightEntry(index, $event)"
+                  >
+                    削除
+                  </button>
+                </li>
+              </ul>
+              <div class="tabbar-right-add">
+                <label class="settings-select-row">
+                  <span>追加する種類</span>
+                  <select v-model="newEntryKind" class="settings-select">
+                    <option v-for="k in ENTRY_KINDS" :key="k.value" :value="k.value">
+                      {{ k.label }}
+                    </option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  class="settings-btn"
+                  data-add-entry
+                  :disabled="settings.tabBarRight.length >= MAX_TAB_BAR_RIGHT_ENTRIES"
+                  @click="addTabBarRightEntry"
+                >
+                  追加
+                </button>
+              </div>
+              <label class="settings-select-row">
+                <span>右端エントリの区切り文字</span>
+                <input
+                  type="text"
+                  class="settings-path"
+                  aria-label="区切り文字"
+                  :value="settings.tabBarRightSeparator"
+                  @change="onTabBarRightSeparatorChange"
+                  @keydown.enter="onTabBarRightSeparatorEnter"
+                />
+              </label>
+            </fieldset>
+          </li>
+          <!-- サイドバーの行の並び・見た目・条件（20260927-sidebar-row-tokens。herdr の [ui.sidebar.*].rows）。 -->
+          <li class="settings-row">
+            <SidebarRowsSettings />
+          </li>
+        </ul>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-terminal">
+        <h3 id="settings-terminal" class="settings-heading">端末</h3>
+        <fieldset class="settings-fieldset">
+          <legend class="settings-legend">scrollback（新しく開く pane から効きます）</legend>
+          <label class="settings-radio">
+            <input
+              type="radio"
+              name="settings-scrollback"
+              value="auto"
+              :checked="selectedScrollback === 'auto'"
+              @change="chooseScrollback('auto')"
+            />
+            <span>自動（この端末では {{ formatLines(autoLines) }} 行）</span>
+          </label>
+          <label v-for="n in choices" :key="n" class="settings-radio">
+            <input
+              type="radio"
+              name="settings-scrollback"
+              :value="n"
+              :checked="selectedScrollback === n"
+              @change="chooseScrollback(n)"
+            />
+            <span>{{ formatLines(n) }} 行</span>
+          </label>
+        </fieldset>
+        <fieldset class="settings-fieldset">
+          <legend class="settings-legend">
+            ファイルのリンクとドロップ（このブラウザだけの設定）
+          </legend>
+          <label v-for="c in fileLocalityChoices" :key="c.value" class="settings-radio">
+            <input
+              type="radio"
+              name="settings-file-locality"
+              :value="c.value"
+              :checked="settings.fileLocality === c.value"
+              @change="settings.setFileLocality(c.value)"
+            />
+            <span>{{ c.label }}</span>
+          </label>
+        </fieldset>
+        <fieldset class="settings-fieldset">
+          <legend class="settings-legend">新しく開く場所（workspace・tab・分割）</legend>
+          <label v-for="c in newCwdChoices" :key="c.value" class="settings-radio">
+            <input
+              type="radio"
+              name="settings-new-cwd"
+              :value="c.value"
+              :checked="settings.newCwdPolicy === c.value"
+              @change="chooseNewCwd(c.value)"
+            />
+            <span>{{ c.label }}</span>
+          </label>
+          <input
+            v-model="pathDraft"
+            type="text"
+            class="settings-path"
+            aria-label="指定した場所のパス"
+            aria-describedby="settings-path-note"
+            placeholder="~/work"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            :disabled="settings.newCwdPolicy !== 'path'"
+            @change="commitNewCwdPath"
+            @keydown.enter="onPathEnter"
+          />
+          <p id="settings-path-note" class="settings-note">
+            絶対パスか ~/ で始まるパス（~
+            だけならホーム）。使えない場所なら、代わりの場所で開いて知らせます。
           </p>
-        </li>
-        <li class="settings-row">
-          <button
-            type="button"
-            role="switch"
-            class="settings-switch"
-            :aria-checked="agentIntegrations.status?.autoResumeEnabled ?? true"
-            @click="toggleAgentIntegrationAutoResume"
+        </fieldset>
+        <fieldset class="settings-fieldset" data-settings-display-panel-initial>
+          <legend class="settings-legend">表示のパネルの初めの状態</legend>
+          <label v-for="c in displayPanelInitialChoices" :key="c.value" class="settings-radio">
+            <input
+              type="radio"
+              name="settings-display-panel-initial"
+              :value="c.value"
+              :checked="settings.displayPanelInitial === c.value"
+              @change="settings.setDisplayPanelInitial(c.value)"
+            />
+            <span>{{ c.label }}</span>
+          </label>
+          <p class="settings-note">
+            利用者がまだ開閉していない表示のパネルだけに効きます（プログラムが「たたんで始める」と指定した面はたたまれます）。
+          </p>
+        </fieldset>
+        <fieldset class="settings-fieldset" data-settings-display-panel-dock>
+          <legend class="settings-legend">表示のパネルの既定の置き場所</legend>
+          <label v-for="c in displayPanelDockChoices" :key="c.value" class="settings-radio">
+            <input
+              type="radio"
+              name="settings-display-panel-dock"
+              :value="c.value"
+              :checked="settings.displayPanelDock === c.value"
+              @change="settings.setDisplayPanelDock(c.value)"
+            />
+            <span>{{ c.label }}</span>
+          </label>
+          <p class="settings-note">
+            利用者がまだ置き場所を決めていない面だけに効きます（プログラムの指定が先）。パネルの見出しをつかんで動かす・面のメニューで、面ごとに替えられます。
+          </p>
+        </fieldset>
+        <fieldset class="settings-fieldset" data-settings-display-band-edge>
+          <legend class="settings-legend">表示の帯の既定の場所</legend>
+          <label v-for="c in displayBandEdgeChoices" :key="c.value" class="settings-radio">
+            <input
+              type="radio"
+              name="settings-display-band-edge"
+              :value="c.value"
+              :checked="settings.displayBandEdge === c.value"
+              @change="settings.setDisplayBandEdge(c.value)"
+            />
+            <span>{{ c.label }}</span>
+          </label>
+        </fieldset>
+        <ul class="settings-list">
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.shellCwdTracking"
+              aria-describedby="settings-shell-cwd-note"
+              @click="toggleShellCwdTracking"
+            >
+              <span class="settings-mark">{{ settings.shellCwdTracking ? "入" : "切" }}</span>
+              <span>シェルの場所を追う（Windows）</span>
+            </button>
+            <p id="settings-shell-cwd-note" class="settings-note">
+              Windows のサーバで、pane の PowerShell・cmd
+              がプロンプトのたびに今の場所を知らせるようにします（cd
+              した場所を再起動後も保ちます）。新しく開く pane から効きます。
+            </p>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="settings.displayScriptEnabled"
+              aria-describedby="settings-display-script-note"
+              data-settings-display-script
+              @click="toggleDisplayScript"
+            >
+              <span class="settings-mark">{{ settings.displayScriptEnabled ? "入" : "切" }}</span>
+              <span>スクリプトが動く表示を許可する</span>
+            </button>
+            <p id="settings-display-script-note" class="settings-note">
+              pane
+              のプログラムや拡張が、スクリプトの動く表示（グラフなど）を出せるようになります。表示の中のスクリプトは、アプリや端末の中身には触れませんが、表示に見えているもの・表示に入力したものを外へ送れます。
+              信頼できるプログラムだけを使うときに有効にしてください（既定は無効。無効にすると、出ている表示は閉じます）。
+              この設定は、不注意やふつうのプログラムが出すのを防ぐものです。同じ OS
+              の利用者で動くプログラムは、認証の情報を読めば自分で有効にできます（悪意のあるプログラムへの防御ではありません）。有効になると、つながっている画面に知らせます。詳しくは
+              docs/display.md。
+            </p>
+          </li>
+        </ul>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-agent-integration">
+        <h3 id="settings-agent-integration" class="settings-heading">エージェント連携</h3>
+        <p class="settings-note">
+          各エージェントの公式フックを使い、サーバの再起動後にその会話を自動で再開します。導入すると、
+          そのエージェントの設定ファイルにフックが追加されます（Codex など: 1
+          つ。他の設定は変更しません）。
+          <strong>Claude Code はフックが 6 つ</strong
+          >入ります——会話の再開に加えて、エージェントが動かしているサブエージェントの表示に使います。
+          足りないフックがあれば「更新が必要」と出るので、［更新］で足せます（押すまで設定ファイルは書き換えません）。
+          更新と解除は、その後に起動した Claude Code
+          から効きます（すでに動いているものは前のままです）。
+          この設定は<strong>サーバ全体</strong>で共有されます（ほかの節と違い、ブラウザごとではありません）。
+        </p>
+        <ul class="settings-list">
+          <li
+            v-for="k in AGENT_INTEGRATION_KINDS"
+            :key="k.value"
+            class="settings-row agent-integration-row"
           >
-            <span class="settings-mark">{{ (agentIntegrations.status?.autoResumeEnabled ?? true) ? "入" : "切" }}</span>
-            <span>サーバ再起動時に自動で再開する</span>
-          </button>
-        </li>
-      </ul>
-      <p v-if="agentIntegrationMessage" class="settings-note" role="status" aria-live="polite">{{ agentIntegrationMessage }}</p>
-    </section>
-    <ExtensionSettings />
-    <AgentToolsSettings />
-    <LoginSettings />
-    <KeySettings v-model:capturing="keysCapturing" :kind="kind" />
-    <!-- はじめの案内を開き直す（20260926-settings-onboarding の AC6）。設定画面は自分の watch で閉じる（kind が変わるので）。 -->
-    <p class="settings-reopen-onboarding">
-      <button type="button" class="settings-reopen-button" data-open-onboarding @click="openOnboarding">はじめの案内を開く</button>
-    </p>
-    <p class="settings-hint">
-      この設定はこのブラウザにだけ残ります（テーマは、このブラウザが操作している pane の色の問い合わせの答えにも使います）。Esc か「閉じる」で閉じます。
-    </p>
+            <div class="agent-integration-label">
+              <span>{{ k.label }}</span>
+              <span class="settings-note agent-integration-status">
+                <template v-if="!agentIntegrations.status">確認中…</template>
+                <template v-else>
+                  {{ agentIntegrations.status.agents[k.value].installed ? "導入済み" : "未導入" }}
+                  <template v-if="agentIntegrations.status.agents[k.value].needsUpdate"
+                    >（更新が必要）</template
+                  >
+                  <template v-if="!agentIntegrations.status.agents[k.value].cliDetected"
+                    >（この PATH には見つかりません）</template
+                  >
+                </template>
+              </span>
+            </div>
+            <button
+              v-if="agentIntegrations.status?.agents[k.value].needsUpdate"
+              type="button"
+              class="settings-btn agent-integration-update"
+              :disabled="agentIntegrationBusy === k.value"
+              :aria-label="`${k.label} のフックを更新する`"
+              @click="updateAgentIntegration(k.value)"
+            >
+              更新
+            </button>
+            <button
+              type="button"
+              class="settings-btn"
+              :disabled="!agentIntegrations.status || agentIntegrationBusy === k.value"
+              @click="
+                toggleAgentIntegration(
+                  k.value,
+                  agentIntegrations.status?.agents[k.value].installed ?? false,
+                )
+              "
+            >
+              {{ agentIntegrations.status?.agents[k.value].installed ? "解除" : "導入" }}
+            </button>
+          </li>
+          <li
+            v-if="agentIntegrations.status?.statusLine"
+            class="settings-row agent-integration-row"
+            data-statusline-wrap
+          >
+            <div class="agent-integration-label">
+              <span>利用状況（ステータスライン）</span>
+              <span class="settings-note agent-integration-status" data-statusline-state>{{
+                statusLineText
+              }}</span>
+            </div>
+            <button
+              v-if="statusLine?.state === 'needs_update'"
+              type="button"
+              class="settings-btn agent-integration-update"
+              :disabled="statusLineBusy"
+              aria-label="利用状況（ステータスライン）の包みを更新する"
+              @click="runStatusLine('install')"
+            >
+              更新
+            </button>
+            <button
+              v-if="statusLine?.state === 'installed' || statusLine?.state === 'needs_update'"
+              type="button"
+              class="settings-btn"
+              :disabled="statusLineBusy"
+              @click="runStatusLine('uninstall')"
+            >
+              外す
+            </button>
+            <button
+              v-else
+              type="button"
+              class="settings-btn"
+              :disabled="
+                statusLineBusy ||
+                statusLine?.state === 'invalid' ||
+                statusLine?.state === 'unsupported'
+              "
+              @click="runStatusLine('install')"
+            >
+              導入
+            </button>
+          </li>
+          <li v-if="agentIntegrations.status?.statusLine" class="settings-row">
+            <p class="settings-note">
+              Claude Code の制限（5
+              時間・週）とコストを見るために、ステータスラインの設定（<code>statusLine</code>）を、元の表示をそのまま返す小さな包みに替えます
+              （元の設定は控え、外すと戻ります。押したときだけ書き換えます）。送るのは、数字（コスト・コンテキストの使用率・制限の使用率とリセットの時刻）と、
+              モデルの名前・会話の id
+              だけです。会話の名前・作業フォルダ・記録の場所・リポジトリの情報は送りません。信頼されていないフォルダや、
+              プロジェクトの設定が
+              <code>statusLine</code> を持つときは、包みが呼ばれず、報告は届きません。
+            </p>
+          </li>
+          <li class="settings-row">
+            <button
+              type="button"
+              role="switch"
+              class="settings-switch"
+              :aria-checked="agentIntegrations.status?.autoResumeEnabled ?? true"
+              @click="toggleAgentIntegrationAutoResume"
+            >
+              <span class="settings-mark">{{
+                (agentIntegrations.status?.autoResumeEnabled ?? true) ? "入" : "切"
+              }}</span>
+              <span>サーバ再起動時に自動で再開する</span>
+            </button>
+          </li>
+        </ul>
+        <p v-if="agentIntegrationMessage" class="settings-note" role="status" aria-live="polite">
+          {{ agentIntegrationMessage }}
+        </p>
+      </section>
+      <ExtensionSettings />
+      <AgentToolsSettings />
+      <LoginSettings />
+      <KeySettings v-model:capturing="keysCapturing" :kind="kind" />
+      <!-- はじめの案内を開き直す（20260926-settings-onboarding の AC6）。設定画面は自分の watch で閉じる（kind が変わるので）。 -->
+      <p class="settings-reopen-onboarding">
+        <button
+          type="button"
+          class="settings-reopen-button"
+          data-open-onboarding
+          @click="openOnboarding"
+        >
+          はじめの案内を開く
+        </button>
+      </p>
+      <p class="settings-hint">
+        この設定はこのブラウザにだけ残ります（テーマは、このブラウザが操作している pane
+        の色の問い合わせの答えにも使います）。Esc か「閉じる」で閉じます。
+      </p>
     </div>
   </dialog>
 </template>

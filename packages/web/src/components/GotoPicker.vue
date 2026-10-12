@@ -141,15 +141,13 @@ function navigateTo(target: GotoTarget): void {
   if (target.kind === "workspace") {
     const ws = session.workspaces.get(target.workspaceId);
     if (!ws) return;
-    const tab = session.tabs.get(ws.activeTabId);
-    view.setView(target.workspaceId, ws.activeTabId);
-    if (tab) view.focusPane(tab.focusedPaneId);
+    view.selectWorkspace(target.workspaceId);
     void conn?.request("workspace.focus", { workspaceId: target.workspaceId }).catch(() => undefined);
   } else if (target.kind === "tab") {
     const tab = session.tabs.get(target.tabId);
     if (!tab) return;
     view.setView(tab.workspaceId, tab.id);
-    view.focusPane(tab.focusedPaneId);
+    view.focusPane(view.preferredPane(tab.id));
     void conn?.request("tab.focus", { tabId: target.tabId }).catch(() => undefined);
   } else {
     const pane = session.panes.get(target.paneId);

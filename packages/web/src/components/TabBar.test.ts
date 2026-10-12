@@ -1,4 +1,4 @@
-import type { MethodName, ParamsOf, ResultOf, Tab, Workspace } from "@sodashitsu/protocol";
+import type { MethodName, ParamsOf, ResultOf, Pane, Tab, Workspace } from "@sodashitsu/protocol";
 import { mount } from "@vue/test-utils";
 import { createPinia, type Pinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -124,6 +124,7 @@ describe("TabBar", () => {
     session.workspaceUpserted(makeWorkspace("w1", ["t1", "t2"]));
     session.tabUpserted(makeTab("t1", "w1"));
     session.tabUpserted(makeTab("t2", "w1", { focusedPaneId: "p2" }));
+    session.paneUpserted({id:"p2",tabId:"t2"} as Pane);
     view.setView("w1", "t1");
     const conn = makeConnection();
     const wrapper = mountTabBar(conn);
@@ -505,7 +506,7 @@ describe("TabBar — tab のドラッグでの並べ替え", () => {
     const view = useViewStore(pinia);
     const ids = Array.from({ length: N }, (_, i) => `t${i + 1}`);
     session.workspaceUpserted(makeWorkspace("w1", ids));
-    ids.forEach((id, i) => session.tabUpserted(makeTab(id, "w1", { focusedPaneId: `p${i + 1}` })));
+    ids.forEach((id, i) => {session.tabUpserted(makeTab(id, "w1", { focusedPaneId: `p${i + 1}` }));session.paneUpserted({id:`p${i+1}`,tabId:id} as Pane);});
     view.setView("w1", "t1");
     view.focusPane("p1");
     const conn = makeConnection();

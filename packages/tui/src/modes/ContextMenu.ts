@@ -1,4 +1,4 @@
-import {HEADER_ACTION_LABELS} from "@sodashitsu/protocol";
+import {AGENT_HEADER_ACTIONS,headerActionsFor,HEADER_ACTION_LABELS} from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -30,6 +30,8 @@ export interface MenuDeps {
   ui: UiState;
   model: SessionModel;
   actions: TuiDispatcher;
+  viewItems?:(id:string)=>MenuItem[];
+  conn?: import("../term/PaneRegistry.js").RequestPort;
 }
 
 /**
@@ -38,7 +40,8 @@ export interface MenuDeps {
 export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   const { model, actions } = deps;
   const target = menu.target;
-  if(target.kind === "agent-tools")return actions.agentActionsFor(target.paneId).map(action=>({label:HEADER_ACTION_LABELS[action],run:()=>actions.agentPaneAction(target.paneId,action)}));
+  if(target.kind === "view")return deps.viewItems?.(target.viewId)??[];
+  if(target.kind === "agent-tools")return actions.agentActionsFor(target.paneId).map(action=>({label:HEADER_ACTION_LABELS[action]+(action==='usage'?'（エージェント）':''),run:()=>actions.agentPaneAction(target.paneId,action)}));
   if (target.kind === "pane") {
     const pane = model.panes.get(target.paneId);
     const focused = model.focusedPaneId;
@@ -56,9 +59,10 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }]
         : []),
 
+      ...headerActionsFor(pane?.agent?.kind??'',!!pane?.agentSession,AGENT_HEADER_ACTIONS).filter(a=>a!=='fork').map(action=>({label:HEADER_ACTION_LABELS[action]+(action==='usage'?'（エージェント）':''),run:()=>actions.agentPaneAction(target.paneId,action)})),
       { label: "右へ分割", run: () => actions.splitPane(target.paneId, "right") },
       { label: "下へ分割", run: () => actions.splitPane(target.paneId, "down") },
-      { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },
+      { label: model.tabs.get(pane?.tabId??"")?.zoomedPaneId===target.paneId?"元のサイズに戻す":"拡大表示", run: () => actions.zoomPane(target.paneId) },
       {
         label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る",
         run: () =>
@@ -75,13 +79,19 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         {label:"エージェントを fork…",run:()=>actions.openAgentFork(target.paneId)},
         {label:"利用状況…",run:()=>actions.showUsageOf(target.paneId)},
       ] : []),
+      {label:"このペインにビューを追加…",run:()=>pane&&deps.ui.openDialogWithContext({kind:"workspaceView",tabId:pane.tabId,paneId:target.paneId})},
+      { label: "表示ウィンドウ…", run: () => deps.ui.openDialogWithContext({kind:"display",paneId:target.paneId}) },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
 
     ];
   }
   if (target.kind === "tab") {
+    const tab=model.tabs.get(target.tabId);
     return [
+      ...(tab?.plugin?.terminalDisplay && deps.conn?[{label:tab.perspective==='app'?'端末画面へ':'アプリ画面へ',run:()=>{void deps.conn!.request('tab.set_perspective',{tabId:tab.id,perspective:tab.perspective==='app'?'terminal':'app'}).catch(()=>deps.ui.toast('画面を切り替えられません'));}}]:[]),
+      {label:"ビューを追加…",run:()=>deps.ui.openDialogWithContext({kind:"workspaceView",tabId:target.tabId})},
+      ...(tab?.views??[]).map(v=>({label:`ビューを削除: ${v.viewId}`,run:()=>{void deps.conn?.request("tab.remove_view",{tabId:target.tabId,viewInstanceId:v.id}).catch(()=>deps.ui.toast("ビューを削除できませんでした"));}})),
       { label: "名前の変更", run: () => actions.renameTabById(target.tabId) },
       { label: "閉じる", run: () => actions.closeTabById(target.tabId) },
     ];
@@ -97,6 +107,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
       model.groups.size - (inGroup && model.groups.has(currentGroupId) ? 1 : 0) > 0;
     return [
       { label: "名前の変更", run: () => actions.renameWorkspaceById(target.workspaceId) },
+      { label: "PJフォルダを設定…", run: () => actions.setProjectFolder(target.workspaceId) },
       { label: "閉じる", run: () => actions.closeWorkspaceById(target.workspaceId) },
       ...(isGit
         ? [
@@ -157,7 +168,8 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   return [
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
-    { label: "設定", run: () => actions.run({ type: "settings" }) },
+    {label:"プラグインパッケージ…",run:()=>deps.ui.openDialogWithContext({kind:"pluginPackages"})},
+      { label: "設定", run: () => actions.run({ type: "settings" }) },
     // 端末版だけ：未処理の知らせの一覧（design の「通知の一覧」。web は知らせのトーストが残るので一覧を持たない）。
 
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },

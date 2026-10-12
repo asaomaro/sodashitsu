@@ -33,7 +33,7 @@ export interface ExtensionEntry {
   enabled: boolean;
   /** 並べ替え済み（辞書順）。 */
   allow: string[];
-  tabView?: { title: string; display: string; mobileDisplay?:string|undefined; requiresProject?: boolean | undefined };
+  tabView?: { title: string; display: string; mobileDisplay?:string|undefined; terminalDisplay?:string|undefined; requiresProject?: boolean | undefined };
   views?: import("@sodashitsu/protocol").ExtensionViewDefinition[];
   onUnresponsive: "pass" | "block";
   /** プロジェクトでは常に null。 */

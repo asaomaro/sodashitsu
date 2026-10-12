@@ -203,11 +203,11 @@ const EFFECTS: Record<
   resize_pane_up: { rpc: ["pane.resize", { paneId: "p1", direction: "up", amount: 0.05 }] },
   resize_pane_right: { rpc: ["pane.resize", { paneId: "p1", direction: "right", amount: 0.05 }] },
   swap_with_focused: { none: true },
-  open_graph: { toast: true },
-  // 20261007-soda-extensions。表示の面はブラウザにだけある。
-  focus_display: { toast: true },
+  open_graph: { none: true },
+  // 端末版は表示の面をウィンドウとして開く。
+  focus_display: { dialog: "display" },
   // 20261008-display-layout。
-  display_menu: { toast: true },
+  display_menu: { dialog: "display" },
   show_usage: { toast: true },
 };
 
@@ -233,10 +233,12 @@ describe("TuiDispatcher — 全操作の効果（web の 64 操作と同じ RPC�
 });
 
 describe("TuiDispatcher — 連携のグラフ（20260927-agent-graph）", () => {
-  it("open_graph は開かずに「ブラウザで開けます」と知らせる（D1-8）", () => {
+  it("open_graph は端末専用グラフと端末画面を切り替える", () => {
     const h = harness();
     h.d.run({ type: "openGraph" });
-    expect(h.ui.toasts.map((t) => t.message)).toEqual(["グラフの画面はブラウザで開けます。"]);
+    expect(h.ui.screen).toBe("graph");
+    h.d.run({type:"openGraph"});
+    expect(h.ui.screen).toBe("base");
     expect(h.calls).toEqual([]);
     expect(h.ui.dialogContext).toBeNull();
   });

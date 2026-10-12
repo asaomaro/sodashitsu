@@ -22,7 +22,7 @@ import { deliveryOf, notificationSequence } from "./terminalNotify.js";
 
 /** 入力待ちは 1 秒続いてから知らせる（すぐ戻る短い待ちで鳴らさない。web と同じ）。 */
 export const BLOCKED_DELAY_MS = 1000;
-/** 通知のトーストを出しておく時間（design「通知」：右下・5 秒）。 */
+/** 通知のトーストを出しておく時間（design「通知」：右上・5 秒）。 */
 export const NOTIFY_TOAST_MS = 5000;
 
 const TOAST_SUFFIX: Record<NotifyKind, string> = {

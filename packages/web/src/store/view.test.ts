@@ -326,6 +326,8 @@ describe("useViewStore — モード・ダイアログ・接続状態", () => {
       store.setMobileViewport(true);
       store.setScreen("graph");
       expect(store.screen).toBe("base");
+      store.setScreen("schedule");
+      expect(store.screen).toBe("schedule");
     });
 
     it("窓が 1 列の画面になったら基本画面へ戻る。デスクトップに戻っても、グラフの画面は開き直さない（D13）", () => {

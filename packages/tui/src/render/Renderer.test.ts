@@ -78,6 +78,38 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     return { model, prefs, panes, outer, draw, commit, layout, renderer, setTransparent };
   }
 
+  it("stacks recent snackbar notifications at the top right in chronological order and restores covered content", async () => {
+    const s = await setup();
+    s.commit();
+    const toasts = Array.from({ length: 23 }, (_, i) => ({
+      id: i + 1,
+      message: `notification-${i + 1}`,
+      clickable: true,
+    }));
+    const result = s.renderer.render(
+      s.layout(),
+      {
+        model: s.model,
+        prefs: s.prefs,
+        theme: new ThemeColors("dracula"),
+        mode: "terminal",
+        connection: "open",
+        notice: null,
+        session: "work",
+      },
+      s.panes,
+      { toasts },
+    );
+    expect(result.toastHits).toHaveLength(H - 2);
+    expect(result.toastHits[0]).toMatchObject({ id: 6, y: 1 });
+    expect(result.toastHits.at(-1)).toMatchObject({ id: 23, y: H - 2 });
+    expect(result.toastHits.every((hit) => hit.x > W / 2 && hit.x + hit.w <= W)).toBe(true);
+    await s.outer.write(result.output);
+    expect(s.outer.text().split("\n")[1]).toContain("notification-6");
+    await s.draw();
+    expect(s.outer.text()).not.toContain("notification-");
+  });
+
   it("サイドバーに workspace とエージェント、tab バーに tab、枠に pane の名前、中身に pane の出力", async () => {
     const snap = snapshot({
       workspaces: [

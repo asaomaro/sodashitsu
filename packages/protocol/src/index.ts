@@ -26,3 +26,7 @@ export * from "./conversation.js";
 export * from "./notifications.js";
 
 export * from "./pluginOperations.js";
+
+export * from "./workspaceTools.js";
+
+export * from "./schedule.js";

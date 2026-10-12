@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import {pluginMobileDisplay} from "../display/pluginDisplay.js";
-import {useExtensionsStore} from "../store/extensions.js";
+import { useMachinesStore } from "../store/machines.js";
+import ScheduleView from "../schedule/ScheduleView.vue";
+import { pluginMobileDisplay } from "../display/pluginDisplay.js";
+import { useExtensionsStore } from "../store/extensions.js";
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PaneLayout from "../components/PaneLayout.vue";
 import PluginView from "../components/PluginView.vue";
@@ -36,6 +38,7 @@ import { useVisualViewportHeight } from "./useVisualViewport.js";
  * （葉を見る。デスクトップ用）は付けない（D107）。
  */
 const session = useSessionStore();
+const machines=useMachinesStore();
 const view = useViewStore();
 const registry = inject(TerminalRegistryKey);
 const conn = inject(ConnectionKey);
@@ -43,7 +46,7 @@ const viewSync = inject(ViewSyncKey);
 
 // 表示の面（20261007-soda-extensions）。帯はバーと pane の間に出し、パネルはバーのボタンから重ね表示（端末の横には出さない）。
 const displays = useDisplayStore();
-const extensions=useExtensionsStore();
+const extensions = useExtensionsStore();
 const showDisplaySheet = ref(false);
 // `prefix+i`（focus_display）は、モバイルでは重ね表示を開く（パネルの枠が端末の横に無いため）。
 onMounted(() => {
@@ -55,11 +58,16 @@ onBeforeUnmount(() => {
 watch(
   () => displays.sheetRequest,
   () => {
-    if (currentPaneId.value && displays.panelsOf(currentPaneId.value).length > 0) showDisplaySheet.value = true;
+    if (currentPaneId.value && displays.panelsOf(currentPaneId.value).length > 0)
+      showDisplaySheet.value = true;
   },
 );
-const panelCount = computed(() => (currentPaneId.value ? displays.panelsOf(currentPaneId.value).length : 0));
-const bandCount = computed(() => (currentPaneId.value ? displays.bandsOf(currentPaneId.value).length : 0));
+const panelCount = computed(() =>
+  currentPaneId.value ? displays.panelsOf(currentPaneId.value).length : 0,
+);
+const bandCount = computed(() =>
+  currentPaneId.value ? displays.bandsOf(currentPaneId.value).length : 0,
+);
 
 const showPicker = ref(false);
 const showKeyboard = ref(false);
@@ -69,26 +77,52 @@ const paneLayout = ref<{ commitView: () => void } | null>(null);
 let touchScroll: TouchScroll | null = null;
 
 const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
-const appActive = computed(() => !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal");
+const appActive = computed(
+  () => !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal",
+);
 const tabDisplayPane = computed(() => currentTab.value?.displayPaneId);
-const appMobileDisplay=computed(()=>pluginMobileDisplay(currentTab.value?.plugin,extensions.list?.extensions));
-const tabPanelCount = computed(() => tabDisplayPane.value ? displays.panelsOf(tabDisplayPane.value).filter(d => d.name !== currentTab.value?.plugin?.display && d.name !== appMobileDisplay.value).length : 0);
+const appMobileDisplay = computed(() =>
+  pluginMobileDisplay(currentTab.value?.plugin, extensions.list?.extensions),
+);
+const tabPanelCount = computed(() =>
+  tabDisplayPane.value
+    ? displays
+        .panelsOf(tabDisplayPane.value)
+        .filter(
+          (d) => d.name !== currentTab.value?.plugin?.display && d.name !== appMobileDisplay.value,
+        ).length
+    : 0,
+);
 const sheetPane = ref<string | null>(null);
 const currentPaneId = computed(() => view.focusedPaneId);
-const currentPaneLayout = computed(() => (currentPaneId.value ? ({ type: "pane" as const, paneId: currentPaneId.value }) : null));
-const workspaceLabel = computed(() => (view.workspaceId ? (session.workspaces.get(view.workspaceId)?.label ?? "") : ""));
+const currentPaneLayout = computed(() =>
+  currentPaneId.value ? { type: "pane" as const, paneId: currentPaneId.value } : null,
+);
+const workspaceLabel = computed(() =>
+  view.workspaceId ? (session.workspaces.get(view.workspaceId)?.label ?? "") : "",
+);
 const tabLabel = computed(() => currentTab.value?.label ?? "");
 
-// T6：既定は画面幅に縮小、「この端末に合わせる」で等倍（`client.fit`）。`conn`/`registry`/`viewSync` が無い
+// 既定で実PTYを画面に合わせる。サイズ権限が他の画面へ移った場合は縮小して収める。`conn`/`registry`/`viewSync` が無い
 // （provide されていない）呼び出しはこのコンポーネントの前提が壊れているので、ここで気づけるようにする
 // （`viewSync` が無いと、再接続の後に `client.fit` を送り直せない。D108）。
 if (!conn) throw new Error("MobileShell: ConnectionKey が provide されていません");
 if (!registry) throw new Error("MobileShell: TerminalRegistryKey が provide されていません");
 if (!viewSync) throw new Error("MobileShell: ViewSyncKey が provide されていません");
-const { scale, fitEnabled, naturalSize, toggleFit } = useFitToScreen({ conn, registry, viewSync, paneId: currentPaneId, container: paneContainer });
+const { scale, fitEnabled, naturalSize, toggleFit } = useFitToScreen({
+  initialFit: true,
+  conn,
+  registry,
+  viewSync,
+  paneId: currentPaneId,
+  container: paneContainer,
+});
 
 // T9：`client.view` の大きさを縮小の枠の中の葉ではなく表示領域で測り、表示領域の変化に追従させる（D108）。
-const { measureSinglePane } = usePaneArea({ container: paneContainer, commit: () => paneLayout.value?.commitView() });
+const { measureSinglePane } = usePaneArea({
+  container: paneContainer,
+  commit: () => paneLayout.value?.commitView(),
+});
 
 // T7：ソフトキーボードが開くとブラウザは visual viewport だけを縮める（レイアウトの viewport はそのまま
 // なので CSS の `height:100%`/`100vh` だけでは追従しない）。実際の高さをここで JS から当てる。
@@ -112,27 +146,84 @@ onBeforeUnmount(() => touchScroll?.dispose());
 <template>
   <div class="mobile-shell" :style="{ height: `${viewportHeight}px` }">
     <header class="mobile-shell-bar">
-      <button type="button" class="mobile-shell-title" @click="showPicker = true">{{ workspaceLabel }} / {{ tabLabel }}</button>
-      <button type="button" class="mobile-shell-fit-btn" :aria-pressed="fitEnabled" @click="toggleFit">この端末に合わせる</button>
-      <button type="button" class="mobile-shell-keyboard-btn" :aria-pressed="showKeyboard" aria-label="キーボード" @click="showKeyboard = !showKeyboard">⌨</button>
+      <button type="button" class="mobile-shell-title" @click="showPicker = true">
+        {{ workspaceLabel }} / {{ tabLabel }}
+      </button>
+      <button
+        type="button"
+        class="mobile-shell-fit-btn"
+        :aria-pressed="fitEnabled"
+        @click="toggleFit"
+      >
+        この端末に合わせる
+      </button>
+      <button
+        type="button"
+        class="mobile-shell-keyboard-btn"
+        :aria-pressed="showKeyboard"
+        aria-label="キーボード"
+        @click="showKeyboard = !showKeyboard"
+      >
+        ⌨
+      </button>
       <!-- 設定（20260921-herdr-settings-gaps の AC13）。モバイルはサイドバーも prefix キーも無いので、
            ここが唯一の入口になる。**文字のボタンにする**——以前の 🔔 は絵文字で環境により見た目が変わり、
            設定全体を開くのに通知の絵を出すと中身と食い違う（⚙ も絵文字の属性を持つので避ける）。 -->
       <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
       <NotificationBell variant="mobile" />
-      <button v-if="panelCount > 0" type="button" class="mobile-shell-display-btn" data-mobile-display-btn @click="showDisplaySheet = true">表示{{ panelCount }}</button>
-      <button v-if="tabPanelCount > 0" type="button" @click="sheetPane = tabDisplayPane ?? null; showDisplaySheet = true">タブの表示{{ tabPanelCount }}</button>
+      <button type="button" @click="view.setScreen('schedule')">予約</button>
+      <button
+        v-if="panelCount > 0"
+        type="button"
+        class="mobile-shell-display-btn"
+        data-mobile-display-btn
+        @click="showDisplaySheet = true"
+      >
+        表示{{ panelCount }}
+      </button>
+      <button
+        v-if="tabPanelCount > 0"
+        type="button"
+        @click="
+          sheetPane = tabDisplayPane ?? null;
+          showDisplaySheet = true;
+        "
+      >
+        タブの表示{{ tabPanelCount }}
+      </button>
       <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
-      <button type="button" class="mobile-shell-settings-btn" @click="view.openDialogWithContext({ kind: 'settings' })">設定</button>
+      <button
+        type="button"
+        class="mobile-shell-settings-btn"
+        @click="view.openDialogWithContext({ kind: 'settings' })"
+      >
+        設定
+      </button>
     </header>
     <TabViews v-if="currentTab" :tab="currentTab" show-add-button />
     <PaneBands v-if="tabDisplayPane" :pane-id="tabDisplayPane" :pane-height-px="viewportHeight" />
-    <PaneBands v-if="currentPaneId && bandCount > 0" :pane-id="currentPaneId" :pane-height-px="viewportHeight" />
-    <main ref="paneContainer" class="mobile-shell-pane" :style="appActive ? { touchAction: 'auto' } : undefined">
+    <PaneBands
+      v-if="currentPaneId && bandCount > 0"
+      :pane-id="currentPaneId"
+      :pane-height-px="viewportHeight"
+    />
+    <main
+      ref="paneContainer"
+      class="mobile-shell-pane"
+      :style="appActive ? { touchAction: 'auto' } : undefined"
+    >
       <div
         class="mobile-shell-pane-scale"
-        :style="naturalSize ? { width: `${naturalSize.width}px`, height: `${naturalSize.height}px`, transform: `scale(${scale})` } : {}"
+        :style="
+          naturalSize
+            ? {
+                width: `${naturalSize.width}px`,
+                height: `${naturalSize.height}px`,
+                transform: `scale(${scale})`,
+              }
+            : {}
+        "
       >
         <PaneLayout
           v-if="currentPaneLayout && view.workspaceId && view.tabId"
@@ -149,16 +240,36 @@ onBeforeUnmount(() => touchScroll?.dispose());
           </template>
         </PaneLayout>
       </div>
-      <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view"><PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" mobile /></div>
+      <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view">
+        <PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" mobile />
+      </div>
     </main>
     <ExtraKeys v-if="showKeyboard && !appActive" />
     <PanePicker v-if="showPicker" @close="showPicker = false" />
-    <MobileDisplaySheet v-if="showDisplaySheet && (sheetPane || currentPaneId)" :pane-id="sheetPane || currentPaneId!" :exclude-names="sheetPane === tabDisplayPane ? [currentTab?.plugin?.display,appMobileDisplay].filter((x):x is string=>!!x) : []" @close="showDisplaySheet = false; sheetPane = null" />
+    <MobileDisplaySheet
+      v-if="showDisplaySheet && (sheetPane || currentPaneId)"
+      :pane-id="sheetPane || currentPaneId!"
+      :exclude-names="
+        sheetPane === tabDisplayPane
+          ? [currentTab?.plugin?.display, appMobileDisplay].filter((x): x is string => !!x)
+          : []
+      "
+      @close="
+        showDisplaySheet = false;
+        sheetPane = null;
+      "
+    />
   </div>
+  <section v-if="view.screen==='schedule'" class="mobile-schedules"><button @click="view.setScreen('base')">端末へ戻る</button><ScheduleView :key="machines.selectedId" /></section>
 </template>
 
 <style scoped>
-.mobile-app-view { position:absolute; inset:0; }
+.mobile-schedules{position:fixed;inset:0;z-index:30;background:var(--soda-bg);display:flex;flex-direction:column;}
+.mobile-schedules>.schedule-view{flex:1;min-height:0;}
+.mobile-app-view {
+  position: absolute;
+  inset: 0;
+}
 .mobile-shell {
   display: flex;
   flex-direction: column;
@@ -169,12 +280,14 @@ onBeforeUnmount(() => touchScroll?.dispose());
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
   padding: 0.5em;
   background: var(--soda-menu-bg, #282a36);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
 .mobile-shell-title {
-  flex: 1;
+  flex: 1 1 100px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -232,7 +345,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
   overflow: hidden;
 }
 .mobile-shell-pane-scale {
-  position:relative;
+  position: relative;
   transform-origin: top left;
 }
 </style>

@@ -1,3 +1,12 @@
+import {
+  BUILTIN_VIEWS,
+  BUILTIN_WORKSPACE_KEY,
+  type TabViewInstance,
+  type ParamsOf,
+} from "@sodashitsu/protocol";
+import { useSessionStore } from "./session.js";
+import { useExtensionsStore } from "./extensions.js";
+import { useViewStore } from "./view.js";
 import type { DisplayContent, DisplayDock, DisplayEdge, DisplayInfo } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
@@ -26,7 +35,11 @@ import {
   type LayoutSettings,
 } from "../display/displayPrefs.js";
 import type { DockDragState } from "../display/dockDrag.js";
-import { defaultFloatRect, insertFloat, raiseFloat as raiseOrder } from "../display/floatGeometry.js";
+import {
+  defaultFloatRect,
+  insertFloat,
+  raiseFloat as raiseOrder,
+} from "../display/floatGeometry.js";
 import { useSettingsStore } from "./settings.js";
 import { readPrefs, writePrefs } from "./view.js";
 
@@ -50,7 +63,14 @@ export function loadPanelWidths(raw: unknown): Map<string, number> {
   const out = new Map<string, number>();
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return out;
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v === "number" && Number.isFinite(v) && v >= PANEL_WIDTH_STORED_MIN && v <= PANEL_WIDTH_STORED_MAX && k !== "") out.set(k, Math.round(v));
+    if (
+      typeof v === "number" &&
+      Number.isFinite(v) &&
+      v >= PANEL_WIDTH_STORED_MIN &&
+      v <= PANEL_WIDTH_STORED_MAX &&
+      k !== ""
+    )
+      out.set(k, Math.round(v));
     if (out.size >= PANEL_WIDTHS_MAX) break;
   }
   return out;
@@ -63,6 +83,27 @@ export function loadPanelWidths(raw: unknown): Map<string, number> {
  */
 export const useDisplayStore = defineStore("display", () => {
   const infos = ref(new Map<string, DisplayInfo>());
+  const pendingReveals = new Map<
+    string,
+    { placement: TabViewInstance["placement"]; rect?: FaceRect; ready: boolean }
+  >();
+  const revealKey = (i: DisplayInfo) => `${i.paneId}|${i.name}`;
+  function reveal(info: DisplayInfo) {
+    const key = revealKey(info),
+      p = pendingReveals.get(key);
+    if (!p?.ready) return;
+    const placement = info.kind === "band" ? `band-${info.edge ?? "top"}` : (info.dock ?? "right");
+    if (placement !== p.placement) return;
+    pendingReveals.delete(key);
+    if (p.placement === "float") userOpenedFloats.add(info.id);
+    writeFace(info, {
+      collapsed: false,
+      ...(p.placement === "band-top" || p.placement === "band-bottom"
+        ? { edge: p.placement === "band-bottom" ? "bottom" : "top" }
+        : { dock: p.placement }),
+      ...(p.rect ? { rect: p.rect } : {}),
+    });
+  }
   const contents = ref(new Map<string, DisplayContent>());
   /** pane ごとに選んでいるパネル（面の id）。 */
   const activePanel = ref(new Map<string, string>());
@@ -98,7 +139,8 @@ export const useDisplayStore = defineStore("display", () => {
   function setDockDrag(next: DockDragState | null): void {
     const cur = dockDrag.value;
     if (cur === null && next === null) return;
-    if (cur && next && cur.id === next.id && cur.paneId === next.paneId && cur.zone === next.zone) return;
+    if (cur && next && cur.id === next.id && cur.paneId === next.paneId && cur.zone === next.zone)
+      return;
     dockDrag.value = next;
   }
   /** 割り付けが変わるたびに 1 増える数（知らせの位置の測り直しの合図）。浮いた窓のドラッグ中にも増える。 */
@@ -114,7 +156,8 @@ export const useDisplayStore = defineStore("display", () => {
     floatKeyMode.value = { id: info.id, paneId: info.paneId, mode };
   }
   function endFloatKeys(id?: string): void {
-    if (floatKeyMode.value && (id === undefined || floatKeyMode.value.id === id)) floatKeyMode.value = null;
+    if (floatKeyMode.value && (id === undefined || floatKeyMode.value.id === id))
+      floatKeyMode.value = null;
   }
 
   const all = computed<DisplayInfo[]>(() => [...infos.value.values()]);
@@ -141,6 +184,7 @@ export const useDisplayStore = defineStore("display", () => {
   function replaceAll(list: readonly DisplayInfo[]): void {
     const next = new Map<string, DisplayInfo>();
     for (const d of list) next.set(d.id, d);
+    pendingReveals.clear();
     infos.value = next;
     prune();
   }
@@ -149,6 +193,7 @@ export const useDisplayStore = defineStore("display", () => {
     const next = new Map(infos.value);
     next.set(info.id, info);
     infos.value = next;
+    reveal(info);
   }
   /** 消えた面（`display.removed`）。知らない id は何もしない。 */
   // フォーカスの印（`focusedDisplayId`）は、面が消えても、その枠の部品が外れるときに自分で下ろす（端末へ戻すため）。ここでは触らない。
@@ -222,9 +267,16 @@ export const useDisplayStore = defineStore("display", () => {
    * プログラムの出し直し（`close` → `set`）・記憶から開いた窓は**最背面**に入る（利用者が前へ出した窓の上へ、プログラムが自分を置き直せない）。
    * `keep` に入っている窓（開いているが、pane が小さくて自動でたたまれている窓）は、並びから外さない（広げ直したとき、利用者の順が戻る）。
    */
-  function syncFloatOrder(paneId: string, open: readonly string[], keep: readonly string[] = open): void {
+  function syncFloatOrder(
+    paneId: string,
+    open: readonly string[],
+    keep: readonly string[] = open,
+  ): void {
     const cur = floatOrder.value.get(paneId) ?? [];
-    const engaged = focusedDisplayId.value !== null && infos.value.get(focusedDisplayId.value)?.paneId === paneId ? focusedDisplayId.value : null;
+    const engaged =
+      focusedDisplayId.value !== null && infos.value.get(focusedDisplayId.value)?.paneId === paneId
+        ? focusedDisplayId.value
+        : null;
     const keepSet = new Set([...keep, ...open]);
     let next = cur.filter((id) => keepSet.has(id));
     const fresh = open.filter((id) => !next.includes(id));
@@ -252,8 +304,91 @@ export const useDisplayStore = defineStore("display", () => {
     writePrefs({ displayLayout: next });
   }
   /** 面のいまの状態（`caps` で丸めた値）。描画が読む。 */
+  let viewMover: ((p: ParamsOf<"tab.move_view">) => Promise<unknown>) | null = null;
+  function setViewMover(mover: typeof viewMover) {
+    viewMover = mover;
+  }
+  function registeredView(info: DisplayInfo) {
+    const session = useSessionStore(),
+      pane = session.panes.get(info.paneId),
+      tab = pane ? session.tabs.get(pane.tabId) : undefined;
+    const instance = tab?.views?.find((v) => v.paneId === info.paneId && v.display === info.name);
+    return instance && tab ? { instance, tab } : null;
+  }
+  function allowedPlacementsOf(info: DisplayInfo): readonly TabViewInstance["placement"][] {
+    const v = registeredView(info)?.instance;
+    if (!v)
+      return info.kind === "band"
+        ? ["band-top", "band-bottom"]
+        : ["left", "right", "top", "bottom", "float"];
+    const def =
+      v.extensionKey === BUILTIN_WORKSPACE_KEY
+        ? BUILTIN_VIEWS.find((d) => d.id === v.viewId)
+        : useExtensionsStore()
+            .list?.extensions.find((e) => e.key === v.extensionKey)
+            ?.views?.find((d) => d.id === v.viewId);
+    return def?.placements ?? [v.placement];
+  }
+  function canPlace(info: DisplayInfo, placement: TabViewInstance["placement"]) {
+    return allowedPlacementsOf(info).includes(placement);
+  }
+  function moveRegistered(
+    info: DisplayInfo,
+    placement: TabViewInstance["placement"],
+    rect?: FaceRect,
+  ): boolean {
+    const v = registeredView(info);
+    if (!v) return false;
+    if (!canPlace(info, placement) || !viewMover) return true;
+    const revealId = revealKey(info),
+      pending = { placement, ...(rect ? { rect } : {}), ready: false };
+    pendingReveals.set(revealId, pending);
+    void viewMover({ tabId: v.tab.id, viewInstanceId: v.instance.id, placement })
+      .then(() => {
+        if (pendingReveals.get(revealId) !== pending) return;
+        const faces = { ...layoutPrefs.value.faces },
+          names = { ...layoutPrefs.value.names },
+          key = faceKey(info);
+        if (faces[key]) {
+          faces[key] = { ...faces[key] };
+          delete faces[key]!.dock;
+          delete faces[key]!.edge;
+        }
+        delete names[nameKey(info)];
+        saveLayout({ ...layoutPrefs.value, faces, names });
+        pending.ready = true;
+        const fresh = [...infos.value.values()].find(
+          (d) => d.paneId === info.paneId && d.name === info.name,
+        );
+        if (fresh) reveal(fresh);
+      })
+      .catch(() => {
+        if (pendingReveals.get(revealId) === pending) pendingReveals.delete(revealId);
+        useViewStore().toast("この配置へ移動できません。ビューの設定を確認してください");
+      });
+    return true;
+  }
+  function setViewPlacement(info: DisplayInfo, placement: TabViewInstance["placement"]) {
+    if (!canPlace(info, placement)) return;
+    if (moveRegistered(info, placement)) return;
+    if (placement.startsWith("band-"))
+      setFaceEdge(info, placement === "band-top" ? "top" : "bottom");
+    else setFaceDock(info, placement as DisplayDock);
+  }
   function effectiveOf(info: DisplayInfo): EffectiveFace {
-    return effectiveFace(info, layoutPrefs.value, layoutSettings(), DISPLAY_DOCK_CAPS);
+    const face = effectiveFace(info, layoutPrefs.value, layoutSettings(), DISPLAY_DOCK_CAPS);
+    if (
+      !canPlace(info, info.kind === "band" ? `band-${face.edge ?? "top"}` : (face.dock ?? "right"))
+    )
+      return effectiveFace(
+        info,
+        { ...layoutPrefs.value, faces: {}, names: {} },
+        layoutSettings(),
+        DISPLAY_DOCK_CAPS,
+      );
+    if (face.dock === "float" && registeredView(info) && !hasPref(info))
+      return { ...face, collapsed: info.collapsed === true };
+    return face;
   }
   function hasPref(info: DisplayInfo): boolean {
     return hasFacePref(info, layoutPrefs.value);
@@ -262,20 +397,34 @@ export const useDisplayStore = defineStore("display", () => {
    * 記憶を書く唯一の口。**その時点の導出した値に `patch` を重ねた全項目を書く**（変えた項目だけを書かない。置き場所は `caps` で丸める前の値。`composeFacePref`）。
    * 部品・メニュー・キーは、これを直に呼ばず、下の `setFace*` を呼ぶ。
    */
-  function writeFace(info: DisplayInfo, patch: { dock?: DisplayDock; edge?: DisplayEdge; collapsed?: boolean; rect?: FaceRect }): void {
-    const face: FacePref = composeFacePref(info, layoutPrefs.value, layoutSettings(), DISPLAY_DOCK_CAPS, patch);
+  function writeFace(
+    info: DisplayInfo,
+    patch: { dock?: DisplayDock; edge?: DisplayEdge; collapsed?: boolean; rect?: FaceRect },
+  ): void {
+    const face: FacePref = composeFacePref(
+      info,
+      layoutPrefs.value,
+      layoutSettings(),
+      DISPLAY_DOCK_CAPS,
+      { ...patch, collapsed: patch.collapsed ?? effectiveOf(info).collapsed },
+    );
     // 窓を開く操作は、記憶に矩形が無ければ初めの矩形を一緒に書く（開いた窓は、いつも記憶に矩形を持つ。書いた後は、`set --size` の変更・ほかの窓の開閉で動かない）。
     // 窓の動ける領域が分からない間（`floatArea` が null）は書かない（その間、窓を開く操作は受けない）。
     if (face.dock === "float" && !face.collapsed && !face.rect) {
       const area = layoutByPane.value.get(info.paneId)?.floatArea ?? null;
       if (area) face.rect = defaultFloatRect(openFloatCount(info), info.size, area);
     }
-    saveLayout({ ...layoutPrefs.value, faces: putLast(layoutPrefs.value.faces, faceKey(info), face, FACE_PREFS_MAX) });
+    saveLayout({
+      ...layoutPrefs.value,
+      faces: putLast(layoutPrefs.value.faces, faceKey(info), face, FACE_PREFS_MAX),
+    });
   }
   /** この pane で、いま開いている浮いた窓の数（自動でたたまれた窓と、`except` は数えない）。初めの矩形のずらしに使う。 */
   function openFloatCount(except: DisplayInfo): number {
     const auto = new Set(layoutByPane.value.get(except.paneId)?.auto ?? []);
-    return all.value.filter((d) => d.paneId === except.paneId && d.id !== except.id && isOpenFloat(d) && !auto.has(d.id)).length;
+    return all.value.filter(
+      (d) => d.paneId === except.paneId && d.id !== except.id && isOpenFloat(d) && !auto.has(d.id),
+    ).length;
   }
   /** 浮いた窓を開く操作を受けられるか（窓の動ける領域が分かっている）。トレイのボタン・面の一覧・メニュー・`prefix+i`・D&D の中央が見る。 */
   function canOpenFloat(paneId: string): boolean {
@@ -286,7 +435,10 @@ export const useDisplayStore = defineStore("display", () => {
     return layoutPrefs.value.faces[faceKey(info)]?.rect;
   }
   function writeName(info: DisplayInfo, entry: { dock?: DisplayDock; edge?: DisplayEdge }): void {
-    saveLayout({ ...layoutPrefs.value, names: putLast(layoutPrefs.value.names, nameKey(info), entry, NAME_PREFS_MAX) });
+    saveLayout({
+      ...layoutPrefs.value,
+      names: putLast(layoutPrefs.value.names, nameKey(info), entry, NAME_PREFS_MAX),
+    });
   }
   function setLastFace(paneId: string, id: string): void {
     if (lastFace.value.get(paneId) === id) return;
@@ -314,6 +466,7 @@ export const useDisplayStore = defineStore("display", () => {
   }
   /** パネルの置き場所を変える。移った先で開く（`collapsed: false`）。同じ名前の面も、この置き場所を引き継ぐ。 */
   function setFaceDock(info: DisplayInfo, dock: DisplayDock, rect?: FaceRect): void {
+    if (!canPlace(info, dock) || moveRegistered(info, dock, rect)) return;
     if (dock === "float") userOpenedFloats.add(info.id);
     writeFace(info, { dock, collapsed: false, ...(rect ? { rect } : {}) });
     writeName(info, { dock });
@@ -322,9 +475,25 @@ export const useDisplayStore = defineStore("display", () => {
   }
   /** 帯の場所を変える。移った先で開く。 */
   function setFaceEdge(info: DisplayInfo, edge: DisplayEdge): void {
+    if (!canPlace(info, `band-${edge}`) || moveRegistered(info, `band-${edge}`)) return;
     writeFace(info, { edge, collapsed: false });
     writeName(info, { edge });
     setLastFace(info.paneId, info.id);
+  }
+  function bandHeightOf(info: DisplayInfo) {
+    return layoutPrefs.value.bands?.[faceKey(info)] ?? info.size;
+  }
+  function setBandHeight(info: DisplayInfo, height: number) {
+    if (info.kind !== "band" || !Number.isFinite(height)) return;
+    saveLayout({
+      ...layoutPrefs.value,
+      bands: putLast(
+        layoutPrefs.value.bands ?? {},
+        faceKey(info),
+        Math.max(24, Math.min(96, Math.round(height))),
+        256,
+      ),
+    });
   }
   function setFaceRect(info: DisplayInfo, rect: FaceRect): void {
     writeFace(info, { rect });
@@ -332,7 +501,10 @@ export const useDisplayStore = defineStore("display", () => {
   /** 利用者が決めた側の大きさを覚える（確定のたびに 1 回）。 */
   function setSideSize(paneId: string, side: DockSide, px: number): void {
     const v = Math.min(SIDE_SIZE_STORED_MAX, Math.max(SIDE_SIZE_STORED_MIN, Math.round(px)));
-    saveLayout({ ...layoutPrefs.value, sides: putLast(layoutPrefs.value.sides, sideKey(paneId, side), v, SIDE_PREFS_MAX) });
+    saveLayout({
+      ...layoutPrefs.value,
+      sides: putLast(layoutPrefs.value.sides, sideKey(paneId, side), v, SIDE_PREFS_MAX),
+    });
   }
   function clearSideSize(paneId: string, side: DockSide): void {
     const k = sideKey(paneId, side);
@@ -383,7 +555,8 @@ export const useDisplayStore = defineStore("display", () => {
     if ([...activePanel.value].some(([, id]) => !infos.value.has(id))) {
       activePanel.value = new Map([...activePanel.value].filter(([, id]) => infos.value.has(id)));
     }
-    if ([...contentFailed.value].some((id) => !infos.value.has(id))) contentFailed.value = new Set([...contentFailed.value].filter((id) => infos.value.has(id)));
+    if ([...contentFailed.value].some((id) => !infos.value.has(id)))
+      contentFailed.value = new Set([...contentFailed.value].filter((id) => infos.value.has(id)));
     if ([...activeBySide.value].some(([, id]) => !infos.value.has(id))) {
       activeBySide.value = new Map([...activeBySide.value].filter(([, id]) => infos.value.has(id)));
     }
@@ -391,7 +564,11 @@ export const useDisplayStore = defineStore("display", () => {
       lastFace.value = new Map([...lastFace.value].filter(([, id]) => infos.value.has(id)));
     }
     if ([...floatOrder.value.values()].some((ids) => ids.some((id) => !infos.value.has(id)))) {
-      floatOrder.value = new Map([...floatOrder.value].map(([p, ids]) => [p, ids.filter((id) => infos.value.has(id))] as [string, string[]]).filter(([, ids]) => ids.length > 0));
+      floatOrder.value = new Map(
+        [...floatOrder.value]
+          .map(([p, ids]) => [p, ids.filter((id) => infos.value.has(id))] as [string, string[]])
+          .filter(([, ids]) => ids.length > 0),
+      );
     }
     if (floatKeyMode.value && !infos.value.has(floatKeyMode.value.id)) floatKeyMode.value = null;
   }
@@ -440,12 +617,18 @@ export const useDisplayStore = defineStore("display", () => {
     dockDrag,
     setDockDrag,
     effectiveOf,
+    setViewMover,
+    allowedPlacementsOf,
+    canPlace,
+    setViewPlacement,
     hasPref,
     writeFace,
     setFaceCollapsed,
     setFaceDock,
     setFaceEdge,
     setFaceRect,
+    bandHeightOf,
+    setBandHeight,
     setSideSize,
     clearSideSize,
     sideSizeOf,

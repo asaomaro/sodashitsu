@@ -3,12 +3,17 @@ import { expect, test } from "../support/fixtures.js";
 
 // 目的地へ移る前の「掴んでいる」表示・追従・終了をブラウザで確認する。
 for (const uiStyle of ["classic", "modern"] as const) {
-  test(`${uiStyle}: workspace を掴むと名前がカーソルに付いてきて、Esc と領域外での解放で消える`, async ({ page, appServer }) => {
+  test(`${uiStyle}: workspace を掴むと名前がカーソルに付いてきて、Esc と領域外での解放で消える`, async ({
+    page,
+    appServer,
+  }) => {
     const client = await appServer.openClient();
     await client.request("workspace.create", { cwd: tmpdir(), label: "drag workspace" });
     await client.request("prefs.set", { patch: { uiStyle } });
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-    const row = page.locator('.sidebar-row[data-drop-workspace-id]').filter({ hasText: "drag workspace" });
+    const row = page
+      .locator(".sidebar-row[data-drop-workspace-id]")
+      .filter({ hasText: "drag workspace" });
     await expect(row).toBeVisible();
     const r = (await row.boundingBox())!;
     const x = r.x + r.width / 2;
@@ -43,7 +48,10 @@ for (const uiStyle of ["classic", "modern"] as const) {
     client.close();
   });
 
-  test(`${uiStyle}: pane は目的地へ移る前から表示が出て、ドロップ後に消える`, async ({ page, appServer }) => {
+  test(`${uiStyle}: pane は目的地へ移る前から表示が出て、ドロップ後に消える`, async ({
+    page,
+    appServer,
+  }) => {
     const client = await appServer.openClient();
     const paneId = client.helloSnapshot()!.panes[0]!.id;
     await client.request("pane.rename", { paneId, label: "drag pane" });
@@ -53,6 +61,7 @@ for (const uiStyle of ["classic", "modern"] as const) {
     const name = page.locator(".pane-frame-name").filter({ hasText: "drag pane" });
     await expect(name).toBeVisible();
     const source = page.locator(`[data-pane-id="${paneId}"]`);
+    const frameCount = await page.locator("[data-pane-frame-main]").count();
     const r = (await name.boundingBox())!;
     const x = r.x + r.width / 2;
     const y = r.y + r.height / 2;
@@ -73,9 +82,35 @@ for (const uiStyle of ["classic", "modern"] as const) {
     const target = (await page.locator(".pane-frame-body").nth(1).boundingBox())!;
     await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
     await page.mouse.up();
-    await expect(page.locator("[data-pane-frame-main]")).toHaveCount(1);
+    await expect(page.locator("[data-pane-frame-main]")).toHaveCount(frameCount);
     await expect(preview).toHaveCount(0);
     await expect(page.locator(".pane-frame-drag-source")).toHaveCount(0);
     client.close();
   });
 }
+test("borderless pane retains a floating name as a drag handle while agent-name visibility is disabled", async ({
+  page,
+  appServer,
+}) => {
+  const client = await appServer.openClient(),
+    paneId = client.helloSnapshot()!.panes[0]!.id;
+  await client.request("pane.rename", { paneId, label: "floating-grip" });
+  await client.request("prefs.set", { patch: { paneBorders: "off", paneAgentNameVisible: false } });
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  const name = page.locator(".pane-frame-name-floating").filter({ hasText: "floating-grip" });
+  await expect(name).toBeVisible();
+  const box = (await name.boundingBox())!;
+  await page.mouse.move(box.x + 5, box.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 20, box.y + 5);
+  await expect(page.locator("[data-drag-preview]")).toContainText("floating-grip");
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(page.locator("[data-drag-preview]")).toHaveCount(0);
+  const area = page.locator(".app-panes");
+  const before = await area.boundingBox();
+  await client.request("prefs.set", { patch: { paneOuterBorders: true } });
+  await expect(area).toHaveClass(/app-panes-outer-borders/);
+  expect(await area.evaluate((el) => getComputedStyle(el).outlineWidth)).toBe("1px");
+  expect(await area.boundingBox()).toEqual(before);
+});

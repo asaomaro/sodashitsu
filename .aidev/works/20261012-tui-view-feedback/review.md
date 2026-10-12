@@ -1,0 +1,1 @@
+review_history_usage独立レビュー通過。previewと実dropのzone/allowed共有、view-split境界の入力先取、ratio変換、Esc復元を確認。

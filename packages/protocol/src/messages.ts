@@ -1,11 +1,63 @@
-import {PluginOperationsParams,PluginCallParams,type PluginOperationsResult} from "./pluginOperations.js";
-import {NotificationUpdateParams,NotificationStateParams,type NotificationState,type SharedNotice} from "./notifications.js";
-import { AgentConversationParams,AgentSessionsParams,AgentResumeParams,AgentCommandParams,AgentSummaryParams,type ConversationPage,type PastAgentSession,type ConversationSummary,type AgentHeaderAction,type SummarySettings } from "./conversation.js";
+import {
+  ScheduleSaveParams,
+  ScheduleIdParams,
+  type ScheduleListResult,
+  type ScheduledJob,
+  type ScheduledRun,
+} from "./schedule.js";
+import { WorkspaceToolsParams, type WorkspaceToolsResult } from "./workspaceTools.js";
+import {
+  PluginOperationsParams,
+  PluginCallParams,
+  type PluginOperationsResult,
+} from "./pluginOperations.js";
+import {
+  NotificationUpdateParams,
+  NotificationStateParams,
+  type NotificationState,
+  type SharedNotice,
+} from "./notifications.js";
+import {
+  AgentConversationParams,
+  AgentSessionsParams,
+  AgentResumeParams,
+  AgentCommandParams,
+  AgentSummaryParams,
+  type ConversationPage,
+  type PastAgentSession,
+  type ConversationSummary,
+  type AgentHeaderAction,
+  type SummarySettings,
+} from "./conversation.js";
 import { z } from "zod";
-import type { AgentInfo, AgentIntegrationKind, MachineStatus, Pane, ServerSessionEntry, SessionSnapshot, Tab, Workspace, WorkspaceGroup, WorktreeEntry } from "./model.js";
+import type {
+  AgentInfo,
+  AgentIntegrationKind,
+  MachineStatus,
+  Pane,
+  ServerSessionEntry,
+  SessionSnapshot,
+  Tab,
+  Workspace,
+  WorkspaceGroup,
+  WorktreeEntry,
+} from "./model.js";
 import { THEME_NAMES, type ThemeName } from "./theme.js";
 import { IMAGE_CHUNK_BASE64_MAX, IMAGE_MIME_TYPES } from "./image.js";
-import { ASK_ANSWER_TEXT_MAX, ASK_MEDIA_FILES_MAX, type AskFeatures, ASK_ASKID_MAX, ASK_ID_MAX, ASK_OPTIONS_MAX, ASK_QUESTIONS_MAX, ASK_TIMEOUT_MAX_MS, ASK_TIMEOUT_MIN_MS, jsonBytes, type AskPending, type AskResult } from "./ask.js";
+import {
+  ASK_ANSWER_TEXT_MAX,
+  ASK_MEDIA_FILES_MAX,
+  type AskFeatures,
+  ASK_ASKID_MAX,
+  ASK_ID_MAX,
+  ASK_OPTIONS_MAX,
+  ASK_QUESTIONS_MAX,
+  ASK_TIMEOUT_MAX_MS,
+  ASK_TIMEOUT_MIN_MS,
+  jsonBytes,
+  type AskPending,
+  type AskResult,
+} from "./ask.js";
 import {
   DISPLAY_NAME_RE,
   DISPLAY_REPORT_PROBLEMS,
@@ -21,14 +73,39 @@ import {
   type DisplaySetResult,
   type DisplayWaitResult,
 } from "./display.js";
-import { FILE_CHUNK_BASE64_MAX, FILE_NAME_INPUT_MAX, FILE_PATH_MAX, FILE_RESOLVE_MAX_PATHS, type ResolvedFile } from "./file.js";
+import {
+  FILE_CHUNK_BASE64_MAX,
+  FILE_NAME_INPUT_MAX,
+  FILE_PATH_MAX,
+  FILE_RESOLVE_MAX_PATHS,
+  type ResolvedFile,
+} from "./file.js";
 import type { ExtensionListResult, ExtensionLogResult } from "./extension.js";
 import { ViewPlacementSchema } from "./extension.js";
-import { COMMAND_ID_RE, POPUP_RUN_SIZE_MAX, POPUP_RUN_SIZE_MIN, type CommandListResult, type CommandRunResult } from "./commands.js";
-import { GraphGetParams, GraphHistoryParams, GraphPauseParams, GraphResumeParams, GraphUpdateParams, type Graph, type GraphHistoryResult } from "./graph.js";
+import {
+  COMMAND_ID_RE,
+  POPUP_RUN_SIZE_MAX,
+  POPUP_RUN_SIZE_MIN,
+  type CommandListResult,
+  type CommandRunResult,
+} from "./commands.js";
+import {
+  GraphGetParams,
+  GraphHistoryParams,
+  GraphPauseParams,
+  GraphResumeParams,
+  GraphUpdateParams,
+  type Graph,
+  type GraphHistoryResult,
+} from "./graph.js";
 import type { AgentUsageResult } from "./usage.js";
 import type { ForkCreated, ForkNoteStatus, ForkUnavailableReason } from "./agentFork.js";
-import { CELL_LIMIT_MESSAGE, terminalDimension, VIEW_VISIBLE_PANES_MAX, withinCellLimit } from "./terminalLimits.js";
+import {
+  CELL_LIMIT_MESSAGE,
+  terminalDimension,
+  VIEW_VISIBLE_PANES_MAX,
+  withinCellLimit,
+} from "./terminalLimits.js";
 
 /**
  * 方式（method）の定義。design.md「WebSocket の通信」の表と、architecture.md「方式の追加と変更」
@@ -68,7 +145,11 @@ export const ClientViewParams = z.object({
   tabId,
   // 大きさは 1 辺 4096・面積 1,000,000 セル、件数は 4096 まで（20260927-server-size-input-limits。外れたら要求ごと invalid_params）。
   visible: z
-    .array(z.object({ paneId, cols: terminalDimension, rows: terminalDimension }).refine(withinCellLimit, CELL_LIMIT_MESSAGE))
+    .array(
+      z
+        .object({ paneId, cols: terminalDimension, rows: terminalDimension })
+        .refine(withinCellLimit, CELL_LIMIT_MESSAGE),
+    )
     .max(VIEW_VISIBLE_PANES_MAX),
 });
 export type ClientViewParams = z.infer<typeof ClientViewParams>;
@@ -186,7 +267,10 @@ export interface WorkspaceCreateResult extends CwdFallbackResult {
 export const WorkspaceRenameParams = z.object({ workspaceId, label: z.string().min(1).nullable() });
 export type WorkspaceRenameParams = z.infer<typeof WorkspaceRenameParams>;
 
-export const WorkspaceProjectFolderParams = z.object({ workspaceId, path: z.string().min(1).max(4096).nullable() });
+export const WorkspaceProjectFolderParams = z.object({
+  workspaceId,
+  path: z.string().min(1).max(4096).nullable(),
+});
 export type WorkspaceProjectFolderParams = z.infer<typeof WorkspaceProjectFolderParams>;
 
 export const WorkspaceFocusParams = z.object({ workspaceId });
@@ -197,7 +281,10 @@ export type WorkspaceFocusParams = z.infer<typeof WorkspaceFocusParams>;
 // `z.boolean().default(false)` にすると `z.infer` の TS 型で必須フィールドになり、既存の呼び出し元
 // （例: `packages/cli/src/commands/workspace.ts`）が型エラーになる（タスク点検の指摘）。既定は
 // `SessionService.closeWorkspace(id, closeLinkedWorktrees = false)` 側の JS 既定引数が担う。
-export const WorkspaceCloseParams = z.object({ workspaceId, closeLinkedWorktrees: z.boolean().optional() });
+export const WorkspaceCloseParams = z.object({
+  workspaceId,
+  closeLinkedWorktrees: z.boolean().optional(),
+});
 export type WorkspaceCloseParams = z.infer<typeof WorkspaceCloseParams>;
 
 // --- workspace のグルーピングと並べ替え（20260923-workspace-grouping） --------------------------
@@ -219,7 +306,10 @@ export type WorkspaceMoveToParams = z.infer<typeof WorkspaceMoveToParams>;
 
 // `workspaceId`（20261004-group-worktree-items）: その workspace の項目を新しいグループへ入れる。**省略可**
 // （古い呼び出し元の `{label}` だけが通る。古いサーバはこのキーを黙って落とす）。
-export const GroupCreateParams = z.object({ label: z.string().min(1), workspaceId: workspaceId.optional() });
+export const GroupCreateParams = z.object({
+  label: z.string().min(1),
+  workspaceId: workspaceId.optional(),
+});
 export type GroupCreateParams = z.infer<typeof GroupCreateParams>;
 export interface GroupCreateResult {
   group: WorkspaceGroup;
@@ -253,10 +343,16 @@ export const ItemTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ungrouped") }),
 ]);
 // 同じ入れ物の中で `before` の前へ。null は末尾。入れ物が違う・自分自身などは `{moved:false}`（エラーにしない）。
-export const ItemMoveParams = z.object({ item: ItemTargetSchema, before: ItemTargetSchema.nullable() });
+export const ItemMoveParams = z.object({
+  item: ItemTargetSchema,
+  before: ItemTargetSchema.nullable(),
+});
 export type ItemMoveParams = z.infer<typeof ItemMoveParams>;
 // 同じ入れ物の中で 1 つ動かす。端では動かない（`{moved:false}`）。
-export const ItemMoveByParams = z.object({ item: ItemTargetSchema, direction: z.enum(["previous", "next"]) });
+export const ItemMoveByParams = z.object({
+  item: ItemTargetSchema,
+  direction: z.enum(["previous", "next"]),
+});
 export type ItemMoveByParams = z.infer<typeof ItemMoveByParams>;
 export interface ItemMoveResult {
   moved: boolean;
@@ -271,7 +367,12 @@ export const SidebarLayoutSchema = z.object({
 
 // --- tab ------------------------------------------------------------------
 
-export const PluginTabSchema = z.object({ extensionKey: z.string().min(1).max(4096), display: z.string().regex(DISPLAY_NAME_RE),mobileDisplay:z.string().regex(DISPLAY_NAME_RE).optional() });
+export const PluginTabSchema = z.object({
+  extensionKey: z.string().min(1).max(4096),
+  display: z.string().regex(DISPLAY_NAME_RE),
+  mobileDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
+  terminalDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
+});
 export const TabCreateParams = z.object({
   plugin: PluginTabSchema.optional(),
   /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
@@ -282,9 +383,32 @@ export const TabCreateParams = z.object({
 });
 export type TabCreateParams = z.infer<typeof TabCreateParams>;
 export const TabPerspectiveParams = z.object({ tabId, perspective: z.enum(["terminal", "app"]) });
-export const TabAddViewParams = z.object({ tabId, extensionKey: z.string().min(1).max(4096), viewId: z.string().regex(COMMAND_ID_RE), target: z.enum(["tab", "pane"]), paneId: paneId.optional(), placement: ViewPlacementSchema });
+export const TabAddViewParams = z.object({
+  tabId,
+  extensionKey: z.string().min(1).max(4096),
+  viewId: z.string().regex(COMMAND_ID_RE),
+  target: z.enum(["tab", "pane"]),
+  paneId: paneId.optional(),
+  placement: ViewPlacementSchema,
+});
+export const TabMoveViewParams = z.object({
+  tabId,
+  viewInstanceId: z.string().uuid(),
+  placement: ViewPlacementSchema,
+});
 export const TabRemoveViewParams = z.object({ tabId, viewInstanceId: z.string().uuid() });
-export const TabViewInstanceSchema = z.object({ id: z.string().uuid(), extensionKey: z.string().min(1).max(4096), viewId: z.string().regex(COMMAND_ID_RE), display: z.string().regex(DISPLAY_NAME_RE), paneId, target: z.enum(["tab", "pane"]), placement: ViewPlacementSchema });
+export const TabViewInstanceSchema = z.object({
+  terminal: z.strictObject({ format: z.enum(["text", "markdown", "html"]) }).optional(),
+  terminalDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
+  informationTarget: z.enum(["tab", "pane"]).optional(),
+  id: z.string().uuid(),
+  extensionKey: z.string().min(1).max(4096),
+  viewId: z.string().regex(COMMAND_ID_RE),
+  display: z.string().regex(DISPLAY_NAME_RE),
+  paneId,
+  target: z.enum(["tab", "pane"]),
+  placement: ViewPlacementSchema,
+});
 export interface TabCreateResult extends CwdFallbackResult {
   tab: Tab;
   pane: Pane;
@@ -358,7 +482,11 @@ export interface PaneSwapWithResult {
  * （20260924-pane-dnd-split-move。ドラッグでの分割用）。新しい pane は作らない
  * （`pane.split` は新しい PTY を作るのに対し、こちらは既存の pane を動かすだけ。design「対象範囲」）。
  */
-export const PaneMoveToEdgeParams = z.object({ paneId, targetPaneId: paneId, edge: z.enum(["top", "bottom", "left", "right"]) });
+export const PaneMoveToEdgeParams = z.object({
+  paneId,
+  targetPaneId: paneId,
+  edge: z.enum(["top", "bottom", "left", "right"]),
+});
 export type PaneMoveToEdgeParams = z.infer<typeof PaneMoveToEdgeParams>;
 export interface PaneMoveToEdgeResult {
   /** 自分自身・同一 tab でない等、何も起きなかったときは false（design「エラー処理」）。 */
@@ -429,7 +557,11 @@ export interface PaneEditScrollbackResult {
 // 20260927-clipboard-image-paste（herdr の remote_image_paste）。画像を分けて送る（decisions D3）。置き場所・名前はサーバが決め、ここでは受け取らない。
 // `size` の上限はスキーマに置かない——超えたら `image_too_large` で断る（`invalid_params` では利用者に理由を示せない）。
 const uploadId = z.string().min(1).max(64);
-export const PaneImageBeginParams = z.object({ paneId, mime: z.enum(IMAGE_MIME_TYPES), size: z.number().int().min(1) });
+export const PaneImageBeginParams = z.object({
+  paneId,
+  mime: z.enum(IMAGE_MIME_TYPES),
+  size: z.number().int().min(1),
+});
 export type PaneImageBeginParams = z.infer<typeof PaneImageBeginParams>;
 export interface PaneImageBeginResult {
   uploadId: string;
@@ -483,11 +615,19 @@ export const AskAnswerParams = z.object({
       askAnswerText,
       z.array(askAnswerText).max(ASK_OPTIONS_MAX + 1),
       // table: {行の value: 選んだ value}。行の数は選択肢と同じ上限。
-      z.record(z.string().max(ASK_ID_MAX * 2), z.string().max(ASK_ID_MAX * 2)).refine((o) => Object.keys(o).length <= ASK_OPTIONS_MAX, "too many rows"),
+      z
+        .record(z.string().max(ASK_ID_MAX * 2), z.string().max(ASK_ID_MAX * 2))
+        .refine((o) => Object.keys(o).length <= ASK_OPTIONS_MAX, "too many rows"),
     ]),
   ),
-  custom: z.array(z.string().max(ASK_ID_MAX * 2)).max(ASK_QUESTIONS_MAX).optional(),
-  edited: z.array(z.string().max(ASK_ID_MAX * 2)).max(ASK_QUESTIONS_MAX).optional(),
+  custom: z
+    .array(z.string().max(ASK_ID_MAX * 2))
+    .max(ASK_QUESTIONS_MAX)
+    .optional(),
+  edited: z
+    .array(z.string().max(ASK_ID_MAX * 2))
+    .max(ASK_QUESTIONS_MAX)
+    .optional(),
   note: askAnswerText.optional(),
   // 質問ごとの自由記述。キーの数は `checkAskAnswer`（見えている質問にあること）で質問の数以内に収まる。長さの合計の上限も `checkAskAnswer`。
   comments: z.record(z.string().max(ASK_ID_MAX * 2), askAnswerText).optional(),
@@ -498,7 +638,11 @@ export type AskCancelParams = z.infer<typeof AskCancelParams>;
 /** メディアの 1 片を取る（`ask.subscribe` 済みの画面だけ）。`id` は `AskPending.media` の id、`offset` は生のバイトの位置（`ASK_MEDIA_CHUNK_BYTES` の倍数）。 */
 export const AskMediaParams = z.object({
   askId,
-  id: z.number().int().min(0).max(ASK_MEDIA_FILES_MAX - 1),
+  id: z
+    .number()
+    .int()
+    .min(0)
+    .max(ASK_MEDIA_FILES_MAX - 1),
   offset: z.number().int().min(0),
 });
 export type AskMediaParams = z.infer<typeof AskMediaParams>;
@@ -532,7 +676,8 @@ const displaySetFields = {
   collapsed: z.unknown().optional(),
 };
 const displayCloseFields = { name: displayName.optional(), all: z.boolean().optional() };
-const displayCloseOneOf = (v: { name?: string | undefined; all?: boolean | undefined }): boolean => (v.name !== undefined) !== (v.all === true);
+const displayCloseOneOf = (v: { name?: string | undefined; all?: boolean | undefined }): boolean =>
+  (v.name !== undefined) !== (v.all === true);
 const displayCloseMessage = "exactly one of name or all:true is required";
 const displayWaitFields = {
   since: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
@@ -544,7 +689,9 @@ const displayWaitFields = {
 export const DisplaySetParams = z.object({ paneId, ...displaySetFields });
 export type DisplaySetParams = z.infer<typeof DisplaySetParams>;
 /** 面を閉じる（`name` か `all: true` のどちらか 1 つ）。 */
-export const DisplayCloseParams = z.object({ paneId, ...displayCloseFields }).refine(displayCloseOneOf, displayCloseMessage);
+export const DisplayCloseParams = z
+  .object({ paneId, ...displayCloseFields })
+  .refine(displayCloseOneOf, displayCloseMessage);
 export type DisplayCloseParams = z.infer<typeof DisplayCloseParams>;
 export const DisplayListParams = z.object({ paneId });
 export type DisplayListParams = z.infer<typeof DisplayListParams>;
@@ -558,13 +705,18 @@ export type DisplaySendParams = z.infer<typeof DisplaySendParams>;
 export const DisplayFeaturesParams = z.object({});
 export type DisplayFeaturesParams = z.infer<typeof DisplayFeaturesParams>;
 /** この接続を「面を出せる画面」として登録し、全 pane の面の見出しを受け取る（接続のたびに呼ぶ）。`features` の知らない値はサーバが捨てる。 */
-export const DisplaySubscribeParams = z.object({ features: z.array(z.string().max(64)).max(DISPLAY_RENDER_FEATURES_MAX) });
+export const DisplaySubscribeParams = z.object({
+  features: z.array(z.string().max(64)).max(DISPLAY_RENDER_FEATURES_MAX),
+});
 export type DisplaySubscribeParams = z.infer<typeof DisplaySubscribeParams>;
 export interface DisplaySubscribeResult {
   displays: DisplayInfo[];
 }
 /** 中身の 1 片を取る（名乗った接続だけ）。`offset` は 0 か `DISPLAY_GET_CHUNK_BYTES` の倍数（倍数の検査はサーバ）。 */
-export const DisplayGetParams = z.object({ id: displayId, offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) });
+export const DisplayGetParams = z.object({
+  id: displayId,
+  offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+});
 export type DisplayGetParams = z.infer<typeof DisplayGetParams>;
 /** 利用者の操作を、待っているプログラムへ届ける（名乗った接続だけ）。操作の名前・値の規則と `rev` の範囲はサーバが `checkDisplayAction` などで見る。 */
 export const DisplayActionParams = z.object({
@@ -575,7 +727,12 @@ export const DisplayActionParams = z.object({
 });
 export type DisplayActionParams = z.infer<typeof DisplayActionParams>;
 /** 利用者が面を閉じる（`id` の 1 つか、`paneId` の pane の全部のどちらか 1 つ）。 */
-export const DisplayDismissParams = z.object({ id: displayId.optional(), paneId: paneId.optional() }).refine((v) => (v.id !== undefined) !== (v.paneId !== undefined), "exactly one of id or paneId is required");
+export const DisplayDismissParams = z
+  .object({ id: displayId.optional(), paneId: paneId.optional() })
+  .refine(
+    (v) => (v.id !== undefined) !== (v.paneId !== undefined),
+    "exactly one of id or paneId is required",
+  );
 export type DisplayDismissParams = z.infer<typeof DisplayDismissParams>;
 /**
  * 画面が、枠の異常（別のページへ移った・応答しない）を知らせる。その面を閉じる。
@@ -612,7 +769,9 @@ export interface DisplayListResult {
 /** 受け口（`pane.sock`）の引数: 対象の pane は要求の外側の `paneId` で、引数には持たない。`paneId` を載せたら `invalid_params`（strict）。 */
 export const PaneDisplaySetParams = z.strictObject(displaySetFields);
 export type PaneDisplaySetParams = z.infer<typeof PaneDisplaySetParams>;
-export const PaneDisplayCloseParams = z.strictObject(displayCloseFields).refine(displayCloseOneOf, displayCloseMessage);
+export const PaneDisplayCloseParams = z
+  .strictObject(displayCloseFields)
+  .refine(displayCloseOneOf, displayCloseMessage);
 export type PaneDisplayCloseParams = z.infer<typeof PaneDisplayCloseParams>;
 export const PaneDisplayListParams = z.strictObject({});
 export type PaneDisplayListParams = z.infer<typeof PaneDisplayListParams>;
@@ -638,7 +797,10 @@ export interface FileInfoResult {
   canOpen: boolean;
 }
 /** パスが実在するか確かめる。相対パス・`~` はその pane の今の場所・サーバの利用者のホームから解く。結果は `paths` と同じ並び（無ければ null）。 */
-export const FileResolveParams = z.object({ paneId, paths: z.array(filePath).min(1).max(FILE_RESOLVE_MAX_PATHS) });
+export const FileResolveParams = z.object({
+  paneId,
+  paths: z.array(filePath).min(1).max(FILE_RESOLVE_MAX_PATHS),
+});
 export type FileResolveParams = z.infer<typeof FileResolveParams>;
 export interface FileResolveResult {
   files: (ResolvedFile | null)[];
@@ -657,7 +819,11 @@ export interface FileReadResult {
 }
 // ドロップしたファイルを分けて送る。置き場所はサーバが決める（状態ディレクトリの下）。名前はサーバが `sanitizeFileName` で直して使う。
 // `size` の上限はスキーマに置かない——超えたら `file_too_large` で断る（画像と同じ）。
-export const FileUploadBeginParams = z.object({ paneId, name: z.string().min(1).max(FILE_NAME_INPUT_MAX), size: z.number().int().min(0) });
+export const FileUploadBeginParams = z.object({
+  paneId,
+  name: z.string().min(1).max(FILE_NAME_INPUT_MAX),
+  size: z.number().int().min(0),
+});
 export type FileUploadBeginParams = z.infer<typeof FileUploadBeginParams>;
 export interface FileUploadBeginResult {
   uploadId: string;
@@ -726,13 +892,27 @@ export interface WorktreeCreateResult {
  * （`WorktreeEntry.path`）。対象が現在開いている workspace の cwd と一致すれば、成功後に
  * その workspace も自動的に閉じる（design「振る舞いの詳細」）。
  */
-export const WorktreeRemoveParams = z.object({ workspaceId, path: z.string().min(1), force: z.boolean().optional() });
+export const WorktreeRemoveParams = z.object({
+  workspaceId,
+  path: z.string().min(1),
+  force: z.boolean().optional(),
+});
 export type WorktreeRemoveParams = z.infer<typeof WorktreeRemoveParams>;
 
 // --- agent integration（20260923-agent-session-resume。6つ追加: 20260923-other-agents-session-resume）---
 
 /** `model.ts` の `AgentIntegrationKind` と値を揃える（別の型なので同期がずれないよう並びも揃える）。 */
-const agentIntegrationKind = z.enum(["claude", "codex", "cursor", "copilot", "devin", "droid", "grok", "qwen", "qodercli"]);
+const agentIntegrationKind = z.enum([
+  "claude",
+  "codex",
+  "cursor",
+  "copilot",
+  "devin",
+  "droid",
+  "grok",
+  "qwen",
+  "qodercli",
+]);
 
 // --- session の一覧（20260926-named-session-ui。herdr の `session list` を画面から）------------------
 
@@ -794,6 +974,7 @@ export interface SharedPrefs {
   summarySettings?: SummarySettings;
   statusSymbols?: boolean;
   keyboardLockInFullscreen?: boolean;
+  viewTitleVisible?: boolean;
   paneFrameThickness?: "thin" | "default" | "thick";
   paneAgentNameVisible?: boolean;
   tabBarPosition?: "top" | "bottom";
@@ -847,7 +1028,9 @@ export interface SharedPrefs {
  * 知らない項目・知らない値を捨てずに保存する（`passthrough`）。キー `__proto__` は zod が落とす（プロトタイプを差し替えない）。型は上の `SharedPrefs` として
  * 扱う（形を確かめていないので、`as` で型だけを付ける。読む側の正規化が前提）。
  */
-export const SharedPrefs = z.object({ tui: z.object({}).passthrough().optional() }).passthrough() as unknown as z.ZodType<SharedPrefs>;
+export const SharedPrefs = z
+  .object({ tui: z.object({}).passthrough().optional() })
+  .passthrough() as unknown as z.ZodType<SharedPrefs>;
 
 /** 端末ごとに持ち、共有しない項目（web の localStorage に残す。design「設定」）。 */
 export const DEVICE_LOCAL_PREF_KEYS = [
@@ -906,7 +1089,8 @@ export interface AgentIntegrationStatus {
  * - `invalid`: 設定の形が想定と違う・読めない（何も変えない。`message` に理由）
  * - `unsupported`: この OS では導入できない（Windows）
  */
-export type StatusLineWrapState = "none" | "installed" | "needs_update" | "detached" | "invalid" | "unsupported";
+export type StatusLineWrapState =
+  "none" | "installed" | "needs_update" | "detached" | "invalid" | "unsupported";
 export interface StatusLineWrapStatus {
   state: StatusLineWrapState;
   /** `invalid` の理由など。 */
@@ -941,7 +1125,9 @@ export const AgentIntegrationStatusLineParams = z.object({});
 export type AgentIntegrationStatusLineParams = z.infer<typeof AgentIntegrationStatusLineParams>;
 
 export const AgentIntegrationSetAutoResumeParams = z.object({ enabled: z.boolean() });
-export type AgentIntegrationSetAutoResumeParams = z.infer<typeof AgentIntegrationSetAutoResumeParams>;
+export type AgentIntegrationSetAutoResumeParams = z.infer<
+  typeof AgentIntegrationSetAutoResumeParams
+>;
 
 // --- agent への入力（20260926-agent-prompt-send-keys。herdr の agent.prompt / agent.send_keys）---
 
@@ -956,21 +1142,30 @@ export const MAX_AGENT_PROMPT_BYTES = 1024 * 1024;
  * `instanceId` を渡すと、その pane のエージェントがそれと違えば何も書かずに `agent_not_found`（呼び出し側が見た
  * エージェントから入れ替わっていたら送らない）。
  */
-export const AgentPromptExpectation = z.object({
-  paneId: z.string().min(1),
-  instanceId: z.string().min(1),
-  tabId: z.string().min(1),
-  projectDir: z.string().min(1),
-  name: z.string().min(1),
-}).strict();
+export const AgentPromptExpectation = z
+  .object({
+    paneId: z.string().min(1),
+    instanceId: z.string().min(1),
+    tabId: z.string().min(1),
+    projectDir: z.string().min(1),
+    name: z.string().min(1),
+  })
+  .strict();
 export const AgentPromptParams = z.object({
   expect: AgentPromptExpectation.optional(),
   paneId,
   instanceId: z.string().min(1).optional(),
-  text: z.string().refine((t) => new TextEncoder().encode(t).byteLength <= MAX_AGENT_PROMPT_BYTES, "text too large"),
+  text: z
+    .string()
+    .refine(
+      (t) => new TextEncoder().encode(t).byteLength <= MAX_AGENT_PROMPT_BYTES,
+      "text too large",
+    ),
 });
 export type AgentPromptParams = z.infer<typeof AgentPromptParams>;
-export const AgentPromptCheckedParams = AgentPromptParams.extend({expect: AgentPromptExpectation});
+export const AgentPromptCheckedParams = AgentPromptParams.extend({
+  expect: AgentPromptExpectation,
+});
 export interface AgentPromptResult {
   /** 送信を始める時点のエージェント。 */
   agent: AgentInfo;
@@ -1204,12 +1399,18 @@ export type ExtensionSetEnabledParams = z.infer<typeof ExtensionSetEnabledParams
  * プロジェクトの拡張の承認（画面だけ。20261007-ext-host PR3）。`digest` は、画面が見ている登録の鍵（`ExtensionApprovalView.digest`。16 進 64 文字）で、
  * いまの登録と違えば `extension_stale`。`sodactl` からは承認できない・`pane.sock` にも無い。
  */
-export const ExtensionApproveParams = z.object({ key: extensionKey, digest: z.string().regex(/^[0-9a-f]{64}$/) });
+export const ExtensionApproveParams = z.object({
+  key: extensionKey,
+  digest: z.string().regex(/^[0-9a-f]{64}$/),
+});
 export type ExtensionApproveParams = z.infer<typeof ExtensionApproveParams>;
 export const ExtensionDenyParams = ExtensionApproveParams;
 export type ExtensionDenyParams = ExtensionApproveParams;
 /** (根, id) の承認の記録を消す。いま一覧に無い根・id でもよい。`root` は絶対パスの実体（1〜1024 文字）、`id` は拡張の id。 */
-export const ExtensionRevokeParams = z.object({ root: z.string().min(1).max(1024), id: z.string().regex(COMMAND_ID_RE) });
+export const ExtensionRevokeParams = z.object({
+  root: z.string().min(1).max(1024),
+  id: z.string().regex(COMMAND_ID_RE),
+});
 export type ExtensionRevokeParams = z.infer<typeof ExtensionRevokeParams>;
 
 // --- 独自トークン（20260927-sidebar-row-tokens。herdr の workspace.report_metadata / pane.report_metadata） ----------------
@@ -1271,8 +1472,14 @@ export const METHOD_SCHEMAS = {
   "item.move_by": ItemMoveByParams,
   "tab.create": TabCreateParams,
   "tab.set_perspective": TabPerspectiveParams,
+  "workspace.tools": WorkspaceToolsParams,
+  "schedule.list": z.object({}),
+  "schedule.save": ScheduleSaveParams,
+  "schedule.remove": ScheduleIdParams,
+  "schedule.run": ScheduleIdParams,
   "tab.add_view": TabAddViewParams,
   "tab.remove_view": TabRemoveViewParams,
+  "tab.move_view": TabMoveViewParams,
   "tab.rename": TabRenameParams,
   "tab.focus": TabFocusParams,
   "tab.close": TabCloseParams,
@@ -1342,9 +1549,12 @@ export const METHOD_SCHEMAS = {
   "agent.fork_preview": AgentForkPreviewParams,
   "agent.kinds": AgentKindsParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
+  "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
   "notification.update": NotificationUpdateParams,
   "agent.usage": AgentUsageParams,
+  "plugin.discover": z.object({}),
+  "plugin.register": z.object({key:z.string().regex(/^[a-f0-9]{64}$/),digest:z.string().regex(/^[a-f0-9]{64}$/)}),
   "plugin.operations": PluginOperationsParams,
   "plugin.call": PluginCallParams,
   "agent.conversation": AgentConversationParams,
@@ -1382,6 +1592,10 @@ export const METHOD_SCHEMAS = {
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
 export interface MethodResultMap {
+  "schedule.list": ScheduleListResult;
+  "schedule.save": ScheduledJob;
+  "schedule.remove": {};
+  "schedule.run": ScheduledRun | null;
   "client.hello": ClientHelloResult;
   "client.view": Record<string, never>;
   "client.fit": Record<string, never>;
@@ -1410,7 +1624,9 @@ export interface MethodResultMap {
   "item.move_by": ItemMoveResult;
   "tab.create": TabCreateResult;
   "tab.set_perspective": Record<string, never>;
+  "workspace.tools": WorkspaceToolsResult;
   "tab.add_view": import("./model.js").TabViewInstance;
+  "tab.move_view": {};
   "tab.remove_view": Record<string, never>;
   "tab.rename": Record<string, never>;
   "tab.focus": Record<string, never>;
@@ -1482,15 +1698,18 @@ export interface MethodResultMap {
   "agent.fork_preview": AgentForkPreviewResult;
   "agent.kinds": AgentKindsResult;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
+  "notification.test": { ok: true };
   "notification.state": NotificationState;
   "notification.update": NotificationState;
   "agent.usage": AgentUsageResult;
+  "plugin.discover": {candidates:import("./extension.js").PluginCandidate[]};
+  "plugin.register": {};
   "plugin.operations": PluginOperationsResult;
-  "plugin.call": {result:unknown};
+  "plugin.call": { result: unknown };
   "agent.conversation": ConversationPage;
-  "agent.sessions": {sessions:PastAgentSession[];partial:boolean};
-  "agent.resume": Record<string,never>;
-  "agent.command": Record<string,never>;
+  "agent.sessions": { sessions: PastAgentSession[]; partial: boolean };
+  "agent.resume": Record<string, never>;
+  "agent.command": Record<string, never>;
   "agent.summary": ConversationSummary;
   "agent.summary_cached": { summary: ConversationSummary | null };
   "agent.usage_watch": Record<string, never>;

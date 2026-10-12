@@ -872,3 +872,9 @@ describe("agent prompt expected scope",()=>{
   for(const json of ["bad","{}",JSON.stringify({...expected,extra:true})])expect(()=>parseArgs(["agent","prompt","task-one","update","--expect",json],noEnv)).toThrow(CliUsageError);
  });
 });
+
+it("parses notification test and rejects unexpected arguments", () => {
+  expect(parseArgs(["notification","test"],noEnv)).toMatchObject({kind:"notification-test"});
+  expect(()=>parseArgs(["notification","invalid"],noEnv)).toThrow(CliUsageError);
+  expect(()=>parseArgs(["notification","test","unexpected"],noEnv)).toThrow(CliUsageError);
+});

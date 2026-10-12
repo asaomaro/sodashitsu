@@ -12,6 +12,9 @@ export interface OverlayMouse {
 }
 
 export interface OverlayRenderContext {
+  /** Docked view already owns its header and frame. */
+  embedded?: boolean;
+  showTitle?: boolean;
   grid: Grid;
   theme: ThemeColors;
 }
@@ -30,6 +33,7 @@ export interface Overlay {
   /** 描く。入力欄があれば本物のカーソルの位置を返す（無ければ隠したカーソル）。 */
   render(ctx: OverlayRenderContext): CursorState | null;
   /** 外側を押した・Esc で閉じる（取り消し）。 */
+  canLeave?(): boolean;
   cancel(): void;
   /** 別のダイアログに置き換わった・閉じた後の後始末（popup のコマンドを止める等）。 */
   dispose?(): void;

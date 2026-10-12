@@ -6,9 +6,9 @@ const mountIt = (props: { zone: "top" | "bottom" | "left" | "right" | "float" | 
 const zone = (w: ReturnType<typeof mountIt>, z: string) => w.get(`[data-display-drop-zone="${z}"]`);
 
 describe("DisplayDropZones", () => {
-  it("5 つの場所と文言。pointer-events: none の入れ物は aria-hidden", () => {
+  it("7 つの場所と文言。pointer-events: none の入れ物は aria-hidden", () => {
     const w = mountIt({ zone: null, current: null, float: false });
-    expect(w.findAll("[data-display-drop-zone]").map((e) => e.attributes("data-display-drop-zone"))).toEqual(["top", "left", "float", "right", "bottom"]);
+    expect(w.findAll("[data-display-drop-zone]").map((e) => e.attributes("data-display-drop-zone"))).toEqual(["top", "left", "float", "right", "bottom", "band-top", "band-bottom"]);
     expect(zone(w, "top").text()).toBe("上に置く");
     expect(zone(w, "bottom").text()).toBe("下に置く");
     expect(zone(w, "left").text()).toBe("左に置く");

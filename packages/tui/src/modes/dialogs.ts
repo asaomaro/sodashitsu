@@ -1,4 +1,8 @@
-import { defaultCheckoutPath } from "@sodashitsu/protocol";
+import {
+  BUILTIN_WORKSPACE_KEY,
+  BUILTIN_DEVELOPMENT_DISPLAY,
+  defaultCheckoutPath,
+} from "@sodashitsu/protocol";
 import { repoMembers, type KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -28,6 +32,8 @@ export interface DialogDeps {
   ui: UiState;
   model: SessionModel;
   actions: TuiDispatcher;
+  conn?: import("../term/PaneRegistry.js").RequestPort;
+  redraw?: () => void;
 }
 
 type NameKind = Extract<
@@ -38,6 +44,7 @@ type NameKind = Extract<
       | "newWorkspace"
       | "renamePane"
       | "renameTab"
+      | "projectFolder"
       | "renameWorkspace"
       | "createGroup"
       | "renameGroup";
@@ -50,6 +57,7 @@ const NAME_TITLES: Record<NameKind["kind"], string> = {
   renamePane: "pane の名前を変更",
   renameTab: "tab の名前を変更",
   renameWorkspace: "workspace の名前を変更",
+  projectFolder: "PJフォルダを設定",
   createGroup: "新しいグループの名前",
   renameGroup: "グループの名前を変更",
 };
@@ -60,6 +68,11 @@ export function isNameKind(ctx: DialogContext): ctx is NameKind {
 
 /** 名前の入力欄（web の `NameDialog.vue`）。Enter で確定・Esc で取り消し（AC-I2）。 */
 export class NameDialog implements Overlay {
+  private kindIndex = 0;
+  private kinds: { title: string; plugin?: import("@sodashitsu/protocol").PluginTab }[] = [
+    { title: "ターミナル" },
+  ];
+  private dead = false;
   private readonly input: TextInput;
   /** 開いたときの値（新しい tab は、変えずに確定したら名前を送らない。web の D75）。 */
   private readonly openedWith: string;
@@ -71,10 +84,46 @@ export class NameDialog implements Overlay {
   ) {
     this.openedWith = initialName(ctx, deps.model);
     this.input = new TextInput(this.openedWith);
+    if (ctx.kind === "newTab") {
+      if (deps.model.workspaces.get(ctx.workspaceId)?.projectDir)
+        this.kinds.push({
+          title: "開発（標準）",
+          plugin: { extensionKey: BUILTIN_WORKSPACE_KEY, display: BUILTIN_DEVELOPMENT_DISPLAY },
+        });
+      void deps.conn
+        ?.request("extension.list", {})
+        .then((list) => {
+          if (this.dead) return;
+          for (const ext of list.extensions) {
+            const v = ext.tabView;
+            if (
+              ext.state === "running" &&
+              v?.terminalDisplay &&
+              (ext.scope === "user" || ext.workspaceIds?.includes(ctx.workspaceId)) &&
+              (v.requiresProject === false ||
+                deps.model.workspaces.get(ctx.workspaceId)?.projectDir)
+            )
+              this.kinds.push({
+                title: v.title,
+                plugin: {
+                  extensionKey: ext.key,
+                  display: v.display,
+                  terminalDisplay: v.terminalDisplay,
+                },
+              });
+          }
+          deps.redraw?.();
+        })
+        .catch(() => {});
+    }
   }
 
   handleKey(k: KeyInput): void {
     if (isEsc(k)) return this.cancel();
+    if (this.ctx.kind === "newTab" && k.key === "Tab") {
+      this.kindIndex = (this.kindIndex + 1) % this.kinds.length;
+      return;
+    }
     if (isEnter(k)) return this.confirm();
     this.input.handleKey(k);
   }
@@ -84,6 +133,8 @@ export class NameDialog implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.ctx.kind === "newTab" && this.rect && ev.action === "down" && ev.y === this.rect.y + 2)
+      this.kindIndex = (this.kindIndex + 1) % this.kinds.length;
     return inside(this.rect, ev.x, ev.y);
   }
 
@@ -91,12 +142,23 @@ export class NameDialog implements Overlay {
     this.deps.ui.closeDialog();
   }
 
+  dispose(): void {
+    this.dead = true;
+  }
+
   private confirm(): void {
     const { actions } = this.deps;
     const value = this.input.value;
     switch (this.ctx.kind) {
       case "newTab":
-        actions.confirmNewTab(value.trim() === this.openedWith.trim() ? "" : value);
+        actions.confirmNewTab(
+          value.trim() === this.openedWith.trim()
+            ? this.kindIndex
+              ? this.kinds[this.kindIndex]!.title
+              : ""
+            : value,
+          this.kinds[this.kindIndex]?.plugin,
+        );
         return;
       case "newWorkspace":
         actions.confirmNewWorkspace(value);
@@ -110,6 +172,9 @@ export class NameDialog implements Overlay {
       case "renameWorkspace":
         actions.confirmRenameWorkspace(value);
         return;
+      case "projectFolder":
+        actions.confirmProjectFolder(value);
+        return;
       case "createGroup":
         actions.confirmCreateGroup(value);
         return;
@@ -122,11 +187,15 @@ export class NameDialog implements Overlay {
   render({ grid, theme }: OverlayRenderContext): CursorState {
     const c = dialogColors(theme);
     const hint =
-      this.ctx.kind === "renameWorkspace"
-        ? `${this.ctx.currentAutoLabel ? "いまは自動の名前です。" : ""}空にして確定すると、自動の名前（リポジトリ名かフォルダ名）に戻ります。`
-        : this.ctx.kind === "newWorkspace"
-          ? "空のまま確定すると、自動の名前（リポジトリ名かフォルダ名）になります。"
-          : "";
+      this.ctx.kind === "newTab"
+        ? `種類: ${this.kinds[this.kindIndex]?.title ?? "ターミナル"} · Tabで切替`
+        : this.ctx.kind === "projectFolder"
+          ? "サーバ側の絶対パスを指定します。空にして確定すると設定を解除します。"
+          : this.ctx.kind === "renameWorkspace"
+            ? `${this.ctx.currentAutoLabel ? "いまは自動の名前です。" : ""}空にして確定すると、自動の名前（リポジトリ名かフォルダ名）に戻ります。`
+            : this.ctx.kind === "newWorkspace"
+              ? "空のまま確定すると、自動の名前（リポジトリ名かフォルダ名）になります。"
+              : "";
     const width = Math.min(60, grid.w - 2);
     const hintLines = hint ? wrapText(hint, width - 4) : [];
     const r = centeredRect(grid, width, 5 + hintLines.length);
@@ -151,6 +220,7 @@ export class NameDialog implements Overlay {
 }
 
 function initialName(ctx: NameKind, model: SessionModel): string {
+  if (ctx.kind === "projectFolder") return ctx.currentPath;
   if (ctx.kind === "newTab") {
     const ws = model.workspaces.get(ctx.workspaceId);
     return ws ? String(ws.tabIds.length + 1) : "";

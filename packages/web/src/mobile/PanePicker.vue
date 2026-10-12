@@ -68,9 +68,7 @@ function openPaneInfo(paneId: string): void {
 function selectWorkspace(workspaceId: string): void {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return;
-  const tab = session.tabs.get(ws.activeTabId);
-  view.setView(workspaceId, ws.activeTabId);
-  if (tab) view.focusPane(tab.focusedPaneId);
+  view.selectWorkspace(workspaceId);
   void conn?.request("workspace.focus", { workspaceId }).catch(() => undefined);
   emit("close");
 }
@@ -79,7 +77,7 @@ function selectTab(tabId: string): void {
   const tab = session.tabs.get(tabId);
   if (!tab) return;
   view.setView(tab.workspaceId, tabId);
-  view.focusPane(tab.focusedPaneId);
+  view.focusPane(view.preferredPane(tab.id));
   void conn?.request("tab.focus", { tabId }).catch(() => undefined);
   emit("close");
 }

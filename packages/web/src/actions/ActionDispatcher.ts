@@ -488,10 +488,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view.closeDialog();
     const existing = [...this.session.workspaces.values()].find((w) => w.cwd === path);
     if (existing) {
-      this.view.setView(existing.id, existing.activeTabId);
-      // `setView` は焦点の pane を触らないので、対で移す（Sidebar・GotoPicker・goto・PanePicker と同じ形）。
-      const tab = this.session.tabs.get(existing.activeTabId);
-      if (tab) this.view.focusPane(tab.focusedPaneId);
+      this.view.selectWorkspace(existing.id);
       void this.conn.request("workspace.focus", { workspaceId: existing.id }).catch(() => undefined);
       return;
     }
@@ -1172,7 +1169,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private switchToTab(workspaceId: string, tabId: string): void {
     this.view.setView(workspaceId, tabId);
     const tab = this.session.tabs.get(tabId);
-    if (tab) this.view.focusPane(tab.focusedPaneId);
+    if (tab) this.view.focusPane(this.view.preferredPane(tab.id));
     void this.conn.request("tab.focus", { tabId }).catch(() => undefined);
   }
 
@@ -1416,9 +1413,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private focusWorkspaceById(workspaceId: string): void {
     const ws = this.session.workspaces.get(workspaceId);
     if (ws) {
-      this.view.setView(ws.id, ws.activeTabId);
-      const tab = this.session.tabs.get(ws.activeTabId);
-      if (tab) this.view.focusPane(tab.focusedPaneId);
+      this.view.selectWorkspace(ws.id);
     }
     void this.conn.request("workspace.focus", { workspaceId }).catch(() => undefined);
   }
@@ -1743,6 +1738,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.settings.themeLight = themePrefs.light;
     this.settings.themeDark = themePrefs.dark;
     this.settings.paneFrameThickness = loadPaneFrameThickness(raw["paneFrameThickness"]);
+    this.settings.viewTitleVisible = raw["viewTitleVisible"] !== false;
     this.settings.paneAgentNameVisible = loadPaneAgentNameVisible(raw["paneAgentNameVisible"]);
     // 20260922-tabbar-pane-appearance（PR #12 から取り込み）分。
     this.settings.tabBarPosition = loadTabBarPosition(raw["tabBarPosition"]);

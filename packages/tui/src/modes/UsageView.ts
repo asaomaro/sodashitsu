@@ -1,3 +1,4 @@
+import { glyphFor, stateColor } from "../render/chrome/context.js";
 import { paneNameOf, type KeyInput } from "@sodashitsu/client-core";
 import { shortId, type AgentUsage } from "@sodashitsu/protocol";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -20,7 +21,7 @@ import {
 } from "./overlay.js";
 import type { Grid, Rect } from "../render/Screen.js";
 import type { ThemeColors } from "../render/color.js";
-import { truncate } from "../render/width.js";
+import { stringWidth, truncate } from "../render/width.js";
 
 const num = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString("ja-JP"));
 const basis = { cumulative: "累計", transcript: "記録に残る分", context: "文脈内" };
@@ -89,7 +90,7 @@ export class UsageDialog implements Overlay {
     this.ui.closeDialog();
   }
   render({ grid, theme }: OverlayRenderContext) {
-    this.rect = centeredRect(grid, 90, 16);
+    this.rect = centeredRect(grid, grid.w - 2, grid.h - 2);
     const c = dialogColors(theme),
       area = drawBox(
         grid,
@@ -140,6 +141,7 @@ export class UsageDashboard {
     private readonly ui: UiState,
     private readonly usage: UsageModel,
     private readonly focus: (id: string) => void,
+    private readonly symbols: () => boolean = () => true,
   ) {}
   private rows() {
     return [...this.model.panes.values()]
@@ -222,6 +224,11 @@ export class UsageDashboard {
     );
     const status = statusText(this.usage);
     if (status) put(y++, status);
+    const section = (title: string) => {
+      const label = truncate(`─ ${title} `, Math.max(0, area.w - 2));
+      put(y++, label + "─".repeat(Math.max(0, area.w - 2 - stringWidth(label))));
+    };
+    section("アカウントの利用枠");
     const accountLines = this.usage.data.accounts.flatMap((a) => [
       `${a.label}${a.plan ? " · " + a.plan : ""} · ${new Date(a.asOf).toLocaleString("ja-JP")}`,
       ...a.windows.map(
@@ -229,13 +236,15 @@ export class UsageDashboard {
           `  ${w.label}: ${usageGauge(w.usedPct)}${w.resetsAt ? " · リセット " + new Date(w.resetsAt).toLocaleString("ja-JP") : ""}${w.stale ? "（古い値）" : ""}`,
       ),
     ]);
-    const accountRoom = Math.max(0, Math.min(Math.floor(area.h / 3), area.y + area.h - y - 4));
+    const accountRoom = Math.max(0, Math.min(Math.floor(area.h / 3), area.y + area.h - y - 5));
     for (const line of accountLines.slice(0, accountRoom)) put(y++, line);
     if (accountLines.length > accountRoom && accountRoom > 0)
       put(y - 1, `アカウント枠: ほか ${accountLines.length - accountRoom + 1} 行（aで一覧）`);
+    if (!accountLines.length && area.h >= 8) put(y++, "利用枠の情報がありません（aで一覧）");
+    section("エージェント");
     const rows = this.rows();
     this.selected = Math.max(0, Math.min(this.selected, rows.length - 1));
-    const rowHeight = area.h < 7 ? 1 : 3;
+    const rowHeight = area.y + area.h - y - 1 < 3 ? 1 : 3;
     const available = Math.max(0, Math.floor((area.y + area.h - y - 1) / rowHeight));
     const start = Math.max(0, this.selected - available + 1);
     if (!rows.length) put(y++, "エージェントがありません");
@@ -243,11 +252,15 @@ export class UsageDashboard {
       const tab = this.model.tabs.get(p.tabId),
         ws = tab ? this.model.workspaces.get(tab.workspaceId) : undefined;
       const bg = start + i === this.selected ? c.active : c.bg;
+      const state = this.model.displayStateOf(p);
+      const glyph = glyphFor(state, this.symbols());
       put(
         y,
-        `${paneNameOf(p)} · ${ws?.label ?? shortId(tab?.workspaceId ?? p.tabId)} / ${tab?.label ?? shortId(p.tabId)}`,
+        `${glyph ? glyph + " " : ""}${paneNameOf(p)} · ${ws?.label ?? shortId(tab?.workspaceId ?? p.tabId)} / ${tab?.label ?? shortId(p.tabId)}`,
         bg,
       );
+      if (y < area.y + area.h)
+        grid.text(area.x + 1, y, glyph, stateColor(theme, state), bg, 0, Math.max(0, area.w - 2));
       this.hits.push({ y, paneId: p.id });
       y++;
       if (rowHeight === 1) continue;

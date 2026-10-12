@@ -1,3 +1,6 @@
+import type {ArtifactFiles} from '../http/ArtifactFiles.js';
+import {z} from 'zod';
+import {viewInformation} from "./viewInformation.js";
 import {PluginOperations} from "./PluginOperations.js";
 import { TaskAgentLauncher, TaskStartSchema, type TaskAgentDeps } from "./TaskAgentLauncher.js";
 import { randomUUID } from "node:crypto";
@@ -66,6 +69,7 @@ export interface ExtensionHostOptions {
   session: Pick<SessionService, "snapshot" | "commandContext" | "hasPane">;
   displays: DisplayService;
   tasks?: TaskAgentDeps;
+  artifacts?: ArtifactFiles;
   bus: EventBus;
   isScreenKind(clientId: string): boolean;
   baseEnv: NodeJS.ProcessEnv;
@@ -183,7 +187,7 @@ class Debouncer {
   }
 }
 
-const PANE_EVENTS = new Set(["pane.created", "pane.closed", "tab.created", "tab.closed", "tab.updated", "layout.updated", "workspace.updated", "workspace.created", "workspace.closed", "pane.updated"]);
+const PANE_EVENTS = new Set(["session.focus_changed", "pane.created", "pane.closed", "tab.created", "tab.closed", "tab.updated", "layout.updated", "workspace.updated", "workspace.created", "workspace.closed", "pane.updated"]);
 /** workspace の増減（プロジェクトの根・設定を読み直すきっかけ）。 */
 const WORKSPACE_EVENTS = new Set(["workspace.created", "workspace.closed", "workspace.updated"]);
 
@@ -268,6 +272,7 @@ export class ExtensionHost {
       panes: (ext) => this.panesFor(ext),
       inScope: (ext, paneId) => this.inScopeFn(ext, paneId),
       logger: opts.logger,
+      artifactMethods:opts.artifacts?["artifact.open","artifact.close"]:[],
       ...(this.taskLauncher ? {taskMethods:["task.kinds","task.start"]} : {}),
     });
     this.panesDebounce = new Debouncer(this.clock, EXTENSION_PANES_DEBOUNCE_MS, 500, () => this.refreshPanes());
@@ -1024,6 +1029,23 @@ export class ExtensionHost {
           const r = this.runs.get(key);
           if (!r || r.runId !== runId) return;
           if(this.pluginOperations.handle(key,runId,req))return;
+          if(this.opts.artifacts&&(req.method==='artifact.open'||req.method==='artifact.close')){
+            const operation=async()=>{
+              if(!r.ext.allow.includes('script-html')||!this.opts.displays.features().scriptEnabled)throw new RpcError('invalid_params','成果物のHTTP表示が許可されていません');
+              if(req.method==='artifact.close'){
+                const p=z.object({token:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.params);
+                this.opts.artifacts!.revoke(r.tag,p.token);return {};
+              }
+              const parsed=z.object({paneId:z.string(),path:z.string().max(4096),kind:z.enum(['html','text','image']),stamp:z.object({size:z.number().int().nonnegative(),mtimeMs:z.number(),ino:z.number()})}).safeParse(req.params);
+              if(!parsed.success)throw new RpcError('invalid_params','成果物の指定が不正です');
+              const p=parsed.data,pane=this.panesFor(r.ext).find(q=>q.id===p.paneId);
+              if(!pane?.projectDir||!(pane.plugin?.extensionKey===key||pane.views?.some(v=>v.extensionKey===key)))throw new RpcError('not_found','この拡張の制作環境が見つかりません');
+              const valid=()=>this.runs.get(key)?.runId===runId&&this.opts.displays.features().scriptEnabled===true&&this.panesFor(r.ext).some(q=>q.id===p.paneId&&q.projectDir===pane.projectDir&&(q.plugin?.extensionKey===key||q.views?.some(v=>v.extensionKey===key)));
+              return this.opts.artifacts!.register(r.tag,pane.projectDir,p.path,p.stamp,p.kind,valid);
+            };
+            void operation().then(result=>{if(req.id!==undefined&&this.runs.get(key)?.runId===runId)r.proc.send({type:'ext.result',id:req.id,ok:true,result});}).catch(err=>{if(req.id!==undefined&&this.runs.get(key)?.runId===runId)r.proc.send({type:'ext.result',id:req.id,ok:false,error:{code:err instanceof RpcError?err.code:'internal',message:err instanceof RpcError?err.message:'成果物の表示に失敗しました'}});});
+            return;
+          }
           if(this.taskLauncher && (req.method==="task.kinds"||req.method==="task.start")){
             const target=()=>{
               if(this.runs.get(key)?.runId!==r.runId || !r.ext.allow.includes("agent-start"))throw new RpcError("invalid_params","agent-start の許可が必要です");
@@ -1137,6 +1159,7 @@ export class ExtensionHost {
     const run = this.runs.get(key);
     if (!run || run.runId !== runId) return;
     this.pluginOperations.stopped(key,runId);
+    this.opts.artifacts?.revokeOwner(run.tag);
     this.runs.delete(key);
     this.closing.add(run.proc);
     void run.proc.settled.then(() => this.closing.delete(run.proc));
@@ -1218,8 +1241,8 @@ export class ExtensionHost {
       if (!this.inScopeFn(ext, p.id)) continue;
       const isAppAnchor = tab!.plugin && (tab!.displayPaneId ? tab!.displayPaneId === p.id : tab!.focusedPaneId === p.id);
       const appDefinition=tab!.plugin?this.desired.get(tab!.plugin.extensionKey)?.entry.tabView:undefined;
-      const appPlugin=tab!.plugin && appDefinition?.display===tab!.plugin.display?{...tab!.plugin,mobileDisplay:appDefinition.mobileDisplay}:tab!.plugin;
-      const views = tab!.views?.filter(v => v.paneId === p.id && v.extensionKey === ext.key);
+      const appPlugin=tab!.plugin && appDefinition?.display===tab!.plugin.display?{...tab!.plugin,mobileDisplay:appDefinition.mobileDisplay,terminalDisplay:appDefinition.terminalDisplay}:tab!.plugin;
+      const views = tab!.views?.filter(v => v.paneId === p.id && v.extensionKey === ext.key).map(v=>viewInformation(v,tab!.focusedPaneId));
       out.push({ id: p.id, label: p.label, workspaceId: ws.id, workspaceLabel: ws.label, workspaceCwd: ws.cwd, ...(ws.projectDir ? { projectDir: ws.projectDir } : {}), tabId: tab!.id, ...(isAppAnchor ? { plugin: appPlugin! } : {}), ...(p.virtual ? { virtual: true } : {}), ...(views?.length ? { views } : {}), ...(p.agent ? { agentState: p.agent.state } : {}), agent: p.agent?.kind ?? null });
     }
     return out;

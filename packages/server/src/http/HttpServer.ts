@@ -1,3 +1,4 @@
+import {ARTIFACT_PREFIX,type ArtifactFiles} from './ArtifactFiles.js';
 import { OtpAuthChangedError, type OtpAuth } from "../auth/OtpAuth.js";
 import { createServer as createHttpServer, type IncomingMessage, type Server as HttpServerType, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
@@ -12,6 +13,7 @@ import { LogThrottle } from "../log/LogThrottle.js";
 import { requestPathname } from "../util/net.js";
 
 export interface HttpServerOptions {
+  artifacts?: ArtifactFiles;
   otpAuth?: OtpAuth;
   webDistDir: string;
   /** TLS の PEM の中身（main.ts がファイルから読んで渡す。パスではない）。両方揃えば HTTPS。 */
@@ -161,6 +163,7 @@ export class HttpServer {
     if (req.method === "POST" && pathname === "/api/local-login") return this.handleLocalLogin(req, res);
     if (req.method === "POST" && pathname === "/api/logout") return this.handleLogout(req, res);
     if (req.method === "GET" && pathname === "/api/session") return this.handleSession(req, res);
+    if (pathname.startsWith(ARTIFACT_PREFIX)){if(this.opts.artifacts)return this.opts.artifacts.serve(req,res,pathname);res.statusCode=404;res.end();return;}
     if (pathname.startsWith("/ask-view/")) return this.handleViewFiles(req, res, pathname, "/ask-view/", "ask-view", ASK_VIEW_FILES);
     if (pathname.startsWith("/display-view/")) return this.handleViewFiles(req, res, pathname, "/display-view/", "display-view", DISPLAY_VIEW_FILES);
     return this.handleStatic(req, res, pathname);
@@ -198,7 +201,12 @@ export class HttpServer {
     res.setHeader("Content-Type", entry.type);
     if (entry.csp !== undefined) {
       // 隔離表示のページ: 本体の CSP・X-Frame-Options を置き換える（枠を同じ origin の iframe に入れられるように）。
-      res.setHeader("Content-Security-Policy", entry.csp);
+      let csp=entry.csp;
+      if(name==='script.html'&&this.opts.artifacts){
+        const host=req.headers.host;
+        if(host&&/^(?:[A-Za-z0-9.-]+|\[[a-fA-F0-9:]+\])(?::[0-9]{1,5})?$/.test(host))csp=csp.replace('frame-src blob:',`frame-src blob: ${this.secure?'https':'http'}://${host}${ARTIFACT_PREFIX}`);
+      }
+      res.setHeader("Content-Security-Policy", csp);
       for (const [k, v] of Object.entries(ASK_VIEW_PAGE_HEADERS)) res.setHeader(k, v);
       for (const [k, v] of Object.entries(entry.headers ?? {})) res.setHeader(k, v);
     } else {

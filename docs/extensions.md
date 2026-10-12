@@ -276,10 +276,16 @@ process.on("SIGTERM", () => process.exit(0)); // 止めるとき、soda は標�
 - **親が先に終わった後の孫は止められない**（pid が再利用されうるので、`taskkill` を動かさない）。
 - 結合テスト・起動確認は Windows ではスキップする。
 
-`tabView` を設定した拡張は、タブ作成時の種類に表示できる。`ext.panes` には任意の `projectDir` と `plugin`（主画面アンカーの拡張keyとname）、`virtual`、`views`、`agentState` が含まれる。`views` を宣言すると、通常の端末タブにも追加できるビューを提供する。PJフォルダを設定したworkspaceのプロジェクト拡張は、そのフォルダ自体から読む（gitリポジトリは不要）。PJ未設定の場合は従来どおりworkspace.cwdのgitの根から読む。詳しくは [拡張パッケージ](plugin-packages.md)。
+`tabView` を設定した拡張は、タブ作成時の種類に表示できる。`ext.panes` には任意の `projectDir` と `plugin`（主画面アンカーの拡張keyとname）、`virtual`、`views`、`agentState` が含まれる。`views` を宣言すると、通常の端末タブにも追加できるビューを提供する。`views[].targets` で情報の対象（`tab`／`pane`）を宣言し、追加先に応じて候補を絞る。浮いた窓も情報対象と表示配置は独立している。PJフォルダを設定したworkspaceのプロジェクト拡張は、そのフォルダ自体から読む（gitリポジトリは不要）。PJ未設定の場合は従来どおりworkspace.cwdのgitの根から読む。詳しくは [拡張パッケージ](plugin-packages.md)。
 
 ## 新しい作業ペインへの制作依頼
 
 `agent-start` 許可を登録した稼働中の拡張は `task.kinds {}` と `task.start {paneId,kind,taskFile}` を利用できる。未許可の拡張には機能を告知せず拒否する。kindは初期プロンプト起動を確認したclaude/codex、taskFileはPJ内の相対パスの64KiB以下の通常ファイル。paneIdはその拡張自身のアプリ/追加ビューに属するものだけ。既存の端末へ任意入力するAPIではなく、同じタブの新しい作業ペインでPJ cwdから起動する。
 
 戻り値は `{paneId,kind,name,status:"submitted"}`。CLIの起動指示を送ったことを表し、ログイン・利用者の確認・スキルや依存の不足などで作業が始まらない場合は新しいペインで確認する。起動待ち中も、拡張の稼働・PJ範囲・ペインの所属を入力直前に再確認する。同じ稼働ペインへの重複依頼はまとめ、異なるkindの重複依頼は拒否する。失敗して生成済みのペインは調査のため残す。
+
+### 大きな成果物をHTTPで表示する
+
+`script-html` が許可・有効な拡張は `artifact.open` / `artifact.close` を使える（対応時だけ `ext.hello.methods` に出る）。`artifact.open` は `{paneId,path,kind:"html"|"text"|"image",stamp:{size,mtimeMs,ino}}` を受け、自分の拡張paneに紐づくPJ内の通常ファイルのみ登録する。戻り値は `{token,path:"/display-artifacts/<token>"}`。本文はdisplay.sendに載せず、このpathをiframeへ設定する。URLは15分で失効する。`artifact.close` の `{token}`、拡張停止、pane/PJ変更でも無効になる。複数の拡張が互いのtokenを破棄することはできない。登録は拡張runごと8個、サーバ全体128個まで。
+
+HTTPはGET/HEADのみ、通常の認証cookieではなくランダム256bitの一時URLが閲覧能力になる。URLをログや外部サイトへ転載しない。キャッシュとリファラは送らない。FDを保持し、登録時と配信時のサイズ/mtimeを検査して変更されたものは表示しない。HTMLは応答でもsandboxを付け、不透明originで動かし、外部通信/親アプリへのアクセスは許可しない。script.htmlのframe-srcは同じサーバの専用経路だけを許可する。textはtext/plain、imageはimage/png。ファイルサイズの利用者確認は拡張のUIで登録前に行う（Yukkuri Studioは設定値と一回の許可を使用）。別マシンへのWS中継を通じたHTTP成果物転送はこの機能に含めない。

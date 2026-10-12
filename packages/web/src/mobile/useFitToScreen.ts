@@ -9,6 +9,8 @@ import type { ViewSync } from "../term/ViewSync.js";
 
 export interface UseFitToScreenOptions {
   conn: ConnectionPort;
+  /** モバイルの本体では初回から実PTYを表示領域に合わせる。 */
+  initialFit?: boolean;
   registry: TerminalRegistry;
   /** 新しい接続の最初の `client.view` の直後に `client.fit` を送り直す口（`ViewSync.onViewEstablished`。D107・D108）。 */
   viewSync: Pick<ViewSync, "onViewEstablished">;
@@ -24,34 +26,26 @@ export interface NaturalSize {
 }
 
 /**
- * サイズの縮小表示と「この端末に合わせる」の切り替え（04-mobile T6。design「サイズ」）。
- * 既定ではサイズ権限を取らず（`client.fit` を送らない）、pane の pixel サイズ（`cols × cellWidth`）が
- * 表示領域の幅を超える分だけ `transform: scale()` で縮める。有効にすると `client.fit({enabled:true})` を
- * 送ってサイズ権限を取り（design「サイズ」）、等倍（`scale === 1`）で表示する。
+ * モバイルの本体はinitialFit:trueで実PTYを表示領域に合わせる。
+ * この部品単体の既定は縮小表示（初期fit:false）で、toggleFitで切り替えられる。
  *
- * **`naturalSize` を返す理由**：xterm.js は自分の cols/rows（＝サーバから届く実物のグリッドの大きさ）で
- * 決まる pixel サイズのまま描画する（マウント先の DOM 要素の CSS サイズには自動で合わせない）。
- * `transform: scale()` はレイアウト上の大きさを変えないため、マウント先の要素に `width:100%` のような
- * 相対サイズを与えたままだと「小さい入れ物いっぱいに描いてから縮める」という循環になり縮小の意味が無い。
- * 呼び出し側（`MobileShell.vue`）は `naturalSize` を明示的な px の `width`/`height` として当ててから
- * `transform: scale(scale)` を重ねる。
+ * xtermはサーバのcols/rows×セル寸法の自然サイズで描く。DOMの自然サイズを明示し、
+ * 表示領域の幅・高さに収まる倍率を計算する。fit中でも別クライアントがサイズ権限を
+ * 取った場合やPTY更新を待つ間は、はみ出さない倍率で表示する。
  *
- * **「この端末に合わせる」は接続をまたいで持ち、新しい接続ごとにサーバへ送り直す**（04-mobile T9・D108。統合 review ラウンド1・
- * D106 の独立点検 #2 で発見）。サーバは接続ごとに新しい clientId を fit:false で登録する（D106）が、以前は `fitEnabled` を
- * 持ち越したまま `client.fit` を送り直さなかった——再接続の後はボタンが押された表示のままサーバでは権限を取らず、別の
- * クライアントが決めた大きさのまま等倍で描いて画面からはみ出した。`ViewSync.onViewEstablished`（新しい接続で最初の
- * `client.view` を送った直後、続く `pane.subscribe` より前。初回の接続でも呼ぶ）で、有効なら `client.fit({enabled:true})` を
- * 送る——サーバには `client.view` → `client.fit` → `pane.subscribe` の順に届き（`ConnectionPort.request` は同期的に送る）、
- * `client.fit` は表示のある接続でしか権限を取らない（D106 の `onFitChanged`）ので、この順でなければならない。SNAPSHOT は
- * fit で決まった大きさで取られる。初回の接続では `fitEnabled` は false なので何も送らない。
- * `toggleFit` は、hello が通った接続がある間（`connectionState === 'open'`）だけ `client.fit` を送る。無い間（切断中・再接続の
- * hello 待ち）は手元の状態だけを替える——hello より前に送らない（D107）。有効にした分は次の接続の `onViewEstablished` で送り、
- * 無効にした分は送らなくてよい（新しい接続は fit:false から始まる）。
+ * fitはclient.view送信直後・pane.subscribe前に適用する。初回接続と再接続だけでなく、
+ * 既存接続でMobileShellをマウントした場合にも次のviewの直後に送る。
+ * 切断中は送らず、次のhello後のviewで有効な状態を送り直す。
  */
-export function useFitToScreen(opts: UseFitToScreenOptions): { scale: Ref<number>; fitEnabled: Ref<boolean>; naturalSize: Ref<NaturalSize | null>; toggleFit: () => void } {
+export function useFitToScreen(opts: UseFitToScreenOptions): {
+  scale: Ref<number>;
+  fitEnabled: Ref<boolean>;
+  naturalSize: Ref<NaturalSize | null>;
+  toggleFit: () => void;
+} {
   const session = useSessionStore();
   const view = useViewStore();
-  const fitEnabled = ref(false);
+  const fitEnabled = ref(opts.initialFit ?? false);
   const scale = ref(1);
   const naturalSize = ref<NaturalSize | null>(null);
 
@@ -63,18 +57,19 @@ export function useFitToScreen(opts: UseFitToScreenOptions): { scale: Ref<number
     const paneId = opts.paneId.value;
     const pane = paneId ? session.panes.get(paneId) : undefined;
     const cell = cellSizeOf(paneId ? opts.registry.get(paneId)?.term : undefined);
-    naturalSize.value = pane && cell ? { width: pane.cols * cell.width, height: pane.rows * cell.height } : null;
+    naturalSize.value =
+      pane && cell ? { width: pane.cols * cell.width, height: pane.rows * cell.height } : null;
 
-    if (fitEnabled.value) {
-      scale.value = 1;
-      return;
-    }
     const el = opts.container.value;
     if (!naturalSize.value || !el || el.clientWidth <= 0 || naturalSize.value.width <= 0) {
       scale.value = 1;
       return;
     }
-    scale.value = Math.min(1, el.clientWidth / naturalSize.value.width);
+    scale.value = Math.min(
+      1,
+      el.clientWidth / naturalSize.value.width,
+      el.clientHeight > 0 ? el.clientHeight / naturalSize.value.height : 1,
+    );
   }
 
   function sendFit(enabled: boolean): void {
@@ -91,7 +86,7 @@ export function useFitToScreen(opts: UseFitToScreenOptions): { scale: Ref<number
   // 新しい接続（初回を含む）で最初の `client.view` を送った直後に、有効なら送り直す（D108）。
   const offViewEstablished = opts.viewSync.onViewEstablished(() => {
     if (fitEnabled.value) sendFit(true);
-  });
+  }, true);
   onBeforeUnmount(offViewEstablished);
 
   // pane の cols/rows がサーバから届いて変わったとき（`client.fit` 後の実際のリサイズを含む）も再計算する。
@@ -99,7 +94,10 @@ export function useFitToScreen(opts: UseFitToScreenOptions): { scale: Ref<number
     const pane = opts.paneId.value ? session.panes.get(opts.paneId.value) : undefined;
     return pane ? `${pane.cols}x${pane.rows}` : null;
   });
-  watch([opts.paneId, opts.container, fitEnabled, paneDims], recompute, { flush: "post", immediate: true });
+  watch([opts.paneId, opts.container, fitEnabled, paneDims], recompute, {
+    flush: "post",
+    immediate: true,
+  });
 
   let resizeObserver: ResizeObserver | null = null;
   if (typeof ResizeObserver !== "undefined") {

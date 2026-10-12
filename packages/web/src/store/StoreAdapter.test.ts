@@ -558,3 +558,8 @@ describe("StoreAdapter — 通知への注入口", () => {
     expect(session.effectiveLayout).toEqual({ top: ["u"], groups: {}, ungrouped: ["w:w1"] });
   });
 });
+
+it("shows a test notification as an ordinary snackbar", () => {
+  const {adapter}=makeAdapter();adapter.applyEvent({event:"notification.test",data:{message:"通知テスト"}});
+  expect(useViewStore(pinia).toasts.map(t=>t.message)).toContain("通知テスト");
+});

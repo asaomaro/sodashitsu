@@ -1,0 +1,5 @@
+# 独立レビュー
+
+review_history_usage: Webペインのメニュー追加分の幅計算不足を修正。端末のEscape転送と最小幅でのfooterボタン切れを指摘、修正と回帰確認後に再レビュー合格。
+
+review_summary_cache: HTML動的値のescapeと標準ビュー限定の静的解釈を確認。GraphTerminalの遅延goが別の操作を上書きする問題を指摘。dialogContext同一性の確認に修正し、遅延detachテストと再レビュー合格。直結lease、再openのcleanup順、入力ガード、closedイベントの扱いに追加重大指摘なし。

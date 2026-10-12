@@ -21,7 +21,18 @@ function makeConnection(): ConnectionPort & { requests: [MethodName, unknown][] 
 
 function makeElement(width: number, height: number): HTMLElement {
   const el = document.createElement("div");
-  el.getBoundingClientRect = () => ({ width, height, x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, toJSON: () => ({}) }) as DOMRect;
+  el.getBoundingClientRect = () =>
+    ({
+      width,
+      height,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: width,
+      bottom: height,
+      toJSON: () => ({}),
+    }) as DOMRect;
   return el;
 }
 
@@ -40,9 +51,18 @@ function makeRegistry(
     // `scrollback` は作ったときの行数（20260921-herdr-settings-gaps の D6）。渡さなければ `undefined`＝既存のテストの形。
     get: (paneId: string) =>
       terms.has(paneId)
-        ? { paneId, term: terms.get(paneId)!, element: document.createElement("div"), webgl: false, lastUsed: 0, copy: { apply: () => ({}) }, scrollback: scrollbackOf[paneId] }
+        ? {
+            paneId,
+            term: terms.get(paneId)!,
+            element: document.createElement("div"),
+            webgl: false,
+            lastUsed: 0,
+            copy: { apply: () => ({}) },
+            scrollback: scrollbackOf[paneId],
+          }
         : undefined,
-    takePendingSubscriptions: (shown: Iterable<string>) => [...shown].filter((id) => unsubscribed.delete(id)),
+    takePendingSubscriptions: (shown: Iterable<string>) =>
+      [...shown].filter((id) => unsubscribed.delete(id)),
     markAllUnsubscribed: vi.fn(() => {
       for (const id of paneIds) unsubscribed.add(id);
     }),
@@ -59,7 +79,12 @@ describe("ViewSync", () => {
     // p3 は 0 行で作った端末（サーバの `--scrollback 0` も、0 を選んで保存することも有効な値）。`??` ではなく `||` で
     // 予備に落とすと、0 で作った端末に 5000 を求めてしまい、D6 が防ぐ食い違いそのものになる。
     const registry = makeRegistry(["p1", "p2", "p3"], ["p1", "p2", "p3"], { p1: 2000, p3: 0 });
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened();
 
     viewSync.commit({
@@ -82,22 +107,43 @@ describe("ViewSync", () => {
   it("commit: client.view を送ってから、予約された pane.subscribe を送る（この順で）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], ["p1"]);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened(); // hello が通った（D107：それまでは送らない）
 
-    viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: makeElement(720, 360) }] });
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: makeElement(720, 360) }],
+    });
 
-    expect(conn.requests[0]).toEqual(["client.view", { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }] }]);
+    expect(conn.requests[0]).toEqual([
+      "client.view",
+      { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }] },
+    ]);
     expect(conn.requests[1]).toEqual(["pane.subscribe", { paneId: "p1", scrollbackLines: 5000 }]);
   });
 
   it("同じ内容（workspace/tab/表示中の pane とサイズ）を繰り返し送らない", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], []);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened(); // hello が通った（D107：それまでは送らない）
 
-    const view = { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: makeElement(720, 360) }] };
+    const view = {
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: makeElement(720, 360) }],
+    };
     viewSync.commit(view);
     viewSync.commit(view);
     const viewCalls = conn.requests.filter(([m]) => m === "client.view");
@@ -107,11 +153,24 @@ describe("ViewSync", () => {
   it("サイズが変われば改めて送る", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], []);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened(); // hello が通った（D107：それまでは送らない）
 
-    viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: makeElement(720, 360) }] });
-    viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: makeElement(900, 360) }] });
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: makeElement(720, 360) }],
+    });
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: makeElement(900, 360) }],
+    });
     const viewCalls = conn.requests.filter(([m]) => m === "client.view");
     expect(viewCalls).toHaveLength(2);
   });
@@ -119,7 +178,12 @@ describe("ViewSync", () => {
   it("pane が複数あれば、それぞれ subscribe を送る", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1", "p2"], ["p1", "p2"]);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 1000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 1000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened(); // hello が通った（D107：それまでは送らない）
 
     viewSync.commit({
@@ -141,31 +205,66 @@ describe("ViewSync", () => {
   it("隠れている pane（今の commit の表示に無い）の予約は、表示されるまで送らない（D107）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1", "p2"], ["p1", "p2"]);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened(); // hello が通った（D107：それまでは送らない）
 
-    viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: makeElement(720, 360) }] });
-    expect(conn.requests.filter(([m]) => m === "pane.subscribe")).toEqual([["pane.subscribe", { paneId: "p1", scrollbackLines: 5000 }]]);
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: makeElement(720, 360) }],
+    });
+    expect(conn.requests.filter(([m]) => m === "pane.subscribe")).toEqual([
+      ["pane.subscribe", { paneId: "p1", scrollbackLines: 5000 }],
+    ]);
 
-    viewSync.commit({ workspaceId: "w1", tabId: "t2", visible: [{ paneId: "p2", element: makeElement(720, 360) }] });
-    expect(conn.requests.filter(([m]) => m === "pane.subscribe").map(([, p]) => (p as { paneId: string }).paneId)).toEqual(["p1", "p2"]);
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t2",
+      visible: [{ paneId: "p2", element: makeElement(720, 360) }],
+    });
+    expect(
+      conn.requests
+        .filter(([m]) => m === "pane.subscribe")
+        .map(([, p]) => (p as { paneId: string }).paneId),
+    ).toEqual(["p1", "p2"]);
   });
 
   it("表示が 1 つの pane だけで measureSinglePane が付いていれば、葉の代わりにそれで枠を測る（D108。モバイルは縮小の枠の中の葉ではなく表示領域を測る）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], []);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 1000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 1000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened();
 
     const leaf = makeElement(390, 175); // 縮小の枠の中の葉（PTY の大きさ × scale）
     const measureArea = vi.fn(() => ({ width: 390, height: 600 }));
-    viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: leaf }], measureSinglePane: measureArea });
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: leaf }],
+      measureSinglePane: measureArea,
+    });
     expect(measureArea).toHaveBeenCalledWith("p1", leaf);
-    expect(conn.requests[0]).toEqual(["client.view", { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 43, rows: 33 }] }]);
+    expect(conn.requests[0]).toEqual([
+      "client.view",
+      { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 43, rows: 33 }] },
+    ]);
 
     // 付けなければ葉を測る（デスクトップ）。
     viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: leaf }] });
-    expect(conn.requests.at(-1)).toEqual(["client.view", { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 43, rows: 9 }] }]);
+    expect(conn.requests.at(-1)).toEqual([
+      "client.view",
+      { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 43, rows: 9 }] },
+    ]);
   });
 
   it("measureSinglePane は pane ごとの口ではない：表示が 2 つ以上なら使わずに葉を測り、開発時は 1 度だけ警告する（D108 の独立点検 #2）", () => {
@@ -173,7 +272,12 @@ describe("ViewSync", () => {
     try {
       const conn = makeConnection();
       const registry = makeRegistry(["p1", "p2"], []);
-      const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 1000, getCellSize: () => FIXED_CELL });
+      const viewSync = new ViewSync({
+        conn,
+        registry,
+        getScrollbackLines: () => 1000,
+        getCellSize: () => FIXED_CELL,
+      });
       viewSync.onConnectionOpened();
       const measureArea = vi.fn(() => ({ width: 390, height: 600 }));
       const split = (width: number) => ({
@@ -188,7 +292,11 @@ describe("ViewSync", () => {
       viewSync.commit(split(360));
       viewSync.commit(split(450));
       expect(measureArea).not.toHaveBeenCalled();
-      expect(conn.requests.filter(([m]) => m === "client.view").map(([, p]) => (p as { visible: unknown[] }).visible)).toEqual([
+      expect(
+        conn.requests
+          .filter(([m]) => m === "client.view")
+          .map(([, p]) => (p as { visible: unknown[] }).visible),
+      ).toEqual([
         [
           { paneId: "p1", cols: 40, rows: 20 },
           { paneId: "p2", cols: 40, rows: 20 },
@@ -208,11 +316,23 @@ describe("ViewSync", () => {
   it("枠の寸法とセルの寸法から cols/rows を求める（余りは切り捨て）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], []);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => ({ width: 10, height: 20 }) });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => ({ width: 10, height: 20 }),
+    });
     viewSync.onConnectionOpened(); // hello が通った（D107：それまでは送らない）
 
-    viewSync.commit({ workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", element: makeElement(805, 405) }] });
-    expect(conn.requests[0]).toEqual(["client.view", { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }] }]);
+    viewSync.commit({
+      workspaceId: "w1",
+      tabId: "t1",
+      visible: [{ paneId: "p1", element: makeElement(805, 405) }],
+    });
+    expect(conn.requests[0]).toEqual([
+      "client.view",
+      { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }] },
+    ]);
   });
 });
 
@@ -222,16 +342,29 @@ describe("ViewSync", () => {
  * ので、再接続の後は表示中の pane に OUTPUT も SNAPSHOT も届かなかった（入力だけは届く）。
  */
 describe("ViewSync — 接続が替わったら表示と購読を張り直す（D107）", () => {
-  const view = (paneIds: string[]) => ({ workspaceId: "w1", tabId: "t1", visible: paneIds.map((paneId) => ({ paneId, element: makeElement(720, 360) })) });
+  const view = (paneIds: string[]) => ({
+    workspaceId: "w1",
+    tabId: "t1",
+    visible: paneIds.map((paneId) => ({ paneId, element: makeElement(720, 360) })),
+  });
 
   it("onConnectionOpened の後は、同じ内容でも client.view を送り直し、表示中の pane を購読し直す（client.view → pane.subscribe の順）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1", "p2"], ["p1", "p2"]);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     viewSync.onConnectionOpened(); // 最初の接続の hello
     viewSync.commit(view(["p1", "p2"]));
     viewSync.commit(view(["p1", "p2"]));
-    expect(conn.requests.map(([m]) => m)).toEqual(["client.view", "pane.subscribe", "pane.subscribe"]); // 同じ接続では 1 回ずつ
+    expect(conn.requests.map(([m]) => m)).toEqual([
+      "client.view",
+      "pane.subscribe",
+      "pane.subscribe",
+    ]); // 同じ接続では 1 回ずつ
 
     conn.requests.length = 0;
     viewSync.onConnectionClosed(); // 切れた
@@ -239,7 +372,17 @@ describe("ViewSync — 接続が替わったら表示と購読を張り直す（
     expect(registry.markAllUnsubscribed).toHaveBeenCalledTimes(2);
     viewSync.commit(view(["p1", "p2"]));
     expect(conn.requests).toEqual([
-      ["client.view", { workspaceId: "w1", tabId: "t1", visible: [{ paneId: "p1", cols: 80, rows: 20 }, { paneId: "p2", cols: 80, rows: 20 }] }],
+      [
+        "client.view",
+        {
+          workspaceId: "w1",
+          tabId: "t1",
+          visible: [
+            { paneId: "p1", cols: 80, rows: 20 },
+            { paneId: "p2", cols: 80, rows: 20 },
+          ],
+        },
+      ],
       ["pane.subscribe", { paneId: "p1", scrollbackLines: 5000 }],
       ["pane.subscribe", { paneId: "p2", scrollbackLines: 5000 }],
     ]);
@@ -247,7 +390,12 @@ describe("ViewSync — 接続が替わったら表示と購読を張り直す（
 
   it("onConnectionOpened は root の PaneLayout が付けた関数で今の表示を commit し直す。外した後・別の関数に替わった後は呼ばない", () => {
     const conn = makeConnection();
-    const viewSync = new ViewSync({ conn, registry: makeRegistry(["p1"], []), getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry: makeRegistry(["p1"], []),
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     const first = vi.fn();
     const detachFirst = viewSync.attachCommitter(first);
     viewSync.onConnectionOpened();
@@ -268,7 +416,12 @@ describe("ViewSync — 接続が替わったら表示と購読を張り直す（
   it("hello の前（最初の接続・閉じた後、WebSocket が開いてから hello の応答までを含む）の commit は何も送らず、予約の購読も取らない。hello の後の commit し直しで 1 回ずつ送る（独立点検 #4）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], ["p1"]);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     const commitNow = vi.fn(() => viewSync.commit(view(["p1"])));
     viewSync.attachCommitter(commitNow);
     // 「再接続」ボタンの直後：本体が mount して commit するが、まだ hello が通っていない。
@@ -294,7 +447,12 @@ describe("ViewSync — 接続が替わったら表示と購読を張り直す（
   it("onViewEstablished：新しい接続で最初の client.view を送った直後、pane.subscribe より前に呼ぶ（04 が client.fit を送り直す口）", () => {
     const conn = makeConnection();
     const registry = makeRegistry(["p1"], ["p1"]);
-    const viewSync = new ViewSync({ conn, registry, getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+    const viewSync = new ViewSync({
+      conn,
+      registry,
+      getScrollbackLines: () => 5000,
+      getCellSize: () => FIXED_CELL,
+    });
     const listener = vi.fn(() => void conn.request("client.fit", { enabled: true }));
     viewSync.onViewEstablished(listener);
 
@@ -319,7 +477,12 @@ describe("ViewSync — 接続が替わったら表示と購読を張り直す（
     vi.useFakeTimers();
     try {
       const conn = makeConnection();
-      const viewSync = new ViewSync({ conn, registry: makeRegistry(["p1"], ["p1"]), getScrollbackLines: () => 5000, getCellSize: () => FIXED_CELL });
+      const viewSync = new ViewSync({
+        conn,
+        registry: makeRegistry(["p1"], ["p1"]),
+        getScrollbackLines: () => 5000,
+        getCellSize: () => FIXED_CELL,
+      });
       const removed = vi.fn();
       viewSync.onViewEstablished(removed)();
       viewSync.onViewEstablished(() => {
@@ -335,4 +498,54 @@ describe("ViewSync — 接続が替わったら表示と購読を張り直す（
       vi.useRealTimers();
     }
   });
+});
+
+const mobileView = (ids: string[]) => ({
+  workspaceId: "w1",
+  tabId: "t1",
+  visible: ids.map((paneId) => ({ paneId, element: makeElement(720, 360) })),
+});
+it("new mobile listener on an existing connection runs after a fresh view and before subscription", () => {
+  const conn = makeConnection();
+  const registry = makeRegistry(["p1"], ["p1"]);
+  const sync = new ViewSync({
+    conn,
+    registry,
+    getScrollbackLines: () => 1000,
+    getCellSize: () => FIXED_CELL,
+  });
+  sync.onConnectionOpened();
+  sync.commit(mobileView(["p1"]));
+  conn.requests.length = 0;
+  const listener = vi.fn(() => void conn.request("client.fit", { enabled: true }));
+  const off = sync.onViewEstablished(listener, true);
+  expect(listener).not.toHaveBeenCalled();
+  registry.markAllUnsubscribed();
+  sync.commit(mobileView(["p1"]));
+  expect(conn.requests.map(([m]) => m)).toEqual(["client.view", "client.fit", "pane.subscribe"]);
+  conn.requests.length = 0;
+  sync.commit(mobileView(["p1"]));
+  expect(conn.requests).toEqual([]);
+  off();
+  sync.onConnectionClosed();
+  sync.onConnectionOpened();
+  sync.commit(mobileView(["p1"]));
+  expect(listener).toHaveBeenCalledTimes(1);
+});
+it("unmounting before the current-connection view cancels its pending fit", () => {
+  const conn = makeConnection();
+  const sync = new ViewSync({
+    conn,
+    registry: makeRegistry(["p1"], ["p1"]),
+    getScrollbackLines: () => 1000,
+    getCellSize: () => FIXED_CELL,
+  });
+  sync.onConnectionOpened();
+  sync.commit(mobileView(["p1"]));
+  conn.requests.length = 0;
+  const listener = vi.fn();
+  sync.onViewEstablished(listener, true)();
+  sync.commit(mobileView(["p1"]));
+  expect(listener).not.toHaveBeenCalled();
+  expect(conn.requests).toEqual([]);
 });

@@ -125,6 +125,7 @@ describe("Sidebar — spaces", () => {
     const view = useViewStore(pinia);
     session.workspaceUpserted(makeWorkspace("w1", { activeTabId: "t1" }));
     session.tabUpserted(makeTab("t1", "w1", "p1"));
+    session.paneUpserted(makePane("p1", "t1"));
     const conn = makeConnection();
     const wrapper = mountSidebar(conn);
     clickRow(wrapper.find(".sidebar-spaces .sidebar-row"));

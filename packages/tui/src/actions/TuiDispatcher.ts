@@ -280,16 +280,16 @@ export class TuiDispatcher {
         this.ui.openDialogWithContext({ kind: "confirmStopServer", ...this.stopTarget() });
         return;
       case "openGraph":
-        // 連携のグラフ画面はブラウザにだけある（20260927-agent-graph の decisions D1-8。操作表は共有のまま、端末版は知らせる）。
-        this.ui.toast("グラフの画面はブラウザで開けます。");
+        // 端末版独自の罫線グラフを主画面に表示する。
+        this.ui.setScreen(this.ui.screen==="graph"?"base":"graph");
         return;
       case "showUsage":
         if (this.model.focusedPaneId) this.showUsageOf(this.model.focusedPaneId);
         return;
       case "displayMenu":
       case "focusDisplay":
-        // 表示の面（パネル・帯）はブラウザにだけある（20261007-soda-extensions）。
-        this.ui.toast("表示のパネル・帯はブラウザで使えます。");
+        // 端末版は表示の面を窓の一覧として開く。
+        if(this.model.focusedPaneId)this.ui.openDialogWithContext({kind:"display",paneId:this.model.focusedPaneId});
         return;
       // 20261004-subagent-display。フォーカスしている pane のエージェントの一覧を開く（件数が 0・分からない・エージェントが居ないときは何もしない）。
       case "showSubagents": {
@@ -313,14 +313,14 @@ export class TuiDispatcher {
   }
 
   /** 名前の入力欄が新規 tab の名前を確定したとき（空なら名前を送らない）。 */
-  confirmNewTab(label: string): void {
+  confirmNewTab(label: string, plugin?:import("@sodashitsu/protocol").PluginTab): void {
     const ctx = this.ui.dialogContext;
     if (ctx?.kind !== "newTab") return;
     this.ui.closeDialog();
-    this.createTab(ctx.workspaceId, label);
+    this.createTab(ctx.workspaceId, label,plugin);
   }
 
-  private createTab(workspaceId: string, label: string): void {
+  private createTab(workspaceId: string, label: string,plugin?:import("@sodashitsu/protocol").PluginTab): void {
     const trimmed = label.trim();
     const hold = this.host.input?.holdInput(this.model.focusedPaneId);
     // 元の pane は焦点の pane が作る先の workspace にあるときだけ（閉じた後に読む。web の D97・design D7）。
@@ -330,6 +330,7 @@ export class TuiDispatcher {
         workspaceId,
         ...(trimmed ? { label: trimmed } : {}),
         newCwd,
+        ...(plugin?{plugin}:{}),
       })
       .then((result) => {
         this.model.setView(workspaceId, result.tab.id, result.pane.id);
@@ -427,8 +428,7 @@ export class TuiDispatcher {
     this.ui.closeDialog();
     const existing = [...this.model.workspaces.values()].find((w) => w.cwd === path);
     if (existing) {
-      const tab = this.model.tabs.get(existing.activeTabId);
-      this.model.setView(existing.id, existing.activeTabId, tab ? tab.focusedPaneId : undefined);
+      this.model.selectWorkspace(existing.id);
       void this.conn
         .request("workspace.focus", { workspaceId: existing.id })
         .catch(() => undefined);
@@ -1074,7 +1074,7 @@ export class TuiDispatcher {
 
   switchToTab(workspaceId: string, tabId: string): void {
     const tab = this.model.tabs.get(tabId);
-    this.model.setView(workspaceId, tabId, tab ? tab.focusedPaneId : undefined);
+    this.model.setView(workspaceId, tabId, tab ? this.model.preferredPane(tab.id) : undefined);
     void this.conn.request("tab.focus", { tabId }).catch(() => undefined);
   }
 
@@ -1140,8 +1140,7 @@ export class TuiDispatcher {
   focusWorkspaceById(workspaceId: string): void {
     const ws = this.model.workspaces.get(workspaceId);
     if (ws) {
-      const tab = this.model.tabs.get(ws.activeTabId);
-      this.model.setView(ws.id, ws.activeTabId, tab ? tab.focusedPaneId : undefined);
+      this.model.selectWorkspace(ws.id);
     }
     void this.conn.request("workspace.focus", { workspaceId }).catch(() => undefined);
   }
@@ -1377,6 +1376,19 @@ export class TuiDispatcher {
       currentLabel: ws.label,
       currentAutoLabel: ws.autoLabel,
     });
+  }
+
+  setProjectFolder(workspaceId: string): void {
+    const ws = this.model.workspaces.get(workspaceId);
+    if (ws) this.ui.openDialogWithContext({kind:"projectFolder",workspaceId,currentPath:ws.projectDir ?? ""});
+  }
+
+  confirmProjectFolder(path: string): void {
+    const ctx = this.ui.dialogContext;
+    if(ctx?.kind !== "projectFolder") return;
+    void this.conn.request("workspace.set_project_folder", {workspaceId:ctx.workspaceId,path:path.trim() || null})
+      .then(()=>{if(this.ui.dialogContext === ctx)this.ui.closeDialog();})
+      .catch(()=>this.ui.toast("PJフォルダを設定できません。サーバ側に存在する絶対パスを指定してください"));
   }
 
   /** `pane.rename` は空欄を「名前の消去」として送る。 */

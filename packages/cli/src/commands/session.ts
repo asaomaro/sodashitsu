@@ -53,3 +53,10 @@ export async function runWatch(cmd: WatchCmd, store: SessionStore): Promise<void
     await watchEvents(client, cmd.json);
   });
 }
+
+export async function runNotificationTest(cmd: Extract<Command, {kind:"notification-test"}>, store: SessionStore): Promise<void> {
+  printJson(await withSession(cmd.opts, store, async client => {
+    await client.hello();
+    return client.request("notification.test", {});
+  }));
+}

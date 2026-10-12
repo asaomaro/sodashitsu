@@ -48,6 +48,7 @@ export interface ExtensionApiDeps {
   inScope(ext: ApiExtension, paneId: string): boolean;
   logger: Pick<Logger, "warn">;
   taskMethods?: readonly string[];
+  artifactMethods?: readonly string[];
 }
 
 const SCRIPT_HTML = "script-html";
@@ -79,7 +80,7 @@ export function createExtensionApi(deps: ExtensionApiDeps) {
   }
 
   function methods(ext: ApiExtension): string[] {
-    return [...METHODS_ALWAYS, "app.register", "app.result", ...(mayScript(ext) ? ["display.send"] : []), ...(ext.allow.includes("agent-start") ? deps.taskMethods ?? [] : [])];
+    return [...METHODS_ALWAYS, "app.register", "app.result", ...(mayScript(ext) ? ["display.send",...(deps.artifactMethods??[])] : []), ...(ext.allow.includes("agent-start") ? deps.taskMethods ?? [] : [])];
   }
 
   function helloLine(ext: ApiExtension): ExtLine {
