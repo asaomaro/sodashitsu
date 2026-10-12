@@ -25,7 +25,7 @@ import { runPaneAttach } from "./commands/attach.js";
 import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
 import { runTabClose, runTabCreate } from "./commands/tab.js";
 import { runPaneClose, runPaneCurrent, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./commands/pane.js";
-import { runLogin, runSnapshot, runWatch } from "./commands/session.js";
+import { runNotificationTest, runLogin, runSnapshot, runWatch } from "./commands/session.js";
 import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename, runWorkspaceReportMetadata } from "./commands/workspace.js";
 import { reportAndExit } from "./output.js";
 import { FsSessionStore } from "./session.js";
@@ -150,6 +150,8 @@ async function main(): Promise<void> {
       return runPaneControl(cmd, store);
     case "pane-report-metadata":
       return runPaneReportMetadata(cmd, store);
+    case "notification-test":
+      return runNotificationTest(cmd, store);
     case "snapshot":
       return runSnapshot(cmd, store);
     case "watch":

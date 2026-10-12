@@ -1,0 +1,3 @@
+# 設計
+
+ヘッダーのgripは24px以上と移動印を維持する。displayHeadingはbuiltin:workspaceの題を機能名として表示、それ以外は固定出どころ表示を残し題を文字列で後置。共通パネル/フロートの別タイトル行を削除。WorkspaceViewは単体の見出しを削除、複合developmentの子だけ維持、ファイル検索行へ再読込を移す。仮想ペインのfloat dropはdata-display-pane-idでcenterを取得する。登録viewかつprefなしのfloatは初期open、保存は現在のcollapsed値を引き継ぐ。初期窓は中央/6割サイズ以上、未保存の複数窓は番号でcascade。

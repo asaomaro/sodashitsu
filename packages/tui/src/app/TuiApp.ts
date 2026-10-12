@@ -1,9 +1,21 @@
-import {findMessageLine} from "@sodashitsu/client-core";
-import {ConversationDialog} from "../modes/ConversationDialog.js";
-import {headerActionsFor,loadAgentHeaderActions} from "@sodashitsu/protocol";
+import { GraphTerminal } from "../modes/GraphTerminal.js";
+import { ScheduleView } from "../modes/ScheduleView.js";
+import { PluginPackages } from "../modes/PluginPackages.js";
+import { GraphView } from "../modes/GraphView.js";
+import { terminalViews, DockedViews } from "./DockedViews.js";
+import { ViewPicker } from "../modes/ViewPicker.js";
+import { BUILTIN_WORKSPACE_KEY, type BuiltinViewId } from "@sodashitsu/protocol";
+import { chordOf } from "@sodashitsu/client-core";
+import { WorkspaceDialog } from "../modes/WorkspaceDialog.js";
+import { DisplayModel } from "../model/DisplayModel.js";
+import { DisplayDialog } from "../modes/DisplayDialog.js";
+import { WindowOverlay } from "../modes/WindowOverlay.js";
+import { findMessageLine } from "@sodashitsu/client-core";
+import { ConversationDialog } from "../modes/ConversationDialog.js";
+import { headerActionsFor, loadAgentHeaderActions } from "@sodashitsu/protocol";
 import { AgentForkDialog } from "../modes/AgentForkDialog.js";
-import {UsageModel} from "../model/UsageModel.js";
-import {UsageDialog,UsageDashboard} from "../modes/UsageView.js";
+import { UsageModel } from "../model/UsageModel.js";
+import { UsageDialog, UsageDashboard } from "../modes/UsageView.js";
 import {
   CopyMode,
   InputGate,
@@ -170,7 +182,7 @@ export class TuiApp {
   protected readonly dispatcher: TuiDispatcher;
   readonly ui: UiState;
   readonly usage: UsageModel;
-  private readonly dashboard:UsageDashboard;
+  private readonly dashboard: UsageDashboard;
   /**
    * 共有の設定（`prefs.*`）の口：**いつもローカルのサーバ**（ローカルを見ていれば画面の接続、ほかのマシンを見ていればローカルの軽い接続。
    * web の PrefsSync の `isLocal` と同じく、ほかのマシンのサーバの設定は読み書きしない。decisions D7.4）。
@@ -234,6 +246,11 @@ export class TuiApp {
   private readonly copyTargets = new WeakMap<PaneTerminal, TuiCopyTarget>();
   /** オーバーレイ（ダイアログ・メニュー）。 */
   readonly overlays: OverlayHost;
+  readonly displays: DisplayModel;
+  readonly dockedViews: DockedViews;
+  readonly schedules: ScheduleView;
+  private graphTerminal: GraphTerminal | null = null;
+  readonly graphView: GraphView;
   /** この起動ではじめの案内を開いたか（2 回開かない）。 */
   private onboardingOpened = false;
   /**
@@ -256,6 +273,7 @@ export class TuiApp {
   ) {
     this.modes = new TerminalModes(io);
     this.model = new SessionModel({
+      onDisplayEvent: (e) => this.displays?.apply(e),
       onUsageChanged: (data) => this.usage?.apply(data),
       onPaneClosed: (paneId) => {
         this.panes.paneClosed(paneId);
@@ -265,8 +283,12 @@ export class TuiApp {
       onSnapshotApplied: (panes, first) => this.notify?.onSnapshotApplied(panes, first),
       onMachinesChanged: (list) => this.wiring?.onMainMachinesChanged(list),
       onPopupClosed: (popupId, exitCode) => this.onPopupClosed(popupId, exitCode),
+      onAttachChanged: (paneId, clientId) => {
+        if (this.graphTerminal?.paneId === paneId) this.graphTerminal.onAttachChanged(clientId);
+      },
       // 共有の設定はローカルのサーバのものだけ（ほかのマシンを見ている間の画面の接続の知らせは当てない。decisions D7.4）。
-      onNotificationState:state=>this.notify.onSharedNotification(state),
+      onNotificationTest: (message) => this.ui.toast(message, { ms: 20_000 }),
+      onNotificationState: (state) => this.notify.onSharedNotification(state),
       onPrefsChanged: (data) => {
         if (this.machines.selectedId === LOCAL_MACHINE_ID) this.prefs.apply(data.prefs, data.rev);
       },
@@ -330,8 +352,54 @@ export class TuiApp {
       this.scheduleRender();
     });
     this.ui = new UiState(this.model);
-    this.usage=new UsageModel(this.rpc,()=>this.scheduleRender());
-    this.dashboard=new UsageDashboard(this.model,this.ui,this.usage,(id)=>this.dispatcher.focusPaneAcrossViews(id));
+    this.displays = new DisplayModel(
+      this.rpc,
+      () => this.scheduleRender(),
+      (info) => {
+        if (
+          info.dock === "float" &&
+          !info.collapsed &&
+          info.paneId === this.model.focusedPaneId &&
+          !this.ui.overlayOpen
+        )
+          this.ui.openDialogWithContext({
+            kind: "display",
+            paneId: info.paneId,
+            displayId: info.id,
+          });
+      },
+    );
+    this.dockedViews = new DockedViews(
+      this.model,
+      this.ui,
+      this.displays,
+      this.rpc,
+      () => {
+        this.commitView();
+        this.scheduleRender();
+      },
+      () => this.prefs.viewTitleVisible,
+    );
+    this.disposers.push(() => this.dockedViews.dispose());
+    this.schedules = new ScheduleView(this.model, this.ui, this.rpc, () => this.scheduleRender());
+    this.disposers.push(() => this.schedules.dispose());
+    this.graphView = new GraphView(
+      this.model,
+      this.ui,
+      this.rpc,
+      () => this.scheduleRender(),
+      (id) => this.ui.openDialogWithContext({ kind: "graphTerminal", paneId: id }),
+      () => this.prefs.statusSymbols,
+    );
+    this.disposers.push(() => this.graphView.dispose());
+    this.usage = new UsageModel(this.rpc, () => this.scheduleRender());
+    this.dashboard = new UsageDashboard(
+      this.model,
+      this.ui,
+      this.usage,
+      (id) => this.dispatcher.focusPaneAcrossViews(id),
+      () => this.prefs.statusSymbols,
+    );
     this.settingsWriter = new SettingsWriter({
       prefs: this.prefs,
       conn: this.prefsPort,
@@ -340,9 +408,14 @@ export class TuiApp {
     });
     this.disposers.push(
       this.ui.onChange(() => {
-        this.usage.sync(this.ui.screen === "dashboard" || ["usage","usageAccounts"].includes(this.ui.dialogContext?.kind??""));
+        this.schedules.sync(this.ui.screen === "schedule");
+        this.graphView.sync(this.ui.screen === "graph");
+        this.usage.sync(
+          this.ui.screen === "dashboard" ||
+            ["usage", "usageAccounts"].includes(this.ui.dialogContext?.kind ?? ""),
+        );
         this.commitView();
-        if (this.ui.overlayOpen || this.ui.screen === "dashboard")
+        if (this.ui.overlayOpen || this.ui.screen !== "base")
           this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
         else this.maybeOpenOnboarding(); // 案内をほかのダイアログが閉じるまで待っていた
         this.scheduleRender();
@@ -357,7 +430,12 @@ export class TuiApp {
       prefs: this.prefs,
       conn: this.rpc,
       input: { holdInput: (source) => (this.gate ? this.gate.holdInput(source) : NO_HOLD) },
-      keys: { setMode: (m) => this.keys.router.setMode(m), selectNumbers:target=>{this.keys.router.selectNumbers(target);} },
+      keys: {
+        setMode: (m) => this.keys.router.setMode(m),
+        selectNumbers: (target) => {
+          this.keys.router.selectNumbers(target);
+        },
+      },
       copyTarget: (paneId) => this.copyTargetOf(paneId),
       writeClipboard: (text) => this.writeClipboard(text),
       readClipboard: () => readClipboardText(this.clipboardEnv),
@@ -398,8 +476,8 @@ export class TuiApp {
       readTimeoutMs: imageReadTimeoutMs(this.clipboardEnv),
     });
     this.notify = new NotificationController({
-      loadShared:()=>this.rpc.request("notification.state",{}),
-      updateShared:n=>this.rpc.request("notification.update",n),
+      loadShared: () => this.rpc.request("notification.state", {}),
+      updateShared: (n) => this.rpc.request("notification.update", n),
       model: this.model,
       ui: this.ui,
       prefs: this.prefs,
@@ -413,11 +491,34 @@ export class TuiApp {
     });
     this.disposers.push(() => this.notify.dispose());
     this.overlays = new OverlayHost({
+      conn: this.rpc,
+      redraw: () => this.scheduleRender(),
+      viewItems: (id) => this.dockedViews.menuItems(id),
       ui: this.ui,
       model: this.model,
       actions: this.dispatcher,
       helpGroups: () => helpGroups(this.keymap, this.navigateKeymap),
-      extra: (ctx) => this.extraOverlay(ctx),
+      extra: (ctx) => {
+        const o = this.extraOverlay(ctx);
+        return o &&
+          [
+            "workspaceView",
+            "display",
+            "conversation",
+            "pastSessions",
+            "usage",
+            "usageAccounts",
+            "graphTerminal",
+          ].includes(ctx.kind)
+          ? new WindowOverlay(
+              o,
+              ctx.kind === "usage" || ctx.kind === "usageAccounts"
+                ? { w: 92, h: 18 }
+                : { w: 110, h: 32 },
+              this.viewWindowControls(ctx),
+            )
+          : o;
+      },
     });
     this.mouse = new MouseController({
       model: this.model,
@@ -425,7 +526,16 @@ export class TuiApp {
       actions: this.dispatcher,
       layout: () => this.lastLayout,
       paneControls: true,
-      agentActions:id=>{const p=this.model.panes.get(id);return p?.agent?headerActionsFor(p.agent.kind,!!p.agentSession,loadAgentHeaderActions(this.prefs.shared.agentHeaderActions)):[];},
+      agentActions: (id) => {
+        const p = this.model.panes.get(id);
+        return p?.agent
+          ? headerActionsFor(
+              p.agent.kind,
+              !!p.agentSession,
+              loadAgentHeaderActions(this.prefs.shared.agentHeaderActions),
+            )
+          : [];
+      },
       dashboardMouse: (ev) => this.dashboard.handleMouse(ev),
       sidebarHits: () => this.sidebarHits,
       tabHits: () => this.tabBarHits,
@@ -613,6 +723,7 @@ export class TuiApp {
   protected onConnectionOpened(_clientId: string): void {
     this.panes.connectionOpened();
     this.usage.connected();
+    void this.displays.connect();
     this.commitView();
     this.scheduleRender();
     const net = this.net;
@@ -657,11 +768,14 @@ export class TuiApp {
   }
 
   protected onConnectionClosed(): void {
+    if (this.ui.dialogContext?.kind === "graphTerminal") this.ui.closeDialog();
     if (this.popup) {
       this.popup.onDisconnected();
       this.popup = null;
     }
     this.usage.disconnected();
+    this.displays.disconnect();
+    this.dockedViews.release();
     this.panes.connectionClosed();
   }
 
@@ -781,9 +895,50 @@ export class TuiApp {
       this.scheduleRender();
       return;
     }
-    if(this.ui.screen === "dashboard" && (ev.kind === "paste" || ev.kind === "key")) {
-      if(ev.kind === "key")this.dashboard.handleKey(ev.key);
-      this.scheduleRender();return;
+    if (this.ui.screen === "base" && this.keys.mode === "terminal") {
+      if (ev.kind === "key") {
+        const chord = chordOf(ev.key);
+        if (chord === this.keymap.prefix || (chord !== null && this.keymap.directMap.has(chord)))
+          this.dockedViews.release();
+        else if (this.dockedViews.key(ev.key)) return;
+      } else if (ev.kind === "paste" && this.dockedViews.paste(ev.text)) return;
+      else if (ev.kind === "mouse" && this.dockedViews.mouse(ev)) return;
+    }
+    if (
+      this.ui.screen === "graph" &&
+      (ev.kind === "key" || ev.kind === "paste" || ev.kind === "mouse")
+    ) {
+      if (ev.kind === "key") {
+        if (chordOf(ev.key) === this.keymap.prefix || this.keys.mode !== "terminal")
+          this.keys.handle(ev);
+        else this.graphView.handleKey(ev.key);
+      } else if (ev.kind === "mouse" && !this.graphView.handleMouse(ev)) {
+        this.mouse.handle(ev);
+        return;
+      }
+      this.scheduleRender();
+      return;
+    }
+    if (
+      this.ui.screen === "schedule" &&
+      (ev.kind === "key" || ev.kind === "paste" || ev.kind === "mouse")
+    ) {
+      if (ev.kind === "key") {
+        const chord = chordOf(ev.key);
+        if (chord === this.keymap.prefix || this.keys.mode !== "terminal") this.keys.handle(ev);
+        else this.schedules.handleKey(ev.key);
+      } else if (ev.kind === "paste") this.schedules.handlePaste(ev.text);
+      else if (!this.schedules.handleMouse(ev)) {
+        this.mouse.handle(ev);
+        return;
+      }
+      this.scheduleRender();
+      return;
+    }
+    if (this.ui.screen === "dashboard" && (ev.kind === "paste" || ev.kind === "key")) {
+      if (ev.kind === "key") this.dashboard.handleKey(ev.key);
+      this.scheduleRender();
+      return;
     }
     switch (ev.kind) {
       case "key":
@@ -817,7 +972,8 @@ export class TuiApp {
         const term = this.model.focusedPaneId
           ? this.panes.get(this.model.focusedPaneId)
           : undefined;
-        if (this.ui.screen === "base" && term?.modes.sendFocusMode) this.sendToFocusedPane(ev.focused ? "\x1b[I" : "\x1b[O");
+        if (this.ui.screen === "base" && term?.modes.sendFocusMode)
+          this.sendToFocusedPane(ev.focused ? "\x1b[I" : "\x1b[O");
         this.scheduleRender();
         return;
       }
@@ -832,7 +988,8 @@ export class TuiApp {
    * 今の画面に見えているときだけ。続けて鳴っても {@link BELL_INTERVAL_MS} に 1 回。
    */
   protected onPaneBell(paneId: string): void {
-    if (this.ui.screen !== "base" || this.ended || !this.prefs.forwardBell || !this.outerFocused) return;
+    if (this.ui.screen !== "base" || this.ended || !this.prefs.forwardBell || !this.outerFocused)
+      return;
     if (!this.layout().panes.some((b) => b.paneId === paneId)) return;
     const now = performance.now();
     if (now - this.lastBellAt < BELL_INTERVAL_MS) return;
@@ -922,10 +1079,163 @@ export class TuiApp {
     return Promise.resolve(true);
   }
 
+  private viewWindowControls(ctx: DialogContext) {
+    const info =
+      ctx.kind === "display" && ctx.displayId ? this.displays.infos.get(ctx.displayId) : undefined;
+    const id =
+      ctx.kind === "display" || ctx.kind === "workspaceView"
+        ? (ctx.viewInstanceId ??
+          (info
+            ? [...this.model.tabs.values()]
+                .flatMap((t) => t.views ?? [])
+                .find(
+                  (v) =>
+                    v.paneId === info.paneId &&
+                    (v.display === info.name || v.terminalDisplay === info.name),
+                )?.id
+            : undefined))
+        : undefined;
+    if (!id) return undefined;
+    void this.dockedViews.prepare(id);
+    return {
+      showTitle: () => this.prefs.viewTitleVisible,
+      busy: () => this.dockedViews.isPending(id),
+      preview: (grid: Grid, theme: ThemeColors, x: number, y: number) =>
+        this.dockedViews.drawDropPreview(grid, theme, id, x, y),
+      fold: () => {
+        this.dockedViews.fold(id);
+        this.ui.closeDialog();
+      },
+      close: () => {
+        void this.dockedViews.close(id).then((ok) => {
+          if (ok && this.ui.dialogContext === ctx) this.ui.closeDialog();
+        });
+      },
+      menu: (x: number, y: number) => {
+        this.ui.closeDialog();
+        void this.dockedViews.menu(id, x, y);
+      },
+      drop: (x: number, y: number, canLeave?: () => boolean) => {
+        void this.dockedViews.drop(id, x, y, canLeave);
+      },
+    };
+  }
   /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
   protected extraOverlay(ctx: DialogContext): Overlay | null {
-    if(ctx.kind==='conversation'||ctx.kind==='pastSessions')return new ConversationDialog(ctx.kind==='pastSessions'?'sessions':ctx.mode,ctx.kind==='pastSessions'?null:ctx.paneId,this.ui,this.rpc,this.prefs,this.model,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id),(id,text)=>{const terminal=this.panes.get(id)?.term;if(terminal){const line=findMessageLine(terminal.buffer.active,text);if(line!==null){terminal.scrollToLine(line);this.scheduleRender();}}});
-    if (ctx.kind === "agentFork") return new AgentForkDialog(ctx.paneId,this.ui,this.rpc,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id));
+    if (ctx.kind === "workspaceView") {
+      if (ctx.viewId)
+        return new WorkspaceDialog(
+          ctx.tabId,
+          ctx.paneId,
+          this.model,
+          this.ui,
+          this.rpc,
+          () => this.scheduleRender(),
+          ctx.viewId,
+        );
+      return new ViewPicker(
+        ctx.tabId,
+        ctx.paneId,
+        this.model,
+        this.ui,
+        this.rpc,
+        () => this.scheduleRender(),
+        (v) => {
+          this.ui.closeDialog();
+          if (v.placement !== "float") {
+            this.dockedViews.focus(v.id);
+            this.commitView();
+          } else if (v.extensionKey === BUILTIN_WORKSPACE_KEY && v.viewId !== "statusline")
+            this.ui.openDialogWithContext({
+              kind: "workspaceView",
+              tabId: ctx.tabId,
+              viewId: v.viewId as BuiltinViewId,
+              viewInstanceId: v.id,
+            });
+          else {
+            const info = [...this.displays.infos.values()].find(
+              (d) => d.paneId === v.paneId && d.name === (v.terminalDisplay ?? v.display),
+            );
+            this.ui.openDialogWithContext({
+              kind: "display",
+              paneId: v.paneId,
+              viewInstanceId: v.id,
+              ...(info ? { displayId: info.id } : {}),
+            });
+          }
+        },
+      );
+    }
+    if (ctx.kind === "display")
+      return new DisplayDialog(
+        ctx.paneId,
+        ctx.displayId,
+        this.displays,
+        this.rpc,
+        this.ui,
+        () => this.scheduleRender(),
+        (info) => {
+          const pane = this.model.panes.get(info.paneId),
+            tab = pane ? this.model.tabs.get(pane.tabId) : undefined;
+          if (!tab) return false;
+          const v = tab.views?.find(
+            (v) => (v.terminalDisplay ?? v.display) === info.name && v.paneId === info.paneId,
+          );
+          if (v && v.placement !== "float") {
+            this.ui.closeDialog();
+            this.dockedViews.open(v.id);
+            return true;
+          }
+          if (info.source?.type !== "builtin" || v?.viewId === "statusline") return false;
+          this.ui.openDialogWithContext({
+            kind: "workspaceView",
+            tabId: tab.id,
+            ...(v?.target === "pane" ? { paneId: info.paneId } : {}),
+            viewId: (v?.viewId ?? "development") as BuiltinViewId,
+            ...(v ? { viewInstanceId: v.id } : {}),
+          });
+          return true;
+        },
+        undefined,
+        (info) => {
+          const tab = this.model.tabs.get(this.model.panes.get(ctx.paneId)?.tabId ?? "");
+          return !!tab?.views?.some(
+            (v) =>
+              v.target === "tab" &&
+              v.paneId === info.paneId &&
+              (v.terminalDisplay ?? v.display) === info.name,
+          );
+        },
+      );
+    if (ctx.kind === "conversation" || ctx.kind === "pastSessions")
+      return new ConversationDialog(
+        ctx.kind === "pastSessions" ? "sessions" : ctx.mode,
+        ctx.kind === "pastSessions" ? null : ctx.paneId,
+        this.ui,
+        this.rpc,
+        this.prefs,
+        this.model,
+        () => this.scheduleRender(),
+        (id) => this.dispatcher.focusPaneAcrossViews(id),
+        (id, text) => {
+          const terminal = this.panes.get(id)?.term;
+          if (terminal) {
+            const line = findMessageLine(terminal.buffer.active, text);
+            if (line !== null) {
+              terminal.scrollToLine(line);
+              this.scheduleRender();
+            }
+          }
+        },
+      );
+    if (ctx.kind === "agentFork")
+      return new AgentForkDialog(
+        ctx.paneId,
+        this.ui,
+        this.rpc,
+        () => this.scheduleRender(),
+        (id) => this.dispatcher.focusPaneAcrossViews(id),
+      );
     if (ctx.kind === "goto")
       return new GotoDialog({
         ui: this.ui,
@@ -934,6 +1244,8 @@ export class TuiApp {
         statusSymbols: () => this.prefs.statusSymbols,
         machines: this.machines,
       });
+    if (ctx.kind === "pluginPackages")
+      return new PluginPackages(this.ui, this.rpc, () => this.scheduleRender());
     if (ctx.kind === "settings") return this.settingsDialog(ctx.section);
     if (ctx.kind === "onboarding")
       return new OnboardingDialog({
@@ -941,9 +1253,19 @@ export class TuiApp {
         hintFor: (id) => this.keymap.hintFor(id),
         complete: () => this.completeOnboarding(),
       });
-    if (ctx.kind === "usageAccounts") return new UsageDialog(null,this.model,this.ui,this.usage);
-    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId,this.model,this.ui,this.usage);
+    if (ctx.kind === "usageAccounts") return new UsageDialog(null, this.model, this.ui, this.usage);
+    if (ctx.kind === "usage") return new UsageDialog(ctx.paneId, this.model, this.ui, this.usage);
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
+    if (ctx.kind === "graphTerminal")
+      return (this.graphTerminal = new GraphTerminal(ctx.paneId, {
+        ui: this.ui,
+        model: this.model,
+        conn: this.rpc,
+        sendInput: (id, bytes) => this.net?.conn.sendInput(id, bytes),
+        attachExternal: (id, sink) => this.panes.attachExternal(id, sink),
+        redraw: () => this.scheduleRender(),
+        focus: (id) => this.dispatcher.focusPaneAcrossViews(id),
+      }));
     if (ctx.kind === "commandPopup") {
       const popup = new CommandPopup(ctx, {
         ui: this.ui,
@@ -1056,6 +1378,9 @@ export class TuiApp {
     this.imagePaster.resetForMachineSwitch();
     this.ui.closeDialog();
     this.ui.closeContextMenu();
+    this.dockedViews.dispose();
+    this.schedules.reset();
+    this.graphView.reset();
     this.model.reset(id);
     this.panes.reset();
     net.conn.retarget(wsUrlFor(net.baseWsUrl, id));
@@ -1128,7 +1453,8 @@ export class TuiApp {
     if (next.agents) keep.agents = true;
     const { sidebarSectionsCollapsed: _drop, ...rest } = this.prefs.localState;
     void _drop;
-    const state: TuiState = Object.keys(keep).length > 0 ? { ...rest, sidebarSectionsCollapsed: keep } : rest;
+    const state: TuiState =
+      Object.keys(keep).length > 0 ? { ...rest, sidebarSectionsCollapsed: keep } : rest;
     this.prefs.setLocal(state);
     writeTuiState(this.target.stateDir, state).catch(() => undefined);
     this.scheduleRender();
@@ -1138,7 +1464,8 @@ export class TuiApp {
   private navigateWasOn = false;
   private openSpacesForNavigate(): void {
     const on = this.keys.mode === "navigate";
-    if (on && !this.navigateWasOn && this.prefs.sectionsCollapsed.spaces) this.toggleSidebarSection("spaces");
+    if (on && !this.navigateWasOn && this.prefs.sectionsCollapsed.spaces)
+      this.toggleSidebarSection("spaces");
     this.navigateWasOn = on;
   }
 
@@ -1158,15 +1485,29 @@ export class TuiApp {
   protected layout(): LayoutResult {
     const { cols, rows } = this.io.size();
     const tab = this.model.currentTab();
-    return computeLayout({
+    const views = this.ui.screen === "base" ? (tab ? terminalViews(tab) : []) : [];
+    const docked = this.dockedViews.hasDocked(views);
+    const layout = computeLayout({
       cols,
       rows,
+      paneTopRows: this.dockedViews.hasTray(views) ? 1 : 0,
+      singleRowPanes: views
+        .filter((v) => v.placement.startsWith("band-"))
+        .map((v) => "view:" + v.id),
       sidebarVisible: !this.prefs.sidebarCollapsed,
       collapsedSidebarStrip: true,
       sidebarCols: this.prefs.sidebarCols,
       narrowThreshold: this.prefs.narrowThreshold,
-      tab: tab ? { layout: tab.layout, zoomedPaneId: tab.zoomedPaneId } : null,
-      focusedPaneId: this.model.focusedPaneId,
+      tab: tab
+        ? {
+            layout: this.dockedViews.tree(
+              docked && tab.zoomedPaneId ? { type: "pane", paneId: tab.zoomedPaneId } : tab.layout,
+              views,
+            ),
+            zoomedPaneId: docked ? null : tab.zoomedPaneId,
+          }
+        : null,
+      focusedPaneId: this.dockedViews.focusedId() ?? this.model.focusedPaneId,
       navigateOverlay: this.keys.mode === "navigate",
       paneBorders: this.prefs.paneBorders,
       paneGaps: this.prefs.paneGaps,
@@ -1178,11 +1519,12 @@ export class TuiApp {
         !this.prefs.sidebarCollapsed &&
         (this.model.workspaceId ? this.model.tabsOf(this.model.workspaceId).length : 0) <= 1,
     });
+    return layout;
   }
 
   /** 見えている pane と、自分の割り付けで決まる大きさ（申告する値。design「pane の大きさ」）。 */
   protected visiblePanes(layout = this.layout()): VisiblePane[] {
-    if (this.ui.screen === "dashboard") return [];
+    if (this.ui.screen !== "base") return [];
     return layout.panes
       .filter((b) => this.model.panes.has(b.paneId))
       .map((b) => ({ paneId: b.paneId, ...clampTerminalSize(b.content.w, b.content.h) }));
@@ -1222,7 +1564,15 @@ export class TuiApp {
       notificationCount: this.notify.queued.length,
       sidebarDrag: this.mouse.sidebarFeedback,
       dropTabId: this.mouse.dropTarget?.kind === "tab" ? this.mouse.dropTarget.tabId : undefined,
-      dragNotice: this.mouse.sidebarFeedback ? (this.mouse.sidebarFeedback.plan.kind === "refuse" ? "移動不可: " + this.mouse.sidebarFeedback.plan.reason : this.mouse.sidebarFeedback.plan.kind === "move" ? "移動中 · ▶ ここへ配置" : "移動中 · 移動先を選択") : this.mouse.dropTarget?.kind === "tab" ? "ペインを別タブへ移動 · 離して確定" : undefined,
+      dragNotice: this.mouse.sidebarFeedback
+        ? this.mouse.sidebarFeedback.plan.kind === "refuse"
+          ? "移動不可: " + this.mouse.sidebarFeedback.plan.reason
+          : this.mouse.sidebarFeedback.plan.kind === "move"
+            ? "移動中 · ▶ ここへ配置"
+            : "移動中 · 移動先を選択"
+        : this.mouse.dropTarget?.kind === "tab"
+          ? "ペインを別タブへ移動 · 離して確定"
+          : undefined,
       sidebarCollapsed: layout.sidebarCollapsed === true,
       prefs: this.prefs,
       theme: this.theme,
@@ -1239,8 +1589,16 @@ export class TuiApp {
     };
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => {
-        if(this.ui.screen === "dashboard"){this.dashboard.render(grid,layout.paneArea,this.theme);return {x:0,y:0,visible:false,style:"block",blink:false};}
-        return this.decorate(grid, layout);
+        if (this.ui.screen === "graph")
+          return this.graphView.render(grid, layout.paneArea, this.theme);
+        if (this.ui.screen === "schedule")
+          return this.schedules.render(grid, layout.paneArea, this.theme);
+        if (this.ui.screen === "dashboard") {
+          this.dashboard.render(grid, layout.paneArea, this.theme);
+          return { x: 0, y: 0, visible: false, style: "block", blink: false };
+        }
+        const cursor = this.decorate(grid, layout);
+        return this.dockedViews.render(grid, layout, this.theme) ?? cursor;
       },
       toasts: this.ui.toasts.map((t) => ({ id: t.id, message: t.message, clickable: !!t.onClick })),
       overlay: (grid) => this.overlays.render(grid, this.theme),
@@ -1292,14 +1650,15 @@ export class TuiApp {
     const ws = m.workspaceId ? m.workspaces.get(m.workspaceId) : undefined;
     const tab = m.currentTab();
     const pane = m.focusedPaneId ? m.panes.get(m.focusedPaneId) : undefined;
-    return (this.notify.queued.length > 0 ? "🔔 " : "") + (
-      renderWindowTitle(parts, {
+    return (
+      (this.notify.queued.length > 0 ? "🔔 " : "") +
+      (renderWindowTitle(parts, {
         hostname: m.host?.hostname ?? "",
         workspace: ws?.label ?? "",
         tab: tab?.label ?? "",
         pane: pane?.label ?? "",
         terminal_title: pane?.title ? (strippedTerminalTitle(pane.title) ?? "") : "",
-      }) ?? FALLBACK_WINDOW_TITLE
+      }) ?? FALLBACK_WINDOW_TITLE)
     );
   }
 

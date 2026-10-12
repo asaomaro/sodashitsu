@@ -1,0 +1,3 @@
+# 設計
+
+computeLayoutへ1行を許す帯のpane IDを渡し、縦分割だけ最低行数を変更する。通常ペイン・パネルの3行下限は維持する。帯の比率下限は0とし、実際の1行下限はレイアウト計算が担う。リサイズ比率は当該分割の高さで計算する。グラフ・状況の名前先頭にglyphFor/stateColorを描画し、表示状態はSessionModel.displayStateOf、設定は動的callbackで取得する。

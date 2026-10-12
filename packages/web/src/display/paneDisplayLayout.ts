@@ -1,6 +1,22 @@
 import type { DisplayDock, DisplayEdge } from "@sodashitsu/protocol";
-import { BANDS_MORE_ROW_PX, DEFAULT_CELL_WIDTH_PX, PANEL_MIN_PX, TERMINAL_MIN_COLS, visibleBands } from "./displayLayout.js";
-import { FLOAT_AREA_INSET_PX, FLOAT_CASCADE_PX, FLOAT_INSET_PX, FLOAT_MIN_H_PX, FLOAT_MIN_W_PX, clampFloatRect, defaultFloatRect, floatAreaOf, type Rect } from "./floatGeometry.js";
+import {
+  BANDS_MORE_ROW_PX,
+  DEFAULT_CELL_WIDTH_PX,
+  PANEL_MIN_PX,
+  TERMINAL_MIN_COLS,
+  visibleBands,
+} from "./displayLayout.js";
+import {
+  FLOAT_AREA_INSET_PX,
+  FLOAT_CASCADE_PX,
+  FLOAT_INSET_PX,
+  FLOAT_MIN_H_PX,
+  FLOAT_MIN_W_PX,
+  clampFloatRect,
+  defaultFloatRect,
+  floatAreaOf,
+  type Rect,
+} from "./floatGeometry.js";
 
 /**
  * pane の表示の面（パネル・帯・トレイ）の割り付け（20261008-display-layout の design「割り付け」）。**純粋な関数 1 つ**で、部品はこの結果を描くだけ。
@@ -36,7 +52,14 @@ export interface LayoutInput {
   cellW: number;
   cellH: number;
   /** 出た順。`seq` は、その pane の面の全体（パネルと帯）での出た順の番号。 */
-  bands: { id: string; seq: number; size: number; edge: DisplayEdge; collapsed: boolean; script?: boolean }[];
+  bands: {
+    id: string;
+    seq: number;
+    size: number;
+    edge: DisplayEdge;
+    collapsed: boolean;
+    script?: boolean;
+  }[];
   panels: { id: string; seq: number; size: number; dock: DisplayDock; collapsed: boolean }[];
   /** 側ごとの、選んでいる面。 */
   active: Partial<Record<Side, string>>;
@@ -64,7 +87,12 @@ export interface DockGroup {
 export interface LayoutResult {
   /** 出す帯（側ごと・出た順）と、「ほか N 件」に回った帯。 */
   bands: { top: string[]; bottom: string[]; more: string[] };
-  tray: { edge: DisplayEdge; row: "band" | "own" | "none"; hostBandId: string | null; buttons: TrayButton[] };
+  tray: {
+    edge: DisplayEdge;
+    row: "band" | "own" | "none";
+    hostBandId: string | null;
+    buttons: TrayButton[];
+  };
   docks: Record<Side, DockGroup | null>;
   /** 出す窓（出た順）。`rect` は窓の動ける領域（端末の領域の 4px 内側）の左上から。 */
   floats: { id: string; rect: Rect }[];
@@ -76,7 +104,12 @@ export interface LayoutResult {
   terminal: Rect;
 }
 
-const EMPTY_DOCKS = (): Record<Side, DockGroup | null> => ({ right: null, left: null, top: null, bottom: null });
+const EMPTY_DOCKS = (): Record<Side, DockGroup | null> => ({
+  right: null,
+  left: null,
+  top: null,
+  bottom: null,
+});
 
 interface Pass {
   bands: LayoutResult["bands"];
@@ -104,7 +137,12 @@ function fitAxis(
   total: number,
   avail: number,
   min: number,
-): { size: { first: number; second: number }; max: number; autoFirst: boolean; autoSecond: boolean } {
+): {
+  size: { first: number; second: number };
+  max: number;
+  autoFirst: boolean;
+  autoSecond: boolean;
+} {
   const max = Math.floor(Math.min(Math.floor(total / 2), avail));
   const out = { size: { first: 0, second: 0 }, max, autoFirst: false, autoSecond: false };
   if (!(max >= min)) {
@@ -112,7 +150,8 @@ function fitAxis(
     out.autoSecond = second !== null;
     return out;
   }
-  const round = (g: NonNullable<SidePlan["group"]>): number => Math.min(max, Math.max(min, Math.round(g.want)));
+  const round = (g: NonNullable<SidePlan["group"]>): number =>
+    Math.min(max, Math.max(min, Math.round(g.want)));
   let a = first ? round(first) : 0;
   let b = second ? round(second) : 0;
   if (first && second && a + b > avail) {
@@ -145,21 +184,26 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
 
   // 1. 帯: たたんでいない帯を出た順に足し、高さの合計が paneH / 3 以下に収まる分だけ出す（上と下を合わせて数える）。
   // pane が狭くて固定の部品が入らない帯は、自動でたたむ（出す帯の数え方・トレイの側にも入れない）。
-  const tooNarrow = (b: LayoutInput["bands"][number]): boolean => paneW < (b.script ? BAND_SCRIPT_MIN_W_PX : BAND_MIN_W_PX);
+  const tooNarrow = (b: LayoutInput["bands"][number]): boolean =>
+    paneW < (b.script ? BAND_SCRIPT_MIN_W_PX : BAND_MIN_W_PX);
   const open = input.bands.filter((b) => !b.collapsed && !tooNarrow(b));
   const autoBands = input.bands.filter((b) => !b.collapsed && tooNarrow(b));
-  const split = visibleBands(open.map((b) => b.size), paneH);
+  const split = visibleBands(
+    open.map((b) => b.size),
+    paneH,
+  );
   const shown = open.slice(0, split.shown);
   const more = open.slice(split.shown).map((b) => b.id);
   const top = shown.filter((b) => b.edge === "top");
   const bottom = shown.filter((b) => b.edge === "bottom");
 
-  // 2. トレイの側: 出す帯の最初の 1 本の側。出す帯が無ければ設定。
-  const first = shown[0];
-  const trayEdge: DisplayEdge = first ? first.edge : input.trayEdgeDefault;
-  const hostBandId = (trayEdge === "top" ? top : bottom)[0]?.id ?? null;
+  // Collapsed views always have their own tray, independent of open bands.
+  const trayEdge = input.trayEdgeDefault;
+  const hostBandId = null;
   // 専用のトレイの行を引くか（ボタンがある〔利用者がたたんだ面がある〕か、やり直し）。
-  const hasUserButtons = input.panels.some((p) => p.collapsed || p.dock === "float") || input.bands.some((b) => b.collapsed);
+  const hasUserButtons =
+    input.panels.some((p) => p.collapsed || p.dock === "float") ||
+    input.bands.some((b) => b.collapsed);
   const trayRow = hostBandId === null && (hasUserButtons || extraRow) ? TRAY_ROW_PX : 0;
   const rowOnEdge = (edge: DisplayEdge): number => {
     let h = 0;
@@ -172,13 +216,22 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
 
   // 3・4. パネルの 4 つの側。置き場所が `float` の面はここでは場所を取らない（手順 6 で窓にする）。
   const planOf = (side: Side): SidePlan["group"] => {
-    const ps = input.panels.filter((p) => p.dock === side && !p.collapsed).sort((a, b) => a.seq - b.seq);
+    const ps = input.panels
+      .filter((p) => p.dock === side && !p.collapsed)
+      .sort((a, b) => a.seq - b.seq);
     if (ps.length === 0) return null;
-    const activeId = ps.some((p) => p.id === input.active[side]) ? (input.active[side] as string) : ps[0]!.id;
+    const activeId = ps.some((p) => p.id === input.active[side])
+      ? (input.active[side] as string)
+      : ps[0]!.id;
     const active = ps.find((p) => p.id === activeId)!;
     return { ids: ps.map((p) => p.id), activeId, want: input.sideSizes[side] ?? active.size };
   };
-  const plans: Record<Side, SidePlan["group"]> = { top: planOf("top"), bottom: planOf("bottom"), left: planOf("left"), right: planOf("right") };
+  const plans: Record<Side, SidePlan["group"]> = {
+    top: planOf("top"),
+    bottom: planOf("bottom"),
+    left: planOf("left"),
+    right: planOf("right"),
+  };
   const auto: string[] = autoBands.map((b) => b.id);
   // pane が細くて、上・下のパネルの見出しの固定の部品が最小の高さに収まらないときは、自動でたたむ。
   if (paneW < PANEL_TB_MIN_W_PX) {
@@ -189,7 +242,13 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
     }
   }
   const docks = EMPTY_DOCKS();
-  const place = (side: Side, plan: NonNullable<SidePlan["group"]>, size: number, min: number, max: number): void => {
+  const place = (
+    side: Side,
+    plan: NonNullable<SidePlan["group"]>,
+    size: number,
+    min: number,
+    max: number,
+  ): void => {
     docks[side] = { ids: plan.ids, activeId: plan.activeId, size, min, max };
   };
   // 縦（上・下）: 本体の高さから、帯の行を引いた残り。端末は 10 行を残す。
@@ -204,7 +263,13 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
     else place("bottom", plans.bottom, v.size.second, DOCK_H_MIN_PX, v.max);
   }
   // 横（左・右）: 本体の幅から、端末は 40 列を残す。
-  const h = fitAxis(plans.left, plans.right, paneW, paneW - TERMINAL_MIN_COLS * cellW, PANEL_MIN_PX);
+  const h = fitAxis(
+    plans.left,
+    plans.right,
+    paneW,
+    paneW - TERMINAL_MIN_COLS * cellW,
+    PANEL_MIN_PX,
+  );
   if (plans.left) {
     if (h.autoFirst) auto.push(...plans.left.ids);
     else place("left", plans.left, h.size.first, PANEL_MIN_PX, h.max);
@@ -219,7 +284,12 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   const rightW = docks.right?.size ?? 0;
   const topP = docks.top?.size ?? 0;
   const bottomP = docks.bottom?.size ?? 0;
-  const terminal: Rect = { x: leftW, y: topH + topP, w: Math.max(0, paneW - leftW - rightW), h: Math.max(0, H - topP - bottomP) };
+  const terminal: Rect = {
+    x: leftW,
+    y: topH + topP,
+    w: Math.max(0, paneW - leftW - rightW),
+    h: Math.max(0, H - topP - bottomP),
+  };
 
   // 6. 浮いた窓: 窓の動ける領域は、端末の領域を各辺 4px 縮めた箱。最小の窓が入らなければ、窓は全部（閉じているものも）自動でたたむ＝開く操作を受けない。
   //    入るなら、たたんでいない窓ごとに、記憶の矩形（無ければ初めの矩形）を領域の中へ丸める。
@@ -230,7 +300,13 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   else {
     for (const p of floatPanels) {
       if (p.collapsed) continue;
-      floats.push({ id: p.id, rect: clampFloatRect(input.floatRects[p.id] ?? defaultFloatRect(0, p.size, floatArea), floatArea) });
+      floats.push({
+        id: p.id,
+        rect: clampFloatRect(
+          input.floatRects[p.id] ?? defaultFloatRect(floats.length, p.size, floatArea),
+          floatArea,
+        ),
+      });
     }
   }
 
@@ -239,10 +315,20 @@ function pass(input: LayoutInput, extraRow: boolean): Pass {
   const tagged: { seq: number; b: TrayButton }[] = [];
   for (const p of input.panels) {
     const isAuto = autoSet.has(p.id);
-    if (p.dock === "float") tagged.push({ seq: p.seq, b: { id: p.id, kind: "float", open: !p.collapsed && !isAuto, disabled: isAuto } });
-    else if (p.collapsed || isAuto) tagged.push({ seq: p.seq, b: { id: p.id, kind: "panel", open: false, disabled: isAuto } });
+    if (p.dock === "float")
+      tagged.push({
+        seq: p.seq,
+        b: { id: p.id, kind: "float", open: !p.collapsed && !isAuto, disabled: isAuto },
+      });
+    else if (p.collapsed || isAuto)
+      tagged.push({ seq: p.seq, b: { id: p.id, kind: "panel", open: false, disabled: isAuto } });
   }
-  for (const b of input.bands) if (b.collapsed || autoSet.has(b.id)) tagged.push({ seq: b.seq, b: { id: b.id, kind: "band", open: false, disabled: autoSet.has(b.id) && !b.collapsed } });
+  for (const b of input.bands)
+    if (b.collapsed || autoSet.has(b.id))
+      tagged.push({
+        seq: b.seq,
+        b: { id: b.id, kind: "band", open: false, disabled: autoSet.has(b.id) && !b.collapsed },
+      });
   tagged.sort((a, b) => a.seq - b.seq);
   const buttons = tagged.map((t) => t.b);
   const trayOwn = hostBandId === null && buttons.length > 0;
@@ -267,7 +353,8 @@ export function resolvePaneDisplays(input: LayoutInput): LayoutResult {
   // （やり直しで自動でたたむ面は増えるだけ。2 回目の結果を使う）。
   let p = pass(input, false);
   if (p.trayOwn && !p.hasUserButtons) p = pass(input, true);
-  const row: LayoutResult["tray"]["row"] = p.hostBandId !== null ? "band" : p.buttons.length > 0 ? "own" : "none";
+  const row: LayoutResult["tray"]["row"] =
+    p.hostBandId !== null ? "band" : p.buttons.length > 0 ? "own" : "none";
   return {
     bands: p.bands,
     tray: { edge: p.trayEdge, row, hostBandId: p.hostBandId, buttons: p.buttons },

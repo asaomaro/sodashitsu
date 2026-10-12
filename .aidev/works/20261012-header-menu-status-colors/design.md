@@ -1,0 +1,11 @@
+# 設計
+
+既存の右クリックメニューをヘッダーから呼び出す。端末のビューは描画とクリック判定で共通のbutton定義を使用する。Web帯のたたむは既存DisplayControllerへ委譲する。
+
+Statuslineはサーバ側で動的値をescapeしたHTMLを生成し、テーマ色と固定tone属性を付ける。端末側は標準Statuslineだけを識別して静的なspanへ読み替える。折り返しで色を保持する。利用率70%以上は警告、90%以上は危険色。
+
+状況画面のセクションは日本語のセル幅を計算した罫線で区切る。短い画面ではエージェント行を縮める。
+
+グラフのクリックとD&Dは2セルの閾値で判定する。クリック/EnterはGraphTerminalをWindowOverlayで開き、pane.attachと外部terminal sinkで既存PTYを表示する。窓が閉じればdetach/unsubscribeする。サーバ既存SizeAuthorityが元のサイズを復元する。pane.closeは呼ばない。
+
+同一接続・ペインの再openは前窓のcleanup完了を待つ。入力は直結成功時だけ許可する。端末への移動はcleanup完了後、同じdialogContextが残る場合だけ実行する。通常EscはPTYへ、Alt+Escは閉じる、Ctrl+Enterは通常端末へ移動する。狭幅のfooterボタンは2行表示する。

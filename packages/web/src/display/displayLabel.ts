@@ -7,7 +7,9 @@ export const DISPLAY_LABEL_PREFIX = "pane のプログラムの表示（隔離�
  * 面の出どころ（`DisplayInfo.source`。拡張が出した面に、サーバが付ける）が、形の合うものか。**`{ type: "extension", id: <EXTENSION_ID_RE に合う文字列>, scope: "user" | "project" }`
  * のときだけ**拡張として扱う（面の中身・題からは変えられず、id は英数字・`_`・`-` だけなので、似せた文言を入れられない）。ほかの形・文字列・無いときは null。
  */
-function extensionSource(info: { source?: unknown }): { id: string; scope: "user" | "project" } | null {
+function extensionSource(info: {
+  source?: unknown;
+}): { id: string; scope: "user" | "project" } | null {
   const s = info.source;
   if (typeof s !== "object" || s === null) return null;
   const r = s as Record<string, unknown>;
@@ -21,6 +23,9 @@ function extensionSource(info: { source?: unknown }): { id: string; scope: "user
 
 /** 固定のラベルの先頭の文（出どころで替わる）。拡張が出した面は「拡張『<id>』の表示（利用者｜プロジェクト・隔離）」、ほかは「pane のプログラムの表示（隔離）」。 */
 export function displayLabelPrefix(info: { source?: unknown }): string {
+  const source = info.source as { type?: unknown; id?: unknown; scope?: unknown } | undefined;
+  if (source?.type === "builtin" && source.id === "workspace" && source.scope === "user")
+    return "標準ビュー";
   const ext = extensionSource(info);
   if (ext === null) return DISPLAY_LABEL_PREFIX;
   return `拡張『${ext.id}』の表示（${ext.scope === "user" ? "利用者" : "プロジェクト"}・隔離）`;
@@ -32,6 +37,17 @@ export function displayLabelPrefix(info: { source?: unknown }): string {
  */
 export function displayLabel(info: Pick<DisplayInfo, "name"> & { source?: unknown }): string {
   return `${displayLabelPrefix(info)}· ${info.name}`;
+}
+
+/** 機能名を見出しに表示する。標準ビューは内部IDを利用者へ出さない。 */
+export function displayHeading(
+  info: Pick<DisplayInfo, "name" | "title"> & { source?: unknown },
+): string {
+  const source = info.source as { type?: unknown; id?: unknown; scope?: unknown } | undefined;
+  if (source?.type === "builtin" && source.id === "workspace" && source.scope === "user")
+    return info.title || displayLabel(info);
+  const label = displayLabel(info);
+  return info.title && info.title !== info.name ? `${label}: ${info.title}` : label;
 }
 
 /** 操作中の固定の文言。スクリプトが動く面は、中身が `Esc` を無効にできる場合があるので、［操作を終える］も案内する。 */
@@ -46,16 +62,28 @@ export function engagedNote(info: Pick<DisplayInfo, "format">): string {
  * 変えた接続の種別が分かれば添える（`desktop`・`mobile`＝ほかの画面、`external`＝`sodactl`・外部の接続）。
  */
 export function scriptEnabledNotice(byKind: "desktop" | "mobile" | "external" | undefined): string {
-  const by = byKind === "external" ? "（`sodactl`・外部の接続が変えました）" : byKind === undefined ? "" : "（ほかの画面が変えました）";
+  const by =
+    byKind === "external"
+      ? "（`sodactl`・外部の接続が変えました）"
+      : byKind === undefined
+        ? ""
+        : "（ほかの画面が変えました）";
   return `スクリプトが動く表示が、有効になりました${by}。設定で変えられます`;
 }
 
 /** `prefs.changed` を受けたとき、知らせを出すか: 手元の値が無効で、サーバの値が有効に変わったときだけ（自分の画面で変えたときは、手元がもう有効なので出ない）。 */
-export function scriptEnabledNoticeFor(data: { prefs: { displayScriptEnabled?: unknown }; byKind?: "desktop" | "mobile" | "external" }, localEnabled: boolean): string | null {
-  return data.prefs.displayScriptEnabled === true && !localEnabled ? scriptEnabledNotice(data.byKind) : null;
+export function scriptEnabledNoticeFor(
+  data: { prefs: { displayScriptEnabled?: unknown }; byKind?: "desktop" | "mobile" | "external" },
+  localEnabled: boolean,
+): string | null {
+  return data.prefs.displayScriptEnabled === true && !localEnabled
+    ? scriptEnabledNotice(data.byKind)
+    : null;
 }
 
 /** 帯の印の `title`・`aria-label`（題を添える）。 */
-export function displayBandLabel(info: Pick<DisplayInfo, "name" | "title"> & { source?: unknown }): string {
+export function displayBandLabel(
+  info: Pick<DisplayInfo, "name" | "title"> & { source?: unknown },
+): string {
   return `${displayLabel(info)}: ${info.title}`;
 }

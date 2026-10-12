@@ -229,6 +229,8 @@ describe("端末版の通知（組み立て）", () => {
     h.app.renderNow();
     const hits = (h.app as unknown as { toastHits: { x: number; y: number }[] }).toastHits;
     expect(hits).toHaveLength(1);
+    expect(hits[0]!.y).toBe(1);
+    expect(hits[0]!.x).toBeGreaterThan(40);
     h.io.type(
       `\x1b[<0;${hits[0]!.x + 2};${hits[0]!.y + 1}M\x1b[<0;${hits[0]!.x + 2};${hits[0]!.y + 1}m`,
     );

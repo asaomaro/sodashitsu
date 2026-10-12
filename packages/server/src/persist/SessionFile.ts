@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import { SidebarLayoutSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, PluginTabSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -130,7 +130,7 @@ const SessionFileTabSchema: z.ZodType<SessionFileTab> = z.object({
   focusedPaneId: z.string(),
   zoomedPaneId: z.string().nullable(),
   layout: LayoutNodeSchema,
-  plugin: z.object({ extensionKey: z.string().min(1).max(4096), display: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),mobileDisplay:z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/).optional() }).optional(),
+  plugin: PluginTabSchema.optional(),
   perspective: z.enum(["terminal", "app"]).optional(),
   displayPaneId: z.string().optional(),
   views: z.array(TabViewInstanceSchema).max(16).optional(),

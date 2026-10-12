@@ -12,9 +12,19 @@ import type { SessionModel } from "./SessionModel.js";
  * **`DialogContext` の形は web と同じ**——操作（`TuiDispatcher`）の確定・取り消しの規則を web の `ActionDispatcher` から写すため。
  */
 export type DialogContext =
+  | { kind: "graphTerminal"; paneId: string }
+  | {
+      kind: "workspaceView";
+      tabId: string;
+      paneId?: string;
+      viewInstanceId?: string;
+      viewId?: import("@sodashitsu/protocol").BuiltinViewId;
+    }
+  | { kind: "display"; paneId: string; displayId?: string; viewInstanceId?: string }
   | { kind: "newTab"; workspaceId: string }
   /** 端末版だけ：新しい workspace の名前（`tui.promptNewWorkspaceName`。herdr の prompt_new_workspace_name）。 */
   | { kind: "newWorkspace" }
+  | { kind: "projectFolder"; workspaceId: string; currentPath: string }
   | { kind: "renamePane"; paneId: string; currentLabel: string }
   | { kind: "renameTab"; tabId: string; currentLabel: string }
   | {
@@ -28,13 +38,14 @@ export type DialogContext =
   | { kind: "help" }
   | { kind: "goto" }
   /** `section`：開いたときに選ぶ節の id（はじめの案内の後の「エージェント連携」。herdr の select_settings_section）。 */
+  | { kind: "pluginPackages" }
   | { kind: "settings"; section?: string }
   /** はじめの案内（web と同じ kind。端末版は herdr のはじめの画面の形。H25b）。 */
   | { kind: "onboarding" }
   /** 端末版だけ：未処理の知らせの一覧（design「modes/」の「通知の一覧」）。 */
   | { kind: "notifications" }
-  | {kind:"conversation";paneId:string;mode:"messages"|"summary"}
-  | {kind:"pastSessions"}
+  | { kind: "conversation"; paneId: string; mode: "messages" | "summary" }
+  | { kind: "pastSessions" }
   | { kind: "agentFork"; paneId: string }
   | { kind: "usage"; paneId: string }
   | { kind: "usageAccounts" }
@@ -77,7 +88,8 @@ export type DialogContext =
 
 /** 右クリックのメニューの対象（web の `MenuTarget` と同じ）。 */
 export type MenuTarget =
-  | {kind:"agent-tools";paneId:string}
+  | { kind: "view"; viewId: string }
+  | { kind: "agent-tools"; paneId: string }
   | { kind: "pane"; paneId: string }
   | { kind: "tab"; tabId: string }
   | { kind: "workspace"; workspaceId: string }
@@ -110,8 +122,8 @@ export interface ToastOptions {
 export const TOAST_MS = 4000;
 
 export class UiState {
-  screen: "base" | "dashboard" = "base";
-  setScreen(screen: "base" | "dashboard"): void {
+  screen: "base" | "dashboard" | "schedule" | "graph" = "base";
+  setScreen(screen: "base" | "dashboard" | "schedule" | "graph"): void {
     if (this.screen === screen) return;
     this.screen = screen;
     this.emit();

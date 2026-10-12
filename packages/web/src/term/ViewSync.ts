@@ -70,6 +70,7 @@ export class ViewSync {
   private committer: (() => void) | null = null;
   /** 新しい接続で、まだ `client.view` を送っていない（送ったら `onViewEstablished` の listener を呼ぶ。D107）。 */
   private viewEstablishPending = false;
+  private readonly currentViewListeners = new Set<() => void>();
   private readonly viewEstablishedListeners = new Set<() => void>();
   /** `measureSinglePane` を 2 つ以上の pane の表示で渡された警告を出したか（開発時に 1 度だけ。D108）。 */
   private warnedMultiPaneMeasure = false;
@@ -82,8 +83,10 @@ export class ViewSync {
     // hello の前は送らない（`lastPayload` も予約の購読も触らない——`onConnectionOpened` の commit し直しで送る。D107）。
     if (!this.connectionReady) return;
     // 表示領域の全体を 1 つの pane に当てる測り方は、表示が 1 つの pane だけのときだけ使う（D108）。
-    const measureSingle = view.measureSinglePane && view.visible.length === 1 ? view.measureSinglePane : null;
-    if (view.measureSinglePane && view.visible.length > 1) this.warnMultiPaneMeasure(view.visible.length);
+    const measureSingle =
+      view.measureSinglePane && view.visible.length === 1 ? view.measureSinglePane : null;
+    if (view.measureSinglePane && view.visible.length > 1)
+      this.warnMultiPaneMeasure(view.visible.length);
     const visible = view.visible.map(({ paneId, element }) => {
       const entry = this.opts.registry.get(paneId);
       const cell = entry ? this.getCellSize(entry.term) : { width: 9, height: 18 };
@@ -95,20 +98,30 @@ export class ViewSync {
 
     const payload = { workspaceId: view.workspaceId, tabId: view.tabId, visible };
     const serialized = JSON.stringify(payload);
-    if (serialized !== this.lastPayload) {
+    if (serialized !== this.lastPayload || this.currentViewListeners.size > 0) {
       this.lastPayload = serialized;
       void this.opts.conn.request("client.view", payload).catch(() => undefined);
       if (this.viewEstablishPending) {
         this.viewEstablishPending = false;
+        this.currentViewListeners.clear();
         this.notifyViewEstablished();
+      } else if (this.currentViewListeners.size > 0) {
+        const pending = [...this.currentViewListeners];
+        this.currentViewListeners.clear();
+        for (const listener of pending) this.invokeViewListener(listener);
       }
     }
 
-    for (const paneId of this.opts.registry.takePendingSubscriptions(visible.map((v) => v.paneId))) {
+    for (const paneId of this.opts.registry.takePendingSubscriptions(
+      visible.map((v) => v.paneId),
+    )) {
       // 作ったときの値を使う（D6）。以前は購読のたびに `getScrollbackLines()` を読んでいたが、利用者が設定を変えられる
       // ようになった今は、作ってから購読するまでの間に変えると xterm の容量と求める行数が食い違う。
-      const scrollbackLines = this.opts.registry.get(paneId)?.scrollback ?? this.opts.getScrollbackLines();
-      void this.opts.conn.request("pane.subscribe", { paneId, scrollbackLines }).catch(() => undefined);
+      const scrollbackLines =
+        this.opts.registry.get(paneId)?.scrollback ?? this.opts.getScrollbackLines();
+      void this.opts.conn
+        .request("pane.subscribe", { paneId, scrollbackLines })
+        .catch(() => undefined);
     }
   }
 
@@ -150,34 +163,41 @@ export class ViewSync {
 
   /**
    * 新しい接続で最初の `client.view` を送った直後（続く `pane.subscribe` より前）に `listener` を呼ぶ。外す関数を返す（D107）。
+   * `currentConnection=true` なら、接続済みでも次の commit で表示を送り直して呼ぶ（PC 表示からモバイルへの切替）。
    * 初回の接続でも呼ぶ。**`client.fit` を送り直す口**（04-mobile 向け）：サーバの `client.fit` は表示（`client.view`）が
    * まだ無い接続では権限を取らない（サーバの D106 の `onFitChanged`）ので、「この端末に合わせる」を有効にしたまま再接続した
    * モバイルは、ここで `client.fit({enabled:true})` を送り直す。`ConnectionPort.request` は同期的に送るので、ここで送れば
    * `client.view` → `client.fit` → `pane.subscribe` の順に届き、SNAPSHOT は fit で決まった大きさで取られる。
    */
-  onViewEstablished(listener: () => void): () => void {
+  onViewEstablished(listener: () => void, currentConnection = false): () => void {
     this.viewEstablishedListeners.add(listener);
+    if (currentConnection && this.connectionReady && !this.viewEstablishPending)
+      this.currentViewListeners.add(listener);
     return () => {
       this.viewEstablishedListeners.delete(listener);
+      this.currentViewListeners.delete(listener);
     };
   }
 
   private warnMultiPaneMeasure(count: number): void {
     if (!import.meta.env.DEV || this.warnedMultiPaneMeasure) return;
     this.warnedMultiPaneMeasure = true;
-    console.warn(`ViewSync: measureSinglePane は表示が 1 つの pane だけの commit で使う口です（表示中 ${count} 個）。葉の大きさで測ります（D108）`);
+    console.warn(
+      `ViewSync: measureSinglePane は表示が 1 つの pane だけの commit で使う口です（表示中 ${count} 個）。葉の大きさで測ります（D108）`,
+    );
   }
 
   /** listener の例外で続く `pane.subscribe` を止めない（後のタスクで投げ直して見えるようにする）。 */
-  private notifyViewEstablished(): void {
-    for (const listener of [...this.viewEstablishedListeners]) {
-      try {
-        listener();
-      } catch (err) {
-        setTimeout(() => {
-          throw err;
-        }, 0);
-      }
+  private invokeViewListener(listener: () => void): void {
+    try {
+      listener();
+    } catch (err) {
+      setTimeout(() => {
+        throw err;
+      }, 0);
     }
+  }
+  private notifyViewEstablished(): void {
+    for (const listener of [...this.viewEstablishedListeners]) this.invokeViewListener(listener);
   }
 }

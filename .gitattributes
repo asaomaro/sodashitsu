@@ -5,3 +5,12 @@ packages/web/public/fonts/nerd-symbols/LICENSE* -text whitespace=-blank-at-eol
 
 # Preserve raw terminal-grid output in regression records.
 .aidev/works/20261011-history-usage-otp/test-result.md whitespace=-blank-at-eol
+
+.aidev/works/20261012-tui-document-windows/test-result.md whitespace=-blank-at-eol
+
+# Preserve verbatim negative-control output.
+.aidev/works/20261012-band-panel-heading/test-result.md whitespace=-blank-at-eol
+.aidev/works/20261012-header-menu-status-colors/test-result.md whitespace=-blank-at-eol
+.aidev/works/20261012-web-view-heading-float/test-result.md whitespace=-blank-at-eol
+.aidev/works/20261012-scheduled-execution/negative-controls.md whitespace=-blank-at-eof
+.aidev/works/20261012-tui-document-windows/test-result.md whitespace=-blank-at-eol,-blank-at-eof

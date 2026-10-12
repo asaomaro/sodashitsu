@@ -380,9 +380,7 @@ const agents = computed(() => {
 function focusWorkspace(workspaceId: string): void {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return;
-  const tab = session.tabs.get(ws.activeTabId);
-  view.setView(workspaceId, ws.activeTabId);
-  if (tab) view.focusPane(tab.focusedPaneId);
+  view.selectWorkspace(workspaceId);
   void conn?.request("workspace.focus", { workspaceId }).catch(() => undefined);
   view.notifySidebarPick();
   // グラフの画面では、その workspace のある空間へ切り替えて、囲いへ動く（20261008-graph-first の T11e）。

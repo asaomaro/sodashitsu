@@ -1,3 +1,9 @@
+import {ArtifactFiles} from './http/ArtifactFiles.js';
+import {RpcError} from "@sodashitsu/protocol";
+import {Scheduler} from "./schedule/Scheduler.js";
+import {executeScheduledCommand} from "./schedule/executeCommand.js";
+import {WorkspaceTools} from "./workspace/WorkspaceTools.js";
+import {BuiltinViews} from "./workspace/BuiltinViews.js";
 import { OtpAuth } from "./auth/OtpAuth.js";
 import { loadSummarySettings } from "@sodashitsu/protocol";
 import {SharedNotifications} from "./notify/SharedNotifications.js";
@@ -52,6 +58,7 @@ import { askFeaturesOp, askOpenOp } from "./panesocket/askOp.js";
 import { displayCloseOp, displayFeaturesOp, displayListOp, displaySendOp, displaySetOp, displayWaitOp } from "./panesocket/displayOps.js";
 import { DisplayService } from "./display/DisplayService.js";
 import { ExtensionHost, type ExtensionHostOptions } from "./extensions/ExtensionHost.js";
+import { PluginDiscovery } from "./extensions/PluginDiscovery.js";
 import { AskMedia, type ImageFetcher } from "./ask/AskMedia.js";
 import { RemoteImageFetcher } from "./ask/RemoteImageFetcher.js";
 import { FileAccess } from "./file/FileAccess.js";
@@ -240,9 +247,10 @@ export async function composeServer(
   const originRejections = new OriginRejectionLog(logger, origins, { extraOrigins: options.extraOrigins });
   // 手元からのログイン（20260927-cli-mode。decisions D2）。秘密は `listen()` の待ち受けの後に作って `local-auth.json` へ書き、`close()` で消す。
   const localLogin = new LocalLogin(options.stateDir);
+  const artifacts=new ArtifactFiles();
   let httpServer: HttpServer;
   try {
-    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin, otpAuth });
+    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin, otpAuth, artifacts });
   } catch (err) {
     // `https.createServer` は証明書と秘密鍵をその場で解釈する（PEM でない・鍵が合わない等で投げる）。
     if (!secure) throw err;
@@ -445,9 +453,12 @@ export async function composeServer(
     },
     logger,
   });
+  const workspaceTools=new WorkspaceTools(id=>session.snapshot().workspaces.find(w=>w.id===id)?.projectDir);
+  const builtinViews=new BuiltinViews(session,displays,bus,workspaceTools,id=>usage.get(id));
   // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
   const extensions = new ExtensionHost({
+    artifacts,
     tasks:{session,starter:agentStarter,kinds:createAgentKindsLister()},
     stateDir: options.stateDir,
     sessionRoot: options.sessionRoot,
@@ -464,6 +475,7 @@ export async function composeServer(
     logger,
     ...(internal.extensions ? { deps: internal.extensions } : {}),
   });
+  const pluginDiscovery=new PluginDiscovery(options.stateDir,osHomedir(),process.cwd(),()=>session.snapshot().workspaces.flatMap(w=>w.projectDir?[w.projectDir]:[]),extensions);
   // ログイン不要の受け口（20261003-sodactl-ask-socket）。受けるのはここに登録した操作だけ（`/ws` の RPC は通さない）。いま載せるのは `ask.open` だけ。
   // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
@@ -596,7 +608,24 @@ export async function composeServer(
     } else if (!agent) summaryWorking.delete(id);
   });
 
+  const scheduler = new Scheduler(options.stateDir,async(job,signal)=>{
+    if(signal.aborted)throw new Error("予約の実行が中断されました");
+    if(job.action.type === "agent") {
+      const response=await surface.invoke({clientId:"scheduler",signal,sink:{} as import("./terminal/OutputFanout.js").ClientSink},"agent.prompt",{paneId:job.action.paneId,text:job.action.text});
+      if(!response.ok)throw new Error(response.error.code+": "+response.error.message);
+      return {status:"sent",exitCode:null,output:"エージェントへ指示を送信しました。"};
+    }
+    const workspaceId=job.action.workspaceId;
+    const ws=session.snapshot().workspaces.find(w=>w.id===workspaceId);
+    if(!ws)throw new Error("実行先のワークスペースが閉じられました");
+    return executeScheduledCommand(job.action.command,ws.projectDir??ws.cwd,signal);
+  },draft=>{
+    const action=draft.action;
+    if(action.type === "agent" && !session.getPane(action.paneId))throw new RpcError("not_found","対象ペインが見つかりません");
+    if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
+  });
   registerAllMethods(surface, {
+    workspaceTools,scheduler,pluginDiscovery,
     conversations,summaries,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
     session,
     clients,
@@ -610,6 +639,7 @@ export async function composeServer(
     subagentTranscripts,
     usage,
     usageWatch,
+    notificationTest: () => bus.publish({event:"notification.test",data:{message:"通知テスト：右上のスナックバーの動作確認です"}}),
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
     machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
     commands,
@@ -693,6 +723,7 @@ export async function composeServer(
     scrollbackEditors: () => session.handoffScrollbackEditors(),
     boundPort: () => boundPortValue,
     pausePollers: async () => {
+      await scheduler.close();
       graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
       graphMaintainer.pause(); // 20261008-graph-first（引き継ぎの停止の間は維持を呼ばない。新しい版が起動の経路で呼ぶ）
       remoteLinks.closeAll(); // 別のマシンへの接続は実行を止めた後に閉じる（04。元に戻すときは start の ensure が開き直す）
@@ -705,6 +736,7 @@ export async function composeServer(
       await extensions.stop();
     },
     resumePollers: () => {
+      scheduler.start();
       graphEngine.start();
       graphMaintainer.resume(); // 止まっている間のできごとを拾う
       gitPoller.start();
@@ -938,6 +970,7 @@ export async function composeServer(
           await session.adoptScrollbackEditors(finished.scrollbackEditors, adoptedPaneIds);
           handoff.recordTaken(handoffResult);
         }
+        builtinViews.sync();
         sessionLoaded = true;
         // 止まっている間に閉じた pane のノードを外す（復元した pane に無いもの。id は再利用されないので、`session.json` が読めなかった起動の保存済みノードもここで外れる）。
         const prunedNodes = await paneCleanup.pruneMissing();
@@ -969,6 +1002,8 @@ export async function composeServer(
         wireLayoutConfirmation(gitPoller, session);
         gitPoller.start();
         agentMonitor.start();
+        await scheduler.load();scheduler.start();
+
         // 4.5. 更新時の引き継ぎの指示の受け口（Linux/macOS。20260926-live-handoff）。復元と poller の開始の後に置く——起動の途中の指示で、
         //      復元の途中の session.json を保存したり、まだ始めていない poller を「再開」したりしないため。置けなくても起動は続ける。
         if (platform() !== "win32" || internal.workerPty) {
@@ -1006,8 +1041,10 @@ export async function composeServer(
         if (!sessionLoaded) persist.cancel();
         graphEngine.stop();
         lineage.close();
+        builtinViews.close();
         summarySub.dispose();
         summaries.close();
+        await scheduler.close();
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
@@ -1035,6 +1072,8 @@ export async function composeServer(
     },
 
     async close(): Promise<void> {
+      await scheduler.close();
+      builtinViews.close();
       summarySub.dispose();
       summaries.close();
       try {
@@ -1089,12 +1128,13 @@ export async function composeServer(
         wsServer.closeAll(1001, "server shutting down");
         bridgeEndpoint.closeAll(1001, "server shutting down");
         await bridgeEndpoint.close();
+        artifacts.close();
         await new Promise<void>((resolve) => httpServer.server.close(() => resolve()));
       } finally {
         if(internal.workerPty) {
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
-          graphEngine.stop();lineage.close();summarySub.dispose();summaries.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
+          graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
           usageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();

@@ -29,9 +29,15 @@ export const EXTENSION_LINE_MAX_BYTES = 4 * 1024 * 1024;
 /** 超えたら読むのを待つ。 */
 export const EXTENSION_REQUEST_RATE = { perSec: 50, burst: 100 } as const;
 /** 拡張ごとの量。 */
-export const EXTENSION_INPUT_BYTES_RATE = { perSec: 2 * 1024 * 1024, burst: 8 * 1024 * 1024 } as const;
+export const EXTENSION_INPUT_BYTES_RATE = {
+  perSec: 2 * 1024 * 1024,
+  burst: 8 * 1024 * 1024,
+} as const;
 /** 全部の拡張の合計の量。 */
-export const EXTENSION_TOTAL_INPUT_BYTES_RATE = { perSec: 8 * 1024 * 1024, burst: 16 * 1024 * 1024 } as const;
+export const EXTENSION_TOTAL_INPUT_BYTES_RATE = {
+  perSec: 8 * 1024 * 1024,
+  burst: 16 * 1024 * 1024,
+} as const;
 /** これだけ処理したら、イベントループへ返す。 */
 export const EXTENSION_PUMP_BATCH = { lines: 16, ms: 8 } as const;
 export const EXTENSION_STDERR_BYTES_RATE = { perSec: 256 * 1024, burst: 1024 * 1024 } as const;
@@ -81,17 +87,55 @@ export type ExtensionScope = "user" | "project";
 export interface ExtensionViewDefinition {
   id: string;
   title: string;
+  terminal?: { format: "text" | "markdown" | "html" } | undefined;
   placements: import("./model.js").TabViewInstance["placement"][];
   requiresProject?: boolean | undefined;
+  /** 情報の対象。省略時は両方（既存プラグイン互換）。配置の範囲ではない。 */
+  targets?: readonly ("tab" | "pane")[] | undefined;
 }
-const ViewTitle = z.string().min(1).max(80).refine(v => !hasForbiddenChars(v));
-export const ExtensionTabViewSchema = z.strictObject({ title: ViewTitle, display: z.string().regex(DISPLAY_NAME_RE), mobileDisplay:z.string().regex(DISPLAY_NAME_RE).optional(), requiresProject: z.boolean().optional() });
-export const ViewPlacementSchema = z.enum(["right", "left", "top", "bottom", "float", "band-top", "band-bottom"]);
-export const ExtensionViewsSchema = z.array(z.strictObject({
-  id: z.string().regex(COMMAND_ID_RE), title: ViewTitle,
-  placements: z.array(ViewPlacementSchema).min(1).max(7).refine(v => new Set(v).size === v.length),
+const ViewTitle = z
+  .string()
+  .min(1)
+  .max(80)
+  .refine((v) => !hasForbiddenChars(v));
+export const ExtensionTabViewSchema = z.strictObject({
+  title: ViewTitle,
+  display: z.string().regex(DISPLAY_NAME_RE),
+  mobileDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
+  terminalDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
   requiresProject: z.boolean().optional(),
-})).max(16).refine(v => new Set(v.map(d => d.id)).size === v.length);
+});
+export const ViewPlacementSchema = z.enum([
+  "right",
+  "left",
+  "top",
+  "bottom",
+  "float",
+  "band-top",
+  "band-bottom",
+]);
+export const ExtensionViewsSchema = z
+  .array(
+    z.strictObject({
+      id: z.string().regex(COMMAND_ID_RE),
+      title: ViewTitle,
+      placements: z
+        .array(ViewPlacementSchema)
+        .min(1)
+        .max(7)
+        .refine((v) => new Set(v).size === v.length),
+      requiresProject: z.boolean().optional(),
+      terminal: z.strictObject({ format: z.enum(["text", "markdown", "html"]) }).optional(),
+      targets: z
+        .array(z.enum(["tab", "pane"]))
+        .min(1)
+        .max(2)
+        .refine((v) => new Set(v).size === v.length)
+        .optional(),
+    }),
+  )
+  .max(16)
+  .refine((v) => new Set(v.map((d) => d.id)).size === v.length);
 export type ExtensionRunState =
   | "running" // 動作中
   | "backoff" // 落ちた。起動し直しを待っている
@@ -103,7 +147,8 @@ export type ExtensionRunState =
   | "over_limit" // 同時に動かす合計の上限のため、動かしていない
   | "waiting"; // 設定か無効の記録を読めない（時間切れ・一時の失敗）ので、起動を見送っている。読めれば起動する
 
-export type ExtensionExitReason = "exited" | "crashed" | "spawn_failed" | "bad_lines" | "not_reading" | "stopped";
+export type ExtensionExitReason =
+  "exited" | "crashed" | "spawn_failed" | "bad_lines" | "not_reading" | "stopped";
 
 /** プロジェクトの拡張の、承認の画面に出す中身（PR3 が使う。型はここで定義する）。 */
 export interface ExtensionApprovalView {
@@ -115,7 +160,13 @@ export interface ExtensionApprovalView {
   groupWritable: boolean;
   decidedAt?: string;
   /** 最後に承認した中身（あれば。「承認しない」とした中身は、ここに入らない）。 */
-  previous?: { command: string; description: string | null; enabled: boolean; allow: string[]; onUnresponsive: string };
+  previous?: {
+    command: string;
+    description: string | null;
+    enabled: boolean;
+    allow: string[];
+    onUnresponsive: string;
+  };
   /** この (根, id) で、前に別の中身を「承認しない」とした。 */
   deniedBefore: boolean;
   /** この (根, id) に、承認の記録が残っている（いまの登録と鍵が違っても。その中身へ戻ると、動く）。 */
@@ -133,7 +184,13 @@ export interface ExtensionInfo {
   description?: string;
   allow: string[];
   onUnresponsive: "pass" | "block";
-  tabView?: { title: string; display: string; mobileDisplay?:string|undefined; requiresProject?: boolean | undefined };
+  tabView?: {
+    title: string;
+    display: string;
+    mobileDisplay?: string | undefined;
+    terminalDisplay?: string | undefined;
+    requiresProject?: boolean | undefined;
+  };
   views?: ExtensionViewDefinition[];
   /** プロジェクト拡張が利用できるワークスペース（サーバ側の根判定）。 */
   workspaceIds?: string[];
@@ -148,7 +205,12 @@ export interface ExtensionInfo {
   failures: number;
   /** backoff のとき。 */
   nextRetryAt?: string;
-  lastExit?: { code: number | null; signal: string | null; at: string; reason: ExtensionExitReason };
+  lastExit?: {
+    code: number | null;
+    signal: string | null;
+    at: string;
+    reason: ExtensionExitReason;
+  };
   /** いま出している面の数。 */
   displays: number;
   /** プロジェクトだけ（PR3）。 */
@@ -197,7 +259,7 @@ export interface ExtPane {
   tabId?: string;
   plugin?: import("./model.js").PluginTab;
   virtual?: true;
-  views?: import("./model.js").TabViewInstance[];
+  views?: (import("./model.js").TabViewInstance & { sourcePaneId?: string | undefined })[];
   agentState?: import("./model.js").AgentState;
   agent: string | null;
 }
@@ -230,7 +292,13 @@ export type ExtDisplayEvent =
 
 /** サーバ → 拡張の行。 */
 export type ExtLine =
-  | {type: "app.call";callId:string;operation:string;params:Record<string,unknown>;target:{paneId:string;tabId:string;workspaceId:string}}
+  | {
+      type: "app.call";
+      callId: string;
+      operation: string;
+      params: Record<string, unknown>;
+      target: { paneId: string; tabId: string; workspaceId: string };
+    }
   | {
       type: "ext.hello";
       v: 1;
@@ -261,7 +329,16 @@ export type ExtRequestParse =
   | { ok: true; request: ExtRequest }
   | { ok: false; code: "bad_line" | "bad_request"; message: string };
 
-export const EXT_EVENT_TYPES = ["ext.hello", "ext.result", "ext.error", "ext.dropped", "ext.panes", "display.action", "display.closed", "app.call"] as const;
+export const EXT_EVENT_TYPES = [
+  "ext.hello",
+  "ext.result",
+  "ext.error",
+  "ext.dropped",
+  "ext.panes",
+  "display.action",
+  "display.closed",
+  "app.call",
+] as const;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -278,25 +355,48 @@ export function parseExtRequest(line: string): ExtRequestParse {
   } catch {
     return { ok: false, code: "bad_line", message: "the line is not JSON" };
   }
-  if (!isPlainObject(raw)) return { ok: false, code: "bad_request", message: "the request must be a JSON object" };
+  if (!isPlainObject(raw))
+    return { ok: false, code: "bad_request", message: "the request must be a JSON object" };
   const method = Object.prototype.hasOwnProperty.call(raw, "method") ? raw.method : undefined;
-  if (typeof method !== "string" || method.length < 1 || method.length > EXTENSION_METHOD_NAME_MAX) {
-    return { ok: false, code: "bad_request", message: "method must be a string of 1 to 64 characters" };
+  if (
+    typeof method !== "string" ||
+    method.length < 1 ||
+    method.length > EXTENSION_METHOD_NAME_MAX
+  ) {
+    return {
+      ok: false,
+      code: "bad_request",
+      message: "method must be a string of 1 to 64 characters",
+    };
   }
   const out: ExtRequest = { method };
   if (Object.prototype.hasOwnProperty.call(raw, "id") && raw.id !== undefined && raw.id !== null) {
     const id = raw.id;
     if (typeof id === "number") {
-      if (!Number.isFinite(id)) return { ok: false, code: "bad_request", message: "id must be a finite number or a string" };
+      if (!Number.isFinite(id))
+        return {
+          ok: false,
+          code: "bad_request",
+          message: "id must be a finite number or a string",
+        };
     } else if (typeof id !== "string" || id.length < 1 || id.length > EXTENSION_REQUEST_ID_MAX) {
-      return { ok: false, code: "bad_request", message: "id must be a finite number or a string of 1 to 64 characters" };
+      return {
+        ok: false,
+        code: "bad_request",
+        message: "id must be a finite number or a string of 1 to 64 characters",
+      };
     }
     out.id = id;
   } else if (Object.prototype.hasOwnProperty.call(raw, "id") && raw.id === null) {
-    return { ok: false, code: "bad_request", message: "id must be a finite number or a string of 1 to 64 characters" };
+    return {
+      ok: false,
+      code: "bad_request",
+      message: "id must be a finite number or a string of 1 to 64 characters",
+    };
   }
   if (Object.prototype.hasOwnProperty.call(raw, "params") && raw.params !== undefined) {
-    if (!isPlainObject(raw.params)) return { ok: false, code: "bad_request", message: "params must be an object" };
+    if (!isPlainObject(raw.params))
+      return { ok: false, code: "bad_request", message: "params must be an object" };
     out.params = raw.params;
   }
   return { ok: true, request: out };
@@ -306,7 +406,8 @@ export function parseExtRequest(line: string): ExtRequestParse {
  * 設定の検査・根のパスの検査・画面の表示が、同じものを使う。制御（Cc）・書式（Cf）・私用（Co）・未割り当て（Cn）・サロゲート（Cs）・
  * 行と段落の区切り（Zl・Zp）・U+0020 以外の空白（Zs）と、見えない埋め草・異体字セレクタ。
  */
-const FORBIDDEN_CHARS_RE = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}ᅟᅠㅤﾠ͏︀-️\u{E0100}-\u{E01EF}]|(?! )\p{Zs}/u;
+const FORBIDDEN_CHARS_RE =
+  /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}ᅟᅠㅤﾠ͏︀-️\u{E0100}-\u{E01EF}]|(?! )\p{Zs}/u;
 export function hasForbiddenChars(s: string): boolean {
   return FORBIDDEN_CHARS_RE.test(s);
 }
@@ -321,3 +422,13 @@ export function extLimits(): ExtLimits {
     displayBytes: EXTENSION_DISPLAY_BYTES_MAX,
   };
 }
+
+export function viewSupportsTarget(
+  def: Pick<ExtensionViewDefinition, "targets">,
+  target: "tab" | "pane",
+): boolean {
+  return target === "tab" || (def.targets?.includes(target) ?? true);
+}
+
+/** 配置された未登録パッケージの候補。検出だけでは実行しない。 */
+export interface PluginCandidate {key:string;digest:string;path:string;scope:'user'|'project';root:string;id:string;version:string;name:string;description:string;allow:string[];files:number;}

@@ -1,4 +1,9 @@
-import {loadAgentHeaderActions,loadSummarySettings,type AgentHeaderAction,type SummarySettings} from "@sodashitsu/protocol";
+import {
+  loadAgentHeaderActions,
+  loadSummarySettings,
+  type AgentHeaderAction,
+  type SummarySettings,
+} from "@sodashitsu/protocol";
 import type { DisplayDock, DisplayEdge, ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
@@ -95,7 +100,6 @@ export {
  * （所有者を 1 つにする。`view.ts` の注記）。
  */
 
-
 /**
  * 全画面のときブラウザ予約キーも Keyboard Lock で受け取るか（20260922-keybinding-usability。
  * design「US4」）。**既定は無効**——実験的 API・Chromium 系限定のため（AC11）。
@@ -119,7 +123,10 @@ export const PANE_FRAME_THICKNESS_PX: Record<PaneFrameThickness, number> = {
  * 様式ごとの、pane の枠・隙間の太さの表（20261008-ui-style の D7）。**クラシックは今の値のまま**（上の `PANE_FRAME_THICKNESS_PX`）。モダンの値は仮置き
  * （利用者が、絵を見て決める。**数値を変えるのは、ここだけ**）。配る所は `App.vue` の 1 か所（`--soda-pane-gap`）。
  */
-export const PANE_FRAME_THICKNESS_PX_BY_STYLE: Record<UiStyle, Record<PaneFrameThickness, number>> = {
+export const PANE_FRAME_THICKNESS_PX_BY_STYLE: Record<
+  UiStyle,
+  Record<PaneFrameThickness, number>
+> = {
   classic: PANE_FRAME_THICKNESS_PX,
   modern: { thin: 4, default: 8, thick: 12 },
 };
@@ -137,7 +144,6 @@ export function loadPaneFrameThickness(raw: unknown): PaneFrameThickness {
     : "default";
 }
 
-
 /**
  * pane 領域の外周の枠（20260922-tabbar-pane-appearance。herdr の `ui.pane_outer_borders` 相当。PR #12 から
  * 取り込み）。既定は今までと同じ見た目＝「無し」——外周の枠は本製品にこれまで無かった装飾なので、
@@ -147,22 +153,29 @@ export function loadPaneOuterBorders(raw: unknown): boolean {
   return typeof raw === "boolean" ? raw : false;
 }
 
-
-
 export const useSettingsStore = defineStore("settings", () => {
   const initial = readPrefs();
-  const agentHeaderActions=ref(loadAgentHeaderActions(initial["agentHeaderActions"]));
-  const summarySettings=ref(loadSummarySettings(initial["summarySettings"]));
-  function setAgentHeaderActions(v:AgentHeaderAction[]):void {agentHeaderActions.value=loadAgentHeaderActions(v);writePrefs({agentHeaderActions:agentHeaderActions.value});}
-  function setSummarySettings(v:SummarySettings):void {summarySettings.value=loadSummarySettings(v);writePrefs({summarySettings:summarySettings.value});}
+  const agentHeaderActions = ref(loadAgentHeaderActions(initial["agentHeaderActions"]));
+  const summarySettings = ref(loadSummarySettings(initial["summarySettings"]));
+  function setAgentHeaderActions(v: AgentHeaderAction[]): void {
+    agentHeaderActions.value = loadAgentHeaderActions(v);
+    writePrefs({ agentHeaderActions: agentHeaderActions.value });
+  }
+  function setSummarySettings(v: SummarySettings): void {
+    summarySettings.value = loadSummarySettings(v);
+    writePrefs({ summarySettings: summarySettings.value });
+  }
 
   /** 状態を色に加えて記号でも示すか（`StateIcon.vue` が読む）。 */
   const statusSymbols = ref(loadStatusSymbols(initial["statusSymbols"]));
   /** 全画面のときブラウザ予約キーも Keyboard Lock で受け取るか（`KeyboardLockController` が読む）。 */
-  const keyboardLockInFullscreen = ref(loadKeyboardLockInFullscreen(initial["keyboardLockInFullscreen"]));
+  const keyboardLockInFullscreen = ref(
+    loadKeyboardLockInFullscreen(initial["keyboardLockInFullscreen"]),
+  );
   /** pane の枠・隙間の太さ（`App.vue` が CSS 変数へ配る）。 */
   const paneFrameThickness = ref(loadPaneFrameThickness(initial["paneFrameThickness"]));
   /** pane にエージェント名を可視で出すか（`PaneFrame.vue` が読む）。 */
+  const viewTitleVisible = ref(initial["viewTitleVisible"] !== false);
   const paneAgentNameVisible = ref(loadPaneAgentNameVisible(initial["paneAgentNameVisible"]));
   /**
    * tab バーの位置・右端のエントリ・pane 領域の外周の枠（20260922-tabbar-pane-appearance。herdr の
@@ -205,7 +218,9 @@ export const useSettingsStore = defineStore("settings", () => {
    * 表示の面の初めの状態・置き場所の既定（20261008-display-layout）。記憶の無い面にだけ効く（プログラムの指定の次）。共有の設定。
    * `displayPanelDock` の選択肢は PR-A の画面には出さない（値の読みと ref は入れておく）。
    */
-  const displayPanelInitial = ref<DisplayPanelInitial>(loadDisplayPanelInitial(initial["displayPanelInitial"]));
+  const displayPanelInitial = ref<DisplayPanelInitial>(
+    loadDisplayPanelInitial(initial["displayPanelInitial"]),
+  );
   const displayPanelDock = ref<DisplayDock>(loadDisplayPanelDock(initial["displayPanelDock"]));
   const displayBandEdge = ref<DisplayEdge>(loadDisplayBandEdge(initial["displayBandEdge"]));
   /**
@@ -291,7 +306,11 @@ export const useSettingsStore = defineStore("settings", () => {
   function addTabBarRightEntry(kind: TabBarRightEntry["kind"]): void {
     if (tabBarRight.value.length >= MAX_TAB_BAR_RIGHT_ENTRIES) return;
     const entry: TabBarRightEntry =
-      kind === "datetime" ? { kind, format: "time" } : kind === "text" ? { kind, text: "" } : { kind };
+      kind === "datetime"
+        ? { kind, format: "time" }
+        : kind === "text"
+          ? { kind, text: "" }
+          : { kind };
     setTabBarRight([...tabBarRight.value, entry]);
   }
 
@@ -303,7 +322,13 @@ export const useSettingsStore = defineStore("settings", () => {
   /** 指定した位置のエントリを 1 つ隣と入れ替える。端では何もしない。 */
   function moveTabBarRightEntry(index: number, direction: -1 | 1): void {
     const next = index + direction;
-    if (index < 0 || index >= tabBarRight.value.length || next < 0 || next >= tabBarRight.value.length) return;
+    if (
+      index < 0 ||
+      index >= tabBarRight.value.length ||
+      next < 0 ||
+      next >= tabBarRight.value.length
+    )
+      return;
     const reordered = [...tabBarRight.value];
     const moved = reordered[index]!;
     reordered[index] = reordered[next]!;
@@ -340,6 +365,11 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   /** 反映と保存を同時に行う。 */
+  function setViewTitleVisible(v: boolean): void {
+    viewTitleVisible.value = v;
+    writePrefs({ viewTitleVisible: v });
+  }
+
   function setPaneBorders(v: PaneBorders): void {
     paneBorders.value = v;
     writePrefs({ paneBorders: v });
@@ -458,7 +488,9 @@ export const useSettingsStore = defineStore("settings", () => {
    */
   // 独自コマンド（20260927-custom-command-keys）の一覧も渡す——サーバの一覧が変われば表も作り直す（一覧に無いコマンドの割り当ては載らない）。
   const commands = useCommandsStore();
-  const keymap = computed<ResolvedKeymap>(() => resolveKeymap(keyPrefs.value, commandKeyDefs(commands.catalog)).keymap);
+  const keymap = computed<ResolvedKeymap>(
+    () => resolveKeymap(keyPrefs.value, commandKeyDefs(commands.catalog)).keymap,
+  );
   /**
    * navigate モードの6操作（20260923-navigate-mode-keys。design「store」）の解決した表。
    * `keyPrefs.navigateKeys` は `bindings`/`prefix` とは別の**内容**の表なので、専用の computed で分ける
@@ -518,7 +550,8 @@ export const useSettingsStore = defineStore("settings", () => {
       themeOverrides.value = freshOverrides;
     // 20260927-sidebar-row-tokens：行の並び（`sidebarRows`）も 2 つの区画を 1 つのまとまりとして丸ごと書くので、同じ理由で追従する。
     const freshRows = loadSidebarRows(readPrefs()["sidebarRows"]);
-    if (JSON.stringify(freshRows) !== JSON.stringify(sidebarRows.value)) sidebarRows.value = freshRows;
+    if (JSON.stringify(freshRows) !== JSON.stringify(sidebarRows.value))
+      sidebarRows.value = freshRows;
   });
 
   /**
@@ -528,14 +561,16 @@ export const useSettingsStore = defineStore("settings", () => {
    */
   window.addEventListener("storage", () => {
     const prefs = readPrefs();
-    agentHeaderActions.value=loadAgentHeaderActions(prefs["agentHeaderActions"]);
-    summarySettings.value=loadSummarySettings(prefs["summarySettings"]);
+    viewTitleVisible.value = prefs["viewTitleVisible"] !== false;
+    agentHeaderActions.value = loadAgentHeaderActions(prefs["agentHeaderActions"]);
+    summarySettings.value = loadSummarySettings(prefs["summarySettings"]);
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
     if (nextPosition !== tabBarPosition.value) tabBarPosition.value = nextPosition;
     const nextAlways = loadTabBarAlways(prefs["tabBarAlways"]);
     if (nextAlways !== tabBarAlways.value) tabBarAlways.value = nextAlways;
     const nextRight = loadTabBarRightEntries(prefs["tabBarRight"]);
-    if (JSON.stringify(nextRight) !== JSON.stringify(tabBarRight.value)) tabBarRight.value = nextRight;
+    if (JSON.stringify(nextRight) !== JSON.stringify(tabBarRight.value))
+      tabBarRight.value = nextRight;
     const nextSeparator = loadTabBarRightSeparator(prefs["tabBarRightSeparator"]);
     if (nextSeparator !== tabBarRightSeparator.value) tabBarRightSeparator.value = nextSeparator;
     const nextOuter = loadPaneOuterBorders(prefs["paneOuterBorders"]);
@@ -626,10 +661,15 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   return {
-    agentHeaderActions,summarySettings,setAgentHeaderActions,setSummarySettings,
+    agentHeaderActions,
+    summarySettings,
+    setAgentHeaderActions,
+    setSummarySettings,
     statusSymbols,
     keyboardLockInFullscreen,
     paneFrameThickness,
+    viewTitleVisible,
+    setViewTitleVisible,
     paneAgentNameVisible,
     tabBarPosition,
     tabBarAlways,

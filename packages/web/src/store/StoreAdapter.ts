@@ -132,6 +132,9 @@ export class StoreAdapter implements StorePort {
   private applyEventToSession(e: ServerEvent): void {
     const session = useSessionStore(this.opts.pinia);
     switch (e.event) {
+      case "notification.test":
+        useViewStore(this.opts.pinia).toast(e.data.message);
+        return;
       case "notification.changed": this.opts.onNotificationState?.(e.data); return;
       case "workspace.created":
       case "workspace.updated":

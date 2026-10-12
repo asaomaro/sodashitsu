@@ -21,6 +21,10 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
       schema: AgentConversationParams,
       handler: async (_, p) => ({ summary: await deps.summaries!.cached(p.paneId) }),
     });
+  if (deps.notificationTest) surface.register("notification.test", {
+    schema: NotificationStateParams,
+    handler: () => { deps.notificationTest!(); return { ok: true as const }; },
+  });
   if (deps.notifications) {
     surface.register("notification.state", {
       schema: NotificationStateParams,

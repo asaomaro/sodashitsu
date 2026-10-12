@@ -1,25 +1,35 @@
 <script setup lang="ts">
 import {pluginMobileDisplay} from "../display/pluginDisplay.js";
-import { computed } from "vue";
+import { computed, inject, provide, ref } from "vue";
+import { DisplayHostKey } from "../injection.js";
+import {BUILTIN_WORKSPACE_KEY} from "@sodashitsu/protocol";
 import type { PluginTab } from "@sodashitsu/protocol";
 import { useDisplayStore } from "../store/display.js";
 import { useExtensionsStore } from "../store/extensions.js";
 import { displayLabel } from "../display/displayLabel.js";
-import DisplayFrame from "./DisplayFrame.vue";
+import DisplayFrame from "./DisplaySurface.vue";
 import DisplayScriptMark from "./DisplayScriptMark.vue";
 
 const props = defineProps<{ paneId: string; plugin: PluginTab; mobile?:boolean }>();
+const root = ref<HTMLElement | null>(null);
+const parentHost = inject(DisplayHostKey, null);
+// An app display has no visible terminal to return to. Refreshing a script
+// frame or leaving its input mode must keep the user's chosen perspective.
+if (parentHost) {
+  const focusApp = () => { if (root.value?.isConnected) root.value.focus({ preventScroll: true }); };
+  provide(DisplayHostKey, { ...parentHost, focusTerminal: focusApp, focusSelectedTerminal: focusApp });
+}
 const displays = useDisplayStore();
 const extensions = useExtensionsStore();
 const extension = computed(() => extensions.list?.extensions.find(e => e.key === props.plugin.extensionKey));
 const mobileDisplay=computed(()=>pluginMobileDisplay(props.plugin,extensions.list?.extensions));
 const displayName=computed(()=>props.mobile&&mobileDisplay.value?mobileDisplay.value:props.plugin.display);
-const info = computed(() => displays.panelsOf(props.paneId).find(d => d.name === displayName.value && d.source?.id === props.plugin.extensionKey.split(":").at(-1) && d.source?.scope === props.plugin.extensionKey.split(":")[0]));
+const info = computed(() => displays.panelsOf(props.paneId).find(d => d.name === displayName.value && d.source?.id === props.plugin.extensionKey.split(":").at(-1) && (props.plugin.extensionKey===BUILTIN_WORKSPACE_KEY?d.source?.type==='builtin':d.source?.scope === props.plugin.extensionKey.split(":")[0])));
 const content = computed(() => info.value ? displays.contents.get(info.value.id) : undefined);
 </script>
 
 <template>
-  <section class="plugin-view" data-plugin-view :data-mobile-view="mobile || undefined" :data-plugin="plugin.extensionKey" :data-display-root="info?.id">
+  <section ref="root" tabindex="-1" class="plugin-view" data-plugin-view :data-mobile-view="mobile || undefined" :data-plugin="plugin.extensionKey" :data-display-root="info?.id">
     <header v-if="info" class="plugin-view-head" data-display-chrome>
       <span>{{ displayLabel(info) }}</span>
       <DisplayScriptMark :info="info" part="mark" />

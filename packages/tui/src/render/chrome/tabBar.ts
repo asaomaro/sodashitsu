@@ -29,6 +29,7 @@ export interface TabHit {
 export interface TabBarHits {
   tabs: TabHit[];
   newTab: { x: number; w: number } | null;
+  addView?: {x:number;w:number}|null;
   scrollLeft?: { x: number } | null;
   scrollRight?: { x: number } | null;
   expandSidebar?: { x: number } | null;
@@ -170,6 +171,8 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
     }
   }
 
+  let addView: TabBarHits["addView"]=null;
+  if(model.tabId&&rightStart-x>=24){const label="[ビュー＋]";const w=stringWidth(label);rightStart-=w+1;grid.text(rightStart,rect.y,label,fg,activeBg,0,w);addView={x:rightStart,w};}
   const hits: TabHit[] = [];
   if (!model.workspaceId) return { tabs: hits, newTab: null, expandSidebar };
   const tabs = model.tabsOf(model.workspaceId);
@@ -233,5 +236,5 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
     const w = grid.text(x + 1, rect.y, " + ", fg, activeBg, 0);
     newTab = { x: x + 1, w };
   }
-  return { tabs: hits, newTab, scrollLeft, scrollRight, expandSidebar };
+  return { tabs: hits, newTab, addView, scrollLeft, scrollRight, expandSidebar };
 }

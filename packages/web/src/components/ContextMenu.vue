@@ -3,6 +3,14 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { ActionDispatcherKey, TerminalHostKey, TerminalRegistryKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useGraphStore } from "../store/graph.js";
+import {
+  AGENT_HEADER_ACTIONS,
+  HEADER_ACTION_LABELS,
+  headerActionsFor,
+  type AgentHeaderAction,
+} from "@sodashitsu/protocol";
+import { useConversationWindowStore } from "../store/conversationWindow.js";
+import { ConnectionKey } from "../injection.js";
 import type { NodeKey } from "@sodashitsu/protocol";
 import { paneMoveBlock, paneMoveBlockMessage } from "@sodashitsu/client-core";
 import { linksTouching, paneIdsOfTargets } from "./graph/closeLinks.js";
@@ -12,9 +20,14 @@ import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
 import { useViewStore } from "../store/view.js";
-import { dismissWithFocus, headFocusTarget, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
+import {
+  dismissWithFocus,
+  headFocusTarget,
+  openDisplayMenu,
+  trayFocusTarget,
+  withDisplayChange,
+} from "../display/displayOps.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
-
 
 /**
  * 右クリックのメニュー（M3。APG の Menu。D56 の訂正 10）。`view.contextMenu` が開閉を持つ
@@ -33,7 +46,10 @@ interface MenuItem {
 }
 
 /** 移せない理由の文言（移せるなら null）。判定は D&D・サーバと同じ `paneMoveBlock`。 */
-function paneMoveBlockMessageFor(source: Parameters<typeof paneMoveBlock>[0], target: Parameters<typeof paneMoveBlock>[1]): string | null {
+function paneMoveBlockMessageFor(
+  source: Parameters<typeof paneMoveBlock>[0],
+  target: Parameters<typeof paneMoveBlock>[1],
+): string | null {
   const block = paneMoveBlock(source, target, { lenient: true });
   return block === null ? null : paneMoveBlockMessage(block);
 }
@@ -81,21 +97,48 @@ function swappableWithFocused(paneId: string): boolean {
 /** 表示のメニューは 2 段（面の一覧 → 面のメニュー）。選んだ項目の処理が、同じ位置に次のメニューを開く。 */
 function openDisplaysMenu(paneId: string, _from?: unknown): void {
   void _from;
-  openDisplayMenu((t, p) => view.openContextMenu(t, p), { kind: "displays", paneId }, menuAt, displayHost, paneId);
+  openDisplayMenu(
+    (t, p) => view.openContextMenu(t, p),
+    { kind: "displays", paneId },
+    menuAt,
+    displayHost,
+    paneId,
+  );
 }
 /** 項目を選んで閉じる直前の、メニューの位置（次のメニューを同じ位置に開く）。 */
 let menuAt: { x: number; y: number } = { x: 8, y: 8 };
 const KIND_LABEL = { panel: "パネル", band: "帯" } as const;
-const DOCK_LABEL: Record<string, string> = { right: "右", left: "左", top: "上", bottom: "下", float: "浮いた窓" };
+const DOCK_LABEL: Record<string, string> = {
+  right: "右",
+  left: "左",
+  top: "上",
+  bottom: "下",
+  float: "浮いた窓",
+};
 function displaysItems(paneId: string): MenuItem[] {
   const auto = new Set(displays.layoutByPane.get(paneId)?.auto ?? []);
   return displays.all
     .filter((d) => d.paneId === paneId)
     .map((d) => {
       const f = displays.effectiveOf(d);
-      const where = d.kind === "band" ? (f.edge === "bottom" ? "下" : "上") : (DOCK_LABEL[f.dock ?? "right"] ?? "右");
+      const where =
+        d.kind === "band"
+          ? f.edge === "bottom"
+            ? "下"
+            : "上"
+          : (DOCK_LABEL[f.dock ?? "right"] ?? "右");
       const state = auto.has(d.id) ? "出せない" : f.collapsed ? "たたんでいる" : "開いている";
-      return { label: `${KIND_LABEL[d.kind]} ${d.name} — ${where}・${state}`, run: () => openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "display", id: d.id }, menuAt, displayHost, paneId) };
+      return {
+        label: `${KIND_LABEL[d.kind]} ${d.name} — ${where}・${state}`,
+        run: () =>
+          openDisplayMenu(
+            (t, at) => view.openContextMenu(t, at),
+            { kind: "display", id: d.id },
+            menuAt,
+            displayHost,
+            paneId,
+          ),
+      };
     });
 }
 function displayItems(id: string): MenuItem[] {
@@ -105,31 +148,108 @@ function displayItems(id: string): MenuItem[] {
   const focusToHead = (): HTMLElement | null => headFocusTarget(d.id);
   const focusToTray = (): HTMLElement | null => trayFocusTarget(d.id);
   const list: MenuItem[] = [];
+  if(d.kind==="band")list.push({label:"帯を高くする",run:()=>displays.setBandHeight(d,displays.bandHeightOf(d)+8)},{label:"帯を低くする",run:()=>displays.setBandHeight(d,displays.bandHeightOf(d)-8)});
   // 浮いた窓は、窓の動ける領域が分かっている間だけ開く操作を受ける（無ければ「開く」を出さない）。
   if (f.collapsed && f.dock === "float" && !displays.canOpenFloat(d.paneId)) {
     // 開けない（pane が小さい）
-  } else if (f.collapsed) list.push({ label: "開く", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, false), focusToHead, displayHost) });
-  else list.push({ label: "たたむ", run: () => void withDisplayChange(d, () => displays.setFaceCollapsed(d, true), focusToTray, displayHost) });
+  } else if (f.collapsed)
+    list.push({
+      label: "開く",
+      run: () =>
+        void withDisplayChange(
+          d,
+          () => displays.setFaceCollapsed(d, false),
+          focusToHead,
+          displayHost,
+        ),
+    });
+  else
+    list.push({
+      label: "たたむ",
+      run: () =>
+        void withDisplayChange(
+          d,
+          () => displays.setFaceCollapsed(d, true),
+          focusToTray,
+          displayHost,
+        ),
+    });
   if (d.kind === "band") {
-    if (f.edge !== "top") list.push({ label: "上に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "top"), focusToHead, displayHost) });
-    if (f.edge !== "bottom") list.push({ label: "下に置く", run: () => void withDisplayChange(d, () => displays.setFaceEdge(d, "bottom"), focusToHead, displayHost) });
+    if (f.edge !== "top" && displays.canPlace(d, "band-top"))
+      list.push({
+        label: "上に置く",
+        run: () =>
+          void withDisplayChange(d, () => displays.setFaceEdge(d, "top"), focusToHead, displayHost),
+      });
+    if (f.edge !== "bottom" && displays.canPlace(d, "band-bottom"))
+      list.push({
+        label: "下に置く",
+        run: () =>
+          void withDisplayChange(
+            d,
+            () => displays.setFaceEdge(d, "bottom"),
+            focusToHead,
+            displayHost,
+          ),
+      });
+  }
+  for (const placement of displays.allowedPlacementsOf(d)) {
+    if (d.kind === "panel" && placement.startsWith("band-"))
+      list.push({
+        label: placement === "band-top" ? "上の帯に置く" : "下の帯に置く",
+        run: () => displays.setViewPlacement(d, placement),
+      });
+    if (d.kind === "band" && !placement.startsWith("band-"))
+      list.push({
+        label:
+          placement === "float"
+            ? "浮いた窓にする"
+            : `${DOCK_LABEL[placement as keyof typeof DOCK_LABEL]}に置く`,
+        run: () => displays.setViewPlacement(d, placement),
+      });
   }
   if (d.kind === "panel") {
     // 今と違う側だけ。移った先で開いて出る（`setFaceDock` が `collapsed: false` も書く）。枠は作り直し。
     for (const side of ["right", "left", "top", "bottom"] as const) {
-      if (f.dock !== side) list.push({ label: `${DOCK_LABEL[side]}に置く`, run: () => void withDisplayChange(d, () => displays.setFaceDock(d, side), focusToHead, displayHost) });
+      if (f.dock !== side && displays.canPlace(d, side))
+        list.push({
+          label: `${DOCK_LABEL[side]}に置く`,
+          run: () =>
+            void withDisplayChange(
+              d,
+              () => displays.setFaceDock(d, side),
+              focusToHead,
+              displayHost,
+            ),
+        });
     }
     // 浮いた窓にする: 窓の動ける領域があるときだけ。矩形は渡さない（`writeFace` が、記憶に矩形が無いときだけ初めの矩形を書く＝前の位置を上書きしない）。
-    if (f.dock !== "float" && displays.canOpenFloat(d.paneId)) {
-      list.push({ label: "浮いた窓にする", run: () => void withDisplayChange(d, () => displays.setFaceDock(d, "float"), focusToHead, displayHost) });
+    if (f.dock !== "float" && displays.canOpenFloat(d.paneId) && displays.canPlace(d, "float")) {
+      list.push({
+        label: "浮いた窓にする",
+        run: () =>
+          void withDisplayChange(
+            d,
+            () => displays.setFaceDock(d, "float"),
+            focusToHead,
+            displayHost,
+          ),
+      });
     }
     if (f.dock === "float" && !f.collapsed) {
       list.push({ label: "キーで動かす", run: () => displays.startFloatKeys(d, "move") });
       list.push({ label: "キーで大きさを変える", run: () => displays.startFloatKeys(d, "resize") });
     }
   }
-  if (displays.hasPref(d)) list.push({ label: "プログラムの指定に戻す", run: () => void withDisplayChange(d, () => displays.resetFace(d), focusToHead, displayHost) });
-  list.push({ label: "この表示を閉じる", run: () => dismissWithFocus(d, () => displayController?.dismiss({ id: d.id }), displayHost) });
+  if (displays.hasPref(d))
+    list.push({
+      label: "プログラムの指定に戻す",
+      run: () => void withDisplayChange(d, () => displays.resetFace(d), focusToHead, displayHost),
+    });
+  list.push({
+    label: "この表示を閉じる",
+    run: () => dismissWithFocus(d, () => displayController?.dismiss({ id: d.id }), displayHost),
+  });
   return list;
 }
 
@@ -140,7 +260,8 @@ function closeFromGraph(t: { type: "pane" | "workspace"; id: string }): void {
     actions.closeWorkspaceById(t.id);
     return;
   }
-  if (linksTouching(graphStore.links, paneIdsOfTargets([t], session)) > 0) view.openDialogWithContext({ kind: "confirmClose", targets: [t] });
+  if (linksTouching(graphStore.links, paneIdsOfTargets([t], session)) > 0)
+    view.openDialogWithContext({ kind: "confirmClose", targets: [t] });
   else actions.closePaneById(t.id);
 }
 
@@ -151,9 +272,25 @@ function closeFromGraph(t: { type: "pane" | "workspace"; id: string }): void {
 function forkItem(paneId: string, local: boolean): MenuItem[] {
   if (mobileViewportQuery().matches) return [];
   const reason = forkUnavailableReason(session.panes.get(paneId), local);
-  return [{ label: "会話を fork…", run: () => actions?.openAgentFork(paneId), ...(reason !== null ? { disabledReason: forkReasonText(reason) } : {}) }];
+  return [
+    {
+      label: "会話を fork…",
+      run: () => actions?.openAgentFork(paneId),
+      ...(reason !== null ? { disabledReason: forkReasonText(reason) } : {}),
+    },
+  ];
 }
 
+const conversationWindow = useConversationWindowStore(),
+  connection = inject(ConnectionKey);
+function agentAction(paneId: string, action: AgentHeaderAction) {
+  if (action === "messages" || action === "summary") conversationWindow.open(paneId, action);
+  else if (action === "fork") actions?.openAgentFork(paneId);
+  else
+    void connection
+      ?.request("agent.command", { paneId, action })
+      .catch(() => view.toast("エージェントの処理完了を待ってください。"));
+}
 const items = computed<MenuItem[]>(() => {
   const target = view.contextMenu?.target;
   if (!target) return [];
@@ -163,24 +300,63 @@ const items = computed<MenuItem[]>(() => {
     // （20261008-graph-first PR2a のレビュー指摘 4。キーの絞り〔D75〕と同じ線）。
     if (terminalHost?.heldByWindow(target.paneId)) {
       return [
-        { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
+        {
+          label:
+            pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る",
+          run: () =>
+            actions.setRightClickTarget(
+              target.paneId,
+              pane?.rightClick === "pane" ? "herdr" : "pane",
+            ),
+        },
         { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       ];
     }
     const list: MenuItem[] = [
       { label: "名前の変更", run: () => actions.renamePaneById(target.paneId) },
-      ...(pane?.label ? [{ label: "名前の消去", run: () => actions.clearPaneName(target.paneId) }] : []),
+      ...(pane?.label
+        ? [{ label: "名前の消去", run: () => actions.clearPaneName(target.paneId) }]
+        : []),
       // herdr の「Swap with focused pane」（20260927-cli-mode の design D-7）。焦点の pane 以外の、同じ tab の pane のメニューにだけ出す。
-      ...(swappableWithFocused(target.paneId) ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }] : []),
+      ...(swappableWithFocused(target.paneId)
+        ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }]
+        : []),
 
+      ...headerActionsFor(pane?.agent?.kind ?? "", !!pane?.agentSession, AGENT_HEADER_ACTIONS)
+        .filter((a) => a !== "fork")
+        .map((action) => ({
+          label: HEADER_ACTION_LABELS[action] + (action === "usage" ? "（エージェント）" : ""),
+          run: () => agentAction(target.paneId, action),
+        })),
+      {
+        label: "このペインにビューを追加…",
+        run: () =>
+          pane &&
+          view.openDialogWithContext({ kind: "addView", tabId: pane.tabId, paneId: target.paneId }),
+      },
       { label: "右へ分割", run: () => actions.splitPane(target.paneId, "right") },
       { label: "下へ分割", run: () => actions.splitPane(target.paneId, "down") },
-      { label: "拡大表示", run: () => actions.zoomPane(target.paneId) },
-      { label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る", run: () => actions.setRightClickTarget(target.paneId, pane?.rightClick === "pane" ? "herdr" : "pane") },
+      {
+        label:
+          session.tabs.get(pane?.tabId ?? "")?.zoomedPaneId === target.paneId
+            ? "元のサイズに戻す"
+            : "拡大表示",
+        run: () => actions.zoomPane(target.paneId),
+      },
+      {
+        label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る",
+        run: () =>
+          actions.setRightClickTarget(
+            target.paneId,
+            pane?.rightClick === "pane" ? "herdr" : "pane",
+          ),
+      },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       ...forkItem(target.paneId, true),
       // そのセッションの利用状況（20261010-agent-usage PR4。エージェントの居る pane だけ。クラシック・モダンとも）。
-      ...(pane?.agent ? [{ label: "利用状況…", run: () => actions.showPaneInfo(target.paneId) }] : []),
+      ...(pane?.agent
+        ? [{ label: "利用状況…", run: () => actions.showPaneInfo(target.paneId) }]
+        : []),
       // 表示の面（パネル・帯）があるときだけ（20261007-soda-extensions）。
       ...(displays.hasAny(target.paneId)
         ? [
@@ -197,6 +373,7 @@ const items = computed<MenuItem[]>(() => {
   if (target.kind === "display") return displayItems(target.id);
   if (target.kind === "tab") {
     return [
+      ...(session.tabs.get(target.tabId)?.views ?? []).map(v=>({label:`ビューを削除: ${v.viewId}`,run:()=>{void connection?.request("tab.remove_view",{tabId:target.tabId,viewInstanceId:v.id}).catch(()=>view.toast("ビューを削除できませんでした"));}})),
       { label: "名前の変更", run: () => actions.renameTabById(target.tabId) },
       { label: "閉じる", run: () => actions.closeTabById(target.tabId) },
     ];
@@ -213,7 +390,8 @@ const items = computed<MenuItem[]>(() => {
     const currentGroupId = itemGroupIdOf(session, target.workspaceId);
     const inGroup = currentGroupId !== null;
     // 移し先に選べるグループがあるか（所属ありのときは今のグループを除く）。
-    const hasOtherGroup = session.groups.size - (inGroup && session.groups.has(currentGroupId) ? 1 : 0) > 0;
+    const hasOtherGroup =
+      session.groups.size - (inGroup && session.groups.has(currentGroupId) ? 1 : 0) > 0;
     return [
       { label: "名前の変更", run: () => actions.renameWorkspaceById(target.workspaceId) },
       { label: "PJフォルダを設定…", run: () => actions.setProjectFolder(target.workspaceId) },
@@ -228,14 +406,23 @@ const items = computed<MenuItem[]>(() => {
       // （所属なし: 追加・新規／所属あり: 移す・外す・新規）。
       ...(inGroup
         ? [
-            ...(hasOtherGroup ? [{ label: "別のグループへ移す…", run: () => actions.openGroupPicker(target.workspaceId) }] : []),
-            { label: "グループから外す", run: () => actions.removeWorkspaceFromGroup(target.workspaceId) },
+            ...(hasOtherGroup
+              ? [
+                  {
+                    label: "別のグループへ移す…",
+                    run: () => actions.openGroupPicker(target.workspaceId),
+                  },
+                ]
+              : []),
+            {
+              label: "グループから外す",
+              run: () => actions.removeWorkspaceFromGroup(target.workspaceId),
+            },
           ]
         : hasOtherGroup
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
       // モダンの配置では、グループは「新規」のメニューから作る（20261008-ui-style AC16）。
-
     ];
   }
   if (target.kind === "group") {
@@ -254,7 +441,10 @@ const items = computed<MenuItem[]>(() => {
   if (target.kind === "graphMore") {
     const paused = graphStore.graph?.paused === true;
     return [
-      { label: paused ? "全体を再開" : "全体を一時停止", run: () => graphSpaces.requestCommand("pause") },
+      {
+        label: paused ? "全体を再開" : "全体を一時停止",
+        run: () => graphSpaces.requestCommand("pause"),
+      },
       { label: "履歴", run: () => graphSpaces.requestCommand("history") },
       { label: "別のマシンの pane を載せる", run: () => graphSpaces.requestCommand("checklist") },
     ];
@@ -279,8 +469,13 @@ const items = computed<MenuItem[]>(() => {
     return [
       { label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) },
       ...forkItem(info.paneId, info.local && info.exists === true),
-      ...(session.panes.get(info.paneId)?.agent ? [{ label: "利用状況…", run: () => actions.showPaneInfo(info.paneId) }] : []),
-      { label: "別の workspace へ移す…", run: () => view.openContextMenu({ kind: "graphMoveTo", key: target.key }, menuAt) },
+      ...(session.panes.get(info.paneId)?.agent
+        ? [{ label: "利用状況…", run: () => actions.showPaneInfo(info.paneId) }]
+        : []),
+      {
+        label: "別の workspace へ移す…",
+        run: () => view.openContextMenu({ kind: "graphMoveTo", key: target.key }, menuAt),
+      },
     ];
   }
   if (target.kind === "graphMoveTo") {
@@ -301,15 +496,27 @@ const items = computed<MenuItem[]>(() => {
       const title = graphSpaces.infoMap.get(ws.id)?.title ?? ws.label;
       const reason = ws.id === source.id ? null : paneMoveBlockMessageFor(source, ws);
       const tabs = graphSpaces.infoMap.get(ws.id)?.tabs ?? [];
-      const move = (tabId: string) => (): void => graphSpaces.requestCommand("moveNode", JSON.stringify({ key: target.key, workspaceId: ws.id, tabId }));
+      const move = (tabId: string) => (): void =>
+        graphSpaces.requestCommand(
+          "moveNode",
+          JSON.stringify({ key: target.key, workspaceId: ws.id, tabId }),
+        );
       if (ws.id !== source.id) {
-        out.push({ label: unique(title), run: move(ws.activeTabId), ...(reason ? { disabledReason: reason } : {}) });
+        out.push({
+          label: unique(title),
+          run: move(ws.activeTabId),
+          ...(reason ? { disabledReason: reason } : {}),
+        });
       }
       // tab が複数ある workspace は、tab も選べる（いまの tab は除く）。
       if (tabs.length > 1) {
         for (const t of tabs) {
           if (t.id === sourceTab.id) continue;
-          out.push({ label: unique(`${title} › ${t.label}`), run: move(t.id), ...(reason ? { disabledReason: reason } : {}) });
+          out.push({
+            label: unique(`${title} › ${t.label}`),
+            run: move(t.id),
+            ...(reason ? { disabledReason: reason } : {}),
+          });
         }
       }
     }
@@ -320,14 +527,30 @@ const items = computed<MenuItem[]>(() => {
     const inWorktreeGroup = info?.parentId != null; // worktree グループの中の workspace だけを移す操作は出さない
     const groupId = itemGroupIdOf(session, target.workspaceId);
     return [
-      { label: "pane を足す", run: () => graphSpaces.requestCommand("addPane", target.workspaceId) },
+      {
+        label: "pane を足す",
+        run: () => graphSpaces.requestCommand("addPane", target.workspaceId),
+      },
       ...(inWorktreeGroup
         ? []
         : [
-            { label: "別のグループへ移す…", run: () => actions.openGroupPicker(target.workspaceId) },
-            ...(groupId !== null ? [{ label: "グループから外す", run: () => void actions.moveItemToGroup(target.workspaceId, null) }] : []),
+            {
+              label: "別のグループへ移す…",
+              run: () => actions.openGroupPicker(target.workspaceId),
+            },
+            ...(groupId !== null
+              ? [
+                  {
+                    label: "グループから外す",
+                    run: () => void actions.moveItemToGroup(target.workspaceId, null),
+                  },
+                ]
+              : []),
           ]),
-      { label: "workspace を閉じる", run: () => closeFromGraph({ type: "workspace", id: target.workspaceId }) },
+      {
+        label: "workspace を閉じる",
+        run: () => closeFromGraph({ type: "workspace", id: target.workspaceId }),
+      },
     ];
   }
   if (target.kind === "graphGroupFrame") {
@@ -335,7 +558,14 @@ const items = computed<MenuItem[]>(() => {
     const groupId = itemGroupIdOf(session, target.workspaceId);
     return [
       { label: "別のグループへ移す…", run: () => actions.openGroupPicker(target.workspaceId) },
-      ...(groupId !== null ? [{ label: "グループから外す", run: () => void actions.moveItemToGroup(target.workspaceId, null) }] : []),
+      ...(groupId !== null
+        ? [
+            {
+              label: "グループから外す",
+              run: () => void actions.moveItemToGroup(target.workspaceId, null),
+            },
+          ]
+        : []),
     ];
   }
   if (target.kind === "ungrouped") {
@@ -354,8 +584,12 @@ const items = computed<MenuItem[]>(() => {
     return [
       { label: "workspace", run: () => actions.run({ type: "newWorkspace" }) },
       // 基本画面の「分割」の既定（`split_vertical`＝右へ）と同じ。グラフの画面では、見えない基本画面を変えるので出さない。
-      ...(view.screen === "base" ? [{ label: "pane", run: () => actions.run({ type: "split", dir: "right" }) }] : []),
-      ...(workspaceId ? [{ label: "グループ…", run: () => actions.createGroupForWorkspace(workspaceId) }] : []),
+      ...(view.screen === "base"
+        ? [{ label: "pane", run: () => actions.run({ type: "split", dir: "right" }) }]
+        : []),
+      ...(workspaceId
+        ? [{ label: "グループ…", run: () => actions.createGroupForWorkspace(workspaceId) }]
+        : []),
     ];
   }
   // global：どこにも属さない全体の操作。**「設定」は入れる**（20260920-agent-notifications で通知の設定として足し、
@@ -428,7 +662,10 @@ function onOutsideClick(ev: Event): void {
     // 外側のクリックでは戻さない（フォーカスはクリックした先へ移る）。ただし、押してもフォーカスを取らない部品・覆いを押したときは、フォーカスは動かない（メニューが消えて `body` に落ちる）ので、
     // 開く前の場所へ戻してから閉じる。`pointerdown` を `preventDefault` する部品（つまみ）は互換の `mousedown` が出ないので、`pointerdown` の capture でも聞く。
     const t = ev.target;
-    if (t instanceof Element && t.closest("[data-display-keepfocus], [data-display-cover]") !== null) {
+    if (
+      t instanceof Element &&
+      t.closest("[data-display-keepfocus], [data-display-cover]") !== null
+    ) {
       close();
       restoreFocus();
       return;
@@ -460,7 +697,12 @@ watch(
       void nextTick(clampIntoViewport);
       // 開いたままほかの対象で開き直したとき（フォーカスはメニューの中）は、最初に開く前の要素を戻す先のままにする。
       const active = document.activeElement;
-      if (active instanceof HTMLElement && active !== document.body && !menuEl.value?.contains(active)) returnFocusTo = active;
+      if (
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        !menuEl.value?.contains(active)
+      )
+        returnFocusTo = active;
       activeIndex.value = 0;
       void nextTick(() => menuEl.value?.focus());
     }
@@ -484,20 +726,29 @@ onBeforeUnmount(() => {
     role="menu"
     tabindex="-1"
     class="context-menu"
-    :style="{ left: `${view.contextMenu.at.x + shift.x}px`, top: `${view.contextMenu.at.y + shift.y}px` }"
+    :style="{
+      left: `${view.contextMenu.at.x + shift.x}px`,
+      top: `${view.contextMenu.at.y + shift.y}px`,
+    }"
     @keydown="onKeydown"
   >
     <li
       v-for="(item, index) in items"
       :key="item.label"
       role="menuitem"
-      :class="{ 'context-menu-active': index === activeIndex, 'context-menu-disabled': item.disabledReason }"
+      :class="{
+        'context-menu-active': index === activeIndex,
+        'context-menu-disabled': item.disabledReason,
+      }"
       :aria-disabled="item.disabledReason ? 'true' : undefined"
       :title="item.disabledReason"
       @mouseenter="activeIndex = index"
       @click="activate(index)"
     >
-      {{ item.label }}<span v-if="item.disabledReason" class="context-menu-reason">　— {{ item.disabledReason }}</span>
+      {{ item.label
+      }}<span v-if="item.disabledReason" class="context-menu-reason"
+        >　— {{ item.disabledReason }}</span
+      >
     </li>
   </ul>
 </template>

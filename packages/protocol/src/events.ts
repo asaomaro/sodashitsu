@@ -236,7 +236,13 @@ export interface DisplayMessageEvent {
   data: { id: string; data: unknown };
 }
 
+export interface NotificationTestEvent {
+  event: "notification.test";
+  data: { message: string };
+}
+
 export type ServerEvent =
+  | NotificationTestEvent
   | {event:"notification.changed";data:import("./notifications.js").NotificationState}
   | WorkspaceCreatedEvent
   | WorkspaceUpdatedEvent

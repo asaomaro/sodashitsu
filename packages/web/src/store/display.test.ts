@@ -222,7 +222,7 @@ describe("面の記憶（置き場所・たたみ。20261008-display-layout）",
       expect(s.effectiveOf(a).collapsed).toBe(true); // 記憶の無い浮いた窓は、閉じて始まる
       s.setFaceCollapsed(a, false);
       const r = s.faceRectOf(a)!;
-      expect(r).toEqual({ x: 800 - 400 - 8, y: 8, w: 400, h: 300 });
+      expect(r).toEqual({ x: 160, y: 100, w: 480, h: 300 });
       s.upsert(win("a", { size: 700 })); // プログラムが --size を変えて set し直しても
       s.setFaceCollapsed(a, true);
       s.setFaceCollapsed(a, false);

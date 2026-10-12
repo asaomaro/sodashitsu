@@ -13,10 +13,28 @@ import DisplayTray from "./DisplayTray.vue";
 import PaneBands from "./PaneBands.vue";
 
 /** 見出し（DisplayPanelHead）・トレイ（DisplayTray）・帯（PaneBands の edge あり）の属性・キー・押下（20261008-display-layout）。 */
-const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({ id, paneId: "p1", name: id, kind: "panel", format: "text", title: id, size: 320, rev: 1, bytes: 1, updatedAt: "x", ...over });
+const info = (id: string, over: Partial<DisplayInfo> = {}): DisplayInfo => ({
+  id,
+  paneId: "p1",
+  name: id,
+  kind: "panel",
+  format: "text",
+  title: id,
+  size: 320,
+  rev: 1,
+  bytes: 1,
+  updatedAt: "x",
+  ...over,
+});
 
 let pinia: Pinia;
-const controller = () => ({ dismiss: vi.fn(), report: vi.fn(), sendAction: vi.fn(), ensureContent: vi.fn(async () => undefined), onMessage: vi.fn(() => () => undefined) });
+const controller = () => ({
+  dismiss: vi.fn(),
+  report: vi.fn(),
+  sendAction: vi.fn(),
+  ensureContent: vi.fn(async () => undefined),
+  onMessage: vi.fn(() => () => undefined),
+});
 const hostMock = (): DisplayHost => ({
   focusTerminal: vi.fn(),
   focusSelectedTerminal: vi.fn(),
@@ -36,7 +54,11 @@ function mountWith(comp: unknown, props: Record<string, unknown>, host: DisplayH
   const w = mount(comp as never, {
     props: props as never,
     attachTo: document.body,
-    global: { plugins: [pinia], provide: { [DisplayControllerKey as symbol]: ctl, [DisplayHostKey as symbol]: host }, stubs: { DisplayFrame: true } },
+    global: {
+      plugins: [pinia],
+      provide: { [DisplayControllerKey as symbol]: ctl, [DisplayHostKey as symbol]: host },
+      stubs: { DisplayFrame: true },
+    },
   });
   return { w, ctl, host };
 }
@@ -54,7 +76,12 @@ describe("DisplayPanelHead", () => {
     expect(grip.attributes("data-pane-panel-label")).toBeDefined();
     expect(grip.find("[data-display-script-mark]").exists()).toBe(true); // 印はラベルの入れ物（つかむ場所）の中。ラベルの箱の外
     expect(grip.get(".display-head-label").text()).toBe("pane のプログラムの表示（隔離）· a");
-    for (const sel of ["[data-display-grip]", "[data-display-menu-button]", "[data-pane-panel-fold]", "[data-pane-panel-close]"]) {
+    for (const sel of [
+      "[data-display-grip]",
+      "[data-display-menu-button]",
+      "[data-pane-panel-fold]",
+      "[data-pane-panel-close]",
+    ]) {
       expect(w.get(sel).attributes("data-display-keepfocus"), sel).toBeDefined();
     }
     expect(w.find("[data-display-engage]").attributes("data-display-keepfocus")).toBeUndefined(); // ［操作する］は DisplayScriptMark（変えない）
@@ -86,7 +113,12 @@ describe("DisplayPanelHead", () => {
     store.upsert(a);
     const host = hostMock();
     const { w } = mountWith(DisplayPanelHead, { info: a, collapsible: true }, host);
-    const ev = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true });
+    const ev = new KeyboardEvent("keydown", {
+      key: "Enter",
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
     w.get("[data-pane-panel-fold]").element.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
     const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
@@ -113,7 +145,13 @@ describe("DisplayPanelHead", () => {
     const fold = w.get("[data-pane-panel-fold]").element as HTMLElement;
     fold.focus();
     let bodyHits = 0;
-    document.addEventListener("focusout", (e) => { if ((e as FocusEvent).relatedTarget === null) bodyHits++; }, true);
+    document.addEventListener(
+      "focusout",
+      (e) => {
+        if ((e as FocusEvent).relatedTarget === null) bodyHits++;
+      },
+      true,
+    );
     fold.click();
     expect(document.activeElement).toBe(term); // 同期で端末
     await nextTick();
@@ -124,13 +162,18 @@ describe("DisplayPanelHead", () => {
 });
 
 describe("DisplayTray", () => {
-  const buttons = (...b: { id: string; kind?: "panel" | "float" | "band"; open?: boolean; disabled?: boolean }[]) => b.map((x) => ({ kind: "panel" as const, open: false, disabled: false, ...x }));
+  const buttons = (
+    ...b: { id: string; kind?: "panel" | "float" | "band"; open?: boolean; disabled?: boolean }[]
+  ) => b.map((x) => ({ kind: "panel" as const, open: false, disabled: false, ...x }));
   it("ボタンの属性・押せないボタンの理由・印・浮いた窓の aria-pressed・名前の省略", () => {
     const store = useDisplayStore();
     store.upsert(info("a"));
     store.upsert(info("b", { kind: "band" }));
     store.upsert(info("c", { name: "a-very-long-name-here" }));
-    const { w } = mountWith(DisplayTray, { paneId: "p1", buttons: buttons({ id: "a" }, { id: "b", kind: "band" }, { id: "c", disabled: true }) });
+    const { w } = mountWith(DisplayTray, {
+      paneId: "p1",
+      buttons: buttons({ id: "a" }, { id: "b", kind: "band" }, { id: "c", disabled: true }),
+    });
     const btns = w.findAll("[data-display-tray-button]");
     expect(btns.map((b) => b.attributes("data-display-id"))).toEqual(["a", "b", "c"]);
     expect(btns[0]!.attributes("data-display-name")).toBe("a");
@@ -146,7 +189,10 @@ describe("DisplayTray", () => {
   it("浮いた窓のボタンは aria-pressed（開いていれば真）で、ラベルは『閉じる』", () => {
     const store = useDisplayStore();
     store.upsert(info("w"));
-    const { w } = mountWith(DisplayTray, { paneId: "p1", buttons: buttons({ id: "w", kind: "float", open: true }) });
+    const { w } = mountWith(DisplayTray, {
+      paneId: "p1",
+      buttons: buttons({ id: "w", kind: "float", open: true }),
+    });
     const b = w.get("[data-display-tray-button]");
     expect(b.attributes("aria-pressed")).toBe("true");
     expect(b.attributes("aria-label")).toBe("表示を閉じる（w）");
@@ -156,7 +202,10 @@ describe("DisplayTray", () => {
     const store = useDisplayStore();
     store.upsert(info("s", { format: "script-html" }));
     store.upsert(info("t"));
-    const { w } = mountWith(DisplayTray, { paneId: "p1", buttons: buttons({ id: "s" }, { id: "t" }) });
+    const { w } = mountWith(DisplayTray, {
+      paneId: "p1",
+      buttons: buttons({ id: "s" }, { id: "t" }),
+    });
     const [s, t] = w.findAll("[data-display-tray-button]");
     expect(s!.find("[data-display-script-mark]").exists()).toBe(true);
     expect(t!.find("[data-display-script-mark]").exists()).toBe(false);
@@ -167,7 +216,10 @@ describe("DisplayTray", () => {
     store.upsert(a);
     store.upsert(info("z"));
     store.setFaceCollapsed(a, true);
-    const { w } = mountWith(DisplayTray, { paneId: "p1", buttons: buttons({ id: "a" }, { id: "z", disabled: true }) });
+    const { w } = mountWith(DisplayTray, {
+      paneId: "p1",
+      buttons: buttons({ id: "a" }, { id: "z", disabled: true }),
+    });
     const [ba, bz] = w.findAll("[data-display-tray-button]");
     const ev = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     ba!.element.dispatchEvent(ev);
@@ -180,16 +232,62 @@ describe("DisplayTray", () => {
   it("繰り返しの Enter は無視する。面が消えたボタンは描かない（測る前は全部描く）", async () => {
     const store = useDisplayStore();
     store.upsert(info("a"));
-    const { w } = mountWith(DisplayTray, { paneId: "p1", buttons: buttons({ id: "a" }, { id: "gone" }) });
+    const { w } = mountWith(DisplayTray, {
+      paneId: "p1",
+      buttons: buttons({ id: "a" }, { id: "gone" }),
+    });
     expect(w.findAll("[data-display-tray-button]")).toHaveLength(1);
-    const ev = new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true });
+    const ev = new KeyboardEvent("keydown", {
+      key: "Enter",
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
     w.get("[data-display-tray-button]").element.dispatchEvent(ev);
     expect(ev.defaultPrevented).toBe(true);
   });
 });
 
 describe("PaneBands（edge あり）", () => {
-  const input = (over: Partial<LayoutInput> = {}): LayoutInput => ({ paneW: 1000, paneH: 600, cellW: 9, cellH: 18, bands: [], panels: [], active: {}, sideSizes: {}, floatRects: {}, trayEdgeDefault: "top", ...over });
+  it("band buttons offer menu, fold and close in order; folding keeps its registration", async () => {
+    const store = useDisplayStore(),
+      b = info("bar", { kind: "band", size: 32 });
+    store.upsert(b);
+    const layout = resolvePaneDisplays({
+      paneW: 1000,
+      paneH: 600,
+      cellW: 9,
+      cellH: 18,
+      bands: [{ id: b.id, seq: 0, size: 32, edge: "top", collapsed: false }],
+      panels: [],
+      active: {},
+      sideSizes: {},
+      floatRects: {},
+      trayEdgeDefault: "top",
+    });
+    const { w, ctl } = mountWith(PaneBands, { paneId: "p1", edge: "top", layout });
+    expect(
+      w.findAll(".pane-band-actions > button").map((button) => button.attributes("aria-label")),
+    ).toEqual(["この表示のメニュー", "この表示をたたむ", "この表示を閉じる"]);
+    await w.get("[data-pane-band-fold]").trigger("click");
+    expect(store.effectiveOf(b).collapsed).toBe(true);
+    expect(ctl.dismiss).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  const input = (over: Partial<LayoutInput> = {}): LayoutInput => ({
+    paneW: 1000,
+    paneH: 600,
+    cellW: 9,
+    cellH: 18,
+    bands: [],
+    panels: [],
+    active: {},
+    sideSizes: {},
+    floatRects: {},
+    trayEdgeDefault: "top",
+    ...over,
+  });
   it("その側の帯だけ・帯の行にトレイ・行ごとの［⋮］［×］は keepfocus・アプリの部分は data-display-chrome", () => {
     const store = useDisplayStore();
     store.upsert(info("t", { kind: "band", size: 32 }));
@@ -197,27 +295,52 @@ describe("PaneBands（edge あり）", () => {
     store.upsert(info("p"));
     store.setFaceEdge(info("u", { kind: "band" }), "bottom");
     store.setFaceCollapsed(info("p"), true);
-    const bands = [info("t", { kind: "band" }), info("u", { kind: "band" })].map((b, seq) => ({ id: b.id, seq, size: 32, edge: store.effectiveOf(b).edge!, collapsed: store.effectiveOf(b).collapsed }));
-    const layout = resolvePaneDisplays(input({ bands, panels: [{ id: "p", seq: 2, size: 320, dock: "right", collapsed: true }] }));
+    const bands = [info("t", { kind: "band" }), info("u", { kind: "band" })].map((b, seq) => ({
+      id: b.id,
+      seq,
+      size: 32,
+      edge: store.effectiveOf(b).edge!,
+      collapsed: store.effectiveOf(b).collapsed,
+    }));
+    const layout = resolvePaneDisplays(
+      input({ bands, panels: [{ id: "p", seq: 2, size: 320, dock: "right", collapsed: true }] }),
+    );
     const top = mountWith(PaneBands, { paneId: "p1", edge: "top", layout }).w;
     expect(top.attributes("data-pane-bands-edge")).toBe("top");
-    expect(top.findAll("[data-pane-band]").map((b) => b.attributes("data-display-name"))).toEqual(["t"]);
+    expect(top.findAll("[data-pane-band]").map((b) => b.attributes("data-display-name"))).toEqual([
+      "t",
+    ]);
     expect(top.find("[data-display-tray]").exists()).toBe(true); // トレイは最初の帯（t）の行
-    expect(top.find("[data-pane-band] [data-display-tray]").exists()).toBe(true);
-    for (const sel of ["[data-display-menu-button]", "[data-pane-band-close]"]) expect(top.get(sel).attributes("data-display-keepfocus"), sel).toBeDefined();
+    expect(top.find("[data-pane-band] [data-display-tray]").exists()).toBe(false);
+    expect(top.find("[data-display-tray-row] [data-display-tray]").exists()).toBe(true);
+    for (const sel of [
+      "[data-display-menu-button]",
+      "[data-pane-band-fold]",
+      "[data-pane-band-close]",
+    ])
+      expect(top.get(sel).attributes("data-display-keepfocus"), sel).toBeDefined();
     expect(top.get("[data-pane-band-mark]").attributes("data-display-chrome")).toBeDefined();
     expect(top.get("[data-pane-band]").attributes("data-display-root")).toBe("t");
     const bottom = mountWith(PaneBands, { paneId: "p1", edge: "bottom", layout }).w;
-    expect(bottom.findAll("[data-pane-band]").map((b) => b.attributes("data-display-name"))).toEqual(["u"]);
+    expect(
+      bottom.findAll("[data-pane-band]").map((b) => b.attributes("data-display-name")),
+    ).toEqual(["u"]);
     expect(bottom.find("[data-display-tray]").exists()).toBe(false); // トレイは top 側だけ
   });
   it("帯が無い側のトレイの行（own）は 24px。トレイの側に出ない側は何も描かない", () => {
     const store = useDisplayStore();
     store.upsert(info("p"));
     store.setFaceCollapsed(info("p"), true);
-    const layout = resolvePaneDisplays(input({ panels: [{ id: "p", seq: 0, size: 320, dock: "right", collapsed: true }], trayEdgeDefault: "bottom" }));
+    const layout = resolvePaneDisplays(
+      input({
+        panels: [{ id: "p", seq: 0, size: 320, dock: "right", collapsed: true }],
+        trayEdgeDefault: "bottom",
+      }),
+    );
     const bottom = mountWith(PaneBands, { paneId: "p1", edge: "bottom", layout }).w;
-    expect((bottom.get("[data-display-tray-row]").element as HTMLElement).style.height).toBe("24px");
+    expect((bottom.get("[data-display-tray-row]").element as HTMLElement).style.height).toBe(
+      "24px",
+    );
     expect(bottom.find("[data-display-tray-button]").exists()).toBe(true);
     const top = mountWith(PaneBands, { paneId: "p1", edge: "top", layout }).w;
     expect(top.find("[data-pane-bands]").exists()).toBe(false);
@@ -239,4 +362,41 @@ describe("PaneBands（edge あり）", () => {
     await w.get("[data-pane-band-close]").trigger("click");
     expect(ctl.dismiss).toHaveBeenCalledWith({ id: "x" });
   });
+});
+it("hides view function names without removing drag grips or action buttons", async () => {
+  const settings = useSettingsStore();
+  const panel = mountWith(DisplayPanelHead, { info: info("PanelFunction"), collapsible: true }).w;
+  expect(panel.find(".display-head-label").text()).toContain("PanelFunction");
+  expect(panel.get("[data-view-drag-icon]").findAll("circle")).toHaveLength(6);
+  settings.setViewTitleVisible(false);
+  await nextTick();
+  expect(panel.find(".display-head-label").exists()).toBe(false);
+  expect(panel.find("[data-display-grip]").exists()).toBe(true);
+  expect(panel.get("[data-view-drag-icon]").findAll("circle")).toHaveLength(6);
+  expect(panel.get("[data-display-grip]").attributes("aria-label")).toContain("ビューを移動");
+  expect(panel.find("[data-display-menu-button]").exists()).toBe(true);
+  const store = useDisplayStore(),
+    b = info("band", { kind: "band", size: 24, title: "BandFunction" });
+  store.upsert(b);
+  const layout = resolvePaneDisplays({
+    paneW: 1000,
+    paneH: 600,
+    cellW: 9,
+    cellH: 18,
+    panels: [],
+    active: {},
+    sideSizes: {},
+    floatRects: {},
+    trayEdgeDefault: "top",
+    bands: [{ id: b.id, seq: 1, size: 24, edge: "top", collapsed: false }],
+  });
+  const band = mountWith(PaneBands, { paneId: "p1", edge: "top", layout }).w;
+  expect(band.find("[data-display-grip]").text()).toBe("");
+  expect(band.get("[data-view-drag-icon]").findAll("circle")).toHaveLength(6);
+  settings.setViewTitleVisible(true);
+  await nextTick();
+  expect(band.find("[data-display-grip]").text()).toContain("BandFunction");
+  expect(band.get("[data-view-drag-icon]").findAll("circle")).toHaveLength(6);
+  panel.unmount();
+  band.unmount();
 });

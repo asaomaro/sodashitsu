@@ -304,3 +304,7 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 `sodactl plugin call <id|key> <operation> --tab <tabId> --params '<JSON object>'` で呼び、`{"result":...}` を受け取る。公開された `description` と `inputSchema` に従う。例: `sodactl plugin call commit-graph history --pane <paneId> --params '{"limit":20}'`。未承認・無効なプラグインの起動は行わない。
 
 応答待ちは30秒。タイムアウトや切断でも操作が実行済みの場合がある。作成・削除を重ねて再試行せず、取得操作で状態を確認する。
+
+## 通知表示のテスト
+
+`sodactl notification test` は、認証済み接続から、接続中の画面へ固定文言のテスト通知を出す。エージェントの状態や通知履歴は変更しない。Web版は再読み込み、端末版は切り離し再起動により新しい受信機能を読み込む。

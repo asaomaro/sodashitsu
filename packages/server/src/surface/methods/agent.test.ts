@@ -39,20 +39,26 @@ class FakeHost {
 
 function setup(paneAgent: AgentInfo | null = agent(), hasHost = true) {
   const host = new FakeHost();
-  const pane = { id: "p1", tabId:"t1", agent: paneAgent } as unknown as Pane;
+  const pane = { id: "p1", tabId: "t1", agent: paneAgent } as unknown as Pane;
   const panes = new Map<string, Pane>([["p1", pane]]);
-  const workspace = {projectDir:"/pj"};
+  const workspace = { projectDir: "/pj" };
   const noteInteraction = vi.fn();
   const deps = {
-    session: { getPane: (id: string) => panes.get(id), getTab: () => ({workspaceId:"w1"}), getWorkspace: () => workspace },
+    session: {
+      getPane: (id: string) => panes.get(id),
+      getTab: () => ({ workspaceId: "w1" }),
+      getWorkspace: () => workspace,
+    },
     terminals: { get: (id: string) => (hasHost && id === "p1" ? host : undefined) },
     sizeAuthority: { noteInteraction },
   } as unknown as MethodDeps;
   const surface = new ControlSurface(new MemoryLogger());
   registerAgentMethods(surface, deps);
   const ctx = { clientId: "c1", sink: {} as never };
-  const call = (method: "agent.prompt" | "agent.prompt_checked" | "agent.send_keys", params: unknown) =>
-    surface.invoke(ctx, method, params);
+  const call = (
+    method: "agent.prompt" | "agent.prompt_checked" | "agent.send_keys",
+    params: unknown,
+  ) => surface.invoke(ctx, method, params);
   /** 書く直前（build を呼ぶ前）のエージェントを差し替える——別の入力の後ろで待っている間の変化を模す。 */
   const changeAgentBeforeWrite = (next: AgentInfo | null): void => {
     const original = host.writeModal.getMockImplementation()!;
@@ -61,7 +67,7 @@ function setup(paneAgent: AgentInfo | null = agent(), hasHost = true) {
       return original(input);
     });
   };
-  return { host, call, noteInteraction, changeAgentBeforeWrite, pane, workspace };
+  return { host, call, noteInteraction, changeAgentBeforeWrite, pane, workspace, surface, ctx };
 }
 
 function errorCode(result: Awaited<ReturnType<ReturnType<typeof setup>["call"]>>): string {
@@ -75,11 +81,11 @@ describe("agent.prompt", () => {
     s = setup();
   });
 
-  it("本文と Enter を 2 部分にして 300ms の間を置くモード付き入力として書き、送信を始めた時点のエージェントを返す（AC2・AC4）", async () => {
+  it("本文と Enter を 2 部分にして1000msの間を置くモード付き入力として書き、送信を始めた時点のエージェントを返す（AC2・AC4）", async () => {
     const result = await s.call("agent.prompt", { paneId: "p1", text: "line1\nline2" });
     expect(result).toEqual({ ok: true, result: { agent: agent() } });
     expect(s.host.modal).toHaveLength(1);
-    expect(s.host.modal[0]!.delayMs).toBe(300);
+    expect(s.host.modal[0]!.delayMs).toBe(1000);
     expect(s.host.written).toEqual(["line1\nline2", "\r"]);
     expect(s.noteInteraction).toHaveBeenCalledWith("c1", "p1");
   });
@@ -259,25 +265,89 @@ describe("agent.send_keys", () => {
   });
 });
 
-
-describe("agent.prompt expected scope",()=>{
- const expectation={paneId:"p1",instanceId:"a1",tabId:"t1",projectDir:"/pj",name:"task-one"};
- it("accepts a matching target and refuses a name resolved to another pane",async()=>{
-  const s=setup(agent({name:"task-one"}));
-  expect((await s.call("agent.prompt",{paneId:"p1",text:"update",expect:expectation})).ok).toBe(true);
-  s.host.written.length=0;
-  expect(errorCode(await s.call("agent.prompt",{paneId:"p1",text:"update",expect:{...expectation,paneId:"other"}}))).toBe("agent_not_found");
-  expect(s.host.written).toEqual([]);
- });
- it.each(["tab","project","instance","name"])("refuses %s changes while queued before writing",async(change)=>{
-  const s=setup(agent({name:"task-one"}));const original=s.host.writeModal.getMockImplementation()!;
-  s.host.writeModal.mockImplementationOnce(async input=>{if(change==="tab")s.pane.tabId="other";if(change==="project")s.workspace.projectDir="/other";if(change==="instance")s.pane.agent!.instanceId="replacement";if(change==="name")s.pane.agent!.name="renamed";return original(input);});
-  expect(errorCode(await s.call("agent.prompt",{paneId:"p1",text:"update",expect:expectation}))).toBe("agent_not_found");expect(s.host.written).toEqual([]);
- });
+describe("agent.prompt expected scope", () => {
+  const expectation = {
+    paneId: "p1",
+    instanceId: "a1",
+    tabId: "t1",
+    projectDir: "/pj",
+    name: "task-one",
+  };
+  it("accepts a matching target and refuses a name resolved to another pane", async () => {
+    const s = setup(agent({ name: "task-one" }));
+    expect(
+      (await s.call("agent.prompt", { paneId: "p1", text: "update", expect: expectation })).ok,
+    ).toBe(true);
+    s.host.written.length = 0;
+    expect(
+      errorCode(
+        await s.call("agent.prompt", {
+          paneId: "p1",
+          text: "update",
+          expect: { ...expectation, paneId: "other" },
+        }),
+      ),
+    ).toBe("agent_not_found");
+    expect(s.host.written).toEqual([]);
+  });
+  it.each(["tab", "project", "instance", "name"])(
+    "refuses %s changes while queued before writing",
+    async (change) => {
+      const s = setup(agent({ name: "task-one" }));
+      const original = s.host.writeModal.getMockImplementation()!;
+      s.host.writeModal.mockImplementationOnce(async (input) => {
+        if (change === "tab") s.pane.tabId = "other";
+        if (change === "project") s.workspace.projectDir = "/other";
+        if (change === "instance") s.pane.agent!.instanceId = "replacement";
+        if (change === "name") s.pane.agent!.name = "renamed";
+        return original(input);
+      });
+      expect(
+        errorCode(
+          await s.call("agent.prompt", { paneId: "p1", text: "update", expect: expectation }),
+        ),
+      ).toBe("agent_not_found");
+      expect(s.host.written).toEqual([]);
+    },
+  );
 });
 
-it("requires an expectation for the checked-only method",async()=>{
- const s=setup(agent({name:"task-one"}));
- expect(errorCode(await s.call("agent.prompt_checked",{paneId:"p1",text:"update"}))).toBe("invalid_params");
- expect((await s.call("agent.prompt_checked",{paneId:"p1",text:"update",expect:{paneId:"p1",instanceId:"a1",tabId:"t1",projectDir:"/pj",name:"task-one"}})).ok).toBe(true);
+it("requires an expectation for the checked-only method", async () => {
+  const s = setup(agent({ name: "task-one" }));
+  expect(errorCode(await s.call("agent.prompt_checked", { paneId: "p1", text: "update" }))).toBe(
+    "invalid_params",
+  );
+  expect(
+    (
+      await s.call("agent.prompt_checked", {
+        paneId: "p1",
+        text: "update",
+        expect: {
+          paneId: "p1",
+          instanceId: "a1",
+          tabId: "t1",
+          projectDir: "/pj",
+          name: "task-one",
+        },
+      })
+    ).ok,
+  ).toBe(true);
+});
+
+it("an internal cancelled scheduled prompt waiting in the modal queue never writes", async () => {
+  const s = setup(),
+    abort = new AbortController();
+  let release!: () => void;
+  s.host.writeModal.mockImplementationOnce(async (input) => {
+    await new Promise<void>((resolve) => (release = resolve));
+    s.host.written.push(...input.build(s.host.modes));
+  });
+  const pending = s.surface.invoke({ ...s.ctx, signal: abort.signal }, "agent.prompt", {
+    paneId: "p1",
+    text: "late instruction",
+  });
+  abort.abort();
+  release();
+  expect((await pending).ok).toBe(false);
+  expect(s.host.written).toEqual([]);
 });

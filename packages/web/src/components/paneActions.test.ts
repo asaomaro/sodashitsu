@@ -20,25 +20,65 @@ afterEach(() => {
 });
 
 function makePane(id: string, overrides: Partial<Pane> = {}): Pane {
-  return { id, tabId: "t1", label: null, cwd: "/", shell: "/bin/bash", cols: 80, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr", agent: null, agentSession: null, ...overrides };
+  return {
+    id,
+    tabId: "t1",
+    label: null,
+    cwd: "/",
+    shell: "/bin/bash",
+    cols: 80,
+    rows: 24,
+    status: "running",
+    failure: null,
+    busy: false,
+    title: "",
+    rightClick: "herdr",
+    agent: null,
+    agentSession: null,
+    ...overrides,
+  };
 }
 function makeTab(overrides: Partial<Tab> = {}): Tab {
-  return { id: "t1", workspaceId: "w1", label: "t1", layout: { type: "pane", paneId: "p1" }, focusedPaneId: "p1", zoomedPaneId: null, sizeOwnerClientId: null, ...overrides };
+  return {
+    id: "t1",
+    workspaceId: "w1",
+    label: "t1",
+    layout: { type: "pane", paneId: "p1" },
+    focusedPaneId: "p1",
+    zoomedPaneId: null,
+    sizeOwnerClientId: null,
+    ...overrides,
+  };
 }
 
-function mountFrame(style: "classic" | "modern", opts: { named?: boolean; enabled?: boolean } = {}) {
+function mountFrame(
+  style: "classic" | "modern",
+  opts: { named?: boolean; enabled?: boolean } = {},
+) {
   const settings = useSettingsStore(pinia);
   settings.setUiStyle(style);
   settings.paneAgentNameVisible = opts.named === true;
   const session = useSessionStore(pinia);
   session.paneUpserted(makePane("p1", { label: opts.named ? "alpha" : null }));
   session.tabUpserted(makeTab());
-  const actions = { openContextMenu: vi.fn(), splitPane: vi.fn(), zoomPane: vi.fn(), closePaneWithConfirm: vi.fn(), closePaneById: vi.fn() };
+  const actions = {
+    openContextMenu: vi.fn(),
+    splitPane: vi.fn(),
+    zoomPane: vi.fn(),
+    closePaneWithConfirm: vi.fn(),
+    closePaneById: vi.fn(),
+  };
   const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
   const wrapper = mount(PaneFrame, {
     attachTo: document.body,
     props: { paneId: "p1", enabled: opts.enabled ?? true, multiPane: true },
-    global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: actions, [TerminalRegistryKey as symbol]: registry } },
+    global: {
+      plugins: [pinia],
+      provide: {
+        [ActionDispatcherKey as symbol]: actions,
+        [TerminalRegistryKey as symbol]: registry,
+      },
+    },
     slots: { default: '<div class="fake-leaf"><textarea class="fake-terminal"></textarea></div>' },
   });
   return { wrapper, actions, registry, session };
@@ -46,22 +86,41 @@ function mountFrame(style: "classic" | "modern", opts: { named?: boolean; enable
 
 describe("pane の枠の操作ボタン（モダン）", () => {
   it("クラシックでは出ない。モダンでも、枠を使わない（enabled でない。モバイル・単体テスト）ときは出ない", () => {
-    expect(mountFrame("classic", { named: true }).wrapper.find("[data-pane-actions]").exists()).toBe(true);
+    expect(
+      mountFrame("classic", { named: true }).wrapper.find("[data-pane-actions]").exists(),
+    ).toBe(true);
     expect(mountFrame("classic").wrapper.find("[data-pane-actions]").exists()).toBe(true);
-    expect(mountFrame("modern", { enabled: false }).wrapper.find("[data-pane-actions]").exists()).toBe(false);
+    expect(
+      mountFrame("modern", { enabled: false }).wrapper.find("[data-pane-actions]").exists(),
+    ).toBe(false);
   });
 
   it("名前の行があるときは、行の右端（row）に［右へ分割］［下へ分割］［最大化］［閉じる］の順。閉じるが最後", () => {
     const { wrapper } = mountFrame("modern", { named: true });
     const g = wrapper.get("[data-pane-actions]");
     expect(g.classes()).toContain("pane-actions-row");
-    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual(["split-right", "split-down", "zoom", "close"]);
-    expect(g.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["右へ分割", "下へ分割", "最大化", "閉じる"]);
+    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual([
+      "menu",
+      "add-view",
+      "split-right",
+      "split-down",
+      "zoom",
+      "close",
+    ]);
+    expect(g.findAll("button").map((b) => b.attributes("aria-label"))).toEqual([
+      "このペインのメニュー",
+      "このペインにビューを追加",
+      "右へ分割",
+      "下へ分割",
+      "最大化",
+      "閉じる",
+    ]);
     // Tab の順に入れない。
     for (const b of g.findAll("button")) expect(b.attributes("tabindex")).toBe("-1");
   });
 
-  it("名前の行が無いとき（枠の名前の設定が切）は、端末の領域の右上の隅（corner）に出す", () => {
+  it("枠の表示が切のときは、端末の領域の右上の隅（corner）に出す", () => {
+    useSettingsStore(pinia).setPaneBorders("off");
     const { wrapper } = mountFrame("modern");
     const g = wrapper.get("[data-pane-actions]");
     expect(g.classes()).toContain("pane-actions-corner");
@@ -97,7 +156,9 @@ describe("pane の枠の操作ボタン（モダン）", () => {
     expect(btn().attributes("aria-pressed")).toBe("true");
     expect(btn().html()).not.toBe(svgBefore);
     // 位置は同じ（順は変わらない）。
-    expect(wrapper.findAll("[data-pane-actions] button").map((b) => b.attributes("data-pane-action"))).toEqual(["split-right", "split-down", "zoom", "close"]);
+    expect(
+      wrapper.findAll("[data-pane-actions] button").map((b) => b.attributes("data-pane-action")),
+    ).toEqual(["menu", "add-view", "split-right", "split-down", "zoom", "close"]);
   });
 
   it("ボタンの押下は、端末からフォーカスを奪わない（mousedown を止める）。名前の D&D・枠の右クリックに混ざらない", () => {

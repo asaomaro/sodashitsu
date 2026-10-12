@@ -8,20 +8,74 @@
  * - ボタンは Tab の順に入れない（`tabindex="-1"`）。キーボードでは、いまのキー（分割・拡大表示・閉じる）と、pane の枠の Tab・Enter で開くメニューで足りる。
  * - 押下は、端末からフォーカスを奪わない（`mousedown` を止める）。印はインラインの SVG（絵文字は環境で見た目が変わる）。
  */
-import {HEADER_ACTION_LABELS,type AgentHeaderAction} from "@sodashitsu/protocol";
-const props=defineProps<{ variant: "row" | "corner"; showSplit: boolean; zoomed: boolean; selected: boolean; paneLabel: string; showInfo?: boolean; infoOpen?: boolean; agentActions?:AgentHeaderAction[]; maxAgentActions?:number }>();
-defineEmits<{ split: [dir: "right" | "down"]; zoom: []; close: []; info: []; agent:[action:AgentHeaderAction] }>();
+import { HEADER_ACTION_LABELS, type AgentHeaderAction } from "@sodashitsu/protocol";
+const props = defineProps<{
+  variant: "row" | "corner";
+  showSplit: boolean;
+  zoomed: boolean;
+  selected: boolean;
+  paneLabel: string;
+  showInfo?: boolean;
+  infoOpen?: boolean;
+  agentActions?: AgentHeaderAction[];
+  maxAgentActions?: number;
+  showAddView?: boolean;
+  showMenu?: boolean;
+}>();
+defineEmits<{
+  split: [dir: "right" | "down"];
+  zoom: [];
+  close: [];
+  info: [];
+  menu: [event: MouseEvent];
+  addView: [];
+  agent: [action: AgentHeaderAction];
+}>();
 
-const marks:Record<AgentHeaderAction,string>={messages:"≡",summary:"Σ",compact:"↘",clear:"↺",usage:"%",permissions:"✓",fork:"⑂"};
-function visible(){const list=props.agentActions??[],n=props.maxAgentActions??list.length;return list.length>n?list.slice(0,Math.max(0,n-1)):list;}
-function overflow(){return (props.agentActions??[]).slice(visible().length);}
+const marks: Record<AgentHeaderAction, string> = {
+  messages: "≡",
+  summary: "Σ",
+  compact: "↘",
+  clear: "↺",
+  usage: "%",
+  permissions: "✓",
+  fork: "⑂",
+};
+function visible() {
+  const list = props.agentActions ?? [],
+    n = props.maxAgentActions ?? list.length;
+  return list.length > n ? list.slice(0, Math.max(0, n - 1)) : list;
+}
+function overflow() {
+  return (props.agentActions ?? []).slice(visible().length);
+}
 function keepFocus(ev: MouseEvent): void {
   ev.preventDefault();
 }
 </script>
 
 <template>
-  <div class="pane-actions" :class="[`pane-actions-${variant}`, { 'pane-actions-selected': selected }]" role="group" :aria-label="`${paneLabel}の操作`" data-pane-actions @mousedown="keepFocus">
+  <div
+    class="pane-actions"
+    :class="[`pane-actions-${variant}`, { 'pane-actions-selected': selected }]"
+    role="group"
+    :aria-label="`${paneLabel}の操作`"
+    data-pane-actions
+    @mousedown="keepFocus"
+  >
+    <button
+      v-if="showMenu !== false"
+      type="button"
+      class="pane-actions-btn"
+      tabindex="-1"
+      data-pane-action="menu"
+      aria-label="このペインのメニュー"
+      title="メニュー"
+      aria-haspopup="menu"
+      @click="$emit('menu', $event)"
+    >
+      ⋮
+    </button>
     <button
       v-if="showInfo"
       type="button"
@@ -33,16 +87,108 @@ function keepFocus(ev: MouseEvent): void {
       :aria-pressed="infoOpen === true"
       @click="$emit('info')"
     >
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 7.2v4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /><circle cx="8" cy="5" r="0.9" fill="currentColor" /></svg>
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+        <circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3" />
+        <path
+          d="M8 7.2v4"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+        />
+        <circle cx="8" cy="5" r="0.9" fill="currentColor" />
+      </svg>
     </button>
-    <button v-for="action in visible()" :key="action" type="button" class="pane-actions-btn" tabindex="-1" :data-pane-action="action" :title="HEADER_ACTION_LABELS[action]" :aria-label="HEADER_ACTION_LABELS[action]" @click="$emit('agent',action)">{{marks[action]}}</button>
-    <details v-if="overflow().length" class="pane-actions-more"><summary class="pane-actions-btn" aria-label="エージェント操作">⋯</summary><div class="pane-actions-menu"><button v-for="action in overflow()" :key="action" type="button" @click="$emit('agent',action);($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')">{{HEADER_ACTION_LABELS[action]}}</button></div></details>
+    <button
+      v-if="showAddView"
+      type="button"
+      class="pane-actions-btn"
+      tabindex="-1"
+      data-pane-action="add-view"
+      aria-label="このペインにビューを追加"
+      title="このペインにビューを追加"
+      @click="$emit('addView')"
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="currentColor" />
+        <path d="M8 5v6M5 8h6" stroke="currentColor" />
+      </svg>
+    </button>
+    <button
+      v-for="action in visible()"
+      :key="action"
+      type="button"
+      class="pane-actions-btn"
+      tabindex="-1"
+      :data-pane-action="action"
+      :title="HEADER_ACTION_LABELS[action]"
+      :aria-label="HEADER_ACTION_LABELS[action]"
+      @click="$emit('agent', action)"
+    >
+      {{ marks[action] }}
+    </button>
+    <details v-if="overflow().length" class="pane-actions-more">
+      <summary class="pane-actions-btn" aria-label="エージェント操作">⋯</summary>
+      <div class="pane-actions-menu">
+        <button
+          v-for="action in overflow()"
+          :key="action"
+          type="button"
+          @click="
+            $emit('agent', action);
+            ($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open');
+          "
+        >
+          {{ HEADER_ACTION_LABELS[action] }}
+        </button>
+      </div>
+    </details>
     <template v-if="showSplit">
-      <button type="button" class="pane-actions-btn" tabindex="-1" data-pane-action="split-right" aria-label="右へ分割" title="右へ分割" @click="$emit('split', 'right')">
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M8 3v10" stroke="currentColor" stroke-width="1.3" /></svg>
+      <button
+        type="button"
+        class="pane-actions-btn"
+        tabindex="-1"
+        data-pane-action="split-right"
+        aria-label="右へ分割"
+        title="右へ分割"
+        @click="$emit('split', 'right')"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+          <rect
+            x="2"
+            y="3"
+            width="12"
+            height="10"
+            rx="1.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.3"
+          />
+          <path d="M8 3v10" stroke="currentColor" stroke-width="1.3" />
+        </svg>
       </button>
-      <button type="button" class="pane-actions-btn" tabindex="-1" data-pane-action="split-down" aria-label="下へ分割" title="下へ分割" @click="$emit('split', 'down')">
-        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3" /><path d="M2 8h12" stroke="currentColor" stroke-width="1.3" /></svg>
+      <button
+        type="button"
+        class="pane-actions-btn"
+        tabindex="-1"
+        data-pane-action="split-down"
+        aria-label="下へ分割"
+        title="下へ分割"
+        @click="$emit('split', 'down')"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+          <rect
+            x="2"
+            y="3"
+            width="12"
+            height="10"
+            rx="1.5"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.3"
+          />
+          <path d="M2 8h12" stroke="currentColor" stroke-width="1.3" />
+        </svg>
       </button>
     </template>
     <button
@@ -55,17 +201,83 @@ function keepFocus(ev: MouseEvent): void {
       :aria-pressed="zoomed"
       @click="$emit('zoom')"
     >
-      <svg v-if="!zoomed" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      <svg v-else viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /></svg>
+      <svg
+        v-if="!zoomed"
+        viewBox="0 0 16 16"
+        width="14"
+        height="14"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+      <svg v-else viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+        <path
+          d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
     </button>
-    <button type="button" class="pane-actions-btn pane-actions-close" tabindex="-1" data-pane-action="close" aria-label="閉じる" title="閉じる" @click="$emit('close')">
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
+    <button
+      type="button"
+      class="pane-actions-btn pane-actions-close"
+      tabindex="-1"
+      data-pane-action="close"
+      aria-label="閉じる"
+      title="閉じる"
+      @click="$emit('close')"
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+        <path
+          d="M3.5 3.5l9 9M12.5 3.5l-9 9"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.4"
+          stroke-linecap="round"
+        />
+      </svg>
     </button>
   </div>
 </template>
 
 <style scoped>
-.pane-actions-more{position:relative;pointer-events:auto}.pane-actions-menu{position:absolute;right:0;top:100%;display:grid;min-width:190px;z-index:30;padding:6px;background:var(--soda-menu-bg,#282a36);border:1px solid var(--soda-menu-border,#44475a)}.pane-actions-menu button{padding:6px;text-align:left;color:inherit;background:none;border:none;white-space:nowrap}.pane-actions-menu button:hover{background:var(--soda-menu-hover-bg,#343746)}
+.pane-actions-more {
+  position: relative;
+  pointer-events: auto;
+}
+.pane-actions-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  display: grid;
+  min-width: 190px;
+  z-index: 30;
+  padding: 6px;
+  background: var(--soda-menu-bg, #282a36);
+  border: 1px solid var(--soda-menu-border, #44475a);
+}
+.pane-actions-menu button {
+  padding: 6px;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  white-space: nowrap;
+}
+.pane-actions-menu button:hover {
+  background: var(--soda-menu-hover-bg, #343746);
+}
 .pane-actions {
   display: flex;
   align-items: center;

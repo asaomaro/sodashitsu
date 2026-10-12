@@ -7,7 +7,7 @@ import { placedFrameKey } from "../display/framePage.js";
 import type { DockGroup, Side } from "../display/paneDisplayLayout.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
-import DisplayFrame from "./DisplayFrame.vue";
+import DisplayFrame from "./DisplaySurface.vue";
 import DisplayPanelHead from "./DisplayPanelHead.vue";
 
 /**
@@ -175,7 +175,6 @@ function onTabKey(ev: KeyboardEvent): void {
         {{ p.title }}
       </button>
     </div>
-    <div v-else class="pane-panel-title" data-pane-panel-title>{{ active.title }}</div>
     <div
       v-if="engaged"
       class="pane-panel-engaged-note"

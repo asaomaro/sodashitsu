@@ -1,3 +1,4 @@
+import { ViewHistory } from "@sodashitsu/client-core";
 import type {
   AgentInfo,
   AgentUsageChangedEvent,
@@ -33,15 +34,18 @@ import {
  * 表示（workspace / tab / 焦点の pane）はクライアントごと（web の `store/view` と同じ）。既読（`done`）もクライアントごとに手元のメモリへ持つ（design D-3）。
  */
 export interface SessionModelHooks {
-  onUsageChanged?(data:AgentUsageChangedEvent["data"]):void;
+  onDisplayEvent?(event: ServerEvent): void;
+  onUsageChanged?(data: AgentUsageChangedEvent["data"]): void;
   onPaneClosed?(paneId: string): void;
   onPaneExited?(paneId: string, exitCode: number): void;
   onClientError?(code: string, message: string): void;
-  onNotificationState?(state:import("@sodashitsu/protocol").NotificationState):void;
+  onNotificationState?(state: import("@sodashitsu/protocol").NotificationState): void;
   onPrefsChanged?(data: PrefsChangedEvent["data"]): void;
   onAgentChanged?(paneId: string, prev: AgentInfo | null, next: AgentInfo | null): void;
   /** 独自コマンドの popup が閉じた（`command.popup_closed`）。 */
   onPopupClosed?(popupId: string, exitCode: number | undefined): void;
+  onNotificationTest?(message: string): void;
+  onAttachChanged?(paneId: string, clientId: string | null): void;
   /** 保存した SSH のマシンの一覧が変わった（`machine.changed`）。 */
   onMachinesChanged?(machines: MachineStatus[]): void;
   /** スナップショットを当てた（`first` はこのプロセスで最初の 1 回。通知の判定済みの印に使う）。 */
@@ -49,6 +53,18 @@ export interface SessionModelHooks {
 }
 
 export class SessionModel {
+  private readonly history = new ViewHistory();
+  preferredPane(tabId: string) {
+    return this.history.pane(tabId, this);
+  }
+  selectWorkspace(workspaceId: string) {
+    const tabId = this.history.tab(workspaceId, this);
+    if (tabId) this.setView(workspaceId, tabId, this.preferredPane(tabId));
+  }
+  private rememberCurrent() {
+    this.history.remember(this.workspaceId, this.tabId, this.focusedPaneId, this);
+  }
+
   clientId: string | null = null;
   serverVersion = "";
   host: HostInfo | null = null;
@@ -118,6 +134,7 @@ export class SessionModel {
     let seen = this.seenByScope.get(scope);
     if (!seen) this.seenByScope.set(scope, (seen = new Map()));
     this.seen = seen;
+    this.history.clear();
     this.workspaces = new Map();
     this.tabs = new Map();
     this.panes = new Map();
@@ -164,6 +181,8 @@ export class SessionModel {
   }
 
   applyEvent(e: ServerEvent): void {
+    if (e.event === "display.updated" || e.event === "display.removed")
+      this.hooks.onDisplayEvent?.(e);
     this.applyToSession(e);
     this.repair(e.event === "pane.closed" ? e.data.successorPaneId : undefined);
     this.emit();
@@ -171,8 +190,15 @@ export class SessionModel {
 
   private applyToSession(e: ServerEvent): void {
     switch (e.event) {
-      case "notification.changed": this.hooks.onNotificationState?.(e.data); return;
-      case "agent.usage_changed": this.hooks.onUsageChanged?.(e.data); return;
+      case "notification.test":
+        this.hooks.onNotificationTest?.(e.data.message);
+        return;
+      case "notification.changed":
+        this.hooks.onNotificationState?.(e.data);
+        return;
+      case "agent.usage_changed":
+        this.hooks.onUsageChanged?.(e.data);
+        return;
       case "workspace.created":
       case "workspace.updated":
         this.workspaces.set(e.data.workspace.id, e.data.workspace);
@@ -241,6 +267,9 @@ export class SessionModel {
       case "prefs.changed":
         this.hooks.onPrefsChanged?.(e.data);
         return;
+      case "pane.attach_changed":
+        this.hooks.onAttachChanged?.(e.data.paneId, e.data.clientId);
+        return;
       case "command.popup_closed":
         this.hooks.onPopupClosed?.(e.data.popupId, e.data.exitCode);
         return;
@@ -276,13 +305,16 @@ export class SessionModel {
 
   /** 表示する workspace/tab を替える。 */
   setView(workspaceId: string, tabId: string, focusedPaneId?: string | null): void {
+    this.rememberCurrent();
     this.workspaceId = workspaceId;
     this.tabId = tabId;
     if (focusedPaneId !== undefined) this.setFocusedPane(focusedPaneId);
+    this.rememberCurrent();
     this.emit();
   }
 
   focusPane(paneId: string): void {
+    this.rememberCurrent();
     const pane = this.panes.get(paneId);
     if (!pane) return;
     const tab = this.tabs.get(pane.tabId);
@@ -298,6 +330,7 @@ export class SessionModel {
     if (paneId !== null && this.focusedPaneId !== null && this.focusedPaneId !== paneId)
       this.lastFocusedPaneId = this.focusedPaneId;
     this.focusedPaneId = paneId;
+    this.rememberCurrent();
   }
 
   currentTab(): Tab | undefined {

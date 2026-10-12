@@ -67,15 +67,24 @@ export interface Workspace {
   representative?: boolean;
 }
 
-export interface PluginTab { extensionKey: string; display: string; mobileDisplay?:string|undefined }
+export interface PluginTab {
+  extensionKey: string;
+  display: string;
+  mobileDisplay?: string | undefined;
+  terminalDisplay?: string | undefined;
+}
 
 export interface TabViewInstance {
+  terminal?: { format: "text" | "markdown" | "html" } | undefined;
+  terminalDisplay?: string | undefined;
   id: string;
   extensionKey: string;
   viewId: string;
   display: string;
   paneId: PaneId;
   target: "tab" | "pane";
+  /** 表示する情報の種類。pane+target=tabはアクティブペインに追従。 */
+  informationTarget?: "tab" | "pane" | undefined;
   placement: "right" | "left" | "top" | "bottom" | "float" | "band-top" | "band-bottom";
 }
 
@@ -98,7 +107,14 @@ export interface Tab {
 
 export type LayoutNode =
   | { type: "pane"; paneId: PaneId }
-  | { type: "split"; id: SplitId; dir: SplitDirection; ratio: number; a: LayoutNode; b: LayoutNode };
+  | {
+      type: "split";
+      id: SplitId;
+      dir: SplitDirection;
+      ratio: number;
+      a: LayoutNode;
+      b: LayoutNode;
+    };
 
 export type PaneStatus = "running" | "failed";
 
@@ -137,7 +153,8 @@ export interface Pane {
  * Devin CLI・Droid・Grok CLI・Qwen Code）。
  * 20261007-agent-hook-drift で Qoder CLI（`qodercli`）を追加。
  */
-export type AgentIntegrationKind = "claude" | "codex" | "cursor" | "copilot" | "devin" | "droid" | "grok" | "qwen" | "qodercli";
+export type AgentIntegrationKind =
+  "claude" | "codex" | "cursor" | "copilot" | "devin" | "droid" | "grok" | "qwen" | "qodercli";
 
 export interface AgentSessionRef {
   kind: AgentIntegrationKind;

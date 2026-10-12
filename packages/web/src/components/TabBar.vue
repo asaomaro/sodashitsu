@@ -113,7 +113,7 @@ function selectTab(tabId: string): void {
   const tab = session.tabs.get(tabId);
   if (!tab || !view.workspaceId) return;
   view.setView(view.workspaceId, tabId);
-  view.focusPane(tab.focusedPaneId);
+  view.focusPane(view.preferredPane(tab.id));
   void conn?.request("tab.focus", { tabId }).catch(() => undefined);
 }
 

@@ -50,6 +50,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("summarySettings", loadSummarySettings(raw["summarySettings"]));
   set("keyboardLockInFullscreen", loadKeyboardLockInFullscreen(raw["keyboardLockInFullscreen"]));
   set("paneFrameThickness", loadPaneFrameThickness(raw["paneFrameThickness"]));
+  set("viewTitleVisible", raw["viewTitleVisible"] !== false);
   set("paneAgentNameVisible", loadPaneAgentNameVisible(raw["paneAgentNameVisible"]));
   set("tabBarPosition", loadTabBarPosition(raw["tabBarPosition"]));
   set("tabBarAlways", loadTabBarAlways(raw["tabBarAlways"]));

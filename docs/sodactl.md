@@ -544,11 +544,11 @@ pane の中で検出されたコーディングエージェント（Claude Code�
     （複数行でも途中の改行で確定されない。本文の中の `ESC[200~`・`ESC[201~` は取り除く）。無効なら包まずに送る。
   - `agent list`/`get` と同じく、コマンドが接続したときに見たエージェントにだけ送る。送る前に別のエージェントに入れ替わっていたら
     何も送らずに `agent_not_found`（`send-keys` も同じ）。
-  - 本文を書いてから **300ms** 置いて Enter（CR）を送る（貼り付けの直後の Enter を「貼り付けの続きの改行」として扱うエージェントがあるため。
+  - 本文を書いてから **1000ms** 置いて Enter（CR）を送る（貼り付けの直後の Enter を「貼り付けの続きの改行」として扱うエージェントがあるため。
     herdr と同じ間）。本文から Enter までの間に届いた他の入力（ブラウザでの打鍵・`pane input` 等）は Enter の後へ回す。
   - エージェントが `blocked`（承認・質問の入力待ち）なら**何も送らずに** `agent_blocked`。別の入力の後ろで待っている間に `blocked` になった・
     エージェントが終了した場合も、本文を書く直前にもう一度確かめて送らない（`agent_blocked` / `agent_not_found`）。ただし状態の判定は
-    周期的（500ms ごと）で、本文から Enter までの 300ms の間は確かめ直さないので、その分の窓は残る。本文が空なら `empty_agent_prompt`、
+    周期的（500ms ごと）で、本文から Enter までの1000ms の間は確かめ直さないので、その分の窓は残る。本文が空なら `empty_agent_prompt`、
     1MB を超えると `invalid_params`。本文が `--` で始まると未知のオプションとして使い方の誤り（終了コード 2）になる（`pane input` と同じ制約）。
   - 送信の途中で端末が閉じると `agent_prompt_failed`（閉じた時点によって、本文が書かれている場合も書かれていない場合もある）。
   - `--wait` … 送った後、エージェントが `working` か `blocked` になった（一瞬でもよい）ことを確かめてから、`--until`（省略時は `idle`・`done`・`blocked`）の
@@ -947,7 +947,7 @@ herdr の `agent list` / `agent get` / `agent wait` / `agent read` / `agent prom
   今の alt screen の中身だけ）。alternate screen の履歴を自動でスクロールして読む機能も無い。
 - 出力は camelCase で、herdr の `.result.agent` は `.agent` に当たる（例: `jq -r .agent.status`）。
 - エラーの code（`agent_not_found`・`agent_not_running`・`timeout`・`agent_blocked`・`agent_prompt_stalled`・`empty_agent_prompt`・
-  `invalid_key`）と、`--until` の既定・300ms の遅延 Enter・5 秒の活動の確認・終了コードは herdr と同じ。
+  `invalid_key`）と、`--until` の既定・5 秒の活動の確認・終了コードは herdr と同じ。遅延 Enter は貼り付け処理の完了を待つため1000ms。
 - 本物の Claude Code 等での送信は確かめていない（bracketed paste を有効にする偽のエージェントでの結合テストだけ。
   `.aidev/works/20260926-agent-prompt-send-keys/test-result.md`）。
 
@@ -992,3 +992,7 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
 ## プラグインアプリの操作
 
 `sodactl plugin operations <id|key> (--pane <id>|--tab <id>|--workspace <id>)` は公開操作の一覧、`sodactl plugin call <id|key> <operation> (--pane <id>|--tab <id>|--workspace <id>) [--params <JSON object>]` はその実行です。どちらも認証済みサーバへ接続しJSONを返します。`--url`、`--token`、前置の `--machine` に対応します。導入操作の `--state-dir` は使いません。上限・応答・拡張側の実装は [プラグインアプリのCLI操作](plugin-cli.md) を参照してください。
+
+## 通知の表示テスト
+
+`sodactl notification test` は、接続中のWeb版・端末版へ固定文言のテスト通知を送信します。通常のスナックバー表示を確認する操作で、エージェントの状態・通知履歴は変わりません。ログイン済みの接続が必要です（pane.sockのログイン不要操作ではありません）。新しい受信機能を読み込むため、Web版は再読み込み、端末版は切り離して再起動してください。

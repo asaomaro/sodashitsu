@@ -1,4 +1,13 @@
-import { DISPLAY_DOCKS, DISPLAY_KINDS, isDisplayDock, isDisplayEdge, type DisplayDock, type DisplayEdge, type DisplayInfo, type DisplayKind } from "@sodashitsu/protocol";
+import {
+  DISPLAY_DOCKS,
+  DISPLAY_KINDS,
+  isDisplayDock,
+  isDisplayEdge,
+  type DisplayDock,
+  type DisplayEdge,
+  type DisplayInfo,
+  type DisplayKind,
+} from "@sodashitsu/protocol";
 
 /**
  * 表示の面の置き場所・たたみ・窓の位置の記憶（`soda.prefs.v1` の `displayLayout`。その画面だけ。共有の設定へ送らない）と、そこから「いまの状態」を導く関数
@@ -35,6 +44,7 @@ export interface FacePref {
 }
 export interface DisplayLayoutPrefs {
   v: 1;
+  bands?: Record<string, number>;
   /** 鍵: `${paneId}|${kind}|${name}`。 */
   faces: Record<string, FacePref>;
   /** 鍵: `${kind}|${name}`（同じ名前の面の置き場所の引き継ぎ。たたみ・位置は引き継がない）。 */
@@ -44,7 +54,13 @@ export interface DisplayLayoutPrefs {
 }
 
 /** その版の画面が出せる置き場所（PR-A: 右だけ。PR-B: 4 つの側。PR-C: 浮いた窓も）。PR ごとに、この定数だけを変える。 */
-export const DISPLAY_DOCK_CAPS: readonly DisplayDock[] = ["right", "left", "top", "bottom", "float"];
+export const DISPLAY_DOCK_CAPS: readonly DisplayDock[] = [
+  "right",
+  "left",
+  "top",
+  "bottom",
+  "float",
+];
 
 export function emptyLayout(): DisplayLayoutPrefs {
   return { v: 1, faces: {}, names: {}, sides: {} };
@@ -55,13 +71,15 @@ export const faceKey = (i: FaceId): string => `${i.paneId}|${i.kind}|${i.name}`;
 export const nameKey = (i: Pick<DisplayInfo, "kind" | "name">): string => `${i.kind}|${i.name}`;
 export const sideKey = (paneId: string, side: DockSide): string => `${paneId}|${side}`;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
 const isKind = (v: string): v is DisplayKind => (DISPLAY_KINDS as readonly string[]).includes(v);
 
 function loadRect(raw: unknown): FaceRect | undefined {
   if (!isRecord(raw)) return undefined;
   const { x, y, w, h } = raw;
-  const ok = (v: unknown, min: number): v is number => typeof v === "number" && Number.isFinite(v) && v >= min && v <= RECT_MAX;
+  const ok = (v: unknown, min: number): v is number =>
+    typeof v === "number" && Number.isFinite(v) && v >= min && v <= RECT_MAX;
   if (!ok(x, 0) || !ok(y, 0) || !ok(w, 1) || !ok(h, 1)) return undefined;
   return { x, y, w, h };
 }
@@ -82,7 +100,15 @@ export function loadDisplayLayout(raw: unknown): DisplayLayoutPrefs {
   if (isRecord(raw["faces"])) {
     for (const [k, v] of Object.entries(raw["faces"])) {
       const parts = k.split("|");
-      if (parts.length !== 3 || parts[0] === "" || parts[2] === "" || !isKind(parts[1]!) || !isRecord(v) || typeof v["collapsed"] !== "boolean") continue;
+      if (
+        parts.length !== 3 ||
+        parts[0] === "" ||
+        parts[2] === "" ||
+        !isKind(parts[1]!) ||
+        !isRecord(v) ||
+        typeof v["collapsed"] !== "boolean"
+      )
+        continue;
       const face: FacePref = { collapsed: v["collapsed"] };
       if (parts[1] === "panel") {
         if (!isDisplayDock(v["dock"])) continue;
@@ -102,17 +128,42 @@ export function loadDisplayLayout(raw: unknown): DisplayLayoutPrefs {
       const parts = k.split("|");
       if (parts.length !== 2 || parts[1] === "" || !isKind(parts[0]!) || !isRecord(v)) continue;
       if (parts[0] === "panel" && isDisplayDock(v["dock"])) names.push([k, { dock: v["dock"] }]);
-      else if (parts[0] === "band" && isDisplayEdge(v["edge"])) names.push([k, { edge: v["edge"] }]);
+      else if (parts[0] === "band" && isDisplayEdge(v["edge"]))
+        names.push([k, { edge: v["edge"] }]);
     }
   }
   const sides: [string, number][] = [];
   if (isRecord(raw["sides"])) {
     for (const [k, v] of Object.entries(raw["sides"])) {
       const parts = k.split("|");
-      if (parts.length !== 2 || parts[0] === "" || !(DOCK_SIDES as readonly string[]).includes(parts[1]!)) continue;
-      if (typeof v === "number" && Number.isFinite(v) && v >= SIDE_SIZE_STORED_MIN && v <= SIDE_SIZE_STORED_MAX) sides.push([k, Math.round(v)]);
+      if (
+        parts.length !== 2 ||
+        parts[0] === "" ||
+        !(DOCK_SIDES as readonly string[]).includes(parts[1]!)
+      )
+        continue;
+      if (
+        typeof v === "number" &&
+        Number.isFinite(v) &&
+        v >= SIDE_SIZE_STORED_MIN &&
+        v <= SIDE_SIZE_STORED_MAX
+      )
+        sides.push([k, Math.round(v)]);
     }
   }
+  if (isRecord(raw["bands"]))
+    out.bands = keepLast(
+      Object.entries(raw["bands"]).filter(
+        ([k, v]) =>
+          k.split("|").length === 3 &&
+          k.split("|")[1] === "band" &&
+          typeof v === "number" &&
+          Number.isFinite(v) &&
+          v >= 24 &&
+          v <= 96,
+      ) as [string, number][],
+      FACE_PREFS_MAX,
+    );
   out.faces = keepLast(faces, FACE_PREFS_MAX);
   out.names = keepLast(names, NAME_PREFS_MAX);
   out.sides = keepLast(sides, SIDE_PREFS_MAX);
@@ -120,23 +171,48 @@ export function loadDisplayLayout(raw: unknown): DisplayLayoutPrefs {
 }
 
 /** 書くために、鍵を末尾へ移して（最近使ったものが残る）上限で切った新しいオブジェクトを返す。 */
-export function putLast<T>(rec: Record<string, T>, key: string, value: T, max: number): Record<string, T> {
+export function putLast<T>(
+  rec: Record<string, T>,
+  key: string,
+  value: T,
+  max: number,
+): Record<string, T> {
   const entries = Object.entries(rec).filter(([k]) => k !== key);
   entries.push([key, value]);
   return keepLast(entries, max);
 }
 
 /** もう無い pane の分（`faces`・`sides`）を捨てる。`names` は pane に依らないので触らない。変わらなければ同じ値を返す。 */
-export function pruneLayoutPanes(prefs: DisplayLayoutPrefs, live: ReadonlySet<string>): DisplayLayoutPrefs {
+export function pruneLayoutPanes(
+  prefs: DisplayLayoutPrefs,
+  live: ReadonlySet<string>,
+): DisplayLayoutPrefs {
   const keep = (k: string): boolean => live.has(k.slice(0, k.indexOf("|")));
   const faces = Object.entries(prefs.faces);
   const sides = Object.entries(prefs.sides);
-  if (faces.every(([k]) => keep(k)) && sides.every(([k]) => keep(k))) return prefs;
-  return { ...prefs, faces: Object.fromEntries(faces.filter(([k]) => keep(k))), sides: Object.fromEntries(sides.filter(([k]) => keep(k))) };
+  if (
+    faces.every(([k]) => keep(k)) &&
+    sides.every(([k]) => keep(k)) &&
+    Object.keys(prefs.bands ?? {}).every(keep)
+  )
+    return prefs;
+  return {
+    ...prefs,
+    faces: Object.fromEntries(faces.filter(([k]) => keep(k))),
+    sides: Object.fromEntries(sides.filter(([k]) => keep(k))),
+    ...(prefs.bands
+      ? { bands: Object.fromEntries(Object.entries(prefs.bands).filter(([k]) => keep(k))) }
+      : {}),
+  };
 }
 
 /** 側の大きさの記憶。右は、無ければ今までの `displayPanelWidths[pane]` を読む（読むだけ）。 */
-export function storedSideSize(prefs: DisplayLayoutPrefs, paneId: string, side: DockSide, legacyWidths?: ReadonlyMap<string, number>): number | undefined {
+export function storedSideSize(
+  prefs: DisplayLayoutPrefs,
+  paneId: string,
+  side: DockSide,
+  legacyWidths?: ReadonlyMap<string, number>,
+): number | undefined {
   const own = prefs.sides[sideKey(paneId, side)];
   if (own !== undefined) return own;
   return side === "right" ? legacyWidths?.get(paneId) : undefined;
@@ -161,14 +237,28 @@ export function effectiveDock(
   settings: { dock: DisplayDock },
   caps: readonly DisplayDock[],
 ): DisplayDock {
-  const candidates = [prefs.faces[faceKey(info)]?.dock, prefs.names[nameKey(info)]?.dock, specDock(info), settings.dock];
+  const candidates = [
+    prefs.faces[faceKey(info)]?.dock,
+    prefs.names[nameKey(info)]?.dock,
+    specDock(info),
+    settings.dock,
+  ];
   for (const c of candidates) if (c !== undefined && caps.includes(c)) return c;
   return "right";
 }
 
 /** 帯の場所。優先: 面の記憶 ＞ 同じ名前の記憶 ＞ プログラムの指定 ＞ 設定。 */
-export function effectiveEdge(info: Pick<DisplayInfo, "paneId" | "kind" | "name" | "edge">, prefs: DisplayLayoutPrefs, settings: { edge: DisplayEdge }): DisplayEdge {
-  return prefs.faces[faceKey(info)]?.edge ?? prefs.names[nameKey(info)]?.edge ?? specEdge(info) ?? settings.edge;
+export function effectiveEdge(
+  info: Pick<DisplayInfo, "paneId" | "kind" | "name" | "edge">,
+  prefs: DisplayLayoutPrefs,
+  settings: { edge: DisplayEdge },
+): DisplayEdge {
+  return (
+    prefs.faces[faceKey(info)]?.edge ??
+    prefs.names[nameKey(info)]?.edge ??
+    specEdge(info) ??
+    settings.edge
+  );
 }
 
 /**
@@ -188,7 +278,10 @@ export function effectiveCollapsed(
 }
 
 /** 「プログラムの指定に戻す」を出すか: 面の記憶がある、または、同じ名前の記憶がいまの置き場所を決めている。 */
-export function hasFacePref(info: Pick<DisplayInfo, "paneId" | "kind" | "name">, prefs: DisplayLayoutPrefs): boolean {
+export function hasFacePref(
+  info: Pick<DisplayInfo, "paneId" | "kind" | "name">,
+  prefs: DisplayLayoutPrefs,
+): boolean {
   if (prefs.faces[faceKey(info)] !== undefined) return true;
   const n = prefs.names[nameKey(info)];
   return n !== undefined && (info.kind === "panel" ? n.dock !== undefined : n.edge !== undefined);
@@ -207,9 +300,18 @@ export interface LayoutSettings {
 }
 
 /** 面のいまの状態（`caps` で丸めた値）。描画に使う。 */
-export function effectiveFace(info: DisplayInfo, prefs: DisplayLayoutPrefs, settings: LayoutSettings, caps: readonly DisplayDock[] = DISPLAY_DOCK_CAPS): EffectiveFace {
+export function effectiveFace(
+  info: DisplayInfo,
+  prefs: DisplayLayoutPrefs,
+  settings: LayoutSettings,
+  caps: readonly DisplayDock[] = DISPLAY_DOCK_CAPS,
+): EffectiveFace {
   if (info.kind === "band") {
-    return { dock: null, edge: effectiveEdge(info, prefs, settings), collapsed: effectiveCollapsed(info, prefs, settings, null) };
+    return {
+      dock: null,
+      edge: effectiveEdge(info, prefs, settings),
+      collapsed: effectiveCollapsed(info, prefs, settings, null),
+    };
   }
   const dock = effectiveDock(info, prefs, settings, caps);
   return { dock, edge: null, collapsed: effectiveCollapsed(info, prefs, settings, dock) };
@@ -237,7 +339,10 @@ export function composeFacePref(
     const unrounded = effectiveDock(info, prefs, settings, DISPLAY_DOCKS);
     dock = unrounded === "float" && !caps.includes("float") ? rounded : unrounded;
   }
-  const out: FacePref = { dock, collapsed: patch.collapsed ?? effectiveCollapsed(info, prefs, settings, rounded) };
+  const out: FacePref = {
+    dock,
+    collapsed: patch.collapsed ?? effectiveCollapsed(info, prefs, settings, rounded),
+  };
   const rect = patch.rect ?? current?.rect;
   if (rect) out.rect = rect;
   return out;

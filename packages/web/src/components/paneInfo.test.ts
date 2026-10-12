@@ -23,14 +23,57 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-const agent = (over: Partial<AgentInfo> = {}): AgentInfo => ({ instanceId: "i", kind: "claude", label: "Claude Code", state: "idle", completionSeq: 0, serverSeenSeq: 0, verified: true, since: Date.now(), ...over });
+const agent = (over: Partial<AgentInfo> = {}): AgentInfo => ({
+  instanceId: "i",
+  kind: "claude",
+  label: "Claude Code",
+  state: "idle",
+  completionSeq: 0,
+  serverSeenSeq: 0,
+  verified: true,
+  since: Date.now(),
+  ...over,
+});
 function makePane(id: string, over: Partial<Pane> = {}): Pane {
-  return { id, tabId: "t1", label: null, cwd: "/", shell: "/bin/bash", cols: 80, rows: 24, status: "running", failure: null, busy: false, title: "", rightClick: "herdr", agent: null, agentSession: null, ...over };
+  return {
+    id,
+    tabId: "t1",
+    label: null,
+    cwd: "/",
+    shell: "/bin/bash",
+    cols: 80,
+    rows: 24,
+    status: "running",
+    failure: null,
+    busy: false,
+    title: "",
+    rightClick: "herdr",
+    agent: null,
+    agentSession: null,
+    ...over,
+  };
 }
 function seed(withAgent: boolean): void {
   const session = useSessionStore(pinia);
-  session.workspaceUpserted({ id: "w1", label: "repo", cwd: "/", tabIds: ["t1"], activeTabId: "t1", groupId: null, git: null, autoLabel: false } as unknown as Workspace);
-  session.tabUpserted({ id: "t1", workspaceId: "w1", label: "t1", layout: { type: "pane", paneId: "p1" }, focusedPaneId: "p1", zoomedPaneId: null, sizeOwnerClientId: null } as Tab);
+  session.workspaceUpserted({
+    id: "w1",
+    label: "repo",
+    cwd: "/",
+    tabIds: ["t1"],
+    activeTabId: "t1",
+    groupId: null,
+    git: null,
+    autoLabel: false,
+  } as unknown as Workspace);
+  session.tabUpserted({
+    id: "t1",
+    workspaceId: "w1",
+    label: "t1",
+    layout: { type: "pane", paneId: "p1" },
+    focusedPaneId: "p1",
+    zoomedPaneId: null,
+    sizeOwnerClientId: null,
+  } as Tab);
   session.paneUpserted(makePane("p1", { agent: withAgent ? agent({ name: "alpha" }) : null }));
 }
 
@@ -39,12 +82,24 @@ function mountFrame(style: "classic" | "modern", withAgent: boolean, named = tru
   settings.setUiStyle(style);
   settings.paneAgentNameVisible = named;
   seed(withAgent);
-  const actions = { openContextMenu: vi.fn(), splitPane: vi.fn(), zoomPane: vi.fn(), closePaneWithConfirm: vi.fn(), closePaneById: vi.fn() };
+  const actions = {
+    openContextMenu: vi.fn(),
+    splitPane: vi.fn(),
+    zoomPane: vi.fn(),
+    closePaneWithConfirm: vi.fn(),
+    closePaneById: vi.fn(),
+  };
   const registry = { focus: vi.fn(), get: vi.fn(() => undefined) };
   const wrapper = mount(PaneFrame, {
     attachTo: document.body,
     props: { paneId: "p1", enabled: true, multiPane: true },
-    global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: actions, [TerminalRegistryKey as symbol]: registry } },
+    global: {
+      plugins: [pinia],
+      provide: {
+        [ActionDispatcherKey as symbol]: actions,
+        [TerminalRegistryKey as symbol]: registry,
+      },
+    },
     slots: { default: '<div class="fake-leaf"><textarea class="fake-terminal"></textarea></div>' },
   });
   return { wrapper, registry };
@@ -54,7 +109,18 @@ describe("［情報］ボタン（モダン）", () => {
   it("エージェントの居る pane: 分割と最大化の間に［情報］。読み上げのラベル・Tab の順に入れない・押すと窓が開き、もう一度で閉じる（aria-pressed）", async () => {
     const { wrapper } = mountFrame("modern", true);
     const g = wrapper.get("[data-pane-actions]");
-    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual(["info", "compact", "usage", "permissions", "split-right", "split-down", "zoom", "close"]);
+    expect(g.findAll("button").map((b) => b.attributes("data-pane-action"))).toEqual([
+      "menu",
+      "info",
+      "add-view",
+      "compact",
+      "usage",
+      "permissions",
+      "split-right",
+      "split-down",
+      "zoom",
+      "close",
+    ]);
     const info = wrapper.get('[data-pane-action="info"]');
     expect(info.attributes("aria-label")).toBe("利用状況（情報）");
     expect(info.attributes("tabindex")).toBe("-1");
@@ -68,12 +134,16 @@ describe("［情報］ボタン（モダン）", () => {
     expect(view.paneInfoPaneId).toBeNull();
   });
 
-  it("エージェントの居ない pane では出さない（否定の対照）。クラシックでもエージェントが居れば情報が先頭に出る", () => {
-    expect(mountFrame("modern", false).wrapper.find('[data-pane-action="info"]').exists()).toBe(false);
+  it("エージェントの居ない pane では出さない（否定の対照）。クラシックでもメニューが先頭に出る", () => {
+    expect(mountFrame("modern", false).wrapper.find('[data-pane-action="info"]').exists()).toBe(
+      false,
+    );
     pinia = createPinia();
     document.body.innerHTML = "";
     const c = mountFrame("classic", true);
-    expect(c.wrapper.find("[data-pane-actions] button").attributes("data-pane-action")).toBe("info");
+    expect(c.wrapper.find("[data-pane-actions] button").attributes("data-pane-action")).toBe(
+      "menu",
+    );
     expect(c.wrapper.find('[data-pane-action="info"]').exists()).toBe(true);
   });
 
@@ -87,8 +157,23 @@ describe("［情報］ボタン（モダン）", () => {
 
 describe("右クリックのメニュー「利用状況…」", () => {
   function mountMenu() {
-    const actions = { showPaneInfo: vi.fn(), renamePaneById: vi.fn(), clearPaneName: vi.fn(), splitPane: vi.fn(), zoomPane: vi.fn(), setRightClickTarget: vi.fn(), pasteIntoPane: vi.fn(), closePaneById: vi.fn(), swapWithFocused: vi.fn(), run: vi.fn(), openAgentFork: vi.fn() };
-    const wrapper = mount(ContextMenu, { global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: actions } }, attachTo: document.body });
+    const actions = {
+      showPaneInfo: vi.fn(),
+      renamePaneById: vi.fn(),
+      clearPaneName: vi.fn(),
+      splitPane: vi.fn(),
+      zoomPane: vi.fn(),
+      setRightClickTarget: vi.fn(),
+      pasteIntoPane: vi.fn(),
+      closePaneById: vi.fn(),
+      swapWithFocused: vi.fn(),
+      run: vi.fn(),
+      openAgentFork: vi.fn(),
+    };
+    const wrapper = mount(ContextMenu, {
+      global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: actions } },
+      attachTo: document.body,
+    });
     return { wrapper, actions };
   }
   for (const style of ["classic", "modern"] as const) {
@@ -127,9 +212,23 @@ describe("利用状況の窓（PaneInfoPopover）", () => {
     // pane の箱（基本画面）の代わり。大きさのある要素。
     const paneEl = document.createElement("div");
     paneEl.setAttribute("data-pane-id", "p1");
-    paneEl.getBoundingClientRect = () => ({ left: 0, top: 0, right: 900, bottom: 600, width: 900, height: 600, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    paneEl.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 900,
+        bottom: 600,
+        width: 900,
+        height: 600,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
     document.body.appendChild(paneEl);
-    const wrapper = mount(PaneInfoPopover, { attachTo: document.body, global: { plugins: [pinia], provide: { [TerminalRegistryKey as symbol]: registry } } });
+    const wrapper = mount(PaneInfoPopover, {
+      attachTo: document.body,
+      global: { plugins: [pinia], provide: { [TerminalRegistryKey as symbol]: registry } },
+    });
     return { wrapper, registry, view: useViewStore(pinia), usage: useUsageStore(pinia) };
   }
 
@@ -154,7 +253,9 @@ describe("利用状況の窓（PaneInfoPopover）", () => {
     view.openPaneInfo("p1");
     await nextTick();
     await nextTick();
-    wrapper.get("[data-pane-info-window]").element.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    wrapper
+      .get("[data-pane-info-window]")
+      .element.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     expect(view.paneInfoPaneId).toBe("p1");
     document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     expect(view.paneInfoPaneId).toBeNull();
@@ -243,4 +344,41 @@ describe("利用状況の窓（PaneInfoPopover）", () => {
     await nextTick();
     expect(view.paneInfoPaneId).toBeNull();
   });
+});
+it("keeps a floating draggable pane name when borders are hidden and agent naming only changes the text", async () => {
+  const { wrapper } = mountFrame("modern", true);
+  const settings = useSettingsStore(pinia);
+  settings.setPaneBorders("off");
+  await nextTick();
+  const name = wrapper.get(".pane-frame-name-floating");
+  expect(name.text()).toContain("alpha");
+  expect(wrapper.element.style.paddingTop).toBe("0px");
+  settings.setPaneAgentNameVisible(false);
+  await nextTick();
+  expect(wrapper.get(".pane-frame-name-floating").text()).toContain("pane p1");
+  expect(wrapper.get(".pane-frame-name-floating").text()).not.toContain("alpha");
+  wrapper.unmount();
+});
+it("includes session actions and view addition in the pane context menu", async () => {
+  seed(true);
+  const session = useSessionStore(pinia),
+    p = session.panes.get("p1")!;
+  session.paneUpserted({ ...p, agentSession: { kind: "claude", sessionId: "s", reportedAt: 1 } });
+  const view = useViewStore(pinia);
+  view.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 10, y: 10 });
+  const actions = {
+    renamePaneById: vi.fn(),
+    setRightClickTarget: vi.fn(),
+    pasteIntoPane: vi.fn(),
+    openAgentFork: vi.fn(),
+  };
+  const w = mount(ContextMenu, {
+    global: { plugins: [pinia], provide: { [ActionDispatcherKey as symbol]: actions } },
+  });
+  await nextTick();
+  expect(w.text()).toContain("送信");
+  expect(w.text()).toContain("要約");
+  expect(w.text()).toContain("承認");
+  expect(w.text()).toContain("このペインにビューを追加");
+  w.unmount();
 });

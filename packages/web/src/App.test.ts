@@ -465,7 +465,7 @@ describe("App — 画面の並び（デスクトップ）", () => {
     return view;
   }
 
-  it("画面の一覧から作った 3 つの画面が主な領域にあり、はじめは基本画面だけが見えている（ほかは inert・visibility: hidden）", async () => {
+  it("画面の一覧から作った 4 つの画面が主な領域にあり、はじめは基本画面だけが見えている（ほかは inert・visibility: hidden）", async () => {
     setupTab();
     const wrapper = mount(App, { ...makeProvide(makeConnection()), attachTo: document.body });
     await flushTicks(wrapper);
@@ -478,8 +478,11 @@ describe("App — 画面の並び（デスクトップ）", () => {
     const dashboard = wrapper.get('[data-screen="dashboard"]');
     expect(dashboard.attributes("inert")).toBeDefined();
     expect(dashboard.classes()).toContain("app-screen-hidden");
+    const schedule=wrapper.get('[data-screen="schedule"]');
+    expect(schedule.attributes("inert")).toBeDefined();
+    expect(schedule.classes()).toContain("app-screen-hidden");
     expect(wrapper.find("[data-dashboard]").exists()).toBe(false); // 見えない間は中身を持たない
-    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["基本画面", "グラフ", "利用状況"]);
+    expect(wrapper.findAll(".screen-switcher-btn").map((b) => b.text())).toEqual(["端末", "グラフ", "状況", "予約"]);
     wrapper.unmount();
   });
 

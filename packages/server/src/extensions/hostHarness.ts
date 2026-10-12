@@ -86,6 +86,7 @@ export interface HostHarness {
 export async function makeHost(
   o: {
     tasks?: ExtensionHostOptions["tasks"];
+    artifacts?: ExtensionHostOptions["artifacts"];
     tabPlugins?: Record<string,{extensionKey:string;display:string}>;
     timings?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["timings"]>;
     limits?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["limits"]>;
@@ -147,6 +148,7 @@ export async function makeHost(
     session,
     displays,
     ...(o.tasks ? {tasks:o.tasks} : {}),
+    ...(o.artifacts ? {artifacts:o.artifacts} : {}),
     bus,
     isScreenKind: o.isScreenKind ?? ((id) => id !== "external"),
     baseEnv: o.baseEnv ?? { PATH: "/usr/bin", SODACTL_TOKEN: "TOKEN-SECRET", SODA_PANE_ID: "pane-x" },

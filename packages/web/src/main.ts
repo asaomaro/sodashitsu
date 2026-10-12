@@ -444,9 +444,7 @@ actionDispatcherBox.current = actionDispatcher;
 function focusWorkspaceHere(workspaceId: string): void {
   const ws = session.workspaces.get(workspaceId);
   if (!ws) return;
-  const tab = session.tabs.get(ws.activeTabId);
-  view.setView(workspaceId, ws.activeTabId);
-  if (tab) view.focusPane(tab.focusedPaneId);
+  view.selectWorkspace(workspaceId);
   void conn.request("workspace.focus", { workspaceId }).catch(() => undefined);
 }
 

@@ -107,7 +107,7 @@ export type DisplayFormatValue = DisplayFormat | (string & {});
 
 /** 面の出どころ（拡張が出した面に、サーバが付ける。pane のプログラムの面には無い）。 */
 export interface DisplaySource {
-  type: "extension";
+  type: "extension" | "builtin";
   id: string;
   scope: "user" | "project";
 }

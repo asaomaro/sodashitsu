@@ -51,7 +51,7 @@ export type SidebarTarget =
   | { kind: "agent"; paneId: string }
   /** 「＋」（新しい workspace。herdr の M14）。`x` の桁だけが当たり。 */
   | { kind: "newWorkspace"; x: number }
-  | { kind: "control"; action: "new" | "menu" | "bell" | "base" | "dashboard"; x: number; w: number }
+  | { kind: "control"; action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule"; x: number; w: number }
   /** spaces と agents の区切りの行（ドラッグで spaces の区画の高さ。動かさずに離せば agents の折りたたみ。herdr の H19b）。 */
   | { kind: "sectionDivider" }
   /** spaces の見出しの行（押すと spaces の折りたたみ。「＋」と並び順の桁は別の当たり。20261004-ui-interaction-polish）。 */
@@ -196,14 +196,14 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
   for (let y = rect.y; y < rect.y + rect.h; y++) grid.set(rect.x + inner, y, "│", 1, border, bg);
 
   const controls: SidebarHit[] = [];
-  const control = (y: number, x: number, text: string, action: "new" | "menu" | "bell" | "base" | "dashboard") => {
+  const control = (y: number, x: number, text: string, action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule") => {
     const width = Math.min(stringWidth(text), rect.x + inner - x);
     if (y < rect.y || y >= rect.y + rect.h || width <= 0) return;
     grid.text(x, y, truncate(text, width), fg, (ctx.screen ?? "base") === action ? activeBg : bg, 0, width);
     controls.push({kind:"control",action,x,w:width,y});
   };
   if(ctx.chromeControls && ctx.sidebarCollapsed) {
-    control(rect.y,rect.x,"▣","base");control(rect.y+1,rect.x,"%","dashboard");
+    control(rect.y,rect.x,"▣","base");control(rect.y+1,rect.x,"◇","graph");control(rect.y+2,rect.x,"%","dashboard");control(rect.y+3,rect.x,"◷","schedule");
     if(rect.h>=7){control(rect.y+rect.h-4,rect.x,"＋","new");control(rect.y+rect.h-3,rect.x,"⋯","menu");}
     control(rect.y+rect.h-2,rect.x,"🔔","bell");
     grid.set(rect.x,rect.y+rect.h-1,"»",1,fg,activeBg);
@@ -212,9 +212,9 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     const agents = orderedAgentPaneIds([...model.panes.values()].filter(p => p.agent).map(p => ({paneId:p.id,state:model.displayStateOf(p),since:p.agent?.since??0})), prefs.agentSort);
     const spaceRows = workspaces.map(w => ({state:model.workspaceState(w.id),hit:{kind:"workspace",workspaceId:w.id} as SidebarTarget,selected:w.id===model.workspaceId}));
     const agentRows = agents.map(id => ({state:model.displayStateOf(model.panes.get(id)!),hit:{kind:"agent",paneId:id} as SidebarTarget,selected:id===model.focusedPaneId}));
-    const slots = Math.max(0,rect.h-6);
+    const slots = Math.max(0,rect.h-8);
     const spacesH = agentRows.length ? Math.min(spaceRows.length,Math.ceil(slots/2)) : slots;
-    let y=rect.y+2;
+    let y=rect.y+4;
     for(const [section, rows, height] of [["spaces",spaceRows,spacesH],["agents",agentRows,slots-spacesH]] as const) {
       const offset = Math.min(ctx.sidebarScroll?.[section]??0,Math.max(0,rows.length-height));
       if(ctx.sidebarScroll)ctx.sidebarScroll[section]=offset;
@@ -228,7 +228,9 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     return controls;
   }
   if(ctx.chromeControls) {
-  control(rect.y,rect.x+1,"基本","base");control(rect.y,rect.x+7,"利用状況","dashboard");
+  const switchRows=inner>=23?1:2;
+  const half=Math.floor(inner/2);
+  control(rect.y,rect.x+1,"端末","base");control(rect.y,rect.x+(switchRows===1?6:half),"グラフ","graph");control(rect.y+(switchRows-1),rect.x+(switchRows===1?13:1),"状況","dashboard");control(rect.y+(switchRows-1),rect.x+(switchRows===1?18:half),"予約","schedule");
   const footerY=rect.y+rect.h-2;
   if(inner>=16) {
     control(footerY,rect.x+1,"＋新規","new");control(footerY,rect.x+8,"⋯","menu");
@@ -241,7 +243,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     grid.set(x,y,"«",1,fg,activeBg);controls.push({kind:"collapse",x,y});return controls;
   }
   // Keep the switcher and footer outside the scrolling sections.
-  rect={...rect,y:rect.y+1,h:Math.max(0,rect.h-2)};
+  rect={...rect,y:rect.y+switchRows,h:Math.max(0,rect.h-switchRows-1)};
   }
   const lines: Line[] = [];
   const workspaces = [...model.workspaces.values()];

@@ -1,0 +1,3 @@
+# 設計
+
+ViewDragIconをwidth .75em/height1emにして操作ボタンfont-sizeへ連動。DockedViewsはdividerのd.xと実際の表示罫線d.x-1を判定。WindowOverlayは左上2セルの⠿を常時表示し、drag.dockのみdrop/preview、通常headerはmove。左右・底・上隅でresizeし反対辺を固定、操作ボタンを右罫線から1セル離す。マウスは窓の外・余白でも消費する。登録viewのEscはcanLeaveを確認してcontrols.close、controls無しの窓は従来rawキー経路を維持。Webはトップの見えるfloatに対する通常Escをdismissへ、modal/menu/drag/キー調整時は従来経路を維持。iframeはguardが受けたEscだけを親floatへ伝える。

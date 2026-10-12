@@ -175,10 +175,10 @@ describe("PaneFrame（pane の枠。M7 の後半・D110）", () => {
 
 // 20260922-appearance-settings-rest T4（design「振る舞いの詳細」US4）。
 describe("PaneFrame — エージェント名の可視表示（AC11・AC12）", () => {
-  it("既定（設定が無効）では、名前があっても画面に出さない（aria-label だけ。AC12）", () => {
+  it("エージェント名設定が無効でも手動名を掴み手として表示する", () => {
     useSessionStore(pinia).paneUpserted(makePane("p1", { label: "build" }));
     const { wrapper } = mountFrame();
-    expect(wrapper.find(".pane-frame-name").exists()).toBe(false);
+    expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
     expect(wrapper.get(".pane-frame-edge").attributes("aria-label")).toBe("pane「build」のメニュー");
   });
 
@@ -193,16 +193,16 @@ describe("PaneFrame — エージェント名の可視表示（AC11・AC12）", 
     expect(name.attributes("aria-hidden")).toBe("true"); // aria-label と二重に読み上げない
   });
 
-  it("設定が有効でも、名前が無い pane では何も出さない", async () => {
+  it("名前が無い pane は短いIDを掴み手として表示する", async () => {
     const settings = useSettingsStore(pinia);
     useSessionStore(pinia).paneUpserted(makePane("p1")); // label なし・agent なし
     const { wrapper } = mountFrame();
     settings.setPaneAgentNameVisible(true);
     await wrapper.vm.$nextTick();
-    expect(wrapper.find(".pane-frame-name").exists()).toBe(false);
+    expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
   });
 
-  it("有効にした後、無効に戻すと消える", async () => {
+  it("エージェント名表示を切っても手動名は残る", async () => {
     const settings = useSettingsStore(pinia);
     useSessionStore(pinia).paneUpserted(makePane("p1", { label: "build" }));
     const { wrapper } = mountFrame();
@@ -211,7 +211,7 @@ describe("PaneFrame — エージェント名の可視表示（AC11・AC12）", 
     expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
     settings.setPaneAgentNameVisible(false);
     await wrapper.vm.$nextTick();
-    expect(wrapper.find(".pane-frame-name").exists()).toBe(false);
+    expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
   });
 
   it("enabled でなければ設定に触れず、名前も出さない（モバイル）", () => {
@@ -740,7 +740,7 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
   it("既定（常に・隙間入）は、props を省いても 4 辺に余白・選択の強調・フォーカスの見え方は今のまま（AC1）", () => {
     useViewStore(pinia).focusPane("p1");
     const { wrapper } = mountFrame();
-    expect(padding(wrapper)).toEqual([GAP, GAP, GAP, GAP]);
+    expect(padding(wrapper)).toEqual(["28px", GAP, GAP, GAP]);
     const edge = wrapper.get(".pane-frame-edge");
     expect(edge.classes()).toContain("pane-frame-edge-current");
     expect(edge.classes()).not.toContain("pane-frame-edge-flush");
@@ -755,7 +755,7 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
     expect(wrapper.find(".pane-frame-name").exists()).toBe(true);
   });
 
-  it("枠を描かない pane：余白 0・強調なし・名前なし。Tab で止まりキーでメニューが開き、フォーカスの見え方の class が付く（AC-I5）", async () => {
+  it("枠を描かない pane：余白 0・強調なし・名前を浮かせる。Tab で止まりキーでメニューが開き、フォーカスの見え方の class が付く（AC-I5）", async () => {
     const settings = useSettingsStore(pinia);
     settings.setPaneBorders("auto");
     settings.setPaneAgentNameVisible(true);
@@ -766,7 +766,7 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
     const edge = wrapper.get(".pane-frame-edge");
     expect(edge.classes()).not.toContain("pane-frame-edge-current");
     expect(edge.classes()).not.toContain("pane-frame-edge-named");
-    expect(wrapper.find(".pane-frame-name").exists()).toBe(false);
+    expect(wrapper.get(".pane-frame-name-floating").text()).toBe("build");
     expect(wrapper.classes()).not.toContain("pane-frame-enabled-named");
     expect(edge.classes()).toContain("pane-frame-edge-flush");
     expect(edge.attributes("tabindex")).toBe("0");
@@ -789,7 +789,7 @@ describe("PaneFrame — 枠の描画モードと隙間（AC1・AC6・AC-I5）", 
   it("設定を変えるとその場で余白が変わる（ページの再読み込み不要。AC6）", async () => {
     const settings = useSettingsStore(pinia);
     const { wrapper } = mountFrame({ multiPane: true, neighbors: { ...NO_NEIGHBORS, left: true } });
-    expect(padding(wrapper)).toEqual([GAP, GAP, GAP, GAP]);
+    expect(padding(wrapper)).toEqual(["28px", GAP, GAP, GAP]);
     settings.setPaneBorders("off");
     await wrapper.vm.$nextTick();
     expect(padding(wrapper)).toEqual(["0px", "0px", "0px", GAP]);

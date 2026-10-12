@@ -2,15 +2,23 @@
 import { computed, inject } from "vue";
 import { visibleBands, BANDS_MORE_ROW_PX } from "../display/displayLayout.js";
 import { displayBandLabel, engagedNote } from "../display/displayLabel.js";
-import { dismissWithFocus, menuPositionBelow, openDisplayMenu } from "../display/displayOps.js";
+import {
+  dismissWithFocus,
+  menuPositionBelow,
+  openDisplayMenu,
+  withDisplayChange,
+  trayFocusTarget,
+} from "../display/displayOps.js";
 import { placedFrameKey } from "../display/framePage.js";
 import type { LayoutResult } from "../display/paneDisplayLayout.js";
 import { TRAY_ROW_PX } from "../display/paneDisplayLayout.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
-import DisplayFrame from "./DisplayFrame.vue";
+import DisplayFrame from "./DisplaySurface.vue";
 import DisplayScriptMark from "./DisplayScriptMark.vue";
+import DisplayBandGrip from "./DisplayBandGrip.vue";
+import DisplayBandResize from "./DisplayBandResize.vue";
 import DisplayTray from "./DisplayTray.vue";
 
 /**
@@ -21,7 +29,12 @@ import DisplayTray from "./DisplayTray.vue";
  * - **`edge` を渡すとき**（20261008-display-layout）は、その側に出す帯だけを描く（割り付けの結果 `layout`）。`layout.tray.edge === edge` なら、トレイ（帯の行の中か、専用の行）と
  *   「ほか N 件」（押すと面の一覧のメニュー）も描く。帯ごとに［⋮］（面のメニュー）。上の帯と下の帯は別の入れ物（別の `PaneBands`）＝枠は動かさない。
  */
-const props = defineProps<{ paneId: string; paneHeightPx?: number; edge?: "top" | "bottom"; layout?: LayoutResult }>();
+const props = defineProps<{
+  paneId: string;
+  paneHeightPx?: number;
+  edge?: "top" | "bottom";
+  layout?: LayoutResult;
+}>();
 
 const store = useDisplayStore();
 const view = useViewStore();
@@ -30,7 +43,12 @@ const host = inject(DisplayHostKey, undefined);
 
 const edged = computed(() => props.edge !== undefined && props.layout !== undefined);
 const plainBands = computed(() => store.bandsOf(props.paneId));
-const split = computed(() => visibleBands(plainBands.value.map((b) => b.size), props.paneHeightPx ?? 0));
+const split = computed(() =>
+  visibleBands(
+    plainBands.value.map((b) => store.bandHeightOf(b)),
+    props.paneHeightPx ?? 0,
+  ),
+);
 /** 描く帯。edge なしは今までの先頭から収まる分。edge ありは割り付けの結果。 */
 const shown = computed(() => {
   if (!edged.value) return plainBands.value.slice(0, split.value.shown);
@@ -48,10 +66,18 @@ const hidden = computed(() => {
     return b ? [b] : [];
   });
 });
-const tray = computed(() => (edged.value && props.layout!.tray.edge === props.edge ? props.layout!.tray : null));
+const tray = computed(() =>
+  edged.value && props.layout!.tray.edge === props.edge ? props.layout!.tray : null,
+);
 const ownTray = computed(() => tray.value !== null && tray.value.row === "own");
-const engaged = computed(() => store.focusedDisplayId !== null && shown.value.some((b) => b.id === store.focusedDisplayId));
-const present = computed(() => (edged.value ? shown.value.length > 0 || ownTray.value || hidden.value.length > 0 : plainBands.value.length > 0));
+const engaged = computed(
+  () => store.focusedDisplayId !== null && shown.value.some((b) => b.id === store.focusedDisplayId),
+);
+const present = computed(() =>
+  edged.value
+    ? shown.value.length > 0 || ownTray.value || hidden.value.length > 0
+    : plainBands.value.length > 0,
+);
 
 const markLabel = displayBandLabel;
 const slot = computed(() => (edged.value ? `band:${props.edge}` : "band:plain"));
@@ -60,10 +86,30 @@ function showHidden(ev: MouseEvent): void {
     view.toast(`ほかの帯 ${hidden.value.length} 件: ${hidden.value.map((b) => b.name).join("、")}`);
     return;
   }
-  openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "displays", paneId: props.paneId }, menuPositionBelow(ev.currentTarget as Element), host, props.paneId);
+  openDisplayMenu(
+    (t, at) => view.openContextMenu(t, at),
+    { kind: "displays", paneId: props.paneId },
+    menuPositionBelow(ev.currentTarget as Element),
+    host,
+    props.paneId,
+  );
 }
 function onMenu(id: string, ev: MouseEvent): void {
-  openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "display", id }, menuPositionBelow(ev.currentTarget as Element), host, props.paneId);
+  openDisplayMenu(
+    (t, at) => view.openContextMenu(t, at),
+    { kind: "display", id },
+    menuPositionBelow(ev.currentTarget as Element),
+    host,
+    props.paneId,
+  );
+}
+function onFold(b: import("@sodashitsu/protocol").DisplayInfo): void {
+  void withDisplayChange(
+    b,
+    () => store.setFaceCollapsed(b, true),
+    () => trayFocusTarget(b.id),
+    host,
+  );
 }
 function onClose(b: { id: string; paneId: string }): void {
   dismissWithFocus(b, () => controller?.dismiss({ id: b.id }), host);
@@ -82,10 +128,22 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
 </script>
 
 <template>
-  <div v-if="present" class="pane-bands" :class="{ 'pane-bands-engaged': engaged }" data-pane-bands :data-pane-bands-edge="edged ? edge : undefined">
-    <!-- 帯が無い側のトレイの行（高さ 24px。ボタンだけ）。 -->
-    <div v-if="ownTray" class="pane-tray-row" :style="{ height: `${TRAY_ROW_PX}px` }" data-display-chrome data-display-tray-row>
-      <span class="pane-band-mark" :title="'表示'" role="img" aria-label="表示" data-pane-tray-mark>▍表示</span>
+  <div
+    v-if="present"
+    class="pane-bands"
+    :class="{ 'pane-bands-engaged': engaged }"
+    data-pane-bands
+    :data-pane-bands-edge="edged ? edge : undefined"
+  >
+    <!-- 独立したトレイの行（高さ24px。開いている帯と混ぜない）。 -->
+    <div
+      v-if="ownTray"
+      class="pane-tray-row"
+      :style="{ height: `${TRAY_ROW_PX}px` }"
+      data-display-chrome
+      data-display-tray-row
+    >
+      <span class="pane-band-mark" aria-hidden="true">▍表示</span>
       <DisplayTray :pane-id="paneId" :buttons="tray!.buttons" />
     </div>
     <div
@@ -93,21 +151,43 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
       :key="b.id"
       class="pane-band"
       :class="{ 'pane-band-engaged': store.focusedDisplayId === b.id }"
-      :style="{ height: `${b.size}px` }"
+      :style="{ height: `${store.bandHeightOf(b)}px` }"
       data-pane-band
       :data-display-name="b.name"
       :data-display-root="edged ? b.id : undefined"
     >
-      <span class="pane-band-mark" :title="markLabel(b)" :aria-label="markLabel(b)" role="img" :data-display-chrome="edged ? '' : undefined" data-pane-band-mark>▍表示</span>
-      <DisplayTray v-if="tray && tray.row === 'band' && tray.hostBandId === b.id" :pane-id="paneId" :buttons="tray.buttons" />
+      <DisplayBandGrip v-if="edged" :info="b" data-display-chrome data-pane-band-mark /><span
+        v-else
+        class="pane-band-mark"
+        :title="markLabel(b)"
+        :aria-label="markLabel(b)"
+        role="img"
+        data-pane-band-mark
+        >▍表示</span
+      ><DisplayBandResize v-if="edged" :info="b" />
       <DisplayScriptMark v-if="!edged" :info="b" part="mark" class="pane-band-script-mark" />
-      <span v-if="store.focusedDisplayId === b.id" class="pane-band-engaged-note" aria-live="polite" :title="engagedNote(b)" data-pane-band-engaged-note>
+      <span
+        v-if="store.focusedDisplayId === b.id"
+        class="pane-band-engaged-note"
+        aria-live="polite"
+        :title="engagedNote(b)"
+        data-pane-band-engaged-note
+      >
         {{ engagedNote(b) }}
       </span>
       <div class="pane-band-frame">
-        <DisplayFrame :key="placedFrameKey(b, slot)" :info="b" :content="store.contents.get(b.id)" />
+        <DisplayFrame
+          :key="placedFrameKey(b, slot)"
+          :info="b"
+          :content="store.contents.get(b.id)"
+        />
       </div>
-      <span class="pane-band-actions" :data-display-chrome="edged ? '' : undefined" :data-display-head="edged ? '' : undefined" @keydown="edged ? onRowKey($event, b.paneId) : undefined">
+      <span
+        class="pane-band-actions"
+        :data-display-chrome="edged ? '' : undefined"
+        :data-display-head="edged ? '' : undefined"
+        @keydown="edged ? onRowKey($event, b.paneId) : undefined"
+      >
         <DisplayScriptMark v-if="edged" :info="b" part="mark" class="pane-band-script-mark" />
         <DisplayScriptMark :info="b" part="button" />
         <DisplayScriptMark :info="b" part="end" />
@@ -124,6 +204,19 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
           @click="onMenu(b.id, $event)"
         >
           ⋮
+        </button>
+        <button
+          v-if="edged"
+          type="button"
+          class="pane-band-close"
+          aria-label="この表示をたたむ"
+          title="たたむ"
+          data-pane-band-fold
+          data-display-keepfocus
+          @mousedown.prevent
+          @click="onFold(b)"
+        >
+          −
         </button>
         <button
           type="button"
@@ -195,6 +288,7 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
   background: var(--soda-menu-border, #44475a);
 }
 .pane-band-actions {
+  font-size: 0.75em;
   flex: none;
   display: flex;
   align-items: center;

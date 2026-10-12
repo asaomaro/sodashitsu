@@ -8,6 +8,8 @@ import type { Logger } from "../log/Logger.js";
 
 export interface MethodContext {
   clientId: string;
+  /** サーバー内の予約実行などを取り消す。外部RPCからは設定されない。 */
+  signal?: AbortSignal;
   sink: ClientSink;
   /** 同じマシンからの接続か（`WsConnection.sameMachine`）。サーバの中からの呼び出し・中継の接続では無い＝偽。 */
   sameMachine?: boolean;

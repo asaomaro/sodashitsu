@@ -1,0 +1,1 @@
+bottom帯のview-split dividerは見出しと同じy。登録ビュー見出しでdivider先取りを抑止し、見出しボタン/タイトルを優先する。bottom専用resizeは左端2セルの↕、top下端resizeはh>1のみ。titleだけ2セルずらし、buttons描画/hitは右端7セルのままにする。

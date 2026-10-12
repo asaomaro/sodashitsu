@@ -1,0 +1,1 @@
+OverlayRenderContext.embeddedをDockedViewsから設定。DisplayDialogは枠・操作説明を省き全領域に本文を描く。WorkspaceDialogも内枠を省く。WindowOverlayのfloatはembeddedを渡さず既存の枠を残す。

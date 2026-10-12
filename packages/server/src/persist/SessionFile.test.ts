@@ -50,6 +50,7 @@ describe("FsSessionFile", () => {
   it("round-trips a saved session", async () => {
     const file = new FsSessionFile(dir);
     const data = sample();
+    data.workspaces[0]!.tabs[0]!.plugin={extensionKey:"user:studio",display:"studio",mobileDisplay:"mobile",terminalDisplay:"terminal"};
     await file.save(data);
     const result = await file.load();
     expect(result).toEqual({ kind: "ok", data });

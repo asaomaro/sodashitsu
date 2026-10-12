@@ -8,7 +8,7 @@ import type { DockSide } from "./displayPrefs.js";
 /** 縁から、この割合（幅・高さに対する）までが、その側の落とせる場所。 */
 export const DOCK_ZONE_EDGE_RATIO = 0.22;
 
-export type DockZone = DockSide | "float";
+export type DockZone = DockSide | "float" | "band-top" | "band-bottom";
 export interface ZoneBox {
   left: number;
   top: number;
@@ -20,9 +20,15 @@ export interface ZoneBox {
  * 箱の中の点から、落とせる場所を決める。箱の外は `null`。箱の中では、4 つの縁までの距離（幅・高さで割った比）のうち最小のものが 0.22 以下なら、その縁の側
  * （同じ距離なら 上・下・左・右 の順）。そうでなければ中央（`opts.float` が真のときだけ `float`。偽なら `null`＝落とせない）。
  */
-export function dockZoneAt(box: ZoneBox, x: number, y: number, opts: { float: boolean }): DockZone | null {
+export function dockZoneAt(
+  box: ZoneBox,
+  x: number,
+  y: number,
+  opts: { float: boolean },
+): DockZone | null {
   if (!(box.width > 0) || !(box.height > 0)) return null;
-  if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height) return null;
+  if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height)
+    return null;
   const dist: [DockSide, number][] = [
     ["top", (y - box.top) / box.height],
     ["bottom", (box.top + box.height - y) / box.height],
@@ -39,9 +45,15 @@ export function dockZoneAt(box: ZoneBox, x: number, y: number, opts: { float: bo
 export const FLOAT_EDGE_DROP_PX = 16;
 
 /** 浮いた窓を動かしているポインタが、本体の箱の縁から `px` 以内なら、いちばん近い縁の側。箱の外・縁から遠いときは null。 */
-export function floatEdgeZoneAt(box: ZoneBox, x: number, y: number, px: number = FLOAT_EDGE_DROP_PX): DockSide | null {
+export function floatEdgeZoneAt(
+  box: ZoneBox,
+  x: number,
+  y: number,
+  px: number = FLOAT_EDGE_DROP_PX,
+): DockSide | null {
   if (!(box.width > 0) || !(box.height > 0)) return null;
-  if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height) return null;
+  if (x < box.left || x > box.left + box.width || y < box.top || y > box.top + box.height)
+    return null;
   const dist: [DockSide, number][] = [
     ["top", y - box.top],
     ["bottom", box.top + box.height - y],
@@ -76,6 +88,7 @@ export interface DockDragOptions {
   box(): ZoneBox | null;
   /** 中央（浮いた窓）を落とせる場所にするか。PR-B は偽。 */
   float(): boolean;
+  accepts?(zone: DockZone): boolean;
   /** 状態をストアへ（`null` で終わり）。 */
   setState(s: DockDragState | null): void;
   /** 離した。`zone` は落とせる場所（今の置き場所と同じかどうかは呼ぶ側が決める）。`at` は離した位置（画面の座標。中央＝浮いた窓のとき、窓の左上にする）。 */
@@ -102,7 +115,14 @@ export interface DockDragHandle {
  */
 export function createDockDrag(o: DockDragOptions, win: Window = window): DockDragHandle {
   const root = (): HTMLElement => win.document.documentElement;
-  let start: { x: number; y: number; pointerId: number; target: HTMLElement | null; id: string; paneId: string } | null = null;
+  let start: {
+    x: number;
+    y: number;
+    pointerId: number;
+    target: HTMLElement | null;
+    id: string;
+    paneId: string;
+  } | null = null;
   let active = false;
   let zone: DockZone | null = null;
 
@@ -148,7 +168,14 @@ export function createDockDrag(o: DockDragOptions, win: Window = window): DockDr
 
   function zoneAt(x: number, y: number): DockZone | null {
     const box = o.box();
-    return box ? dockZoneAt(box, x, y, { float: o.float() }) : null;
+    let zone = box ? dockZoneAt(box, x, y, { float: o.float() }) : null;
+    if (box && o.accepts && (zone === "top" || zone === "bottom")) {
+      const band = `band-${zone}` as DockZone;
+      const distance =
+        zone === "top" ? (y - box.top) / box.height : (box.top + box.height - y) / box.height;
+      if (o.accepts(band) && (distance < 0.08 || !o.accepts(zone))) zone = band;
+    }
+    return zone && o.accepts?.(zone) === false ? null : zone;
   }
 
   return {
@@ -157,7 +184,14 @@ export function createDockDrag(o: DockDragOptions, win: Window = window): DockDr
       if (ev.button !== 0 || start !== null) return;
       ev.preventDefault(); // フォーカスを移さない
       const target = (ev.currentTarget as HTMLElement | null) ?? null;
-      start = { x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId, target, id: o.id, paneId: o.paneId }; // つかんだ面を覚える
+      start = {
+        x: ev.clientX,
+        y: ev.clientY,
+        pointerId: ev.pointerId,
+        target,
+        id: o.id,
+        paneId: o.paneId,
+      }; // つかんだ面を覚える
       target?.setPointerCapture?.(ev.pointerId);
       win.addEventListener("keydown", onKeydown, true);
     },

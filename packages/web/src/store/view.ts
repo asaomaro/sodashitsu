@@ -1,7 +1,24 @@
-import { DEVICE_LOCAL_PREF_KEYS, type PopupDimension, type ServerSessionEntry, type SessionFocus, type WorkspaceGroup, type WorktreeEntry, type WorktreeListResult } from "@sodashitsu/protocol";
+import { ViewHistory } from "@sodashitsu/client-core";
+import { useSessionStore } from "./session.js";
+import {
+  DEVICE_LOCAL_PREF_KEYS,
+  type PopupDimension,
+  type ServerSessionEntry,
+  type SessionFocus,
+  type WorkspaceGroup,
+  type WorktreeEntry,
+  type WorktreeListResult,
+} from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { loadAgentSort as loadAgentSortValue, loadCollapsedAutoGroups, loadWorkspaceSort, type AgentSort, type Mode, type WorkspaceSort } from "@sodashitsu/client-core";
+import {
+  loadAgentSort as loadAgentSortValue,
+  loadCollapsedAutoGroups,
+  loadWorkspaceSort,
+  type AgentSort,
+  type Mode,
+  type WorkspaceSort,
+} from "@sodashitsu/client-core";
 
 // 共有の設定の読み込みは client-core（web と端末版が同じ規則で読む。統合の review）。今までの import 先を保つため再び出す。
 export { loadCollapsedAutoGroups, loadWorkspaceSort };
@@ -31,7 +48,8 @@ function loadStoredView(): StoredView | null {
     const raw = sessionStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && "workspaceId" in parsed && "tabId" in parsed) return parsed as StoredView;
+    if (parsed && typeof parsed === "object" && "workspaceId" in parsed && "tabId" in parsed)
+      return parsed as StoredView;
     return null;
   } catch {
     return null;
@@ -68,7 +86,9 @@ export function readPrefs(): Record<string, unknown> {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
     return {}; // プライベートウィンドウ等で読めなくても動く（保存が効かないだけ）
   }
@@ -173,7 +193,11 @@ export const SIDEBAR_WIDTH = { default: 240, min: 160, max: 360 } as const;
  * 保存しえない＝壊れた値（20260921-herdr-settings-gaps の AC3）。
  */
 export function loadSidebarWidth(raw: unknown): number {
-  const ok = typeof raw === "number" && Number.isFinite(raw) && raw >= SIDEBAR_WIDTH.min && raw <= SIDEBAR_WIDTH.max;
+  const ok =
+    typeof raw === "number" &&
+    Number.isFinite(raw) &&
+    raw >= SIDEBAR_WIDTH.min &&
+    raw <= SIDEBAR_WIDTH.max;
   return ok ? raw : SIDEBAR_WIDTH.default;
 }
 
@@ -190,7 +214,8 @@ export type SectionsCollapsed = { spaces: boolean; agents: boolean };
 
 /** 保存された区画の折りたたみを読む。**値が `true` のキーだけ**を採る（壊れた値は開いた状態＝既定）。 */
 export function loadSidebarSectionsCollapsed(raw: unknown): SectionsCollapsed {
-  const o = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const o =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   return { spaces: o["spaces"] === true, agents: o["agents"] === true };
 }
 
@@ -199,11 +224,9 @@ export function loadSidebarCollapsed(raw: unknown): boolean {
   return raw === true;
 }
 
-
 function saveWorkspaceSort(v: WorkspaceSort): void {
   writePrefs({ workspaceSort: v });
 }
-
 
 function saveCollapsedAutoGroups(v: ReadonlySet<string>): void {
   writePrefs({ collapsedAutoGroups: [...v] });
@@ -256,13 +279,18 @@ export interface ToastOptions {
  * `KeyRouter`/`KeyInputController` へ渡すモード名（"dialog"）との対応用の軽い印。
  */
 export type DialogContext =
-  | { kind: "addView"; tabId: string }
+  | { kind: "addView"; tabId: string; paneId?: string }
   | { kind: "newTab"; workspaceId: string }
   | { kind: "projectFolder"; workspaceId: string; currentPath: string }
   | { kind: "renamePane"; paneId: string; currentLabel: string }
   | { kind: "renameTab"; tabId: string; currentLabel: string }
   // `currentAutoLabel` は開いた時点で名前が自動だったか（20260921-workspace-auto-label。変えずに確定したら送らない判定に使う）。
-  | { kind: "renameWorkspace"; workspaceId: string; currentLabel: string; currentAutoLabel: boolean }
+  | {
+      kind: "renameWorkspace";
+      workspaceId: string;
+      currentLabel: string;
+      currentAutoLabel: boolean;
+    }
   | { kind: "confirmClose"; targets: { type: "pane" | "tab" | "workspace"; id: string }[] }
   /**
    * D&D での分割解除（`pane.replace`）の対象（`targetPaneId`）が busy なとき（20260924-pane-dnd-split-move。
@@ -328,7 +356,14 @@ export type DialogContext =
   // session の一覧（20260926-named-session-ui）。**サーバへ聞いてから開く**（`worktreeOpen` と同じ）。
   | { kind: "sessionSwitch"; sessions: ServerSessionEntry[] }
   // 独自コマンドの popup（20260927-custom-command-keys）。開く時点の名前と大きさの指定。`paneId` は走らせる基準の pane（フォーカス中）。
-  | { kind: "commandPopup"; commandId: string; paneId: string; title: string; width?: PopupDimension; height?: PopupDimension }
+  | {
+      kind: "commandPopup";
+      commandId: string;
+      paneId: string;
+      title: string;
+      width?: PopupDimension;
+      height?: PopupDimension;
+    }
   // エージェントが動かしているサブエージェントの一覧（20261004-subagent-display）。対象は `{machineId, paneId}`（pane の ID はマシンをまたいで衝突する。手元は `local`）。
   // 中身は開いている間も画面のストアから引く（`store/subagents.ts`）ので、文脈に持たない。
   // `opener: "button"` は、サイドバーの件数のボタンから開いたとき。閉じたときのフォーカスを、そのボタン（無ければ行）へ戻す。無ければ（`show_subagents`）端末へ。
@@ -372,14 +407,18 @@ export const useViewStore = defineStore("view", () => {
    * ダッシュボード（利用状況の一覧。20261010-agent-usage PR3）が見えている（デスクトップの画面か、1 列の重ねるダイアログ）。
    * 見えている間だけ、サーバへ利用状況の配信を頼む（`UsageController`）。
    */
-  const dashboardVisible = computed(() => screen.value === "dashboard" || dialogContext.value?.kind === "dashboard");
+  const dashboardVisible = computed(
+    () => screen.value === "dashboard" || dialogContext.value?.kind === "dashboard",
+  );
   /**
    * pane の利用状況の窓（20261010-agent-usage PR4）。デスクトップでは、pane の近くの小さな窓（非モーダル）の対象の pane の id（無ければ null）。
    * 1 列の画面では、全面のダイアログ（`dialogContext.kind === "paneInfo"`）。
    */
   const paneInfoPaneId = ref<string | null>(null);
   /** 利用状況の窓が見えている（デスクトップの窓か、1 列のダイアログ）。 */
-  const paneInfoVisible = computed(() => paneInfoPaneId.value !== null || dialogContext.value?.kind === "paneInfo");
+  const paneInfoVisible = computed(
+    () => paneInfoPaneId.value !== null || dialogContext.value?.kind === "paneInfo",
+  );
   /** 利用状況の配信を受けたいか（ダッシュボードか、pane の窓が見えている間。`UsageController` が 1 つの数え方で見る）。 */
   const usageWatchWanted = computed(() => dashboardVisible.value || paneInfoVisible.value);
   /** グラフ画面を開く前にフォーカスしていた pane（閉じたら戻す。AC-I4）。 */
@@ -404,7 +443,8 @@ export const useViewStore = defineStore("view", () => {
       return;
     }
     // 開いている間に焦点の pane が閉じられて差し替わっていたら、閉じたときに反映する（焦点を直接動かすと端末がフォーカスを奪うので、開いている間は戻し先だけ持つ）。
-    if (preAskFocusPaneId.value !== null && preAskFocusPaneId.value !== focusedPaneId.value) focusedPaneId.value = preAskFocusPaneId.value;
+    if (preAskFocusPaneId.value !== null && preAskFocusPaneId.value !== focusedPaneId.value)
+      focusedPaneId.value = preAskFocusPaneId.value;
     preAskFocusPaneId.value = null;
   }
   /** 質問のフォームを開いている間の焦点の移し直し（`retargetPreDialogFocus` と同じ理由）。 */
@@ -425,7 +465,11 @@ export const useViewStore = defineStore("view", () => {
       preExtensionApprovalFocusPaneId.value = focusedPaneId.value;
       return;
     }
-    if (preExtensionApprovalFocusPaneId.value !== null && preExtensionApprovalFocusPaneId.value !== focusedPaneId.value) focusedPaneId.value = preExtensionApprovalFocusPaneId.value;
+    if (
+      preExtensionApprovalFocusPaneId.value !== null &&
+      preExtensionApprovalFocusPaneId.value !== focusedPaneId.value
+    )
+      focusedPaneId.value = preExtensionApprovalFocusPaneId.value;
     preExtensionApprovalFocusPaneId.value = null;
   }
   function retargetPreExtensionApprovalFocus(paneId: string | null): void {
@@ -435,12 +479,24 @@ export const useViewStore = defineStore("view", () => {
    * ダイアログ（1 枠・1 列のグラフ・質問のフォーム・拡張の承認）のどれかが開いている。**デスクトップのグラフの画面は入れない**（それは画面であって、ダイアログではない。D12）。
    * ドラッグの取り消し・焦点の戻し先の差し替え・フォーカスの備えの判定に使う（research-web §1.5）。
    */
-  const modalOpen = computed(() => openDialog.value !== null || graphDialogOpen.value || askOpen.value || extensionApprovalOpen.value);
+  const modalOpen = computed(
+    () =>
+      openDialog.value !== null ||
+      graphDialogOpen.value ||
+      askOpen.value ||
+      extensionApprovalOpen.value,
+  );
   /**
    * キーを端末・サイドバーの navigate へ流さない（`KeyRouter` の dialog モード・`window` の `keydown` の抑止）。**デスクトップのグラフの画面は入れない**——基本画面の pane が
    * `inert` なのでキーは pane に届かず、グラフの面にフォーカスがある間だけグラフのキーが働く。サイドバーは今までどおり使える（D12）。
    */
-  const keysCaptured = computed(() => openDialog.value !== null || graphDialogOpen.value || askOpen.value || extensionApprovalOpen.value);
+  const keysCaptured = computed(
+    () =>
+      openDialog.value !== null ||
+      graphDialogOpen.value ||
+      askOpen.value ||
+      extensionApprovalOpen.value,
+  );
   /** navigate モード中に選択中の行（workspace の id、グループの見出しなら `group:<id>`。`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
   /**
@@ -480,7 +536,11 @@ export const useViewStore = defineStore("view", () => {
    * 先頭メンバー行は同じ `dropAnchorId`〔drop 先として使う workspace id〕を持ちうるので、ホバー中の
    * 行を一意に特定するには行固有の `key` を使う必要がある）。
    */
-  const workspaceDrag = ref<{ sourceIds: string[]; overRowKey: string | null; overInvalid: boolean } | null>(null);
+  const workspaceDrag = ref<{
+    sourceIds: string[];
+    overRowKey: string | null;
+    overInvalid: boolean;
+  } | null>(null);
   const connectionState = ref<ConnectionState>("connecting");
   const authRequired = ref(false);
   /**
@@ -509,9 +569,13 @@ export const useViewStore = defineStore("view", () => {
    * spaces と agents の高さの比（spaces の取り分。null＝自動の配分）。**ドラッグ中は `setSectionRatio` で反映するだけ**で、
    * 保存は終えたとき（`commitSectionRatio`）に 1 回（幅と同じ）。この機器だけの保存（20261004-ui-interaction-polish）。
    */
-  const sidebarSectionRatio = ref<number | null>(loadSidebarSectionRatio(initialPrefs["sidebarSectionRatio"]));
+  const sidebarSectionRatio = ref<number | null>(
+    loadSidebarSectionRatio(initialPrefs["sidebarSectionRatio"]),
+  );
   /** 畳んでいる区画。**切り替えるたびに保存する**（この機器だけ）。 */
-  const sectionsCollapsed = ref<SectionsCollapsed>(loadSidebarSectionsCollapsed(initialPrefs["sidebarSectionsCollapsed"]));
+  const sectionsCollapsed = ref<SectionsCollapsed>(
+    loadSidebarSectionsCollapsed(initialPrefs["sidebarSectionsCollapsed"]),
+  );
   const agentSort = ref(loadAgentSort());
   const workspaceSort = ref(loadWorkspaceSort(initialPrefs["workspaceSort"]));
   const collapsedAutoGroups = ref(loadCollapsedAutoGroups(initialPrefs["collapsedAutoGroups"]));
@@ -526,7 +590,10 @@ export const useViewStore = defineStore("view", () => {
    * フォーカスを合わせる必要があるため（AC-I3。ページの再読み込み（F5）のたびに一度クリックし直さないと
    * キーボード操作を再開できない、という不具合を review で発見。修正）。
    */
-  function restoreView(findTabFocusedPaneId: (workspaceId: string, tabId: string) => string | null, serverFocus: SessionFocus | null): void {
+  function restoreView(
+    findTabFocusedPaneId: (workspaceId: string, tabId: string) => string | null,
+    serverFocus: SessionFocus | null,
+  ): void {
     const stored = loadStoredView();
     if (stored) {
       const paneId = findTabFocusedPaneId(stored.workspaceId, stored.tabId);
@@ -582,7 +649,30 @@ export const useViewStore = defineStore("view", () => {
     lastFocusedPaneId.value = null;
   }
 
+  const histories = new Map<string, ViewHistory>();
+  const history = () => {
+    let h = histories.get(storageKey);
+    if (!h) {
+      h = new ViewHistory();
+      histories.set(storageKey, h);
+    }
+    return h;
+  };
+  function rememberCurrent() {
+    history().remember(workspaceId.value, tabId.value, focusedPaneId.value, useSessionStore());
+  }
+  function preferredPane(id: string) {
+    return history().pane(id, useSessionStore());
+  }
+  function selectWorkspace(id: string) {
+    rememberCurrent();
+    const target = history().tab(id, useSessionStore());
+    if (!target) return;
+    setView(id, target);
+    focusPane(preferredPane(target));
+  }
   function setView(newWorkspaceId: string, newTabId: string): void {
+    rememberCurrent();
     workspaceId.value = newWorkspaceId;
     tabId.value = newTabId;
     saveStoredView({ workspaceId: newWorkspaceId, tabId: newTabId });
@@ -595,6 +685,7 @@ export const useViewStore = defineStore("view", () => {
       lastFocusedPaneId.value = focusedPaneId.value;
     }
     focusedPaneId.value = paneId;
+    rememberCurrent();
   }
 
   function onModeChange(m: Mode): void {
@@ -631,7 +722,7 @@ export const useViewStore = defineStore("view", () => {
 
   /** 画面を切り替える（デスクトップ）。1 列の画面では画面を持たない（基本画面のまま）。 */
   function setScreen(id: ScreenId): void {
-    if (mobileViewport.value && id !== "base") return;
+    if (mobileViewport.value && id !== "base" && id !== "schedule") return;
     screen.value = id;
   }
 
@@ -698,7 +789,9 @@ export const useViewStore = defineStore("view", () => {
 
   /** 同じ pane の窓が開いていれば閉じ、そうでなければ開く（［情報］をもう一度押すと閉じる）。 */
   function togglePaneInfo(paneId: string): void {
-    const open = paneInfoPaneId.value === paneId || (dialogContext.value?.kind === "paneInfo" && dialogContext.value.paneId === paneId);
+    const open =
+      paneInfoPaneId.value === paneId ||
+      (dialogContext.value?.kind === "paneInfo" && dialogContext.value.paneId === paneId);
     if (open) closePaneInfo();
     else openPaneInfo(paneId);
   }
@@ -750,7 +843,13 @@ export const useViewStore = defineStore("view", () => {
 
   /** ドラッグ開始（20260923-pane-name-dnd-swap。閾値を超えて初めて呼ぶ。design「5.」）。 */
   function startPaneDrag(paneId: string): void {
-    paneDrag.value = { sourcePaneId: paneId, overPaneId: null, overZone: null, overTabId: null, overWorkspaceId: null };
+    paneDrag.value = {
+      sourcePaneId: paneId,
+      overPaneId: null,
+      overZone: null,
+      overTabId: null,
+      overWorkspaceId: null,
+    };
   }
 
   /**
@@ -762,8 +861,20 @@ export const useViewStore = defineStore("view", () => {
   function setPaneDragOver(paneId: string | null, zone: Zone | null = null): void {
     if (!paneDrag.value) return;
     const d = paneDrag.value;
-    if (d.overPaneId === paneId && d.overZone === zone && d.overTabId === null && d.overWorkspaceId === null) return;
-    paneDrag.value = { ...d, overPaneId: paneId, overZone: paneId ? zone : null, overTabId: null, overWorkspaceId: null };
+    if (
+      d.overPaneId === paneId &&
+      d.overZone === zone &&
+      d.overTabId === null &&
+      d.overWorkspaceId === null
+    )
+      return;
+    paneDrag.value = {
+      ...d,
+      overPaneId: paneId,
+      overZone: paneId ? zone : null,
+      overTabId: null,
+      overWorkspaceId: null,
+    };
   }
 
   /** ポインタ直下が tab バーの tab になったときに呼ぶ（20260924-pane-move-cross-tab。
@@ -772,7 +883,13 @@ export const useViewStore = defineStore("view", () => {
     if (!paneDrag.value) return;
     const d = paneDrag.value;
     if (d.overTabId === tabId && d.overPaneId === null && d.overWorkspaceId === null) return;
-    paneDrag.value = { ...d, overPaneId: null, overZone: null, overTabId: tabId, overWorkspaceId: null };
+    paneDrag.value = {
+      ...d,
+      overPaneId: null,
+      overZone: null,
+      overTabId: tabId,
+      overWorkspaceId: null,
+    };
   }
 
   /** ポインタ直下がサイドバーの workspace 行になったときに呼ぶ（20260924-pane-move-cross-tab）。 */
@@ -780,7 +897,13 @@ export const useViewStore = defineStore("view", () => {
     if (!paneDrag.value) return;
     const d = paneDrag.value;
     if (d.overWorkspaceId === workspaceId && d.overPaneId === null && d.overTabId === null) return;
-    paneDrag.value = { ...d, overPaneId: null, overZone: null, overTabId: null, overWorkspaceId: workspaceId };
+    paneDrag.value = {
+      ...d,
+      overPaneId: null,
+      overZone: null,
+      overTabId: null,
+      overWorkspaceId: workspaceId,
+    };
   }
 
   function endPaneDrag(): void {
@@ -796,7 +919,11 @@ export const useViewStore = defineStore("view", () => {
   /** `rowKey` は `SpaceRow.key`（`Sidebar.vue`）——workspace id そのものではない。上の注記参照。
    *  `invalid` は「その行の上には落とせない」印（別の入れ物の上・名前順の一番上。20261004-group-worktree-items）。 */
   function setWorkspaceDragOver(rowKey: string | null, invalid = false): void {
-    if (!workspaceDrag.value || (workspaceDrag.value.overRowKey === rowKey && workspaceDrag.value.overInvalid === invalid)) return;
+    if (
+      !workspaceDrag.value ||
+      (workspaceDrag.value.overRowKey === rowKey && workspaceDrag.value.overInvalid === invalid)
+    )
+      return;
     workspaceDrag.value = { ...workspaceDrag.value, overRowKey: rowKey, overInvalid: invalid };
   }
 
@@ -881,7 +1008,10 @@ export const useViewStore = defineStore("view", () => {
 
   /** 区画を畳む／開く。保存は畳んでいる区画だけ（どちらも開いていれば項目を消す）。 */
   function toggleSectionCollapsed(which: keyof SectionsCollapsed): void {
-    sectionsCollapsed.value = { ...sectionsCollapsed.value, [which]: !sectionsCollapsed.value[which] };
+    sectionsCollapsed.value = {
+      ...sectionsCollapsed.value,
+      [which]: !sectionsCollapsed.value[which],
+    };
     const saved: Record<string, true> = {};
     for (const k of ["spaces", "agents"] as const) if (sectionsCollapsed.value[k]) saved[k] = true;
     writePrefs({ sidebarSectionsCollapsed: Object.keys(saved).length > 0 ? saved : undefined });
@@ -907,7 +1037,7 @@ export const useViewStore = defineStore("view", () => {
     toasts.value = toasts.value.filter((t) => t.id !== id);
   }
 
-  const numberTarget = ref<"tab"|"pane"|"workspace"|"agent">("tab");
+  const numberTarget = ref<"tab" | "pane" | "workspace" | "agent">("tab");
   const isPrefixWaiting = computed(() => mode.value === "prefix");
 
   return {
@@ -964,6 +1094,8 @@ export const useViewStore = defineStore("view", () => {
     forgetStoredView,
     resetForMachineSwitch,
     setView,
+    preferredPane,
+    selectWorkspace,
     focusPane,
     onModeChange,
     setOpenDialog,

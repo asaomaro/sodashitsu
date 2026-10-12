@@ -37,13 +37,20 @@ function finite(v: number, fallback: number): number {
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(Math.max(v, lo), Math.max(lo, hi));
 }
-const areaOf = (a: Area): Area => ({ w: Math.max(0, Math.floor(finite(a.w, 0))), h: Math.max(0, Math.floor(finite(a.h, 0))) });
+const areaOf = (a: Area): Area => ({
+  w: Math.max(0, Math.floor(finite(a.w, 0))),
+  h: Math.max(0, Math.floor(finite(a.h, 0))),
+});
 
 /**
  * 窓の全体を、領域の中へ入れる。先に大きさを [最小, 領域] に丸め、次に位置を [0, 領域 − 大きさ] に丸める。数でない値・無限大は、最小の大きさ・原点として扱う。
  * 領域が最小より小さいときは、大きさは領域に収まる（呼ぶ側が、そのような領域では窓を出さない）。整数に丸める。
  */
-export function clampFloatRect(r: Rect, area: Area, min: Area = { w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX }): Rect {
+export function clampFloatRect(
+  r: Rect,
+  area: Area,
+  min: Area = { w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX },
+): Rect {
   const a = areaOf(area);
   const w = Math.round(Math.min(clamp(finite(r.w, min.w), min.w, a.w), a.w));
   const h = Math.round(Math.min(clamp(finite(r.h, min.h), min.h, a.h), a.h));
@@ -53,15 +60,27 @@ export function clampFloatRect(r: Rect, area: Area, min: Area = { w: FLOAT_MIN_W
 }
 
 /**
- * 初めの矩形。幅は `size`（240〜領域−16）、高さは領域の 6 割（120〜領域−16）。右上から、i 番目は 24px ずつ左下へずらす。
+ * 初めの矩形。幅は指定と領域の6割の大きい方、高さは6割。中央から窓ごとに24pxずつ左下へずらす。
  * 領域が小さくて範囲が逆転するときも、最後に `clampFloatRect` を通した値を返す。
  */
 export function defaultFloatRect(i: number, size: number, area: Area): Rect {
   const a = areaOf(area);
   const n = Math.max(0, Math.floor(finite(i, 0)));
-  const w = clamp(finite(size, FLOAT_MIN_W_PX), FLOAT_MIN_W_PX, a.w - FLOAT_INSET_PX * 2);
+  const w = clamp(
+    Math.max(finite(size, FLOAT_MIN_W_PX), Math.round(a.w * 0.6)),
+    FLOAT_MIN_W_PX,
+    a.w - FLOAT_INSET_PX * 2,
+  );
   const h = clamp(Math.round(a.h * 0.6), FLOAT_MIN_H_PX, a.h - FLOAT_INSET_PX * 2);
-  return clampFloatRect({ x: a.w - w - FLOAT_INSET_PX - n * FLOAT_CASCADE_PX, y: FLOAT_INSET_PX + n * FLOAT_CASCADE_PX, w, h }, a);
+  return clampFloatRect(
+    {
+      x: Math.round((a.w - w) / 2) - n * FLOAT_CASCADE_PX,
+      y: Math.round((a.h - h) / 2) + n * FLOAT_CASCADE_PX,
+      w,
+      h,
+    },
+    a,
+  );
 }
 
 /** 移動。`start` に dx・dy を足して丸める。 */
@@ -74,7 +93,14 @@ export function moveFloatRect(start: Rect, dx: number, dy: number, area: Area): 
  * 大きさの変更。`handle` は n・s・e・w・ne・nw・se・sw。**動かさない側の縁は動かさず**、最小と領域に丸める
  * （例: 左の縁をつかんだとき、右の縁の位置は変わらない。左が領域の外へ出る・最小を割る分は止まる）。
  */
-export function resizeFloatRect(start: Rect, handle: FloatHandle, dx: number, dy: number, area: Area, min: Area = { w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX }): Rect {
+export function resizeFloatRect(
+  start: Rect,
+  handle: FloatHandle,
+  dx: number,
+  dy: number,
+  area: Area,
+  min: Area = { w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX },
+): Rect {
   const a = areaOf(area);
   const s = clampFloatRect(start, a, min);
   const mx = finite(dx, 0);
@@ -91,12 +117,20 @@ export function resizeFloatRect(start: Rect, handle: FloatHandle, dx: number, dy
 }
 
 /** 矢印キーの 1 回分。`mode` が move なら位置、resize なら右下の縁（幅・高さ）を動かす。矢印でないキーは null。 */
-export function keyAdjustFloatRect(start: Rect, mode: "move" | "resize", key: string, shift: boolean, area: Area): Rect | null {
+export function keyAdjustFloatRect(
+  start: Rect,
+  mode: "move" | "resize",
+  key: string,
+  shift: boolean,
+  area: Area,
+): Rect | null {
   const step = shift ? FLOAT_KEY_STEP_LARGE_PX : FLOAT_KEY_STEP_PX;
   const dx = key === "ArrowLeft" ? -step : key === "ArrowRight" ? step : 0;
   const dy = key === "ArrowUp" ? -step : key === "ArrowDown" ? step : 0;
   if (dx === 0 && dy === 0) return null;
-  return mode === "move" ? moveFloatRect(start, dx, dy, area) : resizeFloatRect(start, "se", dx, dy, area);
+  return mode === "move"
+    ? moveFloatRect(start, dx, dy, area)
+    : resizeFloatRect(start, "se", dx, dy, area);
 }
 
 // --- 重なりの順（pane ごと。末尾が最前面） -------------------------------------------------------------------------------------------
@@ -111,7 +145,11 @@ export function raiseFloat(order: readonly string[], id: string): string[] {
  * 決まり 3: 新しく出た窓・開き直した窓は、**操作中の窓があれば、その 1 つ後ろ**に入れる（操作中の窓の見出しを覆わない）。無ければ最前面。
  * すでに並びにある窓は動かさない。
  */
-export function insertFloat(order: readonly string[], id: string, engagedId: string | null): string[] {
+export function insertFloat(
+  order: readonly string[],
+  id: string,
+  engagedId: string | null,
+): string[] {
   if (order.includes(id)) return [...order];
   const at = engagedId === null ? -1 : order.indexOf(engagedId);
   if (at < 0) return [...order, id];
@@ -122,7 +160,11 @@ export function insertFloat(order: readonly string[], id: string, engagedId: str
  * 出ている窓の集まり（`open`）に、並びを合わせる: 閉じた窓を外し、新しい窓を `insertFloat` で入れる。**決まり 1: 操作中の窓は、いつも最前面**
  * （`engagedId` が `open` の中にあれば、末尾へ）。変わらなければ同じ内容を返す。
  */
-export function reconcileFloatOrder(order: readonly string[], open: readonly string[], engagedId: string | null): string[] {
+export function reconcileFloatOrder(
+  order: readonly string[],
+  open: readonly string[],
+  engagedId: string | null,
+): string[] {
   const openSet = new Set(open);
   let next = order.filter((id) => openSet.has(id));
   const engaged = engagedId !== null && openSet.has(engagedId) ? engagedId : null;
@@ -138,7 +180,10 @@ export function floatZ(order: readonly string[], id: string): number {
 }
 
 /** 窓の動ける領域（端末の領域を各辺 4px 縮めた箱）。最小の窓が入らなければ null。 */
-export function floatAreaOf(terminal: Area, min: Area = { w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX }): Area | null {
+export function floatAreaOf(
+  terminal: Area,
+  min: Area = { w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX },
+): Area | null {
   const w = finite(terminal.w, 0) - FLOAT_AREA_INSET_PX * 2;
   const h = finite(terminal.h, 0) - FLOAT_AREA_INSET_PX * 2;
   return w >= min.w && h >= min.h ? { w, h } : null;

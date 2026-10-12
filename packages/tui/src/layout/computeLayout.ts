@@ -39,6 +39,9 @@ export interface Divider {
 }
 
 export interface LayoutInput {
+  paneTopRows?: number;
+  /** 枠を持たない帯は1行まで縮められる。 */
+  singleRowPanes?: readonly string[];
   cols: number;
   rows: number;
   sidebarVisible: boolean;
@@ -128,14 +131,17 @@ export function computeLayout(input: LayoutInput): LayoutResult {
     : { x: left, y: bottomBar ? rows - 1 : 0, w: cols - left, h: 1 };
   const paneArea: Rect = {
     x: left,
-    y: bottomBar || hidden ? 0 : 1,
+    y:
+      (bottomBar || hidden ? 0 : 1) +
+      Math.min(Math.max(0, input.paneTopRows ?? 0), Math.max(0, rows - barH - 1)),
     w: cols - left,
-    h: rows - barH,
+    h: rows - barH - Math.min(Math.max(0, input.paneTopRows ?? 0), Math.max(0, rows - barH - 1)),
   };
   const chrome: ChromeRule = {
     borders: input.paneBorders ?? "always",
     gaps: input.paneGaps ?? true,
     controls: input.paneControls === true,
+    singleRowPanes: new Set(input.singleRowPanes),
   };
   const panes: PaneBox[] = [];
   const dividers: Divider[] = [];
@@ -174,6 +180,7 @@ interface ChromeRule {
   borders: PaneBorders;
   gaps: boolean;
   controls: boolean;
+  singleRowPanes?: ReadonlySet<string>;
 }
 
 const NO_NEIGHBORS: PaneSides = { top: false, right: false, bottom: false, left: false };
@@ -202,10 +209,16 @@ function box(paneId: string, frame: Rect, sides: PaneSides = ALL_SIDES): PaneBox
 }
 
 /** 比率で分ける（両側に最低 `MIN_SIDE` を残す。残せない狭さなら半分）。 */
-export function splitSize(total: number, ratio: number): number {
-  const min = Math.min(MIN_SIDE, Math.floor(total / 2));
+export function splitSize(
+  total: number,
+  ratio: number,
+  firstMin = MIN_SIDE,
+  secondMin = MIN_SIDE,
+): number {
+  const first = Math.min(firstMin, Math.floor(total / 2));
+  const second = Math.min(secondMin, Math.floor(total / 2));
   const r = Number.isFinite(ratio) ? ratio : 0.5;
-  return Math.max(min, Math.min(total - min, Math.round(total * r)));
+  return Math.max(first, Math.min(total - second, Math.round(total * r)));
 }
 
 function place(
@@ -230,7 +243,9 @@ function place(
     });
     dividers.push({ splitId: node.id, dir: "right", x: area.x + aw, y: area.y, len: area.h, area });
   } else {
-    const ah = splitSize(area.h, node.ratio);
+    const minimum = (child: LayoutNode) =>
+      child.type === "pane" && rule.singleRowPanes?.has(child.paneId) ? 1 : MIN_SIDE;
+    const ah = splitSize(area.h, node.ratio, minimum(node.a), minimum(node.b));
     place(node.a, { ...area, h: ah }, out, dividers, rule, multi, { ...n, bottom: true });
     place(node.b, { ...area, y: area.y + ah, h: area.h - ah }, out, dividers, rule, multi, {
       ...n,

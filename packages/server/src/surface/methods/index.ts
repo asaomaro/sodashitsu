@@ -1,3 +1,5 @@
+import {registerScheduleMethods} from "./schedule.js";
+import {WorkspaceToolsParams} from "@sodashitsu/protocol";
 import {registerConversationMethods} from "./conversation.js";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
@@ -32,6 +34,7 @@ export type { MethodDeps } from "./deps.js";
  *  （worktree の 2 つ・20260923-agent-session-resume の agent_integration 4 つ・
  *  20260923-workspace-grouping の group.* 6 つ・workspace.move/move_to を含む）。 */
 export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): void {
+  if(deps.workspaceTools) surface.register("workspace.tools",{schema:WorkspaceToolsParams,handler:(_ctx,p)=>deps.workspaceTools!.run(p)});
   registerClientMethods(surface, deps);
   registerSubscribeMethods(surface, deps);
   registerWorkspaceMethods(surface, deps);
@@ -42,7 +45,8 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerLayoutMethods(surface, deps);
   registerWorktreeMethods(surface, deps);
   registerAgentIntegrationMethods(surface, deps);
-  registerAgentMethods(surface, deps); // 20260926-agent-prompt-send-keys
+  registerAgentMethods(surface, deps);
+  registerScheduleMethods(surface,deps); // 20260926-agent-prompt-send-keys
   registerConversationMethods(surface, deps);
   registerAgentForkMethods(surface, deps); // 20261009-agent-fork
   registerAttachMethods(surface, deps); // 20260926-pane-direct-connect

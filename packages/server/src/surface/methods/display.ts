@@ -65,13 +65,34 @@ export function registerDisplayMethods(surface: ControlSurface, deps: MethodDeps
   surface.register("display.dismiss", {
     schema: DisplayDismissParams,
     handler: (ctx, p) => {
-      const instances = deps.session.snapshot().tabs.flatMap(tab => (tab.views ?? []).flatMap(v => {
-        if (!deps.session.hasPane(v.paneId)) return [];
-        const display = displays.list(v.paneId).displays.find(d => d.name === v.display);
-        return display ? [{ tabId:tab.id, viewId:v.id, displayId:display.id }] : [];
-      }));
+      const instances = deps.session.snapshot().tabs.flatMap((tab) =>
+        (tab.views ?? []).flatMap((v) => {
+          if (!deps.session.hasPane(v.paneId)) return [];
+          const matches = displays
+            .list(v.paneId)
+            .displays.filter((d) => d.name === v.display || d.name === v.terminalDisplay);
+          return matches.map((display) => ({
+            tabId: tab.id,
+            viewId: v.id,
+            displayId: display.id,
+            paneId: v.paneId,
+            name: display.name,
+          }));
+        }),
+      );
       const result = displays.dismiss(ctx.clientId, p);
-      for (const v of instances) if (result.closed.includes(v.displayId)) deps.session.removeTabView(v.tabId, v.viewId);
+      const removed = new Set<string>();
+      for (const v of instances)
+        if (
+          !removed.has(v.viewId) &&
+          (p.id === v.displayId || (p.id === undefined && p.paneId === v.paneId)) &&
+          result.closed.includes(v.name)
+        ) {
+          removed.add(v.viewId);
+          deps.session.removeTabView(v.tabId, v.viewId);
+          for (const sibling of instances.filter((i) => i.viewId === v.viewId))
+            displays.close(sibling.paneId, { name: sibling.name });
+        }
       return result;
     },
   });

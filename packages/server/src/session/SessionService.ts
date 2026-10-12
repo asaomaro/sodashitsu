@@ -859,10 +859,17 @@ export class SessionService {
     }
     const viewId = this.model.reserveNextPaneId();
     const instance: TabViewInstance = { ...definition, id: viewId, paneId: pane.id, display: `view-${viewId.replaceAll("-", "").slice(0,27)}` };
+    if(definition.terminal)instance.terminalDisplay=`tui-${viewId.replaceAll("-", "").slice(0,27)}`;
     tab.views = [...(tab.views ?? []), instance];
     this.bus.publish({ event: "tab.updated", data: { tab } });
     this.persist.touch();
     return instance;
+  }
+  moveTabView(id:TabId,viewInstanceId:string,placement:TabViewInstance["placement"]):void {
+    const tab=this.requireTab(id);const view=tab.views?.find(v=>v.id===viewInstanceId);
+    if(!view)throw new RpcError("not_found","ビューが見つかりません");
+    tab.views=tab.views!.map(v=>v.id===viewInstanceId?{...v,placement}:v);
+    this.bus.publish({event:"tab.updated",data:{tab}});this.persist.touch();
   }
   removeTabView(id: TabId, viewInstanceId: string): TabViewInstance {
     const tab = this.requireTab(id);

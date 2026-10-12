@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed, inject, onBeforeUnmount, watch } from "vue";
-import { displayLabel } from "../display/displayLabel.js";
+import { displayHeading } from "../display/displayLabel.js";
 import { isScriptFormat } from "../display/framePage.js";
 import { useSettingsStore } from "../store/settings.js";
 import { createDockDrag, type DockZone } from "../display/dockDrag.js";
-import { dismissWithFocus, headFocusTarget, menuPositionBelow, openDisplayMenu, trayFocusTarget, withDisplayChange } from "../display/displayOps.js";
+import {
+  dismissWithFocus,
+  headFocusTarget,
+  menuPositionBelow,
+  openDisplayMenu,
+  trayFocusTarget,
+  withDisplayChange,
+} from "../display/displayOps.js";
 import { defaultFloatRect, FLOAT_AREA_INSET_PX } from "../display/floatGeometry.js";
 import { DisplayControllerKey, DisplayHostKey, FloatGripKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useViewStore } from "../store/view.js";
+import ViewDragIcon from "./ViewDragIcon.vue";
 import DisplayScriptMark from "./DisplayScriptMark.vue";
 
 /**
@@ -25,10 +33,12 @@ const host = inject(DisplayHostKey, undefined);
 /** 浮いた窓の中では、つかむ場所は D&D ではなく、窓をその場で動かす（`DisplayFloat` が提供する）。 */
 const floatGrip = inject(FloatGripKey, null);
 
-const label = computed(() => displayLabel(props.info));
+const label = computed(() => displayHeading(props.info));
 const settings = useSettingsStore();
 /** 印「スクリプト」が出る面か（`DisplayScriptMark` と同じ条件）。出るときだけ、つかむ場所の最小の幅を、印が入る幅にする（印の無い面の見出しは、今までの折れ方のまま）。 */
-const hasMark = computed(() => isScriptFormat(props.info.format) && store.scriptCapable && settings.displayScriptEnabled);
+const hasMark = computed(
+  () => isScriptFormat(props.info.format) && store.scriptCapable && settings.displayScriptEnabled,
+);
 
 /**
  * 見出しのつかむ場所（`[data-display-grip]`）の D&D。離した場所が今の置き場所と同じなら何もしない。置き場所を変える操作は `withDisplayChange` を通す（フォーカスを `body` に落とさない）。
@@ -42,21 +52,39 @@ const dockDrag = createDockDrag({
   get paneId() {
     return props.info.paneId;
   },
-  box: () => document.querySelector(`[data-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-body-displays`)?.getBoundingClientRect() ?? null,
+  box: () =>
+    document
+      .querySelector(
+        `[data-display-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-body-displays`,
+      )
+      ?.getBoundingClientRect() ?? null,
   // 中央（浮いた窓）は、窓の動ける領域が分かっている間だけ落とせる（無ければ「ここには置けません」）。
-  float: () => store.canOpenFloat(props.info.paneId),
+  float: () => store.canOpenFloat(props.info.paneId) && store.canPlace(props.info, "float"),
+  accepts: (zone) => store.canPlace(props.info, zone),
   setState: (st) => store.setDockDrag(st),
   drop: (zone: DockZone, at) => {
+    if (zone === "band-top" || zone === "band-bottom") {
+      store.setViewPlacement(props.info, zone);
+      return;
+    }
     if (zone === store.effectiveOf(props.info).dock) return;
     if (zone === "float") {
       // 離した位置を左上にした矩形（窓の動ける領域へ丸める）。大きさは初めの矩形と同じ。1 回の呼び出しで、置き場所・開く・矩形を書く。
       const area = store.layoutByPane.get(props.info.paneId)?.floatArea;
-      const center = document.querySelector(`[data-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-center`)?.getBoundingClientRect();
+      const center = document
+        .querySelector(
+          `[data-display-pane-id="${CSS.escape(props.info.paneId)}"] .pane-frame-center`,
+        )
+        ?.getBoundingClientRect();
       if (!area || !center) return;
       const base = defaultFloatRect(0, props.info.size, area);
       // 位置は、離した場所（負にはしない）。いまの領域はドックが場所を取っているので、ここでは領域へ丸めない（丸めると、ドックが外れて広がった領域の右寄りに置けない）。
       // 移した後の割り付けが、広がった領域の中へ丸めて描く（記憶の矩形は、そのまま）。
-      const rect = { ...base, x: Math.max(0, Math.round(at.x - center.left - FLOAT_AREA_INSET_PX)), y: Math.max(0, Math.round(at.y - center.top - FLOAT_AREA_INSET_PX)) };
+      const rect = {
+        ...base,
+        x: Math.max(0, Math.round(at.x - center.left - FLOAT_AREA_INSET_PX)),
+        y: Math.max(0, Math.round(at.y - center.top - FLOAT_AREA_INSET_PX)),
+      };
       void withDisplayChange(
         props.info,
         () => store.setFaceDock(props.info, "float", rect),
@@ -99,7 +127,13 @@ function onClose(): void {
   dismissWithFocus(props.info, () => controller?.dismiss({ id: props.info.id }), host);
 }
 function onMenu(ev: MouseEvent): void {
-  openDisplayMenu((t, at) => view.openContextMenu(t, at), { kind: "display", id: props.info.id }, menuPositionBelow(ev.currentTarget as Element), host, props.info.paneId);
+  openDisplayMenu(
+    (t, at) => view.openContextMenu(t, at),
+    { kind: "display", id: props.info.id },
+    menuPositionBelow(ev.currentTarget as Element),
+    host,
+    props.info.paneId,
+  );
 }
 function onKeydown(ev: KeyboardEvent): void {
   // 押しっぱなし（繰り返し）で、たたむ・開くが往復しない。
@@ -108,7 +142,7 @@ function onKeydown(ev: KeyboardEvent): void {
     return;
   }
   // 見出しのボタンの上の Esc: その pane の端末へ戻る（面は閉じない）。
-  if (ev.key === "Escape") {
+  if (ev.key === "Escape" && !floatGrip) {
     ev.preventDefault();
     ev.stopPropagation();
     host?.focusTerminal(props.info.paneId);
@@ -117,11 +151,27 @@ function onKeydown(ev: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="display-head pane-panel-head" data-display-chrome data-display-head @keydown="onKeydown">
+  <div
+    class="display-head pane-panel-head"
+    data-display-chrome
+    data-display-head
+    @contextmenu.prevent.stop="
+      openDisplayMenu(
+        (t, at) => view.openContextMenu(t, at),
+        { kind: 'display', id: info.id },
+        { x: $event.clientX, y: $event.clientY },
+        host,
+        info.paneId,
+      )
+    "
+    @keydown="onKeydown"
+  >
     <div
       class="display-head-grip"
       :class="{ 'display-head-grip-mark': hasMark }"
       data-display-grip
+      :aria-label="`ビューを移動（${label}）`"
+      :title="`ドラッグして移動（${label}）`"
       data-display-keepfocus
       data-pane-panel-label
       @mousedown.prevent
@@ -129,9 +179,16 @@ function onKeydown(ev: KeyboardEvent): void {
       @pointermove="floatGrip ? floatGrip.onPointerMove($event) : dockDrag.onPointerMove($event)"
       @pointerup="floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerUp($event)"
       @pointercancel="floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerCancel($event)"
-      @lostpointercapture="floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerCancel($event)"
+      @lostpointercapture="
+        floatGrip ? floatGrip.onPointerEnd($event) : dockDrag.onPointerCancel($event)
+      "
     >
-      <DisplayScriptMark :info="info" part="mark" /><span class="display-head-label">{{ label }}</span>
+      <ViewDragIcon />
+      <DisplayScriptMark :info="info" part="mark" /><span
+        v-if="settings.viewTitleVisible"
+        class="display-head-label"
+        >{{ label }}</span
+      >
     </div>
     <div class="display-head-actions">
       <DisplayScriptMark :info="info" part="button" />
@@ -162,7 +219,18 @@ function onKeydown(ev: KeyboardEvent): void {
       >
         ▸
       </button>
-      <button type="button" class="display-head-btn" aria-label="この表示を閉じる" title="この表示を閉じる" data-pane-panel-close data-display-keepfocus @mousedown.prevent @click="onClose">×</button>
+      <button
+        type="button"
+        class="display-head-btn"
+        aria-label="この表示を閉じる"
+        title="この表示を閉じる"
+        data-pane-panel-close
+        data-display-keepfocus
+        @mousedown.prevent
+        @click="onClose"
+      >
+        ×
+      </button>
     </div>
   </div>
 </template>
@@ -183,6 +251,9 @@ function onKeydown(ev: KeyboardEvent): void {
 .display-head-grip {
   flex: 1 1 0;
   min-width: 4em;
+  min-height: 24px;
+  align-self: stretch;
+  gap: 4px;
   display: flex;
   align-items: center;
   font-weight: bold;

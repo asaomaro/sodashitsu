@@ -1,4 +1,10 @@
-import {AGENT_HEADER_ACTIONS,HEADER_ACTION_LABELS,loadAgentHeaderActions,loadSummarySettings,SummarySettingsSchema} from "@sodashitsu/protocol";
+import {
+  AGENT_HEADER_ACTIONS,
+  HEADER_ACTION_LABELS,
+  loadAgentHeaderActions,
+  loadSummarySettings,
+  SummarySettingsSchema,
+} from "@sodashitsu/protocol";
 import {
   CSS_VAR_LABELS,
   CSS_VARS,
@@ -403,6 +409,9 @@ function displaySection(env: SettingsEnv): SettingsSection {
           pick(raw.paneFrameThickness, ["thin", "default", "thick"] as const, "default"),
           (v) => set({ paneFrameThickness: v }),
           BROWSER_ONLY,
+        ),
+        toggleItem("ビューに機能名を表示する", env.prefs.viewTitleVisible, (v) =>
+          set({ viewTitleVisible: v }),
         ),
         toggleItem("pane にエージェント名を出す", env.prefs.paneAgentNameVisible, (v) =>
           set({ paneAgentNameVisible: v }),
@@ -895,17 +904,60 @@ function tuiSection(env: SettingsEnv): SettingsSection {
   };
 }
 
-function agentToolsSection(env:SettingsEnv):SettingsSection{
- return {id:"agent-tools",label:"エージェント操作・要約",items:()=>{
-  const enabled=loadAgentHeaderActions(env.prefs.shared.agentHeaderActions),summary=loadSummarySettings(env.prefs.shared.summarySettings);
-  const setSummary=(patch:Partial<typeof summary>):Outcome=>{const value=SummarySettingsSchema.safeParse({...summary,...patch});if(!value.success)return "指定できる値を確認してください";env.write.setShared({summarySettings:value.data});};
-  return [
-   ...AGENT_HEADER_ACTIONS.map(action=>toggleItem(HEADER_ACTION_LABELS[action],enabled.includes(action),value=>env.write.setShared({agentHeaderActions:value?[...enabled,action]:enabled.filter(x=>x!==action)}),"対応するエージェントだけに表示します。")),
-   choiceItem("要約エージェント",[{value:"claude" as const,label:"Claude Code"},{value:"codex" as const,label:"Codex"}],summary.kind,kind=>setSummary({kind,sessionId:""})),
-   {label:"要約モデル",value:summary.model||"エージェントの既定",activate:()=>({kind:"edit",title:"要約モデル（空欄は既定）",initial:summary.model,commit:model=>setSummary({model})})},
-   {label:"要約の自動更新",value:summary.autoUpdate?"有効":"無効",note:"ターン終了後に差分から更新。モデルの利用が増えます。",activate:()=>setSummary({autoUpdate:!summary.autoUpdate,sessionId:""})}
-  ];
- }};
+function agentToolsSection(env: SettingsEnv): SettingsSection {
+  return {
+    id: "agent-tools",
+    label: "エージェント操作・要約",
+    items: () => {
+      const enabled = loadAgentHeaderActions(env.prefs.shared.agentHeaderActions),
+        summary = loadSummarySettings(env.prefs.shared.summarySettings);
+      const setSummary = (patch: Partial<typeof summary>): Outcome => {
+        const value = SummarySettingsSchema.safeParse({ ...summary, ...patch });
+        if (!value.success) return "指定できる値を確認してください";
+        env.write.setShared({ summarySettings: value.data });
+      };
+      return [
+        ...AGENT_HEADER_ACTIONS.map((action) =>
+          toggleItem(
+            HEADER_ACTION_LABELS[action],
+            enabled.includes(action),
+            (value) =>
+              env.write.setShared({
+                agentHeaderActions: value
+                  ? [...enabled, action]
+                  : enabled.filter((x) => x !== action),
+              }),
+            "対応するエージェントだけに表示します。",
+          ),
+        ),
+        choiceItem(
+          "要約エージェント",
+          [
+            { value: "claude" as const, label: "Claude Code" },
+            { value: "codex" as const, label: "Codex" },
+          ],
+          summary.kind,
+          (kind) => setSummary({ kind, sessionId: "" }),
+        ),
+        {
+          label: "要約モデル",
+          value: summary.model || "エージェントの既定",
+          activate: () => ({
+            kind: "edit",
+            title: "要約モデル（空欄は既定）",
+            initial: summary.model,
+            commit: (model) => setSummary({ model }),
+          }),
+        },
+        {
+          label: "要約の自動更新",
+          value: summary.autoUpdate ? "有効" : "無効",
+          note: "ターン終了後に差分から更新。モデルの利用が増えます。",
+          activate: () => setSummary({ autoUpdate: !summary.autoUpdate, sessionId: "" }),
+        },
+      ];
+    },
+  };
 }
 
 /** 節の並び（web の設定と同じ順＋エージェント連携・端末版）。 */

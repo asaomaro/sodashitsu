@@ -1,0 +1,6 @@
+# 設計
+
+BUILTIN_WEB_VIEWS/BUILTIN_TERMINAL_VIEWSで描画定義を区別し、標準file/Gitはネイティブクライアントが直接描画する。statuslineは共通text表示を使用する。builtinではterminalDisplayを別登録せず表示枠の上限を二重消費しない。
+StatuslineはinformationTarget=pane、target=tabならtab.focusedPaneIdへ追従。focus/agent状態変更と5秒更新でusageを取得し、古い非同期応答を捨てる。合法px sizeと非同期エラー捕捉を行う。
+TUIグラフはセル座標と既存D&Dを保持し、group枠・タグ・件数を描く。新規ノードは全既存位置から空きを探す。SVG Gitはgit --graphの接続記号を線と点へ変換し、SHAで差分を開く。
+×dismiss結果は表示名の配列であり、選択されたdisplay ID/対象paneと対応するview登録を照合して削除する。Web/端末の兄弟displayも閉じ、重複削除を防ぐ。

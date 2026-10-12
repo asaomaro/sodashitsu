@@ -47,7 +47,7 @@ removeは登録を外すだけ。導入したファイルと制作データは�
 - `entry` は `files` に含まれる `.mjs`。Node標準ライブラリだけを使うか、依存を配布物へまとめる。
 - `files` は128件まで、相対パスだけ。絶対パス・`.`・`..`・重複・シンボリックリンクを拒否する。1ファイル8MiB、配布物32MiBまで。
 - `tabView` は任意。`title` はタブの種類の表示名、`display` はメイン画面に使う `display.set` のname。拡張は `ext.panes` の `plugin.extensionKey` / `plugin.display` と `projectDir` を見て、選ばれたタブのアンカーpaneにその面を出す。作業用ターミナルは別のpaneとして起動される。`requiresProject` は省略時true、falseならPJ未設定でも使える。
-- `views` は任意の追加ビュー定義（16件まで）。各項目は `id`、`title`、`placements`、任意の `requiresProject` を持つ。配置は `right/left/top/bottom/float/band-top/band-bottom` のうち対応するものを重複なく宣言する。主画面のdisplay名は32文字まで。
+- `views` は任意の追加ビュー定義（16件まで）。各項目は `id`、`title`、`placements`、任意の `requiresProject`・`targets` を持つ。配置は `right/left/top/bottom/float/band-top/band-bottom` のうち対応するものを重複なく宣言する。主画面のdisplay名は32文字まで。
 - `allow` は `script-html`（スクリプト表示）と `agent-start`（新しい作業ペインでの制作依頼）の必要なものを重複なく指定。説明文とコマンドは既存拡張設定と同じ文字制限。
 - ファイルごとのSHA-256を検証し、版と配布物のハッシュを含む固有フォルダへ展開する。`enable` でも整合性を確認する。SHA-256は作者の署名ではないので、コードの信頼性・作者の確認は利用者が行う。
 
@@ -99,7 +99,7 @@ PJの `enable` は登録の有効化であり、コード実行の承認では�
 
 タブは端末・エージェントが共有する1つの作業環境。アプリを選んだタブには［作業画面］［アプリ画面］があり、同じ作業を異なる配置で表示する。切り替えても端末・プロセス・作業ペインの構成を作り直さない。アプリ画面を開いている間も端末は動き続ける。Yukkuri Studioは同じタブの作業ペインとエージェント状態を一覧に表示する。Yukkuri Studio 0.4では、制作詳細でClaude Code/Codexを選び［新しい作業ペインで依頼］から制作指示付きで起動できる。既存端末には入力せず、新しい端末で実行する。起動結果やログイン・確認操作は作業画面で確認する。
 
-通常のターミナルタブとアプリタブの両方に［ビューを追加］がある。名前を検索して、表示対象を「タブ全体」または「作業ペイン」、配置を対応するパネル・帯・浮いた窓から選ぶ。追加済みビューはツールバーの×で外せる。停止中の拡張は追加候補から外れる。保存済みビューは残り、拡張の復帰後に再表示する。1タブ16ビューまで。
+通常のターミナルタブとアプリタブの両方に［ビューを追加］がある。名前を検索し、配置を対応するパネル・帯・浮いた窓から選ぶ。タブ行からはタブ全体、ペインヘッダーからはその作業ペインへ追加する。標準のファイル・Gitビューもこの入口で使える（[標準ビュー](workspace-tools.md)）。追加済みビューはツールバーの×で外せる。停止中の拡張は追加候補から外れる。保存済みビューは残り、拡張の復帰後に再表示する。1タブ16ビューまで。
 
 タブ全体のビューは画面切り替えの外側に表示する。作業ペインに付けたビューは、その作業ペインと一緒に作業画面で表示する。パネルは幅・高さが足りないとトレイへたたまれる。作業ペインを閉じる・別のタブへ移すと、そのペインの追加ビューの登録を外す。タブの画面モードとビューの登録はsession.jsonに保存する。
 
@@ -110,7 +110,30 @@ PJの `enable` は登録の有効化であり、コード実行の承認では�
 
 拡張は `ext.panes` の `virtual`・`plugin`・`views`・`tabId`・`agentState` を参照する。`plugin` は主画面の表示用アンカーにだけ付く。`views` は自分の拡張が担当するインスタンスだけで、`display` に指定されたnameを使って表示する。インスタンスの削除を受けたら表示も閉じる。
 
-API: `tab.set_perspective {tabId,perspective: "terminal"|"app"}`、`tab.add_view {tabId,extensionKey,viewId,target: "tab"|"pane",paneId?,placement}`、`tab.remove_view {tabId,viewInstanceId}`。追加時はサーバでも拡張の稼働状態・範囲・PJ条件・対応配置を確認する。
+### ビューの情報対象と配置（プラグイン開発）
+
+`views[].targets` は、ビューが表示する情報の対象を宣言する設定です。`["tab"]` はタブ全体、`["pane"]` は作業ペインの情報、`["tab", "pane"]` は両方に対応します。省略した既存プラグインは両方として扱います。空配列・重複は指定できません。
+
+```json
+{
+  "views": [
+    {"id":"workflow","title":"制作進捗","targets":["tab"],"placements":["left","float"]},
+    {"id":"conversation","title":"ペインの会話","targets":["pane"],"placements":["right","float"],"requiresProject":false}
+  ]
+}
+```
+
+タブ行の「ビューを追加」にはタブ情報とペイン情報の両方のビューを表示します。ペイン情報だけのビューをタブ側に置くと、そのタブのアクティブなペインへ追従します。ペインヘッダー側には `pane` 対応の候補だけを表示します。`views[].informationTarget` は情報の種類、`target` は追加した場所です。プラグインへ渡すインスタンスの `sourcePaneId` が実際の情報元で、タブ側の場合は焦点変更に伴って更新されます。`ext.panes_changed` を受けたら `ext.panes` を再取得してください。サーバーもペイン側でタブ専用ビューを追加しないか確認します。
+
+情報の対象と表示の配置は別です。ペイン側で選ぶ `float` は、そのペインの情報を表示する浮いた窓です。ペインの表示矩形内に制限するという意味ではなく、他のペインやタブ全体を対象とした情報へ切り替わることもありません。`ext.panes` の `views[].informationTarget` と `sourcePaneId` を使って情報対象を判定してください。`tab` のインスタンスは表示専用アンカーを使うため、`tabId` が同じ作業ペイン群と `projectDir` を参照します。
+
+標準ファイル・GitビューはワークスペースのPJフォルダに依存するため `targets:["tab"]` とし、タブ側の候補にだけ表示します。従来追加したペイン対象の標準ビューは表示を維持しますが、新しいペイン対象の追加は拒否します。
+
+`placements` は追加・移動の両方で使う配置制限です。例えば `["band-top","band-bottom"]` なら上下の帯だけを選べ、上下の入れ替えは可能ですが、左右パネルやフロートへの移動はできません。Webの移動メニュー・D&Dでも制限し、`tab.move_view {tabId,viewInstanceId,placement}` でサーバーも検証して保存します。標準ビューも上下の帯を選べます。
+
+端末版でも `left/right/top/bottom/band-top/band-bottom` は端末領域と並ぶ固定ビューとして描画し、`float` は浮いた窓で開きます。固定ビューをクリックして操作し、Escで端末へ戻ります。prefixや直接の全体ショートカットも利用できます。画面幅が狭い場合はフォーカスしているビューを1面に表示します。プラグインのHTMLは端末版の対応する簡易フォーム・Markdown等の表現で表示します。JavaScriptを実行するアプリ画面を端末版でそのまま実行する仕組みではありません。
+
+API: `tab.set_perspective {tabId,perspective: "terminal"|"app"}`、`tab.add_view {tabId,extensionKey,viewId,target: "tab"|"pane",paneId?,placement}`、`tab.remove_view {tabId,viewInstanceId}`。追加時はサーバでも拡張の稼働状態・範囲・PJ条件・情報対象・対応配置を確認する。
 
 ## 外部プラグインの管理と連携テスト
 
@@ -133,3 +156,46 @@ YUKKURI_STUDIO_SOURCE=/path/to/yukkuri-work/plugins/yukkuri-studio pnpm --filter
 拡張は `ext.panes` の主画面アンカーの `plugin.display` と `plugin.mobileDisplay` を参照し、同じ pane に両方の HTML 表示を公開する。両方で同じ制作データ・操作を扱い、配置だけを変える。専用表示が指定されているのに未公開の場合は準備中と表示する。公開後に画面幅を変えると切り替わり、作業ペインやプロセスは維持する。既存タブにも稼働中のプラグイン定義を反映し、設定は保存・復元する。主画面の二つの表示は追加パネル一覧から除外する。
 
 [Commit Graph](../plugins/commit-graph/README.md) が実装例。モバイル側の HTML は viewport に応じた幅・折り返し・指で押せるボタンを備える。汎用の追加パネル・帯は従来のモバイル表示一覧で開く。ask-form は既存のモバイル対応を使用する。
+
+### 端末版のプラグインビュー
+
+Web版の表示とは別に、端末版に適した本文を提供できます。`views` の各ビューに `terminal: { "format": "markdown" }` を設定します。形式は `text`・`markdown`・`html`（簡易フォーム用）です。端末版の「ビューを追加」では `terminal` のあるプラグインビューだけが候補に出ます。標準のファイル・Gitビューは端末版も提供します。
+
+```json
+{
+  "id": "conversation",
+  "title": "会話の確認",
+  "targets": ["pane"],
+  "placements": ["left", "right", "float"],
+  "terminal": { "format": "markdown" }
+}
+```
+
+`ext.panes` のビューインスタンスには、Web用の `display` と端末用の `terminalDisplay` が含まれます。プラグインは、同じ `paneId` に両方の表示を作ります。端末用の名前はインスタンスごとにサーバーが生成するので、定数の表示名を流用せず `terminalDisplay` を使ってください。表示の配置はインスタンスの `placement` に従います。MarkdownのMermaidは端末上で記号に整形され、HTMLはJavaScriptを実行せず、対応する簡易フォーム・文字を表示します。フォームの回答は通常の `display.action` で受け取ります。
+
+タブ全体のアプリ用パースペクティブは、`tabView` に `terminalDisplay`（表示名）を追加します。Web用 `display`、モバイル用 `mobileDisplay` と並ぶ端末用の名前です。`ext.panes` の `tabPlugin` にも渡されます。端末版の新規タブは、この設定を持つプラグインを種類として選べます。端末用表示を持たないWeb専用プラグインは、端末版の新規タブ候補にも出しません。
+
+```json
+{
+  "tabView": {
+    "title": "制作アプリ",
+    "display": "studio",
+    "mobileDisplay": "studio-mobile",
+    "terminalDisplay": "studio-terminal"
+  }
+}
+```
+
+端末用本文を作る処理もWeb用本文と同じプラグインプロセスで行います。端末用に別のエージェントやタブを起こす必要はありません。追加した端末用表示も、拡張の表示件数・容量の上限に数えます。
+
+端末版のアプリ用タブはタブの右クリックメニュー「端末画面へ」「アプリ画面へ」で切り替えられます。画面を切り替えても作業ペインは維持されます。
+
+## 配置したパッケージを画面から登録する
+
+ユーザーホーム、ワークスペースのPJフォルダ、sodaの起動フォルダにパッケージを置き、Webの設定画面「拡張」で「パッケージを探す」を押します。端末版はメニューの「プラグインパッケージ…」を開きます。
+
+探索対象は各フォルダ直下、および `plugins/`・`.soda/plugins/`・`.soda/packages/` の直下です。`.sodaplugin` ファイルか、`soda-plugin.json` を含むパッケージフォルダを置けます。再帰的な探索はしません。
+
+PJフォルダで見つかったものはそのPJに登録します。ユーザーホームと起動フォルダはユーザー全体への登録です。起動フォルダがワークスペースのPJフォルダでもある場合はPJとして扱います。確認画面で配置元・対象範囲・権限・検証値を確認して「許可して登録・有効化」を実行します。発見しただけではコードを実行しません。確認後に内容が変わった場合は再確認が必要です。導入済みの同じ内容は候補に出しません。
+
+端末版の確認画面は上下キーで最後まで確認してからEnterで許可します。狭い画面では画面を広げてください。従来の `sodactl plugin install/enable` とPJ拡張のコマンドによる承認も引き続き利用できます。

@@ -1,27 +1,63 @@
 <script lang="ts">
 // 枠の定数は `display/framePage.ts` にある。負の対照・テストが、この部品からも読めるよう再 export する。
-export { DISPLAY_VIEW_SANDBOX, DISPLAY_VIEW_PAGE, DISPLAY_SCRIPT_VIEW_SANDBOX, DISPLAY_SCRIPT_VIEW_PAGE } from "../display/framePage.js";
+export {
+  DISPLAY_VIEW_SANDBOX,
+  DISPLAY_VIEW_PAGE,
+  DISPLAY_SCRIPT_VIEW_SANDBOX,
+  DISPLAY_SCRIPT_VIEW_PAGE,
+} from "../display/framePage.js";
 /** 固定の文言（枠の外の DOM。枠の中身・題からは変えられない）。 */
 export const DISPLAY_NOTE_UNSUPPORTED = "この画面では、この形式の表示を出せません";
 export const DISPLAY_NOTE_LOAD_FAILED = "表示を読み込めませんでした";
 export const DISPLAY_NOTE_CLOSED = "この表示は閉じられました";
 export const DISPLAY_NOTE_CONTENT_FAILED = "表示の中身を取得できませんでした";
-export const DISPLAY_NOTE_RENDER_FAILED = "この表示を描けませんでした（次の更新で直ることがあります）";
-export const DISPLAY_NOTE_FOCUS_DETACHED = "この表示は、キー入力を取ろうとしたので、この画面では止めました";
+export const DISPLAY_NOTE_RENDER_FAILED =
+  "この表示を描けませんでした（次の更新で直ることがあります）";
+export const DISPLAY_NOTE_FOCUS_DETACHED =
+  "この表示は、キー入力を取ろうとしたので、この画面では止めました";
 export const DISPLAY_NOTE_SCRIPT_DISABLED = "スクリプトが動く表示は、設定で無効になっています";
-export const DISPLAY_NOTE_BREAKER = "入力のフォーカスが繰り返し外されたので、この画面ではスクリプトの表示を止めました";
+export const DISPLAY_NOTE_BREAKER =
+  "入力のフォーカスが繰り返し外されたので、この画面ではスクリプトの表示を止めました";
 </script>
 
 <script setup lang="ts">
-import { DISPLAY_PING_INTERVAL_MS, DISPLAY_UNRESPONSIVE_MS, type DisplayContent, type DisplayInfo } from "@sodashitsu/protocol";
+import {
+  DISPLAY_PING_INTERVAL_MS,
+  DISPLAY_UNRESPONSIVE_MS,
+  type DisplayContent,
+  type DisplayInfo,
+} from "@sodashitsu/protocol";
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { coverStartsEngage, startFromButton, startFromCover, startFromKey } from "../display/engageEntry.js";
+import {
+  coverStartsEngage,
+  startFromButton,
+  startFromCover,
+  startFromKey,
+} from "../display/engageEntry.js";
 import { FocusGuard } from "../display/focusGuard.js";
-import { documentRegainedFocusWithin, installFocusOriginTracking, restoreFocus, tabPressedWithin } from "../display/focusOrigin.js";
+import {
+  documentRegainedFocusWithin,
+  installFocusOriginTracking,
+  restoreFocus,
+  tabPressedWithin,
+} from "../display/focusOrigin.js";
 import { frameKey, framePage } from "../display/framePage.js";
 import { readFrameMessage } from "../display/frameMessages.js";
-import { noteFocusRestored, startFocusDropWatch, stopFocusDropWatch } from "../display/focusDrop.js";
-import { registerFrame, registerScriptFrame, scriptFrameCount, setFrameEngaged, stopAllScriptFrames, unregisterFrame, unregisterScriptFrame, type RegisteredFrame } from "../display/frameRegistry.js";
+import {
+  noteFocusRestored,
+  startFocusDropWatch,
+  stopFocusDropWatch,
+} from "../display/focusDrop.js";
+import {
+  registerFrame,
+  registerScriptFrame,
+  scriptFrameCount,
+  setFrameEngaged,
+  stopAllScriptFrames,
+  unregisterFrame,
+  unregisterScriptFrame,
+  type RegisteredFrame,
+} from "../display/frameRegistry.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -87,7 +123,10 @@ const FOCUS_PATROL_MS = 250;
 
 const src = computed(() => (page.value ? `${page.value.page}?t=${ticket.value}` : ""));
 const visibleNote = computed<string | null>(() => {
-  if (page.value === null) return framePage(props.info.format)?.kind === "script" && store.scriptCapable ? DISPLAY_NOTE_SCRIPT_DISABLED : DISPLAY_NOTE_UNSUPPORTED;
+  if (page.value === null)
+    return framePage(props.info.format)?.kind === "script" && store.scriptCapable
+      ? DISPLAY_NOTE_SCRIPT_DISABLED
+      : DISPLAY_NOTE_UNSUPPORTED;
   return phase.value === "closed" ? (note.value ?? DISPLAY_NOTE_CLOSED) : null;
 });
 const showCover = computed(() => isScript.value && phase.value !== "closed" && !engagedRef.value);
@@ -151,7 +190,10 @@ function fail(text: string): void {
 /** 枠を外し、サーバへ知らせて面を閉じる。 */
 function closeAndReport(problem: "navigated" | "unresponsive"): void {
   fail(DISPLAY_NOTE_CLOSED);
-  void controller?.report(props.info.id, problem, { paneId: props.info.paneId, format: props.info.format });
+  void controller?.report(props.info.id, problem, {
+    paneId: props.info.paneId,
+    format: props.info.format,
+  });
 }
 /** フォーカスがこの枠にあったなら、その pane の端末へ戻す。 */
 function releaseFocus(): void {
@@ -212,7 +254,14 @@ function sendRender(): void {
   const theme = readThemeVars();
   // prefix のキーは、スクリプトが動く形式の枠には渡さない（信頼しない中身に、利用者のキーの設定を教えない）。
   const k = isScript.value ? undefined : host?.prefixKey();
-  port.postMessage({ type: "render", rev: c.rev, format: c.format, source: c.content, theme, relayKeys: k ? [k] : [] });
+  port.postMessage({
+    type: "render",
+    rev: c.rev,
+    format: c.format,
+    source: c.content,
+    theme,
+    relayKeys: k ? [k] : [],
+  });
   if (isScript.value) renderSent = true;
 }
 
@@ -238,6 +287,9 @@ function onPortMessage(ev: MessageEvent): void {
         if (!guard.acceptKey(m.key)) return;
         guard.leave();
         syncGuardState();
+        iframeEl.value
+          ?.closest("[data-display-float]")
+          ?.dispatchEvent(new CustomEvent("display-escape", { bubbles: true }));
         host?.focusTerminal(props.info.paneId);
         return;
       }
@@ -245,6 +297,10 @@ function onPortMessage(ev: MessageEvent): void {
       if (store.focusedDisplayId !== props.info.id) return;
       host?.focusTerminal(props.info.paneId);
       store.setFocused(null);
+      if (m.key === "escape")
+        iframeEl.value
+          ?.closest("[data-display-float]")
+          ?.dispatchEvent(new CustomEvent("display-escape", { bubbles: true }));
       if (m.key === "prefix") host?.injectPrefix();
       return;
     case "foreign-focus":
@@ -273,7 +329,8 @@ function onVisibility(): void {
 }
 
 // --- フォーカス ------------------------------------------------------------------------------------------
-const frameHasFocus = (): boolean => iframeEl.value !== null && document.activeElement === iframeEl.value;
+const frameHasFocus = (): boolean =>
+  iframeEl.value !== null && document.activeElement === iframeEl.value;
 
 /** 静的な形式: フォーカスが枠にあるか（操作中の表示）。 */
 function updateFocusStatic(): void {
@@ -347,7 +404,12 @@ function onForeignFocus(): void {
   const now = Date.now();
   // 利用者が入ったと見られるものは戻さない: 直前の Tab・こちらが移した直後・別のウィンドウ／タブ／ブラウザの UI（アドレスバーからの Tab を含む）から戻った直後。
   // 見分けられない場合は、戻さない側に倒す（限界。docs に書く）。
-  if (now - lastOwnFocusAt < OWN_FOCUS_IGNORE_MS || tabPressedWithin(TAB_IGNORE_MS) || documentRegainedFocusWithin(TAB_IGNORE_MS * 2)) return;
+  if (
+    now - lastOwnFocusAt < OWN_FOCUS_IGNORE_MS ||
+    tabPressedWithin(TAB_IGNORE_MS) ||
+    documentRegainedFocusWithin(TAB_IGNORE_MS * 2)
+  )
+    return;
   const el = iframeEl.value;
   if (el === null || !frameHasFocus()) return;
   restoreFocus(el, () => host?.focusSelectedTerminal());
@@ -367,7 +429,12 @@ function syncFocusPatrol(): void {
 /** 画面に載っているスクリプトが動く枠として登録する（静的な枠の `foreign-focus` の戻しと、フォーカスの脱落の見回りは、これが 1 つ以上あるときだけ働く）。 */
 function syncScriptRegistration(): void {
   if (isScript.value && page.value !== null && phase.value !== "closed") {
-    registerScriptFrame(props.info.id, { paneId: props.info.paneId, format: props.info.format, name: props.info.name, stop: () => detach(DISPLAY_NOTE_BREAKER) });
+    registerScriptFrame(props.info.id, {
+      paneId: props.info.paneId,
+      format: props.info.format,
+      name: props.info.name,
+      stop: () => detach(DISPLAY_NOTE_BREAKER),
+    });
     startFocusDropWatch({
       focusSelectedTerminal: () => host?.focusSelectedTerminal(),
       notify: (message) => controller?.toast?.(message),
@@ -394,7 +461,8 @@ function onFocusSignal(): void {
 function onWindowBlur(): void {
   setTimeout(onFocusSignal, 0);
 }
-const inEndButton = (t: EventTarget | null): boolean => t instanceof Element && t.closest("[data-display-end]") !== null;
+const inEndButton = (t: EventTarget | null): boolean =>
+  t instanceof Element && t.closest("[data-display-end]") !== null;
 function onDocFocusIn(ev: Event): void {
   // ［操作を終える］ボタンへ移ったのは、操作を終える途中（その `click` が終える）。ここで終えると、ボタンが消えて `click` が届かない。
   if (isScript.value && inEndButton(ev.target)) return;
@@ -477,7 +545,8 @@ onMounted(() => {
   // `sodactl display send` のデータを、スクリプトが動く枠へ渡す（保存しない。いま描いている枠だけ）。
   offMessage =
     controller?.onMessage(props.info.id, (data) => {
-      if (isScript.value && port && phase.value === "connected") port.postMessage({ type: "message", data });
+      if (isScript.value && port && phase.value === "connected")
+        port.postMessage({ type: "message", data });
     }) ?? null;
 });
 // 合い札・待ちの時計は、最初の描画の前（setup）で用意する（描画の後に作り直すと iframe が作り直される）。
@@ -499,7 +568,13 @@ onBeforeUnmount(() => {
   // 片づけのとき（面が閉じた・版や形式が替わって部品が外れる）、操作中でないのにフォーカスが枠にあれば、元の場所へ戻して「取られた」と 1 回知らせてから外す
   // （取ってから、見回りが気づく前に `close`・版の置き換えで枠を外させる、という逃げ方をさせない）。合い札の合わない合図・時間切れでは送らない。
   const el = iframeEl.value;
-  if (isScript.value && el !== null && phase.value !== "closed" && !guard.engaged && frameHasFocus()) {
+  if (
+    isScript.value &&
+    el !== null &&
+    phase.value !== "closed" &&
+    !guard.engaged &&
+    frameHasFocus()
+  ) {
     restoreFocus(el, () => host?.focusSelectedTerminal());
     reportSteal();
   }
@@ -538,7 +613,8 @@ watch(
   () => [props.info.id, props.info.rev, props.info.format] as const,
   () => {
     const c = props.content;
-    if (page.value && (!c || c.rev !== props.info.rev || c.format !== props.info.format)) void controller?.ensureContent(props.info.id);
+    if (page.value && (!c || c.rev !== props.info.rev || c.format !== props.info.format))
+      void controller?.ensureContent(props.info.id);
   },
   { immediate: true },
 );
@@ -549,7 +625,11 @@ defineExpose({ key: () => frameKey(props.info) });
 </script>
 
 <template>
-  <div class="display-frame-wrap" :data-display-phase="phase" :data-display-engaged="isScript ? (engagedRef ? '1' : '0') : undefined">
+  <div
+    class="display-frame-wrap"
+    :data-display-phase="phase"
+    :data-display-engaged="isScript ? (engagedRef ? '1' : '0') : undefined"
+  >
     <iframe
       v-if="page && phase !== 'closed'"
       :key="gen"
@@ -559,7 +639,9 @@ defineExpose({ key: () => frameKey(props.info) });
       :sandbox="page.sandbox"
       referrerpolicy="no-referrer"
       :src="src"
-      :title="isScript ? 'pane のプログラムの表示（隔離・スクリプト）' : 'pane のプログラムの表示（隔離）'"
+      :title="
+        isScript ? 'pane のプログラムの表示（隔離・スクリプト）' : 'pane のプログラムの表示（隔離）'
+      "
       :tabindex="isScript ? -1 : undefined"
       data-display-frame
       :data-display-script="isScript ? '' : undefined"
@@ -576,11 +658,31 @@ defineExpose({ key: () => frameKey(props.info) });
       @click="onCoverClick"
       @wheel.passive="onCoverWheel"
     ></div>
-    <p v-if="renderFailed && phase === 'connected'" class="display-frame-note" data-display-render-failed>{{ DISPLAY_NOTE_RENDER_FAILED }}</p>
-    <p v-if="store.contentFailed.has(info.id)" class="display-frame-note" data-display-content-failed>{{ DISPLAY_NOTE_CONTENT_FAILED }}</p>
+    <p
+      v-if="renderFailed && phase === 'connected'"
+      class="display-frame-note"
+      data-display-render-failed
+    >
+      {{ DISPLAY_NOTE_RENDER_FAILED }}
+    </p>
+    <p
+      v-if="store.contentFailed.has(info.id)"
+      class="display-frame-note"
+      data-display-content-failed
+    >
+      {{ DISPLAY_NOTE_CONTENT_FAILED }}
+    </p>
     <p v-if="visibleNote" class="display-frame-note" data-display-note>
       {{ visibleNote }}
-      <button v-if="detached" type="button" class="display-frame-redisplay" data-display-redisplay @click="redisplay">{{ note === DISPLAY_NOTE_BREAKER ? "再開" : "もう一度出す" }}</button>
+      <button
+        v-if="detached"
+        type="button"
+        class="display-frame-redisplay"
+        data-display-redisplay
+        @click="redisplay"
+      >
+        {{ note === DISPLAY_NOTE_BREAKER ? "再開" : "もう一度出す" }}
+      </button>
     </p>
   </div>
 </template>

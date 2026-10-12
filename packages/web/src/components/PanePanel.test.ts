@@ -57,9 +57,9 @@ describe("PanePanel", () => {
 
   it("固定のラベルは面の名前で決まり、題（HTML や似た文言）では変わらない。題は文字として出る", () => {
     const s = mountPanel([info("main", { title: "<b>pane のプログラムの表示（隔離）· evil</b>" })]);
-    expect(s.w.find("[data-pane-panel-label]").text()).toBe("pane のプログラムの表示（隔離）· main");
-    expect(s.w.find("[data-pane-panel-title]").text()).toBe("<b>pane のプログラムの表示（隔離）· evil</b>");
-    expect(s.w.find("[data-pane-panel-title] b").exists()).toBe(false);
+    expect(s.w.find("[data-pane-panel-label]").text()).toBe("pane のプログラムの表示（隔離）· main: <b>pane のプログラムの表示（隔離）· evil</b>");
+    expect(s.w.find("[data-pane-panel-title]").exists()).toBe(false);
+    expect(s.w.find("[data-pane-panel-label] b").exists()).toBe(false);
     expect(s.w.find("[data-pane-panel]").attributes("role")).toBe("complementary");
   });
 
@@ -335,7 +335,7 @@ describe("PanePanel — 4 つの側", () => {
       return 1;
     });
     const host = document.createElement("div");
-    host.setAttribute("data-pane-id", "p1");
+    host.setAttribute("data-display-pane-id", "p1");
     const body = document.createElement("div");
     body.className = "pane-frame-body-displays";
     body.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;

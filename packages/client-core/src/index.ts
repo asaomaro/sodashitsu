@@ -57,3 +57,5 @@ export * from "./prefs/scrollback.js";
 export * from "./theme/themeOverrides.js";
 
 export * from "./term/findMessageLine.js";
+
+export * from "./view/ViewHistory.js";

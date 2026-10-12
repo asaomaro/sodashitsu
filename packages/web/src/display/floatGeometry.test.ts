@@ -20,22 +20,58 @@ import {
 } from "./floatGeometry.js";
 
 const AREA: Area = { w: 800, h: 500 };
-const inside = (r: Rect, a: Area): boolean => r.x >= 0 && r.y >= 0 && r.x + r.w <= a.w && r.y + r.h <= a.h && r.w >= FLOAT_MIN_W_PX && r.h >= FLOAT_MIN_H_PX;
+const inside = (r: Rect, a: Area): boolean =>
+  r.x >= 0 &&
+  r.y >= 0 &&
+  r.x + r.w <= a.w &&
+  r.y + r.h <= a.h &&
+  r.w >= FLOAT_MIN_W_PX &&
+  r.h >= FLOAT_MIN_H_PX;
 
 describe("clampFloatRect", () => {
   it("領域の中の矩形は、そのまま", () => {
-    expect(clampFloatRect({ x: 10, y: 20, w: 300, h: 200 }, AREA)).toEqual({ x: 10, y: 20, w: 300, h: 200 });
+    expect(clampFloatRect({ x: 10, y: 20, w: 300, h: 200 }, AREA)).toEqual({
+      x: 10,
+      y: 20,
+      w: 300,
+      h: 200,
+    });
   });
   it("負の位置は 0 へ・大きすぎる位置は領域の中へ", () => {
-    expect(clampFloatRect({ x: -50, y: -9, w: 300, h: 200 }, AREA)).toEqual({ x: 0, y: 0, w: 300, h: 200 });
-    expect(clampFloatRect({ x: 700, y: 480, w: 300, h: 200 }, AREA)).toEqual({ x: 500, y: 300, w: 300, h: 200 });
+    expect(clampFloatRect({ x: -50, y: -9, w: 300, h: 200 }, AREA)).toEqual({
+      x: 0,
+      y: 0,
+      w: 300,
+      h: 200,
+    });
+    expect(clampFloatRect({ x: 700, y: 480, w: 300, h: 200 }, AREA)).toEqual({
+      x: 500,
+      y: 300,
+      w: 300,
+      h: 200,
+    });
   });
   it("領域より大きい矩形は、領域いっぱいに縮む（先に大きさ、次に位置）", () => {
-    expect(clampFloatRect({ x: 100, y: 100, w: 5000, h: 5000 }, AREA)).toEqual({ x: 0, y: 0, w: 800, h: 500 });
+    expect(clampFloatRect({ x: 100, y: 100, w: 5000, h: 5000 }, AREA)).toEqual({
+      x: 0,
+      y: 0,
+      w: 800,
+      h: 500,
+    });
   });
   it("最小より小さい矩形は、最小まで広がる", () => {
-    expect(clampFloatRect({ x: 0, y: 0, w: 10, h: 10 }, AREA)).toEqual({ x: 0, y: 0, w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX });
-    expect(clampFloatRect({ x: 790, y: 495, w: 10, h: 10 }, AREA)).toEqual({ x: 800 - FLOAT_MIN_W_PX, y: 500 - FLOAT_MIN_H_PX, w: FLOAT_MIN_W_PX, h: FLOAT_MIN_H_PX });
+    expect(clampFloatRect({ x: 0, y: 0, w: 10, h: 10 }, AREA)).toEqual({
+      x: 0,
+      y: 0,
+      w: FLOAT_MIN_W_PX,
+      h: FLOAT_MIN_H_PX,
+    });
+    expect(clampFloatRect({ x: 790, y: 495, w: 10, h: 10 }, AREA)).toEqual({
+      x: 800 - FLOAT_MIN_W_PX,
+      y: 500 - FLOAT_MIN_H_PX,
+      w: FLOAT_MIN_W_PX,
+      h: FLOAT_MIN_H_PX,
+    });
   });
   it("領域が縮んだ後は、新しい領域の中へ寄る（記憶の矩形は変えない）", () => {
     const stored: Rect = { x: 500, y: 300, w: 300, h: 200 };
@@ -45,15 +81,28 @@ describe("clampFloatRect", () => {
     expect(clampFloatRect(stored, AREA)).toEqual(stored); // 広がれば元の位置
   });
   it("NaN・無限大・数でない値を受けても、有限の矩形を返す", () => {
-    const bad = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, "x" as unknown as number, undefined as unknown as number];
+    const bad = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      "x" as unknown as number,
+      undefined as unknown as number,
+    ];
     for (const v of bad) {
-      for (const r of [{ x: v, y: v, w: v, h: v }, { x: 1, y: v, w: 300, h: v }, { x: v, y: 1, w: v, h: 200 }]) {
+      for (const r of [
+        { x: v, y: v, w: v, h: v },
+        { x: 1, y: v, w: 300, h: v },
+        { x: v, y: 1, w: v, h: 200 },
+      ]) {
         const out = clampFloatRect(r, AREA);
         expect(Object.values(out).every(Number.isFinite)).toBe(true);
         expect(inside(out, AREA)).toBe(true);
       }
     }
-    const bigArea = clampFloatRect({ x: 1, y: 1, w: 300, h: 200 }, { w: Number.NaN, h: Number.POSITIVE_INFINITY });
+    const bigArea = clampFloatRect(
+      { x: 1, y: 1, w: 300, h: 200 },
+      { w: Number.NaN, h: Number.POSITIVE_INFINITY },
+    );
     expect(Object.values(bigArea).every(Number.isFinite)).toBe(true);
   });
   it("領域が最小より小さくても、領域の外へ出ない", () => {
@@ -62,7 +111,8 @@ describe("clampFloatRect", () => {
   });
   it("乱数で、結果がいつも領域の中（最小以上）に収まる", () => {
     let seed = 7;
-    const rnd = (): number => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 4000 - 1500;
+    const rnd = (): number =>
+      ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 4000 - 1500;
     for (let i = 0; i < 2000; i++) {
       const area = { w: 240 + Math.abs(rnd()) / 2, h: 120 + Math.abs(rnd()) / 3 };
       const out = clampFloatRect({ x: rnd(), y: rnd(), w: rnd(), h: rnd() }, area);
@@ -72,8 +122,8 @@ describe("clampFloatRect", () => {
 });
 
 describe("defaultFloatRect", () => {
-  it("幅は size・高さは領域の 6 割・右上に余白 8px", () => {
-    expect(defaultFloatRect(0, 320, AREA)).toEqual({ x: 800 - 320 - FLOAT_INSET_PX, y: FLOAT_INSET_PX, w: 320, h: 300 });
+  it("幅と高さは領域の6割以上・最初の窓は中央", () => {
+    expect(defaultFloatRect(0, 320, AREA)).toEqual({ x: 160, y: 100, w: 480, h: 300 });
   });
   it("i 番目は 24px ずつ左下へずれる", () => {
     const a = defaultFloatRect(0, 320, AREA);
@@ -82,7 +132,7 @@ describe("defaultFloatRect", () => {
     expect(b.y).toBe(a.y + 2 * FLOAT_CASCADE_PX);
   });
   it("幅は 240〜領域−16 に丸める", () => {
-    expect(defaultFloatRect(0, 100, AREA).w).toBe(FLOAT_MIN_W_PX);
+    expect(defaultFloatRect(0, 100, AREA).w).toBe(480);
     expect(defaultFloatRect(0, 800, AREA).w).toBe(800 - FLOAT_INSET_PX * 2);
   });
   it("ずらしが領域を出ない（何番目でも領域の中）", () => {
@@ -91,7 +141,9 @@ describe("defaultFloatRect", () => {
   it("領域が小さくて範囲が逆転しても、領域の中の値を返す", () => {
     const small = { w: 250, h: 130 };
     expect(inside(defaultFloatRect(0, 320, small), small)).toBe(true);
-    expect(Object.values(defaultFloatRect(Number.NaN, Number.NaN, small)).every(Number.isFinite)).toBe(true);
+    expect(
+      Object.values(defaultFloatRect(Number.NaN, Number.NaN, small)).every(Number.isFinite),
+    ).toBe(true);
   });
 });
 
@@ -101,7 +153,12 @@ describe("moveFloatRect", () => {
     expect(moveFloatRect(start, 50, -30, AREA)).toEqual({ x: 150, y: 70, w: 300, h: 200 });
     expect(moveFloatRect(start, -5000, -5000, AREA)).toEqual({ x: 0, y: 0, w: 300, h: 200 });
     expect(moveFloatRect(start, 5000, 5000, AREA)).toEqual({ x: 500, y: 300, w: 300, h: 200 });
-    expect(moveFloatRect(start, Number.NaN, Number.POSITIVE_INFINITY, AREA)).toEqual({ x: 100, y: 100, w: 300, h: 200 });
+    expect(moveFloatRect(start, Number.NaN, Number.POSITIVE_INFINITY, AREA)).toEqual({
+      x: 100,
+      y: 100,
+      w: 300,
+      h: 200,
+    });
   });
 });
 
@@ -110,7 +167,14 @@ describe("resizeFloatRect — 8 つのつかむ場所", () => {
   const right = (r: Rect): number => r.x + r.w;
   const bottom = (r: Rect): number => r.y + r.h;
   it("動かさない側の縁は動かない（大きく動かしても・最小を割っても）", () => {
-    for (const [dx, dy] of [[40, 30], [-40, -30], [-5000, -5000], [5000, 5000], [-250, 250], [250, -250]] as const) {
+    for (const [dx, dy] of [
+      [40, 30],
+      [-40, -30],
+      [-5000, -5000],
+      [5000, 5000],
+      [-250, 250],
+      [250, -250],
+    ] as const) {
       const n = resizeFloatRect(start, "n", dx, dy, AREA);
       expect(bottom(n)).toBe(bottom(start));
       expect([n.x, n.w]).toEqual([start.x, start.w]);
@@ -135,7 +199,13 @@ describe("resizeFloatRect — 8 つのつかむ場所", () => {
   });
   it("どの場所でも、結果は領域の中で、最小以上", () => {
     for (const h of FLOAT_HANDLES) {
-      for (const [dx, dy] of [[9999, 9999], [-9999, -9999], [-9999, 9999], [9999, -9999], [3, 4]] as const) {
+      for (const [dx, dy] of [
+        [9999, 9999],
+        [-9999, -9999],
+        [-9999, 9999],
+        [9999, -9999],
+        [3, 4],
+      ] as const) {
         expect(inside(resizeFloatRect(start, h, dx, dy, AREA), AREA)).toBe(true);
       }
     }
@@ -155,10 +225,19 @@ describe("resizeFloatRect — 8 つのつかむ場所", () => {
 describe("keyAdjustFloatRect", () => {
   const start: Rect = { x: 200, y: 150, w: 300, h: 200 };
   it("矢印で 16px・Shift で 64px。矢印でないキーは null", () => {
-    expect(keyAdjustFloatRect(start, "move", "ArrowRight", false, AREA)).toEqual({ ...start, x: 216 });
+    expect(keyAdjustFloatRect(start, "move", "ArrowRight", false, AREA)).toEqual({
+      ...start,
+      x: 216,
+    });
     expect(keyAdjustFloatRect(start, "move", "ArrowUp", true, AREA)).toEqual({ ...start, y: 86 });
-    expect(keyAdjustFloatRect(start, "resize", "ArrowDown", false, AREA)).toEqual({ ...start, h: 216 });
-    expect(keyAdjustFloatRect(start, "resize", "ArrowLeft", true, AREA)).toEqual({ ...start, w: 236 < FLOAT_MIN_W_PX ? FLOAT_MIN_W_PX : 236 });
+    expect(keyAdjustFloatRect(start, "resize", "ArrowDown", false, AREA)).toEqual({
+      ...start,
+      h: 216,
+    });
+    expect(keyAdjustFloatRect(start, "resize", "ArrowLeft", true, AREA)).toEqual({
+      ...start,
+      w: 236 < FLOAT_MIN_W_PX ? FLOAT_MIN_W_PX : 236,
+    });
     expect(keyAdjustFloatRect(start, "move", "a", false, AREA)).toBeNull();
   });
   it("領域を出ない", () => {

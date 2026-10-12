@@ -720,3 +720,11 @@ it("passes its actual listening URL to sodactl without inherited tokens",async()
  const h=await makeHost({baseEnv:{PATH:"/usr/bin",SODA_SERVER_URL:"http://wrong:1",SODACTL_TOKEN:"secret"},serverUrlForExtensions:()=>"http://127.0.0.1:17780"});
  try {await h.writeConfig([{id:"a",command:"node a.mjs"}]);await h.host.start();await h.until(()=>h.spawnCalls.length===1);expect(h.spawnCalls[0]!.env["SODA_SERVER_URL"]).toBe("http://127.0.0.1:17780");expect(h.spawnCalls[0]!.env["SODACTL_TOKEN"]).toBeUndefined();}finally{await h.cleanup();}
 });
+
+it('refreshes extension pane snapshots on actual session focus events',async()=>{
+ h=await makeHost();await h.writeConfig([ext('a')]);await h.host.start();await h.until(()=>h!.children[0]!.lines().length>=2);
+ const before=h.children[0]!.lines().filter(x=>x['type']==='ext.panes').length;
+ h.panes.get('p1')!.label='changed focus';
+ h.bus.publish({event:'session.focus_changed',data:{focus:{workspaceId:'w1',tabId:'t-w1',paneId:'p1'}}});
+ await h.until(()=>h!.children[0]!.lines().filter(x=>x['type']==='ext.panes').length>before,50);
+});

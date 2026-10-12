@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {BUILTIN_WORKSPACE_KEY,BUILTIN_DEVELOPMENT_DISPLAY} from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
@@ -98,6 +99,7 @@ const confirm = (): void => {
     const trimmed = value.value.trim();
     // プリフィルから変更していなければ、送信対象を空文字にして「送らない」判定へ合流させる（D75）。
     const ext = plugins.value.find(e => e.key === pluginKey.value);
+    if(pluginKey.value===BUILTIN_WORKSPACE_KEY){if(projectDir.value)actions.confirmNewTab(trimmed===openedWithValue.trim()?"開発":value.value,{extensionKey:BUILTIN_WORKSPACE_KEY,display:BUILTIN_DEVELOPMENT_DISPLAY});return;}
     if (pluginKey.value && (!ext || (ext.tabView?.requiresProject !== false && !projectDir.value))) return;
     const plugin = ext?.tabView ? { extensionKey: ext.key, display: ext.tabView.display } : undefined;
     const label = trimmed === openedWithValue.trim() ? (ext?.tabView?.title ?? "") : value.value;
@@ -146,6 +148,7 @@ function onNativeCancel(ev: Event): void {
         <span>タブの種類</span>
         <select v-model="pluginKey" aria-label="タブの種類">
           <option value="">ターミナル</option>
+          <option :value="BUILTIN_WORKSPACE_KEY" :disabled="!projectDir">開発（標準）</option>
           <option v-for="ext in plugins" :key="ext.key" :value="ext.key" :disabled="!projectDir && ext.tabView?.requiresProject !== false">{{ ext.tabView?.title }}（{{ ext.scope === 'user' ? 'ユーザー' : 'PJ' }}）</option>
         </select>
       </label>

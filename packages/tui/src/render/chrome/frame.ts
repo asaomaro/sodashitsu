@@ -16,26 +16,60 @@ export interface FrameInfo {
   symbols?: boolean;
   controls?: boolean;
   hasAgent?: boolean;
-  agentActions?:import("@sodashitsu/protocol").AgentHeaderAction[];
+  agentActions?: import("@sodashitsu/protocol").AgentHeaderAction[];
   zoomed?: boolean;
 }
 
-export type PaneButtonAction = "agent-more" | "right" | "down" | "info" | "zoom" | "close" | import("@sodashitsu/protocol").AgentHeaderAction;
-export function paneButtons(frame: Rect, hasAgent: boolean, zoomed: boolean,extras:import("@sodashitsu/protocol").AgentHeaderAction[]=[]): {x:number;w:number;action:PaneButtonAction;text:string}[] {
-  const marks={messages:"[≡]",summary:"[Σ]",compact:"[↘]",clear:"[↺]",usage:"[%]",permissions:"[✓]",fork:"[⑂]"};
-  const room=Math.max(0,Math.floor((frame.w-25)/3));
-  const overflow=extras.length>room;
-  const extraButtons=extras.slice(0,Math.max(0,room-(overflow?1:0)));
-  const actions: [PaneButtonAction,string][] = [
-    ...(hasAgent && frame.w>=13 ? [["info","[i]"]] as [PaneButtonAction,string][] : []),
-    ...extraButtons.map(action=>[action,marks[action]] as [PaneButtonAction,string]),
-    ...(overflow&&frame.w>=16?[["agent-more","[⋯]"]] as [PaneButtonAction,string][]:[]),
-    ...(frame.w>=22 ? [["right","[│]"],["down","[─]"]] as [PaneButtonAction,string][] : []),
-    ["zoom",zoomed?"[↙]":"[□]"],["close","[×]"],
+export type PaneButtonAction =
+  | "menu"
+  | "add-view"
+  | "agent-more"
+  | "right"
+  | "down"
+  | "info"
+  | "zoom"
+  | "close"
+  | import("@sodashitsu/protocol").AgentHeaderAction;
+export function paneButtons(
+  frame: Rect,
+  hasAgent: boolean,
+  zoomed: boolean,
+  extras: import("@sodashitsu/protocol").AgentHeaderAction[] = [],
+): { x: number; w: number; action: PaneButtonAction; text: string }[] {
+  const marks = {
+    messages: "[≡]",
+    summary: "[Σ]",
+    compact: "[↘]",
+    clear: "[↺]",
+    usage: "[%]",
+    permissions: "[✓]",
+    fork: "[⑂]",
+  };
+  const room = Math.max(0, Math.floor((frame.w - 39) / 3));
+  const overflow = extras.length > room;
+  const extraButtons = extras.slice(0, Math.max(0, room - (overflow ? 1 : 0)));
+  const actions: [PaneButtonAction, string][] = [
+    ...(frame.w >= 11 ? ([["menu", "[⋮]"]] as [PaneButtonAction, string][]) : []),
+    ...(hasAgent && frame.w >= 16 ? ([["info", "[i]"]] as [PaneButtonAction, string][]) : []),
+    ...(frame.w >= 19 ? ([["add-view", "[+]"]] as [PaneButtonAction, string][]) : []),
+    ...extraButtons.map((action) => [action, marks[action]] as [PaneButtonAction, string]),
+    ...(overflow && frame.w >= 16 ? ([["agent-more", "[⋯]"]] as [PaneButtonAction, string][]) : []),
+    ...(frame.w >= 25
+      ? ([
+          ["right", "[│]"],
+          ["down", "[─]"],
+        ] as [PaneButtonAction, string][])
+      : []),
+    ["zoom", zoomed ? "[↙]" : "[□]"],
+    ["close", "[×]"],
   ];
-  if(frame.w<8)return [];
-  let x=frame.x+frame.w-1-actions.length*3;
-  return actions.map(([action,text])=>{const hit={x,w:3,action,text};x+=3;return hit;});
+  if (frame.w < 8) return [];
+  let x = frame.x + frame.w - 1 - actions.length * 3;
+  return actions.map(([action, text]) => {
+    const hit = { x, w: 3, action, text };
+    x += 3;
+    return hit;
+  });
 }
 
 /**
@@ -72,8 +106,19 @@ export function paintFrame(
 
   // 上辺の名前：`┌─ ◐ name ─…┐`
   let cx = x + (sides.left ? 2 : 1);
-  const buttons=info.controls ? paneButtons(frame, info.hasAgent===true, info.zoomed===true,info.agentActions) : [];
-  for(const button of buttons) grid.text(button.x,y,button.text,theme.ui("--soda-fg"),theme.ground("--soda-menu-bg"),0,button.w);
+  const buttons = info.controls
+    ? paneButtons(frame, info.hasAgent === true, info.zoomed === true, info.agentActions)
+    : [];
+  for (const button of buttons)
+    grid.text(
+      button.x,
+      y,
+      button.text,
+      theme.ui("--soda-fg"),
+      theme.ground("--soda-menu-bg"),
+      0,
+      button.w,
+    );
   const limit = buttons[0]?.x ?? right - 1;
   if (cx >= limit) return;
   cx += grid.text(cx, y, " ", color, bg, 0, limit - cx);

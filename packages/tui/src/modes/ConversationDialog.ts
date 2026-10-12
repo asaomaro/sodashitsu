@@ -1,3 +1,5 @@
+import { MarkdownView, type DocumentRow } from "./document.js";
+import { stringWidth } from "../render/width.js";
 import type { KeyInput } from "@sodashitsu/client-core";
 import { clientErrorMessage, errorCodeOf } from "@sodashitsu/client-core";
 import {
@@ -29,6 +31,7 @@ import {
 import type { Rect } from "../render/Screen.js";
 
 export class ConversationDialog implements Overlay {
+  private readonly markdown = new MarkdownView();
   private messages: ConversationMessage[] = [];
   private sessions: PastAgentSession[] = [];
   private selected = 0;
@@ -255,7 +258,7 @@ export class ConversationDialog implements Overlay {
   }
   render({ grid, theme }: OverlayRenderContext) {
     this.hits = [];
-    this.rect = centeredRect(grid, Math.min(110, grid.w - 2), Math.min(30, grid.h - 2));
+    this.rect = centeredRect(grid, grid.w - 2, grid.h - 2);
     const c = dialogColors(theme),
       area = drawBox(
         grid,
@@ -277,8 +280,12 @@ export class ConversationDialog implements Overlay {
     const start = this.detail
       ? Math.min(this.scroll, Math.max(0, rows.length - area.h + 2))
       : Math.max(0, this.selected - area.h + 3);
-    rows.slice(start, start + area.h - 2).forEach((text, i) => {
+    const rich:DocumentRow[]|null = this.detail ? this.markdown.render(this.detail,area.w) : null;
+    const visibleStart = rich ? Math.min(this.scroll, Math.max(0,rich.length-area.h+2)) : start;
+    (rich ?? rows.map(text=>[{text,attrs:0}])).slice(visibleStart,visibleStart+area.h-2).forEach((spans, i) => {
+      const text=spans.map(s=>s.text).join("");
       if (!this.detail) this.hits.push({ y: area.y + i, index: start + i });
+      if(rich){let x=area.x;for(const s of spans){grid.text(x,area.y+i,s.text,c.fg,c.bg,s.attrs,Math.max(0,area.x+area.w-x));x+=stringWidth(s.text);}return;}
       grid.text(
         area.x,
         area.y + i,
