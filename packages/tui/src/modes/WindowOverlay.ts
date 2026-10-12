@@ -55,6 +55,7 @@ export class WindowOverlay implements Overlay {
     this.drag = null;
   }
   cancelInteraction(): void {
+    this.inner.cancelInteraction?.();
     if (!this.drag) return;
     this.rect = { ...this.drag.rect };
     this.custom = this.drag.custom;
@@ -165,6 +166,7 @@ export class WindowOverlay implements Overlay {
       return true;
     }
     const r = this.rect;
+    if (this.inner.handleScrollMouse?.({ ...ev, x: ev.x - r.x, y: ev.y - r.y })) return true;
     if (ev.x < r.x || ev.x >= r.x + r.w || ev.y < r.y || ev.y >= r.y + r.h) return true;
     if (
       this.options.maximize &&

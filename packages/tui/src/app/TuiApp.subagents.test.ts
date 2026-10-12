@@ -334,7 +334,7 @@ describe("端末版のサブエージェントの表示", () => {
     expect(plainText("全角と😀と ascii")).toBe("全角と😀と ascii");
   });
 
-  it("一覧が長いとき、↑↓ の印は右端の桁に出て、経過時間の最後の文字を上書きしない", async () => {
+  it("一覧が長いとき、スクロールバーは右端の桁に出て、経過時間の最後の文字を上書きしない", async () => {
     const h = await start({
       subagents: {
         count: 70,
@@ -351,8 +351,8 @@ describe("端末版のサブエージェントの表示", () => {
       .split("\n")
       .filter((l) => /T\d+\s/.test(l) && l.includes("│", 30));
     expect(rows.length).toBeGreaterThan(3);
-    for (const r of rows) expect(r).toMatch(/1分\s*[↑↓]?\s*│/); // 経過時間が欠けていない
-    expect(rows.some((r) => /1分\s*↑\s*│/.test(r))).toBe(true);
-    expect(rows.some((r) => /1分\s*↓\s*│/.test(r))).toBe(true);
+    for (const r of rows) expect(r).toMatch(/1分\s*[█░]?\s*│/); // 経過時間が欠けていない
+    expect(rows.some((r) => /1分\s*█\s*│/.test(r))).toBe(true);
+    expect(rows.some((r) => /1分\s*░\s*│/.test(r))).toBe(true);
   });
 });

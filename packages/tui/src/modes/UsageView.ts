@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
 import { paneNameOf, type KeyInput } from "@sodashitsu/client-core";
 import { shortId, type AgentUsage } from "@sodashitsu/protocol";
@@ -69,6 +70,13 @@ const statusText = (usage: UsageModel) =>
 
 export class UsageDialog implements Overlay {
   private rect: Rect | null = null;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
   private scroll = 0;
   constructor(
     private readonly paneId: string | null,
@@ -77,11 +85,13 @@ export class UsageDialog implements Overlay {
     private readonly usage: UsageModel,
   ) {}
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     if (isEsc(k)) this.cancel();
     else if (isDown(k)) this.scroll++;
     else if (isUp(k)) this.scroll = Math.max(0, this.scroll - 1);
   }
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "wheel") this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 1 : -1));
     return true;
@@ -98,6 +108,7 @@ export class UsageDialog implements Overlay {
         c,
         this.paneId ? "利用状況 · " + shortId(this.paneId) : "アカウント利用状況",
       );
+    area.w = Math.max(0, area.w - 1);
     const pane = this.paneId ? this.model.panes.get(this.paneId) : null;
     const lines = [
       ...(pane
@@ -126,12 +137,26 @@ export class UsageDialog implements Overlay {
       .forEach((s, i) =>
         grid.text(area.x, area.y + i, truncate(plainText(s), area.w), c.fg, c.bg, 0, area.w),
       );
+    this.scrollbar.render(
+      grid,
+      { ...area, w: area.w + 1 },
+      lines.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+      },
+    );
     return hiddenCursor();
   }
 }
 
 /** Main screen, leaving the sidebar usable. Arrow keys/scroll select, Enter goes to the pane. */
 export class UsageDashboard {
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+  private readonly scrollbar = new ScrollBar();
   private selected = 0;
   private sort: "name" | "tokens" | "cost" | "context" = "name";
   private hits: { y: number; paneId: string }[] = [];
@@ -160,6 +185,7 @@ export class UsageDashboard {
       });
   }
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     if (k.key === "h") {
       this.ui.openDialogWithContext({ kind: "pastSessions" });
       return;
@@ -183,6 +209,7 @@ export class UsageDashboard {
     }
   }
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.scrollbar.handleMouse(ev)) return true;
     if (!inside(this.area, ev.x, ev.y)) return false;
     if (ev.action === "wheel")
       this.selected = Math.max(
@@ -248,6 +275,7 @@ export class UsageDashboard {
     const available = Math.max(0, Math.floor((area.y + area.h - y - 1) / rowHeight));
     const start = Math.max(0, this.selected - available + 1);
     if (!rows.length) put(y++, "エージェントがありません");
+    const trackY = y;
     for (const [i, p] of rows.slice(start, start + available).entries()) {
       const tab = this.model.tabs.get(p.tabId),
         ws = tab ? this.model.workspaces.get(tab.workspaceId) : undefined;
@@ -285,6 +313,16 @@ export class UsageDashboard {
         bg,
       );
     }
+    this.scrollbar.render(
+      grid,
+      { ...area, y: trackY, h: available * rowHeight },
+      rows.length * rowHeight,
+      start * rowHeight,
+      c,
+      (offset) => {
+        this.selected = Math.min(rows.length - 1, Math.floor(offset / rowHeight) + available - 1);
+      },
+    );
     put(
       area.y + area.h - 1,
       `${rows.length} エージェント · ${this.selected + Number(rows.length > 0)} / ${rows.length}`,

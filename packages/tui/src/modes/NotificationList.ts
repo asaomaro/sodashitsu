@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { UiState } from "../model/UiState.js";
 import type { NotificationController } from "../notify/NotificationController.js";
@@ -26,6 +27,15 @@ const KIND_LABEL = { blocked: "入力待ち", done: "完了" } as const;
  * 一覧から外す）、Delete で外す。Esc で閉じる。
  */
 export class NotificationList implements Overlay {
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+
+  private scroll = 0;
   private selected = 0;
   private rect: Rect | null = null;
   private rowsTop = 0;
@@ -42,6 +52,7 @@ export class NotificationList implements Overlay {
   }
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     const rows = this.rows();
     if (isEsc(k)) return this.cancel();
     if (rows.length === 0) return;
@@ -65,10 +76,12 @@ export class NotificationList implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "down" && ev.button === 0) {
-      const i = ev.y - this.rowsTop;
-      if (i >= 0 && i < this.visible && i < this.rows().length) this.open(i);
+      const i = ev.y - this.rowsTop + this.scroll;
+      if (ev.y >= this.rowsTop && ev.y < this.rowsTop + this.visible && i < this.rows().length)
+        this.open(i);
     } else if (ev.action === "wheel") {
       const n = this.rows().length;
       if (n > 0)
@@ -90,9 +103,13 @@ export class NotificationList implements Overlay {
     const inner = drawBox(grid, r, c, `知らせ（${rows.length} 件）`);
     this.rowsTop = inner.y;
     this.visible = Math.max(0, inner.h - 1);
+    inner.w = Math.max(0, inner.w - 1);
+    if (this.selected < this.scroll) this.scroll = this.selected;
+    if (this.selected >= this.scroll + this.visible) this.scroll = this.selected - this.visible + 1;
+    this.scroll = Math.max(0, Math.min(this.scroll, rows.length - this.visible));
     if (rows.length === 0) grid.text(inner.x, inner.y, "未処理の知らせはありません。", c.dim, c.bg);
-    rows.slice(0, this.visible).forEach((q, i) => {
-      const on = i === this.selected;
+    rows.slice(this.scroll, this.scroll + this.visible).forEach((q, i) => {
+      const on = i + this.scroll === this.selected;
       const bg = on ? c.active : c.bg;
       grid.fill({ x: inner.x, y: inner.y + i, w: inner.w, h: 1 }, c.fg, bg);
       const age = Math.max(0, Math.round((this.now() - q.at) / 60000));
@@ -113,6 +130,17 @@ export class NotificationList implements Overlay {
       truncate("Enter で移る・Delete で外す・Esc で閉じる", inner.w),
       c.dim,
       c.bg,
+    );
+    this.scrollbar.render(
+      grid,
+      { ...inner, w: inner.w + 1, h: this.visible },
+      rows.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.selected = Math.max(offset, Math.min(this.selected, offset + this.visible - 1));
+      },
     );
     return hiddenCursor();
   }

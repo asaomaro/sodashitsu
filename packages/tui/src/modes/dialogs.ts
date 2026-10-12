@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import {
   BUILTIN_WORKSPACE_KEY,
   BUILTIN_DEVELOPMENT_DISPLAY,
@@ -418,6 +419,13 @@ export class ListDialog implements Overlay {
   private rect: Rect | null = null;
   private rowsTop = 0;
   private visibleRows = 0;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
   private scroll = 0;
 
   constructor(
@@ -432,6 +440,7 @@ export class ListDialog implements Overlay {
   }
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     const n = this.rows().length;
     if (isEsc(k)) return this.cancel();
     if (isEnter(k)) return this.accept();
@@ -444,6 +453,7 @@ export class ListDialog implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "down" && ev.button === 0) {
       const index = ev.y - this.rowsTop + this.scroll;
@@ -491,6 +501,7 @@ export class ListDialog implements Overlay {
     const r = centeredRect(grid, width, Math.min(rows.length, grid.h - 6) + 4);
     this.rect = r;
     const inner = drawBox(grid, r, c, title);
+    inner.w = Math.max(0, inner.w - 1);
     const visible = Math.max(1, inner.h - 1);
     this.visibleRows = visible;
     if (this.selected < this.scroll) this.scroll = this.selected;
@@ -523,6 +534,17 @@ export class ListDialog implements Overlay {
         ? "Enter で開く・Delete で削除・Esc で閉じる"
         : "Enter で追加・Esc で閉じる";
     grid.text(inner.x, inner.y + inner.h - 1, help, c.dim, c.bg, 0, inner.w);
+    this.scrollbar.render(
+      grid,
+      { ...inner, w: inner.w + 1, h: visible },
+      rows.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.selected = Math.max(offset, Math.min(this.selected, offset + visible - 1));
+      },
+    );
     return hiddenCursor();
   }
 }

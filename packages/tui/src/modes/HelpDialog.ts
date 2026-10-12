@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import {
   ACTIONS,
   COMMAND_GROUP,
@@ -116,6 +117,13 @@ export function filterHelp(groups: HelpGroup[], query: string): HelpGroup[] {
 export class HelpDialog implements Overlay {
   private readonly query = new TextInput();
   private filtering = false;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
   private scroll = 0;
   private pageSize = 10;
   private rect: Rect | null = null;
@@ -141,6 +149,7 @@ export class HelpDialog implements Overlay {
   }
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     if (this.filtering) {
       if (isEsc(k)) {
         this.query.value = "";
@@ -176,6 +185,7 @@ export class HelpDialog implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "wheel") this.scrollBy(ev.button === 65 ? 3 : -3);
     return true;
@@ -190,6 +200,7 @@ export class HelpDialog implements Overlay {
     const r = { x: 1, y: 1, w: Math.max(10, grid.w - 2), h: Math.max(4, grid.h - 2) };
     this.rect = r;
     const inner = drawBox(grid, r, c, "キー一覧");
+    inner.w = Math.max(0, inner.w - 1);
     // 1 行目：絞り込み欄
     const label = "絞り込み: ";
     grid.text(inner.x, inner.y, label, c.dim, c.bg);
@@ -204,6 +215,7 @@ export class HelpDialog implements Overlay {
     );
     const lines = this.lines();
     this.pageSize = Math.max(1, inner.h - 2);
+    this.scroll = Math.max(0, Math.min(this.scroll, lines.length - this.pageSize));
     const keyCol = Math.min(28, Math.floor(inner.w / 2));
     for (let i = 0; i < this.pageSize && i + this.scroll < lines.length; i++) {
       const line = lines[i + this.scroll]!;
@@ -217,6 +229,16 @@ export class HelpDialog implements Overlay {
       grid.text(inner.x + 2, y, truncate(keys ?? "", keyCol - 3), fg, c.bg);
       grid.text(inner.x + keyCol, y, truncate(desc ?? "", inner.w - keyCol), fg, c.bg);
     }
+    this.scrollbar.render(
+      grid,
+      { ...inner, y: inner.y + 2, w: inner.w + 1, h: this.pageSize },
+      lines.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+      },
+    );
     if (lines.length === 0)
       grid.text(inner.x, inner.y + 2, "一致する操作はありません", c.dim, c.bg);
     return this.filtering

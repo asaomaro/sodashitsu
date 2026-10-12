@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import { statuslineRows } from "./statusline.js";
 import type { KeyInput } from "@sodashitsu/client-core";
 import { checkDisplayAction, type DisplayInfo } from "@sodashitsu/protocol";
@@ -32,6 +33,14 @@ export class DisplayDialog implements Overlay {
   private selected = 0;
   private focus = 0;
   private revealFocus = true;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+  private manualScroll = false;
   private scroll = 0;
   private busy = false;
   private dead = false;
@@ -155,6 +164,8 @@ export class DisplayDialog implements Overlay {
     }
   }
   handleKey(k: KeyInput) {
+    this.scrollbar.cancel();
+    this.manualScroll = false;
     if (isEsc(k)) {
       if (this.onClose) {
         this.onClose();
@@ -230,6 +241,7 @@ export class DisplayDialog implements Overlay {
     }
   }
   handleMouse(ev: OverlayMouse) {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "wheel") {
       this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 3 : -3));
@@ -274,6 +286,7 @@ export class DisplayDialog implements Overlay {
       this.ui.toast(this.error);
       this.error = "";
     }
+    area.w = Math.max(0, area.w - 1);
     const height = Math.max(0, area.h - (embedded ? (this.error ? 1 : 0) : 2));
     let rows: DocumentRow[] = [];
     const controlsAt = new Map<number, FormControl>();
@@ -351,7 +364,7 @@ export class DisplayDialog implements Overlay {
       }
     }
     this.scroll = Math.min(Math.max(0, this.scroll), Math.max(0, rows.length - height));
-    if (!this.id) this.scroll = Math.max(0, this.selected - height + 1);
+    if (!this.id && !this.manualScroll) this.scroll = Math.max(0, this.selected - height + 1);
     const cursor = hiddenCursor();
     rows.slice(this.scroll, this.scroll + height).forEach((row, i) => {
       const index = this.scroll + i;
@@ -381,6 +394,18 @@ export class DisplayDialog implements Overlay {
         cursor.visible = true;
       }
     });
+    this.scrollbar.render(
+      grid,
+      { ...area, w: area.w + 1, h: height },
+      rows.length,
+      this.scroll,
+      colors,
+      (offset) => {
+        this.scroll = offset;
+        this.manualScroll = true;
+        this.revealFocus = false;
+      },
+    );
     if (embedded) {
       if (this.error && area.h >= 2)
         grid.text(area.x, area.y + height, this.error, colors.warn, colors.bg, 0, area.w);

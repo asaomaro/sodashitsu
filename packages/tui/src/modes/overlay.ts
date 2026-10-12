@@ -30,6 +30,8 @@ export interface Overlay {
   handlePaste?(text: string): void;
   /** 内側の事象なら扱って true。外側なら false（押したら閉じる。AC-I1）。 */
   handleMouse?(ev: OverlayMouse): boolean;
+  /** スクロールの掴みを、外枠のリサイズより先に扱う。 */
+  handleScrollMouse?(ev: OverlayMouse): boolean;
   /** 描く。入力欄があれば本物のカーソルの位置を返す（無ければ隠したカーソル）。 */
   render(ctx: OverlayRenderContext): CursorState | null;
   /** 外側を押した・Esc で閉じる（取り消し）。 */

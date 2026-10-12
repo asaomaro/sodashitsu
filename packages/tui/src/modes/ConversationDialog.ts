@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import { MarkdownView, type DocumentRow } from "./document.js";
 import { stringWidth } from "../render/width.js";
 import type { KeyInput } from "@sodashitsu/client-core";
@@ -37,6 +38,14 @@ export class ConversationDialog implements Overlay {
   private orderRect: Rect | null = null;
   private sessions: PastAgentSession[] = [];
   private selected = 0;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+  private manualScroll = false;
   private scroll = 0;
   private detail: string | null = null;
   private next: number | null = 0;
@@ -216,6 +225,8 @@ export class ConversationDialog implements Overlay {
     this.scroll = 0;
   }
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
+    this.manualScroll = false;
     if (this.mode === "messages" && !this.detail && k.key === "o" && !k.ctrl && !k.alt) {
       this.toggleOrder();
       return;
@@ -251,6 +262,7 @@ export class ConversationDialog implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "down" && ev.button === 0 && inside(this.orderRect, ev.x, ev.y)) {
       this.toggleOrder();
@@ -297,6 +309,7 @@ export class ConversationDialog implements Overlay {
             ? "会話の要約"
             : "過去のセッション",
       );
+    area.w = Math.max(0, area.w - 1);
     const rows = this.detail
       ? wrapText(plainText(this.detail), area.w)
       : this.mode === "summary"
@@ -304,15 +317,17 @@ export class ConversationDialog implements Overlay {
         : this.mode === "sessions"
           ? this.sessions.map((r) => `${r.kind} · ${r.title} · ${r.cwd ?? ""}`)
           : this.users().map((m) => (m.at ? m.at + " " : "") + m.text.replace(/\s+/g, " "));
-    const start = this.detail
-      ? Math.min(this.scroll, Math.max(0, rows.length - area.h + 2))
-      : Math.max(0, this.selected - area.h + 3);
+    const start =
+      this.detail || this.manualScroll
+        ? Math.min(this.scroll, Math.max(0, rows.length - area.h + 2))
+        : Math.max(0, this.selected - area.h + 3);
     const rich: DocumentRow[] | null = this.detail
       ? this.markdown.render(this.detail, area.w)
       : null;
     const visibleStart = rich
       ? Math.min(this.scroll, Math.max(0, rich.length - area.h + 2))
       : start;
+    this.scroll = visibleStart;
     (rich ?? rows.map((text) => [{ text, attrs: 0 }]))
       .slice(visibleStart, visibleStart + area.h - 2)
       .forEach((spans, i) => {
@@ -336,6 +351,22 @@ export class ConversationDialog implements Overlay {
           area.w,
         );
       });
+    this.scrollbar.render(
+      grid,
+      { ...area, w: area.w + 1, h: Math.max(0, area.h - 2) },
+      (rich ?? rows).length,
+      visibleStart,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.manualScroll = true;
+        if (!this.detail)
+          this.selected = Math.max(
+            offset,
+            Math.min(this.selected, offset + Math.max(1, area.h - 2) - 1),
+          );
+      },
+    );
     grid.text(
       area.x,
       area.y + area.h - 2,

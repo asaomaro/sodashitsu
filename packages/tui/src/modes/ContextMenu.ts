@@ -1,4 +1,5 @@
-import {AGENT_HEADER_ACTIONS,headerActionsFor,HEADER_ACTION_LABELS} from "@sodashitsu/protocol";
+import { ScrollBar } from "./ScrollBar.js";
+import { AGENT_HEADER_ACTIONS, headerActionsFor, HEADER_ACTION_LABELS } from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -30,7 +31,7 @@ export interface MenuDeps {
   ui: UiState;
   model: SessionModel;
   actions: TuiDispatcher;
-  viewItems?:(id:string)=>MenuItem[];
+  viewItems?: (id: string) => MenuItem[];
   conn?: import("../term/PaneRegistry.js").RequestPort;
 }
 
@@ -40,8 +41,14 @@ export interface MenuDeps {
 export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   const { model, actions } = deps;
   const target = menu.target;
-  if(target.kind === "view")return deps.viewItems?.(target.viewId)??[];
-  if(target.kind === "agent-tools")return actions.agentActionsFor(target.paneId).map(action=>({label:HEADER_ACTION_LABELS[action]+(action==='usage'?'（エージェント）':''),run:()=>actions.agentPaneAction(target.paneId,action)}));
+  if (target.kind === "view") return deps.viewItems?.(target.viewId) ?? [];
+  if (target.kind === "agent-tools")
+    return actions
+      .agentActionsFor(target.paneId)
+      .map((action) => ({
+        label: HEADER_ACTION_LABELS[action] + (action === "usage" ? "（エージェント）" : ""),
+        run: () => actions.agentPaneAction(target.paneId, action),
+      }));
   if (target.kind === "pane") {
     const pane = model.panes.get(target.paneId);
     const focused = model.focusedPaneId;
@@ -59,10 +66,21 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }]
         : []),
 
-      ...headerActionsFor(pane?.agent?.kind??'',!!pane?.agentSession,AGENT_HEADER_ACTIONS).filter(a=>a!=='fork').map(action=>({label:HEADER_ACTION_LABELS[action]+(action==='usage'?'（エージェント）':''),run:()=>actions.agentPaneAction(target.paneId,action)})),
+      ...headerActionsFor(pane?.agent?.kind ?? "", !!pane?.agentSession, AGENT_HEADER_ACTIONS)
+        .filter((a) => a !== "fork")
+        .map((action) => ({
+          label: HEADER_ACTION_LABELS[action] + (action === "usage" ? "（エージェント）" : ""),
+          run: () => actions.agentPaneAction(target.paneId, action),
+        })),
       { label: "右へ分割", run: () => actions.splitPane(target.paneId, "right") },
       { label: "下へ分割", run: () => actions.splitPane(target.paneId, "down") },
-      { label: model.tabs.get(pane?.tabId??"")?.zoomedPaneId===target.paneId?"元のサイズに戻す":"拡大表示", run: () => actions.zoomPane(target.paneId) },
+      {
+        label:
+          model.tabs.get(pane?.tabId ?? "")?.zoomedPaneId === target.paneId
+            ? "元のサイズに戻す"
+            : "拡大表示",
+        run: () => actions.zoomPane(target.paneId),
+      },
       {
         label: pane?.rightClick === "pane" ? "herdr のメニューを使う" : "右クリックを pane に送る",
         run: () =>
@@ -75,23 +93,60 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
       ...((pane?.agent?.subagents?.count ?? 0) > 0
         ? [{ label: "サブエージェントの一覧", run: () => actions.showSubagentsOf(target.paneId) }]
         : []),
-      ...(pane?.agent ? [
-        {label:"エージェントを fork…",run:()=>actions.openAgentFork(target.paneId)},
-        {label:"利用状況…",run:()=>actions.showUsageOf(target.paneId)},
-      ] : []),
-      {label:"このペインにビューを追加…",run:()=>pane&&deps.ui.openDialogWithContext({kind:"workspaceView",tabId:pane.tabId,paneId:target.paneId})},
-      { label: "表示ウィンドウ…", run: () => deps.ui.openDialogWithContext({kind:"display",paneId:target.paneId}) },
+      ...(pane?.agent
+        ? [
+            { label: "エージェントを fork…", run: () => actions.openAgentFork(target.paneId) },
+            { label: "利用状況…", run: () => actions.showUsageOf(target.paneId) },
+          ]
+        : []),
+      {
+        label: "このペインにビューを追加…",
+        run: () =>
+          pane &&
+          deps.ui.openDialogWithContext({
+            kind: "workspaceView",
+            tabId: pane.tabId,
+            paneId: target.paneId,
+          }),
+      },
+      {
+        label: "表示ウィンドウ…",
+        run: () => deps.ui.openDialogWithContext({ kind: "display", paneId: target.paneId }),
+      },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
       { label: "閉じる", run: () => actions.closePaneById(target.paneId) },
-
     ];
   }
   if (target.kind === "tab") {
-    const tab=model.tabs.get(target.tabId);
+    const tab = model.tabs.get(target.tabId);
     return [
-      ...(tab?.plugin?.terminalDisplay && deps.conn?[{label:tab.perspective==='app'?'端末画面へ':'アプリ画面へ',run:()=>{void deps.conn!.request('tab.set_perspective',{tabId:tab.id,perspective:tab.perspective==='app'?'terminal':'app'}).catch(()=>deps.ui.toast('画面を切り替えられません'));}}]:[]),
-      {label:"ビューを追加…",run:()=>deps.ui.openDialogWithContext({kind:"workspaceView",tabId:target.tabId})},
-      ...(tab?.views??[]).map(v=>({label:`ビューを削除: ${v.viewId}`,run:()=>{void deps.conn?.request("tab.remove_view",{tabId:target.tabId,viewInstanceId:v.id}).catch(()=>deps.ui.toast("ビューを削除できませんでした"));}})),
+      ...(tab?.plugin?.terminalDisplay && deps.conn
+        ? [
+            {
+              label: tab.perspective === "app" ? "端末画面へ" : "アプリ画面へ",
+              run: () => {
+                void deps
+                  .conn!.request("tab.set_perspective", {
+                    tabId: tab.id,
+                    perspective: tab.perspective === "app" ? "terminal" : "app",
+                  })
+                  .catch(() => deps.ui.toast("画面を切り替えられません"));
+              },
+            },
+          ]
+        : []),
+      {
+        label: "ビューを追加…",
+        run: () => deps.ui.openDialogWithContext({ kind: "workspaceView", tabId: target.tabId }),
+      },
+      ...(tab?.views ?? []).map((v) => ({
+        label: `ビューを削除: ${v.viewId}`,
+        run: () => {
+          void deps.conn
+            ?.request("tab.remove_view", { tabId: target.tabId, viewInstanceId: v.id })
+            .catch(() => deps.ui.toast("ビューを削除できませんでした"));
+        },
+      })),
       { label: "名前の変更", run: () => actions.renameTabById(target.tabId) },
       { label: "閉じる", run: () => actions.closeTabById(target.tabId) },
     ];
@@ -134,7 +189,6 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         : hasOtherGroup
           ? [{ label: "グループへ追加…", run: () => actions.openGroupPicker(target.workspaceId) }]
           : []),
-
     ];
   }
   if (target.kind === "group") {
@@ -159,17 +213,25 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         ]
       : [];
   }
-  if (target.kind === "new") return [
-    {label:"workspace",run:()=>actions.run({type:"newWorkspace"})},
-    ...(deps.ui.screen === "base" && model.focusedPaneId ? [{label:"pane",run:()=>actions.run({type:"split",dir:"right"})}] : []),
-    ...(model.workspaceId ? [{label:"グループ…",run:()=>actions.createGroupForWorkspace(model.workspaceId!)}] : []),
-  ];
+  if (target.kind === "new")
+    return [
+      { label: "workspace", run: () => actions.run({ type: "newWorkspace" }) },
+      ...(deps.ui.screen === "base" && model.focusedPaneId
+        ? [{ label: "pane", run: () => actions.run({ type: "split", dir: "right" }) }]
+        : []),
+      ...(model.workspaceId
+        ? [{ label: "グループ…", run: () => actions.createGroupForWorkspace(model.workspaceId!) }]
+        : []),
+    ];
   target satisfies { kind: "global" };
   return [
     { label: "キー割り当て", run: () => actions.run({ type: "help" }) },
     { label: "移動", run: () => actions.run({ type: "goto" }) },
-    {label:"プラグインパッケージ…",run:()=>deps.ui.openDialogWithContext({kind:"pluginPackages"})},
-      { label: "設定", run: () => actions.run({ type: "settings" }) },
+    {
+      label: "プラグインパッケージ…",
+      run: () => deps.ui.openDialogWithContext({ kind: "pluginPackages" }),
+    },
+    { label: "設定", run: () => actions.run({ type: "settings" }) },
     // 端末版だけ：未処理の知らせの一覧（design の「通知の一覧」。web は知らせのトーストが残るので一覧を持たない）。
 
     { label: "切り離し", run: () => actions.run({ type: "detach" }) },
@@ -178,6 +240,13 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
 
 /** 右クリックのメニュー（M3）。↑↓/j/k・Enter/Space・Esc。項目を選んだら閉じてから実行する（閉じた後に開く前の pane へ焦点が戻る）。 */
 export class ContextMenu implements Overlay {
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
   private active = 0;
   private rect: Rect | null = null;
   private pressed = false;
@@ -194,6 +263,7 @@ export class ContextMenu implements Overlay {
   }
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     const n = this.items().length;
     if (isEsc(k)) return this.cancel();
     if (isEnter(k) || k.key === " ") return this.activate(this.active);
@@ -202,6 +272,7 @@ export class ContextMenu implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     const index = ev.y - (this.rect!.y + 1);
     if (index >= this.visible) return true; // 枠の下の罫線
@@ -244,6 +315,7 @@ export class ContextMenu implements Overlay {
     const r = { x, y, w, h };
     this.rect = r;
     const inner = drawBox(grid, r, c);
+    inner.w = Math.max(0, inner.w - 1);
     // 短い端末では見える分だけを出し、選んでいる項目が見えるようにずらす（見えない項目を選んで実行しない）。
     this.visible = Math.max(1, inner.h);
     if (this.active < this.scroll) this.scroll = this.active;
@@ -261,6 +333,17 @@ export class ContextMenu implements Overlay {
         inner.w,
       );
     });
+    this.scrollbar.render(
+      grid,
+      { ...inner, w: inner.w + 1 },
+      items.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.active = Math.max(offset, Math.min(this.active, offset + this.visible - 1));
+      },
+    );
     return hiddenCursor();
   }
 }

@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import { shortId } from "@sodashitsu/protocol";
 import {
   formatSubagentElapsed,
@@ -52,6 +53,14 @@ export function plainText(text: string): string {
  * 一覧が長いときの ↑↓ の印は右端の 1 桁に出すので、中身はその手前までにする。
  */
 export class SubagentList implements Overlay {
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+
   private scroll = 0;
   private rect: Rect | null = null;
   private visible = 0;
@@ -65,6 +74,7 @@ export class SubagentList implements Overlay {
   ) {}
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     if (isEsc(k)) return this.cancel();
     if (isDown(k) || k.key === "j") this.move(1);
     else if (isUp(k) || k.key === "k") this.move(-1);
@@ -82,6 +92,7 @@ export class SubagentList implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "wheel") this.move(ev.button === 65 ? 1 : -1);
     return true;
@@ -142,18 +153,17 @@ export class SubagentList implements Overlay {
       }
       grid.text(inner.x + cw - ew, y, elapsed, c.dim, c.bg, 0);
     }
-    if (this.total > this.visible && this.visible > 0) {
-      if (this.scroll > 0) grid.set(inner.x + inner.w - 1, inner.y, "↑", 1, c.dim, c.bg);
-      if (this.scroll + this.visible < this.total)
-        grid.set(inner.x + inner.w - 1, inner.y + this.visible - 1, "↓", 1, c.dim, c.bg);
-    }
-    grid.text(
-      inner.x,
-      inner.y + inner.h - 1,
-      truncate("↑↓ で読む・Esc で閉じる", inner.w),
-      c.dim,
-      c.bg,
+    this.scrollbar.render(
+      grid,
+      { ...inner, h: this.visible },
+      this.total,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+      },
     );
+
     return hiddenCursor();
   }
 }
