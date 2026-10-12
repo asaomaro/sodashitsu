@@ -1,0 +1,2 @@
+review_summary_cache:期間ラベル内の15時間/17日が誤分類される指摘。期間分数を優先し数値境界のregexとテストを追加、再レビュー指摘なし。
+review_history_usage:Web applyPrefsToStoresへの共有設定反映漏れ。正規化を追加、削除時リセットと別クライアント変更を開いたpopupへ反映するテストを追加。reload経路も確認、再レビュー指摘なし。

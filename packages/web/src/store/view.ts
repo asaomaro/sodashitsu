@@ -279,6 +279,7 @@ export interface ToastOptions {
  * `KeyRouter`/`KeyInputController` へ渡すモード名（"dialog"）との対応用の軽い印。
  */
 export type DialogContext =
+  | { kind: "statuslineSettings" }
   | { kind: "addView"; tabId: string; paneId?: string }
   | { kind: "newTab"; workspaceId: string }
   | { kind: "projectFolder"; workspaceId: string; currentPath: string }

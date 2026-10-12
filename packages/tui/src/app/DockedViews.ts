@@ -308,6 +308,7 @@ export class DockedViews {
     const found = this.view(id);
     if (!found) return [];
     return [
+      ...(found.view.extensionKey === BUILTIN_WORKSPACE_KEY && found.view.viewId === "statusline" ? [{ label: "Statuslineの設定…", run: () => this.ui.openDialogWithContext({ kind: "statuslineSettings" as const }) }] : []),
       {
         label: this.folded.has(id) ? "展開する" : "畳む",
         run: () => (this.folded.has(id) ? this.open(id) : this.fold(id)),

@@ -416,3 +416,60 @@ for (const placement of ["band-top", "band-bottom"] as const) {
     client.close();
   });
 }
+
+test("statusline menu opens shared display settings, updates the line and persists after reload", async ({
+  page,
+  appServer,
+}) => {
+  const client = await appServer.openClient(),
+    pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
+  await client.request("pane.rename", { paneId: pane.id, label: "ConfiguredPane" });
+  await client.request("tab.add_view", {
+    tabId: pane.tabId,
+    extensionKey: "builtin:workspace",
+    viewId: "statusline",
+    target: "tab",
+    placement: "band-bottom",
+  });
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  const body = page.frameLocator(".pane-band iframe").locator("body");
+  await expect(body).toContainText("ConfiguredPane");
+  for (const button of await page.locator(".toast-sticky .toast-close").all()) await button.click();
+  await page.locator(".pane-band [data-display-menu-button]").click();
+  await page.getByRole("menuitem", { name: "Statuslineの設定…", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Statuslineの設定", exact: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).uncheck();
+  await expect(body).not.toContainText("ConfiguredPane");
+  await dialog.getByRole("checkbox", { name: "コンテキスト", exact: true }).uncheck();
+  await expect(body).not.toContainText("Context");
+  await dialog.getByRole("checkbox", { name: "コンテキストのグラフ", exact: true }).uncheck();
+  await dialog.getByLabel("週制限のグラフパターン", { exact: true }).selectOption("dots");
+  await expect(dialog.locator("output").nth(2)).toContainText("●");
+  await expect
+    .poll(async () => (await client.request("prefs.get", {})).prefs.statuslineSettings)
+    .toMatchObject({
+      fields: { pane: false, context: false },
+      graphs: { context: { visible: false }, weekly: { pattern: "dots" } },
+    });
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await page.reload();
+  await expect(body).not.toContainText("ConfiguredPane");
+  await page.locator(".pane-band [data-display-menu-button]").click();
+  await page.getByRole("menuitem", { name: "Statuslineの設定…", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: "ペイン名", exact: true })).not.toBeChecked();
+  await expect(dialog.getByLabel("週制限のグラフパターン", { exact: true })).toHaveValue("dots");
+  await page.setViewportSize({ width: 390, height: 720 });
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  const saved = (await client.request("prefs.get", {})).prefs.statuslineSettings!;
+  saved.fields.model = false;
+  await client.request("prefs.set", { patch: { statuslineSettings: saved } });
+  await expect(dialog.getByRole("checkbox", { name: "モデル", exact: true })).not.toBeChecked();
+  await expect(dialog.getByLabel("週制限のグラフパターン", { exact: true })).toHaveValue("dots");
+  await page.screenshot({ path: "/tmp/statusline-settings-mobile.png" });
+  client.close();
+});
