@@ -30,3 +30,5 @@ export * from "./pluginOperations.js";
 export * from "./workspaceTools.js";
 
 export * from "./schedule.js";
+
+export * from "./statusline.js";

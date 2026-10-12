@@ -972,6 +972,7 @@ export interface SharedPrefs {
   notificationStates?: SharedNotice[];
   agentHeaderActions?: AgentHeaderAction[];
   summarySettings?: SummarySettings;
+  statuslineSettings?: import("./statusline.js").StatuslineSettings;
   statusSymbols?: boolean;
   keyboardLockInFullscreen?: boolean;
   viewTitleVisible?: boolean;

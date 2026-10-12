@@ -21,7 +21,7 @@ import {
   type OverlayRenderContext,
 } from "./overlay.js";
 import type { Grid, Rect } from "../render/Screen.js";
-import type { ThemeColors } from "../render/color.js";
+import type { ThemeColors, PackedColor } from "../render/color.js";
 import { stringWidth, truncate } from "../render/width.js";
 
 const num = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString("ja-JP"));
@@ -32,6 +32,35 @@ export function usageGauge(percent: number | undefined, cells = 10): string {
   const filled = Math.round((Math.max(0, Math.min(100, percent)) / 100) * cells);
   return "[" + "#".repeat(filled) + "-".repeat(cells - filled) + "] " + percent.toFixed(1) + "%";
 }
+/** 数値はそのまま保ち、利用量の棒と率だけを閾値に応じた色で描く。 */
+export function paintUsageLine(
+  grid: Grid,
+  x: number,
+  y: number,
+  text: string,
+  theme: ThemeColors,
+  fg: PackedColor,
+  bg: PackedColor,
+  width: number,
+) {
+  const clean = plainText(text);
+  grid.text(x, y, truncate(clean, width), fg, bg, 0, width);
+  for (const match of clean.matchAll(/\[[#?\-]+\]\s*(?:([\d.]+)%|—)/g)) {
+    const col = stringWidth(clean.slice(0, match.index));
+    const percent = match[1] === undefined ? undefined : Number(match[1]);
+    const color = theme.ui(
+      clean.includes("古い") || percent === undefined || !Number.isFinite(percent)
+        ? "--soda-state-idle"
+        : percent >= 90
+          ? "--soda-state-blocked"
+          : percent >= 70
+            ? "--soda-warn-fg"
+            : "--soda-state-done",
+    );
+    if (col < width) grid.text(x + col, y, match[0], color, bg, 0, width - col);
+  }
+}
+
 function contextPercent(u: AgentUsage): number | undefined {
   return (
     u.contextUsedPct ??
@@ -134,9 +163,7 @@ export class UsageDialog implements Overlay {
     this.scroll = Math.min(this.scroll, Math.max(0, lines.length - area.h));
     lines
       .slice(this.scroll, this.scroll + area.h)
-      .forEach((s, i) =>
-        grid.text(area.x, area.y + i, truncate(plainText(s), area.w), c.fg, c.bg, 0, area.w),
-      );
+      .forEach((s, i) => paintUsageLine(grid, area.x, area.y + i, s, theme, c.fg, c.bg, area.w));
     this.scrollbar.render(
       grid,
       { ...area, w: area.w + 1 },
@@ -232,15 +259,7 @@ export class UsageDashboard {
     grid.fill(area, c.fg, c.bg);
     const put = (y: number, text: string, bg = c.bg) => {
       if (y < area.y + area.h)
-        grid.text(
-          area.x + 1,
-          y,
-          truncate(plainText(text), Math.max(0, area.w - 2)),
-          c.fg,
-          bg,
-          0,
-          Math.max(0, area.w - 2),
-        );
+        paintUsageLine(grid, area.x + 1, y, text, theme, c.fg, bg, Math.max(0, area.w - 2));
     };
     let y = area.y;
     put(

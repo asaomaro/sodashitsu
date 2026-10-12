@@ -4,7 +4,7 @@ import { EventBus } from "../bus/EventBus.js";
 import type { SessionService } from "../session/SessionService.js";
 import type { DisplayService } from "../display/DisplayService.js";
 import type { WorkspaceTools } from "./WorkspaceTools.js";
-import { checkDisplaySet } from "@sodashitsu/protocol";
+import { loadStatuslineSettings, checkDisplaySet } from "@sodashitsu/protocol";
 import type { AgentUsageResult } from "@sodashitsu/protocol";
 it("statusline follows the active pane for a tab and keeps a pane-scoped line pinned, using the colored HTML surface", async () => {
   const tab = {
@@ -59,11 +59,28 @@ it("statusline follows the active pane for a tab and keeps a pane-scoped line pi
             contextUsedPct: 42,
           },
         },
-        accounts: [{ kind: "codex", label: "codex", windows: [{ label: "5h", usedPct: 25 }] }],
+        accounts: [
+          {
+            kind: "codex",
+            label: "codex",
+            windows: [
+              { label: "5h", usedPct: 25 },
+              { label: "週", usedPct: 75 },
+            ],
+          },
+        ],
       }) as AgentUsageResult,
   );
   const bus = new EventBus();
-  const views = new BuiltinViews(session, displays, bus, {} as WorkspaceTools, usage);
+  let settings = loadStatuslineSettings({});
+  const views = new BuiltinViews(
+    session,
+    displays,
+    bus,
+    {} as WorkspaceTools,
+    usage,
+    () => settings,
+  );
   try {
     views.sync();
     await vi.waitFor(() => expect(set).toHaveBeenCalledTimes(2));
@@ -77,6 +94,20 @@ it("statusline follows the active pane for a tab and keeps a pane-scoped line pi
     expect(set.mock.calls[0]?.[1].content).toContain('data-soda-color="good">Context');
     expect(set.mock.calls[0]?.[1].content).toContain('data-soda-color="active">working');
     expect(set.mock.calls[0]?.[1].content).toContain("5h");
+    settings.fields.pane = false;
+    settings.fields.model = false;
+    settings.graphs.context.visible = false;
+    settings.graphs.weekly.pattern = "dots";
+    set.mockClear();
+    bus.publish({ event: "prefs.changed", data: {} } as never);
+    await vi.waitFor(() => expect(set).toHaveBeenCalledTimes(2));
+    const configured = set.mock.calls.find((c) => c[1].name === "status")![1].content;
+    expect(configured).not.toContain("Alpha");
+    expect(configured).not.toContain("test-model");
+    expect(configured).toContain("Context 42%");
+    expect(configured).toContain("●●●●●●●●○○ 75%");
+    expect(configured).toContain("▰▰▰▱▱▱▱▱▱▱ 25%");
+    settings = loadStatuslineSettings({});
     set.mockClear();
     tab.focusedPaneId = "b";
     bus.publish({ event: "session.focus_changed", data: {} } as never);

@@ -148,6 +148,8 @@ function displayItems(id: string): MenuItem[] {
   const focusToHead = (): HTMLElement | null => headFocusTarget(d.id);
   const focusToTray = (): HTMLElement | null => trayFocusTarget(d.id);
   const list: MenuItem[] = [];
+  if (d.source?.type === "builtin" && [...session.tabs.values()].some(tab => tab.views?.some(v => v.extensionKey === "builtin:workspace" && v.viewId === "statusline" && v.paneId === d.paneId && v.display === d.name)))
+    list.push({ label: "Statuslineの設定…", run: () => view.openDialogWithContext({ kind: "statuslineSettings" }) });
   if(d.kind==="band")list.push({label:"帯を高くする",run:()=>displays.setBandHeight(d,displays.bandHeightOf(d)+8)},{label:"帯を低くする",run:()=>displays.setBandHeight(d,displays.bandHeightOf(d)-8)});
   // 浮いた窓は、窓の動ける領域が分かっている間だけ開く操作を受ける（無ければ「開く」を出さない）。
   if (f.collapsed && f.dock === "float" && !displays.canOpenFloat(d.paneId)) {

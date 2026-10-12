@@ -1,5 +1,9 @@
 import type { Pinia } from "pinia";
-import { loadAgentHeaderActions, loadSummarySettings } from "@sodashitsu/protocol";
+import {
+  loadAgentHeaderActions,
+  loadSummarySettings,
+  loadStatuslineSettings,
+} from "@sodashitsu/protocol";
 import {
   loadKeyPrefs,
   loadSidebarRows,
@@ -29,7 +33,13 @@ import {
   loadUiStyle,
   useSettingsStore,
 } from "./settings.js";
-import { loadAgentSort, loadCollapsedAutoGroups, loadUngroupedCollapsed, loadWorkspaceSort, useViewStore } from "./view.js";
+import {
+  loadAgentSort,
+  loadCollapsedAutoGroups,
+  loadUngroupedCollapsed,
+  loadWorkspaceSort,
+  useViewStore,
+} from "./view.js";
 import { loadNotifyPrefs, useNotificationsStore } from "./notifications.js";
 import { useOnboardingStore } from "./onboarding.js";
 
@@ -48,6 +58,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("statusSymbols", loadStatusSymbols(raw["statusSymbols"]));
   set("agentHeaderActions", loadAgentHeaderActions(raw["agentHeaderActions"]));
   set("summarySettings", loadSummarySettings(raw["summarySettings"]));
+  set("statuslineSettings", loadStatuslineSettings(raw["statuslineSettings"]));
   set("keyboardLockInFullscreen", loadKeyboardLockInFullscreen(raw["keyboardLockInFullscreen"]));
   set("paneFrameThickness", loadPaneFrameThickness(raw["paneFrameThickness"]));
   set("viewTitleVisible", raw["viewTitleVisible"] !== false);

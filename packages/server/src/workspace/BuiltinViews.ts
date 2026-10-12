@@ -1,4 +1,8 @@
 import {
+  loadStatuslineSettings,
+  statuslineGauge,
+  statuslineLimitKind,
+  type StatuslineField,
   BUILTIN_WORKSPACE_KEY,
   BUILTIN_VIEWS,
   BUILTIN_DEVELOPMENT_DISPLAY,
@@ -42,6 +46,7 @@ export class BuiltinViews {
     bus: EventBus,
     private tools: WorkspaceTools,
     private getUsage?: (paneId: string) => Promise<AgentUsageResult>,
+    private getStatuslineSettings: () => unknown = () => undefined,
   ) {
     this.timer = setInterval(() => {
       for (const [id, v] of this.active) if (v.viewId === "statusline") this.render(id);
@@ -50,6 +55,7 @@ export class BuiltinViews {
     this.sub = bus.subscribe((e) => {
       if (
         [
+          "prefs.changed",
           "tab.created",
           "tab.updated",
           "workspace.updated",
@@ -217,15 +223,19 @@ export class BuiltinViews {
         } catch {}
       if (this.active.get(id) !== v || !this.session.hasPane(v.paneId)) return;
       const usage = pane ? result.panes[pane.id] : null;
-      const bar = (pct: number) =>
-        `${"▰".repeat(Math.round(Math.max(0, Math.min(100, pct)) / 10))}${"▱".repeat(10 - Math.round(Math.max(0, Math.min(100, pct)) / 10))} ${Math.round(pct)}%`;
+      const settings = loadStatuslineSettings(this.getStatuslineSettings());
       const level = (pct: number) => (pct >= 90 ? "danger" : pct >= 70 ? "warning" : "good");
-      const segment = (text: string, tone: string = "normal") => ({ text, tone });
+      const segment = (field: StatuslineField, text: string, tone: string = "normal") => ({
+        field,
+        text,
+        tone,
+      });
       const segments = pane
         ? [
-            segment(paneNameOf(pane), "name"),
-            segment(pane.agent?.kind ?? "ターミナル", "name"),
+            segment("pane", paneNameOf(pane), "name"),
+            segment("agent", pane.agent?.kind ?? "ターミナル", "name"),
             segment(
+              "state",
               pane.agent?.state ?? "",
               pane.agent?.state === "working"
                 ? "active"
@@ -235,27 +245,37 @@ export class BuiltinViews {
                     ? "good"
                     : "muted",
             ),
-            segment(usage?.model ?? "モデル —", "model"),
+            segment("model", usage?.model ?? "モデル —", "model"),
             usage?.contextUsedPct !== undefined
-              ? segment(`Context ${bar(usage.contextUsedPct)}`, level(usage.contextUsedPct))
-              : segment("Context —", "muted"),
+              ? segment(
+                  "context",
+                  `Context ${statuslineGauge(usage.contextUsedPct, settings.graphs.context)}`,
+                  level(usage.contextUsedPct),
+                )
+              : segment("context", "Context —", "muted"),
             segment(
+              "tokens",
               usage?.tokens.total !== undefined ? `Tokens ${usage.tokens.total}` : "",
               "name",
             ),
-            segment(usage?.costUsd !== undefined ? `$${usage.costUsd.toFixed(3)}` : "", "model"),
+            segment(
+              "cost",
+              usage?.costUsd !== undefined ? `$${usage.costUsd.toFixed(3)}` : "",
+              "model",
+            ),
             ...result.accounts
               .filter((a) => a.kind === pane.agent?.kind)
               .flatMap((a) =>
                 a.windows.map((w) =>
                   segment(
-                    `${a.label} ${w.label} ${bar(w.usedPct)}${w.stale ? " (古い値)" : ""}`,
+                    statuslineLimitKind(w),
+                    `${a.label} ${w.label} ${statuslineGauge(w.usedPct, settings.graphs[statuslineLimitKind(w)])}${w.stale ? " (古い値)" : ""}`,
                     w.stale ? "muted" : level(w.usedPct),
                   ),
                 ),
               ),
-          ].filter((s) => s.text)
-        : [segment("アクティブなペインがありません", "muted")];
+          ].filter((s) => s.text && settings.fields[s.field])
+        : [segment("pane", "アクティブなペインがありません", "muted")];
       // 帯には静的ビュー共通の余白を入れず、掴みボタンと同じ中央位置に置く。
       const bandStyle = v.placement.startsWith("band-")
         ? "html,body{height:100%;overflow:hidden}#soda-display-root{box-sizing:border-box;height:100%;max-height:24px;padding:0;display:flex;align-items:center;overflow:hidden}.statusline{box-sizing:border-box;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:20px;padding:0 4px}"

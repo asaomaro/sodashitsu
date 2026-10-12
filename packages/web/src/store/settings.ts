@@ -1,3 +1,4 @@
+import { loadStatuslineSettings, type StatuslineSettings } from "@sodashitsu/protocol";
 import {
   loadAgentHeaderActions,
   loadSummarySettings,
@@ -156,6 +157,11 @@ export function loadPaneOuterBorders(raw: unknown): boolean {
 export const useSettingsStore = defineStore("settings", () => {
   const initial = readPrefs();
   const agentHeaderActions = ref(loadAgentHeaderActions(initial["agentHeaderActions"]));
+  const statuslineSettings = ref(loadStatuslineSettings(initial["statuslineSettings"]));
+  function setStatuslineSettings(v: StatuslineSettings) {
+    statuslineSettings.value = loadStatuslineSettings(v);
+    writePrefs({ statuslineSettings: statuslineSettings.value });
+  }
   const summarySettings = ref(loadSummarySettings(initial["summarySettings"]));
   function setAgentHeaderActions(v: AgentHeaderAction[]): void {
     agentHeaderActions.value = loadAgentHeaderActions(v);
@@ -564,6 +570,7 @@ export const useSettingsStore = defineStore("settings", () => {
     viewTitleVisible.value = prefs["viewTitleVisible"] !== false;
     agentHeaderActions.value = loadAgentHeaderActions(prefs["agentHeaderActions"]);
     summarySettings.value = loadSummarySettings(prefs["summarySettings"]);
+    statuslineSettings.value = loadStatuslineSettings(prefs["statuslineSettings"]);
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
     if (nextPosition !== tabBarPosition.value) tabBarPosition.value = nextPosition;
     const nextAlways = loadTabBarAlways(prefs["tabBarAlways"]);
@@ -661,6 +668,7 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   return {
+    statuslineSettings, setStatuslineSettings,
     agentHeaderActions,
     summarySettings,
     setAgentHeaderActions,

@@ -54,6 +54,21 @@ const raw = {
 };
 
 describe("applyPrefsToStores", () => {
+  it("applies remote statusline changes and resets removed settings", () => {
+    const settings = useSettingsStore(pinia);
+    applyPrefsToStores(pinia, {
+      statuslineSettings: {
+        fields: { pane: false, model: false },
+        graphs: { weekly: { visible: false, pattern: "dots" } },
+      },
+    });
+    expect(settings.statuslineSettings.fields.pane).toBe(false);
+    expect(settings.statuslineSettings.fields.model).toBe(false);
+    expect(settings.statuslineSettings.graphs.weekly).toEqual({ visible: false, pattern: "dots" });
+    applyPrefsToStores(pinia, {});
+    expect(settings.statuslineSettings.fields.pane).toBe(true);
+    expect(settings.statuslineSettings.graphs.weekly).toEqual({ visible: true, pattern: "blocks" });
+  });
   it("applies saved conversation settings on connection and resets removed settings", () => {
     const settings = useSettingsStore(pinia);
     const summary = { kind: "codex", model: "GPT-6-Luna", sessionId: "" };
@@ -160,7 +175,10 @@ describe("applyPrefsToStores", () => {
   });
 });
 it("applies shared view title visibility immediately and restores its default when removed", () => {
- const settings=useSettingsStore(pinia);expect(settings.viewTitleVisible).toBe(true);
- applyPrefsToStores(pinia,{viewTitleVisible:false});expect(settings.viewTitleVisible).toBe(false);
- applyPrefsToStores(pinia,{});expect(settings.viewTitleVisible).toBe(true);
+  const settings = useSettingsStore(pinia);
+  expect(settings.viewTitleVisible).toBe(true);
+  applyPrefsToStores(pinia, { viewTitleVisible: false });
+  expect(settings.viewTitleVisible).toBe(false);
+  applyPrefsToStores(pinia, {});
+  expect(settings.viewTitleVisible).toBe(true);
 });

@@ -1,3 +1,4 @@
+import { statuslineSettingsSections } from "../settings/statuslineSettings.js";
 import { GraphTerminal } from "../modes/GraphTerminal.js";
 import { ScheduleView } from "../modes/ScheduleView.js";
 import { PluginPackages } from "../modes/PluginPackages.js";
@@ -1316,6 +1317,7 @@ export class TuiApp {
       });
     if (ctx.kind === "pluginPackages")
       return new PluginPackages(this.ui, this.rpc, () => this.scheduleRender());
+    if (ctx.kind === "statuslineSettings") return new WindowOverlay(new SettingsDialog(this.ui, () => statuslineSettingsSections(this.prefs, this.settingsWriter), () => this.scheduleRender()), { w: 96, h: 30 });
     if (ctx.kind === "settings") return this.settingsDialog(ctx.section);
     if (ctx.kind === "onboarding")
       return new OnboardingDialog({
