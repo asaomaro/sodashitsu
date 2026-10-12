@@ -8,6 +8,20 @@ import { snapshot } from "../testing/fixtures.js";
 import { Grid } from "../render/Screen.js";
 import { ThemeColors } from "../render/color.js";
 import { ConversationDialog } from "./ConversationDialog.js";
+it('switches message order by key and mouse while keeping the selected message identity',async()=>{
+  const model=new SessionModel();model.applySnapshot(snapshot(),'client');const ui=new UiState(model,vi.fn()),jump=vi.fn();
+  const request=vi.fn(async()=>({messages:[{id:'old',role:'user',text:'最初の質問'},{id:'new',role:'user',text:'最後の質問'}],nextOffset:null,partial:false}));
+  const d=new ConversationDialog('messages','p1',ui,{request} as unknown as RequestPort,new PrefsModel(),model,()=>{},()=>{},jump);
+  const render=()=>{const grid=new Grid(100,30);d.render({grid,theme:new ThemeColors('dracula')});return Array.from({length:grid.h},(_,y)=>grid.rowText(y)).join('\n');};
+  try{
+    await vi.waitFor(()=>expect(render()).toContain('最初の質問'));
+    expect(render().indexOf('最初の質問')).toBeLessThan(render().indexOf('最後の質問'));
+    d.handleKey(chordToKeyInput('o'));expect(render().indexOf('最後の質問')).toBeLessThan(render().indexOf('最初の質問'));
+    d.handleKey(chordToKeyInput('Space'));expect(jump).toHaveBeenCalledWith('p1','最初の質問');
+    d.handleKey(chordToKeyInput('Escape'));render();d.handleMouse({action:'down',button:0,x:90,y:27});
+    expect(render().indexOf('最初の質問')).toBeLessThan(render().indexOf('最後の質問'));
+  }finally{d.dispose();}
+});
 function setup(mode: "messages" | "summary") {
   const model = new SessionModel();
   model.applySnapshot(snapshot(), "client");

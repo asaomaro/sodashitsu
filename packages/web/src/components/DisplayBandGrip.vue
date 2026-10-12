@@ -66,7 +66,7 @@ onBeforeUnmount(() => drag.cancel());
   gap: 4px;
   cursor: grab;
   user-select: none;
-  align-self: center;
+  align-self: flex-start;
   touch-action: none;
   max-width: 160px;
   overflow: hidden;

@@ -82,7 +82,10 @@ describe("NotificationController（web と同じ判定）", () => {
       }),
       "c1",
     );
-    const ui = new UiState(model, () => undefined);
+    const uiTimers: { fn: () => void; ms: number }[] = [];
+    const ui = new UiState(model, (fn, ms) => {
+      uiTimers.push({ fn, ms });
+    });
     const prefs = new PrefsModel();
     prefs.apply({ notify: { toast: true, desktop: true, sound: true } }, 1);
     const written: string[] = [];
@@ -112,9 +115,27 @@ describe("NotificationController（web と同じ判定）", () => {
       model.panes.set(paneId, { ...model.panes.get(paneId)!, agent: a });
       n.onAgentChanged(paneId, prev, a);
     };
-    return { model, ui, prefs, n, written, focused, timers, state, change };
+    return { model, ui, prefs, n, written, focused, timers, uiTimers, state, change };
   }
   const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("keeps event snackbars until clicked or resolved, without expiring or evicting them for transient messages", () => {
+    const s = setup();
+    s.change("p3", { state: "blocked", since: 5 });
+    s.timers[0]!.fn();
+    const id = s.ui.toasts[0]!.id;
+    expect(s.uiTimers).toHaveLength(0);
+    for (let i = 0; i < 5; i++) s.ui.toast("message " + i);
+    for (const t of s.uiTimers) t.fn();
+    expect(s.ui.toasts.map((t) => t.id)).toEqual([id]);
+    s.change("p3", { state: "working" });
+    expect(s.ui.toasts).toHaveLength(0);
+    s.change("p3", { state: "blocked", since: 6 });
+    s.timers.at(-1)!.fn();
+    s.ui.clickToast(s.ui.toasts[0]!.id);
+    expect(s.ui.toasts).toHaveLength(0);
+    expect(s.focused).toEqual(["p3"]);
+  });
 
   it("入力待ちは 1 秒続いてから。見えていない pane ならトースト（押すと移る）と行き先。見ている pane は何も出さない", async () => {
     const s = setup();
@@ -157,7 +178,7 @@ describe("NotificationController（web と同じ判定）", () => {
     s.n.onSnapshotApplied([withDone], true);
     await tick();
     expect(s.ui.toasts).toHaveLength(0);
-    s.model.panes.get("p3")!.agent=agent({instanceId:"a3",completionSeq:4});
+    s.model.panes.get("p3")!.agent = agent({ instanceId: "a3", completionSeq: 4 });
     s.n.onSnapshotApplied(
       [{ paneId: "p3", agent: agent({ instanceId: "a3", completionSeq: 4 }) }],
       false,
@@ -188,18 +209,39 @@ describe("NotificationController（web と同じ判定）", () => {
     expect(s.n.queued).toHaveLength(0);
     expect(s.ui.toasts).toHaveLength(0);
   });
-  it("共有の対応済みは古い先送り応答で復活しない",async()=>{
-    const s=setup();s.change("p3",{state:"idle",completionSeq:1});await tick();const key=s.n.queued[0]!.key,at=Date.now();
-    s.n.onSharedNotification({notices:[{key,paneId:"p3",status:"resolved",at}]});
-    s.n.onSharedNotification({notices:[{key,paneId:"p3",status:"deferred",at:at-1}]});expect(s.n.queued).toHaveLength(0);
+  it("共有の対応済みは古い先送り応答で復活しない", async () => {
+    const s = setup();
+    s.change("p3", { state: "idle", completionSeq: 1 });
+    await tick();
+    const key = s.n.queued[0]!.key,
+      at = Date.now();
+    s.n.onSharedNotification({ notices: [{ key, paneId: "p3", status: "resolved", at }] });
+    s.n.onSharedNotification({ notices: [{ key, paneId: "p3", status: "deferred", at: at - 1 }] });
+    expect(s.n.queued).toHaveLength(0);
   });
-  it("マシンを切り替えると予約済みの完了配送を無効化する",async()=>{
-    const s=setup();s.change("p3",{state:"idle",completionSeq:1});s.n.resetForMachineSwitch();await tick();expect(s.n.queued).toHaveLength(0);expect(s.written).toHaveLength(0);
+  it('keeps an unresolved snackbar when an unrelated shared notice is resolved',async()=>{
+    const s=setup();s.change('p3',{state:'idle',completionSeq:1});await tick();
+    const key=s.n.queued[0]!.key,id=s.ui.toasts[0]!.id;
+    s.n.onSharedNotification({notices:[{key,paneId:'p3',status:'deferred',at:Date.now()},{key:'done:other:1',paneId:'other',status:'resolved',at:Date.now()}]});
+    expect(s.ui.toasts.map(t=>t.id)).toEqual([id]);
+    s.n.onSharedNotification({notices:[{key,paneId:'p3',status:'resolved',at:Date.now()+1}]});expect(s.ui.toasts).toHaveLength(0);
   });
-  it("作業再開済みの先送り完了通知は復元しない",()=>{
-    const s=setup();s.change("p3",{state:"working",completionSeq:1});s.n.onSharedNotification({notices:[{key:"done:a3:1",paneId:"p3",status:"deferred",at:Date.now()}]});expect(s.n.queued).toHaveLength(0);
+  it("マシンを切り替えると予約済みの完了配送を無効化する", async () => {
+    const s = setup();
+    s.change("p3", { state: "idle", completionSeq: 1 });
+    s.n.resetForMachineSwitch();
+    await tick();
+    expect(s.n.queued).toHaveLength(0);
+    expect(s.written).toHaveLength(0);
   });
-
+  it("作業再開済みの先送り完了通知は復元しない", () => {
+    const s = setup();
+    s.change("p3", { state: "working", completionSeq: 1 });
+    s.n.onSharedNotification({
+      notices: [{ key: "done:a3:1", paneId: "p3", status: "deferred", at: Date.now() }],
+    });
+    expect(s.n.queued).toHaveLength(0);
+  });
 });
 
 describe("端末版の通知（組み立て）", () => {
@@ -231,15 +273,18 @@ describe("端末版の通知（組み立て）", () => {
     expect(hits).toHaveLength(1);
     expect(hits[0]!.y).toBe(1);
     expect(hits[0]!.x).toBeGreaterThan(40);
+    const dockedMouse=vi.spyOn(h.app.dockedViews,'mouse').mockReturnValue(true);
     h.io.type(
       `\x1b[<0;${hits[0]!.x + 2};${hits[0]!.y + 1}M\x1b[<0;${hits[0]!.x + 2};${hits[0]!.y + 1}m`,
     );
     await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p3"));
+    expect(dockedMouse).not.toHaveBeenCalled();dockedMouse.mockRestore();
     // 戻って、次の完了は prefix+o で。
     h.app.model.focusPane("p1");
     done(2);
     await vi.waitFor(() => expect(h.app.notify.queued).toHaveLength(1));
-    h.app.renderNow();expect(h.io.output()).toContain("\x1b]2;🔔 ");
+    h.app.renderNow();
+    expect(h.io.output()).toContain("\x1b]2;🔔 ");
     // 知らせの一覧（全体のメニュー）。
     h.app.ui.openContextMenu({ kind: "global" }, { x: 40, y: 10 });
     h.app.renderNow();
@@ -256,7 +301,10 @@ describe("端末版の通知（組み立て）", () => {
     await vi.waitFor(() => expect(h.app.notify.queued).toHaveLength(1));
     h.io.type("\x02o");
     await vi.waitFor(() => expect(h.app.model.focusedPaneId).toBe("p3"));
-    h.app.renderNow();expect((h.io.output().match(/\x1b\]2;[^\x07\x1b]*(?:\x07|\x1b\\)/g)??[]).at(-1)).not.toContain("🔔");
+    h.app.renderNow();
+    expect(
+      (h.io.output().match(/\x1b\]2;[^\x07\x1b]*(?:\x07|\x1b\\)/g) ?? []).at(-1),
+    ).not.toContain("🔔");
   });
 
   it("見えているかは今の割り付けで判定する（同じ打鍵の中で移った先の pane の完了は知らせない）", async () => {

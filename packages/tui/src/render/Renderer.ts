@@ -13,13 +13,14 @@ import type { ColorMode, ThemeColors } from "./color.js";
 import { paneScrollTrack, scrollbarThumb, scrollMetricsOf } from "./scrollbar.js";
 import { isCropped, paintPane } from "./paintPane.js";
 import { Grid, Screen, type CursorState } from "./Screen.js";
+import { drawBox, dialogColors } from "../modes/overlay.js";
 import { stringWidth, truncate } from "./width.js";
 
 /** chrome と pane の後に重ねて描くもの（オーバーレイ・知らせ・pane の上の印）。 */
 export interface RenderExtras {
   /** pane の上の印（copy モードの選択・ドラッグの落とし先）。本物のカーソルを返せば焦点の pane のカーソルの代わりに置く。 */
   decorate?(grid: Grid): CursorState | null | undefined;
-  /** 右下の知らせ。 */
+  /** 右上の知らせ。 */
   toasts?: readonly { id: number; message: string; clickable?: boolean }[];
   /** オーバーレイ（ダイアログ・メニュー）。描いたら本物のカーソルの位置（入力欄が無ければ隠す）を返す。 */
   overlay?(grid: Grid): CursorState | null;
@@ -227,6 +228,7 @@ function centerText(
 /** 右上に知らせを積む（古いものが上・新しいものが下）。 */
 /** 知らせの当たり（押すと対象へ。通知のトースト）。 */
 export interface ToastHit {
+  h: number;
   id: number;
   x: number;
   y: number;
@@ -243,14 +245,24 @@ function paintToasts(
   const fg = ctx.theme.ui("--soda-menu-fg");
   const maxW = Math.max(1, Math.min(60, grid.w - 2));
   let y = grid.h >= 3 ? 1 : 0;
-  const visible = toasts.slice(-Math.max(1, grid.h - 2));
+  const height = grid.h >= 3 && grid.w >= 4 ? 3 : 1;
+  const visible = toasts.slice(-Math.max(1, Math.floor((grid.h - y) / height)));
   for (const t of visible) {
-    const text = ` ${truncate(t.clickable ? `${t.message} ▸` : t.message, Math.max(0, maxW - 2))} `;
-    const w = stringWidth(text);
-    grid.text(Math.max(0, grid.w - w - 1), y, text, fg, bg, 0, Math.min(w, grid.w));
-    if (t.clickable)
-      hits.push({ id: t.id, x: Math.max(0, grid.w - w - 1), y, w: Math.min(w, grid.w) });
-    y++;
+    const text = truncate(t.clickable ? `${t.message} ▸` : t.message, Math.max(0, maxW - 4));
+    const w = Math.min(grid.w, Math.max(4, stringWidth(text) + 4));
+    const x = Math.max(0, grid.w - w - 1);
+    if (height === 3) drawBox(grid, { x, y, w, h: height }, { ...dialogColors(ctx.theme), bg, fg });
+    grid.text(
+      x + (height === 3 ? 2 : 0),
+      y + (height === 3 ? 1 : 0),
+      text,
+      fg,
+      bg,
+      0,
+      Math.max(0, w - (height === 3 ? 4 : 0)),
+    );
+    hits.push({ id: t.id, x, y, w, h: height });
+    y += height;
   }
   return hits;
 }

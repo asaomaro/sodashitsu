@@ -599,7 +599,7 @@ export const AskOpenParams = z.object({
 });
 export type AskOpenParams = z.infer<typeof AskOpenParams>;
 /** この接続を「質問を出せる画面」として登録し、いま待っている質問を受け取る（接続のたびに呼ぶ）。 */
-export const AskSubscribeParams = z.object({});
+export const AskSubscribeParams = z.object({ renderer: z.literal("terminal").optional() });
 export type AskSubscribeParams = z.infer<typeof AskSubscribeParams>;
 export interface AskSubscribeResult {
   asks: AskPending[];
@@ -1554,7 +1554,10 @@ export const METHOD_SCHEMAS = {
   "notification.update": NotificationUpdateParams,
   "agent.usage": AgentUsageParams,
   "plugin.discover": z.object({}),
-  "plugin.register": z.object({key:z.string().regex(/^[a-f0-9]{64}$/),digest:z.string().regex(/^[a-f0-9]{64}$/)}),
+  "plugin.register": z.object({
+    key: z.string().regex(/^[a-f0-9]{64}$/),
+    digest: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
   "plugin.operations": PluginOperationsParams,
   "plugin.call": PluginCallParams,
   "agent.conversation": AgentConversationParams,
@@ -1702,7 +1705,7 @@ export interface MethodResultMap {
   "notification.state": NotificationState;
   "notification.update": NotificationState;
   "agent.usage": AgentUsageResult;
-  "plugin.discover": {candidates:import("./extension.js").PluginCandidate[]};
+  "plugin.discover": { candidates: import("./extension.js").PluginCandidate[] };
   "plugin.register": {};
   "plugin.operations": PluginOperationsResult;
   "plugin.call": { result: unknown };

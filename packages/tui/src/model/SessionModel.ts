@@ -34,6 +34,7 @@ import {
  * 表示（workspace / tab / 焦点の pane）はクライアントごと（web の `store/view` と同じ）。既読（`done`）もクライアントごとに手元のメモリへ持つ（design D-3）。
  */
 export interface SessionModelHooks {
+  onAskEvent?(event: ServerEvent): void;
   onDisplayEvent?(event: ServerEvent): void;
   onUsageChanged?(data: AgentUsageChangedEvent["data"]): void;
   onPaneClosed?(paneId: string): void;
@@ -190,6 +191,10 @@ export class SessionModel {
 
   private applyToSession(e: ServerEvent): void {
     switch (e.event) {
+      case "ask.opened":
+      case "ask.closed":
+        this.hooks.onAskEvent?.(e);
+        return;
       case "notification.test":
         this.hooks.onNotificationTest?.(e.data.message);
         return;

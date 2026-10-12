@@ -12,6 +12,13 @@ import type { SessionModel } from "./SessionModel.js";
  * **`DialogContext` の形は web と同じ**——操作（`TuiDispatcher`）の確定・取り消しの規則を web の `ActionDispatcher` から写すため。
  */
 export type DialogContext =
+  | {
+      kind: "graphEdit";
+      mode: "link" | "pane";
+      nodeKey?: import("@sodashitsu/protocol").NodeKey;
+      linkId?: string;
+      tabId?: string;
+    }
   | { kind: "graphTerminal"; paneId: string }
   | {
       kind: "workspaceView";
@@ -110,12 +117,13 @@ export interface Toast {
   message: string;
   /** 押したときにすること（通知の「移動」。押したら知らせは消える）。 */
   onClick?: () => void;
+  persistent?: boolean;
 }
 
 export interface ToastOptions {
   onClick?: () => void;
   /** 出しておく時間（既定 `TOAST_MS`）。 */
-  ms?: number;
+  ms?: number | null;
 }
 
 /** 知らせを出しておく時間。 */
@@ -213,10 +221,17 @@ export class UiState {
 
   toast(message: string, opts: ToastOptions = {}): number {
     const id = this.nextToastId++;
-    const t: Toast = { id, message, ...(opts.onClick ? { onClick: opts.onClick } : {}) };
-    this.toasts = [...this.toasts, t].slice(-3);
+    const t: Toast = {
+      id,
+      message,
+      persistent: opts.ms === null,
+      ...(opts.onClick ? { onClick: opts.onClick } : {}),
+    };
+    const all = [...this.toasts, t];
+    const transient = all.filter((t) => !t.persistent).slice(-3);
+    this.toasts = all.filter((t) => t.persistent || transient.includes(t));
     this.emit();
-    this.setTimer(() => this.dismissToast(id), opts.ms ?? TOAST_MS);
+    if (opts.ms !== null) this.setTimer(() => this.dismissToast(id), opts.ms ?? TOAST_MS);
     return id;
   }
 

@@ -1,4 +1,12 @@
-import { AskAnswerParams, AskCancelParams, AskFeaturesParams, AskGetParams, AskMediaParams, AskOpenParams, AskSubscribeParams } from "@sodashitsu/protocol";
+import {
+  AskAnswerParams,
+  AskCancelParams,
+  AskFeaturesParams,
+  AskGetParams,
+  AskMediaParams,
+  AskOpenParams,
+  AskSubscribeParams,
+} from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
@@ -15,7 +23,7 @@ export function registerAskMethods(surface: ControlSurface, deps: MethodDeps): v
   });
   surface.register("ask.subscribe", {
     schema: AskSubscribeParams,
-    handler: (ctx) => ({ asks: asks.subscribe(ctx.clientId) }),
+    handler: (ctx, params) => ({ asks: asks.subscribe(ctx.clientId, params.renderer) }),
   });
   surface.register("ask.get", {
     schema: AskGetParams,

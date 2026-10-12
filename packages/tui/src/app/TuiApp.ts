@@ -9,6 +9,8 @@ import { chordOf } from "@sodashitsu/client-core";
 import { WorkspaceDialog } from "../modes/WorkspaceDialog.js";
 import { DisplayModel } from "../model/DisplayModel.js";
 import { DisplayDialog } from "../modes/DisplayDialog.js";
+import { GraphDialog } from "../modes/GraphDialog.js";
+import { TuiAskController } from "../modes/AskController.js";
 import { WindowOverlay } from "../modes/WindowOverlay.js";
 import { findMessageLine } from "@sodashitsu/client-core";
 import { ConversationDialog } from "../modes/ConversationDialog.js";
@@ -62,7 +64,8 @@ import {
 } from "../clipboard.js";
 import { ImagePaster } from "../image/ImagePaster.js";
 import { wrapTmux } from "../notify/terminalNotify.js";
-import { KittyImages, kittyGraphicsSupported, type KittyPlacement } from "../image/kittyOutput.js";
+import { type KittyPlacement } from "../image/kittyOutput.js";
+import { TerminalImages, terminalImageProtocol } from "../image/terminalImages.js";
 import { truncate } from "../render/width.js";
 import { UiState, type DialogContext } from "../model/UiState.js";
 import { helpGroups } from "../modes/HelpDialog.js";
@@ -225,7 +228,7 @@ export class TuiApp {
   /** 画像の貼り付け（herdr の remote_image_paste。05 の T5）。 */
   protected imagePaster!: ImagePaster;
   /** 画像を外側の端末へ出し直す（Kitty graphics を描ける端末だけ）。 */
-  private readonly kitty: KittyImages | null;
+  private readonly kitty: TerminalImages | null;
   /** 直近のフレームで出し直す画像。 */
   private frameImages: KittyPlacement[] = [];
   /** 開いている独自コマンドの popup。 */
@@ -251,6 +254,7 @@ export class TuiApp {
   readonly schedules: ScheduleView;
   private graphTerminal: GraphTerminal | null = null;
   readonly graphView: GraphView;
+  readonly asks: TuiAskController;
   /** この起動ではじめの案内を開いたか（2 回開かない）。 */
   private onboardingOpened = false;
   /**
@@ -289,6 +293,7 @@ export class TuiApp {
       // 共有の設定はローカルのサーバのものだけ（ほかのマシンを見ている間の画面の接続の知らせは当てない。decisions D7.4）。
       onNotificationTest: (message) => this.ui.toast(message, { ms: 20_000 }),
       onNotificationState: (state) => this.notify.onSharedNotification(state),
+      onAskEvent: (e) => this.asks?.onEvent(e),
       onPrefsChanged: (data) => {
         if (this.machines.selectedId === LOCAL_MACHINE_ID) this.prefs.apply(data.prefs, data.rev);
       },
@@ -392,6 +397,17 @@ export class TuiApp {
       () => this.prefs.statusSymbols,
     );
     this.disposers.push(() => this.graphView.dispose());
+    this.asks = new TuiAskController(
+      this.rpc,
+      this.model,
+      () => this.scheduleRender(),
+      () => {
+        this.mouse.cancel();
+        this.dockedViews.release();
+        this.overlays.cancelInteraction();
+      },
+    );
+    this.disposers.push(() => this.asks.reset());
     this.usage = new UsageModel(this.rpc, () => this.scheduleRender());
     this.dashboard = new UsageDashboard(
       this.model,
@@ -452,7 +468,8 @@ export class TuiApp {
       },
       setCommands: (r) => this.model.setCommands(r),
     });
-    this.kitty = kittyGraphicsSupported(io.env) ? new KittyImages() : null;
+    const imageProtocol = terminalImageProtocol(io.env);
+    this.kitty = imageProtocol ? new TerminalImages(imageProtocol, io.env) : null;
     this.clipboardEnv = {
       platform: io.platform,
       env: io.env,
@@ -621,6 +638,7 @@ export class TuiApp {
       this.escTimer = null;
     });
     this.disposers.push(this.io.onInput((bytes) => this.onInput(bytes)));
+    if (this.kitty?.protocol === "sixel") this.io.write("\x1b[16t");
     // tab バーの右端に日時を出していれば、毎秒描き直す（差分だけが出る）。
     const clock = setInterval(() => {
       if (this.lastLayout?.tabBar.h && this.prefs.tabBarRight.some((e) => e.kind === "datetime"))
@@ -721,6 +739,7 @@ export class TuiApp {
   }
 
   protected onConnectionOpened(_clientId: string): void {
+    this.asks.onOpened();
     this.panes.connectionOpened();
     this.usage.connected();
     void this.displays.connect();
@@ -768,6 +787,7 @@ export class TuiApp {
   }
 
   protected onConnectionClosed(): void {
+    this.asks.reset();
     if (this.ui.dialogContext?.kind === "graphTerminal") this.ui.closeDialog();
     if (this.popup) {
       this.popup.onDisconnected();
@@ -883,9 +903,23 @@ export class TuiApp {
   protected handleInput(ev: InputEvent): void {
     if (this.ended || this.detaching) return;
     // オーバーレイが開いている間のキー・貼り付け・マウスはオーバーレイへ（pane へは流さない。AC-I5）。
+    if (ev.kind === "cellSize") {
+      this.kitty?.setCellSize(ev.width, ev.height);
+      this.renderer.invalidate();
+      this.scheduleRender();
+      return;
+    }
     if (ev.kind === "colorScheme") {
       // 外側の端末の明暗（テーマの自動の切り替え。web の prefers-color-scheme の代わり）。
       this.prefs.setSystemDark(ev.dark);
+      return;
+    }
+    const askWindow = this.asks.window;
+    if (askWindow && ev.kind !== "focus") {
+      if (ev.kind === "key") askWindow.handleKeyEvent({ key: ev.key, raw: ev.raw });
+      else if (ev.kind === "paste") askWindow.handlePaste(ev.text);
+      else askWindow.handleMouse(ev);
+      this.scheduleRender();
       return;
     }
     if (ev.kind !== "focus" && this.overlays.active) {
@@ -894,6 +928,16 @@ export class TuiApp {
       else this.overlays.handleMouse(ev);
       this.scheduleRender();
       return;
+    }
+    if (ev.kind === "mouse") {
+      const hit = this.toastHits.find(
+        (t) => ev.x >= t.x && ev.x < t.x + t.w && ev.y >= t.y && ev.y < t.y + t.h,
+      );
+      if (hit) {
+        if (ev.action === "down" && ev.button === 0) this.ui.clickToast(hit.id);
+        this.scheduleRender();
+        return;
+      }
     }
     if (this.ui.screen === "base" && this.keys.mode === "terminal") {
       if (ev.kind === "key") {
@@ -1122,6 +1166,15 @@ export class TuiApp {
   }
   /** ダイアログのうち、基本の部品（入力欄・確認・一覧・ヘルプ）以外のもの（goto。T3）。 */
   protected extraOverlay(ctx: DialogContext): Overlay | null {
+    if (ctx.kind === "graphEdit")
+      return new GraphDialog(
+        ctx,
+        this.model,
+        this.ui,
+        this.rpc,
+        () => this.scheduleRender(),
+        (id) => this.prefs.newCwd(id),
+      );
     if (ctx.kind === "workspaceView") {
       if (ctx.viewId)
         return new WorkspaceDialog(
@@ -1375,6 +1428,7 @@ export class TuiApp {
     // キーのモードを戻す（web の resetView。前のマシンの navigate・copy のまま次のマシンへ持ち込まない）。
     this.keys.router.setMode("terminal");
     this.notify.resetForMachineSwitch();
+    this.asks.reset();
     this.imagePaster.resetForMachineSwitch();
     this.ui.closeDialog();
     this.ui.closeContextMenu();
@@ -1587,6 +1641,8 @@ export class TuiApp {
       sidebarScroll: this.sidebarScroll,
       tabScroll: this.tabScroll,
     };
+    this.frameImages = [];
+    if (this.kitty?.needsRepaint) this.renderer.invalidate();
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => {
         if (this.ui.screen === "graph")
@@ -1601,7 +1657,12 @@ export class TuiApp {
         return this.dockedViews.render(grid, layout, this.theme) ?? cursor;
       },
       toasts: this.ui.toasts.map((t) => ({ id: t.id, message: t.message, clickable: !!t.onClick })),
-      overlay: (grid) => this.overlays.render(grid, this.theme),
+      overlay: (grid) => {
+        const ask = this.asks.window;
+        return ask
+          ? ask.render({ grid, theme: this.theme })
+          : this.overlays.render(grid, this.theme);
+      },
     });
     this.sidebarHits = result.sidebarHits;
     this.tabHits = result.tabHits;
@@ -1726,7 +1787,7 @@ export class TuiApp {
   private decorateImages(grid: Grid, layout: LayoutResult): boolean {
     this.frameImages = [];
     // ダイアログ・メニュー・狭い幅の navigate で重ねたサイドバーの間は出さない（下地の上に透けて見える・印が重なる）。
-    if (this.ui.overlayOpen || layout.sidebarOverlay) return false;
+    if (this.ui.overlayOpen || this.asks.window || layout.sidebarOverlay) return false;
     let drew = false;
     const fg = this.theme.ui("--soda-accent-fg");
     const bg = this.theme.ui("--soda-accent");
@@ -1739,7 +1800,12 @@ export class TuiApp {
       for (const im of term.liveImages()) {
         const row = im.row - top;
         if (row + im.rows <= 0 || row >= h || im.col >= w) continue;
-        if (this.kitty && row >= 0 && row + im.rows <= h && im.col + im.cols <= w) {
+        if (
+          this.kitty?.canRender(im.base64) &&
+          row >= 0 &&
+          row + im.rows <= h &&
+          im.col + im.cols <= w
+        ) {
           this.frameImages.push({
             // 中身で見分ける（pane の headless を作り直して id が重なっても、古い画像を置かない）。
             imageKey: im.hash,

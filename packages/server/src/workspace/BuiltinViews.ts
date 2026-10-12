@@ -256,7 +256,11 @@ export class BuiltinViews {
               ),
           ].filter((s) => s.text)
         : [segment("アクティブなペインがありません", "muted")];
-      const html = `<style>body{margin:0;background:var(--soda-bg);color:var(--soda-fg);font:13px ui-monospace,monospace}.statusline{white-space:pre-wrap;overflow-wrap:anywhere;padding:2px 4px}.statusline [data-soda-color=name],.statusline [data-soda-color=active]{color:var(--soda-state-working,#8be9fd)}.statusline [data-soda-color=model]{color:var(--soda-accent,#bd93f9)}.statusline [data-soda-color=good]{color:var(--soda-state-done,#50fa7b)}.statusline [data-soda-color=warning]{color:var(--soda-warn-fg,#f1fa8c)}.statusline [data-soda-color=danger]{color:var(--soda-state-blocked,#ff5555)}.statusline [data-soda-color=muted]{color:var(--soda-state-idle,#888)}</style><div class="statusline" data-soda-statusline>${segments.map((s) => `<span data-soda-color="${s.tone}">${esc(s.text)}</span>`).join('<span data-soda-color="muted"> · </span>')}</div>`;
+      // 帯には静的ビュー共通の余白を入れず、掴みボタンと同じ中央位置に置く。
+      const bandStyle = v.placement.startsWith("band-")
+        ? "html,body{height:100%;overflow:hidden}#soda-display-root{box-sizing:border-box;height:100%;max-height:24px;padding:0;display:flex;align-items:center;overflow:hidden}.statusline{box-sizing:border-box;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:20px;padding:0 4px}"
+        : "";
+      const html = `<style>body{margin:0;background:var(--soda-bg);color:var(--soda-fg);font:13px ui-monospace,monospace}.statusline{white-space:pre-wrap;overflow-wrap:anywhere;padding:2px 4px}.statusline [data-soda-color=name],.statusline [data-soda-color=active]{color:var(--soda-state-working,#8be9fd)}.statusline [data-soda-color=model]{color:var(--soda-accent,#bd93f9)}.statusline [data-soda-color=good]{color:var(--soda-state-done,#50fa7b)}.statusline [data-soda-color=warning]{color:var(--soda-warn-fg,#f1fa8c)}.statusline [data-soda-color=danger]{color:var(--soda-state-blocked,#ff5555)}.statusline [data-soda-color=muted]{color:var(--soda-state-idle,#888)}${bandStyle}</style><div class="statusline" data-soda-statusline>${segments.map((s) => `<span data-soda-color="${s.tone}">${esc(s.text)}</span>`).join('<span data-soda-color="muted"> · </span>')}</div>`;
       this.displays.set(
         v.paneId,
         {

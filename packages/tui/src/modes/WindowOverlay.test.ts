@@ -175,7 +175,7 @@ it("backdrop stays open and Esc honors unsaved content protection", () => {
   win.render({ grid: new Grid(100, 40), theme: new ThemeColors("dracula") });
   expect(win.handleMouse({ action: "down", button: 0, x: 0, y: 0 })).toBe(true);
   expect(inner.handleMouse).not.toHaveBeenCalled();
-  expect(win.handleMouse({action:"down",button:0,x:20,y:10})).toBe(true);
+  expect(win.handleMouse({ action: "down", button: 0, x: 20, y: 10 })).toBe(true);
   win.handleKey(chordToKeyInput("Escape")!);
   expect(controls.close).not.toHaveBeenCalled();
   canLeave = true;
@@ -220,4 +220,60 @@ it("a registered float's right upper corner resizes without hitting Close", () =
   const grid = render();
   expect(grid.cell(83, 8).ch).toBe("┐");
   expect(grid.cell(83, 28).ch).toBe("┘");
+});
+it("maximizes, follows viewport resize and restores the previous rectangle without forwarding the action", () => {
+  const inner: Overlay = {
+    handleKey: vi.fn(),
+    cancel: vi.fn(),
+    render: ({ grid, theme }) => {
+      drawBox(grid, centeredRect(grid, grid.w - 2, grid.h - 2), dialogColors(theme), "MAX");
+      return hiddenCursor();
+    },
+  };
+  const win = new WindowOverlay(inner, { w: 60, h: 20 }, undefined, { maximize: true });
+  const render = (w = 100, h = 40) => {
+    const grid = new Grid(w, h);
+    win.render({ grid, theme: new ThemeColors("dracula") });
+    return grid;
+  };
+  expect(render().rowText(11)).toContain("MAX");
+  win.handleKey(chordToKeyInput("alt+enter"));
+  expect(render().rowText(1)).toContain("MAX");
+  expect(render(120, 50).rowText(48)).toContain("┘");
+  win.handleKey(chordToKeyInput("alt+enter"));
+  expect(render().rowText(11)).toContain("MAX");
+  expect(inner.handleKey).not.toHaveBeenCalled();
+  win.handleMouse({ action: "down", button: 0, x: 75, y: 11 });
+  expect(render().rowText(1)).toContain("MAX");
+});
+it("restores maximized state when a resize drag is cancelled", () => {
+  const win = new WindowOverlay(
+    {
+      handleKey: vi.fn(),
+      cancel: vi.fn(),
+      render: ({ grid, theme }) => {
+        drawBox(grid, centeredRect(grid, grid.w - 2, grid.h - 2), dialogColors(theme), "MAX");
+        return hiddenCursor();
+      },
+    },
+    { w: 60, h: 20 },
+    undefined,
+    { maximize: true },
+  );
+  const render = (w = 100, h = 40) => {
+    const grid = new Grid(w, h);
+    win.render({ grid, theme: new ThemeColors("dracula") });
+    return grid;
+  };
+  render();
+  win.handleKey(chordToKeyInput("alt+enter"));
+  render();
+  win.handleMouse({ action: "down", button: 0, x: 98, y: 38 });
+  win.handleMouse({ action: "move", button: 32, x: 90, y: 35 });
+  win.handleKey(chordToKeyInput("esc"));
+  expect(render(120, 50).rowText(1)).toContain("[▣]");
+  expect(render(120, 50).rowText(48)).toContain("┘");
+});
+it("interrupts an active window drag without cancelling the dialog or losing its initial size",()=>{
+ const f=fixture();f.render();f.win.handleMouse({action:'down',button:0,x:30,y:11});f.win.handleMouse({action:'move',button:32,x:40,y:15});f.win.cancelInteraction();expect(f.render().rowText(11)).toContain('TEST');f.win.handleMouse({action:'move',button:32,x:50,y:20});expect(f.render().rowText(11)).toContain('TEST');
 });

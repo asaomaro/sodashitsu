@@ -22,8 +22,6 @@ import { deliveryOf, notificationSequence } from "./terminalNotify.js";
 
 /** 入力待ちは 1 秒続いてから知らせる（すぐ戻る短い待ちで鳴らさない。web と同じ）。 */
 export const BLOCKED_DELAY_MS = 1000;
-/** 通知のトーストを出しておく時間（design「通知」：右上・5 秒）。 */
-export const NOTIFY_TOAST_MS = 5000;
 
 const TOAST_SUFFIX: Record<NotifyKind, string> = {
   blocked: "が入力待ちです",
@@ -69,7 +67,7 @@ export class NotificationController {
       if(n.status==='resolved'){this.mark(n.paneId,n.key);this.drop(n.key,false);continue;}
       const agent=this.host.model.panes.get(n.paneId)?.agent,kind=n.key.startsWith('blocked:')?'blocked':'done';
       if(!agent||notifyKeyOf(kind,agent)!==n.key||kind==='blocked'&&agent.state!=='blocked'||kind==='done'&&(agent.state==='working'||agent.state==='blocked'||this.host.model.seenSeqOf(agent)>=agent.completionSeq))continue;
-      const old=this.queue.find(q=>q.key===n.key);if(old){this.cleanup(old);old.toastId=null;}else{const r=enqueue(this.queue,{paneId:n.paneId,key:n.key,kind,label:describeTarget(this.host.model,n.paneId),at:n.at,toastId:null});this.queue=r.queue;for(const q of r.removed)this.cleanup(q);}
+      const old=this.queue.find(q=>q.key===n.key);if(old){/* 未解消の通知は共有状態の更新でも表示を保つ。 */}else{const r=enqueue(this.queue,{paneId:n.paneId,key:n.key,kind,label:describeTarget(this.host.model,n.paneId),at:n.at,toastId:null});this.queue=r.queue;for(const q of r.removed)this.cleanup(q);}
     }this.host.queueChanged?.();
   }
   syncToasts():void {for(const q of this.queue)if(q.toastId!==null&&!this.host.ui.toasts.some(t=>t.id===q.toastId)){q.toastId=null;this.share({key:q.key,paneId:q.paneId},'deferred');}}
@@ -168,7 +166,7 @@ export class NotificationController {
     const label = describeTarget(host.model, paneId);
     const toastId = routes.toast
       ? host.ui.toast(`${label}${TOAST_SUFFIX[kind]}`, {
-          ms: NOTIFY_TOAST_MS,
+          ms: null,
           onClick: () => this.focusNotification(key),
         })
       : null;

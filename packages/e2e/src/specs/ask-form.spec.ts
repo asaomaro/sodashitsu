@@ -24,9 +24,31 @@ import { focusTerminal, prefixKey, typeLine } from "../support/keys.js";
 const SPEC = {
   title: "配布先",
   questions: [
-    { id: "channel", label: "チャンネル", default: "beta", options: [{ value: "beta", label: "ベータ", recommended: true }, { value: "stable", label: "安定版" }], allowOther: true },
-    { id: "rollout", label: "段階", showIf: { channel: "stable" }, default: "10", options: ["10", "100"] },
-    { id: "notes", label: "告知", type: "multi", options: ["changelog", "blog", "mail"], default: ["changelog"], help: "告知の経路は複数選べます。変更履歴だけでよい場合は、そのままにしてください。メールは配布の直前にまとめて送ります。" },
+    {
+      id: "channel",
+      label: "チャンネル",
+      default: "beta",
+      options: [
+        { value: "beta", label: "ベータ", recommended: true },
+        { value: "stable", label: "安定版" },
+      ],
+      allowOther: true,
+    },
+    {
+      id: "rollout",
+      label: "段階",
+      showIf: { channel: "stable" },
+      default: "10",
+      options: ["10", "100"],
+    },
+    {
+      id: "notes",
+      label: "告知",
+      type: "multi",
+      options: ["changelog", "blog", "mail"],
+      default: ["changelog"],
+      help: "告知の経路は複数選べます。変更履歴だけでよい場合は、そのままにしてください。メールは配布の直前にまとめて送ります。",
+    },
   ],
 };
 
@@ -47,7 +69,11 @@ function watchNewPages(context: BrowserContext): () => number {
   return () => n;
 }
 
-test("別のタブ・ウィンドウを開かず、画面の上にダイアログが出て、決定で結果の 1 行（answered・終了コード 0）が返る（AC1・AC2）", async ({ page, context, appServer }) => {
+test("別のタブ・ウィンドウを開かず、画面の上にダイアログが出て、決定で結果の 1 行（answered・終了コード 0）が返る（AC1・AC2）", async ({
+  page,
+  context,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const newPages = watchNewPages(context);
@@ -60,12 +86,18 @@ test("別のタブ・ウィンドウを開かず、画面の上にダイアロ�
   await page.locator("[data-ask-submit]").click();
   const r = await run.done;
   expect(r.code).toBe(0);
-  expect(r.json).toEqual({ status: "answered", answers: { channel: "beta", notes: ["changelog"] } });
+  expect(r.json).toEqual({
+    status: "answered",
+    answers: { channel: "beta", notes: ["changelog"] },
+  });
   await expect(dialog(page)).toHaveCount(0);
   expect(newPages()).toBe(0);
 });
 
-test("確かめ用の定義（7 問・テーマ 13 件・出し分け 2 つ）: showIf・既定・最後の選択肢の選択が、ask-form と同じ結果になる（AC3）", async ({ page, appServer }) => {
+test("確かめ用の定義（7 問・テーマ 13 件・出し分け 2 つ）: showIf・既定・最後の選択肢の選択が、ask-form と同じ結果になる（AC3）", async ({
+  page,
+  appServer,
+}) => {
   const fixture = await askFixture();
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
@@ -91,7 +123,9 @@ test("確かめ用の定義（7 問・テーマ 13 件・出し分け 2 つ）: 
   await print.scrollIntoViewIfNeeded();
   await print.check();
   await expect.poll(() => shownQuestions(page)).toEqual(ids.filter((id) => id !== "motion"));
-  expect((await indexItems(page)).filter((v) => v !== "")).toEqual(ids.filter((id) => id !== "motion")); // 隠れた質問は目次にも出ない
+  expect((await indexItems(page)).filter((v) => v !== "")).toEqual(
+    ids.filter((id) => id !== "motion"),
+  ); // 隠れた質問は目次にも出ない
   await expect(page.locator('[data-ask-question="motion"]')).toBeHidden();
   // 決定はどこからでもでき、全部の回答が入る。
   await page.locator("[data-ask-submit]").click();
@@ -99,17 +133,29 @@ test("確かめ用の定義（7 問・テーマ 13 件・出し分け 2 つ）: 
   expect(r.code).toBe(0);
   expect(r.json).toEqual({
     status: "answered",
-    answers: { theme: themes[12]!.value, mode: "print", toc: "sidebar", layout: "plain", design: "deterministic", "auto-figure": "off" },
+    answers: {
+      theme: themes[12]!.value,
+      mode: "print",
+      toc: "sidebar",
+      layout: "plain",
+      design: "deterministic",
+      "auto-figure": "off",
+    },
   });
 });
 
-test("「その他」の自由入力は custom に id が入り、補足は note に入る（AC3）", async ({ page, appServer }) => {
+test("「その他」の自由入力は custom に id が入り、補足は note に入る（AC3）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
   const run = await runAsk(appServer, p1, SPEC);
   await expect(dialog(page)).toBeVisible();
-  await page.locator('[data-ask-question="channel"] label.opt.other input[type=text]').fill("  金曜は避ける  ");
+  await page
+    .locator('[data-ask-question="channel"] label.opt.other input[type=text]')
+    .fill("  金曜は避ける  ");
   await expect(page.locator('[data-ask-question="channel"] input[data-other]')).toBeChecked(); // 書くと「その他」が選ばれる
   // 補足欄は最後（本文をスクロールして書く。`fill` が見える所までスクロールする）。
   const note = page.locator("textarea[aria-label=補足]");
@@ -117,10 +163,18 @@ test("「その他」の自由入力は custom に id が入り、補足は note
   await expect(note).toBeInViewport();
   await page.keyboard.press("Control+Enter"); // フォーカスは補足欄（部品の中）
   const r = await run.done;
-  expect(r.json).toEqual({ status: "answered", answers: { channel: "金曜は避ける", notes: ["changelog"] }, custom: ["channel"], note: "メモです" });
+  expect(r.json).toEqual({
+    status: "answered",
+    answers: { channel: "金曜は避ける", notes: ["changelog"] },
+    custom: ["channel"],
+    note: "メモです",
+  });
 });
 
-test("キャンセル（Esc）→ cancelled、時間切れ → timeout、ブラウザなし → unavailable。どれも終了コード 0（AC5）", async ({ page, appServer }) => {
+test("キャンセル（Esc）→ cancelled、時間切れ → timeout、ブラウザなし → unavailable。どれも終了コード 0（AC5）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   // ブラウザが 1 つも居ない
@@ -145,11 +199,16 @@ test("キャンセル（Esc）→ cancelled、時間切れ → timeout、ブラ�
   await expect(dialog(page)).toHaveCount(0); // 時間切れでダイアログが閉じる（AC10）
 });
 
-test("定義の誤りは終了コード 2 で何も出さない。pane の外では caller_pane_unknown（AC6）", async ({ page, appServer }) => {
+test("定義の誤りは終了コード 2 で何も出さない。pane の外では caller_pane_unknown（AC6）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
-  const bad = await (await runAsk(appServer, p1, { questions: [{ id: "a", label: "A", options: [] }] })).done;
+  const bad = await (
+    await runAsk(appServer, p1, { questions: [{ id: "a", label: "A", options: [] }] })
+  ).done;
   expect(bad.code).toBe(2);
   expect(bad.stderr).toContain("invalid ask spec");
   await expect(dialog(page)).toHaveCount(0);
@@ -157,7 +216,10 @@ test("定義の誤りは終了コード 2 で何も出さない。pane の外で
   expect(notJson.code).toBe(2);
 });
 
-test("対応していない型（edit・rank・table）の質問がある定義は、ダイアログを出さず unavailable（終了コード 0）。黙って落とさない（追補）", async ({ page, appServer }) => {
+test("対応していない型（edit・rank・table）の質問がある定義は、ダイアログを出さず unavailable（終了コード 0）。黙って落とさない（追補）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -167,14 +229,22 @@ test("対応していない型（edit・rank・table）の質問がある定義�
     { id: "r", label: "R", type: "matrix", options: ["p", "q"] },
   ];
   for (const q of unsupported) {
-    const r = await (await runAsk(appServer, p1, { questions: [{ id: "a", label: "A", options: ["x"] }, q] })).done;
+    const r = await (
+      await runAsk(appServer, p1, { questions: [{ id: "a", label: "A", options: ["x"] }, q] })
+    ).done;
     expect(r.code, q.type).toBe(0);
-    expect(r.json, q.type).toMatchObject({ status: "unavailable", reason: expect.stringContaining(`"${q.type}"`) });
+    expect(r.json, q.type).toMatchObject({
+      status: "unavailable",
+      reason: expect.stringContaining(`"${q.type}"`),
+    });
     await expect(dialog(page)).toHaveCount(0);
   }
 });
 
-test("同じ pane の 2 つめの質問は ask_busy（終了コード 1）で、前の質問はそのまま（AC13）", async ({ page, appServer }) => {
+test("同じ pane の 2 つめの質問は ask_busy（終了コード 1）で、前の質問はそのまま（AC13）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -188,7 +258,10 @@ test("同じ pane の 2 つめの質問は ask_busy（終了コード 1）で、
   expect((await first.done).json).toMatchObject({ status: "answered" });
 });
 
-test("2 つのブラウザの両方にダイアログが出て、片方で決定するともう片方が閉じる。結果は 1 つだけ（AC8）", async ({ browser, appServer }) => {
+test("2 つのブラウザの両方にダイアログが出て、片方で決定するともう片方が閉じる。結果は 1 つだけ（AC8）", async ({
+  browser,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const c1 = await browser.newContext();
@@ -205,12 +278,18 @@ test("2 つのブラウザの両方にダイアログが出て、片方で決定
   await expect(dialog(page1)).toHaveCount(0);
   await expect(dialog(page2)).toHaveCount(0);
   const r = await run.done;
-  expect(r.json).toMatchObject({ status: "answered", answers: { channel: "stable", rollout: "10" } });
+  expect(r.json).toMatchObject({
+    status: "answered",
+    answers: { channel: "stable", rollout: "10" },
+  });
   await c1.close();
   await c2.close();
 });
 
-test("回答を待つ間にブラウザを再読み込みすると、同じ質問のダイアログが出し直される（AC9）", async ({ page, appServer }) => {
+test("回答を待つ間にブラウザを再読み込みすると、同じ質問のダイアログが出し直される（AC9）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const subs = await openBrowser(page, appServer);
@@ -225,7 +304,10 @@ test("回答を待つ間にブラウザを再読み込みすると、同じ質�
   expect((await run.done).json).toMatchObject({ status: "answered" });
 });
 
-test("sodactl を止める（SIGINT）とダイアログが閉じる。サーバが止まっても閉じる（AC10）", async ({ page, appServer }) => {
+test("sodactl を止める（SIGINT）とダイアログが閉じる。サーバが止まっても閉じる（AC10）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -247,7 +329,10 @@ test("sodactl を止める（SIGINT）とダイアログが閉じる。サーバ
 test.describe("ログインなし（token なし・セッションのキャッシュなし）で、pane の受け口（pane.sock）から出す", () => {
   test.skip(process.platform === "win32", "the pane socket is not available on Windows");
 
-  test("ダイアログが出て、最上部に「どの pane からの質問か」が出る。決定で answered・終了コード 0", async ({ page, appServer }) => {
+  test("ダイアログが出て、最上部に「どの pane からの質問か」が出る。決定で answered・終了コード 0", async ({
+    page,
+    appServer,
+  }) => {
     const client = await appServer.openClient();
     const p1 = client.helloSnapshot()!.panes[0]!.id;
     await openBrowser(page, appServer);
@@ -265,24 +350,41 @@ test.describe("ログインなし（token なし・セッションのキャッ�
         const form = d.querySelector("ask-form");
         const inner = form?.shadowRoot;
         return {
-          firstLightDomHeadingIsOrigin: origin !== null && d.querySelector("h1, h2, h3, [data-ask-title], [data-ask-question]") === origin,
-          originBeforeForm: !!origin && !!form && (origin.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+          firstLightDomHeadingIsOrigin:
+            origin !== null &&
+            d.querySelector("h1, h2, h3, [data-ask-title], [data-ask-question]") === origin,
+          originBeforeForm:
+            !!origin &&
+            !!form &&
+            (origin.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
           originInForm: inner?.querySelector("[data-ask-origin]") != null,
           titleInForm: inner?.querySelector("h1[data-ask-title]") != null,
           questionsInForm: inner?.querySelectorAll("[data-ask-question]").length,
         };
       }),
-    ).toEqual({ firstLightDomHeadingIsOrigin: true, originBeforeForm: true, originInForm: false, titleInForm: true, questionsInForm: 3 });
+    ).toEqual({
+      firstLightDomHeadingIsOrigin: true,
+      originBeforeForm: true,
+      originInForm: false,
+      titleInForm: true,
+      questionsInForm: 3,
+    });
     await page.locator("[data-ask-submit]").click();
     const r = await run.done;
     // ログインしていないので、受け口を通らなければ unauthenticated（終了コード 1）になる。
     expect(r.stderr).not.toContain("unauthenticated");
     expect(r.code).toBe(0);
-    expect(r.json).toEqual({ status: "answered", answers: { channel: "beta", notes: ["changelog"] } });
+    expect(r.json).toEqual({
+      status: "answered",
+      answers: { channel: "beta", notes: ["changelog"] },
+    });
     await expect(dialog(page)).toHaveCount(0);
   });
 
-  test("sodactl を止める（SIGINT）とダイアログが閉じ、同じ pane に出し直せる", async ({ page, appServer }) => {
+  test("sodactl を止める（SIGINT）とダイアログが閉じ、同じ pane に出し直せる", async ({
+    page,
+    appServer,
+  }) => {
     const client = await appServer.openClient();
     const p1 = client.helloSnapshot()!.panes[0]!.id;
     await openBrowser(page, appServer);
@@ -301,7 +403,10 @@ test.describe("ログインなし（token なし・セッションのキャッ�
     expect(c.json).toEqual({ status: "cancelled" });
   });
 
-  test("陰性対照: 受け口のパスを渡さなければ、ログインなしの ask は unauthenticated（終了コード 1）でダイアログは出ない", async ({ page, appServer }) => {
+  test("陰性対照: 受け口のパスを渡さなければ、ログインなしの ask は unauthenticated（終了コード 1）でダイアログは出ない", async ({
+    page,
+    appServer,
+  }) => {
     const client = await appServer.openClient();
     const p1 = client.helloSnapshot()!.panes[0]!.id;
     const subs = await openBrowser(page, appServer);
@@ -314,7 +419,10 @@ test.describe("ログインなし（token なし・セッションのキャッ�
   });
 });
 
-test("質問した pane が別の tab にあっても（表示していない）、ダイアログが出る。閉じたら開く前の場所へ戻る（AC10・AC-I4）", async ({ page, appServer }) => {
+test("質問した pane が別の tab にあっても（表示していない）、ダイアログが出る。閉じたら開く前の場所へ戻る（AC10・AC-I4）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -332,7 +440,10 @@ test("質問した pane が別の tab にあっても（表示していない）
   await expect(page.locator(".xterm-helper-textarea:focus")).toHaveCount(1);
 });
 
-test("質問の pane を表示しているときは、閉じたらその pane の端末にフォーカスが戻る（AC-I4）", async ({ page, appServer }) => {
+test("質問の pane を表示しているときは、閉じたらその pane の端末にフォーカスが戻る（AC-I4）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -344,7 +455,10 @@ test("質問の pane を表示しているときは、閉じたらその pane �
   await expect(page.locator(".xterm-helper-textarea").first()).toBeFocused();
 });
 
-test("設定のダイアログが開いているときに質問が来ても、両方操作でき、閉じたら設定のダイアログの中へ戻る（AC-I4・AC-I5）", async ({ page, appServer }) => {
+test("設定のダイアログが開いているときに質問が来ても、両方操作でき、閉じたら設定のダイアログの中へ戻る（AC-I4・AC-I5）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -359,13 +473,18 @@ test("設定のダイアログが開いているときに質問が来ても、�
   await expect(dialog(page)).toHaveCount(0);
   await expect(settings).toBeVisible(); // 設定は潰れていない
   await page.keyboard.press("Tab"); // 閉じた後に設定を操作できる（フォーカスが設定の中を動く）
-  const inSettings = await page.evaluate(() => document.activeElement?.closest("dialog.settings-dialog") !== null);
+  const inSettings = await page.evaluate(
+    () => document.activeElement?.closest("dialog.settings-dialog") !== null,
+  );
   expect(inSettings).toBe(true);
   await page.keyboard.press("Escape");
   await expect(settings).toHaveCount(0);
 });
 
-test("キーボードだけで答えられる（見出し → Tab → 矢印 → Ctrl+Enter）（AC-I3）", async ({ page, appServer }) => {
+test("キーボードだけで答えられる（見出し → Tab → 矢印 → Ctrl+Enter）（AC-I3）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -381,15 +500,26 @@ test("キーボードだけで答えられる（見出し → Tab → 矢印 →
   await page.keyboard.press("Tab");
   await expect(page.locator("input[type=radio][value=beta]")).toBeFocused();
   // フォーカスが部品の中にある間、ページから見たフォーカスは部品の要素（中の要素は shadowRoot.activeElement）。
-  expect(await page.evaluate(() => [document.activeElement?.localName, (document.activeElement?.shadowRoot?.activeElement as HTMLInputElement | null)?.value])).toEqual(["ask-form", "beta"]);
+  expect(
+    await page.evaluate(() => [
+      document.activeElement?.localName,
+      (document.activeElement?.shadowRoot?.activeElement as HTMLInputElement | null)?.value,
+    ]),
+  ).toEqual(["ask-form", "beta"]);
   await page.keyboard.press("ArrowDown");
   await expect(page.locator("input[type=radio][value=stable]")).toBeChecked();
   await expect(dialog(page)).toBeVisible(); // 矢印で移っただけでは決まらない
   await page.keyboard.press("Control+Enter");
-  expect((await run.done).json).toMatchObject({ status: "answered", answers: { channel: "stable", rollout: "10" } });
+  expect((await run.done).json).toMatchObject({
+    status: "answered",
+    answers: { channel: "stable", rollout: "10" },
+  });
 });
 
-test("Tab を回し続けても、背面（サイドバー・tab バー・pane・端末）へはフォーカスが移らない（AC-I3・AC-I5）", async ({ page, appServer }) => {
+test("Tab を回し続けても、背面（サイドバー・tab バー・pane・端末）へはフォーカスが移らない（AC-I3・AC-I5）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -398,13 +528,21 @@ test("Tab を回し続けても、背面（サイドバー・tab バー・pane�
   await expect(dialog(page)).toBeVisible();
   for (let i = 0; i < 25; i++) {
     await page.keyboard.press("Tab");
-    expect(await page.evaluate(() => document.activeElement?.closest(".sidebar, .tab-bar, .app-panes, .terminal-pane") ?? null)).toBeNull();
+    expect(
+      await page.evaluate(
+        () =>
+          document.activeElement?.closest(".sidebar, .tab-bar, .app-panes, .terminal-pane") ?? null,
+      ),
+    ).toBeNull();
   }
   await page.keyboard.press("Escape");
   expect((await run.done).json).toEqual({ status: "cancelled" });
 });
 
-test("ダイアログが開いている間のキー（文字・prefix・貼り付け）は pane へ届かず、tab も増えない（AC-I5）", async ({ page, appServer }) => {
+test("ダイアログが開いている間のキー（文字・prefix・貼り付け）は pane へ届かず、tab も増えない（AC-I5）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const sent = await watchSentInput(page);
@@ -417,19 +555,28 @@ test("ダイアログが開いている間のキー（文字・prefix・貼り�
   await expect(dialog(page)).toBeVisible();
   // 質問が出ている間も、ほかから pane へ送った入力の出力はブラウザへ届き続ける（質問を出していない pane の入出力は止まらない）。
   client.sendInput(p1, "echo soda-ask-alive-$((6*7))\r");
-  await expect.poll(() => frames.output(0, p1), { message: "質問が出ている間も pane の出力がブラウザへ届く" }).toContain("soda-ask-alive-42");
+  await expect
+    .poll(() => frames.output(0, p1), { message: "質問が出ている間も pane の出力がブラウザへ届く" })
+    .toContain("soda-ask-alive-42");
   await page.keyboard.press("x");
   await page.keyboard.press("Control+b");
   await page.keyboard.press("c"); // prefix+c は新しい tab
   await page.keyboard.press("Control+v");
   await page.waitForTimeout(400);
-  expect(sent().slice(before).filter((i) => i.paneId === p1 && [...i.text].some((ch) => "xc\x02\x16".includes(ch)))).toEqual([]);
+  expect(
+    sent()
+      .slice(before)
+      .filter((i) => i.paneId === p1 && [...i.text].some((ch) => "xc\x02\x16".includes(ch))),
+  ).toEqual([]);
   await expect(page.locator("dialog.name-dialog[open]")).toHaveCount(0); // prefix+c が漏れていれば、新しい tab の名前の入力が開く
   await page.locator("[data-ask-cancel]").click();
   await run.done;
 });
 
-test("ダイアログの上と背景でホイールを回しても、背面の端末へマウスの報告（ホイール）が送られない（AC-I5）", async ({ page, appServer }) => {
+test("ダイアログの上と背景でホイールを回しても、背面の端末へマウスの報告（ホイール）が送られない（AC-I5）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const sent = await watchSentInput(page);
@@ -440,11 +587,16 @@ test("ダイアログの上と背景でホイールを回しても、背面の�
   await client.request("pane.subscribe", { paneId: p1, scrollbackLines: 100 });
   await page.waitForTimeout(500);
   const box = (await page.locator(".xterm-screen").first().boundingBox())!;
-  const wheelReports = () => sent().filter((i) => i.paneId === p1 && (i.text.includes("\x1b[<64;") || i.text.includes("\x1b[<65;"))).length;
+  const wheelReports = () =>
+    sent().filter(
+      (i) => i.paneId === p1 && (i.text.includes("\x1b[<64;") || i.text.includes("\x1b[<65;")),
+    ).length;
   // 対照: ダイアログが無いときは、端末の上のホイールが報告として送られる。
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -300);
-  await expect.poll(wheelReports, { message: "対照: ダイアログが無ければ端末へホイールの報告が届く" }).toBeGreaterThan(0);
+  await expect
+    .poll(wheelReports, { message: "対照: ダイアログが無ければ端末へホイールの報告が届く" })
+    .toBeGreaterThan(0);
   const before = wheelReports();
   const run = await runAsk(appServer, p1, SPEC);
   await expect(dialog(page)).toBeVisible();
@@ -459,7 +611,10 @@ test("ダイアログの上と背景でホイールを回しても、背面の�
   await run.done;
 });
 
-test("定義に <script>・HTML を入れても文字として表示され、実行されない。定義の title で出どころの行は消せない（AC11・AC12）", async ({ page, appServer }) => {
+test("定義に <script>・HTML を入れても文字として表示され、実行されない。定義の title で出どころの行は消せない（AC11・AC12）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
@@ -467,28 +622,59 @@ test("定義に <script>・HTML を入れても文字として表示され、実
   const run = await runAsk(appServer, p1, {
     title: evil,
     intro: evil,
-    questions: [{ id: "q", label: evil, help: evil, default: evil, options: [{ value: evil, label: evil, desc: evil, colors: ["red; background:url(javascript:1)", "#1a56db"] }] }],
+    questions: [
+      {
+        id: "q",
+        label: evil,
+        help: evil,
+        default: evil,
+        options: [
+          {
+            value: evil,
+            label: evil,
+            desc: evil,
+            colors: ["red; background:url(javascript:1)", "#1a56db"],
+          },
+        ],
+      },
+    ],
   });
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-title]")).toHaveText(evil);
   await expect(page.locator("label.opt .name").first()).toHaveText(evil); // 選択肢の名前も文字のまま（部品の中に描かれている）。描画を待ってから数える
   // ロケータは部品（Shadow DOM）の中も数える。部品の中を直接数えても、script・img は無い（拡大表示の img は、開いたときにだけ入る）。
-  expect(await page.locator("dialog#soda-ask-dialog script, dialog#soda-ask-dialog img").count()).toBe(0);
-  expect(await page.locator("ask-form").evaluate((f) => f.shadowRoot?.querySelectorAll("script, img").length)).toBe(0);
-  expect(await page.evaluate(() => (window as unknown as { __askXss?: number }).__askXss)).toBeUndefined();
+  expect(
+    await page.locator("dialog#soda-ask-dialog script, dialog#soda-ask-dialog img").count(),
+  ).toBe(0);
+  expect(
+    await page
+      .locator("ask-form")
+      .evaluate((f) => f.shadowRoot?.querySelectorAll("script, img").length),
+  ).toBe(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { __askXss?: number }).__askXss),
+  ).toBeUndefined();
   await expect(page.locator("[data-ask-origin]")).toHaveText(ORIGIN_LINE);
   await expectOriginAboveTitle(page);
   await page.locator("[data-ask-submit]").click();
   expect((await run.done).json).toEqual({ status: "answered", answers: { q: evil } });
 });
 
-test("定義の title に何を書いても、出どころの行の文言は変わらず、部品の題より上にある（AC3）", async ({ page, appServer }) => {
+test("定義の title に何を書いても、出どころの行の文言は変わらず、部品の題より上にある（AC3）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   await openBrowser(page, appServer);
   let originText: string | null = null;
   // 題なし・ふつうの題・長い題・出どころの行そのものに見える題。
-  for (const title of [undefined, "配布先", "あ".repeat(120), "pane「偽物」（どこか／別の tab）のプログラムからの質問"]) {
+  for (const title of [
+    undefined,
+    "配布先",
+    "あ".repeat(120),
+    "pane「偽物」（どこか／別の tab）のプログラムからの質問",
+  ]) {
     const run = await runAsk(appServer, p1, { ...SPEC, title });
     await expect(dialog(page)).toBeVisible();
     const origin = page.locator("[data-ask-origin]");
@@ -514,12 +700,35 @@ test("定義の title に何を書いても、出どころの行の文言は変�
 // 確かめた（下の件）。
 
 /** `x` が既定で選ばれている。 */
-const ONE = { note: false, questions: [{ id: "a", label: "A", default: "x", options: [{ value: "x", label: "エックス" }, { value: "y", label: "ワイ" }, { value: "z", label: "ゼット" }] }] };
+const ONE = {
+  note: false,
+  questions: [
+    {
+      id: "a",
+      label: "A",
+      default: "x",
+      options: [
+        { value: "x", label: "エックス" },
+        { value: "y", label: "ワイ" },
+        { value: "z", label: "ゼット" },
+      ],
+    },
+  ],
+};
 /** 既定なし（どれも選ばれていない。`Tab` は最初の選択肢 `x` に止まる）。 */
-const ONE_UNSET = { note: false, questions: [{ id: "a", label: "A", options: ONE.questions[0]!.options }] };
+const ONE_UNSET = {
+  note: false,
+  questions: [{ id: "a", label: "A", options: ONE.questions[0]!.options }],
+};
 
 /** 即確定の定義を出し、固定の行から `Tab` で選択肢（ラジオ）へ入る（1 問なので目次は出ず、項目への停止も無い）。 */
-async function openInstant(page: Page, appServer: AppServer, paneId: string, spec: unknown, focused: string) {
+async function openInstant(
+  page: Page,
+  appServer: AppServer,
+  paneId: string,
+  spec: unknown,
+  focused: string,
+) {
   const run = await runAsk(appServer, paneId, spec);
   await expect(dialog(page)).toBeVisible();
   await expect(page.locator("[data-ask-origin]")).toBeFocused();
@@ -528,7 +737,10 @@ async function openInstant(page: Page, appServer: AppServer, paneId: string, spe
   return run;
 }
 
-test("即確定: 選択肢のカード（label）のクリックで確定する。選ばれていない選択肢でも、既に選ばれている選択肢でも（AC9）", async ({ page, appServer }) => {
+test("即確定: 選択肢のカード（label）のクリックで確定する。選ばれていない選択肢でも、既に選ばれている選択肢でも（AC9）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const { sentAnswers } = await openBrowser(page, appServer);
@@ -556,7 +768,10 @@ test("即確定: 選択肢のカード（label）のクリックで確定する�
   expect(sentAnswers()).toBe(3);
 });
 
-test("即確定: 矢印キーで移っただけでは確定しない。Enter で確定する（選ばれていない・既に選ばれている・矢印で移った先）（AC9）", async ({ page, appServer }) => {
+test("即確定: 矢印キーで移っただけでは確定しない。Enter で確定する（選ばれていない・既に選ばれている・矢印で移った先）（AC9）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const { sentAnswers } = await openBrowser(page, appServer);
@@ -592,7 +807,10 @@ test("即確定: 矢印キーで移っただけでは確定しない。Enter で
   expect(sentAnswers()).toBe(3);
 });
 
-test("即確定: 選ばれていない選択肢で Space を押すと、選んで確定する。回答は 1 回だけ（AC9）", async ({ page, appServer }) => {
+test("即確定: 選ばれていない選択肢で Space を押すと、選んで確定する。回答は 1 回だけ（AC9）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const { sentAnswers } = await openBrowser(page, appServer);
@@ -604,7 +822,10 @@ test("即確定: 選ばれていない選択肢で Space を押すと、選ん�
   expect(sentAnswers()).toBe(1); // keydown で決め、ブラウザが出す click では決めない（二重に決定しない）
 });
 
-test("即確定: 既に選ばれている選択肢で Space を押すと確定する（既定の選択肢・矢印で移った先）。回答は 1 回ずつ（AC9）", async ({ page, appServer }) => {
+test("即確定: 既に選ばれている選択肢で Space を押すと確定する（既定の選択肢・矢印で移った先）。回答は 1 回ずつ（AC9）", async ({
+  page,
+  appServer,
+}) => {
   const client = await appServer.openClient();
   const p1 = client.helloSnapshot()!.panes[0]!.id;
   const { sentAnswers } = await openBrowser(page, appServer);
@@ -623,4 +844,41 @@ test("即確定: 既に選ばれている選択肢で Space を押すと確定�
   expect((await second.done).json).toEqual({ status: "answered", answers: { a: "y" } });
   await expect(dialog(page)).toHaveCount(0);
   expect(sentAnswers()).toBe(2);
+});
+test("質問窓はリサイズ・最大化・復元しても入力を保持する", async ({ page, appServer }) => {
+  const client = await appServer.openClient();
+  const pane = client.helloSnapshot()!.panes[0]!;
+  await openBrowser(page, appServer);
+  for (const button of await page.locator(".toast-sticky .toast-close").all()) await button.click();
+  const run = await runAsk(appServer, pane.id, {
+    title: "Resize",
+    questions: [{ id: "text", label: "本文", type: "text", required: true }],
+  });
+  const win = dialog(page);
+  await expect(win).toBeVisible();
+  const field = page.locator("ask-form").locator('[name="text"]');
+  await field.fill("保持する本文");
+  const before = (await win.boundingBox())!;
+  const handle = (await page.locator(".ask-resize-handle").boundingBox())!;
+  await page.mouse.move(handle.x + 8, handle.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(handle.x - 110, handle.y + 70, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await win.boundingBox())!.width).toBeLessThan(before.width - 80);
+  const resized = (await win.boundingBox())!;
+  await win.getByRole("button", { name: "最大化", exact: true }).click();
+  await expect
+    .poll(async () => (await win.boundingBox())!.width)
+    .toBe(page.viewportSize()!.width - 16);
+  await expect(field).toHaveValue("保持する本文");
+  await win.getByRole("button", { name: "元のサイズに戻す", exact: true }).click();
+  await expect.poll(async () => (await win.boundingBox())!.width).toBe(resized.width);
+  await expect(field).toHaveValue("保持する本文");
+  await page.locator("[data-ask-submit]").click();
+  expect((await run.done).json).toMatchObject({
+    status: "answered",
+    answers: { text: "保持する本文" },
+  });
+  await expect(win).toHaveCount(0);
+  client.close();
 });

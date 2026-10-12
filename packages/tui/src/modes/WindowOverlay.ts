@@ -15,6 +15,7 @@ export class WindowOverlay implements Overlay {
     resize: boolean;
     moved: boolean;
     custom: boolean;
+    maximized: boolean;
     dock: boolean;
     left: boolean;
     top: boolean;
@@ -23,6 +24,8 @@ export class WindowOverlay implements Overlay {
   } | null = null;
   private custom = false;
   private pointer: { x: number; y: number } | null = null;
+  private restore: Rect | null = null;
+  private maximized = false;
   constructor(
     private readonly inner: Overlay,
     private readonly initial = { w: 110, h: 32 },
@@ -35,7 +38,30 @@ export class WindowOverlay implements Overlay {
       menu(x: number, y: number): void;
       drop(x: number, y: number, canLeave?: () => boolean): void;
     },
+    private readonly options: { maximize?: boolean } = {},
   ) {}
+  private toggleMaximize() {
+    if (!this.rect) return;
+    if (this.maximized) {
+      this.rect = this.restore ? { ...this.restore } : this.rect;
+      this.maximized = false;
+      this.clamp();
+    } else {
+      this.restore = { ...this.rect };
+      this.rect = { x: 0, y: 0, w: this.screen.w, h: this.screen.h };
+      this.maximized = true;
+    }
+    this.custom = true;
+    this.drag = null;
+  }
+  cancelInteraction(): void {
+    if (!this.drag) return;
+    this.rect = { ...this.drag.rect };
+    this.custom = this.drag.custom;
+    this.maximized = this.drag.maximized;
+    this.drag = null;
+    this.pointer = null;
+  }
   private clamp() {
     if (!this.rect) return;
     const r = this.rect;
@@ -46,9 +72,14 @@ export class WindowOverlay implements Overlay {
   }
   handleKey(k: KeyInput) {
     if (this.controls?.busy?.()) return;
+    if (this.options.maximize && k.alt && k.key === "Enter") {
+      this.toggleMaximize();
+      return;
+    }
     if (this.drag && k.key === "Escape") {
       this.rect = { ...this.drag.rect };
       this.custom = this.drag.custom;
+      this.maximized = this.drag.maximized;
       this.drag = null;
       this.pointer = null;
       this.clamp();
@@ -56,6 +87,7 @@ export class WindowOverlay implements Overlay {
     }
     if (k.alt && !k.ctrl && !k.meta && /^Arrow(Left|Right|Up|Down)$/.test(k.key) && this.rect) {
       this.custom = true;
+      this.maximized = false;
       const dx = k.key === "ArrowLeft" ? -2 : k.key === "ArrowRight" ? 2 : 0;
       const dy = k.key === "ArrowUp" ? -1 : k.key === "ArrowDown" ? 1 : 0;
       if (k.shift) {
@@ -79,6 +111,7 @@ export class WindowOverlay implements Overlay {
     if (
       (this.controls && ev.key.key === "Escape") ||
       this.drag ||
+      (this.options.maximize && ev.key.alt && ev.key.key === "Enter") ||
       (ev.key.alt && /^Arrow(Left|Right|Up|Down)$/.test(ev.key.key))
     )
       this.handleKey(ev.key);
@@ -120,6 +153,7 @@ export class WindowOverlay implements Overlay {
           this.rect.y += ev.y - d.y;
         }
         this.custom = true;
+        this.maximized = false;
         this.clamp();
       }
       if (ev.action === "up") {
@@ -132,6 +166,17 @@ export class WindowOverlay implements Overlay {
     }
     const r = this.rect;
     if (ev.x < r.x || ev.x >= r.x + r.w || ev.y < r.y || ev.y >= r.y + r.h) return true;
+    if (
+      this.options.maximize &&
+      ev.action === "down" &&
+      ev.button === 0 &&
+      ev.y === r.y + 1 &&
+      ev.x >= r.x + r.w - 6 &&
+      ev.x < r.x + r.w - 3
+    ) {
+      this.toggleMaximize();
+      return true;
+    }
     if (this.controls && ev.action === "down" && ev.y === r.y + 1) {
       if (this.inner.canLeave?.() === false) return true;
       if (ev.button === 2) {
@@ -165,6 +210,7 @@ export class WindowOverlay implements Overlay {
         resize,
         moved: false,
         custom: this.custom,
+        maximized: this.maximized,
         dock,
         left,
         top,
@@ -178,6 +224,7 @@ export class WindowOverlay implements Overlay {
   }
   render(ctx: OverlayRenderContext) {
     this.screen = { w: ctx.grid.w, h: ctx.grid.h };
+    if (this.maximized) this.rect = { x: 0, y: 0, w: ctx.grid.w, h: ctx.grid.h };
     if (!this.rect || !this.custom)
       this.rect = {
         x: Math.floor((ctx.grid.w - Math.min(this.initial.w, ctx.grid.w)) / 2),
@@ -230,6 +277,16 @@ export class WindowOverlay implements Overlay {
           0,
           button.w,
         );
+    if (this.options.maximize)
+      ctx.grid.text(
+        r.x + r.w - 6,
+        r.y + 1,
+        this.maximized ? "[▣]" : "[□]",
+        ctx.theme.ui("--soda-fg"),
+        ctx.theme.ground("--soda-bg"),
+        0,
+        3,
+      );
     if (this.drag?.moved && this.drag.dock && this.pointer)
       this.controls?.preview?.(ctx.grid, ctx.theme, this.pointer.x, this.pointer.y);
     return cursor ? { ...cursor, x: cursor.x + r.x, y: cursor.y + r.y } : null;

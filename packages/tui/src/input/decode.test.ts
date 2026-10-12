@@ -368,3 +368,6 @@ describe("InputDecoder：応答を待つ間も、ほかの列（CSI 等）の待
     expect(d.flush().length).toBeGreaterThan(0);
   });
 });
+it("parses outer cell pixel reports without forwarding them as keyboard input",()=>{
+ expect(decode('\x1b[6;20;10t')).toEqual([{kind:'cellSize',width:10,height:20}]);expect(decode('\x1b[6;0;10t')).toEqual([]);
+});

@@ -21,9 +21,9 @@ export interface OverlayHostDeps {
   ui: UiState;
   model: SessionModel;
   actions: TuiDispatcher;
-  viewItems?:(id:string)=>import("./ContextMenu.js").MenuItem[];
+  viewItems?: (id: string) => import("./ContextMenu.js").MenuItem[];
   conn?: import("../term/PaneRegistry.js").RequestPort;
-  redraw?:()=>void;
+  redraw?: () => void;
   helpGroups(): HelpGroup[];
   /** ほかの種類（goto 等。T3 で足す）の部品を作る。作れなければ null（そのダイアログは閉じる）。 */
   extra?(ctx: DialogContext): Overlay | null;
@@ -75,6 +75,10 @@ export class OverlayHost {
     if (ctx.kind === "help") return new HelpDialog(deps.ui, () => deps.helpGroups());
     if (ctx.kind === "subagents") return new SubagentList(ctx.paneId, deps.ui, deps.model);
     return deps.extra?.(ctx) ?? null;
+  }
+
+  cancelInteraction(): void {
+    this.current?.overlay.cancelInteraction?.();
   }
 
   handleKey(k: KeyInput, raw = ""): void {

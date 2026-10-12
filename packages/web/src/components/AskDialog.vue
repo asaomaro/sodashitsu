@@ -37,6 +37,39 @@ const dialogEl = ref<HTMLDialogElement | null>(null);
 const headerEl = ref<HTMLElement | null>(null);
 const titleEl = ref<HTMLElement | null>(null);
 const formEl = ref<AskFormElement | null>(null);
+const maximized = ref(false);
+let previousSize = { width: "", height: "" };
+let resizeDrag: { x: number; y: number; width: number; height: number } | null = null;
+let sizeObserver: ResizeObserver | null = null;
+function toggleMaximize() {
+  const el = dialogEl.value;
+  if (!el) return;
+  if (!maximized.value) {
+    previousSize = { width: el.style.width, height: el.style.height };
+    el.style.removeProperty("width");
+    el.style.removeProperty("height");
+  } else {
+    el.style.width = previousSize.width;
+    el.style.height = previousSize.height;
+  }
+  maximized.value = !maximized.value;
+  void nextTick(onResize);
+}
+function beginResize(e: PointerEvent) {
+  if (e.button !== 0 || maximized.value) return;
+  const rect = dialogEl.value?.getBoundingClientRect();
+  if (!rect) return;
+  resizeDrag = { x: e.clientX, y: e.clientY, width: rect.width, height: rect.height };
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  e.preventDefault();
+}
+function resizeWindow(e: PointerEvent) {
+  const el = dialogEl.value;
+  if (!resizeDrag || !el) return;
+  el.style.width = `${Math.min(window.innerWidth - 16, Math.max(Math.min(320, window.innerWidth - 16), resizeDrag.width + e.clientX - resizeDrag.x))}px`;
+  el.style.height = `${Math.min(window.innerHeight - 16, Math.max(Math.min(160, window.innerHeight - 16), resizeDrag.height + e.clientY - resizeDrag.y))}px`;
+  onResize();
+}
 
 const ask = computed<AskEntry | null>(() => store.current);
 
@@ -70,7 +103,9 @@ const origin = computed(() => {
   const name = paneName.value;
   const tab = pane ? session.tabs.get(pane.tabId) : undefined;
   const ws = tab ? session.workspaces.get(tab.workspaceId) : undefined;
-  const where = [ws?.label, tab?.label].filter((v): v is string => typeof v === "string" && v !== "");
+  const where = [ws?.label, tab?.label].filter(
+    (v): v is string => typeof v === "string" && v !== "",
+  );
   return `pane「${name}」${where.length > 0 ? `（${where.join("／")}）` : ""}のプログラムからの質問`;
 });
 
@@ -91,6 +126,15 @@ watch(
       void nextTick(() => {
         const el = dialogEl.value;
         if (!el) return;
+        maximized.value = false;
+        resizeDrag = null;
+        el.style.removeProperty("width");
+        el.style.removeProperty("height");
+        sizeObserver?.disconnect();
+        if (typeof ResizeObserver !== "undefined") {
+          sizeObserver = new ResizeObserver(onResize);
+          sizeObserver.observe(el);
+        }
         if (oldId === null || oldId === undefined) previousFocus = document.activeElement;
         // 前の質問でネイティブに閉じられていても（`cancel` を取り消せないブラウザの 2 回目の Esc 等）、次の質問のために必ず開き直す——
         // でないと見えない質問に `view.askOpen` だけが残り、キーが端末へ流れなくなる。
@@ -147,6 +191,7 @@ function restoreFocus(paneId: string | null, back: Element | null): void {
 }
 
 onBeforeUnmount(() => {
+  sizeObserver?.disconnect();
   window.removeEventListener("resize", onResize);
   view.setAskOpen(false);
 });
@@ -160,21 +205,27 @@ function maxFormHeight(): number {
   const el = dialogEl.value;
   if (!el) return 0;
   const style = getComputedStyle(el);
-  const border = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+  const border =
+    (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
   const header = headerEl.value?.getBoundingClientRect().height ?? 0;
-  return Math.max(0, Math.floor(window.innerHeight - 16 - border - header));
+  const height =
+    maximized.value || el.style.height
+      ? el.getBoundingClientRect().height
+      : window.innerHeight - 16;
+  return Math.max(0, Math.floor(height - border - header));
 }
 
 /** 部品の高さを「中身」に合わせる（最大は超えない）。大きさが取れていなければ与えた高さを消し、中身に任せる。 */
 function applyHeight(): void {
   const el = formEl.value;
   if (!el) return;
-  if (hasView.value) {
+  if (hasView.value && !maximized.value && !dialogEl.value?.style.height) {
     // 成果物つきは、ダイアログの高さを使える最大に固定し、部品はその残りを埋める（中身に縮めない。成果物を広く見せる）。
     el.style.removeProperty("height");
     return;
   }
-  if (contentHeight > 0) el.style.height = `${Math.min(maxFormHeight(), contentHeight)}px`;
+  if (maximized.value || dialogEl.value?.style.height) el.style.height = `${maxFormHeight()}px`;
+  else if (contentHeight > 0) el.style.height = `${Math.min(maxFormHeight(), contentHeight)}px`;
   else el.style.removeProperty("height");
 }
 
@@ -247,7 +298,13 @@ function onResize(): void {
 function onFormClick(ev: Event): void {
   const t = ev.composedPath()[0];
   if (!(t instanceof Element) || !t.matches("[data-ask-comment-toggle]")) return;
-  if (loadedAskId === null || loadedAskId !== ask.value?.askId || contentHeight <= 0 || !formEl.value) return;
+  if (
+    loadedAskId === null ||
+    loadedAskId !== ask.value?.askId ||
+    contentHeight <= 0 ||
+    !formEl.value
+  )
+    return;
   contentHeight = formEl.value.contentHeight;
   applyHeight();
 }
@@ -331,17 +388,63 @@ function onViewKey(key: AskViewKey): void {
 </script>
 
 <template>
-  <dialog id="soda-ask-dialog" ref="dialogEl" class="ask-dialog" :class="{ 'has-view': hasView }" aria-labelledby="ask-origin" @cancel="onNativeCancel" @keydown="onKeydown">
+  <dialog
+    id="soda-ask-dialog"
+    ref="dialogEl"
+    class="ask-dialog"
+    :class="{ 'has-view': hasView, 'ask-maximized': maximized }"
+    aria-labelledby="ask-origin"
+    @cancel="onNativeCancel"
+    @keydown="onKeydown"
+  >
     <template v-if="ask">
       <header ref="headerEl" class="ask-header">
-        <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>{{ origin }}</h2>
+        <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>
+          {{ origin }}
+        </h2>
+        <button
+          type="button"
+          class="ask-maximize"
+          :aria-label="maximized ? '元のサイズに戻す' : '最大化'"
+          @click="toggleMaximize"
+        >
+          {{ maximized ? "❐" : "□" }}
+        </button>
         <!-- 外部 URL の画像の取得に失敗して外した件数（アプリが描く固定の文。定義の文字は使わない）。 -->
-        <p v-if="(ask.warnings ?? 0) > 0" class="ask-warn" data-ask-warnings>画像 {{ ask.warnings }} 件を取得できませんでした（プレビューなしで出しています）</p>
+        <p v-if="(ask.warnings ?? 0) > 0" class="ask-warn" data-ask-warnings>
+          画像 {{ ask.warnings }} 件を取得できませんでした（プレビューなしで出しています）
+        </p>
       </header>
       <div class="ask-body" :class="{ 'has-view': hasView }">
-        <AskViewer v-if="hasView" class="ask-view" :items="views" :pane-name="paneName" :dark="dark" @key="onViewKey" />
-        <ask-form ref="formEl" class="ask-form" @ask-submit="onSubmit" @ask-cancel="cancel" @ask-unsupported="onUnsupported" @click="onFormClick" />
+        <AskViewer
+          v-if="hasView"
+          class="ask-view"
+          :items="views"
+          :pane-name="paneName"
+          :dark="dark"
+          @key="onViewKey"
+        />
+        <ask-form
+          ref="formEl"
+          class="ask-form"
+          @ask-submit="onSubmit"
+          @ask-cancel="cancel"
+          @ask-unsupported="onUnsupported"
+          @click="onFormClick"
+        />
       </div>
+      <button
+        v-if="!maximized"
+        class="ask-resize-handle"
+        type="button"
+        aria-label="質問ウィンドウのサイズ変更"
+        @pointerdown="beginResize"
+        @pointermove="resizeWindow"
+        @pointerup="resizeDrag = null"
+        @pointercancel="resizeDrag = null"
+      >
+        ◢
+      </button>
     </template>
   </dialog>
 </template>
@@ -353,6 +456,7 @@ function onViewKey(key: AskViewKey): void {
   /* 目次が出ているとき（`applyWidth`）は、その幅の分だけ広げる。画面の幅 − 16px は超えない。 */
   width: min(calc(720px + var(--ask-index-width, 0px)), calc(100% - 16px));
   max-height: calc(100% - 16px);
+  max-width: calc(100% - 16px);
   padding: 0;
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-fg, #f8f8f2);
@@ -363,6 +467,40 @@ function onViewKey(key: AskViewKey): void {
 .ask-dialog[open] {
   display: flex;
   flex-direction: column;
+}
+.ask-dialog {
+  box-sizing: border-box;
+  resize: both;
+  overflow: hidden;
+  min-width: min(320px, calc(100% - 16px));
+  min-height: min(160px, calc(100% - 16px));
+}
+.ask-dialog.ask-maximized,
+.ask-dialog.has-view.ask-maximized {
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  resize: none;
+}
+.ask-maximize {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.ask-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: nwse-resize;
+  touch-action: none;
 }
 /* 成果物つき: 広く・高く固定する（左に成果物・右に質問）。成果物の無い質問は今までどおり（`.ask-body` は箱を作らない）。 */
 .ask-body:not(.has-view) {
@@ -397,6 +535,7 @@ function onViewKey(key: AskViewKey): void {
   color: var(--soda-accent-fg, #f8f8f2);
 }
 .ask-origin {
+  padding-right: 28px;
   margin: 0;
   font-size: 0.95em;
   font-weight: bold;

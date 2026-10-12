@@ -100,6 +100,7 @@ export class AskService {
   private readonly byId = new Map<string, Entry>();
   /** 質問を出せる画面（`ask.subscribe` 済みで、まだ接続が生きているもの）。 */
   private readonly subscribers = new Set<string>();
+  private readonly terminalSubscribers = new Set<string>();
   private readonly timers: AskServiceTimers;
   private readonly random: () => string;
   private readonly busSub: Disposable;
@@ -129,6 +130,11 @@ export class AskService {
 
   /** 従来の上限を超えた質問は、ほかのマシン越しの画面には見せない（ローカル起動の画面だけ）。 */
   private visible(entry: Entry, clientId: string): boolean {
+    if (
+      this.terminalSubscribers.has(clientId) &&
+      (hasMediaRefs(entry.spec) || entry.mediaInfo.length > 0 || entry.view?.length)
+    )
+      return false;
     return !entry.oversize || this.opts.isRemoteClient?.(clientId) !== true;
   }
 
@@ -153,28 +159,50 @@ export class AskService {
   }
 
   /** この接続を質問を出せる画面として登録し、いま待っている質問を受けた順に返す。何度呼んでもよい。 */
-  subscribe(clientId: string): AskPending[] {
-    if (!this.opts.isBrowserKind(clientId)) throw new RpcError("invalid_params", "only a browser can show a form");
+  subscribe(clientId: string, renderer?: "terminal"): AskPending[] {
+    if (!this.opts.isBrowserKind(clientId))
+      throw new RpcError("invalid_params", "only a browser can show a form");
     this.subscribers.add(clientId);
+    if (renderer === "terminal") this.terminalSubscribers.add(clientId);
+    else this.terminalSubscribers.delete(clientId);
     return [...this.byId.values()].filter((e) => e.ready && this.visible(e, clientId)).map(pending);
   }
 
   /** 質問を出して、結果が決まるまで待つ（`ask.open`）。 */
-  open(clientId: string, p: { paneId: string; spec: unknown; timeoutMs: number }): Promise<AskResult> {
+  open(
+    clientId: string,
+    p: { paneId: string; spec: unknown; timeoutMs: number },
+  ): Promise<AskResult> {
     const checked = normalizeAskSpec(p.spec);
-    if (!checked.ok && checked.unsupportedType === undefined) throw new RpcError("invalid_ask_spec", checked.message);
-    if (!this.opts.paneExists(p.paneId)) throw new RpcError("not_found", `pane not found: ${p.paneId}`);
-    if (this.byPane.has(p.paneId)) throw new RpcError("ask_busy", "this pane already has a question waiting for an answer");
+    if (!checked.ok && checked.unsupportedType === undefined)
+      throw new RpcError("invalid_ask_spec", checked.message);
+    if (!this.opts.paneExists(p.paneId))
+      throw new RpcError("not_found", `pane not found: ${p.paneId}`);
+    if (this.byPane.has(p.paneId))
+      throw new RpcError("ask_busy", "this pane already has a question waiting for an answer");
     // 同時に待たせられる数の上限（メモリと `ask.subscribe` の応答の大きさを数で止める。`ImageUploads` の `maxActive` と同じ方針）。
-    if (this.byId.size >= ASK_PENDING_MAX) throw new RpcError("ask_busy", "too many questions are waiting for an answer");
+    if (this.byId.size >= ASK_PENDING_MAX)
+      throw new RpcError("ask_busy", "too many questions are waiting for an answer");
     let mine = 0;
     for (const e of this.byId.values()) if (e.ownerClientId === clientId) mine++;
-    if (mine >= ASK_PENDING_PER_CLIENT_MAX) throw new RpcError("ask_busy", "this connection already has too many questions waiting for an answer");
+    if (mine >= ASK_PENDING_PER_CLIENT_MAX)
+      throw new RpcError(
+        "ask_busy",
+        "this connection already has too many questions waiting for an answer",
+      );
     // 対応していない型の質問がある定義は、黙って落とさずダイアログも出さず `unavailable`（呼び出し側が別の手段で聞き直す）。
-    if (!checked.ok) return Promise.resolve({ status: "unavailable", reason: unsupportedTypeReason(checked.unsupportedType!) });
-    if (this.disposed) return Promise.resolve({ status: "unavailable", reason: "the server is shutting down" });
-    if (this.liveSubscribers() === 0)
-      return Promise.resolve({ status: "unavailable", reason: "no browser is connected to show the form" });
+    if (!checked.ok)
+      return Promise.resolve({
+        status: "unavailable",
+        reason: unsupportedTypeReason(checked.unsupportedType!),
+      });
+    if (this.disposed)
+      return Promise.resolve({ status: "unavailable", reason: "the server is shutting down" });
+    if (this.liveSubscribers(checked.spec) === 0)
+      return Promise.resolve({
+        status: "unavailable",
+        reason: "no browser is connected to show the form",
+      });
     return new Promise<AskResult>((resolve, reject) => {
       const entry: Entry = {
         askId: this.random(),
@@ -195,7 +223,10 @@ export class AskService {
         oversize: false,
       };
       // 時間切れは `prepare`（読む・取る）の時間も含める（呼び出し側が待つ時間は `timeoutMs` の範囲）。占有（pane・数）は読む前に取る。
-      entry.timer = this.timers.setTimeout(() => this.close(entry, { status: "timeout" }), p.timeoutMs);
+      entry.timer = this.timers.setTimeout(
+        () => this.close(entry, { status: "timeout" }),
+        p.timeoutMs,
+      );
       this.byPane.set(entry.paneId, entry);
       this.byId.set(entry.askId, entry);
       // メディアの参照が無い定義は、読むものが無いので同期で出す（今までと同じ。順序・タイミングを変えない）。
@@ -203,10 +234,12 @@ export class AskService {
         this.onPrepared(entry, { spec: checked.spec, media: [], warnings: 0, totalBytes: 0 });
         return;
       }
-      this.opts.media.prepare(checked.spec, entry.abort.signal, () => this.mediaTotal, entry.unlimited).then(
-        (prepared) => this.onPrepared(entry, prepared),
-        (err: unknown) => this.onPrepareFailed(entry, err),
-      );
+      this.opts.media
+        .prepare(checked.spec, entry.abort.signal, () => this.mediaTotal, entry.unlimited)
+        .then(
+          (prepared) => this.onPrepared(entry, prepared),
+          (err: unknown) => this.onPrepareFailed(entry, err),
+        );
     });
   }
 
@@ -217,8 +250,11 @@ export class AskService {
       this.fail(entry, new RpcError("ask_busy", "too much media is waiting for an answer"));
       return;
     }
-    if (this.liveSubscribers() === 0) {
-      this.close(entry, { status: "unavailable", reason: "no browser is connected to show the form" });
+    if (this.liveSubscribers(entry.spec) === 0) {
+      this.close(entry, {
+        status: "unavailable",
+        reason: "no browser is connected to show the form",
+      });
       return;
     }
     entry.spec = prepared.spec;
@@ -229,11 +265,22 @@ export class AskService {
     entry.oversize =
       entry.unlimited &&
       (prepared.totalBytes > ASK_MEDIA_TOTAL_MAX ||
-        prepared.media.some((m) => m.info.bytes > (m.info.kind === "markdown" || m.info.kind === "text" ? ASK_MEDIA_TEXT_MAX : ASK_MEDIA_FILE_MAX)));
+        prepared.media.some(
+          (m) =>
+            m.info.bytes >
+            (m.info.kind === "markdown" || m.info.kind === "text"
+              ? ASK_MEDIA_TEXT_MAX
+              : ASK_MEDIA_FILE_MAX),
+        ));
     entry.ready = true;
     entry.heldBytes = prepared.totalBytes;
     this.mediaTotal += entry.heldBytes;
-    this.opts.logger?.info("ask opened", { askId: entry.askId, paneId: entry.paneId, questions: entry.spec.questions.length, media: prepared.media.length });
+    this.opts.logger?.info("ask opened", {
+      askId: entry.askId,
+      paneId: entry.paneId,
+      questions: entry.spec.questions.length,
+      media: prepared.media.length,
+    });
     this.publish({ event: "ask.opened", data: { askId: entry.askId, paneId: entry.paneId } });
   }
 
@@ -260,9 +307,14 @@ export class AskService {
     const entry = this.require(clientId, askId);
     const m = entry.media.get(id);
     if (!m) throw new RpcError("invalid_params", "unknown media id");
-    if (offset > m.bytes.length || offset % ASK_MEDIA_CHUNK_BYTES !== 0) throw new RpcError("invalid_params", "offset is out of range");
+    if (offset > m.bytes.length || offset % ASK_MEDIA_CHUNK_BYTES !== 0)
+      throw new RpcError("invalid_params", "offset is out of range");
     const chunk = m.bytes.subarray(offset, offset + ASK_MEDIA_CHUNK_BYTES);
-    return { base64: chunk.toString("base64"), size: m.bytes.length, eof: offset + chunk.length >= m.bytes.length };
+    return {
+      base64: chunk.toString("base64"),
+      size: m.bytes.length,
+      eof: offset + chunk.length >= m.bytes.length,
+    };
   }
 
   /** 定義を取る（`ask.subscribe` 済みの接続だけ）。 */
@@ -271,7 +323,17 @@ export class AskService {
   }
 
   /** 回答を受ける。誤った形の回答は断り（質問は閉じない）、通れば質問を閉じる。 */
-  answer(clientId: string, p: { askId: string; answers: AskAnswers; custom?: string[] | undefined; edited?: string[] | undefined; note?: string | undefined; comments?: AskComments | undefined }): void {
+  answer(
+    clientId: string,
+    p: {
+      askId: string;
+      answers: AskAnswers;
+      custom?: string[] | undefined;
+      edited?: string[] | undefined;
+      note?: string | undefined;
+      comments?: AskComments | undefined;
+    },
+  ): void {
     const entry = this.require(clientId, p.askId);
     const body: AskAnswerBody = { answers: p.answers };
     if (p.custom !== undefined) body.custom = p.custom;
@@ -286,14 +348,16 @@ export class AskService {
     if (body.note !== undefined && body.note !== "") result.note = body.note;
     // 自由記述: 前後の空白を除いて、空になったものは落とす（断らない）。1 つも残らなければ項目を付けない。
     const comments: AskComments = {};
-    for (const [id, text] of Object.entries(body.comments ?? {})) if (text.trim() !== "") comments[id] = text.trim();
+    for (const [id, text] of Object.entries(body.comments ?? {}))
+      if (text.trim() !== "") comments[id] = text.trim();
     if (Object.keys(comments).length > 0) result.comments = comments;
     this.close(entry, result);
   }
 
   /** 取り消す。知らない id（既に閉じた）は成功——2 つの画面が同時に取り消しても誤りにしない。 */
   cancel(clientId: string, askId: string): void {
-    if (!this.isSubscriber(clientId)) throw new RpcError("ask_closed", "unknown or closed question");
+    if (!this.isSubscriber(clientId))
+      throw new RpcError("ask_closed", "unknown or closed question");
     const entry = this.byId.get(askId);
     if (entry) this.close(entry, { status: "cancelled" });
   }
@@ -301,7 +365,9 @@ export class AskService {
   /** 接続が閉じた。購読者から外し、その接続が出した質問を閉じる（待ちの応答は閉じた接続へ行くだけ。目的は `ask.closed` を配ること）。 */
   onClientGone(clientId: string): void {
     this.subscribers.delete(clientId);
-    for (const entry of [...this.byId.values()]) if (entry.ownerClientId === clientId) this.close(entry, { status: "cancelled" });
+    this.terminalSubscribers.delete(clientId);
+    for (const entry of [...this.byId.values()])
+      if (entry.ownerClientId === clientId) this.close(entry, { status: "cancelled" });
   }
 
   /** 全ての質問を閉じ、以後の `open` を断る（`composeServer` の `close()`。接続を閉じた後なので、応答は誰にも届かない）。 */
@@ -314,7 +380,8 @@ export class AskService {
 
   private require(clientId: string, askId: string): Entry {
     const entry = this.byId.get(askId);
-    if (!this.isSubscriber(clientId) || !entry || !entry.ready || !this.visible(entry, clientId)) throw new RpcError("ask_closed", "unknown or closed question");
+    if (!this.isSubscriber(clientId) || !entry || !entry.ready || !this.visible(entry, clientId))
+      throw new RpcError("ask_closed", "unknown or closed question");
     return entry;
   }
 
@@ -326,9 +393,14 @@ export class AskService {
     return this.subscribers.has(clientId) && this.opts.isBrowserKind(clientId);
   }
 
-  private liveSubscribers(): number {
+  private liveSubscribers(spec?: import("@sodashitsu/protocol").AskSpec): number {
     let n = 0;
-    for (const id of this.subscribers) if (this.opts.isBrowserKind(id)) n++;
+    for (const id of this.subscribers)
+      if (
+        this.opts.isBrowserKind(id) &&
+        !(spec && hasMediaRefs(spec) && this.terminalSubscribers.has(id))
+      )
+        n++;
     return n;
   }
 
@@ -353,9 +425,14 @@ export class AskService {
       entry.heldBytes = 0;
       entry.media.clear();
     }
-    this.opts.logger?.info("ask closed", { askId: entry.askId, paneId: entry.paneId, status: result.status });
+    this.opts.logger?.info("ask closed", {
+      askId: entry.askId,
+      paneId: entry.paneId,
+      status: result.status,
+    });
     entry.resolve(result);
-    if (entry.ready) this.publish({ event: "ask.closed", data: { askId: entry.askId, paneId: entry.paneId } });
+    if (entry.ready)
+      this.publish({ event: "ask.closed", data: { askId: entry.askId, paneId: entry.paneId } });
   }
 }
 
