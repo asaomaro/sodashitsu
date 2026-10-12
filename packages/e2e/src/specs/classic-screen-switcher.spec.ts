@@ -32,14 +32,27 @@ test("classic screen buttons share the available sidebar width at narrow and wid
     expect(Math.abs(r.left - r.start)).toBeLessThanOrEqual(1);
     return r.widths[0]!;
   };
+  const checkHeight = async () => {
+    await expect(page.locator(".tab-bar-item").first()).toBeVisible();
+    await expect.poll(async () => {
+      const tab = await page.locator(".tab-bar-item").first().boundingBox();
+      const heights = await page.locator(".screen-switcher-btn").evaluateAll(
+        (els) => els.map((el) => el.getBoundingClientRect().height),
+      );
+      return Math.max(...heights.map((height) => Math.abs(height - tab!.height)));
+    }).toBeLessThanOrEqual(1);
+  };
   const before = await check();
+  await checkHeight();
   const divider = page.getByRole("separator", { name: "サイドバーの幅", exact: true });
   await divider.focus();
   for (let i = 0; i < 8; i++) await divider.press("ArrowRight");
   expect(await check()).toBeGreaterThan(before + 10);
+  await checkHeight();
   await page.screenshot({ path: "/tmp/classic-screen-switcher-wide.png" });
   await divider.press("Home");
   await check();
+  await checkHeight();
   const labels = await page
     .locator(".screen-switcher-label")
     .evaluateAll((els) => els.map((el) => el.scrollWidth <= el.clientWidth));
