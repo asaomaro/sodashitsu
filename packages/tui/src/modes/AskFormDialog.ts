@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import {
   initialAskState,
   collectAsk,
@@ -34,6 +35,13 @@ export class AskFormDialog implements Overlay {
   private state: AskFormState;
   private inputs = new Map<string, TextInput>();
   private selected = 0;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
   private scroll = 0;
   private rect: Rect | null = null;
   private hits: { rect: Rect; index: number }[] = [];
@@ -202,6 +210,7 @@ export class AskFormDialog implements Overlay {
     row.set?.(row.input.value);
   }
   handleKey(k: KeyInput) {
+    this.scrollbar.cancel();
     if (this.busy) return;
     if (k.key === "Escape") {
       this.cancel();
@@ -239,6 +248,7 @@ export class AskFormDialog implements Overlay {
     this.redraw();
   }
   handleMouse(e: OverlayMouse) {
+    if (this.handleScrollMouse(e)) return true;
     if (!inside(this.rect, e.x, e.y)) return false;
     if (this.busy) return true;
     if (e.action === "wheel")
@@ -302,6 +312,7 @@ export class AskFormDialog implements Overlay {
     this.rect = centeredRect(grid, grid.w - 2, grid.h - 2);
     const c = dialogColors(theme),
       body = drawBox(grid, this.rect, c, safeText(this.origin + " · " + this.ask.spec.title));
+    body.w = Math.max(0, body.w - 1);
     const rows = this.rows();
     this.selected = Math.min(this.selected, rows.length - 1);
     const height = Math.max(1, body.h - 2);
@@ -352,6 +363,17 @@ export class AskFormDialog implements Overlay {
       c.bg,
       0,
       body.w,
+    );
+    this.scrollbar.render(
+      grid,
+      { ...body, w: body.w + 1, h: height },
+      rows.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.selected = Math.max(offset, Math.min(this.selected, offset + height - 1));
+      },
     );
     return cursor;
   }

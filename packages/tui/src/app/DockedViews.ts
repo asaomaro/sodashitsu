@@ -419,6 +419,7 @@ export class DockedViews {
     this.drag = null;
   }
   release() {
+    for (const entry of this.entries.values()) entry.overlay?.cancelInteraction?.();
     this.focused = null;
     this.cancelDrag();
     this.redraw();
@@ -690,6 +691,18 @@ export class DockedViews {
     return true;
   }
   mouse(e: OverlayMouse): boolean {
+    // 掴んだscrollbarはcontent外のmove/upも受け取る。帯のサイズ変更より先に判定。
+    if (!this.drag)
+      for (const box of this.boxes) {
+        const entry = this.entries.get(box.paneId);
+        if (!entry || this.pending.has(entry.view.id)) continue;
+        const content = this.contentRect(box.frame, entry.view);
+        if (entry.overlay?.handleScrollMouse?.({ ...e, x: e.x - content.x, y: e.y - content.y })) {
+          if (e.action === "down") this.focused = box.paneId;
+          this.redraw();
+          return true;
+        }
+      }
     if (this.drag) {
       const d = this.drag;
       if (e.action === "move" || e.action === "up") {

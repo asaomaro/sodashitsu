@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import type { ScheduleListResult, ScheduledJob, ScheduleDraft } from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -26,6 +27,7 @@ const status = {
   interrupted: "中断",
 };
 export class ScheduleView {
+  private readonly scrollbar = new ScrollBar();
   private data: ScheduleListResult = { jobs: [], runs: [] };
   private selected = 0;
   private mode: "list" | "edit" | "results" = "list";
@@ -56,7 +58,11 @@ export class ScheduleView {
     private conn: RequestPort,
     private redraw: () => void,
   ) {}
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
   sync(active: boolean) {
+    if (!active) this.cancelInteraction();
     if (this.active === active) return;
     this.active = active;
     if (this.timer) clearInterval(this.timer);
@@ -68,6 +74,7 @@ export class ScheduleView {
     }
   }
   reset() {
+    this.cancelInteraction();
     this.generation++;
     this.data = { jobs: [], runs: [] };
     this.mode = "list";
@@ -177,6 +184,7 @@ export class ScheduleView {
               : undefined;
   }
   handleKey(k: KeyInput) {
+    this.scrollbar.cancel();
     if (this.busy) return;
     if (this.mode === "edit") {
       if (isEsc(k)) {
@@ -285,6 +293,7 @@ export class ScheduleView {
     } else input.insert(text);
   }
   handleMouse(e: OverlayMouse) {
+    if (this.scrollbar.handleMouse(e)) return true;
     if (!inside(this.rect, e.x, e.y)) return false;
     const hit = this.hits.get(e.y);
     if (e.action === "down" && e.button === 0 && hit !== undefined) {
@@ -297,6 +306,7 @@ export class ScheduleView {
     return true;
   }
   render(grid: Grid, area: Rect, theme: ThemeColors): CursorState {
+    area = { ...area };
     this.rect = area;
     this.hits.clear();
     const c = dialogColors(theme);
@@ -322,6 +332,7 @@ export class ScheduleView {
     );
     write(1, this.busy ? "処理中…" : this.error);
     if (this.mode === "edit") {
+      this.scrollbar.render(grid, { ...area, h: 0 }, 0, 0, c, () => {});
       const prefixes = [
         "名前: ",
         "実行内容: ",
@@ -413,6 +424,7 @@ export class ScheduleView {
             ...(r.output || "出力なし").split("\n"),
             "",
           ]);
+    area.w = Math.max(1, area.w - 1);
     const height = Math.max(0, area.h - 4),
       start = Math.max(0, this.selected - height + 1);
     lines.slice(start, start + height).forEach((text, i) => {
@@ -423,6 +435,16 @@ export class ScheduleView {
       );
       this.hits.set(area.y + i + 3, start + i);
     });
+    this.scrollbar.render(
+      grid,
+      { ...area, x: area.x + 1, y: area.y + 3, w: area.w, h: height },
+      lines.length,
+      start,
+      c,
+      (offset) => {
+        this.selected = Math.min(lines.length - 1, offset + height - 1);
+      },
+    );
     if (!lines.length) write(3, this.mode === "list" ? "予約はありません" : "実行履歴はありません");
     write(
       Math.max(2, area.h - 1),

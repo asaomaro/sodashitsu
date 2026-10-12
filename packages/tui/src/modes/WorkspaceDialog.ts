@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import {
   BUILTIN_WORKSPACE_KEY,
   BUILTIN_TERMINAL_VIEWS,
@@ -29,6 +30,14 @@ export class WorkspaceDialog implements Overlay {
   private context: { workspaceId: string | undefined; folder: string | undefined };
   private mode: "picker" | "placement" | "files" | "file" | "git-graph" | "git-diff" = "picker";
   private selected = 0;
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+  private manualScroll = false;
   private scroll = 0;
   private error = "";
   private busy = false;
@@ -228,6 +237,8 @@ export class WorkspaceDialog implements Overlay {
     }
   }
   handleKey(k: KeyInput) {
+    this.scrollbar.cancel();
+    this.manualScroll = false;
     if (this.busy) return;
     if (this.prompt) {
       if (isEsc(k)) {
@@ -414,13 +425,14 @@ export class WorkspaceDialog implements Overlay {
     }
   }
   handleMouse(e: OverlayMouse) {
+    if (this.handleScrollMouse(e)) return true;
     if (!inside(this.rect, e.x, e.y)) return false;
     if (e.action === "down" && e.button === 0 && inside(this.contentRect, e.x, e.y)) {
       this.selected = this.scroll + e.y - this.contentRect!.y;
       this.choose();
     }
     if (e.action === "wheel")
-      this.selected = Math.max(0, this.selected + (e.button === 0 ? -3 : 3));
+      this.selected = Math.max(0, this.selected + (e.button === 64 ? -3 : 3));
     return true;
   }
   cancel() {
@@ -455,6 +467,7 @@ export class WorkspaceDialog implements Overlay {
             ? `${this.paneId ? "このペイン" : "タブ全体"} · ${this.mode === "picker" ? "ビューを追加" : this.mode === "placement" ? "配置を選択" : this.path || this.directory || this.mode}`
             : undefined,
         );
+    area.w = Math.max(0, area.w - 1);
     const content =
       this.mode === "picker"
         ? WORKSPACE_VIEWS.map((v) => v.title)
@@ -471,8 +484,11 @@ export class WorkspaceDialog implements Overlay {
     this.contentRect = { x: area.x, y: area.y + top, w: area.w, h: height };
     this.selected = Math.min(Math.max(0, content.length - 1), this.selected);
     const focus = this.editing ? this.row : this.selected;
-    this.scroll = Math.max(0, Math.min(this.scroll, focus));
-    if (focus >= this.scroll + height) this.scroll = focus - height + 1;
+    if (!this.manualScroll) {
+      this.scroll = Math.max(0, Math.min(this.scroll, focus));
+      if (focus >= this.scroll + height) this.scroll = focus - height + 1;
+    }
+    this.scroll = Math.max(0, Math.min(this.scroll, content.length - height));
     if (top) grid.text(area.x, area.y, this.busy ? "読込中…" : this.error, c.warn, c.bg, 0, area.w);
     for (let i = 0; i < height; i++) {
       const n = this.scroll + i,
@@ -499,6 +515,17 @@ export class WorkspaceDialog implements Overlay {
         area.w,
       );
     }
+    this.scrollbar.render(
+      grid,
+      { ...this.contentRect!, w: area.w + 1 },
+      content.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.manualScroll = true;
+      },
+    );
     if (footer)
       grid.text(
         area.x,
@@ -513,7 +540,7 @@ export class WorkspaceDialog implements Overlay {
         0,
         area.w,
       );
-    if (this.editing) {
+    if (this.editing && this.row >= this.scroll && this.row < this.scroll + height) {
       const field = this.lines[this.row]!.view(Math.max(1, area.w));
       grid.text(
         area.x,

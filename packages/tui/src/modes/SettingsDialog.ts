@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { UiState } from "../model/UiState.js";
 import { ATTR } from "../render/color.js";
@@ -50,6 +51,18 @@ const SECTIONS_W = 18;
  * その取り消し）。変更は項目ごとに即座に反映（web と同じ。確定のボタンは無い）。
  */
 export class SettingsDialog implements Overlay {
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    if (this.sub) {
+      this.scrollbar.cancel();
+      return false;
+    }
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+
   private readonly sections: SettingsSection[];
   private section = 0;
   private item = 0;
@@ -91,6 +104,7 @@ export class SettingsDialog implements Overlay {
   // --- キー ---
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     if (this.sub) return this.subKey(this.sub, k);
     if (this.focus === "sections") {
       if (isEsc(k)) return this.cancel();
@@ -252,6 +266,7 @@ export class SettingsDialog implements Overlay {
   // --- マウス ---
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) {
       // 一覧・入力欄・確認の外を押したらそれだけ閉じる（設定画面は閉じない）。
       if (this.sub && ev.action === "down") {
@@ -362,6 +377,7 @@ export class SettingsDialog implements Overlay {
       this.item - (this.itemScroll - 1) < bodyH
     )
       this.itemScroll--;
+    items.w = Math.max(0, items.w - 1);
     const valueW = Math.min(40, Math.floor(items.w / 2));
     for (let i = 0; i < bodyH; i++) {
       const it = list[this.itemScroll + i];
@@ -382,9 +398,22 @@ export class SettingsDialog implements Overlay {
         grid.text(items.x + items.w - stringWidth(v) - 1, y, v, fg, bg, it.toggle ? ATTR.bold : 0);
       }
     }
-    if (this.itemScroll > 0) grid.set(items.x + items.w - 1, items.y, "↑", 1, c.dim, c.bg);
-    if (this.itemScroll + bodyH < list.length)
-      grid.set(items.x + items.w - 1, items.y + bodyH - 1, "↓", 1, c.dim, c.bg);
+    this.scrollbar.render(
+      grid,
+      { ...items, w: items.w + 1 },
+      list.length,
+      this.itemScroll,
+      c,
+      (offset) => {
+        this.itemScroll = offset;
+        this.item = this.firstSelectable(
+          Math.max(offset, Math.min(this.item, offset + bodyH - 1)),
+          1,
+          true,
+        );
+        this.focus = "items";
+      },
+    );
 
     // 下：説明と知らせ（知らせは警告の色）。
     const footY = inner.y + bodyH + 1;

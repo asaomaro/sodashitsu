@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import type { DisplayState } from "@sodashitsu/protocol";
 import {
   aggregate,
@@ -165,6 +166,14 @@ export function gotoRows(
  * b/w/i/d で状態の絞り込み・a で解除・Backspace で状態の絞り込みだけを消す、Space で workspace を開閉、Esc で閉じる。
  */
 export class GotoDialog implements Overlay {
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+
   private readonly query = new TextInput();
   private editing = false;
   private filter: DisplayState | null = null;
@@ -219,6 +228,7 @@ export class GotoDialog implements Overlay {
   }
 
   handleKey(k: KeyInput): void {
+    this.scrollbar.cancel();
     if (isEsc(k)) {
       if (this.editing) this.editing = false;
       else this.cancel();
@@ -280,6 +290,7 @@ export class GotoDialog implements Overlay {
   }
 
   handleMouse(ev: OverlayMouse): boolean {
+    if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
     if (ev.action === "down" && ev.button === 0) {
       const index = ev.y - this.rowsTop + this.scroll;
@@ -316,6 +327,7 @@ export class GotoDialog implements Overlay {
     const r = { x: 2, y: 1, w: Math.max(10, grid.w - 4), h: Math.max(5, grid.h - 2) };
     this.rect = r;
     const inner = drawBox(grid, r, c, "goto");
+    inner.w = Math.max(0, inner.w - 1);
     const label = "/ ";
     grid.text(inner.x, inner.y, label, c.dim, c.bg);
     const view = this.query.view(inner.w - 12);
@@ -363,6 +375,17 @@ export class GotoDialog implements Overlay {
           bg,
         );
     }
+    this.scrollbar.render(
+      grid,
+      { ...inner, y: this.rowsTop, h: visible, w: inner.w + 1 },
+      rows.length,
+      this.scroll,
+      c,
+      (offset) => {
+        this.scroll = offset;
+        this.selected = rows[Math.max(offset, Math.min(sel, offset + visible - 1))]?.target ?? null;
+      },
+    );
     return this.editing
       ? { x: inner.x + 2 + view.cursorCol, y: inner.y, visible: true, style: "bar", blink: true }
       : hiddenCursor();

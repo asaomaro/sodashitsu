@@ -100,6 +100,7 @@ export interface MouseHost {
   /** マウスで選んだら離した時点でコピーするか（`tui.copyOnSelect`。省略は入）。 */
   copyOnSelect?(): boolean;
   /** サイドバーの区画をホイールで動かす（区画が一覧より低いとき）。 */
+  setSidebarScroll?(section: "spaces" | "agents", offset: number): void;
   scrollSidebar?(section: "spaces" | "agents", delta: number): void;
   /** あふれた tab バーの表示をずらす（「‹」「›」）。 */
   scrollTabs?(delta: number): void;
@@ -131,6 +132,7 @@ type Drag =
     }
   /** pane のスクロールバーのつまみ（M9）。`grab` はつまみの上端から掴んだ位置までの行数。 */
   | { kind: "scrollbar"; paneId: string; grab: number }
+  | { kind: "sidebarScroll"; section: "spaces" | "agents"; grab: number }
   | { kind: "sidebar" }
   /** サイドバーの spaces と agents の区切り（herdr の H19b）。`moved` は動かしたとき（動かさずに離せば agents の折りたたみ）。 */
   | { kind: "section"; top: number; startY: number; moved: boolean }
@@ -188,6 +190,8 @@ export class MouseController {
     if (ev.action === "down") this.press(ev);
     else if (ev.action === "wheel") this.wheel(ev);
     else if (ev.action === "move") this.motion(ev);
+    else if (ev.action === "up" && this.host.ui.screen === "dashboard")
+      this.host.dashboardMouse?.(ev);
   }
 
   /** ボタンを押していない動き（外側の端末で ?1003 を有効にしたとき）：全部の動きを求める pane（any）へ送る。 */
@@ -310,6 +314,29 @@ export class MouseController {
       .find((t) => y >= t.y && y < t.y + (t.h ?? 1) && x >= t.x && x < t.x + t.w);
     if (toast) {
       if (left) ui.clickToast(toast.id);
+      return;
+    }
+
+    // スクロール専用列は一覧項目の選択・D&Dより先に判定する。
+    const sidebarBar = this.host
+      .sidebarHits()
+      .find((h) => h.kind === "sidebarScrollbar" && h.x === x && h.y === y);
+    if (sidebarBar?.kind === "sidebarScrollbar") {
+      if (left) {
+        const { metrics, track, section } = sidebarBar;
+        const thumb = scrollbarThumb(metrics, track)!;
+        const onThumb = y >= thumb.top && y < thumb.top + thumb.len;
+        if (!onThumb)
+          this.host.setSidebarScroll?.(
+            section,
+            metrics.maxOffsetFromBottom - offsetFromRow(metrics, track, y),
+          );
+        this.drag = {
+          kind: "sidebarScroll",
+          section,
+          grab: onThumb ? y - thumb.top : Math.floor(thumb.len / 2),
+        };
+      }
       return;
     }
 
@@ -700,6 +727,18 @@ export class MouseController {
         const track = box && term ? paneScrollTrack(box, term) : null;
         if (term && metrics && track)
           this.scrollPaneTo(term, offsetFromDragRow(metrics, track, ev.y, drag.grab));
+        break;
+      }
+      case "sidebarScroll": {
+        const bar = this.host
+          .sidebarHits()
+          .find((h) => h.kind === "sidebarScrollbar" && h.section === drag.section);
+        if (bar?.kind === "sidebarScrollbar")
+          this.host.setSidebarScroll?.(
+            drag.section,
+            bar.metrics.maxOffsetFromBottom -
+              offsetFromDragRow(bar.metrics, bar.track, ev.y, drag.grab),
+          );
         break;
       }
       case "sidebar":

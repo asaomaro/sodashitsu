@@ -405,6 +405,8 @@ export class TuiApp {
         this.mouse.cancel();
         this.dockedViews.release();
         this.overlays.cancelInteraction();
+        this.dashboard.cancelInteraction();
+        this.schedules.cancelInteraction();
       },
     );
     this.disposers.push(() => this.asks.reset());
@@ -424,6 +426,17 @@ export class TuiApp {
     });
     this.disposers.push(
       this.ui.onChange(() => {
+        if (
+          this.ui.screen !== "dashboard" ||
+          this.ui.dialogContext !== null ||
+          this.ui.contextMenu !== null
+        )
+          this.dashboard.cancelInteraction();
+        if (this.ui.dialogContext !== null || this.ui.contextMenu !== null) {
+          this.schedules.cancelInteraction();
+          this.dockedViews.release();
+          this.mouse.cancel();
+        }
         this.schedules.sync(this.ui.screen === "schedule");
         this.graphView.sync(this.ui.screen === "graph");
         this.usage.sync(
@@ -570,6 +583,10 @@ export class TuiApp {
       sectionsCollapsed: () => this.prefs.sectionsCollapsed,
       copyOnSelect: () => this.prefs.copyOnSelect,
       toastHits: () => this.toastHits,
+      setSidebarScroll: (section, offset) => {
+        this.sidebarScroll[section] = offset;
+        this.scheduleRender();
+      },
       scrollSidebar: (section, delta) => {
         this.sidebarScroll[section] = Math.max(0, this.sidebarScroll[section] + delta);
         this.scheduleRender();

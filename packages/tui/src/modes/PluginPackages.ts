@@ -1,3 +1,4 @@
+import { ScrollBar } from "./ScrollBar.js";
 import type { PluginCandidate } from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { UiState } from "../model/UiState.js";
@@ -20,6 +21,14 @@ import {
 import type { Rect } from "../render/Screen.js";
 import { safeText } from "./document.js";
 export class PluginPackages implements Overlay {
+  private readonly scrollbar = new ScrollBar();
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+
   private candidates: PluginCandidate[] = [];
   private selected = 0;
   private review = false;
@@ -73,6 +82,7 @@ export class PluginPackages implements Overlay {
     }
   }
   handleKey(k: KeyInput) {
+    this.scrollbar.cancel();
     if (isEsc(k)) {
       if (this.review && !this.busy) this.review = false;
       else if (!this.busy) this.cancel();
@@ -97,6 +107,7 @@ export class PluginPackages implements Overlay {
     } else if (k.key === "r" && !this.review) void this.refresh();
   }
   handleMouse(e: OverlayMouse) {
+    if (this.handleScrollMouse(e)) return true;
     if (!inside(this.rect, e.x, e.y)) return false;
     if (!this.busy && e.action === "down" && e.button === 0) {
       const index = this.hits.get(e.y);
@@ -135,6 +146,7 @@ export class PluginPackages implements Overlay {
             (p, i) =>
               `${i === this.selected ? "▶" : " "} ${p.name} ${p.version} · ${p.scope === "user" ? "ユーザー" : "PJ"}`,
           );
+    a.w = Math.max(0, a.w - 1);
     if (this.review) {
       const wrapped = lines.flatMap((line) => wrapText(safeText(line), Math.max(1, a.w))),
         height = Math.max(0, a.h - 2);
@@ -158,14 +170,34 @@ export class PluginPackages implements Overlay {
         0,
         a.w,
       );
+      this.scrollbar.render(
+        grid,
+        { ...a, y: a.y + 1, h: height, w: a.w + 1 },
+        wrapped.length,
+        this.scroll,
+        c,
+        (offset) => {
+          this.scroll = offset;
+        },
+      );
       return hiddenCursor();
     }
-    const start = this.review ? 0 : Math.max(0, this.selected - Math.max(1, a.h - 3) + 1);
+    const start = this.review ? 0 : Math.max(0, this.selected - Math.max(1, a.h - 2) + 1);
     grid.text(a.x, a.y, this.busy ? "処理中…" : this.error, c.warn, c.bg, 0, a.w);
     lines.slice(start, start + a.h - 2).forEach((line, i) => {
       grid.text(a.x, a.y + i + 1, safeText(line), c.fg, c.bg, 0, a.w);
       if (!this.review) this.hits.set(a.y + i + 1, start + i);
     });
+    this.scrollbar.render(
+      grid,
+      { ...a, y: a.y + 1, h: Math.max(0, a.h - 2), w: a.w + 1 },
+      lines.length,
+      start,
+      c,
+      (offset) => {
+        this.selected = Math.min(lines.length - 1, offset + Math.max(1, a.h - 2) - 1);
+      },
+    );
     if (!lines.length)
       grid.text(a.x, a.y + 1, "未登録のパッケージはありません", c.fg, c.bg, 0, a.w);
     if (!this.review)

@@ -1,0 +1,1 @@
+review_history_usageによる独立レビュー。PluginPackagesのマウス導線欠落と先頭1行ずれ、DockedViewsで領域外releaseが届かない問題、Schedule/Dashboard画面変更時のcapture残りを指摘。すべて修正し回帰テスト追加。修正差分を再レビューし追加指摘なし。
