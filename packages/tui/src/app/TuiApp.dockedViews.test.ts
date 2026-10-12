@@ -207,7 +207,7 @@ it("opens the graph from the sidebar and draws it in the outer terminal without 
     h.app.renderNow();
     expect(await h.screen()).toContain("1ノード / 0線");
   });
-  h.io.type("random");
+  h.io.type("xyz");
   expect(h.ws.sent.filter((m) => m instanceof Uint8Array)).toHaveLength(0);
   h.io.type("\x1b");
   await vi.waitFor(() => expect(h.app.ui.screen).toBe("base"));

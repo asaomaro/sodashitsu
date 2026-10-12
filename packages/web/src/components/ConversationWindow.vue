@@ -20,8 +20,12 @@ const messages = ref<ConversationMessage[]>([]),
   selected = ref<string | null>(null),
   body = ref<HTMLElement | null>(null),
   note = ref("");
+const messageOrder = ref<"oldest" | "newest">("oldest");
 const target = computed(() => store.target),
-  users = computed(() => messages.value.filter((m) => m.role === "user"));
+  users = computed(() => {
+    const rows = messages.value.filter((m) => m.role === "user");
+    return messageOrder.value === "newest" ? rows.reverse() : rows;
+  });
 const sessionId = computed(() =>
   target.value ? session.panes.get(target.value.paneId)?.agentSession?.sessionId : null,
 );
@@ -179,6 +183,13 @@ function close() {
       <p v-if="partial">記録の一部、または長いメッセージの先頭のみ表示しています。</p>
       <div class="conversation-columns">
         <nav aria-label="送信メッセージ一覧">
+          <label
+            >表示順
+            <select v-model="messageOrder" aria-label="送信メッセージの表示順">
+              <option value="oldest">古い順</option>
+              <option value="newest">新しい順</option>
+            </select>
+          </label>
           <button
             v-for="m in users"
             :key="m.id"

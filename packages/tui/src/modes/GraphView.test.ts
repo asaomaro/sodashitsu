@@ -7,6 +7,37 @@ import { ThemeColors } from "../render/color.js";
 import { pane, tab, workspace, leaf } from "../testing/fixtures.js";
 import { chordToKeyInput } from "@sodashitsu/client-core";
 import type { RequestPort } from "../term/PaneRegistry.js";
+it('opens the visible last connection when outgoing connection chips overlap',async()=>{
+  const model=new SessionModel(),ui=new UiState(model);
+  model.workspaces.set('w',workspace('w',['t']));model.tabs.set('t',tab('t','w',leaf('a')));model.panes.set('a',pane('a','t'));model.panes.set('b',pane('b','t'));
+  const links=['first','last'].map(id=>({id,kind:'supervise',from:'local:a',to:'local:b',limit:10,count:0,paused:null}));
+  const view=new GraphView(model,ui,{request:async()=>({rev:0,paused:false,nodes:[{key:'local:a',x:0,y:0},{key:'local:b',x:0,y:0}],links})} as unknown as RequestPort,()=>{},()=>{});
+  view.sync(true);try{
+    await vi.waitFor(()=>{const grid=new Grid(100,30);view.render(grid,{x:0,y:0,w:100,h:30},new ThemeColors('dracula'));expect(grid.rowText(1)).toContain('監督');});
+    view.handleMouse({action:'down',button:0,x:27,y:4});expect(ui.dialogContext).toMatchObject({kind:'graphEdit',mode:'link',linkId:'last'});
+  }finally{view.dispose();}
+});
+it('shows clickable workspace tab tags, highlights matching panes and offers graph actions',async()=>{
+  const model=new SessionModel(),ui=new UiState(model),focus=vi.fn();
+  model.workspaces.set('w',workspace('w',['ta','tb']));
+  model.tabs.set('ta',tab('ta','w',leaf('a'),{label:'Build'}));
+  model.tabs.set('tb',tab('tb','w',leaf('b'),{label:'Review'}));
+  model.panes.set('a',pane('a','ta'));model.panes.set('b',pane('b','tb'));
+  const view=new GraphView(model,ui,{request:async()=>({rev:0,paused:false,nodes:[{key:'local:a',x:0,y:0},{key:'local:b',x:0,y:0}],links:[]})} as unknown as RequestPort,()=>{},focus);
+  const theme=new ThemeColors('dracula');
+  const render=()=>{const grid=new Grid(100,30);view.render(grid,{x:0,y:0,w:100,h:30},theme);return grid;};
+  view.sync(true);
+  try{
+    await vi.waitFor(()=>expect(render().rowText(3)).toContain('[Build] [Review]'));
+    view.handleMouse({action:'down',button:0,x:4,y:3});
+    let grid=render();expect(grid.cell(2,4)?.fg).toBe(theme.ui('--soda-warn-fg'));
+    expect(grid.cell(32,4)?.fg).not.toBe(theme.ui('--soda-warn-fg'));
+    expect(focus).not.toHaveBeenCalled();
+    view.handleKey(chordToKeyInput('a')!);expect(ui.dialogContext).toMatchObject({kind:'graphEdit',mode:'pane',tabId:'ta'});ui.closeDialog();
+    view.handleKey(chordToKeyInput('l')!);expect(ui.dialogContext).toMatchObject({kind:'graphEdit',mode:'link'});ui.closeDialog();
+    view.handleMouse({action:'down',button:0,x:4,y:3});grid=render();expect(grid.cell(2,4)?.fg).not.toBe(theme.ui('--soda-warn-fg'));
+  }finally{view.dispose();}
+});
 it("draws box and connection glyphs, drags native nodes without writing Web coordinates, and opens the worker", async () => {
   const model = new SessionModel();
   model.panes.set("a", pane("a", "t", { label: "Alpha" }));

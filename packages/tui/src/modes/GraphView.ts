@@ -21,6 +21,10 @@ export class GraphView {
   private drag: { key: NodeKey | null; start: Point; origin: Point; moved: boolean } | null = null;
   private rect: Rect | null = null;
   private boxes = new Map<NodeKey, Rect>();
+  private selectedTab: string | null = null;
+  private tags: { tabId: string; rect: Rect }[] = [];
+  private controls: { mode: "pane" | "link"; rect: Rect }[] = [];
+  private linkHits: { id: string; rect: Rect }[] = [];
   private active = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private generation = 0;
@@ -55,6 +59,7 @@ export class GraphView {
     this.positions.clear();
     this.pan = { x: 0, y: 0 };
     this.selected = null;
+    this.selectedTab = null;
     this.drag = null;
     this.loading = false;
     this.error = "";
@@ -83,7 +88,30 @@ export class GraphView {
       if (p) this.positions.set(this.selected, { x: p.x + dx, y: p.y + dy });
     } else this.pan = { x: this.pan.x + dx, y: this.pan.y + dy };
   }
+  private edit(mode: "pane" | "link", linkId?: string) {
+    this.ui.openDialogWithContext({
+      kind: "graphEdit",
+      mode,
+      ...(this.selected ? { nodeKey: this.selected } : {}),
+      ...(this.selectedTab ? { tabId: this.selectedTab } : {}),
+      ...(linkId ? { linkId } : {}),
+    });
+  }
   handleKey(k: KeyInput) {
+    if (k.key === "a" && !k.ctrl && !k.alt) {
+      this.edit("pane");
+      return;
+    }
+    if (k.key === "l" && !k.ctrl && !k.alt) {
+      this.edit("link");
+      return;
+    }
+    if (k.key === "t" && !k.ctrl && !k.alt) {
+      const ids = [...new Set(this.tags.map((t) => t.tabId))];
+      this.selectedTab = ids[(ids.indexOf(this.selectedTab!) + 1) % ids.length] ?? null;
+      this.selected = null;
+      return;
+    }
     if (k.key === "Escape") {
       if (this.drag) {
         this.drag = null;
@@ -91,6 +119,10 @@ export class GraphView {
       }
       if (this.selected) {
         this.selected = null;
+        return;
+      }
+      if (this.selectedTab) {
+        this.selectedTab = null;
         return;
       }
       this.ui.setScreen("base");
@@ -136,6 +168,24 @@ export class GraphView {
       return true;
     }
     if (e.action === "down" && e.button === 0) {
+      const control = this.controls.find((t) => inside(t.rect, e.x, e.y));
+      if (control) {
+        this.edit(control.mode);
+        return true;
+      }
+      const tag = this.tags.find((t) => inside(t.rect, e.x, e.y));
+      if (tag) {
+        this.selectedTab = this.selectedTab === tag.tabId ? null : tag.tabId;
+        this.selected = null;
+        this.drag = null;
+        this.redraw();
+        return true;
+      }
+      const link = [...this.linkHits].reverse().find((t) => inside(t.rect, e.x, e.y));
+      if (link) {
+        this.edit("link", link.id);
+        return true;
+      }
       const key = [...this.boxes].reverse().find(([, r]) => inside(r, e.x, e.y))?.[0] ?? null;
       this.selected = key;
       this.drag = {
@@ -166,8 +216,25 @@ export class GraphView {
   render(grid: Grid, area: Rect, theme: ThemeColors): CursorState {
     this.rect = area;
     this.boxes.clear();
+    this.tags = [];
+    this.controls = [];
+    this.linkHits = [];
+    if (this.selectedTab && !this.model.tabs.has(this.selectedTab)) this.selectedTab = null;
     const c = dialogColors(theme);
     grid.fill(area, c.fg, c.bg);
+    let buttonX = area.x + area.w - 1;
+    for (const [mode, label] of [
+      ["link", "[ 連携設定 ]"],
+      ["pane", "[ ペイン追加 ]"],
+    ] as const) {
+      const w = stringWidth(label);
+      buttonX -= w;
+      if (buttonX >= area.x) {
+        grid.text(buttonX, area.y, label, c.fg, c.active, 0, w);
+        this.controls.push({ mode, rect: { x: buttonX, y: area.y, w, h: 1 } });
+        buttonX--;
+      }
+    }
     grid.text(
       area.x + 1,
       area.y,
@@ -175,7 +242,7 @@ export class GraphView {
       c.fg,
       c.bg,
       0,
-      Math.max(0, area.w - 2),
+      Math.max(0, buttonX - area.x - 1),
     );
     grid.text(
       area.x + 1,
@@ -261,8 +328,35 @@ export class GraphView {
         y = Math.max(canvas.y, top),
         w = Math.min(canvas.x + canvas.w, right) - x,
         h = Math.min(canvas.y + canvas.h, bottom) - y;
-      if (w >= 4 && h >= 3)
+      if (w >= 4 && h >= 3) {
         drawBox(grid, { x, y, w, h }, c, safeText(`${groupName.get(id)} · ${keys.length}ペイン`));
+        let tx = x + 2;
+        const tabIds = [
+          ...new Set(
+            keys
+              .map((k) =>
+                k.startsWith("local:") ? this.model.panes.get(k.slice(6))?.tabId : undefined,
+              )
+              .filter((t): t is string => !!t),
+          ),
+        ];
+        for (const tabId of tabIds) {
+          const label = safeText(`[${this.model.tabs.get(tabId)?.label ?? tabId.slice(0, 8)}]`);
+          const tw = Math.min(stringWidth(label), x + w - 2 - tx);
+          if (tw < 3 || top + 1 < canvas.y || top + 1 >= canvas.y + canvas.h) break;
+          grid.text(
+            tx,
+            top + 1,
+            label,
+            this.selectedTab === tabId ? c.accentFg : c.fg,
+            this.selectedTab === tabId ? c.accent : c.bg,
+            0,
+            tw,
+          );
+          this.tags.push({ tabId, rect: { x: tx, y: top + 1, w: tw, h: 1 } });
+          tx += tw + 1;
+        }
+      }
     }
     // セル間の接続方向を合成して、交点も罫線で描く。
     const masks = new Map<string, number>();
@@ -289,7 +383,7 @@ export class GraphView {
       }
     };
     const arrows: Point[] = [];
-    const connect = (from: NodeKey, to: NodeKey, label: string) => {
+    const connect = (from: NodeKey, to: NodeKey, label: string, linkId?: string) => {
       const a = this.boxes.get(from),
         b = this.boxes.get(to);
       if (
@@ -306,7 +400,19 @@ export class GraphView {
       segment({ x: mid, y: start.y }, { x: mid, y: end.y });
       segment({ x: mid, y: end.y }, end);
       arrows.push(end);
-      if (inside(canvas, start.x, start.y - 1))
+      if (inside(canvas, start.x, start.y - 1)) {
+        const nextBox=[...this.boxes.values()].filter(r=>start.y-1>=r.y&&start.y-1<r.y+r.h&&r.x>=start.x).map(r=>r.x-start.x);
+        const width=Math.max(0,Math.min(24,canvas.x+canvas.w-start.x,...nextBox));
+        if (linkId)
+          this.linkHits.push({
+            id: linkId,
+            rect: {
+              x: start.x,
+              y: start.y - 1,
+              w: Math.min(stringWidth(label), width),
+              h: 1,
+            },
+          });
         grid.text(
           start.x,
           start.y - 1,
@@ -314,14 +420,16 @@ export class GraphView {
           c.fg,
           c.bg,
           0,
-          Math.min(24, canvas.x + canvas.w - start.x),
+          width,
         );
+      }
     };
     for (const link of this.graph.links)
       connect(
         link.from,
         link.to,
         `${link.count}/${link.limit} ${{ trigger: "指示", supervise: "監督", approval: "承認" }[link.kind]}${link.paused ? " 停止" : ""}`,
+        link.id,
       );
     for (const node of this.graph.nodes)
       if (node.forkedFrom) connect(node.forkedFrom, node.key, "fork");
@@ -357,7 +465,13 @@ export class GraphView {
       )
         continue;
       const pane = key.startsWith("local:") ? this.model.panes.get(key.slice(6)) : undefined;
-      const colors = { ...c, border: this.selected === key ? c.warn : c.border };
+      const colors = {
+        ...c,
+        border:
+          this.selected === key || (!!this.selectedTab && pane?.tabId === this.selectedTab)
+            ? c.warn
+            : c.border,
+      };
       drawBox(grid, box, colors);
       const state = pane?.agent ? this.model.displayStateOf(pane) : null;
       const glyph = glyphFor(state, this.symbols());
@@ -413,7 +527,7 @@ export class GraphView {
     grid.text(
       area.x,
       area.y + area.h - 1,
-      "D&D 移動 · Tab 選択 · ↑↓←→ 移動 · Enter 端末 · p 停止/再開 · 0 整列 · Esc 戻る",
+      "タグ選択 · a ペイン追加 · l 連携 · t タブ · D&D 移動 · Tab 選択 · ↑↓←→ 移動 · Enter 端末 · p 停止/再開 · 0 整列 · Esc 戻る",
       c.fg,
       c.bg,
       0,

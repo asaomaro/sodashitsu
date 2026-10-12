@@ -35,6 +35,8 @@ export interface Overlay {
   /** 外側を押した・Esc で閉じる（取り消し）。 */
   canLeave?(): boolean;
   cancel(): void;
+  /** 別の窓が割り込んだとき、窓を閉じず進行中のドラッグだけ取り消す。 */
+  cancelInteraction?(): void;
   /** 別のダイアログに置き換わった・閉じた後の後始末（popup のコマンドを止める等）。 */
   dispose?(): void;
 }

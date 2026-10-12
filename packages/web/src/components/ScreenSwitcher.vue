@@ -15,7 +15,12 @@ function fullName(def: ScreenDef): string {
 </script>
 
 <template>
-  <div class="screen-switcher" :class="{ 'screen-switcher-collapsed': view.sidebarCollapsed }" role="group" aria-label="画面の切り替え">
+  <div
+    class="screen-switcher"
+    :class="{ 'screen-switcher-collapsed': view.sidebarCollapsed }"
+    role="group"
+    aria-label="画面の切り替え"
+  >
     <button
       v-for="def in SCREENS"
       :key="def.id"
@@ -28,7 +33,9 @@ function fullName(def: ScreenDef): string {
       :title="fullName(def)"
       @click="view.setScreen(def.id)"
     >
-      <span class="screen-switcher-label">{{ view.sidebarCollapsed ? def.shortLabel : def.label }}</span>
+      <span class="screen-switcher-label">{{
+        view.sidebarCollapsed ? def.shortLabel : def.label
+      }}</span>
     </button>
   </div>
 </template>
@@ -44,6 +51,7 @@ function fullName(def: ScreenDef): string {
  */
 .screen-switcher {
   display: flex;
+  container-type: inline-size;
   background: var(--soda-menu-bg, #282a36);
   border-bottom: 1px solid var(--soda-menu-border, #44475a);
 }
@@ -57,6 +65,7 @@ function fullName(def: ScreenDef): string {
   margin: 0.375em 0;
   padding: 0.2em 0;
   border: 1px solid transparent;
+  border-inline-width: 0;
 }
 .screen-switcher-collapsed {
   flex-direction: column;
@@ -66,14 +75,15 @@ function fullName(def: ScreenDef): string {
   display: none;
 }
 .screen-switcher-btn {
-  /* 前の 2 つ（基本画面・グラフ）は、今までどおり、縮めない（文字を切らない）。3 つ目以降は、下の `:not(:nth-child(-n + 2))` で縮められる。 */
-  flex: none;
+  /* 全画面のボタンで利用可能な幅を均等に分け、サイドバーの幅変更に追従する。 */
+  flex: 1 1 0;
+  justify-content: center;
   display: flex;
   align-items: center;
   align-self: stretch;
   min-width: 0;
-  /* 左右の余白は 0.6em: 既定の 240px で、3 つの名前（基本画面・グラフ・利用状況＝11 字）が切れずに並ぶ最大の余白（1em だと 272px 要る）。tab の余白（1em）より狭い。 */
-  padding: 0 0.6em;
+  /* 最長3文字の名前と区切り線を先に確保し、余った幅だけ左右余白に使う。 */
+  padding: 0 min(0.6em, max(2px, calc(12.5cqw - 1.5em - 0.5px)));
   font: inherit;
   color: var(--soda-fg, #f8f8f2);
   background: none;
@@ -84,18 +94,21 @@ function fullName(def: ScreenDef): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 3 つ目以降の画面のボタンは、狭いサイドバー（160px・大きい文字）で、前の 2 つを先に守って縮む（はみ出して端末の領域に隠れない。名前は省略記号）。 */
-.screen-switcher-btn:not(:nth-child(-n + 2)) {
-  flex: 0 1 auto;
-}
-/* 名前が入りきらないとき（縮んだ 3 つ目）は、省略記号で切る（ボタンは flex なので、名前を包んで効かせる）。 */
+/* 名前が入りきらないときは、省略記号で切る（ボタンは flex なので、名前を包んで効かせる）。 */
 .screen-switcher-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 最小幅では文字も縮め、グラフ（3文字）まで4つの名前を同じ行に収める。 */
+:root[data-ui-style="classic"]
+  .screen-switcher:not(.screen-switcher-collapsed)
+  .screen-switcher-label {
+  font-size: min(1em, calc((25cqw - 6px) / 3));
+}
 .screen-switcher-collapsed .screen-switcher-btn {
+  flex: none;
   /* たたんだ幅（縦並び）は、これまでの箱の大きさを保つ（0.8em の文字・上下 0.2em・線 1px）。塗りだけを tab の言葉に（平ら・区切りは下の線）。 */
   align-self: auto;
   justify-content: center;
@@ -132,7 +145,10 @@ function fullName(def: ScreenDef): string {
   border: var(--soda-shape-seg-border) solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-seg-radius);
 }
-:root[data-ui-style="modern"] .screen-switcher-collapsed .screen-switcher-btn + .screen-switcher-btn {
+:root[data-ui-style="modern"]
+  .screen-switcher-collapsed
+  .screen-switcher-btn
+  + .screen-switcher-btn {
   margin-top: 0; /* すき間は、帯の gap が持つ */
 }
 :root[data-ui-style="modern"] .screen-switcher-collapsed .screen-switcher-btn {

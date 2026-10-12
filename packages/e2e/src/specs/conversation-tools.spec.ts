@@ -80,6 +80,9 @@ test("Codexの要約モデルが使えない理由を画面に表示し、生の
     args: [],
   });
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  // 初期案内の消えない通知を利用者と同じ閉じるボタンで片付ける。
+  await expect(page.locator('.pane-frame').first()).toBeVisible();
+  for(const close of await page.locator('.toast-sticky .toast-close').all())await close.click();
   await page.getByRole("button", { name: "会話の要約", exact: true }).click();
   const window = page.locator(".conversation-window");
   await expect(window).toContainText("codex · GPT-6-Luna");
@@ -110,10 +113,20 @@ test("会話窓へフォーカス、メッセージ選択、要約、過去一�
     args: [],
   });
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  // 初期案内の消えない通知を利用者と同じ閉じるボタンで片付ける。
+  await expect(page.locator('.pane-frame').first()).toBeVisible();
+  for(const close of await page.locator('.toast-sticky .toast-close').all())await close.click();
   const window = page.locator(".conversation-window");
   await page.getByRole("button", { name: "送信メッセージ", exact: true }).click();
   await expect(window).toBeVisible();
   await expect(window).toBeFocused();
+  const sent=window.getByRole('navigation',{name:'送信メッセージ一覧'});
+  const sentMessages=sent.getByRole('button',{name:/会話E2E質問/});
+  await expect(sentMessages.first()).toContainText('会話E2E質問0');
+  await window.getByRole('combobox',{name:'送信メッセージの表示順'}).selectOption('newest');
+  await expect(sentMessages.first()).toContainText('会話E2E質問10');
+  await window.getByRole('combobox',{name:'送信メッセージの表示順'}).selectOption('oldest');
+  await expect(sentMessages.first()).toContainText('会話E2E質問0');
   await expect
     .poll(async () => (await window.locator("header").boundingBox())!.height)
     .toBeLessThanOrEqual(28);
@@ -169,6 +182,9 @@ test("会話窓へフォーカス、メッセージ選択、要約、過去一�
 });
 test("現役エージェントがなくても過去セッション一覧を開ける", async ({ page, appServer }) => {
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  // 初期案内の消えない通知を利用者と同じ閉じるボタンで片付ける。
+  await expect(page.locator('.pane-frame').first()).toBeVisible();
+  for(const close of await page.locator('.toast-sticky .toast-close').all())await close.click();
   await page.locator("[data-screen-id=dashboard]").first().click();
   await expect(page.locator(".past-sessions")).toBeVisible();
 });
@@ -209,6 +225,9 @@ test("配布プラグインをCLIから操作し、JSON結果と画面の内容�
     plugin: { extensionKey: "user:commit-graph", display: "commit-graph" },
   });
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  // 初期案内の消えない通知を利用者と同じ閉じるボタンで片付ける。
+  await expect(page.locator('.pane-frame').first()).toBeVisible();
+  for(const close of await page.locator('.toast-sticky .toast-close').all())await close.click();
   await expect(
     page.frameLocator("[data-plugin-view] iframe[data-display-frame]").locator("pre"),
   ).toContainText("cli-plugin-history");

@@ -96,7 +96,7 @@ export interface MouseHost {
   /** 今畳んでいる区画（畳んでいる間は区切りのドラッグで高さを変えない）。 */
   sectionsCollapsed?(): { spaces: boolean; agents: boolean };
   /** 知らせ（トースト）の当たり（押すと `ui.clickToast`）。 */
-  toastHits?(): readonly { id: number; x: number; y: number; w: number }[];
+  toastHits?(): readonly { id: number; x: number; y: number; w: number; h?: number }[];
   /** マウスで選んだら離した時点でコピーするか（`tui.copyOnSelect`。省略は入）。 */
   copyOnSelect?(): boolean;
   /** サイドバーの区画をホイールで動かす（区画が一覧より低いとき）。 */
@@ -305,7 +305,9 @@ export class MouseController {
     this.selection = null;
 
     // 知らせ（通知のトースト）：押すと対象へ（design「通知」）。ほかの部品より上に描いているので先に見る。
-    const toast = this.host.toastHits?.().find((t) => t.y === y && x >= t.x && x < t.x + t.w);
+    const toast = this.host
+      .toastHits?.()
+      .find((t) => y >= t.y && y < t.y + (t.h ?? 1) && x >= t.x && x < t.x + t.w);
     if (toast) {
       if (left) ui.clickToast(toast.id);
       return;

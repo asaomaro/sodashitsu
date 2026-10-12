@@ -1,3 +1,4 @@
+import { SixelGraphicsTranslator } from "./SixelGraphics.js";
 import { RpcError, type PaneId, type TerminalPalette } from "@sodashitsu/protocol";
 import type { PtyProcess } from "../pty/PtyBackend.js";
 import type { Disposable } from "../util/Disposable.js";
@@ -108,6 +109,7 @@ export class DefaultTerminalHost implements TerminalHost {
   private lastSubmit = 0;
   private readonly exitListeners = new Set<(code: number) => void>();
   /** 出力の Kitty graphics を読み分ける（20260926-kitty-graphics design「4.」）。 */
+  private readonly sixel = new SixelGraphicsTranslator();
   private readonly kitty = new KittyGraphicsTranslator();
   private readonly disposables: Disposable[] = [];
   private paused = false;
@@ -149,7 +151,11 @@ export class DefaultTerminalHost implements TerminalHost {
     this.disposables.push(
       pty.onData((chunk) => {
         this.lastOutput = Date.now();
-        for (const seg of this.kitty.process(chunk)) this.deliver(seg);
+        for (const seg of this.kitty.process(chunk)) {
+          if (seg.kind === "text")
+            for (const converted of this.sixel.process(seg.text)) this.deliver(converted);
+          else this.deliver(seg);
+        }
         if (!this.paused && this.mirror.pendingBytes() > PAUSE_THRESHOLD_BYTES) {
           this.paused = true;
           this.pty.pause();

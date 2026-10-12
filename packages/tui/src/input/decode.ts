@@ -29,6 +29,7 @@ export type InputEvent =
    * 外側の端末の明暗（`OSC 11 ; ?` への背景色の応答、または `CSI ? 2031 h` を有効にした端末の `CSI ? 997 ; 1|2 n`）。
    * テーマの明暗の自動の切り替え（web の `prefers-color-scheme` の代わり）に使う。
    */
+  | { kind: "cellSize"; width: number; height: number }
   | { kind: "colorScheme"; dark: boolean };
 
 /** ESC 単独を確定するまで待つ時間（design「input/decode.ts」）。 */
@@ -379,6 +380,16 @@ export class InputDecoder {
       length,
     });
 
+    if (final === "t" && /^6;\d{1,3};\d{1,3}$/.test(body)) {
+      const [, height, width] = body.split(";").map(Number);
+      return {
+        event:
+          width! > 0 && height! > 0 && width! <= 128 && height! <= 128
+            ? { kind: "cellSize", width: width!, height: height! }
+            : null,
+        length,
+      };
+    }
     // SGR マウス：CSI < b ; x ; y M/m
     if (body.startsWith("<") && (final === "M" || final === "m")) {
       const [b, x, y] = body

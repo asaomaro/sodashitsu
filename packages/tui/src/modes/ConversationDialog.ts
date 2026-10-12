@@ -33,6 +33,8 @@ import type { Rect } from "../render/Screen.js";
 export class ConversationDialog implements Overlay {
   private readonly markdown = new MarkdownView();
   private messages: ConversationMessage[] = [];
+  private newestFirst = false;
+  private orderRect: Rect | null = null;
   private sessions: PastAgentSession[] = [];
   private selected = 0;
   private scroll = 0;
@@ -74,7 +76,13 @@ export class ConversationDialog implements Overlay {
           offset: this.next,
         });
         if (!this.dead) {
+          const selectedId = this.users()[this.selected]?.id;
           this.messages.push(...r.messages);
+          if (selectedId)
+            this.selected = Math.max(
+              0,
+              this.users().findIndex((m) => m.id === selectedId),
+            );
           this.next = r.nextOffset;
           if (r.partial) this.error = "一部の記録のみ表示しています。";
         }
@@ -137,7 +145,17 @@ export class ConversationDialog implements Overlay {
     }
   }
   private users() {
-    return this.messages.filter((m) => m.role === "user");
+    const rows = this.messages.filter((m) => m.role === "user");
+    return this.newestFirst ? rows.reverse() : rows;
+  }
+  private toggleOrder() {
+    const id = this.users()[this.selected]?.id;
+    this.newestFirst = !this.newestFirst;
+    this.selected = Math.max(
+      0,
+      this.users().findIndex((m) => m.id === id),
+    );
+    this.redraw();
   }
   private async resume() {
     const row = this.sessions[this.selected],
@@ -198,6 +216,10 @@ export class ConversationDialog implements Overlay {
     this.scroll = 0;
   }
   handleKey(k: KeyInput): void {
+    if (this.mode === "messages" && !this.detail && k.key === "o" && !k.ctrl && !k.alt) {
+      this.toggleOrder();
+      return;
+    }
     if (isEsc(k)) {
       if (this.detail) {
         this.detail = null;
@@ -230,6 +252,10 @@ export class ConversationDialog implements Overlay {
 
   handleMouse(ev: OverlayMouse): boolean {
     if (!inside(this.rect, ev.x, ev.y)) return false;
+    if (ev.action === "down" && ev.button === 0 && inside(this.orderRect, ev.x, ev.y)) {
+      this.toggleOrder();
+      return true;
+    }
     if (ev.action === "down" && ev.button === 0 && !this.detail) {
       const hit = this.hits.find((h) => h.y === ev.y);
       if (hit) {
@@ -258,6 +284,7 @@ export class ConversationDialog implements Overlay {
   }
   render({ grid, theme }: OverlayRenderContext) {
     this.hits = [];
+    this.orderRect = null;
     this.rect = centeredRect(grid, grid.w - 2, grid.h - 2);
     const c = dialogColors(theme),
       area = drawBox(
@@ -280,22 +307,35 @@ export class ConversationDialog implements Overlay {
     const start = this.detail
       ? Math.min(this.scroll, Math.max(0, rows.length - area.h + 2))
       : Math.max(0, this.selected - area.h + 3);
-    const rich:DocumentRow[]|null = this.detail ? this.markdown.render(this.detail,area.w) : null;
-    const visibleStart = rich ? Math.min(this.scroll, Math.max(0,rich.length-area.h+2)) : start;
-    (rich ?? rows.map(text=>[{text,attrs:0}])).slice(visibleStart,visibleStart+area.h-2).forEach((spans, i) => {
-      const text=spans.map(s=>s.text).join("");
-      if (!this.detail) this.hits.push({ y: area.y + i, index: start + i });
-      if(rich){let x=area.x;for(const s of spans){grid.text(x,area.y+i,s.text,c.fg,c.bg,s.attrs,Math.max(0,area.x+area.w-x));x+=stringWidth(s.text);}return;}
-      grid.text(
-        area.x,
-        area.y + i,
-        plainText(text),
-        c.fg,
-        !this.detail && start + i === this.selected ? c.active : c.bg,
-        0,
-        area.w,
-      );
-    });
+    const rich: DocumentRow[] | null = this.detail
+      ? this.markdown.render(this.detail, area.w)
+      : null;
+    const visibleStart = rich
+      ? Math.min(this.scroll, Math.max(0, rich.length - area.h + 2))
+      : start;
+    (rich ?? rows.map((text) => [{ text, attrs: 0 }]))
+      .slice(visibleStart, visibleStart + area.h - 2)
+      .forEach((spans, i) => {
+        const text = spans.map((s) => s.text).join("");
+        if (!this.detail) this.hits.push({ y: area.y + i, index: start + i });
+        if (rich) {
+          let x = area.x;
+          for (const s of spans) {
+            grid.text(x, area.y + i, s.text, c.fg, c.bg, s.attrs, Math.max(0, area.x + area.w - x));
+            x += stringWidth(s.text);
+          }
+          return;
+        }
+        grid.text(
+          area.x,
+          area.y + i,
+          plainText(text),
+          c.fg,
+          !this.detail && start + i === this.selected ? c.active : c.bg,
+          0,
+          area.w,
+        );
+      });
     grid.text(
       area.x,
       area.y + area.h - 2,
@@ -311,13 +351,19 @@ export class ConversationDialog implements Overlay {
       this.mode === "summary"
         ? "↑↓スクロール・Enter要約・Space開く・Shift+R作り直す・Esc戻る"
         : this.mode === "messages"
-          ? "↑↓選択・Enter要約・Space/クリック開く・n続き・Esc戻る"
+          ? "↑↓選択・Enter要約・Space/クリック開く・o表示順・n続き・Esc戻る"
           : "↑↓選択・Enter/Space再開・n続き・Esc戻る",
       c.dim,
       c.bg,
       0,
       area.w,
     );
+    if (this.mode === "messages" && !this.detail) {
+      const label = `[ ${this.newestFirst ? "新しい順" : "古い順"} ]`,
+        w = Math.min(stringWidth(label), area.w);
+      this.orderRect = { x: area.x + area.w - w, y: area.y + area.h - 1, w, h: 1 };
+      grid.text(this.orderRect.x, this.orderRect.y, label, c.fg, c.active, 0, w);
+    }
     return hiddenCursor();
   }
 }

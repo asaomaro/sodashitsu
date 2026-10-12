@@ -347,3 +347,72 @@ test("new floating view opens centrally without a tray click and reload preserve
     client.close();
   }
 });
+
+for (const placement of ["band-top", "band-bottom"] as const) {
+  test(`statusline band centers text without vertical overflow at compact and narrow sizes (${placement})`, async ({
+    page,
+    appServer,
+  }) => {
+    const client = await appServer.openClient();
+    const pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
+    await client.request("pane.rename", { paneId: pane.id, label: "CompactStatusline" });
+    await client.request("tab.add_view", {
+      tabId: pane.tabId,
+      extensionKey: "builtin:workspace",
+      viewId: "statusline",
+      target: "tab",
+      placement,
+    });
+    await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+    const text = page.frameLocator(".pane-bands iframe").locator("[data-soda-statusline]");
+    await expect(text).toContainText("CompactStatusline");
+    const assertLayout = async (hasGrip = true) => {
+      await expect
+        .poll(() =>
+          text.evaluate((el) => ({
+            overflow: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+            centered: Math.abs(
+              el.getBoundingClientRect().top +
+                el.getBoundingClientRect().height / 2 -
+                Math.min(innerHeight, 24) / 2,
+            ),
+          })),
+        )
+        .toEqual({ overflow: 0, centered: 0 });
+      if (hasGrip) {
+        const grip = await page.locator(".band-grip").boundingBox();
+        const frame = await page.locator(".pane-bands iframe").boundingBox();
+        expect(
+          Math.abs(grip!.y + grip!.height / 2 - frame!.y - frame!.height / 2),
+        ).toBeLessThanOrEqual(1);
+      }
+    };
+    await assertLayout();
+    const handle = await page.locator("[data-band-resize]").boundingBox();
+    await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      handle!.x + handle!.width / 2,
+      handle!.y + (placement === "band-top" ? 60 : -60),
+      { steps: 5 },
+    );
+    await page.mouse.up();
+    await expect
+      .poll(async () => (await page.locator(".pane-band").boundingBox())!.height)
+      .toBeGreaterThan(60);
+    const gripTop = await page.locator(".band-grip").boundingBox();
+    const bandTop = await page.locator(".pane-band").boundingBox();
+    expect(Math.abs(gripTop!.y - bandTop!.y)).toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        text.evaluate((el) =>
+          Math.abs(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2 - 12),
+        ),
+      )
+      .toBe(0);
+    await page.setViewportSize({ width: 720, height: 600 });
+    await assertLayout(false);
+    await page.screenshot({ path: "/tmp/statusline-band-compact.png" });
+    client.close();
+  });
+}

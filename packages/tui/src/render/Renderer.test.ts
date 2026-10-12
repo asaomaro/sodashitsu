@@ -100,12 +100,15 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       s.panes,
       { toasts },
     );
-    expect(result.toastHits).toHaveLength(H - 2);
-    expect(result.toastHits[0]).toMatchObject({ id: 6, y: 1 });
-    expect(result.toastHits.at(-1)).toMatchObject({ id: 23, y: H - 2 });
+    const count = Math.floor((H - 1) / 3);
+    expect(result.toastHits).toHaveLength(count);
+    expect(result.toastHits[0]).toMatchObject({ id: 24 - count, y: 1, h: 3 });
+    expect(result.toastHits.at(-1)).toMatchObject({ id: 23, y: 1 + (count - 1) * 3 });
     expect(result.toastHits.every((hit) => hit.x > W / 2 && hit.x + hit.w <= W)).toBe(true);
     await s.outer.write(result.output);
-    expect(s.outer.text().split("\n")[1]).toContain("notification-6");
+    expect(s.outer.text().split("\n")[1]).toContain("┌");
+    expect(s.outer.text().split("\n")[2]).toContain(`notification-${24 - count}`);
+    expect(s.outer.text().split("\n")[3]).toContain("└");
     await s.draw();
     expect(s.outer.text()).not.toContain("notification-");
   });

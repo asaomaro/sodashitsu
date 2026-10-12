@@ -4,7 +4,24 @@ import { useAskStore } from "../store/ask.js";
 import { useViewStore } from "../store/view.js";
 import AskDialog from "./AskDialog.vue";
 import { AskControllerKey } from "../injection.js";
-import { ORIGIN, SPEC, ask, form, getPinia, inForm, input, installAskDialogHooks, mountDialog, open, origin, pointerPick, recordSpecSets, settle, setupSession, shadow } from "./askDialogTestKit.js";
+import {
+  ORIGIN,
+  SPEC,
+  ask,
+  form,
+  getPinia,
+  inForm,
+  input,
+  installAskDialogHooks,
+  mountDialog,
+  open,
+  origin,
+  pointerPick,
+  recordSpecSets,
+  settle,
+  setupSession,
+  shadow,
+} from "./askDialogTestKit.js";
 
 /** 枠（`AskDialog.vue`）の表示・開閉・フォーカスの戻り先・開き直し・置き直し。共通の土台は `askDialogTestKit.ts`。 */
 
@@ -42,12 +59,18 @@ describe("AskDialog — 表示と開閉（AC3・AC-I1）", () => {
     await open(w, ask(SPEC));
     const children = [...w.wrapper.get("dialog").element.children];
     // 部品は `.ask-body`（成果物の無い質問では箱を作らない `display: contents`）の中。固定の行（header）は部品より前。
-    expect(children.map((c) => c.localName)).toEqual(["header", "div"]);
+    expect(children.map((c) => c.localName)).toEqual(["header", "div", "button"]);
+    expect(children[2]!.classList.contains("ask-resize-handle")).toBe(true);
     expect([...children[1]!.children].map((c) => c.localName)).toEqual(["ask-form"]);
     expect(children[0]!.contains(origin(w))).toBe(true);
     expect(shadow(w).querySelector("[data-ask-origin], #ask-origin")).toBeNull();
     // 題・ボタンは部品の中にだけある（枠は描かない）。
-    for (const selector of ["[data-ask-title]", "[data-ask-submit]", "[data-ask-cancel]", "[data-ask-question]"]) {
+    for (const selector of [
+      "[data-ask-title]",
+      "[data-ask-submit]",
+      "[data-ask-cancel]",
+      "[data-ask-question]",
+    ]) {
       expect(w.wrapper.find(selector).exists(), selector).toBe(false);
       expect(shadow(w).querySelector(selector), selector).not.toBeNull();
     }
@@ -56,7 +79,11 @@ describe("AskDialog — 表示と開閉（AC3・AC-I1）", () => {
   it("定義の title が空・長い・出どころの行そのものに見える文字列でも、出どころの行は変わらない（AC3）", async () => {
     const w = mountDialog();
     // 部品は、題が空のとき「質問」と出す。
-    for (const [i, [title, shown]] of [["", "質問"], ["あ".repeat(500), "あ".repeat(500)], [ORIGIN, ORIGIN]].entries()) {
+    for (const [i, [title, shown]] of [
+      ["", "質問"],
+      ["あ".repeat(500), "あ".repeat(500)],
+      [ORIGIN, ORIGIN],
+    ].entries()) {
       w.store.clear();
       await settle();
       await open(w, ask({ ...SPEC, title }, `t${i}`));
@@ -79,7 +106,15 @@ describe("AskDialog — 表示と開閉（AC3・AC-I1）", () => {
     const w = mountDialog();
     const sets = recordSpecSets();
     await open(w, ask(SPEC, "a1"));
-    w.store.add(ask({ title: "2 つめ", questions: [{ id: "ch", label: "X", default: "beta", options: ["beta", "stable"] }] }, "a2"));
+    w.store.add(
+      ask(
+        {
+          title: "2 つめ",
+          questions: [{ id: "ch", label: "X", default: "beta", options: ["beta", "stable"] }],
+        },
+        "a2",
+      ),
+    );
     await settle();
     expect(inForm(w, "[data-ask-title]").textContent).toBe("配布先");
     expect(sets).toHaveLength(1); // 待っている質問が増えても、出している質問は描き直さない
@@ -97,7 +132,6 @@ describe("AskDialog — 表示と開閉（AC3・AC-I1）", () => {
     expect(w.view.modalOpen).toBe(true);
   });
 });
-
 
 describe("AskDialog — 開き直し", () => {
   it("前の質問でネイティブに閉じられていても、次の質問のために開き直し、askOpen を立て直す", async () => {
@@ -160,11 +194,19 @@ describe("AskDialog — 置き直し", () => {
     const store = useAskStore();
     store.add(ask(SPEC));
     const view = useViewStore();
-    const wrapper = mount(AskDialog, { attachTo: document.body, global: { plugins: [getPinia()], provide: { [AskControllerKey as symbol]: { answer: vi.fn(), cancel: vi.fn() } } } });
+    const wrapper = mount(AskDialog, {
+      attachTo: document.body,
+      global: {
+        plugins: [getPinia()],
+        provide: { [AskControllerKey as symbol]: { answer: vi.fn(), cancel: vi.fn() } },
+      },
+    });
     await settle();
     expect(wrapper.get("dialog").attributes("open")).toBeDefined();
     expect(view.askOpen).toBe(true);
-    expect(wrapper.get("ask-form").element.shadowRoot?.querySelector("[data-ask-title]")?.textContent).toBe("配布先");
+    expect(
+      wrapper.get("ask-form").element.shadowRoot?.querySelector("[data-ask-title]")?.textContent,
+    ).toBe("配布先");
     wrapper.unmount();
     expect(view.askOpen).toBe(false);
   });

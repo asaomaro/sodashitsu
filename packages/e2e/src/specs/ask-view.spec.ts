@@ -217,24 +217,32 @@ test("Markdown に埋め込んだ <script>・onerror・javascript: は動かな�
       consoleErrors.some((t) => /Content Security Policy/.test(t) && /script|inline/i.test(t)),
     ).toBe(true);
     // http(s) のリンクは残り（新しいタブで開く。別のテストが実測）、`javascript:` は外れる。内部の # は残る。
-    await expect(f.locator('a[title="https://example.com/"]')).toHaveAttribute("href", "https://example.com/");
+    await expect(f.locator('a[title="https://example.com/"]')).toHaveAttribute(
+      "href",
+      "https://example.com/",
+    );
     await expect(f.locator('a[title="https://example.com/"]')).toHaveAttribute("target", "_blank");
     await expect(f.locator("a[title^='javascript:']")).not.toHaveAttribute("href", /.+/);
     // SVG・MathML・map/area は取り除かれている（`<set>`・`<animate>` で `href` を書き換えるリンクが枠自身を外へ移すため）。リンクは `href` も `xlink:href` も残らない。
     expect(
       await frame.evaluate(() => ({
-        shapes: document.querySelectorAll("#doc svg, #doc math, #doc map, #doc area, #doc set, #doc animate").length,
+        shapes: document.querySelectorAll(
+          "#doc svg, #doc math, #doc map, #doc area, #doc set, #doc animate",
+        ).length,
         links: Array.from(document.querySelectorAll("#doc a")).filter(
           (a) =>
             a.hasAttribute("xlink:href") ||
-            (a.hasAttribute("href") && a.getAttribute("href") !== "#x" && !/^https:\/\/example\.com\/$/.test(a.getAttribute("href")!)),
+            (a.hasAttribute("href") &&
+              a.getAttribute("href") !== "#x" &&
+              !/^https:\/\/example\.com\/$/.test(a.getAttribute("href")!)),
         ).length,
         mixed: document.querySelector("#doc a#mixed")?.hasAttribute("xlink:href"),
       })),
     ).toEqual({ shapes: 0, links: 0, mixed: false });
     // SMIL で `href` を書き換えるパターン（レビューが実測した 2 つ）を、クリックしても枠は移らない。
     // （取り除く処理が無いと、`svg a` が残っているので押すと外へ移る。あるときは何も無く、押す対象が無い）
-    for (const a of await f.locator("#doc svg a").all()) await a.click({ timeout: 1500 }).catch(() => undefined);
+    for (const a of await f.locator("#doc svg a").all())
+      await a.click({ timeout: 1500 }).catch(() => undefined);
     await page.waitForTimeout(1500);
     expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
     await expect(f.locator('a[href="#x"]')).toHaveCount(2); // 内部の `#x` は残る（本文の 1 つと混在の 1 つ）
@@ -261,7 +269,7 @@ test("mermaid の図の中のリンク（click … href・ラベルの <a href>�
     const p1 = await setup(page, appServer);
     const md = await media.write(
       "diagram-links.md",
-      "# 図\n\n```mermaid\ngraph TD\n A-->B\n click A href \"https://example.com/click\"\n```\n\n```mermaid\ngraph TD\n A[\"<a href='https://example.com/label'>label</a>\"]-->B\n```\n",
+      '# 図\n\n```mermaid\ngraph TD\n A-->B\n click A href "https://example.com/click"\n```\n\n```mermaid\ngraph TD\n A["<a href=\'https://example.com/label\'>label</a>"]-->B\n```\n',
     );
     const run = await runAsk(appServer, p1, SPEC({ file: md }));
     await expect(dialog(page)).toBeVisible();
@@ -279,8 +287,10 @@ test("mermaid の図の中のリンク（click … href・ラベルの <a href>�
       })),
     ).toEqual({ figures: 2, links: 0, smil: 0 });
     // 図の中のリンク（があれば）を押しても、枠は移らない。
-    for (const a of await f.locator(".mermaid a").all()) await a.click({ timeout: 1500, force: true }).catch(() => undefined);
-    for (const n of await f.locator(".mermaid g.node").all()) await n.click({ timeout: 1500 }).catch(() => undefined);
+    for (const a of await f.locator(".mermaid a").all())
+      await a.click({ timeout: 1500, force: true }).catch(() => undefined);
+    for (const n of await f.locator(".mermaid g.node").all())
+      await n.click({ timeout: 1500 }).catch(() => undefined);
     await page.waitForTimeout(1500);
     expect(opened).toBe(0);
     expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
@@ -291,7 +301,10 @@ test("mermaid の図の中のリンク（click … href・ラベルの <a href>�
   }
 });
 
-test("Markdown に埋め込んだ <meta http-equiv=refresh> は、文書に入れる前に除かれ、枠は外へ移らない", async ({ page, appServer }) => {
+test("Markdown に埋め込んだ <meta http-equiv=refresh> は、文書に入れる前に除かれ、枠は外へ移らない", async ({
+  page,
+  appServer,
+}) => {
   const media = await makeMediaDir();
   try {
     const p1 = await setup(page, appServer);
@@ -308,7 +321,11 @@ test("Markdown に埋め込んだ <meta http-equiv=refresh> は、文書に入�
     await page.waitForTimeout(2500);
     const frame = page.frames().find((x) => x.url().endsWith("/ask-view/markdown.html"));
     expect(frame, "枠が /ask-view/markdown.html のまま").toBeTruthy();
-    expect(page.frames().some((x) => x.url().startsWith("chrome-error:") || x.url().includes("example.com"))).toBe(false);
+    expect(
+      page
+        .frames()
+        .some((x) => x.url().startsWith("chrome-error:") || x.url().includes("example.com")),
+    ).toBe(false);
     await expect(f.locator("meta[http-equiv]")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await run.done;
@@ -453,7 +470,9 @@ test("限界の実測: HTML の枠のスクリプトは、質問側の入力欄�
     // 実測 2: その後に打った文字は枠の入力欄に入り、質問側の欄には入らない（成果物のスクリプトは読める）。
     await page.keyboard.type("secret");
     const frame = page.frames().find((x) => x.url().endsWith("/ask-view/html.html"))!;
-    expect(await frame.evaluate(() => (document.getElementById("i") as HTMLInputElement).value)).toBe("secret");
+    expect(
+      await frame.evaluate(() => (document.getElementById("i") as HTMLInputElement).value),
+    ).toBe("secret");
     await expect(commentBox(page, "ok")).toHaveValue("");
     expect(run.finished()).toBe(false); // 回答の確定は防げている
     await page.locator("[data-ask-origin]").focus();
@@ -605,7 +624,11 @@ async function fakeExternal(context: import("@playwright/test").BrowserContext):
   const hits: string[] = [];
   await context.route(/^https?:\/\/links\.example\.test\//, async (route) => {
     hits.push(route.request().url());
-    await route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: "<!doctype html><title>外部</title><p id=ext>外部の偽のページ</p>" });
+    await route.fulfill({
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      body: "<!doctype html><title>外部</title><p id=ext>外部の偽のページ</p>",
+    });
   });
   return hits;
 }
@@ -619,7 +642,10 @@ test("Markdown の枠の https リンクは新しいタブで開く（opener な
   try {
     const hits = await fakeExternal(context);
     const p1 = await setup(page, appServer);
-    const md = await media.write("links.md", `# 題\n\n[外部](${EXT}path?q=1) と [同じ文書](#x)\n\n## x\n`);
+    const md = await media.write(
+      "links.md",
+      `# 題\n\n[外部](${EXT}path?q=1) と [同じ文書](#x)\n\n## x\n`,
+    );
     const run = await runAsk(appServer, p1, SPEC({ file: md }));
     await expect(dialog(page)).toBeVisible();
     const f = frameOf(page);
@@ -690,7 +716,10 @@ test("Markdown の枠の危険・曖昧なリンク（javascript:・data:・相�
       "https:///links.example.test/triple",
     ];
     const body = bad.map((h, i) => `<a id="b${i}" href="${h}">b${i}</a>`).join("\n\n");
-    const md = await media.write("bad.md", `# 悪いリンク\n\n${body}\n\n<a id="ok" href="${EXT}ok">ok</a>\n`);
+    const md = await media.write(
+      "bad.md",
+      `# 悪いリンク\n\n${body}\n\n<a id="ok" href="${EXT}ok">ok</a>\n`,
+    );
     const run = await runAsk(appServer, p1, SPEC({ file: md }));
     await expect(dialog(page)).toBeVisible();
     const f = frameOf(page);
@@ -713,7 +742,9 @@ test("Markdown の枠の危険・曖昧なリンク（javascript:・data:・相�
     await page.waitForTimeout(1500);
     expect(opened).toBe(0);
     expect(hits).toEqual([]);
-    expect(await frame.evaluate(() => (window as unknown as Record<string, unknown>)["__x"])).toBeUndefined();
+    expect(
+      await frame.evaluate(() => (window as unknown as Record<string, unknown>)["__x"]),
+    ).toBeUndefined();
     expect(frame.url().endsWith("/ask-view/markdown.html")).toBe(true);
     await expect(dialog(page)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -782,11 +813,22 @@ const footerRow = (page: Page) =>
 for (const [name, submit, viewport] of [
   ["成果物つき（フォームが狭い）・既定の文言", undefined, { width: 1280, height: 800 }],
   ["成果物つき・長い文言「この内容で進める」", "この内容で進める", { width: 1280, height: 800 }],
-  ["成果物つき・長い文言「この内容で確定して次へ進む」", "この内容で確定して次へ進む", { width: 1280, height: 800 }],
-  ["成果物つき・やや長い文言「この内容で確定して次へ進める」（ボタンの中で折り返さない）", "この内容で確定して次へ進める", { width: 1280, height: 800 }],
+  [
+    "成果物つき・長い文言「この内容で確定して次へ進む」",
+    "この内容で確定して次へ進む",
+    { width: 1280, height: 800 },
+  ],
+  [
+    "成果物つき・やや長い文言「この内容で確定して次へ進める」（ボタンの中で折り返さない）",
+    "この内容で確定して次へ進める",
+    { width: 1280, height: 800 },
+  ],
   ["モバイル幅（390）・長い文言", "この内容で確定して次へ進む", { width: 390, height: 800 }],
 ] as const) {
-  test(`フッター: ${name}でも［キャンセル］と［決定］は同じ行に並び、はみ出さない`, async ({ page, appServer }) => {
+  test(`フッター: ${name}でも［キャンセル］と［決定］は同じ行に並び、はみ出さない`, async ({
+    page,
+    appServer,
+  }) => {
     const media = await makeMediaDir();
     try {
       await page.setViewportSize(viewport);
@@ -803,7 +845,13 @@ for (const [name, submit, viewport] of [
       expect(m.overflow).toBeLessThanOrEqual(0);
       if (viewport.width >= 768) {
         // ボタンの文言が 2 行に折り返さない（1 行の高さ。ボタンの余白を含めて 44px 未満）。
-        const h = await page.evaluate(() => document.querySelector("ask-form")!.shadowRoot!.querySelector("[data-ask-submit]")!.getBoundingClientRect().height);
+        const h = await page.evaluate(
+          () =>
+            document
+              .querySelector("ask-form")!
+              .shadowRoot!.querySelector("[data-ask-submit]")!
+              .getBoundingClientRect().height,
+        );
         expect(h, "［決定］の文言が 1 行").toBeLessThan(44);
       }
       await page.keyboard.press("Escape");
@@ -813,3 +861,42 @@ for (const [name, submit, viewport] of [
     }
   });
 }
+test("成果物付き質問窓もリサイズ・最大化・復元できる", async ({ page, appServer }) => {
+  const media = await makeMediaDir();
+  try {
+    const pane = await setup(page, appServer);
+    for (const button of await page.locator(".toast-sticky .toast-close").all())
+      await button.click();
+    const file = await media.write("resize.md", "# Preview");
+    const run = await runAsk(appServer, pane, {
+      title: "ViewResize",
+      view: [{ file }],
+      questions: [{ id: "text", label: "本文", type: "text" }],
+    });
+    const win = dialog(page);
+    await expect(win).toBeVisible();
+    await expect(frameOf(page).locator("h1")).toHaveText("Preview");
+    const field = page.locator("ask-form").locator('[name="text"]');
+    await field.fill("成果物の回答");
+    const h = (await page.locator(".ask-resize-handle").boundingBox())!;
+    await page.mouse.move(h.x + 8, h.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(h.x - 250, h.y - 100, { steps: 5 });
+    await page.mouse.up();
+    const resized = (await win.boundingBox())!;
+    await win.getByRole("button", { name: "最大化", exact: true }).click();
+    await expect
+      .poll(async () => (await win.boundingBox())!.width)
+      .toBe(page.viewportSize()!.width - 16);
+    await win.getByRole("button", { name: "元のサイズに戻す", exact: true }).click();
+    await expect.poll(async () => (await win.boundingBox())!.width).toBe(resized.width);
+    await expect(field).toHaveValue("成果物の回答");
+    await page.locator("[data-ask-submit]").click();
+    expect((await run.done).json).toMatchObject({
+      status: "answered",
+      answers: { text: "成果物の回答" },
+    });
+  } finally {
+    await media.cleanup();
+  }
+});
