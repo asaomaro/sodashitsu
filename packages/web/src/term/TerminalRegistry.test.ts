@@ -579,3 +579,76 @@ describe("TerminalRegistry — 画像だけの貼り付け（20260927-clipboard-
     entry.term.dispose();
   });
 });
+
+describe("independent plugin terminal mirrors", () => {
+  it("broadcasts snapshots/output/size/theme without moving the base DOM or sending input; reconnects and removes sinks independently", async () => {
+    const { registry, conn } = makeRegistry({capacity:1});
+    const base = registry.acquire('agent');
+    const mount = document.createElement('div'); mount.appendChild(base.element);
+    const sink = () => ({onOutput:vi.fn(),onSnapshot:vi.fn(),onSizeChanged:vi.fn(),setTheme:vi.fn(),refreshFonts:vi.fn()});
+    const a = sink(), b = sink();
+    const offA=registry.attachMirror('agent',a,vi.fn()), offB=registry.attachMirror('agent',b,vi.fn());
+    await new Promise<void>(resolve => base.term.write('',resolve));
+    registry.onSnapshot('agent',80,24,'hello');
+    registry.onOutput('agent',new TextEncoder().encode('world'));
+    registry.onSizeChanged('agent',100,30);
+    registry.setTheme({background:'#123456'});
+    registry.refreshFonts();
+    expect(a.onSnapshot).toHaveBeenCalledWith('agent',80,24,'hello');
+    expect(b.onOutput).toHaveBeenCalledOnce();
+    expect(b.setTheme).toHaveBeenCalledWith({background:'#123456'});
+    expect(b.refreshFonts).toHaveBeenCalledOnce();
+    expect(base.element.parentElement).toBe(mount);
+    expect(conn.sentInput).toEqual([]);
+    expect(conn.requests.every(([m]) => m==='pane.subscribe')).toBe(true);
+    const before=conn.requests.length;
+    registry.markAllUnsubscribed();
+    expect(conn.requests.length).toBe(before+1);
+    offA(); registry.onOutput('agent',new Uint8Array([65]));
+    expect(a.onOutput).toHaveBeenCalledOnce(); expect(b.onOutput).toHaveBeenCalledTimes(2);
+    registry.release('agent');
+    registry.acquire('other');
+    expect(registry.get('agent')).toBeDefined();
+    offB(); registry.evictIfNeeded();
+    expect(registry.get('agent')).toBeUndefined();
+    registry.disposeAll();
+  });
+});
+
+ it("adding a second mirror initializes it without resetting base scroll/selection or the first mirror", async () => {
+   const {registry,conn}=makeRegistry({capacity:4});
+   const base=registry.acquire('agent');
+   registry.takePendingSubscriptions(['agent']);
+   await new Promise<void>(resolve => base.term.write(Array.from({length:60},(_,i)=>`line${i}\r\n`).join(''),resolve));
+   base.term.scrollToTop();base.term.select(0,0,4);
+   const position=base.term.buffer.active.viewportY, selection=base.term.getSelection();
+   const a={onOutput:vi.fn(),onSnapshot:vi.fn(),onSizeChanged:vi.fn()};
+   const offA=registry.attachMirror('agent',a,vi.fn());
+   await new Promise<void>(resolve => base.term.write('',resolve));
+   const b={onOutput:vi.fn(),onSnapshot:vi.fn(),onSizeChanged:vi.fn()};
+   const offB=registry.attachMirror('agent',b,vi.fn());
+   registry.onOutput('agent',new TextEncoder().encode('after-barrier'));
+   await new Promise<void>(resolve => base.term.write('',resolve));
+   expect(conn.requests).toEqual([]);
+   expect(base.term.buffer.active.viewportY).toBe(position);
+   expect(base.term.getSelection()).toBe(selection);
+   expect(a.onSnapshot).toHaveBeenCalledOnce();
+   expect(b.onSnapshot).toHaveBeenCalledOnce();
+   expect(b.onSnapshot.mock.calls[0]![3]).toContain('line59');
+   expect(b.onOutput).toHaveBeenCalledOnce();
+   expect(b.onSnapshot.mock.invocationCallOrder[0]).toBeLessThan(b.onOutput.mock.invocationCallOrder[0]!);
+   expect(registry.isVisible('agent')).toBe(true);
+   registry.release('agent');
+   expect(registry.isVisible('agent')).toBe(false);
+   expect(registry.get('agent')).toBeDefined();
+   offA();offB();registry.disposeAll();
+ });
+
+ it("a read-only mirror keeps LRU ownership but does not automatically mark background notifications seen", async () => {
+   const {registry}=makeRegistry({capacity:1});
+   const off=registry.attachMirror('background',{onOutput:vi.fn(),onSnapshot:vi.fn(),onSizeChanged:vi.fn()},vi.fn());
+   expect(registry.isVisible('background')).toBe(false);
+   registry.acquire('foreground');
+   expect(registry.get('background')).toBeDefined();
+   off();registry.disposeAll();
+ });

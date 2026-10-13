@@ -1,7 +1,10 @@
+import { readComponentRect, type TerminalComponent } from "./components.js";
 import { checkDisplayAction } from "@sodashitsu/protocol";
 
 /** 枠から親へ、port で届く知らせ（`readFrameMessage` が検査して読む）。 */
 export type FrameMessage =
+  | ({ type: "component"; rev: number; component: "terminal" } & TerminalComponent)
+  | { type: "component-remove"; rev: number; id: string }
   | { type: "rendered"; rev: number }
   | { type: "rejected"; rev: number }
   | { type: "failed"; rev: number }
@@ -20,6 +23,13 @@ const isRev = (v: unknown): v is number => typeof v === "number" && Number.isInt
 export function readFrameMessage(data: unknown): FrameMessage | null {
   if (!isRecord(data)) return null;
   switch (data.type) {
+    case "component-remove":
+      return isRev(data.rev) && typeof data.id === "string" && /^[0-9]{1,10}$/.test(data.id) ? { type: data.type, rev: data.rev, id: data.id } : null;
+    case "component": {
+      const rect = readComponentRect(data.rect), clip = readComponentRect(data.clip);
+      if (!isRev(data.rev) || data.component !== "terminal" || typeof data.id !== "string" || !/^[0-9]{1,10}$/.test(data.id) || typeof data.paneId !== "string" || data.paneId.length > 64 || !rect || !clip) return null;
+      return { type: data.type, rev: data.rev, component: "terminal", id: data.id, paneId: data.paneId, rect, clip };
+    }
     case "rendered":
     case "rejected":
     case "failed":

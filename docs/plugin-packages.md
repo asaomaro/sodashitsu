@@ -199,3 +199,34 @@ Web版の表示とは別に、端末版に適した本文を提供できます�
 PJフォルダで見つかったものはそのPJに登録します。ユーザーホームと起動フォルダはユーザー全体への登録です。起動フォルダがワークスペースのPJフォルダでもある場合はPJとして扱います。確認画面で配置元・対象範囲・権限・検証値を確認して「許可して登録・有効化」を実行します。発見しただけではコードを実行しません。確認後に内容が変わった場合は再確認が必要です。導入済みの同じ内容は候補に出しません。
 
 端末版の確認画面は上下キーで最後まで確認してからEnterで許可します。狭い画面では画面を広げてください。従来の `sodactl plugin install/enable` とPJ拡張のコマンドによる承認も引き続き利用できます。
+
+## Sodashitsuの部品をアプリへ埋め込む
+
+Web版・モバイルWeb版の `script-html` では、`soda.mount` で標準部品を配置できる。最初の部品は **読み取り専用端末**。アプリ専用の入力フォームと、背景で動くエージェントの端末出力を組み合わせられる。`typeof soda.mount === "function"` でAPIの有無を判定できる。現在対応する部品名は `soda.components`（`["terminal"]`）で確認する。
+
+```html
+<div id="agent-output" style="height:360px; width:100%"></div>
+<textarea id="reply" placeholder="エージェントへの指示"></textarea>
+<button id="send">送信</button>
+<script>
+// agentPaneIdは拡張がext.panes等で把握した作業ペインの完全なUUID。
+// HTMLを生成するときはJSON.stringifyで文字列を埋め込む。
+const terminal = soda.mount("terminal", document.getElementById("agent-output"), {
+  paneId: agentPaneId
+});
+document.getElementById("send").onclick = () => {
+  soda.action("agent.reply", { paneId: agentPaneId, text: document.getElementById("reply").value });
+};
+// 要らなくなったとき。アプリを閉じる・表示を更新する場合は自動で片付く。
+// terminal?.dispose();
+</script>
+```
+
+`agent.reply` は例の操作名で、自動送信される標準コマンドではない。拡張側で `display.action` を受け、所有する作業ペイン・現在のエージェント・本文を検証し、既存の `agent.prompt` へ渡す。端末部品は入力を送らないので、専用のテキストエリア・送信ボタン・レビュー承認等のワークフローをアプリ側で設計できる。
+
+- `soda.mount("terminal", element, {paneId})` は `{dispose()}` を返す。未対応の部品・不正な指定・同時4部品の上限なら `null`。指定要素には幅と高さを持たせる。対象は同じワークスペースの実体がある稼働中ペインで、別タブの作業ペインも指定できる。仮想アンカーには端末がない。
+- 対象を利用できない場合は、`soda.onMessage` に `{type:"component-error", id, error:"pane_not_available"}` が届く。表示中に対象が閉じられる・別ワークスペースへ移る場合も端末表示を外す。
+- 元の端末と同じxterm.js、ANSIカラー、Unicodeアイコンと画像の表示処理を使い、取得済み履歴（最大5,000行）と以後の出力を表示する。既に表示済みの画像は履歴の複製時に復元されない場合があるが、新しく届く画像は描画する。端末の選択・コピー・スクロールはできる。ネットワークの再接続時は取り直す。
+- 元のペインと同時に表示できる。部品の枠をリサイズしてもPTYの行数・桁数やサイズ権限は変えない。狭い枠ではスクロールして読む。埋め込みのみを理由に通知を自動で既読にはしない。出力を追っている間はカーソル行が見える位置に追従し、利用者が履歴へ戻ったときは位置を保つ。
+- 部品はSodashitsu側のDOMに描画し、位置だけを隔離したアプリから受け取る。アプリに端末DOM・認証トークン・汎用RPCを渡さない。枠とスクロール領域の外には表示しない。要素へのCSS変形・重なり・角丸・透過・独自clip-pathは反映しないため、専用の矩形領域を確保する。
+- 従来どおり `allow:["script-html"]` と利用者のスクリプト表示設定が必要。静的HTML・端末版の `terminalDisplay` ではこのWeb用APIは使えない。端末版のビューは従来のテキスト／Markdownの定義で提供する。
