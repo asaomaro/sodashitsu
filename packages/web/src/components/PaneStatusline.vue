@@ -25,18 +25,27 @@ const segments = computed(() =>
     ? statuslineSegments(pane.value, usage.panes[props.paneId], usage.accounts, current.value)
     : [],
 );
-const cellWidth = () =>
-  registry?.get(props.paneId)?.term ? getCellSize(registry.get(props.paneId)!.term).width : 8;
-const width = computed(() =>
-  Math.min(
-    available.value,
-    natural.value + 36,
-    (preview.value ?? current.value.columns ?? 4096) * cellWidth(),
-  ),
-);
+const maxRows = computed(() => Math.min(natural.value || 1, available.value));
+const rows = computed(() => Math.min(maxRows.value, preview.value ?? current.value.rows));
+function setRows(value: number) {
+  settings.setStatuslineSettings({
+    ...loadStatuslineSettings(settings.statuslineSettings),
+    rows: Math.max(1, Math.min(maxRows.value, value)),
+  });
+}
 function measure() {
-  available.value = host.value?.clientWidth ?? 0;
-  natural.value = text.value?.scrollWidth ?? 0;
+  const terminal = host.value?.parentElement?.querySelector<HTMLElement>(
+    ".pane-frame-main, .mobile-shell-pane",
+  );
+  const term = registry?.get(props.paneId)?.term;
+  const minimum = term ? getCellSize(term).height : 18;
+  available.value = Math.max(
+    0,
+    Math.floor(
+      ((terminal?.clientHeight ?? 22) + (host.value?.clientHeight ?? 0) - minimum - 2) / 22,
+    ),
+  );
+  natural.value = Math.max(1, Math.ceil((text.value?.scrollHeight ?? 22) / 22));
 }
 let observer: ResizeObserver | undefined;
 let cancelDrag: (() => void) | undefined;
@@ -44,12 +53,13 @@ function resize(event: PointerEvent) {
   if (event.button !== 0 || !host.value) return;
   event.preventDefault();
   cancelDrag?.();
-  const origin = event.clientX,
-    initial = width.value,
-    cell = cellWidth();
-  const max = Math.max(8, Math.ceil(Math.min(available.value, natural.value + 36) / cell));
+  const origin = event.clientY,
+    initial = rows.value;
   const move = (ev: PointerEvent) => {
-    preview.value = Math.min(max, Math.max(8, Math.round((initial + ev.clientX - origin) / cell)));
+    preview.value = Math.max(
+      1,
+      Math.min(maxRows.value, Math.round(initial + (origin - ev.clientY) / 22)),
+    );
   };
   const end = () => {
     const value = preview.value;
@@ -57,7 +67,7 @@ function resize(event: PointerEvent) {
     if (value !== null)
       settings.setStatuslineSettings({
         ...loadStatuslineSettings(settings.statuslineSettings),
-        columns: value,
+        rows: Math.min(maxRows.value, value),
       });
   };
   const key = (ev: KeyboardEvent) => {
@@ -79,7 +89,10 @@ function resize(event: PointerEvent) {
 }
 onMounted(() => {
   observer = new ResizeObserver(measure);
-  if (host.value) observer.observe(host.value);
+  if (host.value) {
+    observer.observe(host.value);
+    if (host.value.parentElement) observer.observe(host.value.parentElement);
+  }
   if (text.value) observer.observe(text.value);
   measure();
 });
@@ -90,13 +103,13 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div
-    v-show="segments.length"
+    v-show="segments.length && maxRows > 0"
     ref="host"
     class="pane-statusline"
     data-pane-statusline
     :data-pane-id="paneId"
   >
-    <div class="statusline-width" :style="{ width: width ? `${width}px` : '100%' }">
+    <div class="statusline-width" :style="{ height: `${rows * 22 + 2}px` }">
       <button
         aria-label="Statuslineの設定"
         title="Statuslineの設定"
@@ -114,30 +127,18 @@ onBeforeUnmount(() => {
       </div>
       <div
         role="separator"
-        aria-label="Statuslineの表示桁数"
-        aria-orientation="vertical"
+        aria-label="Statuslineの表示行数"
+        aria-orientation="horizontal"
+        :aria-valuenow="rows"
+        :aria-valuemin="1"
+        :aria-valuemax="maxRows"
         tabindex="0"
         class="statusline-resize"
         @pointerdown="resize"
-        @dblclick="settings.setStatuslineSettings({ ...current, columns: null })"
-        @keydown.left.prevent="
-          settings.setStatuslineSettings({
-            ...current,
-            columns: Math.max(8, Math.floor(width / cellWidth()) - 1),
-          })
-        "
-        @keydown.right.prevent="
-          settings.setStatuslineSettings({
-            ...current,
-            columns: Math.min(
-              Math.ceil((natural + 36) / cellWidth()),
-              Math.floor(width / cellWidth()) + 1,
-            ),
-          })
-        "
-      >
-        │
-      </div>
+        @dblclick="setRows(1)"
+        @keydown.up.prevent="setRows(rows + 1)"
+        @keydown.down.prevent="setRows(rows - 1)"
+      ></div>
     </div>
   </div>
 </template>
@@ -152,9 +153,10 @@ onBeforeUnmount(() => {
 }
 .statusline-width {
   display: flex;
-  align-items: center;
-  max-width: 100%;
-  height: 24px;
+  align-items: flex-start;
+  position: relative;
+  width: 100%;
+  padding-top: 2px;
   box-sizing: border-box;
 }
 button {
@@ -169,19 +171,27 @@ button {
 .statusline-scroll {
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
 }
 .statusline-text {
-  display: inline-block;
-  white-space: pre;
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 .statusline-resize {
-  flex: 0 0 12px;
-  text-align: center;
-  cursor: ew-resize;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
   touch-action: none;
 }
+
 .separator,
 .color-muted {
   color: var(--soda-fg);

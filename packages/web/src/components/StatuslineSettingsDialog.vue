@@ -81,8 +81,8 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
         <option value="k">1000をk表記</option>
       </select></label
     >
-    <button @click="settings.setStatuslineSettings({ ...current, columns: null })">
-      表示桁数を自動に戻す
+    <button @click="settings.setStatuslineSettings({ ...current, rows: 1 })">
+      表示行数を1行に戻す
     </button>
     <fieldset>
       <legend>表示する情報・順序</legend>

@@ -10,25 +10,28 @@ import type { SettingsWriter } from "../settings/SettingsWriter.js";
 import { Grid } from "../render/Screen.js";
 import { ThemeColors } from "../render/color.js";
 import { loadStatuslineSettings } from "@sodashitsu/protocol";
-it("reserves the bottom terminal row and clamps live resizing to the available information", () => {
+function harness(rows = 1) {
   const model = new SessionModel();
   model.applySnapshot(
     snapshot({
       panes: [
-        pane("p1", "t1", { label: "Alpha", agent: agent({ kind: "codex", label: "Codex" }) }),
+        pane("p1", "t1", {
+          label: "日本語の制作状況を確認".repeat(20),
+          agent: agent({ kind: "codex" }),
+        }),
         pane("p2", "t1"),
       ],
     }),
     "client",
   );
-  const prefs = new PrefsModel(),
-    ui = new UiState(model),
-    setShared = vi.fn();
+  const prefs = new PrefsModel();
+  prefs.apply({ statuslineSettings: loadStatuslineSettings({ rows }) }, 1);
+  const setShared = vi.fn();
   const controller = new PaneStatuslines(
     model,
     prefs,
     { data: { panes: {}, accounts: [] } } as unknown as UsageModel,
-    ui,
+    new UiState(model),
     { setShared } as unknown as SettingsWriter,
     vi.fn(),
   );
@@ -42,125 +45,77 @@ it("reserves the bottom terminal row and clamps live resizing to the available i
       tab: model.currentTab()!,
       focusedPaneId: "p1",
     });
-  const original = layout(),
-    before = original.panes[0]!.content.h;
-  controller.adjust(original);
-  const box = original.panes[0]!;
-  expect(box.content.h).toBe(before - 1);
-  expect(original.panes[1]!.content.h).toBe(before);
-  const y = box.content.y + box.content.h;
-  const max = Math.min(box.content.w, "Alpha · codex · idle".length + 3),
-    x = box.content.x + max - 1;
-  const ev = (action: "down" | "move" | "up", xx: number) => ({
-    kind: "mouse" as const,
-    action,
-    button: 0,
-    x: xx,
-    y,
-    mods: { ctrl: false, alt: false, shift: false, meta: false },
-  });
-  expect(controller.handle(ev("down", x))).toBe(true);
-  controller.handle(ev("move", x + 1000));
-  controller.adjust(layout());
-  controller.handle(ev("up", x + 1000));
-  expect(setShared).toHaveBeenLastCalledWith({
-    statuslineSettings: { ...loadStatuslineSettings(undefined), columns: max },
-  });
-  controller.handle(ev("down", x));
-  controller.handle(ev("move", x - 1000));
-  controller.adjust(layout());
-  controller.handle(ev("up", x - 1000));
-  expect(setShared.mock.calls.at(-1)![0].statuslineSettings.columns).toBe(8);
-  prefs.apply({ statuslineSettings: { ...loadStatuslineSettings(undefined), enabled: false } }, 1);
-  const hidden = layout();
-  controller.adjust(hidden);
-  expect(hidden.panes[0]!.content.h).toBe(before);
-});
-
-it("scrolls in both directions and stops at the first full-width character that will not fit", () => {
-  const model = new SessionModel();
-  model.applySnapshot(
-    snapshot({
-      panes: [pane("p1", "t1", { label: "1234日本abc", agent: agent({ kind: "codex" }) })],
-    }),
-    "client",
-  );
-  const prefs = new PrefsModel();
-  prefs.apply({ statuslineSettings: loadStatuslineSettings({ columns: 8 }) }, 1);
-  const controller = new PaneStatuslines(
-    model,
-    prefs,
-    { data: { panes: {}, accounts: [] } } as unknown as UsageModel,
-    new UiState(model),
-    {} as SettingsWriter,
-    vi.fn(),
-  );
-  const layout = computeLayout({
-    cols: 100,
-    rows: 30,
-    sidebarVisible: false,
-    sidebarCols: 20,
-    narrowThreshold: 40,
-    tab: model.currentTab()!,
-    focusedPaneId: "p1",
-  });
-  controller.adjust(layout);
-  const box = layout.panes[0]!,
-    y = box.content.y + box.content.h;
-  const screen = () => {
-    const grid = new Grid(100, 30);
-    controller.render(grid, new ThemeColors("dracula"));
-    return grid.rowText(y).slice(box.content.x, box.content.x + 8);
-  };
-  const first = screen();
-  expect(first).toContain("1234");
-  expect(first).not.toContain("a");
-  controller.handle({
-    kind: "mouse",
-    action: "wheel",
-    button: 65,
-    x: box.content.x + 2,
-    y,
-    mods: { ctrl: false, alt: false, shift: false, meta: false },
-  });
-  expect(screen()).not.toBe(first);
-  controller.handle({
-    kind: "mouse",
-    action: "wheel",
-    button: 64,
-    x: box.content.x + 2,
-    y,
-    mods: { ctrl: false, alt: false, shift: false, meta: false },
-  });
-  expect(screen()).toBe(first);
-  for (let i = 0; i < 20; i++)
+  const mouse = (action: "down" | "move" | "up" | "wheel", x: number, y: number, button = 0) =>
     controller.handle({
       kind: "mouse",
-      action: "wheel",
-      button: 65,
-      x: box.content.x + 2,
+      action,
+      button,
+      x,
       y,
       mods: { ctrl: false, alt: false, shift: false, meta: false },
     });
-  model.panes.get("p1")!.label = "Hi";
-  prefs.apply(
-    {
-      statuslineSettings: loadStatuslineSettings({
-        columns: 8,
-        fields: { agent: false, state: false },
-      }),
-    },
-    2,
-  );
-  const short = computeLayout({
-    cols: 100,
-    rows: 30,
-    sidebarVisible: false,
-    sidebarCols: 20,
-    narrowThreshold: 40,
-    tab: model.currentTab()!,
-    focusedPaneId: "p1",
-  });
-  controller.adjust(short);
-  expect(screen()).toContain("Hi");
+  return { model, prefs, setShared, controller, layout, mouse };
+}
+it("reserves the requested bottom rows, previews vertical resizing, caps it to content and keeps a terminal row", () => {
+  const h = harness(3),
+    original = h.layout(),
+    before = original.panes[0]!.content.h;
+  h.controller.adjust(original);
+  let box = original.panes[0]!;
+  expect(box.content.h).toBe(before - 3);
+  expect(original.panes[1]!.content.h).toBe(before);
+  const x = box.content.x + box.content.w - 1,
+    y = box.content.y + box.content.h;
+  expect(h.mouse("down", x, y)).toBe(true);
+  h.mouse("move", x, y - 1000);
+  const expanded = h.layout();
+  h.controller.adjust(expanded);
+  box = expanded.panes[0]!;
+  const height = before - box.content.h;
+  expect(height).toBeGreaterThan(3);
+  expect(height).toBeLessThan(before);
+  h.mouse("up", x, y - 1000);
+  expect(h.setShared.mock.calls.at(-1)![0].statuslineSettings.rows).toBe(height);
+  const nextY = box.content.y + box.content.h;
+  h.mouse("down", x, nextY);
+  h.mouse("move", x, nextY - 1000);
+  h.model.panes.get("p1")!.label = "Short";
+  const short = h.layout();
+  h.controller.adjust(short);
+  expect(short.panes[0]!.content.h).toBe(before - 1);
+  h.mouse("up", x, nextY - 1000);
+  expect(h.setShared.mock.calls.at(-1)![0].statuslineSettings.rows).toBe(1);
+  h.mouse("down", x, short.panes[0]!.content.y + short.panes[0]!.content.h);
+  h.mouse("move", x, 1000);
+  h.mouse("up", x, 1000);
+  expect(h.setShared.mock.calls.at(-1)![0].statuslineSettings.rows).toBe(1);
+  h.prefs.apply({ statuslineSettings: loadStatuslineSettings({ enabled: false, rows: 3 }) }, 2);
+  const disabled = h.layout();
+  h.controller.adjust(disabled);
+  expect(disabled.panes[0]!.content.h).toBe(before);
+});
+it("wraps full-width text without losing glyphs and scrolls rows in both directions", () => {
+  const h = harness(2),
+    layout = h.layout();
+  h.controller.adjust(layout);
+  const box = layout.panes[0]!,
+    y = box.content.y + box.content.h;
+  const screen = () => {
+    const grid = new Grid(120, 30);
+    h.controller.render(grid, new ThemeColors("dracula"));
+    return [grid.rowText(y), grid.rowText(y + 1)].join("\n");
+  };
+  const initial = screen();
+  expect(initial).toContain("日本語");
+  expect(initial.split("\n")[1]).toMatch(/[日本語制作状況確認]/);
+  h.mouse("wheel", box.content.x + 3, y, 65);
+  expect(screen()).not.toBe(initial);
+  h.mouse("wheel", box.content.x + 3, y, 64);
+  expect(screen()).toBe(initial);
+  h.mouse("down", box.content.x + box.content.w - 1, y);
+  h.mouse("move", 0, y - 3);
+  h.controller.cancel();
+  const canceled = h.layout();
+  h.controller.adjust(canceled);
+  expect(canceled.panes[0]!.content.h).toBe(box.content.h);
 });

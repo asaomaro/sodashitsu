@@ -31,15 +31,15 @@ it("separates weekly, five-hour and other windows by duration or label", () => {
 it("normalizes shared ordering, width and token formatting with safe old defaults", () => {
   const s = loadStatuslineSettings({
     order: ["tokens", "tokens", "unknown", "model"],
-    columns: Infinity,
+    rows: Infinity,
     tokenFormat: "k",
   });
   expect(s.order.slice(0, 2)).toEqual(["tokens", "model"]);
   expect(new Set(s.order).size).toBe(s.order.length);
-  expect(s.columns).toBeNull();
+  expect(s.rows).toBe(1);
   expect(s.enabled).toBe(true);
   expect(s.fields.input).toBe(false);
-  expect(loadStatuslineSettings({ columns: -100 }).columns).toBe(8);
+  expect(loadStatuslineSettings({ rows: -100 }).rows).toBe(1);
 });
 
 it("formats enabled fields in shared order, omits unknown values, and compactly formats all token counts", () => {
@@ -84,4 +84,8 @@ it("uses the configured agent name as the pane name", () => {
   expect(statuslineSegments(pane, undefined, [], loadStatuslineSettings(undefined))[0]?.text).toBe(
     "Writer",
   );
+});
+
+it("ignores the superseded column width preference", () => {
+  expect(loadStatuslineSettings({ columns: 8 }).rows).toBe(1);
 });

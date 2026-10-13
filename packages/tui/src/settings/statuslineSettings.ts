@@ -96,11 +96,11 @@ export function statuslineSettingsSections(
             }),
         },
         {
-          label: "表示桁数を自動に戻す",
-          value: read().columns === null ? "自動" : String(read().columns),
+          label: "表示行数を1行に戻す",
+          value: String(read().rows),
           activate: () =>
             update((s) => {
-              s.columns = null;
+              s.rows = 1;
             }),
         },
         ...read().order.map((id, index) => ({
