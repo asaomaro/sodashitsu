@@ -164,6 +164,9 @@ body {
 .app-shell {
   display: flex;
   height: 100%;
+  /* Keep pane/observer updates from creating document scrollbars. Login and
+   * detached screens remain scrollable, and each app panel owns its scrolling. */
+  overflow: clip;
 }
 .app-main {
   flex: 1;
