@@ -38,6 +38,8 @@ export interface TermEntry {
 export interface TerminalRegistryOptions {
   /** LRU の容量（デスクトップ 24・モバイル 2。D28・D60）。 */
   capacity: number;
+  /** Embedded terminals address a fixed pane; do not retarget through pane-creation input holds. */
+  componentInput?: (paneId: string, data: string) => void;
   conn: ConnectionPort;
   renderers: RendererPool;
   keys: KeyInputController;
@@ -271,6 +273,13 @@ export class TerminalRegistry implements TerminalSinkPort {
       this.release(paneId, holder);
     };
   }
+  /** Native component input only. The component validates focus, engagement and workspace on every write. */
+  sendMirrorInput(paneId: string, data: string): void {
+    if (!this.inputEnabled || !this.mirrors.has(paneId) || isFocusReport(data)) return;
+    if (this.opts.componentInput) this.opts.componentInput(paneId, data);
+    else this.opts.conn.sendInput(paneId, data);
+  }
+
   private subscribeMirror(paneId: string, onError: () => void = () => undefined): void {
     this.unsubscribed.delete(paneId);
     void this.opts.conn.request("pane.subscribe", { paneId, scrollbackLines: this.get(paneId)?.scrollback ?? 1000 }).catch(onError);

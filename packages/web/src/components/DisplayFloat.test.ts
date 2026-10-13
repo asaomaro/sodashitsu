@@ -390,3 +390,18 @@ it("Escape closes a floating view from its content and header", async () => {
   await w.get("[data-display-head]").trigger("keydown", { key: "Escape" });
   expect(controller.dismiss).toHaveBeenCalledWith({ id: "a" });
 });
+
+it('embedded terminal IME Escape and modified Escape do not close the float in capture or bubbling', () => {
+ const {w,controller}=setup();
+ const root=w.get('[data-display-float]').element;
+ const native=document.createElement('div');native.setAttribute('data-embedded-terminal','');
+ const input=document.createElement('textarea');native.appendChild(input);root.appendChild(native);
+ for(const init of [{isComposing:true},{keyCode:229},{ctrlKey:true}]) {
+   input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true,...init}));
+   const prevented=new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true,...init});
+   prevented.preventDefault();input.dispatchEvent(prevented);
+ }
+ expect(controller.dismiss).not.toHaveBeenCalled();
+ input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
+ expect(controller.dismiss).toHaveBeenCalledOnce();
+});

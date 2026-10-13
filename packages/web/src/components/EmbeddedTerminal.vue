@@ -1,13 +1,26 @@
 <script setup lang="ts">
-import { inject, onMounted, onBeforeUnmount, ref } from "vue";
+import { inject, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { Terminal } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { TerminalRegistryKey } from "../injection.js";
 import { TERMINAL_FONT_FAMILY } from "../term/terminalFonts.js";
 import { installQueryFilter } from "../term/QueryFilter.js";
+import { isEmbeddedAppEscape } from "../term/embeddedKeys.js";
 import { createImageAddon } from "../term/imageAddon.js";
 
-const props = defineProps<{ paneId: string }>();
+const props = defineProps<{
+  paneId: string;
+  interactive?: boolean;
+  enabled?: boolean;
+  canInput?: () => boolean;
+}>();
+const emit = defineEmits<{ escape: [] }>();
+function onKeydown(ev: KeyboardEvent): void {
+  if (!isEmbeddedAppEscape(ev)) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  emit("escape");
+}
 const registry = inject(TerminalRegistryKey, null);
 const viewport = ref<HTMLElement | null>(null);
 const mount = ref<HTMLElement | null>(null);
@@ -23,7 +36,7 @@ onMounted(() => {
     ...registry.baseTerminalOptions(),
     allowProposedApi: true,
     disableStdin: true,
-    screenReaderMode: true,
+    screenReaderMode: !props.interactive,
     fontFamily: TERMINAL_FONT_FAMILY,
     theme: registry.currentTheme(),
     scrollback: 5000,
@@ -38,7 +51,25 @@ onMounted(() => {
   }
   installQueryFilter(term);
   term.open(mount.value);
-  // Local scrolling and selection only. No onData/onBinary input handler and no fit/attach RPC.
+  // The author iframe cannot focus or type into this native DOM. Input still requires
+  // a user-engaged frame, focused native textarea, and a live workspace check.
+  term.attachCustomKeyEventHandler((ev) => !isEmbeddedAppEscape(ev));
+  term.onData((data) => {
+    if (
+      !props.interactive ||
+      !props.enabled ||
+      !props.canInput?.() ||
+      error.value ||
+      document.activeElement !== term?.textarea
+    )
+      return;
+    registry.sendMirrorInput(props.paneId, data);
+  });
+  term.options.disableStdin = !props.interactive || !props.enabled;
+  term.textarea?.setAttribute(
+    "aria-label",
+    props.interactive ? "埋め込み端末への入力" : "埋め込み端末（閲覧専用）",
+  );
   const write = (data: string | Uint8Array, reset = false) => {
     const el = viewport.value;
     const cursorBottom = () => {
@@ -80,6 +111,19 @@ onMounted(() => {
     },
   );
 });
+watch(
+  () => [props.interactive, props.enabled],
+  () => {
+    if (term) {
+      term.options.disableStdin = !props.interactive || !props.enabled;
+      term.options.screenReaderMode = !props.interactive;
+      term.textarea?.setAttribute(
+        "aria-label",
+        props.interactive ? "埋め込み端末への入力" : "埋め込み端末（閲覧専用）",
+      );
+    }
+  },
+);
 onBeforeUnmount(() => {
   off?.();
   term?.dispose();
@@ -91,7 +135,8 @@ onBeforeUnmount(() => {
     class="embedded-terminal"
     data-embedded-terminal
     :data-pane-id="paneId"
-    @keydown.esc.stop.prevent="$emit('escape')"
+    :data-interactive="interactive ? '1' : '0'"
+    @keydown="onKeydown"
   >
     <div ref="mount" class="embedded-terminal-content" v-show="!error"></div>
     <p v-if="error" role="status">端末を読み込めませんでした</p>

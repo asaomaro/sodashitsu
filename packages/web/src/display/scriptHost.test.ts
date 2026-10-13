@@ -46,15 +46,17 @@ describe("script.html（土台）", () => {
 
   it("soda.mount reserves bounded native terminal slots and disposal removes them without exposing parent DOM", () => {
     const f=boot(); f.init(); f.render({rev:1,format:'script-html',source:'<div id="slot"></div>'});
-    const soda=f.win.soda as {mount(kind:string,el:Element,options:{paneId:string}):{dispose():void}|null};
+    const soda=f.win.soda as {mount(kind:string,el:Element,options:{paneId:string;interactive?:boolean}):{dispose():void}|null};
     const el=document.getElementById('slot')!;
     expect(soda.mount('iframe',el,{paneId:'agent'})).toBeNull();
-    const first=soda.mount('terminal',el,{paneId:'agent'})!;
+    const first=soda.mount('terminal',el,{paneId:'agent',interactive:true})!;
     expect(first).not.toBeNull();
+    expect(soda.mount('terminal',el,{paneId:'agent',interactive:'yes' as never})).toBeNull();
     for(let i=0;i<3;i++) expect(soda.mount('terminal',el,{paneId:'agent'})).not.toBeNull();
     expect(soda.mount('terminal',el,{paneId:'agent'})).toBeNull();
     f.animationFrames.shift()!(0);
     expect(posted(f).filter(m => (m as {type:string}).type==='component')).toHaveLength(4);
+    expect(posted(f).find(m => (m as {type:string}).type==='component')).toMatchObject({interactive:true});
     first.dispose(); first.dispose();
     expect(posted(f).filter(m => (m as {type:string}).type==='component-remove')).toEqual([{type:'component-remove',rev:1,id:'1'}]);
     expect(soda.mount('terminal',el,{paneId:'agent'})).not.toBeNull();

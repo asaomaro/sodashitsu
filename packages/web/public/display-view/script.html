@@ -204,16 +204,16 @@
       var signature = jsonStringify(signatureData);
       if (signature !== c.last) {
         c.last = signature;
-        var m=mk(); own(m,'type','component'); own(m,'rev',rev); own(m,'id',ids[j]); own(m,'component','terminal'); own(m,'paneId',c.paneId); own(m,'rect',rectangle); own(m,'clip',clip); post(m);
+        var m=mk(); own(m,'type','component'); own(m,'rev',rev); own(m,'id',ids[j]); own(m,'component','terminal'); own(m,'paneId',c.paneId); own(m,'interactive',c.interactive); own(m,'rect',rectangle); own(m,'clip',clip); post(m);
       }
     }
     if (mountCount > 0) queueComponentTick();
   }
   function queueComponentTick() { if (!queued && raf) { queued = true; rApply(raf, WIN, [componentTick]); } }
   function mountComponent(kind, element, options) {
-    if (kind !== 'terminal' || !(element instanceof ElementCtor) || mountCount >= 4 || !options || typeof options.paneId !== 'string' || options.paneId.length > 64) return null;
+    if (kind !== 'terminal' || !(element instanceof ElementCtor) || mountCount >= 4 || !options || typeof options.paneId !== 'string' || options.paneId.length > 64 || (options.interactive !== undefined && typeof options.interactive !== 'boolean')) return null;
     var id = '' + (++mountSerial), c = mk();
-    own(c,'element',element); own(c,'paneId',options.paneId); own(c,'last',''); own(mounted,id,c); mountCount++;
+    own(c,'element',element); own(c,'paneId',options.paneId); own(c,'interactive',options.interactive === true); own(c,'last',''); own(mounted,id,c); mountCount++;
     queueComponentTick();
     var handle=mk(), disposed=false;
     own(handle,'dispose',function () {
@@ -242,6 +242,7 @@
     own(soda, 'version', 1);
     own(soda, 'mount', mountComponent);
     own(soda, 'components', objFreeze(['terminal']));
+    var features = mk(); own(features,'terminalInput',true); own(soda,'features',objFreeze(features));
     own(soda, 'action', function (name, data) {
       if (typeof name !== 'string' || !rApply(RegExpTest, ACTION_RE, [name])) return false;
       if (data !== undefined && !isPlainStringMap(data)) return false;

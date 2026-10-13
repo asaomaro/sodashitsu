@@ -50,6 +50,7 @@ describe("native component boundary", () => {
     for (const changes of [
       { rev: 0 },
       { component: "iframe" },
+      { interactive: "true" },
       { id: "__proto__" },
       { rect: { ...m.rect, x: NaN } },
       { rect: { ...m.rect, width: -1 } },
@@ -57,4 +58,19 @@ describe("native component boundary", () => {
     ])
       expect(readFrameMessage({ ...m, ...changes })).toBeNull();
   });
+});
+
+it("terminal input is opt-in, and frame messages only accept a boolean", () => {
+  const rect = { x: 0, y: 0, width: 20, height: 20 };
+  const m = {
+    type: "component",
+    rev: 1,
+    component: "terminal",
+    id: "1",
+    paneId: "p",
+    rect,
+    clip: rect,
+  };
+  expect(readFrameMessage(m)).toMatchObject({ interactive: false });
+  expect(readFrameMessage({ ...m, interactive: true })).toMatchObject({ interactive: true });
 });
