@@ -35,6 +35,8 @@ defineEmits<{
 const marks: Record<AgentHeaderAction, string> = {
   messages: "≡",
   summary: "Σ",
+  notes: "✎",
+  todos: "☑",
   compact: "↘",
   clear: "↺",
   usage: "%",

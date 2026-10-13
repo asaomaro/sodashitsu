@@ -1,3 +1,5 @@
+import { SessionToolsParams, SessionNoteSaveParams, SessionNoteDeleteParams } from "@sodashitsu/protocol";
+import { readAgentTodos } from "../../conversation/AgentTodos.js";
 import { NotificationStateParams, NotificationUpdateParams } from "@sodashitsu/protocol";
 import {
   AgentSummaryParams,
@@ -35,8 +37,14 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
       handler: (ctx, p) => deps.notifications!.update(p, ctx.clientId),
     });
   }
+  if (deps.sessionNotes) {
+    surface.register("agent.notes", { schema: SessionToolsParams, handler: (_, p) => deps.sessionNotes!.list(p.paneId) });
+    surface.register("agent.note_save", { schema: SessionNoteSaveParams, handler: (_, p) => deps.sessionNotes!.save(p) });
+    surface.register("agent.note_delete", { schema: SessionNoteDeleteParams, handler: (_, p) => deps.sessionNotes!.delete(p) });
+  }
   const service = deps.conversations;
   if (!service) return;
+  surface.register("agent.todos", { schema: SessionToolsParams, handler: (_, p) => readAgentTodos(service, p.paneId) });
   surface.register("agent.conversation", {
     schema: AgentConversationParams,
     handler: (_, p) => service.page(p.paneId, p.offset),

@@ -68,6 +68,8 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl watch [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent list [--url <URL>] [--token <TOKEN>]",
   "sodactl agent get <target> [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent notes [<target>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent todos [<target>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent usage [<target>] [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
@@ -318,6 +320,7 @@ export type Command =
   | { kind: "watch"; opts: GlobalOpts; json: boolean }
   | { kind: "agent-list"; opts: GlobalOpts }
   // agent-* の paneId は pane ID かエージェントの名前（`agentTarget.ts` の `resolveAgentTarget` で解決する。20260926-agent-start-rename）。
+  | { kind: "agent-session-tools"; opts: GlobalOpts; paneId: string | undefined; tool: "notes" | "todos" }
   | { kind: "agent-get"; opts: GlobalOpts; paneId: string }
   /** 20261010-agent-usage。`paneId` を省くと、利用状況を取れる全部のエージェント。 */
   | { kind: "agent-usage"; opts: GlobalOpts; paneId: string | undefined; json: boolean }
@@ -1012,6 +1015,11 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
     const paneId = requirePositional(positionals, 0, "target", USAGE);
     rejectExtra(positionals, 1, USAGE);
     return { kind: "agent-get", opts: globalOptsFrom(values, env), paneId };
+  }
+  if (sub === "notes" || sub === "todos") {
+    const { positionals, values } = parseFlags(rest, URL_TOKEN);
+    rejectExtra(positionals, 1, USAGE);
+    return { kind: "agent-session-tools", opts: globalOptsFrom(values, env), paneId: positionals[0], tool: sub };
   }
   if (sub === "usage") {
     const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!], bools: ["--json"] });

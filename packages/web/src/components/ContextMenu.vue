@@ -4,9 +4,8 @@ import { ActionDispatcherKey, TerminalHostKey, TerminalRegistryKey } from "../in
 import { useDisplayStore } from "../store/display.js";
 import { useGraphStore } from "../store/graph.js";
 import {
-  AGENT_HEADER_ACTIONS,
   HEADER_ACTION_LABELS,
-  headerActionsFor,
+  configuredAgentActions, headerActionsFor,
   type AgentHeaderAction,
 } from "@sodashitsu/protocol";
 import { useConversationWindowStore } from "../store/conversationWindow.js";
@@ -19,6 +18,7 @@ import { mobileViewportQuery } from "../mobile/detect.js";
 import { useGraphSpacesStore } from "../store/graphSpaces.js";
 import { useSessionStore } from "../store/session.js";
 import { itemGroupIdOf } from "../store/sidebarTree.js";
+import { useSettingsStore } from "../store/settings.js";
 import { useViewStore } from "../store/view.js";
 import {
   dismissWithFocus,
@@ -55,6 +55,7 @@ function paneMoveBlockMessageFor(
 }
 
 const session = useSessionStore();
+const settings = useSettingsStore();
 const view = useViewStore();
 const displays = useDisplayStore();
 const graphStore = useGraphStore();
@@ -286,7 +287,8 @@ function forkItem(paneId: string, local: boolean): MenuItem[] {
 const conversationWindow = useConversationWindowStore(),
   connection = inject(ConnectionKey);
 function agentAction(paneId: string, action: AgentHeaderAction) {
-  if (action === "messages" || action === "summary") conversationWindow.open(paneId, action);
+  if (action === "notes" || action === "todos") view.openDialogWithContext({ kind: "sessionTools", paneId, mode: action });
+  else if (action === "messages" || action === "summary") conversationWindow.open(paneId, action);
   else if (action === "fork") actions?.openAgentFork(paneId);
   else
     void connection
@@ -324,7 +326,7 @@ const items = computed<MenuItem[]>(() => {
         ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }]
         : []),
 
-      ...headerActionsFor(pane?.agent?.kind ?? "", !!pane?.agentSession, AGENT_HEADER_ACTIONS)
+      ...headerActionsFor(pane?.agent?.kind ?? "", !!pane?.agentSession, configuredAgentActions(settings.agentActionSettings, settings.agentHeaderActions, true))
         .filter((a) => a !== "fork")
         .map((action) => ({
           label: HEADER_ACTION_LABELS[action] + (action === "usage" ? "（エージェント）" : ""),
@@ -354,7 +356,7 @@ const items = computed<MenuItem[]>(() => {
           ),
       },
       { label: "貼り付け", run: () => actions.pasteIntoPane(target.paneId) },
-      ...forkItem(target.paneId, true),
+      ...(configuredAgentActions(settings.agentActionSettings, settings.agentHeaderActions, true).includes("fork") ? forkItem(target.paneId, true) : []),
       // そのセッションの利用状況（20261010-agent-usage PR4。エージェントの居る pane だけ。クラシック・モダンとも）。
       ...(pane?.agent
         ? [{ label: "利用状況…", run: () => actions.showPaneInfo(target.paneId) }]
@@ -470,7 +472,7 @@ const items = computed<MenuItem[]>(() => {
     if (!info.local || info.exists !== true || !session.panes.has(info.paneId)) return [];
     return [
       { label: "pane を閉じる", run: () => closeFromGraph({ type: "pane", id: info.paneId }) },
-      ...forkItem(info.paneId, info.local && info.exists === true),
+      ...(configuredAgentActions(settings.agentActionSettings, settings.agentHeaderActions, true).includes("fork") ? forkItem(info.paneId, info.local && info.exists === true) : []),
       ...(session.panes.get(info.paneId)?.agent
         ? [{ label: "利用状況…", run: () => actions.showPaneInfo(info.paneId) }]
         : []),

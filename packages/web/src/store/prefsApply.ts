@@ -1,6 +1,7 @@
 import type { Pinia } from "pinia";
 import {
   loadAgentHeaderActions,
+  loadAgentActionSettings,
   loadSummarySettings,
   loadStatuslineSettings,
 } from "@sodashitsu/protocol";
@@ -56,6 +57,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
     if (JSON.stringify(settings[key]) !== JSON.stringify(value)) settings[key] = value;
   };
   set("statusSymbols", loadStatusSymbols(raw["statusSymbols"]));
+  set("agentActionSettings", loadAgentActionSettings(raw["agentActionSettings"], raw["agentHeaderActions"]));
   set("agentHeaderActions", loadAgentHeaderActions(raw["agentHeaderActions"]));
   set("summarySettings", loadSummarySettings(raw["summarySettings"]));
   set("statuslineSettings", loadStatuslineSettings(raw["statuslineSettings"]));

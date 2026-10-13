@@ -608,6 +608,8 @@ it("ペインのメニューからfork・利用状況を開き、タブには新
     verified: true,
     since: 0,
   };
+  // Session-dependent controls are only offered once a session has been reported.
+  p.agentSession = { kind: "codex", sessionId: "session-1", reportedAt: 0 };
   s.ui.openContextMenu({ kind: "pane", paneId: "p1" }, { x: 0, y: 0 });
   const items = menuItems(s.ui.contextMenu!, { ui: s.ui, model: s.model, actions: s.actions });
   items.find((i) => i.label === "エージェントを fork…")!.run();

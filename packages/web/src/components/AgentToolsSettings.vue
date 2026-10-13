@@ -9,12 +9,11 @@ import { ref } from "vue";
 import { useSettingsStore } from "../store/settings.js";
 const settings = useSettingsStore(),
   error = ref("");
-function toggle(action: AgentHeaderAction) {
-  settings.setAgentHeaderActions(
-    settings.agentHeaderActions.includes(action)
-      ? settings.agentHeaderActions.filter((a) => a !== action)
-      : [...settings.agentHeaderActions, action],
-  );
+function visibility(action: AgentHeaderAction, event: Event) {
+  settings.setAgentActionSettings({
+    ...settings.agentActionSettings,
+    [action]: (event.target as HTMLSelectElement).value as "display" | "menu" | "hidden",
+  });
 }
 function update(key: "kind" | "model" | "sessionId", event: Event) {
   const r = SummarySettingsSchema.safeParse({
@@ -31,15 +30,22 @@ function update(key: "kind" | "model" | "sessionId", event: Event) {
 <template>
   <section class="settings-section" aria-labelledby="settings-agent-tools">
     <h3 id="settings-agent-tools" class="settings-heading">ペインのエージェント操作</h3>
-    <p>ヘッダーに表示する操作を選択します。対応しないエージェントでは表示されません。</p>
+    <p>
+      表示はヘッダーとメニュー、メニューに表示はメニューだけに出します。対応しないエージェントでは表示されません。
+    </p>
     <div class="agent-tool-options">
-      <label v-for="action in AGENT_HEADER_ACTIONS" :key="action"
-        ><input
-          type="checkbox"
-          :checked="settings.agentHeaderActions.includes(action)"
-          @change="toggle(action)"
-        />{{ HEADER_ACTION_LABELS[action] }}</label
-      >
+      <label v-for="action in AGENT_HEADER_ACTIONS" :key="action">
+        {{ HEADER_ACTION_LABELS[action] }}
+        <select
+          :aria-label="HEADER_ACTION_LABELS[action] + 'の表示'"
+          :value="settings.agentActionSettings[action]"
+          @change="visibility(action, $event)"
+        >
+          <option value="display">表示</option>
+          <option value="menu">メニューに表示</option>
+          <option value="hidden">非表示</option>
+        </select>
+      </label>
     </div>
     <h4>会話の要約</h4>
     <label

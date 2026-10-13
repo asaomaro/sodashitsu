@@ -1,4 +1,4 @@
-import { headerActionsFor, loadAgentHeaderActions } from "@sodashitsu/protocol";
+import { configuredAgentActions, headerActionsFor } from "@sodashitsu/protocol";
 import { shortId } from "@sodashitsu/protocol";
 import { paneNameOf, depthFirstPaneIds } from "@sodashitsu/client-core";
 import type { LayoutResult, PaneBox } from "../layout/computeLayout.js";
@@ -143,7 +143,7 @@ export class Renderer {
             ? headerActionsFor(
                 pane.agent.kind,
                 !!pane.agentSession,
-                loadAgentHeaderActions(ctx.prefs.shared.agentHeaderActions),
+                configuredAgentActions(ctx.prefs.shared.agentActionSettings, ctx.prefs.shared.agentHeaderActions),
               )
             : [],
           zoomed: model.currentTab()?.zoomedPaneId === box.paneId,

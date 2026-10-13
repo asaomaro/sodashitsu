@@ -1,3 +1,6 @@
+import { readAgentTodos } from "./conversation/AgentTodos.js";
+import { z } from "zod";
+import { SessionNotesService } from "./conversation/SessionNotes.js";
 import {ArtifactFiles} from './http/ArtifactFiles.js';
 import {RpcError} from "@sodashitsu/protocol";
 import {Scheduler} from "./schedule/Scheduler.js";
@@ -596,6 +599,10 @@ export async function composeServer(
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
   const summaries=new SummaryService(conversations, options.stateDir);
+  const sessionNotes = new SessionNotesService(id=>session.getPane(id), options.stateDir);
+  // Same-user pane socket exposes only read access to the requested pane's session.
+  paneOps.register({ name: "agent.notes", params: z.object({}).strict(), handler: ctx => sessionNotes.list(ctx.paneId) });
+  paneOps.register({ name: "agent.todos", params: z.object({}).strict(), handler: ctx => readAgentTodos(conversations, ctx.paneId) });
   const summaryWorking = new Set<string>();
   const summarySub = bus.subscribe((e) => {
     if (e.event === "pane.closed") summaryWorking.delete(e.data.paneId);
@@ -626,7 +633,7 @@ export async function composeServer(
   });
   registerAllMethods(surface, {
     workspaceTools,scheduler,pluginDiscovery,
-    conversations,summaries,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
+    conversations,summaries,sessionNotes,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
     session,
     clients,
     sizeAuthority,

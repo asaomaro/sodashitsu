@@ -12,6 +12,7 @@ import type { SessionModel } from "./SessionModel.js";
  * **`DialogContext` の形は web と同じ**——操作（`TuiDispatcher`）の確定・取り消しの規則を web の `ActionDispatcher` から写すため。
  */
 export type DialogContext =
+  | { kind: "sessionTools"; paneId: string; mode: "notes" | "todos" }
   | { kind: "statuslineSettings" }
   | {
       kind: "graphEdit";

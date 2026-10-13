@@ -8,6 +8,7 @@ import GotoPicker from "./components/GotoPicker.vue";
 import GraphDialog from "./components/graph/GraphDialog.vue";
 import DashboardDialog from "./components/DashboardDialog.vue";
 import PaneInfoDialog from "./components/PaneInfoDialog.vue";
+import SessionToolsWindow from "./components/SessionToolsWindow.vue";
 import ConversationWindow from "./components/ConversationWindow.vue";
 import PaneInfoPopover from "./components/PaneInfoPopover.vue";
 import AgentForkDialog from "./components/AgentForkDialog.vue";
@@ -100,6 +101,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
     <DashboardDialog v-if="isMobile" />
     <!-- pane の利用状況（20261010-agent-usage PR4）。デスクトップは pane の近くの窓、1 列の画面は全面のダイアログ。 -->
     <ConversationWindow />
+    <SessionToolsWindow />
     <PaneInfoPopover v-if="!isMobile" />
     <PaneInfoDialog v-if="isMobile" />
     <CommandPopup />

@@ -1,3 +1,4 @@
+import { SessionToolsDialog } from "../modes/SessionToolsDialog.js";
 import { statuslineSettingsSections } from "../settings/statuslineSettings.js";
 import { GraphTerminal } from "../modes/GraphTerminal.js";
 import { ScheduleView } from "../modes/ScheduleView.js";
@@ -15,7 +16,7 @@ import { TuiAskController } from "../modes/AskController.js";
 import { WindowOverlay } from "../modes/WindowOverlay.js";
 import { findMessageLine } from "@sodashitsu/client-core";
 import { ConversationDialog } from "../modes/ConversationDialog.js";
-import { headerActionsFor, loadAgentHeaderActions } from "@sodashitsu/protocol";
+import { configuredAgentActions, headerActionsFor } from "@sodashitsu/protocol";
 import { AgentForkDialog } from "../modes/AgentForkDialog.js";
 import { UsageModel } from "../model/UsageModel.js";
 import { UsageDialog, UsageDashboard } from "../modes/UsageView.js";
@@ -563,7 +564,7 @@ export class TuiApp {
           ? headerActionsFor(
               p.agent.kind,
               !!p.agentSession,
-              loadAgentHeaderActions(this.prefs.shared.agentHeaderActions),
+              configuredAgentActions(this.prefs.shared.agentActionSettings, this.prefs.shared.agentHeaderActions),
             )
           : [];
       },
@@ -1278,6 +1279,8 @@ export class TuiApp {
           );
         },
       );
+    if (ctx.kind === "sessionTools")
+      return new WindowOverlay(new SessionToolsDialog(ctx.mode,ctx.paneId,this.ui,this.rpc,()=>this.scheduleRender()), {w:110,h:32});
     if (ctx.kind === "conversation" || ctx.kind === "pastSessions")
       return new ConversationDialog(
         ctx.kind === "pastSessions" ? "sessions" : ctx.mode,

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runSessionTools } from "./commands/sessionTools.js";
 import {runPluginApp} from "./commands/pluginApp.js";
 /**
  * `sodactl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
@@ -160,6 +161,8 @@ async function main(): Promise<void> {
       return runAgentList(cmd, store);
     case "agent-get":
       return runAgentGet(cmd, store);
+    case "agent-session-tools":
+      return runSessionTools(cmd, store);
     case "agent-usage":
       return runAgentUsage(cmd, store);
     case "agent-wait":
