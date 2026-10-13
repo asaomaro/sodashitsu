@@ -1,16 +1,10 @@
 import {
-  loadStatuslineSettings,
-  statuslineGauge,
-  statuslineLimitKind,
-  type StatuslineField,
   BUILTIN_WORKSPACE_KEY,
   BUILTIN_VIEWS,
   BUILTIN_DEVELOPMENT_DISPLAY,
   WorkspaceToolsParams,
   type BuiltinViewId,
-  type AgentUsageResult,
 } from "@sodashitsu/protocol";
-import { paneNameOf } from "@sodashitsu/client-core";
 import type { SessionService } from "../session/SessionService.js";
 import type { DisplayService } from "../display/DisplayService.js";
 import type { EventBus } from "../bus/EventBus.js";
@@ -38,20 +32,12 @@ export class BuiltinViews {
   >();
   private requests = new Map<string, number>();
   private states = new Map<string, { path: string; text: string; version?: string }>();
-  private timer: ReturnType<typeof setInterval>;
-  private pending = new Set<string>();
   constructor(
     private session: SessionService,
     private displays: DisplayService,
     bus: EventBus,
     private tools: WorkspaceTools,
-    private getUsage?: (paneId: string) => Promise<AgentUsageResult>,
-    private getStatuslineSettings: () => unknown = () => undefined,
   ) {
-    this.timer = setInterval(() => {
-      for (const [id, v] of this.active) if (v.viewId === "statusline") this.render(id);
-    }, 5000);
-    this.timer.unref?.();
     this.sub = bus.subscribe((e) => {
       if (
         [
@@ -112,8 +98,7 @@ export class BuiltinViews {
         !this.active.has(id) ||
         this.active.get(id)?.placement !== v.placement ||
         this.active.get(id)?.root !== v.root ||
-        this.active.get(id)?.workspaceId !== v.workspaceId ||
-        v.viewId === "statusline"
+        this.active.get(id)?.workspaceId !== v.workspaceId
       ) {
         if (
           !this.states.has(id) ||
@@ -140,10 +125,6 @@ export class BuiltinViews {
     const v = this.active.get(id),
       s = this.states.get(id);
     if (!v || !s || !this.session.hasPane(v.paneId)) return;
-    if (v.viewId === "statusline") {
-      void this.renderStatus(id).catch(() => {});
-      return;
-    }
     const clipped = s.text.length > 16000;
     const shown = s.text.slice(0, 16000);
     const file = !clipped && (v.viewId === "file" || v.viewId === "development");
@@ -210,103 +191,7 @@ export class BuiltinViews {
     }
     this.render(id);
   }
-  private async renderStatus(id: string) {
-    const v = this.active.get(id);
-    if (!v || this.pending.has(id)) return;
-    this.pending.add(id);
-    try {
-      const pane = this.session.snapshot().panes.find((p) => p.id === v.sourcePaneId);
-      let result: AgentUsageResult = { panes: {}, accounts: [] };
-      if (pane && this.getUsage)
-        try {
-          result = await this.getUsage(pane.id);
-        } catch {}
-      if (this.active.get(id) !== v || !this.session.hasPane(v.paneId)) return;
-      const usage = pane ? result.panes[pane.id] : null;
-      const settings = loadStatuslineSettings(this.getStatuslineSettings());
-      const level = (pct: number) => (pct >= 90 ? "danger" : pct >= 70 ? "warning" : "good");
-      const segment = (field: StatuslineField, text: string, tone: string = "normal") => ({
-        field,
-        text,
-        tone,
-      });
-      const segments = pane
-        ? [
-            segment("pane", paneNameOf(pane), "name"),
-            segment("agent", pane.agent?.kind ?? "ターミナル", "name"),
-            segment(
-              "state",
-              pane.agent?.state ?? "",
-              pane.agent?.state === "working"
-                ? "active"
-                : pane.agent?.state === "blocked"
-                  ? "warning"
-                  : pane.agent?.state === "idle"
-                    ? "good"
-                    : "muted",
-            ),
-            segment("model", usage?.model ?? "モデル —", "model"),
-            usage?.contextUsedPct !== undefined
-              ? segment(
-                  "context",
-                  `Context ${statuslineGauge(usage.contextUsedPct, settings.graphs.context)}`,
-                  level(usage.contextUsedPct),
-                )
-              : segment("context", "Context —", "muted"),
-            segment(
-              "tokens",
-              usage?.tokens.total !== undefined ? `Tokens ${usage.tokens.total}` : "",
-              "name",
-            ),
-            segment(
-              "cost",
-              usage?.costUsd !== undefined ? `$${usage.costUsd.toFixed(3)}` : "",
-              "model",
-            ),
-            ...result.accounts
-              .filter((a) => a.kind === pane.agent?.kind)
-              .flatMap((a) =>
-                a.windows.map((w) =>
-                  segment(
-                    statuslineLimitKind(w),
-                    `${a.label} ${w.label} ${statuslineGauge(w.usedPct, settings.graphs[statuslineLimitKind(w)])}${w.stale ? " (古い値)" : ""}`,
-                    w.stale ? "muted" : level(w.usedPct),
-                  ),
-                ),
-              ),
-          ].filter((s) => s.text && settings.fields[s.field])
-        : [segment("pane", "アクティブなペインがありません", "muted")];
-      // 帯には静的ビュー共通の余白を入れず、掴みボタンと同じ中央位置に置く。
-      const bandStyle = v.placement.startsWith("band-")
-        ? "html,body{height:100%;overflow:hidden}#soda-display-root{box-sizing:border-box;height:100%;max-height:24px;padding:0;display:flex;align-items:center;overflow:hidden}.statusline{box-sizing:border-box;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:20px;padding:0 4px}"
-        : "";
-      const html = `<style>body{margin:0;background:var(--soda-bg);color:var(--soda-fg);font:13px ui-monospace,monospace}.statusline{white-space:pre-wrap;overflow-wrap:anywhere;padding:2px 4px}.statusline [data-soda-color=name],.statusline [data-soda-color=active]{color:var(--soda-state-working,#8be9fd)}.statusline [data-soda-color=model]{color:var(--soda-accent,#bd93f9)}.statusline [data-soda-color=good]{color:var(--soda-state-done,#50fa7b)}.statusline [data-soda-color=warning]{color:var(--soda-warn-fg,#f1fa8c)}.statusline [data-soda-color=danger]{color:var(--soda-state-blocked,#ff5555)}.statusline [data-soda-color=muted]{color:var(--soda-state-idle,#888)}${bandStyle}</style><div class="statusline" data-soda-statusline>${segments.map((s) => `<span data-soda-color="${s.tone}">${esc(s.text)}</span>`).join('<span data-soda-color="muted"> · </span>')}</div>`;
-      this.displays.set(
-        v.paneId,
-        {
-          name: v.name,
-          title: "Statusline",
-          kind: v.placement.startsWith("band-") ? "band" : "panel",
-          format: "html",
-          content: html,
-          ...(v.placement.startsWith("band-")
-            ? { edge: v.placement === "band-top" ? "top" : "bottom", size: 24 }
-            : { dock: v.placement, size: 240 }),
-        },
-        {
-          owner: {
-            tag: BUILTIN_WORKSPACE_KEY,
-            source: { type: "builtin", id: "workspace", scope: "user" },
-          },
-        },
-      );
-    } finally {
-      this.pending.delete(id);
-      if (this.active.get(id) && this.active.get(id) !== v) this.render(id);
-    }
-  }
   close() {
-    clearInterval(this.timer);
     this.active.clear();
     this.sub.dispose();
     this.actions.dispose();

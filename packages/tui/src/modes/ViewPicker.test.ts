@@ -51,11 +51,10 @@ it("pane picker excludes workspace builtins and tab-only plugins while allowing 
   picker.render({ grid, theme: new ThemeColors("dracula") });
   const screen = Array.from({ length: grid.h }, (_, y) => grid.rowText(y)).join("\n");
   expect(screen).toContain("ペインの会話");
-  expect(screen).toContain("Statusline");
+  expect(screen).not.toContain("Statusline");
   expect(screen).not.toContain("Webのみ");
   expect(screen).not.toContain("ファイルツリー");
   expect(screen).not.toContain("タブの制作");
-  picker.handleKey(chordToKeyInput("down")!);
   picker.handleKey(chordToKeyInput("Enter")!);
   picker.handleKey(chordToKeyInput("Enter")!);
   await new Promise((r) => setTimeout(r, 0));

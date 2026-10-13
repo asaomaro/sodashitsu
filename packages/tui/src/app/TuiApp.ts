@@ -1,3 +1,5 @@
+import { PaneStatuslines } from "./PaneStatuslines.js";
+import { loadStatuslineSettings } from "@sodashitsu/protocol";
 import { SessionToolsDialog } from "../modes/SessionToolsDialog.js";
 import { statuslineSettingsSections } from "../settings/statuslineSettings.js";
 import { GraphTerminal } from "../modes/GraphTerminal.js";
@@ -245,6 +247,7 @@ export class TuiApp {
   protected toastHits: ToastHit[] = [];
   /** 設定の書き込み（設定画面・05）。 */
   protected readonly settingsWriter: SettingsWriter;
+  readonly statuslines: PaneStatuslines;
   /** 外側の端末へ ?1003（ボタンを押していない動きの報告）を有効にしているか。 */
   private anyMotion = false;
   /** pane の headless ごとの copy モードの対象（捨てた headless のものは一緒に消える）。 */
@@ -426,6 +429,7 @@ export class TuiApp {
       toast: (m) => this.ui.toast(m),
       setLocal: (patch) => this.setLocalState(patch as Partial<TuiState>, true),
     });
+    this.statuslines = new PaneStatuslines(this.model, this.prefs, this.usage, this.ui, this.settingsWriter, () => this.scheduleRender());
     this.disposers.push(
       this.ui.onChange(() => {
         if (
@@ -438,13 +442,11 @@ export class TuiApp {
           this.schedules.cancelInteraction();
           this.dockedViews.release();
           this.mouse.cancel();
+          this.statuslines.cancel();
         }
         this.schedules.sync(this.ui.screen === "schedule");
         this.graphView.sync(this.ui.screen === "graph");
-        this.usage.sync(
-          this.ui.screen === "dashboard" ||
-            ["usage", "usageAccounts"].includes(this.ui.dialogContext?.kind ?? ""),
-        );
+        this.usage.sync(this.usageWanted());
         this.commitView();
         if (this.ui.overlayOpen || this.ui.screen !== "base")
           this.mouse?.cancel(); // オーバーレイを開いたら途中のドラッグを捨てる
@@ -921,6 +923,7 @@ export class TuiApp {
 
   protected handleInput(ev: InputEvent): void {
     if (this.ended || this.detaching) return;
+    if (ev.kind === "key" && ev.key.key === "Escape" && this.statuslines.dragging) { this.statuslines.cancel(); return; }
     // オーバーレイが開いている間のキー・貼り付け・マウスはオーバーレイへ（pane へは流さない。AC-I5）。
     if (ev.kind === "cellSize") {
       this.kitty?.setCellSize(ev.width, ev.height);
@@ -1027,6 +1030,7 @@ export class TuiApp {
       }
       case "focus": {
         this.outerFocused = ev.focused;
+        if (!ev.focused) this.statuslines.cancel();
         if (!ev.focused)
           this.mouse.cancel(); // 外側の端末を離れた：離す事象は届かないので、ドラッグを捨てる
         // 外側の端末に戻ったら全部描き直す（`tui.redrawOnFocusGained`。herdr の redraw_on_focus_gained。まれな外側の端末の表示の崩れを残さない）。
@@ -1062,7 +1066,7 @@ export class TuiApp {
 
   /** マウス（`input/mouse.ts`。design「マウス」の全操作）。 */
   protected handleMouse(ev: Extract<InputEvent, { kind: "mouse" }>): void {
-    this.mouse.handle(ev);
+    if (!this.statuslines.handle(ev)) this.mouse.handle(ev);
   }
 
   /** 送り先が無くて打鍵を捨てた。接続が開いていないなら短く知らせる（黙って捨てない）。 */
@@ -1557,6 +1561,14 @@ export class TuiApp {
     this.shown = { workspaceId, tabId, paneId: focusedPaneId, nav };
   }
 
+  private usageWanted(): boolean {
+    return this.ui.screen === "dashboard" ||
+      ["usage", "usageAccounts"].includes(this.ui.dialogContext?.kind ?? "") ||
+      (this.ui.screen === "base" &&
+        loadStatuslineSettings(this.prefs.shared.statuslineSettings).enabled &&
+        [...this.model.panes.values()].some((p) => p.tabId === this.model.tabId && p.agent && !p.virtual));
+  }
+
   /** 今の割り付け（純粋な `computeLayout` に今の大きさ・モデル・設定を渡す）。 */
   protected layout(): LayoutResult {
     const { cols, rows } = this.io.size();
@@ -1595,6 +1607,8 @@ export class TuiApp {
         !this.prefs.sidebarCollapsed &&
         (this.model.workspaceId ? this.model.tabsOf(this.model.workspaceId).length : 0) <= 1,
     });
+    this.statuslines.adjust(layout);
+    this.usage.sync(this.usageWanted());
     return layout;
   }
 
@@ -1675,6 +1689,7 @@ export class TuiApp {
           this.dashboard.render(grid, layout.paneArea, this.theme);
           return { x: 0, y: 0, visible: false, style: "block", blink: false };
         }
+        this.statuslines.render(grid, this.theme);
         const cursor = this.decorate(grid, layout);
         return this.dockedViews.render(grid, layout, this.theme) ?? cursor;
       },

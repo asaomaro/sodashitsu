@@ -3,6 +3,7 @@ import { BUILTIN_WORKSPACE_KEY, type TabViewInstance } from "@sodashitsu/protoco
 import { startedApp } from "../testing/appHarness.js";
 import { snapshot, tab, pane, workspace, leaf } from "../testing/fixtures.js";
 import type { LayoutResult } from "../layout/computeLayout.js";
+const bandExtensions = { extensions: [{ key: "test:band", views: [{ id: "Statusline", title: "Statusline", targets: ["tab"], terminal: { format: "html" }, placements: ["band-top", "band-bottom", "top", "bottom", "left", "right", "float"] }] }] };
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => {
   await close?.();
@@ -317,8 +318,10 @@ it("native headers fold into one row, reopen, show a view menu, drag and close w
 it("bottom band grows from its upper boundary and Escape restores its height", async () => {
   const v: TabViewInstance = {
     id: "band",
-    extensionKey: BUILTIN_WORKSPACE_KEY,
-    viewId: "statusline",
+    extensionKey: "test:band",
+    viewId: "Statusline",
+    terminal: { format: "html" },
+    terminalDisplay: "band",
     target: "tab",
     placement: "band-bottom",
     paneId: "anchor",
@@ -327,6 +330,7 @@ it("bottom band grows from its upper boundary and Escape restores its height", a
   const h = await startedApp({
     cols: 120,
     rows: 50,
+    respond: { "extension.list": bandExtensions },
     snapshot: snapshot({
       tabs: [tab("t1", "w1", leaf("p1"), { views: [v] })],
       panes: [pane("p1", "t1"), pane("anchor", "t1", { virtual: true })],
@@ -419,8 +423,10 @@ it.each(["band-bottom", "band-top"] as const)(
   async (placement) => {
     const v: TabViewInstance = {
       id: "band",
-      extensionKey: BUILTIN_WORKSPACE_KEY,
-      viewId: "statusline",
+      extensionKey: "test:band",
+      viewId: "Statusline",
+      terminal: { format: "html" },
+      terminalDisplay: "status",
       target: "tab",
       placement,
       paneId: "anchor",
@@ -434,7 +440,7 @@ it.each(["band-bottom", "band-top"] as const)(
         tabs: [t],
         panes: [pane("p1", "t1"), pane("anchor", "t1", { virtual: true })],
       }),
-      respond: { "tab.remove_view": {}, "tab.move_view": {} },
+      respond: { "extension.list": bandExtensions, "tab.remove_view": {}, "tab.move_view": {} },
     });
     close = h.close;
     const layout = () => {
@@ -468,6 +474,7 @@ it.each(["band-bottom", "band-top"] as const)(
       area = layout().paneArea,
       targetY = placement === "band-top" ? area.y + area.h - 1 : area.y;
     mouse(0, header.x, header.y);
+    await vi.waitFor(() => expect((h.app.dockedViews as unknown as { drag: { allowed: string[] } | null }).drag?.allowed).toContain("band-top"));
     mouse(32, area.x + Math.floor(area.w / 2), targetY);
     h.app.renderNow();
     expect(await h.screen()).toContain(
@@ -495,8 +502,10 @@ it.each(["band-bottom", "band-top"] as const)(
 it("renders band content on the first row and hides its name through shared settings", async () => {
   const v: TabViewInstance = {
     id: "status",
-    extensionKey: BUILTIN_WORKSPACE_KEY,
-    viewId: "statusline",
+    extensionKey: "test:band",
+    viewId: "Statusline",
+    terminal: { format: "html" },
+    terminalDisplay: "status",
     target: "tab",
     placement: "band-bottom",
     paneId: "anchor",
@@ -524,6 +533,7 @@ it("renders band content on the first row and hides its name through shared sett
       panes: [pane("p1", "t1"), pane("anchor", "t1", { virtual: true })],
     }),
     respond: {
+      "extension.list": bandExtensions,
       "display.subscribe": { displays: [info] },
       "display.get": {
         id: "d",

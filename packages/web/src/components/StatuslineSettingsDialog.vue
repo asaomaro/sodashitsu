@@ -22,6 +22,22 @@ watch(
   },
   { immediate: true },
 );
+function change(key: "enabled" | "tokenFormat", value: boolean | string) {
+  const next = loadStatuslineSettings(current.value);
+  if (key === "enabled") next.enabled = value === true;
+  else next.tokenFormat = value === "k" ? "k" : "exact";
+  settings.setStatuslineSettings(next);
+}
+function reorder(index: number, delta: number) {
+  const next = loadStatuslineSettings(current.value),
+    to = index + delta;
+  if (to < 0 || to >= next.order.length) return;
+  [next.order[index], next.order[to]] = [next.order[to]!, next.order[index]!];
+  settings.setStatuslineSettings(next);
+}
+const ordered = computed(() =>
+  current.value.order.map((id) => STATUSLINE_FIELDS.find((f) => f.id === id)!),
+);
 function field(id: (typeof STATUSLINE_FIELDS)[number]["id"], event: Event) {
   const next = loadStatuslineSettings(current.value);
   next.fields[id] = (event.target as HTMLInputElement).checked;
@@ -48,14 +64,50 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
       ><button type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
     </header>
     <p>変更はすべてのstatuslineへ反映され、Web版・端末版で共有されます。</p>
+    <label
+      ><input
+        type="checkbox"
+        :checked="current.enabled"
+        @change="change('enabled', ($event.target as HTMLInputElement).checked)"
+      />ペイン最下部に表示</label
+    >
+    <label
+      >トークン数の表記<select
+        aria-label="トークン数の表記"
+        :value="current.tokenFormat"
+        @change="change('tokenFormat', ($event.target as HTMLSelectElement).value)"
+      >
+        <option value="exact">実数</option>
+        <option value="k">1000をk表記</option>
+      </select></label
+    >
+    <button @click="settings.setStatuslineSettings({ ...current, columns: null })">
+      表示桁数を自動に戻す
+    </button>
     <fieldset>
-      <legend>表示する情報</legend>
-      <label v-for="item in STATUSLINE_FIELDS" :key="item.id"
+      <legend>表示する情報・順序</legend>
+      <label v-for="(item, index) in ordered" :key="item.id"
         ><input
           type="checkbox"
+          :aria-label="item.label"
           :checked="current.fields[item.id]"
           @change="field(item.id, $event)"
-        />{{ item.label }}</label
+        />{{ item.label
+        }}<button
+          type="button"
+          :aria-label="`${item.label}を上へ`"
+          :disabled="index === 0"
+          @click.prevent="reorder(index, -1)"
+        >
+          ↑</button
+        ><button
+          type="button"
+          :aria-label="`${item.label}を下へ`"
+          :disabled="index === ordered.length - 1"
+          @click.prevent="reorder(index, 1)"
+        >
+          ↓
+        </button></label
       >
     </fieldset>
     <fieldset>
@@ -120,9 +172,11 @@ label {
   gap: 6px;
   padding: 4px 0;
 }
-fieldset:first-of-type {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+fieldset:first-of-type label {
+  display: flex;
+}
+fieldset:first-of-type button:first-of-type {
+  margin-left: auto;
 }
 .graph-row {
   display: grid;

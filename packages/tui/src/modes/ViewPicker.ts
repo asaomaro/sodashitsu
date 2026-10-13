@@ -66,7 +66,7 @@ export class ViewPicker implements Overlay {
     if (!tab) return;
     this.choices = BUILTIN_TERMINAL_VIEWS.filter((d) => viewSupportsTarget(d, this.target())).map((def) => ({
       extensionKey: BUILTIN_WORKSPACE_KEY,
-      def: { ...def, placements: [...def.placements], requiresProject: def.id !== "statusline" },
+      def: { ...def, placements: [...def.placements], requiresProject: true },
     }));
     try {
       const list = await this.conn.request("extension.list", {});

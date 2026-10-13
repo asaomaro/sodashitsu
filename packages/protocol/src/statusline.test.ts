@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { loadStatuslineSettings, statuslineGauge, statuslineLimitKind } from "./statusline.js";
+import {
+  loadStatuslineSettings,
+  statuslineGauge,
+  statuslineLimitKind,
+  statuslineSegments,
+} from "./statusline.js";
 it("keeps defaults for old, partial and invalid settings without accepting arbitrary glyphs", () => {
   const s = loadStatuslineSettings({
     fields: { pane: false, context: "no" },
@@ -22,4 +27,61 @@ it("separates weekly, five-hour and other windows by duration or label", () => {
   expect(statuslineLimitKind({ label: "17 days" })).toBe("otherLimits");
   expect(statuslineLimitKind({ label: "5h", windowMinutes: 900 })).toBe("otherLimits");
   expect(statuslineLimitKind({ label: "月" })).toBe("otherLimits");
+});
+it("normalizes shared ordering, width and token formatting with safe old defaults", () => {
+  const s = loadStatuslineSettings({
+    order: ["tokens", "tokens", "unknown", "model"],
+    columns: Infinity,
+    tokenFormat: "k",
+  });
+  expect(s.order.slice(0, 2)).toEqual(["tokens", "model"]);
+  expect(new Set(s.order).size).toBe(s.order.length);
+  expect(s.columns).toBeNull();
+  expect(s.enabled).toBe(true);
+  expect(s.fields.input).toBe(false);
+  expect(loadStatuslineSettings({ columns: -100 }).columns).toBe(8);
+});
+
+it("formats enabled fields in shared order, omits unknown values, and compactly formats all token counts", () => {
+  const pane = {
+    id: "p",
+    cwd: "/pj",
+    label: "Alpha",
+    agent: { kind: "codex", label: "Codex", state: "working" },
+    agentSession: { kind: "codex", sessionId: "s" },
+  } as import("./model.js").Pane;
+  const usage = {
+    paneId: "p",
+    kind: "codex",
+    model: null,
+    tokens: { basis: "context", total: 1000, input: 10001, output: 0 },
+    contextUsedPct: NaN,
+  } as import("./usage.js").AgentUsage;
+  const s = loadStatuslineSettings({
+    order: ["tokens", "output", "input"],
+    tokenFormat: "k",
+    fields: { input: true, output: true, session: true },
+  });
+  const result = statuslineSegments(pane, usage, [], s);
+  expect(result.slice(0, 3).map((v) => v.text)).toEqual([
+    "Tokens 1k",
+    "出力トークン 0",
+    "入力トークン 10k",
+  ]);
+  expect(result.some((v) => ["context", "cost", "model"].includes(v.field))).toBe(false);
+  expect(result.find((v) => v.field === "session")?.text).toBe("s");
+  expect(statuslineSegments({ ...pane, agent: null }, usage, [], s)).toEqual([]);
+  expect(
+    statuslineSegments(pane, { ...usage, kind: "claude" }, [], s).some((v) => v.field === "tokens"),
+  ).toBe(false);
+});
+
+it("uses the configured agent name as the pane name", () => {
+  const pane = {
+    label: null,
+    agent: { kind: "codex", label: "Codex", name: "Writer", state: "idle" },
+  } as import("./model.js").Pane;
+  expect(statuslineSegments(pane, undefined, [], loadStatuslineSettings(undefined))[0]?.text).toBe(
+    "Writer",
+  );
 });

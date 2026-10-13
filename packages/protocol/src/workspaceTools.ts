@@ -34,22 +34,13 @@ export const BUILTIN_VIEWS = [
     terminal: { format: "text" },
     placements: ["right", "bottom", "float", "band-top", "band-bottom"],
   },
-  {
-    id: "statusline",
-    title: "Statusline",
-    targets: ["pane", "tab"],
-    requiresProject: false,
-    web: { renderer: "statusline" },
-    terminal: { format: "markdown" },
-    placements: ["band-top", "band-bottom", "float", "top", "bottom"],
-  },
 ] as const;
 export const BUILTIN_WEB_VIEWS = BUILTIN_VIEWS.map((v) => ({ ...v, renderer: v.web.renderer }));
 export const BUILTIN_TERMINAL_VIEWS = BUILTIN_VIEWS.map((v) => ({
   ...v,
   renderer: v.terminal.format,
 }));
-export type BuiltinViewId = (typeof BUILTIN_VIEWS)[number]["id"] | "development";
+export type BuiltinViewId = (typeof BUILTIN_VIEWS)[number]["id"] | "development" | "statusline";
 export const WorkspaceToolsParams = z.object({
   // 保存済みの旧IDも他のworkspace RPCと同様に受け付ける。
   workspaceId: z.string().min(1),

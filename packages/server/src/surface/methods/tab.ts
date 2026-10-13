@@ -115,7 +115,7 @@ export function registerTabMethods(surface: ControlSurface, deps: MethodDeps): v
           target: p.target,
           // ファイル/Gitは端末クライアントが直接描画し、表示枠の上限を二重消費しない。
           ...(definition.terminal && !builtin ? { terminal: definition.terminal } : {}),
-          informationTarget: builtin && p.viewId === "statusline" ? "pane" : definition.targets?.length === 1 ? definition.targets[0] : p.target,
+          informationTarget: definition.targets?.length === 1 ? definition.targets[0] : p.target,
           placement: p.placement,
         },
         p.paneId,

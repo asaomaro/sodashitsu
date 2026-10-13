@@ -457,7 +457,7 @@ export async function composeServer(
     logger,
   });
   const workspaceTools=new WorkspaceTools(id=>session.snapshot().workspaces.find(w=>w.id===id)?.projectDir);
-  const builtinViews=new BuiltinViews(session,displays,bus,workspaceTools,id=>usage.get(id),()=>prefs.get().prefs.statuslineSettings);
+  const builtinViews=new BuiltinViews(session,displays,bus,workspaceTools);
   // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
   const extensions = new ExtensionHost({

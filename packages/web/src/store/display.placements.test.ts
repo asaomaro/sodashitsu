@@ -71,7 +71,7 @@ it("reveals a registered band moved to float when its new panel info arrives aft
         id: "v",
         paneId: "p",
         display: "status",
-        viewId: "statusline",
+        viewId: "files",
         extensionKey: "builtin:workspace",
         target: "tab",
         placement: "band-top",

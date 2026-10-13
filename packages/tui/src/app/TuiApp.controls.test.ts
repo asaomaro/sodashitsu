@@ -89,7 +89,7 @@ it("利用状況画面を配信で更新し、入力をPTYへ送らず、一覧�
   expect(await h.screen()).toContain("5,678");
   h.io.type("\r");
   expect(h.app.ui.screen).toBe("base");
-  expect(h.ws.requests("agent.usage_watch").at(-1)?.params).toEqual({ on: false });
+  expect(h.ws.requests("agent.usage_watch").at(-1)?.params).toEqual({ on: true }); // statusline remains visible
   h.io.type("\x02U");
   await vi.waitFor(() => expect(h.app.ui.dialogContext).toEqual({ kind: "usage", paneId: "p1" }));
   await vi.waitFor(() => expect(h.app.usage.status).toBe("ready"));
