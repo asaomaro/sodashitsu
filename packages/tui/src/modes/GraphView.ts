@@ -220,7 +220,7 @@ export class GraphView {
     this.controls = [];
     this.linkHits = [];
     if (this.selectedTab && !this.model.tabs.has(this.selectedTab)) this.selectedTab = null;
-    const c = dialogColors(theme);
+    const c = { ...dialogColors(theme), bg: theme.ground("--soda-menu-bg") };
     grid.fill(area, c.fg, c.bg);
     let buttonX = area.x + area.w - 1;
     for (const [mode, label] of [
