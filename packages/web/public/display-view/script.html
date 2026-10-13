@@ -169,6 +169,60 @@
     return rd(u8Length, rApply(encoderEncode, new Encoder(), [jsonStringify(out)]), 'length') <= DATA_MAX_BYTES;
   }
 
+  // Native components live in the parent. Only placement travels over this frame's port;
+  // author code gets neither the terminal DOM nor an authenticated connection.
+  var ElementCtor = Element;
+  var max = Math.max, min = Math.min;
+  var bounds = E.getBoundingClientRect;
+  var parentElement = getterOf(N, 'parentElement');
+  var connected = getterOf(N, 'isConnected');
+  var getStyles = WIN.getComputedStyle;
+  var raf = WIN.requestAnimationFrame;
+  var innerW = getterOf(WIN, 'innerWidth');
+  var innerH = getterOf(WIN, 'innerHeight');
+  var mounted = mk(), mountSerial = 0, mountCount = 0, queued = false;
+  function componentTick() {
+    queued = false;
+    var ids = objKeys(mounted);
+    for (var j = 0; j < ids.length; j++) {
+      var c = mounted[ids[j]];
+      if (!c) continue;
+      var r = rApply(bounds, c.element, []);
+      var x = r.x, y = r.y, right = r.right, bottom = r.bottom;
+      var cx = 0, cy = 0, cr = rd(innerW, WIN, 'innerWidth'), cb = rd(innerH, WIN, 'innerHeight');
+      // Scroll containers/hidden sections clip native components just like author DOM.
+      for (var el = rd(parentElement, c.element, 'parentElement'); el; el = rd(parentElement, el, 'parentElement')) {
+        var st = rApply(getStyles, WIN, [el]), b = rApply(bounds, el, []);
+        if (st.overflowX !== 'visible') { cx = max(cx, b.left); cr = min(cr, b.right); }
+        if (st.overflowY !== 'visible') { cy = max(cy, b.top); cb = min(cb, b.bottom); }
+      }
+      var rectangle = mk(); own(rectangle,'x',x); own(rectangle,'y',y); own(rectangle,'width',r.width); own(rectangle,'height',r.height);
+      var clip = mk(); own(clip,'x',cx); own(clip,'y',cy); own(clip,'width',max(0,cr-cx)); own(clip,'height',max(0,cb-cy));
+      var ownStyle = rApply(getStyles, WIN, [c.element]);
+      if (ownStyle.visibility !== 'visible' || !rd(connected, c.element, 'isConnected') || !r.width || !r.height) { own(clip,'width',0); own(clip,'height',0); }
+      var signatureData = mk(); own(signatureData,"rect",rectangle); own(signatureData,"clip",clip);
+      var signature = jsonStringify(signatureData);
+      if (signature !== c.last) {
+        c.last = signature;
+        var m=mk(); own(m,'type','component'); own(m,'rev',rev); own(m,'id',ids[j]); own(m,'component','terminal'); own(m,'paneId',c.paneId); own(m,'rect',rectangle); own(m,'clip',clip); post(m);
+      }
+    }
+    if (mountCount > 0) queueComponentTick();
+  }
+  function queueComponentTick() { if (!queued && raf) { queued = true; rApply(raf, WIN, [componentTick]); } }
+  function mountComponent(kind, element, options) {
+    if (kind !== 'terminal' || !(element instanceof ElementCtor) || mountCount >= 4 || !options || typeof options.paneId !== 'string' || options.paneId.length > 64) return null;
+    var id = '' + (++mountSerial), c = mk();
+    own(c,'element',element); own(c,'paneId',options.paneId); own(c,'last',''); own(mounted,id,c); mountCount++;
+    queueComponentTick();
+    var handle=mk(), disposed=false;
+    own(handle,'dispose',function () {
+      if (disposed) return; disposed=true; delete mounted[id]; mountCount--;
+      var m=mk(); own(m,'type','component-remove'); own(m,'rev',rev); own(m,'id',id); post(m);
+    });
+    return objFreeze(handle);
+  }
+
   /** window.soda。action は、規則の外の名前・値なら false を返して送らない（静的な形式の data-soda-action と同じ規則）。 */
   function makeSoda(theme) {
     var vars = mk();
@@ -186,6 +240,8 @@
     own(th, 'vars', objFreeze(vars));
     var soda = mk();
     own(soda, 'version', 1);
+    own(soda, 'mount', mountComponent);
+    own(soda, 'components', objFreeze(['terminal']));
     own(soda, 'action', function (name, data) {
       if (typeof name !== 'string' || !rApply(RegExpTest, ACTION_RE, [name])) return false;
       if (data !== undefined && !isPlainStringMap(data)) return false;

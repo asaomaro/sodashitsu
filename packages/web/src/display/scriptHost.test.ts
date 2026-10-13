@@ -26,13 +26,15 @@ function boot(search = "?t=ticket123") {
   const fakeWindow: Win = new EventTarget();
   fakeWindow.scrollBy = vi.fn();
   fakeWindow.focus = vi.fn();
+  const animationFrames: FrameRequestCallback[] = [];
+  Object.assign(fakeWindow, { requestAnimationFrame: (fn: FrameRequestCallback) => { animationFrames.push(fn); return 1; }, getComputedStyle: window.getComputedStyle.bind(window), innerWidth: 800, innerHeight: 600 });
   new Function("parent", "window", "location", scriptBody())(parent, fakeWindow, { search });
   const port: FakePort = { onmessage: null, postMessage: vi.fn() };
   const fire = (type: string, ev: Record<string, unknown>): void => void fakeWindow.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), ev));
   const init = (source: unknown = parent): void => fire("message", { source, data: { type: "display-init", v: 1 }, ports: [port] });
   const send = (msg: Record<string, unknown>): void => port.onmessage?.({ data: msg });
   const render = (msg: Record<string, unknown>): void => send({ type: "render", theme: { dark: true, vars: { "--soda-bg": "#111" } }, ...msg });
-  return { parent, port, fire, init, send, render, win: fakeWindow };
+  return { parent, port, fire, init, send, render, win: fakeWindow, animationFrames };
 }
 const posted = (f: ReturnType<typeof boot>): unknown[] => f.port.postMessage.mock.calls.map((c) => c[0]);
 
@@ -40,6 +42,22 @@ describe("script.html（土台）", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
+  });
+
+  it("soda.mount reserves bounded native terminal slots and disposal removes them without exposing parent DOM", () => {
+    const f=boot(); f.init(); f.render({rev:1,format:'script-html',source:'<div id="slot"></div>'});
+    const soda=f.win.soda as {mount(kind:string,el:Element,options:{paneId:string}):{dispose():void}|null};
+    const el=document.getElementById('slot')!;
+    expect(soda.mount('iframe',el,{paneId:'agent'})).toBeNull();
+    const first=soda.mount('terminal',el,{paneId:'agent'})!;
+    expect(first).not.toBeNull();
+    for(let i=0;i<3;i++) expect(soda.mount('terminal',el,{paneId:'agent'})).not.toBeNull();
+    expect(soda.mount('terminal',el,{paneId:'agent'})).toBeNull();
+    f.animationFrames.shift()!(0);
+    expect(posted(f).filter(m => (m as {type:string}).type==='component')).toHaveLength(4);
+    first.dispose(); first.dispose();
+    expect(posted(f).filter(m => (m as {type:string}).type==='component-remove')).toEqual([{type:'component-remove',rev:1,id:'1'}]);
+    expect(soda.mount('terminal',el,{paneId:'agent'})).not.toBeNull();
   });
 
   it("頁の構成: 土台のスクリプトは頁の中に直に書いてあり、外のスクリプトを読まない（script-src に 'self' が要らない）", () => {

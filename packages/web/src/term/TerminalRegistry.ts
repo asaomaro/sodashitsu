@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { TERMINAL_FONT_FAMILY } from "./terminalFonts.js";
 import type { ITerminalAddon, ITerminalOptions, ITheme } from "@xterm/xterm";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
 import type { KeyInputController } from "../keys/KeyInputController.js";
@@ -16,9 +17,12 @@ import { imageFromDataTransfer } from "./clipboard.js";
 /** xterm.js がマウスの報告やホイールの変換を出すイベント（`markPointer` の対象。D99）。 */
 const POINTER_EVENT_TYPES = ["mousedown", "mouseup", "mousemove", "wheel", "pointerdown", "pointerup", "pointermove"] as const;
 
+export type TerminalMirror = TerminalSinkPort & { setTheme?(theme: ITheme): void; refreshFonts?(): void };
+
 export interface TermEntry {
   paneId: string;
   term: Terminal;
+  serialize: SerializeAddon;
   /**
    * 作ったときの scrollback の行数（`getScrollbackLines` を省いたときは `undefined`＝xterm.js の既定）。
    * **購読（`ViewSync`）はこの値を使う**——利用者が途中で設定を変えても、xterm の容量と SNAPSHOT に求める行数を
@@ -93,6 +97,8 @@ export class TerminalRegistry implements TerminalSinkPort {
   private readonly unsubscribed = new Set<string>();
   private readonly now: () => number;
   private inputEnabled = true;
+  private readonly mirrors = new Map<string, Set<TerminalMirror>>();
+  private mirrorSerial = 0;
   /**
    * pane 以外の端末の受け手（独自コマンドの popup。20260927-custom-command-keys）。popup の端末は prefix を横取りさせないので registry の外で作り、
    * OUTPUT・SNAPSHOT・大きさの変化だけをここから回す。
@@ -141,6 +147,7 @@ export class TerminalRegistry implements TerminalSinkPort {
    */
   setTheme(theme: ITheme): void {
     for (const entry of this.entries.values()) entry.term.options.theme = theme;
+    for (const sinks of this.mirrors.values()) for (const sink of sinks) sink.setTheme?.(theme);
   }
 
   /**
@@ -153,8 +160,9 @@ export class TerminalRegistry implements TerminalSinkPort {
    * 読む側は **`await nextTick()` の後**に呼ぶ（mount/unmount のフックは Vue のパッチ後に走るので、
    * 途中で読むと tab の切り替え中に空を拾う）。
    */
+  // 読み取り専用ミラーの保持だけでは、通知を自動で既読にしない。
   isVisible(paneId: string): boolean {
-    return this.visible.has(paneId);
+    return this.visible.has(paneId) && [...(this.claims.get(paneId) ?? [])].some(holder => !holder.startsWith("mirror:"));
   }
 
   evictIfNeeded(): void {
@@ -190,6 +198,7 @@ export class TerminalRegistry implements TerminalSinkPort {
    */
   markAllUnsubscribed(): void {
     for (const paneId of this.entries.keys()) this.unsubscribed.add(paneId);
+    for (const paneId of this.mirrors.keys()) this.subscribeMirror(paneId);
   }
 
   focus(paneId: string): void {
@@ -208,6 +217,9 @@ export class TerminalRegistry implements TerminalSinkPort {
     this.inputEnabled = enabled;
   }
 
+  /** 現在の配色を、独立した読み取り専用端末にも適用する。 */
+  currentTheme(): ITheme { return this.opts.getTheme?.() ?? toXtermTheme(); }
+
   /** 端末の生成オプションの上書き（`host.windowsBuild` からの `windowsPty` 等）。registry の外で作る端末（独自コマンドの popup）も同じ前提にそろえる。 */
   baseTerminalOptions(): Partial<ITerminalOptions> {
     return { ...this.opts.terminalOptions };
@@ -223,7 +235,49 @@ export class TerminalRegistry implements TerminalSinkPort {
     };
   }
 
+  /** Independent read-only terminals; never move the base DOM or acquire PTY size authority. */
+  attachMirror(paneId: string, sink: TerminalMirror, onError: () => void): () => void {
+    const holder = `mirror:${++this.mirrorSerial}`;
+    const entry = this.acquire(paneId, holder);
+    const needsSubscription = this.unsubscribed.has(paneId);
+    const sinks = this.mirrors.get(paneId) ?? new Set<TerminalMirror>();
+    let live = true, ready = false;
+    const pending: (() => void)[] = [];
+    const deliver = (fn: () => void) => { if (!live) return; if (ready) fn(); else pending.push(fn); };
+    const mirror: TerminalMirror = {
+      onOutput: (id, chunk) => deliver(() => sink.onOutput(id, chunk)),
+      onSnapshot: (id, cols, rows, text) => deliver(() => sink.onSnapshot(id, cols, rows, text)),
+      onSizeChanged: (id, cols, rows) => deliver(() => sink.onSizeChanged(id, cols, rows)),
+      setTheme: theme => sink.setTheme?.(theme),
+      refreshFonts: () => sink.refreshFonts?.(),
+    };
+    // Everything already queued before this barrier belongs to the initial state.
+    // Events after it are replayed only to the new sink, in arrival order.
+    entry.term.write("", () => {
+      if (!live) return;
+      sink.onSnapshot(paneId, entry.term.cols, entry.term.rows, entry.serialize.serialize({ scrollback: 5000 }));
+      ready = true;
+      for (const fn of pending) fn();
+      pending.length = 0;
+    });
+    sinks.add(mirror);
+    this.mirrors.set(paneId, sinks);
+    if (needsSubscription) this.subscribeMirror(paneId, () => { if (live) onError(); });
+    return () => {
+      live = false;
+      pending.length = 0;
+      sinks.delete(mirror);
+      if (!sinks.size) this.mirrors.delete(paneId);
+      this.release(paneId, holder);
+    };
+  }
+  private subscribeMirror(paneId: string, onError: () => void = () => undefined): void {
+    this.unsubscribed.delete(paneId);
+    void this.opts.conn.request("pane.subscribe", { paneId, scrollbackLines: this.get(paneId)?.scrollback ?? 1000 }).catch(onError);
+  }
+
   onOutput(paneId: string, chunk: Uint8Array): void {
+    for (const sink of this.mirrors.get(paneId) ?? []) sink.onOutput(paneId, chunk);
     const external = this.externals.get(paneId);
     if (external) return external.onOutput(paneId, chunk);
     this.entries.get(paneId)?.term.write(chunk);
@@ -237,6 +291,7 @@ export class TerminalRegistry implements TerminalSinkPort {
    * 起きうる。大きさは先に変えてよい（その前の書き込みは RIS で消える。RIS は大きさを保つ）。
    */
   onSnapshot(paneId: string, cols: number, rows: number, text: string): void {
+    for (const sink of this.mirrors.get(paneId) ?? []) sink.onSnapshot(paneId, cols, rows, text);
     const external = this.externals.get(paneId);
     if (external) return external.onSnapshot(paneId, cols, rows, text);
     const entry = this.entries.get(paneId);
@@ -246,6 +301,7 @@ export class TerminalRegistry implements TerminalSinkPort {
   }
 
   onSizeChanged(paneId: string, cols: number, rows: number): void {
+    for (const sink of this.mirrors.get(paneId) ?? []) sink.onSizeChanged(paneId, cols, rows);
     const external = this.externals.get(paneId);
     if (external) return external.onSizeChanged(paneId, cols, rows);
     this.entries.get(paneId)?.term.resize(Math.max(1, cols), Math.max(1, rows));
@@ -253,6 +309,7 @@ export class TerminalRegistry implements TerminalSinkPort {
 
   /** Discard missing-glyph entries when the bundled icon font finishes loading late. */
   refreshFonts(): void {
+    for (const sinks of this.mirrors.values()) for (const sink of sinks) sink.refreshFonts?.();
     for (const { term } of this.entries.values()) {
       term.clearTextureAtlas();
       term.refresh(0, term.rows - 1);
@@ -282,6 +339,8 @@ export class TerminalRegistry implements TerminalSinkPort {
     const unicode11 = new Unicode11Addon();
     term.loadAddon(unicode11);
     term.unicode.activeVersion = "11";
+    const serialize = new SerializeAddon();
+    term.loadAddon(serialize);
     const search = new SearchAddon();
     term.loadAddon(search);
     // 問い合わせの握りつぶしは addon を全部読み込んだ後に登録する（xterm.js のハンドラは後から登録したものが先に呼ばれる。
@@ -337,6 +396,7 @@ export class TerminalRegistry implements TerminalSinkPort {
     return {
       paneId,
       term,
+      serialize,
       element,
       webgl,
       lastUsed: this.now(),
@@ -351,6 +411,7 @@ export class TerminalRegistry implements TerminalSinkPort {
    */
   disposeAll(): void {
     for (const paneId of [...this.entries.keys()]) this.dispose(paneId, { notifyServer: false });
+    this.mirrors.clear();
   }
 
   private dispose(paneId: string, opts: { notifyServer?: boolean } = {}): void {

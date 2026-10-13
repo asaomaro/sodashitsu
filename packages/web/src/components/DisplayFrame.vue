@@ -58,6 +58,9 @@ import {
   unregisterScriptFrame,
   type RegisteredFrame,
 } from "../display/frameRegistry.js";
+import EmbeddedTerminal from "./EmbeddedTerminal.vue";
+import { terminalComponentAllowed, componentViewport, type TerminalComponent } from "../display/components.js";
+import { useSessionStore } from "../store/session.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -75,6 +78,23 @@ import { useSettingsStore } from "../store/settings.js";
  */
 const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefined }>();
 
+const session = useSessionStore();
+const components = ref(new Map<string, TerminalComponent>());
+const wrap = ref<HTMLElement | null>(null);
+const viewport = ref({ width: 0, height: 0 });
+let componentResize: ResizeObserver | undefined;
+const permittedComponents = computed(() => [...components.value.values()].filter(c => {
+  const v = componentViewport(c, viewport.value.width, viewport.value.height);
+  return v.width > 0 && v.height > 0 && terminalComponentAllowed(props.info, c.paneId, session.panes, session.tabs);
+}));
+function componentStyle(c: TerminalComponent) {
+  const v = componentViewport(c, viewport.value.width, viewport.value.height);
+  return { left: `${v.x}px`, top: `${v.y}px`, width: `${v.width}px`, height: `${v.height}px` };
+}
+function terminalStyle(c: TerminalComponent) {
+  const v = componentViewport(c, viewport.value.width, viewport.value.height);
+  return { position: "absolute" as const, left: `${c.rect.x-v.x}px`, top: `${c.rect.y-v.y}px`, width: `${c.rect.width}px`, height: `${c.rect.height}px` };
+}
 const controller = inject(DisplayControllerKey, null);
 const host = inject(DisplayHostKey, null);
 const store = useDisplayStore();
@@ -144,6 +164,7 @@ function clearTimers(): void {
   patrolTimer = null;
 }
 function closePort(): void {
+  components.value.clear();
   if (port) {
     port.onmessage = null;
     port.close();
@@ -269,6 +290,19 @@ function onPortMessage(ev: MessageEvent): void {
   const m = readFrameMessage(ev.data);
   if (!m) return;
   switch (m.type) {
+    case "component-remove":
+      if (isScript.value && m.rev === props.content?.rev) components.value.delete(m.id);
+      return;
+    case "component":
+      if (!isScript.value || phase.value !== "connected" || m.rev !== props.content?.rev) return;
+      if (!terminalComponentAllowed(props.info, m.paneId, session.panes, session.tabs)) {
+        components.value.delete(m.id);
+        port?.postMessage({ type: "message", data: { type: "component-error", id: m.id, error: "pane_not_available" } });
+        return;
+      }
+      if (!components.value.has(m.id) && components.value.size >= 4) return;
+      components.value.set(m.id, m);
+      return;
     case "pong":
       lastReply = Date.now();
       return;
@@ -329,8 +363,13 @@ function onVisibility(): void {
 }
 
 // --- フォーカス ------------------------------------------------------------------------------------------
-const frameHasFocus = (): boolean =>
-  iframeEl.value !== null && document.activeElement === iframeEl.value;
+const inComponent = (t: EventTarget | null): boolean => t instanceof Element && !!wrap.value?.contains(t) && t.closest("[data-native-component]") !== null;
+const frameHasFocus = (): boolean => iframeEl.value !== null && (document.activeElement === iframeEl.value || inComponent(document.activeElement));
+function componentEscape(): void {
+  guard.leave(); syncGuardState();
+  iframeEl.value?.closest("[data-display-float]")?.dispatchEvent(new CustomEvent("display-escape", { bubbles: true }));
+  host?.focusTerminal(props.info.paneId);
+}
 
 /** 静的な形式: フォーカスが枠にあるか（操作中の表示）。 */
 function updateFocusStatic(): void {
@@ -466,7 +505,7 @@ const inEndButton = (t: EventTarget | null): boolean =>
 function onDocFocusIn(ev: Event): void {
   // ［操作を終える］ボタンへ移ったのは、操作を終える途中（その `click` が終える）。ここで終えると、ボタンが消えて `click` が届かない。
   if (isScript.value && inEndButton(ev.target)) return;
-  if (isScript.value && ev.target !== iframeEl.value) {
+  if (isScript.value && ev.target !== iframeEl.value && !inComponent(ev.target)) {
     // 枠でない要素にフォーカスが移った: 操作を終える。そのあとで枠が取り返したら、新しい「取った」（1 拍置いて見る）。
     guard.leave();
     setTimeout(onFocusSignal, 0);
@@ -478,6 +517,7 @@ function onDocFocusIn(ev: Event): void {
 function onDocPointerDown(ev: Event): void {
   if (!isScript.value || !guard.engaged) return;
   const t = ev.target;
+  if (inComponent(t)) return;
   if (t instanceof Node && (t === iframeEl.value || iframeEl.value?.contains(t))) return;
   // ［操作を終える］ボタンの押下は、ここで終えない（終えるとボタンが消えて、`click` が届かない）。ボタンの `click` が終える。
   if (t instanceof Element && t.closest("[data-display-end]")) return;
@@ -531,6 +571,10 @@ const handle: RegisteredFrame = {
 };
 
 onMounted(() => {
+  componentResize = new ResizeObserver(() => {
+    viewport.value = { width: wrap.value?.clientWidth ?? 0, height: wrap.value?.clientHeight ?? 0 };
+  });
+  if (wrap.value) componentResize.observe(wrap.value);
   installFocusOriginTracking();
   window.addEventListener("message", onWindowMessage);
   window.addEventListener("blur", onWindowBlur);
@@ -552,6 +596,7 @@ onMounted(() => {
 // 合い札・待ちの時計は、最初の描画の前（setup）で用意する（描画の後に作り直すと iframe が作り直される）。
 start();
 onBeforeUnmount(() => {
+  componentResize?.disconnect();
   window.removeEventListener("message", onWindowMessage);
   window.removeEventListener("blur", onWindowBlur);
   window.removeEventListener("focus", onWindowBlur);
@@ -626,6 +671,7 @@ defineExpose({ key: () => frameKey(props.info) });
 
 <template>
   <div
+    ref="wrap"
     class="display-frame-wrap"
     :data-display-phase="phase"
     :data-display-engaged="isScript ? (engagedRef ? '1' : '0') : undefined"
@@ -648,6 +694,9 @@ defineExpose({ key: () => frameKey(props.info) });
       :data-display-loads="loads"
       @load="onLoad"
     ></iframe>
+    <div v-for="c in permittedComponents" :key="`${gen}:${c.id}:${c.paneId}`" class="native-component" :style="componentStyle(c)" data-native-component>
+      <EmbeddedTerminal :pane-id="c.paneId" :style="terminalStyle(c)" @escape="componentEscape" />
+    </div>
     <div
       v-if="showCover"
       class="display-frame-cover"
@@ -702,6 +751,7 @@ defineExpose({ key: () => frameKey(props.info) });
   border: 0;
   background: var(--soda-bg, #1e1f29);
 }
+.native-component { position: absolute; overflow: hidden; }
 /* 覆い: 操作を始める前の枠の上。ポインタのイベントは受けるが、枠の中へは届かない（アプリの DOM）。 */
 .display-frame-cover {
   position: absolute;
