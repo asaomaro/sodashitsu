@@ -25,7 +25,7 @@ const candidates = computed(() => [
     ext: { key: BUILTIN_WORKSPACE_KEY, id: "標準", scope: "builtin", state: "running" },
     def: {
       ...def,
-      requiresProject: def.id !== "statusline",
+      requiresProject: true,
       placements: [...def.placements] as TabViewInstance["placement"][],
     },
   })),

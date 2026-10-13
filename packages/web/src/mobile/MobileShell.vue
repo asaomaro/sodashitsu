@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaneStatusline from "../components/PaneStatusline.vue";
 import { useMachinesStore } from "../store/machines.js";
 import ScheduleView from "../schedule/ScheduleView.vue";
 import { pluginMobileDisplay } from "../display/pluginDisplay.js";
@@ -244,6 +245,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
         <PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" mobile />
       </div>
     </main>
+    <PaneStatusline v-if="currentPaneId && !appActive" :pane-id="currentPaneId" />
     <ExtraKeys v-if="showKeyboard && !appActive" />
     <PanePicker v-if="showPicker" @close="showPicker = false" />
     <MobileDisplaySheet

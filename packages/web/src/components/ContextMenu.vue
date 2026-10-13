@@ -359,7 +359,7 @@ const items = computed<MenuItem[]>(() => {
       ...(configuredAgentActions(settings.agentActionSettings, settings.agentHeaderActions, true).includes("fork") ? forkItem(target.paneId, true) : []),
       // そのセッションの利用状況（20261010-agent-usage PR4。エージェントの居る pane だけ。クラシック・モダンとも）。
       ...(pane?.agent
-        ? [{ label: "利用状況…", run: () => actions.showPaneInfo(target.paneId) }]
+        ? [{ label: "Statuslineの設定…", run: () => view.openDialogWithContext({ kind: "statuslineSettings" }) }, { label: "利用状況…", run: () => actions.showPaneInfo(target.paneId) }]
         : []),
       // 表示の面（パネル・帯）があるときだけ（20261007-soda-extensions）。
       ...(displays.hasAny(target.paneId)

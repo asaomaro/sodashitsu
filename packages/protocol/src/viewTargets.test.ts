@@ -19,7 +19,7 @@ it("information targets are independent of placement, validated and backwards co
         .success,
     ).toBe(false);
   for (const v of BUILTIN_VIEWS) {
-    expect(viewSupportsTarget(v, "pane")).toBe(v.id === "statusline");
+    expect(viewSupportsTarget(v, "pane")).toBe(false);
     expect(viewSupportsTarget(v, "tab")).toBe(true);
   }
 });

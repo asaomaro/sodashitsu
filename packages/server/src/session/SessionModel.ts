@@ -1478,14 +1478,17 @@ export class SessionModel {
     this.createdRank.set(workspace.id, ++this.createdCounter);
     this.layout = null; // 復元した直後は仮の状態（`layout` の復元は T9。確定は `confirmLayout`）
     for (const tabData of data.tabs) {
+      const legacyStatuslines = (tabData.views ?? []).filter((v) => v.extensionKey === "builtin:workspace" && v.viewId === "statusline");
+      const views = (tabData.views ?? []).filter((v) => !legacyStatuslines.includes(v));
+      const unusedAnchors = new Set(legacyStatuslines.filter((v) => v.target === "tab" && !(tabData.plugin && v.paneId === tabData.displayPaneId) && !views.some((other) => other.paneId === v.paneId)).map((v) => v.paneId));
       const tab: Tab = {
         id: tabData.id,
         workspaceId: workspace.id,
         label: tabData.label,
         ...(tabData.plugin ? { plugin: tabData.plugin } : {}),
         ...(tabData.perspective ? { perspective: tabData.perspective } : {}),
-        ...(tabData.displayPaneId ? { displayPaneId: tabData.displayPaneId } : {}),
-        ...(tabData.views ? { views: tabData.views } : {}),
+        ...(tabData.displayPaneId && !unusedAnchors.has(tabData.displayPaneId) ? { displayPaneId: tabData.displayPaneId } : {}),
+        ...(tabData.views ? { views } : {}),
         layout: tabData.layout,
         focusedPaneId: tabData.focusedPaneId,
         zoomedPaneId: tabData.zoomedPaneId,
@@ -1493,6 +1496,7 @@ export class SessionModel {
       };
       this.tabs.set(tab.id, tab);
       for (const paneData of tabData.panes) {
+        if (paneData.virtual && unusedAnchors.has(paneData.id)) continue;
         const pane = this.makePane(paneData.id, tab.id, {
           label: paneData.label,
           cwd: paneData.cwd,

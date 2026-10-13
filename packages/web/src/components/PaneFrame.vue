@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PaneStatusline from "./PaneStatusline.vue";
 import { pluginMobileDisplay } from "../display/pluginDisplay.js";
 import { useExtensionsStore } from "../store/extensions.js";
 import { configuredAgentActions, headerActionsFor, type AgentHeaderAction } from "@sodashitsu/protocol";
@@ -792,6 +793,7 @@ function onKeydown(ev: KeyboardEvent): void {
           >
             <slot />
           </div>
+          <PaneStatusline v-if="!presentationOnly && session?.panes.get(paneId)?.agent && !session?.panes.get(paneId)?.virtual && settings?.statuslineSettings.enabled" :pane-id="paneId" />
           <!-- 浮いた窓の層（端末の領域の箱の中だけ。`.pane-frame-main` の兄弟なので、操作中に端末を薄くする `opacity` が窓に掛からない）。
                `v-for` は出た順のまま（並べ替えない＝枠〔iframe〕を動かさない）。重なりは `z-index`。 -->
           <div
@@ -1179,6 +1181,7 @@ function onKeydown(ev: KeyboardEvent): void {
 }
 /* 端末の領域（20261008-display-layout）。面の有無・置き場所に依らず、いつもある（葉の DOM の位置を変えない）。 */
 .pane-frame-center {
+  flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;

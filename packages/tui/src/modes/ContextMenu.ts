@@ -96,6 +96,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
       ...(pane?.agent
         ? [
             ...(actions.agentActionsFor(target.paneId, true).includes("fork") ? [{ label: "エージェントを fork…", run: () => actions.openAgentFork(target.paneId) }] : []),
+            { label: "Statuslineの設定…", run: () => deps.ui.openDialogWithContext({ kind: "statuslineSettings" }) },
             { label: "利用状況…", run: () => actions.showUsageOf(target.paneId) },
           ]
         : []),

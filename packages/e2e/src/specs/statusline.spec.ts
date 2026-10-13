@@ -1,50 +1,22 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { focusTerminal, typeLine } from "../support/keys.js";
 import { expect, test } from "../support/fixtures.js";
-test("statusline follows pane focus and closing it removes the saved view", async ({
-  page,
-  appServer,
-}) => {
-  const client = await appServer.openClient();
-  const pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
-  await client.request("pane.rename", { paneId: pane.id, label: "StatusAlpha" });
-  const split = await client.request("pane.split", { paneId: pane.id, direction: "right" });
-  await client.request("pane.rename", { paneId: split.pane.id, label: "StatusBeta" });
-  await client.request("pane.focus", { paneId: pane.id });
-  await client.request("tab.add_view", {
-    tabId: pane.tabId,
-    extensionKey: "builtin:workspace",
-    viewId: "statusline",
-    target: "tab",
-    placement: "band-bottom",
-  });
-  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-  const bands = page.locator(".pane-bands");
-  const body = page.frameLocator(".pane-bands iframe").locator("body");
-  await expect(body).toContainText("StatusAlpha");
-  await client.request("pane.focus", { paneId: split.pane.id });
-  await expect(body).toContainText("StatusBeta");
-  await page.screenshot({ path: "/tmp/status-native-statusline-web.png" });
-  await expect(page.locator(".tab-view-instance")).toHaveCount(0);
-  await page.locator("[data-pane-band-close]").click();
-  await expect(bands).toHaveCount(0);
-  const check = await appServer.openClient();
-  const state = check.helloSnapshot()!;
-  expect(state.tabs.find((t) => t.id === pane.tabId)?.views ?? []).toHaveLength(0);
-  check.close();
-  client.close();
-});
 test("band heights resize at the inner boundary and persist after reload", async ({
   page,
   appServer,
 }) => {
   const client = await appServer.openClient(),
     pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
+  await client.request("workspace.set_project_folder", {
+    workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
+    path: appServer.stateDir,
+  });
   await client.request("tab.add_view", {
     tabId: pane.tabId,
     extensionKey: "builtin:workspace",
-    viewId: "statusline",
+    viewId: "files",
     target: "tab",
     placement: "band-bottom",
   });
@@ -73,10 +45,14 @@ test("band heights resize at the inner boundary and persist after reload", async
 test("band grip moves a tab view into a visible floating window", async ({ page, appServer }) => {
   const client = await appServer.openClient(),
     pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
+  await client.request("workspace.set_project_folder", {
+    workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
+    path: appServer.stateDir,
+  });
   await client.request("tab.add_view", {
     tabId: pane.tabId,
     extensionKey: "builtin:workspace",
-    viewId: "statusline",
+    viewId: "files",
     target: "tab",
     placement: "band-top",
   });
@@ -97,16 +73,17 @@ test("band grip moves a tab view into a visible floating window", async ({ page,
   await expect(page.locator(".band-grip")).toHaveCount(0);
   client.close();
 });
-test("pane menu and band menu/fold/close buttons work and statusline segments have distinct colors", async ({
-  page,
-  appServer,
-}) => {
+test("pane menu and band menu/fold/close buttons work", async ({ page, appServer }) => {
   const client = await appServer.openClient(),
     pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
+  await client.request("workspace.set_project_folder", {
+    workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
+    path: appServer.stateDir,
+  });
   await client.request("tab.add_view", {
     tabId: pane.tabId,
     extensionKey: "builtin:workspace",
-    viewId: "statusline",
+    viewId: "files",
     target: "tab",
     placement: "band-bottom",
   });
@@ -117,12 +94,6 @@ test("pane menu and band menu/fold/close buttons work and statusline segments ha
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(page.locator(".pane-band-actions > button")).toHaveCount(3);
-  const frame = page.frameLocator(".pane-band iframe"),
-    name = frame.locator('[data-soda-color="name"]').first(),
-    muted = frame.locator('[data-soda-color="muted"]').first();
-  await expect(name).toBeVisible();
-  const nameColor = await name.evaluate((e) => getComputedStyle(e).color);
-  expect(await muted.evaluate((e) => getComputedStyle(e).color)).not.toBe(nameColor);
   await page.locator(".pane-band [data-display-menu-button]").click();
   await expect(page.getByRole("menu")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -169,6 +140,10 @@ test("collapsed views use an independent tray beside an open band and title visi
     workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
     path: appServer.stateDir,
   });
+  await client.request("workspace.set_project_folder", {
+    workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
+    path: appServer.stateDir,
+  });
   await client.request("tab.add_view", {
     tabId: pane.tabId,
     extensionKey: "builtin:workspace",
@@ -179,7 +154,7 @@ test("collapsed views use an independent tray beside an open band and title visi
   await client.request("tab.add_view", {
     tabId: pane.tabId,
     extensionKey: "builtin:workspace",
-    viewId: "statusline",
+    viewId: "files",
     target: "tab",
     placement: "band-bottom",
   });
@@ -216,15 +191,15 @@ test("collapsed views use an independent tray beside an open band and title visi
   expect(trayBox!.y + trayBox!.height).toBeLessThanOrEqual(bandBox!.y);
   const grip = band.locator("[data-display-grip]");
   await expect(grip.locator("[data-view-drag-icon] circle")).toHaveCount(6);
-  await expect(grip).toContainText("Statusline");
+  await expect(grip).toContainText("ファイルツリー");
   await client.request("prefs.set", { patch: { viewTitleVisible: false } });
-  await expect(grip).not.toContainText("Statusline");
+  await expect(grip).not.toContainText("ファイルツリー");
   await expect(grip.locator("[data-view-drag-icon]")).toBeVisible();
   await expect(band.locator("[data-display-menu-button]")).toBeVisible();
   await page.screenshot({ path: "/tmp/band-tray-separated.png" });
   await client.request("prefs.set", { patch: { viewTitleVisible: true } });
   await expect(grip.locator("[data-view-drag-icon] circle")).toHaveCount(6);
-  await expect(grip).toContainText("Statusline");
+  await expect(grip).toContainText("ファイルツリー");
   client.close();
 });
 
@@ -348,128 +323,108 @@ test("new floating view opens centrally without a tray click and reload preserve
   }
 });
 
-for (const placement of ["band-top", "band-bottom"] as const) {
-  test(`statusline band centers text without vertical overflow at compact and narrow sizes (${placement})`, async ({
-    page,
-    appServer,
-  }) => {
-    const client = await appServer.openClient();
-    const pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
-    await client.request("pane.rename", { paneId: pane.id, label: "CompactStatusline" });
-    await client.request("tab.add_view", {
-      tabId: pane.tabId,
-      extensionKey: "builtin:workspace",
-      viewId: "statusline",
-      target: "tab",
-      placement,
-    });
-    await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-    const text = page.frameLocator(".pane-bands iframe").locator("[data-soda-statusline]");
-    await expect(text).toContainText("CompactStatusline");
-    const assertLayout = async (hasGrip = true) => {
-      await expect
-        .poll(() =>
-          text.evaluate((el) => ({
-            overflow: document.documentElement.scrollHeight - document.documentElement.clientHeight,
-            centered: Math.abs(
-              el.getBoundingClientRect().top +
-                el.getBoundingClientRect().height / 2 -
-                Math.min(innerHeight, 24) / 2,
-            ),
-          })),
-        )
-        .toEqual({ overflow: 0, centered: 0 });
-      if (hasGrip) {
-        const grip = await page.locator(".band-grip").boundingBox();
-        const frame = await page.locator(".pane-bands iframe").boundingBox();
-        expect(
-          Math.abs(grip!.y + grip!.height / 2 - frame!.y - frame!.height / 2),
-        ).toBeLessThanOrEqual(1);
-      }
-    };
-    await assertLayout();
-    const handle = await page.locator("[data-band-resize]").boundingBox();
-    await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + 2);
-    await page.mouse.down();
-    await page.mouse.move(
-      handle!.x + handle!.width / 2,
-      handle!.y + (placement === "band-top" ? 60 : -60),
-      { steps: 5 },
-    );
-    await page.mouse.up();
-    await expect
-      .poll(async () => (await page.locator(".pane-band").boundingBox())!.height)
-      .toBeGreaterThan(60);
-    const gripTop = await page.locator(".band-grip").boundingBox();
-    const bandTop = await page.locator(".pane-band").boundingBox();
-    expect(Math.abs(gripTop!.y - bandTop!.y)).toBeLessThanOrEqual(1);
-    await expect
-      .poll(() =>
-        text.evaluate((el) =>
-          Math.abs(el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2 - 12),
-        ),
-      )
-      .toBe(0);
-    await page.setViewportSize({ width: 720, height: 600 });
-    await assertLayout(false);
-    await page.screenshot({ path: "/tmp/statusline-band-compact.png" });
-    client.close();
-  });
-}
-
-test("statusline menu opens shared display settings, updates the line and persists after reload", async ({
+test("native statusline settings, order, width bounds and mobile layout persist", async ({
   page,
   appServer,
 }) => {
   const client = await appServer.openClient(),
     pane = client.helloSnapshot()!.panes.find((p) => !p.virtual)!;
   await client.request("pane.rename", { paneId: pane.id, label: "ConfiguredPane" });
-  await client.request("tab.add_view", {
-    tabId: pane.tabId,
-    extensionKey: "builtin:workspace",
-    viewId: "statusline",
-    target: "tab",
-    placement: "band-bottom",
-  });
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-  const body = page.frameLocator(".pane-band iframe").locator("body");
-  await expect(body).toContainText("ConfiguredPane");
-  for (const button of await page.locator(".toast-sticky .toast-close").all()) await button.click();
-  await page.locator(".pane-band [data-display-menu-button]").click();
-  await page.getByRole("menuitem", { name: "Statuslineの設定…", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Statuslineの設定", exact: true });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).uncheck();
-  await expect(body).not.toContainText("ConfiguredPane");
-  await dialog.getByRole("checkbox", { name: "コンテキスト", exact: true }).uncheck();
-  await expect(body).not.toContainText("Context");
-  await dialog.getByRole("checkbox", { name: "コンテキストのグラフ", exact: true }).uncheck();
-  await dialog.getByLabel("週制限のグラフパターン", { exact: true }).selectOption("dots");
-  await expect(dialog.locator("output").nth(2)).toContainText("●");
-  await expect
-    .poll(async () => (await client.request("prefs.get", {})).prefs.statuslineSettings)
-    .toMatchObject({
-      fields: { pane: false, context: false },
-      graphs: { context: { visible: false }, weekly: { pattern: "dots" } },
-    });
-  await page.keyboard.press("Escape");
-  await expect(dialog).not.toBeVisible();
-  await page.reload();
-  await expect(body).not.toContainText("ConfiguredPane");
-  await page.locator(".pane-band [data-display-menu-button]").click();
-  await page.getByRole("menuitem", { name: "Statuslineの設定…", exact: true }).click();
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("checkbox", { name: "ペイン名", exact: true })).not.toBeChecked();
-  await expect(dialog.getByLabel("週制限のグラフパターン", { exact: true })).toHaveValue("dots");
-  await page.setViewportSize({ width: 390, height: 720 });
-  const bounds = await dialog.boundingBox();
-  expect(bounds!.x).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
-  const saved = (await client.request("prefs.get", {})).prefs.statuslineSettings!;
-  saved.fields.model = false;
-  await client.request("prefs.set", { patch: { statuslineSettings: saved } });
-  await expect(dialog.getByRole("checkbox", { name: "モデル", exact: true })).not.toBeChecked();
-  await expect(dialog.getByLabel("週制限のグラフパターン", { exact: true })).toHaveValue("dots");
-  await page.screenshot({ path: "/tmp/statusline-settings-mobile.png" });
-  client.close();
+  await expect(page.locator("[data-pane-statusline]")).not.toBeVisible();
+  const root = await mkdtemp(join(tmpdir(), "soda-native-statusline-"));
+  const script = join(root, "fake-claude.sh"),
+    marker = `ready-${Date.now()}`;
+  await writeFile(script, `echo ${marker}\nsleep 600\n`);
+  const detected = client.waitForEvent(
+    "pane.agent_status_changed",
+    (e) => e.data.paneId === pane.id && e.data.agent !== null,
+    25000,
+  );
+  await focusTerminal(page);
+  await typeLine(page, `bash -c 'exec -a claude bash ${script}'`);
+  await detected;
+  try {
+    const bar = page.locator("[data-pane-statusline]");
+    await expect(bar).toBeVisible();
+    await expect(bar).toContainText("ConfiguredPane");
+    const textBox = (await page.locator(".pane-layout-leaf").boundingBox())!,
+      barBox = (await bar.boundingBox())!;
+    expect(textBox.y + textBox.height).toBeLessThanOrEqual(barBox.y + 1);
+    expect(barBox.height).toBeLessThanOrEqual(24);
+    await expect(page.locator(".pane-bands")).toHaveCount(0);
+    await page.screenshot({ path: "/tmp/native-statusline-desktop.png" });
+    await bar.getByRole("button", { name: "Statuslineの設定" }).click();
+    const dialog = page.getByRole("dialog", { name: "Statuslineの設定", exact: true });
+    await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).uncheck();
+    await expect(bar).not.toContainText("ConfiguredPane");
+    await dialog.getByLabel("トークン数の表記", { exact: true }).selectOption("k");
+    await dialog.getByRole("button", { name: "エージェント種類を上へ", exact: true }).click();
+    await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).check();
+    await dialog.getByLabel("週制限のグラフパターン", { exact: true }).selectOption("dots");
+    await expect
+      .poll(async () => (await client.request("prefs.get", {})).prefs.statuslineSettings)
+      .toMatchObject({
+        tokenFormat: "k",
+        order: [
+          "agent",
+          "pane",
+          "state",
+          "model",
+          "context",
+          "tokens",
+          "cost",
+          "fiveHour",
+          "weekly",
+          "otherLimits",
+          "input",
+          "output",
+          "cacheRead",
+          "cacheWrite",
+          "reasoning",
+          "contextTokens",
+          "premiumRequests",
+          "session",
+          "cwd",
+          "subagents",
+        ],
+      });
+    await page.keyboard.press("Escape");
+    await expect(bar.locator(".statusline-text")).toHaveText(/^claude · ConfiguredPane/);
+    const grip = bar.getByRole("separator"),
+      before = (await bar.locator(".statusline-width").boundingBox())!;
+    const resize = (await grip.boundingBox())!;
+    await page.mouse.move(resize.x + resize.width / 2, resize.y + resize.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(resize.x - 70, resize.y + 2, { steps: 5 });
+    await expect
+      .poll(async () => (await bar.locator(".statusline-width").boundingBox())!.width)
+      .toBeLessThan(before.width - 30);
+    await page.mouse.up();
+    await page.reload();
+    await expect(bar).toBeVisible();
+    const smaller = (await bar.locator(".statusline-width").boundingBox())!;
+    expect(smaller.width).toBeLessThan(before.width);
+    const nextGrip = (await grip.boundingBox())!;
+    await page.mouse.move(nextGrip.x + 3, nextGrip.y + 3);
+    await page.mouse.down();
+    await page.mouse.move(nextGrip.x + 1000, nextGrip.y + 3, { steps: 5 });
+    await page.mouse.up();
+    const expanded = (await bar.locator(".statusline-width").boundingBox())!;
+    expect(expanded.width).toBeLessThanOrEqual(before.width + 1);
+    await page.setViewportSize({ width: 390, height: 720 });
+    await expect(bar).toBeVisible();
+    await expect.poll(async () => (await bar.boundingBox())!.width).toBeLessThanOrEqual(390);
+    await page.screenshot({ path: "/tmp/native-statusline-mobile-visible.png" });
+    await bar.getByRole("button", { name: "Statuslineの設定" }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("トークン数の表記", { exact: true })).toHaveValue("k");
+    await dialog.getByRole("checkbox", { name: "ペイン最下部に表示", exact: true }).uncheck();
+    await page.keyboard.press("Escape");
+    await expect(bar).not.toBeVisible();
+    await page.screenshot({ path: "/tmp/native-statusline-mobile.png" });
+  } finally {
+    client.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });

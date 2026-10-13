@@ -25,7 +25,7 @@ import {
 } from "./overlay.js";
 import { paletteColor } from "../render/color.js";
 import type { Rect } from "../render/Screen.js";
-const WORKSPACE_VIEWS = BUILTIN_TERMINAL_VIEWS.filter((v) => v.id !== "statusline");
+const WORKSPACE_VIEWS = BUILTIN_TERMINAL_VIEWS;
 export class WorkspaceDialog implements Overlay {
   private context: { workspaceId: string | undefined; folder: string | undefined };
   private mode: "picker" | "placement" | "files" | "file" | "git-graph" | "git-diff" = "picker";

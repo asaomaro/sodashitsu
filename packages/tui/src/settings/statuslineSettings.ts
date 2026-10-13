@@ -23,16 +23,18 @@ export function statuslineSettingsSections(
       id: "fields",
       label: "表示する情報",
       items: () =>
-        STATUSLINE_FIELDS.map((f) => ({
-          label: f.label,
-          toggle: true,
-          value: read().fields[f.id] ? "表示" : "非表示",
-          note: "すべてのstatuslineに反映し、Web版・端末版で共有します。",
-          activate: () =>
-            update((s) => {
-              s.fields[f.id] = !s.fields[f.id];
-            }),
-        })),
+        read()
+          .order.map((id) => STATUSLINE_FIELDS.find((f) => f.id === id)!)
+          .map((f) => ({
+            label: f.label,
+            toggle: true,
+            value: read().fields[f.id] ? "表示" : "非表示",
+            note: "すべてのstatuslineに反映し、Web版・端末版で共有します。",
+            activate: () =>
+              update((s) => {
+                s.fields[f.id] = !s.fields[f.id];
+              }),
+          })),
     },
     {
       id: "graphs",
@@ -70,6 +72,56 @@ export function statuslineSettingsSections(
             }),
           },
         ]),
+    },
+    {
+      id: "general",
+      label: "全体・順序",
+      items: () => [
+        {
+          label: "ペイン最下部に表示",
+          toggle: true,
+          value: read().enabled ? "表示" : "非表示",
+          activate: () =>
+            update((s) => {
+              s.enabled = !s.enabled;
+            }),
+        },
+        {
+          label: "1000をk表記",
+          toggle: true,
+          value: read().tokenFormat === "k" ? "k" : "実数",
+          activate: () =>
+            update((s) => {
+              s.tokenFormat = s.tokenFormat === "k" ? "exact" : "k";
+            }),
+        },
+        {
+          label: "表示桁数を自動に戻す",
+          value: read().columns === null ? "自動" : String(read().columns),
+          activate: () =>
+            update((s) => {
+              s.columns = null;
+            }),
+        },
+        ...read().order.map((id, index) => ({
+          label: `${index + 1}. ${STATUSLINE_FIELDS.find((f) => f.id === id)!.label}の位置`,
+          activate: () => ({
+            kind: "choose" as const,
+            title: "移動先の表示位置",
+            options: read().order.map((other, i) => ({
+              label: `${i + 1}. ${STATUSLINE_FIELDS.find((f) => f.id === other)!.label}`,
+              current: i === index,
+            })),
+            pick: (to: number) =>
+              update((s) => {
+                const from = s.order.indexOf(id);
+                if (to < 0 || to >= s.order.length) return;
+                s.order.splice(from, 1);
+                s.order.splice(to, 0, id);
+              }),
+          }),
+        })),
+      ],
     },
   ];
 }
