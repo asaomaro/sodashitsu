@@ -39,8 +39,8 @@ export const STATUSLINE_GRAPHS = [
 export type StatuslineGraph = (typeof STATUSLINE_GRAPHS)[number]["id"];
 export interface StatuslineSettings {
   enabled: boolean;
-  /** null follows the available terminal width. */
-  columns: number | null;
+  /** Preferred visible rows, capped by wrapped content and available terminal height. */
+  rows: number;
   tokenFormat: "exact" | "k";
   order: StatuslineField[];
   fields: Record<StatuslineField, boolean>;
@@ -58,10 +58,10 @@ export function loadStatuslineSettings(raw: unknown): StatuslineSettings {
     : [];
   return {
     enabled: typeof input.enabled === "boolean" ? input.enabled : true,
-    columns:
-      typeof input.columns === "number" && Number.isFinite(input.columns)
-        ? Math.max(8, Math.min(4096, Math.round(input.columns)))
-        : null,
+    rows:
+      typeof input.rows === "number" && Number.isFinite(input.rows)
+        ? Math.max(1, Math.min(4096, Math.round(input.rows)))
+        : 1,
     tokenFormat: input.tokenFormat === "k" ? "k" : "exact",
     order: [...new Set([...requested, ...ids])],
     fields: Object.fromEntries(

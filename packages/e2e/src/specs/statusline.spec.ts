@@ -323,7 +323,7 @@ test("new floating view opens centrally without a tray click and reload preserve
   }
 });
 
-test("native statusline settings, order, width bounds and mobile layout persist", async ({
+test("native statusline settings, order, row bounds and mobile layout persist", async ({
   page,
   appServer,
 }) => {
@@ -391,27 +391,52 @@ test("native statusline settings, order, width bounds and mobile layout persist"
       });
     await page.keyboard.press("Escape");
     await expect(bar.locator(".statusline-text")).toHaveText(/^claude · ConfiguredPane/);
+    await client.request("pane.rename", {
+      paneId: pane.id,
+      label: "ConfiguredPane " + "制作の進捗を確認 ".repeat(30),
+    });
+    await expect(bar).toContainText("制作の進捗を確認");
     const grip = bar.getByRole("separator"),
-      before = (await bar.locator(".statusline-width").boundingBox())!;
+      before = (await bar.boundingBox())!;
     const resize = (await grip.boundingBox())!;
-    await page.mouse.move(resize.x + resize.width / 2, resize.y + resize.height / 2);
+    await page.mouse.move(resize.x + resize.width / 2, resize.y + 2);
     await page.mouse.down();
-    await page.mouse.move(resize.x - 70, resize.y + 2, { steps: 5 });
+    await page.mouse.move(resize.x + resize.width / 2, resize.y - 44, { steps: 5 });
     await expect
-      .poll(async () => (await bar.locator(".statusline-width").boundingBox())!.width)
-      .toBeLessThan(before.width - 30);
+      .poll(async () => (await bar.boundingBox())!.height)
+      .toBeGreaterThan(before.height + 20);
     await page.mouse.up();
     await page.reload();
     await expect(bar).toBeVisible();
-    const smaller = (await bar.locator(".statusline-width").boundingBox())!;
-    expect(smaller.width).toBeLessThan(before.width);
+    const savedHeight = (await bar.boundingBox())!.height;
+    expect(savedHeight).toBeGreaterThan(before.height);
     const nextGrip = (await grip.boundingBox())!;
-    await page.mouse.move(nextGrip.x + 3, nextGrip.y + 3);
+    await page.mouse.move(nextGrip.x + 20, nextGrip.y + 2);
     await page.mouse.down();
-    await page.mouse.move(nextGrip.x + 1000, nextGrip.y + 3, { steps: 5 });
+    await page.mouse.move(nextGrip.x + 20, nextGrip.y - 1000, { steps: 5 });
     await page.mouse.up();
-    const expanded = (await bar.locator(".statusline-width").boundingBox())!;
-    expect(expanded.width).toBeLessThanOrEqual(before.width + 1);
+    const naturalRows = await bar
+      .locator(".statusline-text")
+      .evaluate((el) => Math.ceil(el.scrollHeight / 22));
+    await expect.poll(async () => (await bar.boundingBox())!.height).toBe(naturalRows * 22 + 2);
+    const parentHeight = await bar.evaluate((el) => el.parentElement!.clientHeight);
+    await page.setViewportSize({ width: 1280, height: 720 - parentHeight + 84 });
+    await expect
+      .poll(async () => (await page.locator(".pane-layout-leaf").boundingBox())!.height)
+      .toBeGreaterThanOrEqual(18);
+    await expect.poll(async () => (await bar.boundingBox())!.height).toBeLessThanOrEqual(66);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const grownGrip = (await grip.boundingBox())!;
+    await page.mouse.move(grownGrip.x + 20, grownGrip.y + 2);
+    await page.mouse.down();
+    await page.mouse.move(grownGrip.x + 20, grownGrip.y + 1000, { steps: 5 });
+    await expect.poll(async () => (await bar.boundingBox())!.height).toBe(24);
+    await page.mouse.up();
+    await expect
+      .poll(async () => (await client.request("prefs.get", {})).prefs.statuslineSettings?.rows)
+      .toBe(1);
+    await client.request("pane.rename", { paneId: pane.id, label: "ConfiguredPane" });
+    await expect.poll(async () => (await bar.boundingBox())!.height).toBe(24);
     await page.setViewportSize({ width: 390, height: 720 });
     await expect(bar).toBeVisible();
     await expect.poll(async () => (await bar.boundingBox())!.width).toBeLessThanOrEqual(390);
