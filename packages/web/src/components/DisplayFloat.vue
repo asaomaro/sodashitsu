@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isEmbeddedAppEscape } from "../term/embeddedKeys.js";
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { useResizeDrag } from "../composables/useResizeDrag.js";
@@ -242,6 +243,7 @@ function endKeys(commit: boolean, moveFocus: boolean): void {
   store.bumpLayoutRev();
 }
 function onRootKey(ev: KeyboardEvent): void {
+  if (ev.target instanceof Element && ev.target.closest("[data-embedded-terminal]") && ev.key === "Escape" && !isEmbeddedAppEscape(ev)) return;
   const mode = keyMode.value;
   if (mode === null) {
     if (ev.key === "Escape") {
@@ -285,6 +287,7 @@ function onWindowEscape(ev: KeyboardEvent): void {
   if (
     ev.key !== "Escape" ||
     ev.isComposing ||
+    (ev.target instanceof Element && ev.target.closest("[data-embedded-terminal]") !== null && !isEmbeddedAppEscape(ev)) ||
     ev.defaultPrevented ||
     view.modalOpen ||
     view.contextMenu ||

@@ -695,7 +695,9 @@ defineExpose({ key: () => frameKey(props.info) });
       @load="onLoad"
     ></iframe>
     <div v-for="c in permittedComponents" :key="`${gen}:${c.id}:${c.paneId}`" class="native-component" :style="componentStyle(c)" data-native-component>
-      <EmbeddedTerminal :pane-id="c.paneId" :style="terminalStyle(c)" @escape="componentEscape" />
+      <EmbeddedTerminal :pane-id="c.paneId" :interactive="c.interactive === true" :enabled="engagedRef"
+        :can-input="() => guard.engaged && phase === 'connected' && terminalComponentAllowed(info, c.paneId, session.panes, session.tabs)"
+        :style="terminalStyle(c)" @escape="componentEscape" />
     </div>
     <div
       v-if="showCover"

@@ -9,6 +9,7 @@ export interface ComponentRect {
 export interface TerminalComponent {
   id: string;
   paneId: string;
+  interactive?: boolean;
   rect: ComponentRect;
   clip: ComponentRect;
 }

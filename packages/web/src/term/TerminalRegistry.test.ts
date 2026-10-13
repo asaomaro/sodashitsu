@@ -41,6 +41,7 @@ class FakeWebglAddon implements WebglAddonLike {
 
 function makeRegistry(opts: {
   capacity: number;
+  componentInput?: (paneId: string, data: string) => void;
   now?: () => number;
   hasSizeAuthority?: (paneId: string) => boolean;
   getScrollbackLines?: () => number;
@@ -55,6 +56,7 @@ function makeRegistry(opts: {
   const mouseBridges: MouseBridge[] = [];
   const registry = new TerminalRegistry({
     capacity: opts.capacity,
+    ...(opts.componentInput ? { componentInput: opts.componentInput } : {}),
     conn,
     renderers,
     keys,
@@ -652,3 +654,18 @@ describe("independent plugin terminal mirrors", () => {
    expect(registry.get('background')).toBeDefined();
    off();registry.disposeAll();
  });
+
+it("embedded input addresses its pane directly, drops focus reports/disconnected/released input", () => {
+ const direct=vi.fn();
+ const {registry,conn}=makeRegistry({capacity:2,componentInput:direct});
+ const off=registry.attachMirror('agent',{onOutput:vi.fn(),onSnapshot:vi.fn(),onSizeChanged:vi.fn()},vi.fn());
+ registry.sendMirrorInput('agent','hello');
+ expect(direct).toHaveBeenCalledWith('agent','hello');
+ expect(conn.sentInput).toEqual([]);
+ registry.sendMirrorInput('agent','\x1b[I');
+ registry.sendMirrorInput('missing','bad');
+ registry.setInputEnabled(false);registry.sendMirrorInput('agent','lost');
+ registry.setInputEnabled(true);off();registry.sendMirrorInput('agent','stale');
+ expect(direct).toHaveBeenCalledOnce();
+ registry.disposeAll();
+});

@@ -5,6 +5,7 @@ import {
   enableScript,
   setScriptOk,
   engageBtn,
+  settleEngage,
 } from "../support/displayScript.js";
 
 test("native terminal embedded in a plugin: live output, own textarea, clipping, mobile and cleanup", async ({
@@ -113,5 +114,75 @@ test("a background terminal in another tab is visible, survives reconnect, and i
   await reconnected.request("pane.close", { paneId: background.pane.id });
   await expect(terminal).toHaveCount(0);
   reconnected.close();
+  client.close();
+});
+
+test("embedded input terminal sends to its background pane in Web and mobile, after user engagement", async ({
+  page,
+  appServer,
+}) => {
+  const { paneId, client, input } = await openScriptBrowser(page, appServer);
+  const background = await client.request("tab.create", {
+    workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
+    label: "Input target",
+  });
+  await setScriptOk(
+    appServer,
+    paneId,
+    "input-terminal",
+    `<div id="terminal" style="height:220px"></div><div id="output" style="height:160px"></div><script>soda.mount('terminal',document.getElementById('terminal'),{paneId:'${background.pane.id}',interactive:true});soda.mount('terminal',document.getElementById('output'),{paneId:'${background.pane.id}'});</script>`,
+  );
+  const terminal = page.locator('[data-embedded-terminal][data-interactive="1"]');
+  const output = page.locator('[data-embedded-terminal][data-interactive="0"]');
+  const textarea = terminal.locator(".xterm-helper-textarea");
+  await expect(terminal).toHaveAttribute("data-interactive", "1");
+  await expect(textarea).toHaveAttribute("readonly", "");
+  await settleEngage(page);
+  await engageBtn(page).focus();
+  await page.keyboard.press("Enter");
+  await expect(textarea).not.toHaveAttribute("readonly", "");
+  await textarea.focus();
+  await textarea.evaluate((el) => {
+    el.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    el.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", isComposing: true, bubbles: true }),
+    );
+    el.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+  });
+  await expect(page.locator('[data-display-phase][data-display-engaged="1"]')).toBeVisible();
+  await expect(textarea).not.toHaveAttribute("readonly", "");
+  await page.keyboard.type("printf 'INPUT_%s\\n' WEB");
+  await page.keyboard.press("Enter");
+  await expect(output.locator(".xterm-accessibility-tree")).toContainText("INPUT_WEB");
+  expect(
+    input()
+      .filter((x) => x.paneId === background.pane.id)
+      .map((x) => x.text)
+      .join(""),
+  ).toContain("WEB");
+  expect(
+    input()
+      .filter((x) => x.paneId === paneId)
+      .map((x) => x.text)
+      .join(""),
+  ).not.toContain("WEB");
+  await page.keyboard.press("Escape");
+  await expect(textarea).toHaveAttribute("readonly", "");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("[data-mobile-display-btn]").click();
+  await page.locator("[data-mobile-display-sheet] [data-display-engage]").click();
+  await terminal.locator(".xterm-helper-textarea").focus();
+  await page.keyboard.insertText("日本語");
+  await expect.poll(() => input().filter(x=>x.paneId===background.pane.id).map(x=>x.text).join('')).toContain("日本語");
+  await page.keyboard.press("Control+u");
+  await page.keyboard.type("printf 'INPUT_%s\\n' MOBILE");
+  await page.keyboard.press("Enter");
+  await expect(output.locator(".xterm-accessibility-tree")).toContainText("INPUT_MOBILE");
+  expect(
+    input()
+      .filter((x) => x.paneId === background.pane.id)
+      .map((x) => x.text)
+      .join(""),
+  ).toContain("日本語");
   client.close();
 });
