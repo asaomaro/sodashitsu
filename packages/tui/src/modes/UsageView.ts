@@ -255,7 +255,7 @@ export class UsageDashboard {
   render(grid: Grid, area: Rect, theme: ThemeColors): void {
     this.area = area;
     this.hits = [];
-    const c = dialogColors(theme);
+    const c = { ...dialogColors(theme), bg: theme.ground("--soda-menu-bg") };
     grid.fill(area, c.fg, c.bg);
     const put = (y: number, text: string, bg = c.bg) => {
       if (y < area.y + area.h)

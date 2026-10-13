@@ -309,7 +309,7 @@ export class ScheduleView {
     area = { ...area };
     this.rect = area;
     this.hits.clear();
-    const c = dialogColors(theme);
+    const c = { ...dialogColors(theme), bg: theme.ground("--soda-menu-bg") };
     grid.fill(area, c.fg, c.bg);
     const write = (row: number, text: string, active = false) =>
       grid.text(
