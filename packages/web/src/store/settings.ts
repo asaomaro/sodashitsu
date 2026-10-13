@@ -1,6 +1,8 @@
 import { loadStatuslineSettings, type StatuslineSettings } from "@sodashitsu/protocol";
 import {
   loadAgentHeaderActions,
+  loadAgentActionSettings,
+  type AgentActionSettings,
   loadSummarySettings,
   type AgentHeaderAction,
   type SummarySettings,
@@ -156,6 +158,11 @@ export function loadPaneOuterBorders(raw: unknown): boolean {
 
 export const useSettingsStore = defineStore("settings", () => {
   const initial = readPrefs();
+  const agentActionSettings = ref(loadAgentActionSettings(initial["agentActionSettings"], initial["agentHeaderActions"]));
+  function setAgentActionSettings(v: AgentActionSettings): void {
+    agentActionSettings.value = loadAgentActionSettings(v);
+    writePrefs({ agentActionSettings: agentActionSettings.value });
+  }
   const agentHeaderActions = ref(loadAgentHeaderActions(initial["agentHeaderActions"]));
   const statuslineSettings = ref(loadStatuslineSettings(initial["statuslineSettings"]));
   function setStatuslineSettings(v: StatuslineSettings) {
@@ -569,6 +576,7 @@ export const useSettingsStore = defineStore("settings", () => {
     const prefs = readPrefs();
     viewTitleVisible.value = prefs["viewTitleVisible"] !== false;
     agentHeaderActions.value = loadAgentHeaderActions(prefs["agentHeaderActions"]);
+    agentActionSettings.value = loadAgentActionSettings(prefs["agentActionSettings"], prefs["agentHeaderActions"]);
     summarySettings.value = loadSummarySettings(prefs["summarySettings"]);
     statuslineSettings.value = loadStatuslineSettings(prefs["statuslineSettings"]);
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
@@ -672,6 +680,8 @@ export const useSettingsStore = defineStore("settings", () => {
     agentHeaderActions,
     summarySettings,
     setAgentHeaderActions,
+    agentActionSettings,
+    setAgentActionSettings,
     setSummarySettings,
     statusSymbols,
     keyboardLockInFullscreen,

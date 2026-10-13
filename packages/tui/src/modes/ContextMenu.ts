@@ -1,5 +1,5 @@
 import { ScrollBar } from "./ScrollBar.js";
-import { AGENT_HEADER_ACTIONS, headerActionsFor, HEADER_ACTION_LABELS } from "@sodashitsu/protocol";
+import { HEADER_ACTION_LABELS } from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
 import type { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import type { SessionModel } from "../model/SessionModel.js";
@@ -44,7 +44,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   if (target.kind === "view") return deps.viewItems?.(target.viewId) ?? [];
   if (target.kind === "agent-tools")
     return actions
-      .agentActionsFor(target.paneId)
+      .agentActionsFor(target.paneId, true)
       .map((action) => ({
         label: HEADER_ACTION_LABELS[action] + (action === "usage" ? "（エージェント）" : ""),
         run: () => actions.agentPaneAction(target.paneId, action),
@@ -66,7 +66,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         ? [{ label: "焦点の pane と入れ替え", run: () => actions.swapWithFocused(target.paneId) }]
         : []),
 
-      ...headerActionsFor(pane?.agent?.kind ?? "", !!pane?.agentSession, AGENT_HEADER_ACTIONS)
+      ...actions.agentActionsFor(target.paneId, true)
         .filter((a) => a !== "fork")
         .map((action) => ({
           label: HEADER_ACTION_LABELS[action] + (action === "usage" ? "（エージェント）" : ""),
@@ -95,7 +95,7 @@ export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
         : []),
       ...(pane?.agent
         ? [
-            { label: "エージェントを fork…", run: () => actions.openAgentFork(target.paneId) },
+            ...(actions.agentActionsFor(target.paneId, true).includes("fork") ? [{ label: "エージェントを fork…", run: () => actions.openAgentFork(target.paneId) }] : []),
             { label: "利用状況…", run: () => actions.showUsageOf(target.paneId) },
           ]
         : []),

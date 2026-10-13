@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { pluginMobileDisplay } from "../display/pluginDisplay.js";
 import { useExtensionsStore } from "../store/extensions.js";
-import { headerActionsFor, type AgentHeaderAction } from "@sodashitsu/protocol";
+import { configuredAgentActions, headerActionsFor, type AgentHeaderAction } from "@sodashitsu/protocol";
 import { useConversationWindowStore } from "../store/conversationWindow.js";
 import ShortcutNumber from "./ShortcutNumber.vue";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -466,7 +466,7 @@ const hasAgent = computed(() => !!session?.panes.get(props.paneId)?.agent);
 const agentActions = computed(() => {
   const pane = session?.panes.get(props.paneId);
   return pane?.agent
-    ? headerActionsFor(pane.agent.kind, !!pane.agentSession, settings?.agentHeaderActions ?? [])
+    ? headerActionsFor(pane.agent.kind, !!pane.agentSession, configuredAgentActions(settings?.agentActionSettings, settings?.agentHeaderActions))
     : [];
 });
 const agentSlots = computed(() =>
@@ -476,6 +476,10 @@ const agentSlots = computed(() =>
 );
 const agentActionCount = computed(() => Math.min(agentActions.value.length, agentSlots.value));
 function onAgentAction(action: AgentHeaderAction): void {
+  if (action === "notes" || action === "todos") {
+    view?.openDialogWithContext({ kind: "sessionTools", paneId: props.paneId, mode: action });
+    return;
+  }
   if (action === "messages" || action === "summary") {
     conversationWindow?.open(props.paneId, action);
     return;

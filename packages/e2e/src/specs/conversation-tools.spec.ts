@@ -1,6 +1,7 @@
+import { connect } from "node:net";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, writeFile, chmod, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, appendFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { assertPaneResolvesFake } from "@sodashitsu/server";
@@ -280,4 +281,79 @@ test("配布プラグインをCLIから操作し、JSON結果と画面の内容�
       .getByRole("heading", { name: "コミットグラフ", exact: true }),
   ).toBeVisible();
   c.close();
+});
+
+test("セッションメモを複数保存・検索・再読込し、ToDoと3段階のメニュー設定を表示する", async ({page,appServer}) => {
+  const record=(status:string)=>JSON.stringify({message:{role:"assistant",content:[{type:"tool_use",name:"TodoWrite",input:{todos:[{content:"台本チェック",status},{content:"構成整理",status:"completed"},{content:"書き出し",status:"pending"}]}}]}})+"\n";
+  await appendFile(join(dir,"config","projects","test",sid+".jsonl"),record("in_progress"));
+  const client=await appServer.openClient(), pane=client.helloSnapshot()!.panes[0]!;
+  await client.request("prefs.set",{patch:{uiStyle:"modern",agentHeaderActions:["notes","todos"],agentActionSettings:{notes:"display",todos:"menu"}}});
+  await assertPaneResolvesFake({write:input=>client.sendInput(pane.id,input),name:"claude",fakeDir:join(dir,"bin"),scratchDir:dir});
+  await client.request("agent.start",{paneId:pane.id,name:"session-tools-test",kind:"claude",args:[]});
+  await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+  await expect(page.locator('.pane-frame').first()).toBeVisible();
+  for(const close of await page.locator('.toast-sticky .toast-close').all()) await close.click();
+  await page.getByRole("button",{name:"セッションのメモ",exact:true}).click();
+  const win=page.getByRole("dialog",{name:"セッションのメモ",exact:true});
+  await expect(win).toBeVisible();
+  await win.getByLabel("タイトル",{exact:true}).fill("設計の記録");
+  await win.getByLabel("グループ",{exact:true}).fill("仕様");
+  await win.getByLabel("タグ（カンマ区切り）").fill("確認, 設計");
+  await win.getByLabel("メモ",{exact:true}).fill("決定事項\n次回の検討");
+  // A hook can report the same session again during editing. Wait on the browser's received update.
+  const cdp=await page.context().newCDPSession(page); await cdp.send("Network.enable");
+  const reported=new Promise<void>(resolve=>cdp.on("Network.webSocketFrameReceived",event=>{
+    if(event.response.payloadData.includes('agentSession') && event.response.payloadData.includes('99999999-9999-4999-8999-999999999999'))resolve();
+  }));
+  await new Promise<void>((resolve,reject)=>{const socket=connect(join(appServer.stateDir,"agent-report.sock"),()=>socket.end(JSON.stringify({paneId:pane.id,kind:"claude",sessionId:sid})+"\n"));socket.on("error",reject);socket.on("close",()=>resolve());});
+  await client.request("pane.rename",{paneId:pane.id,label:"same-session-refresh"});
+  await reported; await cdp.detach();
+  await expect(win.getByLabel("メモ",{exact:true})).toBeEnabled();
+  await expect(win.getByLabel("メモ",{exact:true})).toHaveValue("決定事項\n次回の検討");
+
+  await win.getByRole("button",{name:"保存",exact:true}).click();
+  await expect(win.getByRole("button",{name:/設計の記録/})).toBeVisible();
+  await win.getByRole("button",{name:"新しいメモ"}).click();
+  await win.getByLabel("タイトル",{exact:true}).fill("レビュー結果");
+  await win.getByLabel("メモ",{exact:true}).fill("修正を確認");
+  await win.getByRole("button",{name:"保存",exact:true}).click();
+  await expect(win.getByRole("button",{name:/レビュー結果/})).toBeVisible();
+  await win.getByLabel("タグで絞り込み").selectOption("設計");
+  await expect(win.getByRole("button",{name:/レビュー結果/})).toHaveCount(0);
+  await win.getByRole("button",{name:/設計の記録/}).click();
+  await expect(win.getByLabel("メモ",{exact:true})).toHaveValue("決定事項\n次回の検討");
+  await page.screenshot({path:"/tmp/session-notes-desktop.png"});
+  await page.setViewportSize({width:390,height:844});
+  const bounds=await win.boundingBox(); expect(bounds!.x).toBeGreaterThanOrEqual(0); expect(bounds!.width).toBeLessThanOrEqual(390); expect(bounds!.height).toBeLessThanOrEqual(844);
+  await page.screenshot({path:"/tmp/session-notes-mobile.png"});
+  await page.setViewportSize({width:1280,height:720});
+  await win.getByRole("button",{name:"閉じる",exact:true}).click();
+  await page.reload();
+  await page.getByRole("button",{name:"セッションのメモ",exact:true}).click();
+  await expect(win.getByRole("button",{name:/設計の記録/})).toBeVisible();
+  await win.getByRole("button",{name:"閉じる",exact:true}).click();
+  // Menu-only remains callable, with no ToDo header button.
+  await expect(page.locator('[data-pane-action="todos"]')).toHaveCount(0);
+  await page.locator('.pane-frame').first().getByRole("button",{name:"このペインのメニュー",exact:true}).click();
+  await page.getByRole("menuitem",{name:"エージェントのToDo",exact:true}).click();
+  const todo=page.getByRole("dialog",{name:"エージェントのToDo",exact:true});
+  await expect(todo).toContainText("参照専用");
+  await expect(todo).toContainText("台本チェック");
+  await expect(todo).toContainText("完了 1 / 3");
+  await appendFile(join(dir,"config","projects","test",sid+".jsonl"),record("completed"));
+  await expect(todo).toContainText("完了 2 / 3");
+  await page.keyboard.press("Escape");
+  await client.request("prefs.set",{patch:{agentActionSettings:{notes:"hidden",todos:"hidden"}}});
+  await expect(page.locator('[data-pane-action="notes"]')).toHaveCount(0);
+  await page.locator('.pane-frame').first().getByRole("button",{name:"このペインのメニュー",exact:true}).click();
+  await expect(page.getByRole("menuitem",{name:"セッションのメモ",exact:true})).toHaveCount(0);
+  const read=await exec(process.execPath,[CLI,"agent","notes",pane.id,"--url",appServer.origin,"--token",appServer.token]);
+  expect(JSON.parse(read.stdout).notes).toHaveLength(2);
+  const ownEnv:NodeJS.ProcessEnv={...process.env,SODA_PANE_ID:pane.id,SODA_SERVER_URL:appServer.origin,SODA_PANE_SOCKET:join(appServer.stateDir,"pane.sock")};
+  delete ownEnv.SODACTL_URL; delete ownEnv.SODACTL_TOKEN;
+  const own=await exec(process.execPath,[CLI,"agent","notes"],{env:ownEnv});
+  expect(JSON.parse(own.stdout).notes).toHaveLength(2);
+  const ownTasks=await exec(process.execPath,[CLI,"agent","todos"],{env:ownEnv});
+  expect(JSON.parse(ownTasks.stdout).items.filter((task:{status:string})=>task.status==="completed")).toHaveLength(2);
+  client.close();
 });

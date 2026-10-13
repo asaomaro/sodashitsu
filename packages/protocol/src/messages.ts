@@ -1,3 +1,5 @@
+import { SessionToolsParams, SessionNoteSaveParams, SessionNoteDeleteParams, type SessionNotes, type AgentTodos } from "./sessionTools.js";
+import type { AgentActionSettings } from "./conversation.js";
 import {
   ScheduleSaveParams,
   ScheduleIdParams,
@@ -971,6 +973,7 @@ export interface SharedPrefs {
   uiStyle?: "classic" | "modern";
   notificationStates?: SharedNotice[];
   agentHeaderActions?: AgentHeaderAction[];
+  agentActionSettings?: Partial<AgentActionSettings>;
   summarySettings?: SummarySettings;
   statuslineSettings?: import("./statusline.js").StatuslineSettings;
   statusSymbols?: boolean;
@@ -1561,6 +1564,10 @@ export const METHOD_SCHEMAS = {
   }),
   "plugin.operations": PluginOperationsParams,
   "plugin.call": PluginCallParams,
+  "agent.notes": SessionToolsParams,
+  "agent.note_save": SessionNoteSaveParams,
+  "agent.note_delete": SessionNoteDeleteParams,
+  "agent.todos": SessionToolsParams,
   "agent.conversation": AgentConversationParams,
   "agent.sessions": AgentSessionsParams,
   "agent.resume": AgentResumeParams,
@@ -1710,6 +1717,10 @@ export interface MethodResultMap {
   "plugin.register": {};
   "plugin.operations": PluginOperationsResult;
   "plugin.call": { result: unknown };
+  "agent.notes": SessionNotes;
+  "agent.note_save": SessionNotes;
+  "agent.note_delete": SessionNotes;
+  "agent.todos": AgentTodos;
   "agent.conversation": ConversationPage;
   "agent.sessions": { sessions: PastAgentSession[]; partial: boolean };
   "agent.resume": Record<string, never>;

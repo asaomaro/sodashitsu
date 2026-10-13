@@ -1,7 +1,7 @@
 import {
   AGENT_HEADER_ACTIONS,
   HEADER_ACTION_LABELS,
-  loadAgentHeaderActions,
+  loadAgentActionSettings,
   loadSummarySettings,
   SummarySettingsSchema,
 } from "@sodashitsu/protocol";
@@ -909,7 +909,7 @@ function agentToolsSection(env: SettingsEnv): SettingsSection {
     id: "agent-tools",
     label: "エージェント操作・要約",
     items: () => {
-      const enabled = loadAgentHeaderActions(env.prefs.shared.agentHeaderActions),
+      const visibility = loadAgentActionSettings(env.prefs.shared.agentActionSettings, env.prefs.shared.agentHeaderActions),
         summary = loadSummarySettings(env.prefs.shared.summarySettings);
       const setSummary = (patch: Partial<typeof summary>): Outcome => {
         const value = SummarySettingsSchema.safeParse({ ...summary, ...patch });
@@ -918,17 +918,13 @@ function agentToolsSection(env: SettingsEnv): SettingsSection {
       };
       return [
         ...AGENT_HEADER_ACTIONS.map((action) =>
-          toggleItem(
-            HEADER_ACTION_LABELS[action],
-            enabled.includes(action),
-            (value) =>
-              env.write.setShared({
-                agentHeaderActions: value
-                  ? [...enabled, action]
-                  : enabled.filter((x) => x !== action),
-              }),
-            "対応するエージェントだけに表示します。",
-          ),
+          choiceItem(HEADER_ACTION_LABELS[action], [
+            { value: "display" as const, label: "表示" },
+            { value: "menu" as const, label: "メニューに表示" },
+            { value: "hidden" as const, label: "非表示" },
+          ], visibility[action], value => env.write.setShared({
+            agentActionSettings: { ...visibility, [action]: value },
+          }), "表示はヘッダーとメニュー、メニューに表示はメニューだけに出します。"),
         ),
         choiceItem(
           "要約エージェント",

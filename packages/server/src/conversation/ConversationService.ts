@@ -71,6 +71,7 @@ export class ConversationService {
   private roots() {
     return this.opts.claudeRoots ?? claudeRoots();
   }
+  taskRoots() { return this.roots().map(root => join(dirname(root), "tasks")); }
   private codexHome() {
     return this.opts.codexHome ?? process.env.CODEX_HOME ?? join(homedir(), ".codex");
   }

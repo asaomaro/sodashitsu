@@ -45,6 +45,8 @@ export const AgentResumeParams = z.object({
 export const AGENT_HEADER_ACTIONS = [
   "messages",
   "summary",
+  "notes",
+  "todos",
   "compact",
   "clear",
   "usage",
@@ -98,6 +100,8 @@ export const AGENT_COMMANDS: Readonly<Record<string, Partial<Record<AgentHeaderA
 export const HEADER_ACTION_LABELS: Record<AgentHeaderAction, string> = {
   messages: "送信メッセージ",
   summary: "会話の要約",
+  notes: "セッションのメモ",
+  todos: "エージェントのToDo",
   compact: "文脈を圧縮",
   clear: "新しい会話",
   usage: "利用状況",
@@ -110,16 +114,22 @@ export function headerActionsFor(
   enabled: readonly AgentHeaderAction[],
 ): AgentHeaderAction[] {
   return enabled.filter((action) =>
-    action === "messages" || action === "summary"
-      ? hasSession && ["claude", "codex"].includes(kind)
-      : action === "fork"
-        ? hasSession && ["claude", "codex", "copilot"].includes(kind)
-        : !!AGENT_COMMANDS[kind]?.[action],
+    action === "notes"
+      ? hasSession && !!kind
+      : action === "todos"
+        ? hasSession && ["claude", "codex"].includes(kind)
+        : action === "messages" || action === "summary"
+          ? hasSession && ["claude", "codex"].includes(kind)
+          : action === "fork"
+            ? hasSession && ["claude", "codex", "copilot"].includes(kind)
+            : !!AGENT_COMMANDS[kind]?.[action],
   );
 }
 export const DEFAULT_AGENT_HEADER_ACTIONS: AgentHeaderAction[] = [
   "messages",
   "summary",
+  "notes",
+  "todos",
   "compact",
   "usage",
   "permissions",
@@ -139,4 +149,34 @@ export function loadAgentHeaderActions(raw: unknown): AgentHeaderAction[] {
 export function loadSummarySettings(raw: unknown): SummarySettings {
   const r = SummarySettingsSchema.safeParse(raw);
   return r.success ? r.data : { kind: "claude", model: "", sessionId: "" };
+}
+
+export type AgentActionVisibility = "display" | "menu" | "hidden";
+export type AgentActionSettings = Record<AgentHeaderAction, AgentActionVisibility>;
+export function loadAgentActionSettings(raw: unknown, legacy?: unknown): AgentActionSettings {
+  const shown = loadAgentHeaderActions(legacy);
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return Object.fromEntries(
+    AGENT_HEADER_ACTIONS.map((action) => {
+      const value = source[action];
+      return [
+        action,
+        value === "display" || value === "menu" || value === "hidden"
+          ? value
+          : shown.includes(action)
+            ? "display"
+            : "hidden",
+      ];
+    }),
+  ) as AgentActionSettings;
+}
+export function configuredAgentActions(
+  raw: unknown,
+  legacy: unknown,
+  menu = false,
+): AgentHeaderAction[] {
+  const settings = loadAgentActionSettings(raw, legacy);
+  return AGENT_HEADER_ACTIONS.filter(
+    (action) => settings[action] === "display" || (menu && settings[action] === "menu"),
+  );
 }

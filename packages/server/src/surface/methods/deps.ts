@@ -33,6 +33,7 @@ export interface MethodDeps {
   workspaceTools?: import("../../workspace/WorkspaceTools.js").WorkspaceTools;
   notifications?: import("../../notify/SharedNotifications.js").SharedNotifications;
   summaries?: import("../../conversation/SummaryService.js").SummaryService;
+  sessionNotes?: import("../../conversation/SessionNotes.js").SessionNotesService;
   conversations?: import("../../conversation/ConversationService.js").ConversationService;
   session: SessionService;
   clients: ClientRegistry;

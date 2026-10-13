@@ -39,6 +39,8 @@ export function paneButtons(
   const marks = {
     messages: "[≡]",
     summary: "[Σ]",
+    notes: "[✎]",
+    todos: "[☑]",
     compact: "[↘]",
     clear: "[↺]",
     usage: "[%]",
