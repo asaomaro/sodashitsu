@@ -33,11 +33,11 @@ test("system footer settings persist, share across clients, and reserve desktop/
   await footerDialog.getByLabel("メモリ使用率のグラフ", { exact: true }).check();
   await footerDialog
     .getByLabel("メモリ使用率のグラフパターン", { exact: true })
-    .selectOption("ascii");
-  await expect(footerDialog.locator("output").nth(1)).toContainText("#######--- 65%");
+    .selectOption("halfBlocks");
+  await expect(footerDialog.locator("output").nth(1)).toContainText("███▒░ 65%");
   await page.keyboard.press("Escape");
   await expect(footer).toContainText("エージェント 0");
-  await expect(footer).toContainText(/メモリ.*[#-]{10}/);
+  await expect(footer).toContainText(/メモリ.*[█▒░]{5} [0-9]+%/);
   await expect(other.locator("[data-system-footer]")).toContainText("エージェント 0");
   await expect(footer).not.toContainText("CPU");
   await expect(other.locator("[data-system-footer]")).not.toContainText("CPU");

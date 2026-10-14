@@ -15,10 +15,11 @@ it("configures agent counts and independent graphs while retaining enabled and o
   const choice = sections[1]!.items()[1]!.activate!();
   if (!choice || typeof choice === "string" || choice.kind !== "choose")
     throw Error("choose expected");
-  choice.pick(3);
+  expect(choice.options.find(p => p.label.startsWith("半段階ブロック"))?.label).toBe("半段階ブロック（5個） ██▒░░ 50%");
+  choice.pick(4);
   const settings = loadSystemFooterSettings(prefs.shared.systemFooterSettings);
   expect(settings.enabled).toBe(true);
   expect(settings.fields).toEqual(["cpu", "memory", "agents"]);
-  expect(settings.graphs.cpu).toEqual({ visible: true, pattern: "ascii" });
+  expect(settings.graphs.cpu).toEqual({ visible: true, pattern: "halfBlocks" });
   expect(settings.graphs.memory.visible).toBe(false);
 });

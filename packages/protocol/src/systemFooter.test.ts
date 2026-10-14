@@ -96,3 +96,26 @@ it("counts live agent panes across all workspaces, excludes virtual panes and se
     ]),
   ).toEqual(["エージェント 5", "作業中 2", "応答待ち 1", "待機 1", "不明 1"]);
 });
+
+it("shares the five-character half-step gauge for all footer percentages", () => {
+  const settings = loadSystemFooterSettings({
+    graphs: Object.fromEntries(
+      ["cpu", "memory", "serverMemory"].map((id) => [id, { visible: true, pattern: "halfBlocks" }]),
+    ),
+  });
+  const data = {
+    hostname: "",
+    loadAverage: null,
+    uptimeSeconds: 0,
+    cpuPercent: 50,
+    cpuCount: 4,
+    memoryTotalBytes: 1024 ** 3,
+    memoryAvailableBytes: 512 * 1024 ** 2,
+    serverRssBytes: 256 * 1024 ** 2,
+  } as SystemResources;
+  expect(systemFooterSegments(data, ["cpu", "memory", "serverMemory"], settings.graphs)).toEqual([
+    "CPU ██▒░░ 50% (4核)",
+    "メモリ 512MiB/1.0GiB ██▒░░ 50%",
+    "Soda 256MiB █▒░░░ 25%",
+  ]);
+});

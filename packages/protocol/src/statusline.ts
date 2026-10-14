@@ -28,6 +28,7 @@ export const STATUSLINE_GRAPH_PATTERNS = [
   { id: "squares", label: "四角", filled: "■", empty: "□" },
   { id: "dots", label: "丸", filled: "●", empty: "○" },
   { id: "ascii", label: "ASCII", filled: "#", empty: "-" },
+  { id: "halfBlocks", label: "半段階ブロック（5個）", filled: "█", empty: "░" },
 ] as const;
 export type StatuslinePattern = (typeof STATUSLINE_GRAPH_PATTERNS)[number]["id"];
 export const STATUSLINE_GRAPHS = [
@@ -111,11 +112,13 @@ export function statuslineGauge(
   if (!Number.isFinite(percent)) return "—";
   const p = STATUSLINE_GRAPH_PATTERNS.find((p) => p.id === graph.pattern)!;
   const filled = Math.round(Math.max(0, Math.min(100, percent)) / 10);
-  return (
-    (graph.visible ? p.filled.repeat(filled) + p.empty.repeat(10 - filled) + " " : "") +
-    Math.round(percent) +
-    "%"
-  );
+  const bar =
+    p.id === "halfBlocks"
+      ? p.filled.repeat(Math.floor(filled / 2)) +
+        (filled % 2 ? "▒" : "") +
+        p.empty.repeat(5 - Math.ceil(filled / 2))
+      : p.filled.repeat(filled) + p.empty.repeat(10 - filled);
+  return (graph.visible ? bar + " " : "") + Math.round(percent) + "%";
 }
 
 export type StatuslineColor = "name" | "active" | "model" | "good" | "warning" | "danger" | "muted";

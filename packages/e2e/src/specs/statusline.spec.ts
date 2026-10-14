@@ -361,7 +361,8 @@ test("native statusline settings, order, row bounds and mobile layout persist", 
     await dialog.getByLabel("トークン数の表記", { exact: true }).selectOption("k");
     await dialog.getByRole("button", { name: "エージェント種類を上へ", exact: true }).click();
     await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).check();
-    await dialog.getByLabel("週制限のグラフパターン", { exact: true }).selectOption("dots");
+    await dialog.getByLabel("週制限のグラフパターン", { exact: true }).selectOption("halfBlocks");
+    await expect(dialog.locator("output").nth(2)).toHaveText("███▒░ 65%");
     await expect
       .poll(async () => (await client.request("prefs.get", {})).prefs.statuslineSettings)
       .toMatchObject({

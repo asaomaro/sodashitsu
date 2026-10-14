@@ -2,6 +2,7 @@ import {
   STATUSLINE_FIELDS,
   STATUSLINE_GRAPHS,
   STATUSLINE_GRAPH_PATTERNS,
+  statuslineGauge,
   loadStatuslineSettings,
   type StatuslineSettings,
 } from "@sodashitsu/protocol";
@@ -59,7 +60,7 @@ export function statuslineSettingsSections(
               kind: "choose" as const,
               title: g.label + "のグラフパターン",
               options: STATUSLINE_GRAPH_PATTERNS.map((p) => ({
-                label: p.label + " " + p.filled.repeat(4) + p.empty.repeat(4),
+                label: p.label + " " + statuslineGauge(50, { visible: true, pattern: p.id }),
                 current: p.id === read().graphs[g.id].pattern,
               })),
               pick: (i: number) => {
