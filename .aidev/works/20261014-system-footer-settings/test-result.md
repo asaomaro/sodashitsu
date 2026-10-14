@@ -23,8 +23,8 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  RUN  v5.0.1 /workspaces/sodashitsu-system-footer
 
 stderr | src/components/SystemFooter.test.ts > keeps the left settings button when every field is hidden
-[Vue warn]: injection "Symbol(connection)" not found. 
-  at <SystemFooter ref="VTU_COMPONENT" > 
+[Vue warn]: injection "Symbol(connection)" not found.
+  at <SystemFooter ref="VTU_COMPONENT" >
   at <VTUROOT>
 
  ❯ |@sodashitsu/web| src/components/SystemFooter.test.ts (2 tests | 1 failed) 102ms
