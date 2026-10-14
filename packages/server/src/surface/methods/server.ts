@@ -1,3 +1,4 @@
+import { SystemResourceSampler } from "./SystemResources.js";
 import { RpcError, ServerStopParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
@@ -10,6 +11,8 @@ import type { MethodDeps } from "./deps.js";
  * 止める手順は返事の後に呼ばれるので、返事の中で次の macrotask（`setImmediate`）まで待ち、この方式の応答をクライアントへ書き終えてから止め始める。
  */
 export function registerServerMethods(surface: ControlSurface, deps: MethodDeps): void {
+  const resources = new SystemResourceSampler();
+  surface.register("server.resources", { schema: ServerStopParams, handler: () => resources.get() });
   surface.register("server.stop", {
     schema: ServerStopParams,
     handler: () =>

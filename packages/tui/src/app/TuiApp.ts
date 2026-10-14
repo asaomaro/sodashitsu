@@ -1,3 +1,5 @@
+import { loadSystemFooterSettings, systemFooterSegments, systemFooterPlaceholder, type SystemResources } from "@sodashitsu/protocol";
+import { SystemResourcePoller } from "@sodashitsu/client-core";
 import { PaneStatuslines } from "./PaneStatuslines.js";
 import { loadStatuslineSettings } from "@sodashitsu/protocol";
 import { SessionToolsDialog } from "../modes/SessionToolsDialog.js";
@@ -189,6 +191,13 @@ export class TuiApp {
   protected readonly dispatcher: TuiDispatcher;
   readonly ui: UiState;
   readonly usage: UsageModel;
+  private resourcesConnected = false;
+  private systemResources: SystemResources | undefined;
+  private systemResourcesFailed = false;
+  private readonly resourcePoller = new SystemResourcePoller(
+    () => this.rpc.request("server.resources", {}),
+    (data, failed) => { this.systemResources = data; this.systemResourcesFailed = failed; this.scheduleRender(); },
+  );
   private readonly dashboard: UsageDashboard;
   /**
    * 共有の設定（`prefs.*`）の口：**いつもローカルのサーバ**（ローカルを見ていれば画面の接続、ほかのマシンを見ていればローカルの軽い接続。
@@ -327,6 +336,7 @@ export class TuiApp {
       () => this.scheduleRender(),
       (paneId) => this.onPaneBell(paneId),
     );
+    this.disposers.push(() => this.resourcePoller.setActive(false));
     this.disposers.push(() => this.panes.dispose());
     this.keys = new TuiKeys(
       this.resolvedKeymap(),
@@ -762,6 +772,7 @@ export class TuiApp {
   protected onConnectionOpened(_clientId: string): void {
     this.asks.onOpened();
     this.panes.connectionOpened();
+    this.resourcesConnected = true;
     this.usage.connected();
     void this.displays.connect();
     this.commitView();
@@ -814,6 +825,8 @@ export class TuiApp {
       this.popup.onDisconnected();
       this.popup = null;
     }
+    this.resourcesConnected = false;
+    this.resourcePoller.setActive(false);
     this.usage.disconnected();
     this.displays.disconnect();
     this.dockedViews.release();
@@ -1572,12 +1585,15 @@ export class TuiApp {
   /** 今の割り付け（純粋な `computeLayout` に今の大きさ・モデル・設定を渡す）。 */
   protected layout(): LayoutResult {
     const { cols, rows } = this.io.size();
+    const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
+    const footerRows = footer.enabled && footer.fields.length > 0 && rows >= 4 ? 1 : 0;
+    this.resourcePoller.setActive(this.resourcesConnected && footerRows > 0);
     const tab = this.model.currentTab();
     const views = this.ui.screen === "base" ? (tab ? terminalViews(tab) : []) : [];
     const docked = this.dockedViews.hasDocked(views);
     const layout = computeLayout({
       cols,
-      rows,
+      rows: rows - footerRows,
       paneTopRows: this.dockedViews.hasTray(views) ? 1 : 0,
       singleRowPanes: views
         .filter((v) => v.placement.startsWith("band-"))
@@ -1607,6 +1623,8 @@ export class TuiApp {
         !this.prefs.sidebarCollapsed &&
         (this.model.workspaceId ? this.model.tabsOf(this.model.workspaceId).length : 0) <= 1,
     });
+    // Keep the renderer full-sized; pane/sidebar rectangles exclude the footer.
+    layout.rows = rows;
     this.statuslines.adjust(layout);
     this.usage.sync(this.usageWanted());
     return layout;
@@ -1681,6 +1699,11 @@ export class TuiApp {
     if (this.kitty?.needsRepaint) this.renderer.invalidate();
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => {
+        const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
+        if (footer.enabled && footer.fields.length > 0 && grid.h >= 4) {
+          const parts = systemFooterSegments(this.systemResources, footer.fields);
+          grid.text(0, grid.h - 1, parts.join(" · ") || systemFooterPlaceholder(this.systemResources, this.systemResourcesFailed), this.theme.ui("--soda-fg"), this.theme.ground("--soda-bg"), 0, grid.w);
+        }
         if (this.ui.screen === "graph")
           return this.graphView.render(grid, layout.paneArea, this.theme);
         if (this.ui.screen === "schedule")

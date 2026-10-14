@@ -1,3 +1,4 @@
+import { SYSTEM_FOOTER_FIELDS, loadSystemFooterSettings } from "@sodashitsu/protocol";
 import {
   AGENT_HEADER_ACTIONS,
   HEADER_ACTION_LABELS,
@@ -383,6 +384,7 @@ function displaySection(env: SettingsEnv): SettingsSection {
       const setEntries = (next: readonly TabBarRightEntry[]): void =>
         set({ tabBarRight: loadTabBarRightEntries(next) });
       const symbolsNote = `色に加えて形でも見分けられます（${DISPLAY_STATES.map((s) => `${stateGlyph(s)} ${stateLabel(s)}`).join("、")}）。`;
+      const footer = loadSystemFooterSettings(raw.systemFooterSettings);
       const items: SettingItem[] = [
         toggleItem(
           "状態を記号でも示す",
@@ -526,6 +528,11 @@ function displaySection(env: SettingsEnv): SettingsSection {
         },
       );
       items.push(...sidebarRowsItems(env));
+      items.push(
+        { label: "画面下部のサーバー情報", heading: true },
+        toggleItem("フッターを表示", footer.enabled, v => set({ systemFooterSettings: { ...footer, enabled: v } }), "サーバーの情報です。WSLではLinux環境。Web版・端末版で共有します。"),
+        ...SYSTEM_FOOTER_FIELDS.map(field => toggleItem(field.label, footer.fields.includes(field.id), v => set({ systemFooterSettings: { ...footer, fields: v ? [...footer.fields, field.id] : footer.fields.filter(f => f !== field.id) } }))),
+      );
       return items;
     },
   };

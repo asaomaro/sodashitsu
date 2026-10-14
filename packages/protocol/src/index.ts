@@ -34,3 +34,5 @@ export * from "./schedule.js";
 export * from "./statusline.js";
 
 export * from "./sessionTools.js";
+
+export * from "./systemFooter.js";

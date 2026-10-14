@@ -1,3 +1,4 @@
+import { loadSystemFooterSettings, type SystemFooterSettings } from "@sodashitsu/protocol";
 import { loadStatuslineSettings, type StatuslineSettings } from "@sodashitsu/protocol";
 import {
   loadAgentHeaderActions,
@@ -164,6 +165,11 @@ export const useSettingsStore = defineStore("settings", () => {
     writePrefs({ agentActionSettings: agentActionSettings.value });
   }
   const agentHeaderActions = ref(loadAgentHeaderActions(initial["agentHeaderActions"]));
+  const systemFooterSettings = ref(loadSystemFooterSettings(initial["systemFooterSettings"]));
+  function setSystemFooterSettings(v: SystemFooterSettings) {
+    systemFooterSettings.value = loadSystemFooterSettings(v);
+    writePrefs({ systemFooterSettings: systemFooterSettings.value });
+  }
   const statuslineSettings = ref(loadStatuslineSettings(initial["statuslineSettings"]));
   function setStatuslineSettings(v: StatuslineSettings) {
     statuslineSettings.value = loadStatuslineSettings(v);
@@ -578,6 +584,7 @@ export const useSettingsStore = defineStore("settings", () => {
     agentHeaderActions.value = loadAgentHeaderActions(prefs["agentHeaderActions"]);
     agentActionSettings.value = loadAgentActionSettings(prefs["agentActionSettings"], prefs["agentHeaderActions"]);
     summarySettings.value = loadSummarySettings(prefs["summarySettings"]);
+    systemFooterSettings.value = loadSystemFooterSettings(prefs["systemFooterSettings"]);
     statuslineSettings.value = loadStatuslineSettings(prefs["statuslineSettings"]);
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
     if (nextPosition !== tabBarPosition.value) tabBarPosition.value = nextPosition;
@@ -676,6 +683,7 @@ export const useSettingsStore = defineStore("settings", () => {
   }
 
   return {
+    systemFooterSettings, setSystemFooterSettings,
     statuslineSettings, setStatuslineSettings,
     agentHeaderActions,
     summarySettings,

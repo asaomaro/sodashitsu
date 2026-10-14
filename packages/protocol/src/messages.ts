@@ -975,6 +975,7 @@ export interface SharedPrefs {
   agentHeaderActions?: AgentHeaderAction[];
   agentActionSettings?: Partial<AgentActionSettings>;
   summarySettings?: SummarySettings;
+  systemFooterSettings?: import("./systemFooter.js").SystemFooterSettings;
   statuslineSettings?: import("./statusline.js").StatuslineSettings;
   statusSymbols?: boolean;
   keyboardLockInFullscreen?: boolean;
@@ -1597,6 +1598,7 @@ export const METHOD_SCHEMAS = {
   "graph.pause": GraphPauseParams,
   "graph.resume": GraphResumeParams,
   "graph.history": GraphHistoryParams,
+  "server.resources": ServerStopParams,
   "server.stop": ServerStopParams,
 } as const;
 
@@ -1749,6 +1751,7 @@ export interface MethodResultMap {
   "graph.pause": Graph;
   "graph.resume": Graph;
   "graph.history": GraphHistoryResult;
+  "server.resources": import("./systemFooter.js").SystemResources;
   "server.stop": Record<string, never>;
 }
 
