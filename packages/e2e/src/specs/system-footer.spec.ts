@@ -28,16 +28,37 @@ test("system footer settings persist, share across clients, and reserve desktop/
   await expect(other.locator("[data-system-footer]")).toContainText("メモリ");
   await footer.getByRole("button", { name: "フッターの設定", exact: true }).click();
   const footerDialog = page.getByRole("dialog", { name: "フッターの設定", exact: true });
+  await expect(footerDialog.getByLabel("フッターの色", { exact: true })).toHaveValue("mono");
+  await footerDialog.getByLabel("フッターの色", { exact: true }).selectOption("color");
+  await expect
+    .poll(() =>
+      footer.locator(".footer-content").evaluate((el) => {
+        const fg = getComputedStyle(el).color;
+        return Array.from(el.querySelectorAll("span")).some((span) => getComputedStyle(span).color !== fg);
+      }),
+    )
+    .toBe(true);
+  await footerDialog.getByLabel("フッターの色", { exact: true }).selectOption("mono");
+  await expect
+    .poll(() =>
+      footer.locator(".footer-content").evaluate((el) => {
+        const fg = getComputedStyle(el).color;
+        return Array.from(el.querySelectorAll("span")).every(
+          (span) => getComputedStyle(span).color === fg,
+        );
+      }),
+    )
+    .toBe(true);
   await footerDialog.getByLabel("CPU使用率", { exact: true }).uncheck();
   await footerDialog.getByLabel("エージェント総数", { exact: true }).check();
   await footerDialog.getByLabel("メモリ使用率のグラフ", { exact: true }).check();
   await footerDialog
     .getByLabel("メモリ使用率のグラフパターン", { exact: true })
-    .selectOption("ascii");
-  await expect(footerDialog.locator("output").nth(1)).toContainText("#######--- 65%");
+    .selectOption("halfBlocks");
+  await expect(footerDialog.locator("output").nth(1)).toContainText("███▒░ 65%");
   await page.keyboard.press("Escape");
   await expect(footer).toContainText("エージェント 0");
-  await expect(footer).toContainText(/メモリ.*[#-]{10}/);
+  await expect(footer).toContainText(/メモリ.*[█▒░]{5} [0-9]+%/);
   await expect(other.locator("[data-system-footer]")).toContainText("エージェント 0");
   await expect(footer).not.toContainText("CPU");
   await expect(other.locator("[data-system-footer]")).not.toContainText("CPU");
@@ -66,11 +87,7 @@ test("system footer settings persist, share across clients, and reserve desktop/
   const mobileDialog = (await footerDialog.boundingBox())!;
   expect(mobileDialog.x).toBeGreaterThanOrEqual(0);
   expect(mobileDialog.x + mobileDialog.width).toBeLessThanOrEqual(390);
-  for (const checkbox of await footerDialog
-    .locator("fieldset")
-    .first()
-    .locator("input")
-    .all())
+  for (const checkbox of await footerDialog.locator("fieldset").first().locator("input").all())
     await checkbox.uncheck();
   await page.keyboard.press("Escape");
   await expect(footer.locator(".footer-content")).toBeEmpty();

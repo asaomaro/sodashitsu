@@ -119,3 +119,22 @@ it("wraps full-width text without losing glyphs and scrolls rows in both directi
   h.controller.adjust(canceled);
   expect(canceled.panes[0]!.content.h).toBe(box.content.h);
 });
+
+it("renders mono statusline cells with the theme foreground", () => {
+  const h = harness(),
+    theme = new ThemeColors("dracula");
+  const render = () => {
+    const layout = h.layout();
+    h.controller.adjust(layout);
+    const grid = new Grid(120, 30);
+    h.controller.render(grid, theme);
+    return { grid, box: layout.panes[0]!.content };
+  };
+  const colored = render();
+  expect(colored.grid.cell(colored.box.x + 2, colored.box.y + colored.box.h).fg).toBe(
+    theme.ui("--soda-state-working"),
+  );
+  h.prefs.apply({ statuslineSettings: loadStatuslineSettings({ colorMode: "mono" }) }, 2);
+  const mono = render();
+  expect(mono.grid.cell(mono.box.x + 2, mono.box.y + mono.box.h).fg).toBe(theme.ui("--soda-fg"));
+});

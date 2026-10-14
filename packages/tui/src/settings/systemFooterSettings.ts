@@ -2,8 +2,8 @@ import {
   SYSTEM_FOOTER_FIELDS,
   SYSTEM_FOOTER_GRAPHS,
   STATUSLINE_GRAPH_PATTERNS,
+  statuslineGauge,
   loadSystemFooterSettings,
-  type SystemFooterSettings,
 } from "@sodashitsu/protocol";
 import type { PrefsModel } from "../model/PrefsModel.js";
 import type { SettingsWriter } from "./SettingsWriter.js";
@@ -59,7 +59,7 @@ export function systemFooterSettingsSections(
               kind: "choose" as const,
               title: g.label + "のグラフパターン",
               options: STATUSLINE_GRAPH_PATTERNS.map((p) => ({
-                label: p.label + " " + p.filled.repeat(4) + p.empty.repeat(4),
+                label: p.label + " " + statuslineGauge(50, { visible: true, pattern: p.id }),
                 current: p.id === read().graphs[g.id].pattern,
               })),
               pick: (i: number) => {
@@ -72,6 +72,30 @@ export function systemFooterSettingsSections(
             }),
           },
         ]),
+    },
+    {
+      id: "appearance",
+      label: "色の表示",
+      items: () => [
+        {
+          label: "色の表示",
+          value: read().colorMode === "color" ? "カラー" : "単色",
+          activate: () => ({
+            kind: "choose" as const,
+            title: "フッターの色",
+            options: [
+              { label: "単色", current: read().colorMode !== "color" },
+              { label: "カラー", current: read().colorMode === "color" },
+            ],
+            pick: (i: number) => {
+              if (i === 0 || i === 1)
+                update((s) => {
+                  s.colorMode = i === 1 ? "color" : "mono";
+                });
+            },
+          }),
+        },
+      ],
     },
   ];
 }

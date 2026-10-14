@@ -2,6 +2,7 @@ import {
   STATUSLINE_FIELDS,
   STATUSLINE_GRAPHS,
   STATUSLINE_GRAPH_PATTERNS,
+  statuslineGauge,
   loadStatuslineSettings,
   type StatuslineSettings,
 } from "@sodashitsu/protocol";
@@ -59,7 +60,7 @@ export function statuslineSettingsSections(
               kind: "choose" as const,
               title: g.label + "のグラフパターン",
               options: STATUSLINE_GRAPH_PATTERNS.map((p) => ({
-                label: p.label + " " + p.filled.repeat(4) + p.empty.repeat(4),
+                label: p.label + " " + statuslineGauge(50, { visible: true, pattern: p.id }),
                 current: p.id === read().graphs[g.id].pattern,
               })),
               pick: (i: number) => {
@@ -77,6 +78,24 @@ export function statuslineSettingsSections(
       id: "general",
       label: "全体・順序",
       items: () => [
+        {
+          label: "色の表示",
+          value: read().colorMode === "mono" ? "単色" : "カラー",
+          activate: () => ({
+            kind: "choose" as const,
+            title: "Statuslineの色",
+            options: [
+              { label: "単色", current: read().colorMode === "mono" },
+              { label: "カラー", current: read().colorMode !== "mono" },
+            ],
+            pick: (i: number) => {
+              if (i === 0 || i === 1)
+                update((s) => {
+                  s.colorMode = i === 0 ? "mono" : "color";
+                });
+            },
+          }),
+        },
         {
           label: "ペイン最下部に表示",
           toggle: true,

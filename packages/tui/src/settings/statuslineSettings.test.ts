@@ -14,10 +14,20 @@ it("toggles fields and graph visibility, chooses patterns and preserves unrelate
   const choice = sections[1]!.items()[1]!.activate?.();
   if (!choice || typeof choice === "string" || choice.kind !== "choose")
     throw Error("choose expected");
-  choice.pick(2);
+  expect(choice.options.find((p) => p.label.startsWith("半段階ブロック"))?.label).toBe(
+    "半段階ブロック（5個） ██▒░░ 50%",
+  );
+  choice.pick(4);
   const s = loadStatuslineSettings(prefs.shared.statuslineSettings);
   expect(s.fields.pane).toBe(false);
   expect(s.fields.model).toBe(true);
-  expect(s.graphs.context).toEqual({ visible: false, pattern: "dots" });
+  expect(s.graphs.context).toEqual({ visible: false, pattern: "halfBlocks" });
   expect(s.graphs.weekly.visible).toBe(true);
+  const appearance = sections
+    .flatMap((section) => section.items())
+    .find((item) => item.label === "色の表示")!.activate!();
+  if (!appearance || typeof appearance === "string" || appearance.kind !== "choose")
+    throw Error("choose expected");
+  appearance.pick(0);
+  expect(loadStatuslineSettings(prefs.shared.statuslineSettings).colorMode).toBe("mono");
 });

@@ -89,3 +89,49 @@ it("uses the configured agent name as the pane name", () => {
 it("ignores the superseded column width preference", () => {
   expect(loadStatuslineSettings({ columns: 8 }).rows).toBe(1);
 });
+
+it("renders five half-step blocks with ten-percent resolution", () => {
+  const settings = loadStatuslineSettings({
+    graphs: { context: { pattern: "halfBlocks", visible: true } },
+  });
+  const examples = [
+    [0, "░░░░░"],
+    [10, "▒░░░░"],
+    [20, "█░░░░"],
+    [40, "██░░░"],
+    [50, "██▒░░"],
+    [90, "████▒"],
+    [100, "█████"],
+    [4, "░░░░░"],
+    [5, "▒░░░░"],
+    [94, "████▒"],
+    [95, "█████"],
+    [-10, "░░░░░"],
+    [110, "█████"],
+  ] as const;
+  for (const [percent, bar] of examples) {
+    const result = statuslineGauge(percent, settings.graphs.context);
+    expect(result).toBe(`${bar} ${percent}%`);
+    expect([...result.split(" ")[0]!]).toHaveLength(5);
+  }
+  expect(statuslineGauge(50, { visible: false, pattern: "halfBlocks" })).toBe("50%");
+  expect(statuslineGauge(NaN, settings.graphs.context)).toBe("—");
+});
+
+it("switches all statusline text to the ordinary foreground without changing contents", () => {
+  const pane = {
+    label: "Agent",
+    agent: { kind: "codex", label: "Codex", state: "working" },
+  } as import("./model.js").Pane;
+  const color = statuslineSegments(pane, undefined, [], loadStatuslineSettings(undefined));
+  const mono = statuslineSegments(
+    pane,
+    undefined,
+    [],
+    loadStatuslineSettings({ colorMode: "mono" }),
+  );
+  expect(color.some((s) => s.color !== "muted")).toBe(true);
+  expect(mono.every((s) => s.color === "muted")).toBe(true);
+  expect(mono.map((s) => s.text)).toEqual(color.map((s) => s.text));
+  expect(loadStatuslineSettings({ colorMode: "invalid" }).colorMode).toBe("color");
+});

@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import {
   countSystemAgents,
+  systemFooterDisplaySegments,
   loadSystemFooterSettings,
   systemFooterSegments,
   systemFooterPlaceholder,
@@ -95,4 +96,55 @@ it("counts live agent panes across all workspaces, excludes virtual panes and se
       "unknown",
     ]),
   ).toEqual(["エージェント 5", "作業中 2", "応答待ち 1", "待機 1", "不明 1"]);
+});
+
+it("shares the five-character half-step gauge for all footer percentages", () => {
+  const settings = loadSystemFooterSettings({
+    graphs: Object.fromEntries(
+      ["cpu", "memory", "serverMemory"].map((id) => [id, { visible: true, pattern: "halfBlocks" }]),
+    ),
+  });
+  const data = {
+    hostname: "",
+    loadAverage: null,
+    uptimeSeconds: 0,
+    cpuPercent: 50,
+    cpuCount: 4,
+    memoryTotalBytes: 1024 ** 3,
+    memoryAvailableBytes: 512 * 1024 ** 2,
+    serverRssBytes: 256 * 1024 ** 2,
+  } as SystemResources;
+  expect(systemFooterSegments(data, ["cpu", "memory", "serverMemory"], settings.graphs)).toEqual([
+    "CPU ██▒░░ 50% (4核)",
+    "メモリ 512MiB/1.0GiB ██▒░░ 50%",
+    "Soda 256MiB █▒░░░ 25%",
+  ]);
+});
+
+it("defaults the footer to mono and colors rates and agent states independently", () => {
+  const data = {
+    hostname: "host",
+    loadAverage: null,
+    uptimeSeconds: 0,
+    cpuPercent: 70,
+    cpuCount: 4,
+    memoryTotalBytes: 1024 ** 3,
+    memoryAvailableBytes: 0,
+    serverRssBytes: 256 * 1024 ** 2,
+    agents: { total: 2, states: { blocked: 1, working: 1, idle: 0, unknown: 0 } },
+  } as SystemResources;
+  const settings = {
+    enabled: true,
+    fields: ["cpu", "memory", "serverMemory", "blocked", "host"],
+  } as const;
+  const mono = systemFooterDisplaySegments(data, { ...settings, fields: [...settings.fields] });
+  const color = systemFooterDisplaySegments(data, {
+    ...settings,
+    fields: [...settings.fields],
+    colorMode: "color",
+  });
+  expect(mono.every((s) => s.color === "muted")).toBe(true);
+  expect(color.map((s) => s.color)).toEqual(["warning", "danger", "good", "danger", "model"]);
+  expect(color.map((s) => s.text)).toEqual(mono.map((s) => s.text));
+  expect(loadSystemFooterSettings({ colorMode: "invalid" }).colorMode).toBe("mono");
 });

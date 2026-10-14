@@ -1,4 +1,5 @@
-import { loadSystemFooterSettings, systemFooterSegments, systemFooterPlaceholder, type SystemResources } from "@sodashitsu/protocol";
+import { stringWidth } from "../render/width.js";
+import { loadSystemFooterSettings, systemFooterDisplaySegments, STATUSLINE_COLOR_VARIABLES, systemFooterPlaceholder, type SystemResources } from "@sodashitsu/protocol";
 import { SystemResourcePoller } from "@sodashitsu/client-core";
 import { PaneStatuslines } from "./PaneStatuslines.js";
 import { loadStatuslineSettings } from "@sodashitsu/protocol";
@@ -1710,8 +1711,17 @@ export class TuiApp {
       decorate: (grid) => {
         const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
         if (footer.enabled && grid.h >= 4) {
-          const parts = systemFooterSegments(this.systemResources, footer.fields, footer.graphs);
-          grid.text(0, grid.h - 1, "⋮ " + (parts.join(" · ") || (footer.fields.length ? systemFooterPlaceholder(this.systemResources, this.systemResourcesFailed) : "")), this.theme.ui("--soda-fg"), this.theme.ground("--soda-bg"), 0, grid.w);
+          const parts = systemFooterDisplaySegments(this.systemResources, footer);
+          const fg = this.theme.ui("--soda-fg"), bg = this.theme.ground("--soda-bg");
+          grid.text(0, grid.h - 1, "⋮ ", fg, bg, 0, grid.w);
+          let x = 2;
+          for (const [i, segment] of parts.entries()) {
+            if(i) { grid.text(x, grid.h - 1, " · ", fg, bg, 0, Math.max(0, grid.w - x)); x += 3; }
+            if(x >= grid.w) break;
+            grid.text(x, grid.h - 1, segment.text, this.theme.ui(STATUSLINE_COLOR_VARIABLES[segment.color]), bg, 0, grid.w - x);
+            x += stringWidth(segment.text);
+          }
+          if(!parts.length && footer.fields.length) grid.text(2, grid.h - 1, systemFooterPlaceholder(this.systemResources, this.systemResourcesFailed), fg, bg, 0, Math.max(0, grid.w - 2));
         }
         if (this.ui.screen === "graph")
           return this.graphView.render(grid, layout.paneArea, this.theme);
