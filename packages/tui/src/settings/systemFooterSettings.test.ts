@@ -15,11 +15,20 @@ it("configures agent counts and independent graphs while retaining enabled and o
   const choice = sections[1]!.items()[1]!.activate!();
   if (!choice || typeof choice === "string" || choice.kind !== "choose")
     throw Error("choose expected");
-  expect(choice.options.find(p => p.label.startsWith("半段階ブロック"))?.label).toBe("半段階ブロック（5個） ██▒░░ 50%");
+  expect(choice.options.find((p) => p.label.startsWith("半段階ブロック"))?.label).toBe(
+    "半段階ブロック（5個） ██▒░░ 50%",
+  );
   choice.pick(4);
   const settings = loadSystemFooterSettings(prefs.shared.systemFooterSettings);
   expect(settings.enabled).toBe(true);
   expect(settings.fields).toEqual(["cpu", "memory", "agents"]);
   expect(settings.graphs.cpu).toEqual({ visible: true, pattern: "halfBlocks" });
   expect(settings.graphs.memory.visible).toBe(false);
+  const appearance = sections
+    .flatMap((section) => section.items())
+    .find((item) => item.label === "色の表示")!.activate!();
+  if (!appearance || typeof appearance === "string" || appearance.kind !== "choose")
+    throw Error("choose expected");
+  appearance.pick(1);
+  expect(loadSystemFooterSettings(prefs.shared.systemFooterSettings).colorMode).toBe("color");
 });

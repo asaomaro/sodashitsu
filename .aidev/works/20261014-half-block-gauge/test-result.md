@@ -140,3 +140,127 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
 ```
 
+
+## 色設定を含む最終検証
+
+- 最終build通過。全パッケージの型検査は製品コードが通過、E2EのNodeListのDOM iterable型エラーはArray.fromへ直し、E2E型検査を再実行して通過。
+- 関連80ファイル887テスト通過。最初の確認はprotocolビルド前の旧distを使って新しいexport/設定が見つからず失敗したため、build後に再実行した。
+- Chromium 2ケース通過。両設定の半段階パターン、実CSS計算済みの色を参照した単色/カラー切替、設定共有・モバイルを確認。
+- 作業フォルダ外smoke PASS。
+- 単色への変換・フッターの色分けだけを無効にする負の対照で2テストが失敗し、バイト一致で復元後15テスト通過。
+
+## display-colors-e2e.log
+
+```text
+
+Running 2 tests using 1 worker
+
+(node:415698) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-14T12:19:51.356Z","level":"info","msg":"agent manifests loaded","ok":22,"total":22}
+{"ts":"2026-10-14T12:19:51.358Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-JPVpAH/commands.json","count":0}
+  ✓  1 src/specs/statusline.spec.ts:326:1 › native statusline settings, order, row bounds and mobile layout persist (7.3s)
+{"ts":"2026-10-14T12:19:58.428Z","level":"info","msg":"agent manifests loaded","ok":22,"total":22}
+{"ts":"2026-10-14T12:19:58.429Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-ydZoZz/commands.json","count":0}
+  ✓  2 src/specs/system-footer.spec.ts:3:1 › system footer settings persist, share across clients, and reserve desktop/mobile space (15.6s)
+
+  2 passed (25.1s)
+
+```
+
+## display-colors-negative.log
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-system-footer
+
+ ❯ |@sodashitsu/protocol| src/systemFooter.test.ts (7 tests | 1 failed) 10ms
+   × defaults the footer to mono and colors rates and agent states independently 5ms
+ ❯ |@sodashitsu/protocol| src/statusline.test.ts (8 tests | 1 failed) 11ms
+   × switches all statusline text to the ordinary foreground without changing contents 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/protocol| src/statusline.test.ts > switches all statusline text to the ordinary foreground without changing contents
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/statusline.test.ts:134:50
+    132|   );
+    133|   expect(color.some((s) => s.color !== "muted")).toBe(true);
+    134|   expect(mono.every((s) => s.color === "muted")).toBe(true);
+       |                                                  ^
+    135|   expect(mono.map((s) => s.text)).toEqual(color.map((s) => s.text));
+    136|   expect(loadStatuslineSettings({ colorMode: "invalid" }).colorMode).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/protocol| src/systemFooter.test.ts > defaults the footer to mono and colors rates and agent states independently
+AssertionError: expected [ 'muted', 'muted', 'muted', …(2) ] to deeply equal [ 'warning', 'danger', 'good', …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "warning",
+-   "danger",
+-   "good",
+-   "danger",
+-   "model",
++   "muted",
++   "muted",
++   "muted",
++   "muted",
++   "muted",
+  ]
+
+ ❯ src/systemFooter.test.ts:147:37
+    145|   });
+    146|   expect(mono.every((s) => s.color === "muted")).toBe(true);
+    147|   expect(color.map((s) => s.color)).toEqual(["warning", "danger", "goo…
+       |                                     ^
+    148|   expect(color.map((s) => s.text)).toEqual(mono.map((s) => s.text));
+    149|   expect(loadSystemFooterSettings({ colorMode: "invalid" }).colorMode)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 13 passed (15)
+   Start at  21:20:32
+   Duration  159ms (transform 63%, tests 16%, import 16%, worker 4%)
+
+
+```
+
+## display-colors-restored.log
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-system-footer
+
+
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+   Start at  21:20:33
+   Duration  159ms (transform 66%, import 18%, tests 12%, worker 4%)
+
+
+```

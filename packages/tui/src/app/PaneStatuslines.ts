@@ -1,5 +1,6 @@
 import {
   loadStatuslineSettings,
+  STATUSLINE_COLOR_VARIABLES,
   statuslineSegments,
   type StatuslineColor,
 } from "@sodashitsu/protocol";
@@ -13,15 +14,6 @@ import type { InputEvent } from "../input/decode.js";
 import type { Grid, Rect } from "../render/Screen.js";
 import type { ThemeColors } from "../render/color.js";
 import { charWidth } from "../render/width.js";
-const colors = {
-  name: "--soda-state-working",
-  active: "--soda-state-working",
-  model: "--soda-state-idle",
-  good: "--soda-state-done",
-  warning: "--soda-state-working",
-  danger: "--soda-state-blocked",
-  muted: "--soda-fg",
-} as const;
 type Mouse = Extract<InputEvent, { kind: "mouse" }>;
 type Glyph = { ch: string; color: StatuslineColor; width: 1 | 2 };
 export class PaneStatuslines {
@@ -107,7 +99,7 @@ export class PaneStatuslines {
       for (let row = 0; row < h; row++) {
         let col = x + 2;
         for (const c of hit.lines[offset + row] ?? []) {
-          grid.set(col, y + row, c.ch, c.width, theme.ui(colors[c.color]), bg);
+          grid.set(col, y + row, c.ch, c.width, theme.ui(STATUSLINE_COLOR_VARIABLES[c.color]), bg);
           col += c.width;
         }
       }

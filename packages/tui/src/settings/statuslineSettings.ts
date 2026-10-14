@@ -79,6 +79,24 @@ export function statuslineSettingsSections(
       label: "全体・順序",
       items: () => [
         {
+          label: "色の表示",
+          value: read().colorMode === "mono" ? "単色" : "カラー",
+          activate: () => ({
+            kind: "choose" as const,
+            title: "Statuslineの色",
+            options: [
+              { label: "単色", current: read().colorMode === "mono" },
+              { label: "カラー", current: read().colorMode !== "mono" },
+            ],
+            pick: (i: number) => {
+              if (i === 0 || i === 1)
+                update((s) => {
+                  s.colorMode = i === 0 ? "mono" : "color";
+                });
+            },
+          }),
+        },
+        {
           label: "ペイン最下部に表示",
           toggle: true,
           value: read().enabled ? "表示" : "非表示",

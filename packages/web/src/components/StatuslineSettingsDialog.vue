@@ -22,9 +22,10 @@ watch(
   },
   { immediate: true },
 );
-function change(key: "enabled" | "tokenFormat", value: boolean | string) {
+function change(key: "enabled" | "tokenFormat" | "colorMode", value: boolean | string) {
   const next = loadStatuslineSettings(current.value);
   if (key === "enabled") next.enabled = value === true;
+  else if (key === "colorMode") next.colorMode = value === "mono" ? "mono" : "color";
   else next.tokenFormat = value === "k" ? "k" : "exact";
   settings.setStatuslineSettings(next);
 }
@@ -70,6 +71,16 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
         :checked="current.enabled"
         @change="change('enabled', ($event.target as HTMLInputElement).checked)"
       />ペイン最下部に表示</label
+    >
+    <label
+      >色の表示<select
+        aria-label="Statuslineの色"
+        :value="current.colorMode"
+        @change="change('colorMode', ($event.target as HTMLSelectElement).value)"
+      >
+        <option value="color">カラー</option>
+        <option value="mono">単色</option>
+      </select></label
     >
     <label
       >トークン数の表記<select

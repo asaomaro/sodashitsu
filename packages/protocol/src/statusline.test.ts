@@ -117,3 +117,21 @@ it("renders five half-step blocks with ten-percent resolution", () => {
   expect(statuslineGauge(50, { visible: false, pattern: "halfBlocks" })).toBe("50%");
   expect(statuslineGauge(NaN, settings.graphs.context)).toBe("—");
 });
+
+it("switches all statusline text to the ordinary foreground without changing contents", () => {
+  const pane = {
+    label: "Agent",
+    agent: { kind: "codex", label: "Codex", state: "working" },
+  } as import("./model.js").Pane;
+  const color = statuslineSegments(pane, undefined, [], loadStatuslineSettings(undefined));
+  const mono = statuslineSegments(
+    pane,
+    undefined,
+    [],
+    loadStatuslineSettings({ colorMode: "mono" }),
+  );
+  expect(color.some((s) => s.color !== "muted")).toBe(true);
+  expect(mono.every((s) => s.color === "muted")).toBe(true);
+  expect(mono.map((s) => s.text)).toEqual(color.map((s) => s.text));
+  expect(loadStatuslineSettings({ colorMode: "invalid" }).colorMode).toBe("color");
+});

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
 import {
-  systemFooterSegments,
+  systemFooterDisplaySegments,
   systemFooterPlaceholder,
   type SystemResources,
 } from "@sodashitsu/protocol";
@@ -17,11 +17,7 @@ const data = ref<SystemResources>(),
   hidden = ref(document.hidden);
 const visible = computed(() => settings.systemFooterSettings.enabled);
 const segments = computed(() =>
-  systemFooterSegments(
-    data.value,
-    settings.systemFooterSettings.fields,
-    settings.systemFooterSettings.graphs,
-  ),
+  systemFooterDisplaySegments(data.value, settings.systemFooterSettings),
 );
 const poller = new SystemResourcePoller(
   () => (conn ? conn.request("server.resources", {}) : Promise.reject(new Error("disconnected"))),
@@ -61,7 +57,9 @@ onBeforeUnmount(() => {
       ⋮
     </button>
     <div class="footer-content">
-      <span v-for="segment in segments" :key="segment">{{ segment }}</span>
+      <span v-for="segment in segments" :key="segment.field" :class="`color-${segment.color}`">{{
+        segment.text
+      }}</span>
       <span v-if="!segments.length && settings.systemFooterSettings.fields.length">{{
         systemFooterPlaceholder(data, failed)
       }}</span>
@@ -111,5 +109,22 @@ button {
 }
 .footer-content::-webkit-scrollbar {
   display: none;
+}
+.color-name,
+.color-active,
+.color-warning {
+  color: var(--soda-state-working);
+}
+.color-model {
+  color: var(--soda-state-idle);
+}
+.color-good {
+  color: var(--soda-state-done);
+}
+.color-danger {
+  color: var(--soda-state-blocked);
+}
+.color-muted {
+  color: var(--soda-fg);
 }
 </style>

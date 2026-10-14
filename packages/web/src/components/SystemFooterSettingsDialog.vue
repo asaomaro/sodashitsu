@@ -53,6 +53,21 @@ function graph(id: keyof SystemFooterGraphs, event: Event, pattern = false) {
     <p>
       接続先サーバー全体の情報です。WSLではLinux側の使用状況です。変更はWeb版・端末版で共有します。
     </p>
+    <label
+      >色の表示<select
+        aria-label="フッターの色"
+        :value="current.colorMode"
+        @change="
+          settings.setSystemFooterSettings({
+            ...current,
+            colorMode: ($event.target as HTMLSelectElement).value === 'color' ? 'color' : 'mono',
+          })
+        "
+      >
+        <option value="mono">単色</option>
+        <option value="color">カラー</option>
+      </select></label
+    >
     <fieldset>
       <legend>表示する情報</legend>
       <label v-for="item in SYSTEM_FOOTER_FIELDS" :key="item.id"

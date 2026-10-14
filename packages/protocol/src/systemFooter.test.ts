@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import {
   countSystemAgents,
+  systemFooterDisplaySegments,
   loadSystemFooterSettings,
   systemFooterSegments,
   systemFooterPlaceholder,
@@ -118,4 +119,32 @@ it("shares the five-character half-step gauge for all footer percentages", () =>
     "メモリ 512MiB/1.0GiB ██▒░░ 50%",
     "Soda 256MiB █▒░░░ 25%",
   ]);
+});
+
+it("defaults the footer to mono and colors rates and agent states independently", () => {
+  const data = {
+    hostname: "host",
+    loadAverage: null,
+    uptimeSeconds: 0,
+    cpuPercent: 70,
+    cpuCount: 4,
+    memoryTotalBytes: 1024 ** 3,
+    memoryAvailableBytes: 0,
+    serverRssBytes: 256 * 1024 ** 2,
+    agents: { total: 2, states: { blocked: 1, working: 1, idle: 0, unknown: 0 } },
+  } as SystemResources;
+  const settings = {
+    enabled: true,
+    fields: ["cpu", "memory", "serverMemory", "blocked", "host"],
+  } as const;
+  const mono = systemFooterDisplaySegments(data, { ...settings, fields: [...settings.fields] });
+  const color = systemFooterDisplaySegments(data, {
+    ...settings,
+    fields: [...settings.fields],
+    colorMode: "color",
+  });
+  expect(mono.every((s) => s.color === "muted")).toBe(true);
+  expect(color.map((s) => s.color)).toEqual(["warning", "danger", "good", "danger", "model"]);
+  expect(color.map((s) => s.text)).toEqual(mono.map((s) => s.text));
+  expect(loadSystemFooterSettings({ colorMode: "invalid" }).colorMode).toBe("mono");
 });

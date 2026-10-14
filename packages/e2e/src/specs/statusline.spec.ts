@@ -356,6 +356,29 @@ test("native statusline settings, order, row bounds and mobile layout persist", 
     await page.screenshot({ path: "/tmp/native-statusline-desktop.png" });
     await bar.getByRole("button", { name: "Statuslineの設定" }).click();
     const dialog = page.getByRole("dialog", { name: "Statuslineの設定", exact: true });
+    await dialog.getByLabel("Statuslineの色", { exact: true }).selectOption("mono");
+    await expect
+      .poll(() =>
+        bar.locator(".statusline-text").evaluate((el) => {
+          const fg = getComputedStyle(el).color;
+          return Array.from(el.querySelectorAll("span")).every(
+            (span) => getComputedStyle(span).color === fg,
+          );
+        }),
+      )
+      .toBe(true);
+    await expect(bar.locator(".color-name")).toHaveCount(0);
+    await dialog.getByLabel("Statuslineの色", { exact: true }).selectOption("color");
+    await expect
+      .poll(() =>
+        bar.locator(".statusline-text").evaluate((el) => {
+          const fg = getComputedStyle(el).color;
+          return Array.from(el.querySelectorAll("span")).some(
+            (span) => getComputedStyle(span).color !== fg,
+          );
+        }),
+      )
+      .toBe(true);
     await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).uncheck();
     await expect(bar).not.toContainText("ConfiguredPane");
     await dialog.getByLabel("トークン数の表記", { exact: true }).selectOption("k");

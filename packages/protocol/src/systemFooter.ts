@@ -2,6 +2,7 @@ import {
   STATUSLINE_GRAPH_PATTERNS,
   statuslineGauge,
   type StatuslinePattern,
+  type StatuslineColor,
 } from "./statusline.js";
 import type { AgentState, Pane } from "./model.js";
 export interface SystemAgentCounts {
@@ -59,6 +60,7 @@ export const SYSTEM_FOOTER_FIELDS = [
 export type SystemFooterField = (typeof SYSTEM_FOOTER_FIELDS)[number]["id"];
 export interface SystemFooterSettings {
   enabled: boolean;
+  colorMode?: "mono" | "color";
   fields: SystemFooterField[];
   graphs?: SystemFooterGraphs;
 }
@@ -68,6 +70,7 @@ export function loadSystemFooterSettings(
   const r = raw && typeof raw === "object" ? (raw as Partial<SystemFooterSettings>) : {};
   return {
     enabled: r.enabled === true,
+    colorMode: r.colorMode === "color" ? "color" : "mono",
     graphs: Object.fromEntries(
       SYSTEM_FOOTER_GRAPHS.map(({ id }) => {
         const g = r.graphs?.[id];
@@ -132,4 +135,39 @@ export function systemFooterPlaceholder(
     : failed
       ? "サーバー情報を取得できません"
       : "サーバー情報を読み込み中…";
+}
+
+/** Shared semantic colors for Web and TUI; mono uses the theme's ordinary foreground. */
+export function systemFooterDisplaySegments(
+  data: SystemResources | undefined,
+  raw: SystemFooterSettings,
+): { field: SystemFooterField; text: string; color: StatuslineColor }[] {
+  if (!data) return [];
+  const settings = loadSystemFooterSettings(raw);
+  const severity = (n: number): StatuslineColor =>
+    n >= 90 ? "danger" : n >= 70 ? "warning" : "good";
+  const colors: Partial<Record<SystemFooterField, StatuslineColor>> = {
+    cpu: data.cpuPercent === null ? "muted" : severity(data.cpuPercent),
+    memory: severity(
+      data.memoryTotalBytes > 0
+        ? ((data.memoryTotalBytes - data.memoryAvailableBytes) / data.memoryTotalBytes) * 100
+        : 0,
+    ),
+    serverMemory: severity(
+      data.memoryTotalBytes > 0 ? (data.serverRssBytes / data.memoryTotalBytes) * 100 : 0,
+    ),
+    load: "model",
+    host: "model",
+    agents: "name",
+    working: "active",
+    idle: "good",
+    blocked: "danger",
+  };
+  return settings.fields.flatMap((field) =>
+    systemFooterSegments(data, [field], settings.graphs).map((text) => ({
+      field,
+      text,
+      color: settings.colorMode === "color" ? (colors[field] ?? "muted") : "muted",
+    })),
+  );
 }
