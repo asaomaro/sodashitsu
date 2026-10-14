@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SystemFooter from "./components/SystemFooter.vue";
 import { computed } from "vue";
 import CommandPopup from "./components/CommandPopup.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -65,7 +66,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
   <DetachedView v-else-if="view.connectionState === 'detached'" />
   <div v-else class="app-shell" :style="{ '--soda-pane-gap': paneGapPx }">
     <MobileShell v-if="isMobile" />
-    <template v-else>
+    <div v-else class="app-desktop">
       <Sidebar />
       <!-- 主な領域。画面の一覧（`screens/screens.ts`）から作った画面を重ねて置き、見えているのは `view.screen` の 1 つだけ。見えない画面は、**大きさを保ったまま** `visibility: hidden` と
            `inert` で見えなくするだけ（`display: none`・`v-show`・`v-if` は使わない。基本画面の pane の箱が 0×0 になると、`client.view` が 1×1 を申告して全部の PTY が縮む。D11） -->
@@ -81,7 +82,8 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
           <component :is="def.component" />
         </div>
       </div>
-    </template>
+    </div>
+    <SystemFooter v-if="!isMobile" />
     <ContextMenu />
     <NameDialog />
     <WorktreeCreateDialog />
@@ -161,8 +163,10 @@ body {
   color: var(--soda-fg);
   font-family: system-ui, sans-serif;
 }
+.app-desktop { display:flex; flex:1; min-height:0; min-width:0; }
 .app-shell {
   display: flex;
+  flex-direction: column;
   height: 100%;
   /* Keep pane/observer updates from creating document scrollbars. Login and
    * detached screens remain scrollable, and each app panel owns its scrolling. */

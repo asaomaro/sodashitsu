@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useSettingsStore } from "../store/settings.js";
+import SystemFooter from "../components/SystemFooter.vue";
 import PaneStatusline from "../components/PaneStatusline.vue";
 import { useMachinesStore } from "../store/machines.js";
 import ScheduleView from "../schedule/ScheduleView.vue";
@@ -41,6 +43,7 @@ import { useVisualViewportHeight } from "./useVisualViewport.js";
 const session = useSessionStore();
 const machines=useMachinesStore();
 const view = useViewStore();
+const settings = useSettingsStore();
 const registry = inject(TerminalRegistryKey);
 const conn = inject(ConnectionKey);
 const viewSync = inject(ViewSyncKey);
@@ -247,6 +250,8 @@ onBeforeUnmount(() => touchScroll?.dispose());
     </main>
     <PaneStatusline v-if="currentPaneId && !appActive" :pane-id="currentPaneId" />
     <ExtraKeys v-if="showKeyboard && !appActive" />
+    <SystemFooter v-if="view.screen !== 'schedule'" />
+    <div v-else-if="settings.systemFooterSettings.enabled && settings.systemFooterSettings.fields.length" class="system-footer-space" aria-hidden="true"></div>
     <PanePicker v-if="showPicker" @close="showPicker = false" />
     <MobileDisplaySheet
       v-if="showDisplaySheet && (sheetPane || currentPaneId)"
@@ -262,10 +267,11 @@ onBeforeUnmount(() => touchScroll?.dispose());
       "
     />
   </div>
-  <section v-if="view.screen==='schedule'" class="mobile-schedules"><button @click="view.setScreen('base')">端末へ戻る</button><ScheduleView :key="machines.selectedId" /></section>
+  <section v-if="view.screen==='schedule'" class="mobile-schedules"><button @click="view.setScreen('base')">端末へ戻る</button><ScheduleView :key="machines.selectedId" /><SystemFooter /></section>
 </template>
 
 <style scoped>
+.system-footer-space { height:24px; flex:0 0 auto; }
 .mobile-schedules{position:fixed;inset:0;z-index:30;background:var(--soda-bg);display:flex;flex-direction:column;}
 .mobile-schedules>.schedule-view{flex:1;min-height:0;}
 .mobile-app-view {
