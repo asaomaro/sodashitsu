@@ -69,13 +69,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .system-footer {
   display: flex;
-  gap: 1em;
+  gap: 0;
   flex: 0 0 auto;
   min-width: 0;
   height: 24px;
   box-sizing: border-box;
   align-items: center;
-  padding: 0 8px;
+  padding: 0;
   font:
     12px/22px system-ui,
     sans-serif;
