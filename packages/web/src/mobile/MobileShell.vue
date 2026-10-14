@@ -251,7 +251,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
     <PaneStatusline v-if="currentPaneId && !appActive" :pane-id="currentPaneId" />
     <ExtraKeys v-if="showKeyboard && !appActive" />
     <SystemFooter v-if="view.screen !== 'schedule'" />
-    <div v-else-if="settings.systemFooterSettings.enabled && settings.systemFooterSettings.fields.length" class="system-footer-space" aria-hidden="true"></div>
+    <div v-else-if="settings.systemFooterSettings.enabled" class="system-footer-space" aria-hidden="true"></div>
     <PanePicker v-if="showPicker" @close="showPicker = false" />
     <MobileDisplaySheet
       v-if="showDisplaySheet && (sheetPane || currentPaneId)"

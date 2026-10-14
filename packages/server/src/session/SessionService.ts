@@ -24,7 +24,7 @@ import type {
   WorkspaceGroup,
   WorkspaceId,
 } from "@sodashitsu/protocol";
-import { INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
+import { countSystemAgents, INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
 import type { SessionFileData, SessionFilePane, SessionFileTab, SessionFileWorkspace } from "../persist/SessionFile.js";
 import type { PaneHistoryEntry } from "../persist/PaneHistoryFile.js";
 import { historyReplayText, sanitizeHistoryAnsi } from "../terminal/historyAnsi.js";
@@ -375,6 +375,10 @@ export class SessionService {
   ): { cwd: string; fellBack: boolean } | Promise<{ cwd: string; fellBack: boolean }> {
     if (!newCwd || !this.newCwdDeps) return { cwd: fallback, fellBack: false };
     return resolveNewCwd(newCwd, sourcePaneId, fallback, this.newCwdDeps);
+  }
+
+  agentCounts() {
+    return countSystemAgents(this.model.listPanes());
   }
 
   snapshot(): SessionSnapshot {

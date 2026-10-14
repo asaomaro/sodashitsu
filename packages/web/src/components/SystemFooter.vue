@@ -15,11 +15,13 @@ const settings = useSettingsStore(),
 const data = ref<SystemResources>(),
   failed = ref(false),
   hidden = ref(document.hidden);
-const visible = computed(
-  () => settings.systemFooterSettings.enabled && settings.systemFooterSettings.fields.length > 0,
-);
+const visible = computed(() => settings.systemFooterSettings.enabled);
 const segments = computed(() =>
-  systemFooterSegments(data.value, settings.systemFooterSettings.fields),
+  systemFooterSegments(
+    data.value,
+    settings.systemFooterSettings.fields,
+    settings.systemFooterSettings.graphs,
+  ),
 );
 const poller = new SystemResourcePoller(
   () => (conn ? conn.request("server.resources", {}) : Promise.reject(new Error("disconnected"))),
@@ -50,8 +52,20 @@ onBeforeUnmount(() => {
     aria-label="サーバーの使用状況"
     title="Sodashitsuサーバーが動く環境の情報（WSLではLinux環境）"
   >
-    <span v-for="segment in segments" :key="segment">{{ segment }}</span>
-    <span v-if="!segments.length">{{ systemFooterPlaceholder(data, failed) }}</span>
+    <button
+      type="button"
+      aria-label="フッターの設定"
+      title="フッターの設定"
+      @click="view.openDialogWithContext({ kind: 'systemFooterSettings' })"
+    >
+      ⋮
+    </button>
+    <div class="footer-content">
+      <span v-for="segment in segments" :key="segment">{{ segment }}</span>
+      <span v-if="!segments.length && settings.systemFooterSettings.fields.length">{{
+        systemFooterPlaceholder(data, failed)
+      }}</span>
+    </div>
   </footer>
 </template>
 <style scoped>
@@ -70,9 +84,32 @@ onBeforeUnmount(() => {
   color: var(--soda-fg);
   background: var(--soda-bg);
   border-top: 1px solid var(--soda-menu-border);
-  overflow-x: auto;
+  overflow: hidden;
   scrollbar-width: none;
   white-space: nowrap;
 }
-.system-footer::-webkit-scrollbar { display:none; }
+.system-footer::-webkit-scrollbar {
+  display: none;
+}
+
+button {
+  flex: 0 0 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.footer-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 1em;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.footer-content::-webkit-scrollbar {
+  display: none;
+}
 </style>

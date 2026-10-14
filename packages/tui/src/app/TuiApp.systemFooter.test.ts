@@ -31,6 +31,16 @@ it("reserves one bottom row across screens and releases it when disabled", async
     h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields: ["load"] } }, 3);
     h.app.renderNow();
     expect((await h.screen()).split("\n")[29]).toContain("選択した情報は利用できません");
+    h.app.prefs.apply({ systemFooterSettings: { enabled: true, fields: [] } }, 4);
+    h.app.renderNow();
+    expect((await h.screen()).split("\n")[29]).toContain("⋮");
+    for (const screen of ["base", "graph", "dashboard", "schedule"] as const) {
+      h.app.ui.setScreen(screen);
+      h.app.renderNow();
+      h.io.type("\x1b[<0;1;30M");
+      expect(h.app.ui.dialogContext?.kind).toBe("systemFooterSettings");
+      h.app.ui.closeDialog();
+    }
     h.app.prefs.apply({ systemFooterSettings: { enabled: false, fields: ["cpu"] } }, 4);
     h.app.renderNow();
     expect((await h.screen()).split("\n")[29]).not.toContain("CPU 25%");

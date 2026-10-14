@@ -33,10 +33,26 @@ it("shows an unavailable state after successfully reading unsupported-only metri
   });
   try {
     await nextTick();
-    expect(wrapper.text()).toBe("選択した情報は利用できません");
+    expect(wrapper.text()).toContain("選択した情報は利用できません");
     settings.setSystemFooterSettings({ enabled: false, fields: ["load"] });
     await nextTick();
     expect(wrapper.find("footer").exists()).toBe(false);
+  } finally {
+    wrapper.unmount();
+    localStorage.clear();
+  }
+});
+
+it("keeps the left settings button when every field is hidden", async () => {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const settings = useSettingsStore();
+  settings.setSystemFooterSettings({ enabled: true, fields: [] });
+  const wrapper = mount(SystemFooter, { global: { plugins: [pinia] } });
+  try {
+    await wrapper.get('button[aria-label="フッターの設定"]').trigger("click");
+    expect(useViewStore().dialogContext?.kind).toBe("systemFooterSettings");
+    expect(wrapper.find("footer").exists()).toBe(true);
   } finally {
     wrapper.unmount();
     localStorage.clear();
