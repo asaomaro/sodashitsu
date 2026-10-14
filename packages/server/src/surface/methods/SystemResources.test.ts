@@ -24,11 +24,21 @@ it("shares the cached sample without creating background timers", () => {
 });
 it("exposes resources through the authenticated RPC surface", async () => {
   const surface = new ControlSurface();
-  registerServerMethods(surface, {} as MethodDeps);
+  let counts = { total: 2, states: { working: 1, idle: 1, blocked: 0, unknown: 0 } };
+  registerServerMethods(surface, {
+    session: { agentCounts: () => counts },
+  } as unknown as MethodDeps);
   const response = await surface.invoke(
     { clientId: "c", sink: {} as ClientSink },
     "server.resources",
     {},
   );
-  expect(response).toMatchObject({ ok: true, result: { cpuPercent: null } });
+  expect(response).toMatchObject({ ok: true, result: { cpuPercent: null, agents: counts } });
+  counts = { total: 1, states: { working: 0, idle: 0, blocked: 1, unknown: 0 } };
+  const next = await surface.invoke(
+    { clientId: "c", sink: {} as ClientSink },
+    "server.resources",
+    {},
+  );
+  expect(next).toMatchObject({ ok: true, result: { agents: counts } });
 });

@@ -12,6 +12,7 @@ test("system footer settings persist, share across clients, and reserve desktop/
   const dialog = page.getByRole("dialog", { name: "設定", exact: true });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "表示", exact: true }).click();
+  await expect(dialog.locator("[data-system-footer-settings] input")).toHaveCount(1);
   await dialog.getByLabel("フッターを表示", { exact: true }).check();
   await page.keyboard.press("Escape");
   const footer = page.locator("[data-system-footer]");
@@ -25,11 +26,19 @@ test("system footer settings persist, share across clients, and reserve desktop/
   const other = await page.context().newPage();
   await other.goto(`${appServer.origin}/#token=${appServer.token}`);
   await expect(other.locator("[data-system-footer]")).toContainText("メモリ");
-  await focusTerminal(page);
-  await prefixKey(page, "s");
-  await dialog.getByRole("button", { name: "表示", exact: true }).click();
-  await dialog.getByLabel("CPU使用率", { exact: true }).uncheck();
+  await footer.getByRole("button", { name: "フッターの設定", exact: true }).click();
+  const footerDialog = page.getByRole("dialog", { name: "フッターの設定", exact: true });
+  await footerDialog.getByLabel("CPU使用率", { exact: true }).uncheck();
+  await footerDialog.getByLabel("エージェント総数", { exact: true }).check();
+  await footerDialog.getByLabel("メモリ使用率のグラフ", { exact: true }).check();
+  await footerDialog
+    .getByLabel("メモリ使用率のグラフパターン", { exact: true })
+    .selectOption("ascii");
+  await expect(footerDialog.locator("output").nth(1)).toContainText("#######--- 65%");
   await page.keyboard.press("Escape");
+  await expect(footer).toContainText("エージェント 0");
+  await expect(footer).toContainText(/メモリ.*[#-]{10}/);
+  await expect(other.locator("[data-system-footer]")).toContainText("エージェント 0");
   await expect(footer).not.toContainText("CPU");
   await expect(other.locator("[data-system-footer]")).not.toContainText("CPU");
   await other.close();
@@ -44,10 +53,29 @@ test("system footer settings persist, share across clients, and reserve desktop/
   await page.screenshot({ path: "/tmp/system-footer-mobile.png" });
   const underlyingHeight = (await page.locator(".mobile-shell-pane").boundingBox())!.height;
   await page.getByRole("button", { name: "予約", exact: true }).click();
-  await expect.poll(async () => (await page.locator(".mobile-shell-pane").boundingBox())!.height).toBe(underlyingHeight);
+  await expect
+    .poll(async () => (await page.locator(".mobile-shell-pane").boundingBox())!.height)
+    .toBe(underlyingHeight);
   await expect(page.locator(".mobile-schedules [data-system-footer]")).toContainText("メモリ");
   await expect(footer).toHaveCount(1);
   const schedulesFooter = (await footer.boundingBox())!,
     schedules = (await page.locator(".mobile-schedules > .schedule-view").boundingBox())!;
   expect(schedules.y + schedules.height).toBeLessThanOrEqual(schedulesFooter.y + 1);
+  await footer.getByRole("button", { name: "フッターの設定", exact: true }).click();
+  await expect(footerDialog).toBeVisible();
+  const mobileDialog = (await footerDialog.boundingBox())!;
+  expect(mobileDialog.x).toBeGreaterThanOrEqual(0);
+  expect(mobileDialog.x + mobileDialog.width).toBeLessThanOrEqual(390);
+  for (const checkbox of await footerDialog
+    .locator("fieldset")
+    .first()
+    .locator("input")
+    .all())
+    await checkbox.uncheck();
+  await page.keyboard.press("Escape");
+  await expect(footer.locator(".footer-content")).toBeEmpty();
+  await footer.getByRole("button", { name: "フッターの設定", exact: true }).click();
+  await footerDialog.getByLabel("CPU使用率", { exact: true }).check();
+  await page.keyboard.press("Escape");
+  await expect(footer).toContainText("CPU");
 });

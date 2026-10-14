@@ -281,6 +281,7 @@ export interface ToastOptions {
 export type DialogContext =
   | { kind: "sessionTools"; paneId: string; mode: "notes" | "todos" }
   | { kind: "statuslineSettings" }
+  | { kind: "systemFooterSettings" }
   | { kind: "addView"; tabId: string; paneId?: string }
   | { kind: "newTab"; workspaceId: string }
   | { kind: "projectFolder"; workspaceId: string; currentPath: string }

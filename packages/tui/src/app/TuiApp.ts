@@ -3,6 +3,7 @@ import { SystemResourcePoller } from "@sodashitsu/client-core";
 import { PaneStatuslines } from "./PaneStatuslines.js";
 import { loadStatuslineSettings } from "@sodashitsu/protocol";
 import { SessionToolsDialog } from "../modes/SessionToolsDialog.js";
+import { systemFooterSettingsSections } from "../settings/systemFooterSettings.js";
 import { statuslineSettingsSections } from "../settings/statuslineSettings.js";
 import { GraphTerminal } from "../modes/GraphTerminal.js";
 import { ScheduleView } from "../modes/ScheduleView.js";
@@ -965,6 +966,13 @@ export class TuiApp {
       return;
     }
     if (ev.kind === "mouse") {
+      const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
+      const { rows } = this.io.size();
+      if (footer.enabled && rows >= 4 && ev.y === rows - 1 && ev.x < 2 && ev.x >= 0) {
+        if (ev.action === "down" && ev.button === 0) this.ui.openDialogWithContext({ kind: "systemFooterSettings" });
+        this.scheduleRender();
+        return;
+      }
       const hit = this.toastHits.find(
         (t) => ev.x >= t.x && ev.x < t.x + t.w && ev.y >= t.y && ev.y < t.y + t.h,
       );
@@ -1337,6 +1345,7 @@ export class TuiApp {
       });
     if (ctx.kind === "pluginPackages")
       return new PluginPackages(this.ui, this.rpc, () => this.scheduleRender());
+    if (ctx.kind === "systemFooterSettings") return new WindowOverlay(new SettingsDialog(this.ui, () => systemFooterSettingsSections(this.prefs, this.settingsWriter), () => this.scheduleRender()), { w: 96, h: 30 });
     if (ctx.kind === "statuslineSettings") return new WindowOverlay(new SettingsDialog(this.ui, () => statuslineSettingsSections(this.prefs, this.settingsWriter), () => this.scheduleRender()), { w: 96, h: 30 });
     if (ctx.kind === "settings") return this.settingsDialog(ctx.section);
     if (ctx.kind === "onboarding")
@@ -1586,7 +1595,7 @@ export class TuiApp {
   protected layout(): LayoutResult {
     const { cols, rows } = this.io.size();
     const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
-    const footerRows = footer.enabled && footer.fields.length > 0 && rows >= 4 ? 1 : 0;
+    const footerRows = footer.enabled && rows >= 4 ? 1 : 0;
     this.resourcePoller.setActive(this.resourcesConnected && footerRows > 0);
     const tab = this.model.currentTab();
     const views = this.ui.screen === "base" ? (tab ? terminalViews(tab) : []) : [];
@@ -1700,9 +1709,9 @@ export class TuiApp {
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => {
         const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
-        if (footer.enabled && footer.fields.length > 0 && grid.h >= 4) {
-          const parts = systemFooterSegments(this.systemResources, footer.fields);
-          grid.text(0, grid.h - 1, parts.join(" · ") || systemFooterPlaceholder(this.systemResources, this.systemResourcesFailed), this.theme.ui("--soda-fg"), this.theme.ground("--soda-bg"), 0, grid.w);
+        if (footer.enabled && grid.h >= 4) {
+          const parts = systemFooterSegments(this.systemResources, footer.fields, footer.graphs);
+          grid.text(0, grid.h - 1, "⋮ " + (parts.join(" · ") || (footer.fields.length ? systemFooterPlaceholder(this.systemResources, this.systemResourcesFailed) : "")), this.theme.ui("--soda-fg"), this.theme.ground("--soda-bg"), 0, grid.w);
         }
         if (this.ui.screen === "graph")
           return this.graphView.render(grid, layout.paneArea, this.theme);

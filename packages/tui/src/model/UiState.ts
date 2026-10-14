@@ -14,6 +14,7 @@ import type { SessionModel } from "./SessionModel.js";
 export type DialogContext =
   | { kind: "sessionTools"; paneId: string; mode: "notes" | "todos" }
   | { kind: "statuslineSettings" }
+  | { kind: "systemFooterSettings" }
   | {
       kind: "graphEdit";
       mode: "link" | "pane";

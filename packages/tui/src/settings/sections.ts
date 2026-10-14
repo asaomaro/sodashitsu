@@ -1,4 +1,4 @@
-import { SYSTEM_FOOTER_FIELDS, loadSystemFooterSettings } from "@sodashitsu/protocol";
+import { loadSystemFooterSettings } from "@sodashitsu/protocol";
 import {
   AGENT_HEADER_ACTIONS,
   HEADER_ACTION_LABELS,
@@ -530,8 +530,7 @@ function displaySection(env: SettingsEnv): SettingsSection {
       items.push(...sidebarRowsItems(env));
       items.push(
         { label: "画面下部のサーバー情報", heading: true },
-        toggleItem("フッターを表示", footer.enabled, v => set({ systemFooterSettings: { ...footer, enabled: v } }), "サーバーの情報です。WSLではLinux環境。Web版・端末版で共有します。"),
-        ...SYSTEM_FOOTER_FIELDS.map(field => toggleItem(field.label, footer.fields.includes(field.id), v => set({ systemFooterSettings: { ...footer, fields: v ? [...footer.fields, field.id] : footer.fields.filter(f => f !== field.id) } }))),
+        toggleItem("フッターを表示", footer.enabled, v => set({ systemFooterSettings: { ...footer, enabled: v } }), "表示内容はフッター左端のボタンから設定します。Web版・端末版で共有します。"),
       );
       return items;
     },

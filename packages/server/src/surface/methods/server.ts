@@ -12,7 +12,10 @@ import type { MethodDeps } from "./deps.js";
  */
 export function registerServerMethods(surface: ControlSurface, deps: MethodDeps): void {
   const resources = new SystemResourceSampler();
-  surface.register("server.resources", { schema: ServerStopParams, handler: () => resources.get() });
+  surface.register("server.resources", {
+    schema: ServerStopParams,
+    handler: () => ({ ...resources.get(), agents: deps.session.agentCounts() }),
+  });
   surface.register("server.stop", {
     schema: ServerStopParams,
     handler: () =>

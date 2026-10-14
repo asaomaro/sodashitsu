@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  SYSTEM_FOOTER_FIELDS,
   DEFAULT_THEME_NAME,
   isThemeName,
   THEME_APPEARANCE,
@@ -1503,10 +1502,7 @@ function onNativeCancel(ev: Event): void {
         <fieldset class="settings-fieldset" data-system-footer-settings>
           <legend>画面下部のサーバー情報</legend>
           <label><input type="checkbox" :checked="settings.systemFooterSettings.enabled" @change="settings.setSystemFooterSettings({ ...settings.systemFooterSettings, enabled: ($event.target as HTMLInputElement).checked })" />フッターを表示</label>
-          <label v-for="field in SYSTEM_FOOTER_FIELDS" :key="field.id" style="display:block">
-            <input type="checkbox" :checked="settings.systemFooterSettings.fields.includes(field.id)" @change="settings.setSystemFooterSettings({ ...settings.systemFooterSettings, fields: ($event.target as HTMLInputElement).checked ? [...settings.systemFooterSettings.fields, field.id] : settings.systemFooterSettings.fields.filter(f => f !== field.id) })" />{{ field.label }}
-          </label>
-          <p class="settings-note">サーバーの情報です。WSLではWindows全体ではなくLinux環境の使用状況を表示します。Web版・端末版で設定を共有します。</p>
+          <p class="settings-note">表示内容はフッター左端のボタンから設定します。Web版・端末版で設定を共有します。</p>
         </fieldset>
       </section>
       <section class="settings-section" aria-labelledby="settings-terminal">

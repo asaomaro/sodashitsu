@@ -20,6 +20,7 @@ import NameDialog from "./components/NameDialog.vue";
 import NotificationHistoryDialog from "./components/NotificationHistoryDialog.vue";
 import OnboardingDialog from "./components/OnboardingDialog.vue";
 import SessionSwitchDialog from "./components/SessionSwitchDialog.vue";
+import SystemFooterSettingsDialog from "./components/SystemFooterSettingsDialog.vue";
 import StatuslineSettingsDialog from "./components/StatuslineSettingsDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import PrefixIndicator from "./components/PrefixIndicator.vue";
@@ -96,6 +97,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
     <NotificationHistoryDialog />
     <SettingsDialog />
     <StatuslineSettingsDialog />
+    <SystemFooterSettingsDialog />
     <HelpDialog />
     <OnboardingDialog />
     <GotoPicker />
