@@ -34,6 +34,23 @@ test("native terminal embedded in a plugin: live output, own textarea, clipping,
   );
   const terminal = page.locator("[data-embedded-terminal]");
   await expect(terminal).toBeVisible();
+  const appPane = async () =>
+    (await c.request("client.hello", { protocol: 1, kind: "external" })).snapshot.panes.find(
+      (p) => p.id === paneId,
+    )!;
+  await expect.poll(async () => (await appPane()).rows).toBeLessThan(12);
+  const initialCols = (await appPane()).cols;
+  const appFrame = page.frameLocator("iframe[data-display-script]");
+  await appFrame.locator("#terminal").evaluate((el) => {
+    (el as HTMLElement).style.width = "240px";
+  });
+  await expect.poll(async () => (await appPane()).cols).toBeLessThan(initialCols);
+  const appGrid = await appPane();
+  expect(appGrid.cols).toBeLessThan(40);
+  c.sendInput(paneId, "printf 'APP_GRID_%s_%s\\n' $(stty size)\r");
+  await expect(terminal.locator(".xterm-accessibility-tree")).toContainText(
+    `APP_GRID_${appGrid.rows}_${appGrid.cols}`,
+  );
   // Setup uses CLI input; outcome is inspected in the real rendered terminal DOM.
   c.sendInput(paneId, "printf '\\033[32mEMBED_%s\\033[0m\\n' LIVE_938\r");
   await expect(terminal.locator(".xterm-accessibility-tree")).toContainText("EMBED_LIVE_938");
@@ -67,7 +84,9 @@ test("native terminal embedded in a plugin: live output, own textarea, clipping,
   await expect(terminal.locator(".xterm-accessibility-tree")).toContainText("EMBED_LIVE_938");
   await page.screenshot({ path: "/tmp/plugin-component-mobile.png" });
   await page.locator("[data-mobile-display-sheet] [data-display-engage]").click();
+  const beforeCloseCols = (await appPane()).cols;
   await frame.locator("#remove").click();
+  await expect.poll(async () => (await appPane()).cols).toBeGreaterThan(beforeCloseCols);
   await expect(terminal).toHaveCount(0);
   c.close();
 });
@@ -77,13 +96,13 @@ test("a background terminal in another tab is visible, survives reconnect, and i
   appServer,
 }) => {
   let allowConnect = true;
-  let socket: WebSocketRoute | null = null;
+  const sockets = new Set<WebSocketRoute>();
   await page.routeWebSocket(/\/ws$/, (ws) => {
     if (!allowConnect) {
       void ws.close();
       return;
     }
-    socket = ws;
+    sockets.add(ws);
     ws.connectToServer();
   });
   await enableScript(appServer);
@@ -103,7 +122,7 @@ test("a background terminal in another tab is visible, survives reconnect, and i
   const terminal = page.locator("[data-embedded-terminal]");
   await expect(terminal.locator(".xterm-accessibility-tree")).toContainText("BACKGROUND_READY");
   allowConnect = false;
-  await (socket as WebSocketRoute | null)?.close();
+  await Promise.all([...sockets].map((socket) => socket.close()));
   await expect(page.locator(".reconnect-overlay")).toBeVisible();
   allowConnect = true;
   await expect(page.locator(".reconnect-overlay")).toBeHidden({ timeout: 15000 });
@@ -173,7 +192,14 @@ test("embedded input terminal sends to its background pane in Web and mobile, af
   await page.locator("[data-mobile-display-sheet] [data-display-engage]").click();
   await terminal.locator(".xterm-helper-textarea").focus();
   await page.keyboard.insertText("日本語");
-  await expect.poll(() => input().filter(x=>x.paneId===background.pane.id).map(x=>x.text).join('')).toContain("日本語");
+  await expect
+    .poll(() =>
+      input()
+        .filter((x) => x.paneId === background.pane.id)
+        .map((x) => x.text)
+        .join(""),
+    )
+    .toContain("日本語");
   await page.keyboard.press("Control+u");
   await page.keyboard.type("printf 'INPUT_%s\\n' MOBILE");
   await page.keyboard.press("Enter");

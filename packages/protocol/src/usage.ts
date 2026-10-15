@@ -47,6 +47,9 @@ export interface AgentUsage {
   breakdown?: AgentUsageBreakdown;
   /** コスト（USD）。製品は単価の表を持たない: 報告・`cost-state` の値だけ。無ければ項目ごと無い。 */
   costUsd?: number;
+  /** Sum of all sessions in this Claude configuration's Sunday–Saturday cache, not the current session. */
+  weeklyCostUsd?: number;
+  weeklyCostAsOf?: number;
   /** `reported`＝エージェントの報告（見積り）・`cost-state`＝記録の会計の行（`costAsOf` の時点）。 */
   costBasis?: "reported" | "cost-state";
   /** コストの時点（epoch ms。`cost-state` は区切りにだけ書かれるので、その後の分は含まない）。 */

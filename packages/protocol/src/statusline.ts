@@ -21,6 +21,9 @@ export const STATUSLINE_FIELDS = [
   { id: "session", label: "セッションID" },
   { id: "cwd", label: "作業フォルダ" },
   { id: "subagents", label: "サブエージェント数" },
+  { id: "weeklyCost", label: "今週のコスト（全セッション）" },
+  { id: "fiveHourReset", label: "5時間制限の解除日時" },
+  { id: "weeklyReset", label: "週制限の解除日時" },
 ] as const;
 export type StatuslineField = (typeof STATUSLINE_FIELDS)[number]["id"];
 export const STATUSLINE_GRAPH_PATTERNS = [
@@ -177,6 +180,7 @@ export function statuslineSegments(
     );
   if (finite(u?.tokens.total)) add("tokens", `Tokens ${tokens(u.tokens.total)}`);
   if (finite(u?.costUsd)) add("cost", `$${u.costUsd.toFixed(3)}`);
+  if (finite(u?.weeklyCostUsd)) add("weeklyCost", `今週 $${u.weeklyCostUsd.toFixed(3)}`);
   for (const id of ["input", "output", "cacheRead", "cacheWrite", "reasoning"] as const) {
     const n = u?.tokens[id];
     if (finite(n)) add(id, `${STATUSLINE_FIELDS.find((f) => f.id === id)!.label} ${tokens(n)}`);
@@ -196,8 +200,19 @@ export function statuslineSegments(
   for (const account of accounts)
     if (account.kind === pane.agent.kind)
       for (const w of account.windows) {
-        if (!finite(w.usedPct)) continue;
         const id = statuslineLimitKind(w);
+        if ((id === "fiveHour" || id === "weekly") && finite(w.resetsAt)) {
+          const reset = new Date(w.resetsAt);
+          if (Number.isFinite(reset.getTime())) {
+            const pad = (n: number) => String(n).padStart(2, "0");
+            add(
+              id === "fiveHour" ? "fiveHourReset" : "weeklyReset",
+              `${account.label} ${id === "fiveHour" ? "5h" : "週"}解除 ${reset.getFullYear()}/${pad(reset.getMonth() + 1)}/${pad(reset.getDate())} ${pad(reset.getHours())}:${pad(reset.getMinutes())}${w.stale ? " *" : ""}`,
+              "model",
+            );
+          }
+        }
+        if (!finite(w.usedPct)) continue;
         add(
           id,
           `${account.label} ${w.label} ${statuslineGauge(w.usedPct, settings.graphs[id])}${w.stale ? " *" : ""}`,

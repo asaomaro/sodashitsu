@@ -120,3 +120,12 @@ describe("ClaudeUsageAdapter", () => {
     expect(again?.tokens.output).toBe(out); // 止まった後は、増えても変わらない
   });
 });
+
+it("includes weekly costs from the verified transcript's config root across sessions", async () => {
+ mkdirSync(join(root,"proj"));
+ writeFileSync(join(root,"proj",`${SID}.jsonl`), assistant(1));
+ const now=Date.now(), date=new Date(now).toISOString().slice(0,10);
+ writeFileSync(join(base,"weekly-usage.json"),JSON.stringify({sessions:{[SID]:{date,cost:1},other:{date,cost:4}}}));
+ const adapter=new ClaudeUsageAdapter({roots:()=>[root],now:()=>now});
+ try { const usage=await adapter.usageFor({paneId:"p",sessionId:SID,transcriptPath:undefined}); expect(usage?.weeklyCostUsd).toBe(5);expect(usage?.weeklyCostAsOf).toBeGreaterThan(0); } finally {adapter.close();}
+});
