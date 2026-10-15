@@ -382,6 +382,11 @@ test("native statusline settings, order, row bounds and mobile layout persist", 
     await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).uncheck();
     await expect(bar).not.toContainText("ConfiguredPane");
     await dialog.getByLabel("トークン数の表記", { exact: true }).selectOption("k");
+    await dialog
+      .getByRole("checkbox", { name: "今週のコスト（全セッション）", exact: true })
+      .check();
+    await dialog.getByRole("checkbox", { name: "5時間制限の解除日時", exact: true }).check();
+    await dialog.getByRole("checkbox", { name: "週制限の解除日時", exact: true }).check();
     await dialog.getByRole("button", { name: "エージェント種類を上へ", exact: true }).click();
     await dialog.getByRole("checkbox", { name: "ペイン名", exact: true }).check();
     await dialog.getByLabel("週制限のグラフパターン", { exact: true }).selectOption("halfBlocks");
@@ -390,6 +395,7 @@ test("native statusline settings, order, row bounds and mobile layout persist", 
       .poll(async () => (await client.request("prefs.get", {})).prefs.statuslineSettings)
       .toMatchObject({
         tokenFormat: "k",
+        fields: { weeklyCost: true, fiveHourReset: true, weeklyReset: true },
         order: [
           "agent",
           "pane",
@@ -411,6 +417,9 @@ test("native statusline settings, order, row bounds and mobile layout persist", 
           "session",
           "cwd",
           "subagents",
+          "weeklyCost",
+          "fiveHourReset",
+          "weeklyReset",
         ],
       });
     await page.keyboard.press("Escape");

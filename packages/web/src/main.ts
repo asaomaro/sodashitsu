@@ -267,6 +267,7 @@ const fileTransfer: FileTransfer = new FileTransfer({
 });
 
 const registry = new TerminalRegistry({
+  componentConnection: (state, event) => connection.createAuxiliary(state, event),
   componentInput: (paneId, data) => conn.sendInput(paneId, data),
   capacity: terminalCapacity,
   conn: inputGate,

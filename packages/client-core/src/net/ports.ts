@@ -52,7 +52,17 @@ export type LoginResult =
   | { ok: false; reason: "http_error"; status: number }
   | { ok: false; reason: "network_error" };
 
+export interface AuxiliaryConnection {
+  request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
+  connect(): void;
+  dispose(): void;
+}
 export interface ConnectionPort {
+  /** Native screen components only: independent attachment ownership on the same target. */
+  createAuxiliary?(
+    onState: (connected: boolean) => void,
+    onEvent?: (event: ServerEvent) => void,
+  ): AuxiliaryConnection;
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
   sendInput(paneId: string, bytes: string | Uint8Array, origin?: InputOrigin): void;
   /** `POST /api/login`。成功（204）か、失敗の理由（`LoginResult`。D105）を返す。reject しない。 */

@@ -1,11 +1,12 @@
 import { Terminal } from "@xterm/xterm";
 import { TERMINAL_FONT_FAMILY } from "./terminalFonts.js";
+import type { ServerEvent } from "@sodashitsu/protocol";
 import type { ITerminalAddon, ITerminalOptions, ITheme } from "@xterm/xterm";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { SearchAddon } from "@xterm/addon-search";
 import type { KeyInputController } from "../keys/KeyInputController.js";
-import type { ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
+import type { AuxiliaryConnection, ConnectionPort, TerminalSinkPort } from "@sodashitsu/client-core";
 import { installQueryFilter } from "./QueryFilter.js";
 import { createImageAddon } from "./imageAddon.js";
 import { RendererPool } from "./RendererPool.js";
@@ -40,6 +41,7 @@ export interface TerminalRegistryOptions {
   capacity: number;
   /** Embedded terminals address a fixed pane; do not retarget through pane-creation input holds. */
   componentInput?: (paneId: string, data: string) => void;
+  componentConnection?: (onState: (connected: boolean) => void, onEvent?: (event: ServerEvent) => void) => AuxiliaryConnection;
   conn: ConnectionPort;
   renderers: RendererPool;
   keys: KeyInputController;
@@ -272,6 +274,10 @@ export class TerminalRegistry implements TerminalSinkPort {
       if (!sinks.size) this.mirrors.delete(paneId);
       this.release(paneId, holder);
     };
+  }
+  /** Separate connection prevents an app mirror from releasing graph/CLI attachment ownership. */
+  createComponentSizeConnection(onState: (connected: boolean) => void, onEvent?: (event: ServerEvent) => void) {
+    return this.opts.componentConnection?.(onState, onEvent) ?? this.opts.conn.createAuxiliary?.(onState, onEvent);
   }
   /** Native component input only. The component validates focus, engagement and workspace on every write. */
   sendMirrorInput(paneId: string, data: string): void {

@@ -6,6 +6,8 @@ import { TerminalRegistryKey } from "../injection.js";
 import { TERMINAL_FONT_FAMILY } from "../term/terminalFonts.js";
 import { installQueryFilter } from "../term/QueryFilter.js";
 import { isEmbeddedAppEscape } from "../term/embeddedKeys.js";
+import { EmbeddedTerminalSize } from "../term/EmbeddedTerminalSize.js";
+import { getCellSize, measure } from "../term/measure.js";
 import { createImageAddon } from "../term/imageAddon.js";
 
 const props = defineProps<{
@@ -27,6 +29,29 @@ const mount = ref<HTMLElement | null>(null);
 const error = ref(false);
 let term: Terminal | undefined;
 let off: (() => void) | undefined;
+let sizing: EmbeddedTerminalSize | undefined;
+let observer: ResizeObserver | undefined;
+let disposed = false;
+const sizeError = ref(false);
+function fit() {
+  if (disposed || !term || !viewport.value) return;
+  const { clientWidth: width, clientHeight: height } = viewport.value;
+  if (document.hidden || width <= 0 || height <= 0) {
+    sizing?.dispose();
+    sizing = undefined;
+    return;
+  }
+  const { cols, rows } = measure(width, height, getCellSize(term));
+  if (term.cols !== cols || term.rows !== rows) term.resize(cols, rows);
+  sizing ??= new EmbeddedTerminalSize(
+    props.paneId,
+    (state, event) => registry?.createComponentSizeConnection(state, event),
+    (failed) => {
+      sizeError.value = failed;
+    },
+  );
+  sizing.resize(cols, rows);
+}
 onMounted(() => {
   if (!registry || !mount.value) {
     error.value = true;
@@ -94,6 +119,7 @@ onMounted(() => {
       refreshFonts: () => {
         term?.clearTextureAtlas();
         if (term) term.refresh(0, term.rows - 1);
+        fit();
       },
       setTheme: (theme) => {
         if (term) term.options.theme = theme;
@@ -101,15 +127,21 @@ onMounted(() => {
       onOutput: (_id, chunk) => write(chunk),
       onSnapshot: (_id, cols, rows, text) => {
         error.value = false;
-        term?.resize(Math.max(1, cols), Math.max(1, rows));
+        fit();
         write(`\x1bc${text}`, true);
       },
-      onSizeChanged: (_id, cols, rows) => term?.resize(Math.max(1, cols), Math.max(1, rows)),
+      onSizeChanged: () => fit(),
     },
     () => {
       error.value = true;
     },
   );
+  observer = new ResizeObserver(fit);
+  observer.observe(viewport.value!);
+  document.addEventListener("visibilitychange", fit);
+  fit();
+  requestAnimationFrame(fit);
+  void document.fonts?.ready.then(fit);
 });
 watch(
   () => [props.interactive, props.enabled],
@@ -125,6 +157,10 @@ watch(
   },
 );
 onBeforeUnmount(() => {
+  disposed = true;
+  document.removeEventListener("visibilitychange", fit);
+  observer?.disconnect();
+  sizing?.dispose();
   off?.();
   term?.dispose();
 });
@@ -139,10 +175,21 @@ onBeforeUnmount(() => {
     @keydown="onKeydown"
   >
     <div ref="mount" class="embedded-terminal-content" v-show="!error"></div>
+    <span v-if="sizeError" class="size-warning" role="status"
+      >別の表示が端末サイズを使用しています</span
+    >
     <p v-if="error" role="status">端末を読み込めませんでした</p>
   </div>
 </template>
 <style scoped>
+.size-warning {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 11px;
+  background: var(--soda-bg);
+  color: var(--soda-fg);
+}
 .embedded-terminal {
   width: 100%;
   height: 100%;

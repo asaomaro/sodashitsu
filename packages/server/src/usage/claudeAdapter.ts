@@ -1,6 +1,13 @@
+import { dirname } from "node:path";
+import { WeeklyCostReader } from "./weeklyCost.js";
 import type { AgentUsage } from "@sodashitsu/protocol";
 import { ClaudeSessionScan, type ScanLimits } from "./claudeScan.js";
-import { claudeRoots, locateClaudeMain, locateClaudeSubagents, SESSION_ID_RE } from "./claudeSource.js";
+import {
+  claudeRoots,
+  locateClaudeMain,
+  locateClaudeSubagents,
+  SESSION_ID_RE,
+} from "./claudeSource.js";
 import type { UsageAdapter, UsageSourceInfo } from "./UsageService.js";
 
 /**
@@ -44,6 +51,7 @@ export interface ClaudeAdapterOptions {
 
 export class ClaudeUsageAdapter implements UsageAdapter {
   readonly kind = "claude";
+  private readonly weeklyCost = new WeeklyCostReader();
   private readonly states = new Map<string, PaneState>();
   private readonly roots: () => string[];
   private readonly now: () => number;
@@ -119,7 +127,10 @@ export class ClaudeUsageAdapter implements UsageAdapter {
       if (state.closed || state.mainFile === null) return null;
     }
     if (state.closed) return null;
-    if (state.running === null && (now - state.lastCheckedAt >= MIN_INTERVAL_MS || state.lastCheckedAt === 0)) {
+    if (
+      state.running === null &&
+      (now - state.lastCheckedAt >= MIN_INTERVAL_MS || state.lastCheckedAt === 0)
+    ) {
       state.lastCheckedAt = now;
       state.running = this.drive(source.paneId, state, now).finally(() => {
         state.running = null;
@@ -142,6 +153,13 @@ export class ClaudeUsageAdapter implements UsageAdapter {
     if (state.scan.stopped) usage.updatesStopped = true;
     if (state.running !== null) usage.scanning = true;
     if (usage.updatedAt === 0) usage.updatedAt = now;
+    // mainFile is verified beneath a Claude projects root; its config directory owns the cache.
+    const weekly = await this.weeklyCost.read(dirname(dirname(dirname(state.mainFile!))), now);
+    if (weekly) {
+      usage.weeklyCostUsd = weekly.usd;
+      usage.weeklyCostAsOf = weekly.asOf;
+    }
+    if (state.closed) return null;
     return usage;
   }
 
@@ -151,7 +169,11 @@ export class ClaudeUsageAdapter implements UsageAdapter {
     if (st.scan.stopped) return; // 生涯の上限に達した: この会話の更新は止めた
     if (now - st.lastRelistAt >= SUBAGENT_RELIST_MS || st.lastRelistAt === 0) {
       st.lastRelistAt = now;
-      const { files, truncated } = await locateClaudeSubagents(st.mainFile, st.sessionId, this.roots());
+      const { files, truncated } = await locateClaudeSubagents(
+        st.mainFile,
+        st.sessionId,
+        this.roots(),
+      );
       if (st.closed) return;
       for (const f of files) st.scan.addFile(f, true);
       st.subagentsTruncated = truncated;

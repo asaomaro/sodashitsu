@@ -1,5 +1,20 @@
-import { decodeFrame, encodeInputFrame, FRAME_TYPE, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
-import type { ClientKind, ConnectionPort, LoginResult, StorePort, TerminalSinkPort } from "./ports.js";
+import {
+  decodeFrame,
+  encodeInputFrame,
+  FRAME_TYPE,
+  type MethodName,
+  type ParamsOf,
+  type ResultOf,
+  type ServerEvent,
+} from "@sodashitsu/protocol";
+import type {
+  AuxiliaryConnection,
+  ClientKind,
+  ConnectionPort,
+  LoginResult,
+  StorePort,
+  TerminalSinkPort,
+} from "./ports.js";
 import { parseRetryAfter } from "./retryAfter.js";
 
 /**
@@ -66,6 +81,7 @@ type SessionCheck = "ok" | "unauthorized" | "forbidden" | "unknown";
  * WebSocket の接続と再接続、要求と応答の対応付け、snapshot とイベントの振り分けを行う。
  */
 export class Connection implements ConnectionPort {
+  private readonly auxiliaries = new Set<() => void>();
   private readonly kind: ClientKind;
   private readonly httpOrigin: string;
   private wsUrl: string;
@@ -134,7 +150,11 @@ export class Connection implements ConnectionPort {
       case 403:
         return { ok: false, reason: "origin_rejected" };
       case 429:
-        return { ok: false, reason: "rate_limited", retryAfterSeconds: parseRetryAfter(res.headers.get("retry-after"), Date.now()) };
+        return {
+          ok: false,
+          reason: "rate_limited",
+          retryAfterSeconds: parseRetryAfter(res.headers.get("retry-after"), Date.now()),
+        };
       default:
         return { ok: false, reason: "http_error", status: res.status };
     }
@@ -163,6 +183,7 @@ export class Connection implements ConnectionPort {
    * 間隔は最初に戻す。続けて呼ばれたら最後の行き先だけが開く（前の socket を閉じ終える前なら、閉じたときに最後の行き先へ開く）。
    */
   retarget(wsUrl: string): void {
+    for (const dispose of [...this.auxiliaries]) dispose();
     this.wsUrl = wsUrl;
     this.stopped = false; // `disconnect` の後でも、行き先を替えたら繋ぐ
     this.targetGen++;
@@ -190,14 +211,57 @@ export class Connection implements ConnectionPort {
    * 繋ぎ直しの待ち・`/api/session` の確認の途中も取り消す。応答待ちの要求は close で reject される。次の `connect()` で再開できる。
    */
   disconnect(): void {
+    for (const dispose of [...this.auxiliaries]) dispose();
     this.stopped = true;
     this.targetGen++; // 確認の途中なら、その後に開かない
     this.cancelReconnectTimer();
     this.retargetPending = false;
     const ws = this.ws;
-    if (ws && (ws.readyState === WS_OPEN || ws.readyState === WS_CONNECTING)) ws.close(1000, "disconnect");
+    if (ws && (ws.readyState === WS_OPEN || ws.readyState === WS_CONNECTING))
+      ws.close(1000, "disconnect");
     // socket が無い（繋ぎ直しの待ち・`/api/session` の確認の途中）なら close は来ないので、ここで知らせる。閉じる途中なら close で知らせる。
     else if (!ws) this.store.onConnectionState("detached");
+  }
+
+  createAuxiliary(
+    onState: (connected: boolean) => void,
+    onEvent?: (event: ServerEvent) => void,
+  ): AuxiliaryConnection {
+    let disposed = false;
+    const child = new Connection({
+      kind: "external",
+      httpOrigin: this.httpOrigin,
+      wsUrl: this.wsUrl,
+      fetchImpl: this.fetchImpl,
+      createWebSocket: this.createWebSocket,
+      sink: { onOutput() {}, onSnapshot() {}, onSizeChanged() {} },
+      store: {
+        applySnapshot() {},
+        applyEvent(event) {
+          if (!disposed) onEvent?.(event);
+        },
+        onAuthRequired: () => dispose(),
+        onConnectionState: (state) => {
+          if (!disposed) onState(state === "open");
+        },
+        onOriginRejectSuspected() {},
+      },
+    });
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      this.auxiliaries.delete(dispose);
+      onState(false);
+      child.disconnect();
+    };
+    this.auxiliaries.add(dispose);
+    return {
+      request: (method, params) => child.request(method, params),
+      connect: () => {
+        if (!disposed) child.connect();
+      },
+      dispose,
+    };
   }
 
   request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
@@ -334,7 +398,8 @@ export class Connection implements ConnectionPort {
       this.handleText(data);
       return;
     }
-    const bytes = data instanceof Uint8Array ? data : data instanceof ArrayBuffer ? new Uint8Array(data) : null;
+    const bytes =
+      data instanceof Uint8Array ? data : data instanceof ArrayBuffer ? new Uint8Array(data) : null;
     if (bytes) this.handleBinary(bytes);
   }
 
@@ -347,7 +412,11 @@ export class Connection implements ConnectionPort {
     }
     if (typeof msg !== "object" || msg === null) return;
     if ("id" in msg && typeof (msg as { id: unknown }).id === "string") {
-      const envelope = msg as { id: string; result?: unknown; error?: { code: string; message: string } };
+      const envelope = msg as {
+        id: string;
+        result?: unknown;
+        error?: { code: string; message: string };
+      };
       const pending = this.pending.get(envelope.id);
       if (!pending) return;
       this.pending.delete(envelope.id);
@@ -456,11 +525,13 @@ export class Connection implements ConnectionPort {
    */
   private noteSocketFailedWhileSessionOk(): void {
     this.socketFailedWhileSessionOk++;
-    if (this.socketFailedWhileSessionOk === ORIGIN_SUSPECT_AFTER) this.store.onOriginRejectSuspected(true);
+    if (this.socketFailedWhileSessionOk === ORIGIN_SUSPECT_AFTER)
+      this.store.onOriginRejectSuspected(true);
   }
 
   private resetOriginSuspicion(): void {
-    if (this.socketFailedWhileSessionOk >= ORIGIN_SUSPECT_AFTER) this.store.onOriginRejectSuspected(false);
+    if (this.socketFailedWhileSessionOk >= ORIGIN_SUSPECT_AFTER)
+      this.store.onOriginRejectSuspected(false);
     this.socketFailedWhileSessionOk = 0;
   }
 

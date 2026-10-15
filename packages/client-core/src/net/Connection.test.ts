@@ -878,3 +878,20 @@ describe("Connection", () => {
     });
   });
 });
+
+it("isolates auxiliary attachment clients and disposes them before a target switch", async () => {
+ const { conn, store, sockets } = makeConnection();
+ const states = vi.fn(), child = conn.createAuxiliary(states);
+ child.connect(); await new Promise(r => setTimeout(r, 0));
+ const socket = sockets[0]!; socket.open();
+ const hello = JSON.parse(socket.sent[0] as string);
+ expect(hello.params.kind).toBe("external");
+ socket.message(JSON.stringify({ id: hello.id, ok: true, result: { snapshot: makeSnapshot(), clientId: "child" } }));
+ await new Promise(r => setTimeout(r, 0));
+ expect(store.snapshots).toHaveLength(0);
+ expect(states).toHaveBeenCalledWith(true);
+ conn.retarget("ws://example.test/ws?machine=other");
+ expect(socket.readyState).toBe(3);
+ expect(states).toHaveBeenLastCalledWith(false);
+ child.dispose(); conn.disconnect();
+});

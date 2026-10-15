@@ -135,3 +135,55 @@ it("switches all statusline text to the ordinary foreground without changing con
   expect(mono.map((s) => s.text)).toEqual(color.map((s) => s.text));
   expect(loadStatuslineSettings({ colorMode: "invalid" }).colorMode).toBe("color");
 });
+
+it("independently selects cross-session weekly cost and exact rate-limit reset dates", () => {
+  const pane = {
+    agent: { kind: "claude", label: "Claude", state: "idle" },
+  } as import("./model.js").Pane;
+  const usage = {
+    kind: "claude",
+    costUsd: 1,
+    weeklyCostUsd: 12.3456,
+    tokens: { basis: "context" },
+  } as import("./usage.js").AgentUsage;
+  const reset = new Date(2026, 9, 16, 3, 4).getTime();
+  const accounts = [
+    {
+      kind: "claude",
+      label: "Claude",
+      windows: [
+        { label: "5h", windowMinutes: 300, usedPct: 60, resetsAt: reset },
+        { label: "週", windowMinutes: 10080, usedPct: 90, resetsAt: reset + 3600000, stale: true },
+      ],
+    },
+  ] as import("./usage.js").AccountUsage[];
+  const settings = loadStatuslineSettings({
+    fields: {
+      weeklyCost: true,
+      fiveHour: false,
+      weekly: false,
+      fiveHourReset: true,
+      weeklyReset: true,
+    },
+  });
+  const result = statuslineSegments(pane, usage, accounts, settings);
+  expect(result.find((s) => s.field === "weeklyCost")?.text).toBe("今週 $12.346");
+  expect(result.find((s) => s.field === "cost")?.text).toBe("$1.000");
+  expect(result.find((s) => s.field === "fiveHourReset")?.text).toBe(
+    "Claude 5h解除 2026/10/16 03:04",
+  );
+  expect(result.find((s) => s.field === "weeklyReset")?.text).toBe(
+    "Claude 週解除 2026/10/16 04:04 *",
+  );
+  expect(result.some((s) => s.field === "fiveHour" || s.field === "weekly")).toBe(false);
+  const missing = { ...usage };
+  delete missing.weeklyCostUsd;
+  expect(
+    statuslineSegments(
+      pane,
+      missing,
+      [{ ...accounts[0]!, windows: [{ label: "5h", usedPct: 0, resetsAt: NaN }] }],
+      settings,
+    ).some((s) => ["weeklyCost", "fiveHourReset", "weeklyReset"].includes(s.field)),
+  ).toBe(false);
+});
