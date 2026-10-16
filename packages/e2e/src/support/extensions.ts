@@ -199,3 +199,46 @@ export async function openRepoWorkspace(appServer: AppServer, root: string, labe
   const r = await client.request("workspace.create", { cwd: root, label });
   return { workspaceId: r.workspace.id, paneId: r.pane.id };
 }
+
+// ---- script-html の面を出す拡張（20261016-display-mount-scope） ---------------------------------------------------------------
+
+const SCRIPT_HTML_SCRIPT = `
+import { readFileSync, existsSync } from "node:fs";
+const [, , planFile] = process.argv;
+const call = (method, params) => process.stdout.write(JSON.stringify({ method, params }) + "\\n");
+const done = new Set();
+setInterval(() => {
+  if (!existsSync(planFile)) return;
+  let plan;
+  try { plan = JSON.parse(readFileSync(planFile, "utf8")); } catch { return; }
+  for (const [i, p] of plan.entries()) {
+    if (done.has(i)) continue;
+    done.add(i);
+    call("display.set", { paneId: p.paneId, name: p.name, kind: "panel", format: "script-html", title: p.name, content: p.html });
+  }
+}, 30);
+process.stdin.on("data", () => {});
+process.stdin.on("close", () => process.exit(0));
+process.on("SIGTERM", () => process.exit(0));
+`;
+
+/**
+ * 利用者の設定の拡張（`allow: ["script-html"]`）を 1 つ登録して、サーバを起こし直す。返す `show` で、その拡張が pane に script-html の面を出す。
+ * 「拡張が出した面（`DisplayInfo.source` つき）」と「pane のプログラムが出した面（`setScript`）」を、同じ形で作り分けるための補助。
+ * `enableScript` は別に呼ぶ（設定が無効なら、拡張の script の面も出ない）。
+ */
+export async function startScriptHtmlExtension(appServer: AppServer, id = "scrhost"): Promise<{ show(paneId: string, name: string, html: string): Promise<void> }> {
+  const dir = await mkdtemp(join(tmpdir(), "soda-e2e-scrext-"));
+  const script = join(dir, "ext.mjs");
+  const planFile = join(dir, "plan.json");
+  await writeFile(script, SCRIPT_HTML_SCRIPT);
+  await writeExtensionsFile(appServer, [{ id, command: `"${process.execPath}" "${script}" "${planFile}"`, allow: ["script-html"] }]);
+  await appServer.restart();
+  const plan: { paneId: string; name: string; html: string }[] = [];
+  return {
+    async show(paneId, name, html) {
+      plan.push({ paneId, name, html });
+      await writeFile(planFile, JSON.stringify(plan));
+    },
+  };
+}

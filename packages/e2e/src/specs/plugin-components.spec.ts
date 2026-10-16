@@ -3,20 +3,21 @@ import { expect, test } from "../support/fixtures.js";
 import {
   openScriptBrowser,
   enableScript,
-  setScriptOk,
   engageBtn,
   settleEngage,
 } from "../support/displayScript.js";
+import { startScriptHtmlExtension } from "../support/extensions.js";
 
 test("native terminal embedded in a plugin: live output, own textarea, clipping, mobile and cleanup", async ({
   page,
   appServer,
 }) => {
+  await enableScript(appServer);
+  const ext = await startScriptHtmlExtension(appServer);
   const { paneId, input } = await openScriptBrowser(page, appServer);
   const c = await appServer.openClient();
   const other = await c.request("workspace.create", { label: "Other" });
-  await setScriptOk(
-    appServer,
+  await ext.show(
     paneId,
     "embedded",
     `<style>
@@ -106,6 +107,7 @@ test("a background terminal in another tab is visible, survives reconnect, and i
     ws.connectToServer();
   });
   await enableScript(appServer);
+  const ext = await startScriptHtmlExtension(appServer);
   const client = await appServer.openClient();
   const paneId = client.helloSnapshot()!.panes[0]!.id;
   await page.goto(`${appServer.origin}/#token=${appServer.token}`);
@@ -113,8 +115,7 @@ test("a background terminal in another tab is visible, survives reconnect, and i
   const ws = client.helloSnapshot()!.workspaces[0]!.id;
   const background = await client.request("tab.create", { workspaceId: ws, label: "Background" });
   client.sendInput(background.pane.id, "printf 'BACKGROUND_%s\\n' READY\r");
-  await setScriptOk(
-    appServer,
+  await ext.show(
     paneId,
     "background",
     `<div id="terminal" style="height:180px"></div><script>soda.mount('terminal',document.getElementById('terminal'),{paneId:'${background.pane.id}'});</script>`,
@@ -140,13 +141,14 @@ test("embedded input terminal sends to its background pane in Web and mobile, af
   page,
   appServer,
 }) => {
+  await enableScript(appServer);
+  const ext = await startScriptHtmlExtension(appServer);
   const { paneId, client, input } = await openScriptBrowser(page, appServer);
   const background = await client.request("tab.create", {
     workspaceId: client.helloSnapshot()!.workspaces[0]!.id,
     label: "Input target",
   });
-  await setScriptOk(
-    appServer,
+  await ext.show(
     paneId,
     "input-terminal",
     `<div id="terminal" style="height:220px"></div><div id="output" style="height:160px"></div><script>soda.mount('terminal',document.getElementById('terminal'),{paneId:'${background.pane.id}',interactive:true});soda.mount('terminal',document.getElementById('output'),{paneId:'${background.pane.id}'});</script>`,

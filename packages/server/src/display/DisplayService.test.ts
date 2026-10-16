@@ -1081,6 +1081,13 @@ describe("DisplayService: 持ち主（札）", () => {
     expect(s.displays.list("p1").displays[0]!.source).toEqual({ type: "extension", id: "a", scope: "user" });
   });
 
+  it("札なしの set の body に source を入れても、info に入らない（pane のプログラムは出どころを偽れない）", () => {
+    const s = withOwned();
+    const r = s.displays.set("p1", { ...(body("m") as object), source: { type: "extension", id: "a", scope: "user" } });
+    expect(r.display.source).toBeUndefined();
+    expect(s.displays.list("p1").displays[0]!.source).toBeUndefined();
+  });
+
   // 表 2: 同じ札の面がある
   it("表 2: 同じ札の面への set は置き換え（rev + 1・id は同じ・source は残る）", () => {
     const s = withOwned();
