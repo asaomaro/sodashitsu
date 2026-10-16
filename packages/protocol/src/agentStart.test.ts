@@ -28,8 +28,8 @@ describe("agentStartExecutable", () => {
     }
   });
 
-  it("22 種類で、実行ファイル名は英小文字・数字・'-' だけ（シェルに裸で出してよい）", () => {
-    expect(AGENT_START_KINDS).toHaveLength(22);
+  it("23 種類（herdr の 22 と Bob Shell）で、実行ファイル名は英小文字・数字・'-' だけ（シェルに裸で出してよい）", () => {
+    expect(AGENT_START_KINDS).toHaveLength(23);
     for (const kind of AGENT_START_KINDS)
       expect(agentStartExecutable(kind)).toMatch(/^[a-z][a-z0-9-]*$/);
   });

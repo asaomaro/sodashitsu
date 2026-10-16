@@ -434,9 +434,21 @@ pnpm --filter @sodashitsu/e2e test` が通ることを基準とする（`package
       - 手で確かめる: 以前の版で導入した Grok・Devin が「導入済み（更新が必要）」と出ること、［更新］の後に
         消えること。claude・codex 以外の報告も pane の会話 ID に記録されること（受け口の修正）。
       - 形の一覧の出どころ: `.aidev/works/20261007-agent-hook-drift/research.md`。
+      - **GitHub Copilot CLI**（20261016-bob-shell で実機 1.0.98 を確認）: `~/.copilot/hooks/soda-agent-report.json` の `hooks.sessionStart` が、
+        最初のメッセージを送ったときに呼ばれ、`sessionId`（camelCase の UUID）が届く。`soda serve` の pane で、検出→信頼の確認で承認待ち→
+        送った直後も作業中（本製品が足したルール。`docs/bob-shell.md`）→コマンドの承認で承認待ち→完了→会話の id の記録→再起動で
+        `copilot --resume=<id>` で前の会話が戻る、までを Linux で通した。信頼を「今回だけ」にしたフォルダーでは、再開のたびに信頼の確認が出る（Copilot の仕様）。
       - GitHub Copilot CLI・Grok CLI は本製品専用のファイル（`soda-agent-report.json`）を
         hooks ディレクトリへ新規作成する方式（他のエージェントは既存の設定ファイルへ追記する方式）。
         既存の他の hook 設定（あれば）が変更されないことも確認する。
+- [ ] Bob Shell（20261016-bob-shell。`docs/bob-shell.md`）: 実機（bobshell 2.0.6）で、仮想端末に `bob` を動かして、
+      作業中・承認待ち・待機の画面（日本語・英語）と、フック（`SessionStart` の `session_id`・`source:"startup"`／`"resume"`）・
+      `bob --resume <id>` を確かめ、判定ルールのテストの画面はそこから写した。`soda serve` の pane での通し（導入の処理→`sodactl agent start --kind bob`→
+      承認待ち→作業中→完了→会話の id の記録→`soda session stop` と起動し直し→`agent resume command written`〔kind bob〕→解除で元の設定）も
+      Linux で確かめた。**未確認は、設定の画面の［導入］ボタンからの操作と Windows**。手で確かめる: 設定の「エージェント連携」で Bob Shell を導入し、`~/.bob/settings/settings.json` の
+      `hooks.SessionStart` に `{hooks:[{type:"command",command:"node \"…/soda-agent-report.cjs\" bob"}]}` が入ること、pane で `bob` を起こして
+      最初のメッセージを送った後に pane の会話 id が付くこと、承認の画面で pane が「承認待ち」になること、サーバの再起動で `bob --resume <id>` が
+      打ち込まれること、解除で元の設定に戻ること。
 - [ ] pane 名の legend 表示（20260923-pane-name-dnd-swap。AC1〜AC3）：設定の「表示」で
       「エージェント名」を有効にし、pane を2つ以上に分割する。期待：各 pane の枠に沿って名前が
       埋め込まれた見た目（legend 風）になり、フォーカス中の pane だけ強調色になる（名前の無い

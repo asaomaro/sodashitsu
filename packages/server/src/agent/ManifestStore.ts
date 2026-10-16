@@ -334,9 +334,15 @@ export class DefaultManifestStore implements ManifestStore {
 
   private constructor() {}
 
-  static async load(source: ManifestSource, logger: Logger): Promise<DefaultManifestStore> {
+  /**
+   * 複数の置き場所を、渡した順に読む（herdr から取り込んだもの → 本製品独自のもの〔`packages/server/assets/agent-detection`。
+   * 20261016-bob-shell〕）。同じ kind が後の置き場所にもあれば、後のもののルールを、先に読めたもののルールの**後ろに足す**
+   * （herdr のルールは消さず、上書きもしない。herdr の判定がエージェントの新しい表示に追いつくまでの補い。ルールの id が重なる・
+   * 足すと上限を超える・先のものが読めていないときは、足さずに警告する）。`summaries()` は kind ごとに 1 件のまま（足した分は `ruleCount` に入る）。
+   */
+  static async load(sources: ManifestSource | readonly ManifestSource[], logger: Logger): Promise<DefaultManifestStore> {
     const store = new DefaultManifestStore();
-    await store.loadAll(source, logger);
+    for (const source of Array.isArray(sources) ? sources : [sources as ManifestSource]) await store.loadAll(source, logger);
     return store;
   }
 
@@ -354,12 +360,17 @@ export class DefaultManifestStore implements ManifestStore {
       const indexRaw = await source.read(INDEX_FILE);
       indexEntries = IndexSchema.parse(parseToml(indexRaw)).agents;
     } catch (err) {
-      // index.toml 自体が読めない・壊れていたら、判定ルールは1件も使えない（起動は続ける。design のエラー処理）。
-      logger.error("failed to load agent-detection index.toml; agent detection is disabled", { error: String(err) });
+      // index.toml 自体が読めない・壊れていたら、この置き場所のルールは1件も使えない（起動は続ける。design のエラー処理）。
+      // 置き場所は複数ありうる（20261016-bob-shell）ので、どこのものかを載せる。ほかの置き場所のルールは使う。
+      logger.error("failed to load agent-detection index.toml; the rules in this folder are not used", { source: source.describe?.() ?? null, error: String(err) });
       return;
     }
 
     for (const entry of indexEntries) {
+      if (this.loadSummaries.some((s) => s.kind === entry.id)) {
+        await this.extendOne(source, entry.id, entry.path, logger);
+        continue;
+      }
       const summary = await this.loadOne(source, entry.id, entry.path);
       this.loadSummaries.push(summary);
       if (!summary.ok) logger.warn("agent manifest disabled", { kind: entry.id, path: entry.path, error: summary.error });
@@ -384,5 +395,29 @@ export class DefaultManifestStore implements ManifestStore {
 
     this.manifests.set(kind, { kind, minEngineVersion: parsed.min_engine_version ?? null, rules: compiled.rules });
     return { kind, ok: true, ruleCount: compiled.rules.length, error: null };
+  }
+
+  /** 先の置き場所で読んだ kind に、後の置き場所のルールを足す（`load` の説明）。 */
+  private async extendOne(source: ManifestSource, kind: string, path: string, logger: Logger): Promise<void> {
+    const base = this.manifests.get(kind);
+    const summary = this.loadSummaries.find((s) => s.kind === kind)!;
+    const skip = (reason: string): void => logger.warn("agent manifest extension ignored", { kind, path, reason });
+    if (!base) return skip("the kind failed to load from an earlier source");
+    let parsed: RawManifest;
+    try {
+      parsed = RawManifestSchema.parse(parseToml(await source.read(path)));
+    } catch (err) {
+      return skip(`could not read or parse ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    const compiled = compileManifest(parsed);
+    if (!compiled.ok) return skip(compiled.reason);
+    const ids = new Set(base.rules.map((r) => r.id));
+    const dup = compiled.rules.find((r) => ids.has(r.id));
+    if (dup) return skip(`rule id ${dup.id} is already used`);
+    if (base.rules.length + compiled.rules.length > MAX_RULES_PER_MANIFEST) return skip(`more than ${MAX_RULES_PER_MANIFEST} rules in total`);
+    const engine = [base.minEngineVersion, parsed.min_engine_version ?? null].filter((v): v is number => v !== null);
+    this.manifests.set(kind, { kind, minEngineVersion: engine.length > 0 ? Math.max(...engine) : null, rules: [...base.rules, ...compiled.rules] });
+    summary.ruleCount += compiled.rules.length;
+    logger.info("agent manifest extended", { kind, path, added: compiled.rules.length });
   }
 }

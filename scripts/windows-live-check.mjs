@@ -48,6 +48,12 @@ await cp(
   join(app, "third_party/herdr/agent-detection"),
   { recursive: true },
 );
+// 本製品独自の判定ルール（Bob Shell など。20261016-bob-shell）。サーバは dist から見て ../assets/agent-detection を読む。
+await cp(
+  resolve("packages/server/assets/agent-detection"),
+  join(app, "packages/server/assets/agent-detection"),
+  { recursive: true },
+);
 const entry = join(app, "packages/server/dist/main.js"),
   cliEntry = join(app, "packages/server/dist/check-cli.js");
 const original = await readFile(entry, "utf8");

@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { ForegroundJob, ForegroundProcess } from "../platform/ProcessInspector.js";
 import { lookupAgentKind } from "./agents.js";
-import { match } from "./ProcessMatcher.js";
+import { agentProcessPids, match } from "./ProcessMatcher.js";
 
 /** `LinuxProcessInspector`/`WindowsProcessInspector` が実際に作る形（`exe` は argv[0] があればそれ）に合わせる。 */
 function proc(pid: number, argv: string[]): ForegroundProcess {
@@ -95,6 +95,17 @@ describe("match — herdr の identify_agent_in_job を移植（実行時のラ�
 
     const windows = job(123, [proc(123, ["node.exe", "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\@qwen-code\\qwen-code\\dist\\index.js"])]);
     expect(match(windows)).toBe("qwen");
+  });
+
+  // 20261016-bob-shell（実機 2.0.6: `node <prefix>/bin/bob` が、同じ形の子を起こし直す。Windows は npm の shim が `node <...>\\bob.js`）。
+  it("node 越しに起動された Bob Shell を見つけ、親子の両方を前面のエージェントの pid に含める", () => {
+    const parent = { ...proc(10, ["node", "/home/user/.nvm/versions/node/v24.15.0/bin/bob"]), ppid: 1 };
+    const child = { ...proc(11, ["/home/user/.nvm/versions/node/v24.15.0/bin/node", "/home/user/.nvm/versions/node/v24.15.0/bin/bob"]), ppid: 10 };
+    expect(match(job(10, [parent, child]))).toBe("bob");
+    expect(agentProcessPids(job(10, [parent, child]), "bob").sort()).toEqual([10, 11]);
+
+    const windows = job(123, [proc(123, ["node.exe", "C:\\Users\\user\\AppData\\Roaming\\npm\\node_modules\\bobshell\\dist\\bob.js"])]);
+    expect(match(windows)).toBe("bob");
   });
 
   it("cline のネイティブバイナリを basename から見つける（identify_agent_in_job_detects_cline_native_binaries）", () => {

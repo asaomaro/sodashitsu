@@ -239,6 +239,12 @@ async function main(): Promise<void> {
     const failed = manifestSummaries.filter((s) => !s.ok);
     if (manifestSummaries.length === 0) throw new Error("agent manifests: no entries loaded (index.toml missing or empty?)");
     if (failed.length > 0) throw new Error(`agent manifests: ${failed.length}/${manifestSummaries.length} failed to load: ${JSON.stringify(failed)}`);
+    // 置き場所は 2 つ（herdr の third_party と、本製品独自の packages/server/assets。20261016-bob-shell）。片方だけ欠けても件数は 0 にならないので、両方の代表を見る。
+    for (const kind of ["claude", "bob"]) {
+      if (!server.manifestStore.get(kind)) throw new Error(`agent manifests: ${kind} is not loaded (is one of the manifest folders missing?)`);
+    }
+    // herdr のルールに足したもの（足せないときは警告だけで、要約は ok のまま）。
+    if (!server.manifestStore.get("copilot")?.rules.some((r) => r.id === "status_bar_working")) throw new Error("agent manifests: the copilot extension rule is not loaded");
     console.log(`smoke: agent manifests ok (${manifestSummaries.length}/${manifestSummaries.length})`);
 
     // token は `listen()` が待ち受けに成功してから作られる（それまでは undefined。D102）。

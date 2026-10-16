@@ -1,0 +1,13 @@
+# 本製品独自の判定ルール（herdr に無いエージェント）。書き方は third_party/herdr/agent-detection と同じ。
+# サーバは herdr のもの（third_party/herdr/agent-detection）を先に読み、ここにある kind のうち、まだ無いものは足し、既にあるものは
+# ルールを後ろに足す（herdr のルールは消さず、上書きもしない。ルールの id は重ねない）。
+schema_version = 1
+
+[[agents]]
+id = "bob"
+path = "bob.toml"
+
+# herdr のルールに足すもの（herdr のルールは消さず、上書きもしない。herdr の判定が新しい表示に追いつくまでの補い）。
+[[agents]]
+id = "copilot"
+path = "github-copilot-extra.toml"

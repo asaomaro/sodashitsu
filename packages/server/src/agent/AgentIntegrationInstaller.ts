@@ -353,6 +353,20 @@ const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
     }),
     isOurs: isOursNested,
   },
+  // 20261016-bob-shell（実機 2.0.6 で確認）。全体の設定 `~/.bob/settings/settings.json` の `hooks.SessionStart`。
+  // Bob はフックの項目を厳密に検証し（`{type,command,timeout?,disabled?}` のほかの項目があると、全体のフックの設定を丸ごと捨てる）、
+  // `async` も持たないので、`type`・`command` だけを書く（時間切れは Bob の既定の 10 秒）。`matcher` は省く（startup・resume・compact の
+  // どれでも報告する。compact は id が変わらない）。SessionStart は、起動したときではなく、最初のメッセージを送ったときに来る。
+  bob: {
+    configFile: (_env, home) => join(home, ".bob", "settings", "settings.json"),
+    hooksDir: (_env, home) => join(home, ".bob", "hooks"),
+    binName: "bob",
+    entriesPath: ["hooks", "SessionStart"],
+    buildEntry: (scriptPath, kind) => ({
+      hooks: [{ type: "command", command: hookCommand(scriptPath, kind) }],
+    }),
+    isOurs: isOursNested,
+  },
 };
 
 /** 連携の kind の一覧（`HOOK_SPECS` のキー）。 */

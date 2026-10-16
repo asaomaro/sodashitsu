@@ -1,5 +1,6 @@
 /**
- * エージェントの id（`ManifestStore`/`third_party/herdr/agent-detection/index.toml` の `id` と同じ）と、
+ * エージェントの id（`ManifestStore`/`third_party/herdr/agent-detection/index.toml` の `id` と同じ。herdr に無い本製品独自のもの〔Bob Shell〕は
+ * `packages/server/assets/agent-detection/index.toml`）と、
  * 実行ファイル名からの別名表（herdr の `da6bcd5:src/detect/mod.rs` の `lookup_agent`・`agent_label` を移植。
  * Apache-2.0・D5・D46）。
  *
@@ -40,6 +41,9 @@ export const AGENTS: readonly AgentDescriptor[] = [
   { kind: "letta", label: "Letta Code", verified: false },
   { kind: "maki", label: "Maki", verified: false },
   { kind: "muse", label: "Muse", verified: false },
+  // 本製品独自（herdr に無い。判定ルールは `packages/server/assets/agent-detection/bob.toml`）。20261016-bob-shell。
+  // verified は design の「MVP で検証済み」（Claude Code・Codex）だけの印なので、実機で確かめた Bob も false のまま（docs/bob-shell.md）。
+  { kind: "bob", label: "Bob Shell", verified: false },
 ] as const;
 
 const BY_KIND = new Map(AGENTS.map((a) => [a.kind, a]));
@@ -100,6 +104,10 @@ const ALIASES: Record<string, string> = {
   muse: "muse",
   "muse-code": "muse",
   "muse-cli": "muse",
+  // IBM Bob Shell（npm の `bobshell`。`node <...>/bin/bob` で動く。Windows は `bob.cmd`）。
+  bob: "bob",
+  "bob-shell": "bob",
+  bobshell: "bob",
 };
 
 /**

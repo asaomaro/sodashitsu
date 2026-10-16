@@ -1,0 +1,16 @@
+# GitHub Copilot CLI（herdr の github-copilot.toml に足すルール）。20261016-bob-shell で、実機 1.0.98 の画面から起こした。
+# 1.0.98 は、メッセージを送った直後の数秒、いちばん下の行に `◎ Working esc edit prompt` を出す。herdr のルールは
+# `esc interrupt`（返答の生成中に出る `○ Working · 104 B esc interrupt`）などしか見ないので、この間を待機と取り違える。
+# いちばん下の行（入力の枠の下の帯）が「印・Working」で始まるかを見る（待機中の帯は `← open sidebar · …`）。
+id = "copilot"
+version = "2026.10.16.1"
+min_engine_version = 1
+updated_at = "2026-10-16T00:00:00Z"
+
+[[rules]]
+id = "status_bar_working"
+state = "working"
+priority = 100
+region = "bottom_non_empty_lines(1)"
+visible_working = true
+line_regex = ['^\s*\S\s+Working(?:\s|·|$)']
