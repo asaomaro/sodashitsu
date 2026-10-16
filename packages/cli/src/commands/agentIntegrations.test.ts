@@ -26,7 +26,7 @@ function harness(request: (method: string, params: unknown) => Promise<unknown>)
   const requestFn = vi.fn(request);
   const client = { hello: vi.fn(async () => ({})), request: requestFn } as unknown as SodaClient;
   vi.mocked(withSession).mockImplementation(async (_o, _s, fn) => fn(client));
-  return requestFn;
+  return { request: requestFn, hello: client.hello as ReturnType<typeof vi.fn> };
 }
 
 beforeEach(() => {
@@ -42,9 +42,10 @@ describe("sodactl agent integrations", () => {
     expect(t).toMatch(/zzz\s+未導入\s+なし/);
   });
   it("既定は表。agent_integration.status を引数なしで呼ぶ", async () => {
-    const req = harness(async () => RESULT);
+    const h = harness(async () => RESULT);
     await runAgentIntegrations(base, store);
-    expect(req).toHaveBeenCalledWith("agent_integration.status", {});
+    expect(h.hello).toHaveBeenCalledTimes(1);
+    expect(h.request).toHaveBeenCalledWith("agent_integration.status", {});
     expect(printLine).toHaveBeenCalledWith(formatIntegrationsTable(RESULT));
     expect(printJson).not.toHaveBeenCalled();
   });
@@ -52,6 +53,7 @@ describe("sodactl agent integrations", () => {
     harness(async () => RESULT);
     await runAgentIntegrations({ ...base, json: true }, store);
     expect(printJson).toHaveBeenCalledWith(RESULT);
+    expect(printLine).not.toHaveBeenCalled();
   });
   it("古いサーバ（未知の操作）は分かる誤りで失敗する", async () => {
     harness(async () => {

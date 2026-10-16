@@ -610,7 +610,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 ### エージェント連携の状態（`agent integrations`）
 
-`sodactl agent integrations [--json]` は、設定の「エージェント連携」の状態を読みます（読み取り専用。導入・更新・削除はしません。サーバの `agent_integration.status` を呼ぶ）。拡張が、導入済みのエージェントの種類に絞って監督・担当を選ぶ、といった使い方を想定しています。表は kind・導入（導入済み／更新が必要／未導入）・実行ファイル（PATH 上に見つかるか）で、kind は**サーバの結果のキーをそのまま**並べます（sodactl 側で種類を固定で持たないので、サーバが種類を足せばそのまま出ます）。`--json` はサーバの結果のまま `{ autoResumeEnabled, agents: { <kind>: { cliDetected, installed, needsUpdate? } }, statusLine? }`。サーバがこの操作を知らない（古い）ときは、`not_found` の分かる誤りで終了コード非 0。`/ws`（ログイン済み）の経路だけで、`pane.sock` には載せません（設定の状態を返す操作で、「受け口に操作を足すとき」の条件 2〔設定に触れない〕に合わないため）。
+`sodactl agent integrations [--json]` は、設定の「エージェント連携」の状態を読みます（読み取り専用。導入・更新・削除はしません。サーバの `agent_integration.status` を呼ぶ）。拡張が、導入済みのエージェントの種類に絞って監督・担当を選ぶ、といった使い方を想定しています。表は kind・導入（導入済み／更新が必要／未導入）・実行ファイル（PATH 上に見つかるか）で、kind は**サーバの結果のキーをそのまま**並べます（sodactl 側で種類を固定で持たないので、サーバが種類を足せばそのまま出ます）。`--json` はサーバの結果のまま `{ autoResumeEnabled, agents: { <kind>: { cliDetected, installed, needsUpdate? } }, statusLine? }`。`statusLine` は Claude Code のステータスラインの包みの状態（`{ state, message?, silent?, lastReportAt? }`。`state` は `none`／`installed`／`needs_update`／`detached`／`invalid`／`unsupported`）で、古いサーバには無い。表は kind 別だけで、`autoResumeEnabled` と `statusLine` は出ない（`--json` で見る）。サーバがこの操作を知らない（古い）ときは、`not_found` の分かる誤りで終了コード非 0。`/ws`（ログイン済み）の経路だけで、`pane.sock` には載せません（引数がなく呼び出し元の pane を対象にしない〔条件 1〕うえ、設定の状態を返す〔条件 2: 設定に触れない〕ため、「受け口に操作を足すとき」の条件に合わない）。そのため pane の中でも、ほかの `agent` コマンドと同じ認証（`sodactl login` か `--token`）が要ります。
 
 ### 利用状況（`agent usage`）
 
