@@ -655,6 +655,7 @@ const AGENT_KINDS: readonly { value: AgentIntegrationKind; label: string }[] = [
   { value: "grok", label: "Grok CLI" },
   { value: "qwen", label: "Qwen Code" },
   { value: "qodercli", label: "Qoder CLI" },
+  { value: "bob", label: "Bob Shell" },
 ];
 
 function agentSection(env: SettingsEnv): SettingsSection {

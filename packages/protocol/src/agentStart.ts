@@ -27,6 +27,8 @@ export const AGENT_START_EXECUTABLES: Readonly<Record<string, string>> = Object.
   letta: "letta",
   maki: "maki",
   muse: "muse",
+  // 本製品独自（herdr に無い。20261016-bob-shell）。
+  bob: "bob",
 });
 
 /**
@@ -41,6 +43,7 @@ export const AGENT_START_LABELS: Readonly<Record<string, string>> = Object.freez
   opencode: "opencode",
   droid: "Droid",
   qwen: "Qwen Code",
+  bob: "Bob Shell",
 });
 
 export function agentStartLabel(kind: string): string {

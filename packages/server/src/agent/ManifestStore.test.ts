@@ -161,3 +161,70 @@ unwrap_or(AgentState::Unknown)）", async () => {
     expect(r.ok).toBe(true);
   });
 });
+
+// 20261016-bob-shell: 本製品独自のルールの置き場所を、herdr のものの後に読む。
+describe("DefaultManifestStore — 複数の置き場所", () => {
+  const rule = (state: string) => `id = "x"\n[[rules]]\nid = "r"\nstate = "${state}"\nregion = "whole_recent"\ncontains = ["a"]\n`;
+  const index = (id: string) => `schema_version = 1\n[[agents]]\nid = "${id}"\npath = "${id}.toml"\n`;
+
+  const rule2 = (id: string, state: string) => `[[rules]]\nid = "${id}"\nstate = "${state}"\nregion = "whole_recent"\ncontains = ["a"]\n`;
+
+  it("後の置き場所の新しい kind を足し、同じ kind はルールを後ろに足す（先のルールは消さない）。要約は kind ごとに 1 件", async () => {
+    const first = new FakeManifestSource({ "index.toml": index("x"), "x.toml": rule("working") });
+    const second = new FakeManifestSource({
+      "index.toml": `${index("x")}[[agents]]\nid = "y"\npath = "y.toml"\n`,
+      "x.toml": `id = "x"\n${rule2("extra", "blocked")}`,
+      "y.toml": rule("blocked").replace('id = "x"', 'id = "y"'),
+    });
+    const logger = new MemoryLogger();
+    const store = await DefaultManifestStore.load([first, second], logger);
+    expect(store.get("x")?.rules.map((r) => [r.id, r.state])).toEqual([["r", "working"], ["extra", "blocked"]]);
+    expect(store.get("y")?.rules[0]?.state).toBe("blocked");
+    expect(store.summaries().map((s) => [s.kind, s.ruleCount])).toEqual([["x", 2], ["y", 1]]);
+  });
+
+  it("足すルールの id が先のルールと重なる・先の kind が読めていないときは、足さずに警告する（先のルールはそのまま）", async () => {
+    const first = new FakeManifestSource({
+      "index.toml": `${index("x")}[[agents]]\nid = "z"\npath = "z.toml"\n`,
+      "x.toml": rule("working"),
+      "z.toml": "this is not toml = = =",
+    });
+    const second = new FakeManifestSource({
+      "index.toml": `${index("x")}[[agents]]\nid = "z"\npath = "z.toml"\n`,
+      "x.toml": `id = "x"\n${rule2("r", "blocked")}`,
+      "z.toml": rule("blocked").replace('id = "x"', 'id = "z"'),
+    });
+    const logger = new MemoryLogger();
+    const store = await DefaultManifestStore.load([first, second], logger);
+    expect(store.get("x")?.rules.map((r) => [r.id, r.state])).toEqual([["r", "working"]]);
+    expect(store.get("z")).toBeUndefined();
+    const ignored = logger.lines.filter((l) => l.msg === "agent manifest extension ignored").map((l) => l.fields?.kind);
+    expect(ignored).toEqual(["x", "z"]);
+  });
+
+  it("足すと 1 種類のルールの上限（128）を超えるなら足さない。足したときの min_engine_version は大きいほう", async () => {
+    const many = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => rule2(`${prefix}${i}`, "working")).join("");
+    const first = new FakeManifestSource({ "index.toml": `${index("x")}[[agents]]\nid = "w"\npath = "w.toml"\n`, "x.toml": `id = "x"\n${many("a", 100)}`, "w.toml": `id = "w"\nmin_engine_version = 1\n${rule2("a", "working")}` });
+    const second = new FakeManifestSource({
+      "index.toml": `${index("x")}[[agents]]\nid = "w"\npath = "w.toml"\n`,
+      "x.toml": `id = "x"\n${many("b", 29)}`,
+      "w.toml": `id = "w"\nmin_engine_version = 2\n${rule2("b", "blocked")}`,
+    });
+    const logger = new MemoryLogger();
+    const store = await DefaultManifestStore.load([first, second], logger);
+    expect(store.get("x")?.rules).toHaveLength(100);
+    expect(logger.lines).toContainEqual(expect.objectContaining({ msg: "agent manifest extension ignored", fields: expect.objectContaining({ kind: "x" }) }));
+    expect(store.get("w")?.rules).toHaveLength(2);
+    expect(store.get("w")?.minEngineVersion).toBe(2);
+  });
+
+  it("実物: herdr の 22 件に、本製品独自の bob を足して 23 件。copilot は herdr のルールに 1 件足される", async () => {
+    const own = new FsManifestSource(join(import.meta.dirname, "..", "..", "assets", "agent-detection"));
+    const store = await DefaultManifestStore.load([new FsManifestSource(REAL_MANIFEST_DIR), own], new MemoryLogger());
+    expect(store.summaries().filter((s) => s.ok)).toHaveLength(23);
+    expect(store.get("bob")).toBeDefined();
+    const herdrOnly = await DefaultManifestStore.load(new FsManifestSource(REAL_MANIFEST_DIR), new MemoryLogger());
+    const ids = store.get("copilot")!.rules.map((r) => r.id);
+    expect(ids).toEqual([...herdrOnly.get("copilot")!.rules.map((r) => r.id), "status_bar_working"]);
+  });
+});

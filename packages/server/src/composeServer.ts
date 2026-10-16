@@ -178,6 +178,12 @@ function manifestDirFor(): string {
   return join(import.meta.dirname, "..", "..", "..", "third_party", "herdr", "agent-detection");
 }
 
+/** 本製品独自の判定ルール（herdr に無いエージェント。20261016-bob-shell）。配布物にも `packages/server/assets` ごと入る。 */
+function ownManifestDirFor(): string {
+  // packages/server/dist/composeServer.js から見て ../assets/agent-detection
+  return join(import.meta.dirname, "..", "assets", "agent-detection");
+}
+
 /** 公式フック連携（20260923-agent-session-resume）の hook スクリプト本体の場所。 */
 function agentHookScriptFor(): string {
   // packages/server/dist/composeServer.js から見て ../assets/agent-hook-report.cjs
@@ -380,9 +386,12 @@ export async function composeServer(
   // worktree の一覧と作成（20260920-git-worktree-actions）。`GitInfoPoller` と同じ runner を使い回す。
   const worktrees = new DefaultWorktreeService(session, gitRunner, logger, options.worktreeDir);
 
-  // エージェント判定（02-agent-detection T10）。判定ルール（third_party/herdr/agent-detection）を読み、
+  // エージェント判定（02-agent-detection T10）。判定ルール（third_party/herdr/agent-detection と、本製品独自の packages/server/assets/agent-detection。20261016-bob-shell）を読み、
   // 結果の要約をログへ出す（個々のファイルの失敗は ManifestStore.loadAll 自身が warn で出す。D46）。
-  const manifestStore = await DefaultManifestStore.load(new FsManifestSource(manifestDirFor()), logger);
+  const manifestStore = await DefaultManifestStore.load(
+    [new FsManifestSource(manifestDirFor()), new FsManifestSource(ownManifestDirFor())],
+    logger,
+  );
   const manifestSummaries = manifestStore.summaries();
   const manifestOkCount = manifestSummaries.filter((s) => s.ok).length;
   logger.info("agent manifests loaded", { ok: manifestOkCount, total: manifestSummaries.length });

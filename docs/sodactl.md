@@ -579,7 +579,7 @@ pane の中で検出されたコーディングエージェント（Claude Code�
 
 - `KIND` は次の表からだけ選ぶ。打ち込む実行ファイルは表で決まっていて、任意のコマンド行は受け付けない（表に無いものは使用誤り＝終了コード 2）。
   `pi` `claude` `codex` `gemini` `cursor`（`cursor-agent`）`devin` `agy` `cline` `opencode` `copilot` `kimi` `kiro`（`kiro-cli`）`droid` `amp`
-  `grok` `hermes` `kilo` `qodercli` `qwen` `letta` `maki` `muse`（括弧の無いものは kind と同じ名前）。
+  `grok` `hermes` `kilo` `qodercli` `qwen` `letta` `maki` `muse` `bob`（括弧の無いものは kind と同じ名前。`bob` は Bob Shell で、`docs/bob-shell.md`）。
 - `--` の後はすべてエージェントへの引数（`--kind` 等もオプションとして読まない）。POSIXでは各引数を**単一引用符で包んで**打ち込むので、
   `;`・`$(…)`・バッククォート・`'`・`"`・`*`・`~`・`!` 等を含んでもそのまま 1 つの引数として届き、シェルの構文として解釈されない。
   **制御文字（改行・タブ・ESC 等）を含む引数**と、打ち込む 1 行が 4000 バイトを超えるものは `invalid_agent_argument` で何も送らない。

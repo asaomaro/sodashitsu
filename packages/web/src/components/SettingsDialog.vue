@@ -478,6 +478,7 @@ const AGENT_INTEGRATION_KINDS: readonly { value: AgentIntegrationKind; label: st
   { value: "grok", label: "Grok CLI" },
   { value: "qwen", label: "Qwen Code" },
   { value: "qodercli", label: "Qoder CLI" },
+  { value: "bob", label: "Bob Shell" },
 ];
 /** 導入/解除の操作中は二重押しを防ぐ（対象の kind を持つ。どちらも同時には押せない設計で足りる）。 */
 const agentIntegrationBusy = ref<AgentIntegrationKind | null>(null);

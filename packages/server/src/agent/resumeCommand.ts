@@ -40,6 +40,9 @@ export function resumeCommandFor(kind: string, sessionId: string): string | unde
     // 20261007-agent-hook-drift（research Q-1。実行ファイル名は qoder）。
     case "qodercli":
       return `qoder --resume ${sessionId}`;
+    // 20261016-bob-shell（実機 2.0.6 で確認。フックの `session_id` は、タスクの id そのもの）。
+    case "bob":
+      return `bob --resume ${sessionId}`;
     default:
       return undefined;
   }
