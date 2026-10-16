@@ -656,6 +656,8 @@ const displayHost: DisplayHost = {
     const k = router.prefixKeyInput();
     return { key: k.key, ctrl: k.ctrl, alt: k.alt, shift: k.shift, meta: k.meta };
   },
+  relayKeymap: () => settings.keymap,
+  runRelayedAction: (action) => actionDispatcher.run(action),
 };
 app.provide(DisplayHostKey, displayHost);
 actionDispatcher.setDisplayHost(displayHost);

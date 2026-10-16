@@ -1,4 +1,5 @@
 import { EXTENSION_ID_RE, type DisplayInfo, type Pane, type Tab } from "@sodashitsu/protocol";
+import { isScriptFormat } from "./framePage.js";
 
 export interface ComponentRect {
   x: number;
@@ -31,7 +32,7 @@ export function readComponentRect(value: unknown): ComponentRect | null {
  * 出どころは `DisplayInfo.source`（サーバが、拡張の `display.set` にだけ付ける。`/ws`・`pane.sock` 経由の面（pane のプログラムのもの）には付かず、
  * 面の中身・`set` の引数からは書けない）で見る。形の合う `{ type: "extension", id, scope }` のときだけ通す。
  */
-function fromExtension(info: DisplayInfo): boolean {
+export function isExtensionDisplay(info: DisplayInfo): boolean {
   const s = info.source as unknown;
   if (typeof s !== "object" || s === null) return false;
   const r = s as Record<string, unknown>;
@@ -42,6 +43,13 @@ function fromExtension(info: DisplayInfo): boolean {
     (r["scope"] === "user" || r["scope"] === "project")
   );
 }
+/**
+ * アプリタブのメイン画面として、覆いなしで操作中にしてよい面か（20261016-app-view-direct-operate の A）。**拡張が出した script の面だけ**（出どころは `terminalComponentAllowed` と同じ
+ * `DisplayInfo.source`。pane のプログラムが同じ名前の面を出しても、`source` が付かないので `false`）。置く側（`PluginView`）が `main` を渡したときだけ、`DisplayFrame` がこれを使う。
+ */
+export function directOperable(info: DisplayInfo): boolean {
+  return isScriptFormat(info.format) && isExtensionDisplay(info);
+}
 /** Author supplied IDs never bypass the owning display's workspace boundary. */
 export function terminalComponentAllowed(
   info: DisplayInfo,
@@ -49,7 +57,7 @@ export function terminalComponentAllowed(
   panes: Map<string, Pane>,
   tabs: Map<string, Tab>,
 ): boolean {
-  if (info.format !== "script-html" || !fromExtension(info)) return false;
+  if (info.format !== "script-html" || !isExtensionDisplay(info)) return false;
   const owner = panes.get(info.paneId),
     target = panes.get(paneId);
   if (!owner || !target || target.virtual || target.status !== "running") return false;

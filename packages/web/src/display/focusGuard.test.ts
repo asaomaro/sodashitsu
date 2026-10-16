@@ -65,3 +65,27 @@ describe("FocusGuard（フォーカスの番の状態機械）", () => {
     expect(g.noteUnreported()).toBe(true);
   });
 });
+
+describe("FocusGuard（アプリのメイン画面＝direct）", () => {
+  it("枠がフォーカスを持てば、取ったことにならず操作中。離れれば終わる", () => {
+    const g = new FocusGuard(true);
+    expect(g.observe(true)).toBeNull(); // 通常なら "steal"
+    expect(g.engaged).toBe(true);
+    expect(g.observe(false)).toBeNull();
+    expect(g.engaged).toBe(false);
+    expect(g.observe(true)).toBeNull(); // 押し直せば、また操作中（覆いの無い枠）
+    expect(g.engaged).toBe(true);
+  });
+  it("Esc の知らせは、操作中でも受けない", () => {
+    const g = new FocusGuard(true);
+    g.engage();
+    expect(g.acceptKey("escape")).toBe(false);
+  });
+  it("direct でなければ今までどおり（取る＝steal・Esc は操作中だけ受ける）", () => {
+    const g = new FocusGuard();
+    expect(g.observe(true)).toBe("steal");
+    const h = new FocusGuard();
+    h.engage();
+    expect(h.acceptKey("escape")).toBe(true);
+  });
+});

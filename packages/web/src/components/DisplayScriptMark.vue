@@ -10,6 +10,7 @@ export const DISPLAY_ENGAGE_TITLE = "この表示を操作する（prefix+i）�
 <script setup lang="ts">
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed } from "vue";
+import { directOperable } from "../display/components.js";
 import { isScriptFormat } from "../display/framePage.js";
 import { endEngageFrame, engageFrame } from "../display/frameRegistry.js";
 import { useDisplayStore } from "../store/display.js";
@@ -20,11 +21,13 @@ import { useSettingsStore } from "../store/settings.js";
  * どちらも `info.format` から決める（枠の実際の形式と食い違わない）。題・中身には依らない。静的な形式の面には、どちらも出さない。
  * ［操作する］は、操作中でないときだけ出す。押すと `engageEntry` の決まりで、枠が操作を始める（枠・覆いを押しても始まらない）。
  */
-const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" | "end" }>();
+const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" | "end"; main?: boolean }>();
 const store = useDisplayStore();
 const settings = useSettingsStore();
 
 const script = computed(() => isScriptFormat(props.info.format) && store.scriptCapable && settings.displayScriptEnabled);
+/** アプリタブのメイン画面（拡張が出した面）は覆いが無いので、［操作する］を出さない。 */
+const direct = computed(() => props.main === true && directOperable(props.info));
 const engaged = computed(() => store.focusedDisplayId === props.info.id);
 const hinted = computed(() => store.engageHint === props.info.id);
 
@@ -39,7 +42,7 @@ function onEnd(): void {
 <template>
   <span v-if="script && part === 'mark'" class="display-script-mark" :title="DISPLAY_SCRIPT_MARK_TITLE" data-display-script-mark>スクリプト</span>
   <button
-    v-else-if="script && part === 'button' && !engaged"
+    v-else-if="script && part === 'button' && !engaged && !direct"
     type="button"
     class="display-engage"
     :class="{ 'display-engage-hint': hinted }"
