@@ -11,6 +11,7 @@ import { RELAY_ACTION_MAX } from "../display/prefixRelay.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSettingsStore } from "../store/settings.js";
+import { useViewStore } from "../store/view.js";
 import DisplayFrame from "./DisplayFrame.vue";
 
 /**
@@ -158,6 +159,38 @@ describe("DisplayFrame（アプリタブのメイン画面）", () => {
     iframe2.dispatchEvent(new Event("load"));
     window.dispatchEvent(new MessageEvent("message", { data: { type: "display-ready", t }, source: iframe2.contentWindow as unknown as MessageEventSource }));
     expect(iframe2.focus).not.toHaveBeenCalled();
+  });
+
+  it("S2: 新しいインスタンスの最初の接続でも、枠の外の入力欄で打っている・ダイアログが開いているときは奪わない", () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    active = input;
+    const s = setup();
+    s.connect();
+    expect(s.iframe.focus).not.toHaveBeenCalled();
+    const dlg = document.createElement("dialog");
+    const btn = document.createElement("button");
+    dlg.appendChild(btn);
+    document.body.appendChild(dlg);
+    active = btn;
+    const s2 = setup();
+    s2.connect();
+    expect(s2.iframe.focus).not.toHaveBeenCalled();
+    active = document.body;
+    const s3 = setup();
+    useViewStore().openDialog = "confirm" as never; // setup が作った pinia がいまの有効なもの
+    s3.connect();
+    expect(s3.iframe.focus).not.toHaveBeenCalled();
+  });
+
+  it("S2: 端末の入力口（xterm）や、ボタンにフォーカスがあるとき（タブを開く・選ぶ操作）は今までどおり取る", () => {
+    const ta = document.createElement("textarea");
+    ta.className = "xterm-helper-textarea";
+    document.body.appendChild(ta);
+    active = ta;
+    const s = setup();
+    s.connect();
+    expect(s.iframe.focus).toHaveBeenCalledTimes(1);
   });
 
   it("B: Esc の知らせでは操作を終えず、端末へフォーカスも移さない", async () => {

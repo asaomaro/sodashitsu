@@ -1,6 +1,9 @@
 <script lang="ts">
 /** 固定の印「スクリプト」の説明（`title`）。 */
 export const DISPLAY_SCRIPT_MARK_TITLE = "この表示は、pane のプログラムのスクリプトを動かしています";
+/** アプリタブのメイン画面（承認した拡張が出す面）の印・終了ボタンの説明。 */
+export const DISPLAY_SCRIPT_MARK_TITLE_DIRECT = "この表示は、承認した拡張のスクリプトを動かしています";
+export const DISPLAY_END_TITLE_DIRECT = "操作を終えて、枠の外へ出る";
 export const DISPLAY_ENGAGE_LABEL = "操作する";
 export const DISPLAY_END_LABEL = "操作を終える";
 export const DISPLAY_END_TITLE = "操作を終えて、端末へ戻る（中身が Esc を無効にしても、これは効く）";
@@ -40,7 +43,7 @@ function onEnd(): void {
 </script>
 
 <template>
-  <span v-if="script && part === 'mark'" class="display-script-mark" :title="DISPLAY_SCRIPT_MARK_TITLE" data-display-script-mark>スクリプト</span>
+  <span v-if="script && part === 'mark'" class="display-script-mark" :title="direct ? DISPLAY_SCRIPT_MARK_TITLE_DIRECT : DISPLAY_SCRIPT_MARK_TITLE" data-display-script-mark>スクリプト</span>
   <button
     v-else-if="script && part === 'button' && !engaged && !direct"
     type="button"
@@ -57,7 +60,7 @@ function onEnd(): void {
     v-else-if="script && part === 'end' && engaged"
     type="button"
     class="display-engage display-engage-end"
-    :title="DISPLAY_END_TITLE"
+    :title="direct ? DISPLAY_END_TITLE_DIRECT : DISPLAY_END_TITLE"
     :aria-label="`${DISPLAY_END_LABEL}（${info.name}）`"
     data-display-end
     @click="onEnd"

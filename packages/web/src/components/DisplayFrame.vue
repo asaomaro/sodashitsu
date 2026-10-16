@@ -63,6 +63,7 @@ import { terminalComponentAllowed, componentViewport, directOperable, type Termi
 import { PrefixRelay } from "../display/prefixRelay.js";
 import { parkFocusAfterRelay } from "../display/relayFocus.js";
 import { useSessionStore } from "../store/session.js";
+import { useViewStore } from "../store/view.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -100,6 +101,7 @@ function terminalStyle(c: TerminalComponent) {
 const controller = inject(DisplayControllerKey, null);
 const host = inject(DisplayHostKey, null);
 const store = useDisplayStore();
+const viewStore = useViewStore();
 const settings = useSettingsStore();
 
 /** この画面が出せる枠の頁（スクリプトが動く形式は、この画面が出せると名乗っているときだけ）。 */
@@ -261,6 +263,12 @@ function onWindowMessage(ev: MessageEvent): void {
   tryConnect();
 }
 
+/** 枠の外の入力欄（input・textarea・[contenteditable]・dialog の中）にフォーカスがある。端末の入力口（xterm）は数えない。 */
+function typingOutsideFrame(a: Element | null): boolean {
+  if (a === null || a === iframeEl.value || a.classList.contains("xterm-helper-textarea")) return false;
+  return a.matches("input, textarea, [contenteditable]") || a.closest("dialog, [role=dialog]") !== null;
+}
+
 function tryConnect(): void {
   const win = iframeEl.value?.contentWindow;
   if (phase.value !== "waiting" || !readySeen || loads.value < 1 || !win) return;
@@ -277,7 +285,9 @@ function tryConnect(): void {
   // アプリのメイン画面は、開いた・選んだ時点で操作中（覆いなし）。版が替わっての作り直し（再接続）では、利用者が枠の外（ダイアログ・サイドバー等）で打っているなら、フォーカスを奪わない。
   if (direct.value) {
     const a = document.activeElement;
-    if (!directEngagedOnce || a === null || a === document.body || a === iframeEl.value) engageNow();
+    const neutral = a === null || a === document.body || a === iframeEl.value;
+    // 最初の接続でも、ダイアログが開いている・枠の外の入力欄で打っている最中は奪わない（拡張の再起動で枠が作り直されたときなど）。
+    if (!viewStore.modalOpen && !typingOutsideFrame(a) && (!directEngagedOnce || neutral)) engageNow();
     directEngagedOnce = true;
   }
 }

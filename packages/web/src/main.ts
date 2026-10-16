@@ -48,6 +48,7 @@ import { ExtensionController } from "./extensions/ExtensionController.js";
 import { useExtensionsStore } from "./store/extensions.js";
 import { useAskStore } from "./store/ask.js";
 import { DisplayController } from "./display/DisplayController.js";
+import { guardRelayRun } from "./display/prefixRelay.js";
 import { scriptEnabledNoticeFor } from "./display/displayLabel.js";
 import { useDisplayStore } from "./store/display.js";
 import { FileTransfer, isFileDrag } from "./term/FileTransfer.js";
@@ -657,7 +658,7 @@ const displayHost: DisplayHost = {
     return { key: k.key, ctrl: k.ctrl, alt: k.alt, shift: k.shift, meta: k.meta };
   },
   relayKeymap: () => settings.keymap,
-  runRelayedAction: (action) => actionDispatcher.run(action),
+  runRelayedAction: guardRelayRun(() => view.keysCaptured || view.modalOpen, (action) => actionDispatcher.run(action)),
 };
 app.provide(DisplayHostKey, displayHost);
 actionDispatcher.setDisplayHost(displayHost);

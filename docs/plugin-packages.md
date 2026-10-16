@@ -155,6 +155,8 @@ YUKKURI_STUDIO_SOURCE=/path/to/yukkuri-work/plugins/yukkuri-studio pnpm --filter
 - 枠が応答しなくなると、キーボードでは抜けられない。タブ行をマウスで押す（10 秒応答が無ければ表示は閉じる）。
 - モバイルのメイン画面も操作中から始まる（prefix の中継は実キーボードがあるときだけ）。
 
+- 取り次いだ prefix と次のキーの `keydown` はアプリに届かない（飲み込む）が、**`keyup` は届く**。`keyup` だけでショートカットを作ると、prefix の操作にも反応する。
+
 ## モバイル専用アプリビュー
 
 プラグインの `tabView` に任意の `mobileDisplay` を指定すると、モバイル画面ではその name の表示を主画面に使う。指定しなければ従来の `display` を使う。

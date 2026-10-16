@@ -175,8 +175,22 @@ test("偽の知らせ: 枠から prefix の中継を偽装しても、タブ・�
   // 連打しても、1 秒の窓の上限を超えて動かない
   const flood: unknown[] = [];
   for (let i = 0; i < 60; i++) flood.push({ type: "key", key: "prefix" }, k("n"));
+  await page.evaluate(() => {
+    const W = window as unknown as { __switches: number };
+    W.__switches = 0;
+    new MutationObserver((recs) => {
+      for (const r of recs) if ((r.target as Element).getAttribute("aria-selected") === "true") W.__switches++;
+    }).observe(document.querySelector(".tab-bar")!, { attributes: true, attributeFilter: ["aria-selected"], subtree: true });
+  });
+  const t0 = Date.now();
   await forge(flood);
+  await page.waitForTimeout(300);
   expect(await tabCount()).toBe(before);
+  // 1 秒の窓の中で実際に切り替わった回数が、上限以下（上限が無ければ 60 回切り替わる）
+  const switches = await page.evaluate(() => (window as unknown as { __switches: number }).__switches);
+  expect(Date.now() - t0).toBeLessThan(1000);
+  expect(switches).toBeGreaterThan(0);
+  expect(switches).toBeLessThanOrEqual(5);
 });
 
 test("C: パネルの script 面（拡張が出したものも）は、今までどおり覆いと［操作する］。Esc で抜ける", async ({ page, appServer }) => {

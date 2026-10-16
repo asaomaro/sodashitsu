@@ -1,6 +1,6 @@
 import { DEFAULT_KEYMAP, type Action } from "@sodashitsu/client-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PrefixRelay, RELAY_ACTION_MAX, RELAY_ALLOWED_ACTIONS, RELAY_MESSAGE_MAX, RELAY_WINDOW_MS, readRelayKey, type RelayKey } from "./prefixRelay.js";
+import { guardRelayRun, PrefixRelay, RELAY_ACTION_MAX, RELAY_ALLOWED_ACTIONS, RELAY_MESSAGE_MAX, RELAY_WINDOW_MS, readRelayKey, type RelayKey } from "./prefixRelay.js";
 
 const k = (key: string, over: Partial<RelayKey> = {}): RelayKey => ({ key, code: "", ctrl: false, alt: false, shift: false, meta: false, ...over });
 
@@ -136,5 +136,18 @@ describe("readRelayKey（枠からの知らせの検査）", () => {
     ["code が欠ける", { key: "n", ctrl: false, alt: false, shift: false, meta: false }],
   ])("捨てる: %s", (_n, v) => {
     expect(readRelayKey(v)).toBeNull();
+  });
+});
+
+describe("guardRelayRun（ダイアログが開いている間は中継の操作を実行しない）", () => {
+  it("ダイアログが開いていれば run を呼ばず、閉じれば呼ぶ", () => {
+    const run = vi.fn<(a: Action) => void>();
+    let blocked = true;
+    const guarded = guardRelayRun(() => blocked, run);
+    guarded({ type: "tabDelta", delta: 1 });
+    expect(run).not.toHaveBeenCalled();
+    blocked = false;
+    guarded({ type: "tabDelta", delta: 1 });
+    expect(run).toHaveBeenCalledExactlyOnceWith({ type: "tabDelta", delta: 1 });
   });
 });

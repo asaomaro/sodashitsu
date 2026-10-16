@@ -20,6 +20,17 @@ export const RELAY_WINDOW_MS = 1000;
 export const RELAY_MESSAGE_MAX = 30;
 export const RELAY_ACTION_MAX = 5;
 
+/**
+ * 中継で実行する関数を包む。ダイアログ・グラフ・質問・承認が開いている間（`blocked()` が真）は実行しない
+ * （実物の `KeyRouter` の dialog モードと同じ。ダイアログの下でタブを切り替えて、フォーカスを奪わない）。
+ */
+export function guardRelayRun(blocked: () => boolean, run: (action: Action) => void): (action: Action) => void {
+  return (action) => {
+    if (blocked()) return;
+    run(action);
+  };
+}
+
 /** 枠が中継する 1 つのキー（`script.html` が本物の keydown から作る）。 */
 export interface RelayKey {
   key: string;
