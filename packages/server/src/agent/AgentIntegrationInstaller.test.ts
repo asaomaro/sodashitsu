@@ -1,5 +1,5 @@
 import { chmod, lstat, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "../persist/atomicFile.js";
 import {
@@ -1170,10 +1170,64 @@ describe("FsAgentIntegrationInstaller — qodercli", () => {
   );
 
   it("isAgentIntegrationKind・AGENT_INTEGRATION_KINDS", () => {
-    expect(AGENT_INTEGRATION_KINDS).toHaveLength(9);
+    expect(AGENT_INTEGRATION_KINDS).toHaveLength(10);
     expect(AGENT_INTEGRATION_KINDS).toContain("qodercli");
+    expect(AGENT_INTEGRATION_KINDS).toContain("bob");
     for (const kind of AGENT_INTEGRATION_KINDS) expect(isAgentIntegrationKind(kind)).toBe(true);
     for (const bad of ["gemini", "__proto__", "constructor", "toString", ""])
       expect(isAgentIntegrationKind(bad)).toBe(false);
+  });
+});
+
+// 20261016-bob-shell: Bob Shell（bob）。
+describe("FsAgentIntegrationInstaller — bob", () => {
+  let workDir: string;
+  let hookScriptSource: string;
+  let home: string;
+
+  beforeEach(async () => {
+    workDir = await makeTempDir("soda-integration-installer-bob-");
+    hookScriptSource = join(workDir, "agent-hook-report.cjs");
+    await writeFile(hookScriptSource, "// fake hook script\n");
+    home = join(workDir, "home");
+  });
+
+  afterEach(async () => {
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  const settingsFile = () => join(home, ".bob", "settings", "settings.json");
+  const installer = () =>
+    new FsAgentIntegrationInstaller(hookScriptSource, { PATH: "" } as NodeJS.ProcessEnv, home);
+
+  it("~/.bob/settings/settings.json の hooks.SessionStart に、Bob が受ける項目（type・command）だけの入れ子で入る", async () => {
+    expect(await installer().install("bob")).toEqual({ ok: true, message: null });
+    const root = JSON.parse(await readFile(settingsFile(), "utf8"));
+    // Bob は、知らない項目（async・matcher 以外の何か）があると、全体のフックの設定を丸ごと捨てる。項目を足さないこと。
+    expect(root.hooks.SessionStart).toEqual([
+      { hooks: [{ type: "command", command: expect.stringMatching(/soda-agent-report\.cjs" bob$/) }] },
+    ]);
+    await expect(stat(join(home, ".bob", "hooks", "soda-agent-report.cjs"))).resolves.toBeDefined();
+    expect(await installer().install("bob")).toEqual({ ok: true, message: "既に導入済みです" });
+    expect(await installer().status("bob")).toMatchObject({ installed: true, needsUpdate: false });
+  });
+
+  it("Bob 自身が書いた設定（licenseConsent など）・利用者のほかのフックを保ち、解除で元に戻る", async () => {
+    const original = {
+      licenseConsent: true,
+      bobShell: { lastRunVersion: "2.0.6" },
+      approval: { mode: "x" },
+      hooks: { Stop: [{ hooks: [{ type: "command", command: "./stop.sh" }] }] },
+    };
+    await mkdir(dirname(settingsFile()), { recursive: true });
+    await writeFile(settingsFile(), JSON.stringify(original, null, 2));
+    await installer().install("bob");
+    const after = JSON.parse(await readFile(settingsFile(), "utf8"));
+    expect(after).toMatchObject({ licenseConsent: true, bobShell: { lastRunVersion: "2.0.6" }, approval: { mode: "x" } });
+    expect(after.hooks.Stop).toEqual(original.hooks.Stop);
+    expect(after.hooks.SessionStart).toHaveLength(1);
+    expect(await installer().uninstall("bob")).toEqual({ ok: true, message: null });
+    expect(JSON.parse(await readFile(settingsFile(), "utf8"))).toEqual(original);
+    await expect(stat(join(home, ".bob", "hooks", "soda-agent-report.cjs"))).rejects.toThrow();
   });
 });

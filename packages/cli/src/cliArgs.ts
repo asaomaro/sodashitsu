@@ -71,6 +71,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl agent notes [<target>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent todos [<target>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent usage [<target>] [--json] [--url <URL>] [--token <TOKEN>]",
+  "sodactl agent integrations [--json] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent wait <target> [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent read <target> [--lines <N>] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl agent prompt <target> <text> [--expect <JSON>] [--wait] [--until working|blocked|idle|done|unknown]... [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
@@ -324,6 +325,8 @@ export type Command =
   | { kind: "agent-get"; opts: GlobalOpts; paneId: string }
   /** 20261010-agent-usage。`paneId` を省くと、利用状況を取れる全部のエージェント。 */
   | { kind: "agent-usage"; opts: GlobalOpts; paneId: string | undefined; json: boolean }
+  /** 設定の「エージェント連携」の状態（読み取り専用。導入・削除はしない）。 */
+  | { kind: "agent-integrations"; opts: GlobalOpts; json: boolean }
   | { kind: "agent-wait"; opts: GlobalOpts; paneId: string; until: AgentStatus[]; timeoutMs: number | undefined }
   | { kind: "agent-read"; opts: GlobalOpts; paneId: string; lines: number; raw: boolean; timeoutMs: number }
   | {
@@ -1025,6 +1028,11 @@ function parseAgent(sub: string | undefined, rest: readonly string[], env: NodeJ
     const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!], bools: ["--json"] });
     rejectExtra(positionals, 1, USAGE);
     return { kind: "agent-usage", opts: globalOptsFrom(values, env), paneId: positionals[0], json: bools.has("--json") };
+  }
+  if (sub === "integrations") {
+    const { positionals, values, bools } = parseFlags(rest, { values: [...URL_TOKEN.values!], bools: ["--json"] });
+    rejectExtra(positionals, 0, USAGE);
+    return { kind: "agent-integrations", opts: globalOptsFrom(values, env), json: bools.has("--json") };
   }
   if (sub === "wait") {
     const { positionals, values, multi } = parseFlags(rest, { values: [...URL_TOKEN.values!, "--timeout"], multi: ["--until"] });

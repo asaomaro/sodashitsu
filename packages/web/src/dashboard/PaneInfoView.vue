@@ -19,7 +19,7 @@ import {
   basisLabel,
   contextDisplay,
   formatAgo,
-  formatCost,
+  formatUsageCost,
   formatTokens,
   isStale,
   kindLabel,
@@ -176,7 +176,7 @@ function openDashboard(): void {
         </template>
         <dt>コスト</dt>
         <dd data-pane-info-cost>
-          <span class="dash-num">{{ formatCost(usage.costUsd) }}</span>
+          <span class="dash-num">{{ formatUsageCost(usage) }}</span>
           <span v-if="costNote" class="dash-muted pinfo-basis">{{ costNote }}</span>
         </dd>
         <dt>コンテキスト</dt>

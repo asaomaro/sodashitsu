@@ -117,6 +117,15 @@
   var kbKey = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'key') : undefined;
   var kbComposing = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'isComposing') : undefined;
   var kbCode = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'keyCode') : undefined;
+  var kbPhys = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'code') : undefined;
+  var kbCtrl = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'ctrlKey') : undefined;
+  var kbAlt = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'altKey') : undefined;
+  var kbShift = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'shiftKey') : undefined;
+  var kbMeta = typeof KeyboardEvent !== 'undefined' ? getterOf(KeyboardEvent.prototype, 'metaKey') : undefined;
+  var evStopImmediate = Event.prototype.stopImmediatePropagation;
+  var strLower = String.prototype.toLowerCase;
+  var rSetTimeout = setTimeout;
+  var rClearTimeout = clearTimeout;
   var msgData = typeof MessageEvent !== 'undefined' ? getterOf(MessageEvent.prototype, 'data') : undefined;
   var msgPorts = typeof MessageEvent !== 'undefined' ? getterOf(MessageEvent.prototype, 'ports') : undefined;
   var msgSource = typeof MessageEvent !== 'undefined' ? getterOf(MessageEvent.prototype, 'source') : undefined;
@@ -352,22 +361,100 @@
     if (parsedBody) insertChildren(parsedBody, liveBody);
   }
 
-  function keyMsg() {
+  function keyMsg(which) {
     var m = mk();
     own(m, 'type', 'key');
-    own(m, 'key', 'escape');
+    own(m, 'key', which);
     return m;
+  }
+  // --- アプリタブのメイン画面（render の direct: true）だけ: Esc は取り次がず（アプリが使える）、prefix を取り次ぐ ---------------------------
+  // prefix（親が render で渡す 1 つの chord）に合う本物のキーは、アプリへ渡さず（preventDefault＋stopImmediatePropagation。中身より先に受ける）、親へ「prefix」と知らせる。
+  // 以後は「待ち」: 修飾キーだけのキーは素通し、それ以外の本物のキーは飲み込んで親へ中継する。待ちは親の 'prefix-state' で続く・終わる（保険の時計 3 秒）。
+  // 親は偽れる前提で、許可表の操作（タブ・ワークスペースの切り替え）しか実行しない。
+  var directMode = false;
+  var prefixChord = null; // 親から受けた prefix（key は小文字にしてある）。null なら中継しない
+  var prefixPending = false;
+  var pendingTimer = null;
+  var PENDING_MS = 3000;
+  function isModifierOnly(k) {
+    return k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'AltGraph' || k === 'CapsLock' || k === 'OS';
+  }
+  function clearPending() {
+    prefixPending = false;
+    if (pendingTimer !== null) { rApply(rClearTimeout, WIN, [pendingTimer]); pendingTimer = null; }
+  }
+  function armPending() {
+    if (pendingTimer !== null) rApply(rClearTimeout, WIN, [pendingTimer]);
+    prefixPending = true;
+    pendingTimer = rApply(rSetTimeout, WIN, [function () { pendingTimer = null; prefixPending = false; }, PENDING_MS]);
+  }
+  function matchesPrefix(e, key) {
+    var c = prefixChord;
+    if (c === null || typeof key !== 'string') return false;
+    return rApply(strLower, key, []) === c.key &&
+      !!rd(kbCtrl, e, 'ctrlKey') === c.ctrl && !!rd(kbAlt, e, 'altKey') === c.alt &&
+      !!rd(kbShift, e, 'shiftKey') === c.shift && !!rd(kbMeta, e, 'metaKey') === c.meta;
+  }
+  function swallow(e) {
+    rApply(evPreventDefault, e, []);
+    rApply(evStopImmediate, e, []);
+  }
+  function relayKeydown(e, key) {
+    if (typeof key !== 'string') return;
+    if (prefixPending) {
+      if (isModifierOnly(key)) return;
+      swallow(e);
+      var input = mk();
+      own(input, 'key', key);
+      var code = rd(kbPhys, e, 'code');
+      own(input, 'code', typeof code === 'string' ? code : '');
+      own(input, 'ctrl', !!rd(kbCtrl, e, 'ctrlKey'));
+      own(input, 'alt', !!rd(kbAlt, e, 'altKey'));
+      own(input, 'shift', !!rd(kbShift, e, 'shiftKey'));
+      own(input, 'meta', !!rd(kbMeta, e, 'metaKey'));
+      var m = mk();
+      own(m, 'type', 'prefix-key');
+      own(m, 'input', input);
+      armPending(); // 親の 'prefix-state' が続き・終わりを決める。返事が来なくても 3 秒で終わる
+      post(m);
+      return;
+    }
+    if (matchesPrefix(e, key)) {
+      swallow(e);
+      armPending();
+      post(keyMsg('prefix'));
+    }
+  }
+  function setDirect(m) {
+    directMode = true;
+    var ks = m.relayKeys;
+    var k = ks && ks.length > 0 ? ks[0] : null;
+    if (k && typeof k.key === 'string' && k.key.length > 0) {
+      var c = mk();
+      own(c, 'key', rApply(strLower, k.key, []));
+      own(c, 'ctrl', !!k.ctrl);
+      own(c, 'alt', !!k.alt);
+      own(c, 'shift', !!k.shift);
+      own(c, 'meta', !!k.meta);
+      prefixChord = c;
+    }
   }
   /**
    * Esc の取り次ぎ。読み込み時（＝中身より先）に window の capture へ付ける。本物の（isTrusted の）キーだけを見る（中身が作った合成のイベントは無視）。
    * key・isComposing・keyCode は、控えた getter で読む（中身が KeyboardEvent.prototype を差し替えても効く）。
+   * メイン画面（directMode）では Esc を取り次がない。代わりに prefix の中継をする。
    */
   rApply(addListener, WIN, ['keydown', function (e) {
     if (!e.isTrusted) return;
     if (rd(kbComposing, e, 'isComposing') || rd(kbCode, e, 'keyCode') === 229) return;
-    if (rd(kbKey, e, 'key') === 'Escape') {
+    var key = rd(kbKey, e, 'key');
+    if (directMode) {
+      relayKeydown(e, key);
+      return;
+    }
+    if (key === 'Escape') {
       rApply(evPreventDefault, e, []);
-      post(keyMsg());
+      post(keyMsg('escape'));
     }
   }, true]);
 
@@ -386,6 +473,7 @@
       return;
     }
     rev = m.rev;
+    if (m.direct === true) setDirect(m);
     try {
       // (i) soda を置く (ii) テーマ (iii) 中身を差し込む (iv) DOMContentLoaded・load を 1 回ずつ起こす (v) rendered。Esc の取り次ぎは、読み込み時に付けてある。
       defProp(WIN, 'soda', { value: makeSoda(m.theme), writable: true, configurable: true, enumerable: true });
@@ -419,6 +507,8 @@
       if (typeof m.dx === 'number' && typeof m.dy === 'number' && isFiniteF(m.dx) && isFiniteF(m.dy) && winScrollBy) rApply(winScrollBy, WIN, [m.dx, m.dy]);
     } else if (type === 'focus') {
       if (winFocus) rApply(winFocus, WIN, []);
+    } else if (type === 'prefix-state') {
+      if (directMode) { if (m.pending === true) armPending(); else clearPending(); }
     }
   }
 

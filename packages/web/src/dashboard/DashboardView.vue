@@ -23,7 +23,7 @@ import {
   contextDisplay,
   filterRows,
   formatAgo,
-  formatCost,
+  formatUsageCost,
   formatTokens,
   isStale,
   kindLabel,
@@ -209,7 +209,7 @@ function tokensText(r: DashboardRow): string {
   return r.usage === null ? NONE : formatTokens(totalTokens(r.usage));
 }
 function costText(r: DashboardRow): string {
-  return formatCost(r.usage?.costUsd);
+  return formatUsageCost(r.usage);
 }
 /** コストの時点・見積りの添え書き。 */
 function costNote(r: DashboardRow): string | null {

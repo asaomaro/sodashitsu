@@ -232,6 +232,94 @@ describe("script.html（土台）", () => {
     expect(f.port.postMessage).not.toHaveBeenCalled();
   });
 
+  describe("アプリタブのメイン画面（render の direct: true）", () => {
+    const prefix = { key: "b", ctrl: true, alt: false, shift: false, meta: false };
+    function booted() {
+      const f = boot();
+      f.init();
+      f.render({ rev: 1, format: "script-html", source: "<p>x</p>", relayKeys: [prefix], direct: true });
+      f.port.postMessage.mockClear();
+      const seen: string[] = [];
+      // 作者のスクリプトに見立てた、あとから付く window の capture／bubble
+      f.win.addEventListener("keydown", (e) => void seen.push((e as unknown as { key: string }).key), true);
+      const key = (k: string, extra: Record<string, unknown> = {}): Event => {
+        const ev = Object.assign(new Event("keydown", { cancelable: true }), { key: k, code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, isTrusted: true, ...extra });
+        f.win.dispatchEvent(ev);
+        return ev;
+      };
+      return { f, seen, key };
+    }
+
+    it("Esc は取り次がず、止めもしない（アプリが使える）", () => {
+      const { f, seen, key } = booted();
+      const ev = key("Escape");
+      expect(f.port.postMessage).not.toHaveBeenCalled();
+      expect(ev.defaultPrevented).toBe(false);
+      expect(seen).toEqual(["Escape"]);
+    });
+
+    it("prefix はアプリへ渡さず親へ知らせ、次のキーを中継する。親が待ちを終えたら、その次のキーはアプリへ届く", () => {
+      const { f, seen, key } = booted();
+      const ev = key("b", { ctrlKey: true });
+      expect(ev.defaultPrevented).toBe(true);
+      expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "key", key: "prefix" });
+      key("Shift"); // 修飾キーだけは素通し（待ちを消費しない）
+      const second = key("n", { code: "KeyN" });
+      expect(second.defaultPrevented).toBe(true);
+      expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "prefix-key", input: { key: "n", code: "KeyN", ctrl: false, alt: false, shift: false, meta: false } });
+      f.send({ type: "prefix-state", pending: false });
+      const third = key("a");
+      expect(third.defaultPrevented).toBe(false);
+      expect(seen).toEqual(["Shift", "a"]); // prefix と、その次のキーは、作者のスクリプトに見えない
+    });
+
+    it("親が待ちを続けると言えば、次のキーも中継する（番号の選択）", () => {
+      const { f, key } = booted();
+      key("b", { ctrlKey: true });
+      key("u");
+      f.send({ type: "prefix-state", pending: true });
+      key("2");
+      expect(f.port.postMessage).toHaveBeenLastCalledWith({ type: "prefix-key", input: expect.objectContaining({ key: "2" }) });
+    });
+
+    it("合成のイベント（isTrusted でない）の prefix は、取り次がない・止めない", () => {
+      const { f, seen, key } = booted();
+      const ev = key("b", { ctrlKey: true, isTrusted: false });
+      expect(ev.defaultPrevented).toBe(false);
+      expect(f.port.postMessage).not.toHaveBeenCalled();
+      expect(seen).toEqual(["b"]);
+    });
+
+    it("修飾が違うキー・IME 変換中は prefix ではない", () => {
+      const { f, key } = booted();
+      key("b");
+      key("b", { ctrlKey: true, altKey: true });
+      key("b", { ctrlKey: true, isComposing: true });
+      expect(f.port.postMessage).not.toHaveBeenCalled();
+    });
+
+    it("direct でない render（relayKeys を渡されても）は、今までどおり Esc を取り次ぎ、prefix は取り次がない", () => {
+      const f = boot();
+      f.init();
+      f.render({ rev: 1, format: "script-html", source: "<p>x</p>", relayKeys: [prefix] });
+      f.port.postMessage.mockClear();
+      f.fire("keydown", { key: "b", ctrlKey: true, isTrusted: true });
+      expect(f.port.postMessage).not.toHaveBeenCalled();
+      f.fire("keydown", { key: "Escape", isTrusted: true });
+      expect(f.port.postMessage).toHaveBeenCalledWith({ type: "key", key: "escape" });
+    });
+
+    it("direct の指定は、描いたあとに port の知らせで後から足せない（render は 1 回）", () => {
+      const f = boot();
+      f.init();
+      f.render({ rev: 1, format: "script-html", source: "<p>x</p>" });
+      f.render({ rev: 2, format: "script-html", source: "<p>y</p>", relayKeys: [prefix], direct: true });
+      f.port.postMessage.mockClear();
+      f.fire("keydown", { key: "Escape", isTrusted: true });
+      expect(f.port.postMessage).toHaveBeenCalledWith({ type: "key", key: "escape" });
+    });
+  });
+
   it("scroll は window.scrollBy、focus は window.focus() だけ。数でないスクロールは無視", () => {
     const f = boot();
     f.init();

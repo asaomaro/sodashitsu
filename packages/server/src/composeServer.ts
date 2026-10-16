@@ -110,6 +110,8 @@ import { UsageFeed } from "./usage/UsageFeed.js";
 import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
 import { StatusLineWrapper } from "./agent/statusLineWrap.js";
 import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
+import { BobUsageAdapter } from "./usage/bobAdapter.js";
+import { CopilotUsageAdapter } from "./usage/copilotAdapter.js";
 import { CodexUsageAdapter } from "./usage/codexAdapter.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
@@ -176,6 +178,12 @@ function manifestDirFor(): string {
   // packages/server/dist/composeServer.js から見て ../../../third_party/herdr/agent-detection
   // （リポジトリ直下。`third_party` は成果物にも同梱する前提——移植元のライセンス表示ごと持ち歩く。D5・D34）。
   return join(import.meta.dirname, "..", "..", "..", "third_party", "herdr", "agent-detection");
+}
+
+/** 本製品独自の判定ルール（herdr に無いエージェント。20261016-bob-shell）。配布物にも `packages/server/assets` ごと入る。 */
+function ownManifestDirFor(): string {
+  // packages/server/dist/composeServer.js から見て ../assets/agent-detection
+  return join(import.meta.dirname, "..", "assets", "agent-detection");
 }
 
 /** 公式フック連携（20260923-agent-session-resume）の hook スクリプト本体の場所。 */
@@ -380,9 +388,12 @@ export async function composeServer(
   // worktree の一覧と作成（20260920-git-worktree-actions）。`GitInfoPoller` と同じ runner を使い回す。
   const worktrees = new DefaultWorktreeService(session, gitRunner, logger, options.worktreeDir);
 
-  // エージェント判定（02-agent-detection T10）。判定ルール（third_party/herdr/agent-detection）を読み、
+  // エージェント判定（02-agent-detection T10）。判定ルール（third_party/herdr/agent-detection と、本製品独自の packages/server/assets/agent-detection。20261016-bob-shell）を読み、
   // 結果の要約をログへ出す（個々のファイルの失敗は ManifestStore.loadAll 自身が warn で出す。D46）。
-  const manifestStore = await DefaultManifestStore.load(new FsManifestSource(manifestDirFor()), logger);
+  const manifestStore = await DefaultManifestStore.load(
+    [new FsManifestSource(manifestDirFor()), new FsManifestSource(ownManifestDirFor())],
+    logger,
+  );
   const manifestSummaries = manifestStore.summaries();
   const manifestOkCount = manifestSummaries.filter((s) => s.ok).length;
   logger.info("agent manifests loaded", { ok: manifestOkCount, total: manifestSummaries.length });
@@ -570,7 +581,7 @@ export async function composeServer(
     logger,
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
-  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter()], logger, reported: reportedUsage });
+  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。

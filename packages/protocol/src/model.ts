@@ -151,10 +151,10 @@ export interface Pane {
  * herdr との対応は無く、本製品独自の公式フック連携専用（20260923-agent-session-resume。
  * 20260923-other-agents-session-resume で6つ追加——Cursor Agent CLI・GitHub Copilot CLI・
  * Devin CLI・Droid・Grok CLI・Qwen Code）。
- * 20261007-agent-hook-drift で Qoder CLI（`qodercli`）を追加。
+ * 20261007-agent-hook-drift で Qoder CLI（`qodercli`）を追加。20261016-bob-shell で Bob Shell（`bob`）を追加。
  */
 export type AgentIntegrationKind =
-  "claude" | "codex" | "cursor" | "copilot" | "devin" | "droid" | "grok" | "qwen" | "qodercli";
+  "claude" | "codex" | "cursor" | "copilot" | "devin" | "droid" | "grok" | "qwen" | "qodercli" | "bob";
 
 export interface AgentSessionRef {
   kind: AgentIntegrationKind;

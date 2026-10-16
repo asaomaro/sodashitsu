@@ -32,11 +32,11 @@ const content = computed(() => info.value ? displays.contents.get(info.value.id)
   <section ref="root" tabindex="-1" class="plugin-view" data-plugin-view :data-mobile-view="mobile || undefined" :data-plugin="plugin.extensionKey" :data-display-root="info?.id">
     <header v-if="info" class="plugin-view-head" data-display-chrome>
       <span>{{ displayLabel(info) }}</span>
-      <DisplayScriptMark :info="info" part="mark" />
-      <DisplayScriptMark :info="info" part="button" />
-      <DisplayScriptMark :info="info" part="end" />
+      <DisplayScriptMark :info="info" part="mark" main />
+      <DisplayScriptMark :info="info" part="button" main />
+      <DisplayScriptMark :info="info" part="end" main />
     </header>
-    <DisplayFrame v-if="info" :key="info.id" :info="info" :content="content" />
+    <DisplayFrame v-if="info" :key="info.id" :info="info" :content="content" main />
     <div v-else class="plugin-view-empty" role="status">
       {{ extension?.state === 'running' ? 'プラグインの画面を準備しています…' : 'プラグインが停止しています。設定の拡張一覧で有効にしてください。' }}
     </div>

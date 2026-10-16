@@ -107,6 +107,7 @@ sodactl agent read reviewer --lines 120
 - `--timeout` を付けないと、作業が始まった後は無期限に待つ。長い仕事でも締め切りを付ける。
 - 既に動いているエージェントの状態が変わるのを待つだけなら `agent wait`（例 `--until blocked`）。
 - `sodactl agent notes [<target>]` はセッションのメモ（タイトル・本文・タグ・グループ）をJSONで読む。`sodactl agent todos [<target>]` は記録されたToDoの未着手・進行中・完了をJSONで読む。対象を省くと自身のペイン。自身のペイン内ではログイン不要のpane.sockを使い、別ペインや別マシンでは通常の認証を使う。どちらも参照専用で、作業中のエージェントへの入力やタスクの更新は行わない。セッションが切り替わればそのセッションのメモへ切り替わる。
+- `sodactl agent integrations [--json]` は、設定の「エージェント連携」の状態（種類ごとの導入済み／更新が必要／未導入と、実行ファイルの検出）を読む。読み取り専用で、導入・削除はしない。種類はサーバの結果のまま（`--json` は `{ autoResumeEnabled, agents: { <kind>: { cliDetected, installed, needsUpdate? } }, statusLine? }`。`statusLine` はステータスラインの包みの状態〔`state` は none／installed／needs_update／detached／invalid／unsupported。古いサーバには無い〕。表は kind 別だけで、全体の値は `--json` で見る）。`pane.sock` には載せないので、pane の中でも他の `agent` コマンドと同じ認証が要る。
 - `sodactl agent usage [<target>] [--json]` は、エージェントの利用状況（モデル・トークン・コスト・コンテキスト）を出す。`<target>` を省くと、取れる全部（Claude Code・Codex。Codex はアカウント全体の制限の枠〔5 時間・週など。使用率とリセット〕も下に出る。Codex のコストは無い）。
   トークンには**数え方の印**がある（「累計」＝記録の会計の行・「記録に残る分」＝記録に残っている分の合計で、下限・「一部」＝大きな記録の末尾だけ）。コストは記録の会計の行があるときだけ
   （時点つき）。取れない項目は「—」（`--json` では項目が無い。0 ではない）。答えは数字・モデル名・時刻だけで、会話の中身は出ない。

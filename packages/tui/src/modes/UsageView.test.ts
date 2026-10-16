@@ -193,3 +193,9 @@ it("account list supports Tab then Enter and ignores a replaced overflow hint", 
  const y=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).findIndex(s=>s.includes("アカウント枠: ほか"));
  expect(y).toBeGreaterThanOrEqual(0); dashboard.handleMouse({action:"down",button:0,x:5,y}); expect(ui.dialogContext).toBeNull();
 });
+
+// 20261016-agent-usage-bob-copilot
+it("shows non-USD credits and premium requests on the cost line", () => {
+  const usage = { paneId: "p1", kind: "copilot", model: "m", tokens: { basis: "transcript" }, credits: { amount: 0.166003, unit: "aic" }, premiumRequests: 2, updatedAt: 0, source: "copilot-events" } as AgentUsage;
+  expect(usageLines(usage).join("\n")).toContain("コスト 0.1660 AIC · プレミアムリクエスト 2");
+});

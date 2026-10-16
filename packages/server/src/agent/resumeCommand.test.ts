@@ -40,6 +40,11 @@ describe("resumeCommandFor", () => {
     expect(resumeCommandFor("qodercli", "a; rm -rf /")).toBeUndefined();
   });
 
+  it("builds the Bob Shell resume command (the hook's session_id is the task id)", () => {
+    expect(resumeCommandFor("bob", "d003720015b0a94fa3f82509f9207b6f")).toBe("bob --resume d003720015b0a94fa3f82509f9207b6f");
+    expect(resumeCommandFor("bob", "a; rm -rf /")).toBeUndefined();
+  });
+
   it("rejects an unsafe sessionId for all 6 new kinds too", () => {
     for (const kind of ["cursor", "copilot", "devin", "droid", "grok", "qwen"] as const) {
       expect(resumeCommandFor(kind, "abc; rm -rf ~")).toBeUndefined();

@@ -8,6 +8,7 @@ import {
   filterRows,
   formatAgo,
   formatCost,
+  formatUsageCost,
   formatDuration,
   formatTokens,
   isStale,
@@ -114,6 +115,11 @@ describe("数字の見せ方", () => {
     expect(formatCost(0)).toBe("$0.00");
     expect(formatCost(0.004)).toBe("<$0.01");
     expect(formatCost(3.456)).toBe("$3.46");
+    // 20261016-agent-usage-bob-copilot: USD が無ければ、USD でないクレジットを単位つきで（換算しない）。
+    expect(formatUsageCost({ costUsd: 2, credits: { amount: 1, unit: "aic" } } as AgentUsage)).toBe("$2.00");
+    expect(formatUsageCost({ credits: { amount: 0.166003, unit: "aic" } } as AgentUsage)).toBe("0.166 AIC");
+    expect(formatUsageCost({ credits: { amount: 0.078512, unit: "bobcoin" } } as AgentUsage)).toBe("0.079 Bobcoin");
+    expect(formatUsageCost(null)).toBe(NONE);
   });
   it("基準の印: 記録に残る分は「記録分」（累計と言わない）", () => {
     expect(basisLabel("transcript")).toBe("記録分");

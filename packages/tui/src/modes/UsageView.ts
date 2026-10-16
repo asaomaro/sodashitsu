@@ -1,7 +1,7 @@
 import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
 import { paneNameOf, type KeyInput } from "@sodashitsu/client-core";
-import { shortId, type AgentUsage, type AccountCostResult } from "@sodashitsu/protocol";
+import { formatUsageCredits, shortId, type AgentUsage, type AccountCostResult } from "@sodashitsu/protocol";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { UsageModel } from "../model/UsageModel.js";
@@ -69,13 +69,18 @@ function contextPercent(u: AgentUsage): number | undefined {
       : undefined)
   );
 }
+/** USD があれば USD、無ければ USD でないクレジット（Bob Shell・Copilot CLI。換算しない）、どちらも無ければ「—」。 */
+function costText(u: AgentUsage, digits: number): string {
+  if (u.costUsd !== undefined) return "$" + u.costUsd.toFixed(digits);
+  return u.credits !== undefined ? formatUsageCredits(u.credits, digits) : "—";
+}
 export function usageLines(u: AgentUsage | null | undefined): string[] {
   if (!u) return ["利用状況を取得できません（記録・会話ID・対応状況を確認してください）"];
   return [
     `${u.kind} / ${u.model ?? "モデル不明"} · ${basis[u.tokens.basis]}`,
     `トークン 合計 ${num(u.tokens.total)} / 入力 ${num(u.tokens.input)} / 出力 ${num(u.tokens.output)}`,
     `キャッシュ 読み ${num(u.tokens.cacheRead)} / 書き ${num(u.tokens.cacheWrite)} · 推論 ${num(u.tokens.reasoning)}`,
-    `コスト ${u.costUsd === undefined ? "—" : "$" + u.costUsd.toFixed(4)}${u.costBasis ? " (" + u.costBasis + ")" : ""}`,
+    `コスト ${costText(u, 4)}${u.costBasis ? " (" + u.costBasis + ")" : ""}${u.premiumRequests !== undefined ? ` · プレミアムリクエスト ${u.premiumRequests}` : ""}`,
     `コンテキスト ${usageGauge(contextPercent(u))} · ${num(u.contextTokens)} / ${num(u.contextWindowTokens)}`,
     `更新 ${new Date(u.updatedAt).toLocaleString("ja-JP")} · ${u.source}`,
     ...(u.partial ? ["一部の記録のみ"] : []),
@@ -351,7 +356,7 @@ export class UsageDashboard {
       put(
         y,
         u
-          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(u.tokens.total)} · $${u.costUsd === undefined ? "—" : u.costUsd.toFixed(4)}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
+          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(u.tokens.total)} · ${costText(u, 4)}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
           : "利用状況を取得できません",
         bg,
       );

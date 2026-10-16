@@ -14,4 +14,8 @@ export class FsManifestSource implements ManifestSource {
   async read(name: string): Promise<string> {
     return readFile(join(this.dir, name), "utf8");
   }
+
+  describe(): string {
+    return this.dir;
+  }
 }

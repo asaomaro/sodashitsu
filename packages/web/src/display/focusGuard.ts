@@ -17,6 +17,12 @@ export class FocusGuard {
   focused = false;
   private unreported = 0;
 
+  /**
+   * `direct`: アプリタブのメイン画面（承認した拡張が出す面）の枠。覆いが無いので、枠がフォーカスを持てば、それが「操作中」（利用者がその画面を押した・開いた）。
+   * 「取った」（`steal`）にならず、`Esc` で抜ける操作も無い（`acceptKey` は常に偽）。枠を離れれば操作中は終わる（印と［操作を終える］は従来どおり）。
+   */
+  constructor(public direct = false) {}
+
   /** 利用者が操作を始める（枠へ `focus()` する前に呼ぶ）。 */
   engage(): void {
     this.engaged = true;
@@ -37,6 +43,11 @@ export class FocusGuard {
    */
   observe(focusedNow: boolean): FocusVerdict {
     if (!focusedNow && this.engaged) this.engaged = false; // フォーカスが枠を離れた（余白を押した、など）。操作中は終わり
+    if (this.direct) {
+      this.focused = focusedNow;
+      this.engaged = focusedNow;
+      return null;
+    }
     const changed = focusedNow && !this.focused;
     this.focused = focusedNow;
     return changed && !this.engaged ? "steal" : null;
@@ -44,7 +55,7 @@ export class FocusGuard {
 
   /** 枠からの `key` の知らせを受けてよいか（操作中の `escape` だけ）。 */
   acceptKey(key: string): boolean {
-    return this.engaged && key === "escape";
+    return !this.direct && this.engaged && key === "escape";
   }
 
   /**

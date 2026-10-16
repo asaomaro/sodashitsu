@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DisplayInfo, Pane, Tab } from "@sodashitsu/protocol";
-import { componentViewport, terminalComponentAllowed } from "./components.js";
+import { componentViewport, directOperable, terminalComponentAllowed } from "./components.js";
 import { readFrameMessage } from "./frameMessages.js";
 
 describe("native component boundary", () => {
-  const info = { paneId: "anchor", format: "script-html" } as DisplayInfo;
+  const info = {
+    paneId: "anchor",
+    format: "script-html",
+    source: { type: "extension", id: "app", scope: "user" },
+  } as DisplayInfo;
   const panes = new Map(
     [
       ["anchor", { id: "anchor", tabId: "app", virtual: true }],
@@ -73,4 +77,50 @@ it("terminal input is opt-in, and frame messages only accept a boolean", () => {
   };
   expect(readFrameMessage(m)).toMatchObject({ interactive: false });
   expect(readFrameMessage({ ...m, interactive: true })).toMatchObject({ interactive: true });
+});
+
+describe("terminalComponentAllowed: 面の出どころ", () => {
+  const panes = new Map(
+    [
+      ["anchor", { id: "anchor", tabId: "work", status: "running" }],
+      ["agent", { id: "agent", tabId: "work", status: "running" }],
+    ].map(([id, p]) => [id, p]) as [string, Pane][],
+  );
+  const tabs = new Map([["work", { workspaceId: "w" }]] as [string, Tab][]);
+  const base = { paneId: "anchor", format: "script-html" } as DisplayInfo;
+  const ext = (source: unknown) => ({ ...base, source }) as DisplayInfo;
+  it("拡張が出した面（利用者・プロジェクト）は埋め込める", () => {
+    for (const scope of ["user", "project"])
+      expect(
+        terminalComponentAllowed(ext({ type: "extension", id: "my-ext_1", scope }), "agent", panes, tabs),
+      ).toBe(true);
+  });
+  it("pane のプログラムが出した面（source なし）・形の合わない source・標準ビューは埋め込めない", () => {
+    expect(terminalComponentAllowed(base, "agent", panes, tabs)).toBe(false);
+    for (const source of [
+      null,
+      "extension",
+      {},
+      { type: "extension", id: "bad id", scope: "user" },
+      { type: "extension", id: "x", scope: "other" },
+      { type: "extension", scope: "user" },
+      { type: "builtin", id: "workspace", scope: "user" },
+    ])
+      expect(terminalComponentAllowed(ext(source), "agent", panes, tabs)).toBe(false);
+  });
+});
+
+describe("directOperable（アプリのメイン画面を覆いなしで操作中にしてよい面）", () => {
+  const base = { format: "script-html" } as DisplayInfo;
+  it("拡張（user・project）が出した script の面だけ", () => {
+    expect(directOperable({ ...base, source: { type: "extension", id: "app", scope: "user" } } as DisplayInfo)).toBe(true);
+    expect(directOperable({ ...base, source: { type: "extension", id: "app", scope: "project" } } as DisplayInfo)).toBe(true);
+  });
+  it("source の無い面（pane のプログラムが出した面）・builtin・形の違う source・script でない形式は偽", () => {
+    expect(directOperable(base)).toBe(false);
+    expect(directOperable({ ...base, source: { type: "builtin", id: "workspace" } } as DisplayInfo)).toBe(false);
+    expect(directOperable({ ...base, source: { type: "extension", id: "../x", scope: "user" } } as DisplayInfo)).toBe(false);
+    expect(directOperable({ ...base, source: { type: "extension", id: "app", scope: "other" } } as unknown as DisplayInfo)).toBe(false);
+    expect(directOperable({ format: "html", source: { type: "extension", id: "app", scope: "user" } } as DisplayInfo)).toBe(false);
+  });
 });
