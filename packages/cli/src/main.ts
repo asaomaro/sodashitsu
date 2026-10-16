@@ -16,6 +16,7 @@ import {
   runAgentWait,
 } from "./commands/agent.js";
 import { runAgentUsage } from "./commands/agentUsage.js";
+import { runAgentIntegrations } from "./commands/agentIntegrations.js";
 import { runAgentFork } from "./commands/agentFork.js";
 import { runAgentStart } from "./commands/agentStart.js";
 import { runAsk } from "./commands/ask.js";
@@ -165,6 +166,8 @@ async function main(): Promise<void> {
       return runSessionTools(cmd, store);
     case "agent-usage":
       return runAgentUsage(cmd, store);
+    case "agent-integrations":
+      return runAgentIntegrations(cmd, store);
     case "agent-wait":
       return runAgentWait(cmd, store);
     case "agent-read":
