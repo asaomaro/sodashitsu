@@ -1,3 +1,5 @@
+import { RpcError } from "@sodashitsu/protocol";
+import { AccountCostReader } from "./accountCost.js";
 import type { AccountUsage, AgentUsage, AgentUsageResult, Pane } from "@sodashitsu/protocol";
 import type { Logger } from "../log/Logger.js";
 import type { ReportedUsage, UsageReport } from "./reportedUsage.js";
@@ -45,6 +47,13 @@ export interface UsageServiceDeps {
 const TRANSCRIPT_NOTES_MAX = 512;
 
 export class UsageService {
+  private readonly costs = new AccountCostReader();
+  async accountCost(accountKey: string) {
+    const { accounts } = await this.get();
+    const account = accounts.find((a) => a.accountKey === accountKey);
+    if (!account) throw new RpcError("not_found", "アカウントが見つかりません");
+    return this.costs.read(account, this.deps.reported?.costReports() ?? []);
+  }
   private readonly adapters = new Map<string, UsageAdapter>();
   private readonly transcripts = new Map<string, { sessionId: string; path: string }>();
 
@@ -57,7 +66,8 @@ export class UsageService {
     this.transcripts.delete(paneId);
     if (path === undefined) return; // 場所の無い報告が受け入れられた: 前の場所は、もう使わない
     this.transcripts.set(paneId, { sessionId, path });
-    while (this.transcripts.size > TRANSCRIPT_NOTES_MAX) this.transcripts.delete(this.transcripts.keys().next().value as string);
+    while (this.transcripts.size > TRANSCRIPT_NOTES_MAX)
+      this.transcripts.delete(this.transcripts.keys().next().value as string);
   }
 
   /** サーバが止まる処理: 以後は何も読まず、走っている読みも止める。 */
@@ -78,7 +88,10 @@ export class UsageService {
   /** `paneId` を省くと、利用状況を取れる全部の pane。 */
   async get(paneId?: string): Promise<AgentUsageResult> {
     if (this.closed) return { panes: {}, accounts: [] };
-    const panes: Pane[] = paneId !== undefined ? [this.deps.session.getPane(paneId)].filter((p): p is Pane => p !== undefined) : this.deps.session.snapshot().panes;
+    const panes: Pane[] =
+      paneId !== undefined
+        ? [this.deps.session.getPane(paneId)].filter((p): p is Pane => p !== undefined)
+        : this.deps.session.snapshot().panes;
     const out: Record<string, AgentUsage | null> = {};
     if (paneId !== undefined) out[paneId] = null;
     await Promise.all(
@@ -97,7 +110,8 @@ export class UsageService {
     }
     // 包みの報告から（制限の枠。記録には出ない）。同じ鍵のアダプタの値が、既にあれば、そちらを優先する。
     const seen = new Set(accounts.map((a) => a.accountKey));
-    for (const acc of this.deps.reported?.accountList() ?? []) if (!seen.has(acc.accountKey)) accounts.push(acc);
+    for (const acc of this.deps.reported?.accountList() ?? [])
+      if (!seen.has(acc.accountKey)) accounts.push(acc);
     return { panes: out, accounts };
   }
 
@@ -109,7 +123,8 @@ export class UsageService {
     const ref = pane.agentSession;
     if (!ref || ref.kind !== agent.kind) return null;
     const note = this.transcripts.get(pane.id);
-    const transcriptPath = note !== undefined && note.sessionId === ref.sessionId ? note.path : undefined;
+    const transcriptPath =
+      note !== undefined && note.sessionId === ref.sessionId ? note.path : undefined;
     let base: Omit<AgentUsage, "paneId" | "kind"> | null = null;
     try {
       base = await adapter.usageFor({ paneId: pane.id, sessionId: ref.sessionId, transcriptPath });
@@ -128,13 +143,20 @@ export class UsageService {
  * 累計ではない。`contextTokens` として別に持つ）。コストは、報告（見積り）が、記録の `cost-state`（区切りにだけ書かれる）より新しければ、報告を使う。
  * コンテキストの使用率・窓の大きさは、報告のほうが正確（記録には窓の大きさが出ない）。
  */
-function mergeReported(base: Omit<AgentUsage, "paneId" | "kind"> | null, r: UsageReport, at: number): Omit<AgentUsage, "paneId" | "kind"> {
+function mergeReported(
+  base: Omit<AgentUsage, "paneId" | "kind"> | null,
+  r: UsageReport,
+  at: number,
+): Omit<AgentUsage, "paneId" | "kind"> {
   const out: Omit<AgentUsage, "paneId" | "kind"> =
     base !== null
       ? { ...base }
       : {
           model: r.model ?? null,
-          tokens: { basis: "context", ...(r.contextTokens !== undefined ? { input: r.contextTokens } : {}) },
+          tokens: {
+            basis: "context",
+            ...(r.contextTokens !== undefined ? { input: r.contextTokens } : {}),
+          },
           source: "statusline",
           updatedAt: at,
         };

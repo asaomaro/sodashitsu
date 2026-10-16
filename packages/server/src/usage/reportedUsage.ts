@@ -58,7 +58,11 @@ export class ReportedUsage {
   constructor(
     private readonly now: () => number = Date.now,
     /** 別の pane が、すでに使われている鍵で報告したとき（鍵は報告が言うまま。同じアカウントの別の pane でも起きる）。 */
-    private readonly onSharedKey?: (info: { accountKey: string; paneId: string; otherPanes: number }) => void,
+    private readonly onSharedKey?: (info: {
+      accountKey: string;
+      paneId: string;
+      otherPanes: number;
+    }) => void,
   ) {}
 
   /** 最後に、受けてよい報告を受けた時刻。 */
@@ -82,6 +86,22 @@ export class ReportedUsage {
     return e !== undefined && e.report.sessionId === sessionId ? e : undefined;
   }
 
+  /** Latest verified live reports; session IDs are used only inside the server. */
+  costReports(): { accountKey: string; sessionId: string; usd: number; at: number }[] {
+    return [...this.panes.values()].flatMap(({ report: r, at }) =>
+      r.costUsd === undefined
+        ? []
+        : [
+            {
+              accountKey: accountKeyOf("claude", r.configKey),
+              sessionId: r.sessionId,
+              usd: r.costUsd,
+              at,
+            },
+          ],
+    );
+  }
+
   forgetPane(paneId: string): void {
     this.panes.delete(paneId);
   }
@@ -102,10 +122,12 @@ export class ReportedUsage {
     if (!e) {
       e = { key, windows: new Map(), asOf: at, panes: new Set() };
       this.accounts.set(key, e);
-      while (this.accounts.size > ACCOUNTS_MAX) this.accounts.delete(this.accounts.keys().next().value as string);
+      while (this.accounts.size > ACCOUNTS_MAX)
+        this.accounts.delete(this.accounts.keys().next().value as string);
     }
     if (!e.panes.has(r.paneId)) {
-      if (e.panes.size > 0) this.onSharedKey?.({ accountKey: key, paneId: r.paneId, otherPanes: e.panes.size });
+      if (e.panes.size > 0)
+        this.onSharedKey?.({ accountKey: key, paneId: r.paneId, otherPanes: e.panes.size });
       if (e.panes.size >= KEY_PANES_MAX) e.panes.delete(e.panes.values().next().value as string);
       e.panes.add(r.paneId);
     }
@@ -122,7 +144,11 @@ export class ReportedUsage {
       kind: "claude",
       accountKey: e.key,
       label: list.length > 1 ? `Claude Code (${e.dirName ?? "既定"})` : "Claude Code",
-      windows: [...e.windows.values()].map(({ window }) => (window.resetsAt !== undefined && window.resetsAt <= now ? { ...window, stale: true } : { ...window })),
+      windows: [...e.windows.values()].map(({ window }) =>
+        window.resetsAt !== undefined && window.resetsAt <= now
+          ? { ...window, stale: true }
+          : { ...window },
+      ),
       source: "statusline" as const,
       asOf: e.asOf,
     }));
@@ -140,12 +166,16 @@ function windowOf(label: string, w: UsageReportWindow, windowMinutes?: number): 
 
 /** アカウントの鍵（サーバの中だけの不透明な値）。種類と、設定のフォルダの場所の一方向の印から作る。印が無ければ既定の 1 つ。 */
 export function accountKeyOf(kind: string, configKey: string | undefined): string {
-  return createHash("sha256").update(`${kind}\0${configKey ?? "default"}`).digest("hex").slice(0, 16);
+  return createHash("sha256")
+    .update(`${kind}\0${configKey ?? "default"}`)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 // --- 受け口 → 確かめ → 受ける -------------------------------------------------------------------------------------------------
 
-export type UsageVerdict = { verdict: "accept" } | { verdict: "hold" } | { verdict: "reject"; reason: string };
+export type UsageVerdict =
+  { verdict: "accept" } | { verdict: "hold" } | { verdict: "reject"; reason: string };
 
 export interface UsageIntakeDeps {
   verdict(r: UsageReport): UsageVerdict;
@@ -164,7 +194,10 @@ const DEFAULT_RETRY_MS: readonly number[] = [1_000, 3_000, 8_000];
  * それでも合わなければ捨てる（ログは理由だけ）。
  */
 export class UsageReportIntake {
-  private readonly pending = new Map<string, { report: UsageReport; step: number; timer: { cancel(): void } }>();
+  private readonly pending = new Map<
+    string,
+    { report: UsageReport; step: number; timer: { cancel(): void } }
+  >();
   private readonly retry: readonly number[];
   private readonly setTimer: (fn: () => void, ms: number) => { cancel(): void };
 
@@ -212,7 +245,10 @@ export class UsageReportIntake {
     this.drop(report.paneId);
     const delay = this.retry[step];
     if (delay === undefined) {
-      this.deps.log?.("the report did not match the pane's front agent / current conversation in time", report);
+      this.deps.log?.(
+        "the report did not match the pane's front agent / current conversation in time",
+        report,
+      );
       return;
     }
     const timer = this.setTimer(() => {

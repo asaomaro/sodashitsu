@@ -3,22 +3,42 @@
  * アカウントの利用枠 1 つ（20261010-agent-usage。PR3 のダッシュボードから切り出した。PR4 の pane の利用状況の窓も同じ部品を使う）。
  * 数字の整形・古い値の扱いは `dashboardModel.ts` のもの。**この部品の CSS は、ダッシュボードの一覧の行も使う棒・印・薄く出す規則を含む（`dash-` の名前だけ。窓の外へは掛からない）。**
  */
+import { useViewStore } from "../store/view.js";
 import type { AccountUsage } from "@sodashitsu/protocol";
 import { formatAgo, isStale, windowDisplay } from "./dashboardModel.js";
 
 defineProps<{ account: AccountUsage; now: number }>();
+const view = useViewStore();
 </script>
 
 <template>
-  <div class="dash-account" :class="{ 'dash-stale': isStale(account.asOf, now) }" :data-dash-account="account.accountKey">
+  <div
+    role="button"
+    tabindex="0"
+    :aria-label="`${account.label}のコストを表示`"
+    @click="view.accountCostAccount = account"
+    @keydown.enter.prevent="view.accountCostAccount = account"
+    @keydown.space.prevent="view.accountCostAccount = account"
+    class="dash-account"
+    :class="{ 'dash-stale': isStale(account.asOf, now) }"
+    :data-dash-account="account.accountKey"
+  >
     <div class="dash-account-head">
       <span class="dash-account-name">{{ account.label }}</span>
       <span v-if="account.plan" class="dash-chip">{{ account.plan }}</span>
-      <span class="dash-muted dash-account-ago" :title="new Date(account.asOf).toLocaleString()">{{ formatAgo(account.asOf, now) }}</span>
+      <span class="dash-muted dash-account-ago" :title="new Date(account.asOf).toLocaleString()">{{
+        formatAgo(account.asOf, now)
+      }}</span>
     </div>
     <p v-if="account.windows.length === 0" class="dash-muted">枠の値がありません</p>
     <ul v-else class="dash-windows">
-      <li v-for="w in account.windows" :key="w.label + String(w.windowMinutes ?? '')" class="dash-window" :class="{ 'dash-stale': windowDisplay(w, now).past }" data-dash-window>
+      <li
+        v-for="w in account.windows"
+        :key="w.label + String(w.windowMinutes ?? '')"
+        class="dash-window"
+        :class="{ 'dash-stale': windowDisplay(w, now).past }"
+        data-dash-window
+      >
         <span class="dash-window-label">{{ w.label }}</span>
         <span
           class="dash-bar"
@@ -32,12 +52,18 @@ defineProps<{ account: AccountUsage; now: number }>();
           <span class="dash-bar-fill" :style="{ width: `${windowDisplay(w, now).pct ?? 0}%` }" />
         </span>
         <span class="dash-window-pct">{{ windowDisplay(w, now).text }}</span>
-        <span v-if="windowDisplay(w, now).spend" class="dash-muted dash-window-spend" data-dash-spend>{{ windowDisplay(w, now).spend }}</span>
-        <span v-if="windowDisplay(w, now).reset" class="dash-muted dash-window-reset">{{ windowDisplay(w, now).reset }}</span>
+        <span
+          v-if="windowDisplay(w, now).spend"
+          class="dash-muted dash-window-spend"
+          data-dash-spend
+          >{{ windowDisplay(w, now).spend }}</span
+        >
+        <span v-if="windowDisplay(w, now).reset" class="dash-muted dash-window-reset">{{
+          windowDisplay(w, now).reset
+        }}</span>
       </li>
     </ul>
   </div>
-
 </template>
 
 <style>
@@ -67,6 +93,7 @@ defineProps<{ account: AccountUsage; now: number }>();
 }
 
 .dash-account {
+  cursor: pointer;
   min-width: 18em;
   flex: 1 1 18em;
   border: 1px solid var(--soda-menu-border, #44475a);
@@ -138,6 +165,10 @@ defineProps<{ account: AccountUsage; now: number }>();
 
 :root[data-ui-style="modern"] .dash-account {
   border-radius: var(--soda-shape-card-radius, 12px);
-  background: color-mix(in srgb, var(--soda-fg, #f8f8f2) var(--soda-shape-card-tint, 5%), transparent);
+  background: color-mix(
+    in srgb,
+    var(--soda-fg, #f8f8f2) var(--soda-shape-card-tint, 5%),
+    transparent
+  );
 }
 </style>

@@ -17,6 +17,12 @@ export class UsageModel {
     private readonly conn: RequestPort,
     private readonly changed: () => void,
   ) {}
+  async accountCost(accountKey: string) {
+    return this.conn.request("agent.account_cost", { accountKey });
+  }
+  refresh() {
+    this.changed();
+  }
   connected(): void {
     this.open = true;
     this.watching = false;
@@ -72,7 +78,7 @@ export class UsageModel {
       for (const [id, u] of Object.entries(this.data.panes)) {
         const next = panes[id];
         if (
-          ((this.paneRevisions.get(id) ?? 0) > revision && (u===null || !next)) ||
+          ((this.paneRevisions.get(id) ?? 0) > revision && (u === null || !next)) ||
           (u && next && u.updatedAt > next.updatedAt)
         )
           panes[id] = u;

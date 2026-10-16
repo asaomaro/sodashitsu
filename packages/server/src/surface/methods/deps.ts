@@ -28,7 +28,7 @@ import type { LinkRun } from "@sodashitsu/protocol";
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
   notificationTest?: () => void;
-  pluginDiscovery?:import("../../extensions/PluginDiscovery.js").PluginDiscovery;
+  pluginDiscovery?: import("../../extensions/PluginDiscovery.js").PluginDiscovery;
   scheduler?: import("../../schedule/Scheduler.js").Scheduler;
   workspaceTools?: import("../../workspace/WorkspaceTools.js").WorkspaceTools;
   notifications?: import("../../notify/SharedNotifications.js").SharedNotifications;
@@ -52,7 +52,7 @@ export interface MethodDeps {
   /** サブエージェントの記録を読む（20261008-graph-first の PR6c）。無ければ `agent.subagent_transcript` を登録しない。 */
   subagentTranscripts?: Pick<SubagentTranscriptReader, "read">;
   /** エージェントの利用状況（20261010-agent-usage）。無ければ `agent.usage` を登録しない。 */
-  usage?: Pick<UsageService, "get">;
+  usage?: Pick<UsageService, "get" | "accountCost">;
   /**
    * 利用状況の配信を、この接続に送るか（`agent.usage_watch`。20261010-agent-usage PR3）。印の持ち方と、確かめの開始・停止は、配線（`composeServer`）が決める。
    * 無ければ `agent.usage_watch` を登録しない。
