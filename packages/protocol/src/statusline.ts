@@ -1,5 +1,5 @@
 import type { Pane } from "./model.js";
-import type { AgentUsage, AccountUsage } from "./usage.js";
+import { formatUsageCredits, type AgentUsage, type AccountUsage } from "./usage.js";
 export const STATUSLINE_FIELDS = [
   { id: "pane", label: "ペイン名" },
   { id: "agent", label: "エージェント種類" },
@@ -180,6 +180,7 @@ export function statuslineSegments(
     );
   if (finite(u?.tokens.total)) add("tokens", `Tokens ${tokens(u.tokens.total)}`);
   if (finite(u?.costUsd)) add("cost", `$${u.costUsd.toFixed(3)}`);
+  else if (u?.credits !== undefined && finite(u.credits.amount)) add("cost", formatUsageCredits(u.credits)); // USD でないクレジット（換算しない）
   if (finite(u?.weeklyCostUsd)) add("weeklyCost", `今週 $${u.weeklyCostUsd.toFixed(3)}`);
   for (const id of ["input", "output", "cacheRead", "cacheWrite", "reasoning"] as const) {
     const n = u?.tokens[id];

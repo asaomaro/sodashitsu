@@ -110,6 +110,8 @@ import { UsageFeed } from "./usage/UsageFeed.js";
 import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
 import { StatusLineWrapper } from "./agent/statusLineWrap.js";
 import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
+import { BobUsageAdapter } from "./usage/bobAdapter.js";
+import { CopilotUsageAdapter } from "./usage/copilotAdapter.js";
 import { CodexUsageAdapter } from "./usage/codexAdapter.js";
 import { LocalAgentPort } from "./graph/LocalAgentPort.js";
 import { RemoteLinks } from "./graph/RemoteLinks.js";
@@ -579,7 +581,7 @@ export async function composeServer(
     logger,
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
-  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter()], logger, reported: reportedUsage });
+  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。

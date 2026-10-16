@@ -32,7 +32,18 @@ describe("formatUsageTable（20261010-agent-usage）", () => {
     expect(t).toContain("17%");
     expect(t).toContain("5 分前");
   });
-  it("制御文字を含む名前は逃がす（端末の表示を偽装させない）", () => {
+  it("USD でないクレジット（Bob Shell の Bobcoin・Copilot CLI の AI クレジット）は、コストの欄に単位つきで出す（20261016-agent-usage-bob-copilot）", () => {
+    const base = result.panes["aaaaaaaa-1111"]!;
+    const t = formatUsageTable(
+      { panes: { b: { ...base, paneId: "b", kind: "bob", credits: { amount: 0.078512, unit: "bobcoin" } }, c: { ...base, paneId: "c", kind: "copilot", credits: { amount: 0.166003, unit: "aic" } } }, accounts: [] },
+      new Map(),
+      now,
+    );
+    expect(t).toContain("0.079 Bobcoin");
+    expect(t).toContain("0.166 AIC");
+    expect(t).not.toContain("$");
+  });
+    it("制御文字を含む名前は逃がす（端末の表示を偽装させない）", () => {
     const t = formatUsageTable({ panes: { "p": { ...result.panes["aaaaaaaa-1111"]!, paneId: "p" } }, accounts: [] }, new Map([["p", "evil\u001b[2Jname"]]), now);
     expect(t).not.toContain("\u001b");
   });

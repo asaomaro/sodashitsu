@@ -134,3 +134,9 @@ it("dashboard shows live colored sidebar symbols in compact and full rows", asyn
     "× Worker",
   );
 });
+
+// 20261016-agent-usage-bob-copilot
+it("shows non-USD credits and premium requests on the cost line", () => {
+  const usage = { paneId: "p1", kind: "copilot", model: "m", tokens: { basis: "transcript" }, credits: { amount: 0.166003, unit: "aic" }, premiumRequests: 2, updatedAt: 0, source: "copilot-events" } as AgentUsage;
+  expect(usageLines(usage).join("\n")).toContain("コスト 0.1660 AIC · プレミアムリクエスト 2");
+});
