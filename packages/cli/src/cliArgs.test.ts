@@ -865,6 +865,18 @@ describe("parseArgs — agent usage（20261010-agent-usage）", () => {
 });
 
 
+describe("parseArgs — agent integrations", () => {
+  const env = {} as NodeJS.ProcessEnv;
+  it("--json の有無", () => {
+    expect(parseArgs(["agent", "integrations"], env)).toMatchObject({ kind: "agent-integrations", json: false });
+    expect(parseArgs(["agent", "integrations", "--json"], env)).toMatchObject({ kind: "agent-integrations", json: true });
+  });
+  it("位置引数・知らない旗は使用誤り", () => {
+    expect(() => parseArgs(["agent", "integrations", "x"], env)).toThrow(CliUsageError);
+    expect(() => parseArgs(["agent", "integrations", "--path", "/x"], env)).toThrow(CliUsageError);
+  });
+});
+
 describe("agent prompt expected scope",()=>{
  const expected={paneId:"pane",instanceId:"instance",tabId:"tab",projectDir:"/pj",name:"task-one"};
  it("parses a complete expectation and rejects malformed or incomplete guards",()=>{
