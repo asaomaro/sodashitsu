@@ -33,7 +33,32 @@ export interface AgentUsageBreakdown {
 }
 
 /** どこから得た値か。 */
-export type UsageSource = "statusline" | "transcript" | "cost-state" | "rollout";
+export type UsageSource =
+  | "statusline"
+  | "transcript"
+  | "cost-state"
+  | "rollout"
+  /** Bob Shell の記録（`~/.bob/db/bob.db` のタスクの行。20261016-agent-usage-bob-copilot）。 */
+  | "bob-db"
+  /** GitHub Copilot CLI の記録（`session-state/<id>/events.jsonl`。同上）。 */
+  | "copilot-events";
+
+/**
+ * USD でない、エージェントの製品のクレジット（20261016-agent-usage-bob-copilot）。**USD に換算しない**（換算の率を製品は持たない）。
+ * - `bobcoin`: Bob Shell の Bobcoin（画面の下の `0.079 🅞`）。
+ * - `aic`: GitHub Copilot の AI クレジット（画面の下の `0.15 AIC used`）。
+ */
+export interface UsageCredits {
+  amount: number;
+  unit: "bobcoin" | "aic";
+}
+
+const CREDIT_UNIT_LABEL: Record<UsageCredits["unit"], string> = { bobcoin: "Bobcoin", aic: "AIC" };
+
+/** クレジットの表示（例 `0.079 Bobcoin`・`0.146 AIC`）。 */
+export function formatUsageCredits(c: UsageCredits, digits = 3): string {
+  return `${c.amount.toFixed(digits)} ${CREDIT_UNIT_LABEL[c.unit] ?? c.unit}`;
+}
 
 /** セッション（pane のエージェント）ごとの利用状況。 */
 export interface AgentUsage {
@@ -60,6 +85,9 @@ export interface AgentUsage {
   contextWindowTokens?: number;
   /** 0〜100。窓の大きさが分かるときだけ（無ければ、トークン数だけ）。 */
   contextUsedPct?: number;
+  /** USD でないクレジット（Bob Shell・Copilot CLI）。`costUsd` とは足さない・比べない。 */
+  credits?: UsageCredits;
+  /** プレミアムリクエストの数（Copilot CLI の会計の区切りの値。会話の初めからの累計）。 */
   premiumRequests?: number;
   source: UsageSource;
   /** 最後に値を得た時刻（epoch ms。記録の最後の応答の時刻）。古ければ、画面がそう出す。 */

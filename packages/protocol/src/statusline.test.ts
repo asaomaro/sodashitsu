@@ -187,3 +187,18 @@ it("independently selects cross-session weekly cost and exact rate-limit reset d
     ).some((s) => ["weeklyCost", "fiveHourReset", "weeklyReset"].includes(s.field)),
   ).toBe(false);
 });
+
+// 20261016-agent-usage-bob-copilot: USD でないクレジット（Bob Shell・Copilot CLI）は、コストの欄に単位つきで出す（USD に換算しない）。
+it("shows non-USD credits in the cost field with their unit, and prefers USD when both exist", () => {
+  const pane = { agent: { kind: "copilot", label: "Copilot", state: "idle" } } as import("./model.js").Pane;
+  const settings = loadStatuslineSettings({ fields: { premiumRequests: true } });
+  const copilot = { kind: "copilot", credits: { amount: 0.166003, unit: "aic" }, premiumRequests: 2, tokens: { basis: "transcript" } } as import("./usage.js").AgentUsage;
+  const seg = statuslineSegments(pane, copilot, [], settings);
+  expect(seg.find((s) => s.field === "cost")?.text).toBe("0.166 AIC");
+  expect(seg.find((s) => s.field === "premiumRequests")?.text).toBe("Premium 2");
+  const bobPane = { agent: { kind: "bob", label: "Bob Shell", state: "idle" } } as import("./model.js").Pane;
+  const bob = { kind: "bob", credits: { amount: 0.078512, unit: "bobcoin" }, tokens: { basis: "context" } } as import("./usage.js").AgentUsage;
+  expect(statuslineSegments(bobPane, bob, [], settings).find((s) => s.field === "cost")?.text).toBe("0.079 Bobcoin");
+  const both = { ...bob, costUsd: 1 } as import("./usage.js").AgentUsage;
+  expect(statuslineSegments(bobPane, both, [], settings).find((s) => s.field === "cost")?.text).toBe("$1.000");
+});

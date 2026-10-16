@@ -1,4 +1,4 @@
-import type { AccountUsage, AgentUsage, DisplayState, Pane, Tab, UsageTokenBasis, UsageWindow, Workspace } from "@sodashitsu/protocol";
+import { formatUsageCredits, type AccountUsage, type AgentUsage, type DisplayState, type Pane, type Tab, type UsageTokenBasis, type UsageWindow, type Workspace } from "@sodashitsu/protocol";
 import { DISPLAY_STATES } from "@sodashitsu/client-core";
 
 /**
@@ -147,6 +147,16 @@ export function formatCost(usd: number | undefined): string {
   if (usd === undefined) return NONE;
   if (usd < 0.01 && usd > 0) return "<$0.01";
   return `$${usd.toFixed(2)}`;
+}
+
+/**
+ * pane のコストの表示。USD があれば USD、無ければ USD でないクレジット（Bob Shell の Bobcoin・Copilot CLI の AI クレジット。換算しない）、どちらも無ければ「—」。
+ * 並べ替えの「コスト」は USD だけで比べる（単位の違うものは比べない。クレジットだけの行は、無い扱いで後ろ）。
+ */
+export function formatUsageCost(u: AgentUsage | null | undefined): string {
+  if (u?.costUsd !== undefined) return formatCost(u.costUsd);
+  if (u?.credits !== undefined) return formatUsageCredits(u.credits);
+  return NONE;
 }
 
 /** 基準の印の短い語（トークンの隣）。 */

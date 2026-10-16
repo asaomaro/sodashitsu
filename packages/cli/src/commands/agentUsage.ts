@@ -1,4 +1,4 @@
-import type { AccountUsage, AgentUsage, AgentUsageResult, UsageTokenBasis } from "@sodashitsu/protocol";
+import { formatUsageCredits, type AccountUsage, type AgentUsage, type AgentUsageResult, type UsageTokenBasis } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import { resolveAgentTarget } from "../agentTarget.js";
 import { formatTable, printJson, printLine } from "../output.js";
@@ -44,7 +44,7 @@ function tokensCell(u: AgentUsage): string {
 }
 
 function costCell(u: AgentUsage): string {
-  if (u.costUsd === undefined) return "—";
+  if (u.costUsd === undefined) return u.credits !== undefined ? formatUsageCredits(u.credits) : "—"; // USD でないクレジット（換算しない）
   const asOf = u.costAsOf !== undefined ? `・${new Date(u.costAsOf).toISOString().slice(0, 16).replace("T", " ")} 時点` : "";
   return `$${u.costUsd.toFixed(2)}${asOf}`;
 }
