@@ -52,6 +52,10 @@ export interface DisplayHost {
   focusedPaneId?(): string | null;
   /** いまの prefix のキー（枠へ `relayKeys` として渡す）。 */
   prefixKey(): { key: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean };
+  /** いまのキーの対応表（アプリタブのメイン画面の prefix の中継が、専用の `KeyRouter` に使う。無ければ中継しない）。 */
+  relayKeymap?(): import("@sodashitsu/client-core").ResolvedKeymap;
+  /** 中継で受けた操作を実行する（許可表の操作だけが来る。`PrefixRelay`）。 */
+  runRelayedAction?(action: import("@sodashitsu/client-core").Action): void;
 }
 export const DisplayHostKey: InjectionKey<DisplayHost> = Symbol("displayHost");
 /**

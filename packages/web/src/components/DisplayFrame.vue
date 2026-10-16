@@ -59,8 +59,11 @@ import {
   type RegisteredFrame,
 } from "../display/frameRegistry.js";
 import EmbeddedTerminal from "./EmbeddedTerminal.vue";
-import { terminalComponentAllowed, componentViewport, type TerminalComponent } from "../display/components.js";
+import { terminalComponentAllowed, componentViewport, directOperable, type TerminalComponent } from "../display/components.js";
+import { PrefixRelay } from "../display/prefixRelay.js";
+import { parkFocusAfterRelay } from "../display/relayFocus.js";
 import { useSessionStore } from "../store/session.js";
+import { useViewStore } from "../store/view.js";
 import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
@@ -76,7 +79,7 @@ import { useSettingsStore } from "../store/settings.js";
  * - **スクリプトが動く形式だけ**: 覆いと「操作を始める」（`engageEntry`）・フォーカスの番（`focusGuard`・`focusOrigin`）。利用者が操作を始めるまでは、枠がフォーカスを持つ
  *   ことを許さず、元の場所へ戻して、サーバへ「取られた」と知らせる（数えて閉じるのはサーバ）。`render` は 1 回だけ（版が替わったら、置く側が枠ごと作り直す）。
  */
-const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefined }>();
+const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefined; main?: boolean }>();
 
 const session = useSessionStore();
 const components = ref(new Map<string, TerminalComponent>());
@@ -98,6 +101,7 @@ function terminalStyle(c: TerminalComponent) {
 const controller = inject(DisplayControllerKey, null);
 const host = inject(DisplayHostKey, null);
 const store = useDisplayStore();
+const viewStore = useViewStore();
 const settings = useSettingsStore();
 
 /** この画面が出せる枠の頁（スクリプトが動く形式は、この画面が出せると名乗っているときだけ）。 */
@@ -107,6 +111,11 @@ const page = computed(() => {
   return p;
 });
 const isScript = computed(() => page.value?.kind === "script");
+/**
+ * アプリタブのメイン画面（置く側が `main` を渡し、拡張が出した script の面）: 覆い・［操作する］・`Esc` で抜ける操作が無い。開いた時点で操作中。
+ * prefix は枠の中継が親へ伝え、許可表の操作だけ受ける（`PrefixRelay`）。それ以外の面（パネル・帯・浮いた窓・pane のプログラムの面）は今どおり（20261016-app-view-direct-operate）。
+ */
+const direct = computed(() => props.main === true && isScript.value && directOperable(props.info));
 const iframeEl = ref<HTMLIFrameElement | null>(null);
 const phase = ref<"waiting" | "connected" | "closed">("waiting");
 const note = ref<string | null>(null);
@@ -122,6 +131,8 @@ const engagedRef = ref(false);
 const detached = ref(false);
 
 const guard = new FocusGuard();
+let relay: PrefixRelay | null = null;
+let directEngagedOnce = false;
 let readySeen = false;
 let renderSent = false;
 let port: MessagePort | null = null;
@@ -149,7 +160,7 @@ const visibleNote = computed<string | null>(() => {
       : DISPLAY_NOTE_UNSUPPORTED;
   return phase.value === "closed" ? (note.value ?? DISPLAY_NOTE_CLOSED) : null;
 });
-const showCover = computed(() => isScript.value && phase.value !== "closed" && !engagedRef.value);
+const showCover = computed(() => isScript.value && phase.value !== "closed" && !engagedRef.value && !direct.value);
 
 function newTicket(): string {
   const b = new Uint8Array(16);
@@ -184,6 +195,9 @@ function start(): void {
   note.value = null;
   phase.value = "waiting";
   guard.leave();
+  guard.direct = direct.value;
+  relay?.dispose();
+  relay = null;
   syncGuardState();
   gen.value++;
   if (page.value === null) {
@@ -249,6 +263,12 @@ function onWindowMessage(ev: MessageEvent): void {
   tryConnect();
 }
 
+/** 枠の外の入力欄（input・textarea・[contenteditable]・dialog の中）にフォーカスがある。端末の入力口（xterm）は数えない。 */
+function typingOutsideFrame(a: Element | null): boolean {
+  if (a === null || a === iframeEl.value || a.classList.contains("xterm-helper-textarea")) return false;
+  return a.matches("input, textarea, [contenteditable]") || a.closest("dialog, [role=dialog]") !== null;
+}
+
 function tryConnect(): void {
   const win = iframeEl.value?.contentWindow;
   if (phase.value !== "waiting" || !readySeen || loads.value < 1 || !win) return;
@@ -262,6 +282,14 @@ function tryConnect(): void {
   lastReply = Date.now();
   startPatrol();
   sendRender();
+  // アプリのメイン画面は、開いた・選んだ時点で操作中（覆いなし）。版が替わっての作り直し（再接続）では、利用者が枠の外（ダイアログ・サイドバー等）で打っているなら、フォーカスを奪わない。
+  if (direct.value) {
+    const a = document.activeElement;
+    const neutral = a === null || a === document.body || a === iframeEl.value;
+    // 最初の接続でも、ダイアログが開いている・枠の外の入力欄で打っている最中は奪わない（拡張の再起動で枠が作り直されたときなど）。
+    if (!viewStore.modalOpen && !typingOutsideFrame(a) && (!directEngagedOnce || neutral)) engageNow();
+    directEngagedOnce = true;
+  }
 }
 
 function sendRender(): void {
@@ -274,7 +302,9 @@ function sendRender(): void {
   if (!c || c.id !== i.id || c.rev !== i.rev || c.format !== i.format) return;
   const theme = readThemeVars();
   // prefix のキーは、スクリプトが動く形式の枠には渡さない（信頼しない中身に、利用者のキーの設定を教えない）。
-  const k = isScript.value ? undefined : host?.prefixKey();
+  // 例外: アプリのメイン画面（拡張が出した面。`direct`）には渡す。`Esc` はアプリが使えるようにし、prefix は枠が先に受けて親へ中継する。
+  const relayOn = direct.value && host?.relayKeymap !== undefined && host.runRelayedAction !== undefined;
+  const k = isScript.value && !relayOn ? undefined : host?.prefixKey();
   port.postMessage({
     type: "render",
     rev: c.rev,
@@ -282,6 +312,7 @@ function sendRender(): void {
     source: c.content,
     theme,
     relayKeys: k ? [k] : [],
+    ...(direct.value ? { direct: true } : {}),
   });
   if (isScript.value) renderSent = true;
 }
@@ -316,6 +347,11 @@ function onPortMessage(ev: MessageEvent): void {
       controller?.sendAction(props.info.id, m.rev, m.action, m.data);
       return;
     case "key":
+      if (direct.value) {
+        // アプリのメイン画面: `Esc` で抜ける操作は無い（捨てる）。prefix の中継だけ受ける。
+        if (m.key === "prefix") relayReply(relayStart());
+        return;
+      }
       if (isScript.value) {
         // 操作中の `escape` だけ受ける（prefix は受けない。操作中でなければ捨てる）。
         if (!guard.acceptKey(m.key)) return;
@@ -337,6 +373,9 @@ function onPortMessage(ev: MessageEvent): void {
           ?.dispatchEvent(new CustomEvent("display-escape", { bubbles: true }));
       if (m.key === "prefix") host?.injectPrefix();
       return;
+    case "prefix-key":
+      if (direct.value && phase.value === "connected") relayReply(relayKey(m.input));
+      return;
     case "foreign-focus":
       onForeignFocus();
       return;
@@ -344,6 +383,31 @@ function onPortMessage(ev: MessageEvent): void {
       renderFailed.value = false;
       return;
   }
+}
+
+// --- prefix の中継（アプリのメイン画面だけ。`PrefixRelay`）---------------------------------------------------------
+function ensureRelay(): PrefixRelay | null {
+  if (relay) return relay;
+  const h = host;
+  if (!h?.relayKeymap || !h.runRelayedAction) return null;
+  relay = new PrefixRelay({
+    keymap: () => h.relayKeymap!(),
+    run: (action) => {
+      h.runRelayedAction!(action);
+      parkFocusAfterRelay(); // 端末へフォーカスを移さない（偽の切り替えで、打っている途中のキーが端末へ入らないように）
+    },
+  });
+  return relay;
+}
+function relayStart(): boolean {
+  return ensureRelay()?.start() ?? false;
+}
+function relayKey(input: Parameters<PrefixRelay["key"]>[0]): boolean {
+  return ensureRelay()?.key(input) ?? false;
+}
+/** 待ちが続くか（番号選択の途中など）を、枠へ返す。枠は、これが偽になるまで次のキーを飲み込んで中継する。 */
+function relayReply(pending: boolean): void {
+  port?.postMessage({ type: "prefix-state", pending });
 }
 
 // --- 見回り（画面が見えている間だけ数える）-------------------------------------------------------------------
@@ -548,6 +612,10 @@ function onCoverWheel(ev: WheelEvent): void {
 
 const handle: RegisteredFrame = {
   focusInside() {
+    if (direct.value) {
+      engageNow();
+      return;
+    }
     if (isScript.value) {
       // `prefix+i`: そのキーが上がる（`keyup`）のを親が受けてから始める。
       startFromKey(engageNow);
@@ -613,8 +681,11 @@ onBeforeUnmount(() => {
   // 片づけのとき（面が閉じた・版や形式が替わって部品が外れる）、操作中でないのにフォーカスが枠にあれば、元の場所へ戻して「取られた」と 1 回知らせてから外す
   // （取ってから、見回りが気づく前に `close`・版の置き換えで枠を外させる、という逃げ方をさせない）。合い札の合わない合図・時間切れでは送らない。
   const el = iframeEl.value;
+  relay?.dispose();
+  relay = null;
   if (
     isScript.value &&
+    !direct.value &&
     el !== null &&
     phase.value !== "closed" &&
     !guard.engaged &&
@@ -653,9 +724,9 @@ watch(
     start();
   },
 );
-// 中身が無い・版が古いときは取る。
+// 中身が無い・版が古いときは取る。枠を出してよいか（`page`。設定の読み込みが面の見出しより遅れることがある）が変わったときも取る。
 watch(
-  () => [props.info.id, props.info.rev, props.info.format] as const,
+  () => [props.info.id, props.info.rev, props.info.format, page.value !== null] as const,
   () => {
     const c = props.content;
     if (page.value && (!c || c.rev !== props.info.rev || c.format !== props.info.format))
@@ -665,6 +736,9 @@ watch(
 );
 watch(() => [props.content, props.info.rev, props.info.format, phase.value], sendRender);
 watch(() => [isScript.value, page.value, phase.value], syncScriptRegistration);
+watch(direct, (d) => {
+  guard.direct = d;
+});
 
 defineExpose({ key: () => frameKey(props.info) });
 </script>
@@ -675,6 +749,7 @@ defineExpose({ key: () => frameKey(props.info) });
     class="display-frame-wrap"
     :data-display-phase="phase"
     :data-display-engaged="isScript ? (engagedRef ? '1' : '0') : undefined"
+    :data-display-direct="direct ? '' : undefined"
   >
     <iframe
       v-if="page && phase !== 'closed'"

@@ -10,7 +10,7 @@ import {
 import { useSessionStore } from "../store/session.js";
 import DisplayFrame from "./DisplayFrame.vue";
 import WorkspaceView from "./WorkspaceView.vue";
-const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefined }>();
+const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefined; main?: boolean }>();
 const session = useSessionStore();
 const builtin = computed(() => {
   if (props.info.source?.type !== "builtin") return null;
@@ -47,7 +47,7 @@ const builtin = computed(() => {
       :target-pane-id="builtin.targetPaneId"
     />
   </div>
-  <DisplayFrame v-else :info="info" :content="content" />
+  <DisplayFrame v-else :info="info" :content="content" :main="main" />
 </template>
 <style scoped>
 .builtin-surface {

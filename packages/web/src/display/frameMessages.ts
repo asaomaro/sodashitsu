@@ -1,5 +1,6 @@
 import { readComponentRect, type TerminalComponent } from "./components.js";
 import { checkDisplayAction } from "@sodashitsu/protocol";
+import { readRelayKey, type RelayKey } from "./prefixRelay.js";
 
 /** 枠から親へ、port で届く知らせ（`readFrameMessage` が検査して読む）。 */
 export type FrameMessage =
@@ -10,6 +11,8 @@ export type FrameMessage =
   | { type: "failed"; rev: number }
   | { type: "action"; rev: number; action: string; data?: Record<string, string> }
   | { type: "key"; key: "escape" | "prefix" }
+  /** アプリタブのメイン画面の枠だけ: prefix のあとのキー（中継。`PrefixRelay` が許可表の操作だけ実行する）。 */
+  | { type: "prefix-key"; input: RelayKey }
   | { type: "pong"; n: number }
   /** 静的な枠だけ: よその窓（兄弟の枠のスクリプトなど）からフォーカスが来た（利用者が入ったのではない）。親が元の場所へ戻す。 */
   | { type: "foreign-focus" };
@@ -42,6 +45,10 @@ export function readFrameMessage(data: unknown): FrameMessage | null {
     }
     case "key":
       return data.key === "escape" || data.key === "prefix" ? { type: "key", key: data.key } : null;
+    case "prefix-key": {
+      const input = readRelayKey(data.input);
+      return input ? { type: "prefix-key", input } : null;
+    }
     case "foreign-focus":
       return { type: "foreign-focus" };
     case "pong":

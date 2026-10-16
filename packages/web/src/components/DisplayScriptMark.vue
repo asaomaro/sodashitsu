@@ -1,6 +1,9 @@
 <script lang="ts">
 /** 固定の印「スクリプト」の説明（`title`）。 */
 export const DISPLAY_SCRIPT_MARK_TITLE = "この表示は、pane のプログラムのスクリプトを動かしています";
+/** アプリタブのメイン画面（承認した拡張が出す面）の印・終了ボタンの説明。 */
+export const DISPLAY_SCRIPT_MARK_TITLE_DIRECT = "この表示は、承認した拡張のスクリプトを動かしています";
+export const DISPLAY_END_TITLE_DIRECT = "操作を終えて、枠の外へ出る";
 export const DISPLAY_ENGAGE_LABEL = "操作する";
 export const DISPLAY_END_LABEL = "操作を終える";
 export const DISPLAY_END_TITLE = "操作を終えて、端末へ戻る（中身が Esc を無効にしても、これは効く）";
@@ -10,6 +13,7 @@ export const DISPLAY_ENGAGE_TITLE = "この表示を操作する（prefix+i）�
 <script setup lang="ts">
 import type { DisplayInfo } from "@sodashitsu/protocol";
 import { computed } from "vue";
+import { directOperable } from "../display/components.js";
 import { isScriptFormat } from "../display/framePage.js";
 import { endEngageFrame, engageFrame } from "../display/frameRegistry.js";
 import { useDisplayStore } from "../store/display.js";
@@ -20,11 +24,13 @@ import { useSettingsStore } from "../store/settings.js";
  * どちらも `info.format` から決める（枠の実際の形式と食い違わない）。題・中身には依らない。静的な形式の面には、どちらも出さない。
  * ［操作する］は、操作中でないときだけ出す。押すと `engageEntry` の決まりで、枠が操作を始める（枠・覆いを押しても始まらない）。
  */
-const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" | "end" }>();
+const props = defineProps<{ info: DisplayInfo; part: "mark" | "button" | "end"; main?: boolean }>();
 const store = useDisplayStore();
 const settings = useSettingsStore();
 
 const script = computed(() => isScriptFormat(props.info.format) && store.scriptCapable && settings.displayScriptEnabled);
+/** アプリタブのメイン画面（拡張が出した面）は覆いが無いので、［操作する］を出さない。 */
+const direct = computed(() => props.main === true && directOperable(props.info));
 const engaged = computed(() => store.focusedDisplayId === props.info.id);
 const hinted = computed(() => store.engageHint === props.info.id);
 
@@ -37,9 +43,9 @@ function onEnd(): void {
 </script>
 
 <template>
-  <span v-if="script && part === 'mark'" class="display-script-mark" :title="DISPLAY_SCRIPT_MARK_TITLE" data-display-script-mark>スクリプト</span>
+  <span v-if="script && part === 'mark'" class="display-script-mark" :title="direct ? DISPLAY_SCRIPT_MARK_TITLE_DIRECT : DISPLAY_SCRIPT_MARK_TITLE" data-display-script-mark>スクリプト</span>
   <button
-    v-else-if="script && part === 'button' && !engaged"
+    v-else-if="script && part === 'button' && !engaged && !direct"
     type="button"
     class="display-engage"
     :class="{ 'display-engage-hint': hinted }"
@@ -54,7 +60,7 @@ function onEnd(): void {
     v-else-if="script && part === 'end' && engaged"
     type="button"
     class="display-engage display-engage-end"
-    :title="DISPLAY_END_TITLE"
+    :title="direct ? DISPLAY_END_TITLE_DIRECT : DISPLAY_END_TITLE"
     :aria-label="`${DISPLAY_END_LABEL}（${info.name}）`"
     data-display-end
     @click="onEnd"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DisplayInfo, Pane, Tab } from "@sodashitsu/protocol";
-import { componentViewport, terminalComponentAllowed } from "./components.js";
+import { componentViewport, directOperable, terminalComponentAllowed } from "./components.js";
 import { readFrameMessage } from "./frameMessages.js";
 
 describe("native component boundary", () => {
@@ -107,5 +107,20 @@ describe("terminalComponentAllowed: 面の出どころ", () => {
       { type: "builtin", id: "workspace", scope: "user" },
     ])
       expect(terminalComponentAllowed(ext(source), "agent", panes, tabs)).toBe(false);
+  });
+});
+
+describe("directOperable（アプリのメイン画面を覆いなしで操作中にしてよい面）", () => {
+  const base = { format: "script-html" } as DisplayInfo;
+  it("拡張（user・project）が出した script の面だけ", () => {
+    expect(directOperable({ ...base, source: { type: "extension", id: "app", scope: "user" } } as DisplayInfo)).toBe(true);
+    expect(directOperable({ ...base, source: { type: "extension", id: "app", scope: "project" } } as DisplayInfo)).toBe(true);
+  });
+  it("source の無い面（pane のプログラムが出した面）・builtin・形の違う source・script でない形式は偽", () => {
+    expect(directOperable(base)).toBe(false);
+    expect(directOperable({ ...base, source: { type: "builtin", id: "workspace" } } as DisplayInfo)).toBe(false);
+    expect(directOperable({ ...base, source: { type: "extension", id: "../x", scope: "user" } } as DisplayInfo)).toBe(false);
+    expect(directOperable({ ...base, source: { type: "extension", id: "app", scope: "other" } } as unknown as DisplayInfo)).toBe(false);
+    expect(directOperable({ format: "html", source: { type: "extension", id: "app", scope: "user" } } as DisplayInfo)).toBe(false);
   });
 });
