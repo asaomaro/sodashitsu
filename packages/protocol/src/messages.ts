@@ -1,4 +1,5 @@
 import { MachineManageParams, type ManagedConnection } from "./delegation.js";
+import { PreviewMethods, type PreviewResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
 import { DelegationInviteParams, DelegationStartParams, DelegationStopParams, type DelegationStatus } from "./delegation.js";
 import {
@@ -1460,6 +1461,7 @@ export const PaneReportMetadataParams = z.object({ paneId, ...metadataReport });
 export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
 
 export const METHOD_SCHEMAS = {
+  ...PreviewMethods,
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
   "client.fit": ClientFitParams,
@@ -1626,7 +1628,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap {
+export interface MethodResultMap extends PreviewResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};

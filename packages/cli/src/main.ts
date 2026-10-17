@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runMachineDelegation } from "./commands/machineDelegation.js";
+import { runPreview } from "./commands/preview.js";
 import { runSessionTools } from "./commands/sessionTools.js";
 import {runPluginApp} from "./commands/pluginApp.js";
 /**
@@ -102,6 +103,7 @@ async function main(): Promise<void> {
       // 終了コードは 0 か 1（`events` の `connection_closed` は終わりの行を出して 1）。使い方の誤り・サーバのエラーは投げて `reportAndExit` へ。
       process.exitCode = await runDisplay(cmd, store);
       return;
+    case "preview": return runPreview(cmd, store);
     case "plugin-app": return runPluginApp(cmd,store);
     case "plugin": {
       if (cmd.action === "pack") { const bundle = await packPlugin(cmd.target!, cmd.out!); printJson({ id: bundle.manifest.id, version: bundle.manifest.version, out: cmd.out }); }

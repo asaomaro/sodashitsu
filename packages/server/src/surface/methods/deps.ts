@@ -28,6 +28,7 @@ import type { LinkRun } from "@sodashitsu/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
+  previews?: import("../../preview/PreviewService.js").PreviewService;
   notificationTest?: () => void;
   pluginDiscovery?: import("../../extensions/PluginDiscovery.js").PluginDiscovery;
   scheduler?: import("../../schedule/Scheduler.js").Scheduler;

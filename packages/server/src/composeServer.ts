@@ -55,6 +55,8 @@ import { DefaultClientRegistry } from "./clients/ClientRegistry.js";
 import { DefaultSizeAuthority } from "./clients/SizeAuthority.js";
 import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
+import { PreviewMethods } from "@sodashitsu/protocol";
+import { PreviewService } from "./preview/PreviewService.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
 import { AskService } from "./ask/AskService.js";
@@ -501,6 +503,24 @@ export async function composeServer(
   // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
   const paneOps = new PaneOpRegistry(logger);
+  const previews = new PreviewService({
+    scope: (id) => { const pane = session.getPane(id); return pane ? session.getTab(pane.tabId)?.workspaceId : undefined; },
+    kind: (id) => clients.get(id)?.kind,
+    blockedPorts: async () => {
+      const address = httpServer.server.address();
+      return [typeof address === "object" && address ? address.port : options.port,
+        ...(await listServerSessions(options.sessionRoot, options.sessionName)).flatMap((s) => s.endpoint ? [s.endpoint.port] : [])];
+    },
+  });
+  // Registration is only a candidate. It opens no network connection. A browser
+  // must opt in and an authenticated helper must explicitly attach to that pane.
+  paneOps.register({ name: "preview.register", params: PreviewMethods["preview.register"].omit({ paneId: true }), handler: (ctx, p) => previews.register({ ...p, paneId: ctx.paneId }) });
+  paneOps.register({ name: "preview.list", params: z.object({}).strict(), handler: (ctx) => previews.list(ctx.paneId) });
+  paneOps.register({ name: "preview.open", params: PreviewMethods["preview.open"], handler: (ctx, p) => {
+    ctx.signal.addEventListener("abort", () => previews.clientGone(ctx.connId), { once: true });
+    return previews.open(ctx.connId, p.appId, p.viewerId, ctx.paneId);
+  } });
+  paneOps.register({ name: "preview.stop", params: PreviewMethods["preview.stop"], handler: (ctx, p) => previews.stop(p.appId, p.remove, ctx.paneId) });
   paneOps.register(askOpenOp(asks));
   paneOps.register(askFeaturesOp(asks));
   // 表示の面: どの操作も対象は要求が名乗った pane だけ（`displayOps.ts`）。待ちは接続が終わると外れる（`ctx.signal`）。
@@ -650,6 +670,7 @@ export async function composeServer(
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
   registerAllMethods(surface, {
+    previews,
     workspaceTools,scheduler,pluginDiscovery,
     conversations,summaries,sessionNotes,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
     session,
@@ -709,6 +730,7 @@ export async function composeServer(
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      previews.clientGone(clientId);
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
       asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
@@ -721,6 +743,7 @@ export async function composeServer(
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      previews.clientGone(clientId);
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
       asks.onClientGone(clientId);
@@ -1187,6 +1210,7 @@ export async function composeServer(
         await extensions.stop().catch(() => undefined);
         extensions.dispose();
         displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
+        previews.dispose();
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。

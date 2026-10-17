@@ -46,6 +46,13 @@ import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
+  "sodactl preview register --name <name> --port <N> [--replace] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl preview list [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl preview viewers [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl preview helper [--viewer <id>] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl preview open <appId> [--viewer <id>] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl preview stop <appId> [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl preview remove <appId> [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl machine request --connect <URL> --label <name> [--url <URL>] [--token <TOKEN>]",
   "sodactl machine requests [--url <URL>] [--token <TOKEN>]",
   "sodactl machine confirm <id> --code <code> [--url <URL>] [--token <TOKEN>]",
@@ -294,6 +301,7 @@ export type DisplayAction =
   | { kind: "features" };
 
 export type Command =
+  | { kind: "preview"; action: "register" | "list" | "viewers" | "helper" | "open" | "stop" | "remove"; opts: GlobalOpts; ref: string | undefined; pane: string | undefined; viewer: string | undefined; name: string | undefined; port: number | undefined; replace: boolean }
   | { kind: "help" }
   | { kind: "skill" }
   | {kind:"plugin-app";action:"operations"|"call";ref:string;operation?:string;params:Record<string,unknown>;pane?:string;tab?:string;workspace?:string;opts:GlobalOpts}
@@ -555,6 +563,18 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
     }
     case "display":
       return parseDisplay(word1, rest0, env);
+    case "preview": {
+      const usage = USAGE_LINES.filter((l) => l.startsWith("sodactl preview ")).join("\n");
+      if (!["register", "list", "viewers", "helper", "open", "stop", "remove"].includes(word1 ?? "")) throw new CliUsageError("unknown preview subcommand", usage);
+      const action = word1 as Extract<Command, { kind: "preview" }>["action"];
+      const { positionals, values, bools } = parseFlags(rest0, { values: ["--url", "--token", "--pane", ...(["helper", "open"].includes(action) ? ["--viewer"] : []), ...(action === "register" ? ["--name", "--port"] : [])], bools: action === "register" ? ["--replace"] : [] });
+      const needsId = ["open", "stop", "remove"].includes(action);
+      const ref = needsId ? requirePositional(positionals, 0, "appId", usage) : undefined;
+      rejectExtra(positionals, needsId ? 1 : 0, usage);
+      const portRaw = values.get("--port"), name = values.get("--name");
+      if (action === "register" && (!name?.trim() || name.length > 80 || !/^[0-9]+$/.test(portRaw ?? "") || Number(portRaw) < 1 || Number(portRaw) > 65535)) throw new CliUsageError("register needs --name and --port (1–65535)", usage);
+      return { kind: "preview", action, opts: globalOptsFrom(values, env), ref, name, port: portRaw === undefined ? undefined : Number(portRaw), pane: values.get("--pane"), viewer: values.get("--viewer"), replace: bools.has("--replace") };
+    }
     case "plugin": {
       const usage = USAGE_LINES.filter((l) => l.startsWith("sodactl plugin")).join("\n");
       if(word1==="operations"||word1==="call"){
