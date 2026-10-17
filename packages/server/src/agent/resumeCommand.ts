@@ -41,6 +41,8 @@ export function resumeCommandFor(kind: string, sessionId: string): string | unde
     case "qodercli":
       return `qoder --resume ${sessionId}`;
     // 20261016-bob-shell（実機 2.0.6 で確認。フックの `session_id` は、タスクの id そのもの）。
+    case "agy":
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId) ? `agy --conversation ${sessionId}` : undefined;
     case "bob":
       return `bob --resume ${sessionId}`;
     default:

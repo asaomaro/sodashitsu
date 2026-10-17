@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import SystemFooter from "./components/SystemFooter.vue";
+import WebPreview from "./components/WebPreview.vue";
 import { computed } from "vue";
 import CommandPopup from "./components/CommandPopup.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -86,6 +87,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
       </div>
     </div>
     <SystemFooter v-if="!isMobile" />
+    <WebPreview v-if="!isMobile" />
     <ContextMenu />
     <NameDialog />
     <WorktreeCreateDialog />

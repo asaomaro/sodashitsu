@@ -154,7 +154,7 @@ export interface Pane {
  * 20261007-agent-hook-drift で Qoder CLI（`qodercli`）を追加。20261016-bob-shell で Bob Shell（`bob`）を追加。
  */
 export type AgentIntegrationKind =
-  "claude" | "codex" | "cursor" | "copilot" | "devin" | "droid" | "grok" | "qwen" | "qodercli" | "bob";
+  "claude" | "codex" | "cursor" | "copilot" | "devin" | "droid" | "grok" | "qwen" | "qodercli" | "bob" | "agy";
 
 export interface AgentSessionRef {
   kind: AgentIntegrationKind;

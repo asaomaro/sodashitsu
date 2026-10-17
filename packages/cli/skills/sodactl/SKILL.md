@@ -316,3 +316,20 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 操作する側で `sodactl machine invite --label <name> --public-url <URL> --out <file>`、招待ファイルを操作されるPCへ渡し、そのPCで `sodactl machine delegate --invitation <file>` を実行する。両方のCLIはそのPCのSodashitsuにログイン済みであること。外部のURLはHTTPS。招待は秘密として扱い、内容を会話・ログへ出さない。委譲する側のサーバーセッションの全ペインを操作する側から扱える。`sodactl machine delegations` で一覧、`sodactl machine stop-delegation <id>` で停止。操作する側は `soda machine disable <id>` / `remove <id>` で拒否できる。各コマンドに `[--url <URL>] [--token <TOKEN>]` が使えるが、招待の秘密は引数で渡さない。
 
 コード交換で操作委譲する場合、操作されるPCで `sodactl machine request --connect https://操作側 --label PC名`。操作側のWeb/TUIにコードが表示され、`sodactl machine requests` でも確認可能。利用者がコードを伝えた後、操作されるPCで `sodactl machine confirm <申請時のid> --code <8桁>`。5分・5回まで・一回限り。コードを自分で他PCから取得して確認を迂回しない。操作側の `sodactl machine reject-request <操作側の申請id>` は申請を拒否する。成立後は通常のマシン一覧とstop-delegationを使う。既存SSH方式は引き続き利用できる。
+
+## 開発Webアプリをブラウザへ表示する
+
+利用者が対象paneのWebプレビューを許可し、ブラウザPCでhelperを起動している場合に使う。開発サーバーをloopbackで起動し、実portを登録して開く。helperを遠隔paneで起動しても表示側PCの入口にはならない。
+
+```sh
+sodactl preview register --name frontend --port 5173 --replace
+sodactl preview list
+sodactl preview viewers
+sodactl preview open <appId> --viewer <viewerId>
+sodactl preview stop <appId>
+sodactl preview remove <appId>
+# ブラウザPCで利用者が起動する
+sodactl preview helper --viewer <viewerId> --url <Sodashitsu URL>
+```
+
+viewerが一意ならopenの--viewerは省略可能。view_openedは画面作成ACKでありアプリのテスト合格ではない。registerは候補登録だけで外部公開しない。stopは転送停止であり開発プロセス終了ではない。管理tokenをアプリへ渡さない。詳細はdocs/remote-web-preview.md。

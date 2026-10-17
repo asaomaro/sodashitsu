@@ -275,8 +275,12 @@ export function kindLabel(kind: string): string {
       return "Claude Code";
     case "codex":
       return "Codex";
+    case "agy":
+      return "Antigravity CLI";
     case "copilot":
       return "Copilot CLI";
+    case "bob":
+      return "Bob Shell";
     default:
       return kind;
   }

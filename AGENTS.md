@@ -14,6 +14,7 @@
 - pane の中のプログラムが画面に出し続けるパネル・帯（表示の面。`sodactl display`。中身の形式・操作・幅のつまみ・隔離のしくみ・限界）は `docs/display.md`、コマンドの形は `docs/sodactl.md`。
 - pane の表示の面の置き場所とたたみ（面ごとのたたみ・帯の行のボタン〔トレイ〕・帯の上下・表示のメニュー `prefix+shift+i`・記憶と優先・フォーカスの扱い・限界）は `docs/display.md`「たたむ・置き場所・帯の行のボタン」、パネルの上下左右の置き場所・並び・端末の最小・D&D・各側のつまみは同「パネルの置き場所と並び」「D&D」「つまみ（各側）」、浮いた窓（出し方・閉じて始まる・動かす・大きさ・キーボード・重なり・限界）は同「浮いた窓」「浮いた窓の限界」、`--dock`・`--edge`・`--collapsed` は `docs/sodactl.md`。
 - 拡張（設定に登録したプログラムを Sodashitsu が動かす。置き場所と書き方・やり取りの型・上限・安全と限界・`sodactl ext`。**リポジトリの `.soda/extensions.json` に書いた拡張は、承認したものだけ動く**〔承認の流れ・鍵・範囲・寿命・承認の記録〕）は `docs/extensions.md`「プロジェクトの拡張と承認」。
+- 開発Webアプリのリモートプレビュー（ブラウザPCのhelper・pane許可・agent CLI・既存machine接続・確認範囲と制限）は `docs/remote-web-preview.md`。
 - 標準のファイルツリー・ファイル名/Grep検索・閲覧/編集・Gitグラフ/差分、Web/TUIの追加導線と上限は `docs/workspace-tools.md`。
 - 処理の予約（エージェント指示・ワークスペースのコマンド、一回・間隔実行、履歴、停止と保存）は `docs/schedules.md`。
 - プラグインアプリのCLI操作（`sodactl plugin operations/call`。操作登録・対象範囲・結果のJSON・skill/MCPの導線）は `docs/plugin-cli.md`。
@@ -26,6 +27,7 @@
 - エージェントの利用状況（トークン・コスト・コンテキストの使用率。記録から読む。Claude Code・Codex・Bob Shell・Copilot CLI〔Bobcoin・AI クレジットは USD に換算しない〕。何が出るか・数え方の印〔記録に残る分／累計〕・出ないもの・安全・限界。**3 つ目の画面「ダッシュボード」**〔一覧・アカウントの枠・並べ替え・行から pane へ・更新の配信 `agent.usage_watch`／`agent.usage_changed`・1 列の画面〕と、**pane の情報**〔モダンの［情報］・メニュー「利用状況…」・キー `show_usage`〕）は `docs/agent-usage.md`、`sodactl agent usage` は `docs/sodactl.md`。Claude Code のステータスラインの包み（設定の「利用状況（ステータスライン）」から導入・外す。元の設定の戻し方・安全と限界）は `docs/agent-usage.md` の包みの節。
 - エージェントの連携のグラフ（画面・線の種類・上限と一時停止・受け渡しの注意・別のマシン）は `docs/agent-graph.md`、`sodactl graph` は `docs/sodactl.md`。
 - エージェントが動かしているサブエージェントの件数と一覧（フックの導入と更新・仕組み・対象外と制約）は `docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」、`sodactl agent get` の `subagents` は `docs/sodactl.md`。
+- Antigravity CLI（`agy`。設定・会話追跡・statusline・利用状況・限界）は `docs/antigravity-cli.md`。
 - IBM Bob Shell（`bob`）への対応（前面の検出・画面の判定〔本製品独自のルール `packages/server/assets/agent-detection/`。herdr のルールへの追加〔Copilot CLI〕もここ〕・会話の再開のフック・限界）は `docs/bob-shell.md`。
 - 実体（workspace・tab・pane・分割・エージェントのインスタンス・手動グループ・グラフの線）の id はすべて UUID（`crypto.randomUUID()`。連番ではなく、再利用されない）。人が見る呼び名は先頭 8 文字（`shortId`）。`sodactl` の指定は完全な id か一意に決まる先頭の部分（4 文字以上）で、`docs/sodactl.md`「id の指定（UUID と先頭の部分）」。
 

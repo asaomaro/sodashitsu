@@ -396,3 +396,27 @@ describe("AgentMonitor", () => {
     expect(stopped).toBe(true);
   });
 });
+
+it("uses attributed Antigravity states briefly then falls back to screen detection", async () => {
+  const { terminals, processInspector, manifestStore, session, monitor } = makeHarness();
+  manifestStore.set("agy", simpleManifest("agy"));
+  const { pane } = await session.createWorkspace("/home/u", "agy");
+  const host = terminals.get(pane.id) as FakeTerminalHost;
+  host.mirror.linesValue = ["idle..."];
+  processInspector.jobs.set(host.pid, { processGroupId: 999, processes: [{ pid: 999, exe: "agy", argv: ["agy"], cwd: null }] });
+  vi.useFakeTimers(); monitor.start();
+  try {
+    await advance(4000);
+    session.reportAgentSession(pane.id, "agy", "12345678-abcd-ef01-2345-6789abcdef01");
+    monitor.noteReportedState(pane.id, "other", "blocked");
+    await advance(1100); expect(session.getPane(pane.id)?.agent?.state).toBe("idle");
+    monitor.noteReportedState(pane.id, "12345678-abcd-ef01-2345-6789abcdef01", "working");
+    await advance(1100); expect(session.getPane(pane.id)?.agent?.state).toBe("working");
+    monitor.noteReportedState(pane.id, "12345678-abcd-ef01-2345-6789abcdef01", "blocked");
+    await advance(1100); expect(session.getPane(pane.id)?.agent?.state).toBe("blocked");
+    monitor.noteReportedState(pane.id, "12345678-abcd-ef01-2345-6789abcdef01");
+    await advance(1100); expect(session.getPane(pane.id)?.agent?.state).toBe("idle");
+    monitor.noteReportedState(pane.id, "12345678-abcd-ef01-2345-6789abcdef01", "blocked");
+    await advance(11000); expect(session.getPane(pane.id)?.agent?.state).toBe("idle");
+  } finally { await monitor.stop(); vi.useRealTimers(); }
+});

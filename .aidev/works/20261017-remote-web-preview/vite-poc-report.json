@@ -1,0 +1,37 @@
+{
+  "status": "passed",
+  "platform": "linux",
+  "node": "v24.15.0",
+  "browser": "153.0.8010.12",
+  "vite": "8.3.0",
+  "route": "loopback Vite → B → B-initiated delegation to A → authenticated CLI helper → isolated localhost iframe",
+  "moduleHmr": true,
+  "cssHmr": true,
+  "documentPreserved": true,
+  "stopRevoked": true,
+  "browserReceivedViteFrames": [
+    {
+      "type": "connected"
+    },
+    {
+      "type": "update",
+      "updates": [
+        {
+          "type": "js-update",
+          "path": "/main.js"
+        }
+      ]
+    },
+    {
+      "type": "update",
+      "updates": [
+        {
+          "type": "css-update",
+          "path": "/style.css?direct"
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "limitations": "Linux Chromium only. Both Sodashitsu hosts are separate server instances on one PC; no external network, real HTTPS parent, Next, other OS/browser, or production TLS tested."
+}

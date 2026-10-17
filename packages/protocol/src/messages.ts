@@ -1,5 +1,6 @@
 import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
 import { MachineManageParams, type ManagedConnection } from "./delegation.js";
+import { PreviewMethods, type PreviewResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
 import { DelegationInviteParams, DelegationStartParams, DelegationStopParams, type DelegationStatus } from "./delegation.js";
 import {
@@ -926,6 +927,7 @@ const agentIntegrationKind = z.enum([
   "qwen",
   "qodercli",
   "bob",
+  "agy",
 ]);
 
 // --- session の一覧（20260926-named-session-ui。herdr の `session list` を画面から）------------------
@@ -1123,6 +1125,8 @@ export interface AgentIntegrationStatusResult {
   agents: Record<AgentIntegrationKind, AgentIntegrationStatus>;
   /** Claude Code のステータスラインの包み。古いサーバには無い。 */
   statusLine?: StatusLineWrapStatus;
+  /** Antigravity CLI の包み。対応するサーバだけ返す。 */
+  agyStatusLine?: StatusLineWrapStatus;
 }
 
 export const AgentIntegrationInstallParams = z.object({ kind: agentIntegrationKind });
@@ -1137,8 +1141,8 @@ export const AgentIntegrationUninstallParams = z.object({ kind: agentIntegration
 export type AgentIntegrationUninstallParams = z.infer<typeof AgentIntegrationUninstallParams>;
 export type AgentIntegrationUninstallResult = AgentIntegrationInstallResult;
 
-/** ステータスラインの包みの導入・外す（Claude Code だけ。引数は無い）。結果は `AgentIntegrationInstallResult`。 */
-export const AgentIntegrationStatusLineParams = z.object({});
+/** ステータスラインの包みの導入・外す。kind省略は既存のClaude Code。結果は `AgentIntegrationInstallResult`。 */
+export const AgentIntegrationStatusLineParams = z.object({ kind: z.enum(["claude", "agy"]).optional() });
 export type AgentIntegrationStatusLineParams = z.infer<typeof AgentIntegrationStatusLineParams>;
 
 export const AgentIntegrationSetAutoResumeParams = z.object({ enabled: z.boolean() });
@@ -1461,6 +1465,7 @@ export const PaneReportMetadataParams = z.object({ paneId, ...metadataReport });
 export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
 
 export const METHOD_SCHEMAS = {
+  ...PreviewMethods,
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
   "client.fit": ClientFitParams,
@@ -1629,7 +1634,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap {
+export interface MethodResultMap extends PreviewResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};

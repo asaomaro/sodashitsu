@@ -26,6 +26,7 @@ export * from "./conversation.js";
 export * from "./notifications.js";
 
 export * from "./pluginOperations.js";
+export * from "./preview.js";
 
 export * from "./workspaceTools.js";
 

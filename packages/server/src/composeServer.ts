@@ -58,6 +58,8 @@ import { DefaultClientRegistry } from "./clients/ClientRegistry.js";
 import { DefaultSizeAuthority } from "./clients/SizeAuthority.js";
 import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
+import { PreviewMethods } from "@sodashitsu/protocol";
+import { PreviewService } from "./preview/PreviewService.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
 import { AskService } from "./ask/AskService.js";
@@ -115,6 +117,8 @@ import { UsageService } from "./usage/UsageService.js";
 import { UsageFeed } from "./usage/UsageFeed.js";
 import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
 import { StatusLineWrapper } from "./agent/statusLineWrap.js";
+import { AntigravityUsageAdapter } from "./usage/antigravityAdapter.js";
+import { AntigravityStatusLineWrapper } from "./agent/antigravityStatusLineWrap.js";
 import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
 import { BobUsageAdapter } from "./usage/bobAdapter.js";
 import { CopilotUsageAdapter } from "./usage/copilotAdapter.js";
@@ -338,6 +342,7 @@ export async function composeServer(
   });
   const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus, {
     statusLine: new StatusLineWrapper(statusLineScriptFor()),
+    agyStatusLine: new AntigravityStatusLineWrapper(join(import.meta.dirname, "..", "assets", "soda-agy-statusline.cjs")),
     health: {
       lastReportAt: () => reportedUsage.lastReportAt(),
       claudeRunningSince: () => {
@@ -504,6 +509,24 @@ export async function composeServer(
   // pane の実在は `AskService` と同じ判定。接続が終わったら、その接続が持ち主の質問を閉じるのは操作の中（`askOpenOp` が `ctx.signal` の abort で取り消す）。
   // 待ち受けは `listen()` の 4.7、閉じるのは `close()`。引き継ぎの間は `pause()`（`HandoffController` の `closeClients`）。
   const paneOps = new PaneOpRegistry(logger);
+  const previews = new PreviewService({
+    scope: (id) => { const pane = session.getPane(id); return pane ? session.getTab(pane.tabId)?.workspaceId : undefined; },
+    kind: (id) => clients.get(id)?.kind,
+    blockedPorts: async () => {
+      const address = httpServer.server.address();
+      return [typeof address === "object" && address ? address.port : options.port,
+        ...(await listServerSessions(options.sessionRoot, options.sessionName)).flatMap((s) => s.endpoint ? [s.endpoint.port] : [])];
+    },
+  });
+  // Registration is only a candidate. It opens no network connection. A browser
+  // must opt in and an authenticated helper must explicitly attach to that pane.
+  paneOps.register({ name: "preview.register", params: PreviewMethods["preview.register"].omit({ paneId: true }), handler: (ctx, p) => previews.register({ ...p, paneId: ctx.paneId }) });
+  paneOps.register({ name: "preview.list", params: z.object({}).strict(), handler: (ctx) => previews.list(ctx.paneId) });
+  paneOps.register({ name: "preview.open", params: PreviewMethods["preview.open"], handler: (ctx, p) => {
+    ctx.signal.addEventListener("abort", () => previews.clientGone(ctx.connId), { once: true });
+    return previews.open(ctx.connId, p.appId, p.viewerId, ctx.paneId);
+  } });
+  paneOps.register({ name: "preview.stop", params: PreviewMethods["preview.stop"], handler: (ctx, p) => previews.stop(p.appId, p.remove, ctx.paneId) });
   paneOps.register(askOpenOp(asks));
   paneOps.register(askFeaturesOp(asks));
   // 表示の面: どの操作も対象は要求が名乗った pane だけ（`displayOps.ts`）。待ちは接続が終わると外れる（`ctx.signal`）。
@@ -591,7 +614,8 @@ export async function composeServer(
     logger,
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
-  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
+  const agyUsage = new AntigravityUsageAdapter();
+  const usage = new UsageService({ session, adapters: [agyUsage, new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。
@@ -612,10 +636,23 @@ export async function composeServer(
     sink: reportedUsage,
     log: (reason, r) => logger.info("usage report ignored", { paneId: r.paneId, kind: "claude", reason }),
   });
+  const agyUsageIntake = new UsageReportIntake({
+    verdict: (r) => session.usageReportVerdict(r.paneId, "agy", r.agentPid, r.sessionId),
+    sink: { note: (r) => {
+      const report = r as import("./usage/antigravityAdapter.js").AntigravityUsageReport;
+      agyUsage.note(report);
+      if (report.toolConfirmationPending === true) agentMonitor.noteReportedState(r.paneId, r.sessionId, "blocked");
+      else if (report.agentState === "idle") agentMonitor.noteReportedState(r.paneId, r.sessionId, "idle");
+      else if (report.agentState !== undefined) agentMonitor.noteReportedState(r.paneId, r.sessionId, "working");
+      else agentMonitor.noteReportedState(r.paneId, r.sessionId);
+    } },
+    log: (reason, r) => logger.info("usage report ignored", { paneId: r.paneId, kind: "agy", reason }),
+  });
   const usageSub = bus.subscribe((e) => {
     if (e.event === "pane.closed") {
       usage.forgetPane(e.data.paneId);
       usageIntake.forgetPane(e.data.paneId);
+      agyUsageIntake.forgetPane(e.data.paneId);
     }
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
@@ -653,6 +690,7 @@ export async function composeServer(
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
   registerAllMethods(surface, {
+    previews,
     workspaceTools,scheduler,pluginDiscovery,
     conversations,summaries,sessionNotes,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
     session,
@@ -714,6 +752,7 @@ export async function composeServer(
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      previews.clientGone(clientId);
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
       asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
@@ -726,6 +765,7 @@ export async function composeServer(
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      previews.clientGone(clientId);
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
       asks.onClientGone(clientId);
@@ -970,6 +1010,7 @@ export async function composeServer(
                   ...(report.configDirName !== undefined ? { configDirName: report.configDirName } : {}),
                 });
               }
+              if (report.kind === "agy") agyUsageIntake.offer(report);
             } else if (report.kind === "claude") {
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
@@ -1084,7 +1125,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close();
+        usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -1128,7 +1169,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close();
+        usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -1174,7 +1215,7 @@ export async function composeServer(
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
           graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
-          usageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
+          usageIntake.close(); agyUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);
@@ -1195,6 +1236,7 @@ export async function composeServer(
         await extensions.stop().catch(() => undefined);
         extensions.dispose();
         displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
+        previews.dispose();
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、
         // その間に既存の接続から届いた報告がタイマーを掛け直し、止めた後まで残る（タスク点検 T4 の指摘）。途中の処理が投げても止める。

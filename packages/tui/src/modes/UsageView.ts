@@ -26,6 +26,13 @@ import { stringWidth, truncate } from "../render/width.js";
 
 const num = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString("ja-JP"));
 const basis = { cumulative: "累計", transcript: "記録に残る分", context: "文脈内" };
+/** Same convention as the Web dashboard: prefer reported total, otherwise sum known parts. */
+function totalTokens(u: AgentUsage | null | undefined): number | undefined {
+  if (!u) return undefined;
+  if (u.tokens.total !== undefined) return u.tokens.total;
+  const parts = [u.tokens.input, u.tokens.output, u.tokens.cacheRead, u.tokens.cacheWrite].filter((n): n is number => n !== undefined);
+  return parts.length ? parts.reduce((sum, n) => sum + n, 0) : undefined;
+}
 /** ASCII cells remain readable without an icon font. Percent is used capacity. */
 export function usageGauge(percent: number | undefined, cells = 10): string {
   if (percent === undefined || !Number.isFinite(percent)) return "[" + "?".repeat(cells) + "] —";
@@ -78,7 +85,7 @@ export function usageLines(u: AgentUsage | null | undefined): string[] {
   if (!u) return ["利用状況を取得できません（記録・会話ID・対応状況を確認してください）"];
   return [
     `${u.kind} / ${u.model ?? "モデル不明"} · ${basis[u.tokens.basis]}`,
-    `トークン 合計 ${num(u.tokens.total)} / 入力 ${num(u.tokens.input)} / 出力 ${num(u.tokens.output)}`,
+    `トークン 合計 ${num(totalTokens(u))} / 入力 ${num(u.tokens.input)} / 出力 ${num(u.tokens.output)}`,
     `キャッシュ 読み ${num(u.tokens.cacheRead)} / 書き ${num(u.tokens.cacheWrite)} · 推論 ${num(u.tokens.reasoning)}`,
     `コスト ${costText(u, 4)}${u.costBasis ? " (" + u.costBasis + ")" : ""}${u.premiumRequests !== undefined ? ` · プレミアムリクエスト ${u.premiumRequests}` : ""}`,
     `コンテキスト ${usageGauge(contextPercent(u))} · ${num(u.contextTokens)} / ${num(u.contextWindowTokens)}`,
@@ -229,7 +236,7 @@ export class UsageDashboard {
         const u = this.usage.data.panes;
         const metric = (id: string) =>
           this.sort === "tokens"
-            ? u[id]?.tokens.total
+            ? totalTokens(u[id])
             : this.sort === "cost"
               ? u[id]?.costUsd
               : u[id]?.contextUsedPct;
@@ -356,7 +363,7 @@ export class UsageDashboard {
       put(
         y,
         u
-          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(u.tokens.total)} · ${costText(u, 4)}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
+          ? `${u.kind} · ${u.model ?? "—"} · ${basis[u.tokens.basis]} ${num(totalTokens(u))} · ${costText(u, 4)}${u.partial ? " · 一部" : ""}${u.scanning ? " · 読取中" : ""}${u.updatesStopped ? " · 更新停止" : ""}`
           : "利用状況を取得できません",
         bg,
       );

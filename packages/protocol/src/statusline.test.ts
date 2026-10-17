@@ -64,7 +64,7 @@ it("formats enabled fields in shared order, omits unknown values, and compactly 
   });
   const result = statuslineSegments(pane, usage, [], s);
   expect(result.slice(0, 3).map((v) => v.text)).toEqual([
-    "Tokens 1k",
+    "Context tokens 1k",
     "出力トークン 0",
     "入力トークン 10k",
   ]);
@@ -201,4 +201,13 @@ it("shows non-USD credits in the cost field with their unit, and prefers USD whe
   expect(statuslineSegments(bobPane, bob, [], settings).find((s) => s.field === "cost")?.text).toBe("0.079 Bobcoin");
   const both = { ...bob, costUsd: 1 } as import("./usage.js").AgentUsage;
   expect(statuslineSegments(bobPane, both, [], settings).find((s) => s.field === "cost")?.text).toBe("$1.000");
+});
+
+it("shows known context token counts for Bob and agy without requiring a reported total", () => {
+  for (const kind of ["bob", "agy"]) {
+    const pane = { agent: { kind, label: kind, state: "idle" } } as import("./model.js").Pane;
+    const usage = { kind, tokens: { basis: "context", input: 19700 } } as import("./usage.js").AgentUsage;
+    expect(statuslineSegments(pane, usage, [], loadStatuslineSettings({})).find(s => s.field === "tokens")?.text).toBe("Context tokens 19700");
+    expect(statuslineSegments(pane, { ...usage, tokens: { basis: "context" } }, [], loadStatuslineSettings({})).find(s => s.field === "tokens")).toBeUndefined();
+  }
 });

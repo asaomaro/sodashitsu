@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentIntegrationKind, ServerEvent } from "@sodashitsu/protocol";
 import { EventBus } from "../bus/EventBus.js";
 import type { IntegrationFile } from "../persist/IntegrationFile.js";
@@ -88,4 +88,16 @@ describe("DefaultAgentIntegrationService — statusLine の silent", () => {
   it("導入していなければ、出さない", async () => {
     expect(await silentOf({ since: T, workedAt: T + 5_000 }, T + 10 * 60_000, "none")).toBeUndefined();
   });
+});
+
+it("keeps Antigravity and default Claude statusline controls independent", async () => {
+  const installer: AgentIntegrationInstaller = { status: async () => ({ cliDetected: false, installed: false, needsUpdate: false }), install: async () => ({ ok: true, message: null }), uninstall: async () => ({ ok: true, message: null }) };
+  const control = () => ({ status: async () => ({ state: "none" as const }), install: vi.fn(async () => ({ ok: true, message: null })), uninstall: vi.fn(async () => ({ ok: true, message: null })) });
+  const claude = control(), agy = control();
+  const file = { load: async () => ({ kind: "missing" }), save: async () => undefined } as unknown as IntegrationFile;
+  const service = await DefaultAgentIntegrationService.load(installer, file, new EventBus(), { statusLine: claude, agyStatusLine: agy });
+  expect((await service.status()).agyStatusLine?.state).toBe("none");
+  await service.installStatusLine("agy"); expect(agy.install).toHaveBeenCalledOnce(); expect(claude.install).not.toHaveBeenCalled();
+  await service.uninstallStatusLine("agy"); expect(agy.uninstall).toHaveBeenCalledOnce();
+  await service.installStatusLine(); expect(claude.install).toHaveBeenCalledOnce();
 });
