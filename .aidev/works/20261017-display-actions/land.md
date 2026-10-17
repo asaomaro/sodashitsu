@@ -57,3 +57,7 @@ AssertionError: expected 300 to be 1000 // Object.is equality
    Start at  22:55:41
    Duration  199ms (transform 48%, import 28%, tests 17%, worker 6%)
 ```
+
+## 統合検証
+
+外部接続画面を含む最新mainとの統合状態（feature/connection-ui af4fff40）で、全体696ファイル11071件成功。build/typecheck成功。作業フォルダ外のworktreeで実シェル・Chromiumのsmoke成功。コード変更のない記録追加を除き同じ実装を検証した。
