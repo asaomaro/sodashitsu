@@ -2,7 +2,7 @@
 
 ユーザーから、Tailscale Funnelの作業前にここまでをmainへ統合する指示。既存PR #168を先にmerge。追加機能は独立worktreeからPR #169。
 
-- 最終差分のbuild/typecheck成功。実シェル・Chromiumのsmoke成功。再ビルド後のsoda実端末起動テスト成功（1成功、1skip）。
+- 最終差分のbuild/typecheck成功。実シェル・Chromiumのsmoke成功。再ビルド後のsoda実端末起動テスト成功（1件）。
 - 全体テスト: 669ファイル、10868成功、25失敗、1skip。別途起動テスト1suiteがdist鮮度検査で失敗。
 - 25失敗のうちTUI21件は、上部ボタン折り返し閾値変更による一覧位置の変化。閾値23を維持し、狭い幅では「他 ▾」へ短縮。既存4ファイル＋controlsの5ファイル79件成功。修正差分は独立再レビュー済み。
 - Web Appの旧ボタン期待を6画面・その他へ更新。独立再レビュー済み。App/GraphViewの2ファイル102件成功（GraphViewの時間超過は単独再実行で解消）。
