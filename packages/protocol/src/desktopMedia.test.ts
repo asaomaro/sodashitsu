@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { DesktopViewerMessage } from "./desktop.js";
+import { RemoteDesktopViewerMessage } from "./desktop.js";
 import {
   DesktopClipboardRequest,
   DesktopIceServers,
@@ -44,7 +44,7 @@ it("accepts only bounded clipboard operations and typed signaling", () => {
   ).toBe(false);
   expect(DesktopIceServers.safeParse([{ urls: "https://bad.example" }]).success).toBe(false);
   expect(
-    DesktopViewerMessage.safeParse({
+    RemoteDesktopViewerMessage.safeParse({
       type: "rtc_signal",
       id: crypto.randomUUID(),
       signal: { kind: "offer", sdp: "x".repeat(24577) },

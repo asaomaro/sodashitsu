@@ -5,7 +5,7 @@ import { performance } from "node:perf_hooks";
 import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import {
-  DesktopViewerMessage,
+  RemoteDesktopViewerMessage,
   DesktopFrameChain,
   DesktopReady,
   decodeDesktopFrame,
@@ -17,7 +17,7 @@ import {
   DesktopClipboardResult,
   decodeDesktopMediaChunk,
   isDesktopMediaChunk,
-  type DesktopInput,
+  type RemoteDesktopInput,
 } from "@sodashitsu/protocol";
 import { DesktopAgentAccess, type AgentTarget, type AgentFrame } from "./DesktopAgentAccess.js";
 import type { AuthService } from "../auth/AuthService.js";
@@ -176,7 +176,7 @@ export class DesktopRelay {
           if (v.provider) this.send(v.provider, { type: "control", enabled: v.control });
         },
         state: (active, expiresAt) => this.send(v.ws, { type: "agent_state", active, expiresAt }),
-        input: (input: DesktopInput) =>
+        input: (input: RemoteDesktopInput) =>
           new Promise<void>((resolve, reject) => {
             if (
               !v.provider ||
@@ -263,7 +263,7 @@ export class DesktopRelay {
         return;
       }
       try {
-        const m = DesktopViewerMessage.parse(JSON.parse(bytes.toString()));
+        const m = RemoteDesktopViewerMessage.parse(JSON.parse(bytes.toString()));
         if (m.type === "start") {
           if (v.started) {
             this.stop(v);

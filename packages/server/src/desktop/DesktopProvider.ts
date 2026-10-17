@@ -7,7 +7,7 @@ import {
   DesktopFrameChain,
   DesktopReady,
   DesktopStartParams,
-  DesktopViewerMessage,
+  RemoteDesktopViewerMessage,
   DESKTOP_MAX_FRAME_BYTES,
   encodeDesktopFrame,
   decodeDesktopFrame,
@@ -190,7 +190,7 @@ export class DesktopProvider {
             this.stop(s);
             return;
           }
-          const m = DesktopViewerMessage.parse(rawMessage);
+          const m = RemoteDesktopViewerMessage.parse(rawMessage);
           if (
             m.type === "media" ||
             m.type === "media_fallback" ||

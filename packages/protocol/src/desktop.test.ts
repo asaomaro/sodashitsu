@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import {
-  DesktopInput,
+  RemoteDesktopInput,
   DesktopOptions,
   DesktopStartParams,
   decodeDesktopFrame,
@@ -28,14 +28,14 @@ it("checks encoded dimensions before decoding and bounds frame headers/images", 
   expect(() => encodeDesktopFrame(info, new Uint8Array(2 * 1024 * 1024 + 1))).toThrow();
 });
 it("admits typed mouse/key/text only and never executable or arbitrary native messages", () => {
-  expect(DesktopInput.safeParse({ kind: "key", code: "KeyA", down: true }).success).toBe(true);
-  expect(DesktopInput.safeParse({ kind: "text", text: "日本語😀" }).success).toBe(true);
+  expect(RemoteDesktopInput.safeParse({ kind: "key", code: "KeyA", down: true }).success).toBe(true);
+  expect(RemoteDesktopInput.safeParse({ kind: "text", text: "日本語😀" }).success).toBe(true);
   for (const value of [
     { kind: "key", code: "cmd.exe", down: true },
     { kind: "pointer", x: Infinity, y: 0, button: 0, event: "move" },
     { kind: "text", text: "x", command: "bad" },
   ])
-    expect(DesktopInput.safeParse(value).success).toBe(false);
+    expect(RemoteDesktopInput.safeParse(value).success).toBe(false);
   expect(
     DesktopStartParams.safeParse({
       url: "https://test",

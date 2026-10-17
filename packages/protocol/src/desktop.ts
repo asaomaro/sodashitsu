@@ -41,7 +41,7 @@ const keyCode = z
   .regex(
     /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Enter|Escape|Tab|Space|Backspace|Delete|Insert|Home|End|PageUp|PageDown|CapsLock|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Backquote|Comma|Period|Slash)$/,
   );
-export const DesktopInput = z.discriminatedUnion("kind", [
+export const RemoteDesktopInput = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("pointer"),
@@ -55,8 +55,8 @@ export const DesktopInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("key"), code: keyCode, down: z.boolean() }).strict(),
   z.object({ kind: z.literal("text"), text: z.string().min(1).max(1024) }).strict(),
 ]);
-export type DesktopInput = z.infer<typeof DesktopInput>;
-export const DesktopViewerMessage = z.union([
+export type RemoteDesktopInput = z.infer<typeof RemoteDesktopInput>;
+export const RemoteDesktopViewerMessage = z.union([
   DesktopMediaRequest,
   DesktopMediaSignal,
   DesktopMediaFallback,
@@ -75,7 +75,7 @@ export const DesktopViewerMessage = z.union([
   z
     .object({
       type: z.literal("input"),
-      input: DesktopInput,
+      input: RemoteDesktopInput,
       seq: z.number().int().positive(),
       frameSeq: z.number().int().positive(),
     })
@@ -170,7 +170,7 @@ export const DesktopMethods = {
     .object({
       leaseId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
       observationId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-      inputs: z.array(DesktopInput).min(1).max(32),
+      inputs: z.array(RemoteDesktopInput).min(1).max(32),
     })
     .strict(),
   "desktop.agent.release": z.object({ leaseId: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict(),

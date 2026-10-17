@@ -1,7 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import {
-  DesktopInput,
-  type DesktopInput as Input,
+  RemoteDesktopInput,
+  type RemoteDesktopInput as Input,
   type DesktopResults,
 } from "@sodashitsu/protocol";
 import type { DesktopAgentSession } from "./desktopSession.js";
@@ -148,7 +148,7 @@ export function computerInputs(actions: unknown, screen: { width: number; height
   }
   if (inputs.length > 32 || (wait && inputs.length))
     throw Error("Split the computer batch into at most 32 inputs, without mixed waits");
-  return { inputs: inputs.map((i) => DesktopInput.parse(i)), wait };
+  return { inputs: inputs.map((i) => RemoteDesktopInput.parse(i)), wait };
 }
 async function jsonBounded(response: Response) {
   const reader = response.body?.getReader();

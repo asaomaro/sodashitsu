@@ -59,3 +59,10 @@ fact-checkスキルの別エージェント `/root/desktop_factcheck` が高リ�
 ## 最大化の独立レビュー
 
 `/root/desktop_review` がtoggleMaximize/restoredSize/inset0/border-box、タイトルdblclick、drag取消、ResizeObserver連携とE2EのDOM観測を点検。初回button処理の置換漏れを指摘し、共通toggleへの接続、data属性とaria-pressedを修正した。最終差分を再読して解決、新たな重大な問題なしと報告。ファイル変更・実OS操作・テスト重複は行っていない。
+
+
+## PR提出前のmain統合レビュー
+
+origin/main 576dbfbd（VSCode共有・Antigravity対応を含む）を29b4053cで取り込み、protocol index/messages、composeServer、MachineHeaderの4競合を両機能維持で解消した。`/root/desktop_review` が接続経路・ready/auth・終了処理・両UI導線の統合差分を独立確認し重大指摘なしと報告。
+
+その後のbuildでDesktopInput/DesktopViewerMessageのroot export衝突（TS2308）を検出。既存CDP側を維持し、新規PC共有側9filesをRemoteDesktopInput/RemoteDesktopViewerMessageへ改名した。schema wire形式は変更していない。同レビュアーがconst/type/schema/Provider/Relay/AgentAccess/CLI/model/Web/testsのconsumerとrepo全体の旧名検索を再点検し、重複0・置換漏れなし・修正妥当と報告。AGENTSに利用文書への索引を追加。

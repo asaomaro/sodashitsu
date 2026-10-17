@@ -1,4 +1,4 @@
-import { DesktopMethods, type DesktopInput, type DesktopResults } from "@sodashitsu/protocol";
+import { DesktopMethods, type RemoteDesktopInput, type DesktopResults } from "@sodashitsu/protocol";
 import type { SodaClient } from "./wsClient.js";
 
 export class DesktopAgentSession {
@@ -46,7 +46,7 @@ export class DesktopAgentSession {
       }),
     );
   }
-  async act(observationId: string, inputs: DesktopInput[]) {
+  async act(observationId: string, inputs: RemoteDesktopInput[]) {
     const params = DesktopMethods["desktop.agent.act"].parse({
       leaseId: this.lease,
       observationId,

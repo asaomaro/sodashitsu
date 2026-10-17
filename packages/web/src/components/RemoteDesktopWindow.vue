@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   decodeDesktopFrame,
   DesktopFrameChain,
-  DesktopInput,
+  RemoteDesktopInput,
   DesktopReady,
   type DesktopFrameInfo,
   isDesktopMediaChunk,
@@ -555,7 +555,7 @@ function restoreImage() {
 }
 function input(value: unknown) {
   if (receiver && !receiver.active) return;
-  if (!control.value || !ready.value || !lastDrawn || !DesktopInput.safeParse(value).success)
+  if (!control.value || !ready.value || !lastDrawn || !RemoteDesktopInput.safeParse(value).success)
     return;
   const id = ++seq;
   inputs.set(id, performance.now());
@@ -609,7 +609,7 @@ function key(e: KeyboardEvent, down: boolean) {
   }
   if (!control.value || e.isComposing || e.repeat) return;
   const value = { kind: "key", code: e.code, down };
-  if (DesktopInput.safeParse(value).success) {
+  if (RemoteDesktopInput.safeParse(value).success) {
     e.preventDefault();
     input(value);
   }

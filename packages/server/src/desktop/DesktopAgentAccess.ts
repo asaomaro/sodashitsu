@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
-import { RpcError, type DesktopInput, type DesktopFrameInfo } from "@sodashitsu/protocol";
+import { RpcError, type RemoteDesktopInput, type DesktopFrameInfo } from "@sodashitsu/protocol";
 
 export type AgentFrame = { info: DesktopFrameInfo; image: Uint8Array; at: number };
 export interface AgentTarget {
@@ -8,7 +8,7 @@ export interface AgentTarget {
   capture?(afterFrameSeq?: number): Promise<void>;
   control(enabled: boolean): void;
   state(active: boolean, expiresAt: number): void;
-  input(input: DesktopInput): Promise<void>;
+  input(input: RemoteDesktopInput): Promise<void>;
   releaseInputs(): void;
 }
 type Grant = {
@@ -105,7 +105,7 @@ export class DesktopAgentAccess {
       latestFrameMaxAgeMs: 2000,
     };
   }
-  async act(owner: string, lease: string, observationId: string, inputs: DesktopInput[]) {
+  async act(owner: string, lease: string, observationId: string, inputs: RemoteDesktopInput[]) {
     const g = this.require(owner, lease);
     if (g.busy || g.preparing) throw new RpcError("server_busy", "Action is in progress");
     const observed = g.observation;
