@@ -4,11 +4,13 @@ import { readRelayKey, type RelayKey } from "./prefixRelay.js";
 
 /** 枠から親へ、port で届く知らせ（`readFrameMessage` が検査して読む）。 */
 export type FrameMessage =
-  | ({ type: "component"; rev: number; component: "terminal" } & TerminalComponent)
+  | ({ type: "component"; rev: number; component: "terminal" | "desktop-cdp" } & TerminalComponent)
   | { type: "component-remove"; rev: number; id: string }
   | { type: "rendered"; rev: number }
   | { type: "rejected"; rev: number }
   | { type: "failed"; rev: number }
+  | { type: "viewport-maximize"; rev: number; maximized: boolean }
+  | { type: "open-link"; rev: number; url: string }
   | { type: "action"; rev: number; action: string; data?: Record<string, string> }
   | { type: "key"; key: "escape" | "prefix" }
   /** アプリタブのメイン画面の枠だけ: prefix のあとのキー（中継。`PrefixRelay` が許可表の操作だけ実行する）。 */
@@ -30,13 +32,19 @@ export function readFrameMessage(data: unknown): FrameMessage | null {
       return isRev(data.rev) && typeof data.id === "string" && /^[0-9]{1,10}$/.test(data.id) ? { type: data.type, rev: data.rev, id: data.id } : null;
     case "component": {
       const rect = readComponentRect(data.rect), clip = readComponentRect(data.clip);
-      if (!isRev(data.rev) || data.component !== "terminal" || typeof data.id !== "string" || !/^[0-9]{1,10}$/.test(data.id) || typeof data.paneId !== "string" || data.paneId.length > 64 || !rect || !clip || (data.interactive !== undefined && typeof data.interactive !== "boolean")) return null;
-      return { type: data.type, rev: data.rev, component: "terminal", id: data.id, paneId: data.paneId, rect, clip, interactive: data.interactive === true };
+      if (!isRev(data.rev) || (data.component !== "terminal" && data.component !== "desktop-cdp") || typeof data.id !== "string" || !/^[0-9]{1,10}$/.test(data.id) || typeof data.paneId !== "string" || data.paneId.length > 64 || !rect || !clip || (data.interactive !== undefined && typeof data.interactive !== "boolean")) return null;
+      return { type: data.type, rev: data.rev, component: data.component, id: data.id, paneId: data.paneId, rect, clip, interactive: data.interactive === true };
     }
     case "rendered":
     case "rejected":
     case "failed":
       return isRev(data.rev) ? { type: data.type, rev: data.rev } : null;
+    case "viewport-maximize":
+      return isRev(data.rev)&&typeof data.maximized==="boolean"?{type:"viewport-maximize",rev:data.rev,maximized:data.maximized}:null;
+    case "open-link": {
+      if(!isRev(data.rev)||typeof data.url!=="string"||data.url.length>2048)return null;
+      try{const url=new URL(data.url);if(!["http:","https:"].includes(url.protocol)||url.username||url.password)return null;return {type:"open-link",rev:data.rev,url:url.href};}catch{return null;}
+    }
     case "action": {
       if (!isRev(data.rev)) return null;
       const checked = checkDisplayAction({ action: data.action, ...(data.data !== undefined ? { data: data.data } : {}) });

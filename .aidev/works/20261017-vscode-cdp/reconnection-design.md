@@ -1,0 +1,17 @@
+# 登録済み共有元からの接続
+
+当初はviewer接続ごとに256bit/5分/一回限りの招待をWindows CLIへ渡していた。ユーザーが毎回の操作は過剰と指摘し、初回登録後はSodaログイン＋一覧の接続だけで共有を開始する方式へ変更した。
+
+## 実装した構成
+
+Windows bridgeを起動したまま待機させ、Sodaの登録一覧から接続する。初回 --remember を利用者が明示し、一回限りtokenから限定device資格を発行。serverはhashのみ、Windows profileはuser AppDataへorigin/device資格/選択target/ローカル許可を保存する。Sodaログインとローカル対象/操作/fit許可を維持し、共有停止と常駐終了を分ける。Windows自動起動設定やVSCode起動変更はしない。
+
+その後はWindowsローカルUI extension（extensionKind: ui）から状態/接続/停止を操作する候補がある。公開extension APIがrendererへアクセスできるようになるわけではなく、CDP有効でのVSCode起動とhelperは依然必要。workbench targetとextension windowの確実な対応は別途検証が必要。
+
+共有ごとにUUID shareIdを生成し古画像/入力/ACKを捨てる。停止後stopped ACKまでbusy、cleanup timeoutは接続を閉じる。同device二重接続は奪わず拒否、停止/ブラウザ切断/ログアウトで共有を止める。bridge回線復帰・server再起動時は保存資格でidleへ接続するだけで、共有/操作/fitは自動再開しない。forgetは永続削除を先に確定しonline bridgeへ4403通知、offlineも次resume時に4403で失効させる。Windowsの0600はowner-only ACL保証ではなくユーザーAppDataのACLに依存する（DPAPI未実装）。初回登録失敗/資格ファイル破損は明示エラーとし勝手に新しい接続先へ変更しない。
+
+## 常駐せずCLIを隠す代替
+
+Sodaの［接続］からVSCode URI handlerへ一回限り招待を渡し、Windows UI extensionが対象選択/許可後helperを起動する候補。公式window.registerUriHandlerは外部URIをextensionへ届けられる（複数windowでは最前面が扱う）。https://code.visualstudio.com/api/references/vscode-api#window.registerUriHandler 。したがって「現在のextension window=共有target」と自動断定せず対象の明示選択が必要。URI利用はWindows側でSodaを開く場合の候補であり、モバイルのvscode:起動はWindowsへ届かない。モバイルでSodaから接続するにはWindows helperの常駐/接続要求受信が必要。いずれも未実装。
+
+検証結果と修正前negativeの生出力は resident-test-result.md、独立レビューはresident-review.md。

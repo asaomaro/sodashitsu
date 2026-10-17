@@ -1,3 +1,9 @@
+import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
+import { DesktopRelay } from "./desktop/DesktopRelay.js";
+import { DesktopProvider, desktopConfigFromEnv } from "./desktop/DesktopProvider.js";
+import { registerDesktopCdpMethods } from "./surface/methods/desktopCdp.js";
+import { DesktopCdpLauncher } from "./desktop/DesktopCdpLauncher.js";
+import { DesktopCdpRelay } from "./desktop/DesktopCdpRelay.js";
 import { ExtraOrigins } from "./auth/ExtraOrigins.js";
 import { DelegationGrants } from "./machine/DelegationGrants.js";
 import { ReverseConnections } from "./machine/ReverseConnections.js";
@@ -423,6 +429,9 @@ export async function composeServer(
   const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
   const delegations = new ReverseConnections({grants:new DelegationGrants(options.sessionRoot,options.stateDir),machines,endpoint:()=>bridgeEndpoint,logger,stateDir:options.stateDir,pairingChanged:(id,message,closed)=>bus.publish({event:"machine.pairing",data:{id,message,closed}})});
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
+  const desktop = new DesktopProvider(desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)));
+  const desktopRelay = new DesktopRelay(auth, originRejections, machines);
+  const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const agentFork = new AgentForkRunner({
     session,
@@ -687,6 +696,8 @@ export async function composeServer(
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
   registerAllMethods(surface, {
+    desktop,
+    desktopRelay,
     previews,
     workspaceTools,scheduler,pluginDiscovery,
     conversations,summaries,sessionNotes,notifications:new SharedNotifications(prefs,id=>session.getPane(id),data=>bus.publish({event:"notification.changed",data})),
@@ -726,6 +737,8 @@ export async function composeServer(
   auth.onSessionRevoked((sessionId) => {
     for (const conn of [...(relayed.get(sessionId) ?? [])]) conn.close(4401, "session revoked");
   });
+  const desktopCdp = new DesktopCdpRelay(auth, originRejections, join(options.stateDir, "desktop-cdp-devices.json"), DesktopCdpLauncher.fromEnvironment());
+  registerDesktopCdpMethods(surface, desktopCdp);
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger, (selector) => {
     const route = machines.route(selector);
     if (route.kind !== "ok") return route;
@@ -742,11 +755,13 @@ export async function composeServer(
         relayToMachine(conn, route.link);
       },
     };
-  }, (req,socket,head)=>delegations.upgrade(req,socket,head));
+  }, (req,socket,head)=>req.url === "/desktop-companion" ? desktopCompanion.upgrade(req,socket,head) : req.url?.startsWith("/desktop-share") ? desktopRelay.upgrade(req,socket,head) : delegations.upgrade(req,socket,head), (req,socket,head)=>desktopCdp.upgrade(req,socket,head));
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      desktop.clientGone(clientId);
+      desktopRelay.clientGone(clientId);
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
@@ -760,6 +775,8 @@ export async function composeServer(
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      desktop.clientGone(clientId);
+      desktopRelay.clientGone(clientId);
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
@@ -817,8 +834,11 @@ export async function composeServer(
       await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
     },
     closeClients: () => {
+      desktopRelay.closeShares();
+      desktop.dispose();
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
+      desktopCdp.disconnectAll();
       bridgeEndpoint.setReady(false);
       bridgeEndpoint.closeAll(1012, "server restarting");
       // ログイン不要の受け口（20261003-sodactl-ask-socket）も `/ws` と揃える: 待っている接続は何も書かずに捨て（質問は取り消し）、
@@ -1152,6 +1172,10 @@ export async function composeServer(
         // 最中（Ctrl+C 等のシグナル）なら、それが終わる（元に戻す）まで待つ——以前は最初に制御の socket を閉じ、その接続の終わりを待つことで同じ順序になっていた。
         // 以後、エージェントが居ないと見えても会話の参照を捨てない（20261009-agent-resume-lost）。`beginClosing` は引き継ぎの終わりを待つので、その前に（同期で）入る。
         session.beginShutdown();
+        wsServer.setReady(false);
+        desktopRelay.dispose();
+        desktopCompanion.dispose();
+        desktop.dispose();
         await control.beginClosing();
         // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
         // （手元の `/ws` と同じ code にそろえる。ブラウザ・sodactl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
@@ -1199,6 +1223,7 @@ export async function composeServer(
         // 繋がったままの WebSocket を明示的に閉じる（レビュー指摘。無いと httpServer.server.close() が
         // 永久にコールバックを呼ばない）。
         wsServer.closeAll(1001, "server shutting down");
+        desktopCdp.close();
         bridgeEndpoint.closeAll(1001, "server shutting down");
         await bridgeEndpoint.close();
         artifacts.close();
@@ -1213,13 +1238,14 @@ export async function composeServer(
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);
           wsServer.setReady(false);bridgeEndpoint.setReady(false);
-          wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
+          desktopCdp.close(); wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
           await agentReportSocket?.close().catch(()=>undefined);
           await new Promise<void>(resolve=>httpServer.server.close(()=>resolve()));
           for(const pane of session.snapshot().panes)terminals.dispose(pane.id);
           internal.workerPty.dispose();
         }
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
+        desktopCdp.close();
         commands.dispose();
         // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
         // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。
@@ -1228,6 +1254,9 @@ export async function composeServer(
         await extensions.stop().catch(() => undefined);
         extensions.dispose();
         displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
+        desktopRelay.dispose();
+        desktopCompanion.dispose();
+        desktop.dispose();
         previews.dispose();
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、

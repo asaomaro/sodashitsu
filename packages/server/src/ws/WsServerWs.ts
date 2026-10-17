@@ -61,6 +61,7 @@ export class WsServerWs implements WsServer {
     /** 保存した SSH のマシンへの中継（20260927-multi-host-machines）。無ければ `?machine=` は 404。 */
     private readonly machineRouter?: MachineRouter,
     private readonly reverseUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>,
+    private readonly desktopUpgrade?: (req: IncomingMessage, socket: Duplex, head: Buffer) => Promise<void>,
   ) {
     this.wss = new WebSocketServer({
       noServer: true,
@@ -108,9 +109,13 @@ export class WsServerWs implements WsServer {
       rejectUpgrade(socket, "400 Bad Request");
       return;
     }
-    if ((pathname === "/machine-delegation" || pathname === "/machine-pairing") && this.reverseUpgrade) {
+    if ((pathname === "/machine-delegation" || pathname === "/machine-pairing" || pathname === "/desktop-share" || pathname === "/desktop-companion") && this.reverseUpgrade) {
       if (!this.ready) { rejectUpgrade(socket,"503 Service Unavailable"); return; }
       await this.reverseUpgrade(req,socket,head); return;
+    }
+    if (pathname === "/desktop-cdp" && this.desktopUpgrade) {
+      if (!this.ready) { rejectUpgrade(socket, "503 Service Unavailable"); return; }
+      await this.desktopUpgrade(req, socket, head); return;
     }
     if (pathname !== WS_PATH) {
       socket.destroy();

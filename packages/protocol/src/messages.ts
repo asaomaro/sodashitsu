@@ -1,3 +1,5 @@
+import { DesktopMethods, type DesktopResults } from "./desktop.js";
+import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
 import { MachineAddParams, MachineManageParams, type ManagedConnection } from "./delegation.js";
 import { PreviewMethods, type PreviewResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
@@ -1465,6 +1467,7 @@ export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
 
 export const METHOD_SCHEMAS = {
   ...PreviewMethods,
+  ...DesktopMethods,
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
   "client.fit": ClientFitParams,
@@ -1605,6 +1608,8 @@ export const METHOD_SCHEMAS = {
   "machine.delegate": DelegationStartParams,
   "machine.delegations": MachineListParams,
   "machine.stop_delegation": DelegationStopParams,
+  "vscode.cdp.open": DesktopCdpOpenParams,
+  "vscode.cdp.send": DesktopCdpSendParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
   "command.reload": CommandReloadParams,
@@ -1632,7 +1637,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap extends PreviewResults {
+export interface MethodResultMap extends PreviewResults, DesktopResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};
@@ -1771,6 +1776,8 @@ export interface MethodResultMap extends PreviewResults {
   "machine.delegate": DelegationStatus;
   "machine.delegations": { delegations: DelegationStatus[] };
   "machine.stop_delegation": Record<string, never>;
+  "vscode.cdp.open": Record<string, never>;
+  "vscode.cdp.send": Record<string, never>;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;
   "command.reload": CommandListResult;

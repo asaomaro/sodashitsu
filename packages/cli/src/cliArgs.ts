@@ -46,6 +46,9 @@ import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
+  "sodactl desktop session [--url <URL>] [--token <TOKEN>]",
+  "sodactl desktop mcp [--url <URL>] [--token <TOKEN>]",
+  "sodactl desktop model --task <text> [--model <id>] [--max-steps <N>] [--auto-act] [--url <URL>] [--token <TOKEN>]",
   "sodactl preview register --name <name> --port <N> [--replace] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl preview list [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl preview viewers [--pane <id>] [--url <URL>] [--token <TOKEN>]",
@@ -301,6 +304,7 @@ export type DisplayAction =
   | { kind: "features" };
 
 export type Command =
+  | {kind:"desktop";action:"session"|"mcp"|"model";opts:GlobalOpts;task:string|undefined;model:string;maxSteps:number;autoAct:boolean}
   | { kind: "preview"; action: "register" | "list" | "viewers" | "helper" | "open" | "stop" | "remove"; opts: GlobalOpts; ref: string | undefined; pane: string | undefined; viewer: string | undefined; name: string | undefined; port: number | undefined; replace: boolean }
   | { kind: "help" }
   | { kind: "skill" }
@@ -512,6 +516,16 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
   const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
 
   switch (word0) {
+    case "desktop": {
+      if(word1!=="session"&&word1!=="mcp"&&word1!=="model")throw new CliUsageError("expected desktop session|mcp|model",USAGE);
+      const {positionals,values,bools}=parseFlags(rest0,{values:["--url","--token","--task","--model","--max-steps"],bools:["--auto-act"]});
+      rejectExtra(positionals,0,USAGE);const task=values.get("--task"),maxSteps=Number(values.get("--max-steps")??10);
+      if(!Number.isInteger(maxSteps)||maxSteps<1||maxSteps>20)throw new CliUsageError("max-steps must be 1..20",USAGE);
+      if(word1==="model"&&(!task?.trim()||task.length>4096))throw new CliUsageError("model requires --task (1..4096 characters)",USAGE);
+      if(word1!=="model"&&(task!==undefined||values.has("--model")||values.has("--max-steps")||bools.has("--auto-act")))throw new CliUsageError("model options require desktop model",USAGE);
+      const model=values.get("--model")??"gpt-6.1-sol";if(!/^[A-Za-z0-9._:-]{1,100}$/.test(model))throw new CliUsageError("invalid model id",USAGE);
+      return {kind:"desktop",action:word1,opts:globalOptsFrom(values,env),task,model,maxSteps,autoAct:bools.has("--auto-act")};
+    }
     case "machine": {
       const sub=argv[1];
       const options:Record<string,string[]>={request:["--connect","--label"],requests:[],confirm:["--code"],"reject-request":[],invite:["--label","--public-url","--out"],delegate:["--invitation"],delegations:[],"stop-delegation":[]};

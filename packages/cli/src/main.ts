@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runDesktop } from "./commands/desktop.js";
 import { runMachineDelegation } from "./commands/machineDelegation.js";
 import { runPreview } from "./commands/preview.js";
 import { runSessionTools } from "./commands/sessionTools.js";
@@ -103,6 +104,7 @@ async function main(): Promise<void> {
       // 終了コードは 0 か 1（`events` の `connection_closed` は終わりの行を出して 1）。使い方の誤り・サーバのエラーは投げて `reportAndExit` へ。
       process.exitCode = await runDisplay(cmd, store);
       return;
+    case "desktop": return runDesktop(cmd,store);
     case "preview": return runPreview(cmd, store);
     case "plugin-app": return runPluginApp(cmd,store);
     case "plugin": {

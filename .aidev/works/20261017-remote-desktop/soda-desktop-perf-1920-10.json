@@ -1,0 +1,30 @@
+{
+  "kind": "synthetic-png-transport-and-browser-only",
+  "os": "linux",
+  "architecture": "x64",
+  "node": "v24.15.0",
+  "browser": "153.0.8010.12",
+  "width": 1920,
+  "height": 1080,
+  "targetFps": 10,
+  "frames": 100,
+  "measuredSeconds": 11.809900000000372,
+  "achievedFps": 8.382797483466996,
+  "averageFrameBytes": 371942.21,
+  "averageMbps": 25.195282601884063,
+  "relayToDrawAckP95Ms": 40.63093299999946,
+  "sourceGenerateP95Ms": 6.732229000000075,
+  "sourcePngEncodeP95Ms": 17.22155399999997,
+  "sourceCpuOneCorePercent": 19.596126978212574,
+  "sourcePeakRssMiB": 129.69140625,
+  "combinedServersCpuOneCorePercent": 61.04244117007817,
+  "combinedServersRssMiB": 394.6953125,
+  "browserTaskPercent": 21.6952444660192,
+  "browserJsHeapMiB": 16.047672271728516,
+  "terminalBrowserEchoPaintP95Ms": {
+    "withoutShare": 47.39999999990687,
+    "withShare": 28.899999999906868,
+    "samplesEach": 30
+  },
+  "limitations": "Loopback A/B and Chromium on one Linux host. Source generates PNG; no Windows capture/input, physical network, or GPU benchmark. Echo ends at browser receipt plus next animation frame; not pixel verification. No real desktop performance conclusion."
+}
