@@ -14,6 +14,7 @@
 - pane の中のプログラムが画面に出し続けるパネル・帯（表示の面。`sodactl display`。中身の形式・操作・幅のつまみ・隔離のしくみ・限界）は `docs/display.md`、コマンドの形は `docs/sodactl.md`。
 - pane の表示の面の置き場所とたたみ（面ごとのたたみ・帯の行のボタン〔トレイ〕・帯の上下・表示のメニュー `prefix+shift+i`・記憶と優先・フォーカスの扱い・限界）は `docs/display.md`「たたむ・置き場所・帯の行のボタン」、パネルの上下左右の置き場所・並び・端末の最小・D&D・各側のつまみは同「パネルの置き場所と並び」「D&D」「つまみ（各側）」、浮いた窓（出し方・閉じて始まる・動かす・大きさ・キーボード・重なり・限界）は同「浮いた窓」「浮いた窓の限界」、`--dock`・`--edge`・`--collapsed` は `docs/sodactl.md`。
 - 拡張（設定に登録したプログラムを Sodashitsu が動かす。置き場所と書き方・やり取りの型・上限・安全と限界・`sodactl ext`。**リポジトリの `.soda/extensions.json` に書いた拡張は、承認したものだけ動く**〔承認の流れ・鍵・範囲・寿命・承認の記録〕）は `docs/extensions.md`「プロジェクトの拡張と承認」。
+- 開発Webアプリのリモートプレビュー（ブラウザPCのhelper・pane許可・agent CLI・既存machine接続・確認範囲と制限）は `docs/remote-web-preview.md`。
 - 標準のファイルツリー・ファイル名/Grep検索・閲覧/編集・Gitグラフ/差分、Web/TUIの追加導線と上限は `docs/workspace-tools.md`。
 - 処理の予約（エージェント指示・ワークスペースのコマンド、一回・間隔実行、履歴、停止と保存）は `docs/schedules.md`。
 - プラグインアプリのCLI操作（`sodactl plugin operations/call`。操作登録・対象範囲・結果のJSON・skill/MCPの導線）は `docs/plugin-cli.md`。
