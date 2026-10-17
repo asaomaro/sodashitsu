@@ -396,6 +396,34 @@ describe("DisplayFrame（スクリプトが動く形式）", () => {
     expect(s.controller.sendAction).toHaveBeenCalledWith("d1", 1, "pick", { id: "3" });
   });
 
+  it("外部リンクは操作中・現行版・利用者のクリックがある場合だけ別タブを開く", () => {
+    const s=setup(),port=s.connect(),open=vi.spyOn(window,"open").mockReturnValue(null);
+    const prior=Object.getOwnPropertyDescriptor(navigator,"userActivation"),activation={isActive:true};
+    Object.defineProperty(navigator,"userActivation",{configurable:true,value:activation});
+    try{
+      s.fromFrame(port,{type:"open-link",rev:1,url:"https://youtu.be/RmSc8yIIk0s"});expect(open).not.toHaveBeenCalled();
+      engageFrame("d1",{detail:1});
+      for(const url of ["javascript:alert(1)","data:text/html,x","https://user:pass@example.com/"])s.fromFrame(port,{type:"open-link",rev:1,url});
+      s.fromFrame(port,{type:"open-link",rev:2,url:"https://youtu.be/RmSc8yIIk0s"});expect(open).not.toHaveBeenCalled();
+      activation.isActive=false;s.fromFrame(port,{type:"open-link",rev:1,url:"https://youtu.be/RmSc8yIIk0s"});expect(open).not.toHaveBeenCalled();
+      activation.isActive=true;s.fromFrame(port,{type:"open-link",rev:1,url:"https://youtu.be/RmSc8yIIk0s"});expect(open).toHaveBeenCalledExactlyOnceWith("https://youtu.be/RmSc8yIIk0s","_blank","noopener,noreferrer");
+    }finally{if(prior)Object.defineProperty(navigator,"userActivation",prior);else Reflect.deleteProperty(navigator,"userActivation");}
+  });
+
+  it("viewport maximize requires a current user action, uses the same iframe, and restores through host control", async () => {
+    const s=setup(),port=s.connect(),root=s.w.element as HTMLElement,iframe=s.iframe;
+    const show=vi.fn(),hide=vi.fn();Object.defineProperty(root,"showPopover",{value:show});Object.defineProperty(root,"hidePopover",{value:hide});
+    const prior=Object.getOwnPropertyDescriptor(navigator,"userActivation"),activation={isActive:true};Object.defineProperty(navigator,"userActivation",{configurable:true,value:activation});
+    try{
+      s.fromFrame(port,{type:"viewport-maximize",rev:1,maximized:true});await nextTick();expect(show).not.toHaveBeenCalled();
+      engageFrame("d1",{detail:1});s.fromFrame(port,{type:"viewport-maximize",rev:2,maximized:true});await nextTick();expect(show).not.toHaveBeenCalled();
+      activation.isActive=false;s.fromFrame(port,{type:"viewport-maximize",rev:1,maximized:true});await nextTick();expect(show).not.toHaveBeenCalled();
+      activation.isActive=true;s.fromFrame(port,{type:"viewport-maximize",rev:1,maximized:true});await nextTick();expect(show).toHaveBeenCalledOnce();expect(s.w.classes()).toContain("display-viewport-maximized");expect(s.w.find("iframe").element).toBe(iframe);
+      s.iframe.focus();await s.w.find("[data-display-viewport-restore]").trigger("pointerdown");await vi.advanceTimersByTimeAsync(0);expect(s.w.attributes("data-display-engaged")).toBe("1");await s.w.find("[data-display-viewport-restore]").trigger("click");await nextTick();expect(s.controller.report).not.toHaveBeenCalled();expect(hide).toHaveBeenCalled();expect(s.w.classes()).not.toContain("display-viewport-maximized");expect(s.w.find("iframe").element).toBe(iframe);
+      expect(port.sent).toContainEqual({type:"message",data:{type:"viewport-state",maximized:false}});
+    }finally{if(prior)Object.defineProperty(navigator,"userActivation",prior);else Reflect.deleteProperty(navigator,"userActivation");}
+  });
+
   it("display.message を port の message へ（接続した後だけ。保存しない）", () => {
     const s = setup();
     expect(s.controller.onMessage).toHaveBeenCalledWith("d1", expect.any(Function));

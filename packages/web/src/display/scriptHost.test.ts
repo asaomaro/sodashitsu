@@ -31,7 +31,7 @@ function boot(search = "?t=ticket123") {
   new Function("parent", "window", "location", scriptBody())(parent, fakeWindow, { search });
   const port: FakePort = { onmessage: null, postMessage: vi.fn() };
   const fire = (type: string, ev: Record<string, unknown>): void => void fakeWindow.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), ev));
-  const init = (source: unknown = parent): void => fire("message", { source, data: { type: "display-init", v: 1 }, ports: [port] });
+  const init = (source: unknown = parent,features:Record<string,boolean>={viewportMaximize:true}): void => fire("message", { source, data: { type: "display-init", v: 1,features }, ports: [port] });
   const send = (msg: Record<string, unknown>): void => port.onmessage?.({ data: msg });
   const render = (msg: Record<string, unknown>): void => send({ type: "render", theme: { dark: true, vars: { "--soda-bg": "#111" } }, ...msg });
   return { parent, port, fire, init, send, render, win: fakeWindow, animationFrames };
@@ -42,6 +42,15 @@ describe("script.html（土台）", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
+  });
+
+  it("soda.maximize forwards a bounded boolean request on the private port",()=>{
+    const f=boot();f.init();f.render({rev:1,format:"script-html",source:"<p>viewer</p>"});
+    const soda=f.win.soda as {maximize(v:boolean):boolean};expect(soda.maximize(true)).toBe(true);expect(soda.maximize("true" as never)).toBe(false);expect(posted(f)).toContainEqual({type:"viewport-maximize",rev:1,maximized:true});
+  });
+
+  it("an older host without viewport support cannot claim maximize succeeded",()=>{
+    const f=boot();f.init(f.parent,{});f.render({rev:1,format:"script-html",source:"<p>viewer</p>"});const soda=f.win.soda as {maximize(v:boolean):boolean;features:{viewportMaximize:boolean}};expect(soda.features.viewportMaximize).toBe(false);expect(soda.maximize(true)).toBe(false);expect(posted(f).some(m=>(m as {type:string}).type==="viewport-maximize")).toBe(false);
   });
 
   it("soda.mount reserves bounded native terminal slots and disposal removes them without exposing parent DOM", () => {

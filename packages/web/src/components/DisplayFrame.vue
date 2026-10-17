@@ -27,7 +27,7 @@ import {
   type DisplayContent,
   type DisplayInfo,
 } from "@sodashitsu/protocol";
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   coverStartsEngage,
   startFromButton,
@@ -87,6 +87,17 @@ const props = defineProps<{ info: DisplayInfo; content?: DisplayContent | undefi
 const session = useSessionStore();
 const components = ref(new Map<string, TerminalComponent>());
 const wrap = ref<HTMLElement | null>(null);
+const viewportMaximized=ref(false);
+async function setViewportMaximized(value:boolean):Promise<void>{
+  const el=wrap.value;
+  if(value&&(!el||typeof el.showPopover!=="function")){port?.postMessage({type:"message",data:{type:"viewport-state",maximized:false}});return;}
+  if(!value&&typeof el?.hidePopover==="function"){try{el.hidePopover();}catch{/* already closed */}}
+  viewportMaximized.value=value;
+  await nextTick();
+  if(value&&viewportMaximized.value&&el===wrap.value&&el?.isConnected)el.showPopover();
+  port?.postMessage({type:"message",data:{type:"viewport-state",maximized:viewportMaximized.value}});
+}
+
 const viewport = ref({ width: 0, height: 0 });
 let componentResize: ResizeObserver | undefined;
 const permittedComponents = computed(() => [...components.value.values()].filter(c => {
@@ -178,6 +189,7 @@ function clearTimers(): void {
   patrolTimer = null;
 }
 function closePort(): void {
+  void setViewportMaximized(false);
   components.value.clear();
   if (port) {
     port.onmessage = null;
@@ -280,7 +292,7 @@ function tryConnect(): void {
   const ch = new MessageChannel();
   port = ch.port1;
   port.onmessage = onPortMessage;
-  win.postMessage({ type: "display-init", v: 1 }, "*", [ch.port2]);
+  win.postMessage({ type: "display-init", v: 1, features: {viewportMaximize:true} }, "*", [ch.port2]);
   phase.value = "connected";
   lastReply = Date.now();
   startPatrol();
@@ -345,6 +357,14 @@ function onPortMessage(ev: MessageEvent): void {
       return;
     case "failed":
       renderFailed.value = true;
+      return;
+    case "viewport-maximize":
+      if(isScript.value&&phase.value==="connected"&&m.rev===props.content?.rev){if(!m.maximized||(guard.engaged&&navigator.userActivation?.isActive))void setViewportMaximized(m.maximized);else port?.postMessage({type:"message",data:{type:"viewport-state",maximized:false,reason:"user-action-required"}});}
+      return;
+    case "open-link":
+      if(isScript.value&&guard.engaged&&m.rev===props.content?.rev&&navigator.userActivation?.isActive){
+        window.open(m.url,"_blank","noopener,noreferrer");
+      }
       return;
     case "action":
       controller?.sendAction(props.info.id, m.rev, m.action, m.data);
@@ -430,6 +450,8 @@ function onVisibility(): void {
 }
 
 // --- フォーカス ------------------------------------------------------------------------------------------
+const inViewportRestore=(t:EventTarget|null):boolean=>t instanceof Element&&!!wrap.value?.contains(t)&&t.closest("[data-display-viewport-restore]")!==null;
+function restoreViewport():void{if(guard.engaged)iframeEl.value?.focus();void setViewportMaximized(false);}
 const inComponent = (t: EventTarget | null): boolean => t instanceof Element && !!wrap.value?.contains(t) && t.closest("[data-native-component]") !== null;
 const frameHasFocus = (): boolean => iframeEl.value !== null && (document.activeElement === iframeEl.value || inComponent(document.activeElement));
 // A direct app's disabled native controls cannot regain focus by themselves
@@ -463,7 +485,7 @@ function syncGuardState(): void {
 /** スクリプトが動く形式: いまのフォーカスを見て、「操作中でないのに枠が取った」に変わったときだけ、戻して知らせる。 */
 function checkScriptFocus(): void {
   if (!isScript.value || iframeEl.value === null || phase.value === "closed") return;
-  if (inEndButton(document.activeElement)) return;
+  if (inEndButton(document.activeElement)||inViewportRestore(document.activeElement)) return;
   const verdict = guard.observe(frameHasFocus());
   syncGuardState();
   if (verdict === "steal") onSteal();
@@ -580,7 +602,7 @@ const inEndButton = (t: EventTarget | null): boolean =>
   t instanceof Element && t.closest("[data-display-end]") !== null;
 function onDocFocusIn(ev: Event): void {
   // ［操作を終える］ボタンへ移ったのは、操作を終える途中（その `click` が終える）。ここで終えると、ボタンが消えて `click` が届かない。
-  if (isScript.value && inEndButton(ev.target)) return;
+  if (isScript.value && (inEndButton(ev.target)||inViewportRestore(ev.target))) return;
   if (isScript.value && ev.target !== iframeEl.value && !inComponent(ev.target)) {
     // 枠でない要素にフォーカスが移った: 操作を終える。そのあとで枠が取り返したら、新しい「取った」（1 拍置いて見る）。
     guard.leave();
@@ -593,7 +615,7 @@ function onDocFocusIn(ev: Event): void {
 function onDocPointerDown(ev: Event): void {
   if (!isScript.value || !guard.engaged) return;
   const t = ev.target;
-  if (inComponent(t)) return;
+  if (inComponent(t)||inViewportRestore(t)) return;
   if (t instanceof Node && (t === iframeEl.value || iframeEl.value?.contains(t))) return;
   // ［操作を終える］ボタンの押下は、ここで終えない（終えるとボタンが消えて、`click` が届かない）。ボタンの `click` が終える。
   if (t instanceof Element && t.closest("[data-display-end]")) return;
@@ -759,10 +781,13 @@ defineExpose({ key: () => frameKey(props.info) });
   <div
     ref="wrap"
     class="display-frame-wrap"
+    :class="{'display-viewport-maximized':viewportMaximized}"
+    :popover="viewportMaximized?'manual':undefined"
     :data-display-phase="phase"
     :data-display-engaged="isScript ? (engagedRef ? '1' : '0') : undefined"
     :data-display-direct="direct ? '' : undefined"
   >
+    <button v-if="viewportMaximized" type="button" class="display-viewport-restore" data-display-viewport-restore @mousedown.prevent @click="restoreViewport">元の表示へ戻す</button>
     <iframe
       v-if="page && phase !== 'closed'"
       :key="gen"
@@ -834,7 +859,7 @@ defineExpose({ key: () => frameKey(props.info) });
   min-width: 0;
   min-height: 0;
 }
-.display-frame {
+.display-viewport-maximized{position:fixed;inset:0;margin:0;padding:0;border:0;width:100vw;height:100dvh;max-width:none;max-height:none;background:var(--soda-bg);overflow:hidden}.display-viewport-restore{position:absolute;bottom:8px;right:8px;z-index:10;padding:6px 10px;border:1px solid var(--soda-menu-border);background:var(--soda-menu-bg);color:var(--soda-fg);border-radius:6px}.display-frame {
   display: block;
   width: 100%;
   height: 100%;

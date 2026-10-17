@@ -233,7 +233,8 @@ function onSubmit(): void {
   flex-direction: column;
   gap: 0.3em;
 }
-.login-view-label input {
+.login-view-label input,
+.login-view-label select {
   font: inherit;
   padding: 0.4em 0.6em;
   min-height: var(--soda-shape-control-h, auto);

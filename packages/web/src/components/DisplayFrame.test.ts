@@ -89,7 +89,7 @@ describe("DisplayFrame", () => {
     expect(s.win.postMessage).not.toHaveBeenCalled();
     s.load();
     expect(s.win.postMessage).toHaveBeenCalledTimes(1);
-    expect(s.win.postMessage.mock.calls[0]![0]).toEqual({ type: "display-init", v: 1 });
+    expect(s.win.postMessage.mock.calls[0]![0]).toEqual({ type: "display-init", v: 1, features: { viewportMaximize: true } });
     await nextTick();
     expect(s.iframe.getAttribute("data-display-loads")).toBe("1");
   });

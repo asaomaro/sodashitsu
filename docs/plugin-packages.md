@@ -255,3 +255,7 @@ soda.mount("terminal", element, { paneId: agentPaneId, interactive: true });
 ```
 
 `interactive` の省略時は `false`（閲覧専用）。`true` では、アプリの［操作する］を押した後、埋め込み端末へフォーカスを置いてキー入力・日本語入力・テキスト貼り付けを行える。入力は指定したペインへ直接送り、アプリ独自の送信処理は不要。元のペインの端末も同時に使える。操作終了・接続切断・対象が範囲外へ移動した場合は送信しない。通常のEscはアプリの操作終了／浮いた窓を閉じる操作を維持し、端末へ送らない。端末自身へEscapeを送る場合はCtrl+[を使う。Sodashitsuのprefixやモバイル追加キー、画像貼り付けボタンはこの部品には付属せず、端末のテキスト入力を提供する。
+
+## 表示をブラウザ内で最大化する
+
+script-htmlでsoda.maximize(true)を呼ぶと、現在の表示枠をpopoverの最前面へ広げる。ユーザーのクリック、操作中、現行revをホストで照合する。soda.maximize(false)で元の配置へ戻す。iframeのDOMを移動/再生成しないため状態を保持する。soda.features.viewportMaximizeでAPIの有無を判定でき、soda.onMessageにviewport-stateとmaximizedの状態が届く。ホストは独立した復帰ボタンも表示する。表示の終了/版変更/停止時は最大化を解除する。sandboxとCSPは変更しない。

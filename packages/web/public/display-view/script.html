@@ -143,6 +143,7 @@
     ticket = got === null || got === undefined ? '' : got;
   } catch (e) { ticket = ''; }
 
+  var viewportMaximizeSupported=false;
   var port = null;
   var inited = false;
   var portReal = false; // 受け取った port が本物の MessagePort か（中身が動く前の、受け取った時点で 1 回だけ決める）
@@ -233,6 +234,24 @@
     return objFreeze(handle);
   }
 
+  // A real user click may open an external link through the app, while the
+  // script iframe itself retains its original network/popup sandbox.
+  var linkClosest = Element.prototype.closest;
+  var linkAttribute = Element.prototype.getAttribute;
+  var clickTarget = getterOf(EventCtor.prototype, 'target');
+  var clickPrevent = EventCtor.prototype.preventDefault;
+  var WEB_LINK_RE = /^https?:\/\//i;
+  rApply(addListener, DOC, ['click', function (event) {
+    if(!event.isTrusted)return;
+    var target=rd(clickTarget,event,'target'),link;
+    try{link=rApply(linkClosest,target,['a[href]']);}catch{return;}
+    if(!link)return;
+    var href=rApply(linkAttribute,link,['href']);
+    if(typeof href!=='string'||href.length>2048||!rApply(RegExpTest,WEB_LINK_RE,[href]))return;
+    rApply(clickPrevent,event,[]);
+    var message=mk();own(message,'type','open-link');own(message,'rev',rev);own(message,'url',href);post(message);
+  }, true]);
+
   /** window.soda。action は、規則の外の名前・値なら false を返して送らない（静的な形式の data-soda-action と同じ規則）。 */
   function makeSoda(theme) {
     var vars = mk();
@@ -251,8 +270,9 @@
     var soda = mk();
     own(soda, 'version', 1);
     own(soda, 'mount', mountComponent);
+    own(soda,'maximize',function(value){if(!viewportMaximizeSupported||typeof value!=='boolean')return false;var m=mk();own(m,'type','viewport-maximize');own(m,'rev',rev);own(m,'maximized',value);post(m);return true;});
     own(soda, 'components', objFreeze(['terminal','desktop-cdp']));
-    var features = mk(); own(features,'terminalInput',true); own(soda,'features',objFreeze(features));
+    var features = mk(); own(features,'terminalInput',true); own(features,'viewportMaximize',viewportMaximizeSupported); own(soda,'features',objFreeze(features));
     own(soda, 'action', function (name, data) {
       if (typeof name !== 'string' || !rApply(RegExpTest, ACTION_RE, [name])) return false;
       if (data !== undefined && !isPlainStringMap(data)) return false;
@@ -519,6 +539,7 @@
     if (!m || typeof m !== 'object' || m.type !== 'display-init') return;
     var ports = rd(msgPorts, ev, 'ports');
     if (!ports || ports.length < 1) return;
+    viewportMaximizeSupported=!!(m.features&&m.features.viewportMaximize===true);
     inited = true;
     port = ports[0];
     portReal = !!portPost && typeof MessagePort === 'function' && port instanceof MessagePort;

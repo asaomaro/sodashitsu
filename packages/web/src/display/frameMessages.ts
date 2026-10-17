@@ -9,6 +9,8 @@ export type FrameMessage =
   | { type: "rendered"; rev: number }
   | { type: "rejected"; rev: number }
   | { type: "failed"; rev: number }
+  | { type: "viewport-maximize"; rev: number; maximized: boolean }
+  | { type: "open-link"; rev: number; url: string }
   | { type: "action"; rev: number; action: string; data?: Record<string, string> }
   | { type: "key"; key: "escape" | "prefix" }
   /** アプリタブのメイン画面の枠だけ: prefix のあとのキー（中継。`PrefixRelay` が許可表の操作だけ実行する）。 */
@@ -37,6 +39,12 @@ export function readFrameMessage(data: unknown): FrameMessage | null {
     case "rejected":
     case "failed":
       return isRev(data.rev) ? { type: data.type, rev: data.rev } : null;
+    case "viewport-maximize":
+      return isRev(data.rev)&&typeof data.maximized==="boolean"?{type:"viewport-maximize",rev:data.rev,maximized:data.maximized}:null;
+    case "open-link": {
+      if(!isRev(data.rev)||typeof data.url!=="string"||data.url.length>2048)return null;
+      try{const url=new URL(data.url);if(!["http:","https:"].includes(url.protocol)||url.username||url.password)return null;return {type:"open-link",rev:data.rev,url:url.href};}catch{return null;}
+    }
     case "action": {
       if (!isRev(data.rev)) return null;
       const checked = checkDisplayAction({ action: data.action, ...(data.data !== undefined ? { data: data.data } : {}) });
