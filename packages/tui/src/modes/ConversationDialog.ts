@@ -289,15 +289,16 @@ export class ConversationDialog implements Overlay {
     return true;
   }
   cancel() {
+    if(this.mode==="sessions"&&this.ui.screen==="history"){this.ui.setScreen("base");return;}
     this.ui.closeDialog();
   }
   dispose() {
     this.dead = true;
   }
-  render({ grid, theme }: OverlayRenderContext) {
+  render({ grid, theme }: OverlayRenderContext, screenArea?:Rect) {
     this.hits = [];
     this.orderRect = null;
-    this.rect = centeredRect(grid, grid.w - 2, grid.h - 2);
+    this.rect = screenArea ?? centeredRect(grid, grid.w - 2, grid.h - 2);
     const c = dialogColors(theme),
       area = drawBox(
         grid,
@@ -307,7 +308,7 @@ export class ConversationDialog implements Overlay {
           ? "送信メッセージ"
           : this.mode === "summary"
             ? "会話の要約"
-            : "過去のセッション",
+            : "セッション履歴",
       );
     area.w = Math.max(0, area.w - 1);
     const rows = this.detail

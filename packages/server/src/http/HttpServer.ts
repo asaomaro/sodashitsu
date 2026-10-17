@@ -13,6 +13,7 @@ import { LogThrottle } from "../log/LogThrottle.js";
 import { requestPathname } from "../util/net.js";
 
 export interface HttpServerOptions {
+  publicOrigins?: readonly string[];
   artifacts?: ArtifactFiles;
   otpAuth?: OtpAuth;
   webDistDir: string;
@@ -204,7 +205,7 @@ export class HttpServer {
       let csp=entry.csp;
       if(name==='script.html'&&this.opts.artifacts){
         const host=req.headers.host;
-        if(host&&/^(?:[A-Za-z0-9.-]+|\[[a-fA-F0-9:]+\])(?::[0-9]{1,5})?$/.test(host))csp=csp.replace('frame-src blob:',`frame-src blob: ${this.secure?'https':'http'}://${host}${ARTIFACT_PREFIX}`);
+        if(host&&/^(?:[A-Za-z0-9.-]+|\[[a-fA-F0-9:]+\])(?::[0-9]{1,5})?$/.test(host))csp=csp.replace('frame-src blob:',`frame-src blob: ${this.secure?'https':'http'}://${host}${ARTIFACT_PREFIX} ${(this.opts.publicOrigins??[]).filter(o=>o.startsWith('https://')).map(o=>o+ARTIFACT_PREFIX).join(' ')}`);
       }
       res.setHeader("Content-Security-Policy", csp);
       for (const [k, v] of Object.entries(ASK_VIEW_PAGE_HEADERS)) res.setHeader(k, v);
@@ -350,7 +351,7 @@ export class HttpServer {
       res.end();
       return;
     }
-    res.setHeader("Set-Cookie", this.auth.buildSetCookieHeader(result.sessionId, this.secure));
+    res.setHeader("Set-Cookie", this.auth.buildSetCookieHeader(result.sessionId, this.secure || req.headers.origin?.startsWith("https://")===true));
     res.statusCode = 204;
     res.end();
   }
@@ -402,7 +403,7 @@ export class HttpServer {
       return;
     }
     const sessionId = await this.auth.issueSession();
-    res.setHeader("Set-Cookie", this.auth.buildSetCookieHeader(sessionId, this.secure));
+    res.setHeader("Set-Cookie", this.auth.buildSetCookieHeader(sessionId, this.secure || req.headers.origin?.startsWith("https://")===true));
     res.statusCode = 204;
     res.end();
   }
@@ -410,7 +411,7 @@ export class HttpServer {
   private async handleLogout(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const sessionId = this.auth.parseSessionIdFromCookie(req.headers.cookie);
     if (sessionId) await this.auth.logout(sessionId);
-    res.setHeader("Set-Cookie", this.auth.buildClearCookieHeader(this.secure));
+    res.setHeader("Set-Cookie", this.auth.buildClearCookieHeader(this.secure || req.headers.origin?.startsWith("https://")===true));
     res.statusCode = 204;
     res.end();
   }

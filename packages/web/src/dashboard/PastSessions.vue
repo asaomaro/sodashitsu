@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, ref } from "vue";
+import { inject, ref, onMounted } from "vue";
 import type { PastAgentSession } from "@sodashitsu/protocol";
 import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
@@ -60,6 +60,7 @@ async function resume(row: PastAgentSession) {
       }
     }
     view.focusPane(result.pane.id);
+    view.setScreen("base");
     view.closeDashboard();
   } catch {
     error.value = "再開できません。作業フォルダとエージェントの起動条件を確認してください。";
@@ -67,10 +68,10 @@ async function resume(row: PastAgentSession) {
     busy.value = false;
   }
 }
+onMounted(()=>void load());
 </script>
 <template>
   <section class="past-sessions">
-    <h3>過去のセッション</h3>
     <p>
       ローカルに保存されたClaude
       Code・Codexの会話です。各CLIの再開一覧とは索引や絞り込みが異なる場合があります。
@@ -126,7 +127,6 @@ option {
 ul {
   padding: 0;
   list-style: none;
-  max-height: 40vh;
   overflow: auto;
 }
 li {

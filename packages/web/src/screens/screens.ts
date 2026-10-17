@@ -1,3 +1,5 @@
+import HistoryScreen from "./HistoryScreen.vue";
+import ConnectionsScreen from "./ConnectionsScreen.vue";
 import ScheduleScreen from "./ScheduleScreen.vue";
 import type { Component } from "vue";
 import BaseScreen from "./BaseScreen.vue";
@@ -43,6 +45,8 @@ export const SCREENS = [
     title: "処理の予約",
     component: ScheduleScreen,
   },
+  {id:"history",label:"セッション履歴",shortLabel:"履",component:HistoryScreen},
+  {id:"connections",label:"外部接続",shortLabel:"接",component:ConnectionsScreen},
 ] as const satisfies readonly ScreenDef[];
 
 export type ScreenId = (typeof SCREENS)[number]["id"];

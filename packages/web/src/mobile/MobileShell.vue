@@ -1,4 +1,7 @@
+<!-- Additional screens share desktop content on mobile. -->
 <script setup lang="ts">
+import HistoryScreen from "../screens/HistoryScreen.vue";
+import ConnectionsScreen from "../screens/ConnectionsScreen.vue";
 import { useSettingsStore } from "../store/settings.js";
 import SystemFooter from "../components/SystemFooter.vue";
 import PaneStatusline from "../components/PaneStatusline.vue";
@@ -176,7 +179,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
       <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
       <NotificationBell variant="mobile" />
-      <button type="button" @click="view.setScreen('schedule')">予約</button>
+      <details><summary>{{view.screen==='schedule'?'予約':view.screen==='history'?'セッション履歴':view.screen==='connections'?'外部接続':'その他'}} ▾</summary><button @click="view.setScreen('schedule')">予約</button><button @click="view.setScreen('history')">セッション履歴</button><button @click="view.setScreen('connections')">外部接続</button></details>
       <button
         v-if="panelCount > 0"
         type="button"
@@ -267,13 +270,14 @@ onBeforeUnmount(() => touchScroll?.dispose());
       "
     />
   </div>
+  <section v-if="view.screen==='history' || view.screen==='connections'" class="mobile-schedules"><button @click="view.setScreen('base')">端末へ戻る</button><HistoryScreen v-if="view.screen==='history'"/><ConnectionsScreen v-else/><SystemFooter/></section>
   <section v-if="view.screen==='schedule'" class="mobile-schedules"><button @click="view.setScreen('base')">端末へ戻る</button><ScheduleView :key="machines.selectedId" /><SystemFooter /></section>
 </template>
 
 <style scoped>
 .system-footer-space { height:24px; flex:0 0 auto; }
 .mobile-schedules{position:fixed;inset:0;z-index:30;background:var(--soda-bg);display:flex;flex-direction:column;}
-.mobile-schedules>.schedule-view{flex:1;min-height:0;}
+.mobile-schedules>.schedule-view,.mobile-schedules>.history-screen,.mobile-schedules>.connections-screen{flex:1;min-height:0;}
 .mobile-app-view {
   position: absolute;
   inset: 0;

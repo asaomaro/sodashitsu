@@ -747,3 +747,23 @@ server {
 `docs/verification.md`「別のマシンからの TLS 接続（AC11）」の手順で、Linux・WSL2・Windows ネイティブのそれぞれについて、
 実際に別マシンのブラウザから `https://` でログインし、AC1〜AC9 の操作が一通りできることを確認する
 （スマートフォンは同じく「実機（iOS Safari・Android Chrome。AC12）」）。
+
+## 公開HTTPSトンネルを使う場合
+
+携帯回線からWSL内のSodashitsuへアクセスする場合、Cloudflare Tunnel等でループバックのHTTPサーバーへ転送できる。通常ログインの認証とWebSocketは引き続きSodashitsuが検査する。認証を省略したり、Originをローカルへ書き換えたりしない。
+
+起動引数を変えずに公開URLを追加するには、対象セッションの状態ディレクトリへ `allowed-origins.json` を通常ファイルとして置く。読み書きはサーバーのOS利用者に限る。
+
+```json
+{"version":1,"origins":["https://your-public-host.example"]}
+```
+
+HTTPSの完全なOriginのみ、最大32件・ファイル8KiB。URL資格情報・任意パス・クエリ・フラグメント・ワイルドカードは不可。正規化した追加Originを `--origin` と合成し、起動時および約1秒ごとの変更検知で反映する。破損・削除・安全に読めないファイルでは追加分を許可せず、CLIで指定したOriginは維持する。許可解除は新しい要求に適用し、認証済みの既存WebSocketを強制切断しない。外部公開そのものを止める場合はトンネルも停止する。
+
+HTTP前段でTLS終端する場合でも、許可したHTTPS Originからログインして発行するCookieにはSecureを付ける。プラグイン成果物のiframeは明示したHTTPS Originの固定成果物パスにだけCSP許可を追加する。公開開始後は、許可ファイルを空に戻しても、そのプロセスではaskメディアのローカル向け上限解除を再度有効にしない。
+
+この検証環境ではsystemdユーザーサービス `sodashitsu-public-tunnel.service` を用意した。接続先は `http://127.0.0.1:7780`、公開URLは状態ディレクトリの `public-access.json`。ラッパーが発行されたURLを許可ファイルへ反映し、停止時に自身が追加したURLを外す。停止は `systemctl --user stop sodashitsu-public-tunnel.service`、再開は `systemctl --user start sodashitsu-public-tunnel.service`。WSLやPCが停止すればアクセスできない。
+
+Quick Tunnelは検証用で、ドメインやCloudflareアカウントなしで始められるが、起動し直すとURLが変わり稼働保証もない。常用する固定URLには名前付きトンネルとドメインの構成を使う。トンネルのメール認証は非対話のマシン間接続に対応しないため、操作委譲にはSodashitsuのコード交換・接続専用資格情報を使う。
+
+参考: [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)。

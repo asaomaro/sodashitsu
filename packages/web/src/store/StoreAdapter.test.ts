@@ -564,3 +564,11 @@ it("shows a test notification as an ordinary snackbar", () => {
   const {adapter}=makeAdapter();adapter.applyEvent({event:"notification.test",data:{message:"通知テスト"}});
   expect(useViewStore(pinia).toasts.map(t=>t.message)).toContain("通知テスト");
 });
+
+it("keeps a pairing code visible until its request closes",()=>{
+  const {adapter}=makeAdapter();
+  adapter.applyEvent({event:"machine.pairing",data:{id:"pair1",message:"確認コード: 01234567",closed:false}});
+  expect(useViewStore(pinia).toasts).toContainEqual(expect.objectContaining({message:"確認コード: 01234567",kind:"sticky"}));
+  adapter.applyEvent({event:"machine.pairing",data:{id:"pair1",message:"",closed:true}});
+  expect(useViewStore(pinia).toasts).toEqual([]);
+});

@@ -310,3 +310,9 @@ pane の中の sodactl は、次の操作の対象が**自分の pane**（`$SODA
 ## 通知表示のテスト
 
 `sodactl notification test` は、認証済み接続から、接続中の画面へ固定文言のテスト通知を出す。エージェントの状態や通知履歴は変更しない。Web版は再読み込み、端末版は切り離し再起動により新しい受信機能を読み込む。
+
+### 外向き接続で操作を委譲
+
+操作する側で `sodactl machine invite --label <name> --public-url <URL> --out <file>`、招待ファイルを操作されるPCへ渡し、そのPCで `sodactl machine delegate --invitation <file>` を実行する。両方のCLIはそのPCのSodashitsuにログイン済みであること。外部のURLはHTTPS。招待は秘密として扱い、内容を会話・ログへ出さない。委譲する側のサーバーセッションの全ペインを操作する側から扱える。`sodactl machine delegations` で一覧、`sodactl machine stop-delegation <id>` で停止。操作する側は `soda machine disable <id>` / `remove <id>` で拒否できる。各コマンドに `[--url <URL>] [--token <TOKEN>]` が使えるが、招待の秘密は引数で渡さない。
+
+コード交換で操作委譲する場合、操作されるPCで `sodactl machine request --connect https://操作側 --label PC名`。操作側のWeb/TUIにコードが表示され、`sodactl machine requests` でも確認可能。利用者がコードを伝えた後、操作されるPCで `sodactl machine confirm <申請時のid> --code <8桁>`。5分・5回まで・一回限り。コードを自分で他PCから取得して確認を迂回しない。操作側の `sodactl machine reject-request <操作側の申請id>` は申請を拒否する。成立後は通常のマシン一覧とstop-delegationを使う。既存SSH方式は引き続き利用できる。

@@ -1,3 +1,4 @@
+import {ArtifactFiles} from "./ArtifactFiles.js";
 import { rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { connect } from "node:net";
@@ -14,7 +15,7 @@ import { DISPLAY_SCRIPT_VIEW_CSP, DISPLAY_SCRIPT_VIEW_PERMISSIONS, DISPLAY_VIEW_
 import { listenOnFreePort } from "../composeServerOnFreePort.js";
 
 /** 本物のサーバを 0 番で待ち受けさせ、割り当てられたポートを OriginPolicy に渡す。 */
-async function startServer(webDistDir: string, opts: { extraOrigins?: string[] } = {}) {
+async function startServer(webDistDir: string, opts: { extraOrigins?: string[]; artifacts?:boolean } = {}) {
   const stateDir = await makeTempDir("soda-http-state-");
   const auth = new DefaultAuthService(new FsAuthFile(stateDir));
   await auth.initialize();
@@ -24,11 +25,12 @@ async function startServer(webDistDir: string, opts: { extraOrigins?: string[] }
   const origins = new DefaultOriginPolicy(originOpts, { addresses: () => [], lanAddresses: () => [], hostnames: () => [] });
   const rateLimiter = new DefaultLoginRateLimiter();
   const logger = new MemoryLogger();
-  const http = new HttpServer(auth, new OriginRejectionLog(logger, origins), rateLimiter, { webDistDir, logger });
+  const artifacts=opts.artifacts?new ArtifactFiles():undefined;
+  const http = new HttpServer(auth, new OriginRejectionLog(logger, origins), rateLimiter, { webDistDir, logger, publicOrigins:opts.extraOrigins??[],...(artifacts?{artifacts}:{}) });
   const port = await listenOnFreePort(http.server);
   originOpts.port = port;
   const baseUrl = `http://127.0.0.1:${port}`;
-  return { baseUrl, port, token: token!, auth, stateDir, logger, close: () => new Promise<void>((r) => http.server.close(() => r())) };
+  return { baseUrl, port, token: token!, auth, stateDir, logger, close: () => new Promise<void>((r) => {artifacts?.close();http.server.close(() => r());}) };
 }
 
 /**
@@ -612,4 +614,20 @@ describe("HttpServer — 認証前の誰でも送れる不正な入力で error 
       await s.close();
     }
   });
+});
+
+it("marks cookies Secure when an explicitly allowed HTTPS Origin uses an HTTP tunnel backend",async()=>{
+  const dist=await makeTempDir("soda-proxy-test-"),server=await startServer(dist,{extraOrigins:["https://mobile.example.com"]});
+  try{
+    const response=await fetch(server.baseUrl+"/api/login",{method:"POST",headers:{origin:"https://mobile.example.com","content-type":"application/json"},body:JSON.stringify({token:server.token})});
+    expect(response.status).toBe(204);expect(response.headers.get("set-cookie")).toMatch(/; Secure(?:;|$)/);
+  }finally{await server.close();await rm(server.stateDir,{recursive:true,force:true});await rm(dist,{recursive:true,force:true});}
+});
+
+it("allows only the explicit HTTPS artifact prefix in the sandbox behind a TLS tunnel",async()=>{
+  const dist=await makeTempDir("soda-proxy-frame-");await mkdir(join(dist,"display-view"));await writeFile(join(dist,"display-view","script.html"),"test");
+  const server=await startServer(dist,{extraOrigins:["https://mobile.example.com"],artifacts:true});
+  try{const response=await fetch(server.baseUrl+"/display-view/script.html");const csp=response.headers.get("content-security-policy")!;
+    expect(csp).toContain("https://mobile.example.com/display-artifacts/");expect(csp).not.toContain("frame-src 'self'");
+  }finally{await server.close();await rm(server.stateDir,{recursive:true,force:true});await rm(dist,{recursive:true,force:true});}
 });

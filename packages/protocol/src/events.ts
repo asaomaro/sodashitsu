@@ -242,6 +242,7 @@ export interface NotificationTestEvent {
 }
 
 export type ServerEvent =
+  | { event: "machine.pairing"; data: { id: string; message: string; closed: boolean } }
   | NotificationTestEvent
   | {event:"notification.changed";data:import("./notifications.js").NotificationState}
   | WorkspaceCreatedEvent

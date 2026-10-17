@@ -1007,3 +1007,9 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
 ### セッションメモ・ToDoの参照
 
 `sodactl agent notes [<pane>]` はセッションのメモ（タイトル・本文・タグ・グループ）をJSONで取得します。`sodactl agent todos [<pane>]` は未着手・進行中・完了のToDoをJSONで取得します。ペイン内では自身の対象を省略できます。自身のペインはpane.sock経由でログイン不要、別対象は通常の認証が必要です。保存・削除・進捗の変更は行いません。対象範囲と上限は [会話の記録](agent-conversation.md#セッションのメモとtodo) を参照してください。
+
+### 外向き接続による操作の委譲
+
+外から接続を受け付けないPCには、操作する側で `sodactl machine invite --label <name> --public-url <HTTPS URL> --out <file>` を実行して招待を渡し、操作される側で `sodactl machine delegate --invitation <file>` を実行する。`sodactl machine delegations` は秘密を含まない状態一覧、`sodactl machine stop-delegation <id>` は接続と保存設定の削除。各コマンドは通常のログイン済み `/ws` だけで使い、`pane.sock` には載せない。方法・権限・停止・保存・制約は [複数マシンの接続手順](machines.md#外部から接続を受け付けないpcから操作を委譲する)。
+
+外向き委譲のコード交換: 操作される側で `sodactl machine request --connect <HTTPS URL> --label <名前>` → 操作する側のWeb/TUI通知または `sodactl machine requests` で8桁コードを確認 → 操作される側で `sodactl machine confirm <申請時のid> --code <8桁>`。操作する側は `sodactl machine reject-request <操作側の申請id>` で拒否できる。コードは5分・誤入力5回・一回限り。成立後は専用資格情報を自動保存する。詳しくは `docs/machines.md`「コード交換で開始する」。

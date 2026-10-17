@@ -45,6 +45,7 @@ export interface MachineWiringDeps {
   onLocalGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
   /** ローカルの軽い接続の hello が通った（グラフを取り直す）。省略可。 */
   onLocalOpened?: () => void;
+  onLocalPairing?: (e: Extract<import("@sodashitsu/protocol").ServerEvent,{event:"machine.pairing"}>)=>void;
   /** 連携のグラフが見えているか（リアクティブ。デスクトップのグラフの画面か、1 列の重ねるダイアログ。1 列の画面でも見えている間はマシンの一覧と軽い接続を保つ）。省略なら常に閉じている。 */
   graphOpen?: Ref<boolean>;
 }
@@ -131,6 +132,7 @@ export class MachineWiring {
         wsUrl: wsUrlFor(this.deps.baseWsUrl, id),
         onSnapshot: (s) => m.applySummarySnapshot(id, s),
         onEvent: (e) => {
+          if (e.event === "machine.pairing") { if(id===LOCAL_MACHINE_ID)this.deps.onLocalPairing?.(e); return; }
           if (e.event === "machine.changed") {
             // ローカルの軽い接続の一覧だけを、ほかのマシンを選んでいる間に使う（リモートの登録簿は混ぜない）。
             if (id === LOCAL_MACHINE_ID && m.selectedId !== LOCAL_MACHINE_ID)

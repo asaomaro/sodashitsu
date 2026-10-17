@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runMachineDelegation } from "./commands/machineDelegation.js";
 import { runSessionTools } from "./commands/sessionTools.js";
 import {runPluginApp} from "./commands/pluginApp.js";
 /**
@@ -166,6 +167,8 @@ async function main(): Promise<void> {
       return runSessionTools(cmd, store);
     case "agent-usage":
       return runAgentUsage(cmd, store);
+    case "machine-delegation":
+      return runMachineDelegation(cmd, store);
     case "agent-integrations":
       return runAgentIntegrations(cmd, store);
     case "agent-wait":

@@ -241,7 +241,7 @@ export class UsageDashboard {
   handleKey(k: KeyInput): void {
     this.scrollbar.cancel();
     if (k.key === "h") {
-      this.ui.openDialogWithContext({ kind: "pastSessions" });
+      this.ui.setScreen("history");
       return;
     }
     if (isEsc(k)) {
@@ -299,7 +299,7 @@ export class UsageDashboard {
       y++,
       "利用状況 · s:並び順 " +
         this.sort +
-        " · a:アカウント · h:過去セッション · ↑↓ / Enter:ペインへ · Esc:基本",
+        " · a:アカウント · h:セッション履歴 · ↑↓ / Enter:ペインへ · Esc:基本",
     );
     const status = statusText(this.usage);
     if (status) put(y++, status);

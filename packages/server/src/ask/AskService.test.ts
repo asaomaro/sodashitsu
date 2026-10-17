@@ -38,7 +38,7 @@ function setup(
     browsers?: string[];
     panes?: string[];
     media?: AskServiceOptions["media"];
-    localOnly?: boolean;
+    localOnly?: boolean | (()=>boolean);
     remote?: string[];
   } = {},
 ) {
@@ -772,6 +772,18 @@ describe("AskService — ローカル起動の無制限（20261005-ask-local-no-
     await t.done;
   });
 
+  it("hides an existing oversized form after an external Origin is allowed",async()=>{
+    let local=true;
+    const s=setup({localOnly:()=>local,media:media(9*MIB)});
+    s.asks.subscribe("b1");
+    const t=track(s.asks.open("cli",{paneId:"p1",spec:IMG,timeoutMs:1000}));await settle();
+    expect(s.asks.get("b1","ask1").askId).toBe("ask1");
+    local=false;
+    expect(()=>s.asks.get("b1","ask1")).toThrow(/unknown or closed/);
+    expect(s.asks.subscribe("b1")).toEqual([]);
+    s.asks.dispose();await t.done;
+  });
+
   it("従来の上限以内なら、中継越しの画面にも見せる", async () => {
     const s = setup({
       localOnly: true,
@@ -917,4 +929,12 @@ describe("terminal form subscription", () => {
     }
     expect(s.asks.pendingCount).toBe(0);
   });
+});
+
+it("applies network media limits when an Origin is added after startup",()=>{
+  let local=true;
+  const s=setup({localOnly:()=>local});
+  expect(s.asks.features().limits).toHaveProperty("unlimited",true);
+  local=false;
+  expect(s.asks.features().limits).not.toHaveProperty("unlimited");
 });

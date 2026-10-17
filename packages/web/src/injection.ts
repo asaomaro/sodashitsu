@@ -76,3 +76,5 @@ export const FileTransferKey: InjectionKey<FileTransfer> = Symbol("fileTransfer"
 export const TerminalHostKey: InjectionKey<TerminalHost> = Symbol("terminalHost");
 /** グラフの上の端末の窓（20261008-graph-first の PR2a）の進行の係。グラフの画面（ノードを押す）・窓の部品・`main.ts` の閉じる道が使う。無ければ（単体テスト）窓は開かない。 */
 export const GraphTerminalControllerKey: InjectionKey<GraphTerminalController> = Symbol("graphTerminalController");
+
+export const LocalClientFactoryKey: InjectionKey<(onOpened:()=>void)=>import("@sodashitsu/client-core").MachineSummaryClient> = Symbol("localClientFactory");

@@ -107,6 +107,7 @@ export type MenuTarget =
   | { kind: "group"; groupId: string }
   /** 「グループなし」の見出し（上へ／下へ移動だけ。追補 01 B）。 */
   | { kind: "ungrouped" }
+  | { kind: "screens" }
   | { kind: "global" }
   | { kind: "new" };
 
@@ -134,8 +135,9 @@ export interface ToastOptions {
 export const TOAST_MS = 4000;
 
 export class UiState {
-  screen: "base" | "dashboard" | "schedule" | "graph" = "base";
-  setScreen(screen: "base" | "dashboard" | "schedule" | "graph"): void {
+  pendingConnectionRequests=0;
+  screen: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections" = "base";
+  setScreen(screen: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections"): void {
     if (this.screen === screen) return;
     this.screen = screen;
     this.emit();

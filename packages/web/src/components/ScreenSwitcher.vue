@@ -3,10 +3,23 @@
  * 画面の切り替えの部品（20261008-graph-first の AC-S3・AC-S6）。サイドバーの上に置く。**ボタンは画面の一覧（`screens/screens.ts`）から作る**——3 つ目以降の画面が一覧に
  * 足されれば、ここに自然に増える。押すと `view.setScreen`。選んでいる workspace・tab・pane は変わらない（同じ実体の見せ方）。
  */
+import { computed,ref,inject,onMounted,onBeforeUnmount } from "vue";
+import { LocalClientFactoryKey } from "../injection.js";
 import { SCREENS, type ScreenDef } from "../screens/screens.js";
 import { useViewStore } from "../store/view.js";
 
 const view = useViewStore();
+const primary=SCREENS.filter(d=>["base","graph","dashboard"].includes(d.id));
+const extra=SCREENS.filter(d=>!["base","graph","dashboard"].includes(d.id));
+const current=computed(()=>extra.find(d=>d.id===view.screen));
+const menuOpen=ref(false),button=ref<HTMLButtonElement|null>(null),menu=ref<HTMLElement|null>(null),left=ref(0),top=ref(0),pending=ref(0);
+const factory=inject(LocalClientFactoryKey,null),local=factory?.(()=>void count());
+let timer:ReturnType<typeof setInterval>|undefined;
+async function count(){try{if(local)pending.value=(await local.request("machine.pairing_requests",{})).requests.length;}catch{pending.value=0;}}
+function toggle(){const rect=button.value?.getBoundingClientRect();if(rect){left.value=Math.max(0,Math.min(rect.left,window.innerWidth-220));top.value=rect.bottom;}menuOpen.value=!menuOpen.value;}
+function outside(e:PointerEvent){if(!menu.value?.contains(e.target as Node)&&!button.value?.contains(e.target as Node))menuOpen.value=false;}
+onMounted(()=>{local?.start();timer=setInterval(()=>void count(),5000);document.addEventListener("pointerdown",outside);});
+onBeforeUnmount(()=>{local?.stop();if(timer)clearInterval(timer);document.removeEventListener("pointerdown",outside);});
 
 /** 正式な名前（`title` が無ければ `label`）。短い名前のボタンに、正式な名前を添える。 */
 function fullName(def: ScreenDef): string {
@@ -22,7 +35,7 @@ function fullName(def: ScreenDef): string {
     aria-label="画面の切り替え"
   >
     <button
-      v-for="def in SCREENS"
+      v-for="def in primary"
       :key="def.id"
       type="button"
       class="screen-switcher-btn"
@@ -37,6 +50,10 @@ function fullName(def: ScreenDef): string {
         view.sidebarCollapsed ? def.shortLabel : def.label
       }}</span>
     </button>
+    <button ref="button" class="screen-switcher-btn" :class="{'screen-switcher-btn-active':current}" data-screen-more aria-haspopup="true" :aria-expanded="menuOpen" :title="current?.label??'その他の画面'" @click="toggle" @keydown.esc="menuOpen=false">
+      <span class="screen-switcher-label">{{view.sidebarCollapsed?(current?.shortLabel??'他'):(current?.label??'その他')}} ▾<span v-if="pending" class="screen-pending"> {{pending}}</span></span>
+    </button>
+    <Teleport to="body"><nav v-if="menuOpen" ref="menu" class="screen-extra-menu" :style="{left:left+'px',top:top+'px'}" aria-label="その他の画面" @keydown.esc="menuOpen=false;button?.focus()"><button v-for="def in extra" :key="def.id" :data-screen-id="def.id" :aria-current="view.screen===def.id?'page':undefined" @click="view.setScreen(def.id);menuOpen=false;button?.focus()">{{def.label}}<span v-if="def.id==='connections'&&pending">（{{pending}}）</span></button></nav></Teleport>
   </div>
 </template>
 
@@ -161,4 +178,6 @@ function fullName(def: ScreenDef): string {
 :root[data-ui-style="modern"] .screen-switcher-btn-active {
   background: var(--soda-menu-active-bg, #44475a);
 }
+.screen-extra-menu{position:fixed;z-index:10000;display:grid;min-width:180px;max-width:calc(100vw - 8px);padding:4px;background:var(--soda-menu-bg,#282a36);border:1px solid var(--soda-menu-border,#44475a);border-radius:4px;box-shadow:0 4px 12px #0005}
+.screen-extra-menu button{font:inherit;padding:8px 12px;text-align:left;border:0;color:var(--soda-fg,#f8f8f2);background:transparent;cursor:pointer}.screen-extra-menu button:hover,.screen-extra-menu button:focus-visible{background:var(--soda-menu-active-bg,#44475a)}.screen-pending{color:var(--soda-warn-fg,#ffb86c)}
 </style>

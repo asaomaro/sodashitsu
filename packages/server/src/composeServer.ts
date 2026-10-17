@@ -1,3 +1,6 @@
+import { ExtraOrigins } from "./auth/ExtraOrigins.js";
+import { DelegationGrants } from "./machine/DelegationGrants.js";
+import { ReverseConnections } from "./machine/ReverseConnections.js";
 import { readAgentTodos } from "./conversation/AgentTodos.js";
 import { z } from "zod";
 import { SessionNotesService } from "./conversation/SessionNotes.js";
@@ -231,6 +234,8 @@ export async function composeServer(
 ): Promise<ComposedServer> {
   const options = await withRememberedPort(resolveServeOptions(rawArgs), rawArgs);
   const logger = new FileLogger(join(options.stateDir, "server.log"));
+  const extraOrigins = new ExtraOrigins(options.stateDir,options.extraOrigins,logger);
+  await extraOrigins.load();
 
   // 同じ state-dir の soda を 2 つ動かさない（D103）。取るのは `listen()` の最初。放すときの失敗はログに残すだけ。
   const lock = new StateDirLock(options.stateDir, { logger });
@@ -261,7 +266,7 @@ export async function composeServer(
   const artifacts=new ArtifactFiles();
   let httpServer: HttpServer;
   try {
-    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin, otpAuth, artifacts });
+    httpServer = new HttpServer(auth, originRejections, rateLimiter, { webDistDir: webDistDirFor(), cert, key, logger, localLogin, otpAuth, artifacts, publicOrigins: options.extraOrigins });
   } catch (err) {
     // `https.createServer` は証明書と秘密鍵をその場で解釈する（PEM でない・鍵が合わない等で投げる）。
     if (!secure) throw err;
@@ -410,6 +415,8 @@ export async function composeServer(
     logger,
     createLink: (profile) => new MachineLink(profile, { ...(internal.machineSpawn !== undefined ? { spawn: internal.machineSpawn } : {}), logger }),
   });
+  const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
+  const delegations = new ReverseConnections({grants:new DelegationGrants(options.sessionRoot,options.stateDir),machines,endpoint:()=>bridgeEndpoint,logger,stateDir:options.stateDir,pairingChanged:(id,message,closed)=>bus.publish({event:"machine.pairing",data:{id,message,closed}})});
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const agentFork = new AgentForkRunner({
@@ -452,7 +459,7 @@ export async function composeServer(
     logger,
     media: new AskMedia({ fetcher: internal.askImageFetcher ?? new RemoteImageFetcher(), logger }),
     // ローカル起動: loopback だけで待ち受け、TLS・`--origin`（ポート転送・プロキシ・LAN への公開）が無い。ほかのマシンの `soda serve` の中継越しの画面は、これとは別に除く。
-    localOnly: isLocalOnlyServer(options.host, secure, options.extraOrigins),
+    localOnly: ()=>!extraOrigins.wasPubliclyExposed && isLocalOnlyServer(options.host, secure, options.extraOrigins),
     isRemoteClient: (clientId) => clients.get(clientId)?.viaBridge === true,
   });
   // 表示の面（20261007-soda-extensions）。pane ごとのパネル・帯。メモリだけ（再起動・引き継ぎで消える）。画面の見分けは ask と同じ（desktop / mobile）。
@@ -659,7 +666,8 @@ export async function composeServer(
     usageWatch,
     notificationTest: () => bus.publish({event:"notification.test",data:{message:"通知テスト：右上のスナックバーの動作確認です"}}),
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui
-    machines: () => machines.listWhenLoaded(), // 20260927-multi-host-machines（最初の読み込みを待つ）
+    machines: () => machines.listWhenLoaded(),
+    delegations, // 20260927-multi-host-machines（最初の読み込みを待つ）
     commands,
     metadata,
     images,
@@ -696,7 +704,7 @@ export async function composeServer(
         relayToMachine(conn, route.link);
       },
     };
-  });
+  }, (req,socket,head)=>delegations.upgrade(req,socket,head));
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
@@ -711,7 +719,6 @@ export async function composeServer(
   });
   // 中継の受け口（20260927-multi-host-machines）。ほかのマシンの `soda serve` が SSH と `soda bridge` 越しに繋ぐ、状態ディレクトリの 0600 の socket。
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
-  const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
@@ -749,6 +756,7 @@ export async function composeServer(
       gitPoller.stop();
       await agentMonitor.stop();
       // マシンへの ssh を閉じ、子が終わるのを待つ（execve で置き換わった後は回収されずに残るため。引き継いだ先の起動がまた繋ぐ。20260927-multi-host-machines）。
+      delegations.suspend();
       await machines.stop();
       // 拡張の子と孫を止める（execve で置き換わった後は回収されずに残るため。引き継いだ先の起動がまた起動する。20261007-ext-host）。
       await extensions.stop();
@@ -760,6 +768,7 @@ export async function composeServer(
       gitPoller.start();
       agentMonitor.start();
       void machines.start();
+      delegations.resume();
       void extensions.start(); // 止めていなくても呼べる（動いているものを二重に起動しない）
       paneHistory?.start(internal.paneHistorySaveIntervalMs);
     },
@@ -1049,6 +1058,9 @@ export async function composeServer(
         // 5. `/ws` の受け付けを始める。復元は bus にイベントを出さないので、ここより前に hello したクライアントは
         //    作りかけのスナップショットのまま取り残される（それまでは 503。ブラウザは間隔を空けて繋ぎ直す）。
         wsServer.setReady(true);
+        await delegations.restore();
+        delegations.setReady(true);
+        extraOrigins.watch();
         // 6. 保存した SSH のマシンへ繋ぎ始める（20260927-multi-host-machines）。登録簿が無ければ何もしない（ssh を起こさない）。待たない。
         void machines.start();
         // 7. 拡張を起動する（20261007-ext-host）。ロックの後・復元の後。待たない（設定を読む処理が遅くても、`listen()` を止めない）。投げない。
@@ -1117,6 +1129,8 @@ export async function composeServer(
         paneCleanup.close();
         subagents.close();
         remoteLinks.closeAll();
+        extraOrigins.close();
+        delegations.close();
         await machines.stop();
         // 拡張の子と孫を止める（`machines.stop()` の後ろ。上限 3 秒）。`finally` でも止める。
         await extensions.stop();

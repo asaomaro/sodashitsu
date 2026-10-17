@@ -73,6 +73,7 @@ export interface StoreAdapterOptions {
 export class StoreAdapter implements StorePort {
   /** 最初のスナップショットを適用したか（`onSnapshotApplied` の `first`）。 */
   #appliedSnapshot = false;
+  private readonly pairingToasts = new Map<string, number>();
 
   constructor(private readonly opts: StoreAdapterOptions) {}
 
@@ -132,6 +133,12 @@ export class StoreAdapter implements StorePort {
   private applyEventToSession(e: ServerEvent): void {
     const session = useSessionStore(this.opts.pinia);
     switch (e.event) {
+      case "machine.pairing": {
+        const view=useViewStore(this.opts.pinia),old=this.pairingToasts.get(e.data.id);
+        if(old!==undefined) { view.dismissToast(old);this.pairingToasts.delete(e.data.id); }
+        if(!e.data.closed) this.pairingToasts.set(e.data.id,view.toast(e.data.message,{kind:"sticky"}));
+        return;
+      }
       case "notification.test":
         useViewStore(this.opts.pinia).toast(e.data.message);
         return;

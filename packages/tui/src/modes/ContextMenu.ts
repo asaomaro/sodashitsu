@@ -41,6 +41,7 @@ export interface MenuDeps {
 export function menuItems(menu: ContextMenuState, deps: MenuDeps): MenuItem[] {
   const { model, actions } = deps;
   const target = menu.target;
+  if(target.kind==="screens")return ([{id:"schedule",label:"予約"},{id:"history",label:"セッション履歴"},{id:"connections",label:"外部接続"+(deps.ui.pendingConnectionRequests?` (${deps.ui.pendingConnectionRequests})`:"")}] as const).map(item=>({label:item.label,run:()=>deps.ui.setScreen(item.id)}));
   if (target.kind === "view") return deps.viewItems?.(target.viewId) ?? [];
   if (target.kind === "agent-tools")
     return actions

@@ -34,6 +34,7 @@ export interface MachineWiringDeps {
   baseWsUrl: string;
   /** ほかのマシンを見ている間に、ローカルの軽い接続が開いた（共有の設定はローカルのサーバとだけやりとりする。decisions D7.4）。 */
   onLocalSummaryOpened?(): void;
+  onLocalPairing?(data:{id:string;message:string;closed:boolean}):void;
   /** ほかのマシンを見ている間の、ローカルの軽い接続の `prefs.changed`。 */
   onLocalPrefsChanged?(data: { prefs: SharedPrefs; rev: number }): void;
 }
@@ -97,6 +98,7 @@ export class MachineWiring {
               this.deps.onLocalPrefsChanged?.(e.data);
             return;
           }
+          if(e.event === "machine.pairing") { if(id===LOCAL_MACHINE_ID)this.deps.onLocalPairing?.(e.data); return; }
           if (e.event === "machine.changed") {
             if (id === LOCAL_MACHINE_ID && m.selectedId !== LOCAL_MACHINE_ID)
               this.applyMachineList(e.data.machines);

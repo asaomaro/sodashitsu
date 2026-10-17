@@ -280,3 +280,32 @@ it("shows an externally requested test notification without changing agents", as
   expect(await h.screen()).toContain("通知テスト");
   expect(JSON.stringify([...h.app.model.panes.values()])).toBe(before);
 });
+
+it("shows a persistent pairing code and removes it after approval or expiration",async()=>{
+  const h=await startedApp();close.push(h.close);
+  h.ws.event("machine.pairing",{id:"pair1",message:"確認コード: 01234567",closed:false});h.app.renderNow();
+  expect(await h.screen()).toContain("01234567");
+  h.ws.event("machine.pairing",{id:"pair1",message:"",closed:true});h.app.renderNow();
+  expect(await h.screen()).not.toContain("01234567");
+});
+
+it("opens the secondary-screen menu independently of the bottom global menu",async()=>{
+  const h=await startedApp({respond:{"machine.connections":{connections:[]},"machine.delegations":{delegations:[]},"machine.pairing_requests":{requests:[]}}});close.push(h.close);
+  h.app.renderNow();
+  const more=(h.app as unknown as {sidebarHits:SidebarHit[]}).sidebarHits.find(b=>b.kind==="control"&&b.action==="screens") as Extract<SidebarHit,{kind:"control"}>;
+  h.io.type(click(more.x,more.y));h.app.renderNow();
+  expect(await h.screen()).toContain("セッション履歴");expect(await h.screen()).toContain("外部接続");
+  h.app.ui.closeContextMenu();h.app.ui.setScreen("connections");
+  await vi.waitFor(()=>expect(h.ws.requests("machine.connections")).toHaveLength(1));
+  h.app.renderNow();
+  expect(await h.screen()).toContain("操作を委譲している接続");
+  expect(await h.screen()).toContain("登録された接続はありません");
+});
+
+it("leaves old session history before retargeting the terminal connection to another machine",async()=>{
+  const h=await startedApp({respond:{"agent.sessions":{sessions:[],partial:false}}});close.push(h.close);
+  h.app.ui.setScreen("history");await vi.waitFor(()=>expect(h.ws.requests("agent.sessions")).toHaveLength(1));
+  h.app.switchMachine("other-machine",undefined,{force:true});
+  expect(h.app.ui.screen).toBe("base");
+  expect(h.ws.requests("agent.resume")).toHaveLength(0);
+});
