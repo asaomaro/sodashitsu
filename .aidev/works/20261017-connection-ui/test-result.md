@@ -12,3 +12,18 @@
 - 共有mainへの反映、PR/merge、稼働サーバーのhandoffは未実施。
 
 ログは /tmp/connection-ui-{related,full-tests,e2e,build,typecheck,perf-check,baseline-check,final-web-build}.log。
+
+
+## 最終統合検証・着地
+
+ユーザーから既存未コミット変更も含むPR/mergeの指示を受けた。PR #174の表示操作/入力待機/ログイン修正と、最新main #172/#173を取り込んだ同一の実装で以下を確認した。
+
+- pnpm build / pnpm typecheck成功。
+- 全体Vitest: 696ファイル、11071件すべて成功。以前の入力待機の不一致はPR #174で1000ms待機へ修正され、グラフ性能も通過した。
+- 統合E2E: display-viewport-actions / plugin-components / secondary-screens / outbound-delegation / vscode-cdp の12件成功。最大化/復帰/外部リンク、既存端末埋込みのWeb/モバイル入力、外部接続登録・保持・委譲、実CDP映像/入力を確認。
+- 元の作業フォルダ外worktreeでpnpm smoke成功（実シェル・Chromium）。
+- 最新main取込み時のprotocol/messages.tsのimport競合は、Desktop/desktop-cdpとmachine.addの宣言を全て保持して解消。独立再レビューで阻害事項なし。
+- PR #174マージ後のmain取込みは記録ファイルのみの差分で、検証後の実装コードは変更していない。
+- 全体のログ: /tmp/combined-main-{build,typecheck,tests,e2e,smoke}.log。
+
+PR #175を作成。mainへマージした後、共有作業フォルダも最新mainへfast-forwardする。稼働サーバーのhandoffは別操作として未実施。
