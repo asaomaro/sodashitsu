@@ -1,6 +1,6 @@
 # リモートデスクトップPoCの実装・検証記録
 
-日付: 2026-10-17。worktree: `/workspaces/sodashitsu-remote-desktop`、branch: `feature/remote-desktop`、起点: `72d486a5`（PR #170）。コミット・PR・mergeは未実施。
+日付: 2026-10-17。worktree: `/workspaces/sodashitsu-remote-desktop`、branch: `feature/remote-desktop`、起点: `72d486a5`（PR #170）。この時点ではコミット・PR・mergeは未実施。着地の最新状況は末尾とdeliver.mdを参照。
 
 最新の追加範囲: StretchBltへの変更、取得開始を基準とするpacing、期限付きエージェントAPIと参照クライアント。最新の検証結果は末尾「追加実装の最終確認」に記載。
 
@@ -869,4 +869,78 @@ Running 1 test using 1 worker
 
   1 passed (7.8s)
 
+```
+
+
+## PR #173・main統合後の検証
+
+- 起点の全変更をd621ac67でcommit、origin/main 576dbfbdを29b4053cでmerge。4競合を両機能維持で解消した。CDP型名の衝突を検出し、新規側の識別子をRemoteDesktopInput/RemoteDesktopViewerMessageへ改名（725d69cc）。wire形式と既存CDP公開名は維持。
+- 最新production sourceの全build PASS `/tmp/soda-desktop-delivery-build.log`、全typecheck PASS `/tmp/soda-desktop-delivery-types.log`。
+- 全Vitest: 695files / 11,062tests PASS、1file / 1test FAIL、総696files / 11,063tests、316.34s。`/tmp/soda-desktop-delivery-tests.log`。
+- 唯一の失敗は前から確認済みのagent.prompt delayMs（期待1000・実際300）。起点の別worktreeで再現済みで、今回のorigin/mainとのagent.ts/agent.test.ts差分も0。関係のない期待値や挙動は変更していない。
+- 並列build/testは避け、関連browser E2Eと隔離worktreeでのsmokeを続けて実施する。
+
+### 全体Vitestの最終出力（行末空白のみ除去）
+
+```text
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/surface/methods/agent.test.ts > agent.prompt > 本文と Enter を 2 部分にして1000msの間を置くモード付き入力として書き、送信を始めた時点のエージェントを返す（AC2・AC4）
+AssertionError: expected 300 to be 1000 // Object.is equality
+
+- Expected
++ Received
+
+- 1000
++ 300
+
+ ❯ src/surface/methods/agent.test.ts:88:38
+     86|     expect(result).toEqual({ ok: true, result: { agent: agent() } });
+     87|     expect(s.host.modal).toHaveLength(1);
+     88|     expect(s.host.modal[0]!.delayMs).toBe(1000);
+       |                                      ^
+     89|     expect(s.host.written).toEqual(["line1\nline2", "\r"]);
+     90|     expect(s.noteInteraction).toHaveBeenCalledWith("c1", "p1");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 695 passed (696)
+      Tests  1 failed | 11062 passed (11063)
+   Start at  22:15:43
+   Duration  316.34s (tests 82%, import 9%, environment 4%, transform 4%)
+
+Environment  |@sodashitsu/web| happy-dom was created 208 times · 51.64s total, 27% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+```
+
+
+### 統合後の関連E2E・隔離smoke
+
+- 関連browser E2E **15件PASS（1.7m）**。PC共有/agent権限とSIGTERM/CLI sessionとMCP/clipboard/delta/解像度追従・等倍・最大化/動画autoと中継/接続設定、既存remote-web-preview、VSCode launcher/remote/residentを検証。`/tmp/soda-desktop-delivery-e2e.log`。
+- 新規の隔離worktree `/tmp/sodashitsu-desktop-delivery-smoke` をcwdにし、上の成功したbuild成果物の `packages/server/dist/smoke.js` を実行。smoke PASS（PTYのecho、browser入力、初回案内とfocusを含む）。`/tmp/soda-desktop-delivery-smoke.log`。共有mainと他の既存worktreeは変更しない。
+- production sourceは725d69ccから変更なし。最後の追加差分は検証記録だけ。全体suiteを再び重複実行しない。
+- PR #173の既知失敗と未検証実機項目を明記し、利用者の指示に従ってmergeする。実機解像度切替・異常終了復元・DPI、外部model API/第三者MCP host、実WAN/長時間、実audio/clipboardの受け入れ項目は残す。
+
+```text
+  ✓   1 src/specs/remote-desktop-agent.spec.ts:10:1 › viewer grants one agent access; observe/action and human takeover stay isolated (6.5s)
+  ✓   2 src/specs/remote-desktop-agent.spec.ts:193:1 › reference client interrupts an unacknowledged action and relinquishes control on SIGTERM (3.2s)
+  ✓   3 src/specs/remote-desktop-cli.spec.ts:7:3 › integrated desktop session uses a browser-issued grant and returns synthetic screenshot (6.3s)
+  ✓   4 src/specs/remote-desktop-cli.spec.ts:7:3 › integrated desktop mcp uses a browser-issued grant and returns synthetic screenshot (6.4s)
+  ✓   5 src/specs/remote-desktop-clipboard.spec.ts:5:1 › clipboard text needs a viewer grant, round trips through the memory helper, and is revoked on blur (3.5s)
+  ✓   6 src/specs/remote-desktop-delta.spec.ts:6:1 › static images are suppressed; distant lossless patches preserve the canvas and API snapshots (6.7s)
+  ✓   7 src/specs/remote-desktop-display.spec.ts:5:1 › window size selects a supported display mode, renders 1:1, revokes grants and never persists OS resizing (8.3s)
+  ✓   8 src/specs/remote-desktop-media.spec.ts:7:3 › synthetic auto video/audio reaches the viewer canvas and stops with the companion (9.5s)
+  ✓   9 src/specs/remote-desktop-media.spec.ts:7:3 › synthetic relay video/audio reaches the viewer canvas and stops with the companion (9.9s)
+  ✓  10 src/specs/remote-desktop-settings.spec.ts:5:1 › connection presets and reduced colors reach the canvas, persist per machine, and reconnect read-only (5.0s)
+  ✓  11 src/specs/remote-desktop.spec.ts:10:1 › B automatically connects back over WSS using the existing machine connection (4.2s)
+  ✓  12 src/specs/remote-web-preview.spec.ts:11:1 › agent registers and opens a real HTTP/WS app through B's outbound-only delegation (6.3s)
+  ✓  13 src/specs/vscode-cdp-launcher.spec.ts:8:1 › server launches the CDP helper without CLI/token entry and binds the selected window (5.7s)
+  ✓  14 src/specs/vscode-cdp-remote.spec.ts:9:1 › machine header routes only the selected remote VSCode and stops it on close or revocation (9.9s)
+  ✓  15 src/specs/vscode-cdp-resident.spec.ts:12:1 › registered Windows bridge stays resident across stop, reload and server restart (9.0s)
+  15 passed (1.7m)
+smoke: PASS
 ```
