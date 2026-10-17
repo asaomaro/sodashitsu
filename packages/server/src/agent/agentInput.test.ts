@@ -29,8 +29,8 @@ describe("pastePayload（herdr の encode_api_text）", () => {
     );
   });
 
-  it("Enter までの遅延は herdr と同じ 300ms", () => {
-    expect(AGENT_PROMPT_SUBMIT_DELAY_MS).toBe(300);
+  it("貼り付け処理の完了を待つため、Enter まで1000ms空ける", () => {
+    expect(AGENT_PROMPT_SUBMIT_DELAY_MS).toBe(1000);
   });
 });
 

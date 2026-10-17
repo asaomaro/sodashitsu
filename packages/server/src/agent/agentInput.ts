@@ -6,8 +6,8 @@ import type { InputModes } from "../terminal/Mirror.js";
  * キーの符号化は xterm の既定（レガシー）の符号化だけ（kitty keyboard protocol は扱わない。decisions.md D1）。
  */
 
-/** herdr の `AGENT_PROMPT_SUBMIT_DELAY`（`src/app/api/agents.rs:13`）。貼り付けの後、Enter を送るまでの間。 */
-export const AGENT_PROMPT_SUBMIT_DELAY_MS = 300;
+/** 貼り付け直後のEnterがTUIの貼り付け処理に取り込まれないよう、本文と確定キーの間を空ける。 */
+export const AGENT_PROMPT_SUBMIT_DELAY_MS = 1000;
 
 const ESC = "\u001b";
 

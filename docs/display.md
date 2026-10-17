@@ -459,3 +459,5 @@ Web版の摘みアイコンは他の操作ボタンの文字サイズに合わ�
 ### 標準部品の埋め込み
 
 スクリプトが動く形式の `soda.mount("terminal", element, {paneId})` は、同じワークスペースの端末をアプリへ配置する（省略時は閲覧専用、`interactive:true` で端末入力も可能）。専用の入力欄は `soda.action` から拡張へ渡す。**使える面は、Sodashitsuが起動した拡張（プラグインのアプリを含む）が出した面だけ**（サーバが拡張の面にだけ付ける `DisplayInfo.source` で判定する）。pane のプログラムが出した `script-html` の面からは埋め込めず、`component-error`（`pane_not_available`）で知らせる。対象範囲、4部品の上限、リサイズ・スクロール、例は [プラグイン開発ガイド](plugin-packages.md#sodashitsuの部品をアプリへ埋め込む)。静的なHTMLの隔離設定・認証は変えない。埋め込み端末の行列数は部品のCSS領域に合わせ、独立接続でサイズを確保し、閉じると解放する。
+
+スクリプト表示内のhttp(s)リンクは、利用者が実際にクリックしたときだけ親画面へ取り次ぎ、ブラウザの別タブで開く（noopener/noreferrer）。親は現行版・操作中・一時的なユーザー操作を照合する。自動クリック、資格情報付きURL、javascript/data等は受け付けず、枠のsandboxはallow-scriptsのまま維持する。
