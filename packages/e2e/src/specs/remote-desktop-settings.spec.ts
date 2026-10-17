@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
@@ -46,7 +47,7 @@ test("connection presets and reduced colors reach the canvas, persist per machin
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({ timeout: 15000 });
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"),
       canvas = view.getByLabel("共有画面");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
@@ -112,7 +113,7 @@ test("connection presets and reduced colors reach the canvas, persist per machin
     ).rejects.toThrow();
     await view.getByRole("button", { name: "閉じる", exact: true }).click();
     await expect(view).toHaveCount(0);
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     await expect(view.locator("[data-desktop-applied]")).toContainText("16階調グレー");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     await view.getByText("画質・計測", { exact: true }).click();

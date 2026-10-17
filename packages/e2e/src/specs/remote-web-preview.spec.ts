@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -54,8 +55,8 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await expect(header.locator('[data-state="online"]')).toBeVisible({ timeout: 15_000 });
     await header.locator(".machine-select").click();
     await expect(page.locator(`.pane-frame[data-pane-id="${paneId}"]`)).toBeVisible();
-    await page.locator("[data-web-preview-toggle]").click();
-    await page.getByRole("button", { name: "このpaneでエージェントからの表示を許可" }).click();
+    await openNativeTab(page, "web-preview");
+    await expect(page.locator("[data-web-preview-toggle], [data-desktop-open], [data-vscode-open]")).toHaveCount(0);
     const command = page.locator("[data-preview-helper-command]"); await expect(command).toContainText("--viewer");
     const viewerId = /--viewer ([0-9a-f-]{36})/.exec((await command.textContent())!)![1]!;
     let helperOutput = "";
@@ -75,9 +76,23 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await frame.locator("#check").click(); await expect(frame.locator("#api")).toHaveText("api-ok");
     expect(receivedCookie).toContain("session=application"); expect(receivedCookie).not.toContain("soda-preview"); expect(receivedCookie).not.toContain("soda_session");
     await frame.getByRole("link", { name: "Redirect" }).click(); await expect(frame.getByRole("heading", { name: "Redirected app" })).toBeVisible();
+    // A normal tab switch must preserve the helper and the actual iframe document.
+    await frame.locator("body").evaluate(el => el.setAttribute("data-kept", "yes"));
+    await page.getByRole("tab").first().click();
+    await expect(page.locator("[data-web-preview]")).toBeHidden();
+    await page.getByRole("tab", { name: "Webプレビュー", exact: true }).click();
+    await expect(frame.locator("body")).toHaveAttribute("data-kept", "yes");
+    await expect(page.getByText("ブラウザPCのhelperに接続済み", { exact: true })).toBeVisible();
+    expect(helper.exitCode).toBeNull();
     await page.screenshot({ path: "/tmp/sodashitsu-remote-web-preview.png" });
     await run(["preview", "stop", registered.id], callerEnv);
     await expect(page.locator("[data-preview-frame]")).toHaveCount(0);
+    // Port entry and registration/opening are available entirely through the UI.
+    await page.getByRole("textbox", { name: "アプリ名", exact: true }).fill("from-ui");
+    await page.getByRole("spinbutton", { name: "ポート", exact: true }).fill(String(webPort));
+    await page.getByRole("button", { name: "登録して開く", exact: true }).click();
+    await expect(page.frameLocator("[data-preview-frame]").getByRole("heading", { name: "Remote development app" })).toBeVisible();
+
   } finally {
     helper?.kill("SIGTERM");
     if (helper && helper.exitCode === null) await new Promise<void>((resolve) => { helper!.once("exit", () => resolve()); setTimeout(() => { helper!.kill("SIGKILL"); resolve(); }, 5000).unref(); });

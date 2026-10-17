@@ -23,6 +23,7 @@ export function registerTabMethods(surface: ControlSurface, deps: MethodDeps): v
     handler: async (ctx, params) => {
       // 作る操作も操作——作った pane のシェルが起動の直後に色を問い合わせたら、作った人の配色で答える（20260921-theme-settings の decisions D13）。
       deps.clients.touch(ctx.clientId);
+      if (params.nativeView && params.plugin) throw new RpcError("invalid_params", "タブの種類は一つだけ指定してください");
       let plugin = params.plugin;
       if (params.plugin?.extensionKey === BUILTIN_WORKSPACE_KEY) {
         const ws = deps.session
@@ -70,6 +71,7 @@ export function registerTabMethods(surface: ControlSurface, deps: MethodDeps): v
         params.label,
         params.newCwd,
         plugin,
+        params.nativeView,
       );
       deps.lineage?.noteCreated(result.pane.id, params.callerPaneId); // 20261003-graph-auto-nodes
       return result;

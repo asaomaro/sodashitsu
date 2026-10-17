@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const PREVIEW_CHUNK_BYTES = 32 * 1024;
+/** Negotiated HTTP download batch; uploads retain the original 32KiB limit. */
+export const PREVIEW_READ_BYTES = 256 * 1024;
 export const PREVIEW_WS_BYTES = 256 * 1024;
 export const PreviewId = z.string().uuid();
 const headers = z.record(z.string().max(128), z.union([z.string().max(8192), z.array(z.string().max(8192)).max(32)]))
@@ -18,9 +20,9 @@ export const PreviewMethods = {
   "preview.list": z.object({ paneId: PreviewId.optional() }).strict(),
   "preview.stop": z.object({ appId: PreviewId, remove: z.boolean().optional() }).strict(),
   "preview.viewers": z.object({ paneId: PreviewId.optional() }).strict(),
-  "preview.watch": z.object({ paneId: PreviewId, origin: PreviewOrigin }).strict(),
-  "preview.unwatch": z.object({}).strict(),
-  "preview.poll": z.object({}).strict(),
+  "preview.watch": z.object({ paneId: PreviewId, origin: PreviewOrigin, viewId: PreviewId.optional() }).strict(),
+  "preview.unwatch": z.object({ viewId: PreviewId.optional() }).strict(),
+  "preview.poll": z.object({ viewId: PreviewId.optional() }).strict(),
   "preview.helper": z.object({ viewerId: PreviewId }).strict(),
   "preview.work": z.object({}).strict(),
   "preview.ready": z.object({ requestId: PreviewId, origin: PreviewLocalOrigin, url: z.string().max(512), expiresAt: z.number().finite() }).strict(),
@@ -30,7 +32,7 @@ export const PreviewMethods = {
   "preview.close": z.object({ requestId: PreviewId }).strict(),
   "preview.http.begin": z.object({ requestId: PreviewId, method: z.enum(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]), path, headers }).strict(),
   "preview.http.write": z.object({ streamId: PreviewId, data: base64(PREVIEW_CHUNK_BYTES), end: z.boolean() }).strict(),
-  "preview.http.read": z.object({ streamId: PreviewId }).strict(),
+  "preview.http.read": z.object({ streamId: PreviewId, maxBytes: z.number().int().min(1).max(PREVIEW_READ_BYTES).optional() }).strict(),
   "preview.cancel": z.object({ streamId: PreviewId }).strict(),
   "preview.ws.begin": z.object({ requestId: PreviewId, path, headers, protocols: z.array(z.string().min(1).max(128)).max(8) }).strict(),
   "preview.ws.write": z.object({ streamId: PreviewId, data: base64(PREVIEW_WS_BYTES), binary: z.boolean() }).strict(),
@@ -49,8 +51,8 @@ export interface PreviewResults {
   "preview.viewers": { viewers: PreviewViewer[] };
   "preview.watch": { viewerId: string };
   "preview.unwatch": {};
-  "preview.poll": { displays: PreviewDisplay[] };
-  "preview.helper": { viewerId: string; paneId: string; origin: string };
+  "preview.poll": { displays: PreviewDisplay[]; helper?: boolean };
+  "preview.helper": { viewerId: string; paneId: string; origin: string; httpReadMaxBytes?: number };
   "preview.work": { jobs: PreviewJob[]; active: string[] };
   "preview.ready": {};
   "preview.open": { requestId: string; status: "view_opened" };

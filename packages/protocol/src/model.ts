@@ -88,7 +88,11 @@ export interface TabViewInstance {
   placement: "right" | "left" | "top" | "bottom" | "float" | "band-top" | "band-bottom";
 }
 
+export type NativeTabView = "web-preview" | "desktop" | "vscode";
+
 export interface Tab {
+  /** 標準のブラウザ用タブ。接続先はこのタブを所有するサーバー。 */
+  nativeView?: NativeTabView;
   /** アプリのパースペクティブ。作業ペインと独立して維持する。 */
   plugin?: PluginTab;
   perspective?: "terminal" | "app";

@@ -56,6 +56,13 @@ describe("FsSessionFile", () => {
     expect(result).toEqual({ kind: "ok", data });
   });
 
+  it.each(["web-preview", "desktop", "vscode"] as const)("標準タブ %s を保存して読み戻す", async (nativeView) => {
+    const file = new FsSessionFile(dir), data = sample();
+    data.workspaces[0]!.tabs[0]!.nativeView = nativeView;
+    await file.save(data);
+    expect(await file.load()).toEqual({ kind: "ok", data });
+  });
+
   it("UUID の id（workspace・tab・pane・グループ）はそのまま往復し、保存に採番の続き（nextId）は書かない", async () => {
     const file = new FsSessionFile(dir);
     const [w, t, p, g] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];

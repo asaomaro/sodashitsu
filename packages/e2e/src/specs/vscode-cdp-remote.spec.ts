@@ -1,3 +1,4 @@
+import { openNativeTab, closeNativeTab } from "../support/nativeTab.js";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { join, resolve } from "node:path";
@@ -81,8 +82,8 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header=page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({timeout:15000});
-    await header.getByRole("button",{name:"Remote VSCode B のVSCodeを開く",exact:true}).click();
-    const dialog=page.locator("[data-vscode-dialog]"),view=dialog.locator("[data-desktop-cdp]"),canvas=view.locator("canvas");
+    await openNativeTab(page,"vscode",header);
+    const dialog=page.locator('[data-native-tab="vscode"]'),view=dialog.locator("[data-desktop-cdp]"),canvas=view.locator("canvas");
     const launch=view.getByRole("button",{name:"VSCodeを起動・接続",exact:true});
     await expect(dialog).toBeVisible();await expect(view).toContainText("接続先: Remote VSCode B");
     await launch.click();
@@ -101,7 +102,7 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     other=await browser.newContext();const observer=await other.newPage();const leaked:any[]=[];
     observer.on("websocket",s=>s.on("framereceived",({payload})=>{try{const m=JSON.parse(String(payload));if(m.event==="vscode.cdp"&&m.data?.type==="frame")leaked.push(m);}catch{}}));
     await observer.goto(`${appServer.origin}/#token=${appServer.token}`);
-    await expect(observer.locator(`[data-machine-id="${invite.machineId}"] [data-vscode-open]`)).toBeVisible();
+    await expect(observer.locator(`[data-machine-id="${invite.machineId}"]`)).toBeVisible();
     await page.bringToFront();
     await view.getByRole("button",{name:"操作する",exact:true}).click();
     const box=(await canvas.boundingBox())!;await page.mouse.click(box.x+80,box.y+50);
@@ -118,12 +119,13 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     await page.keyboard.press("Escape");
     await expect.poll(()=>view.evaluate(el=>document.fullscreenElement===el)).toBe(false);
     await expect(dialog).toBeVisible();
-    await dialog.getByRole("button",{name:"閉じる",exact:true}).click();
+    await closeNativeTab(page);
     await expect(dialog).toHaveCount(0);
     await expect.poll(()=>source.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(originalSize);
     expect(leaked).toHaveLength(0);
     // The existing plugin app must follow the selected machine as well.
     await header.locator(".machine-select").click();
+    await page.getByRole("tab",{name:"Remote VSCode app",exact:true}).click();
     const appView=page.locator("[data-plugin-view] [data-desktop-cdp]");
     await expect(appView).toContainText("接続先: Remote VSCode B");
     await expect(appView.getByRole("button",{name:"共有元を接続",exact:true})).toHaveCount(0);
@@ -137,14 +139,14 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     await local.locator(".machine-select").click(); // Unmount releases the remote plugin peer.
     await expect(appView).toHaveCount(0);
     // Local source is a separate connection; it must not inherit B pixels or permission.
-    await local.locator("[data-vscode-open]").click();
+    await openNativeTab(page,"vscode",local);
     await expect(dialog).toBeVisible();
     await expect(view).toContainText("接続先: ローカル");
     await expect(view.getByRole("button",{name:"共有元を接続",exact:true})).toBeVisible();
     expect(await canvas.evaluate(el=>(el as HTMLCanvasElement).getContext("2d")!.getImageData(0,0,1,1).data[3])).toBe(0);
-    await dialog.getByRole("button",{name:"閉じる",exact:true}).click();
+    await closeNativeTab(page);
     // Opening again creates a fresh read-only peer on B; no control/fit carries across.
-    await header.locator("[data-vscode-open]").click();await launch.click();await pixels();
+    await openNativeTab(page,"vscode",header);await launch.click();await pixels();
     await expect(view.getByRole("checkbox",{name:"表示領域に合わせる",exact:true})).toHaveCount(0);
     await operator.request("machine.manage",{id:invite.machineId,action:"disable"});
     await expect(dialog).toHaveCount(0);

@@ -25,7 +25,7 @@ import {
   type ConnectionSettings,
 } from "../desktop/settings.js";
 
-const props = defineProps<{ machineId: string; label: string }>();
+const props = defineProps<{ machineId: string; label: string; embedded?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 const canvas = ref<HTMLCanvasElement | null>(null);
 const screenElement = ref<HTMLElement | null>(null);
@@ -615,7 +615,7 @@ function key(e: KeyboardEvent, down: boolean) {
   }
 }
 function grip(e: PointerEvent) {
-  if (maximized.value || (e.target as HTMLElement).closest("button")) return;
+  if (props.embedded || maximized.value || (e.target as HTMLElement).closest("button")) return;
   drag = { x: e.clientX, y: e.clientY, left: position.value.x, top: position.value.y };
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 }
@@ -652,12 +652,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Teleport to="body">
+  <Teleport to="body" :disabled="embedded && !maximized">
     <section
       ref="windowElement"
       class="desktop-window"
-      :class="{ maximized }"
-      :style="windowStyle"
+      :class="{ maximized, embedded: embedded && !maximized }"
+      :style="embedded && !maximized ? undefined : windowStyle"
       role="dialog"
       aria-label="リモートデスクトップ"
       data-remote-desktop
@@ -1013,4 +1013,10 @@ details p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+</style>
+
+<style scoped>
+.desktop-window.embedded { position:relative; inset:auto; width:100%; height:100%; min-width:0; min-height:0; resize:none; z-index:auto; box-shadow:none; }
+.embedded > header { cursor:default; }
+.embedded > header strong { flex:0 1 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import { SidebarLayoutSchema, PluginTabSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
+import { SidebarLayoutSchema, NativeTabViewSchema, PluginTabSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -25,6 +25,7 @@ export interface SessionFilePane {
   agentSessionHistory?: { kind: string; sessionId: string; reportedAt: number }[] | undefined;
 }
 export interface SessionFileTab {
+  nativeView?: import("@sodashitsu/protocol").NativeTabView | undefined;
   id: string;
   label: string;
   plugin?: import("@sodashitsu/protocol").PluginTab | undefined;
@@ -130,6 +131,7 @@ const SessionFileTabSchema: z.ZodType<SessionFileTab> = z.object({
   focusedPaneId: z.string(),
   zoomedPaneId: z.string().nullable(),
   layout: LayoutNodeSchema,
+  nativeView: NativeTabViewSchema.optional(),
   plugin: PluginTabSchema.optional(),
   perspective: z.enum(["terminal", "app"]).optional(),
   displayPaneId: z.string().optional(),

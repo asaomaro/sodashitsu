@@ -3,6 +3,7 @@ import { createPinia, type Pinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
+import { useMachinesStore } from "../store/machines.js";
 import { useViewStore } from "../store/view.js";
 import NameDialog from "./NameDialog.vue";
 
@@ -227,4 +228,28 @@ describe("NameDialog — workspace の自動の名前の手掛かり", () => {
       expect(wrapper.get("input").attributes("aria-describedby")).toBeUndefined();
     }
   });
+});
+
+it.each([['web-preview', 'Webプレビュー'], ['desktop', 'デスクトップ'], ['vscode', 'VSCode']])('標準タブ %s を選択して作成する', async (kind, label) => {
+  const session = useSessionStore(pinia), view = useViewStore(pinia);
+  session.workspaceUpserted({ id: "w1", label: "w1", cwd: "/", tabIds: ["t1"], activeTabId: "t1", groupId: null, git: null, autoLabel: false });
+  if (kind === "desktop") useMachinesStore(pinia).selectedId = "remote";
+  const actions = makeActions(), wrapper = mountDialog(actions);
+  view.openDialogWithContext({ kind: "newTab", workspaceId: "w1" });
+  await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick();
+  await wrapper.get('select').setValue(kind);
+  await wrapper.get('form').trigger('submit');
+  expect(actions.confirmNewTab).toHaveBeenCalledWith(label, undefined, kind);
+  wrapper.unmount();
+});
+
+it('ローカルでは外部デスクトップの選択を無効にする', async () => {
+  const view = useViewStore(pinia), actions = makeActions(), wrapper = mountDialog(actions);
+  view.openDialogWithContext({ kind: "newTab", workspaceId: "w1" });
+  await wrapper.vm.$nextTick(); await wrapper.vm.$nextTick();
+  expect((wrapper.get('option[value="desktop"]').element as HTMLOptionElement).disabled).toBe(true);
+  await wrapper.get('select').setValue('desktop');
+  await wrapper.get('form').trigger('submit');
+  expect(actions.confirmNewTab).not.toHaveBeenCalled();
+  wrapper.unmount();
 });

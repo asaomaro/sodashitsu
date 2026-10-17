@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { request, type ClientRequest, type IncomingMessage } from "node:http";
 import WebSocket from "ws";
-import { PREVIEW_CHUNK_BYTES, PREVIEW_WS_BYTES, RpcError, type PreviewApp, type PreviewHeaders, type PreviewResults } from "@sodashitsu/protocol";
+import { PREVIEW_CHUNK_BYTES, PREVIEW_READ_BYTES, PREVIEW_WS_BYTES, RpcError, type PreviewApp, type PreviewHeaders, type PreviewResults } from "@sodashitsu/protocol";
 
 const HOP = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]);
 function sanitized(headers: PreviewHeaders, requestSide: boolean): PreviewHeaders {
@@ -72,7 +72,7 @@ export class PreviewStreams {
     } catch { this.close(s.id); throw new RpcError("spawn_failed", "preview upload failed"); }
     finally { s.writing = false; }
   }
-  async read(owner: string, id: string): Promise<PreviewResults["preview.http.read"]> {
+  async read(owner: string, id: string, maxBytes = PREVIEW_CHUNK_BYTES): Promise<PreviewResults["preview.http.read"]> {
     const s = this.get(owner, id);
     if (s.kind !== "http" || s.reading) throw new RpcError("invalid_params", "HTTP read already pending");
     if (!s.response) return { kind: "wait" };
@@ -93,7 +93,19 @@ export class PreviewStreams {
         if (item.done) { this.close(id); return { kind: "end" }; }
         s.pending = Buffer.from(item.value);
       }
-      const b = s.pending.subarray(0, PREVIEW_CHUNK_BYTES); s.pending = s.pending.subarray(b.length);
+      // Drain only bytes already buffered. Never wait for a batch to fill (SSE).
+      const limit = Math.min(PREVIEW_READ_BYTES, Math.max(1, maxBytes));
+      const parts: Buffer[] = [];
+      let size = 0;
+      for (;;) {
+        const part = s.pending.subarray(0, limit - size);
+        parts.push(part); size += part.length; s.pending = s.pending.subarray(part.length);
+        if (size >= limit || s.response.readableLength === 0) break;
+        const next = await s.iterator!.next();
+        if (next.done) break;
+        s.pending = Buffer.from(next.value);
+      }
+      const b = Buffer.concat(parts, size);
       s.bytesOut += b.length;
       if (s.bytesOut > 256 * 1024 * 1024) { this.close(id); throw new RpcError("invalid_params", "preview download limit"); }
       return { kind: "data", data: b.toString("base64") };

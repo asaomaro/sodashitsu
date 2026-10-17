@@ -4,6 +4,7 @@
  * `inert` で見えなくするだけ。`display: none`・`v-show`・`v-if` で隠すと、pane の箱が 0×0 になり、`client.view` が 1×1 を申告して全部の PTY が縮む。D11）。
  */
 import { computed } from "vue";
+import NativeTabView from "../components/NativeTabView.vue";
 import TabBar from "../components/TabBar.vue";
 import TabWorkspace from "../components/TabWorkspace.vue";
 import TabViews from "../components/TabViews.vue";
@@ -15,6 +16,7 @@ const session = useSessionStore();
 const view = useViewStore();
 const settings = useSettingsStore();
 
+const previewTabs = computed(() => [...session.tabs.values()].filter(tab => tab.nativeView === "web-preview"));
 const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
 </script>
 
@@ -31,11 +33,15 @@ const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : u
         follow-resize
         pane-frames
       />
+      <NativeTabView v-for="tab in previewTabs" :key="tab.id" :tab="tab" class="native-preview-layer"
+        :style="{ visibility: currentTab?.id === tab.id ? 'visible' : 'hidden' }" :inert="currentTab?.id !== tab.id" />
     </div>
   </div>
 </template>
 
 <style scoped>
+.app-panes { position:relative; }
+.native-preview-layer { position:absolute; inset:0; }
 .base-screen {
   display: flex;
   flex-direction: column;

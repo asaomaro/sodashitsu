@@ -75,7 +75,7 @@ async function helper(client: SodaClient, cmd: Cmd, paneId?: string): Promise<vo
       for (const job of work.jobs) {
         let gateway: LoopbackGateway | undefined;
         try {
-          gateway = await LoopbackGateway.listen(rpcPreviewTransport(client, job.requestId), scope.origin);
+          gateway = await LoopbackGateway.listen(rpcPreviewTransport(client, job.requestId, scope.httpReadMaxBytes), scope.origin);
           await client.request("preview.ready", { requestId: job.requestId, ...gateway.bootstrap() });
           gateways.set(job.requestId, gateway);
           printJson({ status: "preview_ready", appId: job.app.id, requestId: job.requestId });

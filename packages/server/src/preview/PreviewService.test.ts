@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PreviewService } from "./PreviewService.js";
 
 const services: PreviewService[] = [];
@@ -70,4 +70,38 @@ describe("PreviewService", () => {
     await expect(x.s.open("agent", app.id, undefined, randomUUID())).rejects.toThrow();
     expect(() => x.s.stop(app.id, true, randomUUID())).toThrow();
   });
+});
+
+it("keeps separate browser-tab leases and only revokes the closed tab's helper", () => {
+  const x = setup(), first = randomUUID(), second = randomUUID();
+  const a = x.s.watch("browser-tabs", x.pane, "https://soda.example.test", first).viewerId;
+  x.s.helper("helper-a", a);
+  const b = x.s.watch("browser-tabs", x.pane, "https://soda.example.test", second).viewerId;
+  x.s.helper("helper-b", b);
+  expect(x.s.watch("browser-tabs", x.pane, "https://soda.example.test", first).viewerId).toBe(a);
+  expect(x.s.poll("browser-tabs", first).helper).toBe(true);
+  x.s.unwatch("browser-tabs", second);
+  expect(x.s.poll("browser-tabs", first).helper).toBe(true);
+  expect(() => x.s.work("helper-b")).toThrow();
+  expect(x.s.work("helper-a").jobs).toEqual([]);
+  x.s.clientGone("browser-tabs");
+  expect(() => x.s.work("helper-a")).toThrow();
+});
+
+it("expiring a legacy viewer does not revoke a newer keyed tab on the same browser", () => {
+  const x = setup(), now = Date.now(), clock = vi.spyOn(Date, "now");
+  try {
+    clock.mockReturnValue(now);
+    x.s.watch("browser-mixed", x.pane, "https://soda.example.test");
+    const key = randomUUID(), scoped = x.s.watch("browser-mixed", x.pane, "https://soda.example.test", key).viewerId;
+    x.s.helper("helper-mixed", scoped);
+    clock.mockReturnValue(now + 80_000);
+    x.s.poll("browser-mixed", key);
+    x.s.helper("helper-mixed", scoped);
+    clock.mockReturnValue(now + 90_001);
+    x.s.viewerList();
+    expect(x.s.poll("browser-mixed", key).helper).toBe(true);
+    // The legacy viewer expired; the tab and its recently renewed helper remain.
+    expect(x.s.watch("browser-mixed", x.pane, "https://soda.example.test", key).viewerId).toBe(scoped);
+  } finally { clock.mockRestore(); }
 });

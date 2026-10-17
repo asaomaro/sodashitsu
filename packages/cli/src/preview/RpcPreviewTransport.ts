@@ -1,11 +1,11 @@
-import { PREVIEW_CHUNK_BYTES, PREVIEW_WS_BYTES } from "@sodashitsu/protocol";
+import { PREVIEW_CHUNK_BYTES, PREVIEW_READ_BYTES, PREVIEW_WS_BYTES } from "@sodashitsu/protocol";
 import type { WebSocket } from "ws";
 import type { SodaClient } from "../wsClient.js";
 import type { PreviewGatewayTransport } from "./LoopbackGateway.js";
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export function rpcPreviewTransport(client: Pick<SodaClient, "request">, requestId: string): PreviewGatewayTransport {
+export function rpcPreviewTransport(client: Pick<SodaClient, "request">, requestId: string, httpReadMaxBytes?: number): PreviewGatewayTransport {
   const cancel = async (streamId: string) => { await client.request("preview.cancel", { streamId }).catch(() => undefined); };
   const prepare: NonNullable<PreviewGatewayTransport["prepareWebsocket"]> = async (req) => {
     const begin = await client.request("preview.ws.begin", { requestId, path: req.path, headers: req.headers, protocols: req.protocols });
@@ -62,7 +62,7 @@ export function rpcPreviewTransport(client: Pick<SodaClient, "request">, request
       })().catch(() => { abort(); });
       try {
         while (!stopped) {
-          const result = await client.request("preview.http.read", { streamId }, { timeoutMs: 35_000 });
+          const result = await client.request("preview.http.read", { streamId, ...(httpReadMaxBytes ? { maxBytes: Math.min(httpReadMaxBytes, PREVIEW_READ_BYTES) } : {}) }, { timeoutMs: 35_000 });
           if (result.kind === "wait") await pause(25);
           else if (result.kind === "head") res.head(result.status, result.headers);
           else if (result.kind === "data") await res.write(Buffer.from(result.data, "base64"));

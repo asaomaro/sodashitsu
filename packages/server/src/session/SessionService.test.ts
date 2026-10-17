@@ -306,6 +306,18 @@ describe("SessionService — tabs and panes", () => {
     service = makeService(terminals, bus, persist);
   });
 
+  it.each(["web-preview", "desktop", "vscode"] as const)("creates and restores the native %s tab type", async nativeView => {
+    const { workspace } = await service.createWorkspace("/home/u", "api");
+    const { tab } = await service.createTab(workspace.id, undefined, undefined, undefined, nativeView);
+    expect(service.snapshot().tabs.find(t => t.id === tab.id)?.nativeView).toBe(nativeView);
+    const restored = new SessionModel();
+    restored.restoreWorkspace({ id: workspace.id, label: "api", cwd: "/home/u", activeTabId: tab.id, tabs: [{
+      id: tab.id, label: tab.label, nativeView, focusedPaneId: tab.focusedPaneId, zoomedPaneId: null, layout: tab.layout,
+      panes: service.snapshot().panes.filter(p => p.tabId === tab.id).map(p => ({ id: p.id, label: p.label, cwd: p.cwd, shell: p.shell })),
+    }] }, false);
+    expect(restored.getTab(tab.id)?.nativeView).toBe(nativeView);
+  });
+
   it("splits a pane and emits pane.created + layout.updated", async () => {
     const { pane } = await service.createWorkspace("/home/u", "api");
     const events: string[] = [];

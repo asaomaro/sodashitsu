@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +29,7 @@ test("B automatically connects back over WSS using the existing machine connecti
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({ timeout: 15000 });
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"), canvas = view.getByLabel("共有画面");
     await expect(view.locator("[data-desktop-status]")).toHaveText("閲覧中");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
@@ -51,17 +52,17 @@ test("B automatically connects back over WSS using the existing machine connecti
     const leaked: number[] = [];
     otherPage.on("websocket", (s) => s.on("framereceived", ({ payload }) => { if (Buffer.isBuffer(payload) && s.url().endsWith("/desktop-share")) leaked.push(payload.byteLength); }));
     await otherPage.goto(`${appServer.origin}/#token=${appServer.token}`);
-    await expect(otherPage.locator(`[data-machine-id="${invite.machineId}"] [data-desktop-open]`)).toBeVisible();
+    await expect(otherPage.locator(`[data-machine-id="${invite.machineId}"]`)).toBeVisible();
     expect(leaked).toHaveLength(0); await expect(otherPage.locator("[data-remote-desktop]")).toHaveCount(0);
     await page.bringToFront();
     await view.getByRole("button", { name: "共有停止", exact: true }).click();
     await expect(view).toHaveCount(0);
     await expect(header.locator('[data-state="online"]')).toBeVisible();
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     await expect(page.locator("[data-desktop-status]")).toHaveText("閲覧中");
     await page.locator("[data-remote-desktop]").getByRole("button", { name: "閉じる", exact: true }).click();
     // Revoking the machine while a share is open must also end the viewer.
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     await expect(page.locator("[data-desktop-status]")).toHaveText("閲覧中");
     await operator.request("machine.manage", { id: invite.machineId, action: "disable" });
     await expect(page.locator("[data-remote-desktop]")).toHaveCount(0);
