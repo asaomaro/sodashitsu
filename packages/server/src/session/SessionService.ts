@@ -800,6 +800,7 @@ export class SessionService {
     label: string | undefined,
     newCwd?: NewCwd,
     plugin?: PluginTab,
+    nativeView?: import("@sodashitsu/protocol").NativeTabView,
   ): Promise<{ tab: Tab; pane: Pane; cwdFallback?: true }> {
     const wsId = workspaceId ?? this.model.getFocus()?.workspaceId;
     if (!wsId) throw new RpcError("not_found", "no workspace to create a tab in");
@@ -809,6 +810,7 @@ export class SessionService {
     const place = pending instanceof Promise ? await pending : pending;
     // 新しい pane の記録（`Pane.cwd`）も決めた場所にする——起動の場所と記録を食い違わせない（design「振る舞いの詳細」）。
     const reserved = this.model.reserveTab(ws.id, label, { cwd: place.cwd, shell: this.shell ?? "", cols: HEADLESS_COLS, rows: HEADLESS_ROWS });
+    if (nativeView) reserved.tab.nativeView = nativeView;
     if (plugin) {
       reserved.tab.plugin = plugin;
       reserved.tab.perspective = "app";

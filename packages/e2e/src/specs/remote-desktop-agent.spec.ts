@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -50,7 +51,7 @@ test("viewer grants one agent access; observe/action and human takeover stay iso
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({ timeout: 15000 });
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"),
       canvas = view.getByLabel("共有画面");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
@@ -66,7 +67,7 @@ test("viewer grants one agent access; observe/action and human takeover stay iso
     const ticket = await code.inputValue();
     const otherPage = await second.newPage();
     await otherPage.goto(`${appServer.origin}/#token=${appServer.token}`);
-    await expect(otherPage.locator("[data-desktop-open]")).toBeVisible();
+    await expect(otherPage.getByRole("button", { name: "新しいタブ", exact: true })).toBeVisible();
     await expect(otherPage.getByLabel("エージェント接続コード")).toHaveCount(0);
     await page.bringToFront();
     const lease = await agent.request("desktop.agent.attach", { ticket });
@@ -231,7 +232,7 @@ test("reference client interrupts an unacknowledged action and relinquishes cont
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({ timeout: 15000 });
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]");
     await expect(view.locator("canvas")).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     await view.locator("[data-agent-access] summary").click();

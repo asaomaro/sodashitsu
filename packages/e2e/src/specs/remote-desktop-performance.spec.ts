@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -72,7 +73,7 @@ test("synthetic desktop performance over real B outbound delegation (opt-in)", a
     const baseline = await echoSample(30);
     const cdp = await page.context().newCDPSession(page); await cdp.send("Performance.enable");
     const beforeBrowser = await cdp.send("Performance.getMetrics"), beforeCpu = process.cpuUsage(), before = performance.now();
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const canvas = page.locator("[data-remote-desktop] canvas");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     const loaded = await echoSample(30);

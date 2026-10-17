@@ -1342,6 +1342,7 @@ export function toSessionFileData(session: SessionService): SessionFileData {
         .map((tab) => ({
           id: tab.id,
           label: tab.label,
+          ...(tab.nativeView ? { nativeView: tab.nativeView } : {}),
           ...(tab.plugin ? { plugin: tab.plugin } : {}),
           ...(tab.perspective ? { perspective: tab.perspective } : {}),
           ...(tab.displayPaneId ? { displayPaneId: tab.displayPaneId } : {}),

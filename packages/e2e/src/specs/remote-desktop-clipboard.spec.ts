@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
@@ -51,7 +52,7 @@ test("clipboard text needs a viewer grant, round trips through the memory helper
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible();
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"),
       text = view.getByLabel("共有するクリップボードのテキスト");
     await view.locator("[data-desktop-clipboard] summary").click();

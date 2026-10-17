@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
@@ -53,7 +54,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible();
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"),
       canvas = view.getByLabel("共有画面"),
       toggle = view.getByLabel("Bの解像度を窓に合わせて等倍表示");
@@ -121,14 +122,16 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     const enlarged = await oneToOne();
     expect(enlarged.cssWidth).toBe(enlarged.pixelWidth);
     expect(enlarged.cssHeight).toBe(enlarged.pixelHeight);
-    // Double-clicking the title restores the user-resized window, rather than its initial size.
+    // Double-clicking the title returns an embedded desktop to its tab bounds.
     await view.locator("header strong").dblclick();
     await expect(maximize).toHaveAttribute("aria-pressed", "false");
     await expect.poll(async () => {
       const bounds = await view.boundingBox();
       return bounds && { width: bounds.width, height: bounds.height };
-    }).toEqual({ width: 720, height: 760 });
-    await expect(view.locator("[data-applied-display]")).toContainText("640×480");
+    }).toEqual(await page.locator('[data-native-tab="desktop"]').evaluate(el => {
+      const r = el.getBoundingClientRect(); return { width: r.width, height: r.height };
+    }));
+    await expect(view.locator("[data-applied-display]")).toContainText("1280×720");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
 
     expect(
@@ -143,7 +146,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     await expect.poll(() => starts.at(-1).options.display).toBeUndefined();
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     await view.getByRole("button", { name: "閉じる", exact: true }).click();
-    await header.locator("[data-desktop-open]").click();
+    await openNativeTab(page, "desktop", header);
     await expect(toggle).not.toBeChecked();
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     await view.getByRole("button", { name: "共有停止", exact: true }).click();

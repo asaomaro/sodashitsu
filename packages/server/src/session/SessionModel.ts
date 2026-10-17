@@ -1485,6 +1485,7 @@ export class SessionModel {
         id: tabData.id,
         workspaceId: workspace.id,
         label: tabData.label,
+        ...(tabData.nativeView ? { nativeView: tabData.nativeView } : {}),
         ...(tabData.plugin ? { plugin: tabData.plugin } : {}),
         ...(tabData.perspective ? { perspective: tabData.perspective } : {}),
         ...(tabData.displayPaneId && !unusedAnchors.has(tabData.displayPaneId) ? { displayPaneId: tabData.displayPaneId } : {}),

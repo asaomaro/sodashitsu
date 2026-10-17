@@ -3,6 +3,7 @@ import {BUILTIN_WORKSPACE_KEY,BUILTIN_DEVELOPMENT_DISPLAY} from "@sodashitsu/pro
 import { computed, inject, nextTick, ref, watch } from "vue";
 import { ActionDispatcherKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
+import { useMachinesStore } from "../store/machines.js";
 import { useExtensionsStore } from "../store/extensions.js";
 import { useViewStore } from "../store/view.js";
 
@@ -30,6 +31,7 @@ const inputEl = ref<HTMLInputElement | null>(null);
 const value = ref("");
 const pluginKey = ref("");
 const extensions = useExtensionsStore();
+const machines = useMachinesStore();
 const plugins = computed(() => {
   const ctx = view.dialogContext;
   if (ctx?.kind !== "newTab") return [];
@@ -98,6 +100,13 @@ const confirm = (): void => {
   if (ctx.kind === "newTab") {
     const trimmed = value.value.trim();
     // プリフィルから変更していなければ、送信対象を空文字にして「送らない」判定へ合流させる（D75）。
+    const nativeViews = { "web-preview": "Webプレビュー", desktop: "デスクトップ", vscode: "VSCode" } as const;
+    if (Object.hasOwn(nativeViews, pluginKey.value)) {
+      const kind = pluginKey.value as keyof typeof nativeViews;
+      if (kind === "desktop" && machines.selectedId === "local") return;
+      actions.confirmNewTab(trimmed === openedWithValue.trim() ? nativeViews[kind] : value.value, undefined, kind);
+      return;
+    }
     const ext = plugins.value.find(e => e.key === pluginKey.value);
     if(pluginKey.value===BUILTIN_WORKSPACE_KEY){if(projectDir.value)actions.confirmNewTab(trimmed===openedWithValue.trim()?"開発":value.value,{extensionKey:BUILTIN_WORKSPACE_KEY,display:BUILTIN_DEVELOPMENT_DISPLAY});return;}
     if (pluginKey.value && (!ext || (ext.tabView?.requiresProject !== false && !projectDir.value))) return;
@@ -148,6 +157,9 @@ function onNativeCancel(ev: Event): void {
         <span>タブの種類</span>
         <select v-model="pluginKey" aria-label="タブの種類">
           <option value="">ターミナル</option>
+          <option value="web-preview">Webプレビュー</option>
+          <option value="desktop" :disabled="machines.selectedId === 'local'">デスクトップ（外部マシン）</option>
+          <option value="vscode">VSCode</option>
           <option :value="BUILTIN_WORKSPACE_KEY" :disabled="!projectDir">開発（標準）</option>
           <option v-for="ext in plugins" :key="ext.key" :value="ext.key" :disabled="!projectDir && ext.tabView?.requiresProject !== false">{{ ext.tabView?.title }}（{{ ext.scope === 'user' ? 'ユーザー' : 'PJ' }}）</option>
         </select>

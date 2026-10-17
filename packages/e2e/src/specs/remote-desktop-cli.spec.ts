@@ -1,3 +1,4 @@
+import { openNativeTab } from "../support/nativeTab.js";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../support/fixtures.js";
@@ -39,7 +40,7 @@ for (const action of ["session", "mcp"] as const) {
       await page.goto(`${appServer.origin}/#token=${appServer.token}`);
       const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
       await expect(header.locator('[data-state="online"]')).toBeVisible();
-      await header.locator("[data-desktop-open]").click();
+      await openNativeTab(page, "desktop", header);
       const view = page.locator("[data-remote-desktop]");
       await expect(view.getByLabel("共有画面")).toHaveAttribute(
         "data-rendered-frames",

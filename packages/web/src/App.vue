@@ -1,7 +1,7 @@
 <script setup lang="ts">
+import NativePreviewHost from "./components/NativePreviewHost.vue";
 import DesktopCompanionPage from "./components/DesktopCompanionPage.vue";
 import SystemFooter from "./components/SystemFooter.vue";
-import WebPreview from "./components/WebPreview.vue";
 import { computed } from "vue";
 import CommandPopup from "./components/CommandPopup.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -67,6 +67,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
 </script>
 
 <template>
+  <NativePreviewHost v-if="!view.authRequired && !desktopCompanion && view.connectionState !== 'detached'" />
   <LoginView v-if="view.authRequired" />
   <DesktopCompanionPage v-else-if="desktopCompanion" />
   <DetachedView v-else-if="view.connectionState === 'detached'" />
@@ -90,7 +91,6 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
       </div>
     </div>
     <SystemFooter v-if="!isMobile" />
-    <WebPreview v-if="!isMobile" />
     <ContextMenu />
     <NameDialog />
     <WorktreeCreateDialog />

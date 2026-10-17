@@ -12,6 +12,7 @@ async function setup() {
   const server = createServer((req, res) => {
     seenCookie = req.headers.cookie ?? "";
     if (req.url === "/sse") { res.writeHead(200, { "Content-Type": "text/event-stream" }); res.write("data: first\n\n"); req.once("close", () => res.end()); }
+    else if (req.url === "/large") res.end(Buffer.alloc(256 * 1024, 42));
     else if (req.url === "/redirect") res.writeHead(302, { Location: `http://127.0.0.1:${app.port}/done` }).end();
     else { const chunks: Buffer[] = []; req.on("data", (b: Buffer) => chunks.push(b)); req.on("end", () => { res.writeHead(201, { "Content-Type": "application/octet-stream" }); res.end(Buffer.concat(chunks)); }); }
   });
@@ -71,3 +72,24 @@ describe("PreviewStreams", () => {
     expect(x.streams.stats().queuedMessages).toBeLessThanOrEqual(256);
   });
 });
+
+it("negotiated downloads batch buffered data above 32KiB while legacy readers stay bounded", async () => {
+  const x = await setup();
+  for (const maxBytes of [undefined, 256 * 1024]) {
+    const { streamId } = await x.streams.begin("helper", { requestId: randomUUID(), method: "GET", path: "/large", headers: {} });
+    await x.streams.write("helper", { streamId, data: "", end: true });
+    await new Promise<void>(resolve => setTimeout(resolve, 30));
+    const chunks: Buffer[] = [];
+    for (;;) {
+      const r = await x.streams.read("helper", streamId, maxBytes);
+      if (r.kind === "end") break;
+      if (r.kind === "data") chunks.push(Buffer.from(r.data, "base64"));
+      if (r.kind === "wait") await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    expect(Buffer.concat(chunks)).toEqual(Buffer.alloc(256 * 1024, 42));
+    if (maxBytes) {
+      expect(Math.max(...chunks.map(c => c.length))).toBeGreaterThan(32 * 1024);
+      expect(chunks.every(c => c.length <= maxBytes)).toBe(true);
+    } else expect(chunks.every(c => c.length <= 32 * 1024)).toBe(true);
+  }
+}, 15_000);

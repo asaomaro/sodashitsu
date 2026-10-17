@@ -5,6 +5,7 @@ import PaneFrame from "./PaneFrame.vue";
 import PaneLayout from "./PaneLayout.vue";
 import PluginView from "./PluginView.vue";
 import TerminalPane from "./TerminalPane.vue";
+import NativeTabView from "./NativeTabView.vue";
 
 const props = defineProps<{ tab: Tab; paneFrames?: boolean; followResize?: boolean }>();
 const app = computed(() => !!props.tab.plugin && props.tab.perspective !== "terminal");
@@ -13,8 +14,9 @@ const app = computed(() => !!props.tab.plugin && props.tab.perspective !== "term
 <template>
   <PaneFrame :pane-id="tab.displayPaneId ?? ''" enabled presentation-only>
     <div class="tab-workspace">
+      <NativeTabView v-if="tab.nativeView && tab.nativeView !== 'web-preview'" :key="tab.id" class="tab-workspace-layer" :tab="tab" />
       <!-- visibility/inert preserve the terminal DOM and measurable size. -->
-      <div class="tab-workspace-layer" :class="{ 'tab-workspace-hidden': app }" :inert="app || undefined" :aria-hidden="app || undefined" data-work-panes>
+      <div v-if="!tab.nativeView" class="tab-workspace-layer" :class="{ 'tab-workspace-hidden': app || !!tab.nativeView }" :inert="app || !!tab.nativeView || undefined" :aria-hidden="app || !!tab.nativeView || undefined" data-work-panes>
         <PaneLayout :workspace-id="tab.workspaceId" :tab-id="tab.id" :layout="tab.layout" :zoomed-pane-id="tab.zoomedPaneId" :follow-resize="followResize" :pane-frames="paneFrames">
           <template #pane="{ paneId }"><TerminalPane :pane-id="paneId" /></template>
         </PaneLayout>

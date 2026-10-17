@@ -388,7 +388,9 @@ export const PluginTabSchema = z.object({
   mobileDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
   terminalDisplay: z.string().regex(DISPLAY_NAME_RE).optional(),
 });
+export const NativeTabViewSchema = z.enum(["web-preview", "desktop", "vscode"]);
 export const TabCreateParams = z.object({
+  nativeView: NativeTabViewSchema.optional(),
   plugin: PluginTabSchema.optional(),
   /** 呼び出し元の pane（pane の中の sodactl が名乗る）。グラフの自動載せの関係の記録にだけ使う。実在しなければ無視する。 */
   callerPaneId: paneId.optional(),

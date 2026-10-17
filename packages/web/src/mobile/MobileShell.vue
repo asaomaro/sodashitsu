@@ -11,6 +11,7 @@ import { pluginMobileDisplay } from "../display/pluginDisplay.js";
 import { useExtensionsStore } from "../store/extensions.js";
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import PaneLayout from "../components/PaneLayout.vue";
+import NativeTabView from "../components/NativeTabView.vue";
 import PluginView from "../components/PluginView.vue";
 import TabViews from "../components/TabViews.vue";
 import TerminalPane from "../components/TerminalPane.vue";
@@ -83,9 +84,10 @@ const paneContainer = ref<HTMLElement | null>(null);
 const paneLayout = ref<{ commitView: () => void } | null>(null);
 let touchScroll: TouchScroll | null = null;
 
+const previewTabs = computed(() => [...session.tabs.values()].filter(tab => tab.nativeView === "web-preview"));
 const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
 const appActive = computed(
-  () => !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal",
+  () => !!currentTab.value?.nativeView || !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal",
 );
 const tabDisplayPane = computed(() => currentTab.value?.displayPaneId);
 const appMobileDisplay = computed(() =>
@@ -247,6 +249,9 @@ onBeforeUnmount(() => touchScroll?.dispose());
           </template>
         </PaneLayout>
       </div>
+      <NativeTabView v-if="currentTab?.nativeView && currentTab.nativeView !== 'web-preview'" :key="currentTab.id" :tab="currentTab" class="mobile-app-view" />
+      <NativeTabView v-for="tab in previewTabs" :key="tab.id" :tab="tab" class="mobile-app-view"
+        :style="{ visibility: currentTab?.id === tab.id ? 'visible' : 'hidden' }" :inert="currentTab?.id !== tab.id" />
       <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view">
         <PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" mobile />
       </div>

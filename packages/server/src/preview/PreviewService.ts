@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { RpcError, PreviewLocalOrigin, type PreviewApp, type PreviewDisplay, type PreviewViewer } from "@sodashitsu/protocol";
+import { PREVIEW_READ_BYTES, RpcError, PreviewLocalOrigin, type PreviewApp, type PreviewDisplay, type PreviewViewer } from "@sodashitsu/protocol";
 import { PreviewStreams } from "./PreviewStreams.js";
 
-type Viewer = PreviewViewer & { clientId: string; expires: number };
+type Viewer = PreviewViewer & { viewId?: string | undefined; clientId: string; expires: number };
 type Helper = { clientId: string; viewerId: string; expires: number };
 type Open = { id: string; owner: string; viewerId: string; helper: string; app: PreviewApp; expires: number; pulled: boolean; display?: PreviewDisplay; acknowledged: boolean; resolve(value: { requestId: string; status: "view_opened" }): void; reject(error: Error): void };
 
@@ -47,28 +47,29 @@ export class PreviewService {
     if (remove) this.apps.delete(id); else { app.state = "stopped"; app.generation = randomUUID(); }
     return {};
   }
-  watch(clientId: string, paneId: string, origin: string): { viewerId: string } {
+  watch(clientId: string, paneId: string, origin: string, viewId?: string): { viewerId: string } {
     if (!["desktop", "mobile"].includes(this.deps.kind(clientId) ?? "") || !this.deps.scope(paneId)) throw new RpcError("unauthorized", "a browser and an existing pane are required");
-    const old = [...this.viewers.values()].find((v) => v.clientId === clientId);
+    const old = [...this.viewers.values()].find((v) => v.clientId === clientId && v.viewId === viewId);
     if (old?.paneId === paneId && old.origin === origin) { old.expires = Date.now() + 90_000; return { viewerId: old.id }; }
-    this.unwatch(clientId);
+    if (old) this.removeViewer(old);
     if (this.viewers.size >= 32) throw new RpcError("server_busy", "preview viewer limit");
-    const viewer: Viewer = { id: randomUUID(), paneId, origin, helper: false, clientId, expires: Date.now() + 90_000 };
+    const viewer: Viewer = { id: randomUUID(), paneId, origin, helper: false, clientId, viewId, expires: Date.now() + 90_000 };
     this.viewers.set(viewer.id, viewer); return { viewerId: viewer.id };
   }
-  unwatch(clientId: string): {} {
-    for (const viewer of this.viewers.values()) if (viewer.clientId === clientId) {
-      for (const helper of this.helpers.values()) if (helper.viewerId === viewer.id) this.helperGone(helper.clientId);
-      for (const open of this.opens.values()) if (open.viewerId === viewer.id) this.drop(open.id);
-      this.viewers.delete(viewer.id);
-    }
+  unwatch(clientId: string, viewId?: string): {} {
+    for (const viewer of this.viewers.values()) if (viewer.clientId === clientId && (viewId === undefined || viewer.viewId === viewId)) this.removeViewer(viewer);
     return {};
+  }
+  private removeViewer(viewer: Viewer): void {
+    for (const helper of this.helpers.values()) if (helper.viewerId === viewer.id) this.helperGone(helper.clientId);
+    for (const open of this.opens.values()) if (open.viewerId === viewer.id) this.drop(open.id);
+    this.viewers.delete(viewer.id);
   }
   viewerList(paneId?: string): { viewers: PreviewViewer[] } {
     this.sweep();
     return { viewers: [...this.viewers.values()].filter((v) => !paneId || v.paneId === paneId).map(({ id, paneId, origin }) => ({ id, paneId, origin, helper: [...this.helpers.values()].some((h) => h.viewerId === id) })) };
   }
-  helper(clientId: string, viewerId: string): { viewerId: string; paneId: string; origin: string } {
+  helper(clientId: string, viewerId: string): { viewerId: string; paneId: string; origin: string; httpReadMaxBytes: number } {
     this.sweep();
     const v = this.viewers.get(viewerId);
     if (!v) throw new RpcError("not_found", "viewer expired; enable Web preview in Sodashitsu");
@@ -76,7 +77,7 @@ export class PreviewService {
     const old = this.helpers.get(clientId);
     if (old && old.viewerId !== viewerId) this.helperGone(clientId);
     this.helpers.set(clientId, { clientId, viewerId, expires: Date.now() + 30_000 });
-    return { viewerId, paneId: v.paneId, origin: v.origin };
+    return { viewerId, paneId: v.paneId, origin: v.origin, httpReadMaxBytes: PREVIEW_READ_BYTES };
   }
   work(clientId: string): { jobs: { requestId: string; app: PreviewApp }[]; active: string[] } {
     this.sweep(); const helper = this.helpers.get(clientId);
@@ -118,11 +119,11 @@ export class PreviewService {
       throw new RpcError("invalid_params", "invalid gateway offer");
     open.display = { app: { ...open.app }, ...p }; return {};
   }
-  poll(clientId: string): { displays: PreviewDisplay[] } {
-    this.sweep(); const v = [...this.viewers.values()].find((v) => v.clientId === clientId);
+  poll(clientId: string, viewId?: string): { displays: PreviewDisplay[]; helper: boolean } {
+    this.sweep(); const v = [...this.viewers.values()].find((v) => v.clientId === clientId && v.viewId === viewId);
     if (!v) throw new RpcError("not_found", "viewer expired");
     v.expires = Date.now() + 90_000;
-    return { displays: [...this.opens.values()].filter((o) => o.viewerId === v.id && o.display).map((o) => o.display!) };
+    return { helper: [...this.helpers.values()].some(h => h.viewerId === v.id), displays: [...this.opens.values()].filter((o) => o.viewerId === v.id && o.display).map((o) => o.display!) };
   }
   ack(clientId: string, requestId: string): {} {
     const open = this.opens.get(requestId), viewer = open && this.viewers.get(open.viewerId);
@@ -152,7 +153,7 @@ export class PreviewService {
   private drop(id: string): void { const open = this.opens.get(id); if (!open) return; this.opens.delete(id); this.streams.cancelRequest(id); if (!open.acknowledged) open.reject(new RpcError("not_found", "preview open cancelled or timed out")); }
   private sweep(): void {
     const now = Date.now();
-    for (const v of this.viewers.values()) if (v.expires <= now || !this.deps.scope(v.paneId)) this.unwatch(v.clientId);
+    for (const v of this.viewers.values()) if (v.expires <= now || !this.deps.scope(v.paneId)) this.removeViewer(v);
     for (const h of this.helpers.values()) if (h.expires <= now) this.helperGone(h.clientId);
     for (const o of this.opens.values()) if (o.expires <= now || !this.deps.scope(o.app.paneId)) this.drop(o.id);
     for (const a of this.apps.values()) if (this.deps.scope(a.paneId) !== a.workspaceId) { this.invalidate(a.id); this.apps.delete(a.id); }

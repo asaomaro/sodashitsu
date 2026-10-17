@@ -325,18 +325,19 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /** T23（`NameDialog`）が新規 tab の名前を確定したときに呼ぶ。 */
-  confirmNewTab(label: string, plugin?: import("@sodashitsu/protocol").PluginTab): void {
+  confirmNewTab(label: string, plugin?: import("@sodashitsu/protocol").PluginTab, nativeView?: import("@sodashitsu/protocol").NativeTabView): void {
     const ctx = this.view.dialogContext;
     if (ctx?.kind !== "newTab") return;
     this.view.closeDialog();
     const trimmed = label.trim();
-    const hold = this.input?.holdInput(this.view.focusedPaneId); // D99：応答までに打った文字は新しい pane へ
+    const hold = nativeView ? undefined : this.input?.holdInput(this.view.focusedPaneId); // D99：応答までに打った文字は新しい pane へ
     // 元の pane は焦点の pane が**作る先の workspace にあるときだけ**（無ければ載せない → その workspace の場所。design D7）。
     // **ダイアログを閉じた後に読む**——開いている間に焦点の pane が閉じられたら、閉じたときに戻す先へ差し替わっている（D97）。
     const newCwd = this.newCwdFor(this.focusedPaneIn(ctx.workspaceId));
     this.conn
-      .request("tab.create", { workspaceId: ctx.workspaceId, ...(trimmed ? { label: trimmed } : {}), ...(plugin ? { plugin } : { newCwd }) })
+      .request("tab.create", { workspaceId: ctx.workspaceId, ...(trimmed ? { label: trimmed } : {}), ...(plugin ? { plugin } : { newCwd }), ...(nativeView ? { nativeView } : {}) })
       .then((result) => {
+        if (nativeView && result.tab.nativeView !== nativeView) this.view.toast("接続先のSodashitsuを更新してください。このサーバーは選択したタブの種類に未対応です");
         this.view.setView(ctx.workspaceId, result.tab.id);
         this.view.focusPane(result.pane.id);
         this.releaseHold(hold, result.pane.id);
