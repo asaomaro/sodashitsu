@@ -213,16 +213,17 @@
       var signature = jsonStringify(signatureData);
       if (signature !== c.last) {
         c.last = signature;
-        var m=mk(); own(m,'type','component'); own(m,'rev',rev); own(m,'id',ids[j]); own(m,'component','terminal'); own(m,'paneId',c.paneId); own(m,'interactive',c.interactive); own(m,'rect',rectangle); own(m,'clip',clip); post(m);
+        var m=mk(); own(m,'type','component'); own(m,'rev',rev); own(m,'id',ids[j]); own(m,'component',c.kind); own(m,'paneId',c.paneId); own(m,'interactive',c.interactive); own(m,'rect',rectangle); own(m,'clip',clip); post(m);
       }
     }
     if (mountCount > 0) queueComponentTick();
   }
   function queueComponentTick() { if (!queued && raf) { queued = true; rApply(raf, WIN, [componentTick]); } }
   function mountComponent(kind, element, options) {
-    if (kind !== 'terminal' || !(element instanceof ElementCtor) || mountCount >= 4 || !options || typeof options.paneId !== 'string' || options.paneId.length > 64 || (options.interactive !== undefined && typeof options.interactive !== 'boolean')) return null;
+    if ((kind !== 'terminal' && kind !== 'desktop-cdp') || !(element instanceof ElementCtor) || mountCount >= 4 || (kind === 'terminal' && !options) || (kind === 'terminal' && typeof options.paneId !== 'string') || (kind === 'terminal' && options.paneId.length > 64) || (kind === 'terminal' && options.interactive !== undefined && typeof options.interactive !== 'boolean')) return null;
+    if (kind === 'desktop-cdp') { options = mk(); own(options,'paneId',''); }
     var id = '' + (++mountSerial), c = mk();
-    own(c,'element',element); own(c,'paneId',options.paneId); own(c,'interactive',options.interactive === true); own(c,'last',''); own(mounted,id,c); mountCount++;
+    own(c,'kind',kind); own(c,'element',element); own(c,'paneId',options.paneId); own(c,'interactive',options.interactive === true); own(c,'last',''); own(mounted,id,c); mountCount++;
     queueComponentTick();
     var handle=mk(), disposed=false;
     own(handle,'dispose',function () {
@@ -250,7 +251,7 @@
     var soda = mk();
     own(soda, 'version', 1);
     own(soda, 'mount', mountComponent);
-    own(soda, 'components', objFreeze(['terminal']));
+    own(soda, 'components', objFreeze(['terminal','desktop-cdp']));
     var features = mk(); own(features,'terminalInput',true); own(soda,'features',objFreeze(features));
     own(soda, 'action', function (name, data) {
       if (typeof name !== 'string' || !rApply(RegExpTest, ACTION_RE, [name])) return false;

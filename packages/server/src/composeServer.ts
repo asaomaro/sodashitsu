@@ -1,3 +1,6 @@
+import { registerDesktopCdpMethods } from "./surface/methods/desktopCdp.js";
+import { DesktopCdpLauncher } from "./desktop/DesktopCdpLauncher.js";
+import { DesktopCdpRelay } from "./desktop/DesktopCdpRelay.js";
 import { ExtraOrigins } from "./auth/ExtraOrigins.js";
 import { DelegationGrants } from "./machine/DelegationGrants.js";
 import { ReverseConnections } from "./machine/ReverseConnections.js";
@@ -726,6 +729,8 @@ export async function composeServer(
   auth.onSessionRevoked((sessionId) => {
     for (const conn of [...(relayed.get(sessionId) ?? [])]) conn.close(4401, "session revoked");
   });
+  const desktopCdp = new DesktopCdpRelay(auth, originRejections, join(options.stateDir, "desktop-cdp-devices.json"), DesktopCdpLauncher.fromEnvironment());
+  registerDesktopCdpMethods(surface, desktopCdp);
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger, (selector) => {
     const route = machines.route(selector);
     if (route.kind !== "ok") return route;
@@ -742,7 +747,7 @@ export async function composeServer(
         relayToMachine(conn, route.link);
       },
     };
-  }, (req,socket,head)=>delegations.upgrade(req,socket,head));
+  }, (req,socket,head)=>delegations.upgrade(req,socket,head), (req,socket,head)=>desktopCdp.upgrade(req,socket,head));
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
@@ -819,6 +824,7 @@ export async function composeServer(
     closeClients: () => {
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
+      desktopCdp.disconnectAll();
       bridgeEndpoint.setReady(false);
       bridgeEndpoint.closeAll(1012, "server restarting");
       // ログイン不要の受け口（20261003-sodactl-ask-socket）も `/ws` と揃える: 待っている接続は何も書かずに捨て（質問は取り消し）、
@@ -1199,6 +1205,7 @@ export async function composeServer(
         // 繋がったままの WebSocket を明示的に閉じる（レビュー指摘。無いと httpServer.server.close() が
         // 永久にコールバックを呼ばない）。
         wsServer.closeAll(1001, "server shutting down");
+        desktopCdp.close();
         bridgeEndpoint.closeAll(1001, "server shutting down");
         await bridgeEndpoint.close();
         artifacts.close();
@@ -1213,13 +1220,14 @@ export async function composeServer(
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);
           wsServer.setReady(false);bridgeEndpoint.setReady(false);
-          wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
+          desktopCdp.close(); wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
           await agentReportSocket?.close().catch(()=>undefined);
           await new Promise<void>(resolve=>httpServer.server.close(()=>resolve()));
           for(const pane of session.snapshot().panes)terminals.dispose(pane.id);
           internal.workerPty.dispose();
         }
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
+        desktopCdp.close();
         commands.dispose();
         // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
         // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。

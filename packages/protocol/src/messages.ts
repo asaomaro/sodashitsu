@@ -1,3 +1,4 @@
+import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
 import { MachineManageParams, type ManagedConnection } from "./delegation.js";
 import { PreviewMethods, type PreviewResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
@@ -1604,6 +1605,8 @@ export const METHOD_SCHEMAS = {
   "machine.delegate": DelegationStartParams,
   "machine.delegations": MachineListParams,
   "machine.stop_delegation": DelegationStopParams,
+  "vscode.cdp.open": DesktopCdpOpenParams,
+  "vscode.cdp.send": DesktopCdpSendParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
   "command.reload": CommandReloadParams,
@@ -1769,6 +1772,8 @@ export interface MethodResultMap extends PreviewResults {
   "machine.delegate": DelegationStatus;
   "machine.delegations": { delegations: DelegationStatus[] };
   "machine.stop_delegation": Record<string, never>;
+  "vscode.cdp.open": Record<string, never>;
+  "vscode.cdp.send": Record<string, never>;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;
   "command.reload": CommandListResult;
