@@ -1,0 +1,35 @@
+{
+  "kind": "real-Windows-agent-API-over-loopback-A-B-browser",
+  "frames": 20,
+  "width": 1280,
+  "height": 800,
+  "targetFps": 10,
+  "achievedFps": 8.77960248779574,
+  "averageMbps": 12.531058242348323,
+  "captureP95Ms": 73.2274,
+  "encodeP95Ms": 4.1733,
+  "relayToDrawAckP95Ms": 23.791838999999527,
+  "sourceCpuOneCorePercent": 47.652447713365035,
+  "sourcePeakRssMiB": 79.48046875,
+  "clickVisualUpperBoundMs": 209.01731300000029,
+  "textVisualUpperBoundMs": 509.30669900000066,
+  "appState": {
+    "clicks": 1,
+    "keys": 6,
+    "wheels": 0,
+    "text": "a日本語😀",
+    "button": {
+      "x": 68,
+      "y": 113
+    },
+    "textPoint": {
+      "x": 80,
+      "y": 200
+    },
+    "panel": {
+      "x": 78,
+      "y": 268
+    }
+  },
+  "limitations": "20 frames, one run, localhost transport. Visual timings include Playwright operations and expect.poll interval. Not physical display latency, production network, IME composition, lock/UAC, or long-run test."
+}

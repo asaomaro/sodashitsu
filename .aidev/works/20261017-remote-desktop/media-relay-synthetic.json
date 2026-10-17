@@ -1,0 +1,9 @@
+{
+  "transport": "relay",
+  "synthetic": true,
+  "requestedFps": 10,
+  "frames": 45,
+  "elapsedMs": 4380,
+  "presentedFps": 10.273972602739725,
+  "note": "Local synthetic canvas, browser codecs, native snapshots in parallel; not Windows capture or WAN benchmark"
+}

@@ -1,0 +1,153 @@
+import { fileURLToPath } from "node:url";
+import { expect, test } from "../support/fixtures.js";
+import { startAppServer } from "../support/appServer.js";
+
+test("window size selects a supported display mode, renders 1:1, revokes grants and never persists OS resizing", async ({
+  page,
+  appServer,
+}) => {
+  test.setTimeout(60000);
+  const keys = [
+      "SODA_DESKTOP_COMMAND",
+      "SODA_DESKTOP_ALLOW_INPUT",
+      "SODA_DESKTOP_ALLOW_DISPLAY_RESIZE",
+    ],
+    saved = keys.map((k) => process.env[k]);
+  process.env.SODA_DESKTOP_COMMAND = JSON.stringify([
+    process.execPath,
+    fileURLToPath(
+      new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
+    ),
+    "--static",
+    "--allow-input",
+    "--allow-display-resize",
+  ]);
+  process.env.SODA_DESKTOP_ALLOW_INPUT = "1";
+  process.env.SODA_DESKTOP_ALLOW_DISPLAY_RESIZE = "1";
+  const provider = await startAppServer().finally(() =>
+    keys.forEach((k, i) => {
+      if (saved[i] === undefined) delete process.env[k];
+      else process.env[k] = saved[i];
+    }),
+  );
+  const starts: any[] = [];
+  page.on("websocket", (socket) => {
+    if (socket.url().endsWith("/desktop-share"))
+      socket.on("framesent", ({ payload }) => {
+        if (typeof payload === "string") {
+          const m = JSON.parse(payload);
+          if (m.type === "start") starts.push(m);
+        }
+      });
+  });
+  try {
+    await page.setViewportSize({ width: 1600, height: 1200 });
+    const owner = await provider.openClient(),
+      agent = await appServer.openClient(),
+      invite = await agent.request("machine.invite", { label: "Display B" });
+    await owner.request("machine.delegate", {
+      url: appServer.origin,
+      machineId: invite.machineId,
+      token: invite.token,
+    });
+    await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+    const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
+    await expect(header.locator('[data-state="online"]')).toBeVisible();
+    await header.locator("[data-desktop-open]").click();
+    const view = page.locator("[data-remote-desktop]"),
+      canvas = view.getByLabel("共有画面"),
+      toggle = view.getByLabel("Bの解像度を窓に合わせて等倍表示");
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+    await view.locator("[data-agent-access] summary").click();
+    await view
+      .getByRole("button", { name: "エージェントへの画面提供・操作を許可", exact: true })
+      .click();
+    const ticket = view.getByLabel("エージェント接続コード");
+    await expect(ticket).toHaveValue(/^[A-Za-z0-9_-]{43}$/);
+    const lease = await agent.request("desktop.agent.attach", {
+      ticket: await ticket.inputValue(),
+    });
+    await view.locator("[data-agent-access] summary").click();
+    await view.evaluate((el) => {
+      const e = el as HTMLElement;
+      e.style.width = "1400px";
+      e.style.height = "1100px";
+    });
+    await toggle.check();
+    await expect(view.locator("[data-applied-display]")).toContainText("1画素＝1 CSS px");
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+    await expect(view.locator("[data-desktop-status]")).toHaveText("閲覧中");
+    await expect(
+      agent.request("desktop.agent.observe", { leaseId: lease.leaseId }),
+    ).rejects.toThrow();
+    const oneToOne = () =>
+      canvas.evaluate((el) => {
+        const c = el as HTMLCanvasElement,
+          r = c.getBoundingClientRect();
+        return {
+          pixelWidth: c.width,
+          pixelHeight: c.height,
+          cssWidth: r.width,
+          cssHeight: r.height,
+        };
+      });
+    const initial = await oneToOne();
+    expect(initial.cssWidth).toBe(initial.pixelWidth);
+    expect(initial.cssHeight).toBe(initial.pixelHeight);
+    expect(initial.pixelWidth).toBeGreaterThan(640);
+    const before = starts.length;
+    // Emulate a user resize of the real floating window. Assert actual DOM/canvas dimensions.
+    await view.evaluate((el) => {
+      const e = el as HTMLElement;
+      e.style.width = "720px";
+      e.style.height = "760px";
+    });
+    await expect.poll(() => starts.length).toBeGreaterThan(before);
+    await expect(view.locator("[data-applied-display]")).toContainText("640×480");
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+    expect(await oneToOne()).toEqual({
+      pixelWidth: 640,
+      pixelHeight: 480,
+      cssWidth: 640,
+      cssHeight: 480,
+    });
+    expect(starts.at(-1).options.display).toEqual({ width: 640, height: 480 });
+    const maximize = view.locator("[data-desktop-maximize]");
+    await maximize.click();
+    await expect(maximize).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => view.boundingBox()).toEqual({ x: 0, y: 0, width: 1600, height: 1200 });
+    await expect.poll(async () => (await oneToOne()).pixelWidth).toBeGreaterThan(640);
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+    const enlarged = await oneToOne();
+    expect(enlarged.cssWidth).toBe(enlarged.pixelWidth);
+    expect(enlarged.cssHeight).toBe(enlarged.pixelHeight);
+    // Double-clicking the title restores the user-resized window, rather than its initial size.
+    await view.locator("header strong").dblclick();
+    await expect(maximize).toHaveAttribute("aria-pressed", "false");
+    await expect.poll(async () => {
+      const bounds = await view.boundingBox();
+      return bounds && { width: bounds.width, height: bounds.height };
+    }).toEqual({ width: 720, height: 760 });
+    await expect(view.locator("[data-applied-display]")).toContainText("640×480");
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+
+    expect(
+      JSON.parse(
+        (await page.evaluate(
+          (id) => localStorage.getItem(`soda:desktop:connection:v1:${id}`),
+          invite.machineId,
+        )) ?? "{}",
+      ),
+    ).not.toHaveProperty("display");
+    await toggle.uncheck();
+    await expect.poll(() => starts.at(-1).options.display).toBeUndefined();
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+    await view.getByRole("button", { name: "閉じる", exact: true }).click();
+    await header.locator("[data-desktop-open]").click();
+    await expect(toggle).not.toBeChecked();
+    await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+    await view.getByRole("button", { name: "共有停止", exact: true }).click();
+  } finally {
+    await provider.close();
+  }
+});

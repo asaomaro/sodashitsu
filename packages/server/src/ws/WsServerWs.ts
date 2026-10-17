@@ -109,7 +109,7 @@ export class WsServerWs implements WsServer {
       rejectUpgrade(socket, "400 Bad Request");
       return;
     }
-    if ((pathname === "/machine-delegation" || pathname === "/machine-pairing") && this.reverseUpgrade) {
+    if ((pathname === "/machine-delegation" || pathname === "/machine-pairing" || pathname === "/desktop-share" || pathname === "/desktop-companion") && this.reverseUpgrade) {
       if (!this.ready) { rejectUpgrade(socket,"503 Service Unavailable"); return; }
       await this.reverseUpgrade(req,socket,head); return;
     }

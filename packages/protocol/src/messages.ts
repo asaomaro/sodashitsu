@@ -1,3 +1,4 @@
+import { DesktopMethods, type DesktopResults } from "./desktop.js";
 import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
 import { MachineManageParams, type ManagedConnection } from "./delegation.js";
 import { PreviewMethods, type PreviewResults } from "./preview.js";
@@ -1466,6 +1467,7 @@ export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
 
 export const METHOD_SCHEMAS = {
   ...PreviewMethods,
+  ...DesktopMethods,
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
   "client.fit": ClientFitParams,
@@ -1634,7 +1636,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap extends PreviewResults {
+export interface MethodResultMap extends PreviewResults, DesktopResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};

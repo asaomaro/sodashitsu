@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MachineState } from "@sodashitsu/protocol";
 import { computed, inject, nextTick, ref, watch } from "vue";
+import RemoteDesktopWindow from "./RemoteDesktopWindow.vue";
 import DesktopCdpView from "./DesktopCdpView.vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
@@ -24,6 +25,7 @@ async function openVscode(): Promise<void> {
   else vscodeOpen.value = false;
 }
 const switcher = inject(MachineSwitcherKey, undefined);
+const desktopShown = ref(false);
 
 const selected = computed(() => machines.selectedId === props.machineId);
 const collapsed = computed(() => machines.collapsed[props.machineId] === true);
@@ -45,6 +47,7 @@ const STATE_LABEL: Record<MachineState, string> = {
   reconnecting: "再接続中",
   attention: "要対応",
 };
+watch(state, value => { if (value !== "online") desktopShown.value = false; });
 const stateText = computed(() => STATE_LABEL[state.value]);
 watch(state, value => { if (value !== "online") vscodeOpen.value = false; });
 const message = computed(() =>
@@ -106,6 +109,8 @@ function onButtonKeydown(ev: KeyboardEvent): void {
       <span class="machine-label">{{ compact ? shortLabel : label }}</span>
       <span v-if="!compact" class="machine-state" :data-state="state">{{ stateText }}</span>
     </button>
+    <button v-if="machineId !== LOCAL_MACHINE_ID && !compact" type="button" :disabled="state !== 'online'" title="デスクトップを開く" data-desktop-open @click.stop="desktopShown = true">デスクトップ</button>
+    <RemoteDesktopWindow v-if="desktopShown" :machine-id="machineId" :label="label" @close="desktopShown = false" />
     <button type="button" class="machine-vscode" data-vscode-open
       :disabled="state !== 'online'" :aria-label="`${label} のVSCodeを開く`"
       @click.stop="openVscode" @keydown.stop>VSCode</button>
