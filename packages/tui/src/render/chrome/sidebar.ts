@@ -304,12 +304,12 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     return controls;
   }
   if (ctx.chromeControls) {
-    const switchRows = inner >= 27 ? 1 : 2;
+    const switchRows = inner >= 23 ? 1 : 2;
     const half = Math.floor(inner / 2);
     control(rect.y, rect.x + 1, "端末", "base");
     control(rect.y, rect.x + (switchRows === 1 ? 6 : half), "グラフ", "graph");
     control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 13 : 1), "状況", "dashboard");
-    control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), (ctx.screen === "schedule" ? "予約 ▾" : ctx.screen === "history" ? "履歴 ▾" : ctx.screen === "connections" ? "接続 ▾" : "その他 ▾")+(ctx.pendingConnectionRequests?` ${ctx.pendingConnectionRequests}`:""), "screens");
+    control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), (switchRows === 1 && inner < 26 ? "他 ▾" : ctx.screen === "schedule" ? "予約 ▾" : ctx.screen === "history" ? "履歴 ▾" : ctx.screen === "connections" ? "接続 ▾" : "その他 ▾")+(ctx.pendingConnectionRequests?` ${ctx.pendingConnectionRequests}`:""), "screens");
     const footerY = rect.y + rect.h - 2;
     if (inner >= 16) {
       control(footerY, rect.x + 1, "＋新規", "new");
