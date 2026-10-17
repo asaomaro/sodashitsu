@@ -1,3 +1,6 @@
+import { MachineManageParams, type ManagedConnection } from "./delegation.js";
+import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
+import { DelegationInviteParams, DelegationStartParams, DelegationStopParams, type DelegationStatus } from "./delegation.js";
 import {
   SessionToolsParams,
   SessionNoteSaveParams,
@@ -1586,6 +1589,16 @@ export const METHOD_SCHEMAS = {
   "agent.summary_cached": AgentConversationParams,
   "agent.usage_watch": AgentUsageWatchParams,
   "server.sessions": ServerSessionsParams,
+  "machine.connections": ServerStopParams,
+  "machine.manage": MachineManageParams,
+  "machine.request_delegation": PairingStartParams,
+  "machine.confirm_delegation": PairingConfirmParams,
+  "machine.pairing_requests": ServerStopParams,
+  "machine.reject_pairing": PairingRejectParams,
+  "machine.invite": DelegationInviteParams,
+  "machine.delegate": DelegationStartParams,
+  "machine.delegations": MachineListParams,
+  "machine.stop_delegation": DelegationStopParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
   "command.reload": CommandReloadParams,
@@ -1741,6 +1754,16 @@ export interface MethodResultMap {
   "agent.summary_cached": { summary: ConversationSummary | null };
   "agent.usage_watch": Record<string, never>;
   "server.sessions": ServerSessionsResult;
+  "machine.connections": { connections: ManagedConnection[] };
+  "machine.manage": Record<string,never>;
+  "machine.request_delegation": { id: string; expiresAt: number };
+  "machine.confirm_delegation": DelegationStatus;
+  "machine.pairing_requests": { requests: PairingRequest[] };
+  "machine.reject_pairing": Record<string, never>;
+  "machine.invite": { machineId: string; token: string };
+  "machine.delegate": DelegationStatus;
+  "machine.delegations": { delegations: DelegationStatus[] };
+  "machine.stop_delegation": Record<string, never>;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;
   "command.reload": CommandListResult;

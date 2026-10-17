@@ -1,3 +1,4 @@
+import { ConnectionsView } from "../modes/ConnectionsView.js";
 import { stringWidth } from "../render/width.js";
 import { loadSystemFooterSettings, systemFooterDisplaySegments, STATUSLINE_COLOR_VARIABLES, systemFooterPlaceholder, type SystemResources } from "@sodashitsu/protocol";
 import { SystemResourcePoller } from "@sodashitsu/client-core";
@@ -268,6 +269,8 @@ export class TuiApp {
   readonly displays: DisplayModel;
   readonly dockedViews: DockedViews;
   readonly schedules: ScheduleView;
+  readonly connections: ConnectionsView;
+  private historyScreen:ConversationDialog|null=null;
   private graphTerminal: GraphTerminal | null = null;
   readonly graphView: GraphView;
   readonly asks: TuiAskController;
@@ -280,12 +283,19 @@ export class TuiApp {
   private readonly onboardingEligible: boolean;
   /** 直前に外側の端末へ回した BEL の時刻。 */
   private lastBellAt = -Infinity;
+  private readonly pairingToasts = new Map<string,number>();
   /** 読んだ外側の端末のタイトルの書式（書式が変わったら読み直す）。 */
   private titleTemplate: { source: string | null; parts: WindowTitlePart[] | null } = {
     source: null,
     parts: null,
   };
 
+  private showPairing(data:{id:string;message:string;closed:boolean}) {
+    const old=this.pairingToasts.get(data.id);
+    if(old!==undefined){this.ui.dismissToast(old);this.pairingToasts.delete(data.id);}
+    if(!data.closed)this.pairingToasts.set(data.id,this.ui.toast(data.message,{ms:null}));
+    this.ui.pendingConnectionRequests=this.pairingToasts.size;
+  }
   constructor(
     readonly target: TuiTarget,
     readonly io: TuiIo,
@@ -307,6 +317,7 @@ export class TuiApp {
         if (this.graphTerminal?.paneId === paneId) this.graphTerminal.onAttachChanged(clientId);
       },
       // 共有の設定はローカルのサーバのものだけ（ほかのマシンを見ている間の画面の接続の知らせは当てない。decisions D7.4）。
+      onMachinePairing: data=>this.showPairing(data),
       onNotificationTest: (message) => this.ui.toast(message, { ms: 20_000 }),
       onNotificationState: (state) => this.notify.onSharedNotification(state),
       onAskEvent: (e) => this.asks?.onEvent(e),
@@ -403,6 +414,8 @@ export class TuiApp {
       () => this.prefs.viewTitleVisible,
     );
     this.disposers.push(() => this.dockedViews.dispose());
+    this.connections=new ConnectionsView(this.ui,this.prefsPort,()=>this.scheduleRender());
+    this.disposers.push(()=>this.connections.dispose(),()=>this.historyScreen?.dispose());
     this.schedules = new ScheduleView(this.model, this.ui, this.rpc, () => this.scheduleRender());
     this.disposers.push(() => this.schedules.dispose());
     this.graphView = new GraphView(
@@ -456,6 +469,9 @@ export class TuiApp {
           this.mouse.cancel();
           this.statuslines.cancel();
         }
+        this.connections.sync(this.ui.screen === "connections");
+        if(this.ui.screen==="history"&&!this.historyScreen)this.historyScreen=new ConversationDialog("sessions",null,this.ui,this.rpc,this.prefs,this.model,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id),()=>undefined);
+        else if(this.ui.screen!=="history"&&this.historyScreen){this.historyScreen.dispose();this.historyScreen=null;}
         this.schedules.sync(this.ui.screen === "schedule");
         this.graphView.sync(this.ui.screen === "graph");
         this.usage.sync(this.usageWanted());
@@ -706,6 +722,7 @@ export class TuiApp {
     this.net = net;
     this.gate = new InputGate(net.conn);
     const wiring = new MachineWiring({
+      onLocalPairing:data=>this.showPairing(data),
       machines: this.machines,
       switchTo: (id, target, opts) => this.switchMachine(id, target, opts),
       requestMainList: () => net.conn.request("machine.list", {}),
@@ -1006,6 +1023,13 @@ export class TuiApp {
       }
       this.scheduleRender();
       return;
+    }
+    if(this.ui.screen==="connections"||this.ui.screen==="history") {
+      const target=this.ui.screen==="connections"?this.connections:this.historyScreen;
+      if(ev.kind==="key") { const chord=chordOf(ev.key);if(chord===this.keymap.prefix||this.keys.mode!=="terminal")this.keys.handle(ev);else target?.handleKey(ev.key); }
+      else if(ev.kind==="paste"&&this.ui.screen==="connections")this.connections.handlePaste(ev.text);
+      else if(ev.kind==="mouse"&&!target?.handleMouse(ev))this.mouse.handle(ev);
+      this.scheduleRender();return;
     }
     if (
       this.ui.screen === "schedule" &&
@@ -1484,6 +1508,7 @@ export class TuiApp {
     this.ui.closeContextMenu();
     this.dockedViews.dispose();
     this.schedules.reset();
+    if(this.ui.screen==="history")this.ui.setScreen("base");
     this.graphView.reset();
     this.model.reset(id);
     this.panes.reset();
@@ -1681,6 +1706,7 @@ export class TuiApp {
       screen: this.ui.screen,
       chromeControls: true,
       notificationCount: this.notify.queued.length,
+      pendingConnectionRequests:this.ui.pendingConnectionRequests,
       sidebarDrag: this.mouse.sidebarFeedback,
       dropTabId: this.mouse.dropTarget?.kind === "tab" ? this.mouse.dropTarget.tabId : undefined,
       dragNotice: this.mouse.sidebarFeedback
@@ -1726,6 +1752,8 @@ export class TuiApp {
         }
         if (this.ui.screen === "graph")
           return this.graphView.render(grid, layout.paneArea, this.theme);
+        if(this.ui.screen==="connections")return this.connections.render(grid,layout.paneArea,this.theme);
+        if(this.ui.screen==="history")return this.historyScreen?.render({grid,theme:this.theme},layout.paneArea)??null;
         if (this.ui.screen === "schedule")
           return this.schedules.render(grid, layout.paneArea, this.theme);
         if (this.ui.screen === "dashboard") {

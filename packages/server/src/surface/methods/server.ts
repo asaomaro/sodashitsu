@@ -1,5 +1,7 @@
+import { MachineManageParams } from "@sodashitsu/protocol";
+import { PairingStartParams, PairingConfirmParams, PairingRejectParams } from "@sodashitsu/protocol";
 import { SystemResourceSampler } from "./SystemResources.js";
-import { RpcError, ServerStopParams } from "@sodashitsu/protocol";
+import { RpcError, ServerStopParams, DelegationInviteParams, DelegationStartParams, DelegationStopParams } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
@@ -11,6 +13,19 @@ import type { MethodDeps } from "./deps.js";
  * 止める手順は返事の後に呼ばれるので、返事の中で次の macrotask（`setImmediate`）まで待ち、この方式の応答をクライアントへ書き終えてから止め始める。
  */
 export function registerServerMethods(surface: ControlSurface, deps: MethodDeps): void {
+  if (deps.delegations) {
+    const d=deps.delegations;
+    surface.register("machine.connections",{schema:ServerStopParams,handler:()=>d.connections()});
+    surface.register("machine.manage",{schema:MachineManageParams,handler:(_ctx,p)=>d.manage(p.id,p.action)});
+    surface.register("machine.request_delegation",{schema:PairingStartParams,handler:(_ctx,p)=>d.requestPairing(p.url,p.label)});
+    surface.register("machine.confirm_delegation",{schema:PairingConfirmParams,handler:(_ctx,p)=>d.confirmPairing(p.id,p.code)});
+    surface.register("machine.pairing_requests",{schema:ServerStopParams,handler:()=>d.pairing.list()});
+    surface.register("machine.reject_pairing",{schema:PairingRejectParams,handler:(_ctx,p)=>d.pairing.reject(p.id)});
+    surface.register("machine.invite",{schema:DelegationInviteParams,handler:(_ctx,p)=>d.invite(p.label)});
+    surface.register("machine.delegate",{schema:DelegationStartParams,handler:(_ctx,p)=>d.start(p)});
+    surface.register("machine.delegations",{schema:ServerStopParams,handler:()=>d.list()});
+    surface.register("machine.stop_delegation",{schema:DelegationStopParams,handler:(_ctx,p)=>d.stop(p.id)});
+  }
   const resources = new SystemResourceSampler();
   surface.register("server.resources", {
     schema: ServerStopParams,

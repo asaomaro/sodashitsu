@@ -890,3 +890,19 @@ it("parses notification test and rejects unexpected arguments", () => {
   expect(()=>parseArgs(["notification","invalid"],noEnv)).toThrow(CliUsageError);
   expect(()=>parseArgs(["notification","test","unexpected"],noEnv)).toThrow(CliUsageError);
 });
+
+it("parses file-based invitations and delegation lifecycle commands without a token argument", () => {
+ const env={SODACTL_URL:"http://127.0.0.1:7780"};
+ expect(parseArgs(["machine","invite","--label","Office PC","--public-url","https://controller.example","--out","invite.json"],env)).toMatchObject({kind:"machine-delegation",sub:"invite",values:{"--label":"Office PC","--out":"invite.json"}});
+ expect(parseArgs(["machine","delegate","--invitation","invite.json"],env)).toMatchObject({kind:"machine-delegation",sub:"delegate"});
+ expect(parseArgs(["machine","stop-delegation","a".repeat(32)],env)).toMatchObject({sub:"stop-delegation",values:{id:"a".repeat(32)}});
+ expect(()=>parseArgs(["machine","invite","--label","Office PC"],env)).toThrow();
+ expect(()=>parseArgs(["machine","delegate","--invitation","invite.json","extra"],env)).toThrow();
+});
+
+it("parses code-exchange delegation commands and requires the request id/code",()=>{
+  expect(parseArgs(["machine","request","--connect","https://soda.example.com","--label","office-pc"],{})).toMatchObject({kind:"machine-delegation",sub:"request"});
+  expect(parseArgs(["machine","confirm","8e778a61-461c-457b-a47a-12476fb4c2ae","--code","01234567"],{})).toMatchObject({sub:"confirm",values:{"--code":"01234567",id:"8e778a61-461c-457b-a47a-12476fb4c2ae"}});
+  expect(parseArgs(["machine","requests"],{})).toMatchObject({sub:"requests"});
+  expect(()=>parseArgs(["machine","confirm","id"],{})).toThrow();
+});

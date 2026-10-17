@@ -1,3 +1,4 @@
+import { LocalClientFactoryKey } from "./injection.js";
 import { loadStatuslineSettings, TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
 import type { ITerminalOptions } from "@xterm/xterm";
 // xterm.js の必須の CSS（canvas の重ね方・入力用 textarea の隠し方）。無いと描画用の canvas が端末の下へ
@@ -507,6 +508,7 @@ const machineWiring = new MachineWiring({
   createSummaryClient: (opts) => new MachineSummaryClient(opts),
   baseWsUrl: wsUrl,
   mobileViewport,
+  onLocalPairing: e=>storeAdapter.applyEvent(e),
   onLocalGraphEvent: (e) => graph.applyEvent(e),
   onLocalOpened: () => void graph.load(),
   graphOpen: toRef(view, "graphVisible"),
@@ -628,6 +630,7 @@ window.addEventListener("drop", (ev) => {
 const app = createApp(App);
 app.use(pinia);
 app.provide(ConnectionKey, conn);
+app.provide(LocalClientFactoryKey,onOpened=>new MachineSummaryClient({wsUrl,onOpened,onSnapshot:()=>undefined,onEvent:()=>undefined,onConnected:()=>undefined}));
 app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);

@@ -45,7 +45,7 @@ export function emptyCatalog(): MachineCatalogData {
   return { version: 1, machines: [] };
 }
 
-const PROFILE_KEYS = new Set(["id", "label", "target", "session", "enabled"]);
+const PROFILE_KEYS = new Set(["id", "label", "target", "session", "enabled", "transport"]);
 
 /** 形と規則を確かめて返す。合わなければ `CatalogError`（理由つき）。 */
 export function validateCatalog(raw: unknown): MachineCatalogData {
@@ -67,7 +67,9 @@ export function validateCatalog(raw: unknown): MachineCatalogData {
     const m = item as Record<string, unknown>;
     for (const k of Object.keys(m))
       if (!PROFILE_KEYS.has(k)) throw new CatalogError(`machines[${i}]: unknown field: ${k}`);
-    const { id, label, target, session, enabled } = m;
+    const { id, label, target, session, enabled, transport } = m;
+    if (transport !== undefined && transport !== "reverse") throw new CatalogError("invalid machine transport");
+    if (transport === "reverse" && (target !== "reverse" || session !== undefined)) throw new CatalogError("invalid reverse machine target");
     if (typeof id !== "string" || !isMachineId(id))
       throw new CatalogError(`machines[${i}]: invalid id`);
     if (ids.has(id)) throw new CatalogError(`machines[${i}]: duplicate id ${id}`);
@@ -83,7 +85,7 @@ export function validateCatalog(raw: unknown): MachineCatalogData {
     const sp = remoteSessionProblem(session);
     if (sp !== undefined) throw new CatalogError(`machines[${i}]: invalid session (${sp})`);
     ids.add(id);
-    machines.push({ id, label, target, ...(session !== undefined ? { session } : {}), enabled });
+    machines.push({ id, label, target, ...(transport === "reverse" ? { transport } : {}), ...(session !== undefined ? { session } : {}), enabled });
   }
   // 名前の規則は全台が揃ってから見る（ほかのマシンの id・名前との衝突を含む）。
   for (const [i, m] of machines.entries()) {

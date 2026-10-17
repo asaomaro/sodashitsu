@@ -61,7 +61,7 @@ export type SidebarTarget =
   | { kind: "newWorkspace"; x: number }
   | {
       kind: "control";
-      action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule";
+      action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule" | "screens";
       x: number;
       w: number;
     }
@@ -222,7 +222,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     y: number,
     x: number,
     text: string,
-    action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule",
+    action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule" | "screens",
   ) => {
     const width = Math.min(stringWidth(text), rect.x + inner - x);
     if (y < rect.y || y >= rect.y + rect.h || width <= 0) return;
@@ -231,7 +231,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       y,
       truncate(text, width),
       fg,
-      (ctx.screen ?? "base") === action ? activeBg : bg,
+      ((ctx.screen ?? "base") === action || action==="screens"&&["schedule","history","connections"].includes(ctx.screen??"base")) ? activeBg : bg,
       0,
       width,
     );
@@ -241,7 +241,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     control(rect.y, rect.x, "▣", "base");
     control(rect.y + 1, rect.x, "◇", "graph");
     control(rect.y + 2, rect.x, "%", "dashboard");
-    control(rect.y + 3, rect.x, "◷", "schedule");
+    control(rect.y + 3, rect.x, "▾", "screens");
     if (rect.h >= 7) {
       control(rect.y + rect.h - 4, rect.x, "＋", "new");
       control(rect.y + rect.h - 3, rect.x, "⋯", "menu");
@@ -309,7 +309,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     control(rect.y, rect.x + 1, "端末", "base");
     control(rect.y, rect.x + (switchRows === 1 ? 6 : half), "グラフ", "graph");
     control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 13 : 1), "状況", "dashboard");
-    control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), "予約", "schedule");
+    control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), (switchRows === 1 && inner < 26 ? "他 ▾" : ctx.screen === "schedule" ? "予約 ▾" : ctx.screen === "history" ? "履歴 ▾" : ctx.screen === "connections" ? "接続 ▾" : "その他 ▾")+(ctx.pendingConnectionRequests?` ${ctx.pendingConnectionRequests}`:""), "screens");
     const footerY = rect.y + rect.h - 2;
     if (inner >= 16) {
       control(footerY, rect.x + 1, "＋新規", "new");

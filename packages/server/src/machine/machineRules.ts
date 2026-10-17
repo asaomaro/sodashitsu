@@ -10,6 +10,8 @@ export interface MachineProfile {
   label: string;
   /** SSH の宛先（`[user@]host` か `ssh://[user@]host[:port]`）。 */
   target: string;
+  /** Outbound provider connects to this server; no SSH is spawned for this entry. */
+  transport?: "reverse";
   /** リモートの session の名前（無ければリモートの既定の session）。 */
   session?: string;
   enabled: boolean;

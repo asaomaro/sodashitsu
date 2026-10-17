@@ -396,6 +396,7 @@ export class MouseController {
             { kind: hit.action === "new" ? "new" : "global" },
             { x, y: Math.max(0, y - 6) },
           );
+        else if(hit.action === "screens") ui.openContextMenu({kind:"screens"},{x,y:y+1});
         else if (hit.action === "bell") ui.openDialogWithContext({ kind: "notifications" });
         else if (hit.action === "graph") actions.run({ type: "openGraph" });
         else ui.setScreen(hit.action);

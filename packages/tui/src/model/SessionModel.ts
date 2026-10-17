@@ -46,6 +46,7 @@ export interface SessionModelHooks {
   /** 独自コマンドの popup が閉じた（`command.popup_closed`）。 */
   onPopupClosed?(popupId: string, exitCode: number | undefined): void;
   onNotificationTest?(message: string): void;
+  onMachinePairing?(data: {id:string;message:string;closed:boolean}): void;
   onAttachChanged?(paneId: string, clientId: string | null): void;
   /** 保存した SSH のマシンの一覧が変わった（`machine.changed`）。 */
   onMachinesChanged?(machines: MachineStatus[]): void;
@@ -195,6 +196,7 @@ export class SessionModel {
       case "ask.closed":
         this.hooks.onAskEvent?.(e);
         return;
+      case "machine.pairing": this.hooks.onMachinePairing?.(e.data);return;
       case "notification.test":
         this.hooks.onNotificationTest?.(e.data.message);
         return;

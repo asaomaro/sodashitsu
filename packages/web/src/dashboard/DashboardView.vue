@@ -8,7 +8,6 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { paneNameOf } from "@sodashitsu/client-core";
 import StateIcon from "../components/StateIcon.vue";
-import PastSessions from "./PastSessions.vue";
 import AccountCard from "./AccountCard.vue";
 import { ConnectionKey } from "../injection.js";
 import { displayStateFor, useSeenStore } from "../store/seen.js";
@@ -359,7 +358,6 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
           <span class="dash-c dash-c-ago" role="cell" :title="new Date(r.since).toLocaleString()"><span class="dash-cell-label" aria-hidden="true">最後の動き</span>{{ formatAgo(r.since, now) }}</span>
         </div>
       </div>
-      <PastSessions />
     </section>
   </section>
 </template>

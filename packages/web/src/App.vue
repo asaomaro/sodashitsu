@@ -81,7 +81,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
           :data-screen="def.id"
           :inert="view.screen !== def.id"
         >
-          <component :is="def.component" />
+          <component v-if="!['history','connections'].includes(def.id) || view.screen===def.id" :is="def.component" />
         </div>
       </div>
     </div>

@@ -164,6 +164,15 @@ export class MachineManager {
     return { kind: "ok", link: e.link };
   }
 
+  async refresh(): Promise<void> { await this.reload(); }
+
+  acceptIncoming(id: string, link: MachineLink): boolean {
+    const entry = this.entries.get(id);
+    if (this.stopped || !entry || entry.profile.transport !== "reverse" || entry.link) return false;
+    this.connect(entry, link);
+    return true;
+  }
+
   private async poll(): Promise<void> {
     if (this.stopped) return;
     const sig = await this.statFile(this.deps.root);
@@ -241,7 +250,7 @@ export class MachineManager {
         this.connect(entry);
         continue;
       }
-      if (e.profile.target !== p.target || e.profile.session !== p.session) {
+      if (e.profile.target !== p.target || e.profile.session !== p.session || e.profile.transport !== p.transport) {
         // 行き先が変わった：今の試みを閉じ、初回の試みとしてすぐ繋ぐ。
         this.dispose(e);
         e.profile = p;
@@ -257,10 +266,13 @@ export class MachineManager {
     this.order = enabled.map((m) => m.id);
   }
 
-  private connect(entry: Entry): void {
+  private connect(entry: Entry, incoming?: MachineLink): void {
     if (this.stopped) return;
     entry.retryTimer = undefined;
-    const link = this.deps.createLink(entry.profile);
+    if (entry.profile.transport === "reverse" && !incoming) {
+      entry.state = "connecting"; entry.message = "操作されるPCからの接続待ち"; return;
+    }
+    const link = incoming ?? this.deps.createLink(entry.profile);
     entry.link = link;
     link.onOnline(() => {
       if (entry.link !== link) return;
@@ -281,6 +293,7 @@ export class MachineManager {
       entry.onlineSince = undefined;
       entry.state = failure.kind === "attention" ? "attention" : "reconnecting";
       entry.message = failure.message;
+      if (entry.profile.transport === "reverse") { entry.state = "reconnecting"; entry.message = "操作されるPCからの再接続待ち"; this.emit(); return; }
       const delay =
         failure.kind === "attention"
           ? MANAGER_TIMINGS.maxBackoffMs

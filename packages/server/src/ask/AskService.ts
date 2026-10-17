@@ -60,7 +60,7 @@ export interface AskServiceOptions {
    * ローカル起動か（`soda serve` が loopback だけで待ち受け、TLS も `--origin` も無い）。真のとき、手元の画面だけが見るなら、メディアの大きさの上限を外す
    * （安全弁だけ。`askByteLimits(true)`）。既定は偽（従来の上限）。
    */
-  localOnly?: boolean;
+  localOnly?: boolean | (()=>boolean);
   /** その接続が、ほかのマシンの `soda serve` の中継（bridge）越しか（手元の画面ではない）。 */
   isRemoteClient?(clientId: string): boolean;
 }
@@ -122,8 +122,9 @@ export class AskService {
    * いま質問のメディアの大きさの上限を外してよいか: ローカル起動で、いま質問を見られる画面にほかのマシン越しのものが無い。
    * 外すと、ネットワークの先のマシンの画面へ大きなファイルを送ってしまうため、1 つでも居れば従来の上限を保つ。
    */
+  private localOnlyNow(): boolean { return (typeof this.opts.localOnly==="function"?this.opts.localOnly():this.opts.localOnly)===true; }
   private unlimitedNow(): boolean {
-    if (this.opts.localOnly !== true) return false;
+    if (!this.localOnlyNow()) return false;
     for (const id of this.subscribers) if (this.opts.isRemoteClient?.(id) === true) return false;
     return true;
   }
@@ -135,7 +136,7 @@ export class AskService {
       (hasMediaRefs(entry.spec) || entry.mediaInfo.length > 0 || entry.view?.length)
     )
       return false;
-    return !entry.oversize || this.opts.isRemoteClient?.(clientId) !== true;
+    return !entry.oversize || this.localOnlyNow() && this.opts.isRemoteClient?.(clientId) !== true;
   }
 
   /** 保持しているメディアの合計バイト数（サーバ全体の上限の判定・テスト用）。 */

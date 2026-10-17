@@ -46,6 +46,14 @@ import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
+  "sodactl machine request --connect <URL> --label <name> [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine requests [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine confirm <id> --code <code> [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine reject-request <id> [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine invite --label <name> --public-url <URL> --out <file> [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine delegate --invitation <file> [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine delegations [--url <URL>] [--token <TOKEN>]",
+  "sodactl machine stop-delegation <id> [--url <URL>] [--token <TOKEN>]",
   "sodactl login --url <URL> --token <TOKEN>",
   "sodactl workspace create [--cwd <path>] [--label <text>] [--url <URL>] [--token <TOKEN>]",
   "sodactl workspace close <workspaceId> [--url <URL>] [--token <TOKEN>]",
@@ -326,6 +334,7 @@ export type Command =
   /** 20261010-agent-usage。`paneId` を省くと、利用状況を取れる全部のエージェント。 */
   | { kind: "agent-usage"; opts: GlobalOpts; paneId: string | undefined; json: boolean }
   /** 設定の「エージェント連携」の状態（読み取り専用。導入・削除はしない）。 */
+  | { kind: "machine-delegation"; opts: GlobalOpts; sub: "invite" | "delegate" | "delegations" | "stop-delegation" | "request" | "requests" | "confirm" | "reject-request"; values: Record<string,string> }
   | { kind: "agent-integrations"; opts: GlobalOpts; json: boolean }
   | { kind: "agent-wait"; opts: GlobalOpts; paneId: string; until: AgentStatus[]; timeoutMs: number | undefined }
   | { kind: "agent-read"; opts: GlobalOpts; paneId: string; lines: number; raw: boolean; timeoutMs: number }
@@ -495,6 +504,18 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
   const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
 
   switch (word0) {
+    case "machine": {
+      const sub=argv[1];
+      const options:Record<string,string[]>={request:["--connect","--label"],requests:[],confirm:["--code"],"reject-request":[],invite:["--label","--public-url","--out"],delegate:["--invitation"],delegations:[],"stop-delegation":[]};
+      if (!sub || !Object.hasOwn(options,sub)) throw new CliUsageError("expected machine invite|delegate|delegations|stop-delegation",USAGE);
+      const {positionals,values}=parseFlags(argv.slice(2),{values:["--url","--token",...options[sub]!]});
+      const hasId=["stop-delegation","confirm","reject-request"].includes(sub);
+      rejectExtra(positionals,hasId?1:0,USAGE);
+      for(const key of options[sub]!) if (!values.get(key)) throw new CliUsageError(`missing ${key}`,USAGE);
+      const data=Object.fromEntries(values);
+      if(hasId) data.id=requirePositional(positionals,0,"id",USAGE);
+      return {kind:"machine-delegation",sub:sub as "invite"|"delegate"|"delegations"|"stop-delegation"|"request"|"requests"|"confirm"|"reject-request",opts:globalOptsFrom(values,env),values:data};
+    }
     // 20260926-agent-skill-file。skill ファイルを出すだけ（サーバへつながない）。引数・オプションは取らない。
     case "skill": {
       const { positionals } = parseFlags(argv.slice(1), {});
