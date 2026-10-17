@@ -10,7 +10,12 @@ import {
   newMachineId,
   saveCatalog,
 } from "./MachineCatalog.js";
-import { labelProblem, type MachineProfile } from "./machineRules.js";
+import {
+  labelProblem,
+  targetProblem,
+  remoteSessionProblem,
+  type MachineProfile,
+} from "./machineRules.js";
 
 /** Persist hashes only. A grant can register its own provider, never authenticate to the controller's /ws. */
 export class DelegationGrants {
@@ -82,23 +87,53 @@ export class DelegationGrants {
     this.queue = result.catch(() => undefined);
     return result;
   }
-  async connections() {
-    const loaded=await loadCatalog(this.root);
-    if(loaded.kind==="invalid") throw new RpcError("invalid_params","マシン登録簿が不正です");
-    return loaded.kind==="ok" ? loaded.data.machines : [];
+  add(input: {
+    label: string;
+    target: string;
+    session?: string | undefined;
+  }): Promise<{ id: string }> {
+    const result = this.queue.then(async () => {
+      const loaded = await loadCatalog(this.root);
+      if (loaded.kind === "invalid") throw new RpcError("invalid_params", "マシン登録簿が不正です");
+      const data = loaded.kind === "ok" ? loaded.data : emptyCatalog();
+      const problem =
+        targetProblem(input.target) ??
+        remoteSessionProblem(input.session) ??
+        labelProblem(input.label, data.machines);
+      if (problem || data.machines.length >= MAX_MACHINES)
+        throw new RpcError("invalid_params", problem ?? "マシン数の上限です");
+      const id = newMachineId();
+      data.machines.push({
+        id,
+        label: input.label,
+        target: input.target,
+        enabled: true,
+        ...(input.session && input.session !== "default" ? { session: input.session } : {}),
+      });
+      await saveCatalog(this.root, data);
+      return { id };
+    });
+    this.queue = result.catch(() => undefined);
+    return result;
   }
-  manage(id:string,action:"enable"|"disable"|"remove") {
-    const result=this.queue.then(async()=>{
-      const loaded=await loadCatalog(this.root);
-      if(loaded.kind!=="ok") throw new RpcError("not_found","登録が見つかりません");
-      const item=loaded.data.machines.find(m=>m.id===id);
-      if(!item)throw new RpcError("not_found","登録が見つかりません");
-      if(action==="remove")loaded.data.machines=loaded.data.machines.filter(m=>m!==item);
-      else item.enabled=action==="enable";
-      await saveCatalog(this.root,loaded.data);
+  async connections() {
+    const loaded = await loadCatalog(this.root);
+    if (loaded.kind === "invalid") throw new RpcError("invalid_params", "マシン登録簿が不正です");
+    return loaded.kind === "ok" ? loaded.data.machines : [];
+  }
+  manage(id: string, action: "enable" | "disable" | "remove") {
+    const result = this.queue.then(async () => {
+      const loaded = await loadCatalog(this.root);
+      if (loaded.kind !== "ok") throw new RpcError("not_found", "登録が見つかりません");
+      const item = loaded.data.machines.find((m) => m.id === id);
+      if (!item) throw new RpcError("not_found", "登録が見つかりません");
+      if (action === "remove")
+        loaded.data.machines = loaded.data.machines.filter((m) => m !== item);
+      else item.enabled = action === "enable";
+      await saveCatalog(this.root, loaded.data);
       return {};
     });
-    this.queue=result.catch(()=>undefined);
+    this.queue = result.catch(() => undefined);
     return result;
   }
   async authorize(id: string, token: string): Promise<MachineProfile | undefined> {

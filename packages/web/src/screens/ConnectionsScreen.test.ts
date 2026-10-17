@@ -51,3 +51,62 @@ it("manages the local controller even when the visible terminal connection point
   w.unmount();
   expect(local.stop).toHaveBeenCalledOnce();
 });
+
+it("registers SSH targets and completes code-exchange delegation through the local connection", async () => {
+  const request = vi.fn(async (method: string) => {
+    if (method === "machine.connections") return { connections: [] };
+    if (method === "machine.delegations") return { delegations: [] };
+    if (method === "machine.pairing_requests") return { requests: [] };
+    return { id: "request-id" };
+  });
+  const remote = vi.fn();
+  let opened!: () => void;
+  const w = mount(ConnectionsScreen, {
+    global: {
+      provide: {
+        [ConnectionKey as symbol]: { request: remote },
+        [LocalClientFactoryKey as symbol]: (callback: () => void) => {
+          opened = callback;
+          return { request, start: () => opened(), stop: vi.fn() };
+        },
+      },
+    },
+  });
+  try {
+    await flushPromises();
+    await w.get("header button").trigger("click");
+    await w.get('input[placeholder="user@host または SSH設定のHost名"]').setValue("user@build");
+    const add = w.findAll("fieldset").find((f) => f.text().includes("追加（SSH）"))!;
+    await add.findAll("input")[0]!.setValue("Build");
+    await add.get('input[placeholder="default"]').setValue("work");
+    await add.get("form").trigger("submit");
+    await flushPromises();
+    expect(request).toHaveBeenCalledWith("machine.add", {
+      label: "Build",
+      target: "user@build",
+      session: "work",
+    });
+    expect(w.text()).not.toContain("外部Sodashitsuを追加（SSH）");
+    const delegation = w
+      .findAll("fieldset")
+      .find((f) => f.text().includes("このPCの操作を委譲する"))!;
+    await delegation.findAll("input")[0]!.setValue("https://operator.example");
+    await delegation.findAll("input")[1]!.setValue("Laptop");
+    await delegation.get("form").trigger("submit");
+    await flushPromises();
+    expect(request).toHaveBeenCalledWith("machine.request_delegation", {
+      url: "https://operator.example",
+      label: "Laptop",
+    });
+    await delegation.get("input").setValue("12345678");
+    await delegation.get("form").trigger("submit");
+    await flushPromises();
+    expect(request).toHaveBeenCalledWith("machine.confirm_delegation", {
+      id: "request-id",
+      code: "12345678",
+    });
+    expect(remote).not.toHaveBeenCalled();
+  } finally {
+    w.unmount();
+  }
+});

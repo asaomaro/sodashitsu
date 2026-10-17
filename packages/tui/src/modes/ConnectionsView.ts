@@ -32,8 +32,9 @@ export class ConnectionsView {
   private area: Rect | null = null;
   private hits = new Map<number, () => void>();
   private readonly scrollbar = new ScrollBar();
-  private mode: "list" | "request" | "confirm" = "list";
+  private mode: "list" | "request" | "confirm" | "add" = "list";
   private fields = [new TextInput(), new TextInput(), new TextInput()];
+  private sshFields = [new TextInput(), new TextInput(), new TextInput()];
   private field = 0;
   private pendingId = "";
   private deleteId = "";
@@ -117,6 +118,13 @@ export class ConnectionsView {
     const rows: Row[] = [
       { text: "[ 更新 ]", run: () => void this.refresh() },
       {
+        text: "[ 外部Sodashitsuを追加（SSH）… ]",
+        run: () => {
+          this.mode = "add";
+          this.field = 0;
+        },
+      },
+      {
         text: "[ このPCの操作を委譲する… ]",
         run: () => {
           this.mode = "request";
@@ -163,6 +171,18 @@ export class ConnectionsView {
       );
     return rows;
   }
+  private submit() {
+    this.handleKey({
+      key: "Enter",
+      code: "Enter",
+      type: "keydown",
+      composing: false,
+      ctrl: false,
+      alt: false,
+      shift: false,
+      meta: false,
+    });
+  }
   handleKey(k: KeyInput) {
     if (isEsc(k)) {
       if (this.mode !== "list") this.mode = "list";
@@ -171,7 +191,18 @@ export class ConnectionsView {
     }
     if (this.mode !== "list") {
       if (isEnter(k)) {
-        if (this.mode === "request")
+        if (this.mode === "add")
+          void this.run(async () => {
+            const session = this.sshFields[2]!.value.trim();
+            await this.conn.request("machine.add", {
+              label: this.sshFields[0]!.value.trim(),
+              target: this.sshFields[1]!.value.trim(),
+              ...(session ? { session } : {}),
+            });
+            this.mode = "list";
+            this.sshFields = [new TextInput(), new TextInput(), new TextInput()];
+          });
+        else if (this.mode === "request")
           void this.run(async () => {
             const r = await this.conn.request("machine.request_delegation", {
               url: this.fields[0]!.value,
@@ -190,8 +221,10 @@ export class ConnectionsView {
             this.mode = "list";
             this.fields[2] = new TextInput();
           });
-      } else if (k.key === "Tab" && this.mode === "request") this.field = this.field === 0 ? 1 : 0;
-      else this.fields[this.field]!.handleKey(k);
+      } else if (k.key === "Tab" && this.mode === "add")
+        this.field = (this.field + (k.shift ? 2 : 1)) % 3;
+      else if (k.key === "Tab" && this.mode === "request") this.field = this.field === 0 ? 1 : 0;
+      else (this.mode === "add" ? this.sshFields : this.fields)[this.field]!.handleKey(k);
       return;
     }
     const rows = this.rows();
@@ -199,13 +232,17 @@ export class ConnectionsView {
     else if (isUp(k)) this.selected = Math.max(0, this.selected - 1);
     else if (isEnter(k)) rows[this.selected]?.run?.();
     else if (k.key === "r") void this.refresh();
-    else if (k.key === "n") {
+    else if (k.key === "a") {
+      this.mode = "add";
+      this.field = 0;
+    } else if (k.key === "n") {
       this.mode = "request";
       this.field = 0;
     }
   }
   handlePaste(text: string) {
-    if (this.mode !== "list") this.fields[this.field]!.insert(text);
+    if (this.mode !== "list")
+      (this.mode === "add" ? this.sshFields : this.fields)[this.field]!.insert(text);
   }
   handleMouse(ev: OverlayMouse) {
     if (this.scrollbar.handleMouse(ev)) return true;
@@ -231,13 +268,29 @@ export class ConnectionsView {
       grid.text(area.x + 1, area.y + y, safeText(s), c.fg, c.bg, 0, Math.max(0, area.w - 3));
     };
     text(0, "外部接続（このサーバー）");
-    text(1, "↑↓選択 Enter実行 / n委譲申請 / r更新 / Esc端末へ");
+    text(1, "↑↓選択 Enter実行 / a外部追加 / n委譲 / r更新 / Esc端末へ");
+    if (this.mode === "add") {
+      text(3, "外部Sodashitsuを追加（SSH鍵・ssh-agentで認証）");
+      ["接続名", "SSH接続先", "相手のセッション名（省略可）"].forEach((label, i) => {
+        text(5 + i * 2, `${this.field === i ? "> " : "  "}${label}: ${this.sshFields[i]!.value}`);
+        this.hits.set(area.y + 5 + i * 2, () => {
+          this.field = i;
+        });
+      });
+      text(11, "[ 登録して接続 ] / Tabで項目移動 / Enterで送信 / Escで戻る");
+      this.hits.set(area.y + 11, () => this.submit());
+      text(12, "接続失敗時も登録は残り、一覧に接続状態を表示します。");
+      text(area.h - 1, this.error || (this.busy ? "処理中…" : ""));
+      return hiddenCursor();
+    }
     if (this.mode !== "list") {
       text(3, "このセッション全体の操作を委譲します。相手を確認してコードを入力してください。");
       if (this.mode === "request") {
         text(5, "操作する側のURL: " + this.fields[0]!.value);
         text(7, "このPCの名前: " + this.fields[1]!.value);
         text(9, `入力中: ${this.field === 0 ? "URL" : "PC名"} / Tabで移動・Enterで申請`);
+        text(11, "[ 接続を申請 ] / Escで戻る");
+        this.hits.set(area.y + 11, () => this.submit());
         this.hits.set(area.y + 5, () => {
           this.field = 0;
         });

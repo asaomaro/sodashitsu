@@ -15,6 +15,28 @@ const error = ref(""),
   label = ref(""),
   requestId = ref(""),
   code = ref("");
+const showAdd = ref(false),
+  sshLabel = ref(""),
+  sshTarget = ref(""),
+  sshSession = ref("");
+const delegationForm = ref<HTMLFieldSetElement | null>(null);
+function openDelegation() {
+  delegationForm.value?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  delegationForm.value?.querySelector("input")?.focus();
+}
+async function addConnection() {
+  await run(async () => {
+    await conn!.request("machine.add", {
+      label: sshLabel.value.trim(),
+      target: sshTarget.value.trim(),
+      ...(sshSession.value.trim() ? { session: sshSession.value.trim() } : {}),
+    });
+    showAdd.value = false;
+    sshLabel.value = "";
+    sshTarget.value = "";
+    sshSession.value = "";
+  });
+}
 let dead = false,
   loading = false,
   timer: ReturnType<typeof setInterval> | undefined;
@@ -102,12 +124,40 @@ const stateName = (state: string) =>
   <section class="connections-screen" aria-label="外部接続" @keydown.esc.stop>
     <header>
       <h1>外部接続</h1>
+      <button :disabled="busy" @click="showAdd = !showAdd">外部Sodashitsuを追加</button>
+      <button :disabled="busy" @click="openDelegation">操作を委譲する</button>
       <button :disabled="busy" @click="refresh">更新</button>
     </header>
     <p>
       このSodashitsuの外部接続を管理します。別のマシンを表示中でも、管理対象はこのサーバーです。
     </p>
     <p v-if="error" role="alert">{{ error }}</p>
+    <fieldset v-if="showAdd" :disabled="busy">
+      <legend>外部Sodashitsuを追加（SSH）</legend>
+      <p>
+        SSHで接続でき、相手側でSodashitsuが起動している必要があります。認証には設定済みのSSH鍵・ssh-agentを使います。
+      </p>
+      <p>相手からこのPCへ接続する場合は、相手側の画面で「操作を委譲する」を選んでください。</p>
+      <form @submit.prevent="addConnection">
+        <label>接続名<input v-model="sshLabel" required maxlength="128" /></label>
+        <label
+          >SSH接続先<input
+            v-model="sshTarget"
+            required
+            maxlength="1024"
+            placeholder="user@host または SSH設定のHost名"
+        /></label>
+        <label
+          >相手のセッション名（省略可）<input
+            v-model="sshSession"
+            maxlength="128"
+            placeholder="default"
+        /></label>
+        <button>登録して接続</button>
+        <button type="button" @click="showAdd = false">キャンセル</button>
+      </form>
+      <p>登録後、接続状態を一覧に表示します。接続できない場合も登録は残ります。</p>
+    </fieldset>
     <fieldset :disabled="busy">
       <legend>操作する接続</legend>
       <p v-if="!connections.length">登録された接続はありません。</p>
@@ -150,9 +200,12 @@ const stateName = (state: string) =>
         </button>
       </article>
     </fieldset>
-    <fieldset :disabled="busy">
+    <fieldset ref="delegationForm" :disabled="busy">
       <legend>このPCの操作を委譲する</legend>
-      <p>このセッション全体の操作を委譲します。相手が表示したコードを確認して入力してください。</p>
+      <p>
+        このセッション全体の操作を委譲します。操作する側のURLに申請し、相手側の「その他 →
+        外部接続」に表示されるコードをここへ入力してください。
+      </p>
       <form v-if="!requestId" @submit.prevent="request">
         <label
           >操作する側のURL<input

@@ -297,3 +297,36 @@ it("rejects a code used on another request, closes after five guesses, and lets 
   ).rejects.toThrow();
   expect((await operator.request("machine.list")).machines).toEqual([]);
 });
+
+it("registers SSH connections through authenticated RPC and persists their settings", async () => {
+  const host = await boot(),
+    control = await client(host);
+  const added = await control.request("machine.add", {
+    label: "Local test SSH",
+    target: "ssh://127.0.0.1:1",
+    session: "work",
+  });
+  expect((await control.request("machine.connections")).connections).toContainEqual(
+    expect.objectContaining({
+      id: added.id,
+      label: "Local test SSH",
+      transport: "ssh",
+      enabled: true,
+    }),
+  );
+  await expect(
+    control.request("machine.add", { label: "Bad", target: "-oProxyCommand=bad" }),
+  ).rejects.toMatchObject({ code: "invalid_params" });
+  await expect(
+    control.request("machine.add", { label: "Local test SSH", target: "host" }),
+  ).rejects.toMatchObject({ code: "invalid_params" });
+  expect((await control.request("machine.connections")).connections).toHaveLength(1);
+  const persisted = await loadCatalog(host.dir);
+  expect(persisted.kind).toBe("ok");
+  if (persisted.kind === "ok")
+    expect(persisted.data.machines[0]).toMatchObject({
+      id: added.id,
+      target: "ssh://127.0.0.1:1",
+      session: "work",
+    });
+});
