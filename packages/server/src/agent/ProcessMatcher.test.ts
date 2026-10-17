@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { ForegroundJob, ForegroundProcess } from "../platform/ProcessInspector.js";
 import { lookupAgentKind } from "./agents.js";
-import { agentProcessPids, match } from "./ProcessMatcher.js";
+import { agentProcessPids, agentResumeSessionId, match } from "./ProcessMatcher.js";
 
 /** `LinuxProcessInspector`/`WindowsProcessInspector` が実際に作る形（`exe` は argv[0] があればそれ）に合わせる。 */
 function proc(pid: number, argv: string[]): ForegroundProcess {
@@ -162,4 +162,14 @@ describe("match — herdr の identify_agent_in_job を移植（実行時のラ�
     const j = job(1, [proc(1, ["powershell.exe", "-Command", "codex --version"])]);
     expect(match(j)).toBe("codex");
   });
+});
+
+it("attributes Antigravity resume argv only to its outer CLI process", () => {
+  const id = "12345678-abcd-ef01-2345-6789abcdef01";
+  for (const args of [["--conversation", id], [`--conversation=${id}`]]) {
+    const j = job(10, [{ ...proc(10, ["/home/u/.local/bin/agy", ...args]), ppid: 1 }]);
+    expect(match(j)).toBe("agy");
+    expect(agentResumeSessionId(j, "agy")).toBe(id);
+  }
+  expect(agentResumeSessionId(job(10, [proc(10, ["agy", "--conversation", "../bad"])]), "agy")).toBeUndefined();
 });

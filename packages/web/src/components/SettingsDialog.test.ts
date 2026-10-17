@@ -312,7 +312,7 @@ describe("SettingsDialog — 9 つの節（AC12）", () => {
 /** claude/codex 以外の6 kind は「未検出・未導入」の既定値で埋める（20260923-other-agents-session-resume）。 */
 function defaultOtherAgentStatuses(): Omit<AgentIntegrationStatusResult["agents"], "claude" | "codex"> {
   const notInstalled = { cliDetected: false, installed: false } as const;
-  return { cursor: notInstalled, copilot: notInstalled, devin: notInstalled, droid: notInstalled, grok: notInstalled, qwen: notInstalled, qodercli: notInstalled, bob: notInstalled };
+  return { cursor: notInstalled, copilot: notInstalled, devin: notInstalled, droid: notInstalled, grok: notInstalled, qwen: notInstalled, qodercli: notInstalled, agy: notInstalled, bob: notInstalled };
 }
 
 function makeAgentIntegrationActions(status: AgentIntegrationStatusResult) {
@@ -569,18 +569,19 @@ describe("SettingsDialog — 節「エージェント連携」の6エージェ�
         qwen: { cliDetected: true, installed: false },
         qodercli: { cliDetected: true, installed: false },
         bob: { cliDetected: false, installed: false },
+        agy: { cliDetected: false, installed: false },
       },
     };
     const { actions, installAgentIntegration, uninstallAgentIntegration } = makeAgentIntegrationActions(status);
     const { wrapper } = await openDialog(makeController(), undefined, actions);
 
     const section = agentIntegrationSection(wrapper);
-    for (const label of ["Cursor Agent CLI", "GitHub Copilot CLI", "Devin CLI", "Droid", "Grok CLI", "Qwen Code", "Qoder CLI", "Bob Shell"]) {
+    for (const label of ["Cursor Agent CLI", "GitHub Copilot CLI", "Devin CLI", "Droid", "Grok CLI", "Qwen Code", "Qoder CLI", "Bob Shell", "Antigravity CLI"]) {
       expect(section.text()).toContain(label);
     }
 
     const rows = section.findAll("li.agent-integration-row");
-    expect(rows).toHaveLength(10); // claude・codex + 8
+    expect(rows).toHaveLength(11); // claude・codex + 9
 
     // Copilot（3行目。claude・codex に続く）は導入済みなので「解除」ボタン
     const copilotButton = rows[3]!.find("button.settings-btn");
@@ -2146,4 +2147,16 @@ describe("SettingsDialog — 表示の節 — 画面の様式", () => {
     expect("uiStyle" in readPrefs()).toBe(true);
     expect(wrapper.find('button[type="submit"]').exists()).toBe(false);
   });
+});
+
+it("offers Antigravity statusline installation separately and sends the agy kind", async () => {
+  const status: AgentIntegrationStatusResult = { autoResumeEnabled: true, agents: { claude: { cliDetected: false, installed: false }, codex: { cliDetected: false, installed: false }, ...defaultOtherAgentStatuses() }, agyStatusLine: { state: "none" } };
+  const m = makeAgentIntegrationActions(status);
+  const installStatusLineWrap = vi.fn(async () => ({ ok: true, message: null }));
+  const { wrapper } = await openDialog(makeController(), undefined, { ...m.actions, installStatusLineWrap });
+  const row = agentIntegrationSection(wrapper).get("[data-agy-statusline-wrap]");
+  expect(row.text()).toContain("Antigravity CLI");
+  await row.get("button").trigger("click");
+  expect(installStatusLineWrap).toHaveBeenCalledWith("agy");
+  expect(m.installAgentIntegration).not.toHaveBeenCalled();
 });

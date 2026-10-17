@@ -68,3 +68,9 @@ describe("resumeCommandFor", () => {
     );
   });
 });
+
+it("resumes Antigravity by conversation UUID and rejects names/paths/metacharacters", () => {
+  const id = "12345678-abcd-ef01-2345-6789abcdef01";
+  expect(resumeCommandFor("agy", id)).toBe(`agy --conversation ${id}`);
+  for (const bad of ["../other", "name", "a;pwd", "--continue"]) expect(resumeCommandFor("agy", bad)).toBeUndefined();
+});

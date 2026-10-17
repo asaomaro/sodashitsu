@@ -179,6 +179,10 @@ function openDashboard(): void {
           <span class="dash-num">{{ formatUsageCost(usage) }}</span>
           <span v-if="costNote" class="dash-muted pinfo-basis">{{ costNote }}</span>
         </dd>
+        <template v-if="usage.premiumRequests !== undefined">
+          <dt>プレミアムリクエスト</dt>
+          <dd class="dash-num" data-pane-info-premium-requests>{{ usage.premiumRequests }}</dd>
+        </template>
         <dt>コンテキスト</dt>
         <dd data-pane-info-context>
           <span

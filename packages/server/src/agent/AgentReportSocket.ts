@@ -48,6 +48,13 @@ type AgentReportBody =
 
 /** `type: "usage"` の項目（検査済み。受け口が、範囲・長さ・形を掛ける）。 */
 export interface UsageFields {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  quota?: { label: string; usedPct: number; resetsAt?: number }[];
+  agentState?: "idle" | "thinking" | "working" | "tool_use" | "initializing";
+  toolConfirmationPending?: boolean;
   model?: string;
   modelName?: string;
   costUsd?: number;
@@ -273,6 +280,21 @@ function windowIn(v: unknown): { usedPct: number; resetsAt?: number } | undefine
 /** `type: "usage"` の電文から、通す項目だけを取り出す。 */
 function usageFieldsOf(o: Record<string, unknown>): UsageFields {
   const out: UsageFields = {};
+  for (const key of ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"] as const) {
+    const n = numIn(o[key], 0, 1e12);
+    if (n !== undefined) out[key] = n;
+  }
+  if (Array.isArray(o.quota)) {
+    out.quota = o.quota.slice(0, 16).flatMap((v: unknown) => {
+      if (!v || typeof v !== "object") return [];
+      const label = (v as Record<string, unknown>).label;
+      const w = windowIn(v);
+      if (w && w.usedPct > 100) return [];
+      return typeof label === "string" && /^[a-zA-Z0-9_.() -]{1,64}$/.test(label) && w ? [{ label, ...w }] : [];
+    });
+  }
+  if (typeof o.agentState === "string" && ["idle", "thinking", "working", "tool_use", "initializing"].includes(o.agentState)) out.agentState = o.agentState as NonNullable<UsageFields["agentState"]>;
+  if (typeof o.toolConfirmationPending === "boolean") out.toolConfirmationPending = o.toolConfirmationPending;
   const model = cut(o.model, 128);
   if (model !== undefined) out.model = model;
   const modelName = cut(o.modelName, 64);

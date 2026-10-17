@@ -1,0 +1,12 @@
+# Observed with native agy 1.4.0, without trusting the temporary directory.
+id = "agy"
+version = "2026.10.17.1"
+min_engine_version = 1
+
+[[rules]]
+id = "workspace_trust_blocked"
+state = "blocked"
+priority = 310
+region = "bottom_non_empty_lines(12)"
+visible_blocker = true
+contains = ["Do you trust the contents of this project?", "Yes, I trust this folder", "No, exit"]
