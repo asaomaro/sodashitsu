@@ -235,6 +235,14 @@ export function devinUserConfigDir(
 }
 
 const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
+  agy: {
+    configFile: (_env, home) => join(home, ".gemini", "config", "hooks.json"),
+    hooksDir: (_env, home) => join(home, ".gemini", "antigravity-cli", "hooks"),
+    binName: "agy",
+    entriesPath: ["sodashitsu", "SessionStart"],
+    buildEntry: (scriptPath, kind) => ({ type: "command", command: hookCommand(scriptPath, kind) }),
+    isOurs: isOursField("command"),
+  },
   claude: {
     configFile: (env, home) =>
       join(env.CLAUDE_CONFIG_DIR || join(home, ".claude"), "settings.json"), // research.md F4.5（旧 F4.5 相当）

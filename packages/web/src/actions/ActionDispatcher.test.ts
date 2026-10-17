@@ -2082,7 +2082,7 @@ describe("ActionDispatcher — 公式フック連携（20260923-agent-session-re
         grok: notInstalled,
         qwen: notInstalled,
         qodercli: notInstalled,
-        bob: notInstalled,
+        agy: notInstalled, bob: notInstalled,
       },
     };
     conn.resolveWith["agent_integration.status"] = status;

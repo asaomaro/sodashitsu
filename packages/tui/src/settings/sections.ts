@@ -67,6 +67,7 @@ export interface AgentIntegrationPort {
   install(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }>;
   uninstall(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }>;
   setAutoResume(enabled: boolean): Promise<void>;
+  statusLine?(kind: "claude" | "agy", install: boolean): Promise<{ ok: boolean; message: string | null }>;
 }
 
 export interface SettingsEnv extends KeySectionEnv {
@@ -656,6 +657,7 @@ const AGENT_KINDS: readonly { value: AgentIntegrationKind; label: string }[] = [
   { value: "qwen", label: "Qwen Code" },
   { value: "qodercli", label: "Qoder CLI" },
   { value: "bob", label: "Bob Shell" },
+  { value: "agy", label: "Antigravity CLI" },
 ];
 
 function agentSection(env: SettingsEnv): SettingsSection {
@@ -726,6 +728,21 @@ function agentSection(env: SettingsEnv): SettingsSection {
           },
         ];
       });
+      for (const kind of ["claude", "agy"] as const) {
+        const wrap = kind === "agy" ? status.agyStatusLine : status.statusLine;
+        if (!wrap || !env.agentIntegration.statusLine) continue;
+        const installed = wrap.state === "installed" || wrap.state === "needs_update";
+        const label = `${kind === "agy" ? "Antigravity CLI" : "Claude Code"} 利用状況（ステータスライン）`;
+        const invoke = (install: boolean): string => {
+          busy = kind;
+          env.agentIntegration.statusLine!(kind, install).then(r => env.message(r.message ?? (r.ok ? "変更しました。エージェントを起動し直すと反映されます。" : "操作に失敗しました")), () => env.message("操作に失敗しました")).finally(() => { busy = null; });
+          return "変更中…";
+        };
+        items.push({ label, value: wrap.state === "none" ? "未導入" : installed ? "導入済み" : wrap.message ?? wrap.state,
+          note: "モデル・利用状況・制限枠を共有します。元の表示と設定を保存し、外すと戻します。",
+          disabled: busy !== null || ["invalid", "unsupported"].includes(wrap.state), activate: () => invoke(!installed) });
+        if (wrap.state === "needs_update") items.push({ label: `${label}を更新`, disabled: busy !== null, activate: () => invoke(true) });
+      }
       items.push(
         toggleItem(
           "サーバの起動時にセッションを再開する",

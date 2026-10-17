@@ -36,10 +36,10 @@ export function registerAgentIntegrationMethods(surface: ControlSurface, deps: M
   // Claude Code のステータスラインの包み（20261010-agent-usage の PR2）。フックの導入とは別の項目。
   surface.register("agent_integration.statusline_install", {
     schema: AgentIntegrationStatusLineParams,
-    handler: () => deps.agentIntegrations.installStatusLine(),
+    handler: (_ctx, params) => deps.agentIntegrations.installStatusLine(params.kind),
   });
   surface.register("agent_integration.statusline_uninstall", {
     schema: AgentIntegrationStatusLineParams,
-    handler: () => deps.agentIntegrations.uninstallStatusLine(),
+    handler: (_ctx, params) => deps.agentIntegrations.uninstallStatusLine(params.kind),
   });
 }

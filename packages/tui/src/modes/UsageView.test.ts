@@ -199,3 +199,39 @@ it("shows non-USD credits and premium requests on the cost line", () => {
   const usage = { paneId: "p1", kind: "copilot", model: "m", tokens: { basis: "transcript" }, credits: { amount: 0.166003, unit: "aic" }, premiumRequests: 2, updatedAt: 0, source: "copilot-events" } as AgentUsage;
   expect(usageLines(usage).join("\n")).toContain("コスト 0.1660 AIC · プレミアムリクエスト 2");
 });
+
+it("renders Antigravity current usage and quota in the TUI without invented currency", async () => {
+  const { UsageDashboard } = await import("./UsageView.js");
+  const model = new SessionModel(); model.applySnapshot(snapshot(), "client");
+  const pane = model.panes.get("p1")!;
+  model.panes.set("p1", { ...pane, agent: { instanceId: "instance", kind: "agy", label: "Antigravity CLI", state: "idle", since: 0, completionSeq: 0, serverSeenSeq: 0, verified: false } });
+  const ui = new UiState(model, vi.fn());
+  const usage = { status: "ready", data: { panes: { p1: { paneId: "p1", kind: "agy", model: "Gemini 3.5 Flash", tokens: { basis: "context", input: 1234 }, contextUsedPct: 25, updatedAt: Date.now(), source: "statusline" } }, accounts: [{ kind: "agy", accountKey: "a", label: "Antigravity CLI", windows: [{ label: "gemini-weekly", usedPct: 30, resetsAt: Date.now() + 3600000 }], source: "statusline", asOf: Date.now() }] } } as unknown as UsageModel;
+  const grid = new Grid(140, 35); new UsageDashboard(model, ui, usage, vi.fn()).render(grid, { x: 0, y: 0, w: 140, h: 35 }, new ThemeColors("dracula"));
+  const text = Array.from({ length: 35 }, (_, y) => grid.rowText(y)).join("\n");
+  expect(text).toContain("Antigravity CLI"); expect(text).toContain("gemini-weekly");
+  expect(text).toContain("30.0%"); expect(text).toContain("Gemini 3.5 Flash");
+  expect(text).toContain("文脈内 1,234");
+  expect(text).not.toContain("$0");
+});
+
+it.each(["agy", "bob"])("shows known token subtotals for %s and sorts by them", async (kind) => {
+  const { UsageDashboard } = await import("./UsageView.js");
+  const model = new SessionModel(); model.applySnapshot(snapshot(), "client");
+  const pane = model.panes.get("p1")!;
+  const agent = { instanceId: "instance", kind, label: kind, state: "idle", since: 0, completionSeq: 0, serverSeenSeq: 0, verified: false } as const;
+  model.panes.set("p1", { ...pane, label: "alpha", agent });
+  model.panes.set("p2", { ...pane, id: "p2", label: "zeta", agent: { ...agent, instanceId: "other" } });
+  const u = { paneId: "p1", kind, model: "test-model", tokens: { basis: "context", input: 80000, output: 1000, cacheRead: 4000 }, updatedAt: 0, source: "statusline" } as AgentUsage;
+  expect(usageLines(u).join("\n")).toContain("トークン 合計 85,000");
+  expect(usageLines({ ...u, tokens: { basis: "context", input: 0 } }).join("\n")).toContain("トークン 合計 0");
+  expect(usageLines({ ...u, tokens: { basis: "context" } }).join("\n")).toContain("トークン 合計 —");
+  expect(usageLines({ ...u, tokens: { ...u.tokens, total: 7 } }).join("\n")).toContain("トークン 合計 7");
+  const usage = { status: "ready", data: { panes: { p1: { ...u, tokens: { basis: "context", input: 100 } }, p2: { ...u, paneId: "p2" } }, accounts: [] } } as unknown as UsageModel;
+  const view = new UsageDashboard(model, new UiState(model), usage, vi.fn());
+  view.handleKey({ key: "s" } as never);
+  const grid = new Grid(140, 35); view.render(grid, { x: 0, y: 0, w: 140, h: 35 }, new ThemeColors("dracula"));
+  const text = Array.from({ length: 35 }, (_, y) => grid.rowText(y)).join("\n");
+  expect(text).toContain("文脈内 85,000");
+  expect(text.indexOf("zeta")).toBeLessThan(text.indexOf("alpha"));
+});

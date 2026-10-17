@@ -1170,7 +1170,7 @@ describe("FsAgentIntegrationInstaller — qodercli", () => {
   );
 
   it("isAgentIntegrationKind・AGENT_INTEGRATION_KINDS", () => {
-    expect(AGENT_INTEGRATION_KINDS).toHaveLength(10);
+    expect(AGENT_INTEGRATION_KINDS).toHaveLength(11);
     expect(AGENT_INTEGRATION_KINDS).toContain("qodercli");
     expect(AGENT_INTEGRATION_KINDS).toContain("bob");
     for (const kind of AGENT_INTEGRATION_KINDS) expect(isAgentIntegrationKind(kind)).toBe(true);
@@ -1230,4 +1230,25 @@ describe("FsAgentIntegrationInstaller — bob", () => {
     expect(JSON.parse(await readFile(settingsFile(), "utf8"))).toEqual(original);
     await expect(stat(join(home, ".bob", "hooks", "soda-agent-report.cjs"))).rejects.toThrow();
   });
+});
+
+it("installs Antigravity named SessionStart handlers without disturbing other named hooks", async () => {
+  const dir = await makeTempDir("soda-agy-hook-");
+  try {
+    const config = join(dir, ".gemini", "config", "hooks.json");
+    await mkdir(join(dir, ".gemini", "config"), { recursive: true });
+    await writeFile(config, JSON.stringify({ user: { Stop: [{ type: "command", command: "user-hook" }] } }));
+    const script = join(dir, "source.cjs"); await writeFile(script, "// test");
+    const installer = new FsAgentIntegrationInstaller(script, { PATH: "" }, dir);
+    expect(await installer.install("agy")).toEqual({ ok: true, message: null });
+    expect((await installer.install("agy")).ok).toBe(true);
+    const json = JSON.parse(await readFile(config, "utf8"));
+    expect(json.user.Stop[0].command).toBe("user-hook");
+    expect(json.sodashitsu.SessionStart).toHaveLength(1);
+    expect(json.sodashitsu.SessionStart[0]).toMatchObject({ type: "command", command: expect.stringContaining(" agy") });
+    expect((await installer.status("agy")).installed).toBe(true);
+    expect((await installer.uninstall("agy")).ok).toBe(true);
+    expect(JSON.parse(await readFile(config, "utf8")).user).toEqual(json.user);
+    expect((await installer.status("agy")).installed).toBe(false);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

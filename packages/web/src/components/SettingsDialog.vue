@@ -479,6 +479,7 @@ const AGENT_INTEGRATION_KINDS: readonly { value: AgentIntegrationKind; label: st
   { value: "qwen", label: "Qwen Code" },
   { value: "qodercli", label: "Qoder CLI" },
   { value: "bob", label: "Bob Shell" },
+  { value: "agy", label: "Antigravity CLI" },
 ];
 /** 導入/解除の操作中は二重押しを防ぐ（対象の kind を持つ。どちらも同時には押せない設計で足りる）。 */
 const agentIntegrationBusy = ref<AgentIntegrationKind | null>(null);
@@ -558,6 +559,16 @@ async function runStatusLine(action: "install" | "uninstall"): Promise<void> {
   } finally {
     statusLineBusy.value = false;
   }
+}
+
+const agyStatusLineBusy = ref(false);
+async function runAgyStatusLine(installed: boolean): Promise<void> {
+  if (!actions || agyStatusLineBusy.value) return;
+  agyStatusLineBusy.value = true;
+  try {
+    const r = installed ? await actions.uninstallStatusLineWrap("agy") : await actions.installStatusLineWrap("agy");
+    agentIntegrationMessage.value = r.message ?? (r.ok ? "変更しました。Antigravity CLI を起動し直すと反映されます。" : "操作に失敗しました");
+  } finally { agyStatusLineBusy.value = false; }
 }
 
 function toggleAgentIntegrationAutoResume(): void {
@@ -1690,18 +1701,18 @@ function onNativeCancel(ev: Event): void {
               <span class="settings-note agent-integration-status">
                 <template v-if="!agentIntegrations.status">確認中…</template>
                 <template v-else>
-                  {{ agentIntegrations.status.agents[k.value].installed ? "導入済み" : "未導入" }}
-                  <template v-if="agentIntegrations.status.agents[k.value].needsUpdate"
+                  {{ agentIntegrations.status.agents[k.value]?.installed ? "導入済み" : "未導入" }}
+                  <template v-if="agentIntegrations.status.agents[k.value]?.needsUpdate"
                     >（更新が必要）</template
                   >
-                  <template v-if="!agentIntegrations.status.agents[k.value].cliDetected"
+                  <template v-if="!agentIntegrations.status.agents[k.value]?.cliDetected"
                     >（この PATH には見つかりません）</template
                   >
                 </template>
               </span>
             </div>
             <button
-              v-if="agentIntegrations.status?.agents[k.value].needsUpdate"
+              v-if="agentIntegrations.status?.agents[k.value]?.needsUpdate"
               type="button"
               class="settings-btn agent-integration-update"
               :disabled="agentIntegrationBusy === k.value"
@@ -1717,11 +1728,11 @@ function onNativeCancel(ev: Event): void {
               @click="
                 toggleAgentIntegration(
                   k.value,
-                  agentIntegrations.status?.agents[k.value].installed ?? false,
+                  agentIntegrations.status?.agents[k.value]?.installed ?? false,
                 )
               "
             >
-              {{ agentIntegrations.status?.agents[k.value].installed ? "解除" : "導入" }}
+              {{ agentIntegrations.status?.agents[k.value]?.installed ? "解除" : "導入" }}
             </button>
           </li>
           <li
@@ -1767,6 +1778,15 @@ function onNativeCancel(ev: Event): void {
             >
               導入
             </button>
+          </li>
+          <li v-if="agentIntegrations.status?.agyStatusLine" class="settings-row agent-integration-row" data-agy-statusline-wrap>
+            <div class="agent-integration-label">
+              <span>Antigravity CLI 利用状況（ステータスライン）</span>
+              <span class="settings-note">{{ agentIntegrations.status.agyStatusLine.state === 'installed' ? '導入済み' : agentIntegrations.status.agyStatusLine.state === 'none' ? '未導入' : agentIntegrations.status.agyStatusLine.message ?? agentIntegrations.status.agyStatusLine.state }}</span>
+              <span class="settings-note">モデル・文脈内トークン・制限枠を共有します。元の表示と設定を保存し、外すと戻します。メール・会話本文は送信しません。</span>
+            </div>
+            <button v-if="agentIntegrations.status.agyStatusLine.state === 'needs_update'" class="settings-btn" :disabled="agyStatusLineBusy" @click="runAgyStatusLine(false)">更新</button>
+            <button class="settings-btn" :disabled="agyStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.agyStatusLine.state)" @click="runAgyStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state) ? '外す' : '導入' }}</button>
           </li>
           <li v-if="agentIntegrations.status?.statusLine" class="settings-row">
             <p class="settings-note">

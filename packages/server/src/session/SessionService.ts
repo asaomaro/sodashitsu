@@ -1460,6 +1460,11 @@ export class SessionService {
       const resumeId = this.frontAgents.get(paneId)?.resumeId;
       if (resumeId !== undefined && isCodexSessionId(resumeId)) this.attachByEvidence(paneId, "codex", resumeId, "argv");
     }
+    if (patch.agent?.kind === "agy" && this.argvApplied.get(paneId) !== patch.agent.instanceId) {
+      this.argvApplied.set(paneId, patch.agent.instanceId);
+      const id = this.frontAgents.get(paneId)?.resumeId;
+      if (id !== undefined && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) this.attachByEvidence(paneId, "agy", id, "argv");
+    }
     // 会話参照の消滅も保存契機にする（design D8）——さもないと、サーバが不意に落ちたときに
     // 「もう有効ではない」という事実が session.json に反映されないまま残ることがある。
     if (cwdChanged || clearsAgentSession || droppedForNewAgent) this.persist.touch();

@@ -419,6 +419,7 @@ test("native statusline settings, order, row bounds and mobile layout persist", 
           "subagents",
           "weeklyCost",
           "fiveHourReset",
+          "otherLimitsReset",
           "weeklyReset",
         ],
       });
