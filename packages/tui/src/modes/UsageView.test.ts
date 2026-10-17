@@ -135,6 +135,65 @@ it("dashboard shows live colored sidebar symbols in compact and full rows", asyn
   );
 });
 
+it("opens cost detail by account click and renders shared model/effort totals", async () => {
+  const { UsageDashboard, AccountCostDialog } = await import("./UsageView.js");
+  const model = new SessionModel();
+  model.applySnapshot(snapshot(), "client");
+  const ui = new UiState(model),
+    theme = new ThemeColors("dracula"),
+    grid = new Grid(110, 28);
+  const accountCost = vi
+    .fn()
+    .mockResolvedValue({
+      accountKey: "k",
+      totalUsd: 12,
+      sessions: 2,
+      unpricedSessions: 0,
+      byModel: [{ label: "sonnet", usd: 12, sessions: 2 }],
+      byEffort: [{ label: "不明", usd: 12, sessions: 2 }],
+      partial: false,
+      asOf: 0,
+    });
+  const usage = {
+    status: "ready",
+    data: {
+      panes: {},
+      accounts: [{ accountKey: "k", label: "CostAccount", windows: [], asOf: 0 }],
+    },
+    accountCost,
+    refresh: vi.fn(),
+  } as unknown as UsageModel;
+  const dashboard = new UsageDashboard(model, ui, usage, vi.fn());
+  dashboard.render(grid, { x: 0, y: 0, w: 110, h: 28 }, theme);
+  const y = Array.from({ length: grid.h }, (_, y) => grid.rowText(y)).findIndex((x) =>
+    x.includes("CostAccount"),
+  );
+  dashboard.handleMouse({ action: "down", button: 0, x: 5, y });
+  expect(ui.dialogContext).toEqual({ kind: "accountCost", accountKey: "k" });
+  const dialog = new AccountCostDialog("k", ui, usage);
+  await Promise.resolve();
+  dialog.render({ grid, theme });
+  const text = Array.from({ length: grid.h }, (_, y) => grid.rowText(y)).join("\n");
+  expect(accountCost).toHaveBeenCalledWith("k");
+  expect(text).toContain("$12.0000");
+  expect(text).toContain("モデル別");
+  expect(text).toContain("エフォート別");
+  expect(text).toContain("sonnet");
+  dialog.handleKey({ key: "Escape" } as never);
+  expect(ui.dialogContext).toBeNull();
+});
+
+it("account list supports Tab then Enter and ignores a replaced overflow hint", async () => {
+ const { UsageDashboard }=await import("./UsageView.js"); const model=new SessionModel(); model.applySnapshot(snapshot(),"client");
+ const ui=new UiState(model), theme=new ThemeColors("dracula");
+ const usage={status:"ready",data:{panes:{},accounts:[{accountKey:"a",label:"First",asOf:0,windows:[{label:"5h",usedPct:10}]},{accountKey:"b",label:"Second",asOf:0,windows:[]}]}} as unknown as UsageModel;
+ const list=new UsageDialog(null,model,ui,usage); list.handleKey({key:"Tab"} as never); list.handleKey({key:"Enter"} as never);
+ expect(ui.dialogContext).toEqual({kind:"accountCost",accountKey:"b"}); ui.closeDialog();
+ const dashboard=new UsageDashboard(model,ui,usage,vi.fn()),grid=new Grid(80,8); dashboard.render(grid,{x:0,y:0,w:80,h:8},theme);
+ const y=Array.from({length:grid.h},(_,y)=>grid.rowText(y)).findIndex(s=>s.includes("アカウント枠: ほか"));
+ expect(y).toBeGreaterThanOrEqual(0); dashboard.handleMouse({action:"down",button:0,x:5,y}); expect(ui.dialogContext).toBeNull();
+});
+
 // 20261016-agent-usage-bob-copilot
 it("shows non-USD credits and premium requests on the cost line", () => {
   const usage = { paneId: "p1", kind: "copilot", model: "m", tokens: { basis: "transcript" }, credits: { amount: 0.166003, unit: "aic" }, premiumRequests: 2, updatedAt: 0, source: "copilot-events" } as AgentUsage;

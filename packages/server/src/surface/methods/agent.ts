@@ -4,6 +4,7 @@ import {
   type AgentPromptResult,
   type AgentPromptParams as PromptParams,
   AgentSubagentTranscriptParams,
+  AccountCostParams,
   AgentUsageParams,
   AgentUsageWatchParams,
   AgentRenameParams,
@@ -67,8 +68,17 @@ function requirePromptExpectation(deps: MethodDeps, params: PromptParams): void 
   const pane = deps.session.getPane(params.paneId);
   const tab = pane && deps.session.getTab(pane.tabId);
   const workspace = tab && deps.session.getWorkspace(tab.workspaceId);
-  if (params.paneId !== e.paneId || pane?.agent?.instanceId !== e.instanceId || pane?.agent?.name !== e.name || pane?.tabId !== e.tabId || workspace?.projectDir !== e.projectDir) {
-    throw new RpcError("agent_not_found", "agent prompt target no longer matches its expected pane, instance, tab, project or name");
+  if (
+    params.paneId !== e.paneId ||
+    pane?.agent?.instanceId !== e.instanceId ||
+    pane?.agent?.name !== e.name ||
+    pane?.tabId !== e.tabId ||
+    workspace?.projectDir !== e.projectDir
+  ) {
+    throw new RpcError(
+      "agent_not_found",
+      "agent prompt target no longer matches its expected pane, instance, tab, project or name",
+    );
   }
 }
 
@@ -96,7 +106,8 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
       try {
         await host.writeModal({
           build: (modes) => {
-            if(ctx.signal?.aborted)throw new RpcError("agent_prompt_failed","指示の送信を中断しました");
+            if (ctx.signal?.aborted)
+              throw new RpcError("agent_prompt_failed", "指示の送信を中断しました");
             // 別の入力の後ろで待っている間に状態が変わりうるので、書く直前にもう一度確かめる
             // （承認ダイアログへの誤答・終了したエージェントの後のシェルへの誤入力を防ぐ。decisions.md D7）。
             requirePromptExpectation(deps, params);
@@ -177,6 +188,10 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
   // ログイン済みの `/ws` の方式だけ（`pane.sock` には載せない）。
   const usage = deps.usage;
   if (usage) {
+    surface.register("agent.account_cost", {
+      schema: AccountCostParams,
+      handler: (_ctx, params) => usage.accountCost(params.accountKey),
+    });
     surface.register("agent.usage", {
       schema: AgentUsageParams,
       handler: (_ctx, params) => usage.get(params.paneId),
@@ -216,7 +231,8 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
           });
         } catch (err) {
           // 受理の前に断られた要求は記録していない。ここで消すと、同じ親が同じ pane へ先に出した受理済みの start の記録まで消えてしまう。
-          if (accepted && params.callerPaneId !== undefined) deps.lineage?.forgetStart(params.paneId, params.callerPaneId);
+          if (accepted && params.callerPaneId !== undefined)
+            deps.lineage?.forgetStart(params.paneId, params.callerPaneId);
           throw err;
         }
       },

@@ -25,7 +25,7 @@ import { ConversationDialog } from "../modes/ConversationDialog.js";
 import { configuredAgentActions, headerActionsFor } from "@sodashitsu/protocol";
 import { AgentForkDialog } from "../modes/AgentForkDialog.js";
 import { UsageModel } from "../model/UsageModel.js";
-import { UsageDialog, UsageDashboard } from "../modes/UsageView.js";
+import { AccountCostDialog, UsageDialog, UsageDashboard } from "../modes/UsageView.js";
 import {
   CopyMode,
   InputGate,
@@ -1355,6 +1355,7 @@ export class TuiApp {
         hintFor: (id) => this.keymap.hintFor(id),
         complete: () => this.completeOnboarding(),
       });
+    if (ctx.kind === "accountCost") return new WindowOverlay(new AccountCostDialog(ctx.accountKey, this.ui, this.usage), { w: 100, h: 30 });
     if (ctx.kind === "usageAccounts") return new UsageDialog(null, this.model, this.ui, this.usage);
     if (ctx.kind === "usage") return new UsageDialog(ctx.paneId, this.model, this.ui, this.usage);
     if (ctx.kind === "notifications") return new NotificationList(this.ui, this.notify);
@@ -1586,7 +1587,7 @@ export class TuiApp {
 
   private usageWanted(): boolean {
     return this.ui.screen === "dashboard" ||
-      ["usage", "usageAccounts"].includes(this.ui.dialogContext?.kind ?? "") ||
+      ["usage", "usageAccounts", "accountCost"].includes(this.ui.dialogContext?.kind ?? "") ||
       (this.ui.screen === "base" &&
         loadStatuslineSettings(this.prefs.shared.statuslineSettings).enabled &&
         [...this.model.panes.values()].some((p) => p.tabId === this.model.tabId && p.agent && !p.virtual));

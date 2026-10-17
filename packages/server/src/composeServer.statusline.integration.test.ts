@@ -166,7 +166,18 @@ describe.skipIf(process.platform !== "linux" || !existsSync("/bin/bash"))("compo
     const r = await usageOf(client, paneId);
     expect(r.panes[paneId]).toMatchObject({ kind: "claude", costBasis: "reported", contextUsedPct: 42.5, contextWindowTokens: 200000, contextTokens: 85000, source: "statusline", model: "claude-opus-5-5", tokens: { basis: "context" } });
     expect(r.accounts).toHaveLength(1);
-    expect(r.accounts[0]).toMatchObject({ kind: "claude", label: "Claude Code", source: "statusline" });
+    const costs = await client.request("agent.account_cost", {
+        accountKey: r.accounts[0].accountKey,
+      });
+      expect(costs.result).toMatchObject({
+        totalUsd: 1.25,
+        sessions: 1,
+        byModel: [{ label: "不明", usd: 1.25, sessions: 1 }],
+        byEffort: [{ label: "不明", usd: 1.25, sessions: 1 }],
+      });
+      const missing = await client.request("agent.account_cost", { accountKey: "unknown-account" });
+      expect(missing.error?.code).toBe("not_found");
+      expect(r.accounts[0]).toMatchObject({ kind: "claude", label: "Claude Code", source: "statusline" });
     expect(r.accounts[0].windows.map((w: { label: string; usedPct: number }) => [w.label, w.usedPct])).toEqual([["5 時間", 12], ["週", 30.5]]);
     expect(r.accounts[0].windows[0].resetsAt).toBe(4_000_000_000 * 1000);
     const json = JSON.stringify(r);

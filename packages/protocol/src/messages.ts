@@ -1,4 +1,10 @@
-import { SessionToolsParams, SessionNoteSaveParams, SessionNoteDeleteParams, type SessionNotes, type AgentTodos } from "./sessionTools.js";
+import {
+  SessionToolsParams,
+  SessionNoteSaveParams,
+  SessionNoteDeleteParams,
+  type SessionNotes,
+  type AgentTodos,
+} from "./sessionTools.js";
 import type { AgentActionSettings } from "./conversation.js";
 import {
   ScheduleSaveParams,
@@ -100,6 +106,7 @@ import {
   type Graph,
   type GraphHistoryResult,
 } from "./graph.js";
+import { AccountCostParams, type AccountCostResult } from "./accountCost.js";
 import type { AgentUsageResult } from "./usage.js";
 import type { ForkCreated, ForkNoteStatus, ForkUnavailableReason } from "./agentFork.js";
 import {
@@ -1558,6 +1565,7 @@ export const METHOD_SCHEMAS = {
   "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
   "notification.update": NotificationUpdateParams,
+  "agent.account_cost": AccountCostParams,
   "agent.usage": AgentUsageParams,
   "plugin.discover": z.object({}),
   "plugin.register": z.object({
@@ -1715,6 +1723,7 @@ export interface MethodResultMap {
   "notification.test": { ok: true };
   "notification.state": NotificationState;
   "notification.update": NotificationState;
+  "agent.account_cost": AccountCostResult;
   "agent.usage": AgentUsageResult;
   "plugin.discover": { candidates: import("./extension.js").PluginCandidate[] };
   "plugin.register": {};

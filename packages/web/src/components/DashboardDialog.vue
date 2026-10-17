@@ -10,7 +10,7 @@ import { useViewStore } from "../store/view.js";
 
 const view = useViewStore();
 const dialogEl = ref<HTMLDialogElement | null>(null);
-const open = computed(() => view.dialogContext?.kind === "dashboard");
+const open = computed(() => view.dialogContext?.kind === "dashboard" && !view.accountCostOpen);
 
 function sync(isOpen: boolean): void {
   const el = dialogEl.value;

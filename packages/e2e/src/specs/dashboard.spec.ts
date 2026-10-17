@@ -22,7 +22,7 @@ await mkdir(projectDir, { recursive: true });
 const FAKE = `
 import { appendFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 const pane = process.env.SODA_PANE_ID;
 const sessionId = randomUUID();
 const transcript = ${JSON.stringify(projectDir)} + "/" + sessionId + ".jsonl";
@@ -41,6 +41,9 @@ if (sock) {
 }
 process.stdin.on("data", (d) => {
   appendFileSync(${JSON.stringify(join(dir, "input.log"))}, JSON.stringify({ pane, data: String(d) }) + "\\n");
+  if (String(d).includes("COSTREPORT")) {
+    const c=connect(sock,()=>c.end(JSON.stringify({type:"usage",paneId:pane,kind:"claude",sessionId,agentPid:process.pid,configKey:createHash("sha256").update(${JSON.stringify(configDir)}).digest("hex").slice(0,16),costUsd:2.5,fiveHour:{usedPct:12}})+"\\n")); c.on("error",()=>{});
+  }
   if (String(d).includes("\\u0004")) process.exit(0);
 });
 setInterval(() => {}, 1000);
@@ -286,4 +289,71 @@ test.describe("ダッシュボード（PR3）", () => {
     expect(text).not.toContain("claude-config");
     expect((await readdir(projectDir)).length).toBeGreaterThan(0);
   });
+});
+
+test("account cost opens from the status card with model/effort breakdown and stays usable on mobile", async ({
+  page,
+  appServer,
+}) => {
+  test.setTimeout(90_000);
+  const client = await appServer.openClient(),
+    pane = client.helloSnapshot()!.panes[0]!;
+  await startAgent(appServer, client, pane.id, "cost-worker");
+  const sessionId = "cost-closed-session";
+  await writeFile(
+    join(projectDir, `${sessionId}.jsonl`),
+    JSON.stringify({
+      type: "cost-state",
+      sessionId,
+      totalCostUSD: 5,
+      modelUsage: { "model-closed": { costUSD: 5, effort: "high" } },
+    }) + "\n",
+  );
+  await open(page, appServer);
+  await page.locator('[data-screen-id="dashboard"]').click();
+  await expect(dash(page)).toBeVisible();
+  // Source is a real verified fake agent report, not a client fixture response.
+  await expect(async () => {
+    client.sendInput(pane.id, "COSTREPORT");
+    await expect(page.locator("[data-dash-account]")).toBeVisible({ timeout: 2500 });
+  }).toPass({ timeout: 20_000 });
+  const card = page.locator("[data-dash-account]");
+  await card.click();
+  const dialog = page.getByRole("dialog", { name: "アカウントのコスト" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("[data-account-cost-total]")).toHaveText("$7.5000");
+  await expect(dialog).toContainText("model-closed");
+  await expect(dialog).toContainText("エフォート別");
+  await expect(dialog).toContainText("high");
+  await expect(dialog).toContainText("不明");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await card.focus();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 700 });
+  await expect
+    .poll(async () =>
+      dialog.evaluate(
+        (el) =>
+          el.getBoundingClientRect().right <= innerWidth &&
+          el.getBoundingClientRect().bottom <= innerHeight,
+      ),
+    )
+    .toBe(true);
+  await expect(dialog.getByRole("button", { name: "閉じる" })).toBeVisible();
+  await page.screenshot({ path: "/tmp/account-cost-mobile.png" });
+  await dialog.getByRole("button", { name: "閉じる" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.locator(".mobile-shell-title").click();
+  await page.locator("[data-picker-dashboard]").click();
+  const mobileDashboard=page.locator(".dashboard-dialog[open]");
+  await expect(mobileDashboard).toBeVisible();
+  await mobileDashboard.locator("[data-dash-account]").click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("[data-account-cost-total]")).toHaveText("$7.5000");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(mobileDashboard).toBeVisible();
+  client.close();
 });

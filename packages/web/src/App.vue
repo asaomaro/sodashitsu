@@ -7,6 +7,7 @@ import ContextMenu from "./components/ContextMenu.vue";
 import DetachedView from "./components/DetachedView.vue";
 import GotoPicker from "./components/GotoPicker.vue";
 import GraphDialog from "./components/graph/GraphDialog.vue";
+import AccountCostDialog from "./dashboard/AccountCostDialog.vue";
 import DashboardDialog from "./components/DashboardDialog.vue";
 import PaneInfoDialog from "./components/PaneInfoDialog.vue";
 import SessionToolsWindow from "./components/SessionToolsWindow.vue";
@@ -95,6 +96,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
     <ConfirmDialog />
     <SubagentListDialog />
     <NotificationHistoryDialog />
+    <AccountCostDialog v-if="view.accountCostAccount" :key="view.accountCostAccount.accountKey" :account="view.accountCostAccount" @close="view.accountCostAccount = null" />
     <SettingsDialog />
     <StatuslineSettingsDialog />
     <SystemFooterSettingsDialog />

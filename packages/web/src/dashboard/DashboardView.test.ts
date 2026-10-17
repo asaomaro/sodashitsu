@@ -7,6 +7,7 @@ import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useUsageStore } from "../store/usage.js";
 import { useViewStore } from "../store/view.js";
+import AccountCostDialog from "./AccountCostDialog.vue";
 import DashboardView from "./DashboardView.vue";
 
 let pinia: Pinia;
@@ -228,4 +229,59 @@ describe("DashboardView（20261010-agent-usage PR3）", () => {
     expect(wrapper.find("[data-dash-failed]").exists()).toBe(true);
     wrapper.unmount();
   });
+});
+
+it("opens an account cost window from its card and displays total, model and effort groups", async () => {
+  const { wrapper, usage: store, requests } = setup([pane("p1", null)]);
+  store.accounts = [account()];
+  const conn = wrapper.vm.$.appContext.provides[ConnectionKey as symbol] as ConnectionPort;
+  conn.request = vi.fn(async (method: string, params: unknown) => {
+    requests.push([method, params]);
+    return {
+      accountKey: "k1",
+      totalUsd: 12,
+      sessions: 2,
+      unpricedSessions: 0,
+      byModel: [
+        { label: "sonnet", usd: 9, sessions: 1 },
+        { label: "不明", usd: 3, sessions: 1 },
+      ],
+      byEffort: [
+        { label: "high", usd: 9, sessions: 1 },
+        { label: "不明", usd: 3, sessions: 1 },
+      ],
+      partial: true,
+      asOf: NOW,
+    };
+  }) as never;
+  // jsdom does not implement native modal focus, covered by the browser test.
+  HTMLDialogElement.prototype.showModal = function () {
+    this.setAttribute("open", "");
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.removeAttribute("open");
+  };
+  await wrapper.vm.$nextTick();
+  await wrapper.get("[data-dash-account]").trigger("click");
+  await wrapper.vm.$nextTick();
+  await Promise.resolve();
+  await wrapper.vm.$nextTick();
+  const view=useViewStore(pinia);
+  expect(view.accountCostAccount?.accountKey).toBe("k1");
+  expect(view.modalOpen).toBe(true);
+  const costWindow=mount(AccountCostDialog,{props:{account:account(),onClose:()=>{view.accountCostAccount=null;}},global:{plugins:[pinia],provide:{[ConnectionKey as symbol]:conn}}});
+  await Promise.resolve(); await costWindow.vm.$nextTick();
+  const dialog = costWindow.get('dialog[aria-label="アカウントのコスト"]');
+  expect(requests).toContainEqual(["agent.account_cost", { accountKey: "k1" }]);
+  expect(dialog.text()).toContain("$12.0000");
+  expect(dialog.text()).toContain("モデル別");
+  expect(dialog.text()).toContain("エフォート別");
+  expect(dialog.text()).toContain("sonnet");
+  expect(dialog.text()).toContain("high");
+  expect(dialog.text()).toContain("一部の記録");
+  await dialog.get("header button").trigger("click");
+  expect(view.accountCostAccount).toBeNull();
+  expect(view.modalOpen).toBe(false);
+  costWindow.unmount();
+  wrapper.unmount();
 });

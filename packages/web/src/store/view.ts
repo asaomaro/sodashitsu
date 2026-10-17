@@ -3,6 +3,7 @@ import { useSessionStore } from "./session.js";
 import {
   DEVICE_LOCAL_PREF_KEYS,
   type PopupDimension,
+  type AccountUsage,
   type ServerSessionEntry,
   type SessionFocus,
   type WorkspaceGroup,
@@ -482,12 +483,15 @@ export const useViewStore = defineStore("view", () => {
    * ダイアログ（1 枠・1 列のグラフ・質問のフォーム・拡張の承認）のどれかが開いている。**デスクトップのグラフの画面は入れない**（それは画面であって、ダイアログではない。D12）。
    * ドラッグの取り消し・焦点の戻し先の差し替え・フォーカスの備えの判定に使う（research-web §1.5）。
    */
+  const accountCostAccount = ref<AccountUsage | null>(null);
+  const accountCostOpen = computed(() => accountCostAccount.value !== null);
   const modalOpen = computed(
     () =>
       openDialog.value !== null ||
       graphDialogOpen.value ||
       askOpen.value ||
-      extensionApprovalOpen.value,
+      extensionApprovalOpen.value ||
+      accountCostOpen.value,
   );
   /**
    * キーを端末・サイドバーの navigate へ流さない（`KeyRouter` の dialog モード・`window` の `keydown` の抑止）。**デスクトップのグラフの画面は入れない**——基本画面の pane が
@@ -498,7 +502,8 @@ export const useViewStore = defineStore("view", () => {
       openDialog.value !== null ||
       graphDialogOpen.value ||
       askOpen.value ||
-      extensionApprovalOpen.value,
+      extensionApprovalOpen.value ||
+      accountCostOpen.value,
   );
   /** navigate モード中に選択中の行（workspace の id、グループの見出しなら `group:<id>`。`↑/↓` で動かす。Enter で確定）。 */
   const navigateSelection = ref<string | null>(null);
@@ -1060,6 +1065,8 @@ export const useViewStore = defineStore("view", () => {
     sidebarPickSeq,
     notifySidebarPick,
     modalOpen,
+    accountCostOpen,
+    accountCostAccount,
     keysCaptured,
     askOpen,
     extensionApprovalOpen,

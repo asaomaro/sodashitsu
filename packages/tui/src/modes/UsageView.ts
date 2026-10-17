@@ -1,7 +1,7 @@
 import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
 import { paneNameOf, type KeyInput } from "@sodashitsu/client-core";
-import { formatUsageCredits, shortId, type AgentUsage } from "@sodashitsu/protocol";
+import { formatUsageCredits, shortId, type AgentUsage, type AccountCostResult } from "@sodashitsu/protocol";
 import type { SessionModel } from "../model/SessionModel.js";
 import type { UiState } from "../model/UiState.js";
 import type { UsageModel } from "../model/UsageModel.js";
@@ -111,6 +111,8 @@ export class UsageDialog implements Overlay {
   cancelInteraction() {
     this.scrollbar.cancel();
   }
+  private accountHits: { y: number; key: string }[] = [];
+  private selectedAccount = 0;
   private scroll = 0;
   constructor(
     private readonly paneId: string | null,
@@ -120,13 +122,23 @@ export class UsageDialog implements Overlay {
   ) {}
   handleKey(k: KeyInput): void {
     this.scrollbar.cancel();
-    if (isEsc(k)) this.cancel();
+    if (!this.paneId && isEnter(k)) {
+      const a = this.usage.data.accounts[this.selectedAccount];
+      if (a) this.ui.openDialogWithContext({ kind: "accountCost", accountKey: a.accountKey });
+    } else if (!this.paneId && k.key === "Tab") {
+      this.selectedAccount =
+        (this.selectedAccount + 1) % Math.max(1, this.usage.data.accounts.length);
+    } else if (isEsc(k)) this.cancel();
     else if (isDown(k)) this.scroll++;
     else if (isUp(k)) this.scroll = Math.max(0, this.scroll - 1);
   }
   handleMouse(ev: OverlayMouse): boolean {
     if (this.handleScrollMouse(ev)) return true;
     if (!inside(this.rect, ev.x, ev.y)) return false;
+    if (!this.paneId && ev.action === "down" && ev.button === 0) {
+      const hit = this.accountHits.find((h) => h.y === ev.y);
+      if (hit) this.ui.openDialogWithContext({ kind: "accountCost", accountKey: hit.key });
+    }
     if (ev.action === "wheel") this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 1 : -1));
     return true;
   }
@@ -144,6 +156,7 @@ export class UsageDialog implements Overlay {
       );
     area.w = Math.max(0, area.w - 1);
     const pane = this.paneId ? this.model.panes.get(this.paneId) : null;
+    this.accountHits = [];
     const lines = [
       ...(pane
         ? [
@@ -156,16 +169,24 @@ export class UsageDialog implements Overlay {
         ? [statusText(this.usage)!]
         : this.paneId
           ? usageLines(this.usage.data.panes[this.paneId])
-          : this.usage.data.accounts.flatMap((a) => [
-              a.label,
+          : this.usage.data.accounts.flatMap((a, i) => [
+              `${i === this.selectedAccount ? "▶ " : "  "}${a.label} [コスト]`,
               ...a.windows.map(
                 (w) =>
                   `${w.label}: ${usageGauge(w.usedPct)} · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
               ),
             ])),
-      "↑↓ スクロール · Esc 閉じる",
+      "↑↓ スクロール · Tab:アカウント選択 / Enter:コスト · Esc 閉じる",
     ];
     this.scroll = Math.min(this.scroll, Math.max(0, lines.length - area.h));
+    if (!this.paneId) {
+      let offset = 0;
+      for (const a of this.usage.data.accounts) {
+        const y = area.y + offset - this.scroll;
+        if (y >= area.y && y < area.y + area.h) this.accountHits.push({ y, key: a.accountKey });
+        offset += 1 + a.windows.length;
+      }
+    }
     lines
       .slice(this.scroll, this.scroll + area.h)
       .forEach((s, i) => paintUsageLine(grid, area.x, area.y + i, s, theme, c.fg, c.bg, area.w));
@@ -192,6 +213,7 @@ export class UsageDashboard {
   private selected = 0;
   private sort: "name" | "tokens" | "cost" | "context" = "name";
   private hits: { y: number; paneId: string }[] = [];
+  private accountHits: { y: number; key: string }[] = [];
   private area: Rect | null = null;
   constructor(
     private readonly model: SessionModel,
@@ -249,6 +271,11 @@ export class UsageDashboard {
         Math.min(this.rows().length - 1, this.selected + (ev.button === 65 ? 1 : -1)),
       );
     if (ev.action === "down" && ev.button === 0) {
+      const account = this.accountHits.find((h) => h.y === ev.y);
+      if (account) {
+        this.ui.openDialogWithContext({ kind: "accountCost", accountKey: account.key });
+        return true;
+      }
       const hit = this.hits.find((h) => h.y === ev.y);
       if (hit) {
         this.ui.setScreen("base");
@@ -260,6 +287,7 @@ export class UsageDashboard {
   render(grid: Grid, area: Rect, theme: ThemeColors): void {
     this.area = area;
     this.hits = [];
+    this.accountHits = [];
     const c = { ...dialogColors(theme), bg: theme.ground("--soda-menu-bg") };
     grid.fill(area, c.fg, c.bg);
     const put = (y: number, text: string, bg = c.bg) => {
@@ -288,9 +316,17 @@ export class UsageDashboard {
       ),
     ]);
     const accountRoom = Math.max(0, Math.min(Math.floor(area.h / 3), area.y + area.h - y - 5));
+    let accountOffset = 0;
+    for (const a of this.usage.data.accounts) {
+      if (accountOffset < accountRoom)
+        this.accountHits.push({ y: y + accountOffset, key: a.accountKey });
+      accountOffset += a.windows.length + 1;
+    }
     for (const line of accountLines.slice(0, accountRoom)) put(y++, line);
-    if (accountLines.length > accountRoom && accountRoom > 0)
+    if (accountLines.length > accountRoom && accountRoom > 0) {
+      this.accountHits = this.accountHits.filter((hit) => hit.y !== y - 1);
       put(y - 1, `アカウント枠: ほか ${accountLines.length - accountRoom + 1} 行（aで一覧）`);
+    }
     if (!accountLines.length && area.h >= 8) put(y++, "利用枠の情報がありません（aで一覧）");
     section("エージェント");
     const rows = this.rows();
@@ -351,5 +387,115 @@ export class UsageDashboard {
       area.y + area.h - 1,
       `${rows.length} エージェント · ${this.selected + Number(rows.length > 0)} / ${rows.length}`,
     );
+  }
+}
+
+/** Account cost drilldown is read-only and uses the same authenticated RPC as the web dialog. */
+export class AccountCostDialog implements Overlay {
+  private rect: Rect | null = null;
+  private scroll = 0;
+  private readonly scrollbar = new ScrollBar();
+  private result: AccountCostResult | null = null;
+  private busy = false;
+  private error = "";
+  private closed = false;
+  constructor(
+    private readonly key: string,
+    private readonly ui: UiState,
+    private readonly usage: UsageModel,
+  ) {
+    void this.load();
+  }
+  private async load() {
+    if (this.busy || this.closed) return;
+    this.busy = true;
+    this.error = "";
+    this.usage.refresh();
+    try {
+      const result = await this.usage.accountCost(this.key);
+      if (!this.closed) this.result = result;
+    } catch {
+      if (!this.closed)
+        this.error = "コストを取得できません（接続・サーバーの対応状況を確認してください）";
+    } finally {
+      if (!this.closed) {
+        this.busy = false;
+        this.usage.refresh();
+      }
+    }
+  }
+  cancelInteraction() {
+    this.scrollbar.cancel();
+  }
+  handleScrollMouse(ev: OverlayMouse) {
+    return this.scrollbar.handleMouse(ev);
+  }
+  cancel() {
+    this.closed = true;
+    this.ui.closeDialog();
+  }
+  handleKey(k: KeyInput) {
+    if (isEsc(k)) this.cancel();
+    else if (isDown(k)) this.scroll++;
+    else if (isUp(k)) this.scroll = Math.max(0, this.scroll - 1);
+    else if (k.key === "r") void this.load();
+  }
+  handleMouse(ev: OverlayMouse) {
+    if (this.scrollbar.handleMouse(ev)) return true;
+    if (!inside(this.rect, ev.x, ev.y)) return false;
+    if (ev.action === "wheel") this.scroll = Math.max(0, this.scroll + (ev.button === 65 ? 1 : -1));
+    return true;
+  }
+  render({ grid, theme }: OverlayRenderContext) {
+    this.rect = centeredRect(grid, Math.min(100, grid.w - 2), grid.h - 2);
+    const c = dialogColors(theme),
+      area = drawBox(
+        grid,
+        this.rect,
+        c,
+        "コスト · " +
+          (this.usage.data.accounts.find((a) => a.accountKey === this.key)?.label ?? "アカウント"),
+      );
+    const usd = (n: number | undefined) => (n === undefined ? "—" : "$" + n.toFixed(4)),
+      r = this.result;
+    const lines = [
+      "保存済みセッションのUSD集計（契約料金・請求額とは異なります）",
+      "内訳のない金額は不明。探索・読み取りには上限があります。",
+      ...(this.busy ? ["読み込み中…"] : []),
+      ...(this.error ? [this.error] : []),
+      ...(r
+        ? [
+            "─ 全体 ──────────────────────────",
+            usd(r.totalUsd) + ` · ${r.sessions} セッション / コスト未取得 ${r.unpricedSessions} 件`,
+            ...(r.partial ? ["一部の記録の集計（探索上限・読めない記録があります）"] : []),
+            "─ モデル別 ───────────────────────",
+            ...r.byModel.map((x) => `${x.label}  ${usd(x.usd)}  (${x.sessions} セッション)`),
+            ...(r.byModel.length ? [] : ["取得できる内訳がありません"]),
+            "─ エフォート別 ───────────────────",
+            ...r.byEffort.map((x) => `${x.label}  ${usd(x.usd)}  (${x.sessions} セッション)`),
+            ...(r.byEffort.length ? [] : ["取得できる内訳がありません"]),
+            `取得 ${new Date(r.asOf).toLocaleString("ja-JP")}`,
+          ]
+        : []),
+      "↑↓ スクロール · r 更新（最大10秒キャッシュ） · Esc 閉じる",
+    ];
+    this.scroll = Math.min(this.scroll, Math.max(0, lines.length - area.h));
+    lines
+      .slice(this.scroll, this.scroll + area.h)
+      .forEach((s, i) =>
+        grid.text(
+          area.x,
+          area.y + i,
+          truncate(plainText(s), Math.max(0, area.w - 1)),
+          c.fg,
+          c.bg,
+          0,
+          Math.max(0, area.w - 1),
+        ),
+      );
+    this.scrollbar.render(grid, area, lines.length, this.scroll, c, (offset) => {
+      this.scroll = offset;
+    });
+    return hiddenCursor();
   }
 }
