@@ -82,7 +82,7 @@ Running 1 test using 1 worker
   ✘  1 src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop (7.4s)
 
 
-  1) src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop 
+  1) src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop
 
     Error: expect(received).toBeLessThanOrEqual(expected)
 
@@ -109,7 +109,7 @@ Running 1 test using 1 worker
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   1 failed
-    src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop 
+    src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop
 undefined
 /workspaces/sodashitsu-vscode-cdp/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test vscode-cdp.spec.ts -g real CDP pixels --output /tmp/vscode-cdp-wheel-view-negative2-results

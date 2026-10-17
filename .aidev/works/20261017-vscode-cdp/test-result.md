@@ -149,7 +149,7 @@ Running 1 test using 1 worker
   ✘  1 src/specs/vscode-cdp.spec.ts:18:1 › real CDP pixels and input through the app view, explicit permissions and stop (9.4s)
 
 
-  1) src/specs/vscode-cdp.spec.ts:18:1 › real CDP pixels and input through the app view, explicit permissions and stop 
+  1) src/specs/vscode-cdp.spec.ts:18:1 › real CDP pixels and input through the app view, explicit permissions and stop
 
     Error: expect(received).toBe(expected) // Object.is equality
 
@@ -179,7 +179,7 @@ Running 1 test using 1 worker
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   1 failed
-    src/specs/vscode-cdp.spec.ts:18:1 › real CDP pixels and input through the app view, explicit permissions and stop 
+    src/specs/vscode-cdp.spec.ts:18:1 › real CDP pixels and input through the app view, explicit permissions and stop
 undefined
 /workspaces/sodashitsu-vscode-cdp/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test vscode-cdp.spec.ts --grep real CDP

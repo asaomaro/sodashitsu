@@ -92,7 +92,7 @@ Running 1 test using 1 worker
   ✘  1 src/specs/vscode-cdp-remote.spec.ts:9:1 › machine header routes only the selected remote VSCode and stops it on close or revocation (21.0s)
 
 
-  1) src/specs/vscode-cdp-remote.spec.ts:9:1 › machine header routes only the selected remote VSCode and stops it on close or revocation 
+  1) src/specs/vscode-cdp-remote.spec.ts:9:1 › machine header routes only the selected remote VSCode and stops it on close or revocation
 
     Error: expect(locator).toHaveCount(expected) failed
 
@@ -128,7 +128,7 @@ Running 1 test using 1 worker
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   1 failed
-    src/specs/vscode-cdp-remote.spec.ts:9:1 › machine header routes only the selected remote VSCode and stops it on close or revocation 
+    src/specs/vscode-cdp-remote.spec.ts:9:1 › machine header routes only the selected remote VSCode and stops it on close or revocation
 undefined
 /workspaces/sodashitsu-vscode-cdp/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test vscode-cdp-remote.spec.ts --output /tmp/cdp-remote-machine-negative-results

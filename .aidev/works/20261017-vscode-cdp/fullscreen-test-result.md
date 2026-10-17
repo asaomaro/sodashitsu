@@ -55,7 +55,7 @@ Running 1 test using 1 worker
   ✘  1 src/specs/vscode-cdp-resident.spec.ts:12:1 › registered Windows bridge stays resident across stop, reload and server restart (1.2m)
 
 
-  1) src/specs/vscode-cdp-resident.spec.ts:12:1 › registered Windows bridge stays resident across stop, reload and server restart 
+  1) src/specs/vscode-cdp-resident.spec.ts:12:1 › registered Windows bridge stays resident across stop, reload and server restart
 
     Error: expect(received).toBe(expected) // Object.is equality
 
@@ -85,7 +85,7 @@ Running 1 test using 1 worker
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   1 failed
-    src/specs/vscode-cdp-resident.spec.ts:12:1 › registered Windows bridge stays resident across stop, reload and server restart 
+    src/specs/vscode-cdp-resident.spec.ts:12:1 › registered Windows bridge stays resident across stop, reload and server restart
 undefined
 /workspaces/sodashitsu-vscode-cdp/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test vscode-cdp-resident.spec.ts --output /tmp/vscode-cdp-fullscreen-disconnect-negative-results
@@ -116,7 +116,7 @@ Running 1 test using 1 worker
   ✘  1 src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop (18.2s)
 
 
-  1) src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop 
+  1) src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop
 
     Error: expect(locator).not.toHaveAttribute(expected) failed
 
@@ -152,7 +152,7 @@ Running 1 test using 1 worker
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   1 failed
-    src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop 
+    src/specs/vscode-cdp.spec.ts:31:1 › real CDP pixels and input through the app view, explicit permissions and stop
 undefined
 /workspaces/sodashitsu-vscode-cdp/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test vscode-cdp.spec.ts -g real CDP pixels --output /tmp/vscode-cdp-fullscreen-escape-negative-results
