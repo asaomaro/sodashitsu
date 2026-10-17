@@ -1,6 +1,9 @@
 import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
 import { DesktopRelay } from "./desktop/DesktopRelay.js";
 import { DesktopProvider, desktopConfigFromEnv } from "./desktop/DesktopProvider.js";
+import { registerDesktopCdpMethods } from "./surface/methods/desktopCdp.js";
+import { DesktopCdpLauncher } from "./desktop/DesktopCdpLauncher.js";
+import { DesktopCdpRelay } from "./desktop/DesktopCdpRelay.js";
 import { ExtraOrigins } from "./auth/ExtraOrigins.js";
 import { DelegationGrants } from "./machine/DelegationGrants.js";
 import { ReverseConnections } from "./machine/ReverseConnections.js";
@@ -117,6 +120,8 @@ import { UsageService } from "./usage/UsageService.js";
 import { UsageFeed } from "./usage/UsageFeed.js";
 import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
 import { StatusLineWrapper } from "./agent/statusLineWrap.js";
+import { AntigravityUsageAdapter } from "./usage/antigravityAdapter.js";
+import { AntigravityStatusLineWrapper } from "./agent/antigravityStatusLineWrap.js";
 import { ClaudeUsageAdapter } from "./usage/claudeAdapter.js";
 import { BobUsageAdapter } from "./usage/bobAdapter.js";
 import { CopilotUsageAdapter } from "./usage/copilotAdapter.js";
@@ -340,6 +345,7 @@ export async function composeServer(
   });
   const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus, {
     statusLine: new StatusLineWrapper(statusLineScriptFor()),
+    agyStatusLine: new AntigravityStatusLineWrapper(join(import.meta.dirname, "..", "assets", "soda-agy-statusline.cjs")),
     health: {
       lastReportAt: () => reportedUsage.lastReportAt(),
       claudeRunningSince: () => {
@@ -614,7 +620,8 @@ export async function composeServer(
     logger,
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
-  const usage = new UsageService({ session, adapters: [new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
+  const agyUsage = new AntigravityUsageAdapter();
+  const usage = new UsageService({ session, adapters: [agyUsage, new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。
@@ -635,10 +642,23 @@ export async function composeServer(
     sink: reportedUsage,
     log: (reason, r) => logger.info("usage report ignored", { paneId: r.paneId, kind: "claude", reason }),
   });
+  const agyUsageIntake = new UsageReportIntake({
+    verdict: (r) => session.usageReportVerdict(r.paneId, "agy", r.agentPid, r.sessionId),
+    sink: { note: (r) => {
+      const report = r as import("./usage/antigravityAdapter.js").AntigravityUsageReport;
+      agyUsage.note(report);
+      if (report.toolConfirmationPending === true) agentMonitor.noteReportedState(r.paneId, r.sessionId, "blocked");
+      else if (report.agentState === "idle") agentMonitor.noteReportedState(r.paneId, r.sessionId, "idle");
+      else if (report.agentState !== undefined) agentMonitor.noteReportedState(r.paneId, r.sessionId, "working");
+      else agentMonitor.noteReportedState(r.paneId, r.sessionId);
+    } },
+    log: (reason, r) => logger.info("usage report ignored", { paneId: r.paneId, kind: "agy", reason }),
+  });
   const usageSub = bus.subscribe((e) => {
     if (e.event === "pane.closed") {
       usage.forgetPane(e.data.paneId);
       usageIntake.forgetPane(e.data.paneId);
+      agyUsageIntake.forgetPane(e.data.paneId);
     }
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
@@ -717,6 +737,8 @@ export async function composeServer(
   auth.onSessionRevoked((sessionId) => {
     for (const conn of [...(relayed.get(sessionId) ?? [])]) conn.close(4401, "session revoked");
   });
+  const desktopCdp = new DesktopCdpRelay(auth, originRejections, join(options.stateDir, "desktop-cdp-devices.json"), DesktopCdpLauncher.fromEnvironment());
+  registerDesktopCdpMethods(surface, desktopCdp);
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger, (selector) => {
     const route = machines.route(selector);
     if (route.kind !== "ok") return route;
@@ -733,7 +755,7 @@ export async function composeServer(
         relayToMachine(conn, route.link);
       },
     };
-  }, (req,socket,head)=>req.url === "/desktop-companion" ? desktopCompanion.upgrade(req,socket,head) : req.url?.startsWith("/desktop-share") ? desktopRelay.upgrade(req,socket,head) : delegations.upgrade(req,socket,head));
+  }, (req,socket,head)=>req.url === "/desktop-companion" ? desktopCompanion.upgrade(req,socket,head) : req.url?.startsWith("/desktop-share") ? desktopRelay.upgrade(req,socket,head) : delegations.upgrade(req,socket,head), (req,socket,head)=>desktopCdp.upgrade(req,socket,head));
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
@@ -816,6 +838,7 @@ export async function composeServer(
       desktop.dispose();
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
+      desktopCdp.disconnectAll();
       bridgeEndpoint.setReady(false);
       bridgeEndpoint.closeAll(1012, "server restarting");
       // ログイン不要の受け口（20261003-sodactl-ask-socket）も `/ws` と揃える: 待っている接続は何も書かずに捨て（質問は取り消し）、
@@ -1001,6 +1024,7 @@ export async function composeServer(
                   ...(report.configDirName !== undefined ? { configDirName: report.configDirName } : {}),
                 });
               }
+              if (report.kind === "agy") agyUsageIntake.offer(report);
             } else if (report.kind === "claude") {
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
@@ -1115,7 +1139,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close();
+        usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -1163,7 +1187,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close();
+        usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
@@ -1199,6 +1223,7 @@ export async function composeServer(
         // 繋がったままの WebSocket を明示的に閉じる（レビュー指摘。無いと httpServer.server.close() が
         // 永久にコールバックを呼ばない）。
         wsServer.closeAll(1001, "server shutting down");
+        desktopCdp.close();
         bridgeEndpoint.closeAll(1001, "server shutting down");
         await bridgeEndpoint.close();
         artifacts.close();
@@ -1208,18 +1233,19 @@ export async function composeServer(
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
           graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
-          usageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
+          usageIntake.close(); agyUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);
           wsServer.setReady(false);bridgeEndpoint.setReady(false);
-          wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
+          desktopCdp.close(); wsServer.closeAll(1001,"server shutting down");bridgeEndpoint.closeAll(1001,"server shutting down");
           await agentReportSocket?.close().catch(()=>undefined);
           await new Promise<void>(resolve=>httpServer.server.close(()=>resolve()));
           for(const pane of session.snapshot().panes)terminals.dispose(pane.id);
           internal.workerPty.dispose();
         }
         // 独自コマンドの popup（モデルに入らない端末。20260927-custom-command-keys）。途中の処理が投げても止める。
+        desktopCdp.close();
         commands.dispose();
         // 受け口は質問を閉じる前に閉じる——`try` が上の `paneSocket.close()` より前で投げた経路でも、待っていた接続へ `cancelled` の返事を
         // 書かずに捨てる（2 回目は何もしない。`pane.sock` も残さない）。

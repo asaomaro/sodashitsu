@@ -23,6 +23,7 @@ export const STATUSLINE_FIELDS = [
   { id: "subagents", label: "サブエージェント数" },
   { id: "weeklyCost", label: "今週のコスト（全セッション）" },
   { id: "fiveHourReset", label: "5時間制限の解除日時" },
+  { id: "otherLimitsReset", label: "その他の利用枠の解除日時" },
   { id: "weeklyReset", label: "週制限の解除日時" },
 ] as const;
 export type StatuslineField = (typeof STATUSLINE_FIELDS)[number]["id"];
@@ -178,7 +179,9 @@ export function statuslineSegments(
       `Context ${statuslineGauge(u.contextUsedPct, settings.graphs.context)}`,
       severity(u.contextUsedPct),
     );
-  if (finite(u?.tokens.total)) add("tokens", `Tokens ${tokens(u.tokens.total)}`);
+  const knownTokens = [u?.tokens.input, u?.tokens.output, u?.tokens.cacheRead, u?.tokens.cacheWrite].filter(finite);
+  const tokenTotal = finite(u?.tokens.total) ? u.tokens.total : knownTokens.length ? knownTokens.reduce((sum, n) => sum + n, 0) : undefined;
+  if (tokenTotal !== undefined) add("tokens", `${u?.tokens.basis === "context" ? "Context tokens" : "Tokens"} ${tokens(tokenTotal)}`);
   if (finite(u?.costUsd)) add("cost", `$${u.costUsd.toFixed(3)}`);
   else if (u?.credits !== undefined && finite(u.credits.amount)) add("cost", formatUsageCredits(u.credits)); // USD でないクレジット（換算しない）
   if (finite(u?.weeklyCostUsd)) add("weeklyCost", `今週 $${u.weeklyCostUsd.toFixed(3)}`);
@@ -202,13 +205,13 @@ export function statuslineSegments(
     if (account.kind === pane.agent.kind)
       for (const w of account.windows) {
         const id = statuslineLimitKind(w);
-        if ((id === "fiveHour" || id === "weekly") && finite(w.resetsAt)) {
+        if (finite(w.resetsAt)) {
           const reset = new Date(w.resetsAt);
           if (Number.isFinite(reset.getTime())) {
             const pad = (n: number) => String(n).padStart(2, "0");
             add(
-              id === "fiveHour" ? "fiveHourReset" : "weeklyReset",
-              `${account.label} ${id === "fiveHour" ? "5h" : "週"}解除 ${reset.getFullYear()}/${pad(reset.getMonth() + 1)}/${pad(reset.getDate())} ${pad(reset.getHours())}:${pad(reset.getMinutes())}${w.stale ? " *" : ""}`,
+              id === "fiveHour" ? "fiveHourReset" : id === "weekly" ? "weeklyReset" : "otherLimitsReset",
+              `${account.label} ${id === "fiveHour" ? "5h" : id === "weekly" ? "週" : w.label}解除 ${reset.getFullYear()}/${pad(reset.getMonth() + 1)}/${pad(reset.getDate())} ${pad(reset.getHours())}:${pad(reset.getMinutes())}${w.stale ? " *" : ""}`,
               "model",
             );
           }

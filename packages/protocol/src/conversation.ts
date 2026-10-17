@@ -93,6 +93,7 @@ export interface ConversationSummary {
 }
 export const AGENT_COMMANDS: Readonly<Record<string, Partial<Record<AgentHeaderAction, string>>>> =
   {
+    agy: { usage: "/usage", permissions: "/permissions" },
     claude: { compact: "/compact", clear: "/clear", usage: "/usage", permissions: "shift+tab" },
     copilot: { compact: "/compact", clear: "/clear", usage: "/usage", permissions: "/permissions" },
     codex: { compact: "/compact", clear: "/clear", usage: "/status", permissions: "/permissions" },

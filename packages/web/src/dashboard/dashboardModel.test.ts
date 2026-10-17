@@ -13,6 +13,7 @@ import {
   formatTokens,
   isStale,
   kindsOf,
+  kindLabel,
   NONE,
   sortRows,
   totalTokens,
@@ -99,6 +100,10 @@ describe("ダッシュボードの行（20261010-agent-usage PR3 の AC1）", ()
 });
 
 describe("数字の見せ方", () => {
+  it("Bob Shell と Copilot CLI の種類を表示名で出す", () => {
+    expect(kindLabel("bob")).toBe("Bob Shell");
+    expect(kindLabel("copilot")).toBe("Copilot CLI");
+  });
   it("トークン: 合計があればそれ。無ければ入力・出力・キャッシュの和。何も無ければ「—」", () => {
     expect(totalTokens(usage("p", { tokens: { basis: "cumulative", total: 7 } }))).toBe(7);
     expect(totalTokens(usage("p", { tokens: { basis: "transcript", input: 1, output: 2, cacheRead: 3 } }))).toBe(6);

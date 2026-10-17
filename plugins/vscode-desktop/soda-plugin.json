@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "vscode-desktop",
+  "version": "0.1.0",
+  "name": "VSCode Desktop (CDP · 実験版)",
+  "description": "起動済みデスクトップVSCodeの描画面をCDPで共有する実験版",
+  "entry": "extension.mjs",
+  "files": [
+    "extension.mjs",
+    "cdp-client.mjs",
+    "cdp-bridge.mjs",
+    "resident-bridge.mjs",
+    "cdp-launcher.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "allow": [
+    "script-html"
+  ],
+  "tabView": {
+    "title": "VSCode Desktop",
+    "display": "vscode-desktop",
+    "requiresProject": false
+  },
+  "views": [
+    {
+      "id": "desktop",
+      "title": "VSCode Desktop",
+      "placements": [
+        "right",
+        "left",
+        "top",
+        "bottom",
+        "float"
+      ]
+    }
+  ]
+}

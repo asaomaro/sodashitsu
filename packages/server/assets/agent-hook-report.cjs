@@ -173,7 +173,7 @@ async function main() {
     // `session_id`（snake_case。Claude Code・Codex・Cursor・Devin・Droid・Qwen Code）と
     // `sessionId`（camelCase。Grok CLI・GitHub Copilot CLI の一部）の両方を受ける
     // （20260923-other-agents-session-resume design「hook スクリプト」・research.md F4）。
-    sessionId = payload && (payload.session_id || payload.sessionId);
+    sessionId = payload && (payload.session_id || payload.sessionId || (kind === "agy" && payload.conversationId));
     if (payload && typeof payload === "object") {
       origin = compact({
         cwd: typeof payload.cwd === "string" && payload.cwd !== "" && payload.cwd.length <= 1024 && !payload.cwd.includes("\0") ? payload.cwd : undefined,

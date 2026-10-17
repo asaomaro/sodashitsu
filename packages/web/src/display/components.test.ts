@@ -4,6 +4,11 @@ import { componentViewport, directOperable, terminalComponentAllowed } from "./c
 import { readFrameMessage } from "./frameMessages.js";
 
 describe("native component boundary", () => {
+  it("preserves the desktop component kind instead of routing it as a terminal", () => {
+    const rect = { x: 0, y: 0, width: 800, height: 600 };
+    const message = readFrameMessage({ type: "component", component: "desktop-cdp", rev: 1, id: "1", paneId: "", rect, clip: rect });
+    expect(message?.type === "component" && message.component).toBe("desktop-cdp");
+  });
   const info = {
     paneId: "anchor",
     format: "script-html",

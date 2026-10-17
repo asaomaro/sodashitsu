@@ -1,4 +1,5 @@
 import { DesktopMethods, type DesktopResults } from "./desktop.js";
+import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
 import { MachineManageParams, type ManagedConnection } from "./delegation.js";
 import { PreviewMethods, type PreviewResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
@@ -927,6 +928,7 @@ const agentIntegrationKind = z.enum([
   "qwen",
   "qodercli",
   "bob",
+  "agy",
 ]);
 
 // --- session の一覧（20260926-named-session-ui。herdr の `session list` を画面から）------------------
@@ -1124,6 +1126,8 @@ export interface AgentIntegrationStatusResult {
   agents: Record<AgentIntegrationKind, AgentIntegrationStatus>;
   /** Claude Code のステータスラインの包み。古いサーバには無い。 */
   statusLine?: StatusLineWrapStatus;
+  /** Antigravity CLI の包み。対応するサーバだけ返す。 */
+  agyStatusLine?: StatusLineWrapStatus;
 }
 
 export const AgentIntegrationInstallParams = z.object({ kind: agentIntegrationKind });
@@ -1138,8 +1142,8 @@ export const AgentIntegrationUninstallParams = z.object({ kind: agentIntegration
 export type AgentIntegrationUninstallParams = z.infer<typeof AgentIntegrationUninstallParams>;
 export type AgentIntegrationUninstallResult = AgentIntegrationInstallResult;
 
-/** ステータスラインの包みの導入・外す（Claude Code だけ。引数は無い）。結果は `AgentIntegrationInstallResult`。 */
-export const AgentIntegrationStatusLineParams = z.object({});
+/** ステータスラインの包みの導入・外す。kind省略は既存のClaude Code。結果は `AgentIntegrationInstallResult`。 */
+export const AgentIntegrationStatusLineParams = z.object({ kind: z.enum(["claude", "agy"]).optional() });
 export type AgentIntegrationStatusLineParams = z.infer<typeof AgentIntegrationStatusLineParams>;
 
 export const AgentIntegrationSetAutoResumeParams = z.object({ enabled: z.boolean() });
@@ -1603,6 +1607,8 @@ export const METHOD_SCHEMAS = {
   "machine.delegate": DelegationStartParams,
   "machine.delegations": MachineListParams,
   "machine.stop_delegation": DelegationStopParams,
+  "vscode.cdp.open": DesktopCdpOpenParams,
+  "vscode.cdp.send": DesktopCdpSendParams,
   "machine.list": MachineListParams,
   "command.list": CommandListParams,
   "command.reload": CommandReloadParams,
@@ -1768,6 +1774,8 @@ export interface MethodResultMap extends PreviewResults, DesktopResults {
   "machine.delegate": DelegationStatus;
   "machine.delegations": { delegations: DelegationStatus[] };
   "machine.stop_delegation": Record<string, never>;
+  "vscode.cdp.open": Record<string, never>;
+  "vscode.cdp.send": Record<string, never>;
   "machine.list": MachineListResult;
   "command.list": CommandListResult;
   "command.reload": CommandListResult;

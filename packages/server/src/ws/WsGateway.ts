@@ -69,7 +69,7 @@ export class WsGateway {
     private readonly sizeAuthority: SizeAuthority,
     private readonly terminals: TerminalManager,
     private readonly bus: EventBus,
-    auth: AuthService,
+    private readonly auth: AuthService,
     private readonly logger: Logger,
     opts: WsGatewayOptions = {},
   ) {
@@ -187,7 +187,7 @@ export class WsGateway {
       this.registerInvalidFrame(clientId);
       return;
     }
-    const result = await this.surface.invoke({ clientId, sink, sameMachine: conn.sameMachine === true }, msg.method, msg.params);
+    const result = await this.surface.invoke({ clientId, sink, connection:conn, connectionAuthorized:() => this.states.get(clientId)?.conn === conn && (this.states.get(clientId)?.sessionId === BRIDGE_SESSION_ID || this.auth.verifySession(this.states.get(clientId)?.sessionId ?? "")), sameMachine: conn.sameMachine === true }, msg.method, msg.params);
     if (result.ok) {
       conn.sendText(JSON.stringify({ id: msg.id, result: result.result }));
       if (msg.method === "client.detach") conn.close(1000, "detached"); // このブラウザの接続だけを切る

@@ -20,8 +20,8 @@ export interface AgentIntegrationService {
   uninstall(kind: AgentIntegrationKind): Promise<AgentIntegrationInstallResult>;
   setAutoResume(enabled: boolean): Promise<void>;
   /** Claude Code のステータスラインの包み（20261010-agent-usage の PR2。フックの導入とは別。押したときだけ書き換える）。 */
-  installStatusLine(): Promise<AgentIntegrationInstallResult>;
-  uninstallStatusLine(): Promise<AgentIntegrationInstallResult>;
+  installStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult>;
+  uninstallStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult>;
 }
 
 /** ステータスラインの包みの部品（`statusLineWrap.ts` の `StatusLineWrapper`）。 */
@@ -54,6 +54,7 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     autoResumeEnabled: boolean,
     private readonly statusLine?: StatusLineControl,
     private readonly health?: StatusLineHealth,
+    private readonly agyStatusLine?: StatusLineControl,
     private readonly now: () => number = Date.now,
   ) {
     this.autoResumeEnabled = autoResumeEnabled;
@@ -64,11 +65,11 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     installer: AgentIntegrationInstaller,
     file: IntegrationFile,
     bus: EventBus,
-    extras: { statusLine?: StatusLineControl; health?: StatusLineHealth; now?: () => number } = {},
+    extras: { statusLine?: StatusLineControl; health?: StatusLineHealth; agyStatusLine?: StatusLineControl; now?: () => number } = {},
   ): Promise<DefaultAgentIntegrationService> {
     const loaded = await file.load();
     const autoResumeEnabled = loaded.kind === "ok" ? loaded.data.autoResumeEnabled : defaultIntegrationFileData().autoResumeEnabled;
-    return new DefaultAgentIntegrationService(installer, file, bus, autoResumeEnabled, extras.statusLine, extras.health, extras.now);
+    return new DefaultAgentIntegrationService(installer, file, bus, autoResumeEnabled, extras.statusLine, extras.health, extras.agyStatusLine, extras.now);
   }
 
   getAutoResumeEnabled = (): boolean => this.autoResumeEnabled;
@@ -80,6 +81,7 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
       autoResumeEnabled: this.autoResumeEnabled,
       agents: Object.fromEntries(entries) as AgentIntegrationStatusResult["agents"],
       ...(statusLine ? { statusLine } : {}),
+      ...(this.agyStatusLine ? { agyStatusLine: await this.agyStatusLine.status() } : {}),
     };
   }
 
@@ -101,16 +103,18 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     return { state: s.state, ...(s.message !== undefined ? { message: s.message } : {}), ...(silent ? { silent: true } : {}), ...(lastReportAt !== undefined ? { lastReportAt } : {}) };
   }
 
-  async installStatusLine(): Promise<AgentIntegrationInstallResult> {
-    if (!this.statusLine) return { ok: false, message: "このサーバでは、ステータスラインの包みを使えません" };
-    const result = await this.statusLine.install();
+  async installStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult> {
+    const control = kind === "agy" ? this.agyStatusLine : this.statusLine;
+    if (!control) return { ok: false, message: "このサーバでは、ステータスラインの包みを使えません" };
+    const result = await control.install();
     if (result.ok) await this.publishChanged();
     return result;
   }
 
-  async uninstallStatusLine(): Promise<AgentIntegrationInstallResult> {
-    if (!this.statusLine) return { ok: false, message: "このサーバでは、ステータスラインの包みを使えません" };
-    const result = await this.statusLine.uninstall();
+  async uninstallStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult> {
+    const control = kind === "agy" ? this.agyStatusLine : this.statusLine;
+    if (!control) return { ok: false, message: "このサーバでは、ステータスラインの包みを使えません" };
+    const result = await control.uninstall();
     if (result.ok) await this.publishChanged();
     return result;
   }

@@ -68,11 +68,13 @@ export function agentProcessPids(job: ForegroundJob, kind: string): number[] {
  * 復元で打ち込んだ・利用者が打った `codex resume <id>` の pane は、daemon の報告を待たずに、どの会話かが分かる（20261010-codex-multi-pane）。
  */
 export function agentResumeSessionId(job: ForegroundJob, kind: string): string | undefined {
-  if (kind !== "codex") return undefined;
+  if (kind !== "codex" && kind !== "agy") return undefined;
   const pids = new Set(agentProcessPids(job, kind));
   for (const p of job.processes) {
     if (!pids.has(p.pid)) continue;
-    const id = codexResumeIdFromArgv(p.argv);
+    const flag = p.argv.findIndex(a => a === "--conversation");
+    const raw = flag >= 0 ? p.argv[flag + 1] : p.argv.find(a => a.startsWith("--conversation="))?.slice(15);
+    const id = kind === "agy" ? (raw && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) ? raw : undefined) : codexResumeIdFromArgv(p.argv);
     if (id !== undefined) return id;
   }
   return undefined;

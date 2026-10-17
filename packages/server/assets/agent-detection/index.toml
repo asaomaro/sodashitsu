@@ -11,3 +11,7 @@ path = "bob.toml"
 [[agents]]
 id = "copilot"
 path = "github-copilot-extra.toml"
+
+[[agents]]
+id = "agy"
+path = "antigravity-extra.toml"

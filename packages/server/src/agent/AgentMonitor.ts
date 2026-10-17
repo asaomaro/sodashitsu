@@ -4,7 +4,7 @@
  * `ManifestStore.get` → `ManifestEngine.evaluate` → `AgentTracker.update` → `SessionService.updatePaneRuntime`
  * の1周期（architecture.md「5. エージェントの判定の1周期」）を回す。
  */
-import type { PaneId } from "@sodashitsu/protocol";
+import type { AgentState, PaneId } from "@sodashitsu/protocol";
 import type { Disposable } from "../util/Disposable.js";
 import type { EventBus } from "../bus/EventBus.js";
 import type { Logger } from "../log/Logger.js";
@@ -79,6 +79,16 @@ export class AgentMonitor {
     this.clock = opts.clock ?? { now: () => Date.now() };
   }
 
+  private readonly reportedStates = new Map<PaneId, { instanceId: string; sessionId: string; state: AgentState; at: number }>();
+
+  /** Already attributed statusline metadata; never carries text or paths. */
+  noteReportedState(paneId: PaneId, sessionId: string, state?: AgentState): void {
+    const pane = this.session.getPane(paneId);
+    if (pane?.agent?.kind !== "agy" || pane.agentSession?.kind !== "agy" || pane.agentSession.sessionId !== sessionId) return;
+    if (state === undefined) { this.reportedStates.delete(paneId); return; }
+    this.reportedStates.set(paneId, { instanceId: pane.agent.instanceId, sessionId, state, at: this.clock.now() });
+  }
+
   start(): void {
     if (this.timer) return;
     this.busSubscription = this.bus.subscribe((event) => {
@@ -115,7 +125,7 @@ export class AgentMonitor {
 
     // 消えた pane の tracker/schedule を捨てる（design「そのエージェントが終了」）。
     for (const paneId of this.trackers.keys()) {
-      if (!paneIds.has(paneId)) this.trackers.delete(paneId);
+      if (!paneIds.has(paneId)) { this.trackers.delete(paneId); this.reportedStates.delete(paneId); }
     }
     for (const paneId of this.schedules.keys()) {
       if (!paneIds.has(paneId)) this.schedules.delete(paneId);
@@ -208,6 +218,13 @@ export class AgentMonitor {
         // ルールが読み込めていない種類（design「そのエージェントのルールが読み込めていないときはunknownにする」）。
         judgment = { state: "unknown", visibleIdle: false, visibleBlocker: false, visibleWorking: false };
       }
+    }
+
+    const reported = this.reportedStates.get(paneId);
+    if (reported) {
+      const pane = this.session.getPane(paneId);
+      if (this.clock.now() - reported.at > 10_000 || kind !== "agy" || pane?.agent?.instanceId !== reported.instanceId || pane.agentSession?.sessionId !== reported.sessionId) this.reportedStates.delete(paneId);
+      else judgment = { state: reported.state, visibleIdle: reported.state === "idle", visibleWorking: reported.state === "working", visibleBlocker: reported.state === "blocked" };
     }
 
     // 会話の参照の報告が、この pane の前面のエージェント自身のものかを確かめる材料（20261009-agent-session-attribution）。

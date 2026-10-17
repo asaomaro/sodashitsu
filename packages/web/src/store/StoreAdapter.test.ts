@@ -371,7 +371,7 @@ describe("StoreAdapter", () => {
         grok: notInstalled,
         qwen: notInstalled,
         qodercli: notInstalled,
-        bob: notInstalled,
+        agy: notInstalled, bob: notInstalled,
       },
     } as const;
     adapter.applyEvent({ event: "agent_integration.changed", data: status });

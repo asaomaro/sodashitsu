@@ -574,3 +574,7 @@ console.log("PID=" + process.pid);
     expect(result).toEqual({ paneId: "p1", kind: "codex", sessionId: "s2" });
   });
 });
+
+it("reports Antigravity conversationId without sending unrelated metadata", async () => {
+  expect(await runHook("agy", JSON.stringify({ conversationId: "12345678-abcd-ef01-2345-6789abcdef01", modelName: "m", email: "private", artifactDirectoryPath: "/private" }))).toMatchObject({ paneId: "p1", kind: "agy", sessionId: "12345678-abcd-ef01-2345-6789abcdef01" });
+});

@@ -59,6 +59,17 @@ function setup(p: Pane) {
 }
 
 describe("PaneInfoView", () => {
+  it("Copilot の AI クレジットとプレミアムリクエストを表示し、未取得の値は出さない", async () => {
+    const { wrapper, usage: store } = setup(pane("p1", agent({ kind: "copilot", label: "GitHub Copilot CLI" })));
+    store.setSnapshot({ panes: { p1: usage("p1", { kind: "copilot", credits: { amount: 0.166, unit: "aic" }, premiumRequests: 0 }) }, accounts: [] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get("[data-pane-info-cost]").text()).toBe("0.166 AIC");
+    expect(wrapper.get("[data-pane-info-premium-requests]").text()).toBe("0");
+    store.setSnapshot({ panes: { p1: usage("p1", { kind: "copilot" }) }, accounts: [] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("[data-pane-info-premium-requests]").exists()).toBe(false);
+    wrapper.unmount();
+  });
   it("エージェントが居ない pane: 居ない旨だけ（利用状況の欄を出さない）。ダッシュボードの入口は残る", () => {
     const { wrapper } = setup(pane("p1", null));
     expect(wrapper.find("[data-pane-info-noagent]").exists()).toBe(true);

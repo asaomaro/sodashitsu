@@ -1468,6 +1468,7 @@ export class TuiApp {
             status: () => this.model.agentIntegration,
             install: (kind) => this.rpc.request("agent_integration.install", { kind }),
             uninstall: (kind) => this.rpc.request("agent_integration.uninstall", { kind }),
+            statusLine: (kind, install) => this.rpc.request(install ? "agent_integration.statusline_install" : "agent_integration.statusline_uninstall", { kind }),
             setAutoResume: (enabled) =>
               this.rpc
                 .request("agent_integration.set_auto_resume", { enabled })
