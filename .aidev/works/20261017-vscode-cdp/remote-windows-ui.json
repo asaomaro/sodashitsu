@@ -1,0 +1,20 @@
+[
+  {
+    "round": 1,
+    "frame": {
+      "width": 1799,
+      "height": 1200,
+      "opaque": true
+    },
+    "manualCommandVisible": 0
+  },
+  {
+    "round": 2,
+    "frame": {
+      "width": 1799,
+      "height": 1200,
+      "opaque": true
+    },
+    "manualCommandVisible": 0
+  }
+]

@@ -59,7 +59,9 @@ import {
   type RegisteredFrame,
 } from "../display/frameRegistry.js";
 import EmbeddedTerminal from "./EmbeddedTerminal.vue";
-import { terminalComponentAllowed, componentViewport, directOperable, type TerminalComponent } from "../display/components.js";
+import { useMachinesStore } from "../store/machines.js";
+import DesktopCdpView from "./DesktopCdpView.vue";
+import { terminalComponentAllowed, isExtensionDisplay, componentViewport, directOperable, type TerminalComponent } from "../display/components.js";
 import { PrefixRelay } from "../display/prefixRelay.js";
 import { parkFocusAfterRelay } from "../display/relayFocus.js";
 import { useSessionStore } from "../store/session.js";
@@ -68,6 +70,7 @@ import { readThemeVars } from "../display/themeVars.js";
 import { DisplayControllerKey, DisplayHostKey } from "../injection.js";
 import { useDisplayStore } from "../store/display.js";
 import { useSettingsStore } from "../store/settings.js";
+const desktopMachines = useMachinesStore();
 
 /**
  * 表示の面の枠 1 つ（静的な形式 `text`・`markdown`・`html` と、スクリプトが動く形式 `script-html`。20261007-soda-extensions の design「枠とのやりとり」「スクリプトが動く形式」）。
@@ -88,7 +91,7 @@ const viewport = ref({ width: 0, height: 0 });
 let componentResize: ResizeObserver | undefined;
 const permittedComponents = computed(() => [...components.value.values()].filter(c => {
   const v = componentViewport(c, viewport.value.width, viewport.value.height);
-  return v.width > 0 && v.height > 0 && terminalComponentAllowed(props.info, c.paneId, session.panes, session.tabs);
+  return v.width > 0 && v.height > 0 && (c.component === "desktop-cdp" ? isExtensionDisplay(props.info) : terminalComponentAllowed(props.info, c.paneId, session.panes, session.tabs));
 }));
 function componentStyle(c: TerminalComponent) {
   const v = componentViewport(c, viewport.value.width, viewport.value.height);
@@ -326,7 +329,7 @@ function onPortMessage(ev: MessageEvent): void {
       return;
     case "component":
       if (!isScript.value || phase.value !== "connected" || m.rev !== props.content?.rev) return;
-      if (!terminalComponentAllowed(props.info, m.paneId, session.panes, session.tabs)) {
+      if (!(m.component === "desktop-cdp" ? isExtensionDisplay(props.info) : terminalComponentAllowed(props.info, m.paneId, session.panes, session.tabs))) {
         components.value.delete(m.id);
         port?.postMessage({ type: "message", data: { type: "component-error", id: m.id, error: "pane_not_available" } });
         return;
@@ -429,6 +432,15 @@ function onVisibility(): void {
 // --- フォーカス ------------------------------------------------------------------------------------------
 const inComponent = (t: EventTarget | null): boolean => t instanceof Element && !!wrap.value?.contains(t) && t.closest("[data-native-component]") !== null;
 const frameHasFocus = (): boolean => iframeEl.value !== null && (document.activeElement === iframeEl.value || inComponent(document.activeElement));
+// A direct app's disabled native controls cannot regain focus by themselves
+// after the user visits another app or a parent control. A real pointer action
+// re-enters the native surface, retaining the separate remote-control grant.
+function engageDesktop(ev: PointerEvent): void {
+  if (!direct.value || !ev.isTrusted || phase.value !== "connected") return;
+  guard.engage();
+  if (!frameHasFocus()) (ev.currentTarget as HTMLElement).focus({ preventScroll: true });
+  syncGuardState();
+}
 function componentEscape(): void {
   guard.leave(); syncGuardState();
   iframeEl.value?.closest("[data-display-float]")?.dispatchEvent(new CustomEvent("display-escape", { bubbles: true }));
@@ -769,8 +781,9 @@ defineExpose({ key: () => frameKey(props.info) });
       :data-display-loads="loads"
       @load="onLoad"
     ></iframe>
-    <div v-for="c in permittedComponents" :key="`${gen}:${c.id}:${c.paneId}`" class="native-component" :style="componentStyle(c)" data-native-component>
-      <EmbeddedTerminal :pane-id="c.paneId" :interactive="c.interactive === true" :enabled="engagedRef"
+    <div v-for="c in permittedComponents" :key="`${gen}:${c.id}:${c.paneId}`" class="native-component" :style="componentStyle(c)" data-native-component tabindex="-1" @pointerdown.capture="c.component === 'desktop-cdp' && engageDesktop($event)">
+      <DesktopCdpView v-if="c.component === 'desktop-cdp'" :key="desktopMachines.selectedId" :machine-id="desktopMachines.selectedId" :machine-label="desktopMachines.sections.find(s => s.id === desktopMachines.selectedId)?.label ?? desktopMachines.selectedId" :enabled="engagedRef" :style="terminalStyle(c)" />
+      <EmbeddedTerminal v-else :pane-id="c.paneId" :interactive="c.interactive === true" :enabled="engagedRef"
         :can-input="() => guard.engaged && phase === 'connected' && terminalComponentAllowed(info, c.paneId, session.panes, session.tabs)"
         :style="terminalStyle(c)" @escape="componentEscape" />
     </div>

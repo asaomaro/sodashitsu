@@ -1,3 +1,4 @@
+import type { WsConnection } from "../ws/WsServer.js";
 import type { z } from "zod";
 import { RpcError, type ErrorCode, type MethodName } from "@sodashitsu/protocol";
 import type { ClientSink } from "../terminal/OutputFanout.js";
@@ -8,6 +9,9 @@ import type { Logger } from "../log/Logger.js";
 
 export interface MethodContext {
   clientId: string;
+  /** Only authenticated WS/bridge gateways supply a live connection. */
+  connection?: WsConnection;
+  connectionAuthorized?: () => boolean;
   /** サーバー内の予約実行などを取り消す。外部RPCからは設定されない。 */
   signal?: AbortSignal;
   sink: ClientSink;

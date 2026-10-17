@@ -106,6 +106,7 @@ PJの `enable` は登録の有効化であり、コード実行の承認では�
 | 提供する画面 | 配布例 |
 |---|---|
 | ワークフローのアプリ | Yukkuri Studio。制作・進捗・成果物・確認をまとめた画面 |
+| デスクトップ共有（実験版） | [VSCode Desktop](../plugins/vscode-desktop/README.md)。CDP有効で起動済みのVSCodeを画像と限定入力で共有。Windows側ブリッジと接続ごとの許可が必要 |
 | 汎用ビュー | [Commit Graph](../plugins/commit-graph/README.md)。読み取り専用のコミット履歴。単独のアプリタブとしても、既存タブのパネルとしても使える |
 
 拡張は `ext.panes` の `virtual`・`plugin`・`views`・`tabId`・`agentState` を参照する。`plugin` は主画面の表示用アンカーにだけ付く。`views` は自分の拡張が担当するインスタンスだけで、`display` に指定されたnameを使って表示する。インスタンスの削除を受けたら表示も閉じる。

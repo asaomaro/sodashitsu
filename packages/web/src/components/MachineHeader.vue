@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MachineState } from "@sodashitsu/protocol";
-import { computed, inject } from "vue";
+import { computed, inject, nextTick, ref, watch } from "vue";
+import DesktopCdpView from "./DesktopCdpView.vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
@@ -14,6 +15,14 @@ import { useViewStore } from "../store/view.js";
 const props = defineProps<{ machineId: string; label: string; compact: boolean }>();
 const machines = useMachinesStore();
 const view = useViewStore();
+const vscodeOpen = ref(false), vscodeDialog = ref<HTMLDialogElement>();
+async function openVscode(): Promise<void> {
+  if (state.value !== "online") return;
+  vscodeOpen.value = true;
+  await nextTick();
+  if (state.value === "online") vscodeDialog.value?.showModal();
+  else vscodeOpen.value = false;
+}
 const switcher = inject(MachineSwitcherKey, undefined);
 
 const selected = computed(() => machines.selectedId === props.machineId);
@@ -37,6 +46,7 @@ const STATE_LABEL: Record<MachineState, string> = {
   attention: "要対応",
 };
 const stateText = computed(() => STATE_LABEL[state.value]);
+watch(state, value => { if (value !== "online") vscodeOpen.value = false; });
 const message = computed(() =>
   props.machineId === LOCAL_MACHINE_ID
     ? null
@@ -96,6 +106,15 @@ function onButtonKeydown(ev: KeyboardEvent): void {
       <span class="machine-label">{{ compact ? shortLabel : label }}</span>
       <span v-if="!compact" class="machine-state" :data-state="state">{{ stateText }}</span>
     </button>
+    <button type="button" class="machine-vscode" data-vscode-open
+      :disabled="state !== 'online'" :aria-label="`${label} のVSCodeを開く`"
+      @click.stop="openVscode" @keydown.stop>VSCode</button>
+    <dialog v-if="vscodeOpen" ref="vscodeDialog" class="machine-vscode-dialog" data-vscode-dialog
+      :aria-label="`${label} のVSCode`" @close="vscodeOpen = false" @cancel.prevent @keydown.stop>
+      <div class="machine-vscode-head"><strong>{{ label }} のVSCode</strong>
+        <button type="button" @click="vscodeOpen = false">閉じる</button></div>
+      <DesktopCdpView :key="machineId" :machine-id="machineId" :machine-label="label" :enabled="true" />
+    </dialog>
   </div>
 </template>
 
@@ -160,4 +179,13 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   color: var(--soda-warn-fg, #ffb86c);
   opacity: 1;
 }
+</style>
+
+<style scoped>
+.machine-vscode { flex:none; font:inherit; cursor:pointer; }
+.machine-vscode-dialog { width:min(1400px,94vw); height:90dvh; max-width:94vw; max-height:94dvh; padding:0; border:1px solid var(--soda-menu-border); color:var(--soda-fg); background:var(--soda-bg); }
+.machine-vscode-dialog[open] { display:flex; flex-direction:column; }
+.machine-vscode-dialog::backdrop { background:#0008; }
+.machine-vscode-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px; }
+.machine-vscode-dialog :deep(.desktop-cdp) { flex:1; min-height:0; }
 </style>

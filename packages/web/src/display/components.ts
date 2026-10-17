@@ -11,6 +11,7 @@ export interface TerminalComponent {
   id: string;
   paneId: string;
   interactive?: boolean;
+  component?: "terminal" | "desktop-cdp";
   rect: ComponentRect;
   clip: ComponentRect;
 }
