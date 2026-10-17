@@ -1,0 +1,35 @@
+{
+  "kind": "real-Windows-agent-API-over-loopback-A-B-browser",
+  "frames": 24,
+  "width": 1280,
+  "height": 800,
+  "targetFps": 10,
+  "averageMbps": 1.1737277704650255,
+  "captureP95Ms": 92.1739,
+  "encodeP95Ms": 2.748,
+  "relayToDrawAckP95Ms": 25.434779000001072,
+  "sourceCpuOneCorePercent": 43.86345099126935,
+  "sourcePeakRssMiB": 90.3125,
+  "clickVisualUpperBoundMs": 484.34530200000063,
+  "textVisualUpperBoundMs": 772.5422830000007,
+  "appState": {
+    "clicks": 1,
+    "keys": 6,
+    "wheels": 0,
+    "text": "a日本語😀",
+    "button": {
+      "x": 68,
+      "y": 113
+    },
+    "textPoint": {
+      "x": 80,
+      "y": 200
+    },
+    "panel": {
+      "x": 78,
+      "y": 268
+    }
+  },
+  "limitations": "20 frames, one run, localhost transport. Visual timings include Playwright operations and expect.poll interval. Not physical display latency, production network, IME composition, lock/UAC, or long-run test. Delta mode is enabled: update rate includes full/patch/idle packets and is not capture fps.",
+  "achievedUpdatesPerSecond": 4.45289654201024
+}

@@ -36,7 +36,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   // xterm.js は任意の外部入力を CSS として書き込まない（テーマの色は固定の設定値）ので、他のディレクティブ
   // （default-src・connect-src 等）は絞ったまま、style-src だけを緩める。
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-src 'self' http://*.localhost:*; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; media-src data: blob:; style-src 'self' 'unsafe-inline'; frame-src 'self' http://*.localhost:*; frame-ancestors 'none'",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",

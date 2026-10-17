@@ -1,0 +1,35 @@
+{
+  "kind": "real-Windows-GDI-JPEG-over-loopback-A-B-browser",
+  "frames": 100,
+  "width": 1280,
+  "height": 800,
+  "targetFps": 10,
+  "achievedFps": 3.4563400903914525,
+  "averageMbps": 3.9281513205954806,
+  "captureP95Ms": 181.1788,
+  "encodeP95Ms": 4.4497,
+  "relayToDrawAckP95Ms": 17.96324800000002,
+  "sourceCpuOneCorePercent": 50.404959651542015,
+  "sourcePeakRssMiB": 122.55859375,
+  "clickVisualUpperBoundMs": 535.2121269999998,
+  "textVisualUpperBoundMs": 986.1277550000004,
+  "appState": {
+    "clicks": 1,
+    "keys": 6,
+    "wheels": 0,
+    "text": "a日本語😀",
+    "button": {
+      "x": 68,
+      "y": 113
+    },
+    "textPoint": {
+      "x": 80,
+      "y": 200
+    },
+    "panel": {
+      "x": 78,
+      "y": 268
+    }
+  },
+  "limitations": "100 frames, one run, localhost transport. Visual timings include Playwright operations and expect.poll interval. Not physical display latency, production network, IME composition, lock/UAC, or long-run test."
+}

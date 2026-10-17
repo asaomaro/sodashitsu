@@ -1,0 +1,9 @@
+{
+  "transport": "auto",
+  "synthetic": true,
+  "requestedFps": 10,
+  "frames": 40,
+  "elapsedMs": 4077,
+  "presentedFps": 9.811135638950208,
+  "note": "Local synthetic canvas, browser codecs, native snapshots in parallel; not Windows capture or WAN benchmark"
+}

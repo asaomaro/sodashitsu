@@ -168,7 +168,7 @@ describe("HttpServer — アプリ本体の CSP と成果物の隔離表示（/a
       const res = await get(s, "/");
       expect(res.headers.get("content-security-policy")).not.toMatch(/'unsafe-eval'/);
       expect(res.headers.get("content-security-policy")).toBe(
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-src 'self' http://*.localhost:*; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; media-src data: blob:; style-src 'self' 'unsafe-inline'; frame-src 'self' http://*.localhost:*; frame-ancestors 'none'",
       );
       expect(res.headers.get("x-frame-options")).toBe("DENY");
     } finally {
@@ -359,7 +359,7 @@ describe("HttpServer — 表示の面の枠のページ（/display-view/*。2026
     try {
       const app = await get(s, "/");
       expect(app.headers.get("content-security-policy")).toBe(
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; media-src data:; style-src 'self' 'unsafe-inline'; frame-src 'self' http://*.localhost:*; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data:; media-src data: blob:; style-src 'self' 'unsafe-inline'; frame-src 'self' http://*.localhost:*; frame-ancestors 'none'",
       );
       expect(app.headers.get("x-frame-options")).toBe("DENY");
       const md = await get(s, "/ask-view/markdown.html");

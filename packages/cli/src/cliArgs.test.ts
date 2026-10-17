@@ -906,3 +906,12 @@ it("parses code-exchange delegation commands and requires the request id/code",(
   expect(parseArgs(["machine","requests"],{})).toMatchObject({sub:"requests"});
   expect(()=>parseArgs(["machine","confirm","id"],{})).toThrow();
 });
+
+describe("desktop CLI", () => {
+  it("uses short-lived environment grants and accepts scoped MCP/session/model commands", () => {
+    expect(parseArgs(["desktop", "mcp"], noEnv)).toMatchObject({ kind: "desktop", action: "mcp" });
+    expect(parseArgs(["desktop", "session"], noEnv)).toMatchObject({ kind: "desktop", action: "session" });
+    expect(parseArgs(["desktop", "model", "--task", "inspect", "--model", "custom", "--max-steps", "2"], noEnv)).toMatchObject({ action: "model", task: "inspect", model: "custom", maxSteps: 2, autoAct: false });
+    for (const args of [["desktop", "model"], ["desktop", "session", "--auto-act"], ["desktop", "mcp", "--grant", "secret"], ["desktop", "model", "--task", "x", "--max-steps", "21"]]) expect(() => parseArgs(args, noEnv)).toThrow(CliUsageError);
+  });
+});

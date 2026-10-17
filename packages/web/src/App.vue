@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DesktopCompanionPage from "./components/DesktopCompanionPage.vue";
 import SystemFooter from "./components/SystemFooter.vue";
 import WebPreview from "./components/WebPreview.vue";
 import { computed } from "vue";
@@ -48,6 +49,7 @@ import { useViewStore } from "./store/view.js";
  * 部品の配線（circular port の bind を含む）は `main.ts`（composition root）の責務——ここはテンプレートの
  * 切り替えと、現在の tab のレイアウト木を `PaneLayout` へ渡すだけ。
  */
+const desktopCompanion = location.pathname === "/desktop-host";
 const view = useViewStore();
 const settings = useSettingsStore();
 
@@ -66,6 +68,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
 
 <template>
   <LoginView v-if="view.authRequired" />
+  <DesktopCompanionPage v-else-if="desktopCompanion" />
   <DetachedView v-else-if="view.connectionState === 'detached'" />
   <div v-else class="app-shell" :style="{ '--soda-pane-gap': paneGapPx }">
     <MobileShell v-if="isMobile" />

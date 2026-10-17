@@ -1,3 +1,4 @@
+import { registerDesktopMethods } from "./desktop.js";
 import {registerScheduleMethods} from "./schedule.js";
 import { registerPreviewMethods } from "./preview.js";
 import {WorkspaceToolsParams} from "@sodashitsu/protocol";
@@ -36,6 +37,7 @@ export type { MethodDeps } from "./deps.js";
  *  20260923-workspace-grouping の group.* 6 つ・workspace.move/move_to を含む）。 */
 export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): void {
   registerPreviewMethods(surface, deps);
+  registerDesktopMethods(surface, deps);
   if(deps.workspaceTools) surface.register("workspace.tools",{schema:WorkspaceToolsParams,handler:(_ctx,p)=>deps.workspaceTools!.run(p)});
   registerClientMethods(surface, deps);
   registerSubscribeMethods(surface, deps);

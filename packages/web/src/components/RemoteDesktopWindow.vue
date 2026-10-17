@@ -1,0 +1,1016 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  decodeDesktopFrame,
+  DesktopFrameChain,
+  DesktopInput,
+  DesktopReady,
+  type DesktopFrameInfo,
+  isDesktopMediaChunk,
+  DesktopMediaStatus,
+  DesktopMediaStream,
+  DesktopMediaSignal,
+  DesktopClipboardResult,
+  DESKTOP_CLIPBOARD_LIMIT,
+} from "@sodashitsu/protocol";
+
+import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
+import { chooseDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
+import { renderDesktopUpdate } from "../desktop/render.js";
+import {
+  loadSettings,
+  saveSettings,
+  normalizeSettings,
+  presets,
+  type ConnectionSettings,
+} from "../desktop/settings.js";
+
+const props = defineProps<{ machineId: string; label: string }>();
+const emit = defineEmits<{ close: [] }>();
+const canvas = ref<HTMLCanvasElement | null>(null);
+const screenElement = ref<HTMLElement | null>(null);
+const displayFollow = ref(false),
+  displayModes = ref<DisplaySize[]>([]);
+let displayObserver: ResizeObserver | undefined,
+  displayTimer: ReturnType<typeof setTimeout> | undefined,
+  requestedDisplay: DisplaySize | undefined;
+function scheduleDisplay() {
+  clearTimeout(displayTimer);
+  if (!displayFollow.value || !ready.value || !screenElement.value) return;
+  displayTimer = setTimeout(() => {
+    if (!displayFollow.value || !ready.value || dead || !screenElement.value) return;
+    const el = screenElement.value,
+      mode = chooseDisplayMode(displayModes.value, {
+        width: el.clientWidth,
+        height: el.clientHeight,
+      });
+    if (!mode || sameDisplay(mode, activeSettings.value?.display)) return;
+    requestedDisplay = mode;
+    connect();
+  }, 700);
+}
+function toggleDisplay() {
+  fit.value = !displayFollow.value;
+  if (displayFollow.value) scheduleDisplay();
+  else {
+    requestedDisplay = undefined;
+    connect();
+  }
+}
+const status = ref("接続中"),
+  error = ref(""),
+  ready = ref(false),
+  connected = ref(false),
+  control = ref(false),
+  allowed = ref(false),
+  title = ref(""),
+  synthetic = ref(false);
+const agentActive = ref(false),
+  agentTicket = ref(""),
+  agentExpires = ref(0);
+const savedSettings = loadSettings(props.machineId);
+const deltas = ref(savedSettings.deltas),
+  colorMode = ref(savedSettings.image.colorMode),
+  showCursor = ref(savedSettings.image.showCursor);
+const width = ref(savedSettings.width),
+  fps = ref(savedSettings.fps),
+  quality = ref(savedSettings.quality),
+  text = ref(""),
+  fit = ref(true),
+  maximized = ref(false);
+const info = ref<DesktopFrameInfo | null>(null),
+  stats = ref({ fps: 0, mbps: 0, ackP95Ms: 0 }),
+  drawMs = ref(0),
+  inputAckMs = ref(0),
+  rendered = ref(0);
+const adaptive = ref(savedSettings.adaptive),
+  dynamicQuality = ref(false),
+  allowMedia = ref(false),
+  allowClipboard = ref(false);
+const mediaState = ref("images"),
+  mediaAudio = ref(false),
+  sound = ref(false),
+  requestAudio = ref(false),
+  mediaTransport = ref<"auto" | "relay">("auto"),
+  mediaBitrate = ref(2500),
+  videoFrames = ref(0);
+const clipboardGranted = ref(false),
+  clipboardText = ref(""),
+  clipboardSync = ref(false),
+  clipboardNotice = ref("");
+let receiver: DesktopMediaReceiver | undefined,
+  qualityController: ImageQualityController | undefined,
+  sourceCanvas = document.createElement("canvas"),
+  clipSeq = 0,
+  clipBusy = false,
+  lastClipboard = "";
+const clipWaits = new Map<
+  number,
+  {
+    resolve(value: string | undefined): void;
+    reject(error: Error): void;
+    timer: ReturnType<typeof setTimeout>;
+  }
+>();
+function clearClipboard() {
+  clipboardSync.value = false;
+  clipboardGranted.value = false;
+  for (const wait of clipWaits.values()) {
+    clearTimeout(wait.timer);
+    wait.reject(new Error("クリップボード共有は終了しました"));
+  }
+  clipWaits.clear();
+}
+function clipboard(operation: "read" | "write", text?: string): Promise<string | undefined> {
+  if (!clipboardGranted.value || !ready.value || (text?.length ?? 0) > DESKTOP_CLIPBOARD_LIMIT)
+    return Promise.reject(
+      new Error("クリップボード共有が許可されていないか、文字数が上限を超えています"),
+    );
+  return new Promise((resolve, reject) => {
+    const id = ++clipSeq,
+      timer = setTimeout(() => {
+        clipWaits.delete(id);
+        reject(new Error("クリップボードの応答がありません"));
+      }, 2000);
+    clipWaits.set(id, { resolve, reject, timer });
+    send({
+      type: "clipboard",
+      id,
+      operation,
+      ...(operation === "write" ? { text: text ?? "" } : {}),
+    });
+  });
+}
+async function transferClipboard(operation: "read" | "write") {
+  try {
+    const value = await clipboard(operation, clipboardText.value);
+    if (operation === "read") clipboardText.value = value ?? "";
+    clipboardNotice.value = operation === "read" ? "共有元から取得しました" : "共有元へ送りました";
+  } catch (e) {
+    clipboardNotice.value = e instanceof Error ? e.message : "転送できません";
+  }
+}
+async function syncClipboard() {
+  if (!clipboardSync.value || clipBusy || !document.hasFocus() || document.hidden) return;
+  clipBusy = true;
+  const version = epoch;
+  try {
+    const local = await navigator.clipboard.readText();
+    if (version !== epoch || !clipboardSync.value) return;
+    if (local.length > DESKTOP_CLIPBOARD_LIMIT) throw new Error("クリップボードは8192文字までです");
+    if (local !== lastClipboard) {
+      await clipboard("write", local);
+      if (version !== epoch || !clipboardSync.value) return;
+      lastClipboard = local;
+      clipboardText.value = local;
+    } else {
+      const remote = (await clipboard("read")) ?? "";
+      if (version !== epoch || !clipboardSync.value) return;
+      if (remote !== lastClipboard) {
+        await navigator.clipboard.writeText(remote);
+        if (version === epoch && clipboardSync.value) {
+          lastClipboard = remote;
+          clipboardText.value = remote;
+        }
+      }
+    }
+  } catch (e) {
+    if (version === epoch) {
+      clipboardSync.value = false;
+      clipboardNotice.value =
+        e instanceof Error ? e.message : "ブラウザのクリップボード権限を確認してください";
+    }
+  } finally {
+    clipBusy = false;
+  }
+}
+async function toggleClipboardSync() {
+  if (clipboardSync.value) {
+    clipboardSync.value = false;
+    return;
+  }
+  try {
+    lastClipboard = await navigator.clipboard.readText();
+    if (!clipboardGranted.value) return;
+    clipboardSync.value = true;
+    await syncClipboard();
+  } catch {
+    clipboardNotice.value =
+      "ブラウザのクリップボード読み取りを許可してください。HTTPSまたはlocalhostが必要です。";
+  }
+}
+function requestVideo() {
+  send({
+    type: "media",
+    enabled: true,
+    settings: {
+      audio: requestAudio.value,
+      transport: mediaTransport.value,
+      adaptive: adaptive.value,
+      maxBitrateKbps: Number(mediaBitrate.value),
+    },
+  });
+}
+function stopVideo() {
+  send({ type: "media", enabled: false });
+  receiver?.stop();
+  receiver = undefined;
+  mediaState.value = "images";
+  sound.value = false;
+  restoreImage();
+  send({ type: "release" });
+}
+async function toggleSound() {
+  if (!receiver) return;
+  try {
+    await receiver?.sound(!sound.value);
+    sound.value = !sound.value;
+  } catch {
+    error.value = "音声再生を許可してください";
+  }
+}
+const clipboardTimer = setInterval(() => void syncClipboard(), 1000);
+const position = ref({ x: 48, y: 56 });
+const windowElement = ref<HTMLElement>();
+const restoredSize = ref<{ width: number; height: number }>();
+function toggleMaximize() {
+  if (!maximized.value && windowElement.value) {
+    const bounds = windowElement.value.getBoundingClientRect();
+    restoredSize.value = { width: bounds.width, height: bounds.height };
+  }
+  drag = undefined;
+  maximized.value = !maximized.value;
+}
+function maximizeFromTitle(event: MouseEvent) {
+  if (!(event.target as HTMLElement).closest("button")) toggleMaximize();
+}
+const windowStyle = computed(() =>
+  maximized.value
+    ? { inset: "0", width: "auto", height: "auto" }
+    : {
+        left: `${position.value.x}px`,
+        top: `${position.value.y}px`,
+        ...(restoredSize.value
+          ? { width: `${restoredSize.value.width}px`, height: `${restoredSize.value.height}px` }
+          : {}),
+      },
+);
+let ws: WebSocket | undefined,
+  dead = false,
+  epoch = 0,
+  seq = 0,
+  lastDrawn = 0,
+  decoding = false;
+let chain = new DesktopFrameChain();
+const inputs = new Map<number, number>();
+let drag: { x: number; y: number; left: number; top: number } | undefined;
+function send(value: unknown) {
+  if (ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
+    ws.send(JSON.stringify(value));
+}
+function relinquish() {
+  if (clipboardGranted.value) {
+    send({ type: "clipboard_grant", enabled: false });
+    clearClipboard();
+  }
+  if (control.value) send({ type: "control", enabled: false });
+  control.value = false;
+  inputs.clear();
+}
+function stop() {
+  epoch++;
+  if (clipboardGranted.value) send({ type: "clipboard_grant", enabled: false });
+  clearClipboard();
+  receiver?.stop();
+  receiver = undefined;
+  mediaState.value = "images";
+  mediaAudio.value = false;
+  sound.value = false;
+  allowMedia.value = false;
+  allowClipboard.value = false;
+  relinquish();
+  ws?.close(1000, "desktop stopped");
+  ws = undefined;
+  ready.value = connected.value = false;
+  agentActive.value = false;
+  agentTicket.value = "";
+  agentExpires.value = 0;
+  info.value = null;
+  canvas.value?.getContext("2d")?.clearRect(0, 0, canvas.value.width, canvas.value.height);
+}
+function close() {
+  displayFollow.value = false;
+  clearTimeout(displayTimer);
+  stop();
+  emit("close");
+}
+const settingNotice = ref("");
+const activeSettings = ref<ConnectionSettings | null>(null);
+function requestedSettings(): ConnectionSettings {
+  return normalizeSettings({
+    width: Number(width.value),
+    fps: Number(fps.value),
+    quality: Number(quality.value),
+    deltas: deltas.value,
+    adaptive: adaptive.value,
+    image: { colorMode: colorMode.value, showCursor: showCursor.value },
+  });
+}
+function preset(event: Event) {
+  const name = (event.target as HTMLSelectElement).value;
+  if (!Object.hasOwn(presets, name)) return;
+  const value = presets[name as keyof typeof presets];
+  width.value = value.width;
+  fps.value = value.fps;
+  quality.value = value.quality;
+  deltas.value = value.deltas;
+  adaptive.value = value.adaptive;
+  colorMode.value = value.image.colorMode;
+  showCursor.value = value.image.showCursor;
+  (event.target as HTMLSelectElement).value = "";
+}
+function connect() {
+  let options: ConnectionSettings;
+  try {
+    options = {
+      ...requestedSettings(),
+      ...(displayFollow.value && requestedDisplay ? { display: requestedDisplay } : {}),
+    };
+  } catch {
+    settingNotice.value = "設定値を確認してください（幅320～1920、fps 1～30、JPEG品質20～90）。";
+    return;
+  }
+  settingNotice.value = saveSettings(props.machineId, options)
+    ? ""
+    : "このブラウザに設定を保存できませんでした。今回の接続には反映します。";
+  activeSettings.value = options;
+  stop();
+  error.value = "";
+  status.value = "接続中";
+  title.value = "";
+  synthetic.value = false;
+  rendered.value = lastDrawn = 0;
+  seq = 0;
+  chain = new DesktopFrameChain();
+  sourceCanvas = document.createElement("canvas");
+  qualityController = new ImageQualityController(options);
+  clipSeq = 0;
+  videoFrames.value = 0;
+  decoding = false;
+  const version = epoch,
+    url = new URL("/desktop-share", location.href);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(url);
+  ws = socket;
+  socket.binaryType = "arraybuffer";
+  socket.onopen = () => {
+    if (version === epoch)
+      send({
+        type: "start",
+        machineId: props.machineId,
+        options: { ...options, features: true },
+      });
+  };
+  socket.onmessage = async (event) => {
+    if (dead || version !== epoch) return;
+    try {
+      if (event.data instanceof ArrayBuffer) {
+        if (isDesktopMediaChunk(new Uint8Array(event.data))) {
+          receiver?.chunk(new Uint8Array(event.data));
+          return;
+        }
+        if (!ready.value || decoding) throw new Error("画像の順序が不正です");
+        decoding = true;
+        const frame = decodeDesktopFrame(new Uint8Array(event.data)),
+          start = performance.now();
+        if (frame.info.seq <= lastDrawn) throw new Error("画像の順序が不正です");
+        const el = canvas.value;
+        if (!el) throw new Error("描画先がありません");
+        if (
+          !(await renderDesktopUpdate(sourceCanvas, frame, chain, () => !dead && version === epoch))
+        )
+          return;
+        if (!receiver?.active) {
+          if (el.width !== sourceCanvas.width || el.height !== sourceCanvas.height) {
+            el.width = sourceCanvas.width;
+            el.height = sourceCanvas.height;
+          }
+          el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
+        }
+        info.value = frame.info;
+        lastDrawn = frame.info.seq;
+        rendered.value++;
+        drawMs.value = performance.now() - start;
+        decoding = false;
+        send({ type: "ack", seq: frame.info.seq });
+      } else {
+        const m = JSON.parse(String(event.data));
+        if (m.type === "ready") {
+          const r = DesktopReady.parse(m);
+          title.value = r.title;
+          allowed.value = r.allowInput;
+          ready.value = connected.value = true;
+          synthetic.value = r.backend === "synthetic";
+          allowMedia.value = r.allowMedia === true;
+          allowClipboard.value = r.allowClipboard === true;
+          dynamicQuality.value = r.dynamicQuality === true;
+          displayModes.value = r.display?.modes ?? [];
+          if (displayFollow.value && !r.display) {
+            displayFollow.value = false;
+            error.value = "Bでディスプレイ解像度の変更が許可されていません";
+          }
+          scheduleDisplay();
+          status.value = "閲覧中";
+        } else if (m.type === "media_status") {
+          const state = DesktopMediaStatus.parse(m);
+          mediaState.value = state.state;
+          mediaAudio.value = state.audio;
+          if (state.state === "images") {
+            receiver?.stop();
+            receiver = undefined;
+            sound.value = false;
+            restoreImage();
+          } else if (state.state === "negotiating" && receiver?.id !== state.id) {
+            receiver?.stop();
+            receiver = new DesktopMediaReceiver(
+              state.id,
+              send,
+              (video, count) => {
+                if (dead || version !== epoch || !canvas.value || !info.value) return;
+                if (
+                  activeSettings.value?.display &&
+                  (video.videoWidth !== info.value.width || video.videoHeight !== info.value.height)
+                ) {
+                  stopVideo();
+                  error.value = "動画が等倍の画素数を維持できないため画像配信に戻しました";
+                  return;
+                }
+                const el = canvas.value;
+                el.width = info.value.width;
+                el.height = info.value.height;
+                el.getContext("2d")!.drawImage(video, 0, 0, el.width, el.height);
+                videoFrames.value = count;
+              },
+              (value) => {
+                mediaState.value = value;
+                if (value === "images") {
+                  restoreImage();
+                  send({ type: "release" });
+                }
+              },
+              state.iceServers as RTCIceServer[] | undefined,
+            );
+          }
+        } else if (m.type === "rtc_signal") {
+          const signal = DesktopMediaSignal.parse(m);
+          if (receiver?.id === signal.id)
+            await receiver.signal(signal.signal as Parameters<DesktopMediaReceiver["signal"]>[0]);
+        } else if (m.type === "media_stream") {
+          const stream = DesktopMediaStream.parse(m);
+          if (receiver?.id === stream.id) receiver.stream(stream.generation, stream.mime);
+        } else if (m.type === "media_unavailable")
+          error.value = "Bのメディア補助画面と共有許可を確認してください";
+        else if (m.type === "clipboard_state") {
+          clipboardGranted.value = m.enabled === true;
+          if (!clipboardGranted.value) clearClipboard();
+        } else if (m.type === "clipboard_result") {
+          const result = DesktopClipboardResult.parse(m),
+            wait = clipWaits.get(result.id);
+          if (wait) {
+            clipWaits.delete(result.id);
+            clearTimeout(wait.timer);
+            if (result.ok) wait.resolve(result.text);
+            else wait.reject(new Error("共有元のクリップボード操作が拒否されました"));
+          }
+        } else if (m.type === "agent_ticket") {
+          if (typeof m.ticket === "string" && /^[A-Za-z0-9_-]{43}$/.test(m.ticket))
+            agentTicket.value = m.ticket;
+        } else if (m.type === "agent_state") {
+          agentActive.value = m.active === true;
+          agentExpires.value = typeof m.expiresAt === "number" ? m.expiresAt : 0;
+          if (agentActive.value || !agentExpires.value) agentTicket.value = "";
+          control.value = false;
+          status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
+        } else if (m.type === "control") {
+          control.value = m.enabled === true && allowed.value;
+          status.value = agentActive.value
+            ? "エージェント操作中"
+            : control.value
+              ? "操作中"
+              : "閲覧中";
+          if (control.value) canvas.value?.focus();
+        } else if (
+          m.type === "stats" &&
+          [m.fps, m.mbps, m.ackP95Ms].every((v) => typeof v === "number" && Number.isFinite(v))
+        ) {
+          stats.value = m;
+          if (adaptive.value && dynamicQuality.value) {
+            const policy = qualityController?.sample(
+              m.ackP95Ms,
+              drawMs.value,
+              socket.bufferedAmount,
+            );
+            if (policy) send(policy);
+          }
+        } else if (m.type === "input_ack") {
+          const at = inputs.get(m.seq);
+          if (at !== undefined) {
+            inputAckMs.value = performance.now() - at;
+            inputs.delete(m.seq);
+          }
+        } else if (m.type === "error") {
+          error.value = typeof m.message === "string" ? m.message : "共有を開始できません";
+        }
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "表示に失敗しました";
+      stop();
+      status.value = "停止";
+    }
+  };
+  socket.onclose = () => {
+    if (version !== epoch) return;
+    const wasReady = ready.value;
+    stop();
+    status.value = "終了";
+    if (!wasReady && activeSettings.value?.display) {
+      displayFollow.value = false;
+      requestedDisplay = undefined;
+      error.value =
+        "Bの解像度を変更できませんでした。共有元で対応モードと復元状態を確認してください。";
+    }
+    if (!wasReady && !error.value)
+      error.value = "共有元が終了しました。Bの補助プログラム設定を確認してください。";
+  };
+  socket.onerror = () => {
+    if (version === epoch) error.value = "共有用の接続を確立できませんでした";
+  };
+}
+function restoreImage() {
+  const el = canvas.value;
+  if (!el || !sourceCanvas.width || !sourceCanvas.height) return;
+  el.width = sourceCanvas.width;
+  el.height = sourceCanvas.height;
+  el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
+}
+function input(value: unknown) {
+  if (receiver && !receiver.active) return;
+  if (!control.value || !ready.value || !lastDrawn || !DesktopInput.safeParse(value).success)
+    return;
+  const id = ++seq;
+  inputs.set(id, performance.now());
+  if (inputs.size > 64) inputs.delete(inputs.keys().next().value!);
+  send({ type: "input", seq: id, frameSeq: lastDrawn, input: value });
+}
+function pointer(e: PointerEvent, event: "move" | "down" | "up") {
+  if (!control.value || !canvas.value || !info.value) return;
+  const r = canvas.value.getBoundingClientRect(),
+    scale = Math.min(r.width / canvas.value.width, r.height / canvas.value.height);
+  const w = scale * canvas.value.width,
+    h = scale * canvas.value.height;
+  const x = (e.clientX - r.left - (r.width - w) / 2) / w,
+    y = (e.clientY - r.top - (r.height - h) / 2) / h;
+  if (
+    (event === "down" || (event === "move" && e.buttons === 0)) &&
+    (x < 0 || x > 1 || y < 0 || y > 1)
+  )
+    return;
+  if (event === "down") {
+    canvas.value.focus();
+    canvas.value.setPointerCapture(e.pointerId);
+  }
+  input({
+    kind: "pointer",
+    event,
+    button: Math.max(0, Math.min(2, e.button)),
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+  });
+  if (event === "up" && canvas.value.hasPointerCapture(e.pointerId))
+    canvas.value.releasePointerCapture(e.pointerId);
+}
+function canvasBlur(e: FocusEvent) {
+  if (e.relatedTarget instanceof Element && e.relatedTarget.closest("[data-remote-desktop]"))
+    send({ type: "release" });
+  else relinquish();
+}
+function escape(e: KeyboardEvent) {
+  if (e.code === "Escape") {
+    if (agentExpires.value) send({ type: "agent_grant", enabled: false });
+    e.preventDefault();
+    relinquish();
+  }
+}
+function key(e: KeyboardEvent, down: boolean) {
+  if (e.code === "Escape" && down) {
+    e.preventDefault();
+    relinquish();
+    return;
+  }
+  if (!control.value || e.isComposing || e.repeat) return;
+  const value = { kind: "key", code: e.code, down };
+  if (DesktopInput.safeParse(value).success) {
+    e.preventDefault();
+    input(value);
+  }
+}
+function grip(e: PointerEvent) {
+  if (maximized.value || (e.target as HTMLElement).closest("button")) return;
+  drag = { x: e.clientX, y: e.clientY, left: position.value.x, top: position.value.y };
+  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+}
+function move(e: PointerEvent) {
+  if (drag)
+    position.value = {
+      x: Math.max(0, Math.min(innerWidth - 160, drag.left + e.clientX - drag.x)),
+      y: Math.max(0, Math.min(innerHeight - 48, drag.top + e.clientY - drag.y)),
+    };
+}
+function visibility() {
+  if (document.hidden) relinquish();
+}
+const heartbeat = setInterval(() => send({ type: "heartbeat" }), 2000);
+onMounted(() => {
+  if (screenElement.value && typeof ResizeObserver !== "undefined") {
+    displayObserver = new ResizeObserver(scheduleDisplay);
+    displayObserver.observe(screenElement.value);
+  }
+  connect();
+  window.addEventListener("blur", relinquish);
+  document.addEventListener("visibilitychange", visibility);
+});
+onBeforeUnmount(() => {
+  clearTimeout(displayTimer);
+  displayObserver?.disconnect();
+  clearInterval(clipboardTimer);
+  dead = true;
+  clearInterval(heartbeat);
+  stop();
+  window.removeEventListener("blur", relinquish);
+  document.removeEventListener("visibilitychange", visibility);
+});
+</script>
+
+<template>
+  <Teleport to="body">
+    <section
+      ref="windowElement"
+      class="desktop-window"
+      :class="{ maximized }"
+      :style="windowStyle"
+      role="dialog"
+      aria-label="リモートデスクトップ"
+      data-remote-desktop
+      @keydown.stop="escape"
+      @keyup.stop
+    >
+      <header
+        @dblclick="maximizeFromTitle"
+        @pointerdown="grip"
+        @pointermove="move"
+        @pointerup="drag = undefined"
+        @pointercancel="drag = undefined"
+      >
+        <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
+        <button data-desktop-maximize :aria-pressed="maximized" @click="toggleMaximize">
+          {{ maximized ? "元に戻す" : "最大化" }}
+        </button>
+        <button @click="close">閉じる</button>
+      </header>
+      <p v-if="title" class="target">
+        {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
+      </p>
+      <p v-if="error" role="alert">{{ error }}</p>
+      <p v-if="activeSettings && ready" data-desktop-applied>
+        適用中: 幅上限{{ activeSettings.width }} / {{ activeSettings.fps }}fps上限 / JPEG
+        {{ activeSettings.quality }} /
+        {{
+          { full: "フルカラー", rgb565: "約6.5万色", rgb332: "256色", gray16: "16階調グレー" }[
+            activeSettings.image.colorMode
+          ]
+        }}
+      </p>
+      <nav>
+        <button
+          :disabled="!ready || !allowed"
+          @pointerdown.prevent
+          @click="send({ type: 'control', enabled: !control })"
+        >
+          {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
+        </button>
+        <button :disabled="!ready" @click="send({ type: 'keyframe' })">再同期</button
+        ><button @click="close">共有停止</button
+        ><label
+          ><input v-model="fit" type="checkbox" :disabled="displayFollow" />画面に合わせる</label
+        >
+        <details>
+          <summary>画質・計測</summary>
+          <label
+            >プリセット<select aria-label="接続プリセット" @change="preset">
+              <option value="">選択…</option>
+              <option value="low">低帯域</option>
+              <option value="balanced">標準</option>
+              <option value="quality">高画質</option>
+            </select></label
+          >
+          <label
+            >送信幅の上限<input
+              v-model="width"
+              aria-label="送信幅の上限"
+              type="number"
+              min="320"
+              max="1920"
+          /></label>
+          <label
+            >fps上限<input v-model="fps" aria-label="fps上限" type="number" min="1" max="30"
+          /></label>
+          <label
+            >JPEG品質<input v-model="quality" aria-label="JPEG品質" type="number" min="20" max="90"
+          /></label>
+          <label
+            >色<select v-model="colorMode" aria-label="送信する色">
+              <option value="full">フルカラー</option>
+              <option value="rgb565">約6.5万色</option>
+              <option value="rgb332">256色</option>
+              <option value="gray16">16階調グレー</option>
+            </select></label
+          >
+          <label><input v-model="deltas" type="checkbox" />差分転送</label>
+          <label><input v-model="adaptive" type="checkbox" />自動画質調整</label>
+          <label><input v-model="showCursor" type="checkbox" />共有元のカーソルを表示</label>
+          <p>
+            幅は縦横比を保った上限、fpsは目標上限です。JPEG品質を下げると文字がにじむ場合があります。
+          </p>
+          <p>
+            減色は細かな色の違いを失い、エージェントの画像認識にも影響します。差分PNGにも適用されます。
+          </p>
+          <p>
+            適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザでマシンごとに記憶します。
+          </p>
+          <p v-if="settingNotice" role="status">{{ settingNotice }}</p>
+          <button @click="connect">適用して再接続</button>
+        </details>
+      </nav>
+      <details v-if="ready && allowMedia" data-desktop-media>
+        <summary>動画・音声</summary>
+        <p>
+          BのWindowsブラウザで /desktop-host
+          を開き、対象と同じモニターを選んで共有を許可してください。
+        </p>
+        <label><input v-model="requestAudio" type="checkbox" />システム音声を要求</label>
+        <label
+          >経路<select v-model="mediaTransport" aria-label="動画の経路">
+            <option value="auto">WebRTC（接続できなければ中継）</option>
+            <option value="relay">圧縮動画を中継</option>
+          </select></label
+        >
+        <label
+          >映像帯域の上限(kbps)<input
+            v-model="mediaBitrate"
+            aria-label="動画帯域の上限"
+            type="number"
+            min="128"
+            max="12000"
+        /></label>
+        <button @click="requestVideo">動画共有を依頼</button
+        ><button @click="stopVideo">動画・音声を停止</button>
+        <button v-if="mediaAudio" @click="toggleSound">
+          {{ sound ? "音声を止める" : "音声を再生" }}
+        </button>
+        <p data-media-state>
+          {{
+            {
+              images: "画像配信",
+              waiting: "Bの共有許可待ち",
+              negotiating: "動画を接続中",
+              rtc: "WebRTC動画",
+              relay: "圧縮動画の中継",
+            }[mediaState] ?? mediaState
+          }}
+        </p>
+      </details>
+      <details v-if="ready && allowClipboard" data-desktop-clipboard>
+        <summary>クリップボード（テキスト）</summary>
+        <p>
+          PC全体のクリップボードを扱います。8192文字まで。同期はこの窓が前面の間だけ動き、同時変更時はAを優先します。
+        </p>
+        <button @click="send({ type: 'clipboard_grant', enabled: !clipboardGranted })">
+          {{ clipboardGranted ? "クリップボード共有を解除" : "クリップボード共有を許可" }}
+        </button>
+        <textarea
+          v-model="clipboardText"
+          aria-label="共有するクリップボードのテキスト"
+          maxlength="8192"
+          :disabled="!clipboardGranted"
+        />
+        <button :disabled="!clipboardGranted" @click="transferClipboard('read')">
+          共有元から取得</button
+        ><button :disabled="!clipboardGranted || !allowed" @click="transferClipboard('write')">
+          共有元へ送信
+        </button>
+        <button :disabled="!clipboardGranted" @click="toggleClipboardSync">
+          {{ clipboardSync ? "自動同期を停止" : "双方向の自動同期を開始" }}
+        </button>
+        <p role="status">{{ clipboardNotice }}</p>
+      </details>
+      <details v-if="ready && allowed" data-agent-access>
+        <summary>エージェント連携</summary>
+        <p>
+          この共有画面の取得・PC操作を最大2分許可します。取得画像をモデルへ渡す用途を含みます。発行コードは30秒以内・1回だけ使用できます。
+        </p>
+        <button @click="send({ type: 'agent_grant', enabled: true })">
+          エージェントへの画面提供・操作を許可
+        </button>
+        <button v-if="agentExpires" @click="send({ type: 'agent_grant', enabled: false })">
+          エージェント許可を取り消す
+        </button>
+        <input
+          v-if="agentTicket"
+          :value="agentTicket"
+          readonly
+          aria-label="エージェント接続コード"
+        />
+        <p v-if="agentActive">
+          エージェントが操作中です。操作を引き取るか、共有を停止すると失効します。
+        </p>
+      </details>
+      <section v-if="displayModes.length" data-desktop-display>
+        <label
+          ><input
+            v-model="displayFollow"
+            type="checkbox"
+            @change="toggleDisplay"
+          />Bの解像度を窓に合わせて等倍表示</label
+        >
+        <p>
+          共有元の実ディスプレイが変更されます。対応解像度から選択し、余白またはスクロールが生じます。変更ごとに再接続して操作許可を解除し、共有終了時に元の解像度へ復元を試みます。
+        </p>
+        <p v-if="activeSettings?.display" data-applied-display>
+          {{ activeSettings.display.width }}×{{ activeSettings.display.height }} — 1画素＝1 CSS px
+        </p>
+      </section>
+      <div
+        ref="screenElement"
+        data-desktop-screen
+        class="screen"
+        :class="{ controlling: control, actual: !fit }"
+      >
+        <canvas
+          ref="canvas"
+          tabindex="0"
+          aria-label="共有画面"
+          :data-rendered-frames="rendered"
+          :data-video-frames="videoFrames"
+          :data-frame-info="info ? JSON.stringify(info) : undefined"
+          :style="
+            fit ? {} : { width: (info?.width ?? 1) + 'px', height: (info?.height ?? 1) + 'px' }
+          "
+          @pointerdown.prevent="pointer($event, 'down')"
+          @pointermove="pointer($event, 'move')"
+          @pointerup.prevent="pointer($event, 'up')"
+          @pointercancel="relinquish"
+          @contextmenu.prevent
+          @wheel.prevent="
+            input({
+              kind: 'wheel',
+              delta: Math.max(-1200, Math.min(1200, Math.round(-$event.deltaY))),
+            })
+          "
+          @keydown="key($event, true)"
+          @keyup="key($event, false)"
+          @blur="canvasBlur"
+        />
+        <span v-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
+      </div>
+      <form
+        @submit.prevent="
+          input({ kind: 'text', text });
+          text = '';
+        "
+      >
+        <input
+          v-model="text"
+          :disabled="!control"
+          maxlength="1024"
+          aria-label="確定した文字を送る"
+          placeholder="日本語はここで変換を確定"
+        /><button :disabled="!control || !text">文字を送る</button>
+      </form>
+      <footer>
+        <span>{{
+          control
+            ? "入力はBのPC全体に届きます。Escで閲覧へ戻る。"
+            : "閲覧専用。操作にはBの事前許可が必要です。"
+        }}</span
+        ><output data-desktop-metrics
+          >{{ stats.fps.toFixed(1) }} fps · {{ stats.mbps.toFixed(2) }} Mbps · relay→描画ACK p95
+          {{ stats.ackP95Ms.toFixed(0) }} ms · 取得 {{ info?.captureMs.toFixed(1) ?? "—" }} / encode
+          {{ info?.encodeMs.toFixed(1) ?? "—" }} / 描画 {{ drawMs.toFixed(1) }} ms · 入力ACK
+          {{ inputAckMs.toFixed(0) }} ms</output
+        >
+      </footer>
+    </section>
+  </Teleport>
+</template>
+
+<style scoped>
+.desktop-window {
+  position: fixed;
+  box-sizing: border-box;
+  z-index: 180;
+  width: min(1100px, calc(100vw - 64px));
+  height: min(780px, calc(100vh - 80px));
+  min-width: 320px;
+  min-height: 280px;
+  resize: both;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--soda-bg, #161b22);
+  color: var(--soda-fg, #ddd);
+  border: 1px solid var(--soda-menu-border, #555);
+  box-shadow: 0 8px 32px #0008;
+}
+.desktop-window.maximized {
+  min-width: 0;
+  min-height: 0;
+  resize: none;
+}
+header,
+nav,
+form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+header {
+  cursor: move;
+  touch-action: none;
+}
+header strong {
+  flex: 1;
+}
+header span {
+  font-weight: bold;
+}
+p {
+  margin: 0;
+  font-size: 12px;
+}
+.screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background: #000;
+  border: 2px solid transparent;
+}
+.screen.controlling {
+  border-color: var(--soda-accent-fg, #79c0ff);
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  touch-action: none;
+}
+.actual canvas {
+  max-width: none;
+  max-height: none;
+}
+.cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  background: #161b22;
+  padding: 16px;
+}
+footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+form input {
+  flex: 1;
+  min-width: 80px;
+}
+details input[type="number"] {
+  width: 72px;
+}
+details p {
+  max-width: 640px;
+  font-size: 12px;
+}
+.target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

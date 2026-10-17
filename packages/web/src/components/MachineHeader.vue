@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { MachineState } from "@sodashitsu/protocol";
-import { computed, inject } from "vue";
+import { computed, inject, ref, watch } from "vue";
+import RemoteDesktopWindow from "./RemoteDesktopWindow.vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
@@ -15,6 +16,7 @@ const props = defineProps<{ machineId: string; label: string; compact: boolean }
 const machines = useMachinesStore();
 const view = useViewStore();
 const switcher = inject(MachineSwitcherKey, undefined);
+const desktopShown = ref(false);
 
 const selected = computed(() => machines.selectedId === props.machineId);
 const collapsed = computed(() => machines.collapsed[props.machineId] === true);
@@ -36,6 +38,7 @@ const STATE_LABEL: Record<MachineState, string> = {
   reconnecting: "再接続中",
   attention: "要対応",
 };
+watch(state, value => { if (value !== "online") desktopShown.value = false; });
 const stateText = computed(() => STATE_LABEL[state.value]);
 const message = computed(() =>
   props.machineId === LOCAL_MACHINE_ID
@@ -96,6 +99,8 @@ function onButtonKeydown(ev: KeyboardEvent): void {
       <span class="machine-label">{{ compact ? shortLabel : label }}</span>
       <span v-if="!compact" class="machine-state" :data-state="state">{{ stateText }}</span>
     </button>
+    <button v-if="machineId !== LOCAL_MACHINE_ID && !compact" type="button" :disabled="state !== 'online'" title="デスクトップを開く" data-desktop-open @click.stop="desktopShown = true">デスクトップ</button>
+    <RemoteDesktopWindow v-if="desktopShown" :machine-id="machineId" :label="label" @close="desktopShown = false" />
   </div>
 </template>
 
