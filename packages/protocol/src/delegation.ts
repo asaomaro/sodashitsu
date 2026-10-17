@@ -59,5 +59,25 @@ export interface PairingRequest {
   address: string;
 }
 
-export const MachineManageParams = z.object({id,action:z.enum(["enable","disable","remove"])});
-export interface ManagedConnection { id:string;label:string;target:string;transport:"ssh"|"reverse";enabled:boolean;state:string;message:string|null }
+export const MachineManageParams = z.object({
+  id,
+  action: z.enum(["enable", "disable", "remove"]),
+});
+export interface ManagedConnection {
+  id: string;
+  label: string;
+  target: string;
+  transport: "ssh" | "reverse";
+  enabled: boolean;
+  state: string;
+  message: string | null;
+}
+
+/** SSH credentials remain managed by OpenSSH; only a target and display name are accepted. */
+export const MachineAddParams = z
+  .object({
+    label: z.string().min(1).max(128),
+    target: z.string().min(1).max(1024),
+    session: z.string().min(1).max(128).optional(),
+  })
+  .strict();

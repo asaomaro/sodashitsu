@@ -59,3 +59,48 @@ it("wheel scrolling changes rendered rows instead of snapping back to the select
     view.dispose();
   }
 });
+
+it("adds an SSH connection from keyboard and preserves delegation request/confirmation", async () => {
+  const { view, request, draw } = setup();
+  request.mockImplementation(async (method: string) => {
+    if (method === "machine.connections") return { connections: [] } as any;
+    if (method === "machine.delegations") return { delegations: [] } as any;
+    if (method === "machine.pairing_requests") return { requests: [] } as any;
+    return { id: "new-request" } as any;
+  });
+  try {
+    view.handleKey(chordToKeyInput("a")!);
+    expect(draw()).toContain("外部Sodashitsuを追加");
+    view.handlePaste("Build");
+    view.handleKey(chordToKeyInput("Tab")!);
+    view.handlePaste("user@build");
+    view.handleKey(chordToKeyInput("Tab")!);
+    view.handlePaste("work");
+    draw();
+    view.handleMouse({ action: "down", button: 0, x: 5, y: 14 });
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith("machine.add", {
+        label: "Build",
+        target: "user@build",
+        session: "work",
+      }),
+    );
+    await vi.waitFor(() => expect(draw()).toContain("登録された接続はありません"));
+    view.handleKey(chordToKeyInput("n")!);
+    view.handlePaste("https://operator.example");
+    view.handleKey(chordToKeyInput("Tab")!);
+    view.handlePaste("Laptop");
+    view.handleKey(chordToKeyInput("Enter")!);
+    await vi.waitFor(() => expect(draw()).toContain("コードを確認して委譲"));
+    view.handlePaste("12345678");
+    view.handleKey(chordToKeyInput("Enter")!);
+    await vi.waitFor(() =>
+      expect(request).toHaveBeenCalledWith("machine.confirm_delegation", {
+        id: "new-request",
+        code: "12345678",
+      }),
+    );
+  } finally {
+    view.dispose();
+  }
+});

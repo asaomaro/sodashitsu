@@ -1,6 +1,6 @@
 import { DesktopMethods, type DesktopResults } from "./desktop.js";
 import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
-import { MachineManageParams, type ManagedConnection } from "./delegation.js";
+import { MachineAddParams, MachineManageParams, type ManagedConnection } from "./delegation.js";
 import { PreviewMethods, type PreviewResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
 import { DelegationInviteParams, DelegationStartParams, DelegationStopParams, type DelegationStatus } from "./delegation.js";
@@ -1597,6 +1597,7 @@ export const METHOD_SCHEMAS = {
   "agent.summary_cached": AgentConversationParams,
   "agent.usage_watch": AgentUsageWatchParams,
   "server.sessions": ServerSessionsParams,
+  "machine.add": MachineAddParams,
   "machine.connections": ServerStopParams,
   "machine.manage": MachineManageParams,
   "machine.request_delegation": PairingStartParams,
@@ -1764,6 +1765,7 @@ export interface MethodResultMap extends PreviewResults, DesktopResults {
   "agent.summary_cached": { summary: ConversationSummary | null };
   "agent.usage_watch": Record<string, never>;
   "server.sessions": ServerSessionsResult;
+  "machine.add": { id: string };
   "machine.connections": { connections: ManagedConnection[] };
   "machine.manage": Record<string,never>;
   "machine.request_delegation": { id: string; expiresAt: number };

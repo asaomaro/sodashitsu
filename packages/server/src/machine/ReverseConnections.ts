@@ -124,11 +124,30 @@ export class ReverseConnections {
       for (const e of this.outbound.values()) if (!e.ws && !e.retry) this.connect(e);
   }
   async connections() {
-    const profiles=await this.deps.grants.connections(),live=this.deps.machines.list();
-    return {connections:profiles.map(p=>({id:p.id,label:p.label,target:p.target,transport:p.transport??"ssh",enabled:p.enabled,state:p.enabled?(live.find(m=>m.id===p.id)?.state??"connecting"):"disabled",message:live.find(m=>m.id===p.id)?.message??null}))};
+    const profiles = await this.deps.grants.connections(),
+      live = this.deps.machines.list();
+    return {
+      connections: profiles.map((p) => ({
+        id: p.id,
+        label: p.label,
+        target: p.target,
+        transport: p.transport ?? "ssh",
+        enabled: p.enabled,
+        state: p.enabled ? (live.find((m) => m.id === p.id)?.state ?? "connecting") : "disabled",
+        message: live.find((m) => m.id === p.id)?.message ?? null,
+      })),
+    };
   }
-  async manage(id:string,action:"enable"|"disable"|"remove") {
-    await this.deps.grants.manage(id,action);await this.deps.machines.refresh();return {};
+  async add(input: { label: string; target: string; session?: string | undefined }) {
+    if (!this.enabled || this.suspended) throw new RpcError("server_busy", "サーバーは準備中です");
+    const result = await this.deps.grants.add(input);
+    await this.deps.machines.refresh();
+    return result;
+  }
+  async manage(id: string, action: "enable" | "disable" | "remove") {
+    await this.deps.grants.manage(id, action);
+    await this.deps.machines.refresh();
+    return {};
   }
   async requestPairing(url: string, label: string) {
     if (!this.enabled || this.suspended) throw new RpcError("server_busy", "サーバーは準備中です");
