@@ -15,6 +15,19 @@ const screen = ref<HTMLDivElement>();
 const sourceSize = ref({ width: 0, height: 0 });
 const maximized = useViewportMaximize(surface);
 const infoOpen = ref(false);
+const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
+const textInput = ref<HTMLInputElement>();
+async function toggleToolbar(): Promise<void> {
+  toolbarCollapsed.value = !toolbarCollapsed.value;
+  if (toolbarCollapsed.value) infoOpen.value = false;
+  await nextTick();
+  (control.value ? canvas.value : surface.value)?.focus({preventScroll:true});
+}
+async function toggleTextInput(): Promise<void> {
+  inputCollapsed.value = !inputCollapsed.value;
+  await nextTick();
+  (inputCollapsed.value ? canvas.value : textInput.value)?.focus({preventScroll:true});
+}
 let maximizeEscapeDown = false;
 function leaveMaximized(): void {
   if (!maximized.value) return;
@@ -443,7 +456,8 @@ onBeforeUnmount(() => {
       </template>
     </div>
     <label v-if="!remote" class="fit-toggle connection-tools"><input v-model="remember" type="checkbox" />共有元を登録する（次回は一覧から接続）</label>
-    <div class="toolbar">
+    <div class="toolbar viewer-toolbar" :class="{ 'toolbar-collapsed': toolbarCollapsed && connected }">
+      <div v-show="!toolbarCollapsed || !connected" class="viewer-toolbar-content">
       <button
         v-if="!remote"
         class="connection-tools"
@@ -484,6 +498,11 @@ onBeforeUnmount(() => {
         :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? '元に戻す' : '最大化' }}</button>
     <label v-if="control && allowFit" class="fit-toggle" title="Windows側で開いている同じVSCodeのレイアウトも変わります"><input v-model="fit" type="checkbox" />表示領域に合わせる</label>
       <button v-if="socket?.readyState === 3" :disabled="!enabled" @click="connect">再接続</button>
+      </div>
+      <button v-if="connected" type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
+        :aria-label="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
+        :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
+        @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
     </div>
     <p role="status" class="cdp-status">{{ note }}</p>
     <p class="scale-note">表示: 等倍（1:1）</p>
@@ -508,19 +527,27 @@ onBeforeUnmount(() => {
         @blur="release"
       />
     </div>
-    <form v-if="control" @submit.prevent="sendText">
+    <div v-if="control" class="viewer-input" :class="{ 'input-collapsed': inputCollapsed }">
+    <form v-show="!inputCollapsed" @submit.prevent="sendText">
       <input
+        ref="textInput"
         v-model="text"
         maxlength="8192"
         aria-label="日本語・文字列入力"
         placeholder="日本語などをここで変換して送信"
       /><button :disabled="!enabled">文字を送る</button>
     </form>
+    <button type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
+      :aria-label="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
+      :title="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
+      @click="toggleTextInput">{{ inputCollapsed ? '▴' : '▾' }}</button>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .desktop-cdp {
+  position: relative;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -539,7 +566,14 @@ onBeforeUnmount(() => {
 .desktop-cdp.soda-viewport-maximized > .screen { position:absolute; inset:0; }
 .desktop-cdp.soda-viewport-maximized > :where(:not(.screen)) { position:relative; z-index:2; background:var(--soda-bg, #202124); }
 .desktop-cdp.soda-viewport-maximized > .toolbar { align-self:flex-end; margin:8px; padding:4px 8px; border-radius:4px; z-index:3; max-width:calc(100% - 32px); }
-.desktop-cdp.soda-viewport-maximized > form { position:absolute; left:8px; right:8px; bottom:8px; padding:4px; }
+.desktop-cdp.soda-viewport-maximized > .viewer-input { position:absolute; left:8px; right:8px; bottom:8px; }
+.desktop-cdp.soda-viewport-maximized > .viewer-input form { padding:4px; }
+.viewer-toolbar-content { display:contents; }
+.viewer-collapse-button { width:28px; height:28px; min-width:28px; min-height:28px; padding:0; flex:0 0 28px; }
+.desktop-cdp > .viewer-toolbar.toolbar-collapsed { position:absolute; top:8px; right:8px; margin:0; padding:2px; border-radius:4px; z-index:3; }
+.viewer-input { display:flex; align-items:center; gap:4px; }
+.viewer-input form { flex:1; min-width:0; }
+.desktop-cdp > .viewer-input.input-collapsed { position:absolute; left:auto; right:8px; bottom:8px; padding:2px; border-radius:4px; z-index:3; }
 header,
 .toolbar,
 form {

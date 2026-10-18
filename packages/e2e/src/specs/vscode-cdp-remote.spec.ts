@@ -1,3 +1,4 @@
+import { checkCollapsibleViewerControls } from "../support/viewerControls.js";
 import { openNativeTab, closeNativeTab } from "../support/nativeTab.js";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
@@ -123,9 +124,14 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     await expect.poll(()=>view.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
     expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
     await expect.poll(()=>view.locator("[data-desktop-screen]").evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
+    // Wait for the resized source frame, not just the maximized host box.
+    await expect.poll(()=>canvas.boundingBox()).toEqual(await view.locator("[data-desktop-screen]").boundingBox());
+    await checkCollapsibleViewerControls(page, view, canvas, "日本語・文字列入力");
+    await expect(view.getByRole("button",{name:"閲覧に戻る",exact:true})).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(view).not.toHaveClass(/soda-viewport-maximized/);
     await expect(dialog).toBeVisible();
+    await checkCollapsibleViewerControls(page, view, canvas, "日本語・文字列入力", false);
     await closeNativeTab(page);
     await expect(dialog).toHaveCount(0);
     await expect.poll(()=>source.evaluate(()=>({width:innerWidth,height:innerHeight}))).toEqual(originalSize);

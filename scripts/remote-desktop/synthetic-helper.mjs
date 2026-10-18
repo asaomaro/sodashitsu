@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { createInterface } from "node:readline";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 function crc32(bytes) {
@@ -100,6 +100,9 @@ function run() {
     lastReport = 0,
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
   const allowInput = process.argv.includes("--allow-input");
+  const markerAt = process.argv.indexOf("--unlock-marker");
+  const unlockMarker = markerAt >= 0 ? process.argv[markerAt + 1] : undefined;
+  const secure = process.argv.includes("--secure") && (!unlockMarker || !existsSync(unlockMarker));
   const recordAt = process.argv.indexOf("--record"),
     record = recordAt >= 0 ? process.argv[recordAt + 1] : undefined;
   const send = (value) => process.stdout.write(JSON.stringify(value) + "\n");
@@ -111,7 +114,7 @@ function run() {
       if (m.type === "configure" && !options) {
         options = m.options;
         const modes = [{width:640,height:480},{width:800,height:600},{width:1024,height:768},{width:1280,height:720},{width:1600,height:900},{width:1920,height:1080}];
-        const displayAllowed = process.argv.includes("--allow-display-resize") && m.allowDisplayResize === true;
+        const displayAllowed = !secure && process.argv.includes("--allow-display-resize") && m.allowDisplayResize === true;
         if (options.display) {
           if (!displayAllowed || !modes.some(mode => mode.width === options.display.width && mode.height === options.display.height)) throw Error("display not allowed");
           options = {...options, width:options.display.width};
@@ -123,9 +126,10 @@ function run() {
           width: options.width,
           height: heightOf(options),
           backend: "synthetic",
+          ...(secure ? {secureDesktop:true} : {}),
           ...(displayAllowed ? {display:{modes}} : {}),
           image: options.image ?? { colorMode: "full", showCursor: true },
-          allowClipboard: process.argv.includes("--allow-clipboard") && m.allowClipboard===true, dynamicQuality:true,
+          allowClipboard: !secure && process.argv.includes("--allow-clipboard") && m.allowClipboard===true, dynamicQuality:true,
         });
       } else if (m.type === "heartbeat") lastSeen = performance.now();
       else if (m.type === "ack" && m.seq === pending) pending = 0;
@@ -139,6 +143,10 @@ function run() {
       }
       else if (m.type === "control") {
         control = m.enabled && allowInput;
+      } else if (m.type === "sas" && secure && control) {
+        if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
+        send({type:"session_unlocked"});
+        process.exit(0);
       } else if (m.type === "input" && control && m.expiresAt >= Date.now()) {
         if (process.argv.includes("--delta-test") && m.input.kind === "text") version++;
         if (record) appendFileSync(record, JSON.stringify(m.input) + "\n");

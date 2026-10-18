@@ -29,7 +29,7 @@ function printHelp(): void {
       "soda [--session NAME] [--state-dir DIR] [--allow-nested]   (open the terminal UI; starts soda serve in the background if needed)",
       "soda serve [--host H] [--port P] [--cert FILE] [--key FILE] [--origin ORIGIN]...",
       "          [--state-dir DIR] [--session NAME] [--scrollback N] [--shell PATH] [--worktree-dir DIR] [--pane-history]",
-      "          [--desktop] [--desktop-input] [--desktop-clipboard] [--desktop-resize]",
+      "          [--desktop] [--desktop-input] [--desktop-clipboard] [--desktop-resize] [--desktop-unlock]",
       "soda token reset [--state-dir DIR] [--session NAME]",
       "soda session list [--state-dir DIR] [--json]",
       "soda session delete NAME [--state-dir DIR] [--json]",

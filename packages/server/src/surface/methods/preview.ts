@@ -5,10 +5,14 @@ import type { MethodDeps } from "./deps.js";
 export function registerPreviewMethods(surface: ControlSurface, deps: MethodDeps): void {
   const helpers = deps.previewHelpers;
   if (helpers) {
-    surface.register("preview.helper_start", { schema: PreviewHelperMethods["preview.helper_start"], handler: async (c, p) => {
-      if (c.connection?.localSettings !== true) throw new RpcError("unauthorized", "ブラウザPCのhelperを手動で起動してください。");
+    surface.register("preview.helper_probe", { schema: PreviewHelperMethods["preview.helper_probe"], handler: async (c, p) => {
       if (c.connectionAuthorized?.() === false) throw new RpcError("unauthorized", "接続が切れました");
-      await helpers.start(c.clientId, p.machineId, p.viewerId);
+      return helpers.probe(c.clientId, p.machineId, p.viewerId);
+    } });
+    surface.register("preview.helper_start", { schema: PreviewHelperMethods["preview.helper_start"], handler: async (c, p) => {
+      if (c.connectionAuthorized?.() === false) throw new RpcError("unauthorized", "接続が切れました");
+      if (c.connection?.localSettings === true) await helpers.start(c.clientId, p.machineId, p.viewerId);
+      else await helpers.startWithProof(c.clientId, p.machineId, p.viewerId, p.proof);
       return {};
     } });
     surface.register("preview.helper_stop", { schema: PreviewHelperMethods["preview.helper_stop"], handler: async (c, p) => {

@@ -67,7 +67,7 @@ async function rcLessShell(stateDir: string): Promise<string | null> {
   return path;
 }
 
-async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; extensions?: ExtensionsInternal }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
+async function bootServer(stateDir: string, port: number, opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; origins?: string[]; extensions?: ExtensionsInternal }, previousToken?: string): Promise<{ composed: ComposedServer; origin: string; token: string; cookie: string }> {
   const shell = await rcLessShell(stateDir);
   const composed: ComposedServer = await composeServer({
     host: "127.0.0.1",
@@ -75,7 +75,7 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
     stateDir,
     ...(shell !== null ? { shell } : {}),
     // `exposed`: 外向きに公開した構成の対照（`--origin` つき＝リバースプロキシ・ポート転送の先。ask のメディアの上限を外さない）。
-    origin: opts.exposed === true ? ["https://soda.example.test"] : [],
+    origin: opts.origins ?? (opts.exposed === true ? ["https://soda.example.test"] : []),
     ...(opts.scrollback !== undefined ? { scrollback: String(opts.scrollback) } : {}),
   }, {
     ...(opts.askImageFetcher !== undefined ? { askImageFetcher: opts.askImageFetcher } : {}),
@@ -94,7 +94,7 @@ async function bootServer(stateDir: string, port: number, opts: { scrollback?: n
 
 /** `askImageFetcher`: 質問のフォームの外部 URL の画像の取得の差し替え（20261004-ask-media-popup。省くと実物の取得＝SSRF 対策つき）。 */
 /** `extensions`: 拡張の起動し直しの間隔などの差し替え（20261007-ext-host。`timings: { backoffMinMs: 20 }` で落ちた拡張の起動し直しを速くする）。 */
-export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; extensions?: ExtensionsInternal } = {}): Promise<AppServer> {
+export async function startAppServer(opts: { scrollback?: number; askImageFetcher?: ImageFetcher; exposed?: boolean; origins?: string[]; extensions?: ExtensionsInternal } = {}): Promise<AppServer> {
   const stateDir = await mkdtemp(join(tmpdir(), "soda-e2e-"));
   const port = await getFreePort();
   // 利用者の本物の `~/.codex`・`~/.claude` を読まないよう、未設定のときだけ、状態の下の空のフォルダへ向ける（`close()` で戻す。`process.env` はワーカー全体のもの）。

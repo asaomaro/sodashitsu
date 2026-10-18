@@ -15,11 +15,14 @@ export const PreviewOrigin = z.string().max(512).refine((s) => {
 });
 export const PreviewLocalOrigin = z.string().max(256).regex(/^http:\/\/p[0-9a-f]{32}\.localhost:[1-9][0-9]{0,4}$/)
   .refine((s) => { try { return new URL(s).origin === s; } catch { return false; } });
+export const PreviewHelperProof = z.object({ id: PreviewId, secret: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict();
+export interface PreviewHelperProbe { id: string; origin: string; url: string }
 export const PreviewHelperMethods = {
-  "preview.helper_start": z.object({ machineId: z.string().min(1).max(256), viewerId: PreviewId }).strict(),
+  "preview.helper_probe": z.object({ machineId: z.string().min(1).max(256), viewerId: PreviewId }).strict(),
+  "preview.helper_start": z.object({ machineId: z.string().min(1).max(256), viewerId: PreviewId, proof: PreviewHelperProof.optional() }).strict(),
   "preview.helper_stop": z.object({ viewerId: PreviewId }).strict(),
 };
-export interface PreviewHelperResults { "preview.helper_start": {}; "preview.helper_stop": {} }
+export interface PreviewHelperResults { "preview.helper_probe": PreviewHelperProbe; "preview.helper_start": {}; "preview.helper_stop": {} }
 export const PreviewMethods = {
   "preview.register": z.object({ paneId: PreviewId, name: z.string().trim().min(1).max(80), port: z.number().int().min(1).max(65535), replace: z.boolean().optional() }).strict(),
   "preview.list": z.object({ paneId: PreviewId.optional() }).strict(),

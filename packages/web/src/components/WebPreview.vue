@@ -149,11 +149,12 @@ onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value
 
 <style scoped>
 .preview-window { position:relative; width:100%; height:100%; min-width:0; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--soda-menu-border); background:var(--soda-bg); color:var(--soda-fg); box-shadow:0 8px 32px #0006; min-height:0; }
+.preview-controls { min-height:0; overflow:auto; }
 .has-app .preview-controls { position:absolute; top:48px; right:8px; z-index:3; width:min(640px,calc(100% - 34px)); max-height:calc(100% - 80px); overflow:auto; padding:8px; background:var(--soda-bg); border:1px solid var(--soda-menu-border); }
 .preview-window.soda-viewport-maximized { padding:0; gap:0; border:0; }
 .soda-viewport-maximized > header { position:absolute; top:8px; right:8px; z-index:4; max-width:calc(100% - 32px); padding:4px 8px; border-radius:4px; background:var(--soda-bg); }
 .soda-viewport-maximized > iframe { position:absolute; inset:0; width:100%; height:100%; border:0; box-sizing:border-box; }
 header, nav, .preview-apps, form { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-header strong { flex:1; } .preview-tools { max-height:35%; overflow:auto; } .preview-tools p, .preview-help { margin:4px 0; font-size:12px; } code { display:block; overflow-wrap:anywhere; user-select:all; margin:6px 0; }
+header strong { flex:1; } .preview-tools p, .preview-help { margin:4px 0; font-size:12px; } code { display:block; overflow-wrap:anywhere; user-select:all; margin:6px 0; }
 iframe { flex:1; width:100%; min-height:0; border:1px solid var(--soda-menu-border); background:white; } .preview-empty { flex:1; padding:24px; } input { max-width:180px; } .preview-help { opacity:.8; }
 </style>

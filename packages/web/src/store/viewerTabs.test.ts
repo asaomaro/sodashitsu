@@ -1,3 +1,4 @@
+(window as unknown as {happyDOM:{settings:{disableIframePageLoading:boolean}}}).happyDOM.settings.disableIframePageLoading = true;
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useViewerTabsStore } from "./viewerTabs.js";
@@ -55,4 +56,21 @@ it("places the first connection nearest the right controls and new connections t
   expect(tabs.visible.map(t => t.id)).toEqual([second.id, first.id]);
   // Display order is separate from persisted order; switching scopes doesn't mutate it.
   expect(tabs.tabs.map(t => t.id)).toEqual([first.id, second.id]);
+});
+it("keeps the public controller connection and completes startup only after localhost proof",async()=>{
+  const tabs=useViewerTabsStore(),viewerId=crypto.randomUUID(),probe={id:crypto.randomUUID(),origin:"http://p00000000000000000000000000000000.localhost:1234",url:"http://p00000000000000000000000000000000.localhost:1234/probe"};
+  let first=true;
+  const request=vi.fn(async(method:string)=>{
+    if(method==="preview.helper_probe") return probe;
+    if(method==="preview.helper_start"&&first) {first=false;throw Object.assign(new Error("proof required"),{code:"unauthorized"});}
+    return {};
+  });
+  tabs.connect({request} as never);
+  const pending=tabs.startHelper("B",viewerId);
+  await vi.waitFor(()=>expect(document.querySelector("[data-preview-helper-probe]")).not.toBeNull());
+  const frame=document.querySelector<HTMLIFrameElement>("[data-preview-helper-probe]")!,proof={id:probe.id,secret:"x".repeat(43)};
+  window.dispatchEvent(new MessageEvent("message",{source:frame.contentWindow,origin:probe.origin,data:{type:"soda-preview-helper-probe",...proof}}));
+  await pending;
+  expect(request).toHaveBeenLastCalledWith("preview.helper_start",{machineId:"B",viewerId,proof});
+  expect(document.querySelector("iframe")).toBeNull();
 });

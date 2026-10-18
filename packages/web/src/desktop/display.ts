@@ -1,8 +1,7 @@
 export type DisplaySize = { width: number; height: number };
-/** Prefer the largest supported mode that fits. If none fits, preserve 1:1 with scrolling. */
-export function chooseDisplayMode(
+/** Largest supported mode within the image transport limits, independent of viewer size. */
+export function chooseMaximumDisplayMode(
   modes: readonly DisplaySize[],
-  viewport: DisplaySize,
 ): DisplaySize | undefined {
   const valid = modes.filter(
     (m) =>
@@ -12,12 +11,8 @@ export function chooseDisplayMode(
       m.height <= 2400 &&
       m.width * m.height <= 8_000_000,
   );
-  const fits = valid.filter(
-    (m) => m.width <= Math.floor(viewport.width) && m.height <= Math.floor(viewport.height),
-  );
-  return [...(fits.length ? fits : valid)].sort(
-    (a, b) =>
-      (fits.length ? -1 : 1) * (a.width * a.height - b.width * b.height) || a.width - b.width,
+  return [...valid].sort(
+    (a, b) => b.width * b.height - a.width * a.height || b.width - a.width,
   )[0];
 }
 export function sameDisplay(a: DisplaySize | undefined, b: DisplaySize | undefined) {

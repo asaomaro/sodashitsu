@@ -72,6 +72,7 @@ export const RemoteDesktopViewerMessage = z.union([
     })
     .strict(),
   z.object({ type: z.literal("control"), enabled: z.boolean() }).strict(),
+  z.object({ type: z.literal("sas") }).strict(),
   z
     .object({
       type: z.literal("input"),
@@ -95,6 +96,7 @@ export const DesktopReady = z
     width: z.number().int().positive().max(32768),
     height: z.number().int().positive().max(32768),
     backend: z.enum(["windows-gdi", "synthetic"]),
+    secureDesktop: z.boolean().optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),
@@ -161,6 +163,7 @@ export const DesktopPermissions = z.object({
   allowInput: z.boolean(),
   allowClipboard: z.boolean(),
   allowDisplayResize: z.boolean(),
+  allowUnlock: z.boolean().optional(),
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
 export interface DesktopSettingsResult {

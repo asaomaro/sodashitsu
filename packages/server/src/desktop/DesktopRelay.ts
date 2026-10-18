@@ -50,6 +50,7 @@ type Viewer = {
   ready: boolean;
   control: boolean;
   allowInput: boolean;
+  secureDesktop?: boolean;
   pending: number;
   seq: number;
   inputSeq: number;
@@ -292,7 +293,7 @@ export class DesktopRelay {
           m.type === "clipboard_grant" ||
           m.type === "clipboard"
         ) {
-          if (v.features && v.ready && v.provider) {
+          if (v.features && v.ready && v.provider && (!v.secureDesktop || m.type === "quality")) {
             if (m.type === "rtc_signal" && m.signal.kind === "offer") throw new Error();
             if (m.type === "media" && !m.enabled) delete v.media;
             this.send(v.provider, m);
@@ -302,7 +303,7 @@ export class DesktopRelay {
           if (v.provider) this.send(v.provider, m);
         } else if (m.type === "stop") this.stop(v);
         else if (m.type === "agent_grant") {
-          if (m.enabled && v.ready && v.allowInput) {
+          if (m.enabled && v.ready && v.allowInput && !v.secureDesktop) {
             this.send(v.ws, { type: "agent_ticket", ...this.agents.grant(v.agent) });
             this.send(v.ws, { type: "control", enabled: false });
           } else this.agents.revoke(v.agent);
@@ -316,6 +317,9 @@ export class DesktopRelay {
             this.stop(v);
         } else if (m.type === "keyframe") {
           if (v.provider) this.send(v.provider, m);
+        } else if (m.type === "sas") {
+          if (v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
+            this.send(v.provider, m);
         } else if (m.type === "input") {
           if (
             v.control &&
@@ -484,7 +488,7 @@ export class DesktopRelay {
           }
           if (++v.frameRate > v.fps + 3) throw new Error();
           v.chain.accept(info);
-          if (!info.update) {
+          if (!info.update && !v.secureDesktop) {
             v.latest = { info, image: image.slice(), at: now };
             if (v.snapshot) {
               const pending = v.snapshot;
@@ -506,9 +510,21 @@ export class DesktopRelay {
             const ready = DesktopReady.parse(msg);
             v.ready = true;
             v.allowInput = ready.allowInput;
+            v.secureDesktop = ready.secureDesktop === true;
+            if (v.secureDesktop) {
+              this.agents.revoke(v.agent);
+              delete v.latest;
+              if (ready.allowMedia || ready.allowClipboard || ready.display) throw new Error();
+            }
             v.since = performance.now();
             this.send(v.ws, ready);
-          } else if (msg.type === "media_status" && v.features) {
+          } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
+            this.send(v.ws, { type: "session_locked" });
+            this.stop(v);
+          } else if (msg.type === "session_unlocked" && v.secureDesktop && v.ready) {
+            this.send(v.ws, { type: "session_unlocked" });
+            this.stop(v);
+          } else if (msg.type === "media_status" && v.features && !v.secureDesktop) {
             const status = DesktopMediaStatus.parse(msg);
             if (status.state === "images") delete v.media;
             else if (!v.media || v.media.id !== status.id)
@@ -567,12 +583,14 @@ export class DesktopRelay {
     });
   }
   private agentFrame(v: Viewer): AgentFrame | undefined {
+    if (v.secureDesktop) return;
     const full = v.latest,
       current = v.chain.last;
     if (!full || !current || full.info.contentId !== current.contentId) return;
     return { info: { ...full.info, seq: current.seq }, image: full.image, at: v.frameAt };
   }
   private async capture(v: Viewer, after?: number): Promise<void> {
+    if (v.secureDesktop) throw new RpcError("unauthorized", "Lock screen is human-only");
     const current = this.agentFrame(v);
     if (
       current &&

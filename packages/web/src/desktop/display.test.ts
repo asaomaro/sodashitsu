@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { chooseDisplayMode, sameDisplay } from "./display.js";
+import { chooseMaximumDisplayMode, sameDisplay } from "./display.js";
 import { normalizeSettings } from "./settings.js";
 const modes = [
   { width: 640, height: 480 },
@@ -7,14 +7,19 @@ const modes = [
   { width: 1280, height: 720 },
   { width: 1920, height: 1080 },
 ];
-it("chooses a supported mode that fits and preserves 1:1 with scroll when none fits", () => {
-  expect(chooseDisplayMode(modes, { width: 1310, height: 800 })).toEqual(modes[2]);
-  expect(chooseDisplayMode(modes, { width: 700, height: 520 })).toEqual(modes[0]);
-  expect(chooseDisplayMode(modes, { width: 400, height: 250 })).toEqual(modes[0]);
-  expect(chooseDisplayMode(modes, { width: 1920, height: 1080 })).toEqual(modes[3]);
-  expect(chooseDisplayMode([], { width: 1000, height: 1000 })).toBeUndefined();
+it("chooses the largest supported mode by pixel count without mutating the mode list", () => {
+  const original = structuredClone(modes);
+  expect(chooseMaximumDisplayMode(modes)).toEqual(modes[3]);
+  expect(chooseMaximumDisplayMode([...modes].reverse())).toEqual(modes[3]);
+  expect(modes).toEqual(original);
+  expect(chooseMaximumDisplayMode([{width:2560,height:800}, {width:1920,height:1200}])).toEqual({width:1920,height:1200});
+  expect(chooseMaximumDisplayMode([])).toBeUndefined();
   expect(sameDisplay(modes[0], { ...modes[0]! })).toBe(true);
   expect(sameDisplay(undefined, modes[0])).toBe(false);
+});
+it("excludes modes beyond the capture limits and resolves equal areas deterministically", () => {
+  expect(chooseMaximumDisplayMode([...modes, {width:7680,height:4320}, {width:4096,height:2400}, {width:319,height:200}])).toEqual(modes[3]);
+  expect(chooseMaximumDisplayMode([{width:1920,height:1200}, {width:2560,height:900}])).toEqual({width:2560,height:900});
 });
 it("never persists display-mode changes or permission in rendering preferences", () => {
   const normalized = normalizeSettings({ display: { width: 800, height: 600 }, features: true });

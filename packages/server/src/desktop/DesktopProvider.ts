@@ -17,6 +17,7 @@ import {
 } from "@sodashitsu/protocol";
 
 import { DesktopCompanionHub } from "./DesktopCompanion.js";
+import { DesktopUnlockLease } from "./DesktopUnlockLease.js";
 
 const HelperFrame = z
   .object({
@@ -35,6 +36,8 @@ export interface DesktopProviderConfig {
   allowClipboard?: boolean;
   allowMedia?: boolean;
   allowDisplayResize?: boolean;
+  allowUnlock?: boolean;
+  unlockLeaseCommand?: string[];
   iceServers?: z.infer<typeof DesktopIceServers>;
   origins(): string[];
 }
@@ -55,6 +58,7 @@ type Share = {
   attached: boolean;
   ready: boolean;
   control: boolean;
+  secureDesktop?: boolean;
   allowInput: boolean;
   lastSeen: number;
   seq: number;
@@ -67,6 +71,7 @@ type Share = {
 
 /** Opt-in B-side provider. Executable and input ceiling are local settings, never RPC arguments. */
 export class DesktopProvider {
+  private readonly unlockLease = new DesktopUnlockLease();
   private active: Share | undefined;
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
   readonly companion: DesktopCompanionHub;
@@ -77,6 +82,12 @@ export class DesktopProvider {
     this.dispose();
     this.config = config;
     this.companion.configure(config?.allowMedia === true, config?.iceServers ?? []);
+    this.resumeUnlockLease();
+  }
+  /** Handoff rollback reopens the local lease; a successful handoff creates a new provider. */
+  resumeUnlockLease(): void {
+    if (this.config?.allowUnlock && this.config.unlockLeaseCommand)
+      this.unlockLease.start(this.config.unlockLeaseCommand);
   }
   capabilities() {
     return {
@@ -203,7 +214,7 @@ export class DesktopProvider {
             m.type === "rtc_signal" ||
             m.type === "media_feedback"
           ) {
-            if (!s.ready || !this.companion.fromViewer(s, m))
+            if (!s.ready || s.secureDesktop || !this.companion.fromViewer(s, m))
               this.send(s, { type: "media_unavailable" });
           } else if (m.type === "quality") {
             if (
@@ -264,6 +275,9 @@ export class DesktopProvider {
             s.control = m.enabled && s.allowInput && s.ready;
             this.write(s, { type: "control", enabled: s.control });
             this.send(s, { type: "control", enabled: s.control });
+          } else if (m.type === "sas") {
+            if (s.secureDesktop && s.control && s.ready && performance.now() - s.lastSeen < 5000)
+              this.write(s, m);
           } else if (m.type === "input") {
             if (
               s.control &&
@@ -323,8 +337,10 @@ export class DesktopProvider {
           const raw = JSON.parse(line);
           if (raw.type === "ready" && !s.ready) {
             const ready = DesktopReady.parse(raw);
+            s.secureDesktop = ready.secureDesktop === true;
+            if (s.secureDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
-              options.display &&
+              !s.secureDesktop && options.display &&
               (!ready.display ||
                 ready.width !== options.display.width ||
                 ready.height !== options.display.height)
@@ -339,7 +355,7 @@ export class DesktopProvider {
             )
               throw new Error("Helper does not support requested image settings");
             s.ready = true;
-            s.allowClipboard = cfg.allowClipboard === true && ready.allowClipboard === true;
+            s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true;
             s.dynamicQuality = ready.dynamicQuality === true;
             s.allowInput = ready.allowInput && cfg.allowInput;
             const {
@@ -350,7 +366,7 @@ export class DesktopProvider {
               display,
               ...legacyReady
             } = ready;
-            const enabledMedia = cfg.allowMedia === true && dynamicQuality === true;
+            const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             this.send(s, {
               ...legacyReady,
               ...(options.image ? { image: appliedImage } : {}),
@@ -359,7 +375,7 @@ export class DesktopProvider {
                     allowClipboard: s.allowClipboard,
                     allowMedia: enabledMedia,
                     dynamicQuality: dynamicQuality === true,
-                    ...(cfg.allowDisplayResize && display ? { display } : {}),
+                    ...(!s.secureDesktop && cfg.allowDisplayResize && display ? { display } : {}),
                   }
                 : {}),
               allowInput: s.allowInput,
@@ -380,13 +396,21 @@ export class DesktopProvider {
                   });
                 },
               });
+          } else if (raw.type === "session_locked" && cfg.allowUnlock && s.ready && !s.secureDesktop) {
+            this.send(s, { type: "session_locked" });
+            this.stop(s);
+            return;
+          } else if (raw.type === "session_unlocked" && s.ready && s.secureDesktop) {
+            this.send(s, { type: "session_unlocked" });
+            this.stop(s);
+            return;
           } else if (raw.type === "frame" && s.ready) {
             const frame = HelperFrame.parse(raw);
             if (
               s.pending ||
               frame.info.seq <= s.seq ||
               frame.info.width > (options.display?.width ?? options.width) ||
-              (options.display &&
+              (!s.secureDesktop && options.display &&
                 (frame.info.width !== options.display.width ||
                   frame.info.height !== options.display.height))
             ) {
@@ -481,6 +505,7 @@ export class DesktopProvider {
   }
   // Also used when pausing clients for handoff; rollback can reuse this provider.
   dispose(): void {
+    this.unlockLease.stop();
     this.companion.dispose();
     for (const pending of this.pendingStarts) pending.cancelled = true;
     if (this.active) this.stop(this.active);
@@ -521,6 +546,7 @@ export function desktopConfigFromEnv(
       allowClipboard: env.SODA_DESKTOP_ALLOW_CLIPBOARD === "1",
       allowMedia: env.SODA_DESKTOP_ALLOW_MEDIA === "1",
       allowDisplayResize: env.SODA_DESKTOP_ALLOW_DISPLAY_RESIZE === "1",
+      allowUnlock: env.SODA_DESKTOP_ALLOW_UNLOCK === "1",
       iceServers: DesktopIceServers.parse(
         env.SODA_DESKTOP_ICE_SERVERS ? JSON.parse(env.SODA_DESKTOP_ICE_SERVERS) : [],
       ),

@@ -440,7 +440,7 @@ export async function composeServer(
     legacy: desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),
     origins: desktopOriginsFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),
     ...(options.desktop ? { startup: { enabled: true, allowInput: options.desktopInput === true,
-      allowClipboard: options.desktopClipboard === true, allowDisplayResize: options.desktopResize === true } } : {}),
+      allowClipboard: options.desktopClipboard === true, allowDisplayResize: options.desktopResize === true, allowUnlock: options.desktopUnlock === true } } : {}),
   });
   const desktopRelay = new DesktopRelay(auth, originRejections, machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
@@ -890,6 +890,7 @@ export async function composeServer(
       paneSocket.pause();
     },
     reopenClients: () => {
+      desktop.resumeUnlockLease();
       wsServer.setReady(true);
       bridgeEndpoint.setReady(true);
       paneSocket.resume();

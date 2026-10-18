@@ -16,7 +16,7 @@ import {
 } from "@sodashitsu/protocol";
 
 import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
-import { chooseDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
+import { chooseMaximumDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
 import { renderDesktopUpdate } from "../desktop/render.js";
 import {
   loadSettings,
@@ -29,31 +29,42 @@ import {
 const props = defineProps<{ machineId: string; label: string; embedded?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 const infoOpen = ref(false);
+const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
+const textInput = ref<HTMLInputElement>();
+const secureDesktop = ref(false);
+async function toggleToolbar() {
+  toolbarCollapsed.value = !toolbarCollapsed.value;
+  if (toolbarCollapsed.value) infoOpen.value = false;
+  await nextTick();
+  (control.value ? canvas.value : windowElement.value)?.focus({preventScroll:true});
+}
+async function toggleTextInput() {
+  inputCollapsed.value = !inputCollapsed.value;
+  await nextTick();
+  const target = control.value ? (inputCollapsed.value ? canvas.value : textInput.value) : windowElement.value;
+  target?.focus({preventScroll:true});
+}
 const canvas = ref<HTMLCanvasElement | null>(null);
 const screenElement = ref<HTMLElement | null>(null);
 const screenSize = ref<DisplaySize>({ width: 0, height: 0 });
-const displayFollow = ref(false),
+const maximumDisplay = ref(false),
   displayModes = ref<DisplaySize[]>([]);
 let displayObserver: ResizeObserver | undefined,
   displayTimer: ReturnType<typeof setTimeout> | undefined,
   requestedDisplay: DisplaySize | undefined;
 function scheduleDisplay() {
   clearTimeout(displayTimer);
-  if (!displayFollow.value || !ready.value || !screenElement.value) return;
+  if (!maximumDisplay.value || !ready.value || !screenElement.value) return;
   displayTimer = setTimeout(() => {
-    if (!displayFollow.value || !ready.value || dead || !screenElement.value) return;
-    const el = screenElement.value,
-      mode = chooseDisplayMode(displayModes.value, {
-        width: el.clientWidth,
-        height: el.clientHeight,
-      });
+    if (!maximumDisplay.value || !ready.value || dead || !screenElement.value) return;
+    const mode = chooseMaximumDisplayMode(displayModes.value);
     if (!mode || sameDisplay(mode, activeSettings.value?.display)) return;
     requestedDisplay = mode;
     connect();
   }, 700);
 }
 function toggleDisplay() {
-  if (displayFollow.value) scheduleDisplay();
+  if (maximumDisplay.value) scheduleDisplay();
   else {
     requestedDisplay = undefined;
     connect();
@@ -304,6 +315,13 @@ function stop() {
   ws?.close(1000, "desktop stopped");
   ws = undefined;
   ready.value = connected.value = false;
+  if (secureDesktop.value) {
+    text.value = '';
+    sourceCanvas.width = sourceCanvas.height = 0;
+    chain = new DesktopFrameChain();
+    inputs.clear();
+  }
+  secureDesktop.value = false;
   agentActive.value = false;
   agentTicket.value = "";
   agentExpires.value = 0;
@@ -311,7 +329,7 @@ function stop() {
   canvas.value?.getContext("2d")?.clearRect(0, 0, canvas.value.width, canvas.value.height);
 }
 function close() {
-  displayFollow.value = false;
+  maximumDisplay.value = false;
   clearTimeout(displayTimer);
   stop();
   emit("close");
@@ -346,7 +364,7 @@ function connect() {
   try {
     options = {
       ...requestedSettings(),
-      ...(displayFollow.value && requestedDisplay ? { display: requestedDisplay } : {}),
+      ...(maximumDisplay.value && requestedDisplay ? { display: requestedDisplay } : {}),
     };
   } catch {
     settingNotice.value = "設定値を確認してください（幅320～1920、fps 1～30、JPEG品質20～90）。";
@@ -419,7 +437,9 @@ function connect() {
         const m = JSON.parse(String(event.data));
         if (m.type === "ready") {
           const r = DesktopReady.parse(m);
-          title.value = r.title;
+          secureDesktop.value = r.secureDesktop === true;
+          if (secureDesktop.value) text.value = "";
+          title.value = secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
           ready.value = connected.value = true;
           synthetic.value = r.backend === "synthetic";
@@ -427,12 +447,20 @@ function connect() {
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
           displayModes.value = r.display?.modes ?? [];
-          if (displayFollow.value && !r.display) {
-            displayFollow.value = false;
+          if (!secureDesktop.value && maximumDisplay.value && !r.display) {
+            maximumDisplay.value = false;
             error.value = "Bでディスプレイ解像度の変更が許可されていません";
           }
-          scheduleDisplay();
-          status.value = "閲覧中";
+          if (!secureDesktop.value) scheduleDisplay();
+          status.value = secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
+        } else if ((m.type === "session_unlocked" && secureDesktop.value) || (m.type === "session_locked" && !secureDesktop.value)) {
+          maximumDisplay.value = false;
+          requestedDisplay = undefined;
+          text.value = "";
+          stop();
+          status.value = m.type === "session_locked" ? "ロック画面に再接続中" : "解除しました。通常画面に再接続中";
+          const reconnectEpoch = epoch;
+          setTimeout(() => { if (!dead && epoch === reconnectEpoch) connect(); }, 750);
         } else if (m.type === "media_status") {
           const state = DesktopMediaStatus.parse(m);
           mediaState.value = state.state;
@@ -546,7 +574,7 @@ function connect() {
     stop();
     status.value = "終了";
     if (!wasReady && activeSettings.value?.display) {
-      displayFollow.value = false;
+      maximumDisplay.value = false;
       requestedDisplay = undefined;
       error.value =
         "Bの解像度を変更できませんでした。共有元で対応モードと復元状態を確認してください。";
@@ -645,7 +673,6 @@ onMounted(() => {
   if (screenElement.value && typeof ResizeObserver !== "undefined") {
     displayObserver = new ResizeObserver(() => {
       if (screenElement.value) screenSize.value = { width: screenElement.value.clientWidth, height: screenElement.value.clientHeight };
-      scheduleDisplay();
     });
     displayObserver.observe(screenElement.value);
   }
@@ -680,12 +707,14 @@ onBeforeUnmount(() => {
       @keyup.stop
     >
       <header
+        :class="{ 'toolbar-collapsed': toolbarCollapsed }"
         @dblclick="maximizeFromTitle"
         @pointerdown="grip"
         @pointermove="move"
         @pointerup="drag = undefined"
         @pointercancel="drag = undefined"
       >
+        <div v-show="!toolbarCollapsed" class="viewer-toolbar-content">
         <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
         <button
           :disabled="!ready || !allowed"
@@ -699,11 +728,20 @@ onBeforeUnmount(() => {
           {{ maximized ? "元に戻す" : "最大化" }}
         </button>
         <button @click="close">閉じる</button>
+        </div>
+        <button type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
+          :aria-label="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
+          :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
+          @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
       <p v-if="error" class="desktop-alert" role="alert">{{ error }}</p>
       <div v-show="infoOpen" class="desktop-controls">
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
+      </p>
+      <p v-if="secureDesktop" data-desktop-locked>
+        Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。
+        <button :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
       <p v-if="activeSettings && ready" data-desktop-applied>
         適用中: 幅上限{{ activeSettings.width }} / {{ activeSettings.fps }}fps上限 / JPEG
@@ -831,7 +869,7 @@ onBeforeUnmount(() => {
         </button>
         <p role="status">{{ clipboardNotice }}</p>
       </details>
-      <details v-if="ready && allowed" data-agent-access>
+      <details v-if="ready && allowed && !secureDesktop" data-agent-access>
         <summary>エージェント連携</summary>
         <p>
           この共有画面の取得・PC操作を最大2分許可します。取得画像をモデルへ渡す用途を含みます。発行コードは30秒以内・1回だけ使用できます。
@@ -855,13 +893,13 @@ onBeforeUnmount(() => {
       <section v-if="displayModes.length" data-desktop-display>
         <label
           ><input
-            v-model="displayFollow"
+            v-model="maximumDisplay"
             type="checkbox"
             @change="toggleDisplay"
-          />Bの解像度も窓に合わせる</label
+          />接続先を最大解像度にする</label
         >
         <p>
-          共有元の実ディスプレイを対応解像度へ変更します。表示の拡縮は「画面に合わせる」で別に選べます。変更ごとに再接続して操作許可を解除し、共有終了時に元の解像度へ復元を試みます。
+          共有元の実ディスプレイを、対応する中で画素数が最大の解像度へ変更します。窓のサイズでは解像度を下げません。表示の拡縮は「画面に合わせる」で別に選べます。変更ごとに再接続して操作許可を解除し、共有終了時に元の解像度へ復元を試みます。
         </p>
         <p v-if="activeSettings?.display" data-applied-display>
           {{ activeSettings.display.width }}×{{ activeSettings.display.height }} — {{ fit ? '画面に合わせて表示' : '1画素＝1 CSS px' }}
@@ -899,22 +937,31 @@ onBeforeUnmount(() => {
         />
         <span v-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
       </div>
-      <div v-show="infoOpen || control" class="desktop-input">
-      <form
+      <div v-show="infoOpen || control" class="desktop-input" :class="{ 'input-collapsed': inputCollapsed }">
+      <div class="viewer-input-row">
+      <form v-show="!inputCollapsed"
         @submit.prevent="
           input({ kind: 'text', text });
           text = '';
         "
       >
         <input
+          ref="textInput"
+          :type="secureDesktop ? 'password' : 'text'"
+          autocomplete="off"
           v-model="text"
           :disabled="!control"
           maxlength="1024"
           aria-label="確定した文字を送る"
-          placeholder="日本語はここで変換を確定"
+          :placeholder="secureDesktop ? 'Windowsの認証画面に送る文字（保存しません）' : '日本語はここで変換を確定'"
         /><button :disabled="!control || !text">文字を送る</button>
       </form>
-      <footer v-show="infoOpen">
+      <button type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
+        :aria-label="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
+        :title="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
+        @click="toggleTextInput">{{ inputCollapsed ? '▴' : '▾' }}</button>
+      </div>
+      <footer v-show="infoOpen && !inputCollapsed">
         <span>{{
           control
             ? "入力はBのPC全体に届きます。Escで閲覧へ戻る。"
@@ -966,6 +1013,12 @@ onBeforeUnmount(() => {
 .desktop-window.maximized { padding: 0; gap: 0; border: 0; }
 .desktop-window.maximized > header { position: absolute; top: 8px; right: 8px; max-width: calc(100% - 32px); padding: 4px 8px; background: var(--soda-bg, #161b22); border-radius: 4px; cursor: default; }
 .desktop-window.maximized > header strong { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-toolbar-content { display: contents; }
+.viewer-collapse-button { width: 28px; height: 28px; min-width: 28px; min-height: 28px; padding: 0; flex: 0 0 28px; }
+.desktop-window > header.toolbar-collapsed { position: absolute; top: 8px; right: 8px; padding: 2px; background: var(--soda-bg, #161b22); border-radius: 4px; cursor: default; }
+.viewer-input-row { display: flex; align-items: center; gap: 4px; }
+.viewer-input-row form { flex: 1; min-width: 0; }
+.desktop-input.input-collapsed { left: auto; padding: 2px; border-radius: 4px; }
 .desktop-window.maximized > .screen { position: absolute; inset: 0; border: 0; scrollbar-gutter: auto; }
 .desktop-window.maximized {
   min-width: 0;

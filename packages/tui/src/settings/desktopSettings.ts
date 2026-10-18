@@ -28,6 +28,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
     ["allowInput", "マウス・キーボードを許可"],
     ["allowClipboard", "クリップボードを許可"],
     ["allowDisplayResize", "解像度変更を許可"],
+    ["allowUnlock", "起動中のロック解除を許可（Windows専用サービスが必要）"],
   ] as const;
   return {
     id: "desktop-sharing",

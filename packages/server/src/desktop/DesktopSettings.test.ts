@@ -90,3 +90,24 @@ it("keeps explicit SSH destinations when using the bundled command without legac
     "https://delegate.example",
   ]);
 });
+
+it("persists opt-in unlock and ties its lease to provider disposal; old permissions stay compatible", async () => {
+  const options = await fixture(), configure = vi.spyOn(options.provider, "configure");
+  // Stub native spawn only; inspect the actual permission-to-command mapping.
+  const { DesktopUnlockLease } = await import("./DesktopUnlockLease.js");
+  const start = vi.spyOn(DesktopUnlockLease.prototype,"start").mockImplementation(()=>undefined);
+  const stop = vi.spyOn(DesktopUnlockLease.prototype,"stop").mockImplementation(()=>undefined);
+  try {
+    const settings = await DesktopSettings.open(options);
+    expect(start).not.toHaveBeenCalled();
+    await settings.set({...off,enabled:true,allowInput:true,allowUnlock:true});
+    expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowUnlock:true,command:["synthetic-helper","-AllowInput","-AllowUnlock"]});
+    expect(start).toHaveBeenLastCalledWith(["synthetic-helper","-UnlockLease"]);
+    expect(JSON.parse(await readFile(options.file,"utf8"))).toMatchObject({allowUnlock:true});
+    const stopped = stop.mock.calls.length;
+    options.provider.dispose();
+    expect(stop.mock.calls.length).toBe(stopped+1);
+    await settings.set(off);
+    expect(configure.mock.calls.at(-1)![0]).toBeUndefined();
+  } finally { start.mockRestore();stop.mockRestore(); }
+});

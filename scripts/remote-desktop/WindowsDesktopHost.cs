@@ -46,13 +46,23 @@ public static class SodaDesktopHost {
     static void Output(object value) { Console.Out.WriteLine(Json.Serialize(value)); Console.Out.Flush(); }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
     static int Num(Dictionary<string,object> value,string key) { return Convert.ToInt32(value[key]); }
+    static bool Secure;
+    static Func<int> SecureLockState;
+    static Func<bool> SecureGuard;
+    static bool AllowedDesktop() { return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop(); }
+    public static void RunSecure(Func<int> lockState,Func<bool> secureGuard) {
+        if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem || !secureGuard())throw new InvalidOperationException("Secure desktop unavailable");
+        SecureLockState=lockState;SecureGuard=secureGuard;Secure=true;
+        try { Run(0,true,false,false,null); }
+        finally { if(SecureLockState()!=0 && SecureLockState()==1)Output(new {type="session_unlocked"}); }
+    }
     static bool DefaultDesktop() {
         IntPtr h=OpenInputDesktop(0,false,1);
         if(h==IntPtr.Zero) return false;
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static void Emit(INPUT value) { if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
+    static void Emit(INPUT value) { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
     static void Key(ushort vk,bool down) { var v=new INPUT();v.type=1;v.data.key.vk=vk;v.data.key.flags=(down?0u:2u)|((vk>=33&&vk<=46||vk==163||vk==165||vk==91||vk==92)?1u:0u);Emit(v); }
     static void Mouse(uint flags,uint data,int x,int y) { var v=new INPUT();v.type=0;v.data.mouse.dx=x;v.data.mouse.dy=y;v.data.mouse.dwFlags=flags;v.data.mouse.mouseData=data;Emit(v); }
     static ushort VirtualKey(string code) {
@@ -66,13 +76,14 @@ public static class SodaDesktopHost {
     static void Release() {
         lock(Gate) {
             Control=false;
+            if(Secure && !AllowedDesktop()){Keys.Clear();Buttons.Clear();return;}
             foreach(ushort key in Keys) { try { Key(key,false); } catch {} } Keys.Clear();
             foreach(int button in Buttons) { try { Mouse(button==0?4u:button==1?64u:16u,0,0,0); } catch {} } Buttons.Clear();
         }
     }
     static bool Apply(Dictionary<string,object> input) {
         lock(Gate) {
-            if(!Control || Stopping || Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>6000 || !DefaultDesktop()) { Release();return false; }
+            if(!Control || Stopping || Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>6000 || !AllowedDesktop()) { Release();return false; }
             string kind=(string)input["kind"];
             if(kind=="key") {
                 ushort key=VirtualKey((string)input["code"]); bool down=(bool)input["down"];
@@ -155,34 +166,36 @@ public static class SodaDesktopHost {
         }
     }
     static SodaDesktopDisplay.Lease DisplayLease;
-    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null) {
+    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null) {
         try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath); }
-        finally { if(DisplayLease!=null){try{DisplayLease.Dispose();}catch{Console.Error.WriteLine("Display restore failed; restore resolution locally in Windows Settings.");}DisplayLease=null;} }
+        finally { if(DisplayLease!=null){try{DisplayLease.Dispose();}catch{Console.Error.WriteLine("Display restore failed; restore resolution locally in Windows Settings.");}DisplayLease=null;}
+            if(!Secure && lockState!=null && lockState()==0)Output(new {type="session_locked"});
+        }
     }
     static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath) {
-        if(!Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
+        if(!Secure && !Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
         SetProcessDPIAware();
         var screens=Screen.AllScreens;
         if(monitorIndex<0 || monitorIndex>=screens.Length)throw new InvalidOperationException("Monitor not found");
         var screen=screens[monitorIndex];
-        SodaDesktopDisplay.WaitForPrevious(screen.DeviceName);
+        if(!Secure)SodaDesktopDisplay.WaitForPrevious(screen.DeviceName);
         Bounds=SodaDesktopDisplay.RectangleOf(new SodaDesktopDisplay.NativeDriver(null).Current(screen.DeviceName));
-        if(!DefaultDesktop() || Bounds.Width<1 || Bounds.Height<1 || (long)Bounds.Width*Bounds.Height>40000000)throw new InvalidOperationException("Desktop unavailable");
+        if(!AllowedDesktop() || Bounds.Width<1 || Bounds.Height<1 || (long)Bounds.Width*Bounds.Height>40000000)throw new InvalidOperationException("Desktop unavailable");
         string first=ReadBoundedLine();if(first==null || first.Length>65536)return;
         var config=Obj(Json.DeserializeObject(first));if((string)config["type"]!="configure")throw new InvalidOperationException();
         var options=Obj(config["options"]);int maxWidth=Num(options,"width"),fps=Num(options,"fps"),quality=Num(options,"quality");
         if(maxWidth<320||maxWidth>1920||fps<1||fps>30||quality<20||quality>90)throw new InvalidOperationException();
         int maxFps=fps,maxQuality=quality;
-        bool clipboardCeiling=locallyAllowClipboard && config.ContainsKey("allowClipboard") && (bool)config["allowClipboard"];
+        bool clipboardCeiling=!Secure && locallyAllowClipboard && config.ContainsKey("allowClipboard") && (bool)config["allowClipboard"];
         bool clipboardAllowed=false;long clipboardGeneration=0;
         bool allow=locallyAllowInput && (bool)config["allowInput"];
         bool deltas=options.ContainsKey("deltas") && (bool)options["deltas"];
         string colorMode="full";bool showCursor=true;
         if(options.ContainsKey("image")){var image=Obj(options["image"]);colorMode=(string)image["colorMode"];showCursor=(bool)image["showCursor"];}
         if(colorMode!="full"&&colorMode!="rgb565"&&colorMode!="rgb332"&&colorMode!="gray16")throw new InvalidOperationException("Invalid color mode");
-        bool displayCeiling=screens.Length==1 && locallyAllowDisplayResize && config.ContainsKey("allowDisplayResize") && (bool)config["allowDisplayResize"];
+        bool displayCeiling=!Secure && screens.Length==1 && locallyAllowDisplayResize && config.ContainsKey("allowDisplayResize") && (bool)config["allowDisplayResize"];
         var displayModes=displayCeiling?new SodaDesktopDisplay.NativeDriver(sourcePath).Modes(screen.DeviceName):new List<SodaDesktopDisplay.Mode>();
-        if(options.ContainsKey("display")) {
+        if(!Secure && options.ContainsKey("display")) {
             if(!displayCeiling)throw new InvalidOperationException("Display resize not permitted");
             var requested=Obj(options["display"]);
             DisplayLease=new SodaDesktopDisplay.Lease(new SodaDesktopDisplay.NativeDriver(sourcePath),screen.DeviceName,Num(requested,"width"),Num(requested,"height"));
@@ -192,14 +205,17 @@ public static class SodaDesktopHost {
         if(h>2400){w=(int)Math.Round(w*2400.0/h);h=2400;}
         if((long)w*h>8000000)throw new InvalidOperationException();
         Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
-        var form=new Form { Text="Sodashitsu - desktop sharing", Width=380, Height=110, TopMost=true, StartPosition=FormStartPosition.CenterScreen };
+        Form form=null;
+        if(!Secure) { form=new Form { Text="Sodashitsu - desktop sharing", Width=380, Height=110, TopMost=true, StartPosition=FormStartPosition.CenterScreen };
         var stop=new Button { Text="Stop sharing", Dock=DockStyle.Fill };
-        stop.Click+=(sender,e)=>{Stopping=true;Release();};form.FormClosed+=(sender,e)=>{Stopping=true;Release();};form.Controls.Add(stop);form.Show();
+        stop.Click+=(sender,e)=>{Stopping=true;Release();};form.FormClosed+=(sender,e)=>{Stopping=true;Release();};form.Controls.Add(stop);form.Show(); }
         var watchdog=new System.Threading.Timer((state)=>{
-            if(Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>8000 || !DefaultDesktop()) { Stopping=true;Release();Environment.Exit(0); }
+            if(Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>8000) { Stopping=true;Release();Environment.Exit(0); }
+            else if(!AllowedDesktop()){Stopping=true;Release();}
         },null,500,500);
         try {
             var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend","windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
+            if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             Output(ready);
             var jpeg=Array.Find(ImageCodecInfo.GetImageEncoders(),c=>c.MimeType=="image/jpeg");
@@ -222,12 +238,13 @@ public static class SodaDesktopHost {
                 byte[] current=deltas || colorMode!="full"?new byte[w*h*3]:null,previous=deltas?new byte[w*h*3]:null;
                 using(var sha=SHA256.Create()) {
                 while(!Stopping) {
-                    Application.DoEvents();
-                    if(!DefaultDesktop() || !SodaDesktopDisplay.Matches(screen.DeviceName,Bounds))break;
+                    if(!Secure)Application.DoEvents();
+                    if(!AllowedDesktop() || !SodaDesktopDisplay.Matches(screen.DeviceName,Bounds))break;
                     int handled=0;string data;
                     while(!Stopping && handled++<64 && lines.TryTake(out data)) {
                         var msg=Obj(Json.DeserializeObject(data));string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
+                        else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
                         else if(type=="keyframe"){forceFull=true;next=0;}
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
@@ -254,7 +271,7 @@ public static class SodaDesktopHost {
                         } else if(type=="stop") { Stopping=true;break; }
                         else throw new InvalidOperationException();
                     }
-                    form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
+                    if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
                     long now=Clock.ElapsedMilliseconds;
                     if(!Stopping && pending==0 && now>=next) {
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureScaled(resize,w,h);
@@ -283,7 +300,7 @@ public static class SodaDesktopHost {
                             } else update=new {kind="unchanged",baseSeq=sequence};
                             byte[] image=stream.ToArray();if(image.Length>2*1024*1024)throw new InvalidOperationException("Frame limit");
                             double encode=t.Elapsed.TotalMilliseconds;
-                            if(!DefaultDesktop())break;
+                            if(!AllowedDesktop())break;
                             var info=new Dictionary<string,object>{{"seq",++sequence},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
                             if(deltas)info["contentId"]=contentId;
                             if(update!=null)info["update"]=update;
@@ -297,7 +314,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;watchdog.Dispose();Release();form.Dispose(); }
+        } finally { Stopping=true;watchdog.Dispose();Release();if(form!=null)form.Dispose(); }
     }
 }
 

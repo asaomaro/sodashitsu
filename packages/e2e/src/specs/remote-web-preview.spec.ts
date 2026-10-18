@@ -59,6 +59,10 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     // No browser-PC CLI, token, login, or helper process is supplied by the test.
     await expect(page.getByText("ブラウザPCのhelperに接続済み", {exact:true})).toBeVisible({timeout:15000});
     await expect(page.locator("[data-preview-helper-command]")).toHaveCount(0);
+    const settings = page.locator("[data-web-preview] .preview-controls");
+    // With ample space, setup fields must not be clipped by a nested scrollbar.
+    await expect.poll(() => settings.locator(".preview-tools").evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+    await expect.poll(() => settings.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     const callerEnv = { SODA_PANE_ID: paneId, SODA_SERVER_URL: provider.origin, SODA_PANE_SOCKET: join(provider.stateDir, "pane.sock"), ...(process.platform === "win32" ? { SODACTL_TOKEN: provider.token } : {}) };
     const registered = JSON.parse(await run(["preview", "register", "--name", "frontend", "--port", String(webPort)], callerEnv)) as { id: string };
     const opening = run(["preview", "open", registered.id], callerEnv);
@@ -84,7 +88,21 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await expect(preview.getByLabel("表示元のペイン")).not.toBeVisible();
     await preview.getByRole("button", {name:"情報・設定",exact:true}).click();
     await expect(preview.getByLabel("表示元のペイン")).toBeVisible();
+    await expect.poll(() => settings.locator(".preview-tools").evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     await expect.poll(()=>previewFrame.boundingBox()).toEqual(viewportBox);
+    const originalViewport = page.viewportSize()!;
+    await page.setViewportSize({ width:originalViewport.width, height:220 });
+    // A genuinely short view scrolls the settings as a whole, keeping its help
+    // and registration controls reachable without a second nested scroller.
+    await expect.poll(() => settings.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    await expect.poll(() => settings.locator(".preview-tools").evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+    await settings.evaluate(el => { el.scrollTop = el.scrollHeight; });
+    await expect.poll(() => settings.evaluate(el => {
+      const help = el.querySelector(".preview-help")!.getBoundingClientRect(), r = el.getBoundingClientRect();
+      return help.top >= r.top && help.bottom <= r.bottom;
+    })).toBe(true);
+    await page.setViewportSize(originalViewport);
+    await expect.poll(() => settings.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     await preview.getByRole("button", {name:"情報・設定",exact:true}).click();
     await expect(frame.locator("body")).toHaveAttribute("data-maximize-kept","yes");
     await preview.getByRole("button", {name:"元に戻す",exact:true}).click();
