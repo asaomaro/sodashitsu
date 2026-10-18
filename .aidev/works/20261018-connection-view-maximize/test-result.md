@@ -337,3 +337,11 @@ undefined
 ```
 
 修正版の最終結果: Web build（vue-tsc含む）、E2E typecheck PASS。e2e-cdp-scroll-fit.logでremoteVS/standaloneCDP/mobile計3件PASS（26.5s）。共有元と画像が601×401に一致し、その後1.5秒間の実DOM寸法・scroll範囲が安定。元の画面寸法への再追従、実画像入力、最大化/復帰、Esc、共有停止まで確認。ログ: build-cdp-scroll-fit.log / typecheck-cdp-scroll-fit.log / negative-cdp-scroll-fit.log / e2e-cdp-scroll-fit.log。
+
+## PR着地前の全体検証
+
+- pnpm build PASS（pr-build.log）、pnpm typecheck PASS（pr-typecheck.log）。
+- pnpm test初回は713ファイル中702成功、11失敗。11,135テスト中11,125成功、10失敗に加えsuite終了処理のtimeout。変更のないserver/CLIのPTY・検出待ち・終了処理・性能テストで発生。初回を全体PASSとは扱わない。pr-test.logに生ログを保存。
+- 失敗した11ファイルだけを、同じソース・timeout値のまま `pnpm exec vitest run --maxWorkers=2 <失敗11ファイルのパス>` で再実行。全11ファイル・106件PASS（228.01s、pr-test-retry.log）。テストコードやtimeoutは変更していない。
+- 関連E2Eは計8件を各修正後に分割実行して成功。Windows fake driver検査・負対照・独立レビューの結果は上記参照。混在DPI Windowsの実入力/キャプチャ成功を保証する検証ではない。
+- 変更21ファイルをcommitしPR #178を作成。個人設定の.claude/と.soda/は対象外。
