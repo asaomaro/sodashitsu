@@ -50,3 +50,15 @@ it("requires a separate local ceiling for physical display changes before connec
   ).rejects.toThrow("許可されていません");
   provider.dispose();
 });
+
+it("revoking configuration cancels a queued start before its helper can launch", async () => {
+  const provider = new DesktopProvider({ command: ["unused"], allowInput: true, origins: () => ["http://127.0.0.1:1"] });
+  const child = new EventEmitter();
+  const state = provider as unknown as { active?: { dead: boolean; process: EventEmitter; owner: string } };
+  state.active = { dead: true, process: child, owner: "old" };
+  const pending = provider.start("new", { url: "ws://127.0.0.1:1/desktop-share", ticket: "a".repeat(43), options: { width: 1280, fps: 10, quality: 65 } });
+  provider.configure(undefined);
+  delete state.active; child.emit("close");
+  await expect(pending).rejects.toThrow(/cancelled/);
+  expect(provider.capabilities().available).toBe(false);
+});

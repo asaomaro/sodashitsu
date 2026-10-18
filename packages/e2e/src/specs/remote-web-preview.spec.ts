@@ -14,7 +14,6 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
   const provider = await startAppServer(), owner = await provider.openClient(), operator = await appServer.openClient();
   const home = await mkdtemp(join(tmpdir(), "soda-preview-e2e-"));
   const cli = fileURLToPath(new URL("../../../cli/dist/main.js", import.meta.url));
-  let helper: ReturnType<typeof spawn> | undefined;
   let receivedCookie = "";
   const web = createServer((req, res) => {
     if (req.url === "/api") { receivedCookie = req.headers.cookie ?? ""; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ ok: true })); }
@@ -57,12 +56,9 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await expect(page.locator(`.pane-frame[data-pane-id="${paneId}"]`)).toBeVisible();
     await openNativeTab(page, "web-preview");
     await expect(page.locator("[data-web-preview-toggle], [data-desktop-open], [data-vscode-open]")).toHaveCount(0);
-    const command = page.locator("[data-preview-helper-command]"); await expect(command).toContainText("--viewer");
-    const viewerId = /--viewer ([0-9a-f-]{36})/.exec((await command.textContent())!)![1]!;
-    let helperOutput = "";
-    helper = spawn(process.execPath, [cli, "--machine", invitation.machineId, "preview", "helper", "--viewer", viewerId, "--url", appServer.origin, "--token", appServer.token], { env, stdio: ["ignore", "pipe", "pipe"] });
-    helper.stdout!.on("data", (b) => helperOutput += String(b)); helper.stderr!.on("data", (b) => helperOutput += String(b));
-    await expect.poll(() => helperOutput).toContain("helper_ready");
+    // No browser-PC CLI, token, login, or helper process is supplied by the test.
+    await expect(page.getByText("ブラウザPCのhelperに接続済み", {exact:true})).toBeVisible({timeout:15000});
+    await expect(page.locator("[data-preview-helper-command]")).toHaveCount(0);
     const callerEnv = { SODA_PANE_ID: paneId, SODA_SERVER_URL: provider.origin, SODA_PANE_SOCKET: join(provider.stateDir, "pane.sock"), ...(process.platform === "win32" ? { SODACTL_TOKEN: provider.token } : {}) };
     const registered = JSON.parse(await run(["preview", "register", "--name", "frontend", "--port", String(webPort)], callerEnv)) as { id: string };
     const opening = run(["preview", "open", registered.id], callerEnv);
@@ -83,7 +79,14 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await page.getByRole("tab", { name: "Webプレビュー", exact: true }).click();
     await expect(frame.locator("body")).toHaveAttribute("data-kept", "yes");
     await expect(page.getByText("ブラウザPCのhelperに接続済み", { exact: true })).toBeVisible();
-    expect(helper.exitCode).toBeNull();
+    // Workspace changes must retain the same live iframe document as well.
+    const originalWorkspace = owner.helloSnapshot()!.workspaces[0]!.id;
+    const otherWorkspace = await owner.request("workspace.create", { label: "Preview retention workspace" });
+    await page.locator(`[data-drop-workspace-id="${otherWorkspace.workspace.id}"]`).first().click();
+    await expect(page.locator("[data-web-preview]")).toBeHidden();
+    await page.locator(`[data-drop-workspace-id="${originalWorkspace}"]`).first().click();
+    await page.getByRole("tab", { name: "Webプレビュー", exact: true }).click();
+    await expect(frame.locator("body")).toHaveAttribute("data-kept", "yes");
     await page.screenshot({ path: "/tmp/sodashitsu-remote-web-preview.png" });
     await run(["preview", "stop", registered.id], callerEnv);
     await expect(page.locator("[data-preview-frame]")).toHaveCount(0);
@@ -92,10 +95,11 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await page.getByRole("spinbutton", { name: "ポート", exact: true }).fill(String(webPort));
     await page.getByRole("button", { name: "登録して開く", exact: true }).click();
     await expect(page.frameLocator("[data-preview-frame]").getByRole("heading", { name: "Remote development app" })).toBeVisible();
+    await page.locator(".viewer-item.active .viewer-close").click();
+    await expect(page.locator("[data-web-preview]")).toHaveCount(0);
+    await expect.poll(async () => (await owner.request("preview.viewers", {paneId})).viewers).toEqual([]);
 
   } finally {
-    helper?.kill("SIGTERM");
-    if (helper && helper.exitCode === null) await new Promise<void>((resolve) => { helper!.once("exit", () => resolve()); setTimeout(() => { helper!.kill("SIGKILL"); resolve(); }, 5000).unref(); });
     for (const socket of wss.clients) socket.terminate(); wss.close(); web.closeAllConnections(); await new Promise<void>((resolve) => web.close(() => resolve()));
     owner.close(); operator.close(); await provider.close(); await rm(home, { recursive: true, force: true });
   }

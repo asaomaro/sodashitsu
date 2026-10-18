@@ -70,8 +70,13 @@ export class DesktopProvider {
   private active: Share | undefined;
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
   readonly companion: DesktopCompanionHub;
-  constructor(private readonly config: DesktopProviderConfig | undefined) {
+  constructor(private config: DesktopProviderConfig | undefined) {
     this.companion = new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
+  }
+  configure(config: DesktopProviderConfig | undefined): void {
+    this.dispose();
+    this.config = config;
+    this.companion.configure(config?.allowMedia === true, config?.iceServers ?? []);
   }
   capabilities() {
     return {
@@ -108,6 +113,7 @@ export class DesktopProvider {
         this.pendingStarts.delete(pending);
       }
     }
+    if (this.config !== cfg) throw new RpcError("unauthorized", "Desktop permissions changed");
     if (this.active) throw new RpcError("server_busy", "Bのデスクトップは共有中です");
     const url = new URL(p.url);
     if (
@@ -509,10 +515,6 @@ export function desktopConfigFromEnv(
       command.some((v) => typeof v !== "string" || !v || v.includes("\0"))
     )
       return;
-    const allowed = (env.SODA_DESKTOP_ORIGINS ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
     return {
       command: command as string[],
       allowInput: env.SODA_DESKTOP_ALLOW_INPUT === "1",
@@ -522,9 +524,15 @@ export function desktopConfigFromEnv(
       iceServers: DesktopIceServers.parse(
         env.SODA_DESKTOP_ICE_SERVERS ? JSON.parse(env.SODA_DESKTOP_ICE_SERVERS) : [],
       ),
-      origins: () => [...allowed, ...delegatedOrigins()],
+      origins: desktopOriginsFromEnv(env, delegatedOrigins),
     };
   } catch {
     return;
   }
+}
+
+/** Destination policy is independent of whether a custom helper command is configured. */
+export function desktopOriginsFromEnv(env: NodeJS.ProcessEnv, delegatedOrigins: () => string[]): () => string[] {
+  const allowed = (env.SODA_DESKTOP_ORIGINS ?? "").split(",").map(s => s.trim()).filter(Boolean);
+  return () => [...allowed, ...delegatedOrigins()];
 }

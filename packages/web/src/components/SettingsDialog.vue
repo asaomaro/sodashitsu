@@ -42,6 +42,8 @@ import {
   type SpyInput,
 } from "../settings/sectionSpy.js";
 import ExtensionSettings from "./ExtensionSettings.vue";
+import VscodeSharingSettings from "./VscodeSharingSettings.vue";
+import DesktopSettings from "./DesktopSettings.vue";
 import LoginSettings from "./LoginSettings.vue";
 import AgentToolsSettings from "./AgentToolsSettings.vue";
 import KeySettings from "./KeySettings.vue";
@@ -1820,6 +1822,8 @@ function onNativeCancel(ev: Event): void {
       </section>
       <ExtensionSettings />
       <AgentToolsSettings />
+      <VscodeSharingSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
+      <DesktopSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
       <LoginSettings />
       <KeySettings v-model:capturing="keysCapturing" :kind="kind" />
       <!-- はじめの案内を開き直す（20260926-settings-onboarding の AC6）。設定画面は自分の watch で閉じる（kind が変わるので）。 -->

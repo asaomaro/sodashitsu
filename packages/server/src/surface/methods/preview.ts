@@ -1,8 +1,20 @@
-import { PreviewMethods } from "@sodashitsu/protocol";
+import { PreviewMethods, PreviewHelperMethods, RpcError } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerPreviewMethods(surface: ControlSurface, deps: MethodDeps): void {
+  const helpers = deps.previewHelpers;
+  if (helpers) {
+    surface.register("preview.helper_start", { schema: PreviewHelperMethods["preview.helper_start"], handler: async (c, p) => {
+      if (c.connection?.localSettings !== true) throw new RpcError("unauthorized", "ブラウザPCのhelperを手動で起動してください。");
+      if (c.connectionAuthorized?.() === false) throw new RpcError("unauthorized", "接続が切れました");
+      await helpers.start(c.clientId, p.machineId, p.viewerId);
+      return {};
+    } });
+    surface.register("preview.helper_stop", { schema: PreviewHelperMethods["preview.helper_stop"], handler: async (c, p) => {
+      await helpers.stop(c.clientId, p.viewerId); return {};
+    } });
+  }
   const s = deps.previews; if (!s) return;
   surface.register("preview.register", { schema: PreviewMethods["preview.register"], handler: (_c, p) => s.register(p) });
   surface.register("preview.list", { schema: PreviewMethods["preview.list"], handler: (_c, p) => s.list(p.paneId) });

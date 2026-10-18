@@ -13,6 +13,8 @@ export interface WsConnection {
    * 別のマシンからの接続も真になる）。`file.info` が返す。分からない接続（中継の受け口等）は持たない＝偽。
    */
   readonly sameMachine?: boolean;
+  /** Direct loopback Host/Origin only; never machine bridges or public reverse proxies. */
+  readonly localSettings?: boolean;
 }
 
 /** upgrade を受け付ける口（architecture.md「WsServer」）。認可の判定は `WsServerWs` が担う（D9 の差し替え点）。 */

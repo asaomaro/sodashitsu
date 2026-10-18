@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false) {
+async function fixture(allowInput = true, legacy = false, configured = true) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -28,11 +28,11 @@ async function fixture(allowInput = true, legacy = false) {
   await new Promise<void>((r) => web.listen(0, "127.0.0.1", r));
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
-  const provider = new DesktopProvider({
+  const provider = new DesktopProvider(configured ? {
     command: [process.execPath, helper, "--allow-input", "--record", record],
     allowInput,
     origins: () => [origin],
-  });
+  } : undefined);
   let revoke: (id: string) => void = () => undefined;
   const auth = {
     authorizeUpgrade: async (req: { headers: Record<string, string> }) =>
@@ -50,7 +50,7 @@ async function fixture(allowInput = true, legacy = false) {
     allowedHostPorts: () => [new URL(origin).host],
   });
   let closed = 0,
-    starts = 0;
+    starts = 0, providerStartCalls = 0;
   const link = {
     openChannel() {
       const owner = `channel-${starts++}`;
@@ -76,7 +76,7 @@ async function fixture(allowInput = true, legacy = false) {
                     ? legacy
                       ? { available: true, allowInput }
                       : provider.capabilities()
-                    : await provider.start(owner, m.params);
+                    : (providerStartCalls++, await provider.start(owner, m.params));
               onText(JSON.stringify({ id: m.id, result }));
             } catch {
               onText(JSON.stringify({ id: m.id, error: { message: "denied" } }));
@@ -135,9 +135,19 @@ async function fixture(allowInput = true, legacy = false) {
     record,
     revoke: () => revoke("ok"),
     closed: () => closed,
+    providerStartCalls: () => providerStartCalls,
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
+it("explains missing provider setup before trying to start a helper", async () => {
+  const f = await fixture(true, false, false), viewer = await f.viewer();
+  viewer.send(start);
+  await expect.poll(() => viewer.messages.find(m => m.type === "error")?.message).toContain("soda serve --desktop");
+  expect(viewer.messages.find(m => m.type === "error")?.message).toContain("接続先PC");
+  expect(viewer.frames).toHaveLength(0);
+  expect(f.providerStartCalls()).toBe(0);
+  await expect.poll(() => viewer.ws.readyState).toBe(WebSocket.CLOSED);
+});
 it("automatically connects B to A, isolates viewers and enforces both input permissions", async () => {
   const f = await fixture(),
     a = await f.viewer(),
@@ -274,3 +284,12 @@ it("allows a fresh share after handoff cleanup is rolled back", async () => {
   expect(resumed.messages).toContainEqual(expect.objectContaining({ type: "ready" }));
   resumed.ws.close();
 }, 10000);
+
+it("stops an active synthetic share immediately when local permissions are revoked", async () => {
+  const f = await fixture(), viewer = await f.viewer();
+  viewer.send(start);
+  await expect.poll(() => viewer.frames.length).toBe(1);
+  f.provider.configure(undefined);
+  await expect.poll(() => viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(f.provider.capabilities().available).toBe(false);
+});

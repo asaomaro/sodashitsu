@@ -555,6 +555,10 @@ export class DesktopCdpRelay {
     this.disconnectAll();
     this.wss.close();
   }
+  cancelLaunched(): void {
+    for (const viewer of this.viewers) if (viewer.launch || viewer.launching || viewer.launchTargets) this.stop(viewer);
+    this.broadcast();
+  }
   disconnectAll(): void {
     for (const v of this.viewers) this.stop(v);
     this.invites.clear();

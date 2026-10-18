@@ -679,7 +679,12 @@ export const useViewStore = defineStore("view", () => {
     setView(id, target);
     focusPane(preferredPane(target));
   }
+  const workSelectionListeners = new Set<(workspaceId: string) => void>();
+  function onWorkSelected(listener: (workspaceId: string) => void): () => void {
+    workSelectionListeners.add(listener); return () => { workSelectionListeners.delete(listener); };
+  }
   function setView(newWorkspaceId: string, newTabId: string): void {
+    for (const listener of workSelectionListeners) listener(newWorkspaceId);
     rememberCurrent();
     workspaceId.value = newWorkspaceId;
     tabId.value = newTabId;
@@ -1104,6 +1109,7 @@ export const useViewStore = defineStore("view", () => {
     forgetStoredView,
     resetForMachineSwitch,
     setView,
+    onWorkSelected,
     preferredPane,
     selectWorkspace,
     focusPane,

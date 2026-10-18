@@ -156,7 +156,21 @@ export const DesktopStartParams = z
     options: DesktopOptions,
   })
   .strict();
+export const DesktopPermissions = z.object({
+  enabled: z.boolean(),
+  allowInput: z.boolean(),
+  allowClipboard: z.boolean(),
+  allowDisplayResize: z.boolean(),
+}).strict();
+export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
+export interface DesktopSettingsResult {
+  permissions: DesktopPermissions;
+  supported: boolean;
+  canConfigure: boolean;
+}
 export const DesktopMethods = {
+  "desktop.settings.get": z.object({}).strict(),
+  "desktop.settings.set": DesktopPermissions,
   "desktop.capabilities": z.object({}).strict(),
   "desktop.start": DesktopStartParams,
   "desktop.agent.attach": z.object({ ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict(),
@@ -176,6 +190,8 @@ export const DesktopMethods = {
   "desktop.agent.release": z.object({ leaseId: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict(),
 };
 export interface DesktopResults {
+  "desktop.settings.get": DesktopSettingsResult;
+  "desktop.settings.set": DesktopSettingsResult;
   "desktop.capabilities": {
     available: boolean;
     allowInput: boolean;

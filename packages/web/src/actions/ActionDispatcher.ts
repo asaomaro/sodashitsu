@@ -1,3 +1,4 @@
+import { useViewerTabsStore } from "../store/viewerTabs.js";
 import type { AgentForkPreviewResult, AgentIntegrationInstallResult, AgentIntegrationKind, ItemTarget, NewCwd, PaneMoveBlock, WorkspaceGroup } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick } from "vue";
@@ -79,6 +80,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   private readonly view: ReturnType<typeof useViewStore>;
   private readonly displays: ReturnType<typeof useDisplayStore>;
   /** 保存した SSH のマシン（20260927-multi-host-machines）。ローカル以外を選んでいる間は session の一覧を使わない。 */
+  private readonly viewerTabs: ReturnType<typeof useViewerTabsStore>;
   private readonly machines: ReturnType<typeof useMachinesStore>;
   private readonly settings: ReturnType<typeof useSettingsStore>;
   private readonly commands: ReturnType<typeof useCommandsStore>;
@@ -102,6 +104,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view = useViewStore(opts.pinia);
     this.displays = useDisplayStore(opts.pinia);
     this.machines = useMachinesStore(opts.pinia);
+    this.viewerTabs = useViewerTabsStore(opts.pinia);
     this.settings = useSettingsStore(opts.pinia);
     this.commands = useCommandsStore(opts.pinia);
     this.agentFork = useAgentForkStore(opts.pinia);
@@ -124,6 +127,9 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   run(action: Action): void {
+    if (this.viewerTabs.active && ["split", "focusDir", "swap", "cyclePane", "closePane", "zoom", "runCommand", "pasteImage", "resizeBy", "copy", "renamePane", "showUsage", "showSubagents", "displayMenu", "focusDisplay"].includes(action.type)) {
+      this.view.toast("作業タブを選択してから操作してください。"); return;
+    }
     switch (action.type) {
       case "split":
         this.split(action.dir);
@@ -330,6 +336,12 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     if (ctx?.kind !== "newTab") return;
     this.view.closeDialog();
     const trimmed = label.trim();
+    if (nativeView) {
+      void this.viewerTabs.create({ kind: nativeView, label: trimmed || nativeView,
+        machineId: this.machines.selectedId, workspaceId: ctx.workspaceId })
+        .catch(() => this.view.toast("閲覧タブを作成できません。操作元の接続を確認してください。"));
+      return;
+    }
     const hold = nativeView ? undefined : this.input?.holdInput(this.view.focusedPaneId); // D99：応答までに打った文字は新しい pane へ
     // 元の pane は焦点の pane が**作る先の workspace にあるときだけ**（無ければ載せない → その workspace の場所。design D7）。
     // **ダイアログを閉じた後に読む**——開いている間に焦点の pane が閉じられたら、閉じたときに戻す先へ差し替わっている（D97）。
@@ -1139,13 +1151,15 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   private tabDelta(delta: 1 | -1): void {
-    const tab = this.view.tabId ? this.session.tabs.get(this.view.tabId) : undefined;
-    if (!tab) return;
-    const ws = this.session.workspaces.get(tab.workspaceId);
-    if (!ws || ws.tabIds.length === 0) return;
-    const idx = ws.tabIds.indexOf(tab.id);
-    const nextTabId = ws.tabIds[(idx === -1 ? 0 : idx + delta + ws.tabIds.length) % ws.tabIds.length];
-    if (nextTabId) this.switchToTab(ws.id, nextTabId);
+    const ws = this.view.workspaceId ? this.session.workspaces.get(this.view.workspaceId) : undefined;
+    if (!ws) return;
+    const ids = [...ws.tabIds, ...this.viewerTabs.visible.map(t => t.id)];
+    if (!ids.length) return;
+    const current = this.viewerTabs.active?.id ?? this.view.tabId;
+    const index = ids.indexOf(current ?? ""), next = ids[(Math.max(0,index) + delta + ids.length) % ids.length];
+    if (!next) return;
+    if (ws.tabIds.includes(next)) this.switchToTab(ws.id,next);
+    else this.viewerTabs.select(next);
   }
 
   private paneIndex(index: number): void {
@@ -1168,6 +1182,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   private switchToTab(workspaceId: string, tabId: string): void {
+    this.viewerTabs.select(null);
     this.view.setView(workspaceId, tabId);
     const tab = this.session.tabs.get(tabId);
     if (tab) this.view.focusPane(this.view.preferredPane(tab.id));
@@ -1277,12 +1292,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   private closeTab(): void {
+    if (this.viewerTabs.active) { void this.viewerTabs.remove(this.viewerTabs.active.id).catch(() => this.view.toast("閲覧タブを閉じられません")); return; }
     const tabId = this.view.tabId;
     if (tabId) this.closeTabById(tabId);
   }
 
   /** T22 から任意の tab を対象に呼ぶ（表示中の tab とは限らない）。 */
   closeTabById(tabId: string): void {
+    if (this.viewerTabs.tabs.some(t => t.id === tabId)) { void this.viewerTabs.remove(tabId).catch(() => this.view.toast("閲覧タブを閉じられません")); return; }
     const panesInTab = [...this.session.panes.values()].filter((p) => p.tabId === tabId);
     if (panesInTab.some((p) => p.busy)) {
       this.view.openDialogWithContext({ kind: "confirmClose", targets: [{ type: "tab", id: tabId }] });
@@ -1517,6 +1534,13 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   private moveTab(direction: "previous" | "next"): void {
+    const viewer = this.viewerTabs.active;
+    if (viewer) {
+      const index = this.viewerTabs.visible.findIndex(t => t.id === viewer.id);
+      const target = this.viewerTabs.visible[index + (direction === "previous" ? -1 : 1)];
+      if (target) void this.viewerTabs.move(viewer.id,target.id).catch(() => this.view.toast("閲覧タブを移動できません"));
+      return;
+    }
     const tab = this.view.tabId ? this.session.tabs.get(this.view.tabId) : undefined;
     if (!tab) return;
     // `tabIds` を先読みで並べ替えない（`tabDelta` と違い対象を求めるのに他の tab の情報が要らない。
@@ -1613,12 +1637,14 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   private beginRenameTab(): void {
-    const tabId = this.view.tabId;
+    const tabId = this.viewerTabs.active?.id ?? this.view.tabId;
     if (tabId) this.renameTabById(tabId);
   }
 
   /** T22 から任意の tab を対象に呼ぶ。 */
   renameTabById(tabId: string): void {
+    const viewer = this.viewerTabs.tabs.find(t => t.id === tabId);
+    if (viewer) { this.view.openDialogWithContext({ kind: "renameTab", tabId, currentLabel: viewer.label }); return; }
     const tab = this.session.tabs.get(tabId);
     if (!tab) return;
     this.view.openDialogWithContext({ kind: "renameTab", tabId, currentLabel: tab.label });
@@ -1652,6 +1678,7 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
     this.view.closeDialog();
     const trimmed = label.trim();
     if (!trimmed) return;
+    if (this.viewerTabs.tabs.some(t => t.id === ctx.tabId)) { void this.viewerTabs.rename(ctx.tabId, trimmed).catch(() => this.view.toast("名前を変更できませんでした")); return; }
     void this.conn.request("tab.rename", { tabId: ctx.tabId, label: trimmed }).catch(() => this.view.toast("名前を変更できませんでした"));
   }
 

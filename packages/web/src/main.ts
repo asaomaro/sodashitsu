@@ -1,3 +1,4 @@
+import { useViewerTabsStore } from "./store/viewerTabs.js";
 import { LocalClientFactoryKey } from "./injection.js";
 import { loadStatuslineSettings, TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
 import type { ITerminalOptions } from "@xterm/xterm";
@@ -441,6 +442,26 @@ for (const type of ["pointerdown", "pointerup", "keydown"] as const) {
 notificationsBox.current = notifications;
 // 履歴の 7 日の期限は、ページを開いたままでも落とす（掃除の契機は出来事の変化だけでは足りない）。
 setInterval(() => useNotificationsStore(pinia).pruneExpiredHistory(), 30_000);
+
+const viewerTabs = useViewerTabsStore(pinia);
+let viewerTabsConnected = false;
+const viewerTabsWaiters = new Set<() => void>();
+function waitForViewerTabs(): Promise<void> {
+  if (viewerTabsConnected) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const ready = () => { clearTimeout(timer); viewerTabsWaiters.delete(ready); resolve(); };
+    const timer = setTimeout(() => { viewerTabsWaiters.delete(ready); reject(new Error("操作元の接続を待っています")); }, 5000);
+    viewerTabsWaiters.add(ready);
+  });
+}
+const viewerTabsClient = new MachineSummaryClient({ wsUrl, onSnapshot: () => undefined,
+  onConnected: connected => { viewerTabsConnected = connected; if (connected) for (const ready of [...viewerTabsWaiters]) ready(); }, onOpened: () => { void viewerTabs.refresh().catch(() => undefined); },
+  onEvent: e => { if (e.event === "prefs.changed") viewerTabs.apply(e.data.prefs.viewerTabs, e.data.rev); },
+});
+viewerTabs.connect({ request: async (method, params) => { await waitForViewerTabs(); return viewerTabsClient.request(method, params); } });
+connection.onOpened(() => { viewerTabsClient.stop(); viewerTabsClient.start(); });
+window.addEventListener("pagehide", () => viewerTabsClient.stop());
+window.addEventListener("pageshow", () => viewerTabsClient.start());
 
 const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster, extensionReload: () => void extensionController.reload(true) });
 actionDispatcherBox.current = actionDispatcher;

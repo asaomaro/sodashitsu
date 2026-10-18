@@ -33,6 +33,21 @@ export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps
       handler: (ctx, p) => agents.release(ctx.clientId, p.leaseId),
     });
   }
+  const settings = deps.desktopSettings;
+  if (settings) {
+    surface.register("desktop.settings.get", {
+      schema: DesktopMethods["desktop.settings.get"],
+      handler: (ctx) => settings.get(ctx.connection?.localSettings === true),
+    });
+    surface.register("desktop.settings.set", {
+      schema: DesktopMethods["desktop.settings.set"],
+      handler: (ctx, p) => {
+        if (ctx.connection?.localSettings !== true)
+          throw new RpcError("unauthorized", "接続先PCの localhost の画面、または端末版で設定してください。");
+        return settings.set(p);
+      },
+    });
+  }
   const provider = deps.desktop;
   if (!provider) return;
   surface.register("desktop.capabilities", {

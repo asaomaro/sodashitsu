@@ -1,7 +1,8 @@
+import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
 import { DesktopMethods, type DesktopResults } from "./desktop.js";
-import { DesktopCdpOpenParams, DesktopCdpSendParams } from "./desktopCdp.js";
+import { DesktopCdpOpenParams, DesktopCdpSendParams, VscodeSharingMethods, type VscodeSharingResults } from "./desktopCdp.js";
 import { MachineAddParams, MachineManageParams, type ManagedConnection } from "./delegation.js";
-import { PreviewMethods, type PreviewResults } from "./preview.js";
+import { PreviewMethods, PreviewHelperMethods, type PreviewResults, type PreviewHelperResults } from "./preview.js";
 import { PairingStartParams, PairingConfirmParams, PairingRejectParams, type PairingRequest } from "./delegation.js";
 import { DelegationInviteParams, DelegationStartParams, DelegationStopParams, type DelegationStatus } from "./delegation.js";
 import {
@@ -978,6 +979,7 @@ export interface SharedTuiPrefs {
  * 読む側は必ず `load*` で正規化する。
  */
 export interface SharedPrefs {
+  viewerTabs?: ViewerTab[];
   /** キーの割り当て（client-core の `serializeKeyPrefs` の形。既定との差だけ）。 */
   keys?: Record<string, unknown>;
   theme?: ThemeName;
@@ -1468,8 +1470,11 @@ export const PaneReportMetadataParams = z.object({ paneId, ...metadataReport });
 export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
 
 export const METHOD_SCHEMAS = {
+  ...VscodeSharingMethods,
   ...PreviewMethods,
+  ...PreviewHelperMethods,
   ...DesktopMethods,
+  ...ViewerTabMethods,
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
   "client.fit": ClientFitParams,
@@ -1639,7 +1644,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap extends PreviewResults, DesktopResults {
+export interface MethodResultMap extends VscodeSharingResults, PreviewResults, PreviewHelperResults, DesktopResults, ViewerTabResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};

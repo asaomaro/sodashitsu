@@ -436,3 +436,17 @@ it("counts virtual peers toward the common limit and refuses revoked authorizati
   await vi.waitFor(()=>expect(()=>f.relay.sendRpc(revoked.connection,{type:"control",enabled:true})).toThrow("closed"));
   expect(revoked.messages.some(m=>m.data?.type==="launchTargets"||m.data?.type==="frame")).toBe(false);
 });
+
+it("publishes auto-launch permission changes to an already-open viewer without revoking a manual share",async()=>{
+  const launcher=new DesktopCdpLauncher(), f=await fixture(undefined,launcher), v=await f.connect();
+  expect((await v.wait("status")).launcherAvailable).toBe(false);
+  launcher.configure(()=>["fixed-helper"]);f.relay.cancelLaunched();
+  expect((await v.wait("status")).launcherAvailable).toBe(true);
+  const {b}=await f.pair(v,true,true);
+  await vi.waitFor(()=>expect(v.messages.some(m=>m.type==="status"&&m.connected)).toBe(true));
+  v.messages.length=0;
+  launcher.configure(undefined);f.relay.cancelLaunched();
+  const status=await v.wait("status");
+  expect(status.launcherAvailable).toBe(false);expect(status.connected).toBe(true);
+  expect(b.ws.readyState).toBe(WebSocket.OPEN);
+});
