@@ -6,7 +6,7 @@ import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import { isSameMachine } from "../auth/LocalLogin.js";
 import type { Logger } from "../log/Logger.js";
 import { LogThrottle } from "../log/LogThrottle.js";
-import { requestPathname } from "../util/net.js";
+import { isLoopbackHost, unbracketHost, requestPathname } from "../util/net.js";
 import type { WsConnection, WsServer } from "./WsServer.js";
 
 const WS_PATH = "/ws";
@@ -159,10 +159,21 @@ export class WsServerWs implements WsServer {
     }
     const sameMachine = "socket" in req && req.socket ? isSameMachine(req.socket.remoteAddress, req.socket.localAddress) : false;
     this.wss.handleUpgrade(req, socket, head, (ws) => {
-      const conn = new WsConnectionImpl(ws, sameMachine);
+      const conn = new WsConnectionImpl(ws, sameMachine, localSettingsRequest(req, sameMachine));
       for (const cb of this.listeners) cb(conn, authResult.sessionId);
     });
   }
+}
+
+/** Permission grants are deliberately unavailable through LAN URLs, proxies and bridges. */
+export function localSettingsRequest(req: Pick<IncomingMessage, "headers">, sameMachine: boolean): boolean {
+  if (!sameMachine || req.headers["forwarded"] || Object.keys(req.headers).some(k => k.startsWith("x-forwarded-"))) return false;
+  try {
+    const host = new URL(`http://${req.headers.host ?? ""}`);
+    if (!isLoopbackHost(unbracketHost(host.hostname))) return false;
+    const origin = req.headers.origin;
+    return origin === undefined || isLoopbackHost(unbracketHost(new URL(origin).hostname));
+  } catch { return false; }
 }
 
 /** upgrade を HTTP の応答で断る（ステータス行だけを書いて閉じる）。 */
@@ -175,6 +186,7 @@ class WsConnectionImpl implements WsConnection {
   constructor(
     private readonly ws: WebSocket,
     readonly sameMachine = false,
+    readonly localSettings = false,
   ) {}
 
   get bufferedAmount(): number {

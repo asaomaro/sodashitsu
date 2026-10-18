@@ -5,7 +5,13 @@ export type LaunchJob = { result: Promise<LaunchTarget[]>; closed: Promise<void>
 /** Only a server-configured argv can execute. Credentials travel over stdin, never argv/logs. */
 export class DesktopCdpLauncher {
   private active = false;
-  constructor(private readonly command?: readonly string[]) {}
+  private factory: (() => readonly string[] | undefined) | undefined;
+  private cancelActive: (() => void) | undefined;
+  constructor(private command?: readonly string[]) {}
+  configure(factory: (() => readonly string[] | undefined) | undefined): void {
+    this.cancelActive?.(); this.factory = factory; this.command = undefined;
+  }
+  configuredCommand(): readonly string[] | undefined { return this.command; }
   static fromEnvironment(value = process.env["SODA_VSCODE_CDP_COMMAND"]): DesktopCdpLauncher {
     if (!value) return new DesktopCdpLauncher();
     let command: unknown;
@@ -15,13 +21,16 @@ export class DesktopCdpLauncher {
       throw new Error("SODA_VSCODE_CDP_COMMAND must be a JSON argv array");
     return new DesktopCdpLauncher(command);
   }
-  get available(): boolean { return !!this.command; }
+  get available(): boolean { return !!this.command || !!this.factory; }
   get busy(): boolean { return this.active; }
   start(request: { type: "discover" } | { type: "connect"; targetId: string; token: string }): LaunchJob {
-    if (!this.command || this.active) throw new Error("Windows起動処理が未設定か使用中です");
+    if (!this.available || this.active) throw new Error("Windows起動処理が未設定か使用中です");
+    let command: readonly string[] | undefined;
+    try { command = this.command ?? this.factory?.(); } catch { /* Fixed error below; never expose discovered paths. */ }
+    if (!command) throw new Error("VSCodeとWindows版Node 24、および同梱helperを確認してください");
     this.active = true;
     let child: ReturnType<typeof spawn>;
-    try { child = spawn(this.command[0]!, this.command.slice(1), { shell: false, windowsHide: true, stdio: "pipe" }); }
+    try { child = spawn(command[0]!, command.slice(1), { shell: false, windowsHide: true, stdio: "pipe" }); }
     catch { this.active = false; throw new Error("Windows起動処理を実行できませんでした"); }
     let closedResolve: () => void = () => {};
     const closed = new Promise<void>(resolve => { closedResolve = resolve; });
@@ -91,9 +100,12 @@ export class DesktopCdpLauncher {
       child.stdin?.write(JSON.stringify(request) + "\n");
 
     });
-    return { result, closed, cancel: () => {
+    const job = { result, closed, cancel: () => {
       if (!settled) { settled = true; clearTimeout(deadline); rejectResult(new Error("起動処理を取り消しました")); }
       cancel();
     } };
+    this.cancelActive = job.cancel;
+    child.once("close", () => { if (this.cancelActive === job.cancel) this.cancelActive = undefined; });
+    return job;
   }
 }

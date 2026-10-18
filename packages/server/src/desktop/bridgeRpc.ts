@@ -12,6 +12,7 @@ export class DesktopBridgeRpc {
   constructor(
     private readonly channel: LinkChannel,
     onClose: () => void,
+    private readonly options: { closeOnTimeout?: boolean; label?: string } = {},
   ) {
     channel.onText((text) => {
       if (text.length > 4 * 1024 * 1024) {
@@ -29,7 +30,7 @@ export class DesktopBridgeRpc {
         if (!p) return;
         clearTimeout(p.timer);
         this.pending.delete(msg.id);
-        if (msg.error) p.reject(new Error("リモートのデスクトップ要求が拒否されました"));
+        if (msg.error) p.reject(new Error(`リモートの${this.options.label ?? "デスクトップ"}要求が拒否されました`));
         else p.resolve(msg.result);
       } catch {
         this.close();
@@ -43,15 +44,15 @@ export class DesktopBridgeRpc {
   async hello(): Promise<void> {
     await this.request("client.hello", { protocol: 1, kind: "external" });
   }
-  request<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> {
+  request<M extends MethodName>(method: M, params: ParamsOf<M>, opts?: {timeoutMs?: number}): Promise<ResultOf<M>> {
     if (this.closed) return Promise.reject(new RpcError("not_found", "マシンが切断されました"));
     return new Promise((resolve, reject) => {
       const id = String(++this.counter);
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("デスクトップ要求が時間切れになりました"));
-        this.close();
-      }, 10000);
+        reject(new Error(`${this.options.label ?? "デスクトップ"}要求が時間切れになりました`));
+        if (this.options.closeOnTimeout !== false) this.close();
+      }, Math.max(1, Math.min(35000, opts?.timeoutMs ?? 10000)));
       timer.unref();
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       this.channel.sendText(JSON.stringify({ id, method, params }));

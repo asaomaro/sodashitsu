@@ -225,3 +225,10 @@ describe("applySessionEnv（SODA_SESSION）", () => {
     expect(parseArgs(["serve"]).sessionSource).toBeUndefined();
   });
 });
+
+it("accepts separate opt-in desktop permissions only for serve", () => {
+  expect(parseArgs(["serve", "--desktop", "--desktop-input", "--desktop-clipboard", "--desktop-resize"]).serve)
+    .toMatchObject({ desktop: true, desktopInput: true, desktopClipboard: true, desktopResize: true });
+  expect(() => parseArgs(["handoff", "--desktop"])).toThrow();
+  expect(() => parseArgs(["token", "reset", "--desktop"])).toThrow();
+});

@@ -1,6 +1,7 @@
+import { DesktopSettings } from "./desktop/DesktopSettings.js";
 import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
 import { DesktopRelay } from "./desktop/DesktopRelay.js";
-import { DesktopProvider, desktopConfigFromEnv } from "./desktop/DesktopProvider.js";
+import { DesktopProvider, desktopConfigFromEnv, desktopOriginsFromEnv } from "./desktop/DesktopProvider.js";
 import { registerDesktopCdpMethods } from "./surface/methods/desktopCdp.js";
 import { DesktopCdpLauncher } from "./desktop/DesktopCdpLauncher.js";
 import { DesktopCdpRelay } from "./desktop/DesktopCdpRelay.js";
@@ -62,6 +63,10 @@ import { DefaultSizeAuthority } from "./clients/SizeAuthority.js";
 import { ControlSurface } from "./surface/ControlSurface.js";
 import { registerAllMethods } from "./surface/methods/index.js";
 import { PreviewMethods } from "@sodashitsu/protocol";
+import { randomUUID as previewClientId } from "node:crypto";
+import { ManagedPreviewHelpers } from "./preview/ManagedPreviewHelpers.js";
+import { VscodeSharingSettings } from "./desktop/VscodeSharingSettings.js";
+import { DesktopBridgeRpc } from "./desktop/bridgeRpc.js";
 import { PreviewService } from "./preview/PreviewService.js";
 import { IMAGE_DIR_NAME, ImageStore } from "./image/ImageStore.js";
 import { ImageUploads } from "./image/ImageUploads.js";
@@ -430,6 +435,13 @@ export async function composeServer(
   const delegations = new ReverseConnections({grants:new DelegationGrants(options.sessionRoot,options.stateDir),machines,endpoint:()=>bridgeEndpoint,logger,stateDir:options.stateDir,pairingChanged:(id,message,closed)=>bus.publish({event:"machine.pairing",data:{id,message,closed}})});
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
   const desktop = new DesktopProvider(desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)));
+  const desktopSettings = await DesktopSettings.open({
+    file: join(options.stateDir, "desktop-permissions.json"), provider: desktop,
+    legacy: desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),
+    origins: desktopOriginsFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),
+    ...(options.desktop ? { startup: { enabled: true, allowInput: options.desktopInput === true,
+      allowClipboard: options.desktopClipboard === true, allowDisplayResize: options.desktopResize === true } } : {}),
+  });
   const desktopRelay = new DesktopRelay(auth, originRejections, machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
@@ -695,8 +707,32 @@ export async function composeServer(
     if(action.type === "agent" && !session.getPane(action.paneId))throw new RpcError("not_found","対象ペインが見つかりません");
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
+  const previewHelpers = new ManagedPreviewHelpers(async (machine, gone) => {
+    if (machine !== "local") {
+      const route = machines.route(machine);
+      if (route.kind !== "ok") throw new RpcError("not_found", "マシンが接続されていません");
+      const channel = route.link.openChannel();
+      if (!channel) throw new RpcError("not_found", "マシンが接続されていません");
+      const rpc = new DesktopBridgeRpc(channel, gone, {closeOnTimeout:false, label:"Webプレビュー"});
+      try { await rpc.hello(); return rpc; } catch (e) { rpc.close(); throw e; }
+    }
+    const clientId = previewClientId();
+    const context = { clientId, sink: { clientId, bufferedAmount: 0, sendOutput() {}, sendSnapshot() {} } };
+    let closed = false;
+    return {
+      async request(method, params) {
+        if (closed) throw new RpcError("not_found", "preview helper stopped");
+        const result = await surface.invoke(context, method, params);
+        if (!result.ok) throw new RpcError(result.error.code, result.error.message);
+        return result.result as never;
+      },
+      close() { if (!closed) { closed = true; previews.clientGone(clientId); } },
+    };
+  });
   registerAllMethods(surface, {
+    previewHelpers,
     desktop,
+    desktopSettings,
     desktopRelay,
     previews,
     workspaceTools,scheduler,pluginDiscovery,
@@ -737,8 +773,14 @@ export async function composeServer(
   auth.onSessionRevoked((sessionId) => {
     for (const conn of [...(relayed.get(sessionId) ?? [])]) conn.close(4401, "session revoked");
   });
-  const desktopCdp = new DesktopCdpRelay(auth, originRejections, join(options.stateDir, "desktop-cdp-devices.json"), DesktopCdpLauncher.fromEnvironment());
-  registerDesktopCdpMethods(surface, desktopCdp);
+  const desktopCdpLauncher = DesktopCdpLauncher.fromEnvironment();
+  const desktopCdp = new DesktopCdpRelay(auth, originRejections, join(options.stateDir, "desktop-cdp-devices.json"), desktopCdpLauncher);
+  const vscodeSettings = await VscodeSharingSettings.create({
+    file: join(options.stateDir,"vscode-sharing.json"), launcher: desktopCdpLauncher,
+    origin: () => { const address = httpServer.server.address(); const port = address && typeof address === "object" ? address.port : options.port; return `${options.cert ? "https" : "http"}://127.0.0.1:${port}`; },
+    changed: () => desktopCdp.cancelLaunched(),
+  });
+  registerDesktopCdpMethods(surface, desktopCdp, vscodeSettings);
   const wsServer = new WsServerWs(httpServer.server, originRejections, auth.authorizeUpgrade, logger, (selector) => {
     const route = machines.route(selector);
     if (route.kind !== "ok") return route;
@@ -762,6 +804,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       desktop.clientGone(clientId);
       desktopRelay.clientGone(clientId);
+      previewHelpers.clientGone(clientId);
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
@@ -777,6 +820,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       desktop.clientGone(clientId);
       desktopRelay.clientGone(clientId);
+      previewHelpers.clientGone(clientId);
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
@@ -1257,6 +1301,7 @@ export async function composeServer(
         desktopRelay.dispose();
         desktopCompanion.dispose();
         desktop.dispose();
+        await previewHelpers.dispose();
         previews.dispose();
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、

@@ -33,19 +33,65 @@ A/BのSSHまたはB発の操作委譲が接続済みであることが前提で�
 
 ## Bの初回設定
 
-**通常のmachine認証と、PC全体の共有/入力の許可は別です。** 未設定のBは`desktop.capabilities`で`available: false`を返し、補助プログラムを起動しません。
+**通常のmachine認証と、PC全体の共有/入力の許可は別です。** 未許可のBは`desktop.capabilities`で`available: false`を返し、補助プログラムを起動しません。
 
-Bの`soda serve`を起動する環境に次を設定します。起動時に一度読み取ります。
+通常は補助プログラムのコマンドを手入力する必要はありません。Windows用の2ファイルは配布物に同梱され、Windows直接起動とWSLで自動検出します。WindowsのPowerShell 5.1/.NET Frameworkと、ログイン済み・ロック解除済みのデスクトップが必要です。実行ポリシーは自動変更しません。
+
+### 起動オプションで許可
+
+**共有されるPC（B）で**実行します。
+
+```sh
+# 閲覧のみ
+soda serve --desktop
+# マウス・キーボード操作も許可
+soda serve --desktop --desktop-input
+# クリップボード・解像度変更も必要な場合だけ追加
+soda serve --desktop --desktop-input --desktop-clipboard --desktop-resize
+```
+
+入力・クリップボード・解像度のオプションには`--desktop`も必要です。これらはサーバー起動用（`soda serve`）の指定です。既に動いているサーバーには、次の設定画面から許可します。設定が保存されていなければ共有は既定で無効です。起動オプションは保存済み設定より優先して、その起動での初期値を指定します。起動後は設定画面から無効にできますが、同じオプションで次回起動すれば再び有効になります。
+
+### 設定画面で許可
+
+Bのブラウザで`http://localhost:7780`（ポートを変更している場合はそのポート）を開いてログインし、**メニュー → 設定 → デスクトップ共有**を開きます。画面共有・マウス/キーボード・クリップボード・解像度変更を個別に選び、［共有設定を保存］を押します。Bの端末版でも設定の「デスクトップ共有」から変更できます。
+
+許可はサーバーの状態ディレクトリの`desktop-permissions.json`に保存され、再起動なしで反映します。変更すると進行中の共有や開始待ちを停止します。新しい許可で接続し直してください。無効化後、次回もオプションなしで起動すれば無効のままです。
+
+許可を変更できるのは認証済みの直接ローカル接続だけです。マシン中継、LANのURL、公開URL、転送ヘッダー付きのプロキシ経由からは変更できません。Bのlocalhost画面かBの端末版を使ってください。ブラウザの同一PC判定だけでなくHost/Originも検査します（ローカルプロキシがHost等を書き換える構成を、物理的な利用者確認の代用にはできません）。
+
+Aのブラウザは、**Bから到達できるHTTPSのURL**で開いてください。Aの`localhost`や`127.0.0.1`を開いた場合、Bから見た接続先がB自身になり共有できません。B発の操作委譲では、接続中の委譲先originを共有先として許可します。SSHで接続する場合の共有先の指定は、下の`SODA_DESKTOP_ORIGINS`を使用します。
+
+### 従来の環境変数・独自補助プログラム
+
+既存の指定も引き続き使えます。環境変数は起動時に読みます。保存済みの画面設定がある場合は、画面側の許可を優先します（`SODA_DESKTOP_ALLOW_*`は固定上限ではなく初期値です）。独自コマンドには、補助プログラム自身の入力等の許可も必要です。画面設定が補助プログラムの引数を変更することはありません。
+
+Bの`soda serve`を起動する環境に次を設定します。
 
 | 環境変数 | 意味 |
 |---|---|
 | `SODA_DESKTOP_COMMAND` | 補助プログラムの実行ファイルと引数のJSON配列。シェルを通さず起動。ブラウザ/RPCから実行コマンドを指定できない |
-| `SODA_DESKTOP_ALLOW_INPUT=1` | Bでの入力許可の上限。省略時は閲覧専用。Windows helperの`-AllowInput`も必要 |
+| `SODA_DESKTOP_ALLOW_INPUT=1` | 保存済み設定がない場合のBの入力許可の初期値。省略時は閲覧専用。Windows helperの`-AllowInput`も必要 |
 | `SODA_DESKTOP_ORIGINS` | 共有先AのHTTP(S) originをカンマ区切りで明示許可。SSH経由ではここでAを指定する |
 
 接続中のB発操作委譲の接続先originも共有先として許可されます。したがってこのPoCで`SODA_DESKTOP_COMMAND`を設定することは、**既存の操作委譲先と明示したoriginにデスクトップ共有を許可する設定**です。ユーザー別ACLや都度の現地承認ダイアログはありません。信頼する接続先だけで検証してください。
 
 Windows helperは[scripts/remote-desktop/windows-helper.ps1](../scripts/remote-desktop/windows-helper.ps1)と[WindowsDesktopHost.cs](../scripts/remote-desktop/WindowsDesktopHost.cs)の2ファイルを、Windowsから読める同じフォルダーへ配置して使います。PowerShell 5.1/.NET Frameworkの標準APIを使用するPoCで、新しいWindowsサービスやキャプチャドライバーは作りません。
+
+BがWindows直接起動の場合は、同じ2ファイルを配置して、そのPCのPowerShellで起動前に設定します（閲覧用）:
+
+```powershell
+$desktopHelper = (Resolve-Path 'C:\SodaDesktop\windows-helper.ps1').Path
+$env:SODA_DESKTOP_COMMAND = ConvertTo-Json -Compress -InputObject @(
+  'powershell.exe', '-NoProfile', '-NonInteractive', '-STA', '-File',
+  $desktopHelper, '-MonitorIndex', '0'
+)
+soda serve
+```
+
+`C:\SodaDesktop`は実際の配置先に置き換えます。この環境変数を別の端末やpaneで設定するだけでは、既に動いているサーバには反映されません。通常の`handoff`も元のサーバ環境を引き継ぐので、初回は設定した環境からの起動が必要です。既存サーバの停止・再起動は作業に影響するため、利用者がタイミングを選んで行います。
+
+「接続先PCでデスクトップ補助プログラムが未設定です」と出る場合は、接続自体は通り、`desktop.capabilities`の`available`がfalseの状態です。補助プログラム未設定・不正な設定・設定前に起動したサーバを確認してください。
 
 BがWSLの場合のコマンド設定例（パスは実際の配置先へ置換）:
 
@@ -62,7 +108,7 @@ soda serve
 
 ## ブラウザで使う
 
-1. 対象の外部マシンとワークスペースを選び、新しいタブの［タブの種類］で［デスクトップ］を選びます。VSCodeのGUI共有も同じ選択欄の［VSCode］から開きます。サイドバーのマシン見出しには起動ボタンを置きません。
+1. 対象の外部マシンとワークスペースを選び、Web版のタブ行右側の［＋接続ビュー］で［デスクトップ］を選びます。VSCodeのGUI共有も同じメニューの［VSCode］から開きます。端末版にはこれらの閲覧ボタン・閲覧タブを表示しません。サイドバーのマシン見出しには起動ボタンを置きません。
 2. BからAへ自動接続し、閲覧専用で始まります。Bのhost/user/画面名を確認してください。
 3. 操作する場合は［操作する］を押します。モニターを1枚選んでも、キーボードとフォーカス操作の権限はPC全体に及びます。
 4. 日本語は下の入力欄で変換を確定して［文字を送る］を押します。Windows側IMEの候補操作を再現する機能ではありません。

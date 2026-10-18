@@ -45,6 +45,10 @@ export interface ServeOptions {
    * 流し直す。既定は無効（pane の出力には秘密が含まれうる。herdr の `[experimental] pane_history` と同じ既定）。
    */
   paneHistory: boolean;
+  desktop?: boolean;
+  desktopInput?: boolean;
+  desktopClipboard?: boolean;
+  desktopResize?: boolean;
 }
 
 export interface RawServeArgs {
@@ -61,6 +65,10 @@ export interface RawServeArgs {
   shell?: string;
   worktreeDir?: string;
   paneHistory?: boolean;
+  desktop?: boolean;
+  desktopInput?: boolean;
+  desktopClipboard?: boolean;
+  desktopResize?: boolean;
 }
 
 /** Linux/macOS は XDG の state ディレクトリ、Windows は `%LOCALAPPDATA%`（design「起動オプション」）。 */
@@ -146,6 +154,8 @@ function parseOrigin(raw: string): string {
 export function resolveServeOptions(args: RawServeArgs, env: NodeJS.ProcessEnv = process.env, os: NodeJS.Platform = platform()): ServeOptions {
   // `--host [::1]` のような角括弧付きの IPv6 は角括弧を外す（`listen()` は角括弧付きを名前として引き、`ENOTFOUND` で
   // 落ちる）。以後の `isLoopbackHost`・`isWildcardHost` は角括弧の無い形だけを見る（D102）。
+  if (!args.desktop && (args.desktopInput || args.desktopClipboard || args.desktopResize))
+    throw new ConfigError("--desktop is required", "操作の許可には --desktop も指定してください。");
   const host = unbracketHost(args.host ?? DEFAULTS.host);
   const port = parsePort(args.port, DEFAULTS.port);
   const hasCert = Boolean(args.cert && args.key);
@@ -193,6 +203,10 @@ export function resolveServeOptions(args: RawServeArgs, env: NodeJS.ProcessEnv =
     shell: args.shell,
     worktreeDir: args.worktreeDir,
     paneHistory: args.paneHistory === true,
+    ...(args.desktop ? { desktop: true } : {}),
+    ...(args.desktopInput ? { desktopInput: true } : {}),
+    ...(args.desktopClipboard ? { desktopClipboard: true } : {}),
+    ...(args.desktopResize ? { desktopResize: true } : {}),
   };
 }
 

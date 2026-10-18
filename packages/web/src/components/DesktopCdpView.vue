@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
       <button :disabled="!enabled || !selected" @click="focusSurface(); send({ type: 'forget', deviceId: selectedDevice })">登録を解除</button>
     </div>
     <p v-if="machineLabel" class="connection-tools">接続先: {{ machineLabel }}</p>
-    <p v-if="remote && !launcherAvailable && socket?.readyState === 1" class="connection-tools">接続先マシンにVSCode起動設定が必要です。</p>
+    <p v-if="remote && !launcherAvailable && socket?.readyState === 1" class="connection-tools">共有するPCの「設定 → VSCode共有」で自動起動を許可してください。対応するWindows/WSLではhelperを自動起動します。</p>
     <div v-if="launcherAvailable" class="connection-tools">
       <button :disabled="!enabled || connected || launchPending || launcherBusy || socket?.readyState !== 1" @click="launchWindows">VSCodeを起動・接続</button>
       <p>このSodashitsuサーバー側のVSCodeを共有します。起動済みなら再利用します。</p>

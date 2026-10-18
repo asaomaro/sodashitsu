@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useViewerTabsStore } from "../store/viewerTabs.js";
 import { computed, inject, onMounted, ref } from "vue";
 import { ConnectionKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
@@ -76,6 +77,7 @@ function selectWorkspace(workspaceId: string): void {
 function selectTab(tabId: string): void {
   const tab = session.tabs.get(tabId);
   if (!tab) return;
+  useViewerTabsStore().select(null);
   view.setView(tab.workspaceId, tabId);
   view.focusPane(view.preferredPane(tab.id));
   void conn?.request("tab.focus", { tabId }).catch(() => undefined);
@@ -83,6 +85,7 @@ function selectTab(tabId: string): void {
 }
 
 function selectPane(paneId: string, tabId: string, workspaceId: string): void {
+  useViewerTabsStore().select(null);
   view.setView(workspaceId, tabId);
   view.focusPane(paneId);
   void conn?.request("pane.focus", { paneId }).catch(() => undefined);

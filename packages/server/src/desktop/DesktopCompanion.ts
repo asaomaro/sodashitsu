@@ -45,9 +45,14 @@ export class DesktopCompanionHub {
   private rateAt = 0;
   private timer: ReturnType<typeof setInterval> | undefined;
   constructor(
-    readonly enabled: boolean,
-    private readonly iceServers: z.infer<typeof DesktopIceServers> = [],
+    public enabled: boolean,
+    private iceServers: z.infer<typeof DesktopIceServers> = [],
   ) {}
+  configure(enabled: boolean, iceServers: z.infer<typeof DesktopIceServers>) {
+    this.dispose();
+    this.enabled = enabled;
+    this.iceServers = iceServers;
+  }
   bind(source: Source) {
     if (this.source) this.end(this.source.owner);
     this.source = source;

@@ -82,10 +82,14 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header=page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({timeout:15000});
+    await owner.request("vscode.settings.set",{enabled:false,allowInput:false,allowFit:false});
     await openNativeTab(page,"vscode",header);
     const dialog=page.locator('[data-native-tab="vscode"]'),view=dialog.locator("[data-desktop-cdp]"),canvas=view.locator("canvas");
     const launch=view.getByRole("button",{name:"VSCodeを起動・接続",exact:true});
     await expect(dialog).toBeVisible();await expect(view).toContainText("接続先: Remote VSCode B");
+    await expect(launch).toHaveCount(0);
+    await owner.request("vscode.settings.set",{enabled:true,allowInput:false,allowFit:false});
+    await expect(launch).toBeVisible();
     await launch.click();
     async function pixels(){
       await expect(view.getByRole("status")).toHaveText("閲覧中",{timeout:15000});
@@ -129,6 +133,9 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     const appView=page.locator("[data-plugin-view] [data-desktop-cdp]");
     await expect(appView).toContainText("接続先: Remote VSCode B");
     await expect(appView.getByRole("button",{name:"共有元を接続",exact:true})).toHaveCount(0);
+    // Re-enter the direct app after using parent navigation controls.
+    await appView.click({position:{x:4,y:4}});
+    await expect(appView.getByRole("button",{name:"VSCodeを起動・接続",exact:true})).toBeEnabled();
     await appView.getByRole("button",{name:"VSCodeを起動・接続",exact:true}).click();
     await expect(appView.getByRole("status")).toHaveText("閲覧中",{timeout:15000});
     await expect.poll(()=>appView.locator("canvas").evaluate(el=>{

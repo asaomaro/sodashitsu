@@ -29,7 +29,9 @@ import type { LinkRun } from "@sodashitsu/protocol";
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
   desktopRelay?: import("../../desktop/DesktopRelay.js").DesktopRelay;
+  desktopSettings?: import("../../desktop/DesktopSettings.js").DesktopSettings;
   desktop?: import("../../desktop/DesktopProvider.js").DesktopProvider;
+  previewHelpers?: import("../../preview/ManagedPreviewHelpers.js").ManagedPreviewHelpers;
   previews?: import("../../preview/PreviewService.js").PreviewService;
   notificationTest?: () => void;
   pluginDiscovery?: import("../../extensions/PluginDiscovery.js").PluginDiscovery;

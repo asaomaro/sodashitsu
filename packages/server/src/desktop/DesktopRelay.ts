@@ -25,6 +25,8 @@ import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { MachineManager } from "../machine/MachineManager.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
 
+class DesktopSetupRequired extends Error {}
+
 type Viewer = {
   chain: DesktopFrameChain;
   features?: boolean;
@@ -272,11 +274,12 @@ export class DesktopRelay {
           v.started = true;
           v.since = now;
           v.fps = m.options.fps;
-          void this.start(v, m.machineId, m.options).catch(() => {
+          void this.start(v, m.machineId, m.options).catch((error: unknown) => {
             this.send(ws, {
               type: "error",
-              message:
-                "共有を開始できません。Bの補助プログラム設定・共有先の許可・接続状態を確認してください。",
+              message: error instanceof DesktopSetupRequired
+                ? error.message
+                : "共有を開始できません。Bの補助プログラム設定・共有先の許可・接続状態を確認してください。",
             });
             this.stop(v);
           });
@@ -381,7 +384,10 @@ export class DesktopRelay {
         displayResize: z.boolean().optional(),
       })
       .parse(await rpc.request("desktop.capabilities", {}));
-    if (!caps.available || !this.viewers.has(v)) throw new Error("desktop unavailable");
+    if (!this.viewers.has(v)) return;
+    if (!caps.available) throw new DesktopSetupRequired(
+      "接続先PCでデスクトップ共有が許可されていません。接続先の設定「デスクトップ共有」で許可するか、soda serve --desktop で起動してください。",
+    );
     const ticket = randomBytes(32).toString("base64url");
     v.ticketHash = hash(ticket);
     this.invites.set(v.ticketHash, v);

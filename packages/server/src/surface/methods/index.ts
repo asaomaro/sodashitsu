@@ -1,3 +1,4 @@
+import { registerViewerTabs } from "./viewerTabs.js";
 import { registerDesktopMethods } from "./desktop.js";
 import {registerScheduleMethods} from "./schedule.js";
 import { registerPreviewMethods } from "./preview.js";
@@ -62,7 +63,8 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerDisplayMethods(surface, deps); // 20261007-soda-extensions
   registerExtensionMethods(surface, deps); // 20261007-ext-host
   registerFileMethods(surface, deps); // 端末のファイルのリンクとドロップ
-  registerPrefsMethods(surface, deps); // 20260927-cli-mode
+  registerPrefsMethods(surface, deps);
+  registerViewerTabs(surface, deps); // 20260927-cli-mode
   registerServerMethods(surface, deps); // 20260927-cli-mode（server.stop）
   registerGraphMethods(surface, deps); // 20260927-agent-graph
 }

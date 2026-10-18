@@ -172,14 +172,14 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
   }
 
   let addView: TabBarHits["addView"]=null;
-  if(model.tabId&&rightStart-x>=24){const label="[ビュー＋]";const w=stringWidth(label);rightStart-=w+1;grid.text(rightStart,rect.y,label,fg,activeBg,0,w);addView={x:rightStart,w};}
+  if(model.tabId&&rightStart-x>=24){const label="[ ＋作業ビュー ]";const w=stringWidth(label);rightStart-=w+1;grid.text(rightStart,rect.y,label,fg,activeBg,0,w);addView={x:rightStart,w};}
   const hits: TabHit[] = [];
   if (!model.workspaceId) return { tabs: hits, newTab: null, expandSidebar };
   const tabs = model.tabsOf(model.workspaceId);
   const labels = tabs.map((t, i) => `${ctx.dropTabId === t.id ? "▶" : " "}${ctx.mode === "prefix" && i<9 ? `${i+1}:` : ""}${t.label} `);
   const widths = labels.map((l) => stringWidth(l));
   // あふれるなら「‹」「›」を出し、先頭の tab をずらす（今の tab が見えるように。herdr の tab_scroll。H22b）。
-  const PLUS_W = 4; // 「 + 」と前の空き
+  const PLUS_W = 5; // 「 ＋ 」と前の空き
   const total = widths.reduce((a, b) => a + b, 0);
   const overflow = tabs.length > 1 && total > rightStart - 1 - x - PLUS_W;
   const scroll = ctx.tabScroll ?? { first: 0, reveal: true };
@@ -232,8 +232,8 @@ export function paintTabBar(grid: Grid, rect: Rect, ctx: ChromeContext): TabBarH
     x = limit + 2;
   }
   let newTab: TabBarHits["newTab"] = null;
-  if (x + 3 < rightStart) {
-    const w = grid.text(x + 1, rect.y, " + ", fg, activeBg, 0);
+  if (x + PLUS_W <= rightStart) {
+    const w = grid.text(x + 1, rect.y, " ＋ ", fg, activeBg, 0);
     newTab = { x: x + 1, w };
   }
   return { tabs: hits, newTab, addView, scrollLeft, scrollRight, expandSidebar };

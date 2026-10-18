@@ -105,7 +105,7 @@ test("tab and pane view entry points fix the target and ask for placement", asyn
     await client.request("workspace.set_project_folder", { workspaceId: ws.id, path: root });
     await client.request("prefs.set", { patch: { uiStyle: "modern" } });
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
-    await page.getByRole("button", { name: "ビューを追加", exact: true }).click();
+    await page.getByRole("button", { name: "＋作業ビュー", exact: true }).click();
     const picker = page.locator(".view-picker");
     await expect(picker).toContainText("情報の対象: タブ全体");
     await expect(picker.getByLabel("表示対象")).toHaveCount(0);
@@ -121,8 +121,9 @@ test("tab and pane view entry points fix the target and ask for placement", asyn
       .first()
       .click();
     await expect(picker).toContainText("情報の対象: このペイン");
-    await expect(picker.getByLabel("ビュー", { exact: true }).locator("option")).toHaveCount(2);
-    await expect(picker.getByLabel("ビュー", { exact: true })).toContainText("Statusline");
+    // Statusline is now built into agent panes, so it is no longer an addable view.
+    await expect(picker.getByLabel("ビュー", { exact: true }).locator("option")).toHaveCount(1);
+    await expect(picker.getByLabel("ビュー", { exact: true })).not.toContainText("Statusline");
     await expect(picker.getByLabel("ビュー", { exact: true })).not.toContainText("ファイルツリー");
     await picker.getByRole("button", { name: "キャンセル", exact: true }).click();
     await expect(page.locator('[data-workspace-view="files"]')).toBeVisible();

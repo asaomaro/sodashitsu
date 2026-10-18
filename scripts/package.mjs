@@ -50,6 +50,12 @@ cpSync(join(root, "packages", "server", "assets"), join(out, "packages", "server
   recursive: true,
   filter: (s) => !s.endsWith(".test.ts"),
 });
+mkdirSync(join(out,"scripts","vscode-cdp"),{recursive:true});
+for (const file of ["cdp-launcher.mjs","cdp-bridge.mjs","cdp-client.mjs","resident-bridge.mjs"])
+  cpSync(join(root,"plugins","vscode-desktop",file),join(out,"scripts","vscode-cdp",file));
+mkdirSync(join(out, "scripts", "remote-desktop"), { recursive: true });
+for (const file of ["windows-helper.ps1", "WindowsDesktopHost.cs"])
+  cpSync(join(root, "scripts", "remote-desktop", file), join(out, "scripts", "remote-desktop", file));
 for (const f of ["third_party", "docs", "LICENSE", "NOTICE", "pnpm-workspace.yaml", "pnpm-lock.yaml"]) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }

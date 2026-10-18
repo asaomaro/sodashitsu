@@ -30,7 +30,7 @@ export const SESSION_ENV_VAR = "SODA_SESSION";
 export const PREFLIGHT_COMMAND_NAME = "__handoff-preflight";
 
 const USAGE =
-  "使い方: soda [--session NAME] [--state-dir D] [--allow-nested] / soda serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] / soda token reset [--state-dir D] [--session NAME] / soda session list [--state-dir D] [--json] / soda session delete NAME [--state-dir D] [--json] / soda session stop NAME [--state-dir D] [--json] / soda handoff [--state-dir D] [--session NAME] / soda bridge [--session NAME] [--state-dir D] / soda machine add|list|rename|enable|disable|remove …";
+  "使い方: soda [--session NAME] [--state-dir D] [--allow-nested] / soda serve [--host H] [--port P] [--cert F] [--key F] [--origin O]... [--state-dir D] [--session NAME] [--scrollback N] [--shell S] [--worktree-dir D] [--pane-history] [--desktop] [--desktop-input] [--desktop-clipboard] [--desktop-resize] / soda token reset [--state-dir D] [--session NAME] / soda session list [--state-dir D] [--json] / soda session delete NAME [--state-dir D] [--json] / soda session stop NAME [--state-dir D] [--json] / soda handoff [--state-dir D] [--session NAME] / soda bridge [--session NAME] [--state-dir D] / soda machine add|list|rename|enable|disable|remove …";
 
 /**
  * CLI の引数を解釈する（`soda serve [...]` / `soda token reset [--state-dir D] [--session NAME]` / `soda session list|delete|stop` /
@@ -121,6 +121,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       case "--worktree-dir":
         serve.worktreeDir = next();
         break;
+      case "--desktop": serve.desktop = true; break;
+      case "--desktop-input": serve.desktopInput = true; break;
+      case "--desktop-clipboard": serve.desktopClipboard = true; break;
+      case "--desktop-resize": serve.desktopResize = true; break;
       case "--pane-history":
         // 値を取らない（20260926-screen-history-replay）。画面履歴の保存と再生を有効にする（既定は無効）。
         serve.paneHistory = true;

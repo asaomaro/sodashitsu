@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PreviewOrigin } from "./preview.js";
 
 /** Narrow remote GUI messages. CDP method names/expressions never cross this boundary. */
 export const DesktopInput = z.discriminatedUnion("kind", [
@@ -79,3 +80,12 @@ export const DesktopBridgeMessage = z.discriminatedUnion("type", [
 
 export const DesktopCdpOpenParams = z.object({}).strict();
 export const DesktopCdpSendParams = z.object({ message: DesktopViewerMessage }).strict();
+
+export const VscodeSharingPermissions = z.object({enabled:z.boolean(),allowInput:z.boolean(),allowFit:z.boolean(),sodaOrigin:z.union([z.literal(""),PreviewOrigin]).optional()}).strict();
+export type VscodeSharingPermissions = z.infer<typeof VscodeSharingPermissions>;
+export interface VscodeSharingSettingsResult { permissions: VscodeSharingPermissions; supported:boolean; canConfigure:boolean; customCommand:boolean }
+export const VscodeSharingMethods = {
+  "vscode.settings.get": z.object({}).strict(),
+  "vscode.settings.set": VscodeSharingPermissions,
+};
+export interface VscodeSharingResults { "vscode.settings.get": VscodeSharingSettingsResult; "vscode.settings.set": VscodeSharingSettingsResult }

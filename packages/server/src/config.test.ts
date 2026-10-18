@@ -298,3 +298,10 @@ describe("stateDirInUseError の SODA_SESSION の案内（20260926-named-session
     expect(stateDirInUseError(inUse, "/s", "token-reset").hint).not.toContain("SODA_SESSION");
   });
 });
+
+it("requires explicit sharing before allowing input, clipboard or resize", () => {
+  for (const args of [{ desktopInput: true }, { desktopClipboard: true }, { desktopResize: true }])
+    expect(() => resolveServeOptions(args)).toThrow("--desktop is required");
+  expect(resolveServeOptions({ desktop: true, desktopInput: true })).toMatchObject({ desktop: true, desktopInput: true });
+  expect(resolveServeOptions({}).desktop).toBeUndefined();
+});

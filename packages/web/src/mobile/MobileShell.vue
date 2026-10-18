@@ -1,5 +1,8 @@
 <!-- Additional screens share desktop content on mobile. -->
 <script setup lang="ts">
+import ViewerTabBar from "../components/ViewerTabBar.vue";
+import ViewerTabView from "../components/ViewerTabView.vue";
+import { useViewerTabsStore } from "../store/viewerTabs.js";
 import HistoryScreen from "../screens/HistoryScreen.vue";
 import ConnectionsScreen from "../screens/ConnectionsScreen.vue";
 import { useSettingsStore } from "../store/settings.js";
@@ -47,6 +50,7 @@ import { useVisualViewportHeight } from "./useVisualViewport.js";
 const session = useSessionStore();
 const machines=useMachinesStore();
 const view = useViewStore();
+const viewers = useViewerTabsStore();
 const settings = useSettingsStore();
 const registry = inject(TerminalRegistryKey);
 const conn = inject(ConnectionKey);
@@ -87,7 +91,7 @@ let touchScroll: TouchScroll | null = null;
 const previewTabs = computed(() => [...session.tabs.values()].filter(tab => tab.nativeView === "web-preview"));
 const currentTab = computed(() => (view.tabId ? session.tabs.get(view.tabId) : undefined));
 const appActive = computed(
-  () => !!currentTab.value?.nativeView || !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal",
+  () => !!viewers.active || !!currentTab.value?.nativeView || !!currentTab.value?.plugin && currentTab.value.perspective !== "terminal",
 );
 const tabDisplayPane = computed(() => currentTab.value?.displayPaneId);
 const appMobileDisplay = computed(() =>
@@ -209,6 +213,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
       >
         設定
       </button>
+      <ViewerTabBar />
     </header>
     <TabViews v-if="currentTab" :tab="currentTab" show-add-button />
     <PaneBands v-if="tabDisplayPane" :pane-id="tabDisplayPane" :pane-height-px="viewportHeight" />
@@ -249,10 +254,11 @@ onBeforeUnmount(() => touchScroll?.dispose());
           </template>
         </PaneLayout>
       </div>
-      <NativeTabView v-if="currentTab?.nativeView && currentTab.nativeView !== 'web-preview'" :key="currentTab.id" :tab="currentTab" class="mobile-app-view" />
+      <ViewerTabView v-for="tab in viewers.tabs.filter(t => t.machineId === machines.selectedId && (t.kind === 'web-preview' || t.id === viewers.active?.id))" :key="tab.id" :tab="tab" class="mobile-app-view" :style="{ visibility: viewers.active?.id === tab.id ? 'visible' : 'hidden' }" :inert="viewers.active?.id !== tab.id" />
+      <NativeTabView v-if="!viewers.active && currentTab?.nativeView && currentTab.nativeView !== 'web-preview'" :key="currentTab.id" :tab="currentTab" class="mobile-app-view" />
       <NativeTabView v-for="tab in previewTabs" :key="tab.id" :tab="tab" class="mobile-app-view"
-        :style="{ visibility: currentTab?.id === tab.id ? 'visible' : 'hidden' }" :inert="currentTab?.id !== tab.id" />
-      <div v-if="appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view">
+        :style="{ visibility: currentTab?.id === tab.id && !viewers.active ? 'visible' : 'hidden' }" :inert="currentTab?.id !== tab.id || !!viewers.active" />
+      <div v-if="!viewers.active && appActive && currentTab?.plugin && tabDisplayPane" class="mobile-app-view">
         <PluginView :pane-id="tabDisplayPane" :plugin="currentTab.plugin" mobile />
       </div>
     </main>
