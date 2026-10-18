@@ -1,0 +1,15 @@
+/* Fill this browser tab without using the browser Fullscreen API. */
+.soda-viewport-maximized {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  resize: none !important;
+  z-index: 850 !important;
+}

@@ -7,8 +7,16 @@ export async function openNativeTab(page: Page, kind: "web-preview" | "desktop" 
   for (const notice of await page.locator(".toast-close").all()) await notice.click();
   await page.getByRole("button", { name: "接続ビューを追加・選択", exact: true }).click();
   const labels = { "web-preview": "Webプレビュー", desktop: "デスクトップ", vscode: "VSCode" };
-  await page.getByRole("menuitem", { name: `＋ ${labels[kind]}`, exact: true }).click();
-  await expect(page.locator(`[data-native-tab="${kind}"]`)).toBeVisible();
+  const notice = page.locator(".toast-close").first();
+  await page.addLocatorHandler(notice, async button => { await button.click(); });
+  try {
+    await page.getByRole("menuitem", { name: `＋ ${labels[kind]}`, exact: true }).click();
+    await expect(page.locator(`[data-native-tab="${kind}"]`)).toBeVisible();
+    // Secondary desktop controls are explicitly opened for feature tests.
+    if (kind === "desktop") await page.locator("[data-remote-desktop]").getByRole("button", {name:"情報・設定",exact:true}).click();
+  } finally {
+    await page.removeLocatorHandler(notice);
+  }
   // Fresh fixture servers can offer extension approval notices above the tab toolbar.
   for (const notice of await page.locator(".toast-close").all()) await notice.click();
 }

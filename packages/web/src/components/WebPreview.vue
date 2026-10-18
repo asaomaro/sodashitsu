@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import "./viewportMaximize.css";
+import { useViewportMaximize } from "./useViewportMaximize.js";
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { PreviewLocalOrigin, type PreviewApp, type PreviewDisplay } from "@sodashitsu/protocol";
 import { useViewerTabsStore } from "../store/viewerTabs.js";
@@ -9,6 +11,20 @@ import { useMachinesStore } from "../store/machines.js";
 
 const props = defineProps<{ workspaceId: string; tabId: string; fallbackPaneId: string; active: boolean }>();
 const session = useSessionStore();
+const infoOpen = ref(false);
+const surface = ref<HTMLElement>();
+const maximized = useViewportMaximize(surface);
+async function toggleMaximize() {
+  maximized.value = !maximized.value;
+  if (maximized.value) infoOpen.value = false;
+  await nextTick();
+  surface.value?.focus({preventScroll:true});
+}
+function maximizeKey(event: KeyboardEvent) {
+  if (event.key === "Escape" && maximized.value) {
+    event.preventDefault(); event.stopPropagation(); maximized.value = false;
+  }
+}
 const sourcePane = ref("");
 const controller = useViewerTabsStore();
 const helperStarting = ref(false);
@@ -105,14 +121,16 @@ async function closeDisplay() {
 }
 watch(() => [machines.selectedId, targetPane.value, view.connectionState], () => { if (allowedPane.value) { void conn?.request("preview.unwatch", { viewId: props.tabId }).catch(() => undefined); reset(); } });
 watch(() => [targetPane.value, view.connectionState], () => { if (targetPane.value && view.connectionState === "open") void enable(); }, { immediate: true });
-watch(() => props.active, active => { if (active) void poll(true); });
+watch(error, value => { if (value) infoOpen.value = true; });
+watch(() => props.active, active => { if (active) void poll(true); else maximized.value = false; });
 const timer = setInterval(() => void poll(), 250);
 onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value) void conn?.request("preview.unwatch", { viewId: props.tabId }).catch(() => undefined); reset(); });
 </script>
 
 <template>
-  <section class="preview-window" role="region" aria-label="Webプレビュー" data-web-preview>
-    <header><strong>Webプレビュー</strong></header>
+  <section ref="surface" class="preview-window" :class="{ 'soda-viewport-maximized': maximized, 'has-app': !!current }" :popover="maximized ? 'manual' : undefined" tabindex="-1" role="region" aria-label="Webプレビュー" data-web-preview @keydown.capture="maximizeKey">
+    <header><strong>Webプレビュー</strong><button v-if="current" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button><button :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? "元に戻す" : "最大化" }}</button></header>
+    <div v-show="!current || infoOpen" class="preview-controls">
     <label>表示元のペイン <select v-model="sourcePane" aria-label="表示元のペイン"><option value="">自動選択</option><option v-for="p in panes" :key="p.id" :value="p.id">{{ p.label || p.title || p.id.slice(0,8) }}</option></select></label>
     <div class="preview-tools">
       <template v-if="!allowedPane"><p>このpaneの開発アプリを表示します。PC側で補助プログラムを動かします。</p><button :disabled="!targetPane" @click="enable">このpaneでエージェントからの表示を許可</button></template>
@@ -123,6 +141,7 @@ onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value
     </div>
     <nav v-if="displays.length"><select v-model="selected" aria-label="表示するアプリ"><option v-for="d in displays" :key="d.requestId" :value="d.requestId">{{ d.app.name }}</option></select><button @click="refresh++">更新</button><button @click="closeDisplay">表示を閉じる</button><a v-if="current" :href="current.url" target="_blank" rel="noopener noreferrer">別タブで開く</a></nav>
     <p class="preview-help">初回はこのSodashitsuサイトへの「ローカルネットワークアクセス」を許可してください。表示されない場合は別タブで開くか、ブラウザのサイト権限を確認してください。</p>
+    </div>
     <iframe v-for="d in displays" v-show="d.requestId === selected" :key="d.requestId + ':' + refresh" :src="d.url" :title="d.app.name" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" referrerpolicy="no-referrer" data-preview-frame />
     <p v-if="!current" class="preview-empty">{{ opening ? "アプリを開いています…" : helperConnected ? "ポートを指定して「登録して開く」を押すか、登録済みアプリを開いてください。" : "ブラウザPCのhelperを接続すると、登録したアプリを開けます。" }}</p>
   </section>
@@ -130,6 +149,10 @@ onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value
 
 <style scoped>
 .preview-window { position:relative; width:100%; height:100%; min-width:0; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--soda-menu-border); background:var(--soda-bg); color:var(--soda-fg); box-shadow:0 8px 32px #0006; min-height:0; }
+.has-app .preview-controls { position:absolute; top:48px; right:8px; z-index:3; width:min(640px,calc(100% - 34px)); max-height:calc(100% - 80px); overflow:auto; padding:8px; background:var(--soda-bg); border:1px solid var(--soda-menu-border); }
+.preview-window.soda-viewport-maximized { padding:0; gap:0; border:0; }
+.soda-viewport-maximized > header { position:absolute; top:8px; right:8px; z-index:4; max-width:calc(100% - 32px); padding:4px 8px; border-radius:4px; background:var(--soda-bg); }
+.soda-viewport-maximized > iframe { position:absolute; inset:0; width:100%; height:100%; border:0; box-sizing:border-box; }
 header, nav, .preview-apps, form { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 header strong { flex:1; } .preview-tools { max-height:35%; overflow:auto; } .preview-tools p, .preview-help { margin:4px 0; font-size:12px; } code { display:block; overflow-wrap:anywhere; user-select:all; margin:6px 0; }
 iframe { flex:1; width:100%; min-height:0; border:1px solid var(--soda-menu-border); background:white; } .preview-empty { flex:1; padding:24px; } input { max-width:180px; } .preview-help { opacity:.8; }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import "./viewportMaximize.css";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   decodeDesktopFrame,
   DesktopFrameChain,
@@ -27,8 +28,10 @@ import {
 
 const props = defineProps<{ machineId: string; label: string; embedded?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
+const infoOpen = ref(false);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const screenElement = ref<HTMLElement | null>(null);
+const screenSize = ref<DisplaySize>({ width: 0, height: 0 });
 const displayFollow = ref(false),
   displayModes = ref<DisplaySize[]>([]);
 let displayObserver: ResizeObserver | undefined,
@@ -50,7 +53,6 @@ function scheduleDisplay() {
   }, 700);
 }
 function toggleDisplay() {
-  fit.value = !displayFollow.value;
   if (displayFollow.value) scheduleDisplay();
   else {
     requestedDisplay = undefined;
@@ -83,6 +85,13 @@ const info = ref<DesktopFrameInfo | null>(null),
   drawMs = ref(0),
   inputAckMs = ref(0),
   rendered = ref(0);
+const canvasSize = computed(() => {
+  const size = info.value ?? { width: 1, height: 1 };
+  const scale = fit.value
+    ? Math.min(screenSize.value.width / size.width, screenSize.value.height / size.height)
+    : 1;
+  return { width: `${size.width * scale}px`, height: `${size.height * scale}px` };
+});
 const adaptive = ref(savedSettings.adaptive),
   dynamicQuality = ref(false),
   allowMedia = ref(false),
@@ -233,13 +242,16 @@ const clipboardTimer = setInterval(() => void syncClipboard(), 1000);
 const position = ref({ x: 48, y: 56 });
 const windowElement = ref<HTMLElement>();
 const restoredSize = ref<{ width: number; height: number }>();
-function toggleMaximize() {
+async function toggleMaximize() {
   if (!maximized.value && windowElement.value) {
     const bounds = windowElement.value.getBoundingClientRect();
     restoredSize.value = { width: bounds.width, height: bounds.height };
   }
   drag = undefined;
   maximized.value = !maximized.value;
+  if (maximized.value) infoOpen.value = false;
+  await nextTick();
+  (control.value ? canvas.value : windowElement.value)?.focus({preventScroll:true});
 }
 function maximizeFromTitle(event: MouseEvent) {
   if (!(event.target as HTMLElement).closest("button")) toggleMaximize();
@@ -564,12 +576,10 @@ function input(value: unknown) {
 }
 function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   if (!control.value || !canvas.value || !info.value) return;
-  const r = canvas.value.getBoundingClientRect(),
-    scale = Math.min(r.width / canvas.value.width, r.height / canvas.value.height);
-  const w = scale * canvas.value.width,
-    h = scale * canvas.value.height;
-  const x = (e.clientX - r.left - (r.width - w) / 2) / w,
-    y = (e.clientY - r.top - (r.height - h) / 2) / h;
+  const r = canvas.value.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const x = (e.clientX - r.left) / r.width,
+    y = (e.clientY - r.top) / r.height;
   if (
     (event === "down" || (event === "move" && e.buttons === 0)) &&
     (x < 0 || x > 1 || y < 0 || y > 1)
@@ -596,6 +606,7 @@ function canvasBlur(e: FocusEvent) {
 }
 function escape(e: KeyboardEvent) {
   if (e.code === "Escape") {
+    if (maximized.value) toggleMaximize();
     if (agentExpires.value) send({ type: "agent_grant", enabled: false });
     e.preventDefault();
     relinquish();
@@ -632,7 +643,10 @@ function visibility() {
 const heartbeat = setInterval(() => send({ type: "heartbeat" }), 2000);
 onMounted(() => {
   if (screenElement.value && typeof ResizeObserver !== "undefined") {
-    displayObserver = new ResizeObserver(scheduleDisplay);
+    displayObserver = new ResizeObserver(() => {
+      if (screenElement.value) screenSize.value = { width: screenElement.value.clientWidth, height: screenElement.value.clientHeight };
+      scheduleDisplay();
+    });
     displayObserver.observe(screenElement.value);
   }
   connect();
@@ -656,11 +670,12 @@ onBeforeUnmount(() => {
     <section
       ref="windowElement"
       class="desktop-window"
-      :class="{ maximized, embedded: embedded && !maximized }"
+      :class="{ maximized, 'soda-viewport-maximized': maximized, embedded: embedded && !maximized }"
       :style="embedded && !maximized ? undefined : windowStyle"
       role="dialog"
       aria-label="リモートデスクトップ"
       data-remote-desktop
+      tabindex="-1"
       @keydown.stop="escape"
       @keyup.stop
     >
@@ -672,15 +687,24 @@ onBeforeUnmount(() => {
         @pointercancel="drag = undefined"
       >
         <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
+        <button
+          :disabled="!ready || !allowed"
+          @pointerdown.prevent
+          @click="send({ type: 'control', enabled: !control })"
+        >
+          {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
+        </button>
+        <button :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
         <button data-desktop-maximize :aria-pressed="maximized" @click="toggleMaximize">
           {{ maximized ? "元に戻す" : "最大化" }}
         </button>
         <button @click="close">閉じる</button>
       </header>
+      <p v-if="error" class="desktop-alert" role="alert">{{ error }}</p>
+      <div v-show="infoOpen" class="desktop-controls">
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
       </p>
-      <p v-if="error" role="alert">{{ error }}</p>
       <p v-if="activeSettings && ready" data-desktop-applied>
         適用中: 幅上限{{ activeSettings.width }} / {{ activeSettings.fps }}fps上限 / JPEG
         {{ activeSettings.quality }} /
@@ -691,17 +715,11 @@ onBeforeUnmount(() => {
         }}
       </p>
       <nav>
-        <button
-          :disabled="!ready || !allowed"
-          @pointerdown.prevent
-          @click="send({ type: 'control', enabled: !control })"
-        >
-          {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
-        </button>
+
         <button :disabled="!ready" @click="send({ type: 'keyframe' })">再同期</button
         ><button @click="close">共有停止</button
         ><label
-          ><input v-model="fit" type="checkbox" :disabled="displayFollow" />画面に合わせる</label
+          ><input v-model="fit" type="checkbox" />画面に合わせる</label
         >
         <details>
           <summary>画質・計測</summary>
@@ -840,15 +858,16 @@ onBeforeUnmount(() => {
             v-model="displayFollow"
             type="checkbox"
             @change="toggleDisplay"
-          />Bの解像度を窓に合わせて等倍表示</label
+          />Bの解像度も窓に合わせる</label
         >
         <p>
-          共有元の実ディスプレイが変更されます。対応解像度から選択し、余白またはスクロールが生じます。変更ごとに再接続して操作許可を解除し、共有終了時に元の解像度へ復元を試みます。
+          共有元の実ディスプレイを対応解像度へ変更します。表示の拡縮は「画面に合わせる」で別に選べます。変更ごとに再接続して操作許可を解除し、共有終了時に元の解像度へ復元を試みます。
         </p>
         <p v-if="activeSettings?.display" data-applied-display>
-          {{ activeSettings.display.width }}×{{ activeSettings.display.height }} — 1画素＝1 CSS px
+          {{ activeSettings.display.width }}×{{ activeSettings.display.height }} — {{ fit ? '画面に合わせて表示' : '1画素＝1 CSS px' }}
         </p>
       </section>
+      </div>
       <div
         ref="screenElement"
         data-desktop-screen
@@ -862,9 +881,7 @@ onBeforeUnmount(() => {
           :data-rendered-frames="rendered"
           :data-video-frames="videoFrames"
           :data-frame-info="info ? JSON.stringify(info) : undefined"
-          :style="
-            fit ? {} : { width: (info?.width ?? 1) + 'px', height: (info?.height ?? 1) + 'px' }
-          "
+          :style="canvasSize"
           @pointerdown.prevent="pointer($event, 'down')"
           @pointermove="pointer($event, 'move')"
           @pointerup.prevent="pointer($event, 'up')"
@@ -882,6 +899,7 @@ onBeforeUnmount(() => {
         />
         <span v-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
       </div>
+      <div v-show="infoOpen || control" class="desktop-input">
       <form
         @submit.prevent="
           input({ kind: 'text', text });
@@ -896,7 +914,7 @@ onBeforeUnmount(() => {
           placeholder="日本語はここで変換を確定"
         /><button :disabled="!control || !text">文字を送る</button>
       </form>
-      <footer>
+      <footer v-show="infoOpen">
         <span>{{
           control
             ? "入力はBのPC全体に届きます。Escで閲覧へ戻る。"
@@ -909,6 +927,7 @@ onBeforeUnmount(() => {
           {{ inputAckMs.toFixed(0) }} ms</output
         >
       </footer>
+      </div>
     </section>
   </Teleport>
 </template>
@@ -933,6 +952,21 @@ onBeforeUnmount(() => {
   border: 1px solid var(--soda-menu-border, #555);
   box-shadow: 0 8px 32px #0008;
 }
+.desktop-controls, .desktop-input, .desktop-alert {
+  position: absolute;
+  z-index: 2;
+  padding: 8px;
+  border: 1px solid var(--soda-menu-border, #555);
+  background: var(--soda-bg, #161b22);
+}
+.desktop-controls { top: 48px; right: 8px; width: min(640px, calc(100% - 34px)); max-height: calc(100% - 150px); overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+.desktop-input { left: 8px; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
+.desktop-alert { top: 48px; left: 8px; max-width: calc(100% - 34px); }
+.desktop-window > header { flex: 0 0 auto; z-index: 3; }
+.desktop-window.maximized { padding: 0; gap: 0; border: 0; }
+.desktop-window.maximized > header { position: absolute; top: 8px; right: 8px; max-width: calc(100% - 32px); padding: 4px 8px; background: var(--soda-bg, #161b22); border-radius: 4px; cursor: default; }
+.desktop-window.maximized > header strong { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desktop-window.maximized > .screen { position: absolute; inset: 0; border: 0; scrollbar-gutter: auto; }
 .desktop-window.maximized {
   min-width: 0;
   min-height: 0;
@@ -972,11 +1006,13 @@ p {
 .screen.controlling {
   border-color: var(--soda-accent-fg, #79c0ff);
 }
+.screen:not(.actual) { overflow: hidden; scrollbar-gutter: auto; }
+.screen:not(.actual) canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 canvas {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: fill;
   touch-action: none;
 }
 .actual canvas {

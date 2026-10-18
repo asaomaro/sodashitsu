@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import "./viewportMaximize.css";
+import { useViewportMaximize } from "./useViewportMaximize.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { DesktopInput } from "@sodashitsu/protocol";
 
 const props = defineProps<{ enabled: boolean; machineId?:string; machineLabel?:string }>();
@@ -11,51 +13,36 @@ const canvas = ref<HTMLCanvasElement>();
 const surface = ref<HTMLElement>();
 const screen = ref<HTMLDivElement>();
 const sourceSize = ref({ width: 0, height: 0 });
-const fullscreen = ref(false), fullscreenSupported = ref(false), fullscreenBusy = ref(false);
-const fullscreenError = ref("");
-let disposed = false, fullscreenEscapeDown = false;
-function syncFullscreen(): void {
-  const owned = document.fullscreenElement === surface.value;
-  if (fullscreen.value && !owned) {
-    // The browser can exit before delivering Escape keydown to this document.
-    // A fresh non-repeat keydown resets the guard for normal remote Escape.
-    fullscreenEscapeDown = true;
-    release();
-  }
-  fullscreen.value = owned;
+const maximized = useViewportMaximize(surface);
+const infoOpen = ref(false);
+let maximizeEscapeDown = false;
+function leaveMaximized(): void {
+  if (!maximized.value) return;
+  maximized.value = false;
+  release();
   scheduleFit();
 }
-async function leaveFullscreen(): Promise<void> {
-  if (document.fullscreenElement !== surface.value) return;
-  try { await document.exitFullscreen(); } catch { /* The browser may already be leaving fullscreen. */ }
+async function toggleMaximize(): Promise<void> {
+  if (!props.enabled) return;
+  if (maximized.value) leaveMaximized();
+  else { maximized.value = true; infoOpen.value = false; }
+  await nextTick();
+  (control.value ? canvas.value : surface.value)?.focus({preventScroll:true});
+  scheduleFit();
 }
-async function toggleFullscreen(): Promise<void> {
-  const element = surface.value;
-  if (!element || !props.enabled || fullscreenBusy.value) return;
-  focusSurface();
-  fullscreenError.value = "";
-  fullscreenBusy.value = true;
-  try {
-    if (document.fullscreenElement === element) await document.exitFullscreen();
-    else await element.requestFullscreen({ navigationUI: "hide" });
-    if ((disposed || !connected.value) && document.fullscreenElement === element) await document.exitFullscreen();
-  } catch {
-    if (!disposed) fullscreenError.value = "全画面表示に切り替えられませんでした。このブラウザの全画面表示の許可を確認してください。";
-  } finally {
-    fullscreenBusy.value = false;
-    if (!disposed) syncFullscreen();
-  }
-}
-function fullscreenKey(event: KeyboardEvent): void {
+function maximizeKey(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
-  const local = fullscreen.value || (fullscreenEscapeDown && (event.type === "keyup" || event.repeat));
+  const local = maximized.value || (maximizeEscapeDown && (event.type === "keyup" || event.repeat));
   if (event.type === "keydown") {
-    if (!event.repeat || fullscreen.value) fullscreenEscapeDown = fullscreen.value;
-  } else fullscreenEscapeDown = false;
+    if (!event.repeat || maximized.value) maximizeEscapeDown = maximized.value;
+  } else maximizeEscapeDown = false;
   if (!local) return;
   event.preventDefault();
   event.stopPropagation();
-  if (event.type === "keydown") void leaveFullscreen();
+  if (event.type === "keydown") {
+    leaveMaximized();
+    void nextTick(() => { (control.value ? canvas.value : surface.value)?.focus({preventScroll:true}); scheduleFit(); });
+  }
 }
 const socket = ref<WebSocket>();
 const connected = ref(false),
@@ -97,6 +84,7 @@ function flushWheel(): void {
     send({ type: "input", input: pending });
 }
 const allowFit = ref(false), fit = ref(false);
+let viewportSize = { width: 0, height: 0 };
 let resizeObserver: ResizeObserver | undefined;
 let fitTimer: ReturnType<typeof setTimeout> | undefined;
 let lastFit = "";
@@ -105,7 +93,9 @@ function scheduleFit(): void {
   if (!fit.value || !allowFit.value || !control.value || !props.enabled) return;
   fitTimer = setTimeout(() => {
     if (!fit.value || !allowFit.value || !control.value || !props.enabled || !screen.value) return;
-    const w = screen.value.clientWidth, h = screen.value.clientHeight;
+    // ResizeObserver retains fractional CSS pixels. clientWidth/clientHeight
+    // round them and can request a source just larger than the actual surface.
+    const w = viewportSize.width, h = viewportSize.height;
     if (document.hidden || w < 160 || h < 120) {
       cancelWheel();
       if (lastFit) send({ type: "viewport", size: null });
@@ -382,7 +372,7 @@ function hidden(): void {
 watch(
   () => props.enabled,
   (enabled) => {
-    if (!enabled) relinquish();
+    if (!enabled) { relinquish(); leaveMaximized(); }
   },
 );
 watch(fit, active => {
@@ -394,7 +384,7 @@ watch(fit, active => {
     if (control.value && allowFit.value) send({ type: "viewport", size: null });
   }
 });
-watch(connected, active => { if (!active) void leaveFullscreen(); });
+watch(connected, active => { if (!active) leaveMaximized(); });
 watch([connected, control, allowFit], ([connected, control, allowed]) => {
   if (!connected || !control) cancelWheel();
   if (!connected || !control || !allowed) {
@@ -404,18 +394,17 @@ watch([connected, control, allowFit], ([connected, control, allowed]) => {
   }
 });
 onMounted(() => {
-  fullscreenSupported.value = document.fullscreenEnabled === true && typeof surface.value?.requestFullscreen === "function";
-  document.addEventListener("fullscreenchange", syncFullscreen);
   connect();
-  resizeObserver = new ResizeObserver(scheduleFit);
+  resizeObserver = new ResizeObserver(entries => {
+    const entry = entries.find(entry => entry.target === screen.value);
+    if (entry) viewportSize = { width: entry.contentRect.width, height: entry.contentRect.height };
+    scheduleFit();
+  });
   if (screen.value) resizeObserver.observe(screen.value);
   document.addEventListener("visibilitychange", hidden);
   window.addEventListener("blur", relinquish);
 });
 onBeforeUnmount(() => {
-  disposed = true;
-  document.removeEventListener("fullscreenchange", syncFullscreen);
-  void leaveFullscreen();
   relinquish();
   ++generation;
   clearTimeout(fitTimer);
@@ -427,7 +416,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="surface" class="desktop-cdp" tabindex="-1" data-desktop-cdp @keydown.capture="fullscreenKey" @keyup.capture="fullscreenKey">
+  <section ref="surface" class="desktop-cdp" :class="{ 'soda-viewport-maximized': maximized, connected, 'info-open': infoOpen }" :popover="maximized ? 'manual' : undefined" tabindex="-1" data-desktop-cdp @keydown.capture="maximizeKey" @keyup.capture="maximizeKey">
     <header>
       <strong>VSCode Desktop · 実験版</strong><span>{{ title }}</span>
     </header>
@@ -490,19 +479,18 @@ onBeforeUnmount(() => {
       >
         共有を停止
       </button>
-      <button v-if="connected" :disabled="!enabled || !fullscreenSupported || fullscreenBusy"
-        :title="fullscreenSupported ? 'Escでも全画面を解除できます' : 'このブラウザでは全画面表示を利用できません'"
-        :aria-pressed="fullscreen" @click="toggleFullscreen">{{ fullscreen ? '全画面を解除' : '全画面' }}</button>
+      <button v-if="connected" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
+      <button v-if="connected" :disabled="!enabled" title="ブラウザのタブ内全体へ最大化。Escでも元に戻せます"
+        :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? '元に戻す' : '最大化' }}</button>
+    <label v-if="control && allowFit" class="fit-toggle" title="Windows側で開いている同じVSCodeのレイアウトも変わります"><input v-model="fit" type="checkbox" />表示領域に合わせる</label>
       <button v-if="socket?.readyState === 3" :disabled="!enabled" @click="connect">再接続</button>
     </div>
-    <p role="status">{{ note }}</p>
+    <p role="status" class="cdp-status">{{ note }}</p>
     <p class="scale-note">表示: 等倍（1:1）</p>
-    <p v-if="fullscreenError" role="alert">{{ fullscreenError }}</p>
-    <p v-if="connected && allowInput && !enabled">画面内をクリックすると操作を再開できます。</p>
-    <p v-if="connected && !allowFit">表示領域への追従は共有元で許可されていません。再接続時に --allow-input --allow-fit を付けてください。</p>
+    <p v-if="connected && allowInput && !enabled" class="connection-tools">画面内をクリックすると操作を再開できます。</p>
+    <p v-if="connected && !allowFit" class="connection-tools">表示領域への追従は共有元で許可されていません。再接続時に --allow-input --allow-fit を付けてください。</p>
     <textarea v-if="invitation" readonly :value="invitation" aria-label="Windows側の接続コマンド" />
-    <label v-if="control && allowFit" class="fit-toggle" title="Windows側で開いている同じVSCodeのレイアウトも変わります"><input v-model="fit" type="checkbox" />表示領域に合わせる</label>
-    <div ref="screen" class="screen" data-desktop-screen>
+    <div ref="screen" class="screen" :class="{ fitting: fit && allowFit && control }" data-desktop-screen>
       <canvas
         ref="canvas"
         tabindex="0"
@@ -543,20 +531,15 @@ onBeforeUnmount(() => {
   font: 13px system-ui;
   overflow: auto;
 }
-.desktop-cdp:fullscreen {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-}
-.desktop-cdp:fullscreen header,
-.desktop-cdp:fullscreen .connection-tools,
-.desktop-cdp:fullscreen .scale-note {
-  display: none;
-}
+.desktop-cdp.connected:not(.info-open) header,
+.desktop-cdp.connected:not(.info-open) .connection-tools,
+.desktop-cdp.connected:not(.info-open) .scale-note { display:none; }
+.desktop-cdp.connected .cdp-status { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.desktop-cdp.soda-viewport-maximized { padding:0; gap:0; border:0; }
+.desktop-cdp.soda-viewport-maximized > .screen { position:absolute; inset:0; }
+.desktop-cdp.soda-viewport-maximized > :where(:not(.screen)) { position:relative; z-index:2; background:var(--soda-bg, #202124); }
+.desktop-cdp.soda-viewport-maximized > .toolbar { align-self:flex-end; margin:8px; padding:4px 8px; border-radius:4px; z-index:3; max-width:calc(100% - 32px); }
+.desktop-cdp.soda-viewport-maximized > form { position:absolute; left:8px; right:8px; bottom:8px; padding:4px; }
 header,
 .toolbar,
 form {
@@ -592,6 +575,7 @@ input {
 .fit-toggle input { flex: none; min-width: 0; min-height: 0; }
 .screen {
   flex: 1;
+  min-width: 0;
   min-height: 100px;
   overflow: auto;
   display: flex;
@@ -599,6 +583,7 @@ input {
   justify-content: flex-start;
   background: #111;
 }
+.screen.fitting { overflow: hidden; }
 canvas {
   display: block;
   flex: none;

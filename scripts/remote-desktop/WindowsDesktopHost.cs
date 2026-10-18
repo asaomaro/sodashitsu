@@ -85,9 +85,12 @@ public static class SodaDesktopHost {
             } else if(kind=="pointer") {
                 double x=Convert.ToDouble(input["x"]),y=Convert.ToDouble(input["y"]);
                 if(Double.IsNaN(x)||Double.IsNaN(y)||x<0||x>1||y<0||y>1)throw new InvalidOperationException();
-                Rectangle all=SystemInformation.VirtualScreen;
-                int px=Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),py=Bounds.Top+(int)Math.Round(y*(Bounds.Height-1));
-                Mouse(0x8000|0x4000|1,0,(int)Math.Round((px-all.Left)*65535.0/Math.Max(1,all.Width-1)),(int)Math.Round((py-all.Top)*65535.0/Math.Max(1,all.Height-1)));
+                // Read the same native pixel coordinate space used by capture.
+                // WinForms virtual bounds can be DPI-virtualized by the host.
+                var devices=new List<string>();foreach(var screen in Screen.AllScreens)devices.Add(screen.DeviceName);
+                Rectangle all=SodaDesktopDisplay.VirtualRectangle(new SodaDesktopDisplay.NativeDriver(null),devices);
+                Point absolute=SodaDesktopDisplay.AbsolutePointer(Bounds,all,x,y);
+                Mouse(0x8000|0x4000|1,0,absolute.X,absolute.Y);
                 int button=Num(input,"button");if(button<0||button>2)throw new InvalidOperationException();
                 string action=(string)input["event"];
                 if(action=="down" && Buttons.Add(button)) Mouse(button==0?2u:button==1?32u:8u,0,0,0);
@@ -378,6 +381,22 @@ public static class SodaDesktopDisplay {
     public static Mode RestoreSize(Mode current,Mode original) {current.Width=original.Width;current.Height=original.Height;current.Fields=0x180000;return current;}
     public static bool Valid(uint width,uint height) {return width>=320 && width<=4096 && height>=200 && height<=2400 && (long)width*height<=8000000;}
     public static Rectangle RectangleOf(Mode mode) {return new Rectangle(mode.X,mode.Y,(int)mode.Width,(int)mode.Height);}
+    public static Rectangle VirtualRectangle(Driver driver,IEnumerable<string> devices) {
+        Rectangle bounds=Rectangle.Empty;bool any=false;
+        foreach(string device in devices) {
+            Rectangle current=RectangleOf(driver.Current(device));
+            if(current.Width<1 || current.Height<1)throw new InvalidOperationException("Display bounds unavailable");
+            bounds=any?Rectangle.Union(bounds,current):current;any=true;
+        }
+        if(!any)throw new InvalidOperationException("Display bounds unavailable");
+        return bounds;
+    }
+    public static Point AbsolutePointer(Rectangle monitor,Rectangle desktop,double x,double y) {
+        if(desktop.Width<1 || desktop.Height<1 || monitor.Width<1 || monitor.Height<1 || !desktop.Contains(monitor) ||
+           Double.IsNaN(x)||Double.IsNaN(y)||x<0||x>1||y<0||y>1)throw new InvalidOperationException("Invalid pointer coordinates");
+        int px=monitor.Left+(int)Math.Round(x*(monitor.Width-1)),py=monitor.Top+(int)Math.Round(y*(monitor.Height-1));
+        return new Point((int)Math.Round((px-desktop.Left)*65535.0/Math.Max(1,desktop.Width-1)),(int)Math.Round((py-desktop.Top)*65535.0/Math.Max(1,desktop.Height-1)));
+    }
     public static bool Same(Mode a,Mode b) {return a.X==b.X&&a.Y==b.Y&&a.Width==b.Width&&a.Height==b.Height&&a.Orientation==b.Orientation;}
     public static bool Matches(string device,Rectangle bounds) {try{return RectangleOf(new NativeDriver(null).Current(device))==bounds;}catch{return false;}}
     public sealed class Lease : IDisposable {

@@ -118,10 +118,13 @@ test("machine header routes only the selected remote VSCode and stops it on clos
     await expect(dialog).toBeVisible();
     await view.getByRole("checkbox",{name:"表示領域に合わせる",exact:true}).check();
     await expect.poll(()=>source.evaluate(()=>({width:innerWidth,height:innerHeight}))).not.toEqual(originalSize);
-    await view.getByRole("button",{name:"全画面",exact:true}).click();
-    await expect.poll(()=>view.evaluate(el=>document.fullscreenElement===el)).toBe(true);
+    await view.getByRole("button",{name:"最大化",exact:true}).click();
+    await expect(view).toHaveClass(/soda-viewport-maximized/);
+    await expect.poll(()=>view.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
+    expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
+    await expect.poll(()=>view.locator("[data-desktop-screen]").evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
     await page.keyboard.press("Escape");
-    await expect.poll(()=>view.evaluate(el=>document.fullscreenElement===el)).toBe(false);
+    await expect(view).not.toHaveClass(/soda-viewport-maximized/);
     await expect(dialog).toBeVisible();
     await closeNativeTab(page);
     await expect(dialog).toHaveCount(0);
