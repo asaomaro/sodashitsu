@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -29,8 +29,9 @@ async function fixture(allowInput = true, legacy = false, configured = true) {
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : [])],
     allowInput,
+    allowUnlock: unlockAllowed,
     origins: () => [origin],
   } : undefined);
   let revoke: (id: string) => void = () => undefined;
@@ -292,4 +293,26 @@ it("stops an active synthetic share immediately when local permissions are revok
   f.provider.configure(undefined);
   await expect.poll(() => viewer.ws.readyState).toBe(WebSocket.CLOSED);
   expect(f.provider.capabilities().available).toBe(false);
+});
+
+
+it("never grants agent access on a lock screen and closes the old generation when unlocked", async () => {
+  const f=await fixture(true,false,true,true), viewer=await f.viewer();
+  viewer.send({...start,options:{...start.options,features:true}});
+  await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+  expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({secureDesktop:true,allowClipboard:false,allowMedia:false});
+  viewer.send({type:"agent_grant",enabled:true});
+  viewer.send({type:"control",enabled:true});
+  await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+  expect(viewer.messages.some(m=>m.type==="agent_ticket")).toBe(false);
+  viewer.send({type:"sas"});
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.some(m=>m.type==="session_unlocked")).toBe(true);
+});
+it("rejects a source which advertises a lock screen without the local unlock ceiling", async () => {
+  const f=await fixture(true,false,true,true,false), viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.frames).toHaveLength(0);
+  expect(viewer.messages.some(m=>m.type==="ready")).toBe(false);
 });

@@ -300,8 +300,9 @@ describe("stateDirInUseError の SODA_SESSION の案内（20260926-named-session
 });
 
 it("requires explicit sharing before allowing input, clipboard or resize", () => {
-  for (const args of [{ desktopInput: true }, { desktopClipboard: true }, { desktopResize: true }])
+  for (const args of [{ desktopInput: true }, { desktopClipboard: true }, { desktopResize: true }, { desktopUnlock: true }])
     expect(() => resolveServeOptions(args)).toThrow("--desktop is required");
   expect(resolveServeOptions({ desktop: true, desktopInput: true })).toMatchObject({ desktop: true, desktopInput: true });
+  expect(resolveServeOptions({ desktop: true, desktopUnlock: true })).toMatchObject({ desktop: true, desktopUnlock: true });
   expect(resolveServeOptions({}).desktop).toBeUndefined();
 });

@@ -1,3 +1,4 @@
+import { checkCollapsibleViewerControls } from "../support/viewerControls.js";
 import { openNativeTab } from "../support/nativeTab.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -50,10 +51,13 @@ test("B automatically connects back over WSS using the existing machine connecti
     await view.getByRole("button", { name: "文字を送る", exact: true }).click();
     await expect.poll(async () => readFile(record, "utf8").catch(() => "")).toContain("日本語😀");
     await expect.poll(async () => readFile(record, "utf8").catch(() => "")).toContain('"code":"KeyA"');
+    await checkCollapsibleViewerControls(page, view, canvas, "確定した文字を送る", false);
     await view.getByRole("button", { name: "最大化", exact: true }).click();
     await expect(view).toHaveClass(/maximized/);
     await expect.poll(()=>view.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
     expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
+    await checkCollapsibleViewerControls(page, view, canvas, "確定した文字を送る");
+    await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
     await expect.poll(()=>view.locator("[data-desktop-screen]").evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
     await page.keyboard.press("Escape");
     await expect(view).not.toHaveClass(/maximized/, {timeout:3000});

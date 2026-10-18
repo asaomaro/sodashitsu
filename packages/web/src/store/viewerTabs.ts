@@ -1,3 +1,4 @@
+import { readLocalHelperProof } from "../preview/helperProbe.js";
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { loadViewerTabs, type ViewerTab } from "@sodashitsu/protocol";
@@ -20,7 +21,10 @@ export const useViewerTabsStore = defineStore("viewerTabs", () => {
     selected.value[JSON.stringify([machines.selectedId, workspaceId])] = null;
   });
   const active = computed(() => visible.value.find((t) => t.id === selected.value[scope.value]));
+  const helperProbes = new Map<string, AbortController>();
   function connect(value: Pick<ConnectionPort, "request">) {
+    for (const probe of helperProbes.values()) probe.abort();
+    helperProbes.clear();
     port = value;
   }
   let revision = -1;
@@ -31,9 +35,23 @@ export const useViewerTabsStore = defineStore("viewerTabs", () => {
   }
   async function startHelper(machineId: string, viewerId: string) {
     if (!port) throw new Error("操作元に接続していません");
-    await port.request("preview.helper_start", {machineId, viewerId});
+    const controller = port, abort = new AbortController();
+    helperProbes.get(viewerId)?.abort();
+    helperProbes.set(viewerId, abort);
+    try {
+      try { await controller.request("preview.helper_start", {machineId, viewerId}); }
+      catch (error) {
+        if (abort.signal.aborted || (error as {code?:string})?.code !== "unauthorized") throw error;
+        const probe = await controller.request("preview.helper_probe", {machineId, viewerId});
+        const proof = await readLocalHelperProof(probe, abort.signal);
+        if (abort.signal.aborted) throw new Error("helper probe cancelled");
+        await controller.request("preview.helper_start", {machineId, viewerId, proof});
+      }
+    } finally { if (helperProbes.get(viewerId) === abort) helperProbes.delete(viewerId); }
   }
   async function stopHelper(viewerId: string) {
+    helperProbes.get(viewerId)?.abort();
+    helperProbes.delete(viewerId);
     await port?.request("preview.helper_stop", {viewerId});
   }
   async function refresh() {

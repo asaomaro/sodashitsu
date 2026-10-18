@@ -71,6 +71,7 @@ export class DesktopSettings {
           allowInput: options.legacy.allowInput,
           allowClipboard: options.legacy.allowClipboard === true,
           allowDisplayResize: options.legacy.allowDisplayResize === true,
+          ...(options.legacy.allowUnlock ? { allowUnlock: true } : {}),
         }
       : { ...disabled };
     try {
@@ -97,6 +98,8 @@ export class DesktopSettings {
           "invalid_params",
           "この環境では同梱のWindows補助プログラムを使用できません。",
         );
+      if (permissions.allowUnlock && this.options.legacy)
+        throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
       await writeFileAtomic(this.options.file, JSON.stringify(permissions) + "\n");
       this.permissions = permissions;
       this.apply();
@@ -116,6 +119,7 @@ export class DesktopSettings {
         if (p.allowInput) command.push("-AllowInput");
         if (p.allowClipboard) command.push("-AllowClipboard");
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
+        if (p.allowUnlock) command.push("-AllowUnlock");
       }
       config = {
         ...legacy,
@@ -123,6 +127,8 @@ export class DesktopSettings {
         allowInput: p.allowInput,
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
+        allowUnlock: p.allowUnlock === true,
+        ...(p.allowUnlock && !legacy ? { unlockLeaseCommand: [...this.command, "-UnlockLease"] } : {}),
         origins: legacy?.origins ?? this.options.origins,
       };
     }

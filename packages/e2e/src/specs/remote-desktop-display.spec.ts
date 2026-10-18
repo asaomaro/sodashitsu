@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
 
-test("window size selects a supported display mode, renders 1:1, revokes grants and never persists OS resizing", async ({
+test("selects the maximum supported display mode regardless of window size, renders 1:1 and revokes grants", async ({
   page,
   appServer,
 }) => {
@@ -61,7 +61,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"),
       canvas = view.getByLabel("共有画面"),
-      toggle = view.getByLabel("Bの解像度も窓に合わせる");
+      toggle = view.getByLabel("接続先を最大解像度にする");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     await view.locator("[data-agent-access] summary").click();
     await view
@@ -100,29 +100,31 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     const initial = await oneToOne();
     expect(initial.cssWidth).toBe(initial.pixelWidth);
     expect(initial.cssHeight).toBe(initial.pixelHeight);
-    expect(initial.pixelWidth).toBeGreaterThan(640);
+    expect(initial.pixelWidth).toBe(1920);
+    expect(initial.pixelHeight).toBe(1080);
+    await expect(view.locator("[data-applied-display]")).toContainText("1920×1080");
     const before = starts.length;
-    // Emulate a user resize of the real floating window. Assert actual DOM/canvas dimensions.
+    // A smaller viewer must keep the maximum source resolution; 1:1 uses scrolling.
     await view.evaluate((el) => {
       const e = el as HTMLElement;
       e.style.width = "720px";
       e.style.height = "760px";
     });
-    await expect.poll(() => starts.length).toBeGreaterThan(before);
-    await expect(view.locator("[data-applied-display]")).toContainText("640×480");
+    await expect.poll(() => view.locator("[data-desktop-screen]").evaluate(el => el.clientWidth)).toBeLessThan(1920);
+    await expect(view.locator("[data-applied-display]")).toContainText("1920×1080");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     expect(await oneToOne()).toEqual({
-      pixelWidth: 640,
-      pixelHeight: 480,
-      cssWidth: 640,
-      cssHeight: 480,
+      pixelWidth: 1920,
+      pixelHeight: 1080,
+      cssWidth: 1920,
+      cssHeight: 1080,
     });
-    expect(starts.at(-1).options.display).toEqual({ width: 640, height: 480 });
+    expect(starts.at(-1).options.display).toEqual({ width: 1920, height: 1080 });
     const maximize = view.locator("[data-desktop-maximize]");
     await maximize.click();
     await expect(maximize).toHaveAttribute("aria-pressed", "true");
     await expect.poll(() => view.boundingBox()).toEqual({ x: 0, y: 0, width: 1600, height: 900 });
-    await expect.poll(async () => (await oneToOne()).pixelWidth).toBe(1600);
+    await expect.poll(async () => (await oneToOne()).pixelWidth).toBe(1920);
     await expect(view.locator("[data-desktop-display]")).not.toBeVisible();
     await expect.poll(()=>view.locator("[data-desktop-screen]").boundingBox()).toEqual({x:0,y:0,width:1600,height:900});
     await page.screenshot({path:"/workspaces/sodashitsu-check-logs/20261018-maximize/desktop-content-maximized.png"});
@@ -139,7 +141,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     }).toEqual(await page.locator('[data-native-tab="desktop"]').evaluate(el => {
       const r = el.getBoundingClientRect(); return { width: r.width, height: r.height };
     }));
-    await expect(view.locator("[data-applied-display]")).toContainText("1280×720");
+    await expect(view.locator("[data-applied-display]")).toContainText("1920×1080");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
 
     expect(
@@ -151,7 +153,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
       ),
     ).not.toHaveProperty("display");
     await view.getByRole("button", {name:"情報・設定",exact:true}).click();
-    // Native resolution following must not disable fitting the resulting image.
+    // Maximum source resolution must not disable fitting the resulting image.
     const fit = view.getByLabel("画面に合わせる", { exact: true });
     await expect(fit).toBeEnabled();
     await fit.check();
@@ -160,6 +162,8 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     await expect.poll(() => view.locator("[data-desktop-screen]").evaluate(el =>
       el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight,
     )).toBe(true);
+    // All resize/maximize/fit operations above keep the same stream and source mode.
+    expect(starts.length).toBe(before);
     await toggle.uncheck();
     await expect.poll(() => starts.at(-1).options.display).toBeUndefined();
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);

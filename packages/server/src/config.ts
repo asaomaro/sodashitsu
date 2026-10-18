@@ -49,6 +49,7 @@ export interface ServeOptions {
   desktopInput?: boolean;
   desktopClipboard?: boolean;
   desktopResize?: boolean;
+  desktopUnlock?: boolean;
 }
 
 export interface RawServeArgs {
@@ -69,6 +70,7 @@ export interface RawServeArgs {
   desktopInput?: boolean;
   desktopClipboard?: boolean;
   desktopResize?: boolean;
+  desktopUnlock?: boolean;
 }
 
 /** Linux/macOS は XDG の state ディレクトリ、Windows は `%LOCALAPPDATA%`（design「起動オプション」）。 */
@@ -154,7 +156,7 @@ function parseOrigin(raw: string): string {
 export function resolveServeOptions(args: RawServeArgs, env: NodeJS.ProcessEnv = process.env, os: NodeJS.Platform = platform()): ServeOptions {
   // `--host [::1]` のような角括弧付きの IPv6 は角括弧を外す（`listen()` は角括弧付きを名前として引き、`ENOTFOUND` で
   // 落ちる）。以後の `isLoopbackHost`・`isWildcardHost` は角括弧の無い形だけを見る（D102）。
-  if (!args.desktop && (args.desktopInput || args.desktopClipboard || args.desktopResize))
+  if (!args.desktop && (args.desktopInput || args.desktopClipboard || args.desktopResize || args.desktopUnlock))
     throw new ConfigError("--desktop is required", "操作の許可には --desktop も指定してください。");
   const host = unbracketHost(args.host ?? DEFAULTS.host);
   const port = parsePort(args.port, DEFAULTS.port);
@@ -207,6 +209,7 @@ export function resolveServeOptions(args: RawServeArgs, env: NodeJS.ProcessEnv =
     ...(args.desktopInput ? { desktopInput: true } : {}),
     ...(args.desktopClipboard ? { desktopClipboard: true } : {}),
     ...(args.desktopResize ? { desktopResize: true } : {}),
+    ...(args.desktopUnlock ? { desktopUnlock: true } : {}),
   };
 }
 
