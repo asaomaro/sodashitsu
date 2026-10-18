@@ -20,6 +20,11 @@ test("B automatically connects back over WSS using the existing machine connecti
     if (savedInput === undefined) delete process.env.SODA_DESKTOP_ALLOW_INPUT; else process.env.SODA_DESKTOP_ALLOW_INPUT = savedInput;
   });
   const owner = await provider.openClient(), operator = await appServer.openClient();
+  await operator.request("prefs.set", {patch:{notifyHintDone:true}});
+  await owner.request("prefs.set", {patch:{notifyHintDone:true}});
+  // Keep unrelated repository-local extension approvals out of the fixture UI.
+  for (const [client, server] of [[operator, appServer], [owner, provider]] as const)
+    await client.request("workspace.set_project_folder", {workspaceId:client.helloSnapshot()!.workspaces[0]!.id,path:server.stateDir});
   let other: Awaited<ReturnType<typeof browser.newContext>> | undefined;
   const browserFrames: number[] = [];
   page.on("websocket", (socket) => { if (socket.url().endsWith("/desktop-share")) socket.on("framereceived", ({ payload }) => { if (Buffer.isBuffer(payload)) browserFrames.push(payload.byteLength); }); });
@@ -37,6 +42,7 @@ test("B automatically connects back over WSS using the existing machine connecti
     await expect(view.getByText("模擬画面（実デスクトップではありません）")).toBeVisible();
     await expect.poll(() => browserFrames.length).toBeGreaterThan(1);
     await expect(view.locator("[data-desktop-metrics]")).toContainText("Mbps");
+    await view.getByRole("button", {name:"情報・設定",exact:true}).click();
     await view.getByRole("button", { name: "操作する", exact: true }).click();
     await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
     await canvas.click(); await page.keyboard.press("a");
@@ -46,7 +52,14 @@ test("B automatically connects back over WSS using the existing machine connecti
     await expect.poll(async () => readFile(record, "utf8").catch(() => "")).toContain('"code":"KeyA"');
     await view.getByRole("button", { name: "最大化", exact: true }).click();
     await expect(view).toHaveClass(/maximized/);
+    await expect.poll(()=>view.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
+    expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
+    await expect.poll(()=>view.locator("[data-desktop-screen]").evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
+    await page.keyboard.press("Escape");
+    await expect(view).not.toHaveClass(/maximized/, {timeout:3000});
+    await view.getByRole("button", { name: "最大化", exact: true }).click();
     await view.getByRole("button", { name: "元に戻す", exact: true }).click();
+    await view.getByRole("button", {name:"情報・設定",exact:true}).click();
     // A second authenticated browser gets no screen data merely by logging in.
     other = await browser.newContext(); const otherPage = await other.newPage();
     const leaked: number[] = [];

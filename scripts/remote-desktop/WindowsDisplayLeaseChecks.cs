@@ -1,12 +1,13 @@
 namespace SodaDesktopTests {
 using System;
+using System.Drawing;
 // Fake-driver and kernel-lock checks only; never changes a display mode.
 public static class DisplayModeChecks {
  class Fake : SodaDesktopDisplay.Driver {
   public SodaDesktopDisplay.Mode CurrentMode=new SodaDesktopDisplay.Mode { Width=1600,Height=900,X=100,Y=200,Bits=32,Frequency=60 };
   public int Applies,Arms,Disarms;public bool ArmFails,FailAfterApply;
   public System.Threading.ManualResetEvent RestoreEntered,RestoreContinue;
-  public SodaDesktopDisplay.Mode Current(string name){return CurrentMode;}
+  public virtual SodaDesktopDisplay.Mode Current(string name){return CurrentMode;}
   public System.Collections.Generic.List<SodaDesktopDisplay.Mode> Modes(string name){return new System.Collections.Generic.List<SodaDesktopDisplay.Mode>{new SodaDesktopDisplay.Mode{Width=800,Height=600,Bits=32}};}
   public bool Test(string name,SodaDesktopDisplay.Mode mode){return true;}
   public void Apply(string name,SodaDesktopDisplay.Mode mode){if(Arms==0)throw new Exception("Applied before guardian");Applies++;if(mode.Width==1600&&RestoreEntered!=null){RestoreEntered.Set();RestoreContinue.WaitOne();}CurrentMode=mode;if(FailAfterApply){FailAfterApply=false;throw new Exception("Partial driver failure");}}
@@ -14,8 +15,22 @@ public static class DisplayModeChecks {
   public void Disarm(){Disarms++;}
  }
  static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
+ class Layout : Fake {
+  public SodaDesktopDisplay.Mode Left=new SodaDesktopDisplay.Mode {X=-1920,Y=360,Width=1920,Height=1080};
+  public override SodaDesktopDisplay.Mode Current(string name){return name=="left"?Left:CurrentMode;}
+ }
  public static string Run() {
   Check(System.Runtime.InteropServices.Marshal.SizeOf(typeof(SodaDesktopDisplay.Mode))==220,"DEVMODEW layout");
+  var layout=new Layout{CurrentMode=new SodaDesktopDisplay.Mode{Width=3840,Height=2160}};
+  var native=SodaDesktopDisplay.VirtualRectangle(layout,new[]{"primary","left"});
+  Check(native==new Rectangle(-1920,0,5760,2160),"Physical virtual bounds, including negative monitor origin");
+  var absolute=SodaDesktopDisplay.AbsolutePointer(SodaDesktopDisplay.RectangleOf(layout.CurrentMode),native,0.5,0.5);
+  Check(absolute==new Point(43698,32783),"Physical pointer coordinates must not use DPI-scaled bounds");
+  Check(SodaDesktopDisplay.AbsolutePointer(SodaDesktopDisplay.RectangleOf(layout.Left),native,0,0).X==0,"Leftmost physical pixel");
+  Check(SodaDesktopDisplay.AbsolutePointer(SodaDesktopDisplay.RectangleOf(layout.CurrentMode),native,1,1)==new Point(65535,65535),"Last physical pixel");
+  layout.CurrentMode=new SodaDesktopDisplay.Mode{Width=1600,Height=900};
+  var resized=SodaDesktopDisplay.VirtualRectangle(layout,new[]{"primary"});
+  Check(resized==new Rectangle(0,0,1600,900)&&SodaDesktopDisplay.AbsolutePointer(resized,resized,1,1)==new Point(65535,65535),"Refresh native input bounds after resolution change");
   var normal=new Fake();var lease=new SodaDesktopDisplay.Lease(normal,"test",800,600);Check(normal.Applies==1&&normal.CurrentMode.Width==800,"Mode applied");lease.Dispose();lease.Dispose();Check(normal.Applies==2&&normal.CurrentMode.Width==1600&&normal.Disarms==1,"Restoration and guardian disarm");
   var failedGuard=new Fake{ArmFails=true};try{new SodaDesktopDisplay.Lease(failedGuard,"test",800,600);throw new Exception("Expected guardian refusal");}catch{Check(failedGuard.Applies==0,"Must not apply without guardian");}
   var unsupported=new Fake();try{new SodaDesktopDisplay.Lease(unsupported,"test",801,601);throw new Exception("Expected unsupported refusal");}catch{Check(unsupported.Applies==0&&unsupported.Arms==0,"Unsupported mode touched driver");}

@@ -42,7 +42,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
       });
   });
   try {
-    await page.setViewportSize({ width: 1600, height: 1200 });
+    await page.setViewportSize({ width: 1600, height: 900 });
     const owner = await provider.openClient(),
       agent = await appServer.openClient(),
       invite = await agent.request("machine.invite", { label: "Display B" });
@@ -51,13 +51,17 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
       machineId: invite.machineId,
       token: invite.token,
     });
+    for (const [client, server] of [[agent, appServer], [owner, provider]] as const) {
+      await client.request("prefs.set", {patch:{notifyHintDone:true}});
+      await client.request("workspace.set_project_folder", {workspaceId:client.helloSnapshot()!.workspaces[0]!.id,path:server.stateDir});
+    }
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible();
     await openNativeTab(page, "desktop", header);
     const view = page.locator("[data-remote-desktop]"),
       canvas = view.getByLabel("共有画面"),
-      toggle = view.getByLabel("Bの解像度を窓に合わせて等倍表示");
+      toggle = view.getByLabel("Bの解像度も窓に合わせる");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     await view.locator("[data-agent-access] summary").click();
     await view
@@ -74,6 +78,7 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
       e.style.width = "1400px";
       e.style.height = "1100px";
     });
+    await view.getByLabel("画面に合わせる", { exact: true }).uncheck();
     await toggle.check();
     await expect(view.locator("[data-applied-display]")).toContainText("1画素＝1 CSS px");
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
@@ -116,8 +121,11 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
     const maximize = view.locator("[data-desktop-maximize]");
     await maximize.click();
     await expect(maximize).toHaveAttribute("aria-pressed", "true");
-    await expect.poll(() => view.boundingBox()).toEqual({ x: 0, y: 0, width: 1600, height: 1200 });
-    await expect.poll(async () => (await oneToOne()).pixelWidth).toBeGreaterThan(640);
+    await expect.poll(() => view.boundingBox()).toEqual({ x: 0, y: 0, width: 1600, height: 900 });
+    await expect.poll(async () => (await oneToOne()).pixelWidth).toBe(1600);
+    await expect(view.locator("[data-desktop-display]")).not.toBeVisible();
+    await expect.poll(()=>view.locator("[data-desktop-screen]").boundingBox()).toEqual({x:0,y:0,width:1600,height:900});
+    await page.screenshot({path:"/workspaces/sodashitsu-check-logs/20261018-maximize/desktop-content-maximized.png"});
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     const enlarged = await oneToOne();
     expect(enlarged.cssWidth).toBe(enlarged.pixelWidth);
@@ -142,6 +150,16 @@ test("window size selects a supported display mode, renders 1:1, revokes grants 
         )) ?? "{}",
       ),
     ).not.toHaveProperty("display");
+    await view.getByRole("button", {name:"情報・設定",exact:true}).click();
+    // Native resolution following must not disable fitting the resulting image.
+    const fit = view.getByLabel("画面に合わせる", { exact: true });
+    await expect(fit).toBeEnabled();
+    await fit.check();
+    await expect(toggle).toBeChecked();
+    await expect(view.locator("[data-applied-display]")).toContainText("画面に合わせて表示");
+    await expect.poll(() => view.locator("[data-desktop-screen]").evaluate(el =>
+      el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight,
+    )).toBe(true);
     await toggle.uncheck();
     await expect.poll(() => starts.at(-1).options.display).toBeUndefined();
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);

@@ -42,3 +42,17 @@ it("retains the browser-PC command when automatic startup is unavailable", async
   expect(h.wrapper.text()).toContain("自動起動できませんでした");
   h.wrapper.unmount();
 });
+
+it("restores the preview on Escape or when its tab becomes inactive", async () => {
+  const {wrapper, target} = await fixture();
+  const maximize = () => wrapper.findAll("button").find(b=>b.text()==="最大化")!;
+  await maximize().trigger("click");
+  expect(wrapper.classes()).toContain("soda-viewport-maximized");
+  await wrapper.trigger("keydown", {key:"Escape"});
+  expect(wrapper.classes()).not.toContain("soda-viewport-maximized");
+  await maximize().trigger("click");
+  await wrapper.setProps({active:false});
+  expect(wrapper.classes()).not.toContain("soda-viewport-maximized");
+  expect(target.mock.calls.filter(([method])=>method==="preview.watch")).toHaveLength(1);
+  wrapper.unmount();
+});

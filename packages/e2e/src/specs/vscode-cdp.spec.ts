@@ -8,6 +8,15 @@ import { test, expect } from "../support/fixtures.js";
 import { enableScript } from "../support/displayScript.js";
 import type { AppServer } from "../support/appServer.js";
 
+test.beforeEach(async ({appServer}) => {
+  const client = await appServer.openClient();
+  try {
+    await client.request("prefs.set", {patch:{notifyHintDone:true}});
+    await client.request("workspace.set_project_folder", {workspaceId:client.helloSnapshot()!.workspaces[0]!.id,path:appServer.stateDir});
+  }
+  finally { client.close(); }
+});
+
 async function installDesktopPlugin(appServer: AppServer) {
   const bundle = join(appServer.stateDir, "vscode-desktop.sodaplugin");
   for (const args of [
@@ -33,7 +42,7 @@ test("real CDP pixels and input through the app view, explicit permissions and s
   context,
   appServer,
 }) => {
-  // This flow includes multiple fullscreen/fit transitions as well as pixels,
+  // This flow includes multiple maximization/fit transitions as well as pixels,
   // IME, pointer capture and wheel; keep per-assertion timeouts unchanged.
   test.setTimeout(60000);
   await enableScript(appServer);
@@ -111,12 +120,12 @@ test("real CDP pixels and input through the app view, explicit permissions and s
         }),
       )
       .toBeLessThanOrEqual(3); // JPEG permits a small channel error; blank/wrong images fail.
-    // Fullscreen is a local viewer action and must not grant remote input.
-    const fullscreenButton = view.getByRole("button", { name: "全画面", exact: true });
-    const exitFullscreenButton = view.getByRole("button", { name: "全画面を解除", exact: true });
-    const ownsFullscreen = () => view.evaluate(el => document.fullscreenElement === el);
-    await fullscreenButton.click();
-    await expect.poll(ownsFullscreen).toBe(true);
+    // Maximization is a local viewer action and must not grant remote input.
+    const maximizeButton = view.getByRole("button", { name: "最大化", exact: true });
+    const restoreButton = view.getByRole("button", { name: "元に戻す", exact: true });
+    const isMaximized = () => view.evaluate(el => el.classList.contains("soda-viewport-maximized"));
+    await maximizeButton.click();
+    await expect.poll(isMaximized).toBe(true);
     await expect(view.getByRole("status")).toHaveText("閲覧中");
     await expect(view.getByRole("checkbox", { name: "共有元を登録する", exact: false })).not.toBeVisible();
     await expect(view.getByRole("button", { name: "共有を停止", exact: true })).toBeVisible();
@@ -124,8 +133,8 @@ test("real CDP pixels and input through the app view, explicit permissions and s
       const r = el.getBoundingClientRect();
       return { x:r.x, y:r.y, width:r.width, height:r.height };
     })).toEqual(await page.evaluate(() => ({ x:0, y:0, width:innerWidth, height:innerHeight })));
-    await exitFullscreenButton.click();
-    await expect.poll(ownsFullscreen).toBe(false);
+    await restoreButton.click();
+    await expect.poll(isMaximized).toBe(false);
     await expect(view.getByRole("status")).toHaveText("閲覧中");
     // Hold the viewer ACK, produce a final repaint, then stop repainting.
     // The receiver must eventually show that final image, without another source event.
@@ -153,7 +162,7 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     });
     await page.locator("#outside-cdp").click();
     await expect(view.getByRole("button", { name: "操作する", exact: true })).toBeDisabled();
-    await view.locator("header strong").click();
+    await canvas.click({ position: { x: 10, y: 10 } });
     await expect(view.getByRole("button", { name: "操作する", exact: true })).toBeEnabled();
     await page.locator("#outside-cdp").evaluate(el => el.remove());
     await view.getByRole("button", { name: "操作する", exact: true }).click();
@@ -192,6 +201,7 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     await expect
       .poll(async () => Number(await source.locator("body").getAttribute("data-releases")))
       .toBe(releases + 1);
+    await expect(view.getByRole("status")).toHaveText("操作中");
     // Simulate a local renderer resize on a HiDPI display. This does not resize
     // a real Windows window: it verifies the image and CSS input coordinate path.
     await session.send("Emulation.setDeviceMetricsOverride", {
@@ -235,8 +245,39 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     const fit = view.getByRole("checkbox", { name: "表示領域に合わせる" });
     await fit.check();
     const screen = view.locator("[data-desktop-screen]");
-    const size = () => screen.evaluate(el => ({ width: el.clientWidth, height: el.clientHeight }));
+    const size = () => screen.evaluate(el => {
+      const r = el.getBoundingClientRect();
+      return { width: Math.floor(r.width), height: Math.floor(r.height) };
+    });
     const sourceSize = () => source.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    // Fractional CSS pixels occur with browser zoom / split layouts. clientWidth
+    // rounds up at .5; fitting that rounded value causes real scrollbars and a
+    // feedback loop. Exercise classic Windows-sized scrollbars in Chromium.
+    const scrollbarStyle = await page.addStyleTag({ content: "[data-desktop-cdp] .screen::-webkit-scrollbar { width:17px; height:17px; }" });
+    await screen.evaluate(el => {
+      const e = el as HTMLElement;
+      e.style.flex = "none"; e.style.width = "601.75px"; e.style.height = "401.75px";
+    });
+    await expect.poll(sourceSize).toEqual({ width:601, height:401 });
+    await expect.poll(async () => {
+      const b = (await canvas.boundingBox())!;
+      return { width:b.width, height:b.height };
+    }).toEqual({ width:601, height:401 });
+    // Observe real browser geometry for multiple debounce periods. Fit must not
+    // keep changing the source viewport after the first matching frame arrives.
+    const stableSizes = await screen.evaluate(async el => {
+      const samples: string[] = [], until = performance.now() + 1500;
+      while (performance.now() < until) {
+        const r = el.getBoundingClientRect();
+        samples.push(`${r.width}x${r.height}:${el.clientWidth}x${el.clientHeight}:${el.scrollWidth}x${el.scrollHeight}`);
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
+      return [...new Set(samples)];
+    });
+    expect(stableSizes).toHaveLength(1);
+    expect(await sourceSize()).toEqual({ width:601, height:401 });
+    await screen.evaluate(el => { const e = el as HTMLElement; e.style.removeProperty("flex"); e.style.removeProperty("width"); e.style.removeProperty("height"); });
+    await scrollbarStyle.evaluate(el => (el as Element).remove());
     await expect.poll(async () => ({ source: await sourceSize(), view: await size() }))
       .toEqual({ source: await size(), view: await size() });
     await expect.poll(() => canvas.evaluate(el => {
@@ -262,13 +303,13 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     await page.keyboard.press("End");
     await page.keyboard.type("F");
     await expect(source.getByRole("textbox", { name: "Source editor" })).toHaveValue("existing日本語ARF");
-    // Fullscreen moves the parent-owned native surface above clipped plugin
+    // Maximization lifts the parent-owned native surface above clipped plugin
     // bounds. Its real CSS box and the existing renderer must both resize.
     const embeddedSize = await size();
-    const fullscreenNetwork = await context.newCDPSession(page);
+    const maximizeNetwork = await context.newCDPSession(page);
     const escapedInputs: unknown[] = [];
-    await fullscreenNetwork.send("Network.enable");
-    fullscreenNetwork.on("Network.webSocketFrameSent", event => {
+    await maximizeNetwork.send("Network.enable");
+    maximizeNetwork.on("Network.webSocketFrameSent", event => {
       try {
         const m = JSON.parse(event.response.payloadData);
         if (m.type === "input" && m.input?.kind === "key" && m.input.key === "Escape") escapedInputs.push(m.input);
@@ -280,12 +321,21 @@ test("real CDP pixels and input through the app view, explicit permissions and s
           if ((event as KeyboardEvent).key === "Escape") document.body.dataset.remoteEscape = "yes";
         });
     });
-    await fullscreenButton.click();
-    await expect.poll(ownsFullscreen).toBe(true);
+    await maximizeButton.click();
+    await expect.poll(isMaximized).toBe(true);
     await expect.poll(async () => ({ source:await sourceSize(), view:await size() }))
       .toEqual({ source:await size(), view:await size() });
     expect((await size()).width).toBeGreaterThan(embeddedSize.width);
+    // A source resize precedes the viewer's fresh image and its ACK. Input is
+    // deliberately blocked until that frame is displayed and acknowledged.
+    await expect.poll(async () => {
+      const box = (await canvas.boundingBox())!;
+      return { width: box.width, height: box.height };
+    }).toEqual(await size());
+    await expect.poll(() => capture.inputBlocked).toBe(false);
     await expect.poll(() => colorError([22,88,144])).toBeLessThanOrEqual(3);
+    await expect.poll(() => view.locator("form").evaluate(el => el.getBoundingClientRect().bottom))
+      .toBe(await page.evaluate(() => innerHeight - 8));
     const fullImage = (await canvas.boundingBox())!;
     await page.mouse.click(fullImage.x + 100, fullImage.y + 70);
     await page.keyboard.press("End");
@@ -295,8 +345,8 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     )).toBe("existing日本語ARF".length - 1);
     await page.screenshot({path:"/tmp/vscode-cdp-fullscreen.png"});
     await page.keyboard.down("Escape");
-    await expect.poll(ownsFullscreen).toBe(false);
-    await page.keyboard.down("Escape"); // Hold-repeat after fullscreenchange must remain local.
+    await expect.poll(isMaximized).toBe(false);
+    await page.keyboard.down("Escape"); // Hold-repeat after restoring must remain local.
     await page.keyboard.up("Escape");
     await expect.poll(sourceSize).toEqual(embeddedSize);
     await expect.poll(() => capture.inputBlocked).toBe(false);
@@ -309,22 +359,16 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     expect(escapedInputs).toHaveLength(0);
     await expect.poll(sourceSize).toEqual(embeddedSize);
     await expect(view.getByRole("status")).toHaveText("操作中");
-    // API rejection leaves the share/input permission intact and gives a way
-    // to retry; do not pretend fullscreen succeeded when the browser denied it.
+    // Browser fullscreen permission is irrelevant to in-tab maximization.
     await view.evaluate(el => Object.defineProperty(el, "requestFullscreen", { configurable:true,
-      value:() => Promise.reject(new DOMException("denied", "NotAllowedError")) }));
-    await fullscreenButton.click();
-    await expect(view.getByRole("alert")).toContainText("全画面表示に切り替えられませんでした");
-    await expect.poll(ownsFullscreen).toBe(false);
+      value:() => { throw new Error("must not request browser fullscreen"); } }));
+    await maximizeButton.click();
+    await expect.poll(isMaximized).toBe(true);
+    expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
     await expect(view.getByRole("status")).toHaveText("操作中");
-    await view.evaluate(el => Reflect.deleteProperty(el, "requestFullscreen"));
-    await fullscreenButton.click();
-    await expect.poll(ownsFullscreen).toBe(true);
-    await exitFullscreenButton.click();
-    await expect.poll(ownsFullscreen).toBe(false);
+    await restoreButton.click();
+    await expect.poll(isMaximized).toBe(false);
     await expect.poll(sourceSize).toEqual(embeddedSize);
-    // UA-driven exit can suppress keydown while a later keyup reaches the page.
-    await page.keyboard.up("Escape");
     await expect.poll(() => capture.inputBlocked).toBe(false);
     const normalImage = (await canvas.boundingBox())!;
     await page.mouse.click(normalImage.x + 100, normalImage.y + 70);
@@ -337,7 +381,7 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     await page.keyboard.press("Escape"); // A fresh ordinary Escape must still reach VSCode.
     await expect(source.locator("body")).toHaveAttribute("data-remote-escape", "yes");
     await expect.poll(() => escapedInputs.length).toBe(2);
-    await fullscreenNetwork.detach();
+    await maximizeNetwork.detach();
     // A real wheel scroll must reach the existing source renderer. Then burst
     // DOM wheel events exercise browser-side aggregation without a server-only
     // fake input client standing in for the viewer.
@@ -392,11 +436,11 @@ test("real CDP pixels and input through the app view, explicit permissions and s
     })).toBeLessThan(0.005);
     const resizedWidth = await canvas.evaluate(el => (el as HTMLCanvasElement).width);
     await page.screenshot({ path: "/tmp/vscode-cdp-app.png" });
-    await fullscreenButton.click();
-    await expect.poll(ownsFullscreen).toBe(true);
+    await maximizeButton.click();
+    await expect.poll(isMaximized).toBe(true);
     const ended = once(bridge, "close");
     await view.getByRole("button", { name: "共有を停止", exact: true }).click();
-    await expect.poll(ownsFullscreen).toBe(false);
+    await expect.poll(isMaximized).toBe(false);
     await ended;
     await expect.poll(sourceSize).toEqual(restoredSize);
     await expect(view.getByRole("status")).toHaveText("共有元が接続されていません");

@@ -72,13 +72,34 @@ test("agent registers and opens a real HTTP/WS app through B's outbound-only del
     await frame.locator("#check").click(); await expect(frame.locator("#api")).toHaveText("api-ok");
     expect(receivedCookie).toContain("session=application"); expect(receivedCookie).not.toContain("soda-preview"); expect(receivedCookie).not.toContain("soda_session");
     await frame.getByRole("link", { name: "Redirect" }).click(); await expect(frame.getByRole("heading", { name: "Redirected app" })).toBeVisible();
+    const preview = page.locator("[data-web-preview]");
+    await frame.locator("body").evaluate(el => { el.dataset.maximizeKept = "yes"; });
+    const beforeMaximize = await preview.boundingBox();
+    await preview.getByRole("button", {name:"最大化",exact:true}).click();
+    await expect.poll(()=>preview.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
+    expect(await page.evaluate(()=>document.fullscreenElement)).toBeNull();
+    const previewFrame = preview.locator("[data-preview-frame]");
+    const viewportBox = await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight}));
+    await expect.poll(()=>previewFrame.boundingBox()).toEqual(viewportBox);
+    await expect(preview.getByLabel("表示元のペイン")).not.toBeVisible();
+    await preview.getByRole("button", {name:"情報・設定",exact:true}).click();
+    await expect(preview.getByLabel("表示元のペイン")).toBeVisible();
+    await expect.poll(()=>previewFrame.boundingBox()).toEqual(viewportBox);
+    await preview.getByRole("button", {name:"情報・設定",exact:true}).click();
+    await expect(frame.locator("body")).toHaveAttribute("data-maximize-kept","yes");
+    await preview.getByRole("button", {name:"元に戻す",exact:true}).click();
+    await expect.poll(()=>preview.boundingBox()).toEqual(beforeMaximize);
+    await expect(frame.locator("body")).toHaveAttribute("data-maximize-kept","yes");
     // A normal tab switch must preserve the helper and the actual iframe document.
     await frame.locator("body").evaluate(el => el.setAttribute("data-kept", "yes"));
     await page.getByRole("tab").first().click();
     await expect(page.locator("[data-web-preview]")).toBeHidden();
     await page.getByRole("tab", { name: "Webプレビュー", exact: true }).click();
     await expect(frame.locator("body")).toHaveAttribute("data-kept", "yes");
+    await expect(page.getByText("ブラウザPCのhelperに接続済み", { exact: true })).toBeHidden();
+    await preview.getByRole("button", { name: "情報・設定", exact: true }).click();
     await expect(page.getByText("ブラウザPCのhelperに接続済み", { exact: true })).toBeVisible();
+    await preview.getByRole("button", { name: "情報・設定", exact: true }).click();
     // Workspace changes must retain the same live iframe document as well.
     const originalWorkspace = owner.helloSnapshot()!.workspaces[0]!.id;
     const otherWorkspace = await owner.request("workspace.create", { label: "Preview retention workspace" });
