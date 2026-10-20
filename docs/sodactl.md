@@ -20,6 +20,8 @@ export SODACTL_URL=http://127.0.0.1:7780                    # 以後 --url を�
 
 ## コマンド一覧
 
+接続先スキルの検出・読み込み、作業先の固定、メモと会話の引継ぎは[`sodactl work`](remote-work.md)を参照してください。
+
 ```
 sodactl workspace create [--cwd <path>] [--label <text>]
 sodactl workspace close <workspaceId>
@@ -1017,3 +1019,32 @@ herdr の agent skill（`skills/herdr/SKILL.md`・`herdr --skill`）と pane の
 ## 開発Webアプリのプレビュー
 
 `preview register/list/viewers/helper/open/stop/remove`で開発port登録・ブラウザへの表示・転送停止を扱います。初回の画面許可とブラウザPCの補助プロセスが必要です。[リモートWebプレビュー](remote-web-preview.md)を参照してください。
+
+
+## 接続先での非対話コマンド実行
+
+接続先PCにエージェントがなくても、Sodashitsuが起動しmachine接続が確立していれば、操作元のエージェントからコマンドを実行できます。ローカルと外部で同じコマンドを使います。
+
+```sh
+sodactl --machine sr-pc exec --cwd 'C:\git\project' -- 'git status --short'
+# Windowsのcmd組み込みコマンド等がCP932を返す場合
+sodactl --machine sr-pc exec --cwd 'C:\git\project' --encoding shift_jis -- 'echo 日本語'
+sodactl exec --cwd /workspaces/project --timeout 60000 -- 'pnpm test'
+```
+
+`--`の後には、接続先のシェルへ渡すコマンド文字列を1つ指定します。Unixは`/bin/sh -lc`、Windowsは`cmd.exe /d /s /c`です。PowerShellの構文が必要ならコマンドから`powershell.exe`等を呼び出します。`--cwd`は接続先の絶対パスです。Windowsはドライブ文字付きのパス（`C:\git\project`等）を指定します。cmd.exeが作業フォルダを維持できないUNCパスは拒否します。毎回新しい非対話プロセスで実行するため、前の実行の`cd`や環境変数は次へ引き継ぎません。stdinは閉じて開始します。
+
+完了まで待ち、`stdout`・`stderr`・`exitCode`・`signal`・`timedOut`・`cancelled`をJSONで返します。出力は既定UTF-8で読み取り、`--encoding shift_jis`（WindowsのCP932）または`--encoding utf-16le`を選べます。文字コードは自動判定せず、stdout/stderrに同じ指定を使います。各ストリーム64KiBまで保持し、超過は`stdoutTruncated`/`stderrTruncated`で示します。CLIの終了コードは、コマンド成功0、コマンド失敗/通信エラー1、使い方の誤り2、時間切れ124、中断130です。接続先の正確な終了コードはJSONの`exitCode`を参照します。
+
+既定の実行期限は30秒、指定可能な上限は5分です。同時実行はサーバー全体で4件、保持する実行は32件までで、CLI接続の終了時に結果を破棄します。Ctrl+Cは中断要求を送り、接続切断・サーバー更新/終了でも停止を試みます。Unixはプロセスグループ、Windowsは`taskkill /T`を使いますが、親を離れて動く子孫や別セッションへ脱離したプロセスの完全な回収は保証しません。対話入力・TTY・常駐サーバーには`pane run/read/attach`を使ってください。
+
+認証済みの`/ws`と既存のSSH/操作委譲machineチャネルだけを使い、接続先でSodashitsuを動かしているOSユーザーの権限で実行します。エージェントやSSHサーバーを接続先へ追加導入する必要はありません。ログイン不要の`pane.sock`では利用できません。通信が切れた場合も実行済みの可能性があるため、自動再実行せず状態を確認してください。
+
+
+### エージェントの検索・編集ツールとの使い分け
+
+`--machine`は`sodactl`の要求先を切り替えます。エージェント自身の標準のファイル検索・読取・編集ツールやシェルの実行先を、自動的に接続先へ変更するものではありません。接続先で作業する指示には、machine名と接続先のOS・作業フォルダを明示してください。
+
+検索は接続先の`rg`等、読取・編集は接続先のファイル操作コマンドやスクリプト、Git・ビルド・テストも同じ`exec`経路で行います。接続先に必要な開発ツールは導入されている必要があり、Sodashitsuがツールを自動導入するわけではありません。ファイル内容をコマンドへ埋め込む場合は、接続先のシェルに合った引用やbase64等で渡し、秘密や長いバイナリを無制限に標準出力へ出さないでください。
+
+端末の画面を見ながら入力する必要がある処理は、接続先にpaneを作り`pane run/read/control/attach`を使います。GUIは共有とagent操作を許可したdesktop APIを使います。これにより接続先にエージェントを置かずに開発できますが、出力上限・時間制限・回線遅延・OS間のコマンド差があるため、ローカル標準ツールと完全に同じ使い勝手ではありません。

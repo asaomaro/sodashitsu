@@ -1,0 +1,68 @@
+# 接続先のスキル・作業先・メモ・会話の引継ぎ
+
+ローカルのClaude Code/Codexを使い、エージェントを導入していない接続先PCで開発できます。既存のmachine接続（SSH・操作委譲）を使います。両側のSodashitsuと操作側のsodactlを、この機能に対応した版へ更新してください。
+
+## 作業先を一度指定する
+
+操作する側のエージェントのpaneで実行します。接続先のワークスペースにはPJフォルダを設定しておきます。
+
+```sh
+sodactl work bind <machine名またはid> <接続先workspaceのid>
+sodactl work status
+```
+
+種類は呼出元のClaude Code/Codexから判定します。判定できない場合は`--kind claude`または`--kind codex`を指定します。paneの外では操作する側の`--pane <id>`が必要です。workspace/paneのidは一意に決まる4文字以上の先頭部分も使えます。
+
+移行前から保存されている`w3`・`p3`等のIDもそのまま指定できます。新しく作る実体のIDはUUIDです。
+
+bindは接続先・PJの実体・呼出元pane/会話を保存し、接続先のスキル一覧（名前・説明・id）、AGENTS.md/CLAUDE.md、エージェントが使う操作手順を返します。別paneに作業先は引き継がれません。サーバ再起動後も保存されますが、会話・PJ設定・PJの実体が変わったら再bindが必要です。`work unbind`で解除できます。
+
+## スキルと実行先
+
+```sh
+sodactl work skills
+sodactl work skill <skill-id>
+sodactl work skill <skill-id> --path references/usage.md
+sodactl work file list
+sodactl work file read --path src/main.ts
+sodactl work file search --query TODO
+sodactl work file write --path src/main.ts --version <read結果のversion> < edited-main.ts
+sodactl work exec -- 'git status --short'
+```
+
+スキル一覧は毎回接続先から検出し、選んだスキルの本文・付属資料は必要な時に読みます。`file`も`exec`も同じmachineとPJへ送られます。`work`に`--machine`は併用しません。未接続・未指定・PJ変更時にローカルへフォールバックしません。
+
+検出する場所はPJ/親PJの`.agents/skills`、種類に対応する`.claude/skills`または`.codex/skills`、ユーザーの同等フォルダ、Codexのsystem/adminスキル、エージェントのプラグインキャッシュです。親への探索は最寄りの`.git`まで。`CLAUDE_CONFIG_DIR`/`CODEX_HOME`は接続先サーバの環境を使います。プラグインキャッシュからの検出は、そのプラグインの有効化やMCP・認証・依存ツールの導入を意味しません。無効化設定やプラグインの許可はエージェント側の設定も確認してください。
+
+検出は200スキル・2000探索項目までで、上限に達したら`truncated: true`です。SKILL.mdは128KiB、必要時の本文・付属ファイルは256KiBまでのUTF-8テキストです。読み込みでscriptを実行しません。スキルの付属scriptを使う場合も`work exec`で接続先のシェルへ送ります。
+
+**エージェント組込みのRead/Edit/Shellや、既存のローカルMCP自体を差し替える機能ではありません。** `sodactl skill`とbindの返す指示に従い、対象PJの操作をwork経由に統一します。接続先の絶対パスをローカルのファイルツールへ渡さないでください。`file`はPJ相対path、UTF-8・512KiBまでの既存ファイル編集とversion照合を扱います。新規ファイル/フォルダや大きな変更は`work exec`で行います。対話/常駐処理は接続先のpaneを使います。execの時間・出力・終了コードの制約は[CLI](sodactl.md)と同じです。
+
+## 接続先にメモを残す
+
+```sh
+sodactl work memory write MEMORY.md < handoff-notes.md
+sodactl work memory list
+sodactl work memory read MEMORY.md
+sodactl work memory write MEMORY.md --version <read結果のversion> < revised-notes.md
+```
+
+接続先PJの`.soda/agent-memory/<呼出元pane UUID>/`に保存します。既存AGENTS.md/CLAUDE.mdは上書きしません。判断、未完了作業、起動・検証コマンドなどを残してください。各ファイルは256KiB、paneごとに200ファイルまで。更新には読み込み結果のversionが必要です。必要に応じ、このフォルダを接続先のGit ignoreへ追加してください。
+
+## 接続先の同じエージェントからresumeする
+
+```sh
+sodactl work handoff
+```
+
+操作する側の呼出元paneに対応するClaude Code/Codexの主会話を、完結したJSONL行の時点でスナップショットし、64KiBずつ転送します。サブエージェントの独立した履歴は含みません。会話は32MiBまで。対応する記録が無い・上限を超える場合はメモ経由で引き継ぎます。接続先のエージェントを自動起動したり、元の会話を停止したりはしません。
+
+接続先に`.soda/agent-memory/<pane>/handoff-<転送UUID>/`を作り、元の`transcript.jsonl`と`SODASHITSU-HANDOFF.md`を保存します。Claudeのプロジェクト固有auto memoryも同じフォルダへコピーします（32ファイル・合計512KiB、各64KiBまで）。Codexのグローバルmemoriesは他PJを含むため自動転送しません。`work memory`で保存したメモは既に接続先の親フォルダにあります。
+
+さらに同じ種類の標準の会話保存先へ登録を試み、成功時は`nativePath`・`resumeArgv`・`cwd`を返します。`cwd`を作業ディレクトリとして、`resumeArgv`を配列の各要素のまま起動してください。返すargvには引継ぎメモを読む初期指示も含まれます。シェルへ連結する場合は接続先のシェルに応じた引用が必要です。対象にはその種類のエージェントとログイン設定が必要です。
+
+既存の同ID履歴を上書きしません。既存履歴の探索が完走できない、保存先がリンク等で確認できない場合も、native登録を見送ってメモと元の履歴を残します。この場合`nativePath`/`resumeArgv`はnullで、`warnings`に理由を返します。転送中の切断・不完全データ・ハッシュ不一致ではnative履歴を登録しません。同じ会話の引継ぎを同時に複数送ってもnative登録は1件までです。
+
+ネイティブ履歴は各エージェントの内部形式です。バージョン差・利用モデル・追加ツールによってresumeできない場合があります。最上位のcwdは接続先へ変更しますが、過去のツール引数などに含まれる元PCのパスを機械的に書き換えません。再開時に引継ぎメモと現在のPJ規約を読み直してください。互換性が合わない場合もメモを読んで新しいセッションで続けられます。
+
+認証cookie・APIキーの設定ファイル・MCP設定・元PCの全体設定はコピーしません。ただし会話・メモに利用者が書いた情報自体は転送対象です。通常の認証済みWS/machine経路を使い、pane.sockでは利用できません。

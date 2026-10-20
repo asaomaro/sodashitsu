@@ -1,0 +1,4 @@
+- [x] 1: protocol・認証付きwork binding・スキル/メモサービス。壊れやすい境界: path/上限/保存先を重点点検。
+- [x] 2: CLIの統一したtarget解決、file/exec/skills/memory。offlineと明示machineの取り違えを重点点検。
+- [x] 3: 主会話のchunk転送・native resume用保存。所有者/整合性/既存履歴保護を重点点検。
+- [x] 4: 実サーバ2台の統合テスト、文書、全体独立レビュー。テストは逐次、全体vitest maxWorkers=2。

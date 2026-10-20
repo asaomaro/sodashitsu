@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { lstat, opendir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { openVerified, readRange } from "../agent/safeFile.js";
+import { folderIdentity } from "../work/files.js";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   RpcError,
@@ -34,6 +35,8 @@ export class WorkspaceTools {
     } catch {
       throw new RpcError("not_found", "PJフォルダが見つかりません");
     }
+    if ((p.expectedRoot && p.expectedRoot !== root) || (p.expectedIdentity && p.expectedIdentity !== await folderIdentity(root)))
+      throw new RpcError("invalid_params", "PJフォルダの実体が変わりました。作業先を選び直してください");
     if (
       p.path.split(/[\\/]/).some((part) => part.toLowerCase() === ".git") ||
       p.path.includes("\0") ||

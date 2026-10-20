@@ -1,3 +1,6 @@
+import { ExecService } from "./exec/ExecService.js";
+import { WorkContext } from "./work/WorkContext.js";
+import { SessionTransfer } from "./work/SessionTransfer.js";
 import { DesktopSettings } from "./desktop/DesktopSettings.js";
 import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
 import { DesktopRelay } from "./desktop/DesktopRelay.js";
@@ -442,6 +445,7 @@ export async function composeServer(
     ...(options.desktop ? { startup: { enabled: true, allowInput: options.desktopInput === true,
       allowClipboard: options.desktopClipboard === true, allowDisplayResize: options.desktopResize === true, allowUnlock: options.desktopUnlock === true } } : {}),
   });
+  const exec = new ExecService();
   const desktopRelay = new DesktopRelay(auth, originRejections, machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
@@ -501,6 +505,7 @@ export async function composeServer(
     logger,
   });
   const workspaceTools=new WorkspaceTools(id=>session.snapshot().workspaces.find(w=>w.id===id)?.projectDir);
+  const work = new WorkContext(options.stateDir, id => session.getPane(id), id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir);
   const builtinViews=new BuiltinViews(session,displays,bus,workspaceTools);
   // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
@@ -674,6 +679,7 @@ export async function composeServer(
     }
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
+  const workTransfers = new SessionTransfer(work, conversations);
   const summaries=new SummaryService(conversations, options.stateDir);
   const sessionNotes = new SessionNotesService(id=>session.getPane(id), options.stateDir);
   // Same-user pane socket exposes only read access to the requested pane's session.
@@ -733,6 +739,9 @@ export async function composeServer(
     previewHelpers,
     desktop,
     desktopSettings,
+    exec,
+    work,
+    workTransfers,
     desktopRelay,
     previews,
     workspaceTools,scheduler,pluginDiscovery,
@@ -802,6 +811,8 @@ export async function composeServer(
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      exec.clientGone(clientId);
+      workTransfers.clientGone(clientId);
       desktop.clientGone(clientId);
       desktopRelay.clientGone(clientId);
       previewHelpers.clientGone(clientId);
@@ -818,6 +829,8 @@ export async function composeServer(
   // 各チャネルは `/ws` の 1 接続と同じ（2 つ目の `WsGateway` に渡す）。待ち受けは `listen()` の最後（`/ws` と同じく復元の後）。
   new WsGateway(bridgeEndpoint, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
     onClientGone: (clientId) => {
+      exec.clientGone(clientId);
+      workTransfers.clientGone(clientId);
       desktop.clientGone(clientId);
       desktopRelay.clientGone(clientId);
       previewHelpers.clientGone(clientId);
@@ -878,6 +891,8 @@ export async function composeServer(
       await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
     },
     closeClients: () => {
+      exec.dispose();
+      workTransfers.dispose();
       desktopRelay.closeShares();
       desktop.dispose();
       wsServer.setReady(false);
@@ -1218,6 +1233,8 @@ export async function composeServer(
         // 以後、エージェントが居ないと見えても会話の参照を捨てない（20261009-agent-resume-lost）。`beginClosing` は引き継ぎの終わりを待つので、その前に（同期で）入る。
         session.beginShutdown();
         wsServer.setReady(false);
+        exec.dispose();
+        workTransfers.dispose();
         desktopRelay.dispose();
         desktopCompanion.dispose();
         desktop.dispose();
@@ -1299,6 +1316,8 @@ export async function composeServer(
         await extensions.stop().catch(() => undefined);
         extensions.dispose();
         displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
+        exec.dispose();
+        workTransfers.dispose();
         desktopRelay.dispose();
         desktopCompanion.dispose();
         desktop.dispose();
