@@ -1998,9 +1998,10 @@ describe("SessionService — workspace の自動の名前", () => {
       return { type: "split", id: `s-${first}`, dir: "right", ratio: 0.5, a: { type: "pane", paneId: first! }, b: buildLayout(rest) };
     }
 
-    function setup(getAutoResumeEnabled?: () => boolean) {
+    function setup(getAutoResumeEnabled?: () => boolean, manualAgentResume?: (paneId: string) => Promise<boolean>) {
       const terminals = new FakeTerminalManager();
       const service = new SessionService({
+        ...(manualAgentResume ? { manualAgentResume } : {}),
         model: new SessionModel(),
         terminals,
         bus: new EventBus(),
@@ -2015,6 +2016,15 @@ describe("SessionService — workspace の自動の名前", () => {
       });
       return { terminals, service };
     }
+
+    it("managed remote agent never restores with plain native resume", async () => {
+      const { terminals, service } = setup(() => true, async id => id === "p1");
+      await service.restore({ schema: 1, savedAt: "2026-10-21T00:00:00Z", groups: [], focus: { workspaceId: "w1", tabId: "t-w1", paneId: "p1" }, workspaces: [
+        oneWorkspace("w1", "/stage", [paneData("p1", "/stage", { kind: "claude", sessionId: "remote-session", reportedAt: 1 }), paneData("p2", "/home/u", { kind: "claude", sessionId: "ordinary-session", reportedAt: 1 })]),
+      ] });
+      expect((terminals.hosts.get("p1") as FakeTerminalHost).writes).toEqual([]);
+      expect((terminals.hosts.get("p2") as FakeTerminalHost).writes).toEqual(["claude --resume ordinary-session\r"]);
+    });
 
     it("保存されていた会話IDで claude --resume <id> を投入する（AC1）", async () => {
       const { terminals, service } = setup();

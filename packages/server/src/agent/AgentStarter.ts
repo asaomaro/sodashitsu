@@ -65,12 +65,13 @@ export class AgentStarter {
     params: AgentStartParams,
     onAccepted?: () => void,
     /** `skipInterrupt`: 先頭の Ctrl-C を送らない（作ったばかりの pane。fork が使う。20261009-agent-fork の A2）。 */
-    opts: { skipInterrupt?: boolean; beforeWrite?: () => void } = {},
+    opts: { skipInterrupt?: boolean; beforeWrite?: () => void; /** Internal wrapper only; never accepted by agent.start RPC. */ command?: { executable: string; args: string[] } } = {},
   ): Promise<AgentStartResult> {
-    const { name, kind, paneId, args } = params;
+    const { name, kind, paneId } = params;
+    const args = opts.command?.args ?? params.args;
     if (!isValidAgentName(name))
       throw new RpcError("invalid_agent_name", INVALID_AGENT_NAME_MESSAGE);
-    const executable = agentStartExecutable(kind);
+    const executable = opts.command?.executable ?? agentStartExecutable(kind);
     if (executable === null)
       throw new RpcError("unsupported_agent_kind", `unsupported interactive agent kind ${kind}`);
     if (args.some(hasControlChar)) {

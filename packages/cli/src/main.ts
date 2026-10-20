@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { requestWorkAgent, controlWorkAgent } from "./commands/workAgent.js";
+import { runWorkAgent } from "./workAgentRun.js";
+import { workAgentMcp } from "./workAgentMcp.js";
+import { WorkAgentClient } from "./workAgentIo.js";
 import { runExec } from "./commands/exec.js";
 import { runWork } from "./commands/work.js";
 import { runDesktop } from "./commands/desktop.js";
@@ -98,6 +102,11 @@ async function main(): Promise<void> {
   if (cmd.kind === "skill") return runSkill(); // サーバへつながない（セッションのキャッシュも読まない）
   const store = new FsSessionStore();
   switch (cmd.kind) {
+    case "work-agent": return requestWorkAgent(cmd, store);
+    case "work-agent-control": return controlWorkAgent(cmd, store);
+    case "work-agent-internal":
+      if (cmd.action === "run") return runWorkAgent(cmd.file);
+      return workAgentMcp(process.stdin, process.stdout, await WorkAgentClient.open(cmd.file));
     case "login":
       return runLogin(cmd, store);
     case "ask":

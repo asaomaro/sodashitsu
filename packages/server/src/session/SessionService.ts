@@ -89,6 +89,8 @@ export interface FollowedLabel {
 }
 
 export interface SessionServiceOptions {
+  /** Managed launchers must rebuild their transport before resume; never use plain native resume. */
+  manualAgentResume?: (paneId: string) => Promise<boolean>;
   model: SessionModel;
   terminals: TerminalManager;
   bus: EventBus;
@@ -245,6 +247,7 @@ export class SessionService {
   private readonly agentReportSocketPath: string | undefined;
   private readonly paneSocketPath: string | undefined;
   private readonly getAutoResumeEnabled: () => boolean;
+  private readonly manualAgentResume: (paneId: string) => Promise<boolean>;
   private readonly serverUrlForPanes: () => string | undefined;
   private readonly sessionName: string | undefined;
   private readonly scrollbackEditorEnv: { tmpRoot: string | undefined; platform: NodeJS.Platform; env: NodeJS.ProcessEnv };
@@ -325,6 +328,7 @@ export class SessionService {
     this.agentReportSocketPath = opts.agentReportSocketPath;
     this.paneSocketPath = opts.paneSocketPath;
     this.getAutoResumeEnabled = opts.getAutoResumeEnabled ?? (() => true);
+    this.manualAgentResume = opts.manualAgentResume ?? (async () => false);
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
     this.sessionName = opts.sessionName;
     this.ancestorsOf = opts.ancestorsOf ?? ((pid) => procAncestors(pid));
@@ -2250,6 +2254,10 @@ export class SessionService {
     agentSession?: { kind: string; sessionId: string } | undefined,
     history?: PaneHistoryEntry | undefined,
   ): Promise<void> {
+    if (await this.manualAgentResume(paneId)) {
+      agentSession = undefined;
+      this.logger.info("managed agent requires explicit restart", { paneId });
+    }
     // 会話を再開する pane には保存した画面を流さない（再開が自分の画面を描く。herdr の `pane_restore_startup` と同じ。AC9）。
     const seed = history && this.resumeCommandForRestore(agentSession) === null ? historyReplayText(history.ansi, history.savedAt) : undefined;
     const spawn = await this.spawnForPane(paneId, cwd, undefined, seed);

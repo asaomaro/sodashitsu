@@ -370,3 +370,11 @@ viewerが一意ならopenの--viewerは省略可能。view_openedは画面作成
 
 
 接続先での作業はmachine名・接続先のOS・絶対cwdを固定して行う。エージェント標準の検索/読取/編集ツールは手元を操作するため、リモートのファイルへ自動では切り替わらない。検索・編集・Git・テストは`--machine ... exec`で接続先のコマンドを呼ぶ。必要なツールは接続先に導入済みである必要がある。対話処理は接続先pane、GUIは許可済みdesktop経路を使う。
+
+## 操作元のCLIで接続先を操作する起動
+
+- 接続先のpaneで `sodactl work agent claude --resume` または `sodactl work agent codex resume --last` を実行する。PC/PJはそのpaneの設定から決まり、履歴から切り替えない。
+- 操作元Webで利用者が起動を受け付ける。端末では操作元の `sodactl work accept <machine> <要求ID>`。一覧は接続先で `sodactl work requests`（操作元からは `sodactl --machine <接続先> work requests`）。
+- 起動したエージェントは専用MCPのremote_workで検索/編集/実行/スキル/メモを接続先へ送る。切断・PJ変更で失敗したらローカルで代行しない。
+- 起動時に接続先MEMORY.mdを読み、判断と未完了作業はmemory操作で接続先に残す。会話resumeとメモは別。サーバ再起動後は接続先から起動し直す。
+- nativeの引数はエージェント名の後。対話/resume/model等に限定し、ツール・設定・実行先の変更や管理サブコマンドは拒否する。詳細はdocs/remote-work.md。
