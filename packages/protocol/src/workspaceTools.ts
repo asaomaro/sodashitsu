@@ -47,6 +47,8 @@ export const WorkspaceToolsParams = z.object({
   operation: z.enum(["list", "read", "write", "git-log", "git-status", "git-diff", "search"]),
   path: z.string().max(4096).default(""),
   expectedFolder: z.string().max(4096).optional(),
+  expectedRoot: z.string().max(32768).optional(),
+  expectedIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   content: z
     .string()
     .max(512 * 1024)

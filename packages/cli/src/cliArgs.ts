@@ -46,6 +46,15 @@ import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
+  "sodactl work bind <machine> <workspace> [--kind claude|codex] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work status [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work unbind [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work skills [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work skill <id> [--path <relative-path>] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work file list|read|write|search [--path <relative-path>] [--query <text>] [--version <hash>] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work memory list|read|write [<name>] [--version <hash>] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl work exec [--timeout <ms>] [--encoding utf-8|shift_jis|utf-16le] [--pane <id>] [--url <URL>] [--token <TOKEN>] -- <command>",
+  "sodactl work handoff [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl desktop session [--url <URL>] [--token <TOKEN>]",
   "sodactl desktop mcp [--url <URL>] [--token <TOKEN>]",
   "sodactl desktop model --task <text> [--model <id>] [--max-steps <N>] [--auto-act] [--url <URL>] [--token <TOKEN>]",
@@ -76,6 +85,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl pane close <paneId> [--url <URL>] [--token <TOKEN>]",
   "sodactl pane input <paneId> <text> [--url <URL>] [--token <TOKEN>]",
   "sodactl pane run <paneId> <command> [--url <URL>] [--token <TOKEN>]",
+  "sodactl exec --cwd <target-directory> [--encoding utf-8|shift_jis|utf-16le] [--timeout <ms>] [--url <URL>] [--token <TOKEN>] -- <command>",
   "sodactl pane read <paneId> [--follow] [--raw] [--timeout <ms>] [--url <URL>] [--token <TOKEN>]",
   "sodactl pane attach <paneId> [--takeover] [--url <URL>] [--token <TOKEN>]",
   "sodactl pane observe <paneId> [--url <URL>] [--token <TOKEN>]",
@@ -304,6 +314,7 @@ export type DisplayAction =
   | { kind: "features" };
 
 export type Command =
+  | { kind: "work"; action: "bind" | "status" | "unbind" | "skills" | "skill" | "file" | "exec" | "memory" | "handoff"; opts: GlobalOpts; args: string[]; values: Record<string, string> }
   | {kind:"desktop";action:"session"|"mcp"|"model";opts:GlobalOpts;task:string|undefined;model:string;maxSteps:number;autoAct:boolean}
   | { kind: "preview"; action: "register" | "list" | "viewers" | "helper" | "open" | "stop" | "remove"; opts: GlobalOpts; ref: string | undefined; pane: string | undefined; viewer: string | undefined; name: string | undefined; port: number | undefined; replace: boolean }
   | { kind: "help" }
@@ -331,6 +342,7 @@ export type Command =
   | { kind: "pane-close"; opts: GlobalOpts; paneId: string }
   | { kind: "pane-input"; opts: GlobalOpts; paneId: string; text: string }
   | { kind: "pane-run"; opts: GlobalOpts; paneId: string; command: string }
+  | { kind: "exec"; opts: GlobalOpts; cwd: string; command: string; timeoutMs: number; encoding?: "utf-8" | "shift_jis" | "utf-16le" }
   | { kind: "pane-read"; opts: GlobalOpts; paneId: string; follow: boolean; raw: boolean; timeoutMs: number }
   | { kind: "pane-attach"; opts: GlobalOpts; paneId: string; takeover: boolean }
   // 20260926-pane-observe-control（herdr の terminal session observe/control）。
@@ -516,6 +528,28 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
   const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
 
   switch (word0) {
+    case "work": {
+      const actions = ["bind", "status", "unbind", "skills", "skill", "file", "exec", "memory", "handoff"] as const;
+      if (!actions.includes(word1 as typeof actions[number])) throw new CliUsageError("expected work bind|status|unbind|skills|skill|file|exec|memory|handoff", USAGE);
+      const action = word1 as typeof actions[number], boundary = argv.indexOf("--");
+      if (action === "exec" && (boundary < 0 || argv.length !== boundary + 2)) throw new CliUsageError("work exec requires -- followed by one command string", USAGE);
+      if (action !== "exec" && boundary >= 0) throw new CliUsageError("unexpected --", USAGE);
+      const extra: Record<typeof action, string[]> = { bind: ["--kind"], status: [], unbind: [], skills: [], skill: ["--path"], file: ["--path", "--query", "--version"], memory: ["--version"], exec: ["--timeout", "--encoding"], handoff: [] };
+      const { positionals, values } = parseFlags(argv.slice(2, boundary < 0 ? undefined : boundary), { values: ["--url", "--token", "--pane", ...extra[action]] });
+      const count = action === "bind" ? 2 : action === "skill" || action === "file" ? 1 : action === "memory" ? 2 : 0;
+      rejectExtra(positionals, count, USAGE);
+      if ((action === "bind" && positionals.length !== 2) || ((action === "file" || action === "skill" || action === "memory") && !positionals[0])) throw new CliUsageError("missing work arguments", USAGE);
+      if (action === "file" && !["list", "read", "write", "search"].includes(positionals[0]!)) throw new CliUsageError("unknown file operation", USAGE);
+      if (action === "memory" && !["list", "read", "write"].includes(positionals[0]!)) throw new CliUsageError("unknown memory operation", USAGE);
+      if (values.has("--kind") && !["claude", "codex"].includes(values.get("--kind")!)) throw new CliUsageError("--kind must be claude or codex", USAGE);
+      if (action === "exec") {
+        const timeout = values.get("--timeout") ?? "30000", encoding = values.get("--encoding") ?? "utf-8", command = argv[boundary + 1]!;
+        if (!/^\d+$/.test(timeout) || Number(timeout) < 1 || Number(timeout) > 300000 || !["utf-8", "shift_jis", "utf-16le"].includes(encoding) || !command.trim() || command.includes("\0") || command.length > 65536)
+          throw new CliUsageError("invalid work exec command, timeout or encoding", USAGE);
+        positionals.push(command);
+      }
+      return { kind: "work", action, opts: globalOptsFrom(values, env), args: positionals, values: Object.fromEntries(values) };
+    }
     case "desktop": {
       if(word1!=="session"&&word1!=="mcp"&&word1!=="model")throw new CliUsageError("expected desktop session|mcp|model",USAGE);
       const {positionals,values,bools}=parseFlags(rest0,{values:["--url","--token","--task","--model","--max-steps"],bools:["--auto-act"]});
@@ -550,6 +584,21 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
       const opts = globalOptsFrom(values, env);
       if (!opts.token) throw new CliUsageError("missing --token", "sodactl login --url <URL> --token <TOKEN>");
       return { kind: "login", opts };
+    }
+    case "exec": {
+      const usage = USAGE_LINES.find(s => s.startsWith("sodactl exec "))!;
+      const boundary = argv.indexOf("--");
+      if (boundary < 0 || argv.length !== boundary + 2) throw new CliUsageError("exec needs -- followed by one command string", usage);
+      const { positionals, values } = parseFlags(argv.slice(1, boundary), { values: ["--cwd", "--encoding", "--timeout", "--url", "--token"] });
+      rejectExtra(positionals, 0, usage);
+      const cwd = values.get("--cwd"), command = argv[boundary + 1]!;
+      const raw = values.get("--timeout") ?? "30000", timeoutMs = Number(raw);
+      if (!cwd || cwd.includes("\0") || cwd.length > 32768 || !command.trim() || command.includes("\0") || command.length > 65536 ||
+        !/^[0-9]+$/.test(raw) || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000)
+        throw new CliUsageError("exec needs --cwd, a command, and --timeout between 1 and 300000 ms", usage);
+      const encoding = values.get("--encoding") ?? "utf-8";
+      if (encoding !== "utf-8" && encoding !== "shift_jis" && encoding !== "utf-16le") throw new CliUsageError("unsupported --encoding", usage);
+      return { kind: "exec", opts: globalOptsFrom(values, env), cwd, command, timeoutMs, encoding };
     }
     case "notification": {
       if (argv[1] !== "test") throw new CliUsageError("expected notification test", "sodactl notification test");

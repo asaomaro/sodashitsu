@@ -18,6 +18,7 @@
 - 標準のファイルツリー・ファイル名/Grep検索・閲覧/編集・Gitグラフ/差分、Web/TUIの追加導線と上限は `docs/workspace-tools.md`。
 - 処理の予約（エージェント指示・ワークスペースのコマンド、一回・間隔実行、履歴、停止と保存）は `docs/schedules.md`。
 - プラグインアプリのCLI操作（`sodactl plugin operations/call`。操作登録・対象範囲・結果のJSON・skill/MCPの導線）は `docs/plugin-cli.md`。
+- 接続先のスキル検出・読み込み・PJと実行先の固定・メモ・Claude/Codex会話の引継ぎ（`sodactl work`、範囲・制約）は `docs/remote-work.md`。
 - 会話の送信メッセージ一覧・スクロール・要約専用セッション・設定可能なヘッダー操作・過去セッション・通知のWeb/TUI共有は `docs/agent-conversation.md`。
 - 配布できる拡張パッケージ（`sodactl plugin pack/install/list/enable/disable/remove`。導入時は無効、素材・スキルは別途）と動画制作UIの Yukkuri Studio は `docs/plugin-packages.md`、プラグイン本体と利用手順は別PJの `yukkuri-work/plugins/yukkuri-studio/` で管理する。連携テストは `YUKKURI_STUDIO_SOURCE` で外部ソースを指定する。
 - 画面の様式（クラシック／モダン。設定「表示」のラジオ。モダンが変えるもの・数値を決めてある場所・対象外）は `docs/ui-style.md`。変更の前後を画素まで比べる道具は `docs/verification.md`「画面の見た目を、変更の前後で画素まで比べる」。

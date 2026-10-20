@@ -1,3 +1,5 @@
+import { registerExecMethods } from "./exec.js";
+import { registerWorkMethods } from "./work.js";
 import { registerViewerTabs } from "./viewerTabs.js";
 import { registerDesktopMethods } from "./desktop.js";
 import {registerScheduleMethods} from "./schedule.js";
@@ -37,6 +39,8 @@ export type { MethodDeps } from "./deps.js";
  *  （worktree の 2 つ・20260923-agent-session-resume の agent_integration 4 つ・
  *  20260923-workspace-grouping の group.* 6 つ・workspace.move/move_to を含む）。 */
 export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): void {
+  registerWorkMethods(surface, deps);
+  registerExecMethods(surface, deps);
   registerPreviewMethods(surface, deps);
   registerDesktopMethods(surface, deps);
   if(deps.workspaceTools) surface.register("workspace.tools",{schema:WorkspaceToolsParams,handler:(_ctx,p)=>deps.workspaceTools!.run(p)});

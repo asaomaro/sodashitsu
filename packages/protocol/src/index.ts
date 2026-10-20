@@ -48,3 +48,6 @@ export * from "./desktopMedia.js";
 export * from "./desktopCdp.js";
 
 export * from "./viewerTabs.js";
+
+export * from "./exec.js";
+export * from "./work.js";

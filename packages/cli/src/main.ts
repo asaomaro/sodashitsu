@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { runExec } from "./commands/exec.js";
+import { runWork } from "./commands/work.js";
 import { runDesktop } from "./commands/desktop.js";
 import { runMachineDelegation } from "./commands/machineDelegation.js";
 import { runPreview } from "./commands/preview.js";
@@ -145,6 +147,10 @@ async function main(): Promise<void> {
       return runPaneClose(cmd, store);
     case "pane-input":
       return runPaneInput(cmd, store);
+    case "exec":
+      return runExec(cmd, store);
+    case "work":
+      return runWork(cmd, store);
     case "pane-run":
       return runPaneRun(cmd, store);
     case "pane-read":
