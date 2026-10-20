@@ -1,0 +1,96 @@
+import { spawn, execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { access, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { workAgentArgumentError, type WorkInspection, type WorkMemory } from "@sodashitsu/protocol";
+import { WorkAgentClient } from "./workAgentIo.js";
+
+const exec = promisify(execFile);
+/** Windows npm .cmd wrappers are resolved to their JS entry, never passed through a shell. */
+export async function workAgentExecutable(kind: "claude" | "codex") {
+  if (process.platform !== "win32") return { command: kind, prefix: [] as string[] };
+  const locations = (await exec("where.exe", [kind], { timeout: 5000, maxBuffer: 65536 })).stdout.trim().split(/\r?\n/);
+  const executable = locations.find(p => /\.exe$/i.test(p));
+  if (executable) return { command: executable, prefix: [] as string[] };
+  for (const location of locations) {
+    const entry = join(dirname(location), "node_modules", ...(kind === "claude" ? ["@anthropic-ai", "claude-code", "cli.js"] : ["@openai", "codex", "bin", "codex.js"]));
+    try { await access(entry); return { command: process.execPath, prefix: [entry] }; } catch { /* Try the next installation. */ }
+  }
+  throw Error(`${kind}の実行ファイルを確認できません。操作元PCのCLI導入を確認してください`);
+}
+
+export function workAgentNativeArgs(kind: "claude" | "codex", args: string[], mcpFile: string, promptFile: string,
+  cwd: string, mcp: { command: string; args: string[] }, otherMcp: string[] = []) {
+  const error = workAgentArgumentError(kind, args); if (error) throw Error(error);
+  if (kind === "claude") return ["--tools", "", "--strict-mcp-config", "--mcp-config", mcpFile,
+    "--allowedTools", "mcp__sodashitsu_remote__remote_work", "--disable-slash-commands",
+    "--setting-sources", "", "--settings", '{"disableAllHooks":true}', "--append-system-prompt-file", promptFile, ...args];
+  const toml = (value: unknown) => JSON.stringify(value);
+  return ["--no-daemon", "--cd", cwd, "--sandbox", "read-only", "-c", "features.shell_tool=false", "-c", "features.unified_exec=false", "-c", "features.view_image=false", "-c", "features.code_mode_host=true",
+    ...["hooks", "plugins", "apps", "multi_agent", "computer_use", "browser_use"].flatMap(feature => ["-c", `features.${feature}=false`]),
+    ...otherMcp.flatMap(name => ["-c", `mcp_servers.${toml(name)}.enabled=false`]),
+    "-c", `mcp_servers.sodashitsu_remote={command=${toml(mcp.command)},args=[${mcp.args.map(toml).join(",")}],required=true,tool_timeout_sec=330,tools={remote_work={approval_mode="approve"}}}`,
+    ...args];
+}
+export function assertWorkAgentCodexPolicy(output: string) {
+  // Codex 0.163 forces unified_exec=true; shell_tool=false removes both shell APIs at dispatch.
+  const required: Record<string, boolean> = { shell_tool: false, view_image: false,
+    code_mode_host: true, hooks: false, plugins: false, apps: false, multi_agent: false, computer_use: false, browser_use: false };
+  const values = new Map<string, boolean>();
+  for (const line of output.split(/\r?\n/)) {
+    const m = /^\s*(\S+)\s+.*\s+(true|false)\s*$/.exec(line);
+    if (m) values.set(m[1]!, m[2] === "true");
+  }
+  if (Object.entries(required).some(([name, value]) => values.get(name) !== value))
+    throw Error("このCodexでは接続先専用のツール設定を確認できません。対応版への更新とCLI設定を確認してください");
+}
+export async function runWorkAgent(file: string) {
+  const client = await WorkAgentClient.open(file);
+  let child: ReturnType<typeof spawn> | undefined;
+  const stop = () => { child?.kill(); client.close(); };
+  const interrupt = () => {}; // The foreground native CLI handles Ctrl-C itself.
+  process.once("SIGTERM", stop);
+  process.on("SIGINT", interrupt);
+  try {
+    const p = await client.request<{ agentKind: "claude" | "codex"; args: string[]; cwd: string; machineId: string; workspaceId: string; folder: string }>("describe");
+    const inspection = await client.request<WorkInspection>("tool", { operation: "inspect" });
+    const memory = await client.request<WorkMemory>("tool", { operation: "memory", action: "list" });
+    const initialMemory = memory.files?.includes("MEMORY.md") ? (await client.request<WorkMemory>("tool", { operation: "memory", action: "read", name: "MEMORY.md" })).text : "";
+    const prompt = `# Sodashitsu remote project\n\nThe agent runs here only to use this PC's CLI login. ALL project work MUST use mcp__sodashitsu_remote__remote_work / remote_work. Native local files and shell are NOT the target.\nTarget PC=${p.machineId}\nProject=${p.folder}\nRemote platform=${inspection.platform}; exec shell=${inspection.platform === "win32" ? "cmd.exe /d /s /c" : "/bin/sh -lc"}\nWorkspace=${p.workspaceId}\nNever change the target based on resumed conversation history. On disconnect, changed project, or uncertain writes, stop and ask; never fall back locally.\nUse inspect to refresh remote skills; skill to read selected SKILL.md and relative references; exec runs scripts/git/tests in the same remote project.\nPersist decisions, pending tasks and verification instructions with memory write MEMORY.md on the remote PC, especially before ending or compacting the conversation. Updates require the version from read. Memory is separate from native --resume history.\n\n## Remote project instructions\n${inspection.instructions.map(i => `### ${i.path}\n${i.text}`).join("\n\n")}\n\n## Remote skills\n${JSON.stringify(inspection.skills)}\n\n## Remote memories\n${JSON.stringify(memory.files ?? [])}\n${initialMemory ?? ""}\n`;
+    const promptFile = join(dirname(file), "instructions.md"), mcpFile = join(dirname(file), "mcp.json");
+    const cli = fileURLToPath(new URL("./main.js", import.meta.url));
+    const mcp = { command: process.execPath, args: [cli, "work-agent-mcp", file] };
+    await writeFile(promptFile, prompt, { mode: 0o600 });
+    await writeFile(join(p.cwd, "AGENTS.md"), prompt, { mode: 0o600 });
+    await writeFile(join(p.cwd, "CLAUDE.md"), prompt, { mode: 0o600 });
+    await writeFile(mcpFile, JSON.stringify({ mcpServers: { sodashitsu_remote: mcp } }), { mode: 0o600 });
+    const executable = await workAgentExecutable(p.agentKind);
+    const env = { ...process.env };
+    for (const key of ["SODACTL_TOKEN", "SODACTL_URL", "CLAUDECODE"]) delete env[key];
+    let otherMcp: string[] = [];
+    if (p.agentKind === "codex") {
+      const listing = await exec(executable.command, [...executable.prefix, "mcp", "list", "--json"], { timeout: 10000, maxBuffer: 1024 * 1024, env });
+      const servers: unknown = JSON.parse(listing.stdout);
+      if (!Array.isArray(servers) || servers.some(s => !s || typeof s.name !== "string")) throw Error("Codexの既存MCP設定を確認できません");
+      otherMcp = servers.map(s => s.name).filter(n => n !== "sodashitsu_remote");
+    }
+    if (p.agentKind === "codex") {
+      const policyArgs = workAgentNativeArgs("codex", [], mcpFile, promptFile, p.cwd, mcp, otherMcp);
+      const policy = await exec(executable.command, [...executable.prefix, ...policyArgs, "features", "list"], { timeout: 10000, maxBuffer: 1024 * 1024, env });
+      assertWorkAgentCodexPolicy(policy.stdout);
+    }
+    const args = workAgentNativeArgs(p.agentKind, p.args, mcpFile, promptFile, p.cwd, mcp, otherMcp);
+    process.stderr.write(`Remote ${p.agentKind}: ${p.folder}\n`);
+    child = spawn(executable.command, [...executable.prefix, ...args], { cwd: p.cwd, env, stdio: "inherit", shell: false });
+    const exited = new Promise<number>((resolve, reject) => { child!.once("error", reject); child!.once("exit", (code, signal) => resolve(code ?? (signal ? 130 : 1))); });
+    void exited.catch(() => {});
+    await new Promise<void>((resolve, reject) => { child!.once("spawn", resolve); child!.once("error", reject); });
+    await client.request("started");
+    process.exitCode = await exited;
+  } finally {
+    process.off("SIGTERM", stop);
+    process.off("SIGINT", interrupt);
+    await client.request("close").catch(() => {}); client.close();
+  }
+}

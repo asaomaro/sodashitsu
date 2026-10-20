@@ -1,5 +1,7 @@
 import { ExecService } from "./exec/ExecService.js";
 import { WorkContext } from "./work/WorkContext.js";
+import { WorkAgentRequests } from "./work/WorkAgentRequests.js";
+import { WorkAgentLauncher } from "./work/WorkAgentLauncher.js";
 import { SessionTransfer } from "./work/SessionTransfer.js";
 import { DesktopSettings } from "./desktop/DesktopSettings.js";
 import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
@@ -28,7 +30,7 @@ import {ConversationService} from "./conversation/ConversationService.js";
 import { controlSecret } from "./handoff/windowsControl.js";
 import { createAgentKindsLister } from "./agent/agentKinds.js";
 import { X509Certificate } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir as osHomedir, hostname as osHostname, platform } from "node:os";
 import { type HostInfo, type LinkRun } from "@sodashitsu/protocol";
@@ -371,6 +373,10 @@ export async function composeServer(
   /** pane の環境の `SODA_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
   let paneUrl: string | undefined;
   const session = new SessionService({
+    manualAgentResume: async paneId => {
+      try { await lstat(join(options.stateDir, "work-agents", "panes", paneId)); return true; }
+      catch (e) { return (e as NodeJS.ErrnoException).code !== "ENOENT"; }
+    },
     model,
     terminals,
     bus,
@@ -735,7 +741,26 @@ export async function composeServer(
       close() { if (!closed) { closed = true; previews.clientGone(clientId); } },
     };
   });
+  const workAgentRequests = new WorkAgentRequests(work, id => {
+    const pane = session.getPane(id), tab = pane && session.snapshot().tabs.find(t => t.id === pane.tabId);
+    return tab ? { workspaceId: tab.workspaceId } : undefined;
+  }, id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir);
+  const workAgentLauncher = new WorkAgentLauncher(options.stateDir, session, agentStarter, async machine => {
+    const route = machines.route(machine);
+    if (route.kind !== "ok") throw new RpcError("not_found", "接続先マシンが未接続です");
+    const channel = route.link.openChannel();
+    if (!channel) throw new RpcError("not_found", "接続先マシンが未接続です");
+    let gone = false;
+    const rpc = new DesktopBridgeRpc(channel, () => { gone = true; }, { label: "リモート作業" });
+    try { await rpc.hello(); } catch (e) { rpc.close(); throw e; }
+    return {
+      request: rpc.request.bind(rpc), close: () => { gone = true; rpc.close(); },
+      valid: () => { const current = machines.route(machine); return !gone && current.kind === "ok" && current.link === route.link; },
+    };
+  });
   registerAllMethods(surface, {
+    workAgentRequests,
+    workAgentLauncher,
     previewHelpers,
     desktop,
     desktopSettings,
@@ -891,6 +916,7 @@ export async function composeServer(
       await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
     },
     closeClients: () => {
+      workAgentLauncher.close();
       exec.dispose();
       workTransfers.dispose();
       desktopRelay.closeShares();
@@ -1233,6 +1259,7 @@ export async function composeServer(
         // 以後、エージェントが居ないと見えても会話の参照を捨てない（20261009-agent-resume-lost）。`beginClosing` は引き継ぎの終わりを待つので、その前に（同期で）入る。
         session.beginShutdown();
         wsServer.setReady(false);
+        workAgentLauncher.close();
         exec.dispose();
         workTransfers.dispose();
         desktopRelay.dispose();
@@ -1316,6 +1343,7 @@ export async function composeServer(
         await extensions.stop().catch(() => undefined);
         extensions.dispose();
         displays.dispose(); // 待っている display.wait を空の結果で返し、面を捨てる
+        workAgentLauncher.close();
         exec.dispose();
         workTransfers.dispose();
         desktopRelay.dispose();

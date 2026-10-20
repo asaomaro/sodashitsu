@@ -1048,3 +1048,7 @@ sodactl exec --cwd /workspaces/project --timeout 60000 -- 'pnpm test'
 検索は接続先の`rg`等、読取・編集は接続先のファイル操作コマンドやスクリプト、Git・ビルド・テストも同じ`exec`経路で行います。接続先に必要な開発ツールは導入されている必要があり、Sodashitsuがツールを自動導入するわけではありません。ファイル内容をコマンドへ埋め込む場合は、接続先のシェルに合った引用やbase64等で渡し、秘密や長いバイナリを無制限に標準出力へ出さないでください。
 
 端末の画面を見ながら入力する必要がある処理は、接続先にpaneを作り`pane run/read/control/attach`を使います。GUIは共有とagent操作を許可したdesktop APIを使います。これにより接続先にエージェントを置かずに開発できますが、出力上限・時間制限・回線遅延・OS間のコマンド差があるため、ローカル標準ツールと完全に同じ使い勝手ではありません。
+
+## 接続先から操作元のエージェントを起動する
+
+`sodactl work agent [--pane <id>] [--url <URL>] [--token <TOKEN>] claude|codex [agent-args...]`を接続先のpaneで実行します。操作元Webで起動要求を受け付けるか、操作元で`sodactl work accept <machine> <要求ID>`を実行します。`sodactl --machine <接続先> work requests`で要求を確認できます。起動したpaneでPC/PJを固定し、専用MCPで操作します。再開・メモ・引数の範囲・再起動時の扱いは[接続先での作業](remote-work.md)を参照してください。

@@ -1,5 +1,6 @@
 import { ExecMethods, type ExecResults } from "./exec.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
+import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
 import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
 import { DesktopMethods, type DesktopResults } from "./desktop.js";
 import { DesktopCdpOpenParams, DesktopCdpSendParams, VscodeSharingMethods, type VscodeSharingResults } from "./desktopCdp.js";
@@ -1473,6 +1474,7 @@ export type PaneReportMetadataParams = z.infer<typeof PaneReportMetadataParams>;
 
 export const METHOD_SCHEMAS = {
   ...WorkMethods,
+  ...WorkAgentMethods,
   ...WorkTransferMethods,
   ...ExecMethods,
   ...VscodeSharingMethods,
@@ -1649,7 +1651,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap extends WorkResults, ExecResults, VscodeSharingResults, PreviewResults, PreviewHelperResults, DesktopResults, ViewerTabResults {
+export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResults, VscodeSharingResults, PreviewResults, PreviewHelperResults, DesktopResults, ViewerTabResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};

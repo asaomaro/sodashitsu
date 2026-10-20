@@ -51,3 +51,4 @@ export * from "./viewerTabs.js";
 
 export * from "./exec.js";
 export * from "./work.js";
+export * from "./workAgent.js";

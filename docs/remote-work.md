@@ -2,6 +2,37 @@
 
 ローカルのClaude Code/Codexを使い、エージェントを導入していない接続先PCで開発できます。既存のmachine接続（SSH・操作委譲）を使います。両側のSodashitsuと操作側のsodactlを、この機能に対応した版へ更新してください。
 
+## 接続先のシェルから操作元のエージェントを起動する
+
+接続先PC（B）のSodashitsuのpaneで実行します。そのワークスペースにはPJフォルダを設定し、Bの`sodactl`もログインしておきます。Claude Code/Codexの導入とログインが必要なのは操作元PC（A）だけです。
+
+```sh
+sodactl work agent claude
+sodactl work agent claude --resume
+sodactl work agent claude --model sonnet --effort high
+sodactl work agent codex resume --last
+sodactl work agent codex -c 'model_reasoning_effort="high"'
+```
+
+AのWebでBを表示していると「操作元のエージェントを起動」が現れます。PC・PJ・引数を確認して「起動」を押すと、Aに新しいワークスペースとpaneを開き、AのCLIを起動します。Bから要求を送っただけでAのプログラムが自動実行されることはありません。最初の作業指示は、開いたエージェントの入力欄に入力してください。
+
+端末版を使う場合は、**Aのシェル**で次を実行します。要求IDはBのコマンドにも表示されます。Aに新しいpaneが作られるので、そのpaneを選んで操作します。
+
+```sh
+sodactl --machine <Bのmachine名> work requests
+sodactl work accept <Bのmachine名> <要求ID>
+```
+
+`sodactl`の`--pane`・`--url`・`--token`はエージェント名の**前**に指定します。その後の引数は配列のままCLIへ渡します。対応するのは対話起動、Claudeの`--resume`/`--continue`/`--fork-session`、Codexの`resume`/`fork`、モデル指定などの対話用オプションです。履歴IDはUUIDを使います。ツール・MCP・作業先・設定ファイル・権限を上書きするオプション、管理サブコマンド、起動時の自由な位置引数は拒否します。Codexの`-c`は`model_reasoning_effort`/`model_verbosity`の定数指定に限ります。要求は10分で期限切れです。両側のSodashitsuとCLIの更新が必要です。
+
+この起動では、AのCLIに専用MCPの`remote_work`を設定し、検索・読み取り・編集・実行・スキル・メモをBのPJへ送ります。Claudeの組込みツール、Codexのローカルshell/画像ツール、既存MCPやプラグイン/フック等をこの起動では無効化します。Codexのシェルはread-only設定も併用します。これらの起動オプションに対応するCLIが必要です（Codexは`--no-daemon`と専用ツール設定に対応する版（0.163.0で実dispatchを検証））。起動を受け付けた作業先の専用MCPだけはCLIのツール許可にも登録します。エージェントは利用者の作業指示に従い、重大な操作は別途確認してください。CLIのログイン設定をBへ移すことはありません。Codexは起動前にfeatures一覧で設定の反映を確認し、必要な設定が無効化できない版では起動を拒否します。同じOSユーザーで動くプログラム同士を隔離するOSサンドボックスを提供するものではありません。
+
+PC・PJはBの起動paneから毎回決まり、PJの実体とmachine接続の世代を固定します。切断やPJ変更時は失敗し、Aのファイルやシェルで代行しません。MCPに渡すのは固定先だけを操作できる一時的な能力で、一般のSodashitsuログインcookieは渡しません。
+
+起動時にBのPJ規約・スキル一覧・`.soda/agent-memory/<Bの起動pane ID>/MEMORY.md`を読み込みます。その他のメモとスキル本文は必要時にMCPから読みます。エージェントに判断・未完了作業・検証手順を同じBのメモへ保存するよう初期指示を渡します。メモの自動要約・完全な保存を保証する機能ではありません。`--resume`はAに残るネイティブ会話履歴を再開する指定で、Bのメモとは別です。履歴のPC/PJへ接続先を自動で切り替えません。
+
+起動中の能力は終了・切断・Aのpane閉鎖・Aのサーバ停止で破棄され、最長24時間です。Aの再起動・更新後は、通常の`claude --resume`等で自動復元せず、Bのpaneから同じコマンドで起動し直します。保存済みのBのメモはそのまま読み込めます。MCPのキャンセル通知またはツール接続の終了時は、その接続から実行中のコマンドへ中断を送ります。ファイル更新等の完了済み操作は元に戻りません。常駐・対話コマンドは従来どおりBのpaneを使ってください。
+
 ## 作業先を一度指定する
 
 操作する側のエージェントのpaneで実行します。接続先のワークスペースにはPJフォルダを設定しておきます。

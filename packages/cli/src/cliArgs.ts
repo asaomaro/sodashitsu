@@ -46,6 +46,9 @@ import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
+  "sodactl work agent [--pane <id>] [--url <URL>] [--token <TOKEN>] claude|codex [agent-args...]",
+  "sodactl work requests [--url <URL>] [--token <TOKEN>]",
+  "sodactl work accept <machine> <request-id> [--url <URL>] [--token <TOKEN>]",
   "sodactl work bind <machine> <workspace> [--kind claude|codex] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl work status [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl work unbind [--pane <id>] [--url <URL>] [--token <TOKEN>]",
@@ -314,6 +317,9 @@ export type DisplayAction =
   | { kind: "features" };
 
 export type Command =
+  | { kind: "work-agent"; opts: GlobalOpts; agentKind: "claude" | "codex"; args: string[]; pane?: string }
+  | { kind: "work-agent-control"; opts: GlobalOpts; action: "requests" | "accept"; machine?: string; requestId?: string }
+  | { kind: "work-agent-internal"; action: "run" | "mcp"; file: string }
   | { kind: "work"; action: "bind" | "status" | "unbind" | "skills" | "skill" | "file" | "exec" | "memory" | "handoff"; opts: GlobalOpts; args: string[]; values: Record<string, string> }
   | {kind:"desktop";action:"session"|"mcp"|"model";opts:GlobalOpts;task:string|undefined;model:string;maxSteps:number;autoAct:boolean}
   | { kind: "preview"; action: "register" | "list" | "viewers" | "helper" | "open" | "stop" | "remove"; opts: GlobalOpts; ref: string | undefined; pane: string | undefined; viewer: string | undefined; name: string | undefined; port: number | undefined; replace: boolean }
@@ -528,7 +534,29 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
   const URL_TOKEN: FlagSpec = { values: ["--url", "--token"] };
 
   switch (word0) {
+    case "work-agent-run":
+    case "work-agent-mcp": {
+      if (argv.length !== 2 || !argv[1]) throw new CliUsageError("internal work agent requires one capability file", USAGE);
+      return { kind: "work-agent-internal", action: word0 === "work-agent-run" ? "run" : "mcp", file: argv[1] };
+    }
     case "work": {
+      if (word1 === "agent") {
+        let index = 2;
+        const values = new Map<string, string>();
+        while (argv[index]?.startsWith("--")) {
+          const flag = argv[index++]!;
+          if (!["--pane", "--url", "--token"].includes(flag) || !argv[index] || values.has(flag)) throw new CliUsageError("work agent options must precede claude|codex", USAGE);
+          values.set(flag, argv[index++]!);
+        }
+        const kind = argv[index++];
+        if (kind !== "claude" && kind !== "codex") throw new CliUsageError("work agent requires claude|codex", USAGE);
+        return { kind: "work-agent", opts: globalOptsFrom(values, env), agentKind: kind, args: argv.slice(index), ...(values.has("--pane") ? { pane: values.get("--pane")! } : {}) };
+      }
+      if (word1 === "requests" || word1 === "accept") {
+        const { positionals, values } = parseFlags(argv.slice(2), URL_TOKEN);
+        if (positionals.length !== (word1 === "accept" ? 2 : 0)) throw new CliUsageError("work accept requires machine and request id", USAGE);
+        return { kind: "work-agent-control", opts: globalOptsFrom(values, env), action: word1, ...(word1 === "accept" ? { machine: positionals[0]!, requestId: positionals[1]! } : {}) };
+      }
       const actions = ["bind", "status", "unbind", "skills", "skill", "file", "exec", "memory", "handoff"] as const;
       if (!actions.includes(word1 as typeof actions[number])) throw new CliUsageError("expected work bind|status|unbind|skills|skill|file|exec|memory|handoff", USAGE);
       const action = word1 as typeof actions[number], boundary = argv.indexOf("--");

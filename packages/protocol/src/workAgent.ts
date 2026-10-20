@@ -1,0 +1,77 @@
+import { z } from "zod";
+import { WorkKind } from "./work.js";
+
+const entity = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
+export const WorkAgentArgv = z.array(z.string().max(4096).refine(s => !/[\x00-\x1f\x7f]/.test(s))).max(64)
+  .refine(a => a.reduce((n, s) => n + s.length, 0) <= 16000, "agent arguments are too long");
+/** Only interactive options are forwarded; native tool/config/admin switches are not. */
+export function workAgentArgumentError(kind: "claude" | "codex", args: readonly string[]): string | undefined {
+  if (kind !== "claude" && kind !== "codex") return "work agent requires claude|codex";
+  if (!WorkAgentArgv.safeParse(args).success) return "agent arguments are invalid or too long";
+  const switches = new Set(kind === "claude"
+    ? ["--continue", "-c", "--fork-session", "--verbose", "--disable-slash-commands", "--include-partial-messages", "--help", "-h", "--version", "-v"]
+    : ["--last", "--all", "--no-alt-screen", "--search", "--help", "-h", "--version", "-V"]);
+  const values = new Set(kind === "claude"
+    ? ["--model", "--effort", "--fallback-model", "--output-format", "--input-format", "--max-turns", "--max-budget-usd", "--autocompact", "--name"]
+    : ["--model", "-m"]);
+  let subcommand = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!, equal = arg.indexOf("="), flag = equal < 0 ? arg : arg.slice(0, equal);
+    if (switches.has(arg)) continue;
+    if (kind === "codex" && (arg === "resume" || arg === "fork") && !subcommand) { subcommand = true; continue; }
+    if (kind === "codex" && subcommand && /^[a-f0-9-]{36}$/i.test(arg)) continue;
+    if (kind === "claude" && (flag === "--resume" || flag === "-r")) {
+      if (equal >= 0) { if (!/^[a-f0-9-]{36}$/i.test(arg.slice(equal + 1))) return "resume requires a session UUID"; }
+      else if (args[i + 1] && !args[i + 1]!.startsWith("-")) {
+        if (!/^[a-f0-9-]{36}$/i.test(args[++i]!)) return "resume requires a session UUID";
+      }
+      continue;
+    }
+    if (values.has(flag)) {
+      if (equal < 0 && (!args[i + 1] || args[i + 1]!.startsWith("-"))) return `missing value for ${flag}`;
+      if (equal < 0) i++;
+      continue;
+    }
+    if (kind === "codex" && (flag === "--config" || flag === "-c")) {
+      const value = equal < 0 ? args[++i] : arg.slice(equal + 1);
+      if (value && /^(?:model_reasoning_effort|model_verbosity)=(?:"(?:minimal|low|medium|high|xhigh|max|ultra)"|(?:minimal|low|medium|high|xhigh|max|ultra))$/.test(value)) continue;
+    }
+    return `unsupported work agent argument: ${flag}. Only interactive/resume/model options are allowed; enter the task after launch.`;
+  }
+  return undefined;
+}
+export const WorkAgentTool = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("inspect") }).strict(),
+  z.object({ operation: z.literal("skill"), id: z.string().regex(/^[a-f0-9]{64}$/), path: z.string().min(1).max(4096).default("SKILL.md") }).strict(),
+  z.object({ operation: z.literal("file"), action: z.enum(["list", "read", "write", "search"]), path: z.string().max(4096).default(""), query: z.string().max(4096).optional(), content: z.string().max(524288).optional(), version: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict(),
+  z.object({ operation: z.literal("exec"), command: z.string().min(1).max(65536).refine(s => !s.includes("\0")), timeoutMs: z.number().int().min(1).max(300000).default(30000), encoding: z.enum(["utf-8", "shift_jis", "utf-16le"]).default("utf-8") }).strict(),
+  z.object({ operation: z.literal("memory"), action: z.enum(["list", "read", "write"]), name: z.string().min(1).max(128).default("MEMORY.md"), content: z.string().max(262144).optional(), version: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict(),
+]);
+export type WorkAgentTool = z.infer<typeof WorkAgentTool>;
+export interface WorkAgentRequest {
+  id: string; paneId: string; workspaceId: string; folder: string; root: string; identity: string;
+  agentKind: "claude" | "codex"; args: string[]; expiresAt: number;
+  state: "pending" | "claimed" | "launched" | "failed" | "rejected";
+}
+export const WorkAgentRequestSchema = z.object({
+  id: z.string().uuid(), paneId: entity, workspaceId: entity,
+  folder: z.string().min(1).max(32768), root: z.string().min(1).max(32768), identity: z.string().regex(/^[a-f0-9]{64}$/),
+  agentKind: WorkKind, args: WorkAgentArgv, expiresAt: z.number().int().positive(),
+  state: z.enum(["pending", "claimed", "launched", "failed", "rejected"]),
+}).strict();
+export const WorkAgentMethods = {
+  "work.agent_request": z.object({ paneId: entity, agentKind: WorkKind, args: WorkAgentArgv }).strict(),
+  "work.agent_requests": z.object({ paneId: entity.optional() }).strict(),
+  "work.agent_claim": z.object({ id: z.string().uuid() }).strict(),
+  "work.agent_finish": z.object({ id: z.string().uuid(), claim: z.string().uuid(), state: z.enum(["launched", "failed"]) }).strict(),
+  "work.agent_reject": z.object({ id: z.string().uuid() }).strict(),
+  "work.agent_launch": z.object({ machineId: z.string().regex(/^[a-f0-9]{32}$/), requestId: z.string().uuid() }).strict(),
+} as const;
+export interface WorkAgentResults {
+  "work.agent_request": WorkAgentRequest;
+  "work.agent_requests": { requests: WorkAgentRequest[] };
+  "work.agent_claim": { request: WorkAgentRequest; claim: string };
+  "work.agent_finish": {};
+  "work.agent_reject": {};
+  "work.agent_launch": { workspaceId: string; tabId: string; paneId: string };
+}
