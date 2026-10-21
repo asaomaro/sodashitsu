@@ -2,6 +2,19 @@ import { z } from "zod";
 import { WorkKind } from "./work.js";
 import { normalizeAskSpec, ASK_SPEC_MAX_BYTES } from "./ask.js";
 import { RpcError } from "./errors.js";
+import { COMMAND_ID_RE } from "./commands.js";
+
+export const WorkAgentTask = z.object({
+  pluginKey: z.string().min(1).max(2048),
+  taskFile: z.string().min(1).max(4096),
+}).strict();
+export const WorkAgentState = z.enum(["starting", "idle", "working", "blocked", "stopped"]);
+const lease = { id: z.string().uuid(), claim: z.string().uuid() };
+export const WorkAgentPlugin = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("operations") }).strict(),
+  z.object({ action: z.literal("call"), name: z.string().regex(COMMAND_ID_RE), params: z.record(z.string(), z.unknown())
+    .refine(v => new TextEncoder().encode(JSON.stringify(v)).length <= 65536) }).strict(),
+]);
 
 const entity = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
 export const WorkAgentArgv = z.array(z.string().max(4096).refine(s => !/[\x00-\x1f\x7f]/.test(s))).max(64)
@@ -43,6 +56,7 @@ export function workAgentArgumentError(kind: "claude" | "codex", args: readonly 
   return undefined;
 }
 export const WorkAgentTool = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("plugin"), request: WorkAgentPlugin }).strict(),
   z.object({ operation: z.literal("inspect") }).strict(),
   z.object({ operation: z.literal("skill"), id: z.string().regex(/^[a-f0-9]{64}$/), path: z.string().min(1).max(4096).default("SKILL.md") }).strict(),
   z.object({ operation: z.literal("file"), action: z.enum(["list", "read", "write", "search"]), path: z.string().max(4096).default(""), query: z.string().max(4096).optional(), content: z.string().max(524288).optional(), version: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict(),
@@ -54,12 +68,14 @@ export interface WorkAgentRequest {
   id: string; paneId: string; workspaceId: string; folder: string; root: string; identity: string;
   agentKind: "claude" | "codex"; args: string[]; expiresAt: number;
   state: "pending" | "claimed" | "launched" | "failed" | "rejected";
+  task?: z.infer<typeof WorkAgentTask>;
 }
 export const WorkAgentRequestSchema = z.object({
   id: z.string().uuid(), paneId: entity, workspaceId: entity,
   folder: z.string().min(1).max(32768), root: z.string().min(1).max(32768), identity: z.string().regex(/^[a-f0-9]{64}$/),
   agentKind: WorkKind, args: WorkAgentArgv, expiresAt: z.number().int().positive(),
   state: z.enum(["pending", "claimed", "launched", "failed", "rejected"]),
+  task: WorkAgentTask.optional(),
 }).strict();
 export const WorkAgentMethods = {
   "work.agent_request": z.object({ paneId: entity, agentKind: WorkKind, args: WorkAgentArgv }).strict(),
@@ -68,6 +84,11 @@ export const WorkAgentMethods = {
   "work.agent_finish": z.object({ id: z.string().uuid(), claim: z.string().uuid(), state: z.enum(["launched", "failed"]) }).strict(),
   "work.agent_reject": z.object({ id: z.string().uuid() }).strict(),
   "work.agent_launch": z.object({ machineId: z.string().regex(/^[a-f0-9]{32}$/), requestId: z.string().uuid() }).strict(),
+  "work.agent_poll": z.object({ ...lease, paneId: entity, state: WorkAgentState }).strict(),
+  "work.agent_instruction_result": z.object({ ...lease, instructionId: z.string().uuid(), state: z.enum(["sent", "failed"]), message: z.string().max(500).optional() }).strict(),
+  "work.agent_plugin": z.object({ ...lease, request: WorkAgentPlugin }).strict(),
+  "work.agent_check": z.object(lease).strict(),
+  "work.agent_tool": z.object({...lease,tool:WorkAgentTool}).strict(),
 } as const;
 export interface WorkAgentResults {
   "work.agent_request": WorkAgentRequest;
@@ -76,6 +97,11 @@ export interface WorkAgentResults {
   "work.agent_finish": {};
   "work.agent_reject": {};
   "work.agent_launch": { workspaceId: string; tabId: string; paneId: string };
+  "work.agent_poll": { instruction?: { id: string; taskFile: string } };
+  "work.agent_instruction_result": {};
+  "work.agent_plugin": unknown;
+  "work.agent_check": {};
+  "work.agent_tool": unknown;
 }
 
 

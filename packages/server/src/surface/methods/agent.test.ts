@@ -33,6 +33,7 @@ class FakeHost {
   writeModal = vi.fn(async (input: ModalInput) => {
     this.modal.push(input);
     if (this.fail) throw this.fail;
+    await input.prepare?.();
     this.written.push(...input.build(this.modes));
   });
 }
@@ -74,6 +75,21 @@ function errorCode(result: Awaited<ReturnType<ReturnType<typeof setup>["call"]>>
   if (result.ok) throw new Error(`expected an error, got ${JSON.stringify(result.result)}`);
   return result.error.code;
 }
+
+it("enforces an internal idle-only guard after queued input while ordinary prompts retain working support",async()=>{
+  const s=setup();s.changeAgentBeforeWrite(agent({state:"working"}));
+  const result=await s.surface.invoke({...s.ctx,agentPromptGuard:a=>{if(a.state!=="idle")throw Error("not idle");}},"agent.prompt",{paneId:"p1",text:"remote follow-up"});
+  expect(result.ok).toBe(false);expect(s.host.written).toEqual([]);
+  expect((await s.call("agent.prompt",{paneId:"p1",text:"ordinary prompt"})).ok).toBe(true);
+});
+
+it("revalidates a remote lease inside the input queue before building a follow-up",async()=>{
+  const s=setup();let release!:()=>void;const gate=new Promise<void>(r=>{release=r;});let valid=true;
+  const prepare=vi.fn(async()=>{await gate;if(!valid)throw Error("revoked remote lease");});
+  const result=s.surface.invoke({...s.ctx,agentPromptPrepare:prepare},"agent.prompt",{paneId:"p1",text:"queued follow-up"});
+  await vi.waitFor(()=>expect(prepare).toHaveBeenCalled());valid=false;release();
+  expect((await result).ok).toBe(false);expect(s.host.written).toEqual([]);
+});
 
 describe("agent.prompt", () => {
   let s: ReturnType<typeof setup>;

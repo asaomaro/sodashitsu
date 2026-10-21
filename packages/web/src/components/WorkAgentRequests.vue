@@ -46,6 +46,7 @@ onBeforeUnmount(() => { disposed = true; local?.stop(); if (timer) clearInterval
     <div v-for="request in requests" :key="request.id" class="work-agent-request">
       <div>{{ machines.statusOf(machines.selectedId)?.label }} / {{ request.folder }}</div>
       <code>{{ request.agentKind }} {{ request.args.join(' ') }}</code>
+      <p v-if="request.task">プラグイン: {{ request.task.pluginKey }}<br>制作指示: {{ request.task.taskFile }}</p>
       <p>このPCのエージェントを新しいペインで起動し、上の接続先PJを操作します。</p>
       <button type="button" :disabled="busy || !local" @click="launch(request)">{{ busy ? '起動中…' : '起動' }}</button>
       <button type="button" :disabled="busy" @click="reject(request)">取り消す</button>

@@ -1,4 +1,4 @@
-import { WorkMethods, WorkTransferMethods, WorkAgentMethods, RpcError } from "@sodashitsu/protocol";
+import { WorkMethods, WorkTransferMethods, WorkAgentMethods, WorkspaceToolsParams, RpcError } from "@sodashitsu/protocol";
 import type { ControlSurface, MethodContext } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 export function registerWorkMethods(surface: ControlSurface, deps: MethodDeps): void {
@@ -14,6 +14,27 @@ export function registerWorkMethods(surface: ControlSurface, deps: MethodDeps): 
     surface.register("work.agent_claim", { schema: WorkAgentMethods["work.agent_claim"], handler: (ctx, p) => { auth(ctx); return requests.claim(p.id); } });
     surface.register("work.agent_finish", { schema: WorkAgentMethods["work.agent_finish"], handler: (ctx, p) => { auth(ctx); return requests.finish(p.id, p.claim, p.state); } });
     surface.register("work.agent_reject", { schema: WorkAgentMethods["work.agent_reject"], handler: (ctx, p) => { auth(ctx); return requests.reject(p.id); } });
+    surface.register("work.agent_poll", { schema: WorkAgentMethods["work.agent_poll"], handler: (ctx, p) => { auth(ctx); return requests.poll(p.id,p.claim,p.paneId,p.state); } });
+    surface.register("work.agent_instruction_result", { schema: WorkAgentMethods["work.agent_instruction_result"], handler: (ctx, p) => { auth(ctx); return requests.instructionResult(p.id,p.claim,p.instructionId,p.state,p.message); } });
+    surface.register("work.agent_plugin", { schema: WorkAgentMethods["work.agent_plugin"], handler: (ctx, p) => { auth(ctx); return requests.plugin(p.id,p.claim,p.request); } });
+    surface.register("work.agent_check", { schema: WorkAgentMethods["work.agent_check"], handler: (ctx, p) => { auth(ctx); return requests.check(p.id,p.claim); } });
+    surface.register("work.agent_tool",{schema:WorkAgentMethods["work.agent_tool"],handler:async(ctx,p)=>{
+      auth(ctx);
+      return requests.operate(p.id,p.claim,async(scope,sourcePaneId,guard)=>{
+        const tool=p.tool;const check=()=>{auth(ctx);guard();};check();
+        if(tool.operation==="inspect")return work.inspect(scope);
+        if(tool.operation==="skill")return work.skill({...scope,id:tool.id,path:tool.path});
+        if(tool.operation==="plugin")return requests.plugin(p.id,p.claim,tool.request);
+        if(tool.operation==="memory")return work.memory(WorkMethods["work.memory"].parse({...scope,sourcePaneId,action:tool.action,name:tool.name,...(tool.content!==undefined?{content:tool.content}:{}),...(tool.version?{version:tool.version}:{})}),check);
+        if(tool.operation==="file"){
+          if(!deps.workspaceTools)throw new RpcError("not_found","ファイル操作を利用できません");
+          return deps.workspaceTools.run(WorkspaceToolsParams.parse({...scope,operation:tool.action,path:tool.path,...(tool.query!==undefined?{query:tool.query,grep:true}:{}),...(tool.content!==undefined?{content:tool.content}:{}),...(tool.version?{version:tool.version}:{})}),check);
+        }
+        if(!deps.exec)throw new RpcError("not_found","コマンド実行を利用できません");
+        const cwd=await work.scope(scope);check();
+        return deps.exec.start(ctx.clientId,{command:tool.command,cwd,timeoutMs:tool.timeoutMs,encoding:tool.encoding});
+      });
+    }});
   }
   if (deps.workAgentLauncher) surface.register("work.agent_launch", { schema: WorkAgentMethods["work.agent_launch"], handler: (ctx, p) => { auth(ctx); return deps.workAgentLauncher!.launch(p.machineId, p.requestId); } });
   surface.register("work.binding", { schema: WorkMethods["work.binding"], handler: (ctx, p) => { auth(ctx); return work.binding(p); } });

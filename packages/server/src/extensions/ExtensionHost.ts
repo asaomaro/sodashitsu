@@ -2,7 +2,7 @@ import type {ArtifactFiles} from '../http/ArtifactFiles.js';
 import {z} from 'zod';
 import {viewInformation} from "./viewInformation.js";
 import {PluginOperations} from "./PluginOperations.js";
-import { TaskAgentLauncher, TaskStartSchema, type TaskAgentDeps } from "./TaskAgentLauncher.js";
+import { TaskAgentLauncher, TaskStartSchema, TaskStatusSchema, TaskPromptSchema, TaskKindsSchema, type TaskAgentDeps } from "./TaskAgentLauncher.js";
 import { randomUUID } from "node:crypto";
 import { stat as fsStat } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -273,7 +273,7 @@ export class ExtensionHost {
       inScope: (ext, paneId) => this.inScopeFn(ext, paneId),
       logger: opts.logger,
       artifactMethods:opts.artifacts?["artifact.open","artifact.close"]:[],
-      ...(this.taskLauncher ? {taskMethods:["task.kinds","task.start"]} : {}),
+      ...(this.taskLauncher ? {taskMethods:["task.kinds","task.start",...(opts.tasks?.operator ? ["task.status","task.prompt"] : [])]} : {}),
     });
     this.panesDebounce = new Debouncer(this.clock, EXTENSION_PANES_DEBOUNCE_MS, 500, () => this.refreshPanes());
     this.workspaceDebounce = new Debouncer(this.clock, 200, 1_000, () => this.scheduleReconcile());
@@ -1046,7 +1046,7 @@ export class ExtensionHost {
             void operation().then(result=>{if(req.id!==undefined&&this.runs.get(key)?.runId===runId)r.proc.send({type:'ext.result',id:req.id,ok:true,result});}).catch(err=>{if(req.id!==undefined&&this.runs.get(key)?.runId===runId)r.proc.send({type:'ext.result',id:req.id,ok:false,error:{code:err instanceof RpcError?err.code:'internal',message:err instanceof RpcError?err.message:'成果物の表示に失敗しました'}});});
             return;
           }
-          if(this.taskLauncher && (req.method==="task.kinds"||req.method==="task.start")){
+          if(this.taskLauncher && ["task.kinds","task.start","task.status","task.prompt"].includes(req.method)){
             const target=()=>{
               if(this.runs.get(key)?.runId!==r.runId || !r.ext.allow.includes("agent-start"))throw new RpcError("invalid_params","agent-start の許可が必要です");
               const pane=this.panesFor(r.ext).find(p=>p.id===(req.params as {paneId?:string})?.paneId);
@@ -1055,8 +1055,21 @@ export class ExtensionHost {
             };
             const operation=async()=>{
               if(!r.ext.allow.includes("agent-start"))throw new RpcError("invalid_params","agent-start の許可が必要です");
-              if(req.method==="task.kinds")return this.taskLauncher!.kinds();
+              const owner=JSON.stringify([key,r.runId]);
+              if(req.method==="task.kinds")return this.taskLauncher!.kinds(TaskKindsSchema.parse(req.params??{}).execution);
+              if(req.method==="task.status"||req.method==="task.prompt"){
+                if(!this.opts.tasks?.operator)throw new RpcError("not_found","操作元の担当に対応していません");
+                const p=(req.method==="task.prompt"?TaskPromptSchema:TaskStatusSchema).parse(req.params);target();
+                return req.method==="task.prompt"
+                  ? this.opts.tasks.operator.prompt(owner,p.paneId,p.requestId,(p as z.infer<typeof TaskPromptSchema>).taskFile)
+                  : this.opts.tasks.operator.status(owner,p.paneId,p.requestId);
+              }
               const parsed=TaskStartSchema.safeParse(req.params);if(!parsed.success)throw new RpcError("invalid_params","制作依頼の指定が不正です");
+              if(parsed.data.execution==="operator")return this.taskLauncher!.startOperator(owner,key,parsed.data,target,async request=>{
+                target();
+                const fixed={key,paneId:parsed.data.paneId};
+                return request.action==="operations" ? this.pluginOperations.list(fixed) : this.pluginOperations.call({...fixed,operation:request.name,params:request.params});
+              });
               return this.taskLauncher!.start(key,parsed.data,target);
             };
             void operation().then(result=>{if(req.id!==undefined && this.runs.get(key)?.runId===r.runId)r.proc.send({type:"ext.result",id:req.id,ok:true,result});}).catch(err=>{if(req.id!==undefined && this.runs.get(key)?.runId===r.runId)r.proc.send({type:"ext.result",id:req.id,ok:false,error:{code:err instanceof RpcError?err.code:"internal",message:err instanceof RpcError?err.message:"依頼の起動に失敗しました"}});});

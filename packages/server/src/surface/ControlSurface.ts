@@ -1,6 +1,6 @@
 import type { WsConnection } from "../ws/WsServer.js";
 import type { z } from "zod";
-import { RpcError, type ErrorCode, type MethodName } from "@sodashitsu/protocol";
+import { RpcError, type ErrorCode, type MethodName, type AgentInfo } from "@sodashitsu/protocol";
 import type { ClientSink } from "../terminal/OutputFanout.js";
 // `session/SessionService.js` の再エクスポート経由で取る（architecture.md の依存表に無い
 // `session/SessionModel` への直接依存を避ける。レビュー指摘・round2）。
@@ -14,6 +14,9 @@ export interface MethodContext {
   connectionAuthorized?: () => boolean;
   /** サーバー内の予約実行などを取り消す。外部RPCからは設定されない。 */
   signal?: AbortSignal;
+  /** Internal callers can impose a stricter condition at the final queued input build. */
+  agentPromptGuard?: (agent: AgentInfo) => void;
+  agentPromptPrepare?: () => Promise<void>;
   sink: ClientSink;
   /** 同じマシンからの接続か（`WsConnection.sameMachine`）。サーバの中からの呼び出し・中継の接続では無い＝偽。 */
   sameMachine?: boolean;

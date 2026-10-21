@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { access, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { workAgentArgumentError, type WorkInspection, type WorkMemory } from "@sodashitsu/protocol";
+import { workAgentArgumentError, type WorkInspection, type WorkMemory, type WorkAgentRequest } from "@sodashitsu/protocol";
 import { WorkAgentClient } from "./workAgentIo.js";
 
 const exec = promisify(execFile);
@@ -53,7 +53,7 @@ export async function runWorkAgent(file: string) {
   process.once("SIGTERM", stop);
   process.on("SIGINT", interrupt);
   try {
-    const p = await client.request<{ agentKind: "claude" | "codex"; args: string[]; cwd: string; machineId: string; workspaceId: string; folder: string }>("describe");
+    const p = await client.request<{ agentKind: "claude" | "codex"; args: string[]; cwd: string; machineId: string; workspaceId: string; folder: string; task?:WorkAgentRequest["task"] }>("describe");
     const inspection = await client.request<WorkInspection>("tool", { operation: "inspect" });
     const memory = await client.request<WorkMemory>("tool", { operation: "memory", action: "list" });
     const initialMemory = memory.files?.includes("MEMORY.md") ? (await client.request<WorkMemory>("tool", { operation: "memory", action: "read", name: "MEMORY.md" })).text : "";
@@ -81,6 +81,7 @@ export async function runWorkAgent(file: string) {
       assertWorkAgentCodexPolicy(policy.stdout);
     }
     const args = workAgentNativeArgs(p.agentKind, p.args, mcpFile, promptFile, p.cwd, mcp, otherMcp);
+    if(p.task)args.push(`プラグインからの制作依頼です。remote_workのfile/readで接続先PJの ${JSON.stringify(p.task.taskFile)} を読み、指示に従って作業を開始してください。制作物・スキル・Git・テストは接続先です。プラグインの操作一覧はremote_work {operation:"plugin",request:{action:"operations"}}、進捗更新などはrequest:{action:"call",name:<公開された操作名>,params:<操作の引数>}で呼び出します。操作先は依頼元のアプリに固定されています。質問と成果物の確認はask_userで操作元に表示してください。`);
     process.stderr.write(`Remote ${p.agentKind}: ${p.folder}\n`);
     child = spawn(executable.command, [...executable.prefix, ...args], { cwd: p.cwd, env, stdio: "inherit", shell: false });
     const exited = new Promise<number>((resolve, reject) => { child!.once("error", reject); child!.once("exit", (code, signal) => resolve(code ?? (signal ? 130 : 1))); });

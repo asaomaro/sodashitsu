@@ -289,3 +289,6 @@ process.on("SIGTERM", () => process.exit(0)); // 止めるとき、soda は標�
 `script-html` が許可・有効な拡張は `artifact.open` / `artifact.close` を使える（対応時だけ `ext.hello.methods` に出る）。`artifact.open` は `{paneId,path,kind:"html"|"text"|"image",stamp:{size,mtimeMs,ino}}` を受け、自分の拡張paneに紐づくPJ内の通常ファイルのみ登録する。戻り値は `{token,path:"/display-artifacts/<token>"}`。本文はdisplay.sendに載せず、このpathをiframeへ設定する。URLは15分で失効する。`artifact.close` の `{token}`、拡張停止、pane/PJ変更でも無効になる。複数の拡張が互いのtokenを破棄することはできない。登録は拡張runごと8個、サーバ全体128個まで。
 
 HTTPはGET/HEADのみ、通常の認証cookieではなくランダム256bitの一時URLが閲覧能力になる。URLをログや外部サイトへ転載しない。キャッシュとリファラは送らない。FDを保持し、登録時と配信時のサイズ/mtimeを検査して変更されたものは表示しない。HTMLは応答でもsandboxを付け、不透明originで動かし、外部通信/親アプリへのアクセスは許可しない。script.htmlのframe-srcは同じサーバの専用経路だけを許可する。textはtext/plain、imageはimage/png。ファイルサイズの利用者確認は拡張のUIで登録前に行う（Yukkuri Studioは設定値と一回の許可を使用）。別マシンへのWS中継を通じたHTTP成果物転送はこの機能に含めない。
+# 接続先のプラグインから操作元のエージェントを使う
+
+`agent-start` を許可したプラグインは、`task.start {paneId,kind,taskFile,execution:"operator"}` で操作元への起動要求を作れます。従来の起動は `execution` の省略または `"server"` です。`task.kinds {execution:"operator"}`、`task.status {paneId,requestId}`、`task.prompt {paneId,requestId,taskFile}` とMCPによるアプリ操作は、[作成ガイド](plugin-agents.md)を参照してください。操作元での明示起動、依頼元のプロセス世代・アプリ・PJへの固定、接続終了時の扱いがあります。

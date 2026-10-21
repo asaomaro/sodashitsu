@@ -18,6 +18,9 @@ it("rejects target/cwd/method injection even when a caller bypasses the CLI", ()
     { operation: "auth.login", token: "x" },
   ]) expect(WorkAgentTool.safeParse(value).success).toBe(false);
   expect(WorkAgentRequestSchema.safeParse({ agentKind: "node" }).success).toBe(false);
+  expect(WorkAgentTool.safeParse({operation:"plugin",request:{action:"operations"}}).success).toBe(true);
+  for(const request of [{action:"operations",key:"other"},{action:"call",name:"report",params:{},paneId:"other"},{action:"call",name:"report",params:{text:"あ".repeat(30000)}}])
+    expect(WorkAgentTool.safeParse({operation:"plugin",request}).success).toBe(false);
 });
 
 

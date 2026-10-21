@@ -97,6 +97,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
         throw new RpcError("empty_agent_prompt", "agent prompt must not be empty");
       requirePromptExpectation(deps, params);
       const { agent, host } = requireAgent(deps, params.paneId, params.instanceId);
+      ctx.agentPromptGuard?.(agent);
       // blocked（承認・質問の入力待ち）には何も書かない。答えるなら agent.send_keys で意図して送る。
       if (agent.state === "blocked") throw blockedError(params.paneId);
       deps.sizeAuthority.noteInteraction(ctx.clientId, params.paneId);
@@ -105,6 +106,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
       let sentTo = agent;
       try {
         await host.writeModal({
+          ...(ctx.agentPromptPrepare?{prepare:ctx.agentPromptPrepare}:{}),
           build: (modes) => {
             if (ctx.signal?.aborted)
               throw new RpcError("agent_prompt_failed", "指示の送信を中断しました");
@@ -112,6 +114,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
             // （承認ダイアログへの誤答・終了したエージェントの後のシェルへの誤入力を防ぐ。decisions.md D7）。
             requirePromptExpectation(deps, params);
             const now = requireSameAgent(deps, params.paneId, agent);
+            ctx.agentPromptGuard?.(now);
             if (now.state === "blocked") throw blockedError(params.paneId);
             sentTo = now;
             return [pastePayload(params.text, modes.bracketedPaste), "\r"];
