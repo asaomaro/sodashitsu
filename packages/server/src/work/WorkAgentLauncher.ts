@@ -23,7 +23,8 @@ export class WorkAgentLauncher {
   private stopped = false;
   constructor(private readonly stateDir: string, private readonly session: SessionService,
     private readonly starter: AgentStarter, private readonly connect: (machine: string) => Promise<WorkAgentRemote>,
-    private readonly asks?: Pick<AskService, "open" | "onClientGone">) {}
+    private readonly asks?: Pick<AskService, "open" | "onClientGone">,
+    private readonly prompt?: (paneId:string,instanceId:string,text:string,signal:AbortSignal,guards:{prepare:()=>Promise<void>;check:()=>void})=>Promise<void>) {}
 
   async launch(machineId: string, requestId: string) {
     if (this.stopped || this.leases.size >= 20) throw new RpcError("server_busy", "エージェント起動の上限です");
@@ -37,7 +38,7 @@ export class WorkAgentLauncher {
       if (!parsed.success || parsed.data.id !== requestId || parsed.data.state !== "claimed" || parsed.data.expiresAt <= Date.now()) throw new RpcError("invalid_params", "接続先の起動要求が不正です");
       const p = parsed.data, error = workAgentArgumentError(p.agentKind, p.args);
       if (error) throw new RpcError("invalid_params", error);
-      activeKey = `${machineId}/${p.paneId}/${p.agentKind}`;
+      activeKey = `${machineId}/${p.paneId}/${p.agentKind}${p.task?`/${requestId}`:""}`;
       if (this.active.has(activeKey)) throw new RpcError("server_busy", "この作業先のエージェントは起動済みです");
       if (this.active.size >= 20) throw new RpcError("server_busy", "エージェント起動の上限です");
       this.active.add(activeKey);
@@ -49,6 +50,9 @@ export class WorkAgentLauncher {
       const socketPath = process.platform === "win32" ? `\\\\.\\pipe\\soda-work-${randomUUID()}` : join(tmpdir(), `soda-work-${randomUUID()}.sock`);
       const secret = randomBytes(32).toString("hex"), sockets = new Set<Socket>();
       let closed = false, busy = false, paneId: string | undefined, launching = true, closeRequested = false;
+      const abort = new AbortController();
+      const agentName = `remote-${randomUUID().slice(0,8)}`;
+      let agentInstance: string | undefined, reporting = false, reportTimer: ReturnType<typeof setInterval> | undefined;
       let job: { socket: Socket; cancelled: boolean; execId?: string; remote?: WorkAgentRemote; askOwner?: string } | undefined;
       const cancel = (socket: Socket) => {
         if (job?.socket !== socket) return;
@@ -64,6 +68,7 @@ export class WorkAgentLauncher {
       };
       const ask = async (raw: unknown, owner: NonNullable<typeof job>) => {
         check();
+        if(p.task)await remote.request("work.agent_check",{id:requestId,claim:claim!});
         if (!this.asks || !paneId) throw new RpcError("not_found", "操作元の質問フォームを利用できません");
         const params = checkWorkAgentAsk(raw), files: string[] = [];
         owner.askOwner = `work-agent-${randomUUID()}`;
@@ -75,6 +80,7 @@ export class WorkAgentLauncher {
             files.push(file);
             view.push({ title: document.title, file });
           }
+          if(p.task)await remote.request("work.agent_check",{id:requestId,claim:claim!});
           check();
           if (owner.cancelled) return { status: "cancelled" };
           return await this.asks.open(owner.askOwner, { paneId, timeoutMs: params.timeoutMs,
@@ -88,6 +94,9 @@ export class WorkAgentLauncher {
         check();
         if (owner.cancelled) throw new RpcError("invalid_params", "操作は中断されました");
         const tool = WorkAgentTool.parse(raw);
+        // Plugin generation and project scope must still be valid before any scoped operation.
+        if(p.task && tool.operation!=="exec")return remote.request("work.agent_tool",{id:requestId,claim:claim!,tool});
+        if(tool.operation === "plugin")return remote.request("work.agent_plugin",{id:requestId,claim:claim!,request:tool.request});
         if (tool.operation === "inspect") return remote.request("work.inspect", scope);
         if (tool.operation === "skill") return remote.request("work.skill", { ...scope, id: tool.id, path: tool.path });
         if (tool.operation === "file") return remote.request("workspace.tools", { ...scope, operation: tool.action, path: tool.path,
@@ -100,7 +109,10 @@ export class WorkAgentLauncher {
         try {
           check();
           if (owner.cancelled) throw new RpcError("invalid_params", "操作は中断されました");
-          const { id } = await commandRemote.request("work.exec", { ...scope, command: tool.command, timeoutMs: tool.timeoutMs, encoding: tool.encoding });
+          const result=p.task
+            ? await commandRemote.request("work.agent_tool",{id:requestId,claim:claim!,tool}) as {id:string}
+            : await commandRemote.request("work.exec", { ...scope, command: tool.command, timeoutMs: tool.timeoutMs, encoding: tool.encoding });
+          const {id}=result;
           owner.execId = id;
           if (owner.cancelled) await commandRemote.request("exec.cancel", { id }).catch(() => {});
           for (;;) {
@@ -134,7 +146,7 @@ export class WorkAgentLauncher {
             void (async () => {
               try {
                 check();
-                if (m.operation === "describe") respond({ result: { agentKind: p.agentKind, args: p.args, cwd: project, machineId, workspaceId: p.workspaceId, folder: p.folder } });
+                if (m.operation === "describe") respond({ result: { agentKind: p.agentKind, args: p.args, cwd: project, machineId, workspaceId: p.workspaceId, folder: p.folder, ...(p.task?{task:p.task}:{}) } });
                 else if (m.operation === "ask") respond({ result: await ask(m.tool, owner) });
                 else if (m.operation === "tool") respond({ result: await execute(m.tool, owner) });
                 else respond({ error: "Unknown work agent operation" });
@@ -148,6 +160,7 @@ export class WorkAgentLauncher {
       const expiry = setTimeout(() => cleanup?.(), 24 * 60 * 60 * 1000); expiry.unref();
       cleanup = () => {
         if (closed) return; closed = true;
+        abort.abort(); if(reportTimer)clearInterval(reportTimer);
         clearInterval(timer); clearTimeout(expiry);
         if (job?.askOwner) this.asks?.onClientGone(job.askOwner);
         job?.remote?.close();
@@ -170,11 +183,37 @@ export class WorkAgentLauncher {
       // Wait for the freshly spawned shell to become inspectable. Never type into a busy pane.
       for (let i = 0; i < 40 && !await this.starter.isShellAvailable(paneId); i++) await new Promise(resolve => setTimeout(resolve, 100));
       check();
-      await this.starter.start({ paneId, kind: p.agentKind, name: `remote-${randomUUID().slice(0, 8)}`, args: [] }, undefined,
+      await this.starter.start({ paneId, kind: p.agentKind, name: agentName, args: [] }, undefined,
         { skipInterrupt: true, command: { executable: process.execPath, args: [cli, "work-agent-run", config] } });
       const bootTimer = setTimeout(() => startFailed?.(), 30000);
       try { await ready; } finally { clearTimeout(bootTimer); }
       await remote.request("work.agent_finish", { id: requestId, claim, state: "launched" });
+      if(p.task){
+        const report=async()=>{
+          if(reporting||closed)return;reporting=true;
+          try{
+            check();const agent=this.session.getPane(paneId!)?.agent;
+            if(!agentInstance && agent?.kind===p.agentKind && agent.name===agentName)agentInstance=agent.instanceId;
+            const same=agentInstance && agent?.instanceId===agentInstance;
+            const state=same&&agent!.state!=="unknown"?agent!.state:agentInstance&&!same?"stopped":"starting";
+            const result=await remote.request("work.agent_poll",{id:requestId,claim:claim!,paneId:paneId!,state});
+            if(result.instruction){
+              const instruction=result.instruction;let message:string|undefined;
+              try{
+                check();
+                const current=this.session.getPane(paneId!)?.agent;
+                if(!this.prompt||!agentInstance||current?.instanceId!==agentInstance||current.state!=="idle")throw new RpcError("agent_not_found","同じ担当の入力待ちを確認できません");
+                await this.prompt(paneId!,agentInstance,`追加指示です。remote_workで接続先PJの ${JSON.stringify(instruction.taskFile)} を読み、進めてください。`,abort.signal,
+                  {prepare:async()=>{check();await remote.request("work.agent_check",{id:requestId,claim:claim!});check();},check});
+              }catch{message="送信・受信状態を操作元で確認してください。自動再送はしません";}
+              await remote.request("work.agent_instruction_result",{id:requestId,claim:claim!,instructionId:instruction.id,state:message?"failed":"sent",...(message?{message}:{})});
+            }
+            if(state==="stopped")cleanup?.();
+          }catch{cleanup?.();}
+          finally{reporting=false;}
+        };
+        reportTimer=setInterval(()=>void report(),3000);reportTimer.unref();void report();
+      }
       launching = false; if (closeRequested) cleanup();
       return { workspaceId: created.workspace.id, tabId: created.tab.id, paneId };
     } catch (e) {

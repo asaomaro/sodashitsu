@@ -70,9 +70,10 @@ export class WorkContext {
     if (!inside(skill.directory, file)) throw new RpcError("invalid_params", "スキルの外にはアクセスできません");
     return { text: await textFile(file), directory: skill.directory, path: p.path };
   }
-  async memory(p: z.infer<(typeof WorkMethods)["work.memory"]>): Promise<WorkMemory> {
+  async memory(p: z.infer<(typeof WorkMethods)["work.memory"]>,guard:()=>void=()=>{}): Promise<WorkMemory> {
     return this.serial(async () => {
       const folder = await this.scope(p);
+      guard();
       const directory = await privateDirs(folder, [".soda", "agent-memory", p.sourcePaneId]);
       if (p.action === "list") return { directory, files: (await readdir(directory, { withFileTypes: true })).filter(e => e.isFile()).map(e => e.name).sort().slice(0, 200) };
       const file = join(directory, p.name);
@@ -87,6 +88,7 @@ export class WorkContext {
         if (p.version) throw new RpcError("invalid_params", "メモが削除されています");
         if ((await readdir(directory)).length >= 200) throw new RpcError("invalid_params", "メモは200件までです");
         await this.scope(p);
+        guard();
         await createExclusive(file, p.content);
       } else {
         if (!p.version || p.version !== digest(old)) throw new RpcError("invalid_params", "メモを再読込し、最新versionを指定してください");
@@ -96,6 +98,7 @@ export class WorkContext {
           await createExclusive(temporary, p.content);
           if (digest(await textFile(file)) !== p.version) throw new RpcError("invalid_params", "保存中にメモが変更されました");
           await this.scope(p); await check();
+          guard();
           await rename(temporary, file);
         } finally { await check().then(() => unlink(temporary)).catch(() => {}); }
       }

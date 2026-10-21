@@ -512,12 +512,16 @@ export async function composeServer(
   });
   const workspaceTools=new WorkspaceTools(id=>session.snapshot().workspaces.find(w=>w.id===id)?.projectDir);
   const work = new WorkContext(options.stateDir, id => session.getPane(id), id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir);
+  const workAgentRequests = new WorkAgentRequests(work, id => {
+    const pane = session.getPane(id), tab = pane && session.snapshot().tabs.find(t => t.id === pane.tabId);
+    return tab ? { workspaceId: tab.workspaceId } : undefined;
+  }, id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir);
   const builtinViews=new BuiltinViews(session,displays,bus,workspaceTools);
   // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
   const extensions = new ExtensionHost({
     artifacts,
-    tasks:{session,starter:agentStarter,kinds:createAgentKindsLister()},
+    tasks:{session,starter:agentStarter,kinds:createAgentKindsLister(),operator:workAgentRequests},
     stateDir: options.stateDir,
     sessionRoot: options.sessionRoot,
     session,
@@ -741,10 +745,6 @@ export async function composeServer(
       close() { if (!closed) { closed = true; previews.clientGone(clientId); } },
     };
   });
-  const workAgentRequests = new WorkAgentRequests(work, id => {
-    const pane = session.getPane(id), tab = pane && session.snapshot().tabs.find(t => t.id === pane.tabId);
-    return tab ? { workspaceId: tab.workspaceId } : undefined;
-  }, id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir);
   const workAgentLauncher = new WorkAgentLauncher(options.stateDir, session, agentStarter, async machine => {
     const route = machines.route(machine);
     if (route.kind !== "ok") throw new RpcError("not_found", "接続先マシンが未接続です");
@@ -757,7 +757,12 @@ export async function composeServer(
       request: rpc.request.bind(rpc), close: () => { gone = true; rpc.close(); },
       valid: () => { const current = machines.route(machine); return !gone && current.kind === "ok" && current.link === route.link; },
     };
-  }, asks);
+  }, asks, async (paneId,instanceId,text,signal,guards) => {
+    const result=await surface.invoke({clientId:"work-agent",sink:{clientId:"work-agent",bufferedAmount:0,sendOutput(){},sendSnapshot(){}},signal,
+      agentPromptPrepare:guards.prepare,
+      agentPromptGuard:agent=>{guards.check();if(agent.state!=="idle")throw new RpcError("agent_pane_busy","担当の入力待ちを確認できません");}},"agent.prompt",{paneId,instanceId,text});
+    if(!result.ok)throw new RpcError(result.error.code,result.error.message);
+  });
   registerAllMethods(surface, {
     workAgentRequests,
     workAgentLauncher,

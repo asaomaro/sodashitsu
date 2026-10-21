@@ -5,23 +5,55 @@ import { RpcError, hasForbiddenChars, type ExtPane, type AgentKindsResult } from
 import { z } from "zod";
 import type { SessionService } from "../session/SessionService.js";
 import type { AgentStarter } from "../agent/AgentStarter.js";
+import type { WorkAgentRequests } from "../work/WorkAgentRequests.js";
+import type { WorkAgentPlugin } from "@sodashitsu/protocol";
 
 export const TASK_AGENT_KINDS = ["claude", "codex"] as const;
-export const TaskStartSchema = z.strictObject({ paneId:z.string(), kind:z.enum(TASK_AGENT_KINDS), taskFile:z.string().min(1).max(4096) });
+export const TaskStartSchema = z.strictObject({ paneId:z.string(), kind:z.enum(TASK_AGENT_KINDS), taskFile:z.string().min(1).max(4096), execution:z.enum(["server","operator"]).optional() });
+export const TaskStatusSchema = z.strictObject({ paneId:z.string(), requestId:z.string().uuid() });
+export const TaskPromptSchema = TaskStatusSchema.extend({ taskFile:z.string().min(1).max(4096) });
+export const TaskKindsSchema = z.strictObject({ execution:z.enum(["server","operator"]).optional() });
 type TaskStart = z.infer<typeof TaskStartSchema>;
 export interface TaskAgentResult { paneId:string; kind:string; name:string; status:"submitted" }
 export interface TaskAgentDeps {
   session:Pick<SessionService,"splitPane"|"getPane"|"getTab">;
   starter:Pick<AgentStarter,"start"|"isShellAvailable">;
   kinds:()=>Promise<AgentKindsResult>;
+  operator?: WorkAgentRequests;
 }
 /** Only creates fresh work panes. No prompt or arbitrary argv can target existing terminals. */
 export class TaskAgentLauncher {
   private active=new Map<string,{paneId:string; result:TaskAgentResult}>();
   private pending=new Map<string,{kind:string;promise:Promise<TaskAgentResult>}>();
+  private remoteTasks=new Map<string,string>();
   constructor(private deps:TaskAgentDeps) {}
-  async kinds():Promise<AgentKindsResult> {
+  async kinds(execution?: "server" | "operator"):Promise<AgentKindsResult> {
+    if(execution === "operator") {
+      if(!this.deps.operator)throw new RpcError("not_found","操作元のエージェント起動に対応していません");
+      return {kinds:TASK_AGENT_KINDS.map(kind=>({kind,label:kind === "claude" ? "Claude Code（操作元で確認）" : "Codex（操作元で確認）",available:true}))};
+    }
     return {kinds:(await this.deps.kinds()).kinds.filter(k=>TASK_AGENT_KINDS.includes(k.kind as typeof TASK_AGENT_KINDS[number]))};
+  }
+  async startOperator(owner:string,pluginKey:string,p:TaskStart,target:()=>ExtPane,invoke:(request:z.infer<typeof WorkAgentPlugin>)=>Promise<unknown>) {
+    if(!this.deps.operator)throw new RpcError("not_found","操作元のエージェント起動に対応していません");
+    const origin=target();
+    const guard=()=>{const now=target();if(now.id!==origin.id||now.workspaceId!==origin.workspaceId||now.tabId!==origin.tabId||now.projectDir!==origin.projectDir)throw new RpcError("not_found","依頼元のPJまたはタブが変わりました");};
+    const key=JSON.stringify([owner,origin.id,p.taskFile]);
+    const id=this.remoteTasks.get(key);
+    if(id){
+      try { const status=this.deps.operator.status(owner,origin.id,id); if(!["failed","rejected"].includes(status.status)&&status.agent?.state!=="stopped") {
+        if(status.kind!==p.kind)throw new RpcError("agent_pane_busy","この制作には依頼済みの担当があります");
+        return status;
+      }} catch(e) { if(!(e instanceof RpcError) || e.code!=="not_found")throw e; }
+      this.remoteTasks.delete(key);
+    }
+    for(const [cacheKey,requestId] of this.remoteTasks) {
+      // The registry is bounded and prunes revoked/expired generations.
+      if(!this.deps.operator.list().requests.some(r=>r.id===requestId))this.remoteTasks.delete(cacheKey);
+    }
+    const request=await this.deps.operator.create({paneId:origin.id,agentKind:p.kind,args:[]},{owner,pluginKey,taskFile:p.taskFile,valid:guard,invoke});
+    this.remoteTasks.set(key,request.id);
+    return this.deps.operator.status(owner,origin.id,request.id);
   }
   start(key:string,p:TaskStart,target:()=>ExtPane):Promise<TaskAgentResult> {
     for(const [id,item] of this.active)if(!this.deps.session.getPane(item.paneId))this.active.delete(id);

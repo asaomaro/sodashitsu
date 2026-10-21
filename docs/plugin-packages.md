@@ -259,3 +259,6 @@ soda.mount("terminal", element, { paneId: agentPaneId, interactive: true });
 ## 表示をブラウザ内で最大化する
 
 script-htmlでsoda.maximize(true)を呼ぶと、現在の表示枠をpopoverの最前面へ広げる。ユーザーのクリック、操作中、現行revをホストで照合する。soda.maximize(false)で元の配置へ戻す。iframeのDOMを移動/再生成しないため状態を保持する。soda.features.viewportMaximizeでAPIの有無を判定でき、soda.onMessageにviewport-stateとmaximizedの状態が届く。ホストは独立した復帰ボタンも表示する。表示の終了/版変更/停止時は最大化を解除する。sandboxとCSPは変更しない。
+# 操作元のエージェントとの連携
+
+接続先PCで動くプラグインから、操作元PCのClaude Code / Codexに制作を依頼する場合は、[プラグイン作成ガイド：操作元のエージェント](plugin-agents.md)を参照してください。`task.start` の `execution:'operator'`、状態取得・追加指示、固定したアプリへのMCP操作、質問フォームの出し先を説明しています。

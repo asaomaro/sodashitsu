@@ -20,7 +20,8 @@ function within(root: string, path: string) {
 export class WorkspaceTools {
   private writes = new Map<string, Promise<unknown>>();
   constructor(private folder: (id: string) => string | undefined) {}
-  async run(p: WorkspaceToolsParams): Promise<WorkspaceToolsResult> {
+  async run(p: WorkspaceToolsParams, guard:()=>void = ()=>{}): Promise<WorkspaceToolsResult> {
+    guard();
     const folder = this.folder(p.workspaceId);
     if (!folder)
       throw new RpcError("invalid_params", "ワークスペースのPJフォルダを設定してください");
@@ -49,6 +50,7 @@ export class WorkspaceTools {
       throw new RpcError("invalid_params", "PJフォルダの外にはアクセスできません");
     const checked = async () => {
       const path = await realpath(lexical);
+      guard();
       if (
         relative(root, path)
           .split(sep)
@@ -78,6 +80,7 @@ export class WorkspaceTools {
         if (!info.isFile() || info.size > MAX_BYTES)
           throw new RpcError("invalid_params", "512 KiB以下の通常ファイルを指定してください");
         const content = await readRange(handle, 0, MAX_BYTES + 1);
+        guard();
         const bytesRead = content.length;
         if (bytesRead > MAX_BYTES || content.includes(0))
           throw new RpcError("invalid_params", "大きなファイル・バイナリは編集できません");
@@ -132,7 +135,7 @@ export class WorkspaceTools {
               continue;
             }
             try {
-              const found = await this.run({ ...p, operation: "read", path });
+              const found = await this.run({ ...p, operation: "read", path },guard);
               const lines = (found.text ?? "").split("\n");
               for (let i = 0; i < lines.length && matches.length < 100; i++)
                 if (includes(lines[i]!))
@@ -207,6 +210,7 @@ export class WorkspaceTools {
               throw new RpcError("invalid_params", "PJフォルダが変更されました");
             const temporary = join(dirname(data.path), `.soda-edit-${randomUUID()}`);
             try {
+              guard();
               await writeFile(temporary, p.content!, { flag: "wx", mode: data.info.mode & 0o777 });
               // 保存を準備している間の外部変更も検出する。
               const latest = await read();
@@ -218,7 +222,7 @@ export class WorkspaceTools {
               const currentPath = await checked();
               if (this.folder(p.workspaceId) !== folder || currentPath !== data.path)
                 throw new RpcError("invalid_params", "保存中にPJフォルダが変更されました");
-              await rename(temporary, data.path);
+              guard();await rename(temporary, data.path);
             } finally {
               await unlink(temporary).catch(() => {});
             }
