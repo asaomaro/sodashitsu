@@ -1052,3 +1052,17 @@ sodactl exec --cwd /workspaces/project --timeout 60000 -- 'pnpm test'
 ## 接続先から操作元のエージェントを起動する
 
 `sodactl work agent [--pane <id>] [--url <URL>] [--token <TOKEN>] claude|codex [agent-args...]`を接続先のpaneで実行します。操作元Webで起動要求を受け付けるか、操作元で`sodactl work accept <machine> <要求ID>`を実行します。`sodactl --machine <接続先> work requests`で要求を確認できます。起動したpaneでPC/PJを固定し、専用MCPで操作します。再開・メモ・引数の範囲・再起動時の扱いは[接続先での作業](remote-work.md)を参照してください。
+
+
+### 接続先メモの名前・新規作成・更新
+
+`work bind`済みの呼出元paneで`work memory list`の`files`を確認します。名前は`MEMORY.md`や`decisions.md`を指定し、未作成はversionなし、既存はreadの最新version付きで保存します。
+
+```sh
+sodactl work memory list
+sodactl work memory read decisions.md
+sodactl work memory write decisions.md --version <readの最新version> < revised-notes.md
+sodactl work memory read decisions.md
+```
+
+新規作成ではwriteの`--version`を省略します。保存後は同じ名前の`text`/`version`を読み戻して照合してください。専用MCPの`remote_work`は`name`に同じファイル名を渡します。汎用エラーだけで切断と判断せず、引数と状態を読み取り操作で切り分け、保存結果が不明な書込を無条件に再送しません。MCPの具体的なJSON、新規作成と更新、PowerShellの標準入力、paneによる保存単位の違いは[接続先メモの手順](remote-work.md#接続先にメモを残す)を参照してください。

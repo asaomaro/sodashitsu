@@ -71,14 +71,83 @@ sodactl work exec -- 'git status --short'
 
 ## 接続先にメモを残す
 
+メモはファイル名の`name`で指定します。`MEMORY.md`や`decisions.md`のような名前を**一覧の確認・読取・保存・読み戻しで揃えてください**。`name`を省略すると`MEMORY.md`です。`path`や`.soda/agent-memory/...`の絶対/相対パスは渡しません。名前は英数字で始め、英数字・`_`・`-`・`.`の128文字以内（末尾の`.`とWindows予約名は不可）です。
+
+専用MCPの`remote_work`は、`work agent`を要求した接続先Bのpane IDを保存単位にします。CLIの`work memory`は`work bind`した操作元の呼出元pane IDを使います。別paneや別方式の一覧を見て、メモが消えたと判断しないでください。
+
+### 専用MCPの例
+
+`remote_work`へ次のJSONを1件ずつ順に渡します。PC/PJ/paneの指定を追加する必要はありません。
+
+1. 一覧の`files`で、使う名前が存在するか確認します。
+
+   ```json
+   {"operation":"memory","action":"list"}
+   ```
+
+2. `decisions.md`が存在しなければ、`version`を付けずに新規作成します。
+
+   ```json
+   {"operation":"memory","action":"write","name":"decisions.md","content":"決定事項と未完了作業"}
+   ```
+
+3. 既存メモは先に読み、返された`text`と`version`を確認します。
+
+   ```json
+   {"operation":"memory","action":"read","name":"decisions.md"}
+   ```
+
+4. 更新は同じ`name`と、直前のreadが返した`version`を指定します。下のプレースホルダーを実際の64桁の値に置き換えてください。古いversion・任意に作った値・version省略による既存メモの上書きはできません。
+
+   ```json
+   {"operation":"memory","action":"write","name":"decisions.md","content":"読み取った内容を踏まえた改訂メモ","version":"<直前のreadのversion>"}
+   ```
+
+5. 保存後は同じ名前をもう一度readし、`text`が保存したい内容であることと、`version`がwrite結果と一致することを確認します。write結果が受け取れなかった場合も、再送前に読み戻します。
+
+   ```json
+   {"operation":"memory","action":"read","name":"decisions.md"}
+   ```
+
+一覧に無い名前でも、その後に別の処理が作成することがあります。新規作成が失敗したら同じ名前をreadし、存在すれば最新versionを使う更新へ切り替えます。一覧は最大200件です。
+
+### CLIの例
+
+次は`work bind`済みの呼出元paneで使う例です。専用MCP起動が自動でCLIのbindを作るわけではありません。シェルの標準入力で渡す本文はUTF-8にしてください。
+
 ```sh
-sodactl work memory write MEMORY.md < handoff-notes.md
 sodactl work memory list
-sodactl work memory read MEMORY.md
-sodactl work memory write MEMORY.md --version <read結果のversion> < revised-notes.md
+# decisions.mdが無い場合だけ新規作成（versionなし）
+sodactl work memory write decisions.md < handoff-notes.md
+# 既存メモは先にtext/versionを取得
+sodactl work memory read decisions.md
+# <最新version>を直前のread結果に置き換えて更新
+sodactl work memory write decisions.md --version <最新version> < revised-notes.md
+# 保存後のtext/versionを確認
+sodactl work memory read decisions.md
 ```
 
-接続先PJの`.soda/agent-memory/<呼出元pane UUID>/`に保存します。既存AGENTS.md/CLAUDE.mdは上書きしません。判断、未完了作業、起動・検証コマンドなどを残してください。各ファイルは256KiB、paneごとに200ファイルまで。更新には読み込み結果のversionが必要です。必要に応じ、このフォルダを接続先のGit ignoreへ追加してください。
+PowerShellでは`< file`を使わず、UTF-8の標準入力をパイプで渡します。既存メモの更新例です。
+
+```powershell
+$OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$memo = sodactl work memory read decisions.md | ConvertFrom-Json
+# read成功と$memo.versionを確認してから実行
+Get-Content .\revised-notes.md -Raw -Encoding UTF8 | sodactl work memory write decisions.md --version $memo.version
+sodactl work memory read decisions.md
+```
+
+接続先PJの`.soda/agent-memory/<保存単位のpane ID>/`に保存します。既存AGENTS.md/CLAUDE.mdは上書きしません。判断、未完了作業、起動・検証コマンドなどを残してください。各ファイルは256KiB、paneごとに200ファイルまで。必要に応じ、このフォルダを接続先のGit ignoreへ追加してください。
+
+### メモ操作が失敗したとき
+
+「接続先の操作に失敗しました。接続とPJを確認してください」などの**汎用エラーだけでは、接続切断と判断できません**。引数不備、メモの未作成、version競合、権限、容量/件数制限、保存先の実体変更なども切り分けます。
+
+1. `operation`/`action`、同じ`name`を使っているか、writeの`content`、更新の`version`、本文と名前の上限を確認します。
+2. 専用MCPでは`{"operation":"inspect"}`、memory list、存在する名前のmemory readを**順番に**試します。並列実行は「別のremote操作が実行中」になる場合があります。CLIでは`work status`でbindを確認し、`work skills`で接続先のinspect、`work memory list/read`でメモを確認します。
+3. 読取が成功すれば、その時点の通信とその読取の対象確認はできています。書込権限まで確認できたとは限りません。未作成なら作成、version競合なら最新内容を読んで差分を合わせ、最新versionで更新します。引数が正しいのに失敗する場合は、接続先の権限・上限・保存先の状態を調べます。
+4. writeが成功したか不明なら同じ名前をreadし、`text`と`version`を照合します。読取でも確認できない間は更新を止めて利用者に状況を伝えます。書込を無条件に再送しません。
+5. inspectや一覧も失敗する場合は、操作元の接続一覧、接続先の起動pane/PJ設定、サーバ再起動や接続の世代変更を確認します。切断や対象変更が確認できたら操作を止め、利用者に同じ作業先での再起動を依頼します。CLIのbindが失効した場合も、対象を確認してから再bindします。手元のファイル/シェルで代行しません。
 
 ## 接続先の同じエージェントからresumeする
 
