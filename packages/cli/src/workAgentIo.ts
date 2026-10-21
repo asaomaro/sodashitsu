@@ -49,7 +49,7 @@ export class WorkAgentClient {
     });
     return new WorkAgentClient(socket, p.secret);
   }
-  request<T = unknown>(operation: "describe" | "tool" | "close" | "started" | "cancel", tool?: unknown): Promise<T> {
+  request<T = unknown>(operation: "describe" | "tool" | "ask" | "close" | "started" | "cancel", tool?: unknown): Promise<T> {
     if (this.closed) return Promise.reject(Error("作業先proxyが終了しました。ローカルでは代行しません"));
     return new Promise<T>((resolve, reject) => {
       const id = ++this.id;

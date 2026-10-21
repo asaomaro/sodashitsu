@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { WorkAgentTool, workAgentArgumentError, WorkAgentRequestSchema } from "./workAgent.js";
+import { WorkAgentTool, workAgentArgumentError, WorkAgentRequestSchema, checkWorkAgentAsk } from "./workAgent.js";
 
 it("allows native resume/model arguments without allowing policy or admin overrides", () => {
   expect(workAgentArgumentError("claude", ["--resume", "--model", "sonnet", "--effort", "high"])).toBeUndefined();
@@ -18,4 +18,16 @@ it("rejects target/cwd/method injection even when a caller bypasses the CLI", ()
     { operation: "auth.login", token: "x" },
   ]) expect(WorkAgentTool.safeParse(value).success).toBe(false);
   expect(WorkAgentRequestSchema.safeParse({ agentKind: "node" }).success).toBe(false);
+});
+
+
+it("permits inline operator questions and remote Markdown bodies, with bounded time and size", () => {
+  const spec = { questions: [{ id: "ok", label: "進めますか", options: ["はい", "いいえ"] }] };
+  expect(checkWorkAgentAsk({ spec, documents: [{ title: "設計", markdown: "# plan" }] })).toMatchObject({ timeoutMs: 300000 });
+  for (const raw of [
+    { spec, paneId: "other" }, { spec, machineId: "other" }, { spec, timeoutMs: 300001 },
+    { spec: { ...spec, view: { file: "/private/local.md" } } },
+    { spec: { questions: [{ id: "ok", label: "Q", options: [{ value: "a", label: "a", image: "https://example.com/a.png" }] }] } },
+    { spec, documents: [{ title: "large", markdown: "あ".repeat(100000) }] },
+  ]) expect(() => checkWorkAgentAsk(raw)).toThrow();
 });

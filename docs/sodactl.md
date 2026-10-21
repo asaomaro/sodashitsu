@@ -1066,3 +1066,8 @@ sodactl work memory read decisions.md
 ```
 
 新規作成ではwriteの`--version`を省略します。保存後は同じ名前の`text`/`version`を読み戻して照合してください。専用MCPの`remote_work`は`name`に同じファイル名を渡します。汎用エラーだけで切断と判断せず、引数と状態を読み取り操作で切り分け、保存結果が不明な書込を無条件に再送しません。MCPの具体的なJSON、新規作成と更新、PowerShellの標準入力、paneによる保存単位の違いは[接続先メモの手順](remote-work.md#接続先にメモを残す)を参照してください。
+
+
+### リモート作業エージェントから操作元へ質問する
+
+`work agent`の専用MCPでは`ask_user`を使うと、操作元のエージェントpaneにフォームを表示して回答JSONを受け取れます。質問には通常のask-form定義を渡し、接続先で読んだMarkdownはパスではなく`documents[].markdown`へ本文を渡します。ファイル編集・Git・テスト・メモは引き続き`remote_work`で接続先へ送ります。[フォームの具体例と上限](remote-work.md#操作元への質問フォームと接続先資料)を参照してください。

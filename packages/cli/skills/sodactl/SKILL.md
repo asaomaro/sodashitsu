@@ -409,3 +409,14 @@ viewerが一意ならopenの--viewerは省略可能。view_openedは画面作成
 汎用エラーだけで切断と決めつけない。引数・name・content・versionと上限を確認し、inspect→memory list→存在する名前のreadを**逐次**試す。読取成功はその時点の通信/対象が有効な証拠であり、書込権限の保証ではない。未作成、version競合、権限、容量/件数、保存先実体変更を切り分ける。更新結果が確認できなければ更新を止め、状態を利用者へ伝える。接続/対象変更が確認できたら再起動を依頼し、ローカルで代行しない。
 
 メモはpane単位。専用MCPはBの起動要求pane、bind経由CLIは操作元の呼出元paneを保存単位にする。別paneの一覧から消失を判断しない。名前の制約、CLI/PowerShell例、診断の詳細は`docs/remote-work.md`「接続先にメモを残す」。
+
+
+### 専用MCPのask-formは操作元へ出す
+
+`work agent`から使える`ask_user`は、操作元Aのエージェントpaneに固定した質問フォームを出し、回答JSONを返す。質問・成果物確認は`ask_user`、接続先Bの編集・Git・テスト・メモは`remote_work`を使う。接続先で`ask.py`や`sodactl ask`を実行して操作元への表示を代用しない。
+
+```json
+{"spec":{"title":"設計の確認","questions":[{"id":"ok","label":"進めますか","options":["はい","いいえ"]}]},"documents":[{"title":"設計メモ","markdown":"# 接続先で読んだ本文"}]}
+```
+
+通常のask-form定義を`spec`に渡す。接続先資料は先にremote_workで読み、その本文を`documents[].markdown`に渡す。操作元/接続先のファイルパス・pane/machine指定・画像/音声参照は渡せない。資料8件・定義と本文256KiB・既定5分（timeoutMsは1000～300000）。`answered`のanswers/comments/noteを読み、cancelled/timeout/unavailableで既定を承認扱いしない。表示できなければ同じ内容を会話で確認する。既に稼働中のMCPは更新後に起動し直す。

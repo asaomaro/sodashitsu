@@ -33,6 +33,38 @@ PC・PJはBの起動paneから毎回決まり、PJの実体とmachine接続の�
 
 起動中の能力は終了・切断・Aのpane閉鎖・Aのサーバ停止で破棄され、最長24時間です。Aの再起動・更新後は、通常の`claude --resume`等で自動復元せず、Bのpaneから同じコマンドで起動し直します。保存済みのBのメモはそのまま読み込めます。MCPのキャンセル通知またはツール接続の終了時は、その接続から実行中のコマンドへ中断を送ります。ファイル更新等の完了済み操作は元に戻りません。常駐・対話コマンドは従来どおりBのpaneを使ってください。
 
+## 操作元への質問フォームと接続先資料
+
+`work agent`で起動したエージェントには、専用MCPの`remote_work`と`ask_user`を公開します。
+
+| ツール | 実行先・用途 |
+| --- | --- |
+| `remote_work` | 接続先Bの検索・編集・Git・テスト・スキル・メモ |
+| `ask_user` | 操作元Aのエージェントpaneに紐付く質問フォーム。回答をJSONで返す |
+
+フォームは既存のask-form部品で表示します。専用MCPのエージェントは`ask_user`を直接呼び、接続先で`ask.py`や`sodactl ask`を実行する必要はありません。通常の`sodactl ask`は実行したPCのpaneを対象にするため、接続先Bで実行するとBのpaneに紐付きます（Bを表示している操作元ブラウザでも受け取れます）。
+
+接続先の資料は`remote_work`のfile read等で読み、取得した**本文**を`documents[].markdown`へ渡します。操作元/接続先のファイルパスやpane/machine IDを渡す指定はありません。
+
+```json
+{
+  "spec": {
+    "title": "設計の確認",
+    "questions": [
+      {"id":"approve","label":"この設計で進めますか","options":[{"value":"yes","label":"進める"},{"value":"revise","label":"修正する"}]}
+    ]
+  },
+  "documents": [
+    {"title":"接続先の設計メモ","markdown":"# 設計案\n\nここに接続先で読んだMarkdown本文を入れます。"}
+  ],
+  "timeoutMs": 300000
+}
+```
+
+`spec`には通常のask-formの質問定義（single/multi/text/edit/rank/table、出し分け等）を使えます。`spec.view`を使う場合は`text`の直接指定のみです。整形したMarkdownは`documents`で指定してください。操作元の任意のファイルを読む`view.file`や画像/音声参照は受け付けません。資料は合計8件、質問と資料の本文は合計256KiBまで。待機時間は1秒～5分、既定5分です。
+
+回答は`{"status":"answered","answers":{"approve":"yes"}}`の形で返り、自由記述があれば`comments`や`note`も返ります。`cancelled`・`timeout`・`unavailable`は承認とみなさず、必要なら同じ内容を会話で確認します。操作元の質問表示対応画面が無ければ`unavailable`です。MCP終了・pane閉鎖・作業先接続の終了時はフォームも取り消します。既に起動済みのエージェントには、更新後に起動し直すと新しいツールが反映されます。
+
 ## 作業先を一度指定する
 
 操作する側のエージェントのpaneで実行します。接続先のワークスペースにはPJフォルダを設定しておきます。
