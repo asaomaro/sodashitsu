@@ -39,7 +39,7 @@ test -n "${SODA_PANE_ID:-}"
 - `sodactl work skill <id>`: 選んだSKILL.mdを必要時に読む。付属資料は同じidで `--path references/<file>` を指定する。本文のパスは接続先のパスであり、手元のRead/検索ツールへ渡さない。
 - `sodactl work file list|read|search`: 接続先PJの相対pathを `--path`、検索語を `--query` で渡す。結果はJSON。編集は `sodactl work file write --path <file> --version <read結果のversion>` の標準入力へUTF-8本文を渡す。新規ファイル/ディレクトリや大きな変更には次のexecを使う。
 - `sodactl work exec -- <command>`: スクリプト・Git・ビルド・テストも同じ接続先のPJで実行する。スキル付属scriptもここで実行する。接続先シェルの引用規則を使い、手元のシェルで展開しない。
-- `sodactl work memory write <name>`: 標準入力のメモを接続先PJに保存する。`sodactl work memory read <name>` のversionで更新する。重要な判断・未完了作業・検証結果を残す。既存のAGENTS.md/CLAUDE.mdを上書きしない。
+- `sodactl work memory write <name>`: 先に `sodactl work memory list` で同じ名前を確認。未作成はversionなしで作り、既存は `sodactl work memory read <name>` の最新versionを `--version` へ渡して更新する。保存後は同じ名前をreadしてtext/versionを照合する。標準入力のUTF-8メモを接続先PJに保存する。重要な判断・未完了作業・検証結果を残す。既存のAGENTS.md/CLAUDE.mdを上書きしない。
 - `sodactl work handoff`: 呼出元のClaude/Codex主会話と対応するプロジェクトメモを接続先に転送し、resume用のargvとcwdを返す。相手でエージェントを勝手に起動せず、返ったwarningsとメモを確認する。バージョン差によってresumeできない場合はメモから新しい会話へ引き継ぐ。
 
 `work` と `--machine` は併用しない。作業先が切断された、PJの指定・実体・会話が変わった、というエラー時は停止し、手元で代行しない。対象PJの作業を手元の標準Read/Edit/ShellやローカルMCPへ混在させない。エージェントの組込みツールそのものを変更する機能ではないため、この手順で実行先を維持する。`sodactl work unbind` で解除できる。
@@ -378,3 +378,34 @@ viewerが一意ならopenの--viewerは省略可能。view_openedは画面作成
 - 起動したエージェントは専用MCPのremote_workで検索/編集/実行/スキル/メモを接続先へ送る。切断・PJ変更で失敗したらローカルで代行しない。
 - 起動時に接続先MEMORY.mdを読み、判断と未完了作業はmemory操作で接続先に残す。会話resumeとメモは別。サーバ再起動後は接続先から起動し直す。
 - nativeの引数はエージェント名の後。対話/resume/model等に限定し、ツール・設定・実行先の変更や管理サブコマンドは拒否する。詳細はdocs/remote-work.md。
+
+
+### remote_workのメモ操作
+
+専用MCPでは`operation:"memory"`、`action:"list"|"read"|"write"`を使う。`name`は`MEMORY.md`や`decisions.md`などの**ファイル名**を明示し、全操作で同じ値を使う。`path`や保存先の絶対パスを渡さない。省略時は`MEMORY.md`。
+
+```json
+{"operation":"memory","action":"list"}
+```
+
+一覧の`files`に`decisions.md`が無い場合は、versionを付けずに新規作成する。
+
+```json
+{"operation":"memory","action":"write","name":"decisions.md","content":"決定事項と未完了作業"}
+```
+
+既存メモは先に読取。返った`text`を踏まえて改訂し、そのreadの`version`を更新へ渡す。
+
+```json
+{"operation":"memory","action":"read","name":"decisions.md"}
+```
+
+```json
+{"operation":"memory","action":"write","name":"decisions.md","content":"改訂メモ","version":"<直前のreadのversion>"}
+```
+
+プレースホルダーをreadで得た64桁の値に置き換える。versionを作ったり、省略して既存メモを上書きしようとしない。保存後は必ず同じ名前をreadし、`text`とwrite結果の`version`を照合する。保存結果が不明な場合も再送前にreadする。
+
+汎用エラーだけで切断と決めつけない。引数・name・content・versionと上限を確認し、inspect→memory list→存在する名前のreadを**逐次**試す。読取成功はその時点の通信/対象が有効な証拠であり、書込権限の保証ではない。未作成、version競合、権限、容量/件数、保存先実体変更を切り分ける。更新結果が確認できなければ更新を止め、状態を利用者へ伝える。接続/対象変更が確認できたら再起動を依頼し、ローカルで代行しない。
+
+メモはpane単位。専用MCPはBの起動要求pane、bind経由CLIは操作元の呼出元paneを保存単位にする。別paneの一覧から消失を判断しない。名前の制約、CLI/PowerShell例、診断の詳細は`docs/remote-work.md`「接続先にメモを残す」。
