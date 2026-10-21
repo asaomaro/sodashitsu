@@ -20,6 +20,17 @@ export const workAgentTool = {
     }, required: ["operation"], additionalProperties: false,
   },
 };
+export const workAgentAskTool = {
+  name: "ask_user",
+  description: "Ask the user on the OPERATOR PC (A), in this agent's fixed local pane, using Sodashitsu's ask-form dialog. Returns JSON status answered/cancelled/timeout/unavailable; answered includes answers and optional comments/note. Never assume defaults after cancellation or unavailable. Pass a normal ask-form spec with questions (id,label,type,options), optionally inline view.text. To show a REMOTE Markdown artifact, read it using remote_work first and pass its BODY in documents:[{title,markdown}]. Never pass local/remote file paths, image/audio references, target pane or machine IDs. File editing, Git, tests and memory stay on remote_work (B). Maximum combined definition/documents 256KiB, eight documents/views, timeout 1-300 seconds (default 300).",
+  inputSchema: {
+    type: "object", properties: {
+      spec: { type: "object", description: 'ask-form definition, e.g. {"title":"確認","questions":[{"id":"ok","label":"進めますか","options":["はい","いいえ"]}]}. Questions can be single/multi/text/edit/rank/table; use ordinary ask-form fields. Only inline view.text; no file/image/audio references.' },
+      documents: { type: "array", maxItems: 8, items: { type: "object", properties: { title: { type: "string", maxLength: 500 }, markdown: { type: "string", maxLength: 131072 } }, required: ["title", "markdown"], additionalProperties: false } },
+      timeoutMs: { type: "integer", minimum: 1000, maximum: 300000 },
+    }, required: ["spec"], additionalProperties: false,
+  },
+};
 export async function workAgentMcp(input: Readable, output: Writable, client: Pick<WorkAgentClient, "request" | "close">) {
   let initialized = false;
   let busy: unknown, pending: Promise<void> | undefined;
@@ -40,14 +51,15 @@ export async function workAgentMcp(input: Readable, output: Writable, client: Pi
         await send(m.id, { protocolVersion: "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "sodashitsu-remote-work", version: "0.1.0" } });
       } else if (m.method === "ping") await send(m.id, {});
       else if (!initialized) await error(m.id, -32000, "Initialize first");
-      else if (m.method === "tools/list") await send(m.id, { tools: [workAgentTool] });
+      else if (m.method === "tools/list") await send(m.id, { tools: [workAgentTool, workAgentAskTool] });
       else if (m.method === "tools/call") {
         if (busy !== undefined) { await error(m.id, -32000, "Remote operation in progress"); continue; }
         busy = m.id;
         pending = (async () => {
           try {
-            if (m.params?.name !== workAgentTool.name) throw Error("Unknown remote tool");
-            const result = await client.request("tool", m.params.arguments ?? {});
+            const name = m.params?.name;
+            if (name !== workAgentTool.name && name !== workAgentAskTool.name) throw Error("Unknown remote tool");
+            const result = await client.request(name === workAgentAskTool.name ? "ask" : "tool", m.params.arguments ?? {});
             await send(m.id, { content: [{ type: "text", text: JSON.stringify(result) }] });
           } catch (e) { await send(m.id, { isError: true, content: [{ type: "text", text: e instanceof Error ? e.message : "remote tool failed" }] }); }
           finally { busy = undefined; }

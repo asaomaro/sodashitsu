@@ -757,7 +757,7 @@ export async function composeServer(
       request: rpc.request.bind(rpc), close: () => { gone = true; rpc.close(); },
       valid: () => { const current = machines.route(machine); return !gone && current.kind === "ok" && current.link === route.link; },
     };
-  });
+  }, asks);
   registerAllMethods(surface, {
     workAgentRequests,
     workAgentLauncher,

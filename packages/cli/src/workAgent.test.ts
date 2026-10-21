@@ -36,7 +36,7 @@ it("exposes only the fixed remote tool over MCP and propagates disconnect failur
   ]) input.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n");
   input.end(); await running;
   const messages = result.trim().split("\n").map(l => JSON.parse(l));
-  expect(messages[1].result.tools.map((t: { name: string }) => t.name)).toEqual(["remote_work"]);
+  expect(messages[1].result.tools.map((t: { name: string }) => t.name)).toEqual(["remote_work", "ask_user"]);
   expect(messages[2].result).toMatchObject({ isError: true, content: [{ text: "target disconnected" }] });
   expect(client.request).toHaveBeenCalledTimes(1);
   expect(client.close).toHaveBeenCalled();
@@ -75,4 +75,20 @@ it("forwards cancellation while a remote command is pending and remains usable",
   await vi.waitFor(() => expect(replies.find(r => r.id === 3)?.result).toEqual({}));
   input.end(); await running;
   expect(client.request).toHaveBeenCalledWith("cancel");
+});
+
+
+it("routes operator questions through the local ask capability and returns answer JSON", async () => {
+  const input = new PassThrough(), output = new PassThrough(); let result = "";
+  output.on("data", b => { result += String(b); });
+  const answer = { status: "answered", answers: { ok: "yes" }, comments: { ok: "条件付き" }, note: "補足" };
+  const client = { request: vi.fn(async (): Promise<any> => answer), close: vi.fn() };
+  const running = workAgentMcp(input, output, client);
+  const params = { spec: { questions: [{ id: "ok", label: "進めますか", options: ["yes", "no"] }] }, documents: [{ title: "設計", markdown: "# remote plan" }] };
+  input.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }) + "\n");
+  input.write(JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "ask_user", arguments: params } }) + "\n");
+  await vi.waitFor(() => expect(result).toContain('"id":2'));
+  input.end(); await running;
+  expect(client.request).toHaveBeenCalledWith("ask", params);
+  expect(JSON.parse(JSON.parse(result.trim().split("\n")[1]!).result.content[0].text)).toEqual(answer);
 });

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { WorkKind } from "./work.js";
+import { normalizeAskSpec, ASK_SPEC_MAX_BYTES } from "./ask.js";
+import { RpcError } from "./errors.js";
 
 const entity = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
 export const WorkAgentArgv = z.array(z.string().max(4096).refine(s => !/[\x00-\x1f\x7f]/.test(s))).max(64)
@@ -74,4 +76,24 @@ export interface WorkAgentResults {
   "work.agent_finish": {};
   "work.agent_reject": {};
   "work.agent_launch": { workspaceId: string; tabId: string; paneId: string };
+}
+
+
+/** Local UI only. Never accepts a target pane, local file path, or external media URL. */
+export const WorkAgentAskParams = z.object({
+  spec: z.unknown(),
+  documents: z.array(z.object({ title: z.string().min(1).max(500), markdown: z.string().max(131072) }).strict()).max(8).default([]),
+  timeoutMs: z.number().int().min(1000).max(300000).default(300000),
+}).strict();
+export function checkWorkAgentAsk(raw: unknown) {
+  const p = WorkAgentAskParams.parse(raw);
+  if (new TextEncoder().encode(JSON.stringify(p)).length > ASK_SPEC_MAX_BYTES)
+    throw new RpcError("invalid_ask_spec", "質問と添付本文は合計256KiBまでです");
+  const checked = normalizeAskSpec(p.spec);
+  if (!checked.ok) throw new RpcError("invalid_ask_spec", checked.message);
+  if ((checked.spec.view?.length ?? 0) + p.documents.length > 8)
+    throw new RpcError("invalid_ask_spec", "資料は合計8件までです");
+  if (checked.spec.view?.some(v => v.file !== undefined) || checked.spec.questions.some(q => q.options.some(o => o.image !== undefined || o.audio !== undefined)))
+    throw new RpcError("invalid_ask_spec", "操作元への質問には本文だけを渡してください。ローカルファイルや画像・音声参照は指定できません");
+  return { ...p, spec: p.spec as Record<string, unknown>, view: checked.spec.view ?? [] };
 }

@@ -4,8 +4,9 @@ import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { RpcError, WorkAgentTool, WorkAgentRequestSchema, workAgentArgumentError, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
+import { RpcError, WorkAgentTool, WorkAgentRequestSchema, workAgentArgumentError, checkWorkAgentAsk, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
 import type { SessionService } from "../session/SessionService.js";
+import type { AskService } from "../ask/AskService.js";
 import type { AgentStarter } from "../agent/AgentStarter.js";
 import { createExclusive, privateDirs } from "./files.js";
 
@@ -21,7 +22,8 @@ export class WorkAgentLauncher {
   private readonly active = new Set<string>();
   private stopped = false;
   constructor(private readonly stateDir: string, private readonly session: SessionService,
-    private readonly starter: AgentStarter, private readonly connect: (machine: string) => Promise<WorkAgentRemote>) {}
+    private readonly starter: AgentStarter, private readonly connect: (machine: string) => Promise<WorkAgentRemote>,
+    private readonly asks?: Pick<AskService, "open" | "onClientGone">) {}
 
   async launch(machineId: string, requestId: string) {
     if (this.stopped || this.leases.size >= 20) throw new RpcError("server_busy", "エージェント起動の上限です");
@@ -47,10 +49,11 @@ export class WorkAgentLauncher {
       const socketPath = process.platform === "win32" ? `\\\\.\\pipe\\soda-work-${randomUUID()}` : join(tmpdir(), `soda-work-${randomUUID()}.sock`);
       const secret = randomBytes(32).toString("hex"), sockets = new Set<Socket>();
       let closed = false, busy = false, paneId: string | undefined, launching = true, closeRequested = false;
-      let job: { socket: Socket; cancelled: boolean; execId?: string; remote?: WorkAgentRemote } | undefined;
+      let job: { socket: Socket; cancelled: boolean; execId?: string; remote?: WorkAgentRemote; askOwner?: string } | undefined;
       const cancel = (socket: Socket) => {
         if (job?.socket !== socket) return;
         job.cancelled = true;
+        if (job.askOwner) this.asks?.onClientGone(job.askOwner);
         if (job.execId) void job.remote?.request("exec.cancel", { id: job.execId }).catch(() => {});
       };
       let started: (() => void) | undefined, startFailed: (() => void) | undefined;
@@ -58,6 +61,28 @@ export class WorkAgentLauncher {
       void ready.catch(() => {});
       const check = () => {
         if (closed || this.stopped || !remote.valid() || (paneId && !this.session.getPane(paneId))) throw new RpcError("not_found", "作業先が切断されました。ローカルでは代行しません");
+      };
+      const ask = async (raw: unknown, owner: NonNullable<typeof job>) => {
+        check();
+        if (!this.asks || !paneId) throw new RpcError("not_found", "操作元の質問フォームを利用できません");
+        const params = checkWorkAgentAsk(raw), files: string[] = [];
+        owner.askOwner = `work-agent-${randomUUID()}`;
+        try {
+          const view = [...params.view];
+          for (const document of params.documents) {
+            const file = join(directory, `ask-${randomUUID()}.md`);
+            await createExclusive(file, document.markdown);
+            files.push(file);
+            view.push({ title: document.title, file });
+          }
+          check();
+          if (owner.cancelled) return { status: "cancelled" };
+          return await this.asks.open(owner.askOwner, { paneId, timeoutMs: params.timeoutMs,
+            spec: { ...params.spec, ...(view.length ? { view } : {}) } });
+        } finally {
+          this.asks.onClientGone(owner.askOwner);
+          await Promise.allSettled(files.map(file => rm(file, { force: true })));
+        }
       };
       const execute = async (raw: unknown, owner: NonNullable<typeof job>) => {
         check();
@@ -110,6 +135,7 @@ export class WorkAgentLauncher {
               try {
                 check();
                 if (m.operation === "describe") respond({ result: { agentKind: p.agentKind, args: p.args, cwd: project, machineId, workspaceId: p.workspaceId, folder: p.folder } });
+                else if (m.operation === "ask") respond({ result: await ask(m.tool, owner) });
                 else if (m.operation === "tool") respond({ result: await execute(m.tool, owner) });
                 else respond({ error: "Unknown work agent operation" });
               } catch (e) { respond({ error: e instanceof RpcError ? e.message : "接続先の操作に失敗しました。接続とPJを確認してください" }); }
@@ -123,10 +149,11 @@ export class WorkAgentLauncher {
       cleanup = () => {
         if (closed) return; closed = true;
         clearInterval(timer); clearTimeout(expiry);
+        if (job?.askOwner) this.asks?.onClientGone(job.askOwner);
         job?.remote?.close();
         for (const s of sockets) s.destroy(); server.close(); remote.close();
         this.active.delete(activeKey!); this.leases.delete(cleanup!);
-        void rm(directory, { recursive: true, force: true });
+        void rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => {});
         if (process.platform !== "win32") void rm(socketPath, { force: true });
       };
       this.leases.add(cleanup);
