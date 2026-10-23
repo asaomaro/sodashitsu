@@ -4,6 +4,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
+  DESKTOP_INPUT_PROTOCOL,
+  isExtendedDesktopInput,
   DesktopFrameChain,
   RemoteDesktopInput,
   DesktopReady,
@@ -16,6 +18,7 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
+import { DesktopEscape, DesktopButtons } from "../desktop/input.js";
 import { imeKeyCode, type ImeKeyCode } from "../desktop/ime.js";
 import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
 import { chooseMaximumDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
@@ -36,6 +39,7 @@ const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
 const lockScreenCover = ref(false);
 const imeKeys = ref(false);
+const extendedInput = ref(false);
 const dismissInFlight = ref(false);
 let dismissPending = false;
 async function toggleToolbar() {
@@ -293,12 +297,14 @@ let ws: WebSocket | undefined,
 let chain = new DesktopFrameChain();
 let startupRetries = 0;
 const inputs = new Map<number, number>();
+const escapePress = new DesktopEscape(), mouseButtons = new DesktopButtons();
 let drag: { x: number; y: number; left: number; top: number } | undefined;
 function send(value: unknown) {
   if (ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
     ws.send(JSON.stringify(value));
 }
 function relinquish() {
+  escapePress.reset(); mouseButtons.reset();
   if (dismissPending) dismissInFlight.value = false;
   dismissPending = false;
   if (clipboardGranted.value) {
@@ -333,6 +339,7 @@ function stop() {
   secureDesktop.value = false;
   lockScreenCover.value = false;
   imeKeys.value = false;
+  extendedInput.value = false;
   dismissInFlight.value = false;
   dismissPending = false;
   agentActive.value = false;
@@ -404,7 +411,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, DESKTOP_IME_PROTOCOL);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -454,6 +461,7 @@ function connect(automatic = false) {
           secureDesktop.value = r.secureDesktop === true;
           lockScreenCover.value = r.lockScreenCover === true;
           imeKeys.value = r.imeKeys === true;
+          extendedInput.value = r.extendedInput === true;
           if (secureDesktop.value) text.value = "";
           title.value = secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
@@ -554,6 +562,7 @@ function connect(automatic = false) {
           control.value = false;
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
         } else if (m.type === "control") {
+          escapePress.reset(); mouseButtons.reset();
           control.value = m.enabled === true && allowed.value;
           status.value = agentActive.value
             ? "エージェント操作中"
@@ -630,42 +639,59 @@ function input(value: unknown) {
   send({ type: "input", seq: id, frameSeq: lastDrawn, input: value });
 }
 function pointer(e: PointerEvent, event: "move" | "down" | "up") {
+  escapePress.reset();
   if (!control.value || !canvas.value || !info.value) return;
   const r = canvas.value.getBoundingClientRect();
   if (!r.width || !r.height) return;
-  const x = (e.clientX - r.left) / r.width,
-    y = (e.clientY - r.top) / r.height;
-  if (
-    (event === "down" || (event === "move" && e.buttons === 0)) &&
-    (x < 0 || x > 1 || y < 0 || y > 1)
-  )
-    return;
-  if (event === "down") {
-    canvas.value.focus();
-    canvas.value.setPointerCapture(e.pointerId);
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  if ((event === "down" || (event === "move" && e.buttons === 0)) && (x < 0 || x > 1 || y < 0 || y > 1)) return;
+  if (event === "down") { canvas.value.focus(); canvas.value.setPointerCapture(e.pointerId); }
+  const position = { x: Math.max(0, Math.min(1,x)), y: Math.max(0, Math.min(1,y)) };
+  for (const change of mouseButtons.update(e.buttons)) {
+    if (change.button > 2 && !extendedInput.value) {
+      error.value = "接続先を更新すると、マウスの戻る・進むを利用できます";
+      continue;
+    }
+    input({kind:"pointer",...position,...change});
   }
-  input({
-    kind: "pointer",
-    event,
-    button: Math.max(0, Math.min(2, e.button)),
-    x: Math.max(0, Math.min(1, x)),
-    y: Math.max(0, Math.min(1, y)),
-  });
-  if (event === "up" && canvas.value.hasPointerCapture(e.pointerId))
-    canvas.value.releasePointerCapture(e.pointerId);
+  if (event === "move") input({kind:"pointer",...position,event:"move",button:0});
+  if (event === "up" && canvas.value.hasPointerCapture(e.pointerId)) canvas.value.releasePointerCapture(e.pointerId);
+}
+function submitText() {
+  input({kind:"text",text:text.value});
+  // Clearing the draft disables the focused submit button; keep focus in the viewer.
+  canvas.value?.focus({preventScroll:true});
+  text.value = "";
+}
+function wheel(e: WheelEvent) {
+  escapePress.reset(); input({kind:"wheel",delta:Math.max(-1200,Math.min(1200,Math.round(-e.deltaY)))});
+}
+async function windowFocusOut(e: FocusEvent) {
+  escapePress.reset();
+  if (e.target === canvas.value) return; // Canvas has its own blur handler.
+  mouseButtons.reset();
+  send({type:"release"});
+  // During blur, activeElement may temporarily be body before relatedTarget gains focus.
+  if (e.relatedTarget instanceof Node) {
+    if (!windowElement.value?.contains(e.relatedTarget)) relinquish();
+    return;
+  }
+  // Maximizing can move the focused toolbar DOM before restoring canvas focus.
+  await nextTick();
+  if (!windowElement.value?.contains(document.activeElement)) relinquish();
 }
 function canvasBlur(e: FocusEvent) {
-  if (e.relatedTarget instanceof Element && e.relatedTarget.closest("[data-remote-desktop]"))
-    send({ type: "release" });
+  escapePress.reset(); mouseButtons.reset();
+  if (e.relatedTarget instanceof Element && e.relatedTarget.closest("[data-remote-desktop]")) send({type:"release"});
   else relinquish();
 }
-function escape(e: KeyboardEvent) {
-  if (e.code === "Escape") {
-    if (maximized.value) toggleMaximize();
-    if (agentExpires.value) send({ type: "agent_grant", enabled: false });
-    e.preventDefault();
-    relinquish();
-  }
+async function leaveDesktop() {
+  relinquish();
+  if (agentExpires.value) send({type:"agent_grant",enabled:false});
+  if (maximized.value) await toggleMaximize();
+  await nextTick();
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && windowElement.value?.contains(active)) active.blur();
 }
 function dismissLockScreen() {
   if (!ready.value || !allowed.value || !lockScreenCover.value || dismissInFlight.value) return;
@@ -688,28 +714,32 @@ function sendIme(code: ImeKeyCode) {
   input({ kind: "key", code, down: true });
   input({ kind: "key", code, down: false });
 }
-function imeKey(e: KeyboardEvent, down: boolean) {
-  const code = imeKeyCode(e);
-  if (!code || !imeKeys.value || !control.value || !ready.value || lockScreenCover.value ||
-      !windowElement.value?.contains(document.activeElement)) return;
-  // The local text-entry form and setting fields keep their own IME.
-  if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable]:not([contenteditable='false'])")) return;
-  e.preventDefault();
-  e.stopPropagation();
-  if (down && !e.repeat) sendIme(code);
-}
-function key(e: KeyboardEvent, down: boolean) {
-  if (e.code === "Escape" && down) {
-    e.preventDefault();
-    relinquish();
-    return;
+function desktopKey(e: KeyboardEvent, down: boolean) {
+  if (!windowElement.value?.contains(document.activeElement)) return;
+  if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable]:not([contenteditable='false'])")) {
+    escapePress.reset(); return;
   }
-  if (!control.value || lockScreenCover.value || e.isComposing || e.repeat) return;
-  const value = { kind: "key", code: e.code, down };
-  if (RemoteDesktopInput.safeParse(value).success) {
-    e.preventDefault();
-    input(value);
+  const code = e.code || e.key;
+  const modified = e.altKey || e.ctrlKey || e.metaKey || e.shiftKey;
+  const leave = escapePress.key(code,down,e.repeat,modified,performance.now());
+  if (code === "Escape" && !modified) {
+    e.preventDefault(); e.stopPropagation();
+    if (leave) { void leaveDesktop(); return; }
   }
+  if (!control.value || !ready.value || lockScreenCover.value) return;
+  // Every received key belongs to the remote surface, including Tab, modifiers,
+  // shortcuts and composition-time physical keys; local form fields are above.
+  e.preventDefault(); e.stopPropagation();
+  const ime = imeKeyCode(e);
+  if (ime) { escapePress.reset(); if (down && !e.repeat) sendIme(ime); return; }
+  const normalized = e.key === "ZenkakuHankaku" ? "ZenkakuHankaku" : code;
+  const value = {kind:"key" as const,code:normalized,down};
+  const parsed = RemoteDesktopInput.safeParse(value);
+  if (!parsed.success) return;
+  if (isExtendedDesktopInput(parsed.data) && !extendedInput.value) {
+    error.value = "接続先を更新すると、この追加キーを利用できます"; return;
+  }
+  input(parsed.data);
 }
 function grip(e: PointerEvent) {
   if (props.embedded || maximized.value || (e.target as HTMLElement).closest("button")) return;
@@ -761,9 +791,10 @@ onBeforeUnmount(() => {
       aria-label="リモートデスクトップ"
       data-remote-desktop
       tabindex="-1"
-      @keydown.capture="imeKey($event, true)"
-      @keyup.capture="imeKey($event, false)"
-      @keydown.stop="escape"
+      @keydown.capture="desktopKey($event, true)"
+      @keyup.capture="desktopKey($event, false)"
+      @focusout="windowFocusOut"
+      @keydown.stop
       @keyup.stop
     >
       <header
@@ -991,15 +1022,11 @@ onBeforeUnmount(() => {
           @pointermove="pointer($event, 'move')"
           @pointerup.prevent="pointer($event, 'up')"
           @pointercancel="relinquish"
-          @contextmenu.prevent
-          @wheel.prevent="
-            input({
-              kind: 'wheel',
-              delta: Math.max(-1200, Math.min(1200, Math.round(-$event.deltaY))),
-            })
-          "
-          @keydown="key($event, true)"
-          @keyup="key($event, false)"
+          @mousedown.prevent.stop
+          @mouseup.prevent.stop
+          @auxclick.prevent.stop
+          @contextmenu.prevent.stop
+          @wheel.prevent="wheel"
           @blur="canvasBlur"
         />
         <div v-if="lockScreenCover" class="lock-screen-cover" data-desktop-lock-cover>
@@ -1012,10 +1039,7 @@ onBeforeUnmount(() => {
       <div v-show="!lockScreenCover && (infoOpen || control)" class="desktop-input" :class="{ 'input-collapsed': inputCollapsed }">
       <div class="viewer-input-row">
       <form v-show="!inputCollapsed"
-        @submit.prevent="
-          input({ kind: 'text', text });
-          text = '';
-        "
+        @submit.prevent="submitText"
       >
         <input
           ref="textInput"
@@ -1036,7 +1060,7 @@ onBeforeUnmount(() => {
       <footer v-show="infoOpen && !inputCollapsed">
         <span>{{
           control
-            ? "入力はBのPC全体に届きます。Escで閲覧へ戻る。"
+            ? "入力はBのPC全体に届きます。Escを2回続けて押すと操作を解除。"
             : "閲覧専用。操作にはBの事前許可が必要です。"
         }}</span
         ><output data-desktop-metrics

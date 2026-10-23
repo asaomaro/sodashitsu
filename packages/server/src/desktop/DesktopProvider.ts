@@ -4,6 +4,7 @@ import { unlockFailure } from "./unlockFailure.js";
 import { z } from "zod";
 import WebSocket from "ws";
 import {
+  isExtendedDesktopInput,
   DesktopFrameInfo,
   DesktopFrameChain,
   DesktopReady,
@@ -62,6 +63,7 @@ type Share = {
   secureDesktop?: boolean;
   lockScreenCover?: boolean;
   imeKeys?: boolean;
+  extendedInput?: boolean;
   allowInput: boolean;
   lastSeen: number;
   seq: number;
@@ -99,6 +101,7 @@ export class DesktopProvider {
       deltas: true,
       imageSettings: true,
       imeKeys: true,
+      extendedInput: true,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -286,6 +289,7 @@ export class DesktopProvider {
             if (s.lockScreenCover && s.secureDesktop && s.control && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "input") {
+            if (isExtendedDesktopInput(m.input) && !s.extendedInput) return;
             if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !s.imeKeys) return;
             if (
               s.control &&
@@ -348,6 +352,7 @@ export class DesktopProvider {
             s.secureDesktop = ready.secureDesktop === true;
             s.lockScreenCover = ready.lockScreenCover === true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
+            s.extendedInput = options.extendedInput === true && ready.extendedInput === true && !s.lockScreenCover;
             if (s.secureDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
               !s.secureDesktop && options.display &&
@@ -370,6 +375,7 @@ export class DesktopProvider {
             s.allowInput = ready.allowInput && cfg.allowInput;
             const {
               imeKeys,
+              extendedInput,
               image: appliedImage,
               allowClipboard,
               allowMedia,
@@ -380,7 +386,8 @@ export class DesktopProvider {
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             this.send(s, {
               ...legacyReady,
-              ...(s.imeKeys ? { imeKeys: true } : {}),
+              ...(s.imeKeys && imeKeys ? { imeKeys: true } : {}),
+              ...(s.extendedInput && extendedInput ? { extendedInput: true } : {}),
               ...(options.image ? { image: appliedImage } : {}),
               ...(options.features
                 ? {

@@ -1,12 +1,13 @@
 $ErrorActionPreference = 'Stop'
 # No SCM, elevation, screen capture, desktop switching, or OS input.
-Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsDesktopUnlock.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'),(Join-Path $PSScriptRoot 'WindowsDisplayLeaseChecks.cs'),(Join-Path $PSScriptRoot 'WindowsUnlockProcessChecks.cs'),(Join-Path $PSScriptRoot 'WindowsLockCoverChecks.cs')) -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
+Add-Type -Path @((Join-Path $PSScriptRoot 'WindowsDesktopUnlock.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'),(Join-Path $PSScriptRoot 'WindowsDisplayLeaseChecks.cs'),(Join-Path $PSScriptRoot 'WindowsUnlockProcessChecks.cs'),(Join-Path $PSScriptRoot 'WindowsLockCoverChecks.cs'),(Join-Path $PSScriptRoot 'WindowsDesktopInputChecks.cs')) -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
 [SodaDesktopUnlock]::CheckPipeCancellation()
 [SodaDesktopUnlock]::CheckPipeText()
 [SodaDesktopUnlock]::CheckPipeDuplex()
 [SodaDesktopTests.DisplayModeChecks]::Run()
 [SodaDesktopTests.UnlockProcessChecks]::Run($PSScriptRoot)
 [SodaDesktopTests.LockCoverChecks]::Run()
+[SodaDesktopTests.DesktopInputChecks]::Run()
 Write-Output 'desktop_unlock_checks_passed'
 # The installed lease/share proxy runs without a Windows console. Exercise the
 # actual stream setup in a fresh CreateNoWindow process, not a code-page setter.

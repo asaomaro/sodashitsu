@@ -70,14 +70,29 @@ public static class SodaDesktopHost {
         finally { CloseDesktop(h); }
     }
     static void Emit(INPUT value) { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
-    static void Key(ushort vk,bool down) { var v=new INPUT();v.type=1;v.data.key.vk=vk;v.data.key.flags=(down?0u:2u)|((vk>=33&&vk<=46||vk==163||vk==165||vk==91||vk==92)?1u:0u);Emit(v); }
+    static INPUT KeyInput(ushort token,bool down) {
+        ushort vk=(ushort)(token&255);
+        bool extended=(token&0x100)!=0 || vk>=33&&vk<=46 || vk==111 || vk==144 || vk==163 || vk==165 || vk>=91&&vk<=93 || vk>=166&&vk<=183;
+        var v=new INPUT();v.type=1;v.data.key.vk=vk;v.data.key.flags=(down?0u:2u)|(extended?1u:0u);return v;
+    }
+    static void Key(ushort token,bool down){Emit(KeyInput(token,down));}
+    static INPUT ButtonInput(int button,bool down) {
+        if(button<0||button>4)throw new InvalidOperationException("Unsupported button");
+        var v=new INPUT();v.type=0;
+        v.data.mouse.dwFlags=button==0?(down?2u:4u):button==1?(down?32u:64u):button==2?(down?8u:16u):(down?128u:256u);
+        v.data.mouse.mouseData=button>=3?(uint)(button-2):0u;
+        return v;
+    }
+    static void ApplyKey(HashSet<ushort> held,ushort key,bool down,Action<ushort,bool> emit) {
+        if(down){held.Add(key);emit(key,true);}else if(held.Remove(key))emit(key,false);
+    }
     static void Mouse(uint flags,uint data,int x,int y) { var v=new INPUT();v.type=0;v.data.mouse.dx=x;v.data.mouse.dy=y;v.data.mouse.dwFlags=flags;v.data.mouse.mouseData=data;Emit(v); }
     static ushort VirtualKey(string code) {
         if(code.Length==4 && code.StartsWith("Key") && code[3]>='A' && code[3]<='Z') return (ushort)code[3];
         if(code.Length==6 && code.StartsWith("Digit") && code[5]>='0' && code[5]<='9') return (ushort)code[5];
-        int f; if(code.StartsWith("F") && Int32.TryParse(code.Substring(1),out f) && f>=1 && f<=12) return (ushort)(111+f);
+        int f; if(code.StartsWith("F") && Int32.TryParse(code.Substring(1),out f) && f>=1 && f<=24) return (ushort)(111+f);
         if(code.Length==7 && code.StartsWith("Numpad") && code[6]>='0' && code[6]<='9') return (ushort)(96+code[6]-'0');
-        var map=new Dictionary<string,ushort> { {"Enter",13},{"Escape",27},{"Tab",9},{"Space",32},{"Backspace",8},{"Delete",46},{"Insert",45},{"Home",36},{"End",35},{"PageUp",33},{"PageDown",34},{"ArrowLeft",37},{"ArrowUp",38},{"ArrowRight",39},{"ArrowDown",40},{"ShiftLeft",160},{"ShiftRight",161},{"ControlLeft",162},{"ControlRight",163},{"AltLeft",164},{"AltRight",165},{"MetaLeft",91},{"MetaRight",92},{"CapsLock",20},{"ImeOn",0x16},{"ImeOff",0x1A},{"Minus",189},{"Equal",187},{"BracketLeft",219},{"BracketRight",221},{"Backslash",220},{"Semicolon",186},{"Quote",222},{"Backquote",192},{"Comma",188},{"Period",190},{"Slash",191} };
+        var map=new Dictionary<string,ushort> { {"Enter",13},{"Escape",27},{"Tab",9},{"Space",32},{"Backspace",8},{"Delete",46},{"Insert",45},{"Home",36},{"End",35},{"PageUp",33},{"PageDown",34},{"ArrowLeft",37},{"ArrowUp",38},{"ArrowRight",39},{"ArrowDown",40},{"ShiftLeft",160},{"ShiftRight",161},{"ControlLeft",162},{"ControlRight",163},{"AltLeft",164},{"AltRight",165},{"MetaLeft",91},{"MetaRight",92},{"CapsLock",20},{"ImeOn",0x16},{"ImeOff",0x1A},{"Minus",189},{"Equal",187},{"BracketLeft",219},{"BracketRight",221},{"Backslash",220},{"Semicolon",186},{"Quote",222},{"Backquote",192},{"Comma",188},{"Period",190},{"Slash",191},{"NumpadEnter",13},{"NumpadMultiply",106},{"NumpadAdd",107},{"NumpadComma",108},{"NumpadSubtract",109},{"NumpadDecimal",110},{"NumpadDivide",111},{"NumpadEqual",146},{"NumLock",144},{"ScrollLock",145},{"Pause",19},{"PrintScreen",44},{"ContextMenu",93},{"Convert",28},{"NonConvert",29},{"KanaMode",21},{"IntlBackslash",226},{"IntlRo",226},{"IntlYen",220},{"Lang3",241},{"Lang4",242},{"Lang5",25},{"ZenkakuHankaku",25},{"AudioVolumeMute",173},{"AudioVolumeDown",174},{"AudioVolumeUp",175},{"VolumeMute",173},{"VolumeDown",174},{"VolumeUp",175},{"MediaTrackNext",176},{"MediaTrackPrevious",177},{"MediaStop",178},{"MediaPlayPause",179},{"LaunchMail",180},{"MediaSelect",181},{"LaunchApp1",182},{"LaunchApp2",183},{"BrowserBack",166},{"BrowserForward",167},{"BrowserRefresh",168},{"BrowserStop",169},{"BrowserSearch",170},{"BrowserFavorites",171},{"BrowserHome",172} };
         ushort result; if(!map.TryGetValue(code,out result)) throw new InvalidOperationException("Unsupported key");return result;
     }
     static void Release() {
@@ -85,7 +100,7 @@ public static class SodaDesktopHost {
             Control=false;
             if(Secure && !AllowedDesktop()){Keys.Clear();Buttons.Clear();return;}
             foreach(ushort key in Keys) { try { Key(key,false); } catch {} } Keys.Clear();
-            foreach(int button in Buttons) { try { Mouse(button==0?4u:button==1?64u:16u,0,0,0); } catch {} } Buttons.Clear();
+            foreach(int button in Buttons) { try { Emit(ButtonInput(button,false)); } catch {} } Buttons.Clear();
         }
     }
     static bool Apply(Dictionary<string,object> input) {
@@ -93,8 +108,9 @@ public static class SodaDesktopHost {
             if(!Control || Stopping || Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>6000 || !AllowedDesktop()) { Release();return false; }
             string kind=(string)input["kind"];
             if(kind=="key") {
-                ushort key=VirtualKey((string)input["code"]); bool down=(bool)input["down"];
-                if(down) { if(Keys.Add(key)) Key(key,true); } else if(Keys.Remove(key)) Key(key,false);
+                string code=(string)input["code"];ushort key=VirtualKey(code);bool down=(bool)input["down"];
+                if(code=="NumpadEnter")key|=0x100;
+                ApplyKey(Keys,key,down,Key);
             } else if(kind=="text") {
                 string text=(string)input["text"]; if(text.Length<1 || text.Length>1024) throw new InvalidOperationException();
                 foreach(char c in text) { var a=new INPUT();a.type=1;a.data.key.scan=c;a.data.key.flags=4;Emit(a);a.data.key.flags=6;Emit(a); }
@@ -109,10 +125,10 @@ public static class SodaDesktopHost {
                 Rectangle all=SodaDesktopDisplay.VirtualRectangle(new SodaDesktopDisplay.NativeDriver(null),devices);
                 Point absolute=SodaDesktopDisplay.AbsolutePointer(Bounds,all,x,y);
                 Mouse(0x8000|0x4000|1,0,absolute.X,absolute.Y);
-                int button=Num(input,"button");if(button<0||button>2)throw new InvalidOperationException();
+                int button=Num(input,"button");if(button<0||button>4)throw new InvalidOperationException();
                 string action=(string)input["event"];
-                if(action=="down" && Buttons.Add(button)) Mouse(button==0?2u:button==1?32u:8u,0,0,0);
-                else if(action=="up" && Buttons.Remove(button)) Mouse(button==0?4u:button==1?64u:16u,0,0,0);
+                if(action=="down" && Buttons.Add(button)) Emit(ButtonInput(button,true));
+                else if(action=="up" && Buttons.Remove(button)) Emit(ButtonInput(button,false));
             } else throw new InvalidOperationException();
             return true;
         }
@@ -223,6 +239,7 @@ public static class SodaDesktopHost {
         try {
             var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend","windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
+            if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             Output(ready);

@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import {
   RemoteDesktopInput,
+  isExtendedDesktopInput,
   DesktopOptions,
   DesktopStartParams,
   DesktopReady,
@@ -152,4 +153,16 @@ it("accepts only named IME ON/OFF keys and optional helper support", () => {
   const ready={type:"ready",title:"test",allowInput:true,width:640,height:360,backend:"synthetic"};
   expect(DesktopReady.parse(ready)).not.toHaveProperty("imeKeys");
   expect(DesktopReady.parse({...ready,imeKeys:true}).imeKeys).toBe(true);
+});
+
+it("bounds five-button and extended-key input while identifying legacy-safe input",()=>{
+  for(const button of [0,1,2,3,4]){
+    const input=RemoteDesktopInput.parse({kind:"pointer",x:0.5,y:0.5,event:"down",button});
+    expect(isExtendedDesktopInput(input)).toBe(button>2);
+  }
+  for(const code of ["F24","NumpadEnter","ContextMenu","Convert","IntlRo","MediaPlayPause"])
+    expect(isExtendedDesktopInput(RemoteDesktopInput.parse({kind:"key",code,down:true}))).toBe(true);
+  expect(isExtendedDesktopInput(RemoteDesktopInput.parse({kind:"key",code:"Escape",down:true}))).toBe(false);
+  expect(RemoteDesktopInput.safeParse({kind:"pointer",x:0,y:0,event:"up",button:5}).success).toBe(false);
+  expect(RemoteDesktopInput.safeParse({kind:"key",code:"F25",down:true}).success).toBe(false);
 });
