@@ -133,7 +133,7 @@ function run() {
         }
         send({
           type: "ready",
-          ...(!process.argv.includes("--no-ime-keys") ? {imeKeys:true} : {}),
+          ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
           title: "Synthetic test source",
           allowInput,
           width: options.width,

@@ -9,6 +9,7 @@ import {
   DesktopFrameChain,
   DesktopReady,
   decodeDesktopFrame,
+  DESKTOP_IME_PROTOCOL,
   DESKTOP_MAX_FRAME_BYTES,
   RpcError,
   DesktopMediaStatus,
@@ -54,6 +55,8 @@ type Viewer = {
   secureDesktop?: boolean;
   lockScreenCover?: boolean;
   imeKeys?: boolean;
+  imeKeysRequested: boolean;
+  imeKeysNegotiated?: boolean;
   pending: number;
   seq: number;
   inputSeq: number;
@@ -237,6 +240,7 @@ export class DesktopRelay {
       inputSeq: 0,
       viewerSeq: 0,
       viewerAcks: new Map(),
+      imeKeysRequested: ws.protocol === DESKTOP_IME_PROTOCOL,
       frameAt: 0,
       lastSeen: now,
       messages: 0,
@@ -395,6 +399,7 @@ export class DesktopRelay {
         allowInput: z.boolean(),
         deltas: z.boolean().optional(),
         imageSettings: z.boolean().optional(),
+        imeKeys: z.boolean().optional(),
         features: z.boolean().optional(),
         displayResize: z.boolean().optional(),
       })
@@ -408,7 +413,9 @@ export class DesktopRelay {
     this.invites.set(v.ticketHash, v);
     const url = new URL("/desktop-share", v.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
+    const { deltas, image, adaptive, features, display, imeKeys: ignoredImeKeys, ...legacyOptions } = options;
+    // Capability requires both the viewer opt-in and B's current RPC schema.
+    v.imeKeysNegotiated = v.imeKeysRequested && caps.imeKeys === true;
     if (display && (!caps.displayResize || !caps.features))
       throw new Error("B does not allow display resize");
     v.features = caps.features === true;
@@ -417,6 +424,7 @@ export class DesktopRelay {
       throw new Error("B requires an update for image settings");
     const negotiated = {
       ...legacyOptions,
+      ...(v.imeKeysNegotiated ? { imeKeys: true as const } : {}),
       ...(display ? { display } : {}),
       ...(caps.features ? { adaptive, features } : {}),
       ...(caps.deltas ? { deltas } : {}),
@@ -523,14 +531,15 @@ export class DesktopRelay {
             v.allowInput = ready.allowInput;
             v.secureDesktop = ready.secureDesktop === true;
             v.lockScreenCover = ready.lockScreenCover === true;
-            v.imeKeys = ready.imeKeys === true && !v.lockScreenCover;
+            v.imeKeys = v.imeKeysNegotiated === true && ready.imeKeys === true && !v.lockScreenCover;
             if (v.secureDesktop) {
               this.agents.revoke(v.agent);
               delete v.latest;
               if (ready.allowMedia || ready.allowClipboard || ready.display) throw new Error();
             }
             v.since = performance.now();
-            this.send(v.ws, ready);
+            const { imeKeys, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.imeKeys ? { imeKeys: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);

@@ -5,9 +5,9 @@ import { openNativeTab } from "../support/nativeTab.js";
 
 // Synthetic source only. Observe the browser DOM and its actual WS messages;
 // dispatching DOM events does not claim to exercise a physical OS IME shortcut.
-for (const supported of [true, false]) test(`IME keys follow focused remote window and helper support=${supported}`, async ({page,appServer}) => {
+for (const {supported,legacyViewer} of [{supported:true,legacyViewer:false},{supported:false,legacyViewer:false},{supported:true,legacyViewer:true}]) test(`IME keys follow focused remote window and helper support=${supported}, legacy=${legacyViewer}`, async ({page,appServer}) => {
   test.setTimeout(60000);
-  const env={SODA_DESKTOP_COMMAND:JSON.stringify([process.execPath,fileURLToPath(new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs",import.meta.url)),"--allow-input",...(!supported?["--no-ime-keys"]:[])]),SODA_DESKTOP_ALLOW_INPUT:"1"};
+  const env={SODA_DESKTOP_COMMAND:JSON.stringify([process.execPath,fileURLToPath(new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs",import.meta.url)),"--allow-input",...(!supported?["--no-ime-keys"]:[]),...(legacyViewer?["--unconditional-ime-keys"]:[])]),SODA_DESKTOP_ALLOW_INPUT:"1"};
   const before=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));
   Object.assign(process.env,env);
   const provider=await startAppServer().finally(()=>{for(const [key,value] of Object.entries(before)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
@@ -26,6 +26,13 @@ for (const supported of [true, false]) test(`IME keys follow focused remote wind
     }
     const invite=await operator.request("machine.invite",{label:"IME test PC"});
     await owner.request("machine.delegate",{url:appServer.origin,machineId:invite.machineId,token:invite.token});
+    if(legacyViewer) await page.addInitScript(()=>{
+      const Original=window.WebSocket;
+      window.WebSocket=new Proxy(Original,{construct(target,args){
+        if(new URL(String(args[0]),location.href).pathname==="/desktop-share")args=args.slice(0,1);
+        return Reflect.construct(target,args);
+      }});
+    });
     await page.goto(`${appServer.origin}/#token=${appServer.token}`);
     const header=page.locator(`[data-machine-id="${invite.machineId}"]`);
     await expect(header.locator('[data-state="online"]')).toBeVisible({timeout:15000});
@@ -39,7 +46,12 @@ for (const supported of [true, false]) test(`IME keys follow focused remote wind
     await view.getByRole("button",{name:"操作する",exact:true}).click();
     await expect(status).toHaveText("操作中");
     await canvas.focus();
-    if(!supported){
+    if(legacyViewer){
+      const ready=received.find(m=>m.type==="ready")!;
+      expect(ready).not.toHaveProperty("imeKeys");
+      await expect(view.locator("[role=alert]")).toHaveCount(0);
+    }
+    if(!supported || legacyViewer){
       await expect(on).toBeDisabled();await expect(off).toBeDisabled();
       expect(await canvas.evaluate(el=>{const e=new KeyboardEvent("keydown",{key:"IMEOn",code:"Lang1",bubbles:true,cancelable:true});el.dispatchEvent(e);return e.defaultPrevented;})).toBe(false);
       await page.keyboard.press("a");

@@ -9,6 +9,9 @@ import {
   DesktopClipboardRequest,
 } from "./desktopMedia.js";
 
+// Opt in outside the strict JSON start schema so old relays can still connect.
+export const DESKTOP_IME_PROTOCOL = "soda-desktop-ime-v1";
+
 export const DESKTOP_MAX_FRAME_BYTES = 2 * 1024 * 1024;
 export const DesktopDisplaySize = z
   .object({
@@ -32,6 +35,7 @@ export const DesktopOptions = z
     image: DesktopImageSettings.optional(),
     adaptive: z.boolean().optional(),
     features: z.boolean().optional(),
+    imeKeys: z.literal(true).optional(),
     display: DesktopDisplaySize.optional(),
   })
   .strict();
@@ -204,6 +208,7 @@ export interface DesktopResults {
     allowInput: boolean;
     deltas?: boolean;
     imageSettings?: boolean;
+    imeKeys?: boolean;
     features?: boolean;
     displayResize?: boolean;
   };

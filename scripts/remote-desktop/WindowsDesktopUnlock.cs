@@ -205,14 +205,15 @@ public static class SodaDesktopUnlock {
         try{uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Default";}
         finally{CloseDesktop(desktop);}
     }
-    static string LockAppPath() {
+    static string SystemAppPath(string packageName,string executable) {
         var windows=new StringBuilder(32768);uint length=GetWindowsDirectory(windows,(uint)windows.Capacity);
         Require(length>0&&length<windows.Capacity);
-        string root=Path.Combine(windows.ToString(),"SystemApps"),package=Path.Combine(root,"Microsoft.LockApp_cw5n1h2txyewy"),exe=Path.Combine(package,"LockApp.exe");
+        string root=Path.Combine(windows.ToString(),"SystemApps"),package=Path.Combine(root,packageName),exe=Path.Combine(package,executable);
         foreach(string path in new[]{root,package,exe})Require((File.GetAttributes(path)&FileAttributes.ReparsePoint)==0);
         return exe;
     }
-    public static bool UserLockScreen() {
+    static string LockAppPath(){return SystemAppPath("Microsoft.LockApp_cw5n1h2txyewy","LockApp.exe");}
+    static bool UserSystemApp(Func<string> expectedPath) {
         try {
             using(var current=WindowsIdentity.GetCurrent()) {
                 if(current.IsSystem||LockState()!=0||!InputIsDefault())return false;
@@ -220,22 +221,24 @@ public static class SodaDesktopUnlock {
                 uint pid;GetWindowThreadProcessId(foreground,out pid);if(pid==0)return false;
                 using(var app=Process.GetProcessById((int)pid))using(var identity=Identity(app))
                     return app.SessionId==Process.GetCurrentProcess().SessionId&&identity.User==current.User&&
-                        LogonSid(identity)==LogonSid(current)&&String.Equals(Image(app),LockAppPath(),StringComparison.OrdinalIgnoreCase)&&
+                        LogonSid(identity)==LogonSid(current)&&String.Equals(Image(app),expectedPath(),StringComparison.OrdinalIgnoreCase)&&
                         foreground==GetForegroundWindow()&&LockState()==0&&InputIsDefault();
             }
         }catch{return false;}
     }
-    static bool DormantLockScreen(bool system,Func<int> state,Func<bool> inputDefault,Func<bool> noForeground) {
-        // A verified locked console with no foreground can have no LockApp at
-        // all while the display sleeps. This authorizes only a display wake,
+    public static bool UserLockScreen(){return UserSystemApp(LockAppPath);}
+    static bool PendingShellLockScreen(){return UserSystemApp(()=>SystemAppPath("ShellExperienceHost_cw5n1h2txyewy","ShellExperienceHost.exe"));}
+    static bool DormantLockScreen(bool system,Func<int> state,Func<bool> inputDefault,Func<bool> wakeSurface) {
+        // A sleeping locked console can have no foreground or the verified OS
+        // shell in front of LockApp. This authorizes only a display wake,
         // never capture or a key. Enter still needs UserLockScreen's OS identity.
-        return !system&&state()==0&&inputDefault()&&noForeground()&&
-            state()==0&&inputDefault()&&noForeground();
+        return !system&&state()==0&&inputDefault()&&wakeSurface()&&
+            state()==0&&inputDefault()&&wakeSurface();
     }
     static bool PendingUserLockScreen() {
         try {
             using(var current=WindowsIdentity.GetCurrent())
-                return DormantLockScreen(current.IsSystem,LockState,InputIsDefault,()=>GetForegroundWindow()==IntPtr.Zero);
+                return DormantLockScreen(current.IsSystem,LockState,InputIsDefault,()=>GetForegroundWindow()==IntPtr.Zero||PendingShellLockScreen());
         }catch{return false;}
     }
     public static bool UserLockScreenAvailable(){return UserLockScreen()||PendingUserLockScreen();}
