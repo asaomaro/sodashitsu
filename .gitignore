@@ -9,6 +9,7 @@ dist/
 # ログ・状態（開発時にローカルで作られるもの）
 *.log
 .soda-dev-state/
+/.soda/maintenance-backups/
 
 # Playwright（packages/e2e）の実行結果
 test-results/
