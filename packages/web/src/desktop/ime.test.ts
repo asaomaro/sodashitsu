@@ -8,6 +8,6 @@ it.each([
 ])("normalizes dedicated IME key %s / %s to %s", (key, code, expected) => {
   expect(imeKeyCode({key,code})).toBe(expected);
 });
-it.each([["Process", "KeyA"], ["Unidentified", ""], ["Convert", "Convert"], ["NonConvert", "NonConvert"], ["ZenkakuHankaku", "Backquote"]])("does not reinterpret %s as a dedicated ON/OFF command", (key,code) => {
+it.each([["IMEOn","Space"],["IMEOff","Space"],["Process","Space"],["Process", "KeyA"], ["Unidentified", ""], ["Convert", "Convert"], ["NonConvert", "NonConvert"], ["ZenkakuHankaku", "Backquote"]])("does not reinterpret %s as a dedicated ON/OFF command", (key,code) => {
   expect(imeKeyCode({key,code})).toBeUndefined();
 });

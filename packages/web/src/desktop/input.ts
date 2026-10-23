@@ -29,3 +29,31 @@ export class DesktopButtons {
     this.mask = next; return events;
   }
 }
+
+/** Recover modifier downs consumed by the local IME or held before viewer focus. */
+export class DesktopModifiers {
+  private held = new Set<string>();
+  reset() { this.held.clear(); }
+  update(event: Pick<KeyboardEvent,"code"|"ctrlKey"|"shiftKey"|"altKey"|"metaKey">, down: boolean): {kind:"key";code:string;down:boolean}[] {
+    const changes: {kind:"key";code:string;down:boolean}[] = [];
+    for (const [prefix, active] of [["Control",event.ctrlKey],["Shift",event.shiftKey],["Alt",event.altKey],["Meta",event.metaKey]] as const) {
+      if (event.code === prefix+"Left" || event.code === prefix+"Right") {
+        if (down) this.held.add(event.code);
+        else {
+          this.held.delete(event.code);
+          if (!active) for (const code of [...this.held].filter(code=>code.startsWith(prefix))) {
+            this.held.delete(code);changes.push({kind:"key",code,down:false});
+          }
+        }
+        continue;
+      }
+      const keys = [...this.held].filter(code=>code.startsWith(prefix));
+      if (active && !keys.length) {
+        const code=prefix+"Left";this.held.add(code);changes.push({kind:"key",code,down:true});
+      } else if (!active) for (const code of keys) {
+        this.held.delete(code);changes.push({kind:"key",code,down:false});
+      }
+    }
+    return changes;
+  }
+}
