@@ -98,6 +98,7 @@ export class DesktopProvider {
       allowInput: this.config?.allowInput === true,
       deltas: true,
       imageSettings: true,
+      imeKeys: true,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -346,7 +347,7 @@ export class DesktopProvider {
             const ready = DesktopReady.parse(raw);
             s.secureDesktop = ready.secureDesktop === true;
             s.lockScreenCover = ready.lockScreenCover === true;
-            s.imeKeys = ready.imeKeys === true && !s.lockScreenCover;
+            s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
             if (s.secureDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
               !s.secureDesktop && options.display &&
@@ -368,6 +369,7 @@ export class DesktopProvider {
             s.dynamicQuality = ready.dynamicQuality === true;
             s.allowInput = ready.allowInput && cfg.allowInput;
             const {
+              imeKeys,
               image: appliedImage,
               allowClipboard,
               allowMedia,
@@ -378,6 +380,7 @@ export class DesktopProvider {
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             this.send(s, {
               ...legacyReady,
+              ...(s.imeKeys ? { imeKeys: true } : {}),
               ...(options.image ? { image: appliedImage } : {}),
               ...(options.features
                 ? {

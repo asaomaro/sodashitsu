@@ -3,6 +3,7 @@ import "./viewportMaximize.css";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   decodeDesktopFrame,
+  DESKTOP_IME_PROTOCOL,
   DesktopFrameChain,
   RemoteDesktopInput,
   DesktopReady,
@@ -403,7 +404,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url);
+  const socket = new WebSocket(url, DESKTOP_IME_PROTOCOL);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {

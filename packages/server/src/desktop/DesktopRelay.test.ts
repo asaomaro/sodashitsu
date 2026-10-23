@@ -11,7 +11,7 @@ import { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { LinkChannel, MachineLink } from "../machine/MachineLink.js";
 import { DesktopRelay } from "./DesktopRelay.js";
 import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
-import { decodeDesktopFrame } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -29,7 +29,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : [])],
     allowInput,
     allowUnlock: unlockAllowed,
     origins: () => [origin],
@@ -50,6 +50,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     isHostAllowed: () => true,
     allowedHostPorts: () => [new URL(origin).host],
   });
+  const startRequests: {options: Record<string,unknown>}[] = [];
   let closed = 0,
     starts = 0, providerStartCalls = 0;
   const link = {
@@ -68,8 +69,14 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
         },
         sendText(text: string) {
           const m = JSON.parse(text);
+          if(m.method === "desktop.start") startRequests.push(m.params);
           void (async () => {
             try {
+              if(legacy && m.method === "desktop.start") {
+                const {imeKeys: _ime, ...oldShape}=DesktopOptions.shape;
+                const {z}=await import("zod");
+                z.object(oldShape).strict().parse(m.params.options);
+              }
               const result =
                 m.method === "client.hello"
                   ? {}
@@ -106,8 +113,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer() {
-    const ws = new WebSocket(endpoint, { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime = false) {
+    const ws = new WebSocket(endpoint, ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -137,6 +144,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     revoke: () => revoke("ok"),
     closed: () => closed,
     providerStartCalls: () => providerStartCalls,
+    startRequests,
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
@@ -378,7 +386,7 @@ it("has no cover frames or agent access and dismisses only after human control",
 });
 
 it.each([true,false])("forwards named IME keys only when advertised by the helper (%s)", async supported => {
-  const f=await fixture(true,false,true,false,true,false,undefined,undefined,supported),viewer=await f.viewer();
+  const f=await fixture(true,false,true,false,true,false,undefined,undefined,supported),viewer=await f.viewer(true);
   viewer.send(start);
   await expect.poll(()=>viewer.messages.some(m=>m.type==="ready")).toBe(true);
   expect(viewer.messages.find(m=>m.type==="ready")?.imeKeys).toBe(supported?true:undefined);
@@ -392,5 +400,25 @@ it.each([true,false])("forwards named IME keys only when advertised by the helpe
   await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===3)).toBe(true);
   const record=await readFile(f.record,"utf8");
   expect(record.includes('"code":"ImeOn"')).toBe(supported);
+  expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
+});
+
+it.each([false,true])("keeps strict legacy viewers connected without unsolicited IME fields (helper=%s)", async unconditional => {
+  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,unconditional),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+  const ready=viewer.messages.find(m=>m.type==="ready")!;
+  const {imeKeys: _ime, ...oldShape}=DesktopReady.shape;
+  const {z}=await import("zod");
+  expect(()=>z.object(oldShape).strict().parse(ready)).not.toThrow();
+  expect(ready).not.toHaveProperty("imeKeys");
+  expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
+});
+it("does not pass the new IME option to a provider without capability support", async()=>{
+  const f=await fixture(true,true),viewer=await f.viewer(true);
+  viewer.send(start);
+  await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+  expect(viewer.messages.find(m=>m.type==="ready")).not.toHaveProperty("imeKeys");
+  expect(f.startRequests[0]!.options).not.toHaveProperty("imeKeys");
   expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
 });
