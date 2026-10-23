@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -29,7 +29,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : [])],
     allowInput,
     allowUnlock: unlockAllowed,
     origins: () => [origin],
@@ -140,6 +140,48 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
+it("reconnects when an installed worker ends after secure ready and the parent verifies a different desktop",async()=>{
+  const f=await fixture(true,false,true,true,true,false,undefined,"source_transition"),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.map(m=>m.type)).toEqual(["ready","lock_screen_changed"]);
+  expect(viewer.frames).toHaveLength(0);
+});
+it("preserves the first secure runtime fault over a later parent transition",async()=>{
+  const f=await fixture(true,false,true,true,true,false,undefined,"worker_initialization"),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.map(m=>m.type)).toEqual(["ready","error"]);
+  expect(viewer.messages.at(-1)?.message).toContain("認証画面の準備に失敗");
+  expect(JSON.stringify(viewer.messages)).not.toContain("private");
+});
+it("does not accept secure runtime diagnostics from a normal desktop",async()=>{
+  const f=await fixture(true,false,true,false,true,false,undefined,"source_transition"),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.map(m=>m.type)).toEqual(["ready"]);
+});
+it.each(["source_transition", "worker_input_desktop_default", "worker_session_unlocked"])("reclassifies %s before ready without images or control", async (code) => {
+  const f=await fixture(true,false,true,true,true,false,code),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages).toContainEqual({type:"lock_screen_changed"});
+  expect(viewer.messages.some(m=>m.type==="ready"||m.type==="control")).toBe(false);
+  expect(viewer.frames).toHaveLength(0);
+});
+it("keeps fixed startup failure details and drops native exception contents", async()=>{
+  const f=await fixture(true,false,true,true,true,false,"worker_start_or_connection"),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.find(m=>m.type==="error")?.message).toContain("起動または接続できません");
+  expect(JSON.stringify(viewer.messages)).not.toContain("private");
+});
+it.each([false,true])("rejects untrusted startup diagnostics (unlock=%s)",async(unlock)=>{
+  const f=await fixture(true,false,true,true,unlock,false,unlock?"private unknown code":"source_transition"),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.some(m=>m.type==="lock_screen_changed"||m.type==="error")).toBe(false);
+});
 it("explains missing provider setup before trying to start a helper", async () => {
   const f = await fixture(true, false, false), viewer = await f.viewer();
   viewer.send(start);
@@ -315,4 +357,22 @@ it("rejects a source which advertises a lock screen without the local unlock cei
   await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
   expect(viewer.frames).toHaveLength(0);
   expect(viewer.messages.some(m=>m.type==="ready")).toBe(false);
+});
+
+it("has no cover frames or agent access and dismisses only after human control", async () => {
+  const f=await fixture(true,false,true,true,true,true),viewer=await f.viewer();
+  viewer.send({...start,options:{...start.options,features:true}});
+  await expect.poll(()=>viewer.messages.find(m=>m.type==="ready")).toMatchObject({secureDesktop:true,lockScreenCover:true,allowClipboard:false,allowMedia:false});
+  viewer.send({type:"dismiss_lock_screen"});
+  viewer.send({type:"agent_grant",enabled:true});
+  viewer.send({type:"control",enabled:true});
+  await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+  expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
+  expect(viewer.frames).toHaveLength(0);
+  expect(viewer.messages.some(m=>m.type==="agent_ticket"||m.type==="lock_screen_changed")).toBe(false);
+  viewer.send({type:"input",seq:1,frameSeq:1,input:{kind:"text",text:"must-not-send"}});
+  viewer.send({type:"dismiss_lock_screen"});
+  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(viewer.messages.some(m=>m.type==="lock_screen_changed")).toBe(true);
+  expect(await readFile(f.record,"utf8").catch(()=>"")).toBe("");
 });

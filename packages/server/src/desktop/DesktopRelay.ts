@@ -24,6 +24,7 @@ import type { AuthService } from "../auth/AuthService.js";
 import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { MachineManager } from "../machine/MachineManager.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
+import { unlockFailure } from "./unlockFailure.js";
 
 class DesktopSetupRequired extends Error {}
 
@@ -51,6 +52,7 @@ type Viewer = {
   control: boolean;
   allowInput: boolean;
   secureDesktop?: boolean;
+  lockScreenCover?: boolean;
   pending: number;
   seq: number;
   inputSeq: number;
@@ -318,7 +320,10 @@ export class DesktopRelay {
         } else if (m.type === "keyframe") {
           if (v.provider) this.send(v.provider, m);
         } else if (m.type === "sas") {
-          if (v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
+          if (v.secureDesktop && !v.lockScreenCover && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
+            this.send(v.provider, m);
+        } else if (m.type === "dismiss_lock_screen") {
+          if (v.lockScreenCover && v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
             this.send(v.provider, m);
         } else if (m.type === "input") {
           if (
@@ -478,7 +483,7 @@ export class DesktopRelay {
           return;
         }
         if (binary) {
-          if (!v.ready || v.pending) throw new Error();
+          if (!v.ready || v.pending || v.lockScreenCover) throw new Error();
           const { info, image } = decodeDesktopFrame(new Uint8Array(bytes as Buffer));
           if (info.seq <= v.seq) throw new Error();
           const now = performance.now();
@@ -511,6 +516,7 @@ export class DesktopRelay {
             v.ready = true;
             v.allowInput = ready.allowInput;
             v.secureDesktop = ready.secureDesktop === true;
+            v.lockScreenCover = ready.lockScreenCover === true;
             if (v.secureDesktop) {
               this.agents.revoke(v.agent);
               delete v.latest;
@@ -523,6 +529,15 @@ export class DesktopRelay {
             this.stop(v);
           } else if (msg.type === "session_unlocked" && v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_unlocked" });
+            this.stop(v);
+          } else if (msg.type === "lock_screen_changed" && v.secureDesktop && v.lockScreenCover && v.ready) {
+            this.send(v.ws, { type: "lock_screen_changed" });
+            this.stop(v);
+          } else if (msg.type === "unlock_failure" && (!v.ready || v.secureDesktop) && unlockFailure(msg.code)) {
+            const failure = unlockFailure(msg.code)!;
+            this.send(v.ws, failure.retry
+              ? { type: "lock_screen_changed" }
+              : { type: "error", message: failure.message });
             this.stop(v);
           } else if (msg.type === "media_status" && v.features && !v.secureDesktop) {
             const status = DesktopMediaStatus.parse(msg);

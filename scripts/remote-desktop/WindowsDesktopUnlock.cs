@@ -1,10 +1,13 @@
 // Installed, administrator-protected broker. No network listeners or policy changes.
 // Compile together with WindowsDesktopHost.cs, targeting the 64-bit .NET Framework.
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.AccessControl;
 using System.Security.Principal;
 using System.ServiceProcess;
 using System.Text;
@@ -66,6 +69,9 @@ public static class SodaDesktopUnlock {
     [DllImport("user32.dll",SetLastError=true)]static extern IntPtr OpenInputDesktop(uint flags,bool inherit,uint access);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool GetUserObjectInformation(IntPtr handle,int kind,StringBuilder name,uint size,out uint needed);
     [DllImport("user32.dll")]static extern bool CloseDesktop(IntPtr handle);
+    [DllImport("user32.dll")]static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr window,out uint pid);
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern uint GetWindowsDirectory(StringBuilder directory,uint size);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateJobObject(IntPtr sa,string name);
     [DllImport("kernel32.dll")]static extern bool SetInformationJobObject(IntPtr job,int kind,ref JOB_LIMIT limits,uint length);
     [DllImport("kernel32.dll")]static extern bool AssignProcessToJobObject(IntPtr job,IntPtr process);
@@ -80,6 +86,28 @@ public static class SodaDesktopUnlock {
     [StructLayout(LayoutKind.Sequential)]struct PRIVILEGE {public uint count,low;public int high;public uint attributes;}
     [DllImport("advapi32.dll",CharSet=CharSet.Unicode)]static extern bool LookupPrivilegeValue(string machine,string name,out long luid);
     [DllImport("advapi32.dll",SetLastError=true)]static extern bool AdjustTokenPrivileges(IntPtr token,bool disable,ref PRIVILEGE privileges,uint size,IntPtr previous,IntPtr returned);
+    [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetKernelObjectSecurity(IntPtr handle,uint information,byte[] descriptor,uint size,out uint needed);
+    [DllImport("advapi32.dll",SetLastError=true)]static extern bool SetKernelObjectSecurity(IntPtr handle,uint information,byte[] descriptor);
+    static byte[] ProcessDacl(IntPtr handle) {
+        uint needed;GetKernelObjectSecurity(handle,4,null,0,out needed);
+        Require(needed>0&&needed<65536);
+        var bytes=new byte[needed];Require(GetKernelObjectSecurity(handle,4,bytes,needed,out needed));return bytes;
+    }
+    static byte[] AddProcessQuery(byte[] bytes,string logon) {
+        Require(logon!=null&&logon.StartsWith("S-1-5-5-",StringComparison.Ordinal));
+        var descriptor=new RawSecurityDescriptor(bytes,0);
+        Require((descriptor.ControlFlags&ControlFlags.DiscretionaryAclPresent)!=0&&descriptor.DiscretionaryAcl!=null);
+        var acl=descriptor.DiscretionaryAcl;
+        Require(new DiscretionaryAcl(false,false,acl).IsCanonical);
+        // Preserve every existing ACE, adding only this logon's limited query right.
+        // Explicit allows precede inherited ACEs; existing explicit denies retain priority.
+        int index=0;while(index<acl.Count&&(acl[index].AceFlags&AceFlags.Inherited)==0)index++;
+        acl.InsertAce(index,new CommonAce(AceFlags.None,AceQualifier.AccessAllowed,0x1000,new SecurityIdentifier(logon),false,null));
+        var result=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(result,0);return result;
+    }
+    static void GrantProcessQuery(IntPtr handle,string logon) {
+        Require(SetKernelObjectSecurity(handle,4,AddProcessQuery(ProcessDacl(handle),logon)));
+    }
     static void EnableSessionPrivilege() {
         IntPtr token;Require(OpenProcessToken(Process.GetCurrentProcess().Handle,0x28,out token));
         try {long luid;Require(LookupPrivilegeValue(null,"SeTcbPrivilege",out luid));var privilege=new PRIVILEGE{count=1,low=(uint)luid,high=(int)(luid>>32),attributes=2};
@@ -159,12 +187,149 @@ public static class SodaDesktopUnlock {
             return info.data.flags==0?0:info.data.flags==1?1:-1;
         } finally { WTSFreeMemory(buffer); }
     }
-    public static bool SecureDesktop() {
-        using(var current=WindowsIdentity.GetCurrent())if(!current.IsSystem)return false;
-        if(LockState()!=0)return false;
-        IntPtr desktop=OpenInputDesktop(0,false,1);if(desktop==IntPtr.Zero)return false;
-        try { uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Winlogon"; }
+    static string SecureDesktopFailure() {
+        using(var current=WindowsIdentity.GetCurrent())if(!current.IsSystem)return "worker_identity";
+        int state=LockState();if(state!=0)return state==1?"worker_session_unlocked":"worker_session_unavailable";
+        IntPtr desktop=OpenInputDesktop(0,false,1);if(desktop==IntPtr.Zero)return "worker_input_desktop_open";
+        try {
+            uint needed;var name=new StringBuilder(256);
+            if(!GetUserObjectInformation(desktop,2,name,512,out needed))return "worker_input_desktop_query";
+            if(name.ToString()=="Winlogon")return null;
+            return name.ToString()=="Default"?"worker_input_desktop_default":"worker_input_desktop_other";
+        }
         finally { CloseDesktop(desktop); }
+    }
+    public static bool SecureDesktop() {return SecureDesktopFailure()==null;}
+    static bool InputIsDefault() {
+        IntPtr desktop=OpenInputDesktop(0,false,1);if(desktop==IntPtr.Zero)return false;
+        try{uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Default";}
+        finally{CloseDesktop(desktop);}
+    }
+    static string LockAppPath() {
+        var windows=new StringBuilder(32768);uint length=GetWindowsDirectory(windows,(uint)windows.Capacity);
+        Require(length>0&&length<windows.Capacity);
+        string root=Path.Combine(windows.ToString(),"SystemApps"),package=Path.Combine(root,"Microsoft.LockApp_cw5n1h2txyewy"),exe=Path.Combine(package,"LockApp.exe");
+        foreach(string path in new[]{root,package,exe})Require((File.GetAttributes(path)&FileAttributes.ReparsePoint)==0);
+        return exe;
+    }
+    public static bool UserLockScreen() {
+        try {
+            using(var current=WindowsIdentity.GetCurrent()) {
+                if(current.IsSystem||LockState()!=0||!InputIsDefault())return false;
+                IntPtr foreground=GetForegroundWindow();if(foreground==IntPtr.Zero)return false;
+                uint pid;GetWindowThreadProcessId(foreground,out pid);if(pid==0)return false;
+                using(var app=Process.GetProcessById((int)pid))using(var identity=Identity(app))
+                    return app.SessionId==Process.GetCurrentProcess().SessionId&&identity.User==current.User&&
+                        LogonSid(identity)==LogonSid(current)&&String.Equals(Image(app),LockAppPath(),StringComparison.OrdinalIgnoreCase)&&
+                        foreground==GetForegroundWindow()&&LockState()==0&&InputIsDefault();
+            }
+        }catch{return false;}
+    }
+    static bool DormantLockScreen(bool system,Func<int> state,Func<bool> inputDefault,Func<bool> noForeground) {
+        // A verified locked console with no foreground can have no LockApp at
+        // all while the display sleeps. This authorizes only a display wake,
+        // never capture or a key. Enter still needs UserLockScreen's OS identity.
+        return !system&&state()==0&&inputDefault()&&noForeground()&&
+            state()==0&&inputDefault()&&noForeground();
+    }
+    static bool PendingUserLockScreen() {
+        try {
+            using(var current=WindowsIdentity.GetCurrent())
+                return DormantLockScreen(current.IsSystem,LockState,InputIsDefault,()=>GetForegroundWindow()==IntPtr.Zero);
+        }catch{return false;}
+    }
+    public static bool UserLockScreenAvailable(){return UserLockScreen()||PendingUserLockScreen();}
+    [DllImport("kernel32.dll")]static extern uint SetThreadExecutionState(uint flags);
+    static void WakeLockScreen() {
+        Require(PendingUserLockScreen());Require(SetThreadExecutionState(2)!=0);
+    }
+    static void PrepareUserLockScreen(Func<bool> visible,Func<bool> pending,Action wake,Action enter) {
+        // Wake never chains a key. Reconnect with control revoked; advancing
+        // after wake requires another explicit human action on the new session.
+        if(!visible()){Require(pending());wake();return;}
+        // Enter still requires the original foreground/identity/path guard.
+        enter();
+    }
+    static bool SecureDesktopCandidate() {
+        // Access denial is only a routing hint. The SYSTEM worker independently
+        // requires the active, locked Winlogon desktop before capture or input.
+        IntPtr desktop=OpenInputDesktop(0,false,1);
+        if(desktop==IntPtr.Zero)return Marshal.GetLastWin32Error()==5;
+        try{uint needed;var name=new StringBuilder(256);return GetUserObjectInformation(desktop,2,name,512,out needed)&&name.ToString()=="Winlogon";}
+        finally{CloseDesktop(desktop);}
+    }
+    static string SelectSource(Func<int> state,Func<bool> cover,Func<bool> secure,Action pause) {
+        string previous=null;int stable=0;
+        for(int i=0;i<80;i++) {
+            int locked=state();
+            string candidate=locked==1?"normal":locked==0?(cover()?"cover":secure()?"secure":null):null;
+            stable=candidate!=null&&candidate==previous?stable+1:1;previous=candidate;
+            if(candidate!=null&&stable>=4)return candidate;
+            pause();
+        }
+        return "transition";
+    }
+    public static string SelectSource() {
+        return SelectSource(LockState,UserLockScreenAvailable,SecureDesktopCandidate,()=>Thread.Sleep(25));
+    }
+    public static void SourceTransition() {WorkerFailure(Console.Out,"source_transition");}
+    public static void RunUserLockScreen(bool allowInput) {
+        ServeUserLockScreen(Console.In,Console.Out,UserLockScreenAvailable,LockState,
+            ()=>PrepareUserLockScreen(UserLockScreen,PendingUserLockScreen,WakeLockScreen,()=>SodaDesktopHost.DismissLockScreen(UserLockScreen)),allowInput);
+    }
+    static void ServeUserLockScreen(TextReader input,TextWriter output,Func<bool> guard,Func<int> lockState,Action dismiss,bool allowInput) {
+        if(!guard()){WorkerFailure(output,"source_transition");return;}
+        var json=new System.Web.Script.Serialization.JavaScriptSerializer();
+        string first=Line(input,65536);if(first==null)return;
+        var configure=(Dictionary<string,object>)json.DeserializeObject(first);Require((string)configure["type"]=="configure");
+        var options=(Dictionary<string,object>)configure["options"];
+        bool allowed=allowInput&&(bool)configure["allowInput"];
+        if(!guard()){WorkerFailure(output,"source_transition");return;}
+        var ready=new Dictionary<string,object>{{"type","ready"},{"title","Windows lock screen"},{"width",640},{"height",360},
+            {"allowInput",allowed},{"backend","windows-gdi"},{"secureDesktop",true},{"lockScreenCover",true},
+            {"image",options.ContainsKey("image")?options["image"]:new {colorMode="full",showCursor=true}}};
+        output.WriteLine(json.Serialize(ready));output.Flush();
+        var lines=new BlockingCollection<string>(32);int closed=0;
+        var reader=new Thread(()=>{try{string line;while((line=Line(input,65536))!=null){if(!lines.TryAdd(line))break;}}catch{}finally{Interlocked.Exchange(ref closed,1);}}){IsBackground=true};reader.Start();
+        long last=Now;bool control=false,dismissed=false;
+        // This stage never captures a screen or accepts text, pointer or arbitrary keys.
+        while(Volatile.Read(ref closed)==0&&Now-last<8000&&!dismissed&&guard()) {
+            string line;int count=0;
+            while(count++<32&&lines.TryTake(out line)) {
+                var message=(Dictionary<string,object>)json.DeserializeObject(line);string type=(string)message["type"];
+                if(type=="heartbeat")last=Now;
+                else if(type=="control")control=allowed&&(bool)message["enabled"];
+                else if(type=="dismiss_lock_screen") {
+                    Require(control&&!dismissed&&Now-last<5000);
+                    if(!guard()){output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
+                    try{dismiss();dismissed=true;}
+                    catch{if(guard())throw;output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
+                }else if(type=="stop")return;
+                else if(type!="release"&&type!="keyframe")throw new InvalidOperationException();
+            }
+            Thread.Sleep(25);
+        }
+        if(Volatile.Read(ref closed)!=0||Now-last>=8000)return;
+        int state=lockState();
+        if(state==0)output.WriteLine("{\"type\":\"lock_screen_changed\"}");
+        else if(state==1)output.WriteLine("{\"type\":\"session_unlocked\"}");
+        output.Flush();
+    }
+    static void WorkerFailure(TextWriter writer,string code) {
+        // Only fixed stage identifiers, never exception text, paths, images or input.
+        writer.WriteLine("{\"type\":\"unlock_failure\",\"code\":\""+code+"\"}");writer.Flush();
+    }
+    static void RunSecureWorker(TextWriter writer,Func<string> check,Action run) {
+        string failure;
+        try{failure=check();}catch{WorkerFailure(writer,"worker_guard");return;}
+        if(failure!=null){WorkerFailure(writer,failure);return;}
+        bool failed=false;
+        try{run();}catch{failed=true;}
+        // Winlogon can return to the lock cover while capture is running. GDI
+        // may throw before the loop observes its guard. Recheck without capture
+        // or input, and preserve the verified transition before pipe teardown.
+        try{failure=check();}catch{failure="worker_guard";}
+        if(failure!=null||failed)WorkerFailure(writer,failure??"worker_initialization");
     }
     static NamedPipeServerStream ServerPipe(string suffix,bool first,string logon,string serverSid="SY") {
         string acl="D:P(A;;GA;;;"+serverSid+")"+(logon==null?"":"(A;;0x12019b;;;"+logon+")");
@@ -200,13 +365,20 @@ public static class SodaDesktopUnlock {
                 String.Equals(Marshal.PtrToStringUni(config.binary),"\""+OwnPath+"\"",StringComparison.OrdinalIgnoreCase));
         }finally{Marshal.FreeHGlobal(buffer);}
     }
-    static NamedPipeClientStream ClientPipe(string suffix) {
+    static NamedPipeClientStream OpenClientPipe(string name) {
         SafePipeHandle handle=null;
-        for(int n=0;n<50;n++) { handle=CreateFile(PipeName+suffix,DataRights,0,IntPtr.Zero,3,0x100000,IntPtr.Zero);if(!handle.IsInvalid)break;handle.Dispose();Thread.Sleep(100); }
+        // A synchronous Windows handle serializes read and write, even on
+        // different threads. Share/worker both read while awaiting configure,
+        // so their concurrent writes must use an overlapped handle and stream.
+        for(int n=0;n<50;n++) { handle=CreateFile(name,DataRights,0,IntPtr.Zero,3,0x40100000,IntPtr.Zero);if(!handle.IsInvalid)break;handle.Dispose();Thread.Sleep(100); }
         Require(handle!=null&&!handle.IsInvalid);
-        var pipe=new NamedPipeClientStream(PipeDirection.InOut,false,true,handle);
+        try{return new NamedPipeClientStream(PipeDirection.InOut,true,true,handle);}
+        catch{handle.Dispose();throw;}
+    }
+    static NamedPipeClientStream ClientPipe(string suffix) {
+        var pipe=OpenClientPipe(PipeName+suffix);
         try {
-            uint pid;Require(GetNamedPipeServerProcessId(handle,out pid)&&pid==ServicePid());
+            uint pid;Require(GetNamedPipeServerProcessId(pipe.SafePipeHandle,out pid)&&pid==ServicePid());
             using(var process=Process.GetProcessById((int)pid))
                 Require(process.SessionId==0 && String.Equals(Image(process),OwnPath,StringComparison.OrdinalIgnoreCase));
             return pipe;
@@ -229,19 +401,66 @@ public static class SodaDesktopUnlock {
     public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source) {
         SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState);
     }
-    public static void RunInstalled(bool lease) {
-        var start=new ProcessStartInfo(InstalledExecutable(),lease?"--lease":"--share") {
-            UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true
-        };
-        using(var process=Process.Start(start)) {
-            process.ErrorDataReceived+=(s,e)=>{};process.BeginErrorReadLine();
-            var childInput=new StreamWriter(process.StandardInput.BaseStream,new UTF8Encoding(false),4096){AutoFlush=true};
-            var childOutput=new StreamReader(process.StandardOutput.BaseStream,new UTF8Encoding(false,true),false,4096);
-            var input=new Thread(()=>{try{Copy(Console.In,childInput,65536);}catch{}finally{try{childInput.Close();}catch{}}}){IsBackground=true};input.Start();
-            try{Copy(childOutput,Console.Out,3*1024*1024);process.WaitForExit();}
-            finally{try{if(!process.HasExited)process.Kill();}catch{}}
-            Require(process.ExitCode==0);
+    [StructLayout(LayoutKind.Sequential)]struct STARTUPINFOEX { public STARTUPINFO startup;public IntPtr attributes; }
+    [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr GetStdHandle(int id);
+    [DllImport("kernel32.dll")]static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll",SetLastError=true)]static extern bool DuplicateHandle(IntPtr source,IntPtr handle,IntPtr target,out IntPtr copy,uint access,bool inherit,uint options);
+    [DllImport("kernel32.dll",SetLastError=true)]static extern bool InitializeProcThreadAttributeList(IntPtr list,int count,uint flags,ref IntPtr size);
+    [DllImport("kernel32.dll",SetLastError=true)]static extern bool UpdateProcThreadAttribute(IntPtr list,uint flags,IntPtr attribute,IntPtr value,IntPtr size,IntPtr previous,IntPtr returned);
+    [DllImport("kernel32.dll")]static extern void DeleteProcThreadAttributeList(IntPtr list);
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CreateProcess(string app,StringBuilder args,IntPtr psa,IntPtr tsa,bool inherit,uint flags,IntPtr env,string cwd,ref STARTUPINFOEX startup,out PI process);
+    sealed class ProxyChild:IDisposable {
+        public Process Process;public SafeFileHandle Job;
+        public void Dispose(){if(Job!=null)Job.Dispose();if(Process!=null)Process.Dispose();}
+    }
+    static ProxyChild StartProxy(string application,string arguments) {
+        var job=new SafeFileHandle(CreateJobObject(IntPtr.Zero,null),true);
+        IntPtr list=IntPtr.Zero,handles=IntPtr.Zero,jobValue=IntPtr.Zero;bool initialized=false;
+        var copies=new List<IntPtr>();PI child=new PI();Process process=null;
+        try {
+            Require(!job.IsInvalid);
+            var limit=new JOB_LIMIT();limit.basic.flags=0x2000;
+            Require(SetInformationJobObject(job.DangerousGetHandle(),9,ref limit,(uint)Marshal.SizeOf(typeof(JOB_LIMIT))));
+            foreach(int id in new[]{-10,-11,-12}) {
+                IntPtr copy;Require(DuplicateHandle(GetCurrentProcess(),GetStdHandle(id),GetCurrentProcess(),out copy,0,true,2));copies.Add(copy);
+            }
+            IntPtr size=IntPtr.Zero;InitializeProcThreadAttributeList(IntPtr.Zero,2,0,ref size);Require(size!=IntPtr.Zero);
+            list=Marshal.AllocHGlobal(size);Require(InitializeProcThreadAttributeList(list,2,0,ref size));initialized=true;
+            handles=Marshal.AllocHGlobal(3*IntPtr.Size);for(int n=0;n<3;n++)Marshal.WriteIntPtr(handles,n*IntPtr.Size,copies[n]);
+            jobValue=Marshal.AllocHGlobal(IntPtr.Size);Marshal.WriteIntPtr(jobValue,job.DangerousGetHandle());
+            // Assign ownership atomically during creation, before any child code
+            // runs. Only the three protocol streams are inherited, never the job.
+            Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));
+            Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x2000d),jobValue,new IntPtr(IntPtr.Size),IntPtr.Zero,IntPtr.Zero));
+            var startup=new STARTUPINFOEX {startup=new STARTUPINFO {cb=Marshal.SizeOf(typeof(STARTUPINFOEX)),flags=0x100,input=copies[0],output=copies[1],error=copies[2]},attributes=list};
+            Require(CreateProcess(application,new StringBuilder("\""+application+"\" "+arguments),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x08000000,IntPtr.Zero,Path.GetDirectoryName(application),ref startup,out child));
+            process=Process.GetProcessById((int)child.pid);
+            return new ProxyChild {Process=process,Job=job};
+        }catch{job.Dispose();if(process!=null)process.Dispose();throw;}
+        finally {
+            if(child.thread!=IntPtr.Zero)CloseHandle(child.thread);if(child.process!=IntPtr.Zero)CloseHandle(child.process);
+            if(initialized)DeleteProcThreadAttributeList(list);
+            foreach(IntPtr value in new[]{list,handles,jobValue})if(value!=IntPtr.Zero)Marshal.FreeHGlobal(value);
+            foreach(IntPtr copy in copies)CloseHandle(copy);
         }
+    }
+    public static void RunInstalled(bool lease) {
+        // Give the installed client the protocol pipes directly. There is no
+        // parent stdout-copy loop to hang after EOF. Terminating PowerShell also
+        // closes the private job and reaps its lease/share child and descendants.
+        using(var child=StartProxy(InstalledExecutable(),lease?"--lease":"--share")) {
+            child.Process.WaitForExit();
+            if(lease)Require(child.Process.ExitCode==0);
+            else FinishShare(child.Process.ExitCode,SelectSource,Console.Out);
+        }
+    }
+    static void FinishShare(int exitCode,Func<string> select,TextWriter output) {
+        // An older installed worker ends without a marker when the input desktop
+        // changes while still locked. Reclassify without reading stdin, capture,
+        // or input. A fresh connection must obtain its own configure and control.
+        string source=select();
+        if(source=="cover"||source=="normal")WorkerFailure(output,"source_transition");
+        else WorkerFailure(output,exitCode==0?"worker_ended":"worker_start_or_connection");
     }
     public static void Lease() {
         Require(SupportedWindows && WindowsIdentity.GetCurrent().User.Value==Owner && Process.GetCurrentProcess().SessionId==(int)WTSGetActiveConsoleSessionId());
@@ -282,6 +501,10 @@ public static class SodaDesktopUnlock {
         int pid=0;long started=0;Require(Int32.TryParse(args[0],out pid)&&Int64.TryParse(args[1],out started));
         EnableSessionPrivilege();
         OwnerProcess=Process.GetProcessById(pid);Require(OwnerProcess.StartTime.ToUniversalTime().Ticks==started);CheckOwner(OwnerProcess,true);
+        // A normal user's helper must authenticate the SYSTEM broker's image.
+        // Its default process DACL can deny even QUERY_LIMITED_INFORMATION.
+        // Grant it only to the already verified logon, on this process only.
+        using(var current=Process.GetCurrentProcess())GrantProcessQuery(current.Handle,Logon);
         Beat=Now;
         LeasePipe=ServerPipe("",true,Logon);
         var watch=new Thread(()=>{while(Live())Thread.Sleep(250);Shutdown(); }){IsBackground=true};watch.Start();
@@ -302,15 +525,19 @@ public static class SodaDesktopUnlock {
                 using(var peer=Peer(SharePipe))CheckOwner(peer,false);
                 using(var reader=Reader(SharePipe))using(var writer=Writer(SharePipe)) {
                     Require(Line(reader,64)=="share"&&Live());
-                    long generation=StartWorker();Accept(WorkerPipe);
-                    using(var peer=Peer(WorkerPipe))using(var identity=Identity(peer))Require(peer.Id==Worker.Id&&identity.IsSystem&&peer.SessionId==Session);
-                    using(var workerReader=Reader(WorkerPipe))using(var workerWriter=Writer(WorkerPipe)) {
-                        var forwarding=new Thread(()=>{try{Copy(reader,workerWriter,65536);}catch{}finally{EndWorker(generation);}}){IsBackground=true};forwarding.Start();
-                        string output;while((output=Line(workerReader,3*1024*1024))!=null) {
-                            if(output=="{\"type\":\"sas_request\"}") {SendSecureAttention();continue;}
-                            writer.WriteLine(output);
+                    try {
+                        long generation=StartWorker();Accept(WorkerPipe);
+                        using(var peer=Peer(WorkerPipe))using(var identity=Identity(peer))Require(peer.Id==Worker.Id&&identity.IsSystem&&peer.SessionId==Session);
+                        using(var workerReader=Reader(WorkerPipe))using(var workerWriter=Writer(WorkerPipe)) {
+                            var forwarding=new Thread(()=>{try{Copy(reader,workerWriter,65536);}catch{}finally{EndWorker(generation);}}){IsBackground=true};forwarding.Start();
+                            bool outputSeen=false;string output;while((output=Line(workerReader,3*1024*1024))!=null) {
+                                outputSeen=true;
+                                if(output=="{\"type\":\"sas_request\"}") {SendSecureAttention();continue;}
+                                writer.WriteLine(output);
+                            }
+                            if(!outputSeen&&Live())WorkerFailure(writer,"worker_no_output");
                         }
-                    }
+                    }catch{WorkerFailure(writer,"worker_start_or_connection");throw;}
                 }
             }catch{} finally{EndWorker();try{if(SharePipe!=null)SharePipe.Dispose();}catch{} }
         }
@@ -355,9 +582,7 @@ public static class SodaDesktopUnlock {
         using(var identity=WindowsIdentity.GetCurrent())
         using(var pipe=ServerPipe(suffix,true,LogonSid(identity),identity.User.Value)) {
             var accepted=System.Threading.Tasks.Task.Run(()=>Accept(pipe));
-            var handle=CreateFile(PipeName+suffix,DataRights,0,IntPtr.Zero,3,0x100000,IntPtr.Zero);
-            Require(!handle.IsInvalid);
-            using(var client=new NamedPipeClientStream(PipeDirection.InOut,false,true,handle)) {
+            using(var client=OpenClientPipe(PipeName+suffix)) {
                 accepted.GetAwaiter().GetResult();uint pid;
                 Require(GetNamedPipeClientProcessId(pipe.SafePipeHandle,out pid)&&pid==Process.GetCurrentProcess().Id);
                 using(var writer=Writer(client))using(var reader=Reader(pipe)) {
@@ -367,11 +592,42 @@ public static class SodaDesktopUnlock {
         }
         Console.WriteLine("desktop_unlock_utf8_pipe_passed");
     }
+    public static void CheckPipeDuplex() {
+        // Exercise the production client factory with a pending read before a
+        // configure write. No desktop, service, capture, input or credentials.
+        string suffix="-duplex-"+Guid.NewGuid().ToString("N"),expected="configure 日本語\U0001f600";
+        using(var identity=WindowsIdentity.GetCurrent())
+        using(var server=ServerPipe(suffix,true,LogonSid(identity),identity.User.Value)) {
+            var accepted=System.Threading.Tasks.Task.Run(()=>Accept(server));
+            using(var client=OpenClientPipe(PipeName+suffix)) {
+                accepted.GetAwaiter().GetResult();
+                var serverReader=Reader(server);var serverWriter=Writer(server);
+                var clientReader=Reader(client);var clientWriter=Writer(client);
+                try {
+                    var peer=System.Threading.Tasks.Task.Run(()=>{string line=Line(serverReader,128);serverWriter.WriteLine(line);return line;});
+                    var response=System.Threading.Tasks.Task.Run(()=>Line(clientReader,128));
+                    Thread.Sleep(150);
+                    var request=System.Threading.Tasks.Task.Run(()=>clientWriter.WriteLine(expected));
+                    var tasks=new System.Threading.Tasks.Task[]{peer,response,request};bool complete=false;
+                    try{complete=System.Threading.Tasks.Task.WaitAll(tasks,2000);}
+                    finally{if(!complete){server.Dispose();try{System.Threading.Tasks.Task.WaitAll(tasks,2000);}catch{}}}
+                    if(!complete)throw new InvalidOperationException("Pending pipe read blocked the configure write");
+                    Require(peer.Result==expected&&response.Result==expected);
+                } finally {
+                    // Failed duplex tests close the server to release blocked
+                    // reads. A cleanup flush must not mask that test failure.
+                    foreach(IDisposable resource in new IDisposable[]{clientWriter,clientReader,serverWriter,serverReader})try{resource.Dispose();}catch{}
+                }
+            }
+        }
+        Console.WriteLine("desktop_unlock_duplex_pipe_passed");
+    }
     static void WorkerMain() {
-        Require(SecureDesktop());
+        // Authenticate the private transport before checking the desktop, so a
+        // rejected guard can report its stage. No screen/input API runs on rejection.
         using(var pipe=ClientPipe("-worker"))using(var reader=Reader(pipe))using(var writer=Writer(pipe)) {
             Console.SetIn(reader);Console.SetOut(writer);
-            SodaDesktopHost.RunSecure(LockState,SecureDesktop);
+            RunSecureWorker(writer,SecureDesktopFailure,()=>SodaDesktopHost.RunSecure(LockState,SecureDesktop));
         }
     }
     public static bool Finished {get{return End;}}

@@ -10,6 +10,7 @@ it("keeps work and transfer methods off unauthenticated/internal/pane contexts",
   const surface = new ControlSurface(); registerWorkMethods(surface, { work, workTransfers: transfers, workAgentRequests: requests, workAgentLauncher: launcher, exec: { start: vi.fn() } } as unknown as MethodDeps);
   const scope = { workspaceId: randomUUID(), expectedFolder: "/target", agentKind: "codex" };
   const id = randomUUID(), params: Record<string, unknown> = {
+    "work.file_transfer": { ...scope, request: {action:"read_start",path:"report.xlsx"} },
     "work.binding": { action: "get", paneId: id }, "work.inspect": scope, "work.exec": { ...scope, command: "true" },
     "work.skill": { ...scope, id: "a".repeat(64) }, "work.memory": { ...scope, action: "list", sourcePaneId: id },
     "work.export_start": { paneId: id }, "work.export_read": { id, offset: 0 },

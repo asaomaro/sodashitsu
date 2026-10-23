@@ -33,7 +33,22 @@ export const WorkTransferMethods = {
   "work.import_chunk": z.object({ id: transferId, offset: z.number().int().min(0).max(32 * 1024 * 1024), data: z.string().max(90000).regex(/^[A-Za-z0-9+/]*={0,2}$/) }).strict(),
   "work.import_finish": z.object({ id: transferId }).strict(),
 } as const;
+export const WORK_FILE_MAX_BYTES = 100 * 1024 * 1024;
+export const WORK_FILE_CHUNK_BYTES = 64 * 1024;
+const filePath = z.string().min(1).max(4096).refine(s => !s.includes("\0"));
+export const WorkFileRequest = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("check") }).strict(),
+  z.object({ action: z.literal("read_start"), path: filePath }).strict(),
+  z.object({ action: z.literal("write_start"), path: filePath, bytes: z.number().int().min(0).max(WORK_FILE_MAX_BYTES) }).strict(),
+  z.object({ action: z.literal("read"), id: transferId, offset: z.number().int().min(0).max(WORK_FILE_MAX_BYTES) }).strict(),
+  z.object({ action: z.literal("write"), id: transferId, offset: z.number().int().min(0).max(WORK_FILE_MAX_BYTES), data: z.string().max(87384).regex(/^[A-Za-z0-9+/]*={0,2}$/) }).strict(),
+  z.object({ action: z.literal("finish"), id: transferId, sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
+  z.object({ action: z.literal("abort"), id: transferId }).strict(),
+]);
+export type WorkFileRequest = z.infer<typeof WorkFileRequest>;
+export interface WorkFileResult { id?: string; bytes?: number; data?: string; offset?: number; done?: boolean; sha256?: string; destination?: string }
 export const WorkMethods = {
+  "work.file_transfer": z.object({ ...scope, request: WorkFileRequest }).strict(),
   "work.binding": z.discriminatedUnion("action", [
     z.object({ action: z.literal("get"), paneId: entityId }).strict(),
     z.object({ action: z.literal("clear"), paneId: entityId }).strict(),
@@ -48,6 +63,7 @@ export interface WorkSkill { id: string; name: string; description: string; scop
 export interface WorkInspection { folder: string; root: string; identity: string; platform: string; skills: WorkSkill[]; truncated: boolean; instructions: { path: string; text: string }[] }
 export interface WorkMemory { directory: string; files?: string[]; text?: string; version?: string }
 export interface WorkResults {
+  "work.file_transfer": WorkFileResult;
   "work.binding": { binding: WorkBinding | null };
   "work.inspect": WorkInspection;
   "work.exec": { id: string };

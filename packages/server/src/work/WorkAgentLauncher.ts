@@ -4,10 +4,11 @@ import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { RpcError, WorkAgentTool, WorkAgentRequestSchema, workAgentArgumentError, checkWorkAgentAsk, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
+import { RpcError, WorkAgentTool, WorkAgentRequestSchema, workAgentArgumentError, checkWorkAgentAsk, type MethodName, type ParamsOf, type ResultOf, type WorkFileRequest, type WorkFileResult } from "@sodashitsu/protocol";
 import type { SessionService } from "../session/SessionService.js";
 import type { AskService } from "../ask/AskService.js";
 import type { AgentStarter } from "../agent/AgentStarter.js";
+import { FileTransfer, copyWorkFile } from "./FileTransfer.js";
 import { createExclusive, privateDirs } from "./files.js";
 
 export interface WorkAgentRemote {
@@ -90,10 +91,38 @@ export class WorkAgentLauncher {
           await Promise.allSettled(files.map(file => rm(file, { force: true })));
         }
       };
+      const localTransfers = new FileTransfer();
       const execute = async (raw: unknown, owner: NonNullable<typeof job>) => {
         check();
         if (owner.cancelled) throw new RpcError("invalid_params", "操作は中断されました");
         const tool = WorkAgentTool.parse(raw);
+        if (tool.operation === "transfer_chunk") throw new RpcError("invalid_params", "内部転送操作は直接呼び出せません");
+        if (tool.operation === "transfer") {
+          const transferCheck = async () => {
+            check();
+            if (owner.cancelled) throw new RpcError("invalid_params", "転送は中断されました");
+            if (p.task) await remote.request("work.agent_check", { id: requestId, claim: claim! });
+            else await remote.request("work.file_transfer", { ...scope, request: { action: "check" } });
+            check();
+          };
+          const local = (request: WorkFileRequest) => localTransfers.run(requestId, project, request, transferCheck, true);
+          const distant = async (request: WorkFileRequest): Promise<WorkFileResult> => {
+            check();
+            if (owner.cancelled && request.action !== "abort") throw new RpcError("invalid_params", "転送は中断されました");
+            return p.task
+              ? await remote.request("work.agent_tool", { id: requestId, claim: claim!, tool: { operation: "transfer_chunk", request } }) as WorkFileResult
+              : remote.request("work.file_transfer", { ...scope, request });
+          };
+          try {
+            const result = tool.action === "upload"
+              ? await copyWorkFile(local, distant, tool.sourcePath, tool.destinationPath)
+              : await copyWorkFile(distant, local, tool.sourcePath, tool.destinationPath);
+            return { status: "completed", direction: tool.action, source: tool.sourcePath, ...result };
+          } catch (error) {
+            return { status: "failed", direction: tool.action, source: tool.sourcePath, destination: tool.destinationPath,
+              message: error instanceof Error ? error.message : "ファイル転送に失敗しました" };
+          }
+        }
         // Plugin generation and project scope must still be valid before any scoped operation.
         if(p.task && tool.operation!=="exec")return remote.request("work.agent_tool",{id:requestId,claim:claim!,tool});
         if(tool.operation === "plugin")return remote.request("work.agent_plugin",{id:requestId,claim:claim!,request:tool.request});
@@ -160,7 +189,7 @@ export class WorkAgentLauncher {
       const expiry = setTimeout(() => cleanup?.(), 24 * 60 * 60 * 1000); expiry.unref();
       cleanup = () => {
         if (closed) return; closed = true;
-        abort.abort(); if(reportTimer)clearInterval(reportTimer);
+        abort.abort(); void localTransfers.close(); if(reportTimer)clearInterval(reportTimer);
         clearInterval(timer); clearTimeout(expiry);
         if (job?.askOwner) this.asks?.onClientGone(job.askOwner);
         job?.remote?.close();

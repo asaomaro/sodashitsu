@@ -73,6 +73,7 @@ export const RemoteDesktopViewerMessage = z.union([
     .strict(),
   z.object({ type: z.literal("control"), enabled: z.boolean() }).strict(),
   z.object({ type: z.literal("sas") }).strict(),
+  z.object({ type: z.literal("dismiss_lock_screen") }).strict(),
   z
     .object({
       type: z.literal("input"),
@@ -97,6 +98,7 @@ export const DesktopReady = z
     height: z.number().int().positive().max(32768),
     backend: z.enum(["windows-gdi", "synthetic"]),
     secureDesktop: z.boolean().optional(),
+    lockScreenCover: z.boolean().optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),
@@ -106,7 +108,8 @@ export const DesktopReady = z
       .optional(),
     image: DesktopImageSettings.optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => !v.lockScreenCover || v.secureDesktop === true);
 export const DesktopFrameInfo = z
   .object({
     seq: z.number().int().positive(),

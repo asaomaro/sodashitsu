@@ -32,6 +32,9 @@ const infoOpen = ref(false);
 const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
+const lockScreenCover = ref(false);
+const dismissInFlight = ref(false);
+let dismissPending = false;
 async function toggleToolbar() {
   toolbarCollapsed.value = !toolbarCollapsed.value;
   if (toolbarCollapsed.value) infoOpen.value = false;
@@ -285,6 +288,7 @@ let ws: WebSocket | undefined,
   lastDrawn = 0,
   decoding = false;
 let chain = new DesktopFrameChain();
+let startupRetries = 0;
 const inputs = new Map<number, number>();
 let drag: { x: number; y: number; left: number; top: number } | undefined;
 function send(value: unknown) {
@@ -292,6 +296,8 @@ function send(value: unknown) {
     ws.send(JSON.stringify(value));
 }
 function relinquish() {
+  if (dismissPending) dismissInFlight.value = false;
+  dismissPending = false;
   if (clipboardGranted.value) {
     send({ type: "clipboard_grant", enabled: false });
     clearClipboard();
@@ -322,6 +328,9 @@ function stop() {
     inputs.clear();
   }
   secureDesktop.value = false;
+  lockScreenCover.value = false;
+  dismissInFlight.value = false;
+  dismissPending = false;
   agentActive.value = false;
   agentTicket.value = "";
   agentExpires.value = 0;
@@ -359,7 +368,8 @@ function preset(event: Event) {
   showCursor.value = value.image.showCursor;
   (event.target as HTMLSelectElement).value = "";
 }
-function connect() {
+function connect(automatic = false) {
+  if (automatic !== true) startupRetries = 0;
   let options: ConnectionSettings;
   try {
     options = {
@@ -409,7 +419,7 @@ function connect() {
           receiver?.chunk(new Uint8Array(event.data));
           return;
         }
-        if (!ready.value || decoding) throw new Error("画像の順序が不正です");
+        if (!ready.value || lockScreenCover.value || decoding) throw new Error("画像の順序が不正です");
         decoding = true;
         const frame = decodeDesktopFrame(new Uint8Array(event.data)),
           start = performance.now();
@@ -438,6 +448,7 @@ function connect() {
         if (m.type === "ready") {
           const r = DesktopReady.parse(m);
           secureDesktop.value = r.secureDesktop === true;
+          lockScreenCover.value = r.lockScreenCover === true;
           if (secureDesktop.value) text.value = "";
           title.value = secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
@@ -453,14 +464,20 @@ function connect() {
           }
           if (!secureDesktop.value) scheduleDisplay();
           status.value = secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
-        } else if ((m.type === "session_unlocked" && secureDesktop.value) || (m.type === "session_locked" && !secureDesktop.value)) {
+        } else if ((m.type === "session_unlocked" && secureDesktop.value) || (m.type === "session_locked" && !secureDesktop.value) || (m.type === "lock_screen_changed" && (secureDesktop.value || !ready.value))) {
+          const exhausted = ++startupRetries > 3;
           maximumDisplay.value = false;
           requestedDisplay = undefined;
           text.value = "";
           stop();
-          status.value = m.type === "session_locked" ? "ロック画面に再接続中" : "解除しました。通常画面に再接続中";
+          if (exhausted) {
+            status.value = "停止";
+            error.value = "共有元のロック画面が安定しないため再接続を停止しました。少し待ってから接続し直してください。";
+            return;
+          }
+          status.value = m.type === "session_locked" || m.type === "lock_screen_changed" ? "ロック画面に再接続中" : "解除しました。通常画面に再接続中";
           const reconnectEpoch = epoch;
-          setTimeout(() => { if (!dead && epoch === reconnectEpoch) connect(); }, 750);
+          setTimeout(() => { if (!dead && epoch === reconnectEpoch) connect(true); }, 750);
         } else if (m.type === "media_status") {
           const state = DesktopMediaStatus.parse(m);
           mediaState.value = state.state;
@@ -539,6 +556,10 @@ function connect() {
               ? "操作中"
               : "閲覧中";
           if (control.value) canvas.value?.focus();
+          if (control.value && lockScreenCover.value && dismissPending) {
+            dismissPending = false;
+            send({ type: "dismiss_lock_screen" });
+          }
         } else if (
           m.type === "stats" &&
           [m.fps, m.mbps, m.ackP95Ms].every((v) => typeof v === "number" && Number.isFinite(v))
@@ -594,6 +615,7 @@ function restoreImage() {
   el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
 }
 function input(value: unknown) {
+  if (lockScreenCover.value) return;
   if (receiver && !receiver.active) return;
   if (!control.value || !ready.value || !lastDrawn || !RemoteDesktopInput.safeParse(value).success)
     return;
@@ -640,13 +662,27 @@ function escape(e: KeyboardEvent) {
     relinquish();
   }
 }
+function dismissLockScreen() {
+  if (!ready.value || !allowed.value || !lockScreenCover.value || dismissInFlight.value) return;
+  startupRetries = 0;
+  dismissInFlight.value = true;
+  if (control.value) send({ type: "dismiss_lock_screen" });
+  else {
+    dismissPending = true;
+    send({ type: "control", enabled: true });
+  }
+}
+function toggleControl() {
+  startupRetries = 0;
+  send({ type: "control", enabled: !control.value });
+}
 function key(e: KeyboardEvent, down: boolean) {
   if (e.code === "Escape" && down) {
     e.preventDefault();
     relinquish();
     return;
   }
-  if (!control.value || e.isComposing || e.repeat) return;
+  if (!control.value || lockScreenCover.value || e.isComposing || e.repeat) return;
   const value = { kind: "key", code: e.code, down };
   if (RemoteDesktopInput.safeParse(value).success) {
     e.preventDefault();
@@ -719,7 +755,7 @@ onBeforeUnmount(() => {
         <button
           :disabled="!ready || !allowed"
           @pointerdown.prevent
-          @click="send({ type: 'control', enabled: !control })"
+          @click="toggleControl"
         >
           {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
         </button>
@@ -739,7 +775,7 @@ onBeforeUnmount(() => {
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
       </p>
-      <p v-if="secureDesktop" data-desktop-locked>
+      <p v-if="secureDesktop && !lockScreenCover" data-desktop-locked>
         Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。
         <button :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
@@ -804,7 +840,7 @@ onBeforeUnmount(() => {
             適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザでマシンごとに記憶します。
           </p>
           <p v-if="settingNotice" role="status">{{ settingNotice }}</p>
-          <button @click="connect">適用して再接続</button>
+          <button @click="connect()">適用して再接続</button>
         </details>
       </nav>
       <details v-if="ready && allowMedia" data-desktop-media>
@@ -913,6 +949,7 @@ onBeforeUnmount(() => {
         :class="{ controlling: control, actual: !fit }"
       >
         <canvas
+          v-show="!lockScreenCover"
           ref="canvas"
           tabindex="0"
           aria-label="共有画面"
@@ -935,9 +972,14 @@ onBeforeUnmount(() => {
           @keyup="key($event, false)"
           @blur="canvasBlur"
         />
-        <span v-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
+        <div v-if="lockScreenCover" class="lock-screen-cover" data-desktop-lock-cover>
+          <p>接続先はWindowsのロック画面です。</p>
+          <button :disabled="!ready || !allowed || dismissInFlight" @click="dismissLockScreen">サインイン画面へ進む</button>
+          <p>PIN・パスワードは、次の認証画面で入力してください。</p>
+        </div>
+        <span v-else-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
       </div>
-      <div v-show="infoOpen || control" class="desktop-input" :class="{ 'input-collapsed': inputCollapsed }">
+      <div v-show="!lockScreenCover && (infoOpen || control)" class="desktop-input" :class="{ 'input-collapsed': inputCollapsed }">
       <div class="viewer-input-row">
       <form v-show="!inputCollapsed"
         @submit.prevent="
@@ -1055,6 +1097,15 @@ p {
   scrollbar-gutter: stable;
   background: #000;
   border: 2px solid transparent;
+}
+.lock-screen-cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 .screen.controlling {
   border-color: var(--soda-accent-fg, #79c0ff);
