@@ -95,3 +95,23 @@ AssertionError: promise resolved "{ …(3) }" instead of rejecting
 
 
 ```
+
+## PR #185 の分離後の最終検証
+
+`origin/main`（d92caee3）を基点とする `/workspaces/sodashitsu-file-transfer` で、今回の変更とロック画面の必要な前提だけを切り出して検証した。
+
+- `pnpm build`: 成功。
+- `pnpm typecheck`: 成功。
+- `pnpm exec vitest run --maxWorkers=4`: 735ファイル・11254件成功。
+- `pnpm smoke`: 成功。
+- `pnpm --filter @sodashitsu/e2e exec playwright test remote-desktop-cover.spec.ts remote-desktop-unlock.spec.ts`: 6件成功。
+- 全体差分の独立レビュー: 指摘なし（review.md）。
+- GitHub側のチェック設定なし。PRはmainと競合なし。
+
+全体テストの生の集計:
+
+```text
+ Test Files  735 passed (735)
+      Tests  11254 passed (11254)
+   Duration  336.32s (tests 81%, import 10%, environment 5%, transform 4%)
+```
