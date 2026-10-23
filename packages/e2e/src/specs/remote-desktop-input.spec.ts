@@ -33,6 +33,24 @@ test("focused desktop forwards keyboard and all five mouse buttons", async ({pag
     await expect(status).toHaveText("操作中");
     await canvas.focus();
     const keys=()=>sent.filter(m=>m.type==="input"&&m.input?.kind==="key").map(m=>[m.input.code,m.input.down]);
+    // Physical Ctrl+Space must remain a chord for the remote IME's own binding.
+    await page.keyboard.press("Control+Space");
+    await expect.poll(()=>keys()).toEqual([["ControlLeft",true],["Space",true],["Space",false],["ControlLeft",false]]);
+    // Hold Ctrl in a local field, then enter the remote canvas without a new down.
+    await view.getByLabel("確定した文字を送る").focus();
+    await page.keyboard.down("Control");await canvas.focus();
+    await page.keyboard.press("Space");await page.keyboard.up("Control");
+    await expect.poll(()=>keys().slice(4)).toEqual([["ControlLeft",true],["Space",true],["Space",false],["ControlLeft",false]]);
+    const beforeShortcut=keys().length;
+    // Some local IMEs omit the Ctrl down or label Space as IMEOn/Off.
+    expect(await canvas.evaluate(el=>{
+      const prevented=[];
+      for(const [type,code,key,ctrlKey] of [["keydown","Space","IMEOn",true],["keyup","Space","IMEOff",true],["keyup","ControlRight","Control",false]] as const){
+        const e=new KeyboardEvent(type,{code,key,ctrlKey,isComposing:true,bubbles:true,cancelable:true});el.dispatchEvent(e);prevented.push(e.defaultPrevented);
+      }
+      return prevented;
+    })).toEqual([true,true,true]);
+    await expect.poll(()=>keys().slice(beforeShortcut)).toEqual([["ControlLeft",true],["Space",true],["Space",false],["ControlLeft",false],["ControlRight",false]]);
     for(const key of ["Tab","Control+a","Alt+x","NumpadEnter"]) await page.keyboard.press(key);
     await canvas.evaluate(el=>{for(const type of ["keydown","keyup"]){el.dispatchEvent(new KeyboardEvent(type,{code:"F13",key:"F13",bubbles:true,cancelable:true}));}});
     await expect(canvas).toBeFocused();

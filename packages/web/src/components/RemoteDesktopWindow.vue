@@ -18,7 +18,7 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
-import { DesktopEscape, DesktopButtons } from "../desktop/input.js";
+import { DesktopEscape, DesktopButtons, DesktopModifiers } from "../desktop/input.js";
 import { imeKeyCode, type ImeKeyCode } from "../desktop/ime.js";
 import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
 import { chooseMaximumDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
@@ -248,7 +248,7 @@ function stopVideo() {
   mediaState.value = "images";
   sound.value = false;
   restoreImage();
-  send({ type: "release" });
+  releaseInputs();
 }
 async function toggleSound() {
   if (!receiver) return;
@@ -297,14 +297,18 @@ let ws: WebSocket | undefined,
 let chain = new DesktopFrameChain();
 let startupRetries = 0;
 const inputs = new Map<number, number>();
-const escapePress = new DesktopEscape(), mouseButtons = new DesktopButtons();
+const escapePress = new DesktopEscape(), mouseButtons = new DesktopButtons(), modifiers = new DesktopModifiers();
 let drag: { x: number; y: number; left: number; top: number } | undefined;
 function send(value: unknown) {
   if (ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
     ws.send(JSON.stringify(value));
 }
+function releaseInputs() {
+  mouseButtons.reset(); modifiers.reset();
+  send({type:"release"});
+}
 function relinquish() {
-  escapePress.reset(); mouseButtons.reset();
+  escapePress.reset(); mouseButtons.reset(); modifiers.reset();
   if (dismissPending) dismissInFlight.value = false;
   dismissPending = false;
   if (clipboardGranted.value) {
@@ -525,7 +529,7 @@ function connect(automatic = false) {
                 mediaState.value = value;
                 if (value === "images") {
                   restoreImage();
-                  send({ type: "release" });
+                  releaseInputs();
                 }
               },
               state.iceServers as RTCIceServer[] | undefined,
@@ -562,7 +566,7 @@ function connect(automatic = false) {
           control.value = false;
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
         } else if (m.type === "control") {
-          escapePress.reset(); mouseButtons.reset();
+          escapePress.reset(); mouseButtons.reset(); modifiers.reset();
           control.value = m.enabled === true && allowed.value;
           status.value = agentActive.value
             ? "エージェント操作中"
@@ -669,8 +673,8 @@ function wheel(e: WheelEvent) {
 async function windowFocusOut(e: FocusEvent) {
   escapePress.reset();
   if (e.target === canvas.value) return; // Canvas has its own blur handler.
-  mouseButtons.reset();
-  send({type:"release"});
+  mouseButtons.reset(); modifiers.reset();
+  releaseInputs();
   // During blur, activeElement may temporarily be body before relatedTarget gains focus.
   if (e.relatedTarget instanceof Node) {
     if (!windowElement.value?.contains(e.relatedTarget)) relinquish();
@@ -681,8 +685,8 @@ async function windowFocusOut(e: FocusEvent) {
   if (!windowElement.value?.contains(document.activeElement)) relinquish();
 }
 function canvasBlur(e: FocusEvent) {
-  escapePress.reset(); mouseButtons.reset();
-  if (e.relatedTarget instanceof Element && e.relatedTarget.closest("[data-remote-desktop]")) send({type:"release"});
+  escapePress.reset(); mouseButtons.reset(); modifiers.reset();
+  if (e.relatedTarget instanceof Element && e.relatedTarget.closest("[data-remote-desktop]")) releaseInputs();
   else relinquish();
 }
 async function leaveDesktop() {
@@ -730,6 +734,7 @@ function desktopKey(e: KeyboardEvent, down: boolean) {
   // Every received key belongs to the remote surface, including Tab, modifiers,
   // shortcuts and composition-time physical keys; local form fields are above.
   e.preventDefault(); e.stopPropagation();
+  for (const change of modifiers.update(e,down)) input(change);
   const ime = imeKeyCode(e);
   if (ime) { escapePress.reset(); if (down && !e.repeat) sendIme(ime); return; }
   const normalized = e.key === "ZenkakuHankaku" ? "ZenkakuHankaku" : code;
