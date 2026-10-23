@@ -53,6 +53,7 @@ type Viewer = {
   allowInput: boolean;
   secureDesktop?: boolean;
   lockScreenCover?: boolean;
+  imeKeys?: boolean;
   pending: number;
   seq: number;
   inputSeq: number;
@@ -183,6 +184,10 @@ export class DesktopRelay {
         state: (active, expiresAt) => this.send(v.ws, { type: "agent_state", active, expiresAt }),
         input: (input: RemoteDesktopInput) =>
           new Promise<void>((resolve, reject) => {
+            if (input.kind === "key" && (input.code === "ImeOn" || input.code === "ImeOff") && !v.imeKeys) {
+              reject(new RpcError("invalid_params", "接続先はIMEキーに対応していません"));
+              return;
+            }
             if (
               !v.provider ||
               !this.viewers.has(v) ||
@@ -326,6 +331,7 @@ export class DesktopRelay {
           if (v.lockScreenCover && v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
             this.send(v.provider, m);
         } else if (m.type === "input") {
+          if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !v.imeKeys) return;
           if (
             v.control &&
             !this.agents.occupied(v.agent) &&
@@ -517,6 +523,7 @@ export class DesktopRelay {
             v.allowInput = ready.allowInput;
             v.secureDesktop = ready.secureDesktop === true;
             v.lockScreenCover = ready.lockScreenCover === true;
+            v.imeKeys = ready.imeKeys === true && !v.lockScreenCover;
             if (v.secureDesktop) {
               this.agents.revoke(v.agent);
               delete v.latest;

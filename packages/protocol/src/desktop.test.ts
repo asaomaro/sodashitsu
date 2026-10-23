@@ -144,3 +144,12 @@ it("bounds physical display resizing separately from capture width", () => {
   ])
     expect(() => DesktopOptions.parse({ display })).toThrow();
 });
+
+it("accepts only named IME ON/OFF keys and optional helper support", () => {
+  for (const code of ["ImeOn", "ImeOff"])
+    for (const down of [true, false]) expect(RemoteDesktopInput.safeParse({kind:"key",code,down}).success).toBe(true);
+  expect(RemoteDesktopInput.safeParse({kind:"key",code:"VK_IME_ON",down:true}).success).toBe(false);
+  const ready={type:"ready",title:"test",allowInput:true,width:640,height:360,backend:"synthetic"};
+  expect(DesktopReady.parse(ready)).not.toHaveProperty("imeKeys");
+  expect(DesktopReady.parse({...ready,imeKeys:true}).imeKeys).toBe(true);
+});

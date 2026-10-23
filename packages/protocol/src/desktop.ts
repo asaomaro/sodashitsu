@@ -39,7 +39,7 @@ export type DesktopOptions = z.infer<typeof DesktopOptions>;
 const keyCode = z
   .string()
   .regex(
-    /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Enter|Escape|Tab|Space|Backspace|Delete|Insert|Home|End|PageUp|PageDown|CapsLock|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Backquote|Comma|Period|Slash)$/,
+    /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Enter|Escape|Tab|Space|Backspace|Delete|Insert|Home|End|PageUp|PageDown|CapsLock|ImeOn|ImeOff|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Backquote|Comma|Period|Slash)$/,
   );
 export const RemoteDesktopInput = z.discriminatedUnion("kind", [
   z
@@ -99,6 +99,7 @@ export const DesktopReady = z
     backend: z.enum(["windows-gdi", "synthetic"]),
     secureDesktop: z.boolean().optional(),
     lockScreenCover: z.boolean().optional(),
+    imeKeys: z.boolean().optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),

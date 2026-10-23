@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -29,7 +29,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : [])],
     allowInput,
     allowUnlock: unlockAllowed,
     origins: () => [origin],
@@ -375,4 +375,22 @@ it("has no cover frames or agent access and dismisses only after human control",
   await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);
   expect(viewer.messages.some(m=>m.type==="lock_screen_changed")).toBe(true);
   expect(await readFile(f.record,"utf8").catch(()=>"")).toBe("");
+});
+
+it.each([true,false])("forwards named IME keys only when advertised by the helper (%s)", async supported => {
+  const f=await fixture(true,false,true,false,true,false,undefined,undefined,supported),viewer=await f.viewer();
+  viewer.send(start);
+  await expect.poll(()=>viewer.messages.some(m=>m.type==="ready")).toBe(true);
+  expect(viewer.messages.find(m=>m.type==="ready")?.imeKeys).toBe(supported?true:undefined);
+  await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+  viewer.send({type:"control",enabled:true});
+  await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+  const frameSeq=decodeDesktopFrame(viewer.frames.at(-1)!).info.seq;
+  viewer.send({type:"input",seq:1,frameSeq,input:{kind:"key",code:"ImeOn",down:true}});
+  viewer.send({type:"input",seq:2,frameSeq,input:{kind:"key",code:"ImeOn",down:false}});
+  viewer.send({type:"input",seq:3,frameSeq,input:{kind:"key",code:"KeyA",down:true}});
+  await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===3)).toBe(true);
+  const record=await readFile(f.record,"utf8");
+  expect(record.includes('"code":"ImeOn"')).toBe(supported);
+  expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
 });

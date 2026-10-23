@@ -57,6 +57,10 @@ namespace SodaDesktopTests {
                     }finally {if(!parent.HasExited)parent.Kill();if(child!=null){if(!child.HasExited)child.Kill();child.Dispose();}}
                 }
             }
+            // Pure key translation only; no SendInput, capture or IME state change.
+            var virtualKey=typeof(SodaDesktopHost).GetMethod("VirtualKey",BindingFlags.NonPublic|BindingFlags.Static);
+            Check((ushort)virtualKey.Invoke(null,new object[]{"ImeOn"})==0x16,"IME ON did not map to VK_IME_ON");
+            Check((ushort)virtualKey.Invoke(null,new object[]{"ImeOff"})==0x1A,"IME OFF did not map to VK_IME_OFF");
             bool entered=false;
             using(var output=new StringWriter()) {
                 Call("RunSecureWorker",output,new Func<string>(()=>"worker_session_unavailable"),new Action(()=>{entered=true;}));
