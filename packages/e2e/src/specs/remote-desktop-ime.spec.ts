@@ -53,7 +53,7 @@ for (const {supported,legacyViewer} of [{supported:true,legacyViewer:false},{sup
     }
     if(!supported || legacyViewer){
       await expect(on).toBeDisabled();await expect(off).toBeDisabled();
-      expect(await canvas.evaluate(el=>{const e=new KeyboardEvent("keydown",{key:"IMEOn",code:"Lang1",bubbles:true,cancelable:true});el.dispatchEvent(e);return e.defaultPrevented;})).toBe(false);
+      expect(await canvas.evaluate(el=>{const e=new KeyboardEvent("keydown",{key:"IMEOn",code:"Lang1",bubbles:true,cancelable:true});el.dispatchEvent(e);return e.defaultPrevented;})).toBe(true);
       await page.keyboard.press("a");
       await expect.poll(()=>received.some(m=>m.type==="input_ack")).toBe(true);
       expect(ime()).toEqual([]);
@@ -85,7 +85,7 @@ for (const {supported,legacyViewer} of [{supported:true,legacyViewer:false},{sup
     await expect.poll(()=>received.some(m=>m.type==="input_ack"&&m.seq===ime().at(-1)!.seq)).toBe(true);
     expect(await page.evaluate(()=>{const outside=document.createElement("input");outside.id="outside-ime-test";document.body.append(outside);outside.focus();const e=new KeyboardEvent("keydown",{key:"IMEOn",code:"Lang1",bubbles:true,cancelable:true});outside.dispatchEvent(e);return e.defaultPrevented;})).toBe(false);
     await expect(page.locator("#outside-ime-test")).toBeFocused();expect(ime()).toHaveLength(10);
-    await view.getByRole("button",{name:"閲覧に戻る",exact:true}).click();
+    // Leaving any focused part of the remote window returns control.
     await expect(status).toHaveText("閲覧中");await expect(on).toBeDisabled();
   } finally {await provider.close();}
 });

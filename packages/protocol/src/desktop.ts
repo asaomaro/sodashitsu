@@ -11,6 +11,7 @@ import {
 
 // Opt in outside the strict JSON start schema so old relays can still connect.
 export const DESKTOP_IME_PROTOCOL = "soda-desktop-ime-v1";
+export const DESKTOP_INPUT_PROTOCOL = "soda-desktop-input-v1";
 
 export const DESKTOP_MAX_FRAME_BYTES = 2 * 1024 * 1024;
 export const DesktopDisplaySize = z
@@ -36,15 +37,14 @@ export const DesktopOptions = z
     adaptive: z.boolean().optional(),
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
+    extendedInput: z.literal(true).optional(),
     display: DesktopDisplaySize.optional(),
   })
   .strict();
 export type DesktopOptions = z.infer<typeof DesktopOptions>;
-const keyCode = z
-  .string()
-  .regex(
-    /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Enter|Escape|Tab|Space|Backspace|Delete|Insert|Home|End|PageUp|PageDown|CapsLock|ImeOn|ImeOff|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Backquote|Comma|Period|Slash)$/,
-  );
+const legacyKeyPattern = /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Numpad[0-9]|Arrow(?:Left|Right|Up|Down)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Enter|Escape|Tab|Space|Backspace|Delete|Insert|Home|End|PageUp|PageDown|CapsLock|ImeOn|ImeOff|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Backquote|Comma|Period|Slash)$/;
+const extendedKeyPattern = /^(F(?:1[3-9]|2[0-4])|NumLock|ScrollLock|Pause|PrintScreen|ContextMenu|Numpad(?:Enter|Add|Subtract|Multiply|Divide|Decimal|Comma|Equal)|Convert|NonConvert|KanaMode|IntlBackslash|IntlYen|IntlRo|Lang3|Lang4|Lang5|ZenkakuHankaku|(?:Audio)?Volume(?:Mute|Up|Down)|MediaTrackNext|MediaTrackPrevious|MediaStop|MediaPlayPause|MediaSelect|LaunchMail|LaunchApp1|LaunchApp2|BrowserBack|BrowserForward|BrowserRefresh|BrowserStop|BrowserSearch|BrowserFavorites|BrowserHome)$/;
+const keyCode = z.string().max(32).refine(code => legacyKeyPattern.test(code) || extendedKeyPattern.test(code));
 export const RemoteDesktopInput = z.discriminatedUnion("kind", [
   z
     .object({
@@ -52,7 +52,7 @@ export const RemoteDesktopInput = z.discriminatedUnion("kind", [
       x: z.number().min(0).max(1).finite(),
       y: z.number().min(0).max(1).finite(),
       event: z.enum(["move", "down", "up"]),
-      button: z.number().int().min(0).max(2),
+      button: z.number().int().min(0).max(4),
     })
     .strict(),
   z.object({ kind: z.literal("wheel"), delta: z.number().int().min(-1200).max(1200) }).strict(),
@@ -60,6 +60,9 @@ export const RemoteDesktopInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("text"), text: z.string().min(1).max(1024) }).strict(),
 ]);
 export type RemoteDesktopInput = z.infer<typeof RemoteDesktopInput>;
+export function isExtendedDesktopInput(input: RemoteDesktopInput): boolean {
+  return input.kind === "pointer" ? input.button > 2 : input.kind === "key" && !legacyKeyPattern.test(input.code);
+}
 export const RemoteDesktopViewerMessage = z.union([
   DesktopMediaRequest,
   DesktopMediaSignal,
@@ -104,6 +107,7 @@ export const DesktopReady = z
     secureDesktop: z.boolean().optional(),
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
+    extendedInput: z.boolean().optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),
@@ -209,6 +213,7 @@ export interface DesktopResults {
     deltas?: boolean;
     imageSettings?: boolean;
     imeKeys?: boolean;
+    extendedInput?: boolean;
     features?: boolean;
     displayResize?: boolean;
   };

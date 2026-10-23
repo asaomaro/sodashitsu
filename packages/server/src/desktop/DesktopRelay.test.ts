@@ -11,7 +11,7 @@ import { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { LinkChannel, MachineLink } from "../machine/MachineLink.js";
 import { DesktopRelay } from "./DesktopRelay.js";
 import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -29,7 +29,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : [])],
     allowInput,
     allowUnlock: unlockAllowed,
     origins: () => [origin],
@@ -73,7 +73,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
           void (async () => {
             try {
               if(legacy && m.method === "desktop.start") {
-                const {imeKeys: _ime, ...oldShape}=DesktopOptions.shape;
+                const {imeKeys: _ime, extendedInput: _extended, ...oldShape}=DesktopOptions.shape;
                 const {z}=await import("zod");
                 z.object(oldShape).strict().parse(m.params.options);
               }
@@ -113,8 +113,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime = false) {
-    const ws = new WebSocket(endpoint, ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" = false) {
+    const ws = new WebSocket(endpoint, ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -408,7 +408,7 @@ it.each([false,true])("keeps strict legacy viewers connected without unsolicited
   viewer.send(start);
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
   const ready=viewer.messages.find(m=>m.type==="ready")!;
-  const {imeKeys: _ime, ...oldShape}=DesktopReady.shape;
+  const {imeKeys: _ime, extendedInput: _extended, ...oldShape}=DesktopReady.shape;
   const {z}=await import("zod");
   expect(()=>z.object(oldShape).strict().parse(ready)).not.toThrow();
   expect(ready).not.toHaveProperty("imeKeys");
@@ -421,4 +421,34 @@ it("does not pass the new IME option to a provider without capability support", 
   expect(viewer.messages.find(m=>m.type==="ready")).not.toHaveProperty("imeKeys");
   expect(f.startRequests[0]!.options).not.toHaveProperty("imeKeys");
   expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
+});
+
+it.each([true,false])("keeps middle click and gates side buttons/added keys by helper support (%s)",async supported=>{
+  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,supported),viewer=await f.viewer("extended");
+  viewer.send(start);
+  await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+  expect(viewer.ws.protocol).toBe(DESKTOP_INPUT_PROTOCOL);
+  expect(viewer.messages.find(m=>m.type==="ready")?.extendedInput).toBe(supported?true:undefined);
+  viewer.send({type:"control",enabled:true});
+  await expect.poll(()=>viewer.messages.filter(m=>m.type==="control").at(-1)?.enabled).toBe(true);
+  const frameSeq=decodeDesktopFrame(viewer.frames.at(-1)!).info.seq;
+  let seq=0;
+  for(const button of [1,3,4])for(const event of ["down","up"])
+    viewer.send({type:"input",seq:++seq,frameSeq,input:{kind:"pointer",x:0.5,y:0.5,event,button}});
+  for(const code of ["F24","Tab"])for(const down of [true,false])
+    viewer.send({type:"input",seq:++seq,frameSeq,input:{kind:"key",code,down}});
+  await expect.poll(()=>viewer.messages.some(m=>m.type==="input_ack"&&m.seq===seq)).toBe(true);
+  const record=await readFile(f.record,"utf8");
+  expect(record.includes('"button":1')).toBe(true);
+  for(const button of [3,4])expect(record.includes('"button":'+button)).toBe(supported);
+  expect(record.includes('"code":"F24"')).toBe(supported);
+  expect(viewer.ws.readyState).toBe(WebSocket.OPEN);
+});
+it("does not add extended ready fields for an IME-only viewer",async()=>{
+  const f=await fixture(),viewer=await f.viewer(true);viewer.send(start);
+  await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
+  expect(viewer.ws.protocol).toBe(DESKTOP_IME_PROTOCOL);
+  expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({imeKeys:true});
+  expect(viewer.messages.find(m=>m.type==="ready")).not.toHaveProperty("extendedInput");
+  expect(f.startRequests[0]!.options).not.toHaveProperty("extendedInput");
 });

@@ -6,6 +6,8 @@ import { WebSocket, WebSocketServer } from "ws";
 import { z } from "zod";
 import {
   RemoteDesktopViewerMessage,
+  DESKTOP_INPUT_PROTOCOL,
+  isExtendedDesktopInput,
   DesktopFrameChain,
   DesktopReady,
   decodeDesktopFrame,
@@ -57,6 +59,9 @@ type Viewer = {
   imeKeys?: boolean;
   imeKeysRequested: boolean;
   imeKeysNegotiated?: boolean;
+  extendedInputRequested: boolean;
+  extendedInputNegotiated?: boolean;
+  extendedInput?: boolean;
   pending: number;
   seq: number;
   inputSeq: number;
@@ -80,6 +85,8 @@ const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 export class DesktopRelay {
   private readonly server = new WebSocketServer({
     noServer: true,
+    handleProtocols: protocols => protocols.has(DESKTOP_INPUT_PROTOCOL)
+      ? DESKTOP_INPUT_PROTOCOL : protocols.values().next().value || false,
     perMessageDeflate: false,
     maxPayload: DESKTOP_MAX_FRAME_BYTES + 2050,
   });
@@ -187,6 +194,10 @@ export class DesktopRelay {
         state: (active, expiresAt) => this.send(v.ws, { type: "agent_state", active, expiresAt }),
         input: (input: RemoteDesktopInput) =>
           new Promise<void>((resolve, reject) => {
+            if (isExtendedDesktopInput(input) && !v.extendedInput) {
+              reject(new RpcError("invalid_params", "接続先はこの追加キー・マウスボタンに対応していません"));
+              return;
+            }
             if (input.kind === "key" && (input.code === "ImeOn" || input.code === "ImeOff") && !v.imeKeys) {
               reject(new RpcError("invalid_params", "接続先はIMEキーに対応していません"));
               return;
@@ -240,7 +251,8 @@ export class DesktopRelay {
       inputSeq: 0,
       viewerSeq: 0,
       viewerAcks: new Map(),
-      imeKeysRequested: ws.protocol === DESKTOP_IME_PROTOCOL,
+      imeKeysRequested: ws.protocol === DESKTOP_IME_PROTOCOL || ws.protocol === DESKTOP_INPUT_PROTOCOL,
+      extendedInputRequested: ws.protocol === DESKTOP_INPUT_PROTOCOL,
       frameAt: 0,
       lastSeen: now,
       messages: 0,
@@ -335,6 +347,7 @@ export class DesktopRelay {
           if (v.lockScreenCover && v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
             this.send(v.provider, m);
         } else if (m.type === "input") {
+          if (isExtendedDesktopInput(m.input) && !v.extendedInput) return;
           if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !v.imeKeys) return;
           if (
             v.control &&
@@ -400,6 +413,7 @@ export class DesktopRelay {
         deltas: z.boolean().optional(),
         imageSettings: z.boolean().optional(),
         imeKeys: z.boolean().optional(),
+        extendedInput: z.boolean().optional(),
         features: z.boolean().optional(),
         displayResize: z.boolean().optional(),
       })
@@ -413,9 +427,12 @@ export class DesktopRelay {
     this.invites.set(v.ticketHash, v);
     const url = new URL("/desktop-share", v.origin);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    const { deltas, image, adaptive, features, display, imeKeys: ignoredImeKeys, ...legacyOptions } = options;
+    const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
+    delete legacyOptions.imeKeys;
+    delete legacyOptions.extendedInput;
     // Capability requires both the viewer opt-in and B's current RPC schema.
     v.imeKeysNegotiated = v.imeKeysRequested && caps.imeKeys === true;
+    v.extendedInputNegotiated = v.extendedInputRequested && caps.extendedInput === true;
     if (display && (!caps.displayResize || !caps.features))
       throw new Error("B does not allow display resize");
     v.features = caps.features === true;
@@ -425,6 +442,7 @@ export class DesktopRelay {
     const negotiated = {
       ...legacyOptions,
       ...(v.imeKeysNegotiated ? { imeKeys: true as const } : {}),
+      ...(v.extendedInputNegotiated ? { extendedInput: true as const } : {}),
       ...(display ? { display } : {}),
       ...(caps.features ? { adaptive, features } : {}),
       ...(caps.deltas ? { deltas } : {}),
@@ -532,14 +550,15 @@ export class DesktopRelay {
             v.secureDesktop = ready.secureDesktop === true;
             v.lockScreenCover = ready.lockScreenCover === true;
             v.imeKeys = v.imeKeysNegotiated === true && ready.imeKeys === true && !v.lockScreenCover;
+            v.extendedInput = v.extendedInputNegotiated === true && ready.extendedInput === true && !v.lockScreenCover;
             if (v.secureDesktop) {
               this.agents.revoke(v.agent);
               delete v.latest;
               if (ready.allowMedia || ready.allowClipboard || ready.display) throw new Error();
             }
             v.since = performance.now();
-            const { imeKeys, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.imeKeys ? { imeKeys: true } : {}) });
+            const { imeKeys, extendedInput, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);

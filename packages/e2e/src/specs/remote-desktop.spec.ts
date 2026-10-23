@@ -28,6 +28,8 @@ test("B automatically connects back over WSS using the existing machine connecti
     await client.request("workspace.set_project_folder", {workspaceId:client.helloSnapshot()!.workspaces[0]!.id,path:server.stateDir});
   let other: Awaited<ReturnType<typeof browser.newContext>> | undefined;
   const browserFrames: number[] = [];
+  const desktopSent: any[] = [];
+  page.on("websocket",socket=>{if(socket.url().endsWith("/desktop-share"))socket.on("framesent",({payload})=>{if(typeof payload==="string")desktopSent.push(JSON.parse(payload));});});
   page.on("websocket", (socket) => { if (socket.url().endsWith("/desktop-share")) socket.on("framereceived", ({ payload }) => { if (Buffer.isBuffer(payload)) browserFrames.push(payload.byteLength); }); });
   try {
     const invite = await operator.request("machine.invite", { label: "Desktop test B" });
@@ -49,6 +51,7 @@ test("B automatically connects back over WSS using the existing machine connecti
     await canvas.click(); await page.keyboard.press("a");
     await view.getByLabel("確定した文字を送る").fill("日本語😀");
     await view.getByRole("button", { name: "文字を送る", exact: true }).click();
+    await expect.poll(()=>desktopSent.some(m=>m.type==="input"&&m.input?.text==="日本語😀")).toBe(true);
     await expect.poll(async () => readFile(record, "utf8").catch(() => "")).toContain("日本語😀");
     await expect.poll(async () => readFile(record, "utf8").catch(() => "")).toContain('"code":"KeyA"');
     await checkCollapsibleViewerControls(page, view, canvas, "確定した文字を送る", false);
@@ -59,6 +62,8 @@ test("B automatically connects back over WSS using the existing machine connecti
     await checkCollapsibleViewerControls(page, view, canvas, "確定した文字を送る");
     await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
     await expect.poll(()=>view.locator("[data-desktop-screen]").evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})).toEqual(await page.evaluate(()=>({x:0,y:0,width:innerWidth,height:innerHeight})));
+    await page.keyboard.press("Escape");
+    await expect(view).toHaveClass(/maximized/);
     await page.keyboard.press("Escape");
     await expect(view).not.toHaveClass(/maximized/, {timeout:3000});
     await view.getByRole("button", { name: "最大化", exact: true }).click();
