@@ -192,12 +192,22 @@ export class DelegationPairing {
     this.outgoing.set(id, entry);
     return new Promise((resolve, reject) => {
       let pending = false;
+      let reason = "";
       const failed = () =>
         new RpcError(
           "invalid_params",
-          "申請が終了しました。接続先・TLS・有効期限を確認して再申請してください",
+          `申請が終了しました。接続先・TLS・有効期限を確認して再申請してください${reason ? `（${reason}）` : ""}`,
         );
-      ws.on("error", () => undefined);
+      ws.on("unexpected-response", (_req, res) => {
+        reason = `接続先がHTTP ${res.statusCode} を返しました`;
+        res.resume();
+        ws.terminate();
+      });
+      ws.on("error", (error: NodeJS.ErrnoException) => {
+        // Show a bounded transport code, never raw exception text or response bodies.
+        if (!reason && typeof error.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(error.code))
+          reason = error.code;
+      });
       ws.once("close", () => {
         clearTimeout(timer);
         this.outgoing.delete(id);

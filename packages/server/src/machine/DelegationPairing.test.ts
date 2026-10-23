@@ -63,3 +63,31 @@ it("ignores buffered frames after the fifth wrong guess terminates a request", a
   await closed;
   expect(invite).not.toHaveBeenCalled();
 });
+
+it("reports a rejected HTTP upgrade promptly without response text or credentials", async () => {
+  const http = createServer(), provider = new DelegationPairing({ invite: vi.fn(), changed: vi.fn() });
+  http.on("upgrade", (_req, socket) => {
+    socket.end("HTTP/1.1 503 private-status-secret\r\nContent-Length: 19\r\nConnection: close\r\n\r\nprivate-body-secret");
+  });
+  await new Promise<void>(resolve => http.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => new Promise<void>(resolve => http.close(() => resolve())));
+  cleanup.push(() => provider.close());
+  const addr = http.address();
+  if (!addr || typeof addr === "string") throw Error("listen");
+  const result = await provider.request(`http://127.0.0.1:${addr.port}`, "Rejected PC").catch(e => e);
+  expect(result).toBeInstanceOf(Error);
+  expect(result.message).toContain("HTTP 503");
+  expect(result.message).not.toContain("private");
+  expect(provider.list().requests).toEqual([]);
+});
+
+it("reports a refused transport by code", async () => {
+  const http = createServer();
+  await new Promise<void>(resolve => http.listen(0, "127.0.0.1", resolve));
+  const addr = http.address();
+  if (!addr || typeof addr === "string") throw Error("listen");
+  await new Promise<void>(resolve => http.close(() => resolve()));
+  const provider = new DelegationPairing({ invite: vi.fn(), changed: vi.fn() });
+  cleanup.push(() => provider.close());
+  await expect(provider.request(`http://127.0.0.1:${addr.port}`, "Offline PC")).rejects.toThrow("ECONNREFUSED");
+});

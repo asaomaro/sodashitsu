@@ -103,6 +103,40 @@ Windowsの補助プログラムを終了すると、そのために起動したl
 
 検証済みなのはC#コンパイル、Windows上の未接続pipeの中断と既存display leaseの模擬検証、A/Bサーバーと模擬ロック画面を使うブラウザ試験です。Windows実機1台ではサービス導入・起動、限定照会権限の追加、認証画面でのworkerの待機まで確認しました。初期画面の固定Enter操作、実際の認証画面のキャプチャ・入力・解除は未確認です。接続先への初回導入と実機確認は利用者の管理者操作で行ってください。UACや状態不明では接続を拒否します。
 
+### 実装ファイルの配置と更新
+
+これらのTS／CS／PowerShellは製品の実装ソースで、Gitリポジトリで管理します。接続先PCだけに修正を残さず、修正したファイルと利用手順・検証結果をPRに含めてから、両側のPCへ反映してください。
+
+| ファイル | 用途・更新方法 |
+| --- | --- |
+| `packages/protocol/src/desktop.ts` | A/B間の共有・入力メッセージ。更新後は両側をビルドする |
+| `packages/server/src/desktop/DesktopProvider.ts` | Bで共有用helperを起動し、Aへ画像と状態を送る。ビルド後にサーバへ反映する |
+| `packages/server/src/desktop/DesktopRelay.ts` | Aで共有接続を中継し、操作権と画面切り替えを管理する。ビルド後にサーバへ反映する |
+| `packages/server/src/desktop/unlockFailure.ts` | ロック画面の終了理由と再接続可否を判定する。ビルド対象の実装ファイル |
+| `scripts/remote-desktop/windows-helper.ps1` | Windows helperの入口。同じフォルダのHost/UnlockのCSを起動時に読み、コンパイルする |
+| `scripts/remote-desktop/WindowsDesktopHost.cs` | 通常画面の取得と入力。上のPowerShellと同じフォルダに残す |
+| `scripts/remote-desktop/WindowsDesktopUnlock.cs` | ロック画面の判定、非撮影の入口、専用サービスとの通信。上のPowerShellと同じフォルダに残す |
+| `packages/server/src/machine/DelegationPairing.ts` | BからAへの接続申請。共有前のmachine接続に使う。ビルド対象の実装ファイル |
+
+`src`配下のTSはサーバ用の`dist`へビルドされます。現在のプロセスが動いていても、TSを削除すると次のビルドができなくなります。CSはhelperの起動時にも必要なので、`dist`やインストール済みサービスがあっても削除しないでください。Program Filesに配置した専用サービスの更新は、前節のインストーラー再実行が別途必要です。
+
+更新前に接続先でも`git status --short`と`git diff`を確認してください。古いHEADで`M`や`??`と出ていても、後からmainに採用された実装の場合があります。未追跡の実装ファイルを削除したり、ローカル差分を一括で戻したりせず、mainのファイルと比較し、未反映の修正は先に退避して取り込みます。差分を整理して作業ツリーがきれいになったら、次の順で更新します。
+
+```powershell
+git switch main
+git pull --ff-only
+pnpm install --frozen-lockfile
+pnpm build
+# 同じサーバの状態ディレクトリを指定する（以下は既定を使う場合）
+soda handoff
+```
+
+独自の`--state-dir`や名前付きsessionで動かしている場合、handoffにも同じ指定を渡してください。helperのフォルダを別に置いている場合は、上のPowerShellとCSの3ファイルを同じ版で配置します。接続ビューは開き直してください。
+
+`.soda/maintenance-backups/`に退避した旧版は運用上のバックアップで、実装ソースとしてコミットする対象ではありません。対応する修正がmainに入り、更新後の動作と復元不要を確認してから片付けます。
+
+machine接続の申請でHTTP upgradeが拒否された場合は`HTTP 503`のような状態コードを、接続できない場合は`ECONNREFUSED`などの通信エラーコードを表示します。HTTPの本文や例外の自由な文面は表示しません。接続先URL・TLS・公開入口の状態を確認してください。
+
 ### 従来の環境変数・独自補助プログラム
 
 既存の指定も引き続き使えます。環境変数は起動時に読みます。保存済みの画面設定がある場合は、画面側の許可を優先します（`SODA_DESKTOP_ALLOW_*`は固定上限ではなく初期値です）。独自コマンドには、補助プログラム自身の入力等の許可も必要です。画面設定が補助プログラムの引数を変更することはありません。
