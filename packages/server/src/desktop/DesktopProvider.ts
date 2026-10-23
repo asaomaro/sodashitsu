@@ -61,6 +61,7 @@ type Share = {
   control: boolean;
   secureDesktop?: boolean;
   lockScreenCover?: boolean;
+  imeKeys?: boolean;
   allowInput: boolean;
   lastSeen: number;
   seq: number;
@@ -284,6 +285,7 @@ export class DesktopProvider {
             if (s.lockScreenCover && s.secureDesktop && s.control && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "input") {
+            if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !s.imeKeys) return;
             if (
               s.control &&
               m.frameSeq >= s.seq - 1 &&
@@ -344,6 +346,7 @@ export class DesktopProvider {
             const ready = DesktopReady.parse(raw);
             s.secureDesktop = ready.secureDesktop === true;
             s.lockScreenCover = ready.lockScreenCover === true;
+            s.imeKeys = ready.imeKeys === true && !s.lockScreenCover;
             if (s.secureDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
               !s.secureDesktop && options.display &&

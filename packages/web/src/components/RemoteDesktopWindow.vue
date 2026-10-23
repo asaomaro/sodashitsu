@@ -15,6 +15,7 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
+import { imeKeyCode, type ImeKeyCode } from "../desktop/ime.js";
 import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
 import { chooseMaximumDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
 import { renderDesktopUpdate } from "../desktop/render.js";
@@ -33,6 +34,7 @@ const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
 const lockScreenCover = ref(false);
+const imeKeys = ref(false);
 const dismissInFlight = ref(false);
 let dismissPending = false;
 async function toggleToolbar() {
@@ -329,6 +331,7 @@ function stop() {
   }
   secureDesktop.value = false;
   lockScreenCover.value = false;
+  imeKeys.value = false;
   dismissInFlight.value = false;
   dismissPending = false;
   agentActive.value = false;
@@ -449,6 +452,7 @@ function connect(automatic = false) {
           const r = DesktopReady.parse(m);
           secureDesktop.value = r.secureDesktop === true;
           lockScreenCover.value = r.lockScreenCover === true;
+          imeKeys.value = r.imeKeys === true;
           if (secureDesktop.value) text.value = "";
           title.value = secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
@@ -676,6 +680,23 @@ function toggleControl() {
   startupRetries = 0;
   send({ type: "control", enabled: !control.value });
 }
+function sendIme(code: ImeKeyCode) {
+  if (!imeKeys.value || !control.value || !ready.value || lockScreenCover.value) return;
+  // Dedicated IME keys can have no physical keyup. Pair immediately so a later
+  // press is never lost and focus changes cannot leave a remote key held down.
+  input({ kind: "key", code, down: true });
+  input({ kind: "key", code, down: false });
+}
+function imeKey(e: KeyboardEvent, down: boolean) {
+  const code = imeKeyCode(e);
+  if (!code || !imeKeys.value || !control.value || !ready.value || lockScreenCover.value ||
+      !windowElement.value?.contains(document.activeElement)) return;
+  // The local text-entry form and setting fields keep their own IME.
+  if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable]:not([contenteditable='false'])")) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (down && !e.repeat) sendIme(code);
+}
 function key(e: KeyboardEvent, down: boolean) {
   if (e.code === "Escape" && down) {
     e.preventDefault();
@@ -739,6 +760,8 @@ onBeforeUnmount(() => {
       aria-label="リモートデスクトップ"
       data-remote-desktop
       tabindex="-1"
+      @keydown.capture="imeKey($event, true)"
+      @keyup.capture="imeKey($event, false)"
       @keydown.stop="escape"
       @keyup.stop
     >
@@ -759,6 +782,12 @@ onBeforeUnmount(() => {
         >
           {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
         </button>
+        <button v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
+          :title="imeKeys ? '接続先のIMEをONにする' : '接続先をIMEキー対応版に更新してください'"
+          @pointerdown.prevent @click="sendIme('ImeOn')">IME ON</button>
+        <button v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
+          :title="imeKeys ? '接続先のIMEをOFFにする' : '接続先をIMEキー対応版に更新してください'"
+          @pointerdown.prevent @click="sendIme('ImeOff')">IME OFF</button>
         <button :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
         <button data-desktop-maximize :aria-pressed="maximized" @click="toggleMaximize">
           {{ maximized ? "元に戻す" : "最大化" }}

@@ -133,6 +133,7 @@ function run() {
         }
         send({
           type: "ready",
+          ...(!process.argv.includes("--no-ime-keys") ? {imeKeys:true} : {}),
           title: "Synthetic test source",
           allowInput,
           width: options.width,
