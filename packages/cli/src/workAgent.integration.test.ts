@@ -1,4 +1,5 @@
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { randomBytes, createHash } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it, vi } from "vitest";
@@ -46,6 +47,17 @@ it.skipIf(process.platform === "win32")("B requests; A starts its own CLI and ro
     const capabilityFile = join(launchDir, "capability.json"), cap = JSON.parse(await readFile(capabilityFile, "utf8"));
     expect(Object.keys(cap).sort()).toEqual(["secret", "socketPath"]);
     proxy = await WorkAgentClient.open(capabilityFile);
+    // Explicit binary exchange is the sole operation that touches operator files.
+    const binary = randomBytes(170001), operatorSource = join(local, "material.xlsx"), operatorSaved = join(local, "result.xlsx");
+    await writeFile(operatorSource, binary);
+    const upload = await proxy.request("tool", { operation: "transfer", action: "upload", sourcePath: operatorSource, destinationPath: "material.xlsx" });
+    expect(upload).toMatchObject({ status: "completed", destination: join(remote, "material.xlsx"), bytes: binary.length, sha256: createHash("sha256").update(binary).digest("hex") });
+    expect(await readFile(join(remote, "material.xlsx"))).toEqual(binary);
+    const download = await proxy.request("tool", { operation: "transfer", action: "download", sourcePath: "material.xlsx", destinationPath: operatorSaved });
+    expect(download).toMatchObject({ status: "completed", destination: operatorSaved, bytes: binary.length });
+    expect(await readFile(operatorSaved)).toEqual(binary);
+    expect(await proxy.request("tool", { operation: "transfer", action: "download", sourcePath: "material.xlsx", destinationPath: operatorSaved })).toMatchObject({ status: "failed", destination: operatorSaved });
+    expect(await proxy.request("tool", { operation: "transfer", action: "upload", sourcePath: operatorSource, destinationPath: "../outside.xlsx" })).toMatchObject({ status: "failed" });
     const escaped = "\u0001".repeat(300000);
     await writeFile(join(remote, "escaped.txt"), escaped);
     const large = await proxy.request<{ text: string }>("tool", { operation: "file", action: "read", path: "escaped.txt" });
@@ -77,6 +89,8 @@ it.skipIf(process.platform === "win32")("B requests; A starts its own CLI and ro
       await expect(withSession(ao, store, c => c.request("work.agent_launch", { machineId: invite.machineId, requestId: duplicate.id }))).rejects.toThrow(/起動済み/);
     }
     await withSession(bo, store, c => c.request("workspace.set_project_folder", { workspaceId: target.workspace.id, path: other }));
+    expect(await proxy.request("tool", { operation: "transfer", action: "download", sourcePath: "material.xlsx", destinationPath: join(local, "changed-project.xlsx") })).toMatchObject({ status: "failed" });
+    await expect(readFile(join(local, "changed-project.xlsx"))).rejects.toThrow();
     await expect(proxy.request("tool", { operation: "file", action: "read", path: "README.md" })).rejects.toThrow();
     await expect(proxy.request("tool", { operation: "exec", command: "touch should-not-exist" })).rejects.toThrow();
     await expect(readFile(join(local, "should-not-exist"))).rejects.toThrow();

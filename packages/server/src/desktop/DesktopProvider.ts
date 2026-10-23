@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { unlockFailure } from "./unlockFailure.js";
 import { z } from "zod";
 import WebSocket from "ws";
 import {
@@ -59,6 +60,7 @@ type Share = {
   ready: boolean;
   control: boolean;
   secureDesktop?: boolean;
+  lockScreenCover?: boolean;
   allowInput: boolean;
   lastSeen: number;
   seq: number;
@@ -276,7 +278,10 @@ export class DesktopProvider {
             this.write(s, { type: "control", enabled: s.control });
             this.send(s, { type: "control", enabled: s.control });
           } else if (m.type === "sas") {
-            if (s.secureDesktop && s.control && s.ready && performance.now() - s.lastSeen < 5000)
+            if (s.secureDesktop && !s.lockScreenCover && s.control && s.ready && performance.now() - s.lastSeen < 5000)
+              this.write(s, m);
+          } else if (m.type === "dismiss_lock_screen") {
+            if (s.lockScreenCover && s.secureDesktop && s.control && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "input") {
             if (
@@ -338,6 +343,7 @@ export class DesktopProvider {
           if (raw.type === "ready" && !s.ready) {
             const ready = DesktopReady.parse(raw);
             s.secureDesktop = ready.secureDesktop === true;
+            s.lockScreenCover = ready.lockScreenCover === true;
             if (s.secureDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
               !s.secureDesktop && options.display &&
@@ -404,7 +410,17 @@ export class DesktopProvider {
             this.send(s, { type: "session_unlocked" });
             this.stop(s);
             return;
-          } else if (raw.type === "frame" && s.ready) {
+          } else if (raw.type === "lock_screen_changed" && cfg.allowUnlock && s.ready && s.secureDesktop && s.lockScreenCover) {
+            this.send(s, { type: "lock_screen_changed" });
+            this.stop(s);
+            return;
+          } else if (raw.type === "unlock_failure" && cfg.allowUnlock && (!s.ready || s.secureDesktop) && unlockFailure(raw.code)) {
+            // First terminal result wins; a later parent transition must never
+            // overwrite an installed worker's explicit failure.
+            this.send(s, { type: "unlock_failure", code: raw.code });
+            this.stop(s);
+            return;
+          } else if (raw.type === "frame" && s.ready && !s.lockScreenCover) {
             const frame = HelperFrame.parse(raw);
             if (
               s.pending ||

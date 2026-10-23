@@ -22,6 +22,8 @@ export function registerWorkMethods(surface: ControlSurface, deps: MethodDeps): 
       auth(ctx);
       return requests.operate(p.id,p.claim,async(scope,sourcePaneId,guard)=>{
         const tool=p.tool;const check=()=>{auth(ctx);guard();};check();
+        if(tool.operation==="transfer")throw new RpcError("invalid_params","転送は操作元から開始してください");
+        if(tool.operation==="transfer_chunk")return work.transfer({...scope,request:tool.request},ctx.clientId,check);
         if(tool.operation==="inspect")return work.inspect(scope);
         if(tool.operation==="skill")return work.skill({...scope,id:tool.id,path:tool.path});
         if(tool.operation==="plugin")return requests.plugin(p.id,p.claim,tool.request);
@@ -37,6 +39,7 @@ export function registerWorkMethods(surface: ControlSurface, deps: MethodDeps): 
     }});
   }
   if (deps.workAgentLauncher) surface.register("work.agent_launch", { schema: WorkAgentMethods["work.agent_launch"], handler: (ctx, p) => { auth(ctx); return deps.workAgentLauncher!.launch(p.machineId, p.requestId); } });
+  surface.register("work.file_transfer", { schema: WorkMethods["work.file_transfer"], handler: (ctx, p) => { auth(ctx); return work.transfer(p, ctx.clientId, () => auth(ctx)); } });
   surface.register("work.binding", { schema: WorkMethods["work.binding"], handler: (ctx, p) => { auth(ctx); return work.binding(p); } });
   surface.register("work.inspect", { schema: WorkMethods["work.inspect"], handler: (ctx, p) => { auth(ctx); return work.inspect(p); } });
   if (deps.exec) surface.register("work.exec", { schema: WorkMethods["work.exec"], handler: async (ctx, p) => {

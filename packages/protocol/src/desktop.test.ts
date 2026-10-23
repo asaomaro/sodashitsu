@@ -3,9 +3,19 @@ import {
   RemoteDesktopInput,
   DesktopOptions,
   DesktopStartParams,
+  DesktopReady,
+  RemoteDesktopViewerMessage,
   decodeDesktopFrame,
   encodeDesktopFrame,
 } from "./desktop.js";
+
+it("requires the human-only ceiling for a lock cover and only accepts a fixed dismissal command", () => {
+  const ready={type:"ready",title:"lock",allowInput:true,width:640,height:360,backend:"windows-gdi",lockScreenCover:true};
+  expect(DesktopReady.safeParse(ready).success).toBe(false);
+  expect(DesktopReady.safeParse({...ready,secureDesktop:true}).success).toBe(true);
+  expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_screen"}).success).toBe(true);
+  expect(RemoteDesktopViewerMessage.safeParse({type:"dismiss_lock_screen",text:"password"}).success).toBe(false);
+});
 
 const image = Uint8Array.from([
   137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WorkKind } from "./work.js";
+import { WorkKind, WorkFileRequest } from "./work.js";
 import { normalizeAskSpec, ASK_SPEC_MAX_BYTES } from "./ask.js";
 import { RpcError } from "./errors.js";
 import { COMMAND_ID_RE } from "./commands.js";
@@ -56,6 +56,8 @@ export function workAgentArgumentError(kind: "claude" | "codex", args: readonly 
   return undefined;
 }
 export const WorkAgentTool = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("transfer"), action: z.enum(["upload", "download"]), sourcePath: z.string().min(1).max(4096).refine(s => !s.includes("\0")), destinationPath: z.string().min(1).max(4096).refine(s => !s.includes("\0")) }).strict(),
+  z.object({ operation: z.literal("transfer_chunk"), request: WorkFileRequest }).strict(),
   z.object({ operation: z.literal("plugin"), request: WorkAgentPlugin }).strict(),
   z.object({ operation: z.literal("inspect") }).strict(),
   z.object({ operation: z.literal("skill"), id: z.string().regex(/^[a-f0-9]{64}$/), path: z.string().min(1).max(4096).default("SKILL.md") }).strict(),

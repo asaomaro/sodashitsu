@@ -6,10 +6,16 @@ import type { z } from "zod";
 import type { WorkMethods } from "@sodashitsu/protocol";
 import { writeFileAtomic } from "../persist/atomicFile.js";
 import { createExclusive, digest, directoryGuard, folderIdentity, inside, privateDirs, textFile } from "./files.js";
+import { FileTransfer } from "./FileTransfer.js";
 import { discoverSkills } from "./skills.js";
 
 type Scope = z.infer<(typeof WorkMethods)["work.inspect"]>;
 export class WorkContext {
+  private readonly fileTransfers = new FileTransfer();
+  async transfer(p: z.infer<(typeof WorkMethods)["work.file_transfer"]>, owner: string, guard: () => void = () => {}) {
+    const root = await this.scope(p);
+    return this.fileTransfers.run(owner, root, p.request, async () => { await this.scope(p); guard(); });
+  }
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private readonly stateDir: string, private readonly pane: (id: string) => Pane | undefined,
     private readonly folder: (id: string) => string | undefined,

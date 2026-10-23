@@ -103,6 +103,8 @@ function run() {
   const markerAt = process.argv.indexOf("--unlock-marker");
   const unlockMarker = markerAt >= 0 ? process.argv[markerAt + 1] : undefined;
   const secure = process.argv.includes("--secure") && (!unlockMarker || !existsSync(unlockMarker));
+  const coverAt = process.argv.indexOf("--cover-marker"), coverMarker = coverAt >= 0 ? process.argv[coverAt + 1] : undefined;
+  const lockCover = secure && process.argv.includes("--lock-cover") && (!coverMarker || !existsSync(coverMarker));
   const recordAt = process.argv.indexOf("--record"),
     record = recordAt >= 0 ? process.argv[recordAt + 1] : undefined;
   const send = (value) => process.stdout.write(JSON.stringify(value) + "\n");
@@ -112,6 +114,16 @@ function run() {
     try {
       const m = JSON.parse(line);
       if (m.type === "configure" && !options) {
+        const failureAt = process.argv.indexOf("--startup-failure");
+        if (failureAt >= 0) {
+          const code = process.argv[failureAt + 1], markerAt = process.argv.indexOf("--startup-marker");
+          const marker = markerAt >= 0 ? process.argv[markerAt + 1] : undefined;
+          if (!marker || !existsSync(marker)) {
+            if (marker) writeFileSync(marker, "retry");
+            send({ type: "unlock_failure", code, message: "private native exception must not escape" });
+            return;
+          }
+        }
         options = m.options;
         const modes = [{width:640,height:480},{width:800,height:600},{width:1024,height:768},{width:1280,height:720},{width:1600,height:900},{width:1920,height:1080}];
         const displayAllowed = !secure && process.argv.includes("--allow-display-resize") && m.allowDisplayResize === true;
@@ -127,10 +139,20 @@ function run() {
           height: heightOf(options),
           backend: "synthetic",
           ...(secure ? {secureDesktop:true} : {}),
+          ...(lockCover ? {lockScreenCover:true} : {}),
           ...(displayAllowed ? {display:{modes}} : {}),
           image: options.image ?? { colorMode: "full", showCursor: true },
           allowClipboard: !secure && process.argv.includes("--allow-clipboard") && m.allowClipboard===true, dynamicQuality:true,
         });
+        const readyFailureAt=process.argv.indexOf("--ready-failure");
+        const readyMarkerAt=process.argv.indexOf("--ready-marker"),readyMarker=readyMarkerAt>=0?process.argv[readyMarkerAt+1]:undefined;
+        if(readyFailureAt>=0&&(!readyMarker||!existsSync(readyMarker))) {
+          if(readyMarker)writeFileSync(readyMarker,"ended");
+          // Fixed metadata only, modeling a worker that ends after its ready.
+          send({type:"unlock_failure",code:process.argv[readyFailureAt+1],message:"private native failure"});
+          // A parent's later transition may not overwrite the worker's fault.
+          send({type:"unlock_failure",code:"source_transition"});
+        }
       } else if (m.type === "heartbeat") lastSeen = performance.now();
       else if (m.type === "ack" && m.seq === pending) pending = 0;
       else if (m.type === "keyframe") {forceFull = true;next=0;}
@@ -143,6 +165,10 @@ function run() {
       }
       else if (m.type === "control") {
         control = m.enabled && allowInput;
+      } else if (m.type === "dismiss_lock_screen" && lockCover && control) {
+        if (coverMarker) writeFileSync(coverMarker,"dismissed");
+        send({type:"lock_screen_changed"});
+        process.exit(0);
       } else if (m.type === "sas" && secure && control) {
         if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
         send({type:"session_unlocked"});
@@ -158,7 +184,7 @@ function run() {
   });
   setInterval(() => {
     if (performance.now() - lastSeen > 8000) process.exit(0);
-    if (!options || pending || performance.now() < next) return;
+    if (!options || lockCover || pending || performance.now() < next) return;
     const deltaTest = process.argv.includes("--delta-test"),
       stable = deltaTest || process.argv.includes("--static");
     const optimized = options.deltas && stable;

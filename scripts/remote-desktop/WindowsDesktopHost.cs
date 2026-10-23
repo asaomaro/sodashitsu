@@ -56,6 +56,13 @@ public static class SodaDesktopHost {
         try { Run(0,true,false,false,null); }
         finally { if(SecureLockState()!=0 && SecureLockState()==1)Output(new {type="session_unlocked"}); }
     }
+    public static void DismissLockScreen(Func<bool> guard) {
+        // Human-requested fixed Enter only. PIN/text input belongs to Winlogon.
+        if(System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem||!guard())throw new InvalidOperationException("Lock screen unavailable");
+        var down=new INPUT();down.type=1;down.data.key.vk=13;
+        var up=down;up.data.key.flags=2;
+        if(SendInput(2,new[]{down,up},Marshal.SizeOf(typeof(INPUT)))!=2)throw new InvalidOperationException("Lock screen input denied");
+    }
     static bool DefaultDesktop() {
         IntPtr h=OpenInputDesktop(0,false,1);
         if(h==IntPtr.Zero) return false;

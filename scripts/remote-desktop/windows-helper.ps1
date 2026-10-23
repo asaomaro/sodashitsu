@@ -12,7 +12,14 @@ Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.
 if ($ValidateOnly) { Write-Output 'desktop_helper_compiled'; exit 0 }
 [SodaDesktopUnlock]::SetUtf8Console()
 try {
-    if ($UnlockLease -or ($AllowUnlock -and [SodaDesktopUnlock]::LockState() -eq 0)) {
+    $selected = 'normal'
+    if (-not $UnlockLease -and $AllowUnlock) { $selected = [SodaDesktopUnlock]::SelectSource() }
+    if ($selected -eq 'transition') { [SodaDesktopUnlock]::SourceTransition(); exit 0 }
+    if ($selected -eq 'cover') {
+        [SodaDesktopUnlock]::RunUserLockScreen($AllowInput.IsPresent)
+        exit 0
+    }
+    if ($UnlockLease -or $selected -eq 'secure') {
         $executable = [SodaDesktopUnlock]::InstalledExecutable()
         if (-not (Test-Path -LiteralPath $executable)) { throw 'Install the unlock service first.' }
         [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent)
