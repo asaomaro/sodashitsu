@@ -20,9 +20,11 @@ IMEOn/ImeOn・IMEOff/ImeOffのキーの意味と、専用キーLang1/Lang2をIme
 - Windowsのvalidate-unlock-helper.ps1成功。実際のVirtualKeyを反射で呼びIME用の2値を確認。撮影/SendInput/IME状態変更/サービス導入は行っていない。
 - 元の作業フォルダへも今回の差分だけを反映し、他の未コミット変更を維持。root build、関連unit 45件、IME E2E 2件成功。
 - pnpm smoke: 成功。
-- 全体テスト: 実行中（完了後に更新）。
+- 全体テスト: 736ファイル・11270件成功。
 - 別コンテキストreview_transferによる実装全体とテスト修正の独立レビュー: 指摘なし。
 - 実物キーボードからのOSイベント配送・実アプリのIME状態切替は未確認。sr-pcへの配置・サービス再インストールは実施していない。
+
+検証ログの掲載時には改行と行末空白だけを正規化している。
 
 ## 回帰の負対照
 
@@ -86,7 +88,7 @@ display_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-ap
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
     + FullyQualifiedErrorId : InvalidOperationException
- 
+
 
 ```
 
@@ -110,7 +112,7 @@ Running 1 test using 1 worker
   ✘  1 src/specs/remote-desktop-ime.spec.ts:8:40 › IME keys follow focused remote window and helper support=true (3.2s)
 
 
-  1) src/specs/remote-desktop-ime.spec.ts:8:40 › IME keys follow focused remote window and helper support=true 
+  1) src/specs/remote-desktop-ime.spec.ts:8:40 › IME keys follow focused remote window and helper support=true
 
     Error: expect(received).toEqual(expected) // deep equality
 
@@ -150,7 +152,7 @@ Running 1 test using 1 worker
     ────────────────────────────────────────────────────────────────────────────────────────────────
 
   1 failed
-    src/specs/remote-desktop-ime.spec.ts:8:40 › IME keys follow focused remote window and helper support=true 
+    src/specs/remote-desktop-ime.spec.ts:8:40 › IME keys follow focused remote window and helper support=true
 undefined
 /workspaces/sodashitsu-desktop-ime/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-ime.spec.ts --grep support=true
