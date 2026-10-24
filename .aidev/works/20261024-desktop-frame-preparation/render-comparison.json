@@ -1,0 +1,22 @@
+{
+  "kind": "actual-Chromium-PNG-decode-render",
+  "patchCount": 8,
+  "pixels": 524288,
+  "pngBytes": 804624,
+  "samplesPerMode": 25,
+  "modes": {
+    "baseline": {
+      "meanMs": 16.731999999284746,
+      "p50Ms": 16.19999998807907,
+      "p95Ms": 20.599999994039536
+    },
+    "parallel": {
+      "meanMs": 9.944000000953674,
+      "p50Ms": 9.300000011920929,
+      "p95Ms": 13.400000005960464
+    }
+  },
+  "limitations": "Controlled generated PNG patches in headless Chromium on one host; not remote desktop or WAN/input latency.",
+  "browser": "153.0.8010.12",
+  "baseline": "dc115ebb"
+}
