@@ -1,0 +1,44 @@
+{
+  "baselineCommit": "dc115ebb236378f801d704495f183e456e9c7e74",
+  "native30": {
+    "baseline": {
+      "runs": 3,
+      "meanFps": 4.794024349639496,
+      "minFps": 4.663441778117218,
+      "maxFps": 4.965702983630013,
+      "meanCpuOneCorePercent": 22.67722930078087,
+      "meanMbps": 5.08539710721493,
+      "peakRssMiB": 137.1875
+    },
+    "prepared": {
+      "runs": 3,
+      "meanFps": 7.892474846355342,
+      "minFps": 7.857551906436466,
+      "maxFps": 7.942597902634792,
+      "meanCpuOneCorePercent": 37.402987630588186,
+      "meanMbps": 8.458560765755124,
+      "peakRssMiB": 136.91015625
+    }
+  },
+  "native10": {
+    "baseline": {
+      "runs": 1,
+      "meanFps": 4.822743732469634,
+      "minFps": 4.822743732469634,
+      "maxFps": 4.822743732469634,
+      "meanCpuOneCorePercent": 29.503543490478958,
+      "meanMbps": 6.525868706922951,
+      "peakRssMiB": 136.48828125
+    },
+    "prepared": {
+      "runs": 1,
+      "meanFps": 7.114519649333477,
+      "minFps": 7.114519649333477,
+      "maxFps": 7.114519649333477,
+      "meanCpuOneCorePercent": 35.04503852690749,
+      "meanMbps": 9.414684850889783,
+      "peakRssMiB": 136.609375
+    }
+  },
+  "limitations": "One Windows source and same-host WSL A/B+headless Chromium; width1280 JPEG65, deltas=false, 60frames/run, injectedACK100ms. No screen images persisted in these artifacts. Actual source screen contents changed between runs. Not sr-pc/WAN/long-term/input-latency measurements."
+}

@@ -63,3 +63,26 @@ it("discards decoded images from an expired connection before touching its canva
   expect(bitmap.close).toHaveBeenCalledTimes(2);
   expect(chain.last?.seq).toBe(1);
 });
+
+it("decodes patches concurrently while retaining atomic drawing and patch order", async()=>{
+  const {chain,canvas,drawImage,frame}=fixture();
+  const first={width:32,height:32,close:vi.fn()},second={width:32,height:32,close:vi.fn()};
+  let resolveFirst!:(value:typeof first)=>void,resolveSecond!:(value:typeof second)=>void;
+  const decode=vi.fn().mockImplementationOnce(()=>new Promise(resolve=>{resolveFirst=resolve;})).mockImplementationOnce(()=>new Promise(resolve=>{resolveSecond=resolve;}));
+  vi.stubGlobal("createImageBitmap",decode);
+  const rendering=renderDesktopUpdate(canvas,frame,chain,()=>true);
+  expect(decode).toHaveBeenCalledTimes(2);
+  resolveSecond(second);await Promise.resolve();expect(drawImage).not.toHaveBeenCalled();
+  resolveFirst(first);await expect(rendering).resolves.toBe(true);
+  expect(drawImage.mock.calls).toEqual([[first,0,0],[second,96,32]]);
+  expect(first.close).toHaveBeenCalledOnce();expect(second.close).toHaveBeenCalledOnce();
+});
+it("closes late successful bitmaps after an earlier concurrent decoder rejects",async()=>{
+  const {chain,canvas,drawImage,frame}=fixture();const bitmap={width:32,height:32,close:vi.fn()};
+  let finish!:(value:typeof bitmap)=>void;
+  vi.stubGlobal("createImageBitmap",vi.fn().mockRejectedValueOnce(new Error("first failed")).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})));
+  const rendering=renderDesktopUpdate(canvas,frame,chain,()=>true);
+  const rejected=expect(rendering).rejects.toThrow("first failed");
+  await Promise.resolve();expect(bitmap.close).not.toHaveBeenCalled();finish(bitmap);await rejected;
+  expect(bitmap.close).toHaveBeenCalledOnce();expect(drawImage).not.toHaveBeenCalled();expect(chain.last?.seq).toBe(1);
+});

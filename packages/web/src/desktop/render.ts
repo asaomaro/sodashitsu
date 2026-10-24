@@ -25,16 +25,32 @@ export async function renderDesktopUpdate(
                 length: image.length,
               },
             ];
-      for (const p of patches) {
-        const bitmap = await createImageBitmap(
+      // The protocol caps this batch at eight patches. Wait for every decoder
+      // before drawing or closing resources, including when an earlier one fails.
+      const decoded = await Promise.allSettled(patches.map(async (p) => ({
+        bitmap: await createImageBitmap(
           new Blob([image.slice(p.offset, p.offset + p.length).buffer as ArrayBuffer], {
             type: info.format,
           }),
-        );
-        bitmaps.push({ bitmap, x: p.x, y: p.y });
-        if (bitmap.width !== p.width || bitmap.height !== p.height)
-          throw new Error("画像の大きさが不正です");
+        ),
+        patch: p,
+      })));
+      let failure: unknown;
+      let failed = false;
+      for (const result of decoded) {
+        if (result.status === "rejected") {
+          if (!failed) failure = result.reason;
+          failed = true;
+          continue;
+        }
+        const {bitmap, patch: p} = result.value;
+        bitmaps.push({bitmap, x:p.x, y:p.y});
+        if (bitmap.width !== p.width || bitmap.height !== p.height) {
+          if (!failed) failure = new Error("画像の大きさが不正です");
+          failed = true;
+        }
       }
+      if (failed) throw failure;
     }
     if (!current()) return false;
     if (update && (canvas.width !== info.width || canvas.height !== info.height))

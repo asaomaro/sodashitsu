@@ -188,6 +188,13 @@ public static class SodaDesktopHost {
             line.Append((char)c);
         }
     }
+    sealed class PreparedFrame {
+        public Dictionary<string,object> info;
+        public byte[] image;
+        public long started;
+        public bool full;
+        public string contentId;
+    }
     static SodaDesktopDisplay.Lease DisplayLease;
     public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null) {
         try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath); }
@@ -258,7 +265,8 @@ public static class SodaDesktopHost {
                     finally { Release(); }
                 });
                 reader.IsBackground=true;reader.Start();
-                long sequence=0,pending=0,next=0,inputSeq=0,lastFull=-30000,lastReport=-1000;
+                long sequence=0,pending=0,inputSeq=0,lastFull=-30000,lastReport=-1000;
+                var preparation=new SodaDesktopFramePreparation<PreparedFrame>(!Secure);
                 bool forceFull=true,initialized=false;string contentId=null;
                 byte[] current=deltas || colorMode!="full"?new byte[w*h*3]:null,previous=deltas?new byte[w*h*3]:null;
                 using(var sha=SHA256.Create()) {
@@ -270,10 +278,10 @@ public static class SodaDesktopHost {
                         var msg=Obj(Json.DeserializeObject(data));string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
                         else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
-                        else if(type=="keyframe"){forceFull=true;next=0;}
+                        else if(type=="keyframe"){forceFull=true;preparation.Invalidate(true);}
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
-                            fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);next=0;
+                            fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);preparation.Invalidate(true);
                         } else if(type=="clipboard_control") {clipboardAllowed=clipboardCeiling && (bool)msg["enabled"];clipboardGeneration=Convert.ToInt64(msg["generation"]);}
                         else if(type=="clipboard") {
                             long id=Convert.ToInt64(msg["id"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -287,26 +295,27 @@ public static class SodaDesktopHost {
                             }
                             if(text!=null)Output(new {type="clipboard_result",id,ok,text});else Output(new {type="clipboard_result",id,ok});
                         }
-                        else if(type=="release") { lock(Gate){bool keep=Control;Release();Control=keep;} }
-                        else if(type=="control") { Release();lock(Gate){Control=allow && (bool)msg["enabled"];} }
+                        else if(type=="release") { preparation.Invalidate(false);lock(Gate){bool keep=Control;Release();Control=keep;} }
+                        else if(type=="control") { preparation.Invalidate(false);Release();lock(Gate){Control=allow && (bool)msg["enabled"];} }
                         else if(type=="ack") { if(Convert.ToInt64(msg["seq"])!=pending)throw new InvalidOperationException();pending=0; }
                         else if(type=="input") {
                             long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]);
-                            if(Control && id>inputSeq && expires>=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() && expires<=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+1500) { inputSeq=id;if(Apply(Obj(msg["input"])))Output(new { type="input_ack",seq=id }); }
+                            if(Control && id>inputSeq && expires>=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() && expires<=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+1500) { inputSeq=id;if(Apply(Obj(msg["input"]))){preparation.Invalidate(false);Output(new { type="input_ack",seq=id });} }
                         } else if(type=="stop") { Stopping=true;break; }
                         else throw new InvalidOperationException();
                     }
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
                     long now=Clock.ElapsedMilliseconds;
-                    if(!Stopping && pending==0 && now>=next) {
+                    if(!Stopping && preparation.CanPrepare(now,pending)) {
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureScaled(resize,w,h);
                         // PoC cursor: standard arrow at the Windows cursor position; shape is not captured.
                         Point cursor=Cursor.Position;
                         if(showCursor && Bounds.Contains(cursor)) { int cx=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cy=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);Cursors.Default.Draw(resize,new Rectangle(cx,cy,16,24)); }
                         var rects=new List<Rectangle>();
-                        bool changed=true;
+                        bool changed=true;string capturedId=contentId;
+                        var prepared=new PreparedFrame {started=frameStarted};
                         if(deltas || colorMode!="full")ReadPixels(scaled,current,colorMode);
-                        if(deltas){rects=DirtyTiles(current,previous,w,h,initialized);changed=rects.Count>0;if(changed)contentId=BitConverter.ToString(sha.ComputeHash(current)).Replace("-","").ToLowerInvariant();}
+                        if(deltas){rects=DirtyTiles(current,previous,w,h,initialized);changed=rects.Count>0;if(changed)capturedId=BitConverter.ToString(sha.ComputeHash(current)).Replace("-","").ToLowerInvariant();}
                         double capture=t.Elapsed.TotalMilliseconds;t.Restart();
                         bool full=!deltas || forceFull || frameStarted-lastFull>=30000;
                         long area=0;foreach(var r in rects)area+=(long)r.Width*r.Height;
@@ -314,26 +323,34 @@ public static class SodaDesktopHost {
                         bool report=changed || full || frameStarted-lastReport>=1000;
                         if(report)using(var stream=new MemoryStream()) {
                             object update=null;string format="image/jpeg";
-                            if(full){scaled.Save(stream,jpeg,args);lastFull=frameStarted;forceFull=false;}
+                            if(full){scaled.Save(stream,jpeg,args);}
                             else if(changed) {
                                 format="image/png";var patches=new List<object>();
                                 foreach(var r in rects)using(var patch=scaled.Clone(r,PixelFormat.Format24bppRgb)) {
                                     int offset=(int)stream.Length;using(var encoded=new MemoryStream()){patch.Save(encoded,ImageFormat.Png);encoded.WriteTo(stream);patches.Add(new {x=r.X,y=r.Y,width=r.Width,height=r.Height,offset,length=(int)encoded.Length});}
                                 }
                                 update=new {kind="patch",baseSeq=sequence,patches};
-                                if(stream.Length>2*1024*1024){stream.SetLength(0);stream.Position=0;scaled.Save(stream,jpeg,args);format="image/jpeg";update=null;lastFull=frameStarted;}
+                                if(stream.Length>2*1024*1024){stream.SetLength(0);stream.Position=0;scaled.Save(stream,jpeg,args);format="image/jpeg";update=null;full=true;}
                             } else update=new {kind="unchanged",baseSeq=sequence};
                             byte[] image=stream.ToArray();if(image.Length>2*1024*1024)throw new InvalidOperationException("Frame limit");
                             double encode=t.Elapsed.TotalMilliseconds;
                             if(!AllowedDesktop())break;
-                            var info=new Dictionary<string,object>{{"seq",++sequence},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
-                            if(deltas)info["contentId"]=contentId;
+                            var info=new Dictionary<string,object>{{"seq",sequence+1},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
+                            if(deltas)info["contentId"]=capturedId;
                             if(update!=null)info["update"]=update;
                             using(var process=Process.GetCurrentProcess()){info["sourceCpuMs"]=process.TotalProcessorTime.TotalMilliseconds;info["sourceMemoryBytes"]=process.WorkingSet64;}
-                            pending=sequence;Output(new {type="frame",info,data=Convert.ToBase64String(image)});lastReport=frameStarted;
-                            if(deltas){var swap=previous;previous=current;current=swap;initialized=true;}
+                            prepared.info=info;prepared.image=image;prepared.full=full;prepared.contentId=capturedId;
                         }
-                        next=frameStarted+Math.Max(1,1000/fps);
+                        preparation.Set(prepared,frameStarted,Clock.ElapsedMilliseconds,fps);
+                    }
+                    var outgoing=preparation.Take(pending,Clock.ElapsedMilliseconds,fps);
+                    if(!Stopping&&outgoing!=null&&outgoing.info!=null) {
+                        if(!AllowedDesktop())break;
+                        sequence++;pending=sequence;
+                        Output(new {type="frame",info=outgoing.info,data=Convert.ToBase64String(outgoing.image)});
+                        lastReport=outgoing.started;contentId=outgoing.contentId;
+                        if(outgoing.full){lastFull=outgoing.started;forceFull=false;}
+                        if(deltas){var swap=previous;previous=current;current=swap;initialized=true;}
                     }
                     Thread.Sleep(2);
                 }
@@ -490,4 +507,25 @@ public static class SodaDesktopDisplay {
                 } finally {gate.ReleaseMutex();}
             }
     }
+}
+
+// One prepared frame alongside the single frame awaiting ACK. No transport/schema change.
+// Ready-age excludes capture/encode time so slow captures can still make progress.
+public sealed class SodaDesktopFramePreparation<T> where T:class {
+    T prepared;
+    readonly bool overlap;
+    long readyAt;
+    public SodaDesktopFramePreparation(bool prepareWhileAwaitingAck=true){overlap=prepareWhileAwaitingAck;}
+    public long Next {get;private set;}
+    public bool CanPrepare(long now,long pending=0){return prepared==null&&now>=Next&&(overlap||pending==0);}
+    public void Set(T frame,long started,long completed,int fps){
+        if(prepared!=null||frame==null||fps<1)throw new InvalidOperationException("Frame preparation overflow");
+        prepared=frame;readyAt=completed;Next=started+Math.Max(1,1000/fps);
+    }
+    public T Take(long pending,long now,int fps){
+        if(pending!=0||prepared==null)return null;
+        T frame=prepared;prepared=null;
+        return now-readyAt<=200?frame:null;
+    }
+    public void Invalidate(bool immediate){prepared=null;if(immediate)Next=0;}
 }
