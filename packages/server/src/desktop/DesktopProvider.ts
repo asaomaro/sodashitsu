@@ -143,6 +143,7 @@ export class DesktopProvider {
       !allowedRelay(url, cfg.origins())
     )
       throw new RpcError("unauthorized", "Bで許可されていない共有先です");
+    if (cfg.allowUnlock) this.unlockLease.ensureRunning();
     const ws = new WebSocket(url, {
       handshakeTimeout: 10000,
       maxPayload: 65536,
