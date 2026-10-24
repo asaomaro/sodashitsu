@@ -63,6 +63,7 @@ for (const startup of ["stable", "once", "always", "runtime-once", "runtime-alwa
     expect(sent.some(m=>m.type==="input"||m.type==="dismiss_lock_screen")).toBe(false);
     expect(received.find(m=>m.type==="ready")).toMatchObject({lockScreenCover:true,secureDesktop:true,allowClipboard:false,allowMedia:false});
     await cover.getByRole("button",{name:"サインイン画面へ進む",exact:true}).click();
+    await expect.poll(()=>sent.filter(m=>m.type==="dismiss_lock_screen")).toHaveLength(1);
     await expect(cover).toHaveCount(0);
     const canvas=view.getByLabel("共有画面");
     await expect(canvas).toBeVisible();

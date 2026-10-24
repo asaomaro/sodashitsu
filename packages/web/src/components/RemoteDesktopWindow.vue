@@ -700,6 +700,8 @@ async function leaveDesktop() {
 function dismissLockScreen() {
   if (!ready.value || !allowed.value || !lockScreenCover.value || dismissInFlight.value) return;
   startupRetries = 0;
+  // Disabling the focused button must not blur outside and cancel its pending request.
+  windowElement.value?.focus({preventScroll:true});
   dismissInFlight.value = true;
   if (control.value) send({ type: "dismiss_lock_screen" });
   else {
