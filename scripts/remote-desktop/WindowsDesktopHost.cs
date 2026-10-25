@@ -259,7 +259,7 @@ public static class SodaDesktopHost {
         },null,500,500);
         SodaDesktopDxgi dxgi=null;
         SodaDesktopH264 video=null;string videoId=null;
-        long videoSeq=0,videoNext=0;int videoFps=maxFps;var videoWindow=new SodaDesktopVideoWindow(1);
+        long videoSeq=0,videoNext=0;int videoFps=maxFps;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
         // Only new providers opt in. Old providers/helpers keep their existing wire contract.
@@ -355,8 +355,14 @@ public static class SodaDesktopHost {
                     }
                     if(!Stopping && video!=null && videoWindow.CanSend && now>=videoNext) {
                         try {
-                            var captureTimer=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi);double videoCaptureMs=captureTimer.Elapsed.TotalMilliseconds;
-                            var packet=video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
+                            var captureTimer=Stopwatch.StartNew();double conversionMs=0;
+                            if(videoNv12==null)videoNv12=new byte[checked(w*h*3/2)];
+                            Point cursor=Cursor.Position;bool cursorVisible=showCursor&&Bounds.Contains(cursor);
+                            int cursorX=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cursorY=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);
+                            bool gpu=dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
+                            if(!gpu)CaptureFrame(resize,w,h,showCursor,ref dxgi);
+                            double videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
+                            var packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
                             if(!AllowedDesktop())break;
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
                             videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=now+1000/videoFps;
@@ -638,6 +644,9 @@ public sealed class SodaDesktopDxgi : IDisposable {
     static void Release(ref IntPtr obj) { if(obj!=IntPtr.Zero){Marshal.Release(obj);obj=IntPtr.Zero;} }
     static IntPtr Query(IntPtr obj,string iid) { var id=new Guid(iid);IntPtr value;Check(Marshal.QueryInterface(obj,ref id,out value));return value; }
     IntPtr device,context,duplication,source,sourceView,target,targetView,staging,vertex,pixel,sampler;
+    IntPtr nvTarget,nvView,nvStaging,nvShader,cursorTexture,cursorView,cursorConstants;
+    byte[] nvRow;
+    bool nvFailed;
     Bitmap bitmap;
     byte[] row;
     bool hasFrame,disposed;
@@ -705,6 +714,10 @@ public sealed class SodaDesktopDxgi : IDisposable {
         } finally { Release(ref errors);Release(ref code); }
     }
     public bool Capture(Graphics destination) {
+        if(!AcquireFrame())return false;
+        Render(destination);return true;
+    }
+    bool AcquireFrame() {
         if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
         IntPtr resource=IntPtr.Zero,texture=IntPtr.Zero;FrameInfo info;
         int hr=Method<Acquire>(duplication,8)(duplication,hasFrame?0u:16u,out info,out resource);
@@ -724,7 +737,88 @@ public sealed class SodaDesktopDxgi : IDisposable {
                 }
             } finally { Release(ref texture);Release(ref resource);Check(Method<EndFrame>(duplication,14)(duplication)); }
         }
-        Render(destination);return true;
+        return true;
+    }
+    public bool TryCaptureNv12(byte[] output,int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {
+        conversionMs=0;
+        if(nvFailed||(width&1)!=0||(height&1)!=0)return false;
+        try {
+            if(output==null||output.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
+            if(!AcquireFrame())return false;
+            var timer=Stopwatch.StartNew();RenderNv12(output,cursorX,cursorY,cursorVisible);conversionMs=timer.Elapsed.TotalMilliseconds;return true;
+        } catch {nvFailed=true;DisposeNv12();return false;}
+    }
+    [StructLayout(LayoutKind.Sequential)] struct BufferDesc {public uint size,usage,bind,cpu,misc,stride;}
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateBuffer(IntPtr self,ref BufferDesc desc,IntPtr initial,out IntPtr buffer);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void Upload(IntPtr self,IntPtr resource,uint subresource,IntPtr box,IntPtr data,uint pitch,uint depth);
+    void UploadBytes(IntPtr resource,byte[] bytes,int pitch) {
+        var pin=GCHandle.Alloc(bytes,GCHandleType.Pinned);
+        try{Method<Upload>(context,48)(context,resource,0,IntPtr.Zero,pin.AddrOfPinnedObject(),(uint)pitch,0);}finally{pin.Free();}
+    }
+    void InitializeNv12() {
+        int packedWidth=(width+3)/4;
+        nvTarget=Texture(packedWidth,height*3/2,0,32,0);Check(Method<CreateView>(device,9)(device,nvTarget,IntPtr.Zero,out nvView));
+        nvStaging=Texture(packedWidth,height*3/2,3,0,0x20000);nvRow=new byte[packedWidth*4];
+        // Store four NV12 bytes in each BGRA texel. This needs only ordinary
+        // render targets; unsupported video-processor/NV12 surfaces are avoided.
+        string hlsl=@"Texture2D image:register(t0);Texture2D cursorImage:register(t1);SamplerState linearClamp:register(s0);
+cbuffer Cursor:register(b0){float4 cursor;};
+int3 rgb(int x,int y){
+ float3 color=image.SampleLevel(linearClamp,float2((x+0.5)/WIDTH,(y+0.5)/HEIGHT),0).rgb;
+ int2 c=int2(x,y)-int2(cursor.xy);
+ if(cursor.z>0&&c.x>=0&&c.y>=0&&c.x<16&&c.y<24){
+  float3 black=cursorImage.Load(int3(c,0)).rgb,white=cursorImage.Load(int3(c+int2(0,24),0)).rgb;
+  color=black+(white-black)*color;
+ }
+ return int3(floor(saturate(color)*255+0.5));
+}
+int value(int x,int row){
+ if(x>=WIDTH)return 0;
+ if(row<HEIGHT){int3 c=rgb(x,row);return ((47*c.r+157*c.g+16*c.b+128)>>8)+16;}
+ int xx=x&~1,yy=(row-HEIGHT)*2;
+ int3 c=(rgb(xx,yy)+rgb(xx+1,yy)+rgb(xx,yy+1)+rgb(xx+1,yy+1)+2)/4;
+ return (x&1)==0?((-26*c.r-86*c.g+112*c.b+128)>>8)+128:((112*c.r-102*c.g-10*c.b+128)>>8)+128;
+}
+float4 main(float4 p:SV_Position):SV_Target{
+ int x=int(p.x)*4,y=int(p.y);
+ return float4(value(x+2,y),value(x+1,y),value(x,y),value(x+3,y))/255.0;
+}";
+        hlsl=hlsl.Replace("WIDTH",width.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0").Replace("HEIGHT",height.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0");
+        nvShader=Shader(hlsl,"ps_4_0",15);
+        cursorTexture=Texture(16,48,0,8,0);Check(Method<CreateView>(device,7)(device,cursorTexture,IntPtr.Zero,out cursorView));
+        var bytes=new byte[16*48*4];
+        // Black/white renders preserve opaque, transparent AND/XOR cursor pixels,
+        // including inversion. Match the existing fixed 16x24 default cursor.
+        for(int background=0;background<2;background++)using(var cursorBitmap=new Bitmap(16,24,PixelFormat.Format32bppRgb)) {
+            using(var g=Graphics.FromImage(cursorBitmap)){g.Clear(background==0?Color.Black:Color.White);Cursors.Default.Draw(g,new Rectangle(0,0,16,24));}
+            var bits=cursorBitmap.LockBits(new Rectangle(0,0,16,24),ImageLockMode.ReadOnly,PixelFormat.Format32bppRgb);
+            try{for(int y=0;y<24;y++)Marshal.Copy(IntPtr.Add(bits.Scan0,y*bits.Stride),bytes,(background*24+y)*16*4,16*4);}finally{cursorBitmap.UnlockBits(bits);}
+        }
+        UploadBytes(cursorTexture,bytes,16*4);
+        var desc=new BufferDesc{size=16,bind=4};Check(Method<CreateBuffer>(device,3)(device,ref desc,IntPtr.Zero,out cursorConstants));
+    }
+    void RenderNv12(byte[] output,int cursorX,int cursorY,bool cursorVisible) {
+        if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
+        if((width&1)!=0||(height&1)!=0||output==null||output.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
+        if(nvShader==IntPtr.Zero)InitializeNv12();
+        byte[] constants=new byte[16];Buffer.BlockCopy(new float[]{cursorX,cursorY,cursorVisible?1:0,0},0,constants,0,16);UploadBytes(cursorConstants,constants,16);
+        Method<SetArray>(context,16)(context,0,1,new[]{cursorConstants});
+        Method<SetShader>(context,11)(context,vertex,IntPtr.Zero,0);Method<SetShader>(context,9)(context,nvShader,IntPtr.Zero,0);
+        Method<SetArray>(context,8)(context,0,2,new[]{sourceView,cursorView});Method<SetArray>(context,10)(context,0,1,new[]{sampler});
+        Method<SetTopology>(context,24)(context,4);Method<SetTargets>(context,33)(context,1,new[]{nvView},IntPtr.Zero);
+        var viewport=new Viewport{width=(width+3)/4,height=height*3/2,max=1};Method<SetViewport>(context,44)(context,1,ref viewport);
+        Method<Draw>(context,13)(context,3,0);Method<SetTargets>(context,33)(context,0,new IntPtr[0],IntPtr.Zero);
+        Method<SetArray>(context,8)(context,0,2,new IntPtr[2]);
+        Method<Copy>(context,47)(context,nvStaging,nvTarget);
+        Mapped mapped;Check(Method<Map>(context,14)(context,nvStaging,0,1,0,out mapped));
+        try {
+            if(mapped.data==IntPtr.Zero||mapped.pitch<(uint)nvRow.Length||mapped.pitch>256*1024)throw new InvalidOperationException("Invalid NV12 row pitch");
+            for(int y=0;y<height*3/2;y++)Marshal.Copy(IntPtr.Add(mapped.data,checked(y*(int)mapped.pitch)),output,y*width,width);
+        }finally{Method<Unmap>(context,15)(context,nvStaging,0);}
+    }
+    void DisposeNv12(){
+        if(context!=IntPtr.Zero){Method<SetArray>(context,8)(context,0,2,new IntPtr[2]);Method<SetArray>(context,16)(context,0,1,new IntPtr[1]);Method<SetTargets>(context,33)(context,0,new IntPtr[0],IntPtr.Zero);}
+        Release(ref cursorConstants);Release(ref cursorView);Release(ref cursorTexture);Release(ref nvShader);Release(ref nvStaging);Release(ref nvView);Release(ref nvTarget);nvRow=null;
     }
     void Render(Graphics destination) {
         // All scaling occurs before CPU readback. A retained GPU source handles
@@ -754,6 +848,7 @@ public sealed class SodaDesktopDxgi : IDisposable {
     }
     public void Dispose() {
         if(disposed)return;disposed=true;
+        DisposeNv12();
         if(bitmap!=null){bitmap.Dispose();bitmap=null;}
         Release(ref sampler);Release(ref pixel);Release(ref vertex);Release(ref staging);Release(ref targetView);Release(ref target);Release(ref sourceView);Release(ref source);Release(ref duplication);Release(ref context);Release(ref device);
     }
@@ -880,6 +975,9 @@ public sealed class SodaDesktopH264 : IDisposable {
     public void Pause(int milliseconds){delay.Pause(milliseconds);}
     public double ConversionMs {get;private set;}
     public double EncodingMs {get;private set;}
+    public Packet EncodePreparedNv12(byte[] bytes,long timestamp,double conversionMs) {
+        ConversionMs=conversionMs;var timer=Stopwatch.StartNew();var packet=Encode(bytes,timestamp);EncodingMs=timer.Elapsed.TotalMilliseconds;return packet;
+    }
     public Packet EncodeBitmap(Bitmap bitmap,long timestamp) {
         var timing=Stopwatch.StartNew();
         if(bitmap.Width!=width || bitmap.Height!=height)throw new ArgumentException("Video bitmap size");
@@ -891,14 +989,21 @@ public sealed class SodaDesktopH264 : IDisposable {
     }
     public static void ConvertNv12(byte[] bgr,byte[] nv12,int width,int height) {
         if(width<2||height<2||(width&1)!=0||(height&1)!=0||(long)width*height>8000000||bgr.Length!=(long)width*height*3||nv12.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
-        for(int y=0;y<height;y+=2)for(int x=0;x<width;x+=2) {
-            int r=0,g=0,b=0;
-            for(int yy=0;yy<2;yy++)for(int xx=0;xx<2;xx++) {
-                int p=(y+yy)*width+x+xx,i=p*3;int blue=bgr[i],green=bgr[i+1],red=bgr[i+2];
-                nv12[p]=(byte)(((47*red+157*green+16*blue+128)>>8)+16);r+=red;g+=green;b+=blue;
-            }
-            r=(r+2)/4;g=(g+2)/4;b=(b+2)/4;int uv=width*height+(y/2)*width+x;
+        // Walk two contiguous rows at a time. Each 2x2 block shares chroma;
+        // avoid the four inner-loop index multiplications for every block.
+        int uv=width*height;
+        for(int y=0;y<height;y+=2) {
+        int p=y*width,a=p*3,c=a+width*3;
+        for(int x=0;x<width;x+=2,p+=2,a+=6,c+=6,uv+=2) {
+            int b0=bgr[a],g0=bgr[a+1],r0=bgr[a+2],b1=bgr[a+3],g1=bgr[a+4],r1=bgr[a+5];
+            int b2=bgr[c],g2=bgr[c+1],r2=bgr[c+2],b3=bgr[c+3],g3=bgr[c+4],r3=bgr[c+5];
+            nv12[p]=(byte)(((47*r0+157*g0+16*b0+128)>>8)+16);
+            nv12[p+1]=(byte)(((47*r1+157*g1+16*b1+128)>>8)+16);
+            nv12[p+width]=(byte)(((47*r2+157*g2+16*b2+128)>>8)+16);
+            nv12[p+width+1]=(byte)(((47*r3+157*g3+16*b3+128)>>8)+16);
+            int r=(r0+r1+r2+r3+2)/4,g=(g0+g1+g2+g3+2)/4,b=(b0+b1+b2+b3+2)/4;
             nv12[uv]=(byte)(((-26*r-86*g+112*b+128)>>8)+128);nv12[uv+1]=(byte)(((112*r-102*g-10*b+128)>>8)+128);
+        }
         }
     }
     public Packet Encode(byte[] nv12,long timestamp) {

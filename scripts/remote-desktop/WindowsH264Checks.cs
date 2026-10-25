@@ -17,8 +17,11 @@ namespace SodaDesktopTests {
    using(var encoder=new SodaDesktopH264(640,360,30,2500))using(var bitmap=new Bitmap(640,360))using(var g=Graphics.FromImage(bitmap)) {
     g.FillRectangle(Brushes.Red,0,0,320,180);g.FillRectangle(Brushes.Lime,320,0,320,180);g.FillRectangle(Brushes.Blue,0,180,320,180);g.FillRectangle(Brushes.Yellow,320,180,320,180);
     using(var gray=new SolidBrush(Color.FromArgb(128,128,128)))g.FillRectangle(gray,256,144,128,72);
+    var preparedBgr=new byte[640*360*3];var preparedNv12=new byte[640*360*3/2];
+    for(int y=0;y<360;y++)for(int x=0;x<640;x++){var color=bitmap.GetPixel(x,y);int p=(y*640+x)*3;preparedBgr[p]=color.B;preparedBgr[p+1]=color.G;preparedBgr[p+2]=color.R;}
+    SodaDesktopH264.ConvertNv12(preparedBgr,preparedNv12,640,360);
     for(int frame=0;frame<4;frame++) {
-     var packet=encoder.EncodeBitmap(bitmap,frame*33333L);
+     var packet=(frame&1)==0?encoder.EncodeBitmap(bitmap,frame*33333L):encoder.EncodePreparedNv12(preparedNv12,frame*33333L,0);
      Check(packet.data.Length>0&&packet.data.Length<=512*1024-9,"Packet limit");Check(packet.timestamp==frame*33333L,"Timestamp");
      if(frame==0)Check(packet.key&&packet.codec!=null,"Initial SPS/IDR missing");
      byte[] bytes=StripFiller(packet.data);
@@ -26,7 +29,7 @@ namespace SodaDesktopTests {
     }
    }
    if(!String.IsNullOrEmpty(fixtureFile))File.WriteAllText(fixtureFile,new JavaScriptSerializer().Serialize(new {width=640,height=360,packets}),new System.Text.UTF8Encoding(false));
-   Console.WriteLine("desktop_h264_checks_passed: hardware-only MFT, NV12 conversion, four generated frames, initial SPS/IDR, timestamps, packet limits");
+   Console.WriteLine("desktop_h264_checks_passed: hardware-only MFT, bitmap/prepared NV12, four generated frames, initial SPS/IDR, timestamps, packet limits");
   }
   // Only test fixtures remove Annex-B filler NALs (CBR padding), preserving SPS/PPS/IDR/deltas.
   static byte[] StripFiller(byte[] bytes) {
