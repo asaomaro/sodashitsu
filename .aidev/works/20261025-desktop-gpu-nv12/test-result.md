@@ -48,5 +48,5 @@ ected 30"
 
 - 関連の実ブラウザ native-video/input/cover: 11 passed / 明示指定の実画面benchmark 1 skipped。ブラウザ描画、キー/全ボタン、fallbackを確認。新GPU pixel処理そのものは上記Windows checksで確認し、模擬helperのブラウザ試験と混同しない。
 - clean feature worktreeのpnpm smoke: PASS。
-- TypeScript/JavaScript/protocolの差分は0で、直前mainのbuild/typecheck/全11339件試験は成功済み。今回はC#の実コンパイル・native/GPU回帰と関係E2Eを実施し、全体unitを重複実行しない。
+- TypeScript/JavaScript/protocolの差分は0。proxy改善時の全11339件試験と、前回のブラウザ変更時のbuild/typecheck/関係unit/E2Eは成功済み。今回はC#の実コンパイル・native/GPU回帰と関係E2Eを実施し、全体unitを重複実行しない。
 - root作業フォルダへ3-way反映し既存変更を保持。rootのGPU色変換とhelper結合コンパイル・既存native回帰も成功。
