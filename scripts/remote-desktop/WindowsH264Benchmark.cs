@@ -22,7 +22,7 @@ namespace SodaDesktopTests {
     if(validateTimer&&highResolution&&mean>=10)throw new InvalidOperationException("High-resolution 1ms timer averaged >=10ms");
    }
    var conversion=new List<double>();var encoding=new List<double>();
-   using(var encoder=new SodaDesktopH264(1920,1200,30,2500))using(var bitmap=new Bitmap(1920,1200))using(var g=Graphics.FromImage(bitmap)) {
+   using(var encoder=new SodaDesktopH264(1920,1200,30,2500))using(var bitmap=new Bitmap(1920,1200,System.Drawing.Imaging.PixelFormat.Format24bppRgb))using(var g=Graphics.FromImage(bitmap)) {
     g.FillRectangle(Brushes.Red,0,0,960,600);g.FillRectangle(Brushes.Lime,960,0,960,600);g.FillRectangle(Brushes.Blue,0,600,960,600);g.FillRectangle(Brushes.Yellow,960,600,960,600);
     for(int i=0;i<4;i++)encoder.EncodeBitmap(bitmap,i*33333L);
     var clock=Stopwatch.StartNew();long next=0;int frames=0;double cpuStart;using(var process=Process.GetCurrentProcess())cpuStart=process.TotalProcessorTime.TotalMilliseconds;
