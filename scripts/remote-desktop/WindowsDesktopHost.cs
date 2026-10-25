@@ -753,6 +753,10 @@ public sealed class SodaDesktopH264 : IDisposable {
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Set64(IntPtr self,ref Guid key,ulong value);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetGuid(IntPtr self,ref Guid key,ref Guid value);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetType(IntPtr self,uint stream,IntPtr type,uint flags);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int AvailableType(IntPtr self,uint stream,uint index,out IntPtr type);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetGuid(IntPtr self,ref Guid key,out Guid value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Get64(IntPtr self,ref Guid key,out ulong value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetBlob(IntPtr self,ref Guid key,out IntPtr data,out uint length);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Message(IntPtr self,uint message,UIntPtr parameter);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Input(IntPtr self,uint stream,IntPtr sample,uint flags);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Output(IntPtr self,uint flags,uint count,ref OutputData data,out uint status);
@@ -778,7 +782,7 @@ public sealed class SodaDesktopH264 : IDisposable {
     bool started,disposed;
     int inputCredits,outputCredits;
     readonly int width,height,fps,bitrate;
-    byte[] bgr,nv12;
+    byte[] bgr,nv12,sequenceHeader;
     public sealed class Packet { public byte[] data;public bool key;public string codec;public long timestamp; }
     public SodaDesktopH264(int width,int height,int fps,int bitrateKbps) {
         if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>30 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
@@ -881,25 +885,62 @@ public sealed class SodaDesktopH264 : IDisposable {
             Check(Method<Input>(transform,24)(transform,0,sample,0));inputCredits--;
         } finally {Release(ref buffer);Release(ref sample);}
         Wait(true);outputCredits--;
-        var output=new OutputData();IntPtr allocated=IntPtr.Zero;
+        // Some hardware encoders request initial output renegotiation after
+        // consuming their first sample. Retry that output, never resubmit input.
+        for(int attempt=0;attempt<4;attempt++) {
+        var output=new OutputData();IntPtr allocated=IntPtr.Zero;bool changed=false;
         try {
             OutputInfo info;Check(Method<GetOutputInfo>(transform,7)(transform,0,out info));
             if((info.flags&0x100)==0) {
                 if(info.size>512*1024)throw new InvalidOperationException("Encoder output size limit");
                 Check(MFCreateSample(out allocated));Check(MFCreateMemoryBuffer(Math.Max(1,info.size),out buffer));Check(Method<AddBuffer>(allocated,42)(allocated,buffer));Release(ref buffer);output.sample=allocated;
             }
-            uint status;Check(Method<Output>(transform,25)(transform,0,1,ref output,out status));
+            uint status;int hr=Method<Output>(transform,25)(transform,0,1,ref output,out status);
+            if(hr==unchecked((int)0xc00d6d61))changed=true;
+            else {
+            Check(hr);
             Check(Method<GetObject>(output.sample,41)(output.sample,out buffer));IntPtr data;uint max,length;
             Check(Method<BufferLock>(buffer,3)(buffer,out data,out max,out length));byte[] bytes;
             try {if(length==0 || length>512*1024-9 || length>max)throw new InvalidOperationException("H.264 frame limit");bytes=new byte[length];Marshal.Copy(data,bytes,0,(int)length);}
             finally {Check(Method<NoArgs>(buffer,4)(buffer));}
-            bool key=false;string codec=null;
-            for(int i=0;i+4<bytes.Length;i++)if(bytes[i]==0 && bytes[i+1]==0 && (bytes[i+2]==1 || (bytes[i+2]==0 && bytes[i+3]==1))) {
-                int n=i+(bytes[i+2]==1?3:4),kind=bytes[n]&31;
-                if(kind==5)key=true;if(kind==7 && n+3<bytes.Length)codec="avc1."+bytes[n+1].ToString("x2")+bytes[n+2].ToString("x2")+bytes[n+3].ToString("x2");i=n;
+            var packet=ParsePacket(bytes,timestamp);
+            if(packet.key && packet.codec==null && sequenceHeader!=null) {
+                if(sequenceHeader.Length+bytes.Length>512*1024-9)throw new InvalidOperationException("H.264 header limit");
+                var combined=new byte[sequenceHeader.Length+bytes.Length];Buffer.BlockCopy(sequenceHeader,0,combined,0,sequenceHeader.Length);Buffer.BlockCopy(bytes,0,combined,sequenceHeader.Length,bytes.Length);packet=ParsePacket(combined,timestamp);
             }
-            return new Packet {data=bytes,key=key,codec=codec,timestamp=timestamp};
+            return packet;
+            }
         } finally {Release(ref buffer);Release(ref output.events);if(output.sample==allocated)allocated=IntPtr.Zero;Release(ref output.sample);Release(ref allocated);}
+        if(changed)RenegotiateOutput();
+        }
+        throw new InvalidOperationException("H.264 output format did not stabilize");
+    }
+    static Packet ParsePacket(byte[] bytes,long timestamp) {
+        bool key=false;string codec=null;
+        for(int i=0;i+4<bytes.Length;i++)if(bytes[i]==0 && bytes[i+1]==0 && (bytes[i+2]==1 || (bytes[i+2]==0 && bytes[i+3]==1))) {
+            int n=i+(bytes[i+2]==1?3:4),kind=bytes[n]&31;
+            if(kind==5)key=true;if(kind==7 && n+3<bytes.Length)codec="avc1."+bytes[n+1].ToString("x2")+bytes[n+2].ToString("x2")+bytes[n+3].ToString("x2");i=n;
+        }
+        return new Packet {data=bytes,key=key,codec=codec,timestamp=timestamp};
+    }
+    void RenegotiateOutput() {
+        for(uint index=0;index<16;index++) {
+            IntPtr type=IntPtr.Zero;
+            try {
+                int hr=Method<AvailableType>(transform,14)(transform,0,index,out type);if(hr==unchecked((int)0xc00d36b9))break;Check(hr);
+                Guid subtype,key=new Guid("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");Check(Method<GetGuid>(type,10)(type,ref key,out subtype));if(subtype!=H264)continue;
+                ulong size;key=new Guid("1652c33d-d6b2-4012-b834-72030849a37d");hr=Method<Get64>(type,8)(type,ref key,out size);
+                if(hr>=0 && (size>>32)!=(uint)width || hr>=0 && (uint)size!=(uint)height)continue;
+                U64(type,"1652c33d-d6b2-4012-b834-72030849a37d",((ulong)(uint)width<<32)|(uint)height);
+                U64(type,"c459a2e8-3d2c-4e44-b132-fee5156c7bb0",((ulong)(uint)fps<<32)|1);U32(type,"20332624-fb0d-4d9e-bd0d-cbf6786c102e",(uint)bitrate);
+                hr=Method<SetType>(transform,16)(transform,0,type,0);if(hr<0)continue;
+                IntPtr header=IntPtr.Zero;
+                try {uint length;key=new Guid("3c036de7-3ad0-4c9e-9216-ee6d6ac21cb3");if(Method<GetBlob>(type,16)(type,ref key,out header,out length)>=0 && length>0 && length<=65536){sequenceHeader=new byte[length];Marshal.Copy(header,sequenceHeader,0,(int)length);}}
+                finally {if(header!=IntPtr.Zero)Marshal.FreeCoTaskMem(header);}
+                return;
+            } finally {Release(ref type);}
+        }
+        throw new NotSupportedException("No compatible H.264 output format");
     }
     void ShutdownTransform() {
         if(transform!=IntPtr.Zero) {
