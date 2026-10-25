@@ -1,0 +1,10 @@
+
+"1" 個の引数を指定して "Run" を呼び出し中に例外が発生しました: "破棄されたオブジェクトにアクセスできません。
+オブジェクト名 'SodaDesktopDxgi' です。"
+発生場所 \\wsl.localhost\Ubuntu\workspaces\sodashitsu-desktop-input\scripts\remote-desktop\validate-gpu-surfaces.ps1:5
+文字:79
++ ... .GpuSurfaceChecks]::Run($(if($FixtureFile){$FixtureFile}else{$null}))
++                                                                  ~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : ObjectDisposedException
+

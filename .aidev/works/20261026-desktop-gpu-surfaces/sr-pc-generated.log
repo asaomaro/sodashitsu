@@ -1,0 +1,27 @@
+desktop_helper_compiled
+desktop_unlock_pipe_cancelled
+desktop_unlock_utf8_pipe_passed
+desktop_unlock_duplex_pipe_passed
+display_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-apply, restore/disarm, preserve-local-change, partial-failure rollback; fake driver only; no OS mode changes
+desktop_unlock_process_query_passed
+desktop_lock_cover_checks_passed
+desktop_input_checks_passed
+desktop_frame_preparation_checks_passed
+frame_preparation_model: duration=5000ms capture_encode=65ms ack=100ms fps_limit=30 serial_frames=31 overlapped_frames=50; deterministic model, not a desktop benchmark
+desktop_input_priority_checks_passed: native input during blocked video work; bounded queue; control/release FIFO; in-progress control and snapshot commit serialization; legacy fallback; fake input only
+desktop_unlock_checks_passed
+desktop_unlock_no_console_utf8_passed
+desktop_h264_checks_passed: hardware-only MFT, bitmap/prepared NV12, four generated frames, initial SPS/IDR, timestamps, packet limits
+desktop_nv12_checks_passed: byte-exact BT.709 reference, black/white/random, chroma rounding, row edges, source preserved, invalid dimensions, GPU failure latch
+{"source":"generated pixels only; no capture, encoder, network or browser","width":1280,"height":800,"trials":40,"referenceMeanMs":2.4688375000000002,"currentMeanMs":1.9168400000000005,"referenceP95Ms":2.6858,"currentP95Ms":2.1349,"bitmapCopyMeanMs":0.20909,"bitmapCopyP95Ms":0.3022}
+{"source":"generated pixels only; no capture, encoder, network or browser","width":1920,"height":1200,"trials":40,"referenceMeanMs":5.762395,"currentMeanMs":4.5606225000000018,"referenceP95Ms":6.0013000000000005,"currentP95Ms":4.7556,"bitmapCopyMeanMs":0.62817,"bitmapCopyP95Ms":0.76330000000000009}
+{"source":"GPU generated texture; scale/cursor/convert/readback; no capture, encoder or network","width":1280,"height":800,"trials":40,"gpuMeanMs":5.239132500000002,"gpuP95Ms":5.6863,"bitmapCpuMeanMs":24.938815,"bitmapCpuP95Ms":28.8408}
+{"source":"GPU generated texture; scale/cursor/convert/readback; no capture, encoder or network","width":1920,"height":1200,"trials":40,"gpuMeanMs":9.8246675000000039,"gpuP95Ms":10.4959,"bitmapCpuMeanMs":52.841810000000009,"bitmapCpuP95Ms":59.0512}
+desktop_nv12_gpu_checks_passed: generated texture, GPU scaling/BT.709/chroma, padded rows, cursor edges and inversion, retained source, disposal
+{"source":"generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser","frames":90,"width":640,"height":360,"gpuMeanMs":2.7911081395348831,"gpuP95Ms":3.6433,"memoryMeanMs":2.4772802325581407,"memoryP95Ms":3.6414,"gpuCpuMs":187.5,"fullFrameCpuReadbacks":0}
+desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture
+{"source":"generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser","frames":90,"width":1280,"height":800,"gpuMeanMs":4.7038930232558167,"gpuP95Ms":5.6898,"memoryMeanMs":8.6593151162790676,"memoryP95Ms":10.977,"gpuCpuMs":531.25,"fullFrameCpuReadbacks":0}
+desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture
+{"source":"generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser","frames":90,"width":1920,"height":1200,"gpuMeanMs":7.8125465116279056,"gpuP95Ms":12.1357,"memoryMeanMs":13.175220930232557,"memoryP95Ms":15.6897,"gpuCpuMs":593.75,"fullFrameCpuReadbacks":0}
+desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture
+{"sourceHead":"bd527213685b87beff08c5ce6621f3d5b3e54d82","trackedStatus":[],"unchangedHead":true,"repoHead":"e199582bb47bec2e7900758313eebe9ad4484508"}
