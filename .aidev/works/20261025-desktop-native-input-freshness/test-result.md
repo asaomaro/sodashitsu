@@ -63,7 +63,7 @@ Caused by: Error: Matcher did not succeed in time.
 ### relay
 
 ```text
-  1) src/specs/remote-desktop-native-video.spec.ts:21:3 › hardware-produced h264-generated.json H264 drag continues while image snapshots stall 
+  1) src/specs/remote-desktop-native-video.spec.ts:21:3 › hardware-produced h264-generated.json H264 drag continues while image snapshots stall
 
     Error: expect(received).toBe(expected) // Object.is equality
 
@@ -158,6 +158,6 @@ desktop_input_checks_passed
 + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
     + FullyQualifiedErrorId : InvalidOperationException
- 
+
 
 ```
