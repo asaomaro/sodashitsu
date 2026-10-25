@@ -197,3 +197,14 @@ Caused by: Error: Matcher did not succeed in time.
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
 
 ```
+
+## 最終確認
+
+- pnpm build / pnpm typecheck: 成功。
+- 関連unit/IPC: 29 tests passed。
+- 実A/B integration: transportを2回切断して同じIPCで復帰、完了済みexec writeは1回のみ、PJ変更後の閉鎖を確認。
+- 実ブラウザ work-agent-ask E2E: 1 passed。AのMarkdown表示、質問回答、MCP終了時のフォーム取消をDOMで観測。
+- clean worktreeのpnpm smoke: PASS。
+- 全体vitest --maxWorkers=2: 744 files / 11339 tests passed、837.97秒。
+- 独立レビュー: 指摘を修正し、修正差分と最終追加差分の再レビュー通過。
+- 元dirty作業フォルダへ3-wayで反映。既存DesktopBridgeFailureのdiagnostic method/codeをDesktopBridgeErrorの継承で維持し、local timeout/closedを明示。競合解消を別コンテキストで点検し指摘なし。元フォルダのbuild/typecheck/関連検証を行う。
