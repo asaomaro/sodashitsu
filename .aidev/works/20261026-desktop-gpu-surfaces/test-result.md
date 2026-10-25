@@ -19,3 +19,5 @@ Windows実GPUで、NV12 Y/UV planeと従来変換の一致（誤差1以内）、
 - [状態保存](gpu-surface-negative-context-state.log): ExecuteCommandListのrestoreを外すと、保持したtopology検査が失敗。
 
 最終確認: native-video + focused inputのブラウザ試験8件成功、明示opt-inの実画面性能試験1件skip。E2E typecheckとsmoke成功。生成fixtureは最終adapter-bound実装から再生成した。
+
+sr-pcでも一時フォルダへ同じコミットのsourceを展開し、既存helper/hardware H264/NV12と直接入力3寸法を検証して成功。1920×1200の生成90枚はGPU平均7.81ms（p95 12.14ms）、memory入力平均13.18ms（p95 15.69ms）。同一試験内の参考値で、実画面・通信・操作遅延の測定ではない。全寸法でフルフレームCPU readback増分0。検証中のBリポジトリHEAD/変更は維持した。[生ログ](sr-pc-generated.log)。
