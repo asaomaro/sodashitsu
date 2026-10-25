@@ -24,6 +24,8 @@ for (const transport of ["auto", "relay"] as const) {
         new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
       ),
       "--static",
+      "--native-fixture",
+      fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url)),
       "--allow-input",
       "--allow-clipboard",
     ]);
@@ -34,6 +36,12 @@ for (const transport of ["auto", "relay"] as const) {
         else process.env[k] = saved[i];
       }),
     );
+    await page.addInitScript(()=>{
+      const Base=WebSocket;
+      window.WebSocket=class extends Base {
+        constructor(url:string|URL,protocols?:string|string[]){super(url,protocols);if(protocols==="soda-desktop-video-lane-v1")(window as any).__idleVideoSocket=this;}
+      };
+    });
     const host = await context.newPage();
     // This test never opens an OS capture picker, microphone or system clipboard.
     // Real browser codecs and RTC/MSE decode a moving canvas and a synthetic silent audio track.
@@ -136,6 +144,15 @@ for (const transport of ["auto", "relay"] as const) {
       expect(pixel[0]).toBeLessThan(50);
       expect(pixel[2]).toBeLessThan(80);
       await expect(view.getByRole("button", { name: "音声を再生", exact: true })).toBeVisible();
+      if(transport==="auto") {
+        // The dropdown is a future request; it must not change the running WebRTC stream.
+        await view.getByLabel("動画の経路").selectOption("native");
+        const count=Number(await canvas.getAttribute("data-video-frames"));
+        await page.evaluate(()=>{(window as any).__idleVideoSocket.close();});
+        await expect.poll(async()=>Number(await canvas.getAttribute("data-video-frames"))).toBeGreaterThan(count+5);
+        await expect(view.locator("[data-media-state]")).toHaveText("WebRTC動画");
+        await view.getByLabel("動画の経路").selectOption("auto");
+      }
       const first = Number(await canvas.getAttribute("data-video-frames")),
         started = Date.now();
       await expect

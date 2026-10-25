@@ -132,6 +132,7 @@ export const DesktopMediaStream = z.union([
     .strict()
     .refine((v) => v.width * v.height <= 8_000_000),
 ]);
+export const DESKTOP_VIDEO_LANE_PROTOCOL = "soda-desktop-video-lane-v1";
 export const DESKTOP_NATIVE_VIDEO_PROTOCOL = "soda-desktop-native-video-v1";
 export const DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL = "soda-desktop-native-video-v2";
 export const DesktopNativeVideoAck = z

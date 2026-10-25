@@ -1,0 +1,34 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-input
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (39 tests | 1 failed | 38 skipped) 1182ms
+   × isolates H264 video from input ACKs and preserves main/image control after malformed 1181ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > isolates H264 video from input ACKs and preserves main/image control after malformed
+AssertionError: expected 0 to be greater than 0
+ ❯ src/desktop/DesktopRelay.test.ts:552:40
+    550|  v.send({type:"control",enabled:true});await expect.poll(()=>v.message…
+    551|  v.send({type:"media",enabled:true,settings:{transport:"native"}});
+    552|  await expect.poll(()=>packets.length).toBeGreaterThan(0);
+       |                                        ^
+    553|  expect(events.some(m=>m.type==="media_stream"&&m.mime==="video/h264")…
+    554|  expect(v.frames.some(b=>isDesktopMediaChunk(b))).toBe(false);
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopRelay.test.ts:552:2
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  01:14:32
+   Duration  1.99s (tests 62%, transform 28%, import 10%)

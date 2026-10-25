@@ -14,7 +14,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -23,7 +23,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true, dxgi = false) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true, dxgi = false, nativeFixture = false) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -32,8 +32,9 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
     allowInput,
+    allowNativeVideo: nativeFixture,
     allowUnlock: unlockAllowed,
     origins: () => [origin],
   } : undefined);
@@ -53,7 +54,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     isHostAllowed: () => true,
     allowedHostPorts: () => [new URL(origin).host],
   });
-  const startRequests: {options: Record<string,unknown>}[] = [];
+  const startRequests: {options: Record<string,unknown>;videoTicket?:string}[] = [];
   let closed = 0,
     starts = 0, providerStartCalls = 0;
   const link = {
@@ -116,8 +117,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" = false) {
-    const ws = new WebSocket(endpoint, ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" = false) {
+    const ws = new WebSocket(endpoint, ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -140,6 +141,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   }
   return {
     viewer,
+    relay,
     provider,
     endpoint,
     origin,
@@ -530,4 +532,83 @@ it("downgrades the pipeline when the helper lacks the capability", async () => {
  await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  expect(f.startRequests[0]!.options.nativeVideoWindow).toBe(3);
  expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeVideoWindow");v.send({type:"stop"});
+});
+
+it.each(["malformed", "source congestion", "viewer congestion"])("isolates H264 video from input ACKs and preserves main/image control after %s",async fault=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),v=await f.viewer("lane");
+ v.send({...start,options:{width:640,fps:30,quality:65,features:true}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="video_ticket")).toBe(true);
+ const ticket=v.messages.find(m=>m.type==="video_ticket")!.ticket;
+ const video=new WebSocket(f.endpoint,DESKTOP_VIDEO_LANE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),events:any[]=[],packets:Buffer[]=[];
+ video.on("error",()=>{});
+ video.on("message",(b,binary)=>{if(binary)packets.push(Buffer.from(b as Buffer));else events.push(JSON.parse(b.toString()));});
+ await new Promise<void>((resolve,reject)=>{video.once("open",resolve);video.once("error",reject);});
+ video.send(JSON.stringify({type:"video_viewer",ticket}));
+ await expect.poll(()=>v.messages.some(m=>m.type==="video_ready")).toBe(true);
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ v.send({type:"ack",seq:decodeDesktopFrame(v.frames[0]!).info.seq});
+ v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ v.send({type:"media",enabled:true,settings:{transport:"native"}});
+ await expect.poll(()=>packets.length).toBeGreaterThan(0);
+ expect(events.some(m=>m.type==="media_stream"&&m.mime==="video/h264")).toBe(true);
+ expect(v.frames.some(b=>isDesktopMediaChunk(b))).toBe(false);
+ const native=events.find(m=>m.type==="media_stream"),packet=decodeDesktopMediaChunk(packets[0]!);
+ v.send({type:"native_video_ack",id:native.id,generation:packet.generation,seq:packet.seq});
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames[0]!).info.seq,input:{kind:"key",code:"ArrowRight",down:true}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ // Fail only generated video; never disconnect an actual machine or inject OS input.
+ const share=(f.provider as any).active;
+ if(fault==="malformed")share.videoSocket.send(JSON.stringify({type:"input_ack",seq:999}));
+ else {
+   const socket=fault==="source congestion" ? share.videoSocket : [...(f.relay as any).videoLanes.pairs][0].viewer;
+   Object.defineProperty(socket,"bufferedAmount",{configurable:true,get:()=>600000});
+   const next=decodeDesktopMediaChunk(packets[packets.length-1]!);
+   for(let seq=2;seq<=next.seq;seq++)v.send({type:"native_video_ack",id:native.id,generation:1,seq});
+ }
+ await expect.poll(()=>video.readyState).toBe(WebSocket.CLOSED);
+ expect(v.ws.readyState).toBe(WebSocket.OPEN);
+ await expect.poll(()=>v.messages.some(m=>m.type==="video_closed")).toBe(true);
+ v.send({type:"release"});v.send({type:"control",enabled:false});
+ await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled===false)).toBe(true);
+ expect((f.provider as any).active.dead).toBe(false);
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(1);
+ const fresh=decodeDesktopFrame(v.frames[v.frames.length-1]!).info.seq;
+ v.send({type:"ack",seq:fresh});v.send({type:"control",enabled:true});
+ await expect.poll(()=>v.messages.filter(m=>m.type==="control"&&m.enabled).length).toBe(2);
+ v.send({type:"input",seq:2,frameSeq:fresh,input:{kind:"key",code:"ArrowRight",down:false}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);
+ v.send({type:"stop"});
+});
+it("does not expose video tickets to legacy viewers or pass them to legacy providers",async()=>{
+ const oldB=await fixture(true,true),newViewer=await oldB.viewer("lane");newViewer.send(start);
+ await expect.poll(()=>newViewer.frames.length).toBeGreaterThan(0);
+ expect(oldB.startRequests[0]).not.toHaveProperty("videoTicket");expect(newViewer.messages.some(m=>m.type==="video_ticket")).toBe(false);newViewer.send({type:"stop"});
+ const newB=await fixture(),oldViewer=await newB.viewer("native");oldViewer.send(start);await expect.poll(()=>oldViewer.frames.length).toBeGreaterThan(0);
+ expect(newB.startRequests[0]).not.toHaveProperty("videoTicket");expect(oldViewer.messages.some(m=>m.type==="video_ticket")).toBe(false);oldViewer.send({type:"stop"});
+});
+
+it("ignores delayed native stop metadata after a browser-media switch and does not stop browser media when the idle lane closes",async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),v=await f.viewer("lane");
+ v.send({...start,options:{width:640,fps:30,quality:65,features:true}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="video_ticket")).toBe(true);
+ const video=new WebSocket(f.endpoint,DESKTOP_VIDEO_LANE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),events:any[]=[];
+ video.on("error",()=>{});video.on("message",(b,binary)=>{if(!binary)events.push(JSON.parse(b.toString()));});
+ await new Promise<void>((r,j)=>{video.once("open",r);video.once("error",j);});video.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="video_ticket")!.ticket}));
+ await expect.poll(()=>v.messages.some(m=>m.type==="video_ready")).toBe(true);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ v.send({type:"ack",seq:decodeDesktopFrame(v.frames[0]!).info.seq});v.send({type:"media",enabled:true,settings:{transport:"native"}});
+ await expect.poll(()=>events.some(m=>m.type==="media_stream")).toBe(true);
+ const share=(f.provider as any).active,serverViewer=[...(f.relay as any).viewers][0],source=share.videoSocket as WebSocket;
+ const held:any[]=[],send=source.send.bind(source);
+ vi.spyOn(source,"send").mockImplementation(((data:any)=>{if(typeof data==="string"&&JSON.parse(data).state==="images")held.push(JSON.parse(data));else send(data);}) as any);
+ v.send({type:"media",enabled:true,settings:{transport:"relay"}});await expect.poll(()=>held.length).toBe(1);
+ const id="11111111-1111-4111-8111-111111111111";
+ serverViewer.provider.emit("message",Buffer.from(JSON.stringify({type:"media_status",id,state:"negotiating",audio:false})),false);
+ await expect.poll(()=>v.messages.some(m=>m.type==="media_status"&&m.id===id)).toBe(true);
+ send(JSON.stringify(held[0]));
+ await new Promise<void>(r=>{source.once("pong",()=>r());source.ping();});
+ expect(serverViewer.media.id).toBe(id);
+ const before=v.messages.filter(m=>m.type==="media_status"&&m.state==="images").length;
+ source.terminate();await expect.poll(()=>v.messages.some(m=>m.type==="video_closed")).toBe(true);
+ expect(serverViewer.media.id).toBe(id);expect(v.messages.filter(m=>m.type==="media_status"&&m.state==="images")).toHaveLength(before);
+ v.send({type:"stop"});
 });

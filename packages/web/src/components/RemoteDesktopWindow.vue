@@ -5,6 +5,7 @@ import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_VIDEO_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
   DesktopNativeVideoStats,
@@ -295,6 +296,7 @@ const windowStyle = computed(() =>
           : {}),
       },
 );
+let videoSocket: WebSocket | undefined, videoExpected = false, videoReady = false, nativeSupported = false;
 let ws: WebSocket | undefined,
   dead = false,
   epoch = 0,
@@ -343,6 +345,7 @@ function stop() {
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
+  videoSocket?.close(1000, "desktop stopped"); videoSocket=undefined; videoExpected=videoReady=nativeSupported=false;
   ws?.close(1000, "desktop stopped");
   ws = undefined;
   ready.value = connected.value = false;
@@ -427,7 +430,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -472,7 +475,24 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
-        if (m.type === "ready") {
+        if (m.type === "video_ticket") {
+          if (videoSocket || typeof m.ticket !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(m.ticket)) throw Error("Invalid video attachment");
+          videoExpected=true; videoReady=false; nativeVideo.value=false;
+          const video = videoSocket = new WebSocket(url, DESKTOP_VIDEO_LANE_PROTOCOL);
+          video.binaryType="arraybuffer";
+          video.onopen=()=>{if(version===epoch)video.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
+          video.onmessage=event=>{if(version===epoch&&videoSocket===video)void socket.onmessage?.call(socket,event);};
+          video.onerror=()=>video.close();
+          video.onclose=()=>{
+            if(version!==epoch||videoSocket!==video)return;
+            videoReady=false;nativeVideo.value=false;
+            // A sends an id-bound images status for an active native stream.
+          };
+        } else if (m.type === "video_ready") {
+          videoReady=true; nativeVideo.value=nativeSupported;
+        } else if (m.type === "video_closed") {
+          videoReady=false; nativeVideo.value=false;
+        } else if (m.type === "ready") {
           const r = DesktopReady.parse(m);
           secureDesktop.value = r.secureDesktop === true;
           lockScreenCover.value = r.lockScreenCover === true;
@@ -484,9 +504,10 @@ function connect(automatic = false) {
           ready.value = connected.value = true;
           synthetic.value = r.backend === "synthetic";
           allowMedia.value = r.allowMedia === true;
-          nativeVideo.value=r.nativeVideo===true;
-          if(nativeVideo.value&&!allowMedia.value)mediaTransport.value="native";
-          else if(!nativeVideo.value&&mediaTransport.value==="native")mediaTransport.value="auto";
+          nativeSupported=r.nativeVideo===true;
+          nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
+          if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
+          else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
           displayModes.value = r.display?.modes ?? [];
@@ -512,6 +533,7 @@ function connect(automatic = false) {
           setTimeout(() => { if (!dead && epoch === reconnectEpoch) connect(true); }, 750);
         } else if (m.type === "media_status") {
           const state = DesktopMediaStatus.parse(m);
+          if(state.state==="images" && receiver && receiver.id!==state.id)return;
           mediaState.value = state.state;
           mediaAudio.value = state.audio;
           if (state.state === "images") {
