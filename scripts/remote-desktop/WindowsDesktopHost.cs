@@ -33,8 +33,9 @@ public static class SodaDesktopHost {
         try { IntPtr dest=target.GetHdc();try { SetStretchBltMode(dest,4);SetBrushOrgEx(dest,0,0,IntPtr.Zero);if(!StretchBlt(dest,0,0,width,height,source,Bounds.Left,Bounds.Top,Bounds.Width,Bounds.Height,0x00CC0020))throw new InvalidOperationException("Capture failed"); } finally { target.ReleaseHdc(dest); } }
         finally { ReleaseDC(IntPtr.Zero,source); }
     }
-    static void CaptureFrame(Graphics target,int width,int height,bool cursorVisible,ref SodaDesktopDxgi dxgi) {
-        if(dxgi!=null) {try {if(!dxgi.Capture(target))CaptureScaled(target,width,height);}catch {dxgi.Dispose();dxgi=null;CaptureScaled(target,width,height);}}
+    static void RetireCapture(ref SodaDesktopDxgi dxgi,Action beforeDispose) {if(beforeDispose!=null)beforeDispose();dxgi.Dispose();dxgi=null;}
+    static void CaptureFrame(Graphics target,int width,int height,bool cursorVisible,ref SodaDesktopDxgi dxgi,Action beforeDispose=null) {
+        if(dxgi!=null) {try {if(!dxgi.Capture(target))CaptureScaled(target,width,height);}catch {RetireCapture(ref dxgi,beforeDispose);CaptureScaled(target,width,height);}}
         else CaptureScaled(target,width,height);
         Point cursor=Cursor.Position;
         if(cursorVisible && Bounds.Contains(cursor)) {int x=(int)((cursor.X-Bounds.Left)*(double)width/Bounds.Width),y=(int)((cursor.Y-Bounds.Top)*(double)height/Bounds.Height);Cursors.Default.Draw(target,new Rectangle(x,y,16,24));}
@@ -262,7 +263,7 @@ public static class SodaDesktopHost {
         },null,500,500);
         SodaDesktopDxgi dxgi=null;
         SodaDesktopH264 video=null;string videoId=null;
-        long videoSeq=0,videoNext=0;int videoFps=maxFps;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
+        long videoSeq=0,videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
@@ -297,6 +298,9 @@ public static class SodaDesktopHost {
                         if(!SodaDesktopDisplay.Matches(screen.DeviceName,Bounds)){Stopping=true;Release();return;}
                         ApplyInput(msg,ref inputSeq,()=>Interlocked.Increment(ref inputRevision));
                     },msg=>{string type=(string)msg["type"];return type=="ack"||type=="native_video_ack"||type=="heartbeat";});
+                Action beforeCaptureDispose=()=>{
+                    if(video!=null&&video.GpuInput){commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                };
                 var reader=new Thread(()=>{
                     var parser=new JavaScriptSerializer {MaxJsonLength=65536};
                     try { while(!Stopping) { string data=ReadBoundedLine();if(data==null || !commands.Submit(Obj(parser.DeserializeObject(data)))){Stopping=true;break;} } }
@@ -321,7 +325,7 @@ public static class SodaDesktopHost {
                             if((bool)msg["enabled"]) {
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
                                 commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
-                                try {videoFps=Num(msg,"fps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=new SodaDesktopH264(w,h,videoFps,Num(msg,"bitrateKbps"));commands.EnableFast(true);}
+                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                             } else if(videoId==requested) {commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
@@ -361,26 +365,45 @@ public static class SodaDesktopHost {
                     if(!Stopping && video!=null && videoWindow.CanSend && now>=videoNext) {
                         try {
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
-                            if(videoNv12==null)videoNv12=new byte[checked(w*h*3/2)];
                             Point cursor=Cursor.Position;bool cursorVisible=showCursor&&Bounds.Contains(cursor);
                             int cursorX=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cursorY=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);
-                            bool gpu=dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
-                            if(!gpu)CaptureFrame(resize,w,h,showCursor,ref dxgi);
-                            double videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
-                            var packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
+                            SodaDesktopH264.Packet packet=null;double videoCaptureMs;
+                            if(video.GpuInput) {
+                                using(var surface=dxgi.CaptureGpuFrame(cursorX,cursorY,cursorVisible,out conversionMs)) {
+                                    videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
+                                    if(surface!=null)packet=video.EncodeGpuFrame(surface,Clock.ElapsedMilliseconds*1000,conversionMs);
+                                }
+                            } else {
+                                if(videoNv12==null)videoNv12=new byte[checked(w*h*3/2)];
+                                bool gpu=dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
+                                if(!gpu)CaptureFrame(resize,w,h,showCursor,ref dxgi,beforeCaptureDispose);
+                                videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
+                                packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
+                            }
                             if(!AllowedDesktop())break;
+                            videoNext=now+1000/videoFps;
+                            if(packet!=null) {
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
                             videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=now+1000/videoFps;
                             var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
                             if(videoWindow.Capacity==3){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
-                        } catch {commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                            }
+                        } catch {
+                            bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0;
+                            commands.EnableFast(false);if(video!=null)video.Dispose();video=null;
+                            if(surfaceFailure&&dxgi!=null)dxgi.DisableGpuSurfaces();
+                            // Before any packet is published, a new memory-input
+                            // encoder can start cleanly with its own SPS/IDR.
+                            if(surfaceFailure&&unpublished)try{video=new SodaDesktopH264(w,h,videoFps,videoBitrate);commands.EnableFast(true);}catch{}
+                            if(video==null){Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                        }
                         now=Clock.ElapsedMilliseconds;
                     }
                     long revision=Interlocked.Read(ref inputRevision);
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     if(!Stopping && preparation.CanPrepare(now,pending,video!=null&&DeferNativeSnapshots,forceFull,Interlocked.Read(ref LastNativeInput))) {
-                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi);
+                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi,beforeCaptureDispose);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
                         var prepared=new PreparedFrame {started=frameStarted};
@@ -650,12 +673,21 @@ public sealed class SodaDesktopDxgi : IDisposable {
     static IntPtr Query(IntPtr obj,string iid) { var id=new Guid(iid);IntPtr value;Check(Marshal.QueryInterface(obj,ref id,out value));return value; }
     IntPtr device,context,duplication,source,sourceView,target,targetView,staging,vertex,pixel,sampler;
     IntPtr nvTarget,nvView,nvStaging,nvShader,cursorTexture,cursorView,cursorConstants;
+    IntPtr surfaceYShader,surfaceUvShader,multithread,surfaceContext;
+    string nvShaderSource;
+    bool surfaceFailed;
+    readonly object surfaceGate=new object();
+    sealed class SurfaceSlot {public IntPtr texture,yView,uvView;public bool busy;}
+    readonly List<SurfaceSlot> surfaces=new List<SurfaceSlot>();
     byte[] nvRow;
     bool nvFailed;
     Bitmap bitmap;
     byte[] row;
     bool hasFrame,disposed;
     readonly int width,height;
+    public int CpuReadbacks {get;private set;}
+    public bool HasDesktopFrame {get{return hasFrame&&!disposed;}}
+    public IntPtr GpuDevice {get{if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");return device;}}
     SodaDesktopDxgi(int width,int height) { this.width=width;this.height=height; }
     public static SodaDesktopDxgi TryCreate(string name,Rectangle bounds,int width,int height) {
         if(IntPtr.Size!=8 || width<1 || height<1 || width>4096 || height>2400 || (long)width*height>8000000)return null;
@@ -707,8 +739,8 @@ public sealed class SodaDesktopDxgi : IDisposable {
             Check(Method<CreateSampler>(device,23)(device,ref descSampler,out sampler));
             bitmap=new Bitmap(width,height,PixelFormat.Format32bppRgb);row=new byte[checked(width*4)];
     }
-    IntPtr Texture(int w,int h,uint usage,uint bind,uint cpu) {
-        var desc=new TextureDesc {width=(uint)w,height=(uint)h,mips=1,array=1,format=87,samples=1,usage=usage,bind=bind,cpu=cpu};
+    IntPtr Texture(int w,int h,uint usage,uint bind,uint cpu,uint format=87) {
+        var desc=new TextureDesc {width=(uint)w,height=(uint)h,mips=1,array=1,format=format,samples=1,usage=usage,bind=bind,cpu=cpu};
         IntPtr value;Check(Method<CreateTexture>(device,5)(device,ref desc,IntPtr.Zero,out value));return value;
     }
     IntPtr Shader(string hlsl,string profile,int slot) {
@@ -756,9 +788,10 @@ public sealed class SodaDesktopDxgi : IDisposable {
     [StructLayout(LayoutKind.Sequential)] struct BufferDesc {public uint size,usage,bind,cpu,misc,stride;}
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateBuffer(IntPtr self,ref BufferDesc desc,IntPtr initial,out IntPtr buffer);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void Upload(IntPtr self,IntPtr resource,uint subresource,IntPtr box,IntPtr data,uint pitch,uint depth);
-    void UploadBytes(IntPtr resource,byte[] bytes,int pitch) {
+    void UploadBytes(IntPtr resource,byte[] bytes,int pitch,IntPtr drawing=default(IntPtr)) {
+        if(drawing==IntPtr.Zero)drawing=context;
         var pin=GCHandle.Alloc(bytes,GCHandleType.Pinned);
-        try{Method<Upload>(context,48)(context,resource,0,IntPtr.Zero,pin.AddrOfPinnedObject(),(uint)pitch,0);}finally{pin.Free();}
+        try{Method<Upload>(drawing,48)(drawing,resource,0,IntPtr.Zero,pin.AddrOfPinnedObject(),(uint)pitch,0);}finally{pin.Free();}
     }
     void InitializeNv12() {
         int packedWidth=(width+3)/4;
@@ -789,6 +822,7 @@ float4 main(float4 p:SV_Position):SV_Target{
  return float4(value(x+2,y),value(x+1,y),value(x,y),value(x+3,y))/255.0;
 }";
         hlsl=hlsl.Replace("WIDTH",width.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0").Replace("HEIGHT",height.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0");
+        nvShaderSource=hlsl;
         nvShader=Shader(hlsl,"ps_4_0",15);
         cursorTexture=Texture(16,48,0,8,0);Check(Method<CreateView>(device,7)(device,cursorTexture,IntPtr.Zero,out cursorView));
         var bytes=new byte[16*48*4];
@@ -803,18 +837,17 @@ float4 main(float4 p:SV_Position):SV_Target{
         var desc=new BufferDesc{size=16,bind=4};Check(Method<CreateBuffer>(device,3)(device,ref desc,IntPtr.Zero,out cursorConstants));
     }
     void RenderNv12(byte[] output,int cursorX,int cursorY,bool cursorVisible) {
+        using(var guard=LockContext()){RenderNv12Core(output,cursorX,cursorY,cursorVisible);}
+    }
+    void RenderNv12Core(byte[] output,int cursorX,int cursorY,bool cursorVisible) {
         if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
         if((width&1)!=0||(height&1)!=0||output==null||output.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
         if(nvShader==IntPtr.Zero)InitializeNv12();
-        byte[] constants=new byte[16];Buffer.BlockCopy(new float[]{cursorX,cursorY,cursorVisible?1:0,0},0,constants,0,16);UploadBytes(cursorConstants,constants,16);
-        Method<SetArray>(context,16)(context,0,1,new[]{cursorConstants});
-        Method<SetShader>(context,11)(context,vertex,IntPtr.Zero,0);Method<SetShader>(context,9)(context,nvShader,IntPtr.Zero,0);
-        Method<SetArray>(context,8)(context,0,2,new[]{sourceView,cursorView});Method<SetArray>(context,10)(context,0,1,new[]{sampler});
-        Method<SetTopology>(context,24)(context,4);Method<SetTargets>(context,33)(context,1,new[]{nvView},IntPtr.Zero);
-        var viewport=new Viewport{width=(width+3)/4,height=height*3/2,max=1};Method<SetViewport>(context,44)(context,1,ref viewport);
-        Method<Draw>(context,13)(context,3,0);Method<SetTargets>(context,33)(context,0,new IntPtr[0],IntPtr.Zero);
-        Method<SetArray>(context,8)(context,0,2,new IntPtr[2]);
+        IntPtr drawing=surfaceContext==IntPtr.Zero?context:surfaceContext;
+        byte[] constants=new byte[16];Buffer.BlockCopy(new float[]{cursorX,cursorY,cursorVisible?1:0,0},0,constants,0,16);UploadBytes(cursorConstants,constants,16,drawing);
+        DrawPass(drawing,nvShader,nvView,(width+3)/4,height*3/2,true);ExecuteSurfaceCommands();
         Method<Copy>(context,47)(context,nvStaging,nvTarget);
+        CpuReadbacks++;
         Mapped mapped;Check(Method<Map>(context,14)(context,nvStaging,0,1,0,out mapped));
         try {
             if(mapped.data==IntPtr.Zero||mapped.pitch<(uint)nvRow.Length||mapped.pitch>256*1024)throw new InvalidOperationException("Invalid NV12 row pitch");
@@ -826,18 +859,14 @@ float4 main(float4 p:SV_Position):SV_Target{
         Release(ref cursorConstants);Release(ref cursorView);Release(ref cursorTexture);Release(ref nvShader);Release(ref nvStaging);Release(ref nvView);Release(ref nvTarget);nvRow=null;
     }
     void Render(Graphics destination) {
+        using(var guard=LockContext()){RenderCore(destination);}
+    }
+    void RenderCore(Graphics destination) {
         // All scaling occurs before CPU readback. A retained GPU source handles
         // idle/timeouts without reusing a bitmap containing the painted cursor.
-        Method<SetShader>(context,11)(context,vertex,IntPtr.Zero,0);
-        Method<SetShader>(context,9)(context,pixel,IntPtr.Zero,0);
-        Method<SetArray>(context,8)(context,0,1,new[]{sourceView});
-        Method<SetArray>(context,10)(context,0,1,new[]{sampler});
-        Method<SetTopology>(context,24)(context,4);
-        Method<SetTargets>(context,33)(context,1,new[]{targetView},IntPtr.Zero);
-        var viewport=new Viewport {width=width,height=height,max=1};Method<SetViewport>(context,44)(context,1,ref viewport);
-        Method<Draw>(context,13)(context,3,0);
-        Method<SetTargets>(context,33)(context,0,new IntPtr[0],IntPtr.Zero);
+        DrawPass(surfaceContext==IntPtr.Zero?context:surfaceContext,pixel,targetView,width,height,false);ExecuteSurfaceCommands();
         Method<Copy>(context,47)(context,staging,target);
+        CpuReadbacks++;
         Mapped mapped;Check(Method<Map>(context,14)(context,staging,0,1,0,out mapped));
         try {
             if(mapped.data==IntPtr.Zero || mapped.pitch<(uint)row.Length || mapped.pitch>256*1024)throw new InvalidOperationException("Invalid GPU row pitch");
@@ -851,11 +880,108 @@ float4 main(float4 p:SV_Position):SV_Target{
         } finally { Method<Unmap>(context,15)(context,staging,0); }
         destination.DrawImageUnscaled(bitmap,0,0);
     }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void ContextLock(IntPtr self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int ProtectContext(IntPtr self,int enabled);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateContext(IntPtr self,uint flags,out IntPtr deferred);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FinishCommands(IntPtr self,int restore,out IntPtr commands);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void ExecuteCommands(IntPtr self,IntPtr commands,int restore);
+    void DrawPass(IntPtr drawing,IntPtr shader,IntPtr view,int w,int h,bool cursor) {
+        Method<SetShader>(drawing,11)(drawing,vertex,IntPtr.Zero,0);Method<SetShader>(drawing,9)(drawing,shader,IntPtr.Zero,0);
+        Method<SetArray>(drawing,8)(drawing,0,2,new[]{sourceView,cursor?cursorView:IntPtr.Zero});Method<SetArray>(drawing,10)(drawing,0,1,new[]{sampler});
+        if(cursor)Method<SetArray>(drawing,16)(drawing,0,1,new[]{cursorConstants});
+        Method<SetTopology>(drawing,24)(drawing,4);Method<SetTargets>(drawing,33)(drawing,1,new[]{view},IntPtr.Zero);
+        var viewport=new Viewport{width=w,height=h,max=1};Method<SetViewport>(drawing,44)(drawing,1,ref viewport);Method<Draw>(drawing,13)(drawing,3,0);
+        Method<SetTargets>(drawing,33)(drawing,0,new IntPtr[0],IntPtr.Zero);Method<SetArray>(drawing,8)(drawing,0,2,new IntPtr[2]);
+    }
+    void ExecuteSurfaceCommands() {
+        if(surfaceContext==IntPtr.Zero)return;
+        IntPtr commands=IntPtr.Zero;
+        try{Check(Method<FinishCommands>(surfaceContext,114)(surfaceContext,0,out commands));Method<ExecuteCommands>(context,58)(context,commands,1);}finally{Release(ref commands);}
+    }
+    sealed class ContextScope:IDisposable {
+        IntPtr pointer;
+        public ContextScope(IntPtr pointer){this.pointer=pointer;Method<ContextLock>(pointer,3)(pointer);}
+        public void Dispose(){if(pointer!=IntPtr.Zero){Method<ContextLock>(pointer,4)(pointer);pointer=IntPtr.Zero;}}
+    }
+    IDisposable LockContext(){return multithread==IntPtr.Zero?null:new ContextScope(multithread);}
+    [StructLayout(LayoutKind.Sequential)]struct TargetDesc {public uint format,dimension,mip,first,array;}
+    IntPtr PlaneView(IntPtr texture,uint format) {
+        var desc=new TargetDesc{format=format,dimension=4};IntPtr memory=Marshal.AllocHGlobal(Marshal.SizeOf(typeof(TargetDesc)));
+        try{Marshal.StructureToPtr(desc,memory,false);IntPtr view;Check(Method<CreateView>(device,9)(device,texture,memory,out view));return view;}finally{Marshal.FreeHGlobal(memory);}
+    }
+    public bool TryEnableGpuSurfaces() {
+        if(disposed||surfaceFailed||device==IntPtr.Zero||context==IntPtr.Zero||width<2||height<2||(long)width*height>8000000||(width&1)!=0||(height&1)!=0)return false;
+        if(surfaces.Count==4)return true;
+        bool conversionWasReady=nvShader!=IntPtr.Zero;
+        try {
+            multithread=Query(context,"9b7e4e00-342c-4106-a19f-4f2704f689f0");Method<ProtectContext>(multithread,5)(multithread,1);
+            using(var guard=LockContext()) {
+                Check(Method<CreateContext>(device,27)(device,0,out surfaceContext));
+                if(nvShader==IntPtr.Zero)InitializeNv12();
+                string common=nvShaderSource.Substring(0,nvShaderSource.IndexOf("float4 main(",StringComparison.Ordinal));
+                surfaceYShader=Shader(common+"float main(float4 p:SV_Position):SV_Target{return value(int(p.x),int(p.y))/255.0;}","ps_4_0",15);
+                surfaceUvShader=Shader(common+"float2 main(float4 p:SV_Position):SV_Target{int x=int(p.x)*2,y=int(p.y)+"+height.ToString(System.Globalization.CultureInfo.InvariantCulture)+";return float2(value(x,y),value(x+1,y))/255.0;}","ps_4_0",15);
+                // Fixed pool: a texture is never reused until its MF tracked
+                // sample's allocator callback confirms the last consumer released it.
+                for(int i=0;i<4;i++) {
+                    var slot=new SurfaceSlot();surfaces.Add(slot);
+                    slot.texture=Texture(width,height,0,0x28,0,103);
+                    slot.yView=PlaneView(slot.texture,61);slot.uvView=PlaneView(slot.texture,49);
+                }
+            }
+            return true;
+        } catch {surfaceFailed=true;DisposeSurfaces();if(!conversionWasReady)DisposeNv12();return false;}
+    }
+    public void DisableGpuSurfaces(){surfaceFailed=true;DisposeSurfaces();}
+    public sealed class GpuFrame:IDisposable {
+        public readonly IntPtr Texture;
+        Action retire;
+        int ownership;
+        internal GpuFrame(IntPtr texture,Action retire){Texture=texture;this.retire=retire;}
+        internal void BeginEncode(){if(Interlocked.CompareExchange(ref ownership,1,0)!=0)throw new InvalidOperationException("GPU frame already submitted or released");}
+        internal void Retire(){if(Interlocked.Exchange(ref ownership,2)==2)return;Return();}
+        void Return(){var callback=Interlocked.Exchange(ref retire,null);if(callback!=null)callback();}
+        public void Dispose(){if(Interlocked.CompareExchange(ref ownership,2,0)==0)Return();}
+    }
+    public GpuFrame CaptureGpuFrame(int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {
+        conversionMs=0;if(!AcquireFrame())return null;
+        var timing=Stopwatch.StartNew();var frame=RenderGpuFrame(cursorX,cursorY,cursorVisible);conversionMs=timing.Elapsed.TotalMilliseconds;return frame;
+    }
+    GpuFrame RenderGpuFrame(int cursorX,int cursorY,bool cursorVisible) {
+        if(disposed||surfaceFailed||surfaces.Count!=4)throw new InvalidOperationException("GPU surfaces unavailable");
+        SurfaceSlot slot=null;var timer=Stopwatch.StartNew();
+        lock(surfaceGate) {
+            while(slot==null) {
+                if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
+                foreach(var candidate in surfaces)if(!candidate.busy){slot=candidate;slot.busy=true;break;}
+                if(slot==null){if(timer.ElapsedMilliseconds>=1000)throw new System.TimeoutException("GPU surface pool exhausted");Monitor.Wait(surfaceGate,20);}
+            }
+        }
+        var lease=new GpuFrame(slot.texture,()=>{lock(surfaceGate){slot.busy=false;Monitor.PulseAll(surfaceGate);}});
+        try {
+            using(var guard=LockContext()) {
+                var constants=new byte[16];Buffer.BlockCopy(new float[]{cursorX,cursorY,cursorVisible?1:0,0},0,constants,0,16);UploadBytes(cursorConstants,constants,16,surfaceContext);
+                for(int plane=0;plane<2;plane++) {
+                    DrawPass(surfaceContext,plane==0?surfaceYShader:surfaceUvShader,plane==0?slot.yView:slot.uvView,plane==0?width:width/2,plane==0?height:height/2,true);
+                }
+                ExecuteSurfaceCommands();
+            }
+            return lease;
+        } catch {lease.Dispose();throw;}
+    }
+    void DisposeSurfaces() {
+        // Called before encoder construction on partial initialization failure,
+        // or after MF shutdown. Late retire callbacks only touch managed state.
+        lock(surfaceGate){Monitor.PulseAll(surfaceGate);}
+        foreach(var slot in surfaces){Release(ref slot.uvView);Release(ref slot.yView);Release(ref slot.texture);}surfaces.Clear();
+        Release(ref surfaceUvShader);Release(ref surfaceYShader);Release(ref surfaceContext);
+    }
     public void Dispose() {
         if(disposed)return;disposed=true;
+        DisposeSurfaces();
         DisposeNv12();
         if(bitmap!=null){bitmap.Dispose();bitmap=null;}
-        Release(ref sampler);Release(ref pixel);Release(ref vertex);Release(ref staging);Release(ref targetView);Release(ref target);Release(ref sourceView);Release(ref source);Release(ref duplication);Release(ref context);Release(ref device);
+        Release(ref sampler);Release(ref pixel);Release(ref vertex);Release(ref staging);Release(ref targetView);Release(ref target);Release(ref sourceView);Release(ref source);Release(ref duplication);Release(ref multithread);Release(ref context);Release(ref device);
     }
 }
 
@@ -868,9 +994,35 @@ public sealed class SodaDesktopH264 : IDisposable {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFStartup(uint version,uint flags);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFShutdown();
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFTEnumEx(Guid category,uint flags,ref TypeInfo input,ref TypeInfo output,out IntPtr activates,out uint count);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFTEnum2(Guid category,uint flags,ref TypeInfo input,ref TypeInfo output,IntPtr attributes,out IntPtr activates,out uint count);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateAttributes(out IntPtr attributes,uint size);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateMediaType(out IntPtr type);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateSample(out IntPtr sample);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateMemoryBuffer(uint size,out IntPtr buffer);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateDXGIDeviceManager(out uint token,out IntPtr manager);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateDXGISurfaceBuffer(ref Guid iid,IntPtr texture,uint subresource,[MarshalAs(UnmanagedType.Bool)]bool bottomUp,out IntPtr buffer);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateTrackedSample(out IntPtr sample);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int ResetDevice(IntPtr self,IntPtr device,uint token);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Get32(IntPtr self,ref Guid key,out uint value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetAllocator(IntPtr self,IntPtr callback,IntPtr state);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetBlob(IntPtr self,ref Guid key,[In]byte[] bytes,uint size);
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct AdapterDesc {
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]public string description;
+        public uint vendor,device,subsystem,revision;public UIntPtr videoMemory,systemMemory,sharedMemory;public long luid;
+    }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]delegate int GetAdapterDesc(IntPtr self,out AdapterDesc desc);
+    [ComVisible(true),Guid("a27003cf-2354-4f2a-8d6a-ab7cff15437e"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface SampleCallback {
+        [PreserveSig]int GetParameters(out uint flags,out uint queue);
+        [PreserveSig]int Invoke(IntPtr result);
+    }
+    [ComVisible(true),ClassInterface(ClassInterfaceType.None)]
+    public sealed class RetireFrame:SampleCallback {
+        readonly SodaDesktopDxgi.GpuFrame frame;
+        public RetireFrame(SodaDesktopDxgi.GpuFrame frame){this.frame=frame;}
+        public int GetParameters(out uint flags,out uint queue){flags=queue=0;return unchecked((int)0x80004001);}
+        public int Invoke(IntPtr result){frame.Retire();return 0;}
+    }
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetObject(IntPtr self,out IntPtr value);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Activate(IntPtr self,ref Guid iid,out IntPtr value);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Set32(IntPtr self,ref Guid key,uint value);
@@ -902,25 +1054,46 @@ public sealed class SodaDesktopH264 : IDisposable {
     static void U64(IntPtr obj,string key,ulong value) {Guid id=new Guid(key);Check(Method<Set64>(obj,22)(obj,ref id,value));}
     static void GuidValue(IntPtr obj,string key,Guid value) {Guid id=new Guid(key);Check(Method<SetGuid>(obj,24)(obj,ref id,ref value));}
     static readonly Guid Video=new Guid("73646976-0000-0010-8000-00aa00389b71"),NV12=new Guid("3231564e-0000-0010-8000-00aa00389b71"),H264=new Guid("34363248-0000-0010-8000-00aa00389b71");
-    IntPtr transform,eventGenerator,activation;
+    IntPtr transform,eventGenerator,activation,gpuDevice,deviceManager;
     bool started,disposed;
     int inputCredits,outputCredits;
     readonly int width,height,fps,bitrate;
     byte[] bgr,nv12,sequenceHeader;
     SodaDesktopVideoDelay delay;
     public sealed class Packet { public byte[] data;public bool key;public string codec;public long timestamp; }
-    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps) {
+    public bool GpuInput {get{return gpuDevice!=IntPtr.Zero;}}
+    public static SodaDesktopH264 CreateForDesktop(int width,int height,int fps,int bitrateKbps,SodaDesktopDxgi capture) {
+        if(capture!=null&&capture.HasDesktopFrame&&capture.TryEnableGpuSurfaces()) {
+            try{return new SodaDesktopH264(width,height,fps,bitrateKbps,capture.GpuDevice);}catch{capture.DisableGpuSurfaces();}
+        }
+        return new SodaDesktopH264(width,height,fps,bitrateKbps);
+    }
+    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps):this(width,height,fps,bitrateKbps,IntPtr.Zero){}
+    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps,IntPtr gpuDevice) {
         if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>30 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
         this.width=width;this.height=height;this.fps=fps;this.bitrate=bitrateKbps*1000;
+        this.gpuDevice=gpuDevice;if(gpuDevice!=IntPtr.Zero)Marshal.AddRef(gpuDevice);
         try { delay=new SodaDesktopVideoDelay();Initialize(); } catch {Dispose();throw;}
     }
     void Initialize() {
         Check(MFStartup(0x20070,0));started=true;
+        if(gpuDevice!=IntPtr.Zero){uint token;Check(MFCreateDXGIDeviceManager(out token,out deviceManager));Check(Method<ResetDevice>(deviceManager,7)(deviceManager,gpuDevice,token));}
         IntPtr list=IntPtr.Zero;uint count=0;
         try {
             var input=new TypeInfo {major=Video,subtype=NV12};var output=new TypeInfo {major=Video,subtype=H264};
             // HARDWARE only. Never silently select the CPU Microsoft encoder.
-            Check(MFTEnumEx(new Guid("f79eac7d-e545-4387-bdee-d647d7bde42a"),0x44,ref input,ref output,out list,out count));
+            var category=new Guid("f79eac7d-e545-4387-bdee-d647d7bde42a");
+            if(gpuDevice==IntPtr.Zero)Check(MFTEnumEx(category,0x44,ref input,ref output,out list,out count));
+            else {
+                // Bind enumeration to the capture adapter. A globally preferred
+                // encoder on another GPU must not receive this adapter's surface.
+                IntPtr dxgi=IntPtr.Zero,adapter=IntPtr.Zero,attributes=IntPtr.Zero;
+                try {
+                    dxgi=Query(gpuDevice,"54ec77fa-1377-44e6-8c32-88fd5f44c84c");Check(Method<GetObject>(dxgi,7)(dxgi,out adapter));AdapterDesc desc;Check(Method<GetAdapterDesc>(adapter,8)(adapter,out desc));
+                    Check(MFCreateAttributes(out attributes,1));Guid key=new Guid("1d39518c-e220-4da8-a07f-ba172552d6b1");Check(Method<SetBlob>(attributes,26)(attributes,ref key,BitConverter.GetBytes(desc.luid),8));
+                    Check(MFTEnum2(category,0x44,ref input,ref output,attributes,out list,out count));
+                }finally{Release(ref attributes);Release(ref adapter);Release(ref dxgi);}
+            }
             if(count==0 || count>64)throw new NotSupportedException("Hardware H.264 unavailable");
             Exception last=null;
             for(int i=0;i<count;i++) {
@@ -934,9 +1107,13 @@ public sealed class SodaDesktopH264 : IDisposable {
     void ActivateEncoder(IntPtr candidate) {
         Guid iid=new Guid("bf94c121-5b05-4e6f-8000-ba598961414d");Check(Method<Activate>(candidate,33)(candidate,ref iid,out transform));
         IntPtr attributes=IntPtr.Zero;
-        try {Check(Method<GetObject>(transform,8)(transform,out attributes));U32(attributes,"e5666d6b-3422-4eb6-a421-da7db1f8e207",1);}
+        try {
+            Check(Method<GetObject>(transform,8)(transform,out attributes));U32(attributes,"e5666d6b-3422-4eb6-a421-da7db1f8e207",1);
+            if(gpuDevice!=IntPtr.Zero){Guid key=new Guid("206b4fc8-fcf9-4c51-afe3-9764369e33a0");uint aware;Check(Method<Get32>(attributes,7)(attributes,ref key,out aware));if(aware!=1)throw new NotSupportedException("Encoder has no D3D11 input");}
+        }
         finally {Release(ref attributes);}
         eventGenerator=Query(transform,"2cd0bd52-bcd5-4b89-b62c-eadc0c031e7d");
+        if(gpuDevice!=IntPtr.Zero)Check(Method<Message>(transform,23)(transform,2,new UIntPtr(unchecked((ulong)deviceManager.ToInt64()))));
         Codec("9c27891a-ed7a-40e1-88e8-b22727a024ee",1,true);
         Codec("8d390aac-dc5c-4200-b57f-814d04babab2",0);
         Codec("95f31b26-95a4-41aa-9303-246a7fc6eef1",(uint)fps);
@@ -1012,7 +1189,7 @@ public sealed class SodaDesktopH264 : IDisposable {
         }
     }
     public Packet Encode(byte[] nv12,long timestamp) {
-        if(disposed || nv12.Length!=width*height*3/2 || timestamp<0)throw new ArgumentException("Invalid video input");
+        if(disposed || gpuDevice!=IntPtr.Zero || nv12.Length!=width*height*3/2 || timestamp<0)throw new ArgumentException("Invalid video input");
         Wait(false);IntPtr sample=IntPtr.Zero,buffer=IntPtr.Zero;
         try {
             Check(MFCreateSample(out sample));Check(MFCreateMemoryBuffer((uint)nv12.Length,out buffer));
@@ -1023,11 +1200,35 @@ public sealed class SodaDesktopH264 : IDisposable {
             Check(Method<SetTime>(sample,36)(sample,checked(timestamp*10)));Check(Method<SetTime>(sample,38)(sample,10000000/fps));
             Check(Method<Input>(transform,24)(transform,0,sample,0));inputCredits--;
         } finally {Release(ref buffer);Release(ref sample);}
+        return ReceiveOutput(timestamp);
+    }
+    // Ownership transfers to the tracked sample only after SetAllocator succeeds.
+    // Neither ProcessInput success nor output delivery proves the input is free.
+    public Packet EncodeGpuFrame(SodaDesktopDxgi.GpuFrame frame,long timestamp,double conversionMs) {
+        if(frame==null)throw new ArgumentNullException("frame");
+        IntPtr tracked=IntPtr.Zero,sample=IntPtr.Zero,buffer=IntPtr.Zero,callback=IntPtr.Zero;bool allocated=false,owned=false;
+        try {
+            frame.BeginEncode();owned=true;
+            if(disposed||gpuDevice==IntPtr.Zero||timestamp<0)throw new ArgumentException("Invalid GPU video input");
+            ConversionMs=conversionMs;var timer=Stopwatch.StartNew();Wait(false);
+            Check(MFCreateTrackedSample(out tracked));sample=Query(tracked,"c40a00f2-b93a-4d80-ae8c-5a1c634f58e4");
+            Guid iid=new Guid("6f15aaf2-d208-4e89-9ab4-489535d34f9c");Check(MFCreateDXGISurfaceBuffer(ref iid,frame.Texture,0,false,out buffer));
+            Check(Method<AddBuffer>(sample,42)(sample,buffer));
+            callback=Marshal.GetComInterfaceForObject(new RetireFrame(frame),typeof(SampleCallback));
+            Check(Method<SetAllocator>(tracked,3)(tracked,callback,IntPtr.Zero));allocated=true;
+            Check(Method<SetTime>(sample,36)(sample,checked(timestamp*10)));Check(Method<SetTime>(sample,38)(sample,10000000/fps));
+            Check(Method<Input>(transform,24)(transform,0,sample,0));inputCredits--;
+            // Release our references before waiting; MF now owns its sample.
+            Release(ref callback);Release(ref buffer);Release(ref sample);Release(ref tracked);
+            var packet=ReceiveOutput(timestamp);EncodingMs=timer.Elapsed.TotalMilliseconds;return packet;
+        } finally {Release(ref callback);Release(ref buffer);Release(ref sample);Release(ref tracked);if(owned&&!allocated)frame.Retire();}
+    }
+    Packet ReceiveOutput(long timestamp) {
         Wait(true);outputCredits--;
         // Some hardware encoders request initial output renegotiation after
         // consuming their first sample. Retry that output, never resubmit input.
         for(int attempt=0;attempt<4;attempt++) {
-        var output=new OutputData();IntPtr allocated=IntPtr.Zero;bool changed=false;
+        var output=new OutputData();IntPtr allocated=IntPtr.Zero,buffer=IntPtr.Zero;bool changed=false;
         try {
             OutputInfo info;Check(Method<GetOutputInfo>(transform,7)(transform,0,out info));
             if((info.flags&0x100)==0) {
@@ -1091,6 +1292,7 @@ public sealed class SodaDesktopH264 : IDisposable {
     public void Dispose() {
         if(disposed)return;disposed=true;ShutdownTransform();
         if(activation!=IntPtr.Zero){try{Method<NoArgs>(activation,34)(activation);}catch{}Release(ref activation);}
+        Release(ref deviceManager);Release(ref gpuDevice);
         if(started){MFShutdown();started=false;}
         if(delay!=null){delay.Dispose();delay=null;}
     }

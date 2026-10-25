@@ -277,9 +277,9 @@ soda serve
 
 生成したH.264を製品canvasへ描画し、ACKへ100msの待ちを加えた比較では、従来8.54fps・3枚並行26.04fpsでした。実画面の取得・圧縮・実回線を含むsr-pcの性能値ではありません。[条件と検証記録](../.aidev/works/20261025-desktop-native-video-pipeline/test-result.md)を参照してください。
 
-GPU変換時は縮小と読み戻しも「色変換」の時間へ含めるため、旧経路とは「取得＋色変換」の合計で比較してください。
+GPU変換時は縮小も「色変換」に含みます。GPU直接入力では描画命令の発行までを計り、GPU完了待ちは圧縮・encoder待ちへ含まれるため、「取得＋色変換＋圧縮・待機」の合計で比較してください。CPU読み戻しを使う経路では読み戻しも色変換の時間へ含みます。
 
-通常画面のDXGI経路ではGPUで縮小・カーソル合成・BT.709のNV12色変換を行い、変換済みの1.5 bytes/pixelだけをCPUへ読み戻してMedia Foundationのhardware-only MFTでH.264圧縮します。全画面のBitmapコピーとCPU色変換を省きます。GPU変換が利用できない場合は、その共有中は従来のBitmap・CPU色変換へ戻します。通常の画像snapshotや認証画面は既存の取得経路です。CPU encoderへ暗黙に切り替えません。GPU画像を直接encoderへ渡すzero-copy方式は後続です。偶数の画素寸法が必要で、画面構成やドライバーによって対応寸法は異なります。［色］設定は従来の画像へ適用し、native動画はフルカラーです。カーソルは現状の標準矢印近似です。
+通常画面のDXGI経路ではGPUで縮小・カーソル合成・BT.709のNV12色変換を行います。対応するGPUではNV12画像を同じGPUのMedia Foundation hardware MFTへ直接渡し、動画のフルフレームCPU読み戻しを省きます。4枚の固定画像を、encoderの最後の参照が解放されてから再利用します。GPU内部のコピーの有無はドライバーに依存します。非対応時は変換済みの1.5 bytes/pixelをCPUへ読み戻す従来のhardware圧縮へ戻し、GPU変換も使えない場合はBitmap・CPU色変換を使います。動画公開前の直接入力失敗では新encoderで開始し直し、公開後の失敗では動画を止めて画像へ戻します。通常の画像snapshotや認証画面は既存の取得経路です。CPU encoderへ暗黙に切り替えません。偶数の画素寸法が必要で、画面構成やドライバーによって対応寸法は異なります。［色］設定は従来の画像へ適用し、native動画はフルカラーです。カーソルは現状の標準矢印近似です。
 
 新しいブラウザ・A/B/helperが揃う場合、未描画の動画を最大3枚まで順番に送ります。描画ACKが届くごとに次の1枚を送り、参照画像が必要なH.264 deltaは間引きません。旧版が混じる場合は従来の1枚ごとのACK待ちへ戻ります。最古の未ACKフレームの期限を検査し、混雑時は画像配信へ戻します。復号非対応・失敗、動画の更新停止、通常画面からの遷移でも動画を停止し、保持入力を解放します。APIが戻る範囲のエラーは画像へ復帰しますが、ドライバーAPI自体が応答しない場合は既存helper watchdogで共有自体が終了する場合があります。
 
@@ -288,6 +288,8 @@ native動画のencoder完了待ちと次フレームの待ちは、Windows 10 18
 `powershell.exe -NoProfile -STA -File scripts/remote-desktop/benchmark-h264-generated.ps1 -ValidateTimer`では、1ms待機の実時間と、生成した1920×1200の画像90枚のhardware H.264圧縮・フレーム間隔を測れます。実画面、ネットワーク、ACK、ブラウザを含まず、デスクトップのFPS測定の代わりにはなりません。`deadlinePacing`は新しい待機方針の有無、`highResolution`は別途確認したタイマーの利用可否です。対応環境の1ms平均待機が10ms以上の場合に検証を失敗させるため、`-ValidateTimer`は負荷の少ない状態で使ってください。
 
 Windowsで`powershell.exe -NoProfile -File scripts/remote-desktop/validate-h264.ps1`を実行すると、実画面を取得せず、生成画像だけでNV12変換とhardware H.264出力を確認できます。[生成fixtureと実ブラウザ検証](../.aidev/works/20261025-desktop-native-h264/test-result.md)に条件を記録します。
+
+`powershell.exe -NoProfile -STA -File scripts/remote-desktop/validate-gpu-surfaces.ps1 -Benchmark`は、生成したGPU画像で直接入力・画像の保持と解放・NV12の色とカーソル・停止後の再利用を確認します。実画面やOS入力は扱いません。`-FixtureFile <path>`で生成したH.264を保存し、製品canvasのブラウザ試験へ使えます。[検証条件と限界](../.aidev/works/20261026-desktop-gpu-surfaces/test-result.md)を参照してください。補助プログラムの更新なので、接続先でpullして共有を開き直すと反映され、build/handoffは不要です。
 
 `powershell.exe -NoProfile -STA -File scripts/remote-desktop/validate-nv12.ps1 -Gpu -Benchmark`は、生成テクスチャでCPU/GPUの色変換・縮小・カーソル・読み戻しを比較します。実画面や通信・エンコーダ・ブラウザは含みません。`-CaptureDesktop`を明示すると通常画面に短時間だけ専用の色窓を出し、本番の取得入口と初回未確定frame・色・失敗時のfallbackを確認します。ロック中は解除せず停止し、OS入力や画面画像の保存は行いません。補助プログラムだけの更新なので、接続先でpull後に共有を開き直すと有効です。handoffと専用サービスの再インストールは不要です。
 

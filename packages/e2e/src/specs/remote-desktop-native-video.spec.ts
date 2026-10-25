@@ -15,6 +15,7 @@ test.use({
 for (const { fixtureName, failDecoder, stallImages } of [
   { fixtureName: "h264-generated.json", failDecoder: false, stallImages:false },
   { fixtureName: "h264-sr-pc-generated.json", failDecoder: false, stallImages:false },
+  { fixtureName: "h264-gpu-surface-generated.json", failDecoder: false, stallImages:false },
   { fixtureName: "h264-generated.json", failDecoder: true, stallImages:false },
   { fixtureName: "h264-generated.json", failDecoder: false, stallImages:true },
 ])
