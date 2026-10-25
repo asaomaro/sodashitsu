@@ -7,7 +7,7 @@
 - 関連: protocol/stream/renderer/Relay 62件成功。dirty rootへの3-way適用後は同対象67件成功（既存local provider試験を含む）。root build/typecheck/smoke成功。既存変更は保持、backup /tmp/desktop-cursor-root-merge。
 - Windows生成HICON/DIB: 32bit alpha、32/24bit masked color、monochrome AND/XOR、hotspotを2背景でDrawIconExと比較して成功。worker出力gate待ちでStop(20)が期限内false、解放後Stop(1000) true、desktop照会なしを確認。A/Bとも同じ生成試験成功。Bはbranch archiveを一時ディレクトリに展開しrepo HEAD b48da500/dirty状態を変更せず検証。
 - 既存Windows unlock/helperとGPU surface生成試験成功。cursor poll/capture/init/disposeのlock追加後もfullframe CPU readbackなし。
-- ブラウザ: 実製品の2枚のcanvasを観測。shape/alpha/XOR/端clip/予測と実位置への復帰/非表示/reconnectでの解除、元画像canvas不変を確認。最終input/IME併走結果は追記する。
+- ブラウザ: 実製品の2枚のcanvasを観測。shape/alpha/XOR/端clip/予測と実位置への復帰/非表示/reconnectでの解除、元画像canvas不変を確認。最終input/IME 5件成功、cursor 1件成功。negative後の復元buildが完了する前に始めた最初のcursor試験は予測無効版を読み、negativeと同じ箇所で失敗した。復元build完了を確認して再実行し1件成功。製品sourceの再修正はなし。
 - 独立レビューと修正差分の再レビュー成功。join失敗でcapture破棄へ進まない、watchdogを最後まで維持、agent切替時予測解除、DXGIエラー時古いshapeを保持しない修正を含む。
 
 ## 実行時negative
