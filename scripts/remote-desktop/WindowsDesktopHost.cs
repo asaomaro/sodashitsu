@@ -43,13 +43,21 @@ public static class SodaDesktopHost {
     static readonly HashSet<ushort> Keys=new HashSet<ushort>();
     static readonly HashSet<int> Buttons=new HashSet<int>();
     static readonly JavaScriptSerializer Json=new JavaScriptSerializer { MaxJsonLength=3*1024*1024 };
+    static readonly JavaScriptSerializer OutputJson=new JavaScriptSerializer { MaxJsonLength=3*1024*1024 };
+    static readonly object OutputGate=new object();
     static readonly Stopwatch Clock=Stopwatch.StartNew();
     static volatile bool Stopping=false;
     static bool Control=false;
     static long LastHeartbeat=0;
     static Rectangle Bounds;
 
-    static void Output(object value) { Console.Out.WriteLine(Json.Serialize(value)); Console.Out.Flush(); }
+    static void Output(object value) { lock(OutputGate){Console.Out.WriteLine(OutputJson.Serialize(value)); Console.Out.Flush();} }
+    static bool ApplyInput(Dictionary<string,object> msg,ref long inputSeq,Action applied=null) {
+        long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        if(!Control || id<=inputSeq || expires<utc || expires>utc+1500)return false;
+        inputSeq=id;if(!Apply(Obj(msg["input"])))return false;
+        if(applied!=null)applied();Output(new {type="input_ack",seq=id});return true;
+    }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
     static int Num(Dictionary<string,object> value,string key) { return Convert.ToInt32(value[key]); }
     static bool Secure;
@@ -276,14 +284,21 @@ public static class SodaDesktopHost {
                 resize.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
                 // Console.In.ReadLineAsync is synchronous on .NET Framework's SyncTextReader.
                 // Keep all stdin waits off the capture/UI loop and bound the queued commands.
-                var lines=new BlockingCollection<string>(64);
+                long sequence=0,pending=0,inputSeq=0,lastFull=-30000,lastReport=-1000,inputRevision=0,preparedRevision=0;
+                var commands=new SodaDesktopCommandQueue<Dictionary<string,object>>(64,
+                    msg=>(string)msg["type"]=="input",
+                    msg=>{
+                        if(Stopping)return;
+                        if(!SodaDesktopDisplay.Matches(screen.DeviceName,Bounds)){Stopping=true;Release();return;}
+                        ApplyInput(msg,ref inputSeq,()=>Interlocked.Increment(ref inputRevision));
+                    },msg=>{string type=(string)msg["type"];return type=="ack"||type=="native_video_ack"||type=="heartbeat";});
                 var reader=new Thread(()=>{
-                    try { while(!Stopping) { string data=ReadBoundedLine();if(data==null || !lines.TryAdd(data)){Stopping=true;break;} } }
+                    var parser=new JavaScriptSerializer {MaxJsonLength=65536};
+                    try { while(!Stopping) { string data=ReadBoundedLine();if(data==null || !commands.Submit(Obj(parser.DeserializeObject(data)))){Stopping=true;break;} } }
                     catch { Stopping=true; }
                     finally { Release(); }
                 });
                 reader.IsBackground=true;reader.Start();
-                long sequence=0,pending=0,inputSeq=0,lastFull=-30000,lastReport=-1000;
                 var preparation=new SodaDesktopFramePreparation<PreparedFrame>(!Secure);
                 bool forceFull=true,initialized=false;string contentId=null;
                 byte[] current=deltas || colorMode!="full"?new byte[w*h*3]:null,previous=deltas?new byte[w*h*3]:null;
@@ -291,19 +306,19 @@ public static class SodaDesktopHost {
                 while(!Stopping) {
                     if(!Secure)Application.DoEvents();
                     if(!AllowedDesktop() || !SodaDesktopDisplay.Matches(screen.DeviceName,Bounds))break;
-                    int handled=0;string data;
-                    while(!Stopping && handled++<64 && lines.TryTake(out data)) {
-                        var msg=Obj(Json.DeserializeObject(data));string type=(string)msg["type"];
+                    int handled=0;
+                    while(!Stopping && handled++<64 && commands.ProcessOne(msg=> {
+                        string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
                         else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
                         else if(type=="native_video") {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Video id");
                             if((bool)msg["enabled"]) {
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
-                                if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
-                                try {videoFps=Num(msg,"fps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=new SodaDesktopH264(w,h,videoFps,Num(msg,"bitrateKbps"));}
+                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
+                                try {videoFps=Num(msg,"fps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=new SodaDesktopH264(w,h,videoFps,Num(msg,"bitrateKbps"));commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
-                            } else if(videoId==requested) {if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                            } else if(videoId==requested) {commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
                         else if(type=="native_video_ack") {
                             if(video!=null && (string)msg["id"]==videoId) {videoWindow.Ack(Convert.ToInt64(msg["seq"]));}
@@ -329,15 +344,14 @@ public static class SodaDesktopHost {
                         else if(type=="control") { preparation.Invalidate(false);Release();lock(Gate){Control=allow && (bool)msg["enabled"];} }
                         else if(type=="ack") { if(Convert.ToInt64(msg["seq"])!=pending)throw new InvalidOperationException();pending=0; }
                         else if(type=="input") {
-                            long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]);
-                            if(Control && id>inputSeq && expires>=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() && expires<=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+1500) { inputSeq=id;if(Apply(Obj(msg["input"]))){preparation.Invalidate(false);Output(new { type="input_ack",seq=id });} }
-                        } else if(type=="stop") { Stopping=true;break; }
+                            if(ApplyInput(msg,ref inputSeq))preparation.Invalidate(false);
+                        } else if(type=="stop") { Stopping=true;return; }
                         else throw new InvalidOperationException();
-                    }
+                    })) {}
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
                     long now=Clock.ElapsedMilliseconds;
                     if(video!=null && videoWindow.Count>0 && now-videoWindow.OldestAt>2500) {
-                        video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
+                        commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
                     }
                     if(!Stopping && video!=null && videoWindow.CanSend && now>=videoNext) {
                         try {
@@ -349,9 +363,11 @@ public static class SodaDesktopHost {
                             var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
                             if(videoWindow.Capacity==3){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
-                        } catch {video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                        } catch {commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         now=Clock.ElapsedMilliseconds;
                     }
+                    long revision=Interlocked.Read(ref inputRevision);
+                    if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     if(!Stopping && preparation.CanPrepare(now,pending)) {
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi);
                         var rects=new List<Rectangle>();
@@ -386,15 +402,19 @@ public static class SodaDesktopHost {
                         }
                         preparation.Set(prepared,frameStarted,Clock.ElapsedMilliseconds,fps);
                     }
+                    commands.Synchronize(()=> {
+                    revision=Interlocked.Read(ref inputRevision);
+                    if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     var outgoing=preparation.Take(pending,Clock.ElapsedMilliseconds,fps);
                     if(!Stopping&&outgoing!=null&&outgoing.info!=null) {
-                        if(!AllowedDesktop())break;
+                        if(!AllowedDesktop()){Stopping=true;return;}
                         sequence++;pending=sequence;
                         Output(new {type="frame",info=outgoing.info,data=Convert.ToBase64String(outgoing.image)});
                         lastReport=outgoing.started;contentId=outgoing.contentId;
                         if(outgoing.full){lastFull=outgoing.started;forceFull=false;}
                         if(deltas){var swap=previous;previous=current;current=swap;initialized=true;}
                     }
+                    });
                     if(video==null)Thread.Sleep(2);
                     else {int pause=SodaDesktopVideoDelay.FrameDelay(Clock.ElapsedMilliseconds,videoNext,videoWindow.CanSend);if(pause>0)video.Pause(pause);}
                 }
@@ -1017,4 +1037,38 @@ public sealed class SodaDesktopVideoDelay : IDisposable {
         Thread.Sleep(milliseconds);
     }
     public void Dispose(){if(disposed)return;disposed=true;if(timer!=null){timer.Dispose();timer=null;}}
+}
+
+// Every command shares the same gate. During native video work only input has
+// an immediate path. Only bookkeeping ACK/heartbeat may be bypassed; queued
+// input/control/release/stop retains its FIFO position.
+public sealed class SodaDesktopCommandQueue<T> {
+    readonly Queue<T> pending=new Queue<T>();
+    readonly object gate=new object();
+    readonly int capacity;
+    readonly Func<T,bool> eligible;
+    readonly Action<T> apply;
+    bool fast;
+    int barriers;
+    readonly Func<T,bool> bypassable;
+    public SodaDesktopCommandQueue(int capacity,Func<T,bool> eligible,Action<T> apply,Func<T,bool> bypassable=null) {
+        if(capacity<1)throw new ArgumentOutOfRangeException("capacity");
+        this.capacity=capacity;this.eligible=eligible;this.apply=apply;this.bypassable=bypassable??(command=>false);
+    }
+    public void EnableFast(bool enabled){lock(gate){fast=enabled;}}
+    public void Synchronize(Action commit){lock(gate){try{commit();}catch{fast=false;throw;}}}
+    public bool Submit(T command) {
+        lock(gate) {
+            if(fast&&barriers==0&&eligible(command)){try{apply(command);}catch{fast=false;throw;}return true;}
+            if(pending.Count>=capacity)return false;
+            pending.Enqueue(command);if(!bypassable(command))barriers++;return true;
+        }
+    }
+    public bool ProcessOne(Action<T> dispatch) {
+        lock(gate) {
+            if(pending.Count==0)return false;
+            var command=pending.Dequeue();if(!bypassable(command))barriers--;
+            try{dispatch(command);}catch{fast=false;throw;}return true;
+        }
+    }
 }

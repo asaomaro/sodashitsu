@@ -1,0 +1,11 @@
+# Native動画中の入力待ちを減らす
+
+利用者は18.7fpsでもキー・クリック・マウスの全てに遅延を感じ、入力ACK118ms、映像ACK121msを提示。改善を承認。
+
+read-onlyの同desktop WebSocket pingは中央値11.43ms。一方で接続元サーバは1コア程度を使用し、他PJの動画制作も高負荷。公開HTTPの中央値294msはWebSocketと同じ計測ではなく、通信だけを原因と断定しない。共有元のguardと画面mode検査は各平均0.028/0.007msで主要な待ちではない。
+
+通常native GPU動画が有効な間だけ、stdin readerがinputを適用する。queueの同じgateで全commandのenqueue/dequeue/dispatchを直列化する。queued/in-progressのinput/control/release/stop/設定変更はbarrier。ack/native_video_ack/heartbeatだけはinputが追い越せる。capacity64維持、例外でfast停止。video開始成功でfast有効、停止/故障/timeoutで無効。画像・secureではmain dispatchを維持。
+
+入力のseq・期限・Control・desktop・heartbeat・保持キー処理は共通ApplyInput/Applyを使う。fast適用前は画面modeも再検査。入力適用後、ACKより前にrevisionを増やし、mainは準備前と画像確定時にpreparedを無効化。最終revision確認→Take→Output→baseline swapは同queue gateでatomicにする。全stdout行は別serializerとOutputGateで直列化。lock順はcommands→Apply Gate/OutputGate。
+
+protocol変更なし。別の動画制作プロセスは操作しない。OS入力を使わずpure callback/blocked worker/競合テストで検証し、実ユーザーの遅延は更新後に確認する。
