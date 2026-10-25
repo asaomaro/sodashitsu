@@ -9,3 +9,5 @@ read-onlyの同desktop WebSocket pingは中央値11.43ms。一方で接続元サ
 入力のseq・期限・Control・desktop・heartbeat・保持キー処理は共通ApplyInput/Applyを使う。fast適用前は画面modeも再検査。入力適用後、ACKより前にrevisionを増やし、mainは準備前と画像確定時にpreparedを無効化。最終revision確認→Take→Output→baseline swapは同queue gateでatomicにする。全stdout行は別serializerとOutputGateで直列化。lock順はcommands→Apply Gate/OutputGate。
 
 protocol変更なし。別の動画制作プロセスは操作しない。OS入力を使わずpure callback/blocked worker/競合テストで検証し、実ユーザーの遅延は更新後に確認する。
+
+反映はC#補助プログラムの新規起動で有効。TS/JS/protocol変更がないため、handoffは行わず作業用proxyを切断しない。現在のdesktop共有は利用者が開き直す。
