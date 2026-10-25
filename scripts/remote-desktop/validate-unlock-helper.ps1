@@ -25,6 +25,7 @@ Add-Type -Path @((Join-Path $root 'WindowsDesktopUnlock.cs'),(Join-Path $root 'W
 $expected = [string][char]0x65e5 + [char]0x672c + [char]0x8a9e + [char]::ConvertFromUtf32(0x1f600)
 if ([Console]::In.ReadLine() -cne $expected) { throw 'UTF-8 mismatch' }
 [Console]::Out.WriteLine('desktop_unlock_no_console_utf8_passed')
+[Console]::Error.WriteLine('SODA_DESKTOP_INPUT_ACK 42')
 '@
 $command = $command.Replace('__ROOT__',$PSScriptRoot.Replace("'","''"))
 $start = New-Object Diagnostics.ProcessStartInfo
@@ -43,4 +44,7 @@ try {
     if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'No-console helper check timed out' }
     if ($process.ExitCode -ne 0) { throw 'No-console helper check failed' }
     Write-Output $process.StandardOutput.ReadToEnd().Trim()
+    $ackStderr = $process.StandardError.ReadToEnd().Trim()
+    if (($ackStderr -split '\r?\n') -cnotcontains 'SODA_DESKTOP_INPUT_ACK 42') { throw 'No-console input ACK pipe framing failed' }
+    Write-Output 'desktop_input_ack_no_console_passed'
 } finally { if (-not $process.HasExited) { $process.Kill() }; $process.Dispose() }

@@ -1,0 +1,51 @@
+
+Running 1 test using 1 worker
+
+(node:555243) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-25T22:20:58.924Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-25T22:20:58.925Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-25T22:20:58.925Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-25T22:20:58.929Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-2g9VPp/commands.json","count":0}
+{"ts":"2026-10-25T22:20:59.367Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-25T22:20:59.368Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-25T22:20:59.368Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-25T22:20:59.369Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-aFvgx4/commands.json","count":0}
+{"ts":"2026-10-25T22:21:06.505Z","level":"info","msg":"machine link closed","machine":"f42a516e7d90dd109f4d0467b9d5705f","kind":"transient","reason":"接続が切れました"}
+  ✘  1 src/specs/remote-desktop-input.spec.ts:6:37 › focused desktop forwards keyboard and all five mouse buttons (dedicated ACK pipe) (8.1s)
+
+
+  1) src/specs/remote-desktop-input.spec.ts:6:37 › focused desktop forwards keyboard and all five mouse buttons (dedicated ACK pipe)
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      52 |       { kind: "key", code: "KeyZ", down: false },
+      53 |     ]);
+    > 54 |     if(dedicated)await expect.poll(()=>burst.every(m=>received.some(ack=>ack.type==="input_ack"&&ack.seq===m.seq))).toBe(true);
+         |                                                                                                                     ^
+      55 |     // The synthetic helper holds an incomplete stdout ACK until this blur's
+      56 |     // release; the independent pipe above must ACK all burst inputs first.
+      57 |     // Losing canvas focus before the animation callback cancels the queued move.
+        at /workspaces/sodashitsu-desktop-input/packages/e2e/src/specs/remote-desktop-input.spec.ts:54:117
+
+    Error Context: test-results/remote-desktop-input-focus-dd8b0-buttons-dedicated-ACK-pipe-/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/remote-desktop-input-focus-dd8b0-buttons-dedicated-ACK-pipe-/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/remote-desktop-input-focus-dd8b0-buttons-dedicated-ACK-pipe-/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/remote-desktop-input.spec.ts:6:37 › focused desktop forwards keyboard and all five mouse buttons (dedicated ACK pipe)
+undefined
+/workspaces/sodashitsu-desktop-input/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-input.spec.ts --grep dedicated ACK

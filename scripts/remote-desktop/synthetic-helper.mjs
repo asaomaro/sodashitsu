@@ -89,6 +89,10 @@ export function syntheticFrame(width, height, seq, color, mode = "full") {
 function heightOf(options) { return options.display?.height ?? Math.round(options.width * 9 / 16); }
 function run() {
   let options,
+    inputAckPipe = false,
+    outputBlocked = false,
+    blockedSeq = 0,
+    queuedOutput = [],
     pending = 0,
     seq = 0,
     next = 0,
@@ -109,13 +113,14 @@ function run() {
   const lockCover = secure && process.argv.includes("--lock-cover") && (!coverMarker || !existsSync(coverMarker));
   const recordAt = process.argv.indexOf("--record"),
     record = recordAt >= 0 ? process.argv[recordAt + 1] : undefined;
-  const send = (value) => process.stdout.write(JSON.stringify(value) + "\n");
+  const send = (value) => { if(outputBlocked){if(queuedOutput.length<8)queuedOutput.push(value);}else process.stdout.write(JSON.stringify(value) + "\n"); };
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   lines.on("close", () => process.exit(0));
   lines.on("line", (line) => {
     try {
       const m = JSON.parse(line);
       if (m.type === "configure" && !options) {
+        inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
         const failureAt = process.argv.indexOf("--startup-failure");
         if (failureAt >= 0) {
           const code = process.argv[failureAt + 1], markerAt = process.argv.indexOf("--startup-marker");
@@ -136,6 +141,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
           ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
@@ -175,6 +181,10 @@ function run() {
         if(m.operation==="write"){ok=ok&&allowInput;if(ok)clipboard=m.text;send({type:"clipboard_result",id:m.id,ok});}
         else send({type:"clipboard_result",id:m.id,ok,...(ok?{text:clipboard}:{})});
       }
+      else if (m.type === "release" && outputBlocked) {
+        process.stdout.write(blockedSeq+'}\n');outputBlocked=false;
+        for(const value of queuedOutput)send(value);queuedOutput=[];
+      }
       else if (m.type === "control") {
         control = m.enabled && allowInput;
       } else if (m.type === "dismiss_lock_screen" && lockCover && control) {
@@ -188,7 +198,10 @@ function run() {
       } else if (m.type === "input" && control && m.expiresAt >= Date.now()) {
         if (process.argv.includes("--delta-test") && m.input.kind === "text") version++;
         if (record) appendFileSync(record, JSON.stringify(m.input) + "\n");
-        if (!process.argv.includes("--stall-input")) send({ type: "input_ack", seq: m.seq });
+        if(process.argv.includes("--block-stdout-on-input")&&!blockedSeq) { blockedSeq=m.seq;outputBlocked=true;process.stdout.write('{"type":"input_ack","seq":'); }
+        if (!process.argv.includes("--stall-input")) {
+          if(inputAckPipe)process.stderr.write("SODA_DESKTOP_INPUT_ACK "+m.seq+"\n");else send({ type: "input_ack", seq: m.seq });
+        }
       } else if (m.type === "stop") process.exit(0);
     } catch {
       process.exit(1);

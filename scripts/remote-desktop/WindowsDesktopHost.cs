@@ -49,18 +49,23 @@ public static class SodaDesktopHost {
     static readonly Stopwatch Clock=Stopwatch.StartNew();
     static volatile bool Stopping=false;
     static bool Control=false;
+    static bool InputAckPipe=false;
     static bool DeferNativeSnapshots=false;
     static long LastNativeInput=-1000;
     static long LastHeartbeat=0;
     static Rectangle Bounds;
 
     static void Output(object value) { lock(OutputGate){Console.Out.WriteLine(OutputJson.Serialize(value)); Console.Out.Flush();} }
+    static void InputAck(long seq) {
+        if(InputAckPipe){Console.Error.WriteLine("\nSODA_DESKTOP_INPUT_ACK "+seq.ToString(System.Globalization.CultureInfo.InvariantCulture));Console.Error.Flush();}
+        else Output(new {type="input_ack",seq});
+    }
     static bool ApplyInput(Dictionary<string,object> msg,ref long inputSeq,Action applied=null) {
         long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         if(!Control || id<=inputSeq || expires<utc || expires>utc+1500)return false;
         inputSeq=id;if(!Apply(Obj(msg["input"])))return false;
         if(DeferNativeSnapshots&&msg.ContainsKey("deferNativeSnapshot")&&msg["deferNativeSnapshot"] is bool&&(bool)msg["deferNativeSnapshot"])Interlocked.Exchange(ref LastNativeInput,Clock.ElapsedMilliseconds);
-        if(applied!=null)applied();Output(new {type="input_ack",seq=id});return true;
+        if(applied!=null)applied();InputAck(id);return true;
     }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
     static int Num(Dictionary<string,object> value,string key) { return Convert.ToInt32(value[key]); }
@@ -264,6 +269,7 @@ public static class SodaDesktopHost {
         SodaDesktopDxgi dxgi=null;
         SodaDesktopH264 video=null;string videoId=null;
         long videoSeq=0,videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
+        InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
@@ -276,6 +282,7 @@ public static class SodaDesktopHost {
             var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
+            if(InputAckPipe)ready["inputAckPipe"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
             if(nativePipeline)ready["nativeVideoWindow"]=3;

@@ -27,6 +27,20 @@ namespace SodaDesktopTests {
             var held=new HashSet<ushort>();var emitted=new List<string>();Action<ushort,bool> emit=(key,down)=>emitted.Add(key+":"+down);
             Call("ApplyKey",held,(ushort)27,true,emit);Call("ApplyKey",held,(ushort)27,true,emit);Call("ApplyKey",held,(ushort)27,false,emit);Call("ApplyKey",held,(ushort)27,false,emit);
             Check(String.Join(",",emitted.ToArray())=="27:True,27:True,27:False"&&held.Count==0,"Repeat/release handling lost a key or left it held");
+            // Hold the real video output lock; ACK must complete on its own pipe.
+            var field=typeof(SodaDesktopHost).GetField("InputAckPipe",BindingFlags.NonPublic|BindingFlags.Static);
+            var gate=typeof(SodaDesktopHost).GetField("OutputGate",BindingFlags.NonPublic|BindingFlags.Static).GetValue(null);
+            var previousOut=Console.Out;var previousError=Console.Error;var output=new System.IO.StringWriter();var error=new System.IO.StringWriter();
+            var worker=new System.Threading.Thread(()=>Call("InputAck",(long)42));
+            try {
+                Console.SetOut(output);Console.SetError(error);field.SetValue(null,true);
+                System.Threading.Monitor.Enter(gate);
+                try { worker.Start();Check(worker.Join(1000),"Input ACK waited behind video OutputGate"); }
+                finally {System.Threading.Monitor.Exit(gate);worker.Join(2000);}
+                Check(output.ToString()==""&&error.ToString().Trim()=="SODA_DESKTOP_INPUT_ACK 42","Dedicated ACK pipe framing mismatch");
+                field.SetValue(null,false);Call("InputAck",(long)43);
+                Check(output.ToString().Contains("input_ack")&&output.ToString().Contains("43"),"Legacy helper ACK disappeared");
+            }finally{field.SetValue(null,false);Console.SetOut(previousOut);Console.SetError(previousError);}
             Console.WriteLine("desktop_input_checks_passed");
         }
     }
