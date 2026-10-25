@@ -32,7 +32,7 @@ for (const { fixtureName, failDecoder, stallImages } of [
       ),
       "--static",
       "--allow-input",
-      ...(stallImages ? ["--stall-images-during-native"] : []),
+      ...(stallImages ? ["--stall-images-during-native", "--native-input-deferral"] : []),
       "--native-fixture",
       fileURLToPath(
         new URL(`../../../../scripts/remote-desktop/fixtures/${fixtureName}`, import.meta.url),

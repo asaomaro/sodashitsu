@@ -2,4 +2,6 @@
 
 review_pointerが実装と別コンテキストで製品コード・試験全体をレビュー。A browserのstrict schema、capability交渉と旧peer、A/B agent画像2秒、native送出時刻ベースの鮮度、marker除去、既存seq/control/期限/heartbeatを確認し、製品コードに必須指摘なし。
 
-B側private-handler試験のmock復元がACKより先になる競合を指摘。最後のinput_ack seq4をmockが受信するまで待ってからfinallyで復元するよう修正し、対象unit成功。修正差分の再レビューで指摘なし。
+B側private-handler試験のmock復元がACKより先になる競合を指摘。最後のinput_ack seq6をmockが受信するまで待ってからfinallyで復元するよう修正し、対象unit成功。修正差分の再レビューで指摘なし。
+
+追加の補助画像延期も独立レビュー通過。B/helper私有交渉と成功した手動入力限定、150ms静止後再開、forceFull優先、画像/secure維持を確認。helper stdinへの透過spyで、未同意とunmarkedには追加keyがなく、同意したmarked入力だけに付くことを確認する試験を追加し、再レビュー通過。

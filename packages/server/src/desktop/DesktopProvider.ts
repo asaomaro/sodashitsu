@@ -47,6 +47,7 @@ export interface DesktopProviderConfig {
 }
 type Share = {
   native?: DesktopNativeVideo;
+  deferNativeSnapshots?: boolean;
   chain: DesktopFrameChain;
   owner: string;
   allowClipboard: boolean;
@@ -321,7 +322,7 @@ export class DesktopProvider {
               (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000)
             ) {
               s.inputSeq = m.seq;
-              this.write(s, { ...m, expiresAt: Date.now() + 500 });
+              this.write(s, { ...m, expiresAt: Date.now() + 500, ...(nativeDraw && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
             }
           } else {
             this.stop(s);
@@ -368,8 +369,10 @@ export class DesktopProvider {
         try {
           const raw = JSON.parse(line);
           if (raw.type === "ready" && !s.ready) {
-            const ready = DesktopReady.parse(raw);
+            const {deferNativeSnapshots, ...wireReady}=raw;
+            const ready = DesktopReady.parse(wireReady);
             s.secureDesktop = ready.secureDesktop === true;
+            s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.lockScreenCover = ready.lockScreenCover === true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
             s.extendedInput = options.extendedInput === true && ready.extendedInput === true && !s.lockScreenCover;
@@ -509,6 +512,7 @@ export class DesktopProvider {
       options,
       captureBackends: ["dxgi"],
       allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
+      deferNativeSnapshots: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       ...(options.nativeVideoWindow===3&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
       allowClipboard: cfg.allowClipboard === true,

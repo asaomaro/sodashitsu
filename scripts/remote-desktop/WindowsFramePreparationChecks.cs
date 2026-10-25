@@ -35,6 +35,12 @@ namespace SodaDesktopTests {
             Check(!q.CanPrepare(561),"Input bypassed FPS limit");q.Invalidate(true);Check(q.CanPrepare(561),"Keyframe not immediate");
             q.Set("full",561,570,30);Check(q.Take(0,571,30)=="full","Full retry not delivered");
             q.Set("low-rate-old",600,700,1);Check(q.Take(0,901,1)==null,"Low FPS weakened freshness limit");
+            var active=new SodaDesktopFramePreparation<string>();
+            Check(!active.CanPrepare(1000,0,true,false,1000),"Native drag allowed background image work");
+            Check(!active.CanPrepare(1149,0,true,false,1000),"Native activity quiet period was too short");
+            Check(active.CanPrepare(1150,0,true,false,1000),"Image snapshot did not resume after input quieted");
+            Check(active.CanPrepare(1000,0,true,true,1000),"Explicit agent/keyframe snapshot was deferred");
+            Check(active.CanPrepare(1000,0,false,false,1000),"Legacy/image/secure path inherited native deferral");
             int serial=Frames(false),overlap=Frames(true);Check(overlap>serial*1.3,"Preparation did not overlap ACK wait");
             Console.WriteLine("desktop_frame_preparation_checks_passed");
             Console.WriteLine("frame_preparation_model: duration=5000ms capture_encode=65ms ack=100ms fps_limit=30 serial_frames="+serial+" overlapped_frames="+overlap+"; deterministic model, not a desktop benchmark");

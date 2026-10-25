@@ -13,6 +13,7 @@ import { DesktopRelay } from "./DesktopRelay.js";
 import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
+import type { Writable } from "node:stream";
 import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -155,11 +156,13 @@ it("keeps image freshness for unmarked and agent input even when native video is
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
   viewer.send({type:"control",enabled:true});
   await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
-  const share=(f.provider as unknown as {active:{frameAt:number;seq:number;ws:WebSocket;native?:DesktopNativeVideo}}).active;
+  const share=(f.provider as unknown as {active:{frameAt:number;seq:number;ws:WebSocket;native?:DesktopNativeVideo;deferNativeSnapshots?:boolean;process:{stdin:Writable}}}).active;
   // This test injects the private B-side input handler directly. Keep its ACKs
   // local: A did not allocate these sequences. Browser coverage below uses the
   // real end-to-end ACK path.
   const localAcks=vi.spyOn(share.ws,"send").mockImplementation(()=>{});
+  const helperWrites=vi.spyOn(share.process.stdin,"write");
+  const helperInput=(seq:number)=>helperWrites.mock.calls.map(([data])=>typeof data==="string"?JSON.parse(data):undefined).find(m=>m?.type==="input"&&m.seq===seq);
   const recorded=()=>readFile(f.record,"utf8").catch((error:NodeJS.ErrnoException)=>{if(error.code==="ENOENT")return "";throw error;});
   try {
   let id="";
@@ -172,12 +175,20 @@ it("keeps image freshness for unmarked and agent input even when native video is
   inject(1,"DENIED_IMAGE");inject(2,"ACCEPT_NATIVE",true);
   await expect.poll(async()=>(await recorded()).includes("ACCEPT_NATIVE")).toBe(true);
   expect(await readFile(f.record,"utf8")).not.toContain("DENIED_IMAGE");
+  expect(helperInput(2)).not.toHaveProperty("deferNativeSnapshot");
+  share.deferNativeSnapshots=true;
+  inject(3,"ACCEPT_NATIVE_DEFER",true);
+  await expect.poll(async()=>(await recorded()).includes("ACCEPT_NATIVE_DEFER")).toBe(true);
+  expect(helperInput(3)).toHaveProperty("deferNativeSnapshot",true);
+  share.frameAt=performance.now();inject(4,"ACCEPT_IMAGE_WITH_OPTIN");
+  await expect.poll(async()=>(await recorded()).includes("ACCEPT_IMAGE_WITH_OPTIN")).toBe(true);
+  expect(helperInput(4)).not.toHaveProperty("deferNativeSnapshot");
   native.stop();share.frameAt=performance.now();
-  inject(3,"DENIED_STOPPED",true);inject(4,"ACCEPT_IMAGE");
-  await expect.poll(async()=>(await readFile(f.record,"utf8")).includes("ACCEPT_IMAGE")).toBe(true);
+  inject(5,"DENIED_STOPPED",true);inject(6,"ACCEPT_IMAGE");
+  await expect.poll(async()=>(await readFile(f.record,"utf8")).includes('"text":"ACCEPT_IMAGE"')).toBe(true);
   expect(await readFile(f.record,"utf8")).not.toContain("DENIED_STOPPED");
-  await expect.poll(()=>localAcks.mock.calls.some(([data])=>typeof data==="string"&&JSON.parse(data).type==="input_ack"&&JSON.parse(data).seq===4)).toBe(true);
-  } finally {localAcks.mockRestore();}
+  await expect.poll(()=>localAcks.mock.calls.some(([data])=>typeof data==="string"&&JSON.parse(data).type==="input_ack"&&JSON.parse(data).seq===6)).toBe(true);
+  } finally {helperWrites.mockRestore();localAcks.mockRestore();}
 });
 it("reconnects when an installed worker ends after secure ready and the parent verifies a different desktop",async()=>{
   const f=await fixture(true,false,true,true,true,false,undefined,"source_transition"),viewer=await f.viewer();

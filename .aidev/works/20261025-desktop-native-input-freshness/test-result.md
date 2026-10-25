@@ -134,3 +134,30 @@ AssertionError: expected true to be false // Object.is equality
 ## 範囲
 
 利用者の実OSでのdragと、取得・補助画像encodeの同期処理による全ての描画待ちを自動検証したものではない。native中に画像の鮮度判定で入力を破棄する経路を修正した。GPU直接encoder入力やnativeの通信分離は未対応。生成配列でsnapshot用SHA256Managed/Cngを比較したが平均3.37/3.46msで改善せず、hash実装は変更していない。
+
+## 補助画像延期の追加確認
+
+最終追加後もbuild/typecheck成功、23 files / 170 tests成功、ブラウザ12 passed / 1 skipped、smoke PASS。Bのhelper stdinへの透過spyで未同意helperとunmarked/agent形式の入力に追加keyがなく、同意ありmarked入力だけdeferNativeSnapshot:trueが付くことを確認。
+
+Windowsの実helper結合compile、既存pipe/display/input/frame preparation/priority回帰、GPU NV12生成texture確認成功。純粋CanPrepare試験でnative連続入力中の延期、149ms延期・150ms再開、forceFull即時、画像/secure従来を確認。deferral条件だけ外すnegativeを実行時に検出し、Hostはbyte一致へ復元して全native確認を再実行。
+
+```text
+desktop_helper_compiled
+desktop_unlock_pipe_cancelled
+desktop_unlock_utf8_pipe_passed
+desktop_unlock_duplex_pipe_passed
+display_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-apply, restore/disarm, preserve-local-change, partial-failure rollback; fake driver only; no OS mode changes
+desktop_unlock_process_query_passed
+desktop_lock_cover_checks_passed
+desktop_input_checks_passed
+
+"0" 個の引数を指定して "Run" を呼び出し中に例外が発生しました: "Native drag allowed background image work"
+発生場所 \\wsl.localhost\Ubuntu\workspaces\sodashitsu-desktop-input\scripts\remote-desktop\validate-unlock-helper.ps1:1
+5 文字:1
++ [SodaDesktopTests.FramePreparationChecks]::Run()
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : InvalidOperationException
+ 
+
+```
