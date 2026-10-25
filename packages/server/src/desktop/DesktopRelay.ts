@@ -7,6 +7,9 @@ import { z } from "zod";
 import {
   RemoteDesktopViewerMessage,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_CURSOR_PROTOCOL,
+  isDesktopCursor,
+  decodeDesktopCursor,
   DESKTOP_NATIVE_RATE_PROTOCOL,
   DESKTOP_VIDEO_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
@@ -34,11 +37,15 @@ import type { MachineManager } from "../machine/MachineManager.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
 import { unlockFailure } from "./unlockFailure.js";
 
+import { DesktopCursorStream } from "./DesktopCursorStream.js";
 import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
 
 class DesktopSetupRequired extends Error {}
 
 type Viewer = {
+  cursorRequested?:boolean;
+  cursor?:boolean;
+  cursorStream?:DesktopCursorStream;
   nativeRateRequested?: boolean;
   nativeMaxFps?: 60;
   videoLaneRequested?: boolean;
@@ -189,7 +196,7 @@ export class DesktopRelay {
       ws.on("error", () => ws.terminate());
       const offered = String(req.headers["sec-websocket-protocol"] ?? "").split(",").map(v => v.trim());
       if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -199,7 +206,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -263,6 +270,7 @@ export class DesktopRelay {
             }
           }),
       },
+      cursorRequested,
       nativeRateRequested,
       videoLaneRequested,
       nativeVideoRequested,
@@ -465,6 +473,7 @@ export class DesktopRelay {
         nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
         nativeMaxFps:z.literal(60).optional(),
+        cursor:z.boolean().optional(),
         features: z.boolean().optional(),
         displayResize: z.boolean().optional(),
       })
@@ -484,6 +493,8 @@ export class DesktopRelay {
     delete legacyOptions.nativeVideo;
     delete legacyOptions.nativeVideoWindow;
     delete legacyOptions.nativeMaxFps;
+    delete legacyOptions.cursor;
+    v.cursor=v.cursorRequested===true&&caps.cursor===true;
     if(v.nativeRateRequested&&caps.nativeMaxFps===60)v.nativeMaxFps=60;else delete v.nativeMaxFps;
     if(v.nativeWindowRequested&&caps.nativeVideoWindow===3)v.nativeVideoWindow=3;else delete v.nativeVideoWindow;
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
@@ -499,6 +510,7 @@ export class DesktopRelay {
       throw new Error("B requires an update for image settings");
     const negotiated = {
       ...legacyOptions,
+      ...(v.cursor?{cursor:true as const}:{}),
       ...(v.nativeVideo?{nativeVideo:true as const}:{}),
       ...(v.nativeVideo&&v.nativeMaxFps===60?{nativeMaxFps:60 as const}:{}),
       ...(v.nativeVideo&&v.nativeVideoWindow===3?{nativeVideoWindow:3 as const}:{}),
@@ -585,6 +597,10 @@ export class DesktopRelay {
           if (binary ? !isDesktopMediaChunk(bytes) : bytes.length > 65536 || !["media_status","media_stream","native_video_stats"].includes(JSON.parse(bytes.toString()).type)) throw Error("Video lane only");
         }
         const sendMedia = (value: unknown) => lane ? v.videoLane!.send(value) : this.send(v.ws, value);
+        if(binary&&isDesktopCursor(bytes)) {
+          if(lane||!v.ready||v.secureDesktop||!v.cursor||!v.cursorStream)throw Error("Cursor is not negotiated");
+          v.cursorStream.accept(decodeDesktopCursor(bytes));return;
+        }
         if (binary && isDesktopMediaChunk(new Uint8Array(bytes as Buffer))) {
           if (!v.ready || !v.features) throw new Error();
           if (!v.media || (v.videoLane && lane !== !!v.media.native)) return;
@@ -653,9 +669,11 @@ export class DesktopRelay {
             v.since = performance.now();
             v.nativeVideo=v.nativeVideo===true&&ready.nativeVideo===true&&!v.secureDesktop;
             if(ready.nativeVideoWindow!==3||!v.nativeVideo)delete v.nativeVideoWindow;
+            v.cursor=v.cursor===true&&ready.cursor===true&&!v.secureDesktop;
+            if(v.cursor)v.cursorStream=new DesktopCursorStream(bytes=>this.send(v.ws,bytes),()=>v.ws.bufferedAmount);
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
-            const { imeKeys, extendedInput, nativeVideo,nativeVideoWindow,nativeMaxFps, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            const { imeKeys, extendedInput, nativeVideo,nativeVideoWindow,nativeMaxFps,cursor, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);

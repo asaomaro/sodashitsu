@@ -1,0 +1,13 @@
+# Cursorの形状・位置の別送
+
+new viewer header / Bcap / helper readyの3段交渉でのみ有効。旧peer・secure・showCursor=falseは従来経路。通常画像・native動画へ固定矢印を焼き込む代わりに、現在の実形状・hotspot・可視状態・選択monitor内の正規化位置を別packetへ送る。画像ACK/scene hash/入力権限/鮮度はcursor packetで更新しない。agent画像はoverlayを含まない画像planeのまま。
+
+C# helperのcursor workerは約16msで位置を照会。画像fps1でも動く。DXGI Acquire/GetFramePointerShapeも独立して進め、present画像はGPU内へ保持する（捨てて画像更新を失わない）。capture/render/poll/disposeとsurface initはcaptureGateで直列化、MFTのD3D multithread保護・参照解放順は維持。GetCursorInfo/GetIconInfo fallbackも通常desktopだけ。OutputGateを取ってから最新位置を読み、映像出力待ちの古い位置を並べない。入力ACKは前PRのstderr別pipeを維持。停止時はworkerを止めてからMFT/captureを破棄。
+
+source driverがcursorを画像に含む場合は別pointerを重ねない。alpha/monochrome/AND-XOR/色付きXORとhotspotを扱う。GetIconInfoのBGRAは直線alphaとしてDrawIconExの実DIB結果と比較する。shapeは最大256×256、raw最大512KiB。native API不調時はhideを送って従来の焼込みへ戻し、共有全体を止めない。
+
+SDCU version1のbinary frame: 厳密なJSON metadata≤2KiB、shape bytes≤512KiB。B/Aは現在shape1件だけ保持し、cursor poseは輻輳時に省略できる。省略後は次poseへcached shapeを付けて再同期。500msの軽いpose heartbeatで静止中も復旧。hideは輻輳による省略対象外。viewerからcursor packetを送っても受け付けない。
+
+ブラウザは別canvasへ重ね、source/screenshot canvasを変更しない。通常のalpha/透過cursorはshapeをcacheして動画の読み戻しなし。背景依存XORだけ小さいcursor領域を読んで合成する。操作中の新しいlocal位置を最大250ms予測表示し、sourceの形状・可視状態を常に反映した上で静止後は実位置へ戻す。revoke/blur/stop/secure/reconnectで予測と描画を消す。fit/1:1に同じCSSサイズを使い、hotspotと画面端をclip。
+
+生成HICONをnative DIBへDrawIconExする基準（Graphics.GetHdcの一時DCは背景XOR基準に使わない）、protocol bounds/cache、実browserの独立canvas/alpha/XOR/予測/隅/hidden/reconnect、oldpeer/secure、freshness不変、negative、独立レビューで検証する。実OS入力・自動unlockは行わない。

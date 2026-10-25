@@ -14,7 +14,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -117,8 +117,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" = false) {
-    const ws = new WebSocket(endpoint, ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" = false) {
+    const ws = new WebSocket(endpoint, ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -633,4 +633,29 @@ it("keeps the legacy native rate when only the helper lacks 60fps support",async
  expect(f.startRequests[0]!.options.nativeMaxFps).toBe(60);expect(v.messages.find(m=>m.type==="ready")?.nativeVideo).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeMaxFps");
  const writes=vi.spyOn((f.provider as any).active.process.stdin,"write");v.send({type:"media",enabled:true,settings:{transport:"native",fps:60}});
  await expect.poll(()=>writes.mock.calls.map(([data])=>typeof data==="string"?JSON.parse(data):undefined).find(m=>m?.type==="native_video"&&m.enabled)?.fps).toBe(10);v.send({type:"stop"});
+});
+
+it("cursor packets advance independently and cannot renew image freshness or grant input",async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--static","--cursor"]});
+ const v=await f.viewer("cursor");v.send({...start,options:{...start.options,fps:1}});
+ await expect.poll(()=>v.frames.filter(b=>!isDesktopCursor(b)).length).toBeGreaterThan(0);
+ await expect.poll(()=>v.frames.filter(isDesktopCursor).length).toBeGreaterThan(1);
+ expect(v.messages.find(m=>m.type==="ready")?.cursor).toBe(true);expect(f.startRequests[0]!.options.cursor).toBe(true);
+ const server=[...(f.relay as any).viewers][0],source=(f.provider as any).active;
+ v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ server.pending=0;const before=server.frameAt=performance.now()-6000,sourceBefore=source.frameAt;
+ for(let seq=100;seq<103;seq++)server.provider.emit("message",Buffer.from(encodeDesktopCursor({type:"cursor",seq,visible:true,x:.2,y:.3,shapeId:1})),true);
+ expect(server.frameAt).toBe(before);expect(source.frameAt).toBe(sourceBefore);
+ v.send({type:"input",seq:1,frameSeq:server.seq,input:{kind:"key",code:"KeyA",down:true}});
+ await new Promise<void>(r=>{v.ws.once("pong",()=>r());v.ws.ping();});expect(server.viewerSeq).toBe(0);expect(source.inputSeq).toBe(0);v.send({type:"stop"});
+});
+it.each(["viewer","provider","secure"])("does not send cursor extensions to an incompatible %s",async missing=>{
+ const f=await fixture(true,missing==="provider",true,missing==="secure"),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--cursor"]});
+ const v=await f.viewer(missing==="viewer"?"extended":"cursor");v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("cursor");expect(v.frames.some(isDesktopCursor)).toBe(false);
+ if(missing!=="secure")expect(f.startRequests[0]!.options).not.toHaveProperty("cursor");v.send({type:"stop"});
+});
+it("a viewer cannot inject cursor packets into the provider direction",async()=>{
+ const f=await fixture(),v=await f.viewer("cursor");v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ v.ws.send(encodeDesktopCursor({type:"cursor",seq:1,visible:false,x:0,y:0,shapeId:0}));await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
 });

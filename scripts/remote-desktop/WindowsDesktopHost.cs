@@ -267,6 +267,8 @@ public static class SodaDesktopHost {
             else if(!AllowedDesktop()){Stopping=true;Release();}
         },null,500,500);
         SodaDesktopDxgi dxgi=null;
+        SodaDesktopCursor cursorPump=null;
+        bool separateCursor=!Secure&&showCursor&&config.ContainsKey("separateCursor")&&config["separateCursor"] is bool&&(bool)config["separateCursor"];
         SodaDesktopH264 video=null;string videoId=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
@@ -283,6 +285,7 @@ public static class SodaDesktopHost {
             var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
+            if(separateCursor)ready["cursor"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
@@ -291,6 +294,7 @@ public static class SodaDesktopHost {
             if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             Output(ready);
+            if(separateCursor)cursorPump=new SodaDesktopCursor(()=>dxgi,Bounds,showCursor,()=>!Stopping&&AllowedDesktop(),OutputGate,Output);
             var jpeg=Array.Find(ImageCodecInfo.GetImageEncoders(),c=>c.MimeType=="image/jpeg");
             using(var args=new EncoderParameters(1))
             using(var scaled=new Bitmap(w,h,PixelFormat.Format24bppRgb))
@@ -375,7 +379,7 @@ public static class SodaDesktopHost {
                         try {
                             double videoStarted=Clock.Elapsed.TotalMilliseconds;
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
-                            Point cursor=Cursor.Position;bool cursorVisible=showCursor&&Bounds.Contains(cursor);
+                            Point cursor=Cursor.Position;bool cursorVisible=showCursor&&(cursorPump==null||!cursorPump.Active)&&Bounds.Contains(cursor);
                             int cursorX=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cursorY=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);
                             SodaDesktopH264.Packet packet=null;double videoCaptureMs;
                             if(video.GpuInput) {
@@ -386,7 +390,7 @@ public static class SodaDesktopHost {
                             } else {
                                 if(videoNv12==null)videoNv12=new byte[checked(w*h*3/2)];
                                 bool gpu=dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
-                                if(!gpu)CaptureFrame(resize,w,h,showCursor,ref dxgi,beforeCaptureDispose);
+                                if(!gpu)CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);
                                 videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
                                 packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
                             }
@@ -413,7 +417,7 @@ public static class SodaDesktopHost {
                     long revision=Interlocked.Read(ref inputRevision);
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     if(!Stopping && preparation.CanPrepare(now,pending,video!=null&&DeferNativeSnapshots,forceFull,Interlocked.Read(ref LastNativeInput))) {
-                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi,beforeCaptureDispose);
+                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
                         var prepared=new PreparedFrame {started=frameStarted};
@@ -464,7 +468,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;watchdog.Dispose();Release();if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose(); }
+        } finally { Stopping=true;Release();if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
     }
 }
 
@@ -654,6 +658,24 @@ public sealed class SodaDesktopDxgi : IDisposable {
     [StructLayout(LayoutKind.Sequential)] struct Viewport { public float x,y,width,height,min,max; }
     [StructLayout(LayoutKind.Sequential)] struct SamplerDesc { public uint filter,u,v,w;public float bias;public uint anisotropy,comparison;public float r,g,b,a,min,max; }
     [StructLayout(LayoutKind.Sequential)] struct Mapped { public IntPtr data;public uint pitch,depth; }
+    readonly object captureGate=new object();
+    volatile SodaDesktopCursor.State cursorState;long cursorVersion;bool cursorTracking;
+    [StructLayout(LayoutKind.Sequential)] struct PointerInfo {public uint kind,width,height,pitch;public int hotspotX,hotspotY;}
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int PointerShape(IntPtr self,uint size,[Out] byte[] data,out uint required,out PointerInfo info);
+    void UpdateCursor(FrameInfo frame) {
+        if(!cursorTracking||(frame.mouse==0&&frame.pointerSize==0))return;
+        try {
+            var shape=cursorState==null?null:cursorState.Shape;
+            if(frame.pointerSize>0){if(frame.pointerSize>512*1024)throw new InvalidOperationException("Cursor limit");var bytes=new byte[frame.pointerSize];uint required;PointerInfo info;Check(Method<PointerShape>(duplication,11)(duplication,frame.pointerSize,bytes,out required,out info));if(required>bytes.Length)throw new InvalidOperationException("Cursor limit");
+                int h=checked((int)info.height);if(info.kind==1){if((h&1)!=0)throw new InvalidOperationException("Cursor height");h/=2;}
+                int length=checked((int)info.pitch*h*(info.kind==1?2:1));if(length>bytes.Length)throw new InvalidOperationException("Cursor bytes");if(length!=bytes.Length)Array.Resize(ref bytes,length);
+                shape=new SodaDesktopCursor.Shape {Kind=(int)info.kind,Width=(int)info.width,Height=h,Pitch=(int)info.pitch,HotspotX=info.hotspotX,HotspotY=info.hotspotY,Data=bytes};shape.Validate();cursorVersion++;
+            }
+            cursorState=new SodaDesktopCursor.State {Shape=shape,Separate=frame.pointerVisible!=0,Version=cursorVersion};
+        }catch{cursorState=null;}
+    }
+    public SodaDesktopCursor.State PollCursor(){lock(captureGate){if(disposed||duplication==IntPtr.Zero)return null;cursorTracking=true;try{AcquireFrame();}catch{cursorState=null;throw;}return hasFrame?cursorState:null;}}
+    public void StopCursorTracking(){lock(captureGate){cursorTracking=false;cursorState=null;}}
     [StructLayout(LayoutKind.Sequential)] struct FrameInfo { public long present,mouse;public uint accumulated;public int coalesced,protectedContent;public int pointerX,pointerY,pointerVisible;public uint metadata,pointerSize; }
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int EnumObject(IntPtr self,uint index,out IntPtr value);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetOutputDesc(IntPtr self,out OutputDesc value);
@@ -760,10 +782,10 @@ public sealed class SodaDesktopDxgi : IDisposable {
             IntPtr shader;Check(Method<CreateShader>(device,slot)(device,Method<BlobPointer>(code,3)(code),Method<BlobSize>(code,4)(code),IntPtr.Zero,out shader));return shader;
         } finally { Release(ref errors);Release(ref code); }
     }
-    public bool Capture(Graphics destination) {
+    public bool Capture(Graphics destination) {lock(captureGate){
         if(!AcquireFrame())return false;
         Render(destination);return true;
-    }
+    }}
     bool AcquireFrame() {
         if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
         IntPtr resource=IntPtr.Zero,texture=IntPtr.Zero;FrameInfo info;
@@ -772,6 +794,7 @@ public sealed class SodaDesktopDxgi : IDisposable {
         else {
             Check(hr);
             try {
+                UpdateCursor(info);
                 // Pointer-only updates have no new desktop image. Before the
                 // first desktop present, use GDI for this frame; never publish
                 // the undefined/black initial duplication surface.
@@ -786,7 +809,7 @@ public sealed class SodaDesktopDxgi : IDisposable {
         }
         return true;
     }
-    public bool TryCaptureNv12(byte[] output,int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {
+    public bool TryCaptureNv12(byte[] output,int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {lock(captureGate){
         conversionMs=0;
         if(nvFailed||(width&1)!=0||(height&1)!=0)return false;
         try {
@@ -794,7 +817,7 @@ public sealed class SodaDesktopDxgi : IDisposable {
             if(!AcquireFrame())return false;
             var timer=Stopwatch.StartNew();RenderNv12(output,cursorX,cursorY,cursorVisible);conversionMs=timer.Elapsed.TotalMilliseconds;return true;
         } catch {nvFailed=true;DisposeNv12();return false;}
-    }
+    }}
     [StructLayout(LayoutKind.Sequential)] struct BufferDesc {public uint size,usage,bind,cpu,misc,stride;}
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateBuffer(IntPtr self,ref BufferDesc desc,IntPtr initial,out IntPtr buffer);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void Upload(IntPtr self,IntPtr resource,uint subresource,IntPtr box,IntPtr data,uint pitch,uint depth);
@@ -919,7 +942,7 @@ float4 main(float4 p:SV_Position):SV_Target{
         var desc=new TargetDesc{format=format,dimension=4};IntPtr memory=Marshal.AllocHGlobal(Marshal.SizeOf(typeof(TargetDesc)));
         try{Marshal.StructureToPtr(desc,memory,false);IntPtr view;Check(Method<CreateView>(device,9)(device,texture,memory,out view));return view;}finally{Marshal.FreeHGlobal(memory);}
     }
-    public bool TryEnableGpuSurfaces() {
+    public bool TryEnableGpuSurfaces() {lock(captureGate){
         if(disposed||surfaceFailed||device==IntPtr.Zero||context==IntPtr.Zero||width<2||height<2||(long)width*height>8000000||(width&1)!=0||(height&1)!=0)return false;
         if(surfaces.Count==4)return true;
         bool conversionWasReady=nvShader!=IntPtr.Zero;
@@ -941,8 +964,8 @@ float4 main(float4 p:SV_Position):SV_Target{
             }
             return true;
         } catch {surfaceFailed=true;DisposeSurfaces();if(!conversionWasReady)DisposeNv12();return false;}
-    }
-    public void DisableGpuSurfaces(){surfaceFailed=true;DisposeSurfaces();}
+    }}
+    public void DisableGpuSurfaces(){lock(captureGate){surfaceFailed=true;DisposeSurfaces();}}
     public sealed class GpuFrame:IDisposable {
         public readonly IntPtr Texture;
         Action retire;
@@ -953,10 +976,10 @@ float4 main(float4 p:SV_Position):SV_Target{
         void Return(){var callback=Interlocked.Exchange(ref retire,null);if(callback!=null)callback();}
         public void Dispose(){if(Interlocked.CompareExchange(ref ownership,2,0)==0)Return();}
     }
-    public GpuFrame CaptureGpuFrame(int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {
+    public GpuFrame CaptureGpuFrame(int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {lock(captureGate){
         conversionMs=0;if(!AcquireFrame())return null;
         var timing=Stopwatch.StartNew();var frame=RenderGpuFrame(cursorX,cursorY,cursorVisible);conversionMs=timing.Elapsed.TotalMilliseconds;return frame;
-    }
+    }}
     GpuFrame RenderGpuFrame(int cursorX,int cursorY,bool cursorVisible) {
         if(disposed||surfaceFailed||surfaces.Count!=4)throw new InvalidOperationException("GPU surfaces unavailable");
         SurfaceSlot slot=null;var timer=Stopwatch.StartNew();
@@ -986,13 +1009,13 @@ float4 main(float4 p:SV_Position):SV_Target{
         foreach(var slot in surfaces){Release(ref slot.uvView);Release(ref slot.yView);Release(ref slot.texture);}surfaces.Clear();
         Release(ref surfaceUvShader);Release(ref surfaceYShader);Release(ref surfaceContext);
     }
-    public void Dispose() {
+    public void Dispose() {lock(captureGate){
         if(disposed)return;disposed=true;
         DisposeSurfaces();
         DisposeNv12();
         if(bitmap!=null){bitmap.Dispose();bitmap=null;}
         Release(ref sampler);Release(ref pixel);Release(ref vertex);Release(ref staging);Release(ref targetView);Release(ref target);Release(ref sourceView);Release(ref source);Release(ref duplication);Release(ref multithread);Release(ref context);Release(ref device);
-    }
+    }}
 }
 
 // Hardware-only Media Foundation H.264 encoder. Frames enter as bounded NV12
@@ -1393,4 +1416,75 @@ public sealed class SodaDesktopCommandQueue<T> {
             try{dispatch(command);}catch{fast=false;throw;}return true;
         }
     }
+}
+
+// Actual cursor data, independent of image cadence. No screen pixels or OS input.
+public sealed class SodaDesktopCursor : IDisposable {
+    [StructLayout(LayoutKind.Sequential)] struct CURSORINFO {public int size,flags;public IntPtr cursor;public Point point;}
+    [StructLayout(LayoutKind.Sequential)] struct ICONINFO {public int icon;public uint x,y;public IntPtr mask,color;}
+    [StructLayout(LayoutKind.Sequential)] struct BITMAP {public int type,width,height,stride;public ushort planes,bits;public IntPtr pixels;}
+    [StructLayout(LayoutKind.Sequential)] struct HEADER {public uint size;public int width,height;public ushort planes,bits;public uint compression,image;public int x,y;public uint colors,important;}
+    [DllImport("user32.dll")] static extern bool GetCursorInfo(ref CURSORINFO cursor);
+    [DllImport("user32.dll")] static extern IntPtr CopyIcon(IntPtr cursor);
+    [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
+    [DllImport("user32.dll")] static extern bool GetIconInfo(IntPtr icon,out ICONINFO info);
+    [DllImport("gdi32.dll")] static extern int GetObject(IntPtr bitmap,int size,out BITMAP info);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr previous);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr bitmap);
+    [DllImport("gdi32.dll")] static extern int GetDIBits(IntPtr dc,IntPtr bitmap,uint first,uint lines,byte[] pixels,ref HEADER info,uint usage);
+    public sealed class Shape {
+        public int Kind,Width,Height,Pitch,HotspotX,HotspotY;public bool Premultiplied;public byte[] Data;
+        public void Validate(){if((Kind!=1&&Kind!=2&&Kind!=4)||Width<1||Width>256||Height<1||Height>256||HotspotX<0||HotspotX>=Width||HotspotY<0||HotspotY>=Height||Pitch<(Kind==1?(Width+7)/8:Width*4)||Pitch>2048||Data==null||Data.Length!=checked(Pitch*Height*(Kind==1?2:1))||Data.Length>512*1024)throw new InvalidOperationException("Cursor shape limit");}
+        public object Info(){return new {kind=Kind,width=Width,height=Height,pitch=Pitch,hotspotX=HotspotX,hotspotY=HotspotY,premultiplied=Premultiplied};}
+    }
+    public sealed class State {public Shape Shape;public bool Separate;public long Version;}
+    static byte[] BitmapPixels(IntPtr bitmap,out int width,out int height,out int depth) {
+        BITMAP desc;if(GetObject(bitmap,Marshal.SizeOf(typeof(BITMAP)),out desc)==0)throw new InvalidOperationException("Cursor bitmap unavailable");
+        depth=desc.bits;width=desc.width;height=Math.Abs(desc.height);if(width<1||width>256||height<1||height>512)throw new InvalidOperationException("Cursor bitmap limit");
+        byte[] data=new byte[checked(width*height*4)];var header=new HEADER {size=40,width=width,height=-height,planes=1,bits=32};IntPtr dc=CreateCompatibleDC(IntPtr.Zero);
+        if(dc==IntPtr.Zero)throw new InvalidOperationException("Cursor bitmap context unavailable");
+        try{if(GetDIBits(dc,bitmap,0,(uint)height,data,ref header,0)!=height)throw new InvalidOperationException("Cursor bitmap unavailable");}finally{DeleteDC(dc);}return data;
+    }
+    public static Shape FromIcon(IntPtr icon) {
+        ICONINFO info;if(!GetIconInfo(icon,out info))throw new InvalidOperationException("Cursor icon unavailable");
+        try {
+            int w=0,h=0,depth;byte[] data=null;bool alpha=false;
+            if(info.color!=IntPtr.Zero){data=BitmapPixels(info.color,out w,out h,out depth);for(int p=3;p<data.Length;p+=4)if(depth==32&&data[p]!=0){alpha=true;break;}}
+            if(!alpha){
+                int mw,mh;byte[] mask=BitmapPixels(info.mask,out mw,out mh,out depth);
+                if(info.color!=IntPtr.Zero){if(w!=mw||h!=mh)throw new InvalidOperationException("Cursor mask dimensions");}
+                else {if((mh&1)!=0)throw new InvalidOperationException("Cursor mask dimensions");w=mw;h=mh/2;data=new byte[checked(w*h*4)];for(int y=0;y<h;y++)for(int x=0;x<w;x++){int p=(y*w+x)*4;byte xor=mask[((y+h)*w+x)*4];data[p]=data[p+1]=data[p+2]=xor;}}
+                for(int p=0;p<data.Length;p+=4)data[p+3]=mask[p]==0?(byte)0:(byte)255;
+            }
+            var shape=new Shape {Kind=alpha?2:4,Width=w,Height=h,Pitch=w*4,HotspotX=(int)info.x,HotspotY=(int)info.y,Premultiplied=false,Data=data};shape.Validate();return shape;
+        }finally{if(info.color!=IntPtr.Zero)DeleteObject(info.color);if(info.mask!=IntPtr.Zero)DeleteObject(info.mask);}
+    }
+    readonly Func<SodaDesktopDxgi> capture;readonly Func<bool> allowed;readonly Action<Dictionary<string,object>> output;readonly object outputGate;readonly Rectangle bounds;readonly bool show;
+    readonly Thread thread;volatile bool stopping;public volatile bool Active=true;
+    readonly Stopwatch cursorClock=Stopwatch.StartNew();long lastSent=-1000;
+    long sequence,shapeId,driverVersion=-1;IntPtr lastHandle;SodaDesktopDxgi lastCapture;Shape shape;int oldX=Int32.MinValue,oldY;bool? oldVisible;long sentShape;
+    public SodaDesktopCursor(Func<SodaDesktopDxgi> capture,Rectangle bounds,bool show,Func<bool> allowed,object outputGate,Action<Dictionary<string,object>> output){this.capture=capture;this.bounds=bounds;this.show=show;this.allowed=allowed;this.outputGate=outputGate;this.output=output;thread=new Thread(Run){IsBackground=true};thread.Start();}
+    void Run(){try{using(var delay=new SodaDesktopVideoDelay()){while(!stopping){lock(outputGate){if(stopping||!allowed())break;Tick();}delay.Pause(8);if(!stopping)delay.Pause(8);}}}
+        catch{}
+        finally{Active=false;try{var dxgi=capture();if(dxgi!=null)dxgi.StopCursorTracking();}catch{}try{lock(outputGate){if(!stopping&&allowed())output(new Dictionary<string,object>{{"type","cursor"},{"seq",++sequence},{"visible",false},{"x",0},{"y",0},{"shapeId",0}});}}catch{}}}
+    void Tick(){
+        var info=new CURSORINFO {size=Marshal.SizeOf(typeof(CURSORINFO))};if(!GetCursorInfo(ref info))throw new InvalidOperationException("Cursor unavailable");
+        var dxgi=capture();State state=dxgi==null?null:dxgi.PollCursor();
+        if(dxgi!=lastCapture){lastCapture=dxgi;driverVersion=-1;lastHandle=IntPtr.Zero;shape=null;}
+        bool visible=show&&(info.flags&1)!=0&&(info.flags&2)==0&&bounds.Contains(info.point)&&(state==null||state.Separate);
+        if(visible){
+            if(shape==null||lastHandle!=info.cursor){IntPtr copy=CopyIcon(info.cursor);if(copy==IntPtr.Zero)throw new InvalidOperationException("Cursor unavailable");try{shape=FromIcon(copy);}finally{DestroyIcon(copy);}lastHandle=info.cursor;shapeId++;}
+            if(state!=null&&state.Shape!=null&&state.Version!=driverVersion){shape=state.Shape;driverVersion=state.Version;shapeId++;}
+        }
+        int x=visible?info.point.X-bounds.Left:0,y=visible?info.point.Y-bounds.Top:0;
+        if(oldVisible==visible&&oldX==x&&oldY==y&&sentShape==shapeId&&cursorClock.ElapsedMilliseconds-lastSent<500)return;
+        if(!allowed())return;
+        oldVisible=visible;oldX=x;oldY=y;lastSent=cursorClock.ElapsedMilliseconds;
+        var msg=new Dictionary<string,object>{{"type","cursor"},{"seq",++sequence},{"visible",visible},{"x",(double)x/bounds.Width},{"y",(double)y/bounds.Height},{"shapeId",visible?shapeId:0}};
+        if(visible&&sentShape!=shapeId){msg["shape"]=shape.Info();msg["data"]=Convert.ToBase64String(shape.Data);sentShape=shapeId;}
+        output(msg);
+    }
+    public bool Stop(int milliseconds){if(milliseconds<1||milliseconds>1000)throw new ArgumentOutOfRangeException("milliseconds");stopping=true;Active=false;return Thread.CurrentThread!=thread&&thread.Join(milliseconds);}
+    public void Dispose(){if(!Stop(1000))throw new System.TimeoutException("Cursor worker did not stop");}
 }

@@ -42,6 +42,7 @@ export const DesktopOptions = z
     nativeVideo: z.literal(true).optional(),
     nativeVideoWindow: z.literal(3).optional(),
     nativeMaxFps: z.literal(60).optional(),
+    cursor: z.literal(true).optional(),
     display: DesktopDisplaySize.optional(),
   })
   .strict();
@@ -116,6 +117,7 @@ export const DesktopReady = z
     nativeVideo: z.boolean().optional(),
     nativeVideoWindow: z.literal(3).optional(),
     nativeMaxFps: z.literal(60).optional(),
+    cursor: z.literal(true).optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),
@@ -226,6 +228,7 @@ export interface DesktopResults {
     nativeVideo?: boolean;
     nativeVideoWindow?: 3;
     nativeMaxFps?: 60;
+    cursor?: boolean;
     features?: boolean;
     displayResize?: boolean;
   };

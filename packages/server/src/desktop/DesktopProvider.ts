@@ -5,6 +5,7 @@ import { z } from "zod";
 import WebSocket from "ws";
 import {
   DESKTOP_VIDEO_LANE_PROTOCOL,
+  DESKTOP_CURSOR_MAX_BYTES,
   isExtendedDesktopInput,
   DesktopFrameInfo,
   DesktopFrameChain,
@@ -19,6 +20,7 @@ import {
   RpcError,
 } from "@sodashitsu/protocol";
 
+import { DesktopCursorStream } from "./DesktopCursorStream.js";
 import { DesktopInputAcks } from "./DesktopInputAcks.js";
 import {DesktopNativeVideo} from "./DesktopNativeVideo.js";
 import { DesktopCompanionHub } from "./DesktopCompanion.js";
@@ -51,6 +53,7 @@ type Share = {
   videoSocket?: WebSocket;
   videoReady?: boolean;
   inputAcks: DesktopInputAcks;
+  cursor?: DesktopCursorStream;
   native?: DesktopNativeVideo;
   deferNativeSnapshots?: boolean;
   chain: DesktopFrameChain;
@@ -116,6 +119,7 @@ export class DesktopProvider {
       nativeInputFreshness: true,
       nativeVideoWindow: 3 as const,
       nativeMaxFps: 60 as const,
+      cursor: true as const,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -422,6 +426,7 @@ export class DesktopProvider {
               nativeVideo,
               nativeVideoWindow,
               nativeMaxFps,
+              cursor,
               image: appliedImage,
               allowClipboard,
               allowMedia,
@@ -431,6 +436,7 @@ export class DesktopProvider {
             } = ready;
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
+            if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
@@ -439,6 +445,7 @@ export class DesktopProvider {
               ...(nativeEnabled?{nativeVideo:true}:{}),
               ...(nativeWindow===3?{nativeVideoWindow:3}:{}),
               ...(nativeRate?{nativeMaxFps:nativeRate}:{}),
+              ...(s.cursor?{cursor:true}:{}),
               // Keep the existing viewer wire format; capture is a helper detail.
               backend: legacyReady.backend === "windows-dxgi" ? "windows-gdi" : legacyReady.backend,
               ...(s.imeKeys && imeKeys ? { imeKeys: true } : {}),
@@ -509,6 +516,10 @@ export class DesktopProvider {
             s.pending = s.seq;
             s.frameAt = performance.now();
             if (!this.send(s, packet)) return;
+          } else if (raw.type==="cursor"&&s.ready&&!s.secureDesktop&&s.cursor) {
+            const {data,...info}=raw;
+            if(data!==undefined&&(typeof data!=="string"||data.length>Math.ceil(DESKTOP_CURSOR_MAX_BYTES/3)*4||!/^[A-Za-z0-9+/]*={0,2}$/.test(data)))throw Error("Invalid cursor bytes");
+            s.cursor.accept({info,data:Buffer.from(data??"","base64")});
           } else if (s.ready&&!s.secureDesktop&&s.native?.fromHelper(raw)) {
             // Native video has its own bounded frame/draw ACK.
           } else if (raw.type === "clipboard_result" && s.ready) {
@@ -535,6 +546,7 @@ export class DesktopProvider {
       options,
       captureBackends: ["dxgi"],
       inputAckPipe: true,
+      separateCursor: options.cursor===true,
       ...(options.nativeMaxFps===60&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
       allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       deferNativeSnapshots: options.nativeVideo===true&&cfg.allowNativeVideo===true,
