@@ -1,0 +1,7 @@
+# 独立レビュー
+
+review_pointerが実装とは別のコンテキストで全体を点検。GPU COM ABI、BGRA pack、stride/padding、色/カーソル、resource所有権、例外fallbackと既存guardを確認し、製品コードに必須指摘なし。
+
+指摘された検証不足を修正: 非整数縮小と1pixel単位RGB変化を追加し、nearest退行のnegativeを検出。実wrapperの不正buffer→失敗ラッチと普通のGPU取得継続を検査。計測前の失敗試験による初期化混入は、失敗試験を後置しCPU/GPUの測定順を交互にして修正。修正差分の再レビューで指摘なし。
+
+実画面のCaptureDesktopはguardで停止/skipされており、確認済みと扱わない。zero-copyや入力117msの解消は本差分の達成項目ではない。
