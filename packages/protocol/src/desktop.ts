@@ -103,7 +103,7 @@ export const DesktopReady = z
     allowInput: z.boolean(),
     width: z.number().int().positive().max(32768),
     height: z.number().int().positive().max(32768),
-    backend: z.enum(["windows-gdi", "synthetic"]),
+    backend: z.enum(["windows-gdi", "windows-dxgi", "synthetic"]),
     secureDesktop: z.boolean().optional(),
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),

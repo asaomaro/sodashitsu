@@ -131,6 +131,7 @@ function run() {
           if (!displayAllowed || !modes.some(mode => mode.width === options.display.width && mode.height === options.display.height)) throw Error("display not allowed");
           options = {...options, width:options.display.width};
         }
+        if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
@@ -139,7 +140,7 @@ function run() {
           allowInput,
           width: options.width,
           height: heightOf(options),
-          backend: "synthetic",
+          backend: process.argv.includes("--dxgi") && m.captureBackends?.includes("dxgi") ? "windows-dxgi" : "synthetic",
           ...(secure ? {secureDesktop:true} : {}),
           ...(lockCover ? {lockScreenCover:true} : {}),
           ...(displayAllowed ? {display:{modes}} : {}),

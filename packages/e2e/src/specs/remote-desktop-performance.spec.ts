@@ -76,7 +76,7 @@ test("desktop performance over real B outbound delegation (opt-in)", async ({ pa
     const sourceSpan = measured.arrivals.at(-1)! - measured.arrivals[0]!, first = measured.info[0]!, last = measured.info.at(-1)!;
     const metric = (data: { metrics: { name: string; value: number }[] }, name: string) => data.metrics.find((m) => m.name === name)?.value ?? 0;
     const report = {
-      kind: nativeCommand ? "windows-native-capture-transport-browser" : "synthetic-png-transport-and-browser-only", sourceBackend: measured.backend, ackDelayMs, deltas, os: process.platform, architecture: process.arch, node: process.version, browser: page.context().browser()?.version(), width, height: last.height, targetFps: fps,
+      kind: nativeCommand ? "windows-native-capture-transport-browser" : "synthetic-png-transport-and-browser-only", viewerWireBackend: measured.backend, ackDelayMs, deltas, os: process.platform, architecture: process.arch, node: process.version, browser: page.context().browser()?.version(), width, height: last.height, targetFps: fps,
       frames: measured.info.length, measuredSeconds: sourceSpan / 1000, achievedFps: (measured.info.length - 1) * 1000 / sourceSpan,
       averageFrameBytes: measured.bytes / measured.info.length, averageMbps: measured.bytes * 8 / sourceSpan / 1000,
       relayToDrawAckP95Ms: measured.stats.ackP95Ms, sourceGenerateP95Ms: percentile(measured.info.map((m) => m.captureMs)), sourceEncodeP95Ms: percentile(measured.info.map((m) => m.encodeMs)),
@@ -87,7 +87,7 @@ test("desktop performance over real B outbound delegation (opt-in)", async ({ pa
       browserTaskPercent: (metric(afterBrowser, "TaskDuration") - metric(beforeBrowser, "TaskDuration")) * 100000 / duration,
       browserJsHeapMiB: metric(afterBrowser, "JSHeapUsedSize") / 1048576,
       terminalBrowserEchoPaintP95Ms: null,
-      limitations: nativeCommand ? "Opt-in Windows native helper; images stay in private local test browser. No desktop input permission requested. Input latency is not measured. ACK delay is injected, not measured WAN latency. Same-host loopback A/B; results are not sr-pc/WAN/long-term performance." : "Loopback A/B and Chromium on one Linux host. Source generates PNG; no Windows capture/input, physical network, or GPU benchmark. Input/terminal latency is not measured: the terminal is unsubscribed while its viewer tab is hidden. No real desktop performance conclusion.",
+      limitations: nativeCommand ? "The viewer backend name is wire compatibility metadata, not proof of DXGI usage. Opt-in Windows native helper; images stay in private local test browser. No desktop input permission requested. Input latency is not measured. ACK delay is injected, not measured WAN latency. Same-host loopback A/B; results are not sr-pc/WAN/long-term performance." : "Loopback A/B and Chromium on one Linux host. Source generates PNG; no Windows capture/input, physical network, or GPU benchmark. Input/terminal latency is not measured: the terminal is unsubscribed while its viewer tab is hidden. No real desktop performance conclusion.",
     };
     expect(report.frames).toBeGreaterThanOrEqual(frames); expect(report.achievedFps).toBeGreaterThan(0);
     const out = join(process.env.SODA_DESKTOP_BENCH_OUT ?? tmpdir(), `soda-desktop-perf-${width}-${fps}.json`);

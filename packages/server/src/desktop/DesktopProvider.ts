@@ -387,6 +387,8 @@ export class DesktopProvider {
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             this.send(s, {
               ...legacyReady,
+              // Keep the existing viewer wire format; capture is a helper detail.
+              backend: legacyReady.backend === "windows-dxgi" ? "windows-gdi" : legacyReady.backend,
               ...(s.imeKeys && imeKeys ? { imeKeys: true } : {}),
               ...(s.extendedInput && extendedInput ? { extendedInput: true } : {}),
               ...(options.image ? { image: appliedImage } : {}),
@@ -477,6 +479,7 @@ export class DesktopProvider {
     this.write(s, {
       type: "configure",
       options,
+      captureBackends: ["dxgi"],
       allowInput: cfg.allowInput,
       allowClipboard: cfg.allowClipboard === true,
       allowDisplayResize: cfg.allowDisplayResize === true,
