@@ -20,7 +20,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true, dxgi = false) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -29,7 +29,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : [])],
     allowInput,
     allowUnlock: unlockAllowed,
     origins: () => [origin],
@@ -451,4 +451,18 @@ it("does not add extended ready fields for an IME-only viewer",async()=>{
   expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({imeKeys:true});
   expect(viewer.messages.find(m=>m.type==="ready")).not.toHaveProperty("extendedInput");
   expect(f.startRequests[0]!.options).not.toHaveProperty("extendedInput");
+});
+
+it("negotiates DXGI only on the local helper channel and keeps legacy viewer ready compatible", async () => {
+  const f = await fixture(true, false, true, false, true, false, undefined, undefined, true, false, true, true);
+  const viewer = await f.viewer();
+  viewer.send(start);
+  await expect.poll(() => viewer.frames.length).toBeGreaterThan(0);
+  const configure = JSON.parse(await readFile(f.record + ".configure.json", "utf8"));
+  expect(configure.captureBackends).toEqual(["dxgi"]);
+  expect(f.startRequests[0]!.options).not.toHaveProperty("captureBackends");
+  const ready = viewer.messages.find(m => m.type === "ready");
+  expect(ready?.backend).toBe("windows-gdi");
+  expect(DesktopReady.parse(ready).backend).toBe("windows-gdi");
+  viewer.send({type:"stop"});
 });

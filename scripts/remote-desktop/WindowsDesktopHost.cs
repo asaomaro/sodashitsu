@@ -243,8 +243,14 @@ public static class SodaDesktopHost {
             if(Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>8000) { Stopping=true;Release();Environment.Exit(0); }
             else if(!AllowedDesktop()){Stopping=true;Release();}
         },null,500,500);
+        SodaDesktopDxgi dxgi=null;
+        // Only new providers opt in. Old providers/helpers keep their existing wire contract.
+        if(!Secure && Environment.GetEnvironmentVariable("SODA_DESKTOP_CAPTURE")!="gdi" && config.ContainsKey("captureBackends")) {
+            var backends=config["captureBackends"] as object[];
+            if(backends!=null && Array.IndexOf(backends,"dxgi")>=0)dxgi=SodaDesktopDxgi.TryCreate(screen.DeviceName,Bounds,w,h);
+        }
         try {
-            var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend","windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
+            var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(Secure)ready["secureDesktop"]=true;
@@ -307,7 +313,10 @@ public static class SodaDesktopHost {
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
                     long now=Clock.ElapsedMilliseconds;
                     if(!Stopping && preparation.CanPrepare(now,pending)) {
-                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureScaled(resize,w,h);
+                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();if(dxgi!=null) {
+                            try { if(!dxgi.Capture(resize))CaptureScaled(resize,w,h); }
+                            catch { dxgi.Dispose();dxgi=null;CaptureScaled(resize,w,h); }
+                        } else CaptureScaled(resize,w,h);
                         // PoC cursor: standard arrow at the Windows cursor position; shape is not captured.
                         Point cursor=Cursor.Position;
                         if(showCursor && Bounds.Contains(cursor)) { int cx=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cy=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);Cursors.Default.Draw(resize,new Rectangle(cx,cy,16,24)); }
@@ -356,7 +365,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;watchdog.Dispose();Release();if(form!=null)form.Dispose(); }
+        } finally { Stopping=true;watchdog.Dispose();Release();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose(); }
     }
 }
 
@@ -528,4 +537,169 @@ public sealed class SodaDesktopFramePreparation<T> where T:class {
         return now-readyAt<=200?frame:null;
     }
     public void Invalidate(bool immediate){prepared=null;if(immediate)Next=0;}
+}
+
+// Normal-desktop-only DXGI/D3D11 backend. No DLL deployment or SDK is required:
+// the .NET Framework helper uses the system COM ABI and runtime HLSL compiler.
+// Keep this independent of input, transport and the privileged unlock service.
+public sealed class SodaDesktopDxgi : IDisposable {
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("dxgi.dll")] static extern int CreateDXGIFactory1(ref Guid iid,out IntPtr factory);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("d3d11.dll")] static extern int D3D11CreateDevice(IntPtr adapter,uint driver,IntPtr software,uint flags,IntPtr levels,uint count,uint sdk,out IntPtr device,out uint level,out IntPtr context);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("d3dcompiler_47.dll",CharSet=CharSet.Ansi)] static extern int D3DCompile(byte[] source,UIntPtr size,string name,IntPtr defines,IntPtr include,string entry,string target,uint flags,uint flags2,out IntPtr code,out IntPtr errors);
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]
+    struct OutputDesc { [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)] public string name;public int left,top,right,bottom,attached;public uint rotation;public IntPtr monitor; }
+    [StructLayout(LayoutKind.Sequential)] struct TextureDesc { public uint width,height,mips,array,format,samples,quality,usage,bind,cpu,misc; }
+    [StructLayout(LayoutKind.Sequential)] struct Viewport { public float x,y,width,height,min,max; }
+    [StructLayout(LayoutKind.Sequential)] struct SamplerDesc { public uint filter,u,v,w;public float bias;public uint anisotropy,comparison;public float r,g,b,a,min,max; }
+    [StructLayout(LayoutKind.Sequential)] struct Mapped { public IntPtr data;public uint pitch,depth; }
+    [StructLayout(LayoutKind.Sequential)] struct FrameInfo { public long present,mouse;public uint accumulated;public int coalesced,protectedContent;public int pointerX,pointerY,pointerVisible;public uint metadata,pointerSize; }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int EnumObject(IntPtr self,uint index,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetOutputDesc(IntPtr self,out OutputDesc value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Duplicate(IntPtr self,IntPtr device,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Acquire(IntPtr self,uint timeout,out FrameInfo info,out IntPtr resource);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int EndFrame(IntPtr self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void GetTextureDesc(IntPtr self,out TextureDesc desc);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateTexture(IntPtr self,ref TextureDesc desc,IntPtr initial,out IntPtr texture);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateView(IntPtr self,IntPtr resource,IntPtr desc,out IntPtr view);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateShader(IntPtr self,IntPtr code,UIntPtr size,IntPtr linkage,out IntPtr shader);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CreateSampler(IntPtr self,ref SamplerDesc desc,out IntPtr sampler);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate IntPtr BlobPointer(IntPtr self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate UIntPtr BlobSize(IntPtr self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void SetArray(IntPtr self,uint start,uint count,[In] IntPtr[] values);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void SetShader(IntPtr self,IntPtr shader,IntPtr classes,uint count);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void SetTopology(IntPtr self,uint topology);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void SetTargets(IntPtr self,uint count,[In] IntPtr[] targets,IntPtr depth);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void SetViewport(IntPtr self,uint count,ref Viewport viewport);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void Draw(IntPtr self,uint vertices,uint start);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void Copy(IntPtr self,IntPtr dest,IntPtr source);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Map(IntPtr self,IntPtr resource,uint subresource,uint type,uint flags,out Mapped mapped);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate void Unmap(IntPtr self,IntPtr resource,uint subresource);
+    // Vtable indices are from the Windows SDK interfaces (IUnknown included).
+    static T Method<T>(IntPtr obj,int slot) where T:class { return Marshal.GetDelegateForFunctionPointer(Marshal.ReadIntPtr(Marshal.ReadIntPtr(obj),slot*IntPtr.Size),typeof(T)) as T; }
+    static void Check(int result) { if(result<0)Marshal.ThrowExceptionForHR(result); }
+    static void Release(ref IntPtr obj) { if(obj!=IntPtr.Zero){Marshal.Release(obj);obj=IntPtr.Zero;} }
+    static IntPtr Query(IntPtr obj,string iid) { var id=new Guid(iid);IntPtr value;Check(Marshal.QueryInterface(obj,ref id,out value));return value; }
+    IntPtr device,context,duplication,source,sourceView,target,targetView,staging,vertex,pixel,sampler;
+    Bitmap bitmap;
+    byte[] row;
+    bool hasFrame,disposed;
+    readonly int width,height;
+    SodaDesktopDxgi(int width,int height) { this.width=width;this.height=height; }
+    public static SodaDesktopDxgi TryCreate(string name,Rectangle bounds,int width,int height) {
+        if(IntPtr.Size!=8 || width<1 || height<1 || width>4096 || height>2400 || (long)width*height>8000000)return null;
+        var capture=new SodaDesktopDxgi(width,height);
+        try { capture.Initialize(name,bounds);return capture; }
+        catch { capture.Dispose();return null; }
+    }
+    void Initialize(string name,Rectangle bounds) {
+        IntPtr factory=IntPtr.Zero,adapter=IntPtr.Zero,output=IntPtr.Zero,output1=IntPtr.Zero;
+        try {
+            Guid iid=new Guid("770aae78-f26f-4dba-a829-253c83d1b387");Check(CreateDXGIFactory1(ref iid,out factory));
+            // Select by the same Windows display name AND physical bounds used by
+            // input mapping, including outputs on a non-primary GPU.
+            bool found=false;
+            for(uint a=0;a<32 && !found;a++) {
+                int hr=Method<EnumObject>(factory,12)(factory,a,out adapter);
+                if(hr==unchecked((int)0x887a0002))break;Check(hr);
+                try {
+                    for(uint o=0;o<32;o++) {
+                        hr=Method<EnumObject>(adapter,7)(adapter,o,out output);
+                        if(hr==unchecked((int)0x887a0002))break;Check(hr);
+                        try {
+                            OutputDesc desc;Check(Method<GetOutputDesc>(output,7)(output,out desc));
+                            if(desc.attached==0 || desc.name!=name || desc.left!=bounds.Left || desc.top!=bounds.Top || desc.right!=bounds.Right || desc.bottom!=bounds.Bottom)continue;
+                            // Rotated outputs require a different UV transform. GDI
+                            // remains the supported backend for those configurations.
+                            if(desc.rotation!=1)throw new NotSupportedException("Rotated output");
+                            uint level;Check(D3D11CreateDevice(adapter,0,IntPtr.Zero,0x20,IntPtr.Zero,0,7,out device,out level,out context));
+                            output1=Query(output,"00cddea8-939b-4b83-a340-a685226666cc");
+                            Check(Method<Duplicate>(output1,22)(output1,device,out duplication));
+                            found=true;break;
+                        } finally { Release(ref output1);Release(ref output); }
+                    }
+                } finally { Release(ref adapter); }
+            }
+            if(!found)throw new NotSupportedException("Output unavailable");
+            InitializeResources(bounds.Width,bounds.Height);
+        } finally { Release(ref output1);Release(ref output);Release(ref adapter);Release(ref factory); }
+    }
+    void InitializeResources(int sourceWidth,int sourceHeight) {
+            source=Texture(sourceWidth,sourceHeight,0,8,0);
+            Check(Method<CreateView>(device,7)(device,source,IntPtr.Zero,out sourceView));
+            target=Texture(width,height,0,32,0);
+            Check(Method<CreateView>(device,9)(device,target,IntPtr.Zero,out targetView));
+            staging=Texture(width,height,3,0,0x20000);
+            vertex=Shader("struct V {float4 p:SV_Position;float2 uv:TEXCOORD0;}; V main(uint id:SV_VertexID){V v;v.uv=float2((id<<1)&2,id&2);v.p=float4(v.uv*float2(2,-2)+float2(-1,1),0,1);return v;}","vs_4_0",12);
+            pixel=Shader("Texture2D image:register(t0);SamplerState linearClamp:register(s0);float4 main(float4 p:SV_Position,float2 uv:TEXCOORD0):SV_Target{return image.Sample(linearClamp,uv);}","ps_4_0",15);
+            var descSampler=new SamplerDesc {filter=0x15,u=3,v=3,w=3,comparison=1,anisotropy=1,max=float.MaxValue};
+            Check(Method<CreateSampler>(device,23)(device,ref descSampler,out sampler));
+            bitmap=new Bitmap(width,height,PixelFormat.Format32bppRgb);row=new byte[checked(width*4)];
+    }
+    IntPtr Texture(int w,int h,uint usage,uint bind,uint cpu) {
+        var desc=new TextureDesc {width=(uint)w,height=(uint)h,mips=1,array=1,format=87,samples=1,usage=usage,bind=bind,cpu=cpu};
+        IntPtr value;Check(Method<CreateTexture>(device,5)(device,ref desc,IntPtr.Zero,out value));return value;
+    }
+    IntPtr Shader(string hlsl,string profile,int slot) {
+        IntPtr code=IntPtr.Zero,errors=IntPtr.Zero;
+        try {
+            byte[] bytes=Encoding.ASCII.GetBytes(hlsl);Check(D3DCompile(bytes,(UIntPtr)bytes.Length,null,IntPtr.Zero,IntPtr.Zero,"main",profile,0,0,out code,out errors));
+            IntPtr shader;Check(Method<CreateShader>(device,slot)(device,Method<BlobPointer>(code,3)(code),Method<BlobSize>(code,4)(code),IntPtr.Zero,out shader));return shader;
+        } finally { Release(ref errors);Release(ref code); }
+    }
+    public bool Capture(Graphics destination) {
+        if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
+        IntPtr resource=IntPtr.Zero,texture=IntPtr.Zero;FrameInfo info;
+        int hr=Method<Acquire>(duplication,8)(duplication,hasFrame?0u:16u,out info,out resource);
+        if(hr==unchecked((int)0x887a0027)) { if(!hasFrame)return false; }
+        else {
+            Check(hr);
+            try {
+                // Pointer-only updates have no new desktop image. Before the
+                // first desktop present, use GDI for this frame; never publish
+                // the undefined/black initial duplication surface.
+                if(info.present==0) { if(!hasFrame)return false; }
+                else {
+                texture=Query(resource,"6f15aaf2-d208-4e89-9ab4-489535d34f9c");
+                TextureDesc acquired,expected;Method<GetTextureDesc>(texture,10)(texture,out acquired);Method<GetTextureDesc>(source,10)(source,out expected);
+                if(acquired.width!=expected.width || acquired.height!=expected.height || acquired.format!=87 || acquired.samples!=1)throw new InvalidOperationException("Desktop texture changed");
+                Method<Copy>(context,47)(context,source,texture);hasFrame=true;
+                }
+            } finally { Release(ref texture);Release(ref resource);Check(Method<EndFrame>(duplication,14)(duplication)); }
+        }
+        Render(destination);return true;
+    }
+    void Render(Graphics destination) {
+        // All scaling occurs before CPU readback. A retained GPU source handles
+        // idle/timeouts without reusing a bitmap containing the painted cursor.
+        Method<SetShader>(context,11)(context,vertex,IntPtr.Zero,0);
+        Method<SetShader>(context,9)(context,pixel,IntPtr.Zero,0);
+        Method<SetArray>(context,8)(context,0,1,new[]{sourceView});
+        Method<SetArray>(context,10)(context,0,1,new[]{sampler});
+        Method<SetTopology>(context,24)(context,4);
+        Method<SetTargets>(context,33)(context,1,new[]{targetView},IntPtr.Zero);
+        var viewport=new Viewport {width=width,height=height,max=1};Method<SetViewport>(context,44)(context,1,ref viewport);
+        Method<Draw>(context,13)(context,3,0);
+        Method<SetTargets>(context,33)(context,0,new IntPtr[0],IntPtr.Zero);
+        Method<Copy>(context,47)(context,staging,target);
+        Mapped mapped;Check(Method<Map>(context,14)(context,staging,0,1,0,out mapped));
+        try {
+            if(mapped.data==IntPtr.Zero || mapped.pitch<(uint)row.Length || mapped.pitch>256*1024)throw new InvalidOperationException("Invalid GPU row pitch");
+            var bits=bitmap.LockBits(new Rectangle(0,0,width,height),ImageLockMode.WriteOnly,PixelFormat.Format32bppRgb);
+            try {
+                for(int y=0;y<height;y++) {
+                    Marshal.Copy(IntPtr.Add(mapped.data,checked(y*(int)mapped.pitch)),row,0,row.Length);
+                    Marshal.Copy(row,0,IntPtr.Add(bits.Scan0,checked(y*bits.Stride)),row.Length);
+                }
+            } finally { bitmap.UnlockBits(bits); }
+        } finally { Method<Unmap>(context,15)(context,staging,0); }
+        destination.DrawImageUnscaled(bitmap,0,0);
+    }
+    public void Dispose() {
+        if(disposed)return;disposed=true;
+        if(bitmap!=null){bitmap.Dispose();bitmap=null;}
+        Release(ref sampler);Release(ref pixel);Release(ref vertex);Release(ref staging);Release(ref targetView);Release(ref target);Release(ref sourceView);Release(ref source);Release(ref duplication);Release(ref context);Release(ref device);
+    }
 }

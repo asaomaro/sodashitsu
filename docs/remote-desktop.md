@@ -251,11 +251,29 @@ soda serve
 
 画像配信は変更箇所だけ送る独自プロトコルです。VNC/RFB互換やnoVNCではありません。追加の動画共有ではブラウザのWebRTC、またはVP8/OpusのWebM中継を使います（後述）。CopyRectはありません。実装は[Windowsの比較・圧縮](../scripts/remote-desktop/WindowsDesktopHost.cs)、[パケット検査](../packages/protocol/src/desktop.ts)、[ブラウザ合成](../packages/web/src/desktop/render.ts)を参照してください。
 
+## 通常画面のDXGI取得とGDIへの切り替え
+
+Bのサーバーからhelperへの内部configureで`captureBackends: ["dxgi"]`を提示した場合だけ、新helperがDXGIを試します。旧サーバー＋新helper、新サーバー＋旧helperはGDIで動作します。viewerへ出すbackend名は互換性のため`windows-gdi`のままで、実際のGPU利用を表す表示ではありません。native helper自身の初回readyは`windows-dxgi`または`windows-gdi`です。途中で取得に失敗した場合はGDIへ切り替えるため、初回readyは継続利用の保証ではありません。
+
+問題の切り分けでは、Bのhelperコマンドに`-CaptureBackend gdi`を追加してGDIに固定できます。Bのサーバーを起動するプロセスの環境変数`SODA_DESKTOP_CAPTURE=gdi`でも固定できます。再接続すると反映されます。環境変数やコマンドはBのローカル設定で、ブラウザから変更するAPIはありません。既定の`auto`へ戻すと次の接続でDXGIを再試行します。
+
+GPUの基本動作はWindows PowerShellで次を実行して確認できます。生成した画像だけをGPUへ送り、縮小・色・向き・奇数幅の行処理・再描画を確かめます。既定では実デスクトップの取得・入力・画面モード変更は行いません。`-STA -File scripts/remote-desktop/validate-dxgi.ps1 -CaptureDesktop`を明示すると、通常デスクトップに一時的な4色の窓を表示し、DXGI取得後の色・座標も検証します。画像保存や入力送信は行いません。
+
+```powershell
+powershell.exe -NoProfile -File scripts/remote-desktop/validate-dxgi.ps1
+```
+
+信頼するhelperコマンド配列をJSONで`SODA_DESKTOP_BENCH_COMMAND`へ指定した場合だけ、`node scripts/remote-desktop/benchmark-capture.mjs --backend auto`で実画面の取得・圧縮のみを測定できます。`--backend gdi`はDXGIを提示せず同じhelperのGDI経路と比較します。幅1280・30fps・JPEG65・60枚が既定です。画像を保存せず入力も要求しませんが、helper自体は実画面を取得するため明示的な実行だけに使ってください。結果は一時フォルダの`soda-desktop-capture.json`です。ブラウザ・ネットワーク・入力遅延はこの測定に含まれません。
+
+2026-10-25の手元のWindows実画面（3200×2000→1280×800、JPEG65、差分なし、30fps設定、目標60枚）→WSLのA/B→Chromiumでは、追加ACK待ちなしの各1回で実効12.41→21.30fps、取得・縮小p95 78.48→6.24ms、helper CPUは1コア換算53.9→29.4%でした。peak RSSは136.4→178.0MiB、帯域は13.9→22.6Mbpsです。ACKへ100msを追加した各2回ではFPSは平均7.72→7.85で、helper CPUは平均40.0→14.2%でした。固定していない画面内容・実行時の変動を含むため、sr-pcや実WANの速度保証ではありません。[条件と生データ](../.aidev/works/20261025-desktop-dxgi/test-result.md)を参照してください。
+
+DXGIのdirty/move rectanglesとカーソル形状はまだ利用しません。従来のタイル比較と標準矢印の描画を続けます。画面回転はGDIへ戻し、非プライマリーGPUの出力はWindows表示名と物理座標の一致で選びます。複数GPU・混在DPI・RDP仮想画面は個別の実機検証が必要です。
+
 ## 制限と安全の境界
 
 - Bの共有は同時に1件。共有要求ごとに独立したmachineチャネルと一回限りの短命ticketを使います。他のブラウザ/タブに画像やticketをbroadcastしません。同じCookieの別接続でも自動配信されません。
 - Windows helperは非昇格の通常デスクトップのみを対象とします。ロック画面は上記の専用サービス経路だけを実験的に追加しています（実機未検証）。サインアウト後のログイン画面、UAC、昇格アプリ、無人ログイン、headless、DRM保護画面は対象外です。入力は[SendInput/UIPIの制約](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)を受けます。
-- 初期backendはGDI `StretchBlt`で取得と縮小を行い、全画面JPEGまたは部分PNGへ圧縮します。DXGI/Desktop Duplicationは未実装です。動画共有は別のブラウザ補助を使います。GDIを選んだのは、初期PoCを標準ランタイムでコンパイルし測定可能にするためです。性能優位を確認したという意味ではありません。[Microsoft StretchBlt API](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchblt) / [HALFTONEとSetBrushOrgEx](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-setstretchbltmode)
+- x64の通常デスクトップはDXGI Desktop Duplicationで取得し、D3D11の線形サンプリングでGPU上で縮小してからCPUへ読み戻します。JPEG/PNG圧縮・差分転送・入力は従来の経路です。GPU動画エンコードではありません。初回のポインター更新のみ・画像未到着はそのフレームだけGDIを使い、有効なデスクトップ画像が届いてからDXGIへ移ります。回転画面、利用できないGPU/API、初期化・取得失敗はその接続中GDI `StretchBlt`へ戻します。ロック解除用のsecure desktopは常にGDIです。追加DLLやWindows SDKの導入は不要です。[Microsoft Desktop Duplication API](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api) / [StretchBlt](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchblt)
 - 同一権限の通常のネイティブダイアログも取得対象になる設計ですが、実機互換性は未検証です。GPU描画や動画、cursor形状、混在DPI/複数モニター、日本語配列の記号/IME、アプリごとのUnicode入力は別途検証が必要です。カーソルは取得位置に標準矢印を描く近似です。
 - OSやブラウザが取る特殊キーをすべて転送できるとは限りません。通常共有にはCtrl+Alt+Delの送信ボタンはなく、許可済みのロック解除経路でのみ提供します。Esc1回は接続先へ送ります。修飾キーなしのEscを500ms以内に2回押すとローカルの操作解除になります。
 - マイク、ファイル転送、plugin operation、TUI画像表示、Linux/macOSのnative capture backendは含みません。クリップボード・音声・CLIは後述の追加許可が必要です。

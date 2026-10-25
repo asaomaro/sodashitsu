@@ -1,0 +1,17 @@
+{
+  "kind": "native-helper-capture-and-encode-only",
+  "requestedBackend": "gdi",
+  "initialHelperBackend": "windows-gdi",
+  "sourceWidth": 3200,
+  "sourceHeight": 2000,
+  "frameWidth": 1280,
+  "frameHeight": 800,
+  "targetFps": 30,
+  "frames": 60,
+  "achievedFps": 8.747000620500659,
+  "captureP95Ms": 105.4796,
+  "encodeP95Ms": 10.0671,
+  "sourceCpuOneCorePercent": 64.629586152534,
+  "sourcePeakRssMiB": 135.828125,
+  "limitations": "Explicit trusted native command; no input requested, image data discarded. Initial backend does not prove continued DXGI use after fallback. Immediate ACK; no product servers, browser, WAN, GPU utilization or input latency measured. Screen contents are uncontrolled."
+}
