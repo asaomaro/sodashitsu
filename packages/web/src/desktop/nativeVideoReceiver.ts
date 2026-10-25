@@ -1,10 +1,10 @@
 import { decodeDesktopH264Packet } from "@sodashitsu/protocol";
 
-/** One access unit in decode/draw; ACK is emitted only after the frame is painted. */
+/** Bounded access units in decode/draw; ACK follows each frame painted in order. */
 export class DesktopNativeVideoReceiver {
   private decoder: VideoDecoder | undefined;
-  private pending: { seq: number; timestamp: number } | undefined;
-  private queued: { seq: number; bytes: Uint8Array } | undefined;
+  private pending: { seq: number; timestamp: number; at: number }[] = [];
+  private queued: { seq: number; bytes: Uint8Array; at: number }[] = [];
   private stopped = false;
   private initialized = false;
   private lastTimestamp = -1;
@@ -15,6 +15,7 @@ export class DesktopNativeVideoReceiver {
       codec: string;
       width: number;
       height: number;
+      window?: 3;
     },
     private send: (value: unknown) => void,
     private draw: (frame: VideoFrame) => void,
@@ -41,24 +42,24 @@ export class DesktopNativeVideoReceiver {
     this.decoder = decoder;
     decoder.configure(config);
     const queued = this.queued;
-    this.queued = undefined;
-    if (queued) this.push(queued.seq, queued.bytes);
+    this.queued = [];
+    for (const frame of queued) this.push(frame.seq, frame.bytes, frame.at);
   }
-  push(seq: number, bytes: Uint8Array) {
+  push(seq: number, bytes: Uint8Array, at = performance.now()) {
     if (this.stopped) return;
-    if (this.pending || this.queued) {
+    if (this.pending.length + this.queued.length >= (this.settings.window ?? 1)) {
       this.failure();
       return;
     }
     if (!this.decoder) {
-      this.queued = { seq, bytes: bytes.slice() };
+      this.queued.push({ seq, bytes: bytes.slice(), at });
       return;
     }
     try {
       const frame = decodeDesktopH264Packet(bytes);
       if ((!this.initialized && !frame.key) || frame.timestamp <= this.lastTimestamp)
         throw Error("H.264 frame order");
-      this.pending = { seq, timestamp: frame.timestamp };
+      this.pending.push({ seq, timestamp: frame.timestamp, at });
       this.lastTimestamp = frame.timestamp;
       this.initialized = true;
       this.decoder.decode(
@@ -75,7 +76,7 @@ export class DesktopNativeVideoReceiver {
   private output(frame: VideoFrame) {
     try {
       if (this.stopped) return;
-      const pending = this.pending;
+      const pending = this.pending[0];
       if (
         !pending ||
         frame.timestamp !== pending.timestamp ||
@@ -84,12 +85,15 @@ export class DesktopNativeVideoReceiver {
       )
         throw Error("H.264 output mismatch");
       this.draw(frame);
-      this.pending = undefined;
+      this.pending.shift();
       this.send({
         type: "native_video_ack",
         id: this.settings.id,
         generation: this.settings.generation,
         seq: pending.seq,
+        ...(this.settings.window === 3
+          ? { decodeMs: Math.min(60000, Math.max(0, performance.now() - pending.at)) }
+          : {}),
       });
     } catch {
       this.failure();
@@ -105,7 +109,8 @@ export class DesktopNativeVideoReceiver {
   stop() {
     if (this.stopped) return;
     this.stopped = true;
-    this.pending = this.queued = undefined;
+    this.pending = [];
+    this.queued = [];
     if (this.decoder && this.decoder.state !== "closed") this.decoder.close();
     this.decoder = undefined;
   }

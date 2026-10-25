@@ -8,6 +8,8 @@ import {
   RemoteDesktopViewerMessage,
   DESKTOP_INPUT_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
+  DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
+  DesktopNativeVideoStats,
   isExtendedDesktopInput,
   DesktopFrameChain,
   DesktopReady,
@@ -36,8 +38,10 @@ type Viewer = {
   chain: DesktopFrameChain;
   features?: boolean;
   nativeVideoRequested: boolean;
+  nativeWindowRequested:boolean;
+  nativeVideoWindow?:3;
   nativeVideo?: boolean;
-  media?: { id: string; generation: number; seq: number; native?:boolean; pending?:number };
+  media?: { id: string; generation: number; seq: number; native?:boolean; pending?:number[]; window?:1|3;lastAck?:number };
   snapshot?: {
     promise: Promise<void>;
     resolve(): void;
@@ -167,7 +171,7 @@ export class DesktopRelay {
     }
     this.server.handleUpgrade(req, socket, head, (ws) => {
       ws.on("error", () => ws.terminate());
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -177,7 +181,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -242,6 +246,7 @@ export class DesktopRelay {
           }),
       },
       nativeVideoRequested,
+      nativeWindowRequested,
       inputWaits: new Map(),
       ws,
       sessionId,
@@ -313,7 +318,8 @@ export class DesktopRelay {
           });
         } else if(m.type==="native_video_ack") {
           if(v.nativeVideo&&v.media?.native&&v.provider&&m.id===v.media.id&&m.generation===v.media.generation) {
-            if(m.seq!==v.media.pending)throw new Error("Native ACK order");v.media.pending=0;this.send(v.provider,m);
+            if(m.seq<=(v.media.lastAck??0))return;
+            if(m.seq!==v.media.pending?.[0])throw new Error("Native ACK order");v.media.pending.shift();v.media.lastAck=m.seq;this.send(v.provider,m);
           }
         } else if (
           m.type === "media" ||
@@ -424,6 +430,7 @@ export class DesktopRelay {
         imeKeys: z.boolean().optional(),
         extendedInput: z.boolean().optional(),
         nativeVideo: z.boolean().optional(),
+        nativeVideoWindow:z.literal(3).optional(),
         features: z.boolean().optional(),
         displayResize: z.boolean().optional(),
       })
@@ -441,6 +448,8 @@ export class DesktopRelay {
     delete legacyOptions.imeKeys;
     delete legacyOptions.extendedInput;
     delete legacyOptions.nativeVideo;
+    delete legacyOptions.nativeVideoWindow;
+    if(v.nativeWindowRequested&&caps.nativeVideoWindow===3)v.nativeVideoWindow=3;else delete v.nativeVideoWindow;
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
     // Capability requires both the viewer opt-in and B's current RPC schema.
     v.imeKeysNegotiated = v.imeKeysRequested && caps.imeKeys === true;
@@ -454,6 +463,7 @@ export class DesktopRelay {
     const negotiated = {
       ...legacyOptions,
       ...(v.nativeVideo?{nativeVideo:true as const}:{}),
+      ...(v.nativeVideo&&v.nativeVideoWindow===3?{nativeVideoWindow:3 as const}:{}),
       ...(v.imeKeysNegotiated ? { imeKeys: true as const } : {}),
       ...(v.extendedInputNegotiated ? { extendedInput: true as const } : {}),
       ...(display ? { display } : {}),
@@ -518,9 +528,9 @@ export class DesktopRelay {
           const chunk = decodeDesktopMediaChunk(bytes);
           if (chunk.generation !== v.media.generation) return;
           if (chunk.seq !== v.media.seq + 1) throw new Error();
-          if(v.media.native&&v.media.pending)throw new Error("Native video backlog");
+          if(v.media.native&&(v.media.pending?.length??0)>=(v.media.window??1))throw new Error("Native video backlog");
           v.media.seq = chunk.seq;
-          if(v.media.native)v.media.pending=chunk.seq;
+          if(v.media.native)(v.media.pending??=[]).push(chunk.seq);
           if (v.ws.bufferedAmount > 512 * 1024) {
             if (v.provider) this.send(v.provider, { type: "media", enabled: false });
             delete v.media;
@@ -573,8 +583,9 @@ export class DesktopRelay {
             }
             v.since = performance.now();
             v.nativeVideo=v.nativeVideo===true&&ready.nativeVideo===true&&!v.secureDesktop;
-            const { imeKeys, extendedInput, nativeVideo, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.nativeVideo?{nativeVideo:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            if(ready.nativeVideoWindow!==3||!v.nativeVideo)delete v.nativeVideoWindow;
+            const { imeKeys, extendedInput, nativeVideo,nativeVideoWindow, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);
@@ -596,16 +607,19 @@ export class DesktopRelay {
             if (status.state === "images") delete v.media;
             else if (!v.media || v.media.id !== status.id)
               v.media = { id: status.id, generation: 0, seq: 0 };
-            if(v.media&&status.state==="native")v.media.native=true;
+            if(v.media&&status.state==="native"){v.media.native=true;v.media.window=v.nativeVideoWindow??1;v.media.pending=[];v.media.lastAck=0;}
             this.send(v.ws, status);
           } else if (msg.type === "media_stream" && v.media) {
             const stream = DesktopMediaStream.parse(msg);
             if (stream.id !== v.media.id || stream.generation <= v.media.generation)
               throw new Error();
             if((stream.mime==="video/h264")!==!!v.media.native)throw new Error();
+            if(stream.mime==="video/h264"&&(stream.window??1)!==(v.media.window??1))throw new Error();
             v.media.generation = stream.generation;
             v.media.seq = 0;
             this.send(v.ws, stream);
+          } else if(msg.type==="native_video_stats"&&v.nativeVideoWindow===3&&v.media?.native) {
+            const stats=DesktopNativeVideoStats.parse(msg);if(stats.id!==v.media.id)throw new Error();this.send(v.ws,stats);
           } else if (msg.type === "rtc_signal" && v.features) {
             const signal = DesktopMediaSignal.parse(msg);
             if (signal.id !== v.media?.id || signal.signal.kind === "answer") throw new Error();

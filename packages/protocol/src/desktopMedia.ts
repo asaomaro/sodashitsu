@@ -124,6 +124,7 @@ export const DesktopMediaStream = z.union([
       id: z.string().uuid(),
       generation: z.number().int().min(1).max(0xffffffff),
       mime: z.literal("video/h264"),
+      window: z.literal(3).optional(),
       codec: z.string().regex(/^avc1\.[0-9a-f]{6}$/),
       width: z.number().int().min(2).max(4096),
       height: z.number().int().min(2).max(2400),
@@ -132,14 +133,32 @@ export const DesktopMediaStream = z.union([
     .refine((v) => v.width * v.height <= 8_000_000),
 ]);
 export const DESKTOP_NATIVE_VIDEO_PROTOCOL = "soda-desktop-native-video-v1";
+export const DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL = "soda-desktop-native-video-v2";
 export const DesktopNativeVideoAck = z
   .object({
     type: z.literal("native_video_ack"),
+    decodeMs: z.number().finite().min(0).max(60000).optional(),
     id: z.string().uuid(),
     generation: z.number().int().min(1).max(0xffffffff),
     seq: z.number().int().min(1).max(0xffffffff),
   })
   .strict();
+export const DesktopNativeVideoStats = z
+  .object({
+    type: z.literal("native_video_stats"),
+    id: z.string().uuid(),
+    width: z.number().int().min(2).max(4096),
+    height: z.number().int().min(2).max(2400),
+    captureMs: z.number().finite().min(0).max(60000),
+    conversionMs: z.number().finite().min(0).max(60000),
+    encodeMs: z.number().finite().min(0).max(60000),
+    ackMs: z.number().finite().min(0).max(60000),
+    decodeMs: z.number().finite().min(0).max(60000),
+    pending: z.number().int().min(0).max(3),
+    window: z.literal(3),
+  })
+  .strict();
+export type DesktopNativeVideoStats = z.infer<typeof DesktopNativeVideoStats>;
 /** One complete Annex-B access unit. One packet may be outstanding until draw ACK. */
 export function encodeDesktopH264Packet(
   timestamp: number,

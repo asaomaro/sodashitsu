@@ -137,11 +137,11 @@ export class DesktopMediaReceiver {
       { once: true },
     );
   }
-  nativeStream(generation:number,codec:string,width:number,height:number) {
+  nativeStream(generation:number,codec:string,width:number,height:number,window?:3) {
     if(this.stopped)return;
     this.peer?.close();this.peer=undefined;this.native?.stop();this.releaseSource();this.video.srcObject=null;
     this.generation=generation;this.sequence=0;
-    this.native=new DesktopNativeVideoReceiver({id:this.id,generation,codec,width,height},this.send,frame=>{if(this.stopped)return;this.draw(frame,++this.count,width,height);this.drawnAt=performance.now();},()=>this.fail());
+    this.native=new DesktopNativeVideoReceiver({id:this.id,generation,codec,width,height,...(window===3?{window}: {})},this.send,frame=>{if(this.stopped)return;this.draw(frame,++this.count,width,height);this.drawnAt=performance.now();},()=>this.fail());
   }
   chunk(bytes: Uint8Array) {
     const chunk = decodeDesktopMediaChunk(bytes);

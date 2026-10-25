@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { RemoteDesktopViewerMessage } from "./desktop.js";
 import {
-  DesktopClipboardRequest,
+  DesktopClipboardRequest, DesktopNativeVideoStats, DesktopNativeVideoAck,
   DesktopMediaStream, DesktopCompanionMessage, encodeDesktopH264Packet, decodeDesktopH264Packet,
   DesktopIceServers,
   decodeDesktopMediaChunk,
@@ -62,4 +62,14 @@ it("bounds H264 access units, timestamps and codec descriptors separately from b
  expect(DesktopMediaStream.safeParse(stream).success).toBe(true);expect(DesktopCompanionMessage.safeParse(stream).success).toBe(false);
  expect(DesktopMediaStream.safeParse({...stream,codec:"unbounded"}).success).toBe(false);
  expect(DesktopMediaStream.safeParse({...stream,width:4096,height:2400}).success).toBe(false);
+});
+
+it("bounds native pipeline timing and preserves old ACK and stream shapes",()=>{
+ const id=crypto.randomUUID();
+ expect(DesktopNativeVideoAck.safeParse({type:"native_video_ack",id,generation:1,seq:1}).success).toBe(true);
+ expect(DesktopNativeVideoAck.safeParse({type:"native_video_ack",id,generation:1,seq:1,decodeMs:NaN}).success).toBe(false);
+ const stats={type:"native_video_stats",id,width:1920,height:1200,captureMs:10,conversionMs:12,encodeMs:3,ackMs:100,decodeMs:4,pending:2,window:3};
+ expect(DesktopNativeVideoStats.safeParse(stats).success).toBe(true);
+ for(const patch of [{pending:4},{window:4},{ackMs:Infinity},{decodeMs:-1},{encodeMs:60001},{extra:true}])
+  expect(DesktopNativeVideoStats.safeParse({...stats,...patch}).success).toBe(false);
 });

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { DesktopNativeVideoReceiver } from "./nativeVideoReceiver.js";
 import { encodeDesktopH264Packet } from "@sodashitsu/protocol";
 afterEach(() => vi.unstubAllGlobals());
-function fixture(supported = true) {
+function fixture(supported = true, window?: 3) {
   let callbacks!: VideoDecoderInit;
   const decode = vi.fn(),
     close = vi.fn();
@@ -31,7 +31,14 @@ function fixture(supported = true) {
     draw = vi.fn(),
     fail = vi.fn(),
     receiver = new DesktopNativeVideoReceiver(
-      { id: "id", generation: 2, codec: "avc1.42041f", width: 640, height: 480 },
+      {
+        id: "id",
+        generation: 2,
+        codec: "avc1.42041f",
+        width: 640,
+        height: 480,
+        ...(window === 3 ? { window } : {}),
+      },
       send,
       draw,
       fail,
@@ -119,4 +126,44 @@ it("closes the decoder and restores images on a decoder runtime error", async ()
   expect(f.send).not.toHaveBeenCalled();
   const late = f.output();
   expect(late.close).toHaveBeenCalledOnce();
+});
+
+it("pipelines three access units during codec initialization and ACKs them in draw order", async () => {
+  const f = fixture(true, 3);
+  for (let seq = 1; seq <= 3; seq++)
+    f.receiver.push(
+      seq,
+      encodeDesktopH264Packet(
+        seq * 100,
+        seq === 1,
+        new Uint8Array([0, 0, 1, seq === 1 ? 0x65 : 0x41]),
+      ),
+    );
+  await Promise.resolve();
+  expect(f.decode).toHaveBeenCalledTimes(3);
+  f.output(100);
+  f.receiver.push(4, encodeDesktopH264Packet(400, false, new Uint8Array([0, 0, 1, 0x41])));
+  f.output(200);
+  f.output(300);
+  f.output(400);
+  expect(f.send.mock.calls.map(([m]) => m.seq)).toEqual([1, 2, 3, 4]);
+  expect(f.send).toHaveBeenCalledWith(expect.objectContaining({ decodeMs: expect.any(Number) }));
+  f.receiver.stop();
+});
+it("rejects a fourth undecoded frame without dropping a reference picture", async () => {
+  const f = fixture(true, 3);
+  await Promise.resolve();
+  for (let seq = 1; seq <= 4; seq++)
+    f.receiver.push(
+      seq,
+      encodeDesktopH264Packet(
+        seq * 100,
+        seq === 1,
+        new Uint8Array([0, 0, 1, seq === 1 ? 0x65 : 0x41]),
+      ),
+    );
+  expect(f.decode).toHaveBeenCalledTimes(3);
+  expect(f.fail).toHaveBeenCalledOnce();
+  expect(f.send).not.toHaveBeenCalled();
+  expect(f.output(100).close).toHaveBeenCalledOnce();
 });
