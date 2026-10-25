@@ -1,0 +1,7 @@
+# ネイティブ動画の独立60fps上限
+
+画像設定DesktopOptions.fpsは1〜30のまま。新viewer subprotocol、B capability、helper readyの3段確認後だけnativeMaxFps60を返す。native media.settings.fpsを独立した上限として使い、旧peerへ新fieldを送らない。helper未対応時はnative動画自体を維持して従来上限を使う。
+
+native MFTは1〜60fpsを受ける。helperの開始間隔は高精度clockで開始時刻+1000.0/fpsとし、待ちは切り上げる。integerの1000/60=16msで上限を超えず、古いdeadlineへ追い付くための連続送出もしない。ACK windowは既存の有界3枚を維持する（高RTTでの到達fpsは別のUDP経路対応）。画像のpolicyは画像上限以下。
+
+UIはnative専用30/60選択、既存の適用中JPEG等は『画像設定』と明示。60fps達成を保証しない。legacy/helperだけ未対応、codec実GPU、生成画面のbrowser受信、時刻/小数deadline、negativeと独立レビューを行う。

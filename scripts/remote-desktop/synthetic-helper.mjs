@@ -142,6 +142,7 @@ function run() {
         send({
           type: "ready",
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
+          ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
           ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
@@ -212,7 +213,7 @@ function run() {
     if(options&&native&&native.pending.length<native.window&&performance.now()>=native.next) {
       const packet=nativeFixture.packets[native.index++%nativeFixture.packets.length];
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
-      send({type:"native_frame",id:native.id,seq:native.seq,timestamp:native.seq*33333,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
+      send({type:"native_frame",id:native.id,seq:native.seq,timestamp:Math.round(native.seq*1000000/native.fps),key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
     }
     if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;

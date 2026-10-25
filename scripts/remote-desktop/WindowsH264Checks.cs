@@ -29,6 +29,11 @@ namespace SodaDesktopTests {
     }
    }
    if(!String.IsNullOrEmpty(fixtureFile))File.WriteAllText(fixtureFile,new JavaScriptSerializer().Serialize(new {width=640,height=360,packets}),new System.Text.UTF8Encoding(false));
+   Check(SodaDesktopVideoDelay.FrameDelay(10,10+1000.0/60,true)==10&&SodaDesktopVideoDelay.FrameDelay(26,26+2.0/3,true)==1,"Fractional 60fps deadline truncated");
+   using(var fast=new SodaDesktopH264(640,360,60,2500)) {
+    var bytes=new byte[640*360*3/2];for(int i=0;i<640*360;i++)bytes[i]=16;for(int i=640*360;i<bytes.Length;i++)bytes[i]=128;
+    for(int frame=0;frame<4;frame++){var packet=fast.Encode(bytes,(long)Math.Round(frame*1000000.0/60));Check(packet!=null&&packet.timestamp==(long)Math.Round(frame*1000000.0/60),"60fps hardware timestamp");if(frame==0)Check(packet.key&&packet.codec!=null,"60fps initial SPS/IDR missing");}
+   }
    Console.WriteLine("desktop_h264_checks_passed: hardware-only MFT, bitmap/prepared NV12, four generated frames, initial SPS/IDR, timestamps, packet limits");
   }
   // Only test fixtures remove Annex-B filler NALs (CBR padding), preserving SPS/PPS/IDR/deltas.

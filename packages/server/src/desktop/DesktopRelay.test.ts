@@ -14,7 +14,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -32,7 +32,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record, ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
     allowInput,
     allowNativeVideo: nativeFixture,
     allowUnlock: unlockAllowed,
@@ -117,8 +117,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" = false) {
-    const ws = new WebSocket(endpoint, ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" = false) {
+    const ws = new WebSocket(endpoint, ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -611,4 +611,26 @@ it("ignores delayed native stop metadata after a browser-media switch and does n
  source.terminate();await expect.poll(()=>v.messages.some(m=>m.type==="video_closed")).toBe(true);
  expect(serverViewer.media.id).toBe(id);expect(v.messages.filter(m=>m.type==="media_status"&&m.state==="images")).toHaveLength(before);
  v.send({type:"stop"});
+});
+
+it.each(["rate","pipeline"] as const)("negotiates native 60fps independently of image fps only with viewer header (%s)",async mode=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),v=await f.viewer(mode);
+ v.send({...start,options:{width:640,fps:10,quality:65,features:true}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ const ready=v.messages.find(m=>m.type==="ready")!;
+ expect(ready.nativeMaxFps).toBe(mode==="rate"?60:undefined);expect(f.startRequests[0]!.options.fps).toBe(10);
+ expect(f.startRequests[0]!.options.nativeMaxFps).toBe(mode==="rate"?60:undefined);
+ const share=(f.provider as any).active,writes=vi.spyOn(share.process.stdin,"write");
+ v.send({type:"media",enabled:true,settings:{transport:"native",fps:60}});
+ await expect.poll(()=>writes.mock.calls.map(([data])=>typeof data==="string"?JSON.parse(data):undefined).find(m=>m?.type==="native_video"&&m.enabled)?.fps).toBe(mode==="rate"?60:10);
+ expect(writes.mock.calls.map(([data])=>typeof data==="string"?JSON.parse(data):undefined).filter(m=>m?.type==="policy").every(m=>m.fps<=10)).toBe(true);
+ v.send({type:"stop"});
+});
+
+it("keeps the legacy native rate when only the helper lacks 60fps support",async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true);
+ const cfg=(f.provider as any).config;f.provider.configure({...cfg,command:cfg.command.filter((arg:string)=>arg!=="--native-60fps")});
+ const v=await f.viewer("rate");v.send({...start,options:{width:640,fps:10,quality:65,features:true}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.startRequests[0]!.options.nativeMaxFps).toBe(60);expect(v.messages.find(m=>m.type==="ready")?.nativeVideo).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeMaxFps");
+ const writes=vi.spyOn((f.provider as any).active.process.stdin,"write");v.send({type:"media",enabled:true,settings:{transport:"native",fps:60}});
+ await expect.poll(()=>writes.mock.calls.map(([data])=>typeof data==="string"?JSON.parse(data):undefined).find(m=>m?.type==="native_video"&&m.enabled)?.fps).toBe(10);v.send({type:"stop"});
 });

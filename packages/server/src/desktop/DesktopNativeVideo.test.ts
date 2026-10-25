@@ -206,3 +206,11 @@ it("expires the oldest outstanding frame even when newer frames were sent", asyn
     clock.mockRestore();
   }
 });
+
+it.each([false,true])("uses an independent 60fps ceiling only when helper capability is confirmed (%s)",confirmed=>{
+ const write=vi.fn(),send=vi.fn(()=>true),video=new DesktopNativeVideo({enabled:true,width:640,sourceWidth:640,sourceHeight:360,fps:10,...(confirmed?{maxFps:60 as const}:{}),send,write,policy:()=>{},buffered:()=>0});
+ video.fromViewer({type:"media",enabled:true,settings:{transport:"native",fps:60}});
+ if(confirmed)expect(write.mock.calls.find(([m])=>m.type==="native_video")?.[0].fps).toBe(60);
+ else {expect(write).not.toHaveBeenCalled();expect(send).toHaveBeenCalledWith(expect.objectContaining({state:"images",reason:"unavailable"}));}
+ video.stop();
+});

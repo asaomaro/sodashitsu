@@ -273,13 +273,15 @@ soda serve
 
 同梱helperでは、B側の既存のデスクトップ共有許可と、認証済みviewerからの明示開始が必要です。独自helperコマンドでは従来の`SODA_DESKTOP_ALLOW_MEDIA=1`に加え、新しいhelper側の対応が必要です。ロック画面では常に無効です。旧版A/B/helperの組み合わせでは新機能を提示せず、画像共有を続けます。接続元と接続先の両方をpull/build/handoffして、ブラウザを再読み込みしてください。
 
-ビットレートは初期2500kbpsの目標値で、瞬間的な上限保証ではありません。別途JPEG/PNG画像も1fpsで流してエージェントの画像取得と入力鮮度を維持するため、総帯域はその分を含みます。動画の描画実測FPSを表示し、従来のFPS・圧縮時間は画像側の計測として表示します。FPS上限は既存の設定値（最大30）のままです。native動画の動的bitrate調整はまだ行いません。
+ビットレートは初期2500kbpsの目標値で、瞬間的な上限保証ではありません。別途JPEG/PNG画像も1fpsで流してエージェントの画像取得と入力鮮度を維持するため、総帯域はその分を含みます。動画の描画実測FPSを表示し、従来のFPS・圧縮時間は画像側の計測として表示します。画像のFPS上限は既存の設定値（最大30）のままです。native動画の動的bitrate調整はまだ行いません。
+
+新しいviewer・A/B・helperが揃うと、GPU動画に独立した［動画FPS上限］が表示され、30／60fpsを指定できます。画像設定のfps上限（最大30）やJPEG品質とは別です。旧版との組み合わせは従来の動画上限を使い、未知の設定を送りません。60fpsは要求上限で、GPU・解像度・回線による到達は保証しません。この設定はA/Bのbuild・handoffとブラウザ再読み込み後に使えます。
 
 新しい版の組み合わせでは、動画の実寸、取得・NV12変換・圧縮とencoder待ち・送信から描画ACKまで・ブラウザ復号と描画までの時間、未ACK枚数を約1秒間隔で表示します。直近1枚の値で、区間の合計やp95ではありません。ACK時間には通信とブラウザ側の待ちも含みます。「接続先を最大解像度にする」が有効な間は、幅上限より実ディスプレイの解像度を優先します。例えば幅上限1280でも1920×1200の等倍動画になるため、取得・変換の負荷が増えます。
 
 新しいviewerとA/Bが揃う場合、native H.264の動画・その状態通知は、B→AとA→ブラウザの両区間で専用WebSocketを使います。キー・マウス・操作許可・解放・入力ACKは既存の接続にまとめ、動画データの送信待ちの後ろへ並べません。認証済み共有に紐づく役割別の一回券（10秒）で追加接続を結び、共有終了・認証失効で破棄します。専用接続の障害や詰まりはnative動画を止めて画像へ戻し、同じ共有のnative動画を無効化します。画像表示と操作は続けられ、動画を再開する場合は共有を開き直してください。旧版の組み合わせは従来の接続を使い、未知の項目を旧peerへ送りません。
 
-この分離はTCP上の接続を分けるもので、UDPへ変更するものではありません。回線自体の混雑、補助画像snapshot、helperの映像とACK出力、GPU処理の待ちまでは除去しません。[検証記録](../.aidev/works/20261026-desktop-video-lane/test-result.md)を参照してください。サーバーとWebの変更を含むため、A/Bでbuildとhandoff後、デスクトップ共有を開き直してください。
+この分離はTCP上の接続を分けるもので、UDPへ変更するものではありません。回線自体の混雑、補助画像snapshotやGPU処理の待ちは残ります。helper内の入力ACKの分離は、入力の節を参照してください。[検証記録](../.aidev/works/20261026-desktop-video-lane/test-result.md)を参照してください。サーバーとWebの変更を含むため、A/Bでbuildとhandoff後、デスクトップ共有を開き直してください。
 
 生成したH.264を製品canvasへ描画し、ACKへ100msの待ちを加えた比較では、従来8.54fps・3枚並行26.04fpsでした。実画面の取得・圧縮・実回線を含むsr-pcの性能値ではありません。[条件と検証記録](../.aidev/works/20261025-desktop-native-video-pipeline/test-result.md)を参照してください。
 
@@ -295,7 +297,7 @@ native動画のencoder完了待ちと次フレームの待ちは、Windows 10 18
 
 Windowsで`powershell.exe -NoProfile -File scripts/remote-desktop/validate-h264.ps1`を実行すると、実画面を取得せず、生成画像だけでNV12変換とhardware H.264出力を確認できます。[生成fixtureと実ブラウザ検証](../.aidev/works/20261025-desktop-native-h264/test-result.md)に条件を記録します。
 
-`powershell.exe -NoProfile -STA -File scripts/remote-desktop/validate-gpu-surfaces.ps1 -Benchmark`は、生成したGPU画像で直接入力・画像の保持と解放・NV12の色とカーソル・停止後の再利用を確認します。実画面やOS入力は扱いません。`-FixtureFile <path>`で生成したH.264を保存し、製品canvasのブラウザ試験へ使えます。[検証条件と限界](../.aidev/works/20261026-desktop-gpu-surfaces/test-result.md)を参照してください。補助プログラムの更新なので、接続先でpullして共有を開き直すと反映され、build/handoffは不要です。
+`powershell.exe -NoProfile -STA -File scripts/remote-desktop/validate-gpu-surfaces.ps1 -Benchmark`は、生成したGPU画像で直接入力・画像の保持と解放・NV12の色とカーソル・停止後の再利用を確認します。実画面やOS入力は扱いません。`-Fps 60`を加えると60fpsのmedia typeも検証します。`-FixtureFile <path>`で生成したH.264を保存し、製品canvasのブラウザ試験へ使えます。[検証条件と限界](../.aidev/works/20261026-desktop-gpu-surfaces/test-result.md)を参照してください。GPU直接入力だけの更新は補助プログラムの変更なので、接続先でpullして共有を開き直すと反映され、build/handoffは不要です。
 
 `powershell.exe -NoProfile -STA -File scripts/remote-desktop/validate-nv12.ps1 -Gpu -Benchmark`は、生成テクスチャでCPU/GPUの色変換・縮小・カーソル・読み戻しを比較します。実画面や通信・エンコーダ・ブラウザは含みません。`-CaptureDesktop`を明示すると通常画面に短時間だけ専用の色窓を出し、本番の取得入口と初回未確定frame・色・失敗時のfallbackを確認します。ロック中は解除せず停止し、OS入力や画面画像の保存は行いません。補助プログラムだけの更新なので、接続先でpull後に共有を開き直すと有効です。handoffと専用サービスの再インストールは不要です。
 

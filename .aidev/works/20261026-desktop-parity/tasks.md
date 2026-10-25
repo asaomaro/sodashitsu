@@ -3,7 +3,7 @@
 対象は通常Windows画面。既存の認証・許可・secure desktop境界を維持する。実機をロック解除したり実OS入力を自動送信しない。dirty rootを保持し、独立worktreeの小さいPRごとに実装・検証・独立レビュー・merge・反映する。
 
 - [x] helperの入力ACKを映像stdoutから分離（壊れやすい: protocol/入力安全）。旧helper/secure worker互換、診断の非転送、有界parserと実行時negative。
-- [ ] native60fpsと独立した動画設定（capability交渉、旧peerへ未知fieldを送らない）。画像上限30fpsを保持。
+- [x] native60fpsと独立した動画設定（capability交渉、旧peerへ未知fieldを送らない）。画像上限30fpsを保持。
 - [ ] 実カーソル形状・位置・可視状態の別送とローカル描画。hotspot/alpha/monochrome inversion、現地と遠隔の動き、旧peer fallback。入力と無関係な閲覧権限の範囲でcursorのみ。
 - [ ] native H264のUDP/WebRTC経路（ICE/DTLS/SRTPまたはSCTP、既存WSSへfallback、有限queue、loss/PLI/IDR回復、適応帯域）。TURN等は明示設定だけを使う。
 - [ ] nativeシステム音声（WASAPI loopback、マイクなし、要求時のみ、mute/autoplay同意、停止/secure transitionで解放）。

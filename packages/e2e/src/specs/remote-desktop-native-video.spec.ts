@@ -33,7 +33,7 @@ for (const { fixtureName, failDecoder, stallImages } of [
       ),
       "--static",
       "--allow-input",
-      ...(fixtureName==="h264-gpu-surface-generated.json"?["--native-only"]:[]),
+      ...(fixtureName==="h264-gpu-surface-generated.json"?["--native-only","--native-60fps"]:[]),
       ...(stallImages ? ["--stall-images-during-native", "--native-input-deferral"] : []),
       "--native-fixture",
       fileURLToPath(
@@ -100,7 +100,10 @@ for (const { fixtureName, failDecoder, stallImages } of [
       await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
       const before = Number(await canvas.getAttribute("data-rendered-frames"));
       await view.locator("[data-desktop-media] summary").click();
-      if(fixtureName==="h264-gpu-surface-generated.json")await expect(view.getByLabel("動画の経路")).toHaveValue("native");
+      if(fixtureName==="h264-gpu-surface-generated.json") {
+        await expect(view.getByLabel("動画の経路")).toHaveValue("native");
+        await expect(view.getByLabel("動画FPS上限")).toHaveValue("60");
+      }
       else await view.getByLabel("動画の経路").selectOption("native");
       await view.getByRole("button", { name: "動画共有を依頼", exact: true }).click();
       if (failDecoder) {
@@ -138,6 +141,10 @@ for (const { fixtureName, failDecoder, stallImages } of [
               i === 4 ? 8 : 20,
             );
         expect(sent.filter((m) => m.type === "native_video_ack").length).toBeGreaterThanOrEqual(8);
+        if(fixtureName==="h264-gpu-surface-generated.json") {
+          expect(sent.some(m=>m.type==="media"&&m.enabled&&(m.settings as any)?.fps===60)).toBe(true);
+          expect(sent.some(m=>m.type==="start"&&(m.options as any)?.fps>30)).toBe(false);
+        }
         const videoChannel=channels.find(c=>c.sent.some(m=>m.type==="video_viewer"));
         expect(videoChannel?.binary).toBeGreaterThanOrEqual(8);
         expect(videoChannel?.sent.every(m=>m.type==="video_viewer")).toBe(true);

@@ -5,6 +5,7 @@ import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_NATIVE_RATE_PROTOCOL,
   DESKTOP_VIDEO_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
@@ -129,6 +130,7 @@ const mediaState = ref("images"),
   nativeStats = ref<DesktopNativeVideoStats|null>(null),
   mediaTransport = ref<"auto" | "relay" | "native">("auto"),
   mediaBitrate = ref(2500),
+  nativeMaxFps=ref(30), nativeFps=ref(60),
   videoFrames = ref(0),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0;
@@ -246,6 +248,7 @@ function requestVideo() {
       transport: mediaTransport.value,
       adaptive: adaptive.value,
       maxBitrateKbps: Number(mediaBitrate.value),
+      ...(mediaTransport.value==="native"&&nativeMaxFps.value===60?{fps:Number(nativeFps.value)}:{}),
     },
   });
 }
@@ -341,7 +344,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  nativeVideo.value=false;
+  nativeVideo.value=false;nativeMaxFps.value=30;
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -430,7 +433,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -505,6 +508,7 @@ function connect(automatic = false) {
           synthetic.value = r.backend === "synthetic";
           allowMedia.value = r.allowMedia === true;
           nativeSupported=r.nativeVideo===true;
+          nativeMaxFps.value=r.nativeMaxFps===60?60:30;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
@@ -903,7 +907,7 @@ onBeforeUnmount(() => {
         <button :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
       <p v-if="activeSettings && ready" data-desktop-applied>
-        適用中: <template v-if="activeSettings.display">{{activeSettings.display.width}}×{{activeSettings.display.height}}等倍（幅上限より優先）</template><template v-else>幅上限{{ activeSettings.width }}</template> / {{ activeSettings.fps }}fps上限 / JPEG
+        画像設定: <template v-if="activeSettings.display">{{activeSettings.display.width}}×{{activeSettings.display.height}}等倍（幅上限より優先）</template><template v-else>幅上限{{ activeSettings.width }}</template> / {{ activeSettings.fps }}fps上限 / JPEG
         {{ activeSettings.quality }} /
         {{
           { full: "フルカラー", rgb565: "約6.5万色", rgb332: "256色", gray16: "16階調グレー" }[
@@ -989,6 +993,7 @@ onBeforeUnmount(() => {
             min="128"
             max="12000"
         /></label>
+        <label v-if="mediaTransport==='native'&&nativeMaxFps===60">動画FPS上限<select v-model="nativeFps" aria-label="動画FPS上限"><option :value="30">30 fps</option><option :value="60">60 fps</option></select></label>
         <button @click="requestVideo">動画共有を依頼</button
         ><button @click="stopVideo">動画・音声を停止</button>
         <button v-if="mediaAudio" @click="toggleSound">

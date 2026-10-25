@@ -64,6 +64,7 @@ export class DesktopNativeVideo {
       sourceHeight: number;
       exact?: { width: number; height: number };
       fps: number;
+      maxFps?: 60;
       send(value: unknown): boolean;
       write(value: unknown): void;
       policy(video: boolean): void;
@@ -107,7 +108,8 @@ export class DesktopNativeVideo {
     const settings = DesktopMediaSettings.parse(m.settings ?? {});
     if (settings.transport !== "native") return false;
     const id = randomUUID();
-    if (!this.hooks.enabled || settings.audio) {
+    const fps=settings.fps??this.hooks.fps;
+    if (!this.hooks.enabled || settings.audio || fps>(this.hooks.maxFps??this.hooks.fps)) {
       this.hooks.send({
         type: "media_status",
         id,
@@ -134,7 +136,7 @@ export class DesktopNativeVideo {
       enabled: true,
       id,
       bitrateKbps: settings.maxBitrateKbps,
-      fps: this.hooks.fps,
+      fps,
       ...(this.hooks.window === 3 ? { window: 3 } : {}),
     });
     return true;

@@ -1,0 +1,33 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-input
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopNativeVideo.test.ts (10 tests | 1 failed | 8 skipped) 8ms
+   × uses an independent 60fps ceiling only when helper capability is confirmed (true) 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopNativeVideo.test.ts > uses an independent 60fps ceiling only when helper capability is confirmed (true)
+AssertionError: expected 10 to be 60 // Object.is equality
+
+- Expected
++ Received
+
+- 60
++ 10
+
+ ❯ src/desktop/DesktopNativeVideo.test.ts:213:86
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 8 skipped (10)
+   Start at  07:30:50
+   Duration  538ms (transform 74%, import 23%, tests 2%, worker 1%)

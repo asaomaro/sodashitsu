@@ -26,7 +26,7 @@ namespace SodaDesktopTests {
   static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
   static void Set(SodaDesktopDxgi capture,string name,object value){typeof(SodaDesktopDxgi).GetField(name,Private).SetValue(capture,value);}
   static IntPtr Field(SodaDesktopDxgi capture,string name){return (IntPtr)typeof(SodaDesktopDxgi).GetField(name,Private).GetValue(capture);}
-  public static void Run(string fixture,int width=640,int height=360) {
+  public static void Run(string fixture,int width=640,int height=360,int fps=30) {
    int returned=0;var owned=new SodaDesktopDxgi.GpuFrame(IntPtr.Zero,()=>returned++);owned.BeginEncode();owned.Dispose();Check(returned==0,"Dispose reused a frame still owned by MF");
    bool duplicate=false;try{owned.BeginEncode();}catch(InvalidOperationException){duplicate=true;}Check(duplicate,"MF-owned GPU frame submitted twice");
    var retire=new SodaDesktopH264.RetireFrame(owned);retire.Invoke(IntPtr.Zero);retire.Invoke(IntPtr.Zero);owned.Dispose();Check(returned==1,"MF callback did not return frame exactly once");
@@ -79,18 +79,18 @@ namespace SodaDesktopTests {
       uint saved;getTopology(context,out saved);Check(saved==2,"Snapshot render changed encoder context state");
      }
     }finally{if(staging!=IntPtr.Zero)Marshal.Release(staging);}
-    using(var unconfirmed=SodaDesktopH264.CreateForDesktop(width,height,30,2500,capture))Check(!unconfirmed.GpuInput,"Unconfirmed desktop used GPU surface input");
+    using(var unconfirmed=SodaDesktopH264.CreateForDesktop(width,height,fps,2500,capture))Check(!unconfirmed.GpuInput,"Unconfirmed desktop used GPU surface input");
     Set(capture,"hasFrame",true);
     var packets=new List<object>();var timings=new List<double>();int readbacks=capture.CpuReadbacks;
     double gpuCpu;using(var p=Process.GetCurrentProcess())gpuCpu=p.TotalProcessorTime.TotalMilliseconds;
-    using(var encoder=SodaDesktopH264.CreateForDesktop(width,height,30,2500,capture)) {
+    using(var encoder=SodaDesktopH264.CreateForDesktop(width,height,fps,2500,capture)) {
      Check(encoder.GpuInput,"Encoder did not select GPU input");
      for(int frame=0;frame<90;frame++) {
       var t=Stopwatch.StartNew();var lease=(SodaDesktopDxgi.GpuFrame)render.Invoke(capture,new object[]{10,10,frame>=4});
-      var packet=encoder.EncodeGpuFrame(lease,frame*33333L,t.Elapsed.TotalMilliseconds);
+      var packet=encoder.EncodeGpuFrame(lease,(long)Math.Round(frame*1000000.0/fps),t.Elapsed.TotalMilliseconds);
       // A caller's using/finally cannot retire an MF-owned frame early.
       lease.Dispose();
-      Check(packet.data.Length>0&&packet.data.Length<=512*1024-9&&packet.timestamp==frame*33333L,"GPU encoded packet invalid");
+      Check(packet.data.Length>0&&packet.data.Length<=512*1024-9&&packet.timestamp==(long)Math.Round(frame*1000000.0/fps),"GPU encoded packet invalid");
       if(frame==0)Check(packet.key&&packet.codec!=null,"GPU encoder initial SPS/IDR missing");
       if(frame<4)packets.Add(new {key=packet.key,codec=packet.codec,data=Convert.ToBase64String(packet.data)});
       if(frame>=4)timings.Add(t.Elapsed.TotalMilliseconds);
@@ -104,14 +104,14 @@ namespace SodaDesktopTests {
     if(!String.IsNullOrEmpty(fixture))File.WriteAllText(fixture,new JavaScriptSerializer().Serialize(new {width,height,packets}),new System.Text.UTF8Encoding(false));
     capture.DisableGpuSurfaces();
     var memoryTimings=new List<double>();var memory=new byte[width*height*3/2];var readback=typeof(SodaDesktopDxgi).GetMethod("RenderNv12",Private);
-    using(var encoder=new SodaDesktopH264(width,height,30,2500))for(int frame=0;frame<90;frame++) {
+    using(var encoder=new SodaDesktopH264(width,height,fps,2500))for(int frame=0;frame<90;frame++) {
      var t=Stopwatch.StartNew();readback.Invoke(capture,new object[]{memory,10,10,true});double conversion=t.Elapsed.TotalMilliseconds;
-     encoder.EncodePreparedNv12(memory,frame*33333L,conversion);if(frame>=4)memoryTimings.Add(t.Elapsed.TotalMilliseconds);
+     encoder.EncodePreparedNv12(memory,(long)Math.Round(frame*1000000.0/fps),conversion);if(frame>=4)memoryTimings.Add(t.Elapsed.TotalMilliseconds);
     }
     // Memory fallback stays usable after GPU surface input is disabled.
-    using(var fallback=SodaDesktopH264.CreateForDesktop(width,height,30,2500,capture))Check(!fallback.GpuInput,"Disabled surface mode did not fall back");
+    using(var fallback=SodaDesktopH264.CreateForDesktop(width,height,fps,2500,capture))Check(!fallback.GpuInput,"Disabled surface mode did not fall back");
     timings.Sort();memoryTimings.Sort();double sum=0,memorySum=0;foreach(var value in timings)sum+=value;foreach(var value in memoryTimings)memorySum+=value;
-    Console.WriteLine(new JavaScriptSerializer().Serialize(new {source="generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser",frames=90,width,height,gpuMeanMs=sum/timings.Count,gpuP95Ms=timings[(int)Math.Ceiling(timings.Count*.95)-1],memoryMeanMs=memorySum/memoryTimings.Count,memoryP95Ms=memoryTimings[(int)Math.Ceiling(memoryTimings.Count*.95)-1],gpuCpuMs=gpuCpu,fullFrameCpuReadbacks=gpuReadbacks}));
+    Console.WriteLine(new JavaScriptSerializer().Serialize(new {source="generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser",frames=90,width,height,fps,gpuMeanMs=sum/timings.Count,gpuP95Ms=timings[(int)Math.Ceiling(timings.Count*.95)-1],memoryMeanMs=memorySum/memoryTimings.Count,memoryP95Ms=memoryTimings[(int)Math.Ceiling(memoryTimings.Count*.95)-1],gpuCpuMs=gpuCpu,fullFrameCpuReadbacks=gpuReadbacks}));
    }finally{capture.Dispose();capture.Dispose();}
    Console.WriteLine("desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture");
   }

@@ -268,9 +268,10 @@ public static class SodaDesktopHost {
         },null,500,500);
         SodaDesktopDxgi dxgi=null;
         SodaDesktopH264 video=null;string videoId=null;
-        long videoSeq=0,videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
+        long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
+        int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
         // Only new providers opt in. Old providers/helpers keep their existing wire contract.
@@ -284,6 +285,7 @@ public static class SodaDesktopHost {
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;
+            if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
             if(nativePipeline)ready["nativeVideoWindow"]=3;
             if(Secure)ready["secureDesktop"]=true;
@@ -331,8 +333,8 @@ public static class SodaDesktopHost {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Video id");
                             if((bool)msg["enabled"]) {
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
-                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
-                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
+                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
+                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                             } else if(videoId==requested) {commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
@@ -369,8 +371,9 @@ public static class SodaDesktopHost {
                     if(video!=null && videoWindow.Count>0 && now-videoWindow.OldestAt>2500) {
                         commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
                     }
-                    if(!Stopping && video!=null && videoWindow.CanSend && now>=videoNext) {
+                    if(!Stopping && video!=null && videoWindow.CanSend && Clock.Elapsed.TotalMilliseconds>=videoNext) {
                         try {
+                            double videoStarted=Clock.Elapsed.TotalMilliseconds;
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
                             Point cursor=Cursor.Position;bool cursorVisible=showCursor&&Bounds.Contains(cursor);
                             int cursorX=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cursorY=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);
@@ -388,10 +391,10 @@ public static class SodaDesktopHost {
                                 packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
                             }
                             if(!AllowedDesktop())break;
-                            videoNext=now+1000/videoFps;
+                            videoNext=videoStarted+1000.0/videoFps;
                             if(packet!=null) {
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
-                            videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=now+1000/videoFps;
+                            videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;
                             var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
                             if(videoWindow.Capacity==3){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
@@ -457,7 +460,7 @@ public static class SodaDesktopHost {
                     }
                     });
                     if(video==null)Thread.Sleep(2);
-                    else {int pause=SodaDesktopVideoDelay.FrameDelay(Clock.ElapsedMilliseconds,videoNext,videoWindow.CanSend);if(pause>0)video.Pause(pause);}
+                    else {int pause=SodaDesktopVideoDelay.FrameDelay(Clock.Elapsed.TotalMilliseconds,videoNext,videoWindow.CanSend);if(pause>0)video.Pause(pause);}
                 }
                 }
             }
@@ -1077,7 +1080,7 @@ public sealed class SodaDesktopH264 : IDisposable {
     }
     public SodaDesktopH264(int width,int height,int fps,int bitrateKbps):this(width,height,fps,bitrateKbps,IntPtr.Zero){}
     public SodaDesktopH264(int width,int height,int fps,int bitrateKbps,IntPtr gpuDevice) {
-        if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>30 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
+        if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>60 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
         this.width=width;this.height=height;this.fps=fps;this.bitrate=bitrateKbps*1000;
         this.gpuDevice=gpuDevice;if(gpuDevice!=IntPtr.Zero)Marshal.AddRef(gpuDevice);
         try { delay=new SodaDesktopVideoDelay();Initialize(); } catch {Dispose();throw;}
@@ -1340,10 +1343,10 @@ public sealed class SodaDesktopVideoDelay : IDisposable {
             else if(created!=null)created.Dispose();
         } catch(EntryPointNotFoundException) {} // Optional on older Windows.
     }
-    public static int FrameDelay(long now,long next,bool canSend) {
+    public static int FrameDelay(double now,double next,bool canSend) {
         if(!canSend)return 2;
         if(next<=now)return 0;
-        return (int)Math.Min(10,next-now);
+        return (int)Math.Min(10,Math.Ceiling(next-now));
     }
     public void Pause(int milliseconds) {
         if(disposed)throw new ObjectDisposedException("SodaDesktopVideoDelay");
