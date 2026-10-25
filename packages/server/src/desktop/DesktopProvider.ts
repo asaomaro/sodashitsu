@@ -4,6 +4,7 @@ import { unlockFailure } from "./unlockFailure.js";
 import { z } from "zod";
 import WebSocket from "ws";
 import {
+  DESKTOP_VIDEO_LANE_PROTOCOL,
   isExtendedDesktopInput,
   DesktopFrameInfo,
   DesktopFrameChain,
@@ -46,6 +47,8 @@ export interface DesktopProviderConfig {
   origins(): string[];
 }
 type Share = {
+  videoSocket?: WebSocket;
+  videoReady?: boolean;
   native?: DesktopNativeVideo;
   deferNativeSnapshots?: boolean;
   chain: DesktopFrameChain;
@@ -106,6 +109,7 @@ export class DesktopProvider {
       imageSettings: true,
       imeKeys: true,
       extendedInput: true,
+      videoLane: true,
       nativeVideo: true,
       nativeInputFreshness: true,
       nativeVideoWindow: 3 as const,
@@ -214,6 +218,14 @@ export class DesktopProvider {
           if (rawMessage.type === "attached" && !s.attached) {
             s.attached = true;
             s.lastSeen = performance.now();
+            if (p.videoTicket) {
+              const video = s.videoSocket = new WebSocket(url, DESKTOP_VIDEO_LANE_PROTOCOL, {handshakeTimeout:10000,maxPayload:1024,perMessageDeflate:false,followRedirects:false});
+              video.on("open", () => video.send(JSON.stringify({type:"video_provider",ticket:p.videoTicket})));
+              video.on("error", () => video.terminate());
+              video.on("close", () => { s.videoReady=false; s.native?.stop("unavailable"); });
+              // A never sends video/application data back over the send-only lane.
+              video.on("message", () => video.terminate());
+            }
             this.launch(s, cfg, p.options);
             settled = true;
             resolve({ started: true });
@@ -223,11 +235,13 @@ export class DesktopProvider {
             this.stop(s);
             return;
           }
+          if (rawMessage.type === "video_ready" && p.videoTicket && Object.keys(rawMessage).length === 1) { s.videoReady = s.videoSocket?.readyState === WebSocket.OPEN; return; }
           // Private A->B marker, negotiated through RPC capabilities. Browser
           // messages and agent actions retain their existing strict schemas.
           const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
           if (nativeDraw) delete rawMessage.nativeDraw;
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
+          if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
           if(m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
             if(!s.ready||s.secureDesktop){this.send(s,{type:"media_unavailable"});return;}
@@ -411,7 +425,7 @@ export class DesktopProvider {
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,send:value=>this.send(s,value),write:value=>this.write(s,value),buffered:()=>s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(nativeEnabled?{nativeVideo:true}:{}),
@@ -519,6 +533,14 @@ export class DesktopProvider {
       allowDisplayResize: cfg.allowDisplayResize === true,
     });
   }
+  private sendVideo(s: Share, data: unknown): boolean {
+    const video = s.videoSocket;
+    if (!s.videoReady) return this.send(s, data);
+    if (s.dead) return false;
+    if (video?.readyState !== WebSocket.OPEN || video.bufferedAmount > 512 * 1024) { s.videoReady=false; video?.terminate(); return false; }
+    video.send(data instanceof Uint8Array ? data : JSON.stringify(data));
+    return true;
+  }
   private send(s: Share, data: unknown): boolean {
     if (
       s.dead ||
@@ -544,6 +566,7 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    s.videoSocket?.terminate();
     s.native?.stop();
     this.companion.end(s);
     s.clipboardGranted = false;

@@ -1,0 +1,9 @@
+# 動画と入力の通信待ちを分離
+
+H264動画の専用WebSocketをB→A→browserの両区間へ追加。キー/マウス/許可/解放/agent操作/ACKは既存main接続のFIFOを保つ。新viewer subprotocolとB capabilityでだけ有効化し、旧peerには未知fieldを渡さない。動画だけを別socketへ移すので、キーの経路切替・二重送信・epoch追加は不要。
+
+mainから役割ごとに独立した32byte一回券を渡す。10秒TTL、frontendは認証sessionとoriginも固定。parent終了/失効で券とsocketを破棄。pending8、共有32、attach5秒で有界。全体heartbeatに従属しvideoもping。専用socketは動画dataとmetadataだけを受け入れ、入力/clipboard/画像snapshotは既存検査へ入れない。
+
+両端attach後にA→B mainでvideo_readyを送り、その後browserへ通知。media要求も同じA→B mainを通るためB側readyとの順序を保つ。動画障害はnative停止/画像へ戻し、その共有のnative動画は無効化。入力は再送しない。映像のTCP再送待ちは依然あるが、小さい入力ACKをその後ろに並べない。UDP/WebRTC data channel、JPEG snapshot分離、helper ACK出力pipe分離は別対応。
+
+検証: ticket role/session/replay/expiry/revoke、videoのみのpayload制限、親終了、attach順、旧peerfallback、専用動画送信の詰まり中もmain入力ACK継続、実browserのcanvas/キー/stop。差分全体の独立レビュー必須。

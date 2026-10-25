@@ -1,0 +1,51 @@
+
+Running 1 test using 1 worker
+
+(node:4004987) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-25T16:21:40.768Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:40.769Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:40.769Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-25T16:21:40.775Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-bDThot/commands.json","count":0}
+{"ts":"2026-10-25T16:21:41.253Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:41.254Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:41.255Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-25T16:21:41.256Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-xSRMco/commands.json","count":0}
+{"ts":"2026-10-25T16:21:49.132Z","level":"info","msg":"machine link closed","machine":"c02dd6152fe8a5a01f2f133a4b5befe3","kind":"transient","reason":"接続が切れました"}
+  ✘  1 src/specs/remote-desktop-media.spec.ts:8:3 › synthetic auto video/audio reaches the viewer canvas and stops with the companion (9.0s)
+
+
+  1) src/specs/remote-desktop-media.spec.ts:8:3 › synthetic auto video/audio reaches the viewer canvas and stops with the companion
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 8
+    Received:   3
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      150 |         const count=Number(await canvas.getAttribute("data-video-frames"));
+      151 |         await page.evaluate(()=>{(window as any).__idleVideoSocket.close();});
+    > 152 |         await expect.poll(async()=>Number(await canvas.getAttribute("data-video-frames"))).toBeGreaterThan(count+5);
+          |                                                                                            ^
+      153 |         await expect(view.locator("[data-media-state]")).toHaveText("WebRTC動画");
+      154 |         await view.getByLabel("動画の経路").selectOption("auto");
+      155 |       }
+        at /workspaces/sodashitsu-desktop-input/packages/e2e/src/specs/remote-desktop-media.spec.ts:152:92
+
+    Error Context: test-results/remote-desktop-media-synth-2e0f2-nd-stops-with-the-companion/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/remote-desktop-media-synth-2e0f2-nd-stops-with-the-companion/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/remote-desktop-media-synth-2e0f2-nd-stops-with-the-companion/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/remote-desktop-media.spec.ts:8:3 › synthetic auto video/audio reaches the viewer canvas and stops with the companion
+undefined
+/workspaces/sodashitsu-desktop-input/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-media.spec.ts --grep synthetic auto

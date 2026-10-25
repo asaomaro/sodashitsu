@@ -1,0 +1,57 @@
+
+Running 1 test using 1 worker
+
+(node:4004085) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-25T16:21:14.464Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:14.465Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:14.465Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-25T16:21:14.472Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-RtA2VH/commands.json","count":0}
+{"ts":"2026-10-25T16:21:15.112Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:15.113Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-25T16:21:15.113Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-25T16:21:15.114Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-4KSnqT/commands.json","count":0}
+{"ts":"2026-10-25T16:21:22.648Z","level":"info","msg":"machine link closed","machine":"e1cf3a02454f81ca7338f3e06accdd05","kind":"transient","reason":"接続が切れました"}
+  ✘  1 src/specs/remote-desktop-native-video.spec.ts:22:3 › hardware-produced h264-gpu-surface-generated.json H264 pixels reach the canvas with draw ACK and stop (8.8s)
+
+
+  1) src/specs/remote-desktop-native-video.spec.ts:22:3 › hardware-produced h264-gpu-surface-generated.json H264 pixels reach the canvas with draw ACK and stop
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  locator('[data-remote-desktop]').getByLabel('動画の経路')
+    Expected: "native"
+    Received: ""
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveValue" locator('[data-remote-desktop]').getByLabel('動画の経路') with timeout 5000ms
+      - waiting for locator('[data-remote-desktop]').getByLabel('動画の経路')
+        14 × locator resolved to <select data-v-ce61c6ab="" aria-label="動画の経路">…</select>
+           - unexpected value ""
+
+
+      101 |       const before = Number(await canvas.getAttribute("data-rendered-frames"));
+      102 |       await view.locator("[data-desktop-media] summary").click();
+    > 103 |       if(fixtureName==="h264-gpu-surface-generated.json")await expect(view.getByLabel("動画の経路")).toHaveValue("native");
+          |                                                                                                 ^
+      104 |       else await view.getByLabel("動画の経路").selectOption("native");
+      105 |       await view.getByRole("button", { name: "動画共有を依頼", exact: true }).click();
+      106 |       if (failDecoder) {
+        at /workspaces/sodashitsu-desktop-input/packages/e2e/src/specs/remote-desktop-native-video.spec.ts:103:97
+
+    Error Context: test-results/remote-desktop-native-vide-f2f78-nvas-with-draw-ACK-and-stop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/remote-desktop-native-vide-f2f78-nvas-with-draw-ACK-and-stop/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/remote-desktop-native-vide-f2f78-nvas-with-draw-ACK-and-stop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/remote-desktop-native-video.spec.ts:22:3 › hardware-produced h264-gpu-surface-generated.json H264 pixels reach the canvas with draw ACK and stop
+undefined
+/workspaces/sodashitsu-desktop-input/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-native-video.spec.ts --grep h264-gpu-surface-generated

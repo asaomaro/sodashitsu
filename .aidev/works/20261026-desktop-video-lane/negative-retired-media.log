@@ -1,0 +1,31 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-input
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (39 tests | 1 failed | 38 skipped) 349ms
+   × ignores delayed native stop metadata after a browser-media switch and does not stop browser media when the idle lane closes 348ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > ignores delayed native stop metadata after a browser-media switch and does not stop browser media when the idle lane closes
+TypeError: Cannot read properties of undefined (reading 'id')
+ ❯ src/desktop/DesktopRelay.test.ts:609:28
+    607|  send(JSON.stringify(held[0]));
+    608|  await new Promise<void>(r=>{source.once("pong",()=>r());source.ping()…
+    609|  expect(serverViewer.media.id).toBe(id);
+       |                            ^
+    610|  const before=v.messages.filter(m=>m.type==="media_status"&&m.state===…
+    611|  source.terminate();await expect.poll(()=>v.messages.some(m=>m.type===…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  01:21:58
+   Duration  1.37s (transform 54%, tests 30%, import 16%)

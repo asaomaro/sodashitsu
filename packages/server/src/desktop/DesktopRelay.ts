@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   RemoteDesktopViewerMessage,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_VIDEO_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
   DesktopNativeVideoStats,
@@ -32,15 +33,23 @@ import type { MachineManager } from "../machine/MachineManager.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
 import { unlockFailure } from "./unlockFailure.js";
 
+import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
+
 class DesktopSetupRequired extends Error {}
 
 type Viewer = {
+  videoLaneRequested?: boolean;
+  videoLane?: ReturnType<DesktopVideoLanes["issue"]>;
+  videoActive?: boolean;
+  receiveVideo?: (bytes: Buffer, binary: boolean) => void;
   chain: DesktopFrameChain;
   features?: boolean;
   nativeVideoRequested: boolean;
   nativeWindowRequested:boolean;
   nativeVideoWindow?:3;
   nativeVideo?: boolean;
+  retiredMedia: Set<string>;
+  requestedNative?: boolean;
   media?: { id: string; generation: number; seq: number; native?:boolean; pending?:number[]; window?:1|3;lastAck?:number;sentAt?:Map<number,number>;drawnAt?:number };
   nativeInputFreshness?: boolean;
   snapshot?: {
@@ -98,6 +107,7 @@ export class DesktopRelay {
     perMessageDeflate: false,
     maxPayload: DESKTOP_MAX_FRAME_BYTES + 2050,
   });
+  private readonly videoLanes: DesktopVideoLanes;
   private readonly viewers = new Set<Viewer>();
   private readonly pendingProviders = new Set<WebSocket>();
   private readonly invites = new Map<string, Viewer>();
@@ -110,12 +120,14 @@ export class DesktopRelay {
     private readonly origins: OriginRejectionLog,
     private readonly machines: Pick<MachineManager, "route">,
   ) {
+    this.videoLanes = new DesktopVideoLanes(id => auth.verifySession(id));
     this.revoked = auth.onSessionRevoked((id) => {
       for (const v of this.viewers) if (v.sessionId === id) this.stop(v);
     });
     this.timer = setInterval(() => {
       const now = performance.now();
       this.agents.tick();
+      this.videoLanes.tick();
       for (const v of this.viewers)
         if (
           !auth.verifySession(v.sessionId) ||
@@ -130,7 +142,7 @@ export class DesktopRelay {
   async upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
     const reject = (status: string) =>
       socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
-    if (this.closed || this.viewers.size + this.pendingProviders.size >= 32) {
+    if (this.closed || this.viewers.size + this.pendingProviders.size + this.videoLanes.pendingCount >= 32) {
       reject("503 Service Unavailable");
       return;
     }
@@ -166,13 +178,15 @@ export class DesktopRelay {
       reject("503 Service Unavailable");
       return;
     }
-    if (this.closed || socket.destroyed || this.viewers.size + this.pendingProviders.size >= 32) {
+    if (this.closed || socket.destroyed || this.viewers.size + this.pendingProviders.size + this.videoLanes.pendingCount >= 32) {
       reject("503 Service Unavailable");
       return;
     }
     this.server.handleUpgrade(req, socket, head, (ws) => {
       ws.on("error", () => ws.terminate());
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL));
+      const offered = String(req.headers["sec-websocket-protocol"] ?? "").split(",").map(v => v.trim());
+      if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -182,7 +196,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -246,8 +260,10 @@ export class DesktopRelay {
             }
           }),
       },
+      videoLaneRequested,
       nativeVideoRequested,
       nativeWindowRequested,
+      retiredMedia: new Set(),
       inputWaits: new Map(),
       ws,
       sessionId,
@@ -335,9 +351,13 @@ export class DesktopRelay {
           m.type === "clipboard"
         ) {
           if (v.features && v.ready && v.provider && (!v.secureDesktop || m.type === "quality")) {
-            if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&!v.nativeVideo)return;
+            if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&(!v.nativeVideo || (v.videoLane && !v.videoActive))) { this.send(v.ws,{type:"media_unavailable"}); return; }
             if (m.type === "rtc_signal" && m.signal.kind === "offer") throw new Error();
-            if (m.type === "media" && !m.enabled) delete v.media;
+            if (m.type === "media") {
+              if (v.media) { v.retiredMedia.add(v.media.id); if(v.retiredMedia.size>32)v.retiredMedia.delete(v.retiredMedia.values().next().value!); }
+              delete v.media;
+              v.requestedNative = m.enabled && m.settings?.transport === "native";
+            }
             this.send(v.provider, m);
           }
         } else if (m.type === "heartbeat") {
@@ -435,6 +455,7 @@ export class DesktopRelay {
         imageSettings: z.boolean().optional(),
         imeKeys: z.boolean().optional(),
         extendedInput: z.boolean().optional(),
+        videoLane: z.boolean().optional(),
         nativeVideo: z.boolean().optional(),
         nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
@@ -479,9 +500,28 @@ export class DesktopRelay {
       ...(caps.deltas ? { deltas } : {}),
       ...(caps.imageSettings ? { image } : {}),
     };
+    if (v.nativeVideo && v.videoLaneRequested && caps.videoLane) {
+      v.videoLane = this.videoLanes.issue(v.sessionId, v.origin,
+        (bytes, binary) => v.receiveVideo?.(bytes, binary),
+        () => {
+          if (!this.viewers.has(v)) return;
+          v.videoActive = true;
+          if (v.provider) this.send(v.provider, {type:"video_ready"});
+          this.send(v.ws, {type:"video_ready"});
+        },
+        () => {
+          if (!this.viewers.has(v)) return;
+          v.videoActive = false;
+          const media = v.media;
+          if (media?.native) { if (v.provider) this.send(v.provider,{type:"media",enabled:false}); delete v.media; this.send(v.ws, {type:"media_status",id:media.id,state:"images",audio:false,reason:"unavailable"}); }
+          this.send(v.ws, {type:"video_closed"});
+        });
+      this.send(v.ws, {type:"video_ticket",ticket:v.videoLane.viewerTicket});
+    }
     await rpc.request("desktop.start", {
       url: url.href,
       ticket,
+      ...(v.videoLane ? {videoTicket:v.videoLane.providerTicket} : {}),
       options: negotiated,
     });
   }
@@ -495,7 +535,7 @@ export class DesktopRelay {
       this.pendingProviders.delete(ws);
       if (owner) this.stop(owner);
     });
-    ws.on("message", (rawBytes, binary) => {
+    const receive = (rawBytes: import("ws").RawData, binary: boolean, lane = false) => {
       const bytes = Buffer.isBuffer(rawBytes)
         ? rawBytes
         : Array.isArray(rawBytes)
@@ -526,25 +566,32 @@ export class DesktopRelay {
           delete v.ticketHash;
           clearTimeout(deadline);
           this.pendingProviders.delete(ws);
+          v.receiveVideo = (bytes, binary) => receive(bytes, binary, true);
           this.send(ws, { type: "attached" });
           return;
         }
         const v = owner;
+        if (lane) {
+          if (!v.videoActive) return;
+          if (binary ? !isDesktopMediaChunk(bytes) : bytes.length > 65536 || !["media_status","media_stream","native_video_stats"].includes(JSON.parse(bytes.toString()).type)) throw Error("Video lane only");
+        }
+        const sendMedia = (value: unknown) => lane ? v.videoLane!.send(value) : this.send(v.ws, value);
         if (binary && isDesktopMediaChunk(new Uint8Array(bytes as Buffer))) {
           if (!v.ready || !v.features) throw new Error();
-          if (!v.media) return;
+          if (!v.media || (v.videoLane && lane !== !!v.media.native)) return;
           const chunk = decodeDesktopMediaChunk(bytes);
           if (chunk.generation !== v.media.generation) return;
           if (chunk.seq !== v.media.seq + 1) throw new Error();
           if(v.media.native&&(v.media.pending?.length??0)>=(v.media.window??1))throw new Error("Native video backlog");
           v.media.seq = chunk.seq;
           if(v.media.native){(v.media.pending??=[]).push(chunk.seq);(v.media.sentAt??=new Map()).set(chunk.seq,performance.now());}
-          if (v.ws.bufferedAmount > 512 * 1024) {
+          if ((lane ? v.videoLane!.buffered() : v.ws.bufferedAmount) > 512 * 1024) {
+            if (lane) { v.videoLane!.fail(); return; }
             if (v.provider) this.send(v.provider, { type: "media", enabled: false });
             delete v.media;
             return;
           }
-          this.send(v.ws, new Uint8Array(bytes));
+          sendMedia(new Uint8Array(bytes));
           return;
         }
         if (binary) {
@@ -576,6 +623,11 @@ export class DesktopRelay {
         } else {
           if (bytes.byteLength > 65536) throw new Error();
           const msg = JSON.parse(bytes.toString());
+          if (["media_status","media_stream","native_video_stats","rtc_signal"].includes(msg.type)) {
+            if (typeof msg.id === "string" && v.retiredMedia.has(msg.id)) return;
+            if (lane && !v.requestedNative) return;
+            if (v.videoLane && !lane && v.requestedNative && ((msg.type === "media_status" && msg.state !== "images") || msg.type === "media_stream" || msg.type === "rtc_signal")) return;
+          }
           if (msg.type === "ready" && !v.ready) {
             const ready = DesktopReady.parse(msg);
             v.ready = true;
@@ -612,11 +664,12 @@ export class DesktopRelay {
           } else if (msg.type === "media_status" && v.features && !v.secureDesktop) {
             const status = DesktopMediaStatus.parse(msg);
             if(status.state==="native"&&!v.nativeVideo)throw new Error();
-            if (status.state === "images") delete v.media;
+            if (status.state === "images") { if(v.media && status.id!==v.media.id)return; delete v.media; }
             else if (!v.media || v.media.id !== status.id)
               v.media = { id: status.id, generation: 0, seq: 0 };
+            if(v.media && lane && status.state !== "images") v.media.native=true;
             if(v.media&&status.state==="native"){v.media.native=true;v.media.window=v.nativeVideoWindow??1;v.media.pending=[];v.media.lastAck=0;v.media.sentAt=new Map();delete v.media.drawnAt;}
-            this.send(v.ws, status);
+            sendMedia(status);
           } else if (msg.type === "media_stream" && v.media) {
             const stream = DesktopMediaStream.parse(msg);
             if (stream.id !== v.media.id || stream.generation <= v.media.generation)
@@ -625,7 +678,7 @@ export class DesktopRelay {
             if(stream.mime==="video/h264"&&(stream.window??1)!==(v.media.window??1))throw new Error();
             v.media.generation = stream.generation;
             v.media.seq = 0;
-            this.send(v.ws, stream);
+            sendMedia(stream);
           } else if(msg.type==="native_video_stats"&&v.nativeVideoWindow===3&&v.media?.native) {
             const stats=DesktopNativeVideoStats.parse(msg);if(stats.id!==v.media.id)throw new Error();this.send(v.ws,stats);
           } else if (msg.type === "rtc_signal" && v.features) {
@@ -668,10 +721,12 @@ export class DesktopRelay {
           } else throw new Error();
         }
       } catch {
+        if (lane && owner?.videoLane) { owner.videoLane.fail(); return; }
         ws.terminate();
         if (owner) this.stop(owner);
       }
-    });
+    };
+    ws.on("message", (bytes, binary) => receive(bytes, binary));
   }
   private agentFrame(v: Viewer): AgentFrame | undefined {
     if (v.secureDesktop) return;
@@ -712,6 +767,7 @@ export class DesktopRelay {
   private stop(v: Viewer): void {
     if (!this.viewers.delete(v)) return;
     this.agents.revoke(v.agent);
+    v.videoLane?.close();
     if (v.snapshot) {
       clearTimeout(v.snapshot.timer);
       v.snapshot.reject(new RpcError("unauthorized", "Desktop stopped"));
@@ -735,6 +791,7 @@ export class DesktopRelay {
     for (const v of [...this.viewers]) this.stop(v);
     for (const ws of this.pendingProviders) ws.terminate();
     this.pendingProviders.clear();
+    this.videoLanes.close();
   }
   dispose(): void {
     if (this.closed) return;

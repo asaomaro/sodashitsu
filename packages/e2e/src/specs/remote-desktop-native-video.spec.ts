@@ -33,6 +33,7 @@ for (const { fixtureName, failDecoder, stallImages } of [
       ),
       "--static",
       "--allow-input",
+      ...(fixtureName==="h264-gpu-surface-generated.json"?["--native-only"]:[]),
       ...(stallImages ? ["--stall-images-during-native", "--native-input-deferral"] : []),
       "--native-fixture",
       fileURLToPath(
@@ -47,16 +48,31 @@ for (const { fixtureName, failDecoder, stallImages } of [
         else process.env[k] = saved[i];
       }),
     );
+    const channels: {sent:Record<string,unknown>[];binary:number}[]=[];
     const sent: Record<string, unknown>[] = [], received: Record<string, unknown>[] = [];
     page.on("websocket", (socket) => {
       if (socket.url().endsWith("/desktop-share")) {
+        const channel={sent:[] as Record<string,unknown>[],binary:0};channels.push(channel);
         socket.on("framesent", ({ payload }) => {
-          if (typeof payload === "string") sent.push(JSON.parse(payload));
+          if (typeof payload === "string") { const m=JSON.parse(payload);sent.push(m);channel.sent.push(m); }
         });
         socket.on("framereceived", ({ payload }) => {
-          if (typeof payload === "string") received.push(JSON.parse(payload));
+          if (typeof payload === "string") received.push(JSON.parse(payload));else channel.binary++;
         });
       }
+    });
+    if (fixtureName==="h264-gpu-surface-generated.json") await page.addInitScript(()=>{
+      const Base=WebSocket;
+      window.WebSocket=class extends Base {
+        constructor(url:string|URL, protocols?:string|string[]){super(url,protocols);if(protocols==="soda-desktop-video-lane-v1")(window as any).__generatedVideoSocket=this;}
+        override send(data:string|ArrayBufferLike|Blob|ArrayBufferView){
+          if(typeof data==="string"&&JSON.parse(data).type==="video_viewer"){
+            // Ensure main ready precedes lane ready, as on a slower extra connection.
+            setTimeout(()=>{if(this.readyState===Base.OPEN)super.send(data);},350);return;
+          }
+          super.send(data);
+        }
+      };
     });
     // Only generated test pixels are decoded. No OS capture picker, desktop or input.
     if (failDecoder)
@@ -84,7 +100,8 @@ for (const { fixtureName, failDecoder, stallImages } of [
       await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
       const before = Number(await canvas.getAttribute("data-rendered-frames"));
       await view.locator("[data-desktop-media] summary").click();
-      await view.getByLabel("動画の経路").selectOption("native");
+      if(fixtureName==="h264-gpu-surface-generated.json")await expect(view.getByLabel("動画の経路")).toHaveValue("native");
+      else await view.getByLabel("動画の経路").selectOption("native");
       await view.getByRole("button", { name: "動画共有を依頼", exact: true }).click();
       if (failDecoder) {
         await expect(view).toContainText("GPU動画を利用できないため画像配信に戻しました");
@@ -121,6 +138,10 @@ for (const { fixtureName, failDecoder, stallImages } of [
               i === 4 ? 8 : 20,
             );
         expect(sent.filter((m) => m.type === "native_video_ack").length).toBeGreaterThanOrEqual(8);
+        const videoChannel=channels.find(c=>c.sent.some(m=>m.type==="video_viewer"));
+        expect(videoChannel?.binary).toBeGreaterThanOrEqual(8);
+        expect(videoChannel?.sent.every(m=>m.type==="video_viewer")).toBe(true);
+        expect(channels.find(c=>c.sent.some(m=>m.type==="start"))?.sent.some(m=>m.type==="native_video_ack")).toBe(true);
         expect(sent.filter((m) => m.type === "control" && m.enabled)).toHaveLength(0);
         await view.getByRole("button", { name: "操作する", exact: true }).click();
         await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
@@ -158,12 +179,20 @@ for (const { fixtureName, failDecoder, stallImages } of [
           .poll(async () => Number(await canvas.getAttribute("data-video-frames")))
           .toBeGreaterThanOrEqual(12);
 
-        await view.getByRole("button", { name: "動画・音声を停止", exact: true }).click();
-        await expect(view.locator("[data-media-state]")).toHaveText("画像配信");
+        if(fixtureName==="h264-gpu-surface-generated.json") {
+          await page.evaluate(()=>{(window as any).__generatedVideoSocket.close();});
+        } else await view.getByRole("button", { name: "動画・音声を停止", exact: true }).click();
+        if(fixtureName!=="h264-gpu-surface-generated.json")await expect(view.locator("[data-media-state]")).toHaveText("画像配信");
         await expect
           .poll(async () => Number(await canvas.getAttribute("data-rendered-frames")))
           .toBeGreaterThan(before);
         await expect(canvas).toHaveAttribute("width", "1280");
+        if(fixtureName==="h264-gpu-surface-generated.json") {
+          await canvas.focus();await page.keyboard.press("ArrowRight");
+          const key=sent.filter(m=>m.type==="input"&&(m.input as any)?.code==="ArrowRight").at(-1);
+          expect(key).toBeTruthy();await expect.poll(()=>received.some(m=>m.type==="input_ack"&&m.seq===key!.seq)).toBe(true);
+          await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
+        }
       }
       await view.getByRole("button", { name: "共有停止", exact: true }).click();
     } finally {

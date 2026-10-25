@@ -149,7 +149,7 @@ function run() {
           ...(lockCover ? {lockScreenCover:true} : {}),
           ...(displayAllowed ? {display:{modes}} : {}),
           image: options.image ?? { colorMode: "full", showCursor: true },
-          allowClipboard: !secure && process.argv.includes("--allow-clipboard") && m.allowClipboard===true, dynamicQuality:true,
+          allowClipboard: !secure && process.argv.includes("--allow-clipboard") && m.allowClipboard===true, dynamicQuality:!process.argv.includes("--native-only"),
         });
         const readyFailureAt=process.argv.indexOf("--ready-failure");
         const readyMarkerAt=process.argv.indexOf("--ready-marker"),readyMarker=readyMarkerAt>=0?process.argv[readyMarkerAt+1]:undefined;

@@ -173,6 +173,7 @@ export const DesktopStartParams = z
   .object({
     url: z.string().url().max(2048),
     ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    videoTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     options: DesktopOptions,
   })
   .strict();
