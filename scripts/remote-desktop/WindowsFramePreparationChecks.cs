@@ -14,6 +14,12 @@ namespace SodaDesktopTests {
             return count;
         }
         public static void Run() {
+            Check(SodaDesktopVideoDelay.FrameDelay(33,33,true)==0,"Ready video delayed after work");
+            Check(SodaDesktopVideoDelay.FrameDelay(35,33,true)==0,"Slow video delayed again");
+            Check(SodaDesktopVideoDelay.FrameDelay(30,33,true)==3,"Video FPS ceiling bypassed");
+            Check(SodaDesktopVideoDelay.FrameDelay(0,1000,true)==10,"Video input polling unbounded");
+            Check(SodaDesktopVideoDelay.FrameDelay(35,33,false)==2,"Full video window must wait");
+            using(var delay=new SodaDesktopVideoDelay(false)){Check(!delay.HighResolution,"Fallback timer unexpectedly enabled");delay.Pause(1);delay.Dispose();bool disposed=false;try{delay.Pause(1);}catch(ObjectDisposedException){disposed=true;}Check(disposed,"Disposed timer reused");}
             var window=new SodaDesktopVideoWindow(3);
             window.Sent(1,10);window.Sent(2,20);window.Sent(3,30);Check(!window.CanSend&&window.OldestAt==10,"Video window unbounded");
             bool outOfOrder=false;try{window.Ack(2);}catch(InvalidOperationException){outOfOrder=true;}Check(outOfOrder&&window.Count==3,"Out-of-order video ACK accepted");

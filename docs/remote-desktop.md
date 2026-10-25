@@ -267,6 +267,10 @@ soda serve
 
 新しいブラウザ・A/B/helperが揃う場合、未描画の動画を最大3枚まで順番に送ります。描画ACKが届くごとに次の1枚を送り、参照画像が必要なH.264 deltaは間引きません。旧版が混じる場合は従来の1枚ごとのACK待ちへ戻ります。最古の未ACKフレームの期限を検査し、混雑時は画像配信へ戻します。復号非対応・失敗、動画の更新停止、通常画面からの遷移でも動画を停止し、保持入力を解放します。APIが戻る範囲のエラーは画像へ復帰しますが、ドライバーAPI自体が応答しない場合は既存helper watchdogで共有自体が終了する場合があります。
 
+native動画のencoder完了待ちと次フレームの待ちは、Windows 10 1803以降で利用できる[高精度waitable timer](https://learn.microsoft.com/ja-jp/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw)をencoderごとに使います。次フレームの時刻に達したら余分に待ちません。タイマーが使えない場合は従来のSleepへ戻り、停止時にタイマーを解放します。通常の画像配信・認証画面の待ちは変更しません。OS全体のタイマー分解能を変更する処理はありません。
+
+`powershell.exe -NoProfile -STA -File scripts/remote-desktop/benchmark-h264-generated.ps1 -ValidateTimer`では、1ms待機の実時間と、生成した1920×1200の画像90枚のhardware H.264圧縮・フレーム間隔を測れます。実画面、ネットワーク、ACK、ブラウザを含まず、デスクトップのFPS測定の代わりにはなりません。`deadlinePacing`は新しい待機方針の有無、`highResolution`は別途確認したタイマーの利用可否です。対応環境の1ms平均待機が10ms以上の場合に検証を失敗させるため、`-ValidateTimer`は負荷の少ない状態で使ってください。
+
 Windowsで`powershell.exe -NoProfile -File scripts/remote-desktop/validate-h264.ps1`を実行すると、実画面を取得せず、生成画像だけでNV12変換とhardware H.264出力を確認できます。[生成fixtureと実ブラウザ検証](../.aidev/works/20261025-desktop-native-h264/test-result.md)に条件を記録します。
 
 明示的な性能測定は、信頼するhelperのコマンド配列をJSONで`SODA_DESKTOP_BENCH_COMMAND`へ指定し、`node scripts/remote-desktop/benchmark-native-video.mjs --width 1280 --fps 30 --frames 180 --bitrate 2500`を実行します。実画面→A/B→製品canvasを測り、入力は要求せず、スクリーンショットやtraceを保存しません。`--ack-delay-ms 100`で描画ACKへの追加待ちも指定できます。動画帯域はJPEG画像を含まず、CPU/RSSは画像側のカウンターから広い区間を採る点に注意してください。出力は一時フォルダの`soda-desktop-native-video.json`です。通常デスクトップの取得guardが拒否した場合は測定できません。ロック解除などでガードを迂回することはありません。

@@ -395,7 +395,8 @@ public static class SodaDesktopHost {
                         if(outgoing.full){lastFull=outgoing.started;forceFull=false;}
                         if(deltas){var swap=previous;previous=current;current=swap;initialized=true;}
                     }
-                    Thread.Sleep(2);
+                    if(video==null)Thread.Sleep(2);
+                    else {int pause=SodaDesktopVideoDelay.FrameDelay(Clock.ElapsedMilliseconds,videoNext,videoWindow.CanSend);if(pause>0)video.Pause(pause);}
                 }
                 }
             }
@@ -786,11 +787,12 @@ public sealed class SodaDesktopH264 : IDisposable {
     int inputCredits,outputCredits;
     readonly int width,height,fps,bitrate;
     byte[] bgr,nv12,sequenceHeader;
+    SodaDesktopVideoDelay delay;
     public sealed class Packet { public byte[] data;public bool key;public string codec;public long timestamp; }
     public SodaDesktopH264(int width,int height,int fps,int bitrateKbps) {
         if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>30 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
         this.width=width;this.height=height;this.fps=fps;this.bitrate=bitrateKbps*1000;
-        try { Initialize(); } catch {Dispose();throw;}
+        try { delay=new SodaDesktopVideoDelay();Initialize(); } catch {Dispose();throw;}
     }
     void Initialize() {
         Check(MFStartup(0x20070,0));started=true;
@@ -846,7 +848,7 @@ public sealed class SodaDesktopH264 : IDisposable {
         while((output?outputCredits:inputCredits)==0) {
             if(timer.ElapsedMilliseconds>1000)throw new System.TimeoutException("Hardware encoder stalled");
             IntPtr ev=IntPtr.Zero;int hr=Method<GetEvent>(eventGenerator,3)(eventGenerator,1,out ev);
-            if(hr==unchecked((int)0xc00d3e80)){Thread.Sleep(1);continue;}
+            if(hr==unchecked((int)0xc00d3e80)){delay.Pause(1);continue;}
             Check(hr);
             try {
                 uint type;int status;Check(Method<GetNumber>(ev,33)(ev,out type));Check(Method<GetStatus>(ev,35)(ev,out status));Check(status);
@@ -855,6 +857,7 @@ public sealed class SodaDesktopH264 : IDisposable {
             } finally {Release(ref ev);}
         }
     }
+    public void Pause(int milliseconds){delay.Pause(milliseconds);}
     public double ConversionMs {get;private set;}
     public double EncodingMs {get;private set;}
     public Packet EncodeBitmap(Bitmap bitmap,long timestamp) {
@@ -959,6 +962,7 @@ public sealed class SodaDesktopH264 : IDisposable {
         if(disposed)return;disposed=true;ShutdownTransform();
         if(activation!=IntPtr.Zero){try{Method<NoArgs>(activation,34)(activation);}catch{}Release(ref activation);}
         if(started){MFShutdown();started=false;}
+        if(delay!=null){delay.Dispose();delay=null;}
     }
 }
 
@@ -974,4 +978,43 @@ public sealed class SodaDesktopVideoWindow {
     public SodaDesktopVideoWindow(int capacity){if(capacity!=1&&capacity!=3)throw new ArgumentException("Video window limit");Capacity=capacity;}
     public void Sent(long sequence,long at){if(!CanSend||sequence!=sent+1)throw new InvalidOperationException("Video window order");pending.Enqueue(new Pending {seq=sequence,at=at});sent=sequence;}
     public void Ack(long sequence){if(sequence<=acknowledged)return;if(pending.Count==0||pending.Peek().seq!=sequence)throw new InvalidOperationException("Video ACK order");pending.Dequeue();acknowledged=sequence;}
+}
+
+// Per-encoder timer: no process/system timer-resolution setting and no spinning.
+// Windows 10 1803+ supports HIGH_RESOLUTION; older systems retain Sleep fallback.
+public sealed class SodaDesktopVideoDelay : IDisposable {
+    [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]
+    static extern Microsoft.Win32.SafeHandles.SafeWaitHandle CreateWaitableTimerExW(IntPtr attributes,string name,uint flags,uint access);
+    [DllImport("kernel32.dll",SetLastError=true)]
+    [return:MarshalAs(UnmanagedType.Bool)]
+    static extern bool SetWaitableTimer(Microsoft.Win32.SafeHandles.SafeWaitHandle timer,ref long dueTime,int period,IntPtr completion,IntPtr argument,bool resume);
+    [DllImport("kernel32.dll",SetLastError=true)]
+    static extern uint WaitForSingleObject(Microsoft.Win32.SafeHandles.SafeWaitHandle handle,uint milliseconds);
+    Microsoft.Win32.SafeHandles.SafeWaitHandle timer;
+    bool disposed;
+    public bool HighResolution {get{return timer!=null;}}
+    public SodaDesktopVideoDelay(bool precise=true) {
+        if(!precise)return;
+        try {
+            var created=CreateWaitableTimerExW(IntPtr.Zero,null,2,0x00100002); // SYNCHRONIZE | TIMER_MODIFY_STATE
+            if(created!=null&&!created.IsInvalid)timer=created;
+            else if(created!=null)created.Dispose();
+        } catch(EntryPointNotFoundException) {} // Optional on older Windows.
+    }
+    public static int FrameDelay(long now,long next,bool canSend) {
+        if(!canSend)return 2;
+        if(next<=now)return 0;
+        return (int)Math.Min(10,next-now);
+    }
+    public void Pause(int milliseconds) {
+        if(disposed)throw new ObjectDisposedException("SodaDesktopVideoDelay");
+        if(milliseconds<1||milliseconds>10)throw new ArgumentOutOfRangeException("milliseconds");
+        if(timer!=null) {
+            long due=-milliseconds*10000L; // Relative 100ns units, one shot.
+            if(SetWaitableTimer(timer,ref due,0,IntPtr.Zero,IntPtr.Zero,false)&&WaitForSingleObject(timer,(uint)(milliseconds+100))==0)return;
+            timer.Dispose();timer=null; // An unavailable timer must not break sharing.
+        }
+        Thread.Sleep(milliseconds);
+    }
+    public void Dispose(){if(disposed)return;disposed=true;if(timer!=null){timer.Dispose();timer=null;}}
 }
