@@ -6,7 +6,7 @@
 
 ## Encoder
 
-SodaDesktopH264はMFTEnumEx(HARDWARE|SORTANDFILTER)のNV12→H264だけを列挙する。CPUのinbox encoderへ暗黙fallbackしない。async unlock、ICodecAPIの低遅延BOOL、B picture数0、GOP=fps、出力type→入力type、BEGIN/START_STREAMINGを設定する。NeedInput/HaveOutputイベントをNO_WAITで読み、イベント待ちは各1秒、入力・出力は一枚ずつ。MFTのsample/buffer/event/activationをfinally/Disposeで解放しIMFShutdown/MFShutdownを呼ぶ。
+SodaDesktopH264はMFTEnumEx(HARDWARE|SORTANDFILTER)のNV12→H264だけを列挙する。CPUのinbox encoderへ暗黙fallbackしない。async unlock、ICodecAPIの低遅延BOOL、B picture数0、GOP=fps、出力type→入力type、BEGIN/START_STREAMINGを設定する。初回MF_E_TRANSFORM_STREAM_CHANGEを要求するencoderでは、出力sample/event/bufferを解放後にoutput typeを最大16候補で再設定し、新しいHaveOutputを待って同じ出力を最大4回再試行する。入力は再送しない。type側のSPS/PPSは最大64KiBを保持して初回keyに必要なら前置する。NeedInput/HaveOutputイベントをNO_WAITで読み、イベント待ちは各1秒、入力・出力は一枚ずつ。MFTのsample/buffer/event/activationをfinally/Disposeで解放しIMFShutdown/MFShutdownを呼ぶ。
 
 現在はDXGIでGPU縮小後にCPUへ読み戻し、既存BitmapをBT.709 limited-range NV12へCPU変換してhardware encoderへ渡す。zero-copyとは主張しない。NV12の正のstrideを明示し、偶数寸法のみ。初回Annex-B SPS/IDRを確認し、codec文字列をSPSから読む。1packetは512KiB-9以下。ドライバーが未対応/エラー/イベント待ち超過ならその動画を停止し画像へ戻す。ネイティブAPIそのものが応答しない場合は既存helperの8秒watchdogにより共有自体が終了することがある。
 

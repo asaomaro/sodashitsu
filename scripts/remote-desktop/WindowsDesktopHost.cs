@@ -911,7 +911,7 @@ public sealed class SodaDesktopH264 : IDisposable {
             return packet;
             }
         } finally {Release(ref buffer);Release(ref output.events);if(output.sample==allocated)allocated=IntPtr.Zero;Release(ref output.sample);Release(ref allocated);}
-        if(changed)RenegotiateOutput();
+        if(changed){RenegotiateOutput();Wait(true);outputCredits--;}
         }
         throw new InvalidOperationException("H.264 output format did not stabilize");
     }

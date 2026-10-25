@@ -12,8 +12,12 @@ test.use({
   video: "off",
 });
 
-for (const failDecoder of [false, true])
-  test(`hardware-produced H264 ${failDecoder ? "decoder failure restores images" : "pixels reach the canvas with draw ACK and stop"}`, async ({
+for (const { fixtureName, failDecoder } of [
+  { fixtureName: "h264-generated.json", failDecoder: false },
+  { fixtureName: "h264-sr-pc-generated.json", failDecoder: false },
+  { fixtureName: "h264-generated.json", failDecoder: true },
+])
+  test(`hardware-produced ${fixtureName} H264 ${failDecoder ? "decoder failure restores images" : "pixels reach the canvas with draw ACK and stop"}`, async ({
     page,
     appServer,
   }) => {
@@ -29,7 +33,7 @@ for (const failDecoder of [false, true])
       "--allow-input",
       "--native-fixture",
       fileURLToPath(
-        new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json", import.meta.url),
+        new URL(`../../../../scripts/remote-desktop/fixtures/${fixtureName}`, import.meta.url),
       ),
     ]);
     process.env.SODA_DESKTOP_ALLOW_MEDIA = "1";
