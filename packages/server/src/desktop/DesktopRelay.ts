@@ -41,7 +41,8 @@ type Viewer = {
   nativeWindowRequested:boolean;
   nativeVideoWindow?:3;
   nativeVideo?: boolean;
-  media?: { id: string; generation: number; seq: number; native?:boolean; pending?:number[]; window?:1|3;lastAck?:number };
+  media?: { id: string; generation: number; seq: number; native?:boolean; pending?:number[]; window?:1|3;lastAck?:number;sentAt?:Map<number,number>;drawnAt?:number };
+  nativeInputFreshness?: boolean;
   snapshot?: {
     promise: Promise<void>;
     resolve(): void;
@@ -319,7 +320,10 @@ export class DesktopRelay {
         } else if(m.type==="native_video_ack") {
           if(v.nativeVideo&&v.media?.native&&v.provider&&m.id===v.media.id&&m.generation===v.media.generation) {
             if(m.seq<=(v.media.lastAck??0))return;
-            if(m.seq!==v.media.pending?.[0])throw new Error("Native ACK order");v.media.pending.shift();v.media.lastAck=m.seq;this.send(v.provider,m);
+            if(m.seq!==v.media.pending?.[0])throw new Error("Native ACK order");v.media.pending.shift();v.media.lastAck=m.seq;
+            const drawnAt=v.media.sentAt?.get(m.seq);
+            if(drawnAt===undefined)delete v.media.drawnAt;else v.media.drawnAt=drawnAt;
+            v.media.sentAt?.delete(m.seq);this.send(v.provider,m);
           }
         } else if (
           m.type === "media" ||
@@ -372,13 +376,15 @@ export class DesktopRelay {
             m.frameSeq <= v.seq &&
             m.frameSeq >= v.seq - 1 &&
             v.seq > 0 &&
-            now - v.frameAt < 5000
+            (v.nativeInputFreshness && v.media?.native
+              ? v.media.drawnAt !== undefined && now - v.media.drawnAt < 2000
+              : now - v.frameAt < 5000)
           ) {
             v.viewerSeq = m.seq;
             const seq = ++v.inputSeq;
             v.viewerAcks.set(seq, m.seq);
             if (v.viewerAcks.size > 64) v.viewerAcks.delete(v.viewerAcks.keys().next().value!);
-            if (!this.send(v.provider, { ...m, seq })) this.stop(v);
+            if (!this.send(v.provider, { ...m, seq, ...(v.nativeInputFreshness && v.media?.native ? {nativeDraw:true} : {}) })) this.stop(v);
           }
         } else if (m.type === "ack") {
           if (!v.provider || v.pending !== m.seq) {
@@ -430,6 +436,7 @@ export class DesktopRelay {
         imeKeys: z.boolean().optional(),
         extendedInput: z.boolean().optional(),
         nativeVideo: z.boolean().optional(),
+        nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
         features: z.boolean().optional(),
         displayResize: z.boolean().optional(),
@@ -451,6 +458,7 @@ export class DesktopRelay {
     delete legacyOptions.nativeVideoWindow;
     if(v.nativeWindowRequested&&caps.nativeVideoWindow===3)v.nativeVideoWindow=3;else delete v.nativeVideoWindow;
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
+    v.nativeInputFreshness=v.nativeVideo&&caps.nativeInputFreshness===true;
     // Capability requires both the viewer opt-in and B's current RPC schema.
     v.imeKeysNegotiated = v.imeKeysRequested && caps.imeKeys === true;
     v.extendedInputNegotiated = v.extendedInputRequested && caps.extendedInput === true;
@@ -530,7 +538,7 @@ export class DesktopRelay {
           if (chunk.seq !== v.media.seq + 1) throw new Error();
           if(v.media.native&&(v.media.pending?.length??0)>=(v.media.window??1))throw new Error("Native video backlog");
           v.media.seq = chunk.seq;
-          if(v.media.native)(v.media.pending??=[]).push(chunk.seq);
+          if(v.media.native){(v.media.pending??=[]).push(chunk.seq);(v.media.sentAt??=new Map()).set(chunk.seq,performance.now());}
           if (v.ws.bufferedAmount > 512 * 1024) {
             if (v.provider) this.send(v.provider, { type: "media", enabled: false });
             delete v.media;
@@ -607,7 +615,7 @@ export class DesktopRelay {
             if (status.state === "images") delete v.media;
             else if (!v.media || v.media.id !== status.id)
               v.media = { id: status.id, generation: 0, seq: 0 };
-            if(v.media&&status.state==="native"){v.media.native=true;v.media.window=v.nativeVideoWindow??1;v.media.pending=[];v.media.lastAck=0;}
+            if(v.media&&status.state==="native"){v.media.native=true;v.media.window=v.nativeVideoWindow??1;v.media.pending=[];v.media.lastAck=0;v.media.sentAt=new Map();delete v.media.drawnAt;}
             this.send(v.ws, status);
           } else if (msg.type === "media_stream" && v.media) {
             const stream = DesktopMediaStream.parse(msg);

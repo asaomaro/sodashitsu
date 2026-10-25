@@ -46,6 +46,7 @@ export class DesktopNativeVideo {
         }[];
         statsAt: number;
         lastAck: number;
+        drawnAt?: number;
         at: number;
         timestamp: number;
         stream: boolean;
@@ -78,6 +79,7 @@ export class DesktopNativeVideo {
       const pending = s.pending[0];
       if (ack.seq !== pending?.seq) throw Error("Native video ACK order");
       s.lastAck = ack.seq;
+      s.drawnAt = pending.at;
       s.pending.shift();
       const now = performance.now();
       if (this.hooks.window === 3 && now - s.statsAt >= 1000) {
@@ -212,6 +214,10 @@ export class DesktopNativeVideo {
     const s = this.active;
     if (s && now - (s.pending[0]?.at ?? s.at) > (s.pending.length ? 2500 : 5000))
       this.stop(s.pending.length ? "congested" : "unavailable");
+  }
+  hasFreshDraw(now = performance.now()): boolean {
+    const s = this.active;
+    return !!s?.stream && s.drawnAt !== undefined && now - s.drawnAt < 2000;
   }
   stop(reason: "stopped" | "unavailable" | "congested" = "stopped") {
     const s = this.active;

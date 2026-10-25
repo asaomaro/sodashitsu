@@ -200,6 +200,7 @@ function run() {
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
       send({type:"native_frame",id:native.id,seq:native.seq,timestamp:native.seq*33333,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
     }
+    if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;
     const deltaTest = process.argv.includes("--delta-test"),
       stable = deltaTest || process.argv.includes("--static");

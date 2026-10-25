@@ -106,6 +106,7 @@ export class DesktopProvider {
       imeKeys: true,
       extendedInput: true,
       nativeVideo: true,
+      nativeInputFreshness: true,
       nativeVideoWindow: 3 as const,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
@@ -221,6 +222,10 @@ export class DesktopProvider {
             this.stop(s);
             return;
           }
+          // Private A->B marker, negotiated through RPC capabilities. Browser
+          // messages and agent actions retain their existing strict schemas.
+          const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
+          if (nativeDraw) delete rawMessage.nativeDraw;
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
           if(m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
@@ -313,7 +318,7 @@ export class DesktopProvider {
               m.seq > s.inputSeq &&
               performance.now() - s.lastSeen < 5000 &&
               s.seq > 0 &&
-              performance.now() - s.frameAt < 2000
+              (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000)
             ) {
               s.inputSeq = m.seq;
               this.write(s, { ...m, expiresAt: Date.now() + 500 });
