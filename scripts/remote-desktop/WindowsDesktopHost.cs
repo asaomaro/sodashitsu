@@ -33,6 +33,12 @@ public static class SodaDesktopHost {
         try { IntPtr dest=target.GetHdc();try { SetStretchBltMode(dest,4);SetBrushOrgEx(dest,0,0,IntPtr.Zero);if(!StretchBlt(dest,0,0,width,height,source,Bounds.Left,Bounds.Top,Bounds.Width,Bounds.Height,0x00CC0020))throw new InvalidOperationException("Capture failed"); } finally { target.ReleaseHdc(dest); } }
         finally { ReleaseDC(IntPtr.Zero,source); }
     }
+    static void CaptureFrame(Graphics target,int width,int height,bool cursorVisible,ref SodaDesktopDxgi dxgi) {
+        if(dxgi!=null) {try {if(!dxgi.Capture(target))CaptureScaled(target,width,height);}catch {dxgi.Dispose();dxgi=null;CaptureScaled(target,width,height);}}
+        else CaptureScaled(target,width,height);
+        Point cursor=Cursor.Position;
+        if(cursorVisible && Bounds.Contains(cursor)) {int x=(int)((cursor.X-Bounds.Left)*(double)width/Bounds.Width),y=(int)((cursor.Y-Bounds.Top)*(double)height/Bounds.Height);Cursors.Default.Draw(target,new Rectangle(x,y,16,24));}
+    }
     static readonly object Gate=new object();
     static readonly HashSet<ushort> Keys=new HashSet<ushort>();
     static readonly HashSet<int> Buttons=new HashSet<int>();
@@ -244,6 +250,9 @@ public static class SodaDesktopHost {
             else if(!AllowedDesktop()){Stopping=true;Release();}
         },null,500,500);
         SodaDesktopDxgi dxgi=null;
+        SodaDesktopH264 video=null;string videoId=null;
+        long videoSeq=0,videoPending=0,videoNext=0,videoAt=0;int videoFps=maxFps;
+        bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         // Only new providers opt in. Old providers/helpers keep their existing wire contract.
         if(!Secure && Environment.GetEnvironmentVariable("SODA_DESKTOP_CAPTURE")!="gdi" && config.ContainsKey("captureBackends")) {
             var backends=config["captureBackends"] as object[];
@@ -253,6 +262,7 @@ public static class SodaDesktopHost {
             var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
+            if(nativeCeiling)ready["nativeVideo"]=true;
             if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             Output(ready);
@@ -284,6 +294,18 @@ public static class SodaDesktopHost {
                         var msg=Obj(Json.DeserializeObject(data));string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
                         else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
+                        else if(type=="native_video") {
+                            string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Video id");
+                            if((bool)msg["enabled"]) {
+                                if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
+                                if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoPending=videoNext=0;
+                                try {videoFps=Num(msg,"fps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=new SodaDesktopH264(w,h,videoFps,Num(msg,"bitrateKbps"));}
+                                catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
+                            } else if(videoId==requested) {if(video!=null)video.Dispose();video=null;videoId=null;videoPending=0;}
+                        }
+                        else if(type=="native_video_ack") {
+                            if(video!=null && (string)msg["id"]==videoId) {long ack=Convert.ToInt64(msg["seq"]);if(ack==videoPending)videoPending=0;else if(ack>videoSeq)throw new InvalidOperationException("Video ACK order");}
+                        }
                         else if(type=="keyframe"){forceFull=true;preparation.Invalidate(true);}
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
@@ -312,14 +334,23 @@ public static class SodaDesktopHost {
                     }
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
                     long now=Clock.ElapsedMilliseconds;
+                    if(video!=null && videoPending!=0 && now-videoAt>2500) {
+                        video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoPending=0;
+                    }
+                    if(!Stopping && video!=null && videoPending==0 && now>=videoNext) {
+                        try {
+                            CaptureFrame(resize,w,h,showCursor,ref dxgi);
+                            var packet=video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
+                            if(!AllowedDesktop())break;
+                            if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
+                            videoPending=++videoSeq;videoAt=Clock.ElapsedMilliseconds;videoNext=now+1000/videoFps;
+                            var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
+                            if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
+                        } catch {video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoPending=0;}
+                        now=Clock.ElapsedMilliseconds;
+                    }
                     if(!Stopping && preparation.CanPrepare(now,pending)) {
-                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();if(dxgi!=null) {
-                            try { if(!dxgi.Capture(resize))CaptureScaled(resize,w,h); }
-                            catch { dxgi.Dispose();dxgi=null;CaptureScaled(resize,w,h); }
-                        } else CaptureScaled(resize,w,h);
-                        // PoC cursor: standard arrow at the Windows cursor position; shape is not captured.
-                        Point cursor=Cursor.Position;
-                        if(showCursor && Bounds.Contains(cursor)) { int cx=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cy=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);Cursors.Default.Draw(resize,new Rectangle(cx,cy,16,24)); }
+                        long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
                         var prepared=new PreparedFrame {started=frameStarted};
@@ -365,7 +396,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;watchdog.Dispose();Release();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose(); }
+        } finally { Stopping=true;watchdog.Dispose();Release();if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose(); }
     }
 }
 
@@ -701,5 +732,185 @@ public sealed class SodaDesktopDxgi : IDisposable {
         if(disposed)return;disposed=true;
         if(bitmap!=null){bitmap.Dispose();bitmap=null;}
         Release(ref sampler);Release(ref pixel);Release(ref vertex);Release(ref staging);Release(ref targetView);Release(ref target);Release(ref sourceView);Release(ref source);Release(ref duplication);Release(ref context);Release(ref device);
+    }
+}
+
+// Hardware-only Media Foundation H.264 encoder. Frames enter as bounded NV12
+// system memory; this version does not claim a zero-copy GPU colorspace path.
+public sealed class SodaDesktopH264 : IDisposable {
+    [StructLayout(LayoutKind.Sequential)] struct TypeInfo { public Guid major,subtype; }
+    [StructLayout(LayoutKind.Sequential)] struct OutputInfo { public uint flags,size,alignment; }
+    [StructLayout(LayoutKind.Sequential)] struct OutputData { public uint stream;public IntPtr sample;public uint status;public IntPtr events; }
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFStartup(uint version,uint flags);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFShutdown();
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFTEnumEx(Guid category,uint flags,ref TypeInfo input,ref TypeInfo output,out IntPtr activates,out uint count);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateMediaType(out IntPtr type);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateSample(out IntPtr sample);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("mfplat.dll")] static extern int MFCreateMemoryBuffer(uint size,out IntPtr buffer);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetObject(IntPtr self,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Activate(IntPtr self,ref Guid iid,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Set32(IntPtr self,ref Guid key,uint value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Set64(IntPtr self,ref Guid key,ulong value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetGuid(IntPtr self,ref Guid key,ref Guid value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetType(IntPtr self,uint stream,IntPtr type,uint flags);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Message(IntPtr self,uint message,UIntPtr parameter);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Input(IntPtr self,uint stream,IntPtr sample,uint flags);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int Output(IntPtr self,uint flags,uint count,ref OutputData data,out uint status);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetOutputInfo(IntPtr self,uint stream,out OutputInfo info);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetEvent(IntPtr self,uint flags,out IntPtr value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetNumber(IntPtr self,out uint value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int GetStatus(IntPtr self,out int value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int BufferLock(IntPtr self,out IntPtr data,out uint max,out uint length);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int NoArgs(IntPtr self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetLength(IntPtr self,uint value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int AddBuffer(IntPtr self,IntPtr buffer);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int SetTime(IntPtr self,long value);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int CodecValue(IntPtr self,ref Guid key,IntPtr variant);
+    static T Method<T>(IntPtr obj,int slot) where T:class { return Marshal.GetDelegateForFunctionPointer(Marshal.ReadIntPtr(Marshal.ReadIntPtr(obj),slot*IntPtr.Size),typeof(T)) as T; }
+    static void Check(int hr) { if(hr<0)Marshal.ThrowExceptionForHR(hr); }
+    static void Release(ref IntPtr obj) { if(obj!=IntPtr.Zero){Marshal.Release(obj);obj=IntPtr.Zero;} }
+    static IntPtr Query(IntPtr obj,string iid) { Guid id=new Guid(iid);IntPtr value;Check(Marshal.QueryInterface(obj,ref id,out value));return value; }
+    static void U32(IntPtr obj,string key,uint value) {Guid id=new Guid(key);Check(Method<Set32>(obj,21)(obj,ref id,value));}
+    static void U64(IntPtr obj,string key,ulong value) {Guid id=new Guid(key);Check(Method<Set64>(obj,22)(obj,ref id,value));}
+    static void GuidValue(IntPtr obj,string key,Guid value) {Guid id=new Guid(key);Check(Method<SetGuid>(obj,24)(obj,ref id,ref value));}
+    static readonly Guid Video=new Guid("73646976-0000-0010-8000-00aa00389b71"),NV12=new Guid("3231564e-0000-0010-8000-00aa00389b71"),H264=new Guid("34363248-0000-0010-8000-00aa00389b71");
+    IntPtr transform,eventGenerator,activation;
+    bool started,disposed;
+    int inputCredits,outputCredits;
+    readonly int width,height,fps,bitrate;
+    byte[] bgr,nv12;
+    public sealed class Packet { public byte[] data;public bool key;public string codec;public long timestamp; }
+    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps) {
+        if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>30 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
+        this.width=width;this.height=height;this.fps=fps;this.bitrate=bitrateKbps*1000;
+        try { Initialize(); } catch {Dispose();throw;}
+    }
+    void Initialize() {
+        Check(MFStartup(0x20070,0));started=true;
+        IntPtr list=IntPtr.Zero;uint count=0;
+        try {
+            var input=new TypeInfo {major=Video,subtype=NV12};var output=new TypeInfo {major=Video,subtype=H264};
+            // HARDWARE only. Never silently select the CPU Microsoft encoder.
+            Check(MFTEnumEx(new Guid("f79eac7d-e545-4387-bdee-d647d7bde42a"),0x44,ref input,ref output,out list,out count));
+            if(count==0 || count>64)throw new NotSupportedException("Hardware H.264 unavailable");
+            Exception last=null;
+            for(int i=0;i<count;i++) {
+                IntPtr candidate=Marshal.ReadIntPtr(list,i*IntPtr.Size);
+                try { ActivateEncoder(candidate);activation=candidate;Marshal.AddRef(activation);return; }
+                catch(Exception e) {last=e;ShutdownTransform();}
+            }
+            throw new NotSupportedException("No compatible hardware H.264 encoder",last);
+        } finally {if(list!=IntPtr.Zero){for(int i=0;i<count;i++){IntPtr a=Marshal.ReadIntPtr(list,i*IntPtr.Size);if(a!=IntPtr.Zero)Marshal.Release(a);}Marshal.FreeCoTaskMem(list);}}
+    }
+    void ActivateEncoder(IntPtr candidate) {
+        Guid iid=new Guid("bf94c121-5b05-4e6f-8000-ba598961414d");Check(Method<Activate>(candidate,33)(candidate,ref iid,out transform));
+        IntPtr attributes=IntPtr.Zero;
+        try {Check(Method<GetObject>(transform,8)(transform,out attributes));U32(attributes,"e5666d6b-3422-4eb6-a421-da7db1f8e207",1);}
+        finally {Release(ref attributes);}
+        eventGenerator=Query(transform,"2cd0bd52-bcd5-4b89-b62c-eadc0c031e7d");
+        Codec("9c27891a-ed7a-40e1-88e8-b22727a024ee",1,true);
+        Codec("8d390aac-dc5c-4200-b57f-814d04babab2",0);
+        Codec("95f31b26-95a4-41aa-9303-246a7fc6eef1",(uint)fps);
+        IntPtr type=IntPtr.Zero;
+        try {type=MediaType(H264);U32(type,"20332624-fb0d-4d9e-bd0d-cbf6786c102e",(uint)bitrate);U32(type,"ad76a80b-2d5c-4e0b-b375-64e520137036",66);Check(Method<SetType>(transform,16)(transform,0,type,0));}
+        finally {Release(ref type);}
+        try {type=MediaType(NV12);Check(Method<SetType>(transform,15)(transform,0,type,0));}
+        finally {Release(ref type);}
+        Check(Method<Message>(transform,23)(transform,0x10000000,UIntPtr.Zero));Check(Method<Message>(transform,23)(transform,0x10000003,UIntPtr.Zero));
+    }
+    void Codec(string key,uint value,bool boolean=false) {
+        IntPtr api=IntPtr.Zero,variant=Marshal.AllocCoTaskMem(32);
+        try {api=Query(transform,"901db4c7-31ce-41a2-85dc-8fa0bf41b8da");for(int i=0;i<32;i++)Marshal.WriteByte(variant,i,0);Marshal.WriteInt16(variant,boolean?(short)11:(short)19);if(boolean)Marshal.WriteInt16(variant,8,value!=0?(short)-1:(short)0);else Marshal.WriteInt32(variant,8,(int)value);Guid id=new Guid(key);Check(Method<CodecValue>(api,9)(api,ref id,variant));}
+        finally {Marshal.FreeCoTaskMem(variant);Release(ref api);}
+    }
+    IntPtr MediaType(Guid subtype) {
+        IntPtr type;Check(MFCreateMediaType(out type));
+        try {
+            GuidValue(type,"48eba18e-f8c9-4687-bf11-0a74c9f96a8f",Video);GuidValue(type,"f7e34c9a-42e8-4714-b74b-cb29d72c35e5",subtype);
+            U64(type,"1652c33d-d6b2-4012-b834-72030849a37d",((ulong)(uint)width<<32)|(uint)height);
+            U64(type,"c459a2e8-3d2c-4e44-b132-fee5156c7bb0",((ulong)(uint)fps<<32)|1);
+            U64(type,"c6376a1e-8d0a-4027-be45-6d9a0ad39bb6",((ulong)1<<32)|1);U32(type,"e2724bb8-e676-4806-b4b2-a8d6efb44ccd",2);
+            if(subtype==NV12)U32(type,"644b4e48-1e02-4516-b0eb-c01ca9d49ac6",(uint)width);
+            U32(type,"3e23d450-2c75-4d25-a00e-b91670d12327",1);U32(type,"c21b8ee5-b956-4071-8daf-325edf5cab11",2);U32(type,"dbfbe4d7-0740-4ee0-8192-850ab0e21935",2);U32(type,"5fb0fce9-be5c-4935-a811-ec838f8eed93",5);return type;
+        } catch {Release(ref type);throw;}
+    }
+    void Wait(bool output) {
+        var timer=Stopwatch.StartNew();
+        while((output?outputCredits:inputCredits)==0) {
+            if(timer.ElapsedMilliseconds>1000)throw new System.TimeoutException("Hardware encoder stalled");
+            IntPtr ev=IntPtr.Zero;int hr=Method<GetEvent>(eventGenerator,3)(eventGenerator,1,out ev);
+            if(hr==unchecked((int)0xc00d3e80)){Thread.Sleep(1);continue;}
+            Check(hr);
+            try {
+                uint type;int status;Check(Method<GetNumber>(ev,33)(ev,out type));Check(Method<GetStatus>(ev,35)(ev,out status));Check(status);
+                if(type==601){if(++inputCredits>16)throw new InvalidOperationException("Encoder input event limit");}
+                else if(type==602){if(++outputCredits>2)throw new InvalidOperationException("Encoder output event limit");}
+            } finally {Release(ref ev);}
+        }
+    }
+    public Packet EncodeBitmap(Bitmap bitmap,long timestamp) {
+        if(bitmap.Width!=width || bitmap.Height!=height)throw new ArgumentException("Video bitmap size");
+        if(bgr==null){bgr=new byte[width*height*3];nv12=new byte[width*height*3/2];}
+        var bits=bitmap.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format24bppRgb);
+        try {for(int y=0;y<height;y++)Marshal.Copy(IntPtr.Add(bits.Scan0,y*bits.Stride),bgr,y*width*3,width*3);}
+        finally {bitmap.UnlockBits(bits);}
+        ConvertNv12(bgr,nv12,width,height);return Encode(nv12,timestamp);
+    }
+    public static void ConvertNv12(byte[] bgr,byte[] nv12,int width,int height) {
+        if(width<2||height<2||(width&1)!=0||(height&1)!=0||(long)width*height>8000000||bgr.Length!=(long)width*height*3||nv12.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
+        for(int y=0;y<height;y+=2)for(int x=0;x<width;x+=2) {
+            int r=0,g=0,b=0;
+            for(int yy=0;yy<2;yy++)for(int xx=0;xx<2;xx++) {
+                int p=(y+yy)*width+x+xx,i=p*3;int blue=bgr[i],green=bgr[i+1],red=bgr[i+2];
+                nv12[p]=(byte)(((47*red+157*green+16*blue+128)>>8)+16);r+=red;g+=green;b+=blue;
+            }
+            r=(r+2)/4;g=(g+2)/4;b=(b+2)/4;int uv=width*height+(y/2)*width+x;
+            nv12[uv]=(byte)(((-26*r-86*g+112*b+128)>>8)+128);nv12[uv+1]=(byte)(((112*r-102*g-10*b+128)>>8)+128);
+        }
+    }
+    public Packet Encode(byte[] nv12,long timestamp) {
+        if(disposed || nv12.Length!=width*height*3/2 || timestamp<0)throw new ArgumentException("Invalid video input");
+        Wait(false);IntPtr sample=IntPtr.Zero,buffer=IntPtr.Zero;
+        try {
+            Check(MFCreateSample(out sample));Check(MFCreateMemoryBuffer((uint)nv12.Length,out buffer));
+            IntPtr data;uint max,length;Check(Method<BufferLock>(buffer,3)(buffer,out data,out max,out length));
+            try {if(max<nv12.Length)throw new InvalidOperationException("Encoder input buffer limit");Marshal.Copy(nv12,0,data,nv12.Length);}
+            finally {Check(Method<NoArgs>(buffer,4)(buffer));}
+            Check(Method<SetLength>(buffer,6)(buffer,(uint)nv12.Length));Check(Method<AddBuffer>(sample,42)(sample,buffer));
+            Check(Method<SetTime>(sample,36)(sample,checked(timestamp*10)));Check(Method<SetTime>(sample,38)(sample,10000000/fps));
+            Check(Method<Input>(transform,24)(transform,0,sample,0));inputCredits--;
+        } finally {Release(ref buffer);Release(ref sample);}
+        Wait(true);outputCredits--;
+        var output=new OutputData();IntPtr allocated=IntPtr.Zero;
+        try {
+            OutputInfo info;Check(Method<GetOutputInfo>(transform,7)(transform,0,out info));
+            if((info.flags&0x100)==0) {
+                if(info.size>512*1024)throw new InvalidOperationException("Encoder output size limit");
+                Check(MFCreateSample(out allocated));Check(MFCreateMemoryBuffer(Math.Max(1,info.size),out buffer));Check(Method<AddBuffer>(allocated,42)(allocated,buffer));Release(ref buffer);output.sample=allocated;
+            }
+            uint status;Check(Method<Output>(transform,25)(transform,0,1,ref output,out status));
+            Check(Method<GetObject>(output.sample,41)(output.sample,out buffer));IntPtr data;uint max,length;
+            Check(Method<BufferLock>(buffer,3)(buffer,out data,out max,out length));byte[] bytes;
+            try {if(length==0 || length>512*1024-9 || length>max)throw new InvalidOperationException("H.264 frame limit");bytes=new byte[length];Marshal.Copy(data,bytes,0,(int)length);}
+            finally {Check(Method<NoArgs>(buffer,4)(buffer));}
+            bool key=false;string codec=null;
+            for(int i=0;i+4<bytes.Length;i++)if(bytes[i]==0 && bytes[i+1]==0 && (bytes[i+2]==1 || (bytes[i+2]==0 && bytes[i+3]==1))) {
+                int n=i+(bytes[i+2]==1?3:4),kind=bytes[n]&31;
+                if(kind==5)key=true;if(kind==7 && n+3<bytes.Length)codec="avc1."+bytes[n+1].ToString("x2")+bytes[n+2].ToString("x2")+bytes[n+3].ToString("x2");i=n;
+            }
+            return new Packet {data=bytes,key=key,codec=codec,timestamp=timestamp};
+        } finally {Release(ref buffer);Release(ref output.events);if(output.sample==allocated)allocated=IntPtr.Zero;Release(ref output.sample);Release(ref allocated);}
+    }
+    void ShutdownTransform() {
+        if(transform!=IntPtr.Zero) {
+            IntPtr shutdown=IntPtr.Zero;
+            try {shutdown=Query(transform,"97ec2ea4-0e42-4937-97ac-9d6d328824e1");Method<NoArgs>(shutdown,3)(shutdown);}catch{}finally{Release(ref shutdown);}
+        }
+        Release(ref eventGenerator);Release(ref transform);inputCredits=outputCredits=0;
+    }
+    public void Dispose() {
+        if(disposed)return;disposed=true;ShutdownTransform();
+        if(activation!=IntPtr.Zero){try{Method<NoArgs>(activation,34)(activation);}catch{}Release(ref activation);}
+        if(started){MFShutdown();started=false;}
     }
 }

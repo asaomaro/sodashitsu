@@ -21,7 +21,7 @@ export const DesktopIceServers = z
 export const DesktopMediaSettings = z
   .object({
     audio: z.boolean().default(false),
-    transport: z.enum(["auto", "relay"]).default("auto"),
+    transport: z.enum(["auto", "relay", "native"]).default("auto"),
     adaptive: z.boolean().default(true),
     maxBitrateKbps: z.number().int().min(128).max(12000).default(2500),
   })
@@ -103,20 +103,69 @@ export const DesktopMediaStatus = z
   .object({
     type: z.literal("media_status"),
     id: z.string().uuid(),
-    state: z.enum(["waiting", "negotiating", "rtc", "relay", "images"]),
+    state: z.enum(["waiting", "negotiating", "rtc", "relay", "native", "images"]),
     audio: z.boolean(),
     reason: z.enum(["requested", "stopped", "unavailable", "congested", "ended"]).optional(),
     iceServers: DesktopIceServers.optional(),
   })
   .strict();
-export const DesktopMediaStream = z
+export const DesktopMediaStream = z.union([
+  z
+    .object({
+      type: z.literal("media_stream"),
+      id: z.string().uuid(),
+      generation: z.number().int().min(1).max(0xffffffff),
+      mime: z.enum(["video/webm;codecs=vp8,opus", "video/webm;codecs=vp8"]),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("media_stream"),
+      id: z.string().uuid(),
+      generation: z.number().int().min(1).max(0xffffffff),
+      mime: z.literal("video/h264"),
+      codec: z.string().regex(/^avc1\.[0-9a-f]{6}$/),
+      width: z.number().int().min(2).max(4096),
+      height: z.number().int().min(2).max(2400),
+    })
+    .strict()
+    .refine((v) => v.width * v.height <= 8_000_000),
+]);
+export const DESKTOP_NATIVE_VIDEO_PROTOCOL = "soda-desktop-native-video-v1";
+export const DesktopNativeVideoAck = z
   .object({
-    type: z.literal("media_stream"),
+    type: z.literal("native_video_ack"),
     id: z.string().uuid(),
     generation: z.number().int().min(1).max(0xffffffff),
-    mime: z.enum(["video/webm;codecs=vp8,opus", "video/webm;codecs=vp8"]),
+    seq: z.number().int().min(1).max(0xffffffff),
   })
   .strict();
+/** One complete Annex-B access unit. One packet may be outstanding until draw ACK. */
+export function encodeDesktopH264Packet(
+  timestamp: number,
+  key: boolean,
+  data: Uint8Array,
+): Uint8Array {
+  if (
+    !Number.isSafeInteger(timestamp) ||
+    timestamp < 0 ||
+    !data.length ||
+    data.length > DESKTOP_MEDIA_CHUNK_LIMIT - 9
+  )
+    throw Error("native video packet limit");
+  const out = new Uint8Array(9 + data.length);
+  out[0] = key ? 1 : 0;
+  new DataView(out.buffer).setFloat64(1, timestamp);
+  out.set(data, 9);
+  return out;
+}
+export function decodeDesktopH264Packet(bytes: Uint8Array) {
+  if (bytes.length <= 9 || bytes.length > DESKTOP_MEDIA_CHUNK_LIMIT || bytes[0]! > 1)
+    throw Error("native video packet limit");
+  const timestamp = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getFloat64(1);
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) throw Error("native video timestamp");
+  return { timestamp, key: bytes[0] === 1, data: bytes.subarray(9) };
+}
 export const DesktopCompanionMessage = z.union([
   z
     .object({
@@ -136,7 +185,7 @@ export const DesktopCompanionMessage = z.union([
     })
     .strict(),
   DesktopMediaSignal,
-  DesktopMediaStream,
+  DesktopMediaStream.refine((v) => v.mime !== "video/h264"),
   z.object({ type: z.literal("heartbeat") }).strict(),
 ]);
 const magic = [83, 68, 77, 49];

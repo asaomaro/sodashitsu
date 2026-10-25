@@ -1,8 +1,10 @@
+import { DesktopNativeVideoReceiver } from "./nativeVideoReceiver.js";
 import { decodeDesktopMediaChunk, type DesktopMediaSettings } from "@sodashitsu/protocol";
 
 /** Viewer-owned peer/player. Audio starts muted, queues are bounded, stop releases all resources. */
 export class DesktopMediaReceiver {
   readonly video = document.createElement("video");
+  private native: DesktopNativeVideoReceiver|undefined;
   private peer: RTCPeerConnection | undefined;
   private source: MediaSource | undefined;
   private buffer: SourceBuffer | undefined;
@@ -22,7 +24,7 @@ export class DesktopMediaReceiver {
   constructor(
     readonly id: string,
     private send: (value: unknown) => void,
-    private draw: (video: HTMLVideoElement, count: number) => void,
+    private draw: (video: HTMLVideoElement|VideoFrame, count: number, width:number, height:number) => void,
     private state: (value: string) => void,
     iceServers: RTCIceServer[] = [],
   ) {
@@ -50,7 +52,7 @@ export class DesktopMediaReceiver {
       if (this.stopped) return;
       if (this.video.readyState >= 2) {
         this.drawnAt = performance.now();
-        this.draw(this.video, ++this.count);
+        this.draw(this.video, ++this.count,this.video.videoWidth,this.video.videoHeight);
       }
       this.frameCallback = this.video.requestVideoFrameCallback(tick);
     };
@@ -64,6 +66,7 @@ export class DesktopMediaReceiver {
         this.fail();
         return;
       }
+      if(this.native)return;
       if (now - this.feedbackAt < 2000) return;
       this.feedbackAt = now;
       const ranges = this.video.buffered,
@@ -134,11 +137,18 @@ export class DesktopMediaReceiver {
       { once: true },
     );
   }
+  nativeStream(generation:number,codec:string,width:number,height:number) {
+    if(this.stopped)return;
+    this.peer?.close();this.peer=undefined;this.native?.stop();this.releaseSource();this.video.srcObject=null;
+    this.generation=generation;this.sequence=0;
+    this.native=new DesktopNativeVideoReceiver({id:this.id,generation,codec,width,height},this.send,frame=>{if(this.stopped)return;this.draw(frame,++this.count,width,height);this.drawnAt=performance.now();},()=>this.fail());
+  }
   chunk(bytes: Uint8Array) {
     const chunk = decodeDesktopMediaChunk(bytes);
     if (chunk.generation !== this.generation) return;
     if (chunk.seq !== this.sequence + 1) throw Error("動画の順序が不正です");
     this.sequence = chunk.seq;
+    if(this.native){this.native.push(chunk.seq,chunk.data);return;}
     if (this.queued + chunk.data.length > 2 * 1024 * 1024) {
       this.fail();
       return;
@@ -187,6 +197,7 @@ export class DesktopMediaReceiver {
     if (this.stopped) return;
     this.stopped = true;
     clearInterval(this.timer);
+    this.native?.stop();this.native=undefined;
     this.video.cancelVideoFrameCallback(this.frameCallback);
     this.peer?.close();
     this.peer = undefined;

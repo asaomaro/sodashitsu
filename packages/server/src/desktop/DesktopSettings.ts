@@ -124,6 +124,7 @@ export class DesktopSettings {
       config = {
         ...legacy,
         command,
+        allowNativeVideo: !legacy || legacy.allowMedia===true,
         allowInput: p.allowInput,
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,

@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { RemoteDesktopViewerMessage } from "./desktop.js";
 import {
   DesktopClipboardRequest,
+  DesktopMediaStream, DesktopCompanionMessage, encodeDesktopH264Packet, decodeDesktopH264Packet,
   DesktopIceServers,
   decodeDesktopMediaChunk,
   encodeDesktopMediaChunk,
@@ -50,4 +51,15 @@ it("accepts only bounded clipboard operations and typed signaling", () => {
       signal: { kind: "offer", sdp: "x".repeat(24577) },
     }).success,
   ).toBe(false);
+});
+
+it("bounds H264 access units, timestamps and codec descriptors separately from browser companion streams",()=>{
+ const bytes=encodeDesktopH264Packet(123,true,new Uint8Array([0,0,1,0x65]));expect(decodeDesktopH264Packet(bytes)).toEqual({timestamp:123,key:true,data:new Uint8Array([0,0,1,0x65])});
+ const bad=bytes.slice();bad[0]=2;expect(()=>decodeDesktopH264Packet(bad)).toThrow();
+ const nan=bytes.slice();new DataView(nan.buffer).setFloat64(1,NaN);expect(()=>decodeDesktopH264Packet(nan)).toThrow();
+ expect(()=>encodeDesktopH264Packet(-1,false,new Uint8Array([1]))).toThrow();expect(()=>encodeDesktopH264Packet(0,false,new Uint8Array(512*1024))).toThrow();
+ const stream={type:"media_stream",id:crypto.randomUUID(),generation:1,mime:"video/h264",codec:"avc1.42041f",width:640,height:360};
+ expect(DesktopMediaStream.safeParse(stream).success).toBe(true);expect(DesktopCompanionMessage.safeParse(stream).success).toBe(false);
+ expect(DesktopMediaStream.safeParse({...stream,codec:"unbounded"}).success).toBe(false);
+ expect(DesktopMediaStream.safeParse({...stream,width:4096,height:2400}).success).toBe(false);
 });

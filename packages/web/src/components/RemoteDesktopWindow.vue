@@ -5,6 +5,7 @@ import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_NATIVE_VIDEO_PROTOCOL,
   isExtendedDesktopInput,
   DesktopFrameChain,
   RemoteDesktopInput,
@@ -121,9 +122,12 @@ const mediaState = ref("images"),
   mediaAudio = ref(false),
   sound = ref(false),
   requestAudio = ref(false),
-  mediaTransport = ref<"auto" | "relay">("auto"),
+  nativeVideo = ref(false),
+  mediaTransport = ref<"auto" | "relay" | "native">("auto"),
   mediaBitrate = ref(2500),
-  videoFrames = ref(0);
+  videoFrames = ref(0),
+  videoFps = ref(0);
+let videoStatsAt=0,videoStatsCount=0;
 const clipboardGranted = ref(false),
   clipboardText = ref(""),
   clipboardSync = ref(false),
@@ -234,7 +238,7 @@ function requestVideo() {
     type: "media",
     enabled: true,
     settings: {
-      audio: requestAudio.value,
+      audio: mediaTransport.value==="native"?false:requestAudio.value,
       transport: mediaTransport.value,
       adaptive: adaptive.value,
       maxBitrateKbps: Number(mediaBitrate.value),
@@ -328,6 +332,7 @@ function stop() {
   mediaState.value = "images";
   mediaAudio.value = false;
   sound.value = false;
+  nativeVideo.value=false;
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -415,7 +420,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -472,6 +477,9 @@ function connect(automatic = false) {
           ready.value = connected.value = true;
           synthetic.value = r.backend === "synthetic";
           allowMedia.value = r.allowMedia === true;
+          nativeVideo.value=r.nativeVideo===true;
+          if(nativeVideo.value&&!allowMedia.value)mediaTransport.value="native";
+          else if(!nativeVideo.value&&mediaTransport.value==="native")mediaTransport.value="auto";
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
           displayModes.value = r.display?.modes ?? [];
@@ -500,34 +508,41 @@ function connect(automatic = false) {
           mediaState.value = state.state;
           mediaAudio.value = state.audio;
           if (state.state === "images") {
+            if(mediaTransport.value==="native"&&state.reason==="unavailable")error.value="GPU動画を利用できないため画像配信に戻しました";
+            else if(mediaTransport.value==="native"&&state.reason==="congested")error.value="動画の描画待ちが続いたため画像配信に戻しました";
             receiver?.stop();
             receiver = undefined;
             sound.value = false;
-            restoreImage();
+            restoreImage();releaseInputs();
           } else if (state.state === "negotiating" && receiver?.id !== state.id) {
             receiver?.stop();
+            videoStatsAt=videoStatsCount=0;videoFps.value=0;
             receiver = new DesktopMediaReceiver(
               state.id,
               send,
-              (video, count) => {
-                if (dead || version !== epoch || !canvas.value || !info.value) return;
+              (video, count, videoWidth, videoHeight) => {
+                if (dead || version !== epoch || !canvas.value) return;
                 if (
                   activeSettings.value?.display &&
-                  (video.videoWidth !== info.value.width || video.videoHeight !== info.value.height)
+                  (videoWidth !== activeSettings.value.display.width || videoHeight !== activeSettings.value.display.height)
                 ) {
                   stopVideo();
                   error.value = "動画が等倍の画素数を維持できないため画像配信に戻しました";
                   return;
                 }
                 const el = canvas.value;
-                el.width = info.value.width;
-                el.height = info.value.height;
+                el.width = videoWidth;
+                el.height = videoHeight;
                 el.getContext("2d")!.drawImage(video, 0, 0, el.width, el.height);
                 videoFrames.value = count;
+                const now=performance.now();
+                if(!videoStatsAt){videoStatsAt=now;videoStatsCount=count;}
+                else if(now-videoStatsAt>=1000){videoFps.value=(count-videoStatsCount)*1000/(now-videoStatsAt);videoStatsAt=now;videoStatsCount=count;}
               },
               (value) => {
                 mediaState.value = value;
                 if (value === "images") {
+                  if(mediaTransport.value==="native")error.value="GPU動画を利用できないため画像配信に戻しました";
                   restoreImage();
                   releaseInputs();
                 }
@@ -541,7 +556,7 @@ function connect(automatic = false) {
             await receiver.signal(signal.signal as Parameters<DesktopMediaReceiver["signal"]>[0]);
         } else if (m.type === "media_stream") {
           const stream = DesktopMediaStream.parse(m);
-          if (receiver?.id === stream.id) receiver.stream(stream.generation, stream.mime);
+          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height);else receiver.stream(stream.generation, stream.mime);}
         } else if (m.type === "media_unavailable")
           error.value = "Bのメディア補助画面と共有許可を確認してください";
         else if (m.type === "clipboard_state") {
@@ -911,21 +926,23 @@ onBeforeUnmount(() => {
           <button @click="connect()">適用して再接続</button>
         </details>
       </nav>
-      <details v-if="ready && allowMedia" data-desktop-media>
+      <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
         <summary>動画・音声</summary>
-        <p>
+        <p v-if="mediaTransport==='native'">接続先のGPUでH.264へ圧縮します。音声は含みません。利用できない場合は画像配信へ戻ります。</p>
+        <p v-else>
           BのWindowsブラウザで /desktop-host
           を開き、対象と同じモニターを選んで共有を許可してください。
         </p>
-        <label><input v-model="requestAudio" type="checkbox" />システム音声を要求</label>
+        <label><input v-model="requestAudio" type="checkbox" :disabled="mediaTransport==='native'" />システム音声を要求</label>
         <label
           >経路<select v-model="mediaTransport" aria-label="動画の経路">
-            <option value="auto">WebRTC（接続できなければ中継）</option>
-            <option value="relay">圧縮動画を中継</option>
+            <option v-if="nativeVideo" value="native">GPU H.264（音声なし）</option>
+            <option v-if="allowMedia" value="auto">WebRTC（接続できなければ中継）</option>
+            <option v-if="allowMedia" value="relay">圧縮動画を中継</option>
           </select></label
         >
         <label
-          >映像帯域の上限(kbps)<input
+          >{{ mediaTransport==='native' ? '映像ビットレートの目標(kbps)' : '映像帯域の上限(kbps)' }}<input
             v-model="mediaBitrate"
             aria-label="動画帯域の上限"
             type="number"
@@ -945,9 +962,11 @@ onBeforeUnmount(() => {
               negotiating: "動画を接続中",
               rtc: "WebRTC動画",
               relay: "圧縮動画の中継",
+              native: "GPU H.264",
             }[mediaState] ?? mediaState
           }}
         </p>
+        <p v-if="['native','rtc','relay'].includes(mediaState)" data-video-fps>動画 {{ videoFps.toFixed(1) }} fps（描画実測）</p>
       </details>
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード（テキスト）</summary>
@@ -1071,7 +1090,7 @@ onBeforeUnmount(() => {
             : "閲覧専用。操作にはBの事前許可が必要です。"
         }}</span
         ><output data-desktop-metrics
-          >{{ stats.fps.toFixed(1) }} fps · {{ stats.mbps.toFixed(2) }} Mbps · relay→描画ACK p95
+          >{{ mediaState!=='images' ? '画像: ' : '' }}{{ stats.fps.toFixed(1) }} fps · {{ stats.mbps.toFixed(2) }} Mbps · relay→描画ACK p95
           {{ stats.ackP95Ms.toFixed(0) }} ms · 取得 {{ info?.captureMs.toFixed(1) ?? "—" }} / encode
           {{ info?.encodeMs.toFixed(1) ?? "—" }} / 描画 {{ drawMs.toFixed(1) }} ms · 入力ACK
           {{ inputAckMs.toFixed(0) }} ms</output
