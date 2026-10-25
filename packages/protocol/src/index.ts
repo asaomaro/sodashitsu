@@ -54,3 +54,5 @@ export * from "./work.js";
 export * from "./workAgent.js";
 
 export * from "./workAgentProxy.js";
+
+export * from "./desktopCursor.js";

@@ -5,6 +5,9 @@ import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_CURSOR_PROTOCOL,
+  isDesktopCursor,
+  decodeDesktopCursor,
   DESKTOP_NATIVE_RATE_PROTOCOL,
   DESKTOP_VIDEO_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
@@ -23,6 +26,7 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
+import { DesktopCursorRenderer } from "../desktop/cursor.js";
 import { DesktopEscape, DesktopButtons, DesktopModifiers, DesktopInputSender } from "../desktop/input.js";
 import { imeKeyCode, type ImeKeyCode } from "../desktop/ime.js";
 import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
@@ -299,6 +303,8 @@ const windowStyle = computed(() =>
           : {}),
       },
 );
+const cursorCanvas=ref<HTMLCanvasElement>(), separateCursor=ref(false);
+let cursorRenderer:DesktopCursorRenderer|undefined;
 let videoSocket: WebSocket | undefined, videoExpected = false, videoReady = false, nativeSupported = false;
 let ws: WebSocket | undefined,
   dead = false,
@@ -320,6 +326,7 @@ function releaseInputs() {
   inputSender.clear();
   mouseButtons.reset(); modifiers.reset();
   send({type:"release"});
+  cursorRenderer?.clearPrediction();
 }
 function relinquish() {
   inputSender.clear();
@@ -332,10 +339,12 @@ function relinquish() {
   }
   if (control.value) send({ type: "control", enabled: false });
   control.value = false;
+  cursorRenderer?.clearPrediction();
   inputs.clear();
 }
 function stop() {
   epoch++;
+  cursorRenderer?.stop();cursorRenderer=undefined;separateCursor.value=false;
   if (clipboardGranted.value) send({ type: "clipboard_grant", enabled: false });
   clearClipboard();
   receiver?.stop();
@@ -433,7 +442,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -448,6 +457,7 @@ function connect(automatic = false) {
     if (dead || version !== epoch) return;
     try {
       if (event.data instanceof ArrayBuffer) {
+        if(isDesktopCursor(new Uint8Array(event.data))){if(separateCursor.value&&!secureDesktop.value)cursorRenderer?.accept(decodeDesktopCursor(new Uint8Array(event.data)));return;}
         if (isDesktopMediaChunk(new Uint8Array(event.data))) {
           receiver?.chunk(new Uint8Array(event.data));
           return;
@@ -473,6 +483,7 @@ function connect(automatic = false) {
         info.value = frame.info;
         lastDrawn = frame.info.seq;
         rendered.value++;
+        cursorRenderer?.paint();
         drawMs.value = performance.now() - start;
         decoding = false;
         send({ type: "ack", seq: frame.info.seq });
@@ -507,6 +518,8 @@ function connect(automatic = false) {
           ready.value = connected.value = true;
           synthetic.value = r.backend === "synthetic";
           allowMedia.value = r.allowMedia === true;
+          separateCursor.value=r.cursor===true&&!secureDesktop.value;
+          if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
           nativeMaxFps.value=r.nativeMaxFps===60?60:30;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
@@ -569,6 +582,7 @@ function connect(automatic = false) {
                 el.height = videoHeight;
                 el.getContext("2d")!.drawImage(video, 0, 0, el.width, el.height);
                 videoFrames.value = count;
+                cursorRenderer?.paint();
                 const now=performance.now();
                 if(!videoStatsAt){videoStatsAt=now;videoStatsCount=count;}
                 else if(now-videoStatsAt>=1000){videoFps.value=(count-videoStatsCount)*1000/(now-videoStatsAt);videoStatsAt=now;videoStatsCount=count;}
@@ -616,11 +630,13 @@ function connect(automatic = false) {
           agentExpires.value = typeof m.expiresAt === "number" ? m.expiresAt : 0;
           if (agentActive.value || !agentExpires.value) agentTicket.value = "";
           control.value = false;
+          cursorRenderer?.clearPrediction();
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
         } else if (m.type === "control") {
           inputSender.clear();
           escapePress.reset(); mouseButtons.reset(); modifiers.reset();
           control.value = m.enabled === true && allowed.value;
+          if(!control.value)cursorRenderer?.clearPrediction();
           status.value = agentActive.value
             ? "エージェント操作中"
             : control.value
@@ -684,6 +700,7 @@ function restoreImage() {
   el.width = sourceCanvas.width;
   el.height = sourceCanvas.height;
   el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
+  cursorRenderer?.paint();
 }
 function input(value: unknown) {
   const parsed = RemoteDesktopInput.safeParse(value);
@@ -710,6 +727,7 @@ function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   if ((event === "down" || (event === "move" && e.buttons === 0)) && (x < 0 || x > 1 || y < 0 || y > 1)) return;
   if (event === "down") { canvas.value.focus(); canvas.value.setPointerCapture(e.pointerId); }
   const position = { x: Math.max(0, Math.min(1,x)), y: Math.max(0, Math.min(1,y)) };
+  cursorRenderer?.local(position.x,position.y);
   for (const change of mouseButtons.update(e.buttons)) {
     if (change.button > 2 && !extendedInput.value) {
       error.value = "接続先を更新すると、マウスの戻る・進むを利用できます";
@@ -827,6 +845,7 @@ onMounted(() => {
   if (screenElement.value && typeof ResizeObserver !== "undefined") {
     displayObserver = new ResizeObserver(() => {
       if (screenElement.value) screenSize.value = { width: screenElement.value.clientWidth, height: screenElement.value.clientHeight };
+      cursorRenderer?.paint();
     });
     displayObserver.observe(screenElement.value);
   }
@@ -1092,7 +1111,7 @@ onBeforeUnmount(() => {
           :data-rendered-frames="rendered"
           :data-video-frames="videoFrames"
           :data-frame-info="info ? JSON.stringify(info) : undefined"
-          :style="canvasSize"
+          :style="[canvasSize,{cursor:control&&separateCursor?'none':undefined}]"
           @pointerdown.prevent="pointer($event, 'down')"
           @pointermove="pointer($event, 'move')"
           @pointerup.prevent="pointer($event, 'up')"
@@ -1104,6 +1123,7 @@ onBeforeUnmount(() => {
           @wheel.prevent="wheel"
           @blur="canvasBlur"
         />
+        <canvas v-if="separateCursor" ref="cursorCanvas" class="cursor-overlay" :style="canvasSize" aria-hidden="true" data-remote-cursor />
         <div v-if="lockScreenCover" class="lock-screen-cover" data-desktop-lock-cover>
           <p>接続先はWindowsのロック画面です。</p>
           <button :disabled="!ready || !allowed || dismissInFlight" @click="dismissLockScreen">サインイン画面へ進む</button>
@@ -1282,6 +1302,8 @@ details p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.cursor-overlay { pointer-events:none;z-index:1; }
+.screen.actual .cursor-overlay { position:absolute;left:0;top:0;margin:0; }
 </style>
 
 <style scoped>

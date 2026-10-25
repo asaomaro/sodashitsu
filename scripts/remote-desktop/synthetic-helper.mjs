@@ -90,6 +90,7 @@ function heightOf(options) { return options.display?.height ?? Math.round(option
 function run() {
   let options,
     inputAckPipe = false,
+    cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
     outputBlocked = false,
     blockedSeq = 0,
     queuedOutput = [],
@@ -114,12 +115,23 @@ function run() {
   const recordAt = process.argv.indexOf("--record"),
     record = recordAt >= 0 ? process.argv[recordAt + 1] : undefined;
   const send = (value) => { if(outputBlocked){if(queuedOutput.length<8)queuedOutput.push(value);}else process.stdout.write(JSON.stringify(value) + "\n"); };
+  const cursor=()=>{
+    if(!cursorEnabled)return;
+    const info={type:"cursor",seq:++cursorSeq,visible:cursorVisible,x:cursorVisible?cursorX:0,y:cursorVisible?cursorY:0,shapeId:cursorVisible?cursorShapeId:0};
+    if(cursorVisible&&cursorSentShape!==cursorShapeId){
+      const pixels=new Uint8Array(64);for(let p=0;p<pixels.length;p+=4){pixels[p+3]=cursorRed?128:255;if(cursorRed)pixels[p+2]=255;}
+      if(!cursorRed){pixels[0]=pixels[1]=pixels[2]=255;pixels[4]=0;pixels[5]=255;pixels[6]=0;pixels[7]=0;pixels[20]=pixels[21]=pixels[22]=255;pixels[23]=0;}
+      info.shape={kind:cursorRed?2:4,width:4,height:4,pitch:16,hotspotX:1,hotspotY:1,premultiplied:false};info.data=Buffer.from(pixels).toString("base64");cursorSentShape=cursorShapeId;
+    }
+    lastCursor=performance.now();send(info);
+  };
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   lines.on("close", () => process.exit(0));
   lines.on("line", (line) => {
     try {
       const m = JSON.parse(line);
       if (m.type === "configure" && !options) {
+        cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
         const failureAt = process.argv.indexOf("--startup-failure");
         if (failureAt >= 0) {
@@ -141,6 +153,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
@@ -197,6 +210,12 @@ function run() {
         send({type:"session_unlocked"});
         process.exit(0);
       } else if (m.type === "input" && control && m.expiresAt >= Date.now()) {
+        if(cursorEnabled){
+          if(m.input.kind==="pointer"){
+            if(!process.argv.includes("--cursor-no-echo")){cursorX=m.input.x;cursorY=m.input.y;}
+            if(m.input.event!=="move"){cursorRed=m.input.event==="down";cursorShapeId++;}cursor();
+          }else if(m.input.kind==="key"&&m.input.code==="F13"&&m.input.down){cursorVisible=!cursorVisible;cursor();}
+        }
         if (process.argv.includes("--delta-test") && m.input.kind === "text") version++;
         if (record) appendFileSync(record, JSON.stringify(m.input) + "\n");
         if(process.argv.includes("--block-stdout-on-input")&&!blockedSeq) { blockedSeq=m.seq;outputBlocked=true;process.stdout.write('{"type":"input_ack","seq":'); }
@@ -210,6 +229,7 @@ function run() {
   });
   setInterval(() => {
     if (performance.now() - lastSeen > 8000) process.exit(0);
+    if(options&&cursorEnabled&&performance.now()-lastCursor>=500)cursor();
     if(options&&native&&native.pending.length<native.window&&performance.now()>=native.next) {
       const packet=nativeFixture.packets[native.index++%nativeFixture.packets.length];
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
