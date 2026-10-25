@@ -12,12 +12,13 @@ test.use({
   video: "off",
 });
 
-for (const { fixtureName, failDecoder } of [
-  { fixtureName: "h264-generated.json", failDecoder: false },
-  { fixtureName: "h264-sr-pc-generated.json", failDecoder: false },
-  { fixtureName: "h264-generated.json", failDecoder: true },
+for (const { fixtureName, failDecoder, stallImages } of [
+  { fixtureName: "h264-generated.json", failDecoder: false, stallImages:false },
+  { fixtureName: "h264-sr-pc-generated.json", failDecoder: false, stallImages:false },
+  { fixtureName: "h264-generated.json", failDecoder: true, stallImages:false },
+  { fixtureName: "h264-generated.json", failDecoder: false, stallImages:true },
 ])
-  test(`hardware-produced ${fixtureName} H264 ${failDecoder ? "decoder failure restores images" : "pixels reach the canvas with draw ACK and stop"}`, async ({
+  test(`hardware-produced ${fixtureName} H264 ${stallImages ? "drag continues while image snapshots stall" : failDecoder ? "decoder failure restores images" : "pixels reach the canvas with draw ACK and stop"}`, async ({
     page,
     appServer,
   }) => {
@@ -31,6 +32,7 @@ for (const { fixtureName, failDecoder } of [
       ),
       "--static",
       "--allow-input",
+      ...(stallImages ? ["--stall-images-during-native", "--native-input-deferral"] : []),
       "--native-fixture",
       fileURLToPath(
         new URL(`../../../../scripts/remote-desktop/fixtures/${fixtureName}`, import.meta.url),
@@ -44,12 +46,16 @@ for (const { fixtureName, failDecoder } of [
         else process.env[k] = saved[i];
       }),
     );
-    const sent: Record<string, unknown>[] = [];
+    const sent: Record<string, unknown>[] = [], received: Record<string, unknown>[] = [];
     page.on("websocket", (socket) => {
-      if (socket.url().endsWith("/desktop-share"))
+      if (socket.url().endsWith("/desktop-share")) {
         socket.on("framesent", ({ payload }) => {
           if (typeof payload === "string") sent.push(JSON.parse(payload));
         });
+        socket.on("framereceived", ({ payload }) => {
+          if (typeof payload === "string") received.push(JSON.parse(payload));
+        });
+      }
     });
     // Only generated test pixels are decoded. No OS capture picker, desktop or input.
     if (failDecoder)
@@ -118,6 +124,24 @@ for (const { fixtureName, failDecoder } of [
         await view.getByRole("button", { name: "操作する", exact: true }).click();
         await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
         await canvas.focus();
+        if (stallImages) {
+          const imageCount = await canvas.getAttribute("data-rendered-frames");
+          const videoBefore = Number(await canvas.getAttribute("data-video-frames"));
+          const staleAt = Date.now();
+          // Time establishes that both former image-age limits have expired;
+          // advancing canvas frames and returned input ACKs prove continued work.
+          await expect.poll(async () => Date.now()-staleAt>5500 && Number(await canvas.getAttribute("data-video-frames"))>videoBefore+5,{timeout:15000}).toBe(true);
+          expect(await canvas.getAttribute("data-rendered-frames")).toBe(imageCount);
+          const startInput = sent.length, box=(await canvas.boundingBox())!;
+          await page.mouse.move(box.x+box.width*.3,box.y+box.height*.4);
+          await page.mouse.down();
+          for(let step=1;step<=5;step++)await page.mouse.move(box.x+box.width*(.3+step*.05),box.y+box.height*.4,{steps:3});
+          await page.mouse.up();
+          await page.keyboard.press("ArrowRight");
+          await expect.poll(()=>sent.slice(startInput).some(m=>m.type==="input"&&(m.input as {code?:string;down?:boolean})?.code==="ArrowRight"&&(m.input as {down?:boolean}).down===false)).toBe(true);
+          const ids=sent.slice(startInput).filter(m=>m.type==="input").map(m=>m.seq);
+          await expect.poll(()=>ids.every(id=>received.some(m=>m.type==="input_ack"&&m.seq===id))).toBe(true);
+        }
         await page.keyboard.press("Control+Space");
         await page.keyboard.press("Escape");
         await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");

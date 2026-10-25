@@ -137,6 +137,7 @@ function run() {
         send({
           type: "ready",
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
+          ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
           ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
           title: "Synthetic test source",
@@ -200,6 +201,7 @@ function run() {
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
       send({type:"native_frame",id:native.id,seq:native.seq,timestamp:native.seq*33333,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
     }
+    if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;
     const deltaTest = process.argv.includes("--delta-test"),
       stable = deltaTest || process.argv.includes("--static");

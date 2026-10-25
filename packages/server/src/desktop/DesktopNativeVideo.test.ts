@@ -1,6 +1,32 @@
 import { expect, it, vi } from "vitest";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { decodeDesktopMediaChunk, decodeDesktopH264Packet } from "@sodashitsu/protocol";
+import { performance } from "node:perf_hooks";
+
+it("uses the acknowledged frame age and does not renew freshness for delayed or duplicate ACKs", () => {
+  const clock = vi.spyOn(performance, "now").mockReturnValue(10000);
+  try {
+    const f = fixture(true, 3), id = f.start();
+    expect(f.video.hasFreshDraw()).toBe(false);
+    f.video.fromHelper(f.frame(id));
+    expect(f.video.hasFreshDraw()).toBe(false);
+    clock.mockReturnValue(12001);
+    f.video.fromViewer({type:"native_video_ack",id,generation:1,seq:1});
+    expect(f.video.hasFreshDraw()).toBe(false);
+    f.video.fromHelper(f.frame(id,2));
+    f.video.fromViewer({type:"native_video_ack",id,generation:2,seq:2});
+    expect(f.video.hasFreshDraw()).toBe(false);
+    f.video.fromViewer({type:"native_video_ack",id,generation:1,seq:2});
+    expect(f.video.hasFreshDraw()).toBe(true);
+    clock.mockReturnValue(14001);
+    f.video.fromViewer({type:"native_video_ack",id,generation:1,seq:2});
+    expect(f.video.hasFreshDraw()).toBe(false);
+    f.video.stop();
+    expect(f.video.hasFreshDraw()).toBe(false);
+    f.start();
+    expect(f.video.hasFreshDraw()).toBe(false);
+  } finally { clock.mockRestore(); }
+});
 function fixture(enabled = true, window?: 3) {
   const send = vi.fn((_value: unknown) => true),
     write = vi.fn<(value: Record<string, unknown>) => void>(),

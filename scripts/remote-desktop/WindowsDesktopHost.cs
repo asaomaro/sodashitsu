@@ -48,6 +48,8 @@ public static class SodaDesktopHost {
     static readonly Stopwatch Clock=Stopwatch.StartNew();
     static volatile bool Stopping=false;
     static bool Control=false;
+    static bool DeferNativeSnapshots=false;
+    static long LastNativeInput=-1000;
     static long LastHeartbeat=0;
     static Rectangle Bounds;
 
@@ -56,6 +58,7 @@ public static class SodaDesktopHost {
         long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         if(!Control || id<=inputSeq || expires<utc || expires>utc+1500)return false;
         inputSeq=id;if(!Apply(Obj(msg["input"])))return false;
+        if(DeferNativeSnapshots&&msg.ContainsKey("deferNativeSnapshot")&&msg["deferNativeSnapshot"] is bool&&(bool)msg["deferNativeSnapshot"])Interlocked.Exchange(ref LastNativeInput,Clock.ElapsedMilliseconds);
         if(applied!=null)applied();Output(new {type="input_ack",seq=id});return true;
     }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
@@ -261,6 +264,7 @@ public static class SodaDesktopHost {
         SodaDesktopH264 video=null;string videoId=null;
         long videoSeq=0,videoNext=0;int videoFps=maxFps;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
+        DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
         // Only new providers opt in. Old providers/helpers keep their existing wire contract.
         if(!Secure && Environment.GetEnvironmentVariable("SODA_DESKTOP_CAPTURE")!="gdi" && config.ContainsKey("captureBackends")) {
@@ -272,6 +276,7 @@ public static class SodaDesktopHost {
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;
+            if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
             if(nativePipeline)ready["nativeVideoWindow"]=3;
             if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
@@ -374,7 +379,7 @@ public static class SodaDesktopHost {
                     }
                     long revision=Interlocked.Read(ref inputRevision);
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
-                    if(!Stopping && preparation.CanPrepare(now,pending)) {
+                    if(!Stopping && preparation.CanPrepare(now,pending,video!=null&&DeferNativeSnapshots,forceFull,Interlocked.Read(ref LastNativeInput))) {
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
@@ -587,7 +592,7 @@ public sealed class SodaDesktopFramePreparation<T> where T:class {
     long readyAt;
     public SodaDesktopFramePreparation(bool prepareWhileAwaitingAck=true){overlap=prepareWhileAwaitingAck;}
     public long Next {get;private set;}
-    public bool CanPrepare(long now,long pending=0){return prepared==null&&now>=Next&&(overlap||pending==0);}
+    public bool CanPrepare(long now,long pending=0,bool nativeVideo=false,bool forceFull=false,long lastNativeInput=-1000){return prepared==null&&now>=Next&&(overlap||pending==0)&&(!nativeVideo||forceFull||now-lastNativeInput>=150);}
     public void Set(T frame,long started,long completed,int fps){
         if(prepared!=null||frame==null||fps<1)throw new InvalidOperationException("Frame preparation overflow");
         prepared=frame;readyAt=completed;Next=started+Math.Max(1,1000/fps);

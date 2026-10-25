@@ -1,0 +1,15 @@
+# Native動画中の入力停止
+
+利用者はGPU色変換後27.8fpsへ改善したが、window drag中に固まる瞬間があると報告。native動画とは別に1fpsの補助画像を作るが、fast inputのrevisionが画像準備中に変わると画像を破棄する。その間も動画は更新される一方、従来Bは画像のframeAtが2秒、Aは5秒を超えると人間の入力を捨てる。これが動画を見ながらの連続入力を停止させる経路になる。
+
+人間のnative操作だけ、検証済み描画ACKの対象frame送出時刻から2秒以内を鮮度の根拠にする。ACK受信時刻は使わない。Aはnative packetを受信した時刻を最大window3枚だけ保持し、先頭ACKでdrawnAtを更新する。Bは既存pending.atを保持する。古い/重複/世代違いACKは延命させず、未描画・停止後・staleは拒否する。
+
+BのRPC capability nativeInputFreshnessを確認したAだけが、private A→B inputへnativeDraw:trueを付ける。Bはmarkerを除いて既存strict schemaへ通す。ブラウザのschemaは変更しない。agent入力にはmarkerを付けず、A/Bとも従来の画像鮮度・観測一致を保つ。旧peerへunknown keyを送らない。control、seq、frameSeqの範囲、期限、heartbeat、共有所有者、認証画面の条件は維持する。
+
+画像をnative中だけ停止する合成helperと実ブラウザを使い、旧期限を越える5.5秒以上の間も動画canvasが進むことを確認してから、実mouse drag/キーの全ACKを検証する。Bのmarkerなし拒否、停止後拒否と画像復帰、遅いACKの期限もunitで検査。A/Bの条件を個別に戻すnegativeを実行し、A側は実server rebuild後に同E2Eを落とす。最後に独立レビューする。
+
+これは入力を破棄する不具合の修正であり、補助画像の同期処理・TCP共有による全ての描画待ちを除く変更ではない。一般的なremote desktopとの同等性を達成したとは判断しない。
+
+## Native操作中の補助画像延期
+
+同じmain loopの定期画像取得・圧縮が動画を待たせるため、新Bがprivate configureで要求し新helperがprivate readyで同意した場合だけ、成功したnative手動入力へdeferNativeSnapshotを付ける。Bはready私有項目をpublic ready parse前に除去する。旧Bへ新helper ready項目を返さず、未同意helperへ追加input項目を送らない。helperは成功したmarked inputだけで最終時刻を更新し、native動画中だけ150ms以内の補助画像生成を延期する。明示keyframe/agent captureのforceFullはbypassし、静止後・動画停止後は通常生成へ戻る。入力revision/保持キー/画像content照合は維持。
