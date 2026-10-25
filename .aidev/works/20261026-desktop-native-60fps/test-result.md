@@ -13,3 +13,5 @@
 新headerがあってもhelperだけ非対応の回帰を追加。画像設定の表示を明示するレビュー提案にも対応。実際の描画fpsやWAN速度比を示す試験ではない。高RTT時の3枚ACK windowによる上限は今後のUDP経路で対応する。
 
 追加確認: native-video/settings browser8件pass、実画面性能測定1件opt-in skip。生成GPU直接入力と従来memory入力を60fps media typeで各90frame、640×360/1280×800/1920×1200で確認し成功、helperの動画フルフレームCPU readback増分0。local GPU試験の平均encoder処理は約31msと変動し、60fps到達を示さない。既存1ms timerの別試験ではhighResolution=true、平均1.50msで成功。native60設定の受け入れと実到達性能を区別する。[GPU生ログ](gpu-60.log)。
+
+sr-pcも一時archiveでnative/既存NV12/hardware H264/60fps GPU3寸法の検証成功。実画面/OS入力なし、B HEADとtracked変更は維持。1920×1200の生成frameはGPU平均10.72ms・p95 13.29ms、従来memory平均17.42ms。取得・通信・ブラウザを含む60fps達成を示さない。[B生ログ](sr-pc-60.log)。rootへの統合後もbuild/typecheckと関連60件が成功し、既存local-provider等の変更は保持。

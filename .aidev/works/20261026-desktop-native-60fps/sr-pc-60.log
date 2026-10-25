@@ -1,0 +1,28 @@
+desktop_helper_compiled
+desktop_unlock_pipe_cancelled
+desktop_unlock_utf8_pipe_passed
+desktop_unlock_duplex_pipe_passed
+display_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-apply, restore/disarm, preserve-local-change, partial-failure rollback; fake driver only; no OS mode changes
+desktop_unlock_process_query_passed
+desktop_lock_cover_checks_passed
+desktop_input_checks_passed
+desktop_frame_preparation_checks_passed
+frame_preparation_model: duration=5000ms capture_encode=65ms ack=100ms fps_limit=30 serial_frames=31 overlapped_frames=50; deterministic model, not a desktop benchmark
+desktop_input_priority_checks_passed: native input during blocked video work; bounded queue; control/release FIFO; in-progress control and snapshot commit serialization; legacy fallback; fake input only
+desktop_unlock_checks_passed
+desktop_unlock_no_console_utf8_passed
+desktop_input_ack_no_console_passed
+desktop_h264_checks_passed: hardware-only MFT, bitmap/prepared NV12, four generated frames, initial SPS/IDR, timestamps, packet limits
+desktop_nv12_checks_passed: byte-exact BT.709 reference, black/white/random, chroma rounding, row edges, source preserved, invalid dimensions, GPU failure latch
+{"source":"generated pixels only; no capture, encoder, network or browser","width":1280,"height":800,"trials":40,"referenceMeanMs":2.4826425,"currentMeanMs":1.9816125,"referenceP95Ms":2.6544000000000003,"currentP95Ms":2.1376,"bitmapCopyMeanMs":0.19808,"bitmapCopyP95Ms":0.23370000000000002}
+{"source":"generated pixels only; no capture, encoder, network or browser","width":1920,"height":1200,"trials":40,"referenceMeanMs":5.813464999999999,"currentMeanMs":4.8172875000000008,"referenceP95Ms":7.0962000000000005,"currentP95Ms":5.1454,"bitmapCopyMeanMs":0.66755500000000023,"bitmapCopyP95Ms":0.78460000000000008}
+{"source":"GPU generated texture; scale/cursor/convert/readback; no capture, encoder or network","width":1280,"height":800,"trials":40,"gpuMeanMs":18.2265,"gpuP95Ms":7.7989000000000006,"bitmapCpuMeanMs":28.393939999999997,"bitmapCpuP95Ms":40.2691}
+{"source":"GPU generated texture; scale/cursor/convert/readback; no capture, encoder or network","width":1920,"height":1200,"trials":40,"gpuMeanMs":10.5091175,"gpuP95Ms":12.554,"bitmapCpuMeanMs":81.2176725,"bitmapCpuP95Ms":98.4161}
+desktop_nv12_gpu_checks_passed: generated texture, GPU scaling/BT.709/chroma, padded rows, cursor edges and inversion, retained source, disposal
+{"source":"generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser","frames":90,"width":640,"height":360,"fps":60,"gpuMeanMs":4.2202883720930231,"gpuP95Ms":5.8770000000000007,"memoryMeanMs":4.2536209302325574,"memoryP95Ms":6.1783,"gpuCpuMs":781.25,"fullFrameCpuReadbacks":0}
+desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture
+{"source":"generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser","frames":90,"width":1280,"height":800,"fps":60,"gpuMeanMs":5.20733953488372,"gpuP95Ms":6.5318000000000005,"memoryMeanMs":8.7869058139534886,"memoryP95Ms":12.0334,"gpuCpuMs":500,"fullFrameCpuReadbacks":0}
+desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture
+{"source":"generated GPU texture to hardware MFT surface vs NV12 memory input; no desktop, capture, network or browser","frames":90,"width":1920,"height":1200,"fps":60,"gpuMeanMs":10.716553488372092,"gpuP95Ms":13.2916,"memoryMeanMs":17.418033720930229,"memoryP95Ms":25.0291,"gpuCpuMs":593.75,"fullFrameCpuReadbacks":0}
+desktop_gpu_surface_checks_passed: NV12 planes, D3D11-aware MFT, bounded pool, tracked-sample retirement, delayed/double release, shutdown, generated color fixture
+{"sourceHead":"7737c7a465180cfc09f949a2b22146d34cecaf1e","trackedStatus":[],"unchangedHead":true,"repoHead":"0c2d1c9b268f117fc5055abbee23c04f966924dc"}
