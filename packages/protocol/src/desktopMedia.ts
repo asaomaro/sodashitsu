@@ -20,6 +20,7 @@ export const DesktopIceServers = z
   .max(4);
 export const DesktopMediaSettings = z
   .object({
+    fps: z.number().int().min(1).max(60).optional(),
     audio: z.boolean().default(false),
     transport: z.enum(["auto", "relay", "native"]).default("auto"),
     adaptive: z.boolean().default(true),
@@ -132,6 +133,7 @@ export const DesktopMediaStream = z.union([
     .strict()
     .refine((v) => v.width * v.height <= 8_000_000),
 ]);
+export const DESKTOP_NATIVE_RATE_PROTOCOL = "soda-desktop-native-rate-v1";
 export const DESKTOP_VIDEO_LANE_PROTOCOL = "soda-desktop-video-lane-v1";
 export const DESKTOP_NATIVE_VIDEO_PROTOCOL = "soda-desktop-native-video-v1";
 export const DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL = "soda-desktop-native-video-v2";

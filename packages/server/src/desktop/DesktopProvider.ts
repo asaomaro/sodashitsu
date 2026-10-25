@@ -115,6 +115,7 @@ export class DesktopProvider {
       nativeVideo: true,
       nativeInputFreshness: true,
       nativeVideoWindow: 3 as const,
+      nativeMaxFps: 60 as const,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -420,6 +421,7 @@ export class DesktopProvider {
               extendedInput,
               nativeVideo,
               nativeVideoWindow,
+              nativeMaxFps,
               image: appliedImage,
               allowClipboard,
               allowMedia,
@@ -429,12 +431,14 @@ export class DesktopProvider {
             } = ready;
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
+            const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(nativeEnabled?{nativeVideo:true}:{}),
               ...(nativeWindow===3?{nativeVideoWindow:3}:{}),
+              ...(nativeRate?{nativeMaxFps:nativeRate}:{}),
               // Keep the existing viewer wire format; capture is a helper detail.
               backend: legacyReady.backend === "windows-dxgi" ? "windows-gdi" : legacyReady.backend,
               ...(s.imeKeys && imeKeys ? { imeKeys: true } : {}),
@@ -531,6 +535,7 @@ export class DesktopProvider {
       options,
       captureBackends: ["dxgi"],
       inputAckPipe: true,
+      ...(options.nativeMaxFps===60&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
       allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       deferNativeSnapshots: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       ...(options.nativeVideoWindow===3&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),

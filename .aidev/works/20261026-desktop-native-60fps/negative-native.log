@@ -1,0 +1,6 @@
+"1" 個の引数を指定して "Run" を呼び出し中に例外が発生しました: "Native video limits"
+発生場所 \\wsl.localhost\Ubuntu\workspaces\sodashitsu-desktop-input\scripts\remote-desktop\validate-h264.ps1:5 文字:73
++ ... pTests.H264Checks]::Run($(if($FixtureFile){$FixtureFile}else{$null}))
++                                                                  ~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : ArgumentException
