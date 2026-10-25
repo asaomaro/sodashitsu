@@ -14,7 +14,7 @@ export class DesktopVideoLanes {
   private tickets = new Map<string, { pair: Pair; role: "provider" | "viewer" }>();
   private pairs = new Set<Pair>();
   private pending = new Set<WebSocket>();
-  constructor(private validSession: (id: string) => boolean) {}
+  constructor(private validSession: (id: string) => boolean, private maxBuffered = 512 * 1024) {}
   get pendingCount() { return this.pending.size; }
   issue(sessionId: string, origin: string, receive: Pair["receive"], ready: () => void, failed: () => void) {
     const pair: Pair = { sessionId, origin, receive, ready, failed, at: performance.now(), dead: false };
@@ -26,7 +26,7 @@ export class DesktopVideoLanes {
       providerTicket, viewerTicket,
       send: (value: unknown) => {
         const ws = pair.viewer;
-        if (pair.dead || !pair.provider || ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 512 * 1024) return false;
+        if (pair.dead || !pair.provider || ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > this.maxBuffered) return false;
         ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
         return true;
       },

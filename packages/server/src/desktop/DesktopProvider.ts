@@ -4,7 +4,7 @@ import { unlockFailure } from "./unlockFailure.js";
 import { z } from "zod";
 import WebSocket from "ws";
 import {
-  DESKTOP_VIDEO_LANE_PROTOCOL,
+  DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL,
   DESKTOP_CURSOR_MAX_BYTES,
   isExtendedDesktopInput,
   DesktopFrameInfo,
@@ -50,6 +50,7 @@ export interface DesktopProviderConfig {
   origins(): string[];
 }
 type Share = {
+  imageExpected?:boolean; imageSocket?: WebSocket; imageReady?: boolean; imageFailed?: boolean; heldImage?: Uint8Array;
   videoSocket?: WebSocket;
   videoReady?: boolean;
   inputAcks: DesktopInputAcks;
@@ -114,6 +115,7 @@ export class DesktopProvider {
       imageSettings: true,
       imeKeys: true,
       extendedInput: true,
+      imageLane: true,
       videoLane: true,
       nativeVideo: true,
       nativeInputFreshness: true,
@@ -170,6 +172,7 @@ export class DesktopProvider {
     });
     const s: Share = {
       inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); }),
+      imageExpected:!!p.imageTicket,
       chain: new DesktopFrameChain(),
       owner,
       allowClipboard: false,
@@ -234,6 +237,12 @@ export class DesktopProvider {
               // A never sends video/application data back over the send-only lane.
               video.on("message", () => video.terminate());
             }
+            if(p.imageTicket){
+              const image=s.imageSocket=new WebSocket(url,DESKTOP_IMAGE_LANE_PROTOCOL,{handshakeTimeout:10000,maxPayload:1024,perMessageDeflate:false,followRedirects:false});
+              image.on("open",()=>image.send(JSON.stringify({type:"video_provider",ticket:p.imageTicket})));
+              image.on("error",()=>image.terminate());image.on("message",()=>image.terminate());
+              image.on("close",()=>this.failImages(s));
+            }
             this.launch(s, cfg, p.options);
             settled = true;
             resolve({ started: true });
@@ -244,6 +253,10 @@ export class DesktopProvider {
             return;
           }
           if (rawMessage.type === "video_ready" && p.videoTicket && Object.keys(rawMessage).length === 1) { s.videoReady = s.videoSocket?.readyState === WebSocket.OPEN; return; }
+          if(p.imageTicket&&Object.keys(rawMessage).length===1&&rawMessage.type==="image_ready"){
+            if(!s.imageFailed&&s.ready&&s.imageSocket?.readyState===WebSocket.OPEN){s.imageReady=true;const held=s.heldImage;delete s.heldImage;if(held)this.sendImage(s,held);}else this.failImages(s);return;
+          }
+          if(p.imageTicket&&Object.keys(rawMessage).length===1&&rawMessage.type==="image_closed"){this.failImages(s);return;}
           // Private A->B marker, negotiated through RPC capabilities. Browser
           // messages and agent actions retain their existing strict schemas.
           const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
@@ -515,7 +528,8 @@ export class DesktopProvider {
             s.seq = frame.info.seq;
             s.pending = s.seq;
             s.frameAt = performance.now();
-            if (!this.send(s, packet)) return;
+            if(s.imageExpected&&!s.imageFailed&&!s.imageReady)s.heldImage=packet;
+            else if (!this.sendImage(s, packet)) return;
           } else if (raw.type==="cursor"&&s.ready&&!s.secureDesktop&&s.cursor) {
             const {data,...info}=raw;
             if(data!==undefined&&(typeof data!=="string"||data.length>Math.ceil(DESKTOP_CURSOR_MAX_BYTES/3)*4||!/^[A-Za-z0-9+/]*={0,2}$/.test(data)))throw Error("Invalid cursor bytes");
@@ -556,6 +570,17 @@ export class DesktopProvider {
       allowDisplayResize: cfg.allowDisplayResize === true,
     });
   }
+  private failImages(s:Share){
+    if(s.dead||s.imageFailed)return;if(s.imageReady){this.stop(s);return;}s.imageFailed=true;s.imageReady=false;s.imageSocket?.terminate();
+    const held=s.heldImage;delete s.heldImage;if(held)this.send(s,held);
+  }
+  private sendImage(s:Share,data:Uint8Array):boolean{
+    if(!s.imageReady)return this.send(s,data);
+    const image=s.imageSocket;
+    if(s.dead)return false;
+    if(image?.readyState!==WebSocket.OPEN||image.bufferedAmount>DESKTOP_MAX_FRAME_BYTES+4096){this.stop(s);return false;}
+    image.send(data);return true;
+  }
   private sendVideo(s: Share, data: unknown): boolean {
     const video = s.videoSocket;
     if (!s.videoReady) return this.send(s, data);
@@ -589,6 +614,7 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
     s.native?.stop();
     this.companion.end(s);

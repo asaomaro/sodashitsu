@@ -9,7 +9,7 @@ import {
   isDesktopCursor,
   decodeDesktopCursor,
   DESKTOP_NATIVE_RATE_PROTOCOL,
-  DESKTOP_VIDEO_LANE_PROTOCOL,
+  DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
   DesktopNativeVideoStats,
@@ -305,6 +305,7 @@ const windowStyle = computed(() =>
 );
 const cursorCanvas=ref<HTMLCanvasElement>(), separateCursor=ref(false);
 let cursorRenderer:DesktopCursorRenderer|undefined;
+let imageSocket:WebSocket|undefined;
 let videoSocket: WebSocket | undefined, videoExpected = false, videoReady = false, nativeSupported = false;
 let ws: WebSocket | undefined,
   dead = false,
@@ -357,6 +358,7 @@ function stop() {
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
+  imageSocket?.close(1000,"desktop stopped");imageSocket=undefined;
   videoSocket?.close(1000, "desktop stopped"); videoSocket=undefined; videoExpected=videoReady=nativeSupported=false;
   ws?.close(1000, "desktop stopped");
   ws = undefined;
@@ -442,7 +444,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -489,7 +491,14 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
-        if (m.type === "video_ticket") {
+        if(m.type==="image_ticket"){
+          if(imageSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid image attachment");
+          const image=imageSocket=new WebSocket(url,DESKTOP_IMAGE_LANE_PROTOCOL);image.binaryType="arraybuffer";
+          image.onopen=()=>{if(version===epoch)image.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
+          image.onmessage=e=>{if(version===epoch&&imageSocket===image)void socket.onmessage?.call(socket,e);};
+          image.onerror=()=>image.close();
+        }else if(m.type==="image_closed"){imageSocket?.close();imageSocket=undefined;}
+        else if (m.type === "video_ticket") {
           if (videoSocket || typeof m.ticket !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(m.ticket)) throw Error("Invalid video attachment");
           videoExpected=true; videoReady=false; nativeVideo.value=false;
           const video = videoSocket = new WebSocket(url, DESKTOP_VIDEO_LANE_PROTOCOL);
@@ -516,6 +525,7 @@ function connect(automatic = false) {
           title.value = secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
           ready.value = connected.value = true;
+          if(r.imageLane)send({type:"image_ready"});
           synthetic.value = r.backend === "synthetic";
           allowMedia.value = r.allowMedia === true;
           separateCursor.value=r.cursor===true&&!secureDesktop.value;

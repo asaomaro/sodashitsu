@@ -1,3 +1,4 @@
+export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
 import { z } from "zod";
 import {
   DesktopMediaRequest,
@@ -117,6 +118,7 @@ export const DesktopReady = z
     nativeVideo: z.boolean().optional(),
     nativeVideoWindow: z.literal(3).optional(),
     nativeMaxFps: z.literal(60).optional(),
+    imageLane: z.literal(true).optional(),
     cursor: z.literal(true).optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
@@ -177,6 +179,7 @@ export const DesktopStartParams = z
   .object({
     url: z.string().url().max(2048),
     ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    imageTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     videoTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     options: DesktopOptions,
   })

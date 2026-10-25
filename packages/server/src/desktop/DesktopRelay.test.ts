@@ -14,7 +14,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -54,7 +54,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     isHostAllowed: () => true,
     allowedHostPorts: () => [new URL(origin).host],
   });
-  const startRequests: {options: Record<string,unknown>;videoTicket?:string}[] = [];
+  const startRequests: {options: Record<string,unknown>;videoTicket?:string;imageTicket?:string}[] = [];
   let closed = 0,
     starts = 0, providerStartCalls = 0;
   const link = {
@@ -117,8 +117,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" = false) {
-    const ws = new WebSocket(endpoint, ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" = false) {
+    const ws = new WebSocket(endpoint, ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -658,4 +658,41 @@ it.each(["viewer","provider","secure"])("does not send cursor extensions to an i
 it("a viewer cannot inject cursor packets into the provider direction",async()=>{
  const f=await fixture(),v=await f.viewer("cursor");v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  v.ws.send(encodeDesktopCursor({type:"cursor",seq:1,visible:false,x:0,y:0,shapeId:0}));await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
+});
+
+
+it.each([false,true])("holds the first image until parent-ready ACK and image pairing, secure=%s",async secure=>{
+ const f=await fixture(true,false,true,secure),v=await f.viewer("images");v.send(start);
+ await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ const ready=v.messages.find(m=>m.type==="ready")!;expect(ready.imageLane).toBe(true);expect(f.startRequests[0]!.imageTicket).toMatch(/^[A-Za-z0-9_-]{43}$/);
+ const server=Array.from((f.relay as any).viewers)[0] as any;expect(server.ready).toBe(true);expect(v.frames).toHaveLength(0);
+ const ticket=v.messages.find(m=>m.type==="image_ticket")!.ticket;
+ const image=new WebSocket(f.endpoint,DESKTOP_IMAGE_LANE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),frames:Uint8Array[]=[];
+ image.on("error",()=>{});image.on("message",(bytes,binary)=>{expect(binary).toBe(true);frames.push(new Uint8Array(bytes as Buffer));});
+ await new Promise<void>((resolve,reject)=>{image.once("open",resolve);image.once("error",reject);});image.send(JSON.stringify({type:"video_viewer",ticket}));
+ await expect.poll(()=>server.imageAttached).toBe(true);expect(frames).toHaveLength(0);expect(v.frames).toHaveLength(0);
+ v.send({type:"image_ready"});await expect.poll(()=>frames.length).toBe(1);expect(v.frames).toHaveLength(0);
+ const info=decodeDesktopFrame(frames[0]!).info;v.send({type:"ack",seq:info.seq});await expect.poll(()=>frames.length).toBeGreaterThan(1);
+ expect(v.frames).toHaveLength(0);f.revoke();await expect.poll(()=>image.readyState).toBe(WebSocket.CLOSED);await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
+});
+it("falls back to the parent with the held image when attachment fails before activation",async()=>{
+ const f=await fixture(),v=await f.viewer("images");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ const server=Array.from((f.relay as any).viewers)[0] as any;expect(v.frames).toHaveLength(0);server.imageLane.fail();
+ await expect.poll(()=>v.frames.length).toBe(1);expect(v.messages.some(m=>m.type==="image_closed")).toBe(true);expect(v.ws.readyState).toBe(WebSocket.OPEN);
+ v.send({type:"ack",seq:decodeDesktopFrame(v.frames[0]!).info.seq});await expect.poll(()=>v.frames.length).toBeGreaterThan(1);v.send({type:"stop"});
+});
+it.each([true,false])("keeps legacy image routing when viewer/provider image capability is absent, viewer=%s",async viewer=>{
+ const f=await fixture(true,viewer),v=await f.viewer(viewer?"images":false);v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.startRequests[0]).not.toHaveProperty("imageTicket");expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("imageLane");expect(v.messages.some(m=>m.type==="image_ticket")).toBe(false);v.send({type:"stop"});
+});
+
+it("image channel cannot send controls and losing an active channel closes its parent",async()=>{
+ const f=await fixture(),v=await f.viewer("images");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ const ticket=v.messages.find(m=>m.type==="image_ticket")!.ticket,server=Array.from((f.relay as any).viewers)[0] as any;
+ const image=new WebSocket(f.endpoint,DESKTOP_IMAGE_LANE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}});image.on("error",()=>{});
+ await new Promise<void>((resolve,reject)=>{image.once("open",resolve);image.once("error",reject);});image.send(JSON.stringify({type:"video_viewer",ticket}));v.send({type:"image_ready"});
+ await expect.poll(()=>server.imageActive).toBe(true);
+ image.send(JSON.stringify({type:"input",seq:1,input:{kind:"key",code:"F13",down:true}}));
+ await expect.poll(()=>image.readyState).toBe(WebSocket.CLOSED);await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
+ const recorded=await readFile(f.record,"utf8").catch(()=>"");expect(recorded).not.toContain('"code":"F13"');
 });
