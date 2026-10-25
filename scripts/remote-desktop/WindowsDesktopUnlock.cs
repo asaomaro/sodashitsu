@@ -400,6 +400,7 @@ public static class SodaDesktopUnlock {
         // Code-page setters fail without a console. All helper processes use redirected streams.
         Console.SetIn(new StreamReader(Console.OpenStandardInput(),new UTF8Encoding(false,true),false,4096));
         Console.SetOut(new StreamWriter(Console.OpenStandardOutput(),new UTF8Encoding(false),4096){AutoFlush=true});
+        Console.SetError(new StreamWriter(Console.OpenStandardError(),new UTF8Encoding(false),4096){AutoFlush=true});
     }
     public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source) {
         SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState);

@@ -1,0 +1,14 @@
+desktop_helper_compiled
+desktop_unlock_pipe_cancelled
+desktop_unlock_utf8_pipe_passed
+desktop_unlock_duplex_pipe_passed
+display_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-apply, restore/disarm, preserve-local-change, partial-failure rollback; fake driver only; no OS mode changes
+desktop_unlock_process_query_passed
+desktop_lock_cover_checks_passed
+"0" 個の引数を指定して "Run" を呼び出し中に例外が発生しました: "Input ACK waited behind video OutputGate"
+発生場所 \\wsl.localhost\Ubuntu\workspaces\sodashitsu-desktop-input\scripts\remote-desktop\validate-unlock-helper.ps1:1
+4 文字:1
++ [SodaDesktopTests.DesktopInputChecks]::Run()
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : InvalidOperationException

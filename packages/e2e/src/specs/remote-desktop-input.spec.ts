@@ -3,9 +3,9 @@ import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
 import { openNativeTab } from "../support/nativeTab.js";
 
-test("focused desktop forwards keyboard and all five mouse buttons", async ({page,appServer}) => {
+for(const dedicated of [false,true])test(`focused desktop forwards keyboard and all five mouse buttons (${dedicated?"dedicated ACK pipe":"legacy ACK"})`, async ({page,appServer}) => {
   test.setTimeout(60000);
-  const env={SODA_DESKTOP_COMMAND:JSON.stringify([process.execPath,fileURLToPath(new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs",import.meta.url)),"--allow-input"]),SODA_DESKTOP_ALLOW_INPUT:"1"};
+  const env={SODA_DESKTOP_COMMAND:JSON.stringify([process.execPath,fileURLToPath(new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs",import.meta.url)),"--allow-input",...(dedicated?["--input-ack-pipe","--block-stdout-on-input"]:[])]),SODA_DESKTOP_ALLOW_INPUT:"1"};
   const before=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));
   Object.assign(process.env,env);
   const provider=await startAppServer().finally(()=>{for(const [key,value] of Object.entries(before)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
@@ -51,6 +51,9 @@ test("focused desktop forwards keyboard and all five mouse buttons", async ({pag
       { kind: "key", code: "KeyZ", down: true },
       { kind: "key", code: "KeyZ", down: false },
     ]);
+    if(dedicated)await expect.poll(()=>burst.every(m=>received.some(ack=>ack.type==="input_ack"&&ack.seq===m.seq))).toBe(true);
+    // The synthetic helper holds an incomplete stdout ACK until this blur's
+    // release; the independent pipe above must ACK all burst inputs first.
     // Losing canvas focus before the animation callback cancels the queued move.
     const blurStart = sent.length;
     await canvas.evaluate(el => {

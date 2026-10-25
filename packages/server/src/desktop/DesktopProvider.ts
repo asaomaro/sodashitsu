@@ -19,6 +19,7 @@ import {
   RpcError,
 } from "@sodashitsu/protocol";
 
+import { DesktopInputAcks } from "./DesktopInputAcks.js";
 import {DesktopNativeVideo} from "./DesktopNativeVideo.js";
 import { DesktopCompanionHub } from "./DesktopCompanion.js";
 import { DesktopUnlockLease } from "./DesktopUnlockLease.js";
@@ -49,6 +50,7 @@ export interface DesktopProviderConfig {
 type Share = {
   videoSocket?: WebSocket;
   videoReady?: boolean;
+  inputAcks: DesktopInputAcks;
   native?: DesktopNativeVideo;
   deferNativeSnapshots?: boolean;
   chain: DesktopFrameChain;
@@ -162,6 +164,7 @@ export class DesktopProvider {
       followRedirects: false,
     });
     const s: Share = {
+      inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); }),
       chain: new DesktopFrameChain(),
       owner,
       allowClipboard: false,
@@ -336,6 +339,7 @@ export class DesktopProvider {
               (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000)
             ) {
               s.inputSeq = m.seq;
+              s.inputAcks.submitted(m.seq);
               this.write(s, { ...m, expiresAt: Date.now() + 500, ...(nativeDraw && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
             }
           } else {
@@ -365,7 +369,7 @@ export class DesktopProvider {
     });
     child.stdin.on("error", () => this.stop(s));
     // Native errors can contain paths/window titles. Never forward or log stdout/stderr contents.
-    child.stderr.resume();
+    child.stderr.on("data", (chunk: Buffer) => { if (!s.dead) s.inputAcks.push(chunk); });
     let buffer = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -383,9 +387,10 @@ export class DesktopProvider {
         try {
           const raw = JSON.parse(line);
           if (raw.type === "ready" && !s.ready) {
-            const {deferNativeSnapshots, ...wireReady}=raw;
+            const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
             s.secureDesktop = ready.secureDesktop === true;
+            s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.lockScreenCover = ready.lockScreenCover === true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
@@ -510,7 +515,7 @@ export class DesktopProvider {
               .object({ type: z.literal("input_ack"), seq: z.number().int().positive() })
               .strict()
               .parse(raw);
-            if (ack.seq <= s.inputSeq) this.send(s, ack);
+            s.inputAcks.ack(ack.seq);
           } else {
             this.stop(s);
             return;
@@ -525,6 +530,7 @@ export class DesktopProvider {
       type: "configure",
       options,
       captureBackends: ["dxgi"],
+      inputAckPipe: true,
       allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       deferNativeSnapshots: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       ...(options.nativeVideoWindow===3&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
