@@ -32,7 +32,39 @@ test("focused desktop forwards keyboard and all five mouse buttons", async ({pag
     await view.getByRole("button",{name:"操作する",exact:true}).click();
     await expect(status).toHaveText("操作中");
     await canvas.focus();
-    const keys=()=>sent.filter(m=>m.type==="input"&&m.input?.kind==="key").map(m=>[m.input.code,m.input.down]);
+    // Observe the browser's outgoing input frames. A synchronous high-rate burst
+    // must not put hundreds of old positions in front of the next physical key.
+    const burstStart = sent.length;
+    await canvas.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      for (let i = 1; i <= 200; i++) el.dispatchEvent(new PointerEvent("pointermove", {
+        bubbles: true, clientX: box.left + box.width * i / 200,
+        clientY: box.top + box.height / 2, buttons: 0,
+      }));
+      el.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, code: "KeyZ", key: "z" }));
+      el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, code: "KeyZ", key: "z" }));
+    });
+    await expect.poll(() => sent.slice(burstStart).filter(m => m.type === "input").length).toBe(3);
+    const burst = sent.slice(burstStart).filter(m => m.type === "input");
+    expect(burst.map(m => m.input)).toEqual([
+      { kind: "pointer", event: "move", button: 0, x: 1, y: 0.5 },
+      { kind: "key", code: "KeyZ", down: true },
+      { kind: "key", code: "KeyZ", down: false },
+    ]);
+    // Losing canvas focus before the animation callback cancels the queued move.
+    const blurStart = sent.length;
+    await canvas.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      el.dispatchEvent(new PointerEvent("pointermove", { bubbles: true,
+        clientX: box.left + box.width / 3, clientY: box.top + box.height / 2 }));
+      (el.closest("[data-remote-desktop]")!.querySelector("button") as HTMLButtonElement).focus();
+    });
+    await expect.poll(() => sent.slice(blurStart).some(m => m.type === "release")).toBe(true);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
+    expect(sent.slice(blurStart).filter(m => m.type === "input")).toEqual([]);
+    await canvas.focus();
+    const keyStart = sent.length;
+    const keys=()=>sent.slice(keyStart).filter(m=>m.type==="input"&&m.input?.kind==="key").map(m=>[m.input.code,m.input.down]);
     // Physical Ctrl+Space must remain a chord for the remote IME's own binding.
     await page.keyboard.press("Control+Space");
     await expect.poll(()=>keys()).toEqual([["ControlLeft",true],["Space",true],["Space",false],["ControlLeft",false]]);

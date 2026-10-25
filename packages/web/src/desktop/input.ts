@@ -1,3 +1,35 @@
+import type { RemoteDesktopInput } from "@sodashitsu/protocol";
+
+/** Keep one latest move per browser frame, flushing before every ordered input. */
+export class DesktopInputSender {
+  private move: RemoteDesktopInput | undefined;
+  private frame: number | undefined;
+  constructor(
+    private send: (input: RemoteDesktopInput) => void,
+    private schedule = (callback: FrameRequestCallback) => requestAnimationFrame(callback),
+    private cancel = (frame: number) => cancelAnimationFrame(frame),
+  ) {}
+  submit(input: RemoteDesktopInput) {
+    if (input.kind === "pointer" && input.event === "move") {
+      this.move = input;
+      if (this.frame === undefined) this.frame = this.schedule(() => this.flush());
+    } else {
+      this.flush();
+      this.send(input);
+    }
+  }
+  private flush() {
+    const move = this.move;
+    this.clear();
+    if (move) this.send(move);
+  }
+  clear() {
+    if (this.frame !== undefined) this.cancel(this.frame);
+    this.frame = undefined;
+    this.move = undefined;
+  }
+}
+
 export const DOUBLE_ESCAPE_MS = 500;
 
 /** A second bare physical press exits; repeat, other input and focus changes do not. */

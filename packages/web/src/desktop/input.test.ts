@@ -1,5 +1,55 @@
 import { expect, it } from "vitest";
-import { DesktopEscape, DesktopButtons, DesktopModifiers } from "./input.js";
+import { DesktopEscape, DesktopButtons, DesktopModifiers, DesktopInputSender } from "./input.js";
+import type { RemoteDesktopInput } from "@sodashitsu/protocol";
+
+function senderFixture() {
+  let next = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  const sent: RemoteDesktopInput[] = [];
+  const sender = new DesktopInputSender(input => sent.push(input), callback => {
+    frames.set(++next, callback); return next;
+  }, frame => { frames.delete(frame); });
+  return { sender, sent, frames, tick: () => { for (const callback of [...frames.values()]) callback(0); } };
+}
+const move = (x: number): RemoteDesktopInput => ({ kind: "pointer", event: "move", button: 0, x, y: 0.5 });
+
+it("bounds a burst of 1000 pointer moves to one latest coordinate per browser frame", () => {
+  const f = senderFixture();
+  for (let i = 0; i < 1000; i++) f.sender.submit(move(i / 1000));
+  expect(f.sent).toHaveLength(0);
+  expect(f.frames.size).toBe(1);
+  f.tick();
+  expect(f.sent).toEqual([move(0.999)]);
+  expect(f.frames.size).toBe(0);
+  f.sender.submit(move(1)); f.tick();
+  expect(f.sent).toEqual([move(0.999), move(1)]);
+});
+it("flushes the latest drag position before buttons, keys, wheel and text without batching them", () => {
+  const f = senderFixture();
+  const ordered: RemoteDesktopInput[] = [
+    { kind: "pointer", event: "down", button: 0, x: 0, y: 0.5 },
+    { kind: "key", code: "ControlLeft", down: true },
+    { kind: "wheel", delta: 120 },
+    { kind: "text", text: "test" },
+    { kind: "key", code: "ControlLeft", down: false },
+    ...[0, 1, 2, 3, 4].map(button => ({ kind: "pointer" as const, event: "up" as const, button, x: 1, y: 0.5 })),
+  ];
+  for (const input of ordered) {
+    f.sender.submit(move(0.1)); f.sender.submit(move(0.9)); f.sender.submit(input);
+  }
+  expect(f.sent).toEqual(ordered.flatMap(input => [move(0.9), input]));
+  expect(f.frames.size).toBe(0);
+  f.tick();
+  expect(f.sent).toHaveLength(ordered.length * 2);
+});
+it("discards a queued move on release and permits a fresh move after focus returns", () => {
+  const f = senderFixture();
+  f.sender.submit(move(0.1)); f.sender.clear(); f.tick();
+  expect(f.sent).toEqual([]); expect(f.frames.size).toBe(0);
+  f.sender.submit(move(0.9)); f.tick();
+  expect(f.sent).toEqual([move(0.9)]);
+});
+
 it("requires two released bare Escape presses within 500ms",()=>{
   const escape=new DesktopEscape();
   expect(escape.key("Escape",true,false,false,0)).toBe(false);

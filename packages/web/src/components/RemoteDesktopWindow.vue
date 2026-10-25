@@ -21,7 +21,7 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
-import { DesktopEscape, DesktopButtons, DesktopModifiers } from "../desktop/input.js";
+import { DesktopEscape, DesktopButtons, DesktopModifiers, DesktopInputSender } from "../desktop/input.js";
 import { imeKeyCode, type ImeKeyCode } from "../desktop/ime.js";
 import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaReceiver.js";
 import { chooseMaximumDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
@@ -304,6 +304,7 @@ let ws: WebSocket | undefined,
 let chain = new DesktopFrameChain();
 let startupRetries = 0;
 const inputs = new Map<number, number>();
+const inputSender = new DesktopInputSender(sendInput);
 const escapePress = new DesktopEscape(), mouseButtons = new DesktopButtons(), modifiers = new DesktopModifiers();
 let drag: { x: number; y: number; left: number; top: number } | undefined;
 function send(value: unknown) {
@@ -311,10 +312,12 @@ function send(value: unknown) {
     ws.send(JSON.stringify(value));
 }
 function releaseInputs() {
+  inputSender.clear();
   mouseButtons.reset(); modifiers.reset();
   send({type:"release"});
 }
 function relinquish() {
+  inputSender.clear();
   escapePress.reset(); mouseButtons.reset(); modifiers.reset();
   if (dismissPending) dismissInFlight.value = false;
   dismissPending = false;
@@ -582,12 +585,14 @@ function connect(automatic = false) {
           if (typeof m.ticket === "string" && /^[A-Za-z0-9_-]{43}$/.test(m.ticket))
             agentTicket.value = m.ticket;
         } else if (m.type === "agent_state") {
+          inputSender.clear();
           agentActive.value = m.active === true;
           agentExpires.value = typeof m.expiresAt === "number" ? m.expiresAt : 0;
           if (agentActive.value || !agentExpires.value) agentTicket.value = "";
           control.value = false;
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
         } else if (m.type === "control") {
+          inputSender.clear();
           escapePress.reset(); mouseButtons.reset(); modifiers.reset();
           control.value = m.enabled === true && allowed.value;
           status.value = agentActive.value
@@ -655,10 +660,16 @@ function restoreImage() {
   el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
 }
 function input(value: unknown) {
-  if (lockScreenCover.value) return;
-  if (receiver && !receiver.active) return;
-  if (!control.value || !ready.value || !lastDrawn || !RemoteDesktopInput.safeParse(value).success)
-    return;
+  const parsed = RemoteDesktopInput.safeParse(value);
+  if (!parsed.success || !canInput()) return;
+  inputSender.submit(parsed.data);
+}
+function canInput() {
+  return !lockScreenCover.value && (!receiver || receiver.active) && control.value && ready.value && lastDrawn > 0;
+}
+function sendInput(value: RemoteDesktopInput) {
+  // A scheduled move must still belong to the current share and permission.
+  if (!canInput()) return;
   const id = ++seq;
   inputs.set(id, performance.now());
   if (inputs.size > 64) inputs.delete(inputs.keys().next().value!);
