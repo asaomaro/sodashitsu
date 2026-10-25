@@ -40,6 +40,7 @@ export const DesktopOptions = z
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
+    nativeVideoWindow: z.literal(3).optional(),
     display: DesktopDisplaySize.optional(),
   })
   .strict();
@@ -112,6 +113,7 @@ export const DesktopReady = z
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
     nativeVideo: z.boolean().optional(),
+    nativeVideoWindow: z.literal(3).optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),
@@ -219,6 +221,7 @@ export interface DesktopResults {
     imeKeys?: boolean;
     extendedInput?: boolean;
     nativeVideo?: boolean;
+    nativeVideoWindow?: 3;
     features?: boolean;
     displayResize?: boolean;
   };

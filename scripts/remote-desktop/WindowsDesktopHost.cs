@@ -251,8 +251,9 @@ public static class SodaDesktopHost {
         },null,500,500);
         SodaDesktopDxgi dxgi=null;
         SodaDesktopH264 video=null;string videoId=null;
-        long videoSeq=0,videoPending=0,videoNext=0,videoAt=0;int videoFps=maxFps;
+        long videoSeq=0,videoNext=0;int videoFps=maxFps;var videoWindow=new SodaDesktopVideoWindow(1);
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
+        bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
         // Only new providers opt in. Old providers/helpers keep their existing wire contract.
         if(!Secure && Environment.GetEnvironmentVariable("SODA_DESKTOP_CAPTURE")!="gdi" && config.ContainsKey("captureBackends")) {
             var backends=config["captureBackends"] as object[];
@@ -263,6 +264,7 @@ public static class SodaDesktopHost {
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;
+            if(nativePipeline)ready["nativeVideoWindow"]=3;
             if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             Output(ready);
@@ -298,13 +300,13 @@ public static class SodaDesktopHost {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Video id");
                             if((bool)msg["enabled"]) {
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
-                                if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoPending=videoNext=0;
+                                if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
                                 try {videoFps=Num(msg,"fps");if(videoFps>maxFps)throw new InvalidOperationException("Video rate ceiling");video=new SodaDesktopH264(w,h,videoFps,Num(msg,"bitrateKbps"));}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
-                            } else if(videoId==requested) {if(video!=null)video.Dispose();video=null;videoId=null;videoPending=0;}
+                            } else if(videoId==requested) {if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
                         else if(type=="native_video_ack") {
-                            if(video!=null && (string)msg["id"]==videoId) {long ack=Convert.ToInt64(msg["seq"]);if(ack==videoPending)videoPending=0;else if(ack>videoSeq)throw new InvalidOperationException("Video ACK order");}
+                            if(video!=null && (string)msg["id"]==videoId) {videoWindow.Ack(Convert.ToInt64(msg["seq"]));}
                         }
                         else if(type=="keyframe"){forceFull=true;preparation.Invalidate(true);}
                         else if(type=="policy") {
@@ -334,19 +336,20 @@ public static class SodaDesktopHost {
                     }
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
                     long now=Clock.ElapsedMilliseconds;
-                    if(video!=null && videoPending!=0 && now-videoAt>2500) {
-                        video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoPending=0;
+                    if(video!=null && videoWindow.Count>0 && now-videoWindow.OldestAt>2500) {
+                        video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
                     }
-                    if(!Stopping && video!=null && videoPending==0 && now>=videoNext) {
+                    if(!Stopping && video!=null && videoWindow.CanSend && now>=videoNext) {
                         try {
-                            CaptureFrame(resize,w,h,showCursor,ref dxgi);
+                            var captureTimer=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor,ref dxgi);double videoCaptureMs=captureTimer.Elapsed.TotalMilliseconds;
                             var packet=video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
                             if(!AllowedDesktop())break;
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
-                            videoPending=++videoSeq;videoAt=Clock.ElapsedMilliseconds;videoNext=now+1000/videoFps;
+                            videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=now+1000/videoFps;
                             var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
+                            if(videoWindow.Capacity==3){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
-                        } catch {video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoPending=0;}
+                        } catch {video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         now=Clock.ElapsedMilliseconds;
                     }
                     if(!Stopping && preparation.CanPrepare(now,pending)) {
@@ -852,13 +855,16 @@ public sealed class SodaDesktopH264 : IDisposable {
             } finally {Release(ref ev);}
         }
     }
+    public double ConversionMs {get;private set;}
+    public double EncodingMs {get;private set;}
     public Packet EncodeBitmap(Bitmap bitmap,long timestamp) {
+        var timing=Stopwatch.StartNew();
         if(bitmap.Width!=width || bitmap.Height!=height)throw new ArgumentException("Video bitmap size");
         if(bgr==null){bgr=new byte[width*height*3];nv12=new byte[width*height*3/2];}
         var bits=bitmap.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format24bppRgb);
         try {for(int y=0;y<height;y++)Marshal.Copy(IntPtr.Add(bits.Scan0,y*bits.Stride),bgr,y*width*3,width*3);}
         finally {bitmap.UnlockBits(bits);}
-        ConvertNv12(bgr,nv12,width,height);return Encode(nv12,timestamp);
+        ConvertNv12(bgr,nv12,width,height);ConversionMs=timing.Elapsed.TotalMilliseconds;timing.Restart();var packet=Encode(nv12,timestamp);EncodingMs=timing.Elapsed.TotalMilliseconds;return packet;
     }
     public static void ConvertNv12(byte[] bgr,byte[] nv12,int width,int height) {
         if(width<2||height<2||(width&1)!=0||(height&1)!=0||(long)width*height>8000000||bgr.Length!=(long)width*height*3||nv12.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
@@ -954,4 +960,18 @@ public sealed class SodaDesktopH264 : IDisposable {
         if(activation!=IntPtr.Zero){try{Method<NoArgs>(activation,34)(activation);}catch{}Release(ref activation);}
         if(started){MFShutdown();started=false;}
     }
+}
+
+// A bounded ordered window; encoded H.264 reference frames are never discarded.
+public sealed class SodaDesktopVideoWindow {
+    sealed class Pending {public long seq,at;}
+    readonly Queue<Pending> pending=new Queue<Pending>();
+    long sent,acknowledged;
+    public int Capacity {get;private set;}
+    public int Count {get{return pending.Count;}}
+    public long OldestAt {get{return pending.Count==0?0:pending.Peek().at;}}
+    public bool CanSend {get{return pending.Count<Capacity;}}
+    public SodaDesktopVideoWindow(int capacity){if(capacity!=1&&capacity!=3)throw new ArgumentException("Video window limit");Capacity=capacity;}
+    public void Sent(long sequence,long at){if(!CanSend||sequence!=sent+1)throw new InvalidOperationException("Video window order");pending.Enqueue(new Pending {seq=sequence,at=at});sent=sequence;}
+    public void Ack(long sequence){if(sequence<=acknowledged)return;if(pending.Count==0||pending.Peek().seq!=sequence)throw new InvalidOperationException("Video ACK order");pending.Dequeue();acknowledged=sequence;}
 }

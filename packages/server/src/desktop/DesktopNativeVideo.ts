@@ -15,6 +15,9 @@ const HelperVideo = z
     seq: z.number().int().min(1).max(0xffffffff),
     timestamp: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     key: z.boolean(),
+    captureMs: z.number().finite().min(0).max(60000).optional(),
+    conversionMs: z.number().finite().min(0).max(60000).optional(),
+    encodeMs: z.number().finite().min(0).max(60000).optional(),
     codec: z
       .string()
       .regex(/^avc1\.[0-9a-f]{6}$/)
@@ -34,7 +37,14 @@ export class DesktopNativeVideo {
     | {
         id: string;
         seq: number;
-        pending: number;
+        pending: {
+          seq: number;
+          at: number;
+          captureMs: number;
+          conversionMs: number;
+          encodeMs: number;
+        }[];
+        statsAt: number;
         lastAck: number;
         at: number;
         timestamp: number;
@@ -47,6 +57,7 @@ export class DesktopNativeVideo {
   constructor(
     private hooks: {
       enabled: boolean;
+      window?: 1 | 3;
       width: number;
       sourceWidth: number;
       sourceHeight: number;
@@ -64,9 +75,27 @@ export class DesktopNativeVideo {
       const ack = DesktopNativeVideoAck.parse(raw),
         s = this.active;
       if (!s || ack.id !== s.id || ack.generation !== 1 || ack.seq <= s.lastAck) return true;
-      if (ack.seq !== s.pending) throw Error("Native video ACK order");
+      const pending = s.pending[0];
+      if (ack.seq !== pending?.seq) throw Error("Native video ACK order");
       s.lastAck = ack.seq;
-      s.pending = 0;
+      s.pending.shift();
+      const now = performance.now();
+      if (this.hooks.window === 3 && now - s.statsAt >= 1000) {
+        s.statsAt = now;
+        this.hooks.send({
+          type: "native_video_stats",
+          id: s.id,
+          width: s.width!,
+          height: s.height!,
+          window: 3,
+          pending: s.pending.length,
+          captureMs: pending.captureMs,
+          conversionMs: pending.conversionMs,
+          encodeMs: pending.encodeMs,
+          ackMs: Math.min(60000, Math.max(0, now - pending.at)),
+          decodeMs: ack.decodeMs ?? 0,
+        });
+      }
       this.hooks.write({ type: "native_video_ack", id: s.id, seq: ack.seq });
       return true;
     }
@@ -89,7 +118,8 @@ export class DesktopNativeVideo {
     this.active = {
       id,
       seq: 0,
-      pending: 0,
+      pending: [],
+      statsAt: 0,
       lastAck: 0,
       at: performance.now(),
       timestamp: -1,
@@ -103,6 +133,7 @@ export class DesktopNativeVideo {
       id,
       bitrateKbps: settings.maxBitrateKbps,
       fps: this.hooks.fps,
+      ...(this.hooks.window === 3 ? { window: 3 } : {}),
     });
     return true;
   }
@@ -117,7 +148,7 @@ export class DesktopNativeVideo {
     }
     const frame = HelperVideo.parse(raw);
     if (
-      s.pending ||
+      s.pending.length >= (this.hooks.window ?? 1) ||
       frame.seq !== s.seq + 1 ||
       frame.width > this.hooks.width ||
       frame.timestamp <= s.timestamp
@@ -149,6 +180,7 @@ export class DesktopNativeVideo {
         id: s.id,
         generation: 1,
         mime: "video/h264",
+        ...(this.hooks.window === 3 ? { window: 3 } : {}),
         codec: frame.codec,
         width: frame.width,
         height: frame.height,
@@ -164,7 +196,13 @@ export class DesktopNativeVideo {
       Buffer.from(frame.data, "base64"),
     );
     s.seq = frame.seq;
-    s.pending = frame.seq;
+    s.pending.push({
+      seq: frame.seq,
+      at: performance.now(),
+      captureMs: frame.captureMs ?? 0,
+      conversionMs: frame.conversionMs ?? 0,
+      encodeMs: frame.encodeMs ?? 0,
+    });
     s.timestamp = frame.timestamp;
     s.at = performance.now();
     if (!this.hooks.send(encodeDesktopMediaChunk(1, frame.seq, payload))) this.stop("congested");
@@ -172,8 +210,8 @@ export class DesktopNativeVideo {
   }
   tick(now = performance.now()) {
     const s = this.active;
-    if (s && now - s.at > (s.pending ? 2500 : 5000))
-      this.stop(s.pending ? "congested" : "unavailable");
+    if (s && now - (s.pending[0]?.at ?? s.at) > (s.pending.length ? 2500 : 5000))
+      this.stop(s.pending.length ? "congested" : "unavailable");
   }
   stop(reason: "stopped" | "unavailable" | "congested" = "stopped") {
     const s = this.active;

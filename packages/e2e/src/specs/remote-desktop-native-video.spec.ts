@@ -315,3 +315,111 @@ test("native hardware video performance (explicit opt-in)", async ({
     await provider.close();
   }
 });
+
+for (const pipelined of [false, true])
+  test(`native video ${pipelined ? "three-frame" : "legacy one-frame"} window under 100ms draw ACK delay`, async ({
+    page,
+    appServer,
+  }) => {
+    test.setTimeout(45000);
+    const keys = ["SODA_DESKTOP_COMMAND", "SODA_DESKTOP_ALLOW_MEDIA"],
+      saved = keys.map((k) => process.env[k]);
+    process.env.SODA_DESKTOP_COMMAND = JSON.stringify([
+      process.execPath,
+      fileURLToPath(
+        new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
+      ),
+      "--static",
+      "--native-fixture",
+      fileURLToPath(
+        new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json", import.meta.url),
+      ),
+    ]);
+    process.env.SODA_DESKTOP_ALLOW_MEDIA = "1";
+    const provider = await startAppServer().finally(() =>
+      keys.forEach((k, i) => {
+        if (saved[i] === undefined) delete process.env[k];
+        else process.env[k] = saved[i];
+      }),
+    );
+    await page.addInitScript(
+      ({ pipelined }) => {
+        const Base = WebSocket;
+        (window as unknown as { __windowDraws: number[] }).__windowDraws = [];
+        window.WebSocket = class extends Base {
+          constructor(url: string | URL, protocols?: string | string[]) {
+            super(
+              url,
+              Array.isArray(protocols) && !pipelined
+                ? protocols.filter((v) => v !== "soda-desktop-native-video-v2")
+                : protocols,
+            );
+          }
+          override send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+            if (this.url.endsWith("/desktop-share") && typeof data === "string") {
+              const m = JSON.parse(data);
+              if (m.type === "start")
+                data = JSON.stringify({ ...m, options: { ...m.options, fps: 30 } });
+              if (m.type === "native_video_ack") {
+                (window as unknown as { __windowDraws: number[] }).__windowDraws.push(
+                  performance.now(),
+                );
+                setTimeout(() => {
+                  if (this.readyState === Base.OPEN) super.send(data);
+                }, 100);
+                return;
+              }
+            }
+            super.send(data);
+          }
+        };
+      },
+      { pipelined },
+    );
+    try {
+      const owner = await provider.openClient(),
+        a = await appServer.openClient(),
+        invite = await a.request("machine.invite", { label: "Native ACK window B" });
+      await owner.request("machine.delegate", {
+        url: appServer.origin,
+        machineId: invite.machineId,
+        token: invite.token,
+      });
+      await page.goto(`${appServer.origin}/#token=${appServer.token}`);
+      const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
+      await expect(header.locator('[data-state="online"]')).toBeVisible();
+      await openNativeTab(page, "desktop", header);
+      const view = page.locator("[data-remote-desktop]"),
+        canvas = view.getByLabel("共有画面");
+      await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
+      await view.locator("[data-desktop-media] summary").click();
+      await view.getByLabel("動画の経路").selectOption("native");
+      await view.getByRole("button", { name: "動画共有を依頼", exact: true }).click();
+      await expect
+        .poll(async () => Number(await canvas.getAttribute("data-video-frames")), {
+          timeout: 20000,
+        })
+        .toBeGreaterThanOrEqual(60);
+      const times = await page.evaluate(
+          () => (window as unknown as { __windowDraws: number[] }).__windowDraws,
+        ),
+        fps = ((times.length - 1) * 1000) / (times.at(-1)! - times[0]!);
+      if (pipelined) {
+        expect(fps).toBeGreaterThan(18);
+        await expect(view.locator("[data-native-video-stats]")).toContainText("3枚");
+      } else expect(fps).toBeLessThan(12);
+      console.log(
+        "NATIVE_WINDOW_BENCH " +
+          JSON.stringify({
+            pipelined,
+            frames: times.length,
+            fps,
+            ackDelayMs: 100,
+            source: "hardware-generated fixture; no actual desktop or physical network",
+          }),
+      );
+      await view.getByRole("button", { name: "共有停止", exact: true }).click();
+    } finally {
+      await provider.close();
+    }
+  });

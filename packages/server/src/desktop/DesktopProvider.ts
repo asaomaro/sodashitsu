@@ -106,6 +106,7 @@ export class DesktopProvider {
       imeKeys: true,
       extendedInput: true,
       nativeVideo: true,
+      nativeVideoWindow: 3 as const,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -391,6 +392,7 @@ export class DesktopProvider {
               imeKeys,
               extendedInput,
               nativeVideo,
+              nativeVideoWindow,
               image: appliedImage,
               allowClipboard,
               allowMedia,
@@ -400,10 +402,12 @@ export class DesktopProvider {
             } = ready;
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,send:value=>this.send(s,value),write:value=>this.write(s,value),buffered:()=>s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,send:value=>this.send(s,value),write:value=>this.write(s,value),buffered:()=>s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(nativeEnabled?{nativeVideo:true}:{}),
+              ...(nativeWindow===3?{nativeVideoWindow:3}:{}),
               // Keep the existing viewer wire format; capture is a helper detail.
               backend: legacyReady.backend === "windows-dxgi" ? "windows-gdi" : legacyReady.backend,
               ...(s.imeKeys && imeKeys ? { imeKeys: true } : {}),
@@ -500,6 +504,7 @@ export class DesktopProvider {
       options,
       captureBackends: ["dxgi"],
       allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
+      ...(options.nativeVideoWindow===3&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
       allowClipboard: cfg.allowClipboard === true,
       allowDisplayResize: cfg.allowDisplayResize === true,

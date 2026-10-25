@@ -1,13 +1,14 @@
 import { expect, it, vi } from "vitest";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { decodeDesktopMediaChunk, decodeDesktopH264Packet } from "@sodashitsu/protocol";
-function fixture(enabled = true) {
+function fixture(enabled = true, window?: 3) {
   const send = vi.fn((_value: unknown) => true),
     write = vi.fn<(value: Record<string, unknown>) => void>(),
     policy = vi.fn();
   let buffered = 0;
   const video = new DesktopNativeVideo({
     enabled,
+    ...(window === 3 ? { window } : {}),
     width: 1280,
     sourceWidth: 1600,
     sourceHeight: 1000,
@@ -141,4 +142,41 @@ it("switches to browser media without accepting frames or ACKs from the stopped 
   f.video.fromHelper(f.frame(id, 2));
   f.video.fromViewer({ type: "native_video_ack", id, generation: 1, seq: 1 });
   expect(f.send.mock.calls).toHaveLength(count);
+});
+
+it("allows three negotiated frames while enforcing FIFO ACK and returning a slot", () => {
+  const f = fixture(true, 3),
+    id = f.start();
+  for (let seq = 1; seq <= 3; seq++) f.video.fromHelper(f.frame(id, seq));
+  expect(() => f.video.fromHelper(f.frame(id, 4))).toThrow("order");
+  expect(() => f.video.fromViewer({ type: "native_video_ack", id, generation: 1, seq: 2 })).toThrow(
+    "ACK",
+  );
+  f.video.fromViewer({ type: "native_video_ack", id, generation: 1, seq: 1, decodeMs: 5 });
+  f.video.fromHelper(f.frame(id, 4));
+  expect(f.send).toHaveBeenCalledWith(expect.objectContaining({ type: "media_stream", window: 3 }));
+  f.video.fromViewer({ type: "native_video_ack", id, generation: 1, seq: 1 });
+  expect(() => f.video.fromHelper(f.frame(id, 5))).toThrow("order");
+  f.video.stop();
+});
+it("expires the oldest outstanding frame even when newer frames were sent", async () => {
+  const { performance } = await import("node:perf_hooks");
+  const clock = vi.spyOn(performance, "now").mockReturnValue(1000);
+  try {
+    const f = fixture(true, 3),
+      id = f.start();
+    f.video.fromHelper(f.frame(id));
+    clock.mockReturnValue(3000);
+    f.video.fromHelper(f.frame(id, 2));
+    f.video.tick(3600);
+    expect(f.send).toHaveBeenLastCalledWith({
+      type: "media_status",
+      id,
+      state: "images",
+      audio: false,
+      reason: "congested",
+    });
+  } finally {
+    clock.mockRestore();
+  }
 });

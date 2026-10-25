@@ -6,6 +6,8 @@ import {
   DESKTOP_IME_PROTOCOL,
   DESKTOP_INPUT_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
+  DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
+  DesktopNativeVideoStats,
   isExtendedDesktopInput,
   DesktopFrameChain,
   RemoteDesktopInput,
@@ -123,6 +125,7 @@ const mediaState = ref("images"),
   sound = ref(false),
   requestAudio = ref(false),
   nativeVideo = ref(false),
+  nativeStats = ref<DesktopNativeVideoStats|null>(null),
   mediaTransport = ref<"auto" | "relay" | "native">("auto"),
   mediaBitrate = ref(2500),
   videoFrames = ref(0),
@@ -332,6 +335,7 @@ function stop() {
   mediaState.value = "images";
   mediaAudio.value = false;
   sound.value = false;
+  nativeStats.value=null;
   nativeVideo.value=false;
   allowMedia.value = false;
   allowClipboard.value = false;
@@ -420,7 +424,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -516,6 +520,7 @@ function connect(automatic = false) {
             restoreImage();releaseInputs();
           } else if (state.state === "negotiating" && receiver?.id !== state.id) {
             receiver?.stop();
+            nativeStats.value=null;
             videoStatsAt=videoStatsCount=0;videoFps.value=0;
             receiver = new DesktopMediaReceiver(
               state.id,
@@ -556,7 +561,9 @@ function connect(automatic = false) {
             await receiver.signal(signal.signal as Parameters<DesktopMediaReceiver["signal"]>[0]);
         } else if (m.type === "media_stream") {
           const stream = DesktopMediaStream.parse(m);
-          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height);else receiver.stream(stream.generation, stream.mime);}
+          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window);else receiver.stream(stream.generation, stream.mime);}
+        } else if(m.type==="native_video_stats") {
+          const stats=DesktopNativeVideoStats.parse(m);if(receiver?.id===stats.id)nativeStats.value=stats;
         } else if (m.type === "media_unavailable")
           error.value = "Bのメディア補助画面と共有許可を確認してください";
         else if (m.type === "clipboard_state") {
@@ -863,7 +870,7 @@ onBeforeUnmount(() => {
         <button :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
       <p v-if="activeSettings && ready" data-desktop-applied>
-        適用中: 幅上限{{ activeSettings.width }} / {{ activeSettings.fps }}fps上限 / JPEG
+        適用中: <template v-if="activeSettings.display">{{activeSettings.display.width}}×{{activeSettings.display.height}}等倍（幅上限より優先）</template><template v-else>幅上限{{ activeSettings.width }}</template> / {{ activeSettings.fps }}fps上限 / JPEG
         {{ activeSettings.quality }} /
         {{
           { full: "フルカラー", rgb565: "約6.5万色", rgb332: "256色", gray16: "16階調グレー" }[
@@ -967,6 +974,10 @@ onBeforeUnmount(() => {
           }}
         </p>
         <p v-if="['native','rtc','relay'].includes(mediaState)" data-video-fps>動画 {{ videoFps.toFixed(1) }} fps（描画実測）</p>
+        <p v-if="mediaState==='native' && nativeStats" data-native-video-stats>
+          動画 {{nativeStats.width}}×{{nativeStats.height}} · 取得 {{nativeStats.captureMs.toFixed(1)}} / 色変換 {{nativeStats.conversionMs.toFixed(1)}} / 圧縮・待機 {{nativeStats.encodeMs.toFixed(1)}} ms<br />
+          送信→描画ACK {{nativeStats.ackMs.toFixed(0)}} ms · 復号・描画 {{nativeStats.decodeMs.toFixed(1)}} ms · ACK待ち {{nativeStats.pending}} / {{nativeStats.window}}枚
+        </p>
       </details>
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード（テキスト）</summary>

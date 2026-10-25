@@ -11,7 +11,7 @@ import { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { LinkChannel, MachineLink } from "../machine/MachineLink.js";
 import { DesktopRelay } from "./DesktopRelay.js";
 import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -113,8 +113,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" = false) {
-    const ws = new WebSocket(endpoint, ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" = false) {
+    const ws = new WebSocket(endpoint, ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -475,4 +475,17 @@ it("never sends native video options to an older provider even when the new brow
 it("keeps images usable when a new provider has an old native-unaware helper",async()=>{
  const f=await fixture(),v=await f.viewer("native");v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  expect(f.startRequests[0]!.options.nativeVideo).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeVideo");v.send({type:"stop"});
+});
+
+it("strips pipeline options for an older provider despite the viewer v2 header", async () => {
+ const f=await fixture(true,true),v=await f.viewer("pipeline");v.send(start);
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.startRequests[0]!.options).not.toHaveProperty("nativeVideoWindow");
+ expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeVideoWindow");v.send({type:"stop"});
+});
+it("downgrades the pipeline when the helper lacks the capability", async () => {
+ const f=await fixture(),v=await f.viewer("pipeline");v.send(start);
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.startRequests[0]!.options.nativeVideoWindow).toBe(3);
+ expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeVideoWindow");v.send({type:"stop"});
 });

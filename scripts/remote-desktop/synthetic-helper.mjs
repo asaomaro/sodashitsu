@@ -136,7 +136,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
-          ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true}:{}),
+          ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
           ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
           title: "Synthetic test source",
@@ -162,10 +162,10 @@ function run() {
       } else if (m.type === "heartbeat") lastSeen = performance.now();
       else if (m.type === "ack" && m.seq === pending) pending = 0;
       else if(m.type==="native_video") {
-        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,seq:0,pending:0,next:0,index:0,fps:m.fps};
+        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,seq:0,pending:[],next:0,index:0,fps:m.fps,window:m.window===3?3:1};
         else native=undefined;
       }
-      else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending)native.pending=0;
+      else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
       else if (m.type === "keyframe") {forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
       else if(m.type==="clipboard_control"){clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;}
@@ -195,9 +195,9 @@ function run() {
   });
   setInterval(() => {
     if (performance.now() - lastSeen > 8000) process.exit(0);
-    if(options&&native&&!native.pending&&performance.now()>=native.next) {
+    if(options&&native&&native.pending.length<native.window&&performance.now()>=native.next) {
       const packet=nativeFixture.packets[native.index++%nativeFixture.packets.length];
-      native.pending=++native.seq;native.next=performance.now()+1000/native.fps;
+      native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
       send({type:"native_frame",id:native.id,seq:native.seq,timestamp:native.seq*33333,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
     }
     if (!options || lockCover || pending || performance.now() < next) return;
