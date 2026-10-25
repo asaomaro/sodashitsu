@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { randomBytes, createHash } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Duplex } from "node:stream";
 import { expect, it, vi } from "vitest";
 import { composeServerOnFreePort, type ComposedServer } from "@sodashitsu/server";
 import { FsSessionStore } from "./session.js";
@@ -28,6 +29,10 @@ it.skipIf(process.platform === "win32")("B requests; A starts its own CLI and ro
     await withSession(bo, store, c => c.request("workspace.set_project_folder", { workspaceId: target.workspace.id, path: remote }));
     const scope = { workspaceId: target.workspace.id, expectedFolder: remote, agentKind: "claude" as const };
     await withSession(bo, store, c => c.request("work.memory", { ...scope, sourcePaneId: target.pane.id, action: "write", name: "MEMORY.md", content: "remember B tasks" }));
+    let bridge: Duplex | undefined, interruptBridge = false;
+    a.httpServer.server.on("upgrade", (req, socket) => {
+      if (req.headers["x-soda-machine-id"] !== undefined) { bridge = socket; if (interruptBridge) socket.destroy(); }
+    });
     const invite = await withSession(ao, store, c => c.request("machine.invite", { label: "target" }));
     await withSession(bo, store, c => c.request("machine.delegate", { url: ao.url, machineId: invite.machineId, token: invite.token }));
     await withSession(ao, store, async c => { await expect.poll(async () => (await c.request("machine.list", {})).machines[0]?.state).toBe("online"); });
@@ -47,6 +52,21 @@ it.skipIf(process.platform === "win32")("B requests; A starts its own CLI and ro
     const capabilityFile = join(launchDir, "capability.json"), cap = JSON.parse(await readFile(capabilityFile, "utf8"));
     expect(Object.keys(cap).sort()).toEqual(["secret", "socketPath"]);
     proxy = await WorkAgentClient.open(capabilityFile);
+    // Keep the original IPC alive beyond the old 5-second invalid-channel cleanup.
+    expect(bridge).toBeDefined(); interruptBridge = true; bridge!.destroy();
+    await expect.poll(async () => (await withSession(ao,store,c=>c.request("machine.list",{}))).machines[0]?.state).not.toBe("online");
+    await new Promise(resolve=>setTimeout(resolve,5500)); // Deliberately cross the old cleanup interval.
+    await expect(proxy.request("tool",{operation:"inspect"})).rejects.toThrow(/再確認/);
+    interruptBridge = false;
+    await withSession(ao,store,async c=>{await expect.poll(async()=> (await c.request("machine.list",{})).machines[0]?.state,{timeout:15000}).toBe("online");});
+    await expect(proxy.request("tool",{operation:"file",action:"read",path:"README.md"})).resolves.toMatchObject({text:"remote original"});
+    // Lose an exec response after a write actually ran. It must never run twice.
+    const interrupted=proxy.request("tool",{operation:"exec",command:"printf x >> run-once.txt; sleep 30"});
+    const interruptedCheck=expect(interrupted).rejects.toThrow(/結果|再確認/);
+    await expect.poll(async()=>readFile(join(remote,"run-once.txt"),"utf8")).toBe("x");bridge!.destroy();await interruptedCheck;
+    await withSession(ao,store,async c=>{await expect.poll(async()=> (await c.request("machine.list",{})).machines[0]?.state,{timeout:15000}).toBe("online");});
+    await expect(proxy.request("tool",{operation:"inspect"})).resolves.toMatchObject({root:remote});
+    expect(await readFile(join(remote,"run-once.txt"),"utf8")).toBe("x");
     // Explicit binary exchange is the sole operation that touches operator files.
     const binary = randomBytes(170001), operatorSource = join(local, "material.xlsx"), operatorSaved = join(local, "result.xlsx");
     await writeFile(operatorSource, binary);
@@ -89,7 +109,7 @@ it.skipIf(process.platform === "win32")("B requests; A starts its own CLI and ro
       await expect(withSession(ao, store, c => c.request("work.agent_launch", { machineId: invite.machineId, requestId: duplicate.id }))).rejects.toThrow(/起動済み/);
     }
     await withSession(bo, store, c => c.request("workspace.set_project_folder", { workspaceId: target.workspace.id, path: other }));
-    expect(await proxy.request("tool", { operation: "transfer", action: "download", sourcePath: "material.xlsx", destinationPath: join(local, "changed-project.xlsx") })).toMatchObject({ status: "failed" });
+    await expect(proxy.request("tool", { operation: "transfer", action: "download", sourcePath: "material.xlsx", destinationPath: join(local, "changed-project.xlsx") })).rejects.toThrow(/PC・PJ・元の依頼権限/);
     await expect(readFile(join(local, "changed-project.xlsx"))).rejects.toThrow();
     await expect(proxy.request("tool", { operation: "file", action: "read", path: "README.md" })).rejects.toThrow();
     await expect(proxy.request("tool", { operation: "exec", command: "touch should-not-exist" })).rejects.toThrow();

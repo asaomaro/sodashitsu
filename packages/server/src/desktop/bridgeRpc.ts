@@ -1,6 +1,10 @@
 import { RpcError, type MethodName, type ParamsOf, type ResultOf } from "@sodashitsu/protocol";
 import type { LinkChannel } from "../machine/MachineLink.js";
 
+export class DesktopBridgeError extends Error {
+  constructor(readonly reason: "rejected" | "timeout" | "closed", message: string) { super(message); }
+}
+
 /** Owns one existing machine channel until the desktop share ends. Closing it revokes B's work. */
 export class DesktopBridgeRpc {
   private counter = 0;
@@ -30,7 +34,7 @@ export class DesktopBridgeRpc {
         if (!p) return;
         clearTimeout(p.timer);
         this.pending.delete(msg.id);
-        if (msg.error) p.reject(new Error(`リモートの${this.options.label ?? "デスクトップ"}要求が拒否されました`));
+        if (msg.error) p.reject(new DesktopBridgeError("rejected", `リモートの${this.options.label ?? "デスクトップ"}要求が拒否されました`));
         else p.resolve(msg.result);
       } catch {
         this.close();
@@ -50,7 +54,7 @@ export class DesktopBridgeRpc {
       const id = String(++this.counter);
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`${this.options.label ?? "デスクトップ"}要求が時間切れになりました`));
+        reject(new DesktopBridgeError("timeout", `${this.options.label ?? "デスクトップ"}要求が時間切れになりました`));
         if (this.options.closeOnTimeout !== false) this.close();
       }, Math.max(1, Math.min(35000, opts?.timeoutMs ?? 10000)));
       timer.unref();
@@ -58,6 +62,7 @@ export class DesktopBridgeRpc {
       this.channel.sendText(JSON.stringify({ id, method, params }));
     });
   }
+  isClosed(): boolean { return this.closed; }
   close(): void {
     this.finish();
     this.channel.close(1000, "desktop stopped");
@@ -67,7 +72,7 @@ export class DesktopBridgeRpc {
     this.closed = true;
     for (const p of this.pending.values()) {
       clearTimeout(p.timer);
-      p.reject(new Error("マシンが切断されました"));
+      p.reject(new DesktopBridgeError("closed", "マシンが切断されました"));
     }
     this.pending.clear();
   }

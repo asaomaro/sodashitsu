@@ -68,7 +68,7 @@ export class WorkAgentRequests {
     this.list(); const e = this.entries.get(id);
     if (!e || e.claim !== claim || e.request.state !== "claimed") throw new RpcError("not_found", "起動要求がありません");
     e.request.state = state;
-    if (state === "launched" && e.plugin) e.request.expiresAt = this.now() + 24 * 60 * 60 * 1000;
+    if (state === "launched") e.request.expiresAt = this.now() + 24 * 60 * 60 * 1000;
     return {};
   }
   reject(id: string) {

@@ -1,3 +1,4 @@
+import { workAgentProxyCloseMessage } from "@sodashitsu/protocol";
 import { createConnection, type Socket } from "node:net";
 import { lstat, readFile } from "node:fs/promises";
 import { StringDecoder } from "node:string_decoder";
@@ -22,12 +23,15 @@ export class WorkAgentClient {
   private id = 0;
   private readonly pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void; timer: ReturnType<typeof setTimeout> }>();
   private closed = false;
+  private closeMessage: string | undefined;
   private constructor(private readonly socket: Socket, private readonly secret: string) {
     socket.on("error", () => this.close()); socket.on("close", () => this.close());
     void (async () => {
       try {
         for await (const line of workAgentLines(socket)) {
-          const m = JSON.parse(line), p = this.pending.get(m.id);
+          const m = JSON.parse(line);
+          if (m.type === "proxy_closed") { this.closeMessage = workAgentProxyCloseMessage(m.reason); this.close(); return; }
+          const p = this.pending.get(m.id);
           if (!p) continue;
           this.pending.delete(m.id); clearTimeout(p.timer);
           if (m.error) p.reject(Error(String(m.error))); else p.resolve(m.result);
@@ -50,19 +54,23 @@ export class WorkAgentClient {
     return new WorkAgentClient(socket, p.secret);
   }
   request<T = unknown>(operation: "describe" | "tool" | "ask" | "close" | "started" | "cancel", tool?: unknown): Promise<T> {
-    if (this.closed) return Promise.reject(Error("作業先proxyが終了しました。ローカルでは代行しません"));
+    if (this.closed) return Promise.reject(Error(this.closeMessage ?? "作業先proxyが終了しました。ローカルでは代行しません"));
     return new Promise<T>((resolve, reject) => {
       const id = ++this.id;
       const line = JSON.stringify({ id, secret: this.secret, operation, ...(tool === undefined ? {} : { tool }) }) + "\n";
       if (Buffer.byteLength(line) > 4 * 1024 * 1024) { reject(Error("work agent message exceeds 4MiB")); return; }
-      const timer = setTimeout(() => { this.pending.delete(id); reject(Error("remote operation timed out; do not retry an uncertain write")); this.close(); }, 320000);
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(Error("remote operation timed out; result unknown; do not retry an uncertain write. proxy接続は維持しています。読み取りで状態を確認してください"));
+        if (operation !== "cancel" && !this.closed) void this.request("cancel", { reason: "operation_timeout" }).catch(() => {});
+      }, 320000);
       this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
       this.socket.write(line);
     });
   }
   close() {
     if (this.closed) return; this.closed = true; this.socket.destroy();
-    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(Error("作業先proxyが切断されました。ローカルでは代行しません")); }
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(Error(this.closeMessage ?? "作業先proxyが切断されました。ローカルでは代行しません")); }
     this.pending.clear();
   }
 }

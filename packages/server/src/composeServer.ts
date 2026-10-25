@@ -755,14 +755,14 @@ export async function composeServer(
     try { await rpc.hello(); } catch (e) { rpc.close(); throw e; }
     return {
       request: rpc.request.bind(rpc), close: () => { gone = true; rpc.close(); },
-      valid: () => { const current = machines.route(machine); return !gone && current.kind === "ok" && current.link === route.link; },
+      valid: () => { const current = machines.route(machine); return !gone && !rpc.isClosed() && current.kind === "ok" && current.link === route.link; },
     };
   }, asks, async (paneId,instanceId,text,signal,guards) => {
     const result=await surface.invoke({clientId:"work-agent",sink:{clientId:"work-agent",bufferedAmount:0,sendOutput(){},sendSnapshot(){}},signal,
       agentPromptPrepare:guards.prepare,
       agentPromptGuard:agent=>{guards.check();if(agent.state!=="idle")throw new RpcError("agent_pane_busy","担当の入力待ちを確認できません");}},"agent.prompt",{paneId,instanceId,text});
     if(!result.ok)throw new RpcError(result.error.code,result.error.message);
-  });
+  }, {logger});
   registerAllMethods(surface, {
     workAgentRequests,
     workAgentLauncher,
@@ -921,7 +921,7 @@ export async function composeServer(
       await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
     },
     closeClients: () => {
-      workAgentLauncher.close();
+      workAgentLauncher.close("server_restarting");
       exec.dispose();
       workTransfers.dispose();
       desktopRelay.closeShares();

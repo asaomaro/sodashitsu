@@ -24,6 +24,9 @@ it("freezes the source pane project; claims once and rejects changed identity or
     await rename(folder, folder + "-old"); await mkdir(folder);
     await expect(requests.claim(changed.id)).rejects.toThrow(/実体/);
     now += 600001;
+    expect(requests.list().requests.map(r=>r.id)).toEqual([r.id]);
+    await expect(requests.check(r.id,accepted.value.claim)).rejects.toThrow(/実体/);
+    now+=24*60*60*1000;
     expect(requests.list().requests).toEqual([]);
     await expect(requests.claim(changed.id)).rejects.toThrow(/期限/);
     await expect(requests.create({ paneId, agentKind: "claude", args: ["mcp", "add", "x"] })).rejects.toThrow();
@@ -105,4 +108,14 @@ it("coalesces concurrent instruction retries even when the first is already deli
     scope.mockImplementationOnce(async p=>{const value=await original(p);now+=25*60*60*1000;return value;});
     await expect(requests.plugin(request.id,claim,{action:"operations"})).rejects.toThrow();expect(invoke).not.toHaveBeenCalled();
   }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+it("retains a launched non-plugin claim after ten minutes but expires it at 24 hours",async()=>{
+  let now=1000;const paneId=randomUUID(),workspaceId=randomUUID();
+  const work={inspect:async()=>({root:"/remote",identity:"a".repeat(64)}),scope:async()=>"/remote"} as unknown as WorkContext;
+  const requests=new WorkAgentRequests(work,()=>({workspaceId}),()=>"/remote",()=>now);
+  const request=await requests.create({paneId,agentKind:"claude",args:[]});
+  const {claim}=await requests.claim(request.id);requests.finish(request.id,claim,"launched");
+  now+=600001;await expect(requests.check(request.id,claim)).resolves.toEqual({});
+  now+=24*60*60*1000;await expect(requests.check(request.id,claim)).rejects.toThrow();
 });
