@@ -1,0 +1,9 @@
+# マウス移動による入力経路の混雑を抑える
+
+リモートデスクトップの改善を再開する指示。前回のnative入力優先化は反映済みだが、現時点の利用者の再計測は未取得。ブラウザはpointermoveごとに入力RPC・ACKを発生させるため、同じ描画周期内の古い座標が後続のキーやクリックより先に並ぶ。
+
+DesktopInputSenderでmoveだけをrequestAnimationFrameごとに最新1件へ集約する。最大1座標・1予約を保持し、ドラッグ中も同様。すべての非move入力では保留moveを同期flushしてからその入力を送る。ボタンのdown/up・キー・wheel・textは集約しない。focus解除、release、control通知、agent_state、stop/reconnectでは予約moveを破棄する。送信直前にも共有と権限を検査する。
+
+中継・helper・public protocol変更なし。通常画像・native動画・認証画面に共通のブラウザ処理。ブラウザ描画周期までの待ちをmoveに加えるため、単独moveの応答時間を短縮するという主張はしない。通信遅延や描画遅延の改善とも区別する。既存の16KiB送出バッファ制限は維持する。
+
+単体試験で1000件burst、drag/全ボタン・キー等の順序、取消と再開を確認。実ブラウザの送信フレームで200件burst→最新move+keydown+keyupの3件、blur後の取消と既存IME/Esc/全ボタンを確認する。修正のみを外したnegativeを実行し、生出力を記録する。最終差分は独立コンテキストでレビューする。
