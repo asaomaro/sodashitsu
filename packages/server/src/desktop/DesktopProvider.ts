@@ -18,6 +18,7 @@ import {
   RpcError,
 } from "@sodashitsu/protocol";
 
+import {DesktopNativeVideo} from "./DesktopNativeVideo.js";
 import { DesktopCompanionHub } from "./DesktopCompanion.js";
 import { DesktopUnlockLease } from "./DesktopUnlockLease.js";
 
@@ -37,6 +38,7 @@ export interface DesktopProviderConfig {
   allowInput: boolean;
   allowClipboard?: boolean;
   allowMedia?: boolean;
+  allowNativeVideo?: boolean;
   allowDisplayResize?: boolean;
   allowUnlock?: boolean;
   unlockLeaseCommand?: string[];
@@ -44,6 +46,7 @@ export interface DesktopProviderConfig {
   origins(): string[];
 }
 type Share = {
+  native?: DesktopNativeVideo;
   chain: DesktopFrameChain;
   owner: string;
   allowClipboard: boolean;
@@ -102,6 +105,7 @@ export class DesktopProvider {
       imageSettings: true,
       imeKeys: true,
       extendedInput: true,
+      nativeVideo: true,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -174,6 +178,7 @@ export class DesktopProvider {
       frameAt: 0,
       started: performance.now(),
       timer: setInterval(() => {
+        s.native?.tick();
         if (
           performance.now() - s.lastSeen > 12000 ||
           (performance.now() - s.started > 15000 && !s.ready)
@@ -216,6 +221,14 @@ export class DesktopProvider {
             return;
           }
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
+          if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
+          if(m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
+            if(!s.ready||s.secureDesktop){this.send(s,{type:"media_unavailable"});return;}
+            else {
+              if(m.type==="media"&&m.settings?.transport==="native")this.companion.fromViewer(s,{type:"media",enabled:false});
+              if(s.native?.fromViewer(m))return;
+            }
+          }
           if (
             m.type === "media" ||
             m.type === "media_fallback" ||
@@ -377,6 +390,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
+              nativeVideo,
               image: appliedImage,
               allowClipboard,
               allowMedia,
@@ -385,8 +399,11 @@ export class DesktopProvider {
               ...legacyReady
             } = ready;
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
+            const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,send:value=>this.send(s,value),write:value=>this.write(s,value),buffered:()=>s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
+              ...(nativeEnabled?{nativeVideo:true}:{}),
               // Keep the existing viewer wire format; capture is a helper detail.
               backend: legacyReady.backend === "windows-dxgi" ? "windows-gdi" : legacyReady.backend,
               ...(s.imeKeys && imeKeys ? { imeKeys: true } : {}),
@@ -457,6 +474,8 @@ export class DesktopProvider {
             s.pending = s.seq;
             s.frameAt = performance.now();
             if (!this.send(s, packet)) return;
+          } else if (s.ready&&!s.secureDesktop&&s.native?.fromHelper(raw)) {
+            // Native video has its own bounded frame/draw ACK.
           } else if (raw.type === "clipboard_result" && s.ready) {
             const result = DesktopClipboardResult.parse(raw);
             if (s.clipboardPending.delete(result.id) && s.clipboardGranted) this.send(s, result);
@@ -480,6 +499,7 @@ export class DesktopProvider {
       type: "configure",
       options,
       captureBackends: ["dxgi"],
+      allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       allowInput: cfg.allowInput,
       allowClipboard: cfg.allowClipboard === true,
       allowDisplayResize: cfg.allowDisplayResize === true,
@@ -510,6 +530,7 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    s.native?.stop();
     this.companion.end(s);
     s.clipboardGranted = false;
     s.clipboardPending.clear();

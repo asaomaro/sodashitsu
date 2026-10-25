@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   RemoteDesktopViewerMessage,
   DESKTOP_INPUT_PROTOCOL,
+  DESKTOP_NATIVE_VIDEO_PROTOCOL,
   isExtendedDesktopInput,
   DesktopFrameChain,
   DesktopReady,
@@ -34,7 +35,9 @@ class DesktopSetupRequired extends Error {}
 type Viewer = {
   chain: DesktopFrameChain;
   features?: boolean;
-  media?: { id: string; generation: number; seq: number };
+  nativeVideoRequested: boolean;
+  nativeVideo?: boolean;
+  media?: { id: string; generation: number; seq: number; native?:boolean; pending?:number };
   snapshot?: {
     promise: Promise<void>;
     resolve(): void;
@@ -164,7 +167,7 @@ export class DesktopRelay {
     }
     this.server.handleUpgrade(req, socket, head, (ws) => {
       ws.on("error", () => ws.terminate());
-      if (origin !== undefined) this.viewer(ws, sessionId, origin);
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -174,7 +177,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -238,6 +241,7 @@ export class DesktopRelay {
             }
           }),
       },
+      nativeVideoRequested,
       inputWaits: new Map(),
       ws,
       sessionId,
@@ -307,6 +311,10 @@ export class DesktopRelay {
             });
             this.stop(v);
           });
+        } else if(m.type==="native_video_ack") {
+          if(v.nativeVideo&&v.media?.native&&v.provider&&m.id===v.media.id&&m.generation===v.media.generation) {
+            if(m.seq!==v.media.pending)throw new Error("Native ACK order");v.media.pending=0;this.send(v.provider,m);
+          }
         } else if (
           m.type === "media" ||
           m.type === "media_fallback" ||
@@ -317,6 +325,7 @@ export class DesktopRelay {
           m.type === "clipboard"
         ) {
           if (v.features && v.ready && v.provider && (!v.secureDesktop || m.type === "quality")) {
+            if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&!v.nativeVideo)return;
             if (m.type === "rtc_signal" && m.signal.kind === "offer") throw new Error();
             if (m.type === "media" && !m.enabled) delete v.media;
             this.send(v.provider, m);
@@ -414,6 +423,7 @@ export class DesktopRelay {
         imageSettings: z.boolean().optional(),
         imeKeys: z.boolean().optional(),
         extendedInput: z.boolean().optional(),
+        nativeVideo: z.boolean().optional(),
         features: z.boolean().optional(),
         displayResize: z.boolean().optional(),
       })
@@ -430,6 +440,8 @@ export class DesktopRelay {
     const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
     delete legacyOptions.imeKeys;
     delete legacyOptions.extendedInput;
+    delete legacyOptions.nativeVideo;
+    v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
     // Capability requires both the viewer opt-in and B's current RPC schema.
     v.imeKeysNegotiated = v.imeKeysRequested && caps.imeKeys === true;
     v.extendedInputNegotiated = v.extendedInputRequested && caps.extendedInput === true;
@@ -441,6 +453,7 @@ export class DesktopRelay {
       throw new Error("B requires an update for image settings");
     const negotiated = {
       ...legacyOptions,
+      ...(v.nativeVideo?{nativeVideo:true as const}:{}),
       ...(v.imeKeysNegotiated ? { imeKeys: true as const } : {}),
       ...(v.extendedInputNegotiated ? { extendedInput: true as const } : {}),
       ...(display ? { display } : {}),
@@ -505,7 +518,9 @@ export class DesktopRelay {
           const chunk = decodeDesktopMediaChunk(bytes);
           if (chunk.generation !== v.media.generation) return;
           if (chunk.seq !== v.media.seq + 1) throw new Error();
+          if(v.media.native&&v.media.pending)throw new Error("Native video backlog");
           v.media.seq = chunk.seq;
+          if(v.media.native)v.media.pending=chunk.seq;
           if (v.ws.bufferedAmount > 512 * 1024) {
             if (v.provider) this.send(v.provider, { type: "media", enabled: false });
             delete v.media;
@@ -557,8 +572,9 @@ export class DesktopRelay {
               if (ready.allowMedia || ready.allowClipboard || ready.display) throw new Error();
             }
             v.since = performance.now();
-            const { imeKeys, extendedInput, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            v.nativeVideo=v.nativeVideo===true&&ready.nativeVideo===true&&!v.secureDesktop;
+            const { imeKeys, extendedInput, nativeVideo, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.nativeVideo?{nativeVideo:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);
@@ -576,14 +592,17 @@ export class DesktopRelay {
             this.stop(v);
           } else if (msg.type === "media_status" && v.features && !v.secureDesktop) {
             const status = DesktopMediaStatus.parse(msg);
+            if(status.state==="native"&&!v.nativeVideo)throw new Error();
             if (status.state === "images") delete v.media;
             else if (!v.media || v.media.id !== status.id)
               v.media = { id: status.id, generation: 0, seq: 0 };
+            if(v.media&&status.state==="native")v.media.native=true;
             this.send(v.ws, status);
           } else if (msg.type === "media_stream" && v.media) {
             const stream = DesktopMediaStream.parse(msg);
             if (stream.id !== v.media.id || stream.generation <= v.media.generation)
               throw new Error();
+            if((stream.mime==="video/h264")!==!!v.media.native)throw new Error();
             v.media.generation = stream.generation;
             v.media.seq = 0;
             this.send(v.ws, stream);

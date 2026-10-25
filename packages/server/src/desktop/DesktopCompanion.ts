@@ -166,8 +166,9 @@ export class DesktopCompanionHub {
     if (m.type === "media") {
       this.stopMedia("stopped");
       if (!m.enabled) return true;
-      const settings = DesktopMediaSettings.parse(m.settings ?? {}),
-        id = randomUUID();
+      const settings = DesktopMediaSettings.parse(m.settings ?? {});
+      if(settings.transport==="native")return false;
+      const id = randomUUID();
       this.request = {
         id,
         settings,

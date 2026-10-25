@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DesktopMediaRequest,
+  DesktopNativeVideoAck,
   DesktopMediaSignal,
   DesktopMediaFallback,
   DesktopMediaFeedback,
@@ -38,6 +39,7 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    nativeVideo: z.literal(true).optional(),
     display: DesktopDisplaySize.optional(),
   })
   .strict();
@@ -65,6 +67,7 @@ export function isExtendedDesktopInput(input: RemoteDesktopInput): boolean {
 }
 export const RemoteDesktopViewerMessage = z.union([
   DesktopMediaRequest,
+  DesktopNativeVideoAck,
   DesktopMediaSignal,
   DesktopMediaFallback,
   DesktopMediaFeedback,
@@ -108,6 +111,7 @@ export const DesktopReady = z
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
+    nativeVideo: z.boolean().optional(),
     allowClipboard: z.boolean().optional(),
     allowMedia: z.boolean().optional(),
     dynamicQuality: z.boolean().optional(),
@@ -214,6 +218,7 @@ export interface DesktopResults {
     imageSettings?: boolean;
     imeKeys?: boolean;
     extendedInput?: boolean;
+    nativeVideo?: boolean;
     features?: boolean;
     displayResize?: boolean;
   };

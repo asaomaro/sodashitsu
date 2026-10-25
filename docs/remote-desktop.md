@@ -251,6 +251,22 @@ soda serve
 
 画像配信は変更箇所だけ送る独自プロトコルです。VNC/RFB互換やnoVNCではありません。追加の動画共有ではブラウザのWebRTC、またはVP8/OpusのWebM中継を使います（後述）。CopyRectはありません。実装は[Windowsの比較・圧縮](../scripts/remote-desktop/WindowsDesktopHost.cs)、[パケット検査](../packages/protocol/src/desktop.ts)、[ブラウザ合成](../packages/web/src/desktop/render.ts)を参照してください。
 
+## ネイティブのGPU H.264動画
+
+通常画面の［動画・音声］で、経路［GPU H.264（音声なし）］を選び［動画共有を依頼］を押すと、Windows補助プログラムがハードウェアで映像を圧縮します。この経路はBのブラウザや`/desktop-host`の追加共有を必要としません。ブラウザのWebCodecsと、新しいA/B/helperが揃うときだけ選択肢が出ます。ハードウェア対応は開始時に確認し、利用できない場合は画像配信へ戻って知らせます。従来の画像配信が既定です。音声が必要な場合は既存のWebRTC／中継を使ってください。
+
+同梱helperでは、B側の既存のデスクトップ共有許可と、認証済みviewerからの明示開始が必要です。独自helperコマンドでは従来の`SODA_DESKTOP_ALLOW_MEDIA=1`に加え、新しいhelper側の対応が必要です。ロック画面では常に無効です。旧版A/B/helperの組み合わせでは新機能を提示せず、画像共有を続けます。接続元と接続先の両方をpull/build/handoffして、ブラウザを再読み込みしてください。
+
+ビットレートは初期2500kbpsの目標値で、瞬間的な上限保証ではありません。別途JPEG/PNG画像も1fpsで流してエージェントの画像取得と入力鮮度を維持するため、総帯域はその分を含みます。動画の描画実測FPSを表示し、従来のFPS・圧縮時間は画像側の計測として表示します。FPS上限は既存の設定値（最大30）のままです。native動画の動的bitrate調整はまだ行いません。
+
+現在はDXGIで取得・GPU縮小後、CPUへ読み戻してBT.709のNV12へ変換し、Media Foundationのhardware-only MFTでH.264圧縮します。CPU encoderへ暗黙に切り替えません。GPU内でNV12へ変換して直接encoderへ渡すzero-copy方式は後続です。偶数の画素寸法が必要で、画面構成やドライバーによって対応寸法は異なります。［色］設定は従来の画像へ適用し、native動画はフルカラーです。カーソルは現状の標準矢印近似です。
+
+送信は動画1枚ごとに復号・描画ACKを待ち、参照画像が必要なH.264 deltaを間引かず、混雑時は画像配信へ戻します。復号非対応・失敗、動画の更新停止、通常画面からの遷移でも動画を停止し、保持入力を解放します。APIが戻る範囲のエラーは画像へ復帰しますが、ドライバーAPI自体が応答しない場合は既存helper watchdogで共有自体が終了する場合があります。
+
+Windowsで`powershell.exe -NoProfile -File scripts/remote-desktop/validate-h264.ps1`を実行すると、実画面を取得せず、生成画像だけでNV12変換とhardware H.264出力を確認できます。[生成fixtureと実ブラウザ検証](../.aidev/works/20261025-desktop-native-h264/test-result.md)に条件を記録します。
+
+明示的な性能測定は、信頼するhelperのコマンド配列をJSONで`SODA_DESKTOP_BENCH_COMMAND`へ指定し、`node scripts/remote-desktop/benchmark-native-video.mjs --width 1280 --fps 30 --frames 180 --bitrate 2500`を実行します。実画面→A/B→製品canvasを測り、入力は要求せず、スクリーンショットやtraceを保存しません。`--ack-delay-ms 100`で描画ACKへの追加待ちも指定できます。動画帯域はJPEG画像を含まず、CPU/RSSは画像側のカウンターから広い区間を採る点に注意してください。出力は一時フォルダの`soda-desktop-native-video.json`です。通常デスクトップの取得guardが拒否した場合は測定できません。ロック解除などでガードを迂回することはありません。
+
 ## 通常画面のDXGI取得とGDIへの切り替え
 
 Bのサーバーからhelperへの内部configureで`captureBackends: ["dxgi"]`を提示した場合だけ、新helperがDXGIを試します。旧サーバー＋新helper、新サーバー＋旧helperはGDIで動作します。viewerへ出すbackend名は互換性のため`windows-gdi`のままで、実際のGPU利用を表す表示ではありません。native helper自身の初回readyは`windows-dxgi`または`windows-gdi`です。途中で取得に失敗した場合はGDIへ切り替えるため、初回readyは継続利用の保証ではありません。
@@ -273,7 +289,7 @@ DXGIのdirty/move rectanglesとカーソル形状はまだ利用しません。�
 
 - Bの共有は同時に1件。共有要求ごとに独立したmachineチャネルと一回限りの短命ticketを使います。他のブラウザ/タブに画像やticketをbroadcastしません。同じCookieの別接続でも自動配信されません。
 - Windows helperは非昇格の通常デスクトップのみを対象とします。ロック画面は上記の専用サービス経路だけを実験的に追加しています（実機未検証）。サインアウト後のログイン画面、UAC、昇格アプリ、無人ログイン、headless、DRM保護画面は対象外です。入力は[SendInput/UIPIの制約](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)を受けます。
-- x64の通常デスクトップはDXGI Desktop Duplicationで取得し、D3D11の線形サンプリングでGPU上で縮小してからCPUへ読み戻します。JPEG/PNG圧縮・差分転送・入力は従来の経路です。GPU動画エンコードではありません。初回のポインター更新のみ・画像未到着はそのフレームだけGDIを使い、有効なデスクトップ画像が届いてからDXGIへ移ります。回転画面、利用できないGPU/API、初期化・取得失敗はその接続中GDI `StretchBlt`へ戻します。ロック解除用のsecure desktopは常にGDIです。追加DLLやWindows SDKの導入は不要です。[Microsoft Desktop Duplication API](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api) / [StretchBlt](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchblt)
+- x64の通常デスクトップはDXGI Desktop Duplicationで取得し、D3D11の線形サンプリングでGPU上で縮小してからCPUへ読み戻します。JPEG/PNG圧縮・差分転送・入力は従来の経路です。画像経路自体はGPU動画エンコードではありません。追加のnative H.264は上記を参照してください。初回のポインター更新のみ・画像未到着はそのフレームだけGDIを使い、有効なデスクトップ画像が届いてからDXGIへ移ります。回転画面、利用できないGPU/API、初期化・取得失敗はその接続中GDI `StretchBlt`へ戻します。ロック解除用のsecure desktopは常にGDIです。追加DLLやWindows SDKの導入は不要です。[Microsoft Desktop Duplication API](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api) / [StretchBlt](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchblt)
 - 同一権限の通常のネイティブダイアログも取得対象になる設計ですが、実機互換性は未検証です。GPU描画や動画、cursor形状、混在DPI/複数モニター、日本語配列の記号/IME、アプリごとのUnicode入力は別途検証が必要です。カーソルは取得位置に標準矢印を描く近似です。
 - OSやブラウザが取る特殊キーをすべて転送できるとは限りません。通常共有にはCtrl+Alt+Delの送信ボタンはなく、許可済みのロック解除経路でのみ提供します。Esc1回は接続先へ送ります。修飾キーなしのEscを500ms以内に2回押すとローカルの操作解除になります。
 - マイク、ファイル転送、plugin operation、TUI画像表示、Linux/macOSのnative capture backendは含みません。クリップボード・音声・CLIは後述の追加許可が必要です。

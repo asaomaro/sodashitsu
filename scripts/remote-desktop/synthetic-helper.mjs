@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { createInterface } from "node:readline";
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 function crc32(bytes) {
@@ -99,6 +99,8 @@ function run() {
     sentVersion = -1,
     lastReport = 0,
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
+  const nativeAt=process.argv.indexOf("--native-fixture"),nativeFixture=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined;
+  let native;
   const allowInput = process.argv.includes("--allow-input");
   const markerAt = process.argv.indexOf("--unlock-marker");
   const unlockMarker = markerAt >= 0 ? process.argv[markerAt + 1] : undefined;
@@ -134,6 +136,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
           ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
           title: "Synthetic test source",
@@ -158,6 +161,11 @@ function run() {
         }
       } else if (m.type === "heartbeat") lastSeen = performance.now();
       else if (m.type === "ack" && m.seq === pending) pending = 0;
+      else if(m.type==="native_video") {
+        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,seq:0,pending:0,next:0,index:0,fps:m.fps};
+        else native=undefined;
+      }
+      else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending)native.pending=0;
       else if (m.type === "keyframe") {forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
       else if(m.type==="clipboard_control"){clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;}
@@ -187,6 +195,11 @@ function run() {
   });
   setInterval(() => {
     if (performance.now() - lastSeen > 8000) process.exit(0);
+    if(options&&native&&!native.pending&&performance.now()>=native.next) {
+      const packet=nativeFixture.packets[native.index++%nativeFixture.packets.length];
+      native.pending=++native.seq;native.next=performance.now()+1000/native.fps;
+      send({type:"native_frame",id:native.id,seq:native.seq,timestamp:native.seq*33333,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
+    }
     if (!options || lockCover || pending || performance.now() < next) return;
     const deltaTest = process.argv.includes("--delta-test"),
       stable = deltaTest || process.argv.includes("--static");
