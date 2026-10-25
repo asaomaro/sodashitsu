@@ -105,20 +105,24 @@ namespace SodaDesktopTests {
       // Cursor composition must never contaminate the retained desktop source.
       gpu.Invoke(capture,new object[]{actual,0,0,false});render.Invoke(capture,new object[]{g});Check(bitmap.GetPixel(width-1,height-1).ToArgb()==retained.ToArgb(),"GPU cursor changed retained desktop");
       bool rejected=false;try{gpu.Invoke(capture,new object[]{new byte[1],0,0,false});}catch(TargetInvocationException e){rejected=e.InnerException is ArgumentException;}Check(rejected,"Invalid GPU NV12 buffer accepted");
-      double ignored;Check(!capture.TryCaptureNv12(new byte[1],0,0,false,out ignored),"Invalid destination did not disable GPU conversion");
-      Check(!capture.TryCaptureNv12(actual,0,0,false,out ignored),"Disabled GPU conversion did not fall back");
-      render.Invoke(capture,new object[]{g});Check(bitmap.GetPixel(width-1,height-1).ToArgb()==retained.ToArgb(),"Fallback lost ordinary GPU capture");
       if(benchmark) {
        var timings=new List<double>();var cpu=new List<double>();
        for(int i=0;i<40;i++) {
-        var t=Stopwatch.StartNew();gpu.Invoke(capture,new object[]{actual,10,10,true});timings.Add(t.Elapsed.TotalMilliseconds);
-        t.Restart();render.Invoke(capture,new object[]{g});Cursors.Default.Draw(g,new Rectangle(10,10,16,24));
+        for(int pass=0;pass<2;pass++) {
+        bool onGpu=(i+pass)%2==0;var t=Stopwatch.StartNew();
+        if(onGpu){gpu.Invoke(capture,new object[]{actual,10,10,true});timings.Add(t.Elapsed.TotalMilliseconds);continue;}
+        render.Invoke(capture,new object[]{g});Cursors.Default.Draw(g,new Rectangle(10,10,16,24));
         var bits=bitmap.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format24bppRgb);
         try{for(int y=0;y<height;y++)Marshal.Copy(IntPtr.Add(bits.Scan0,y*bits.Stride),bgr,y*width*3,width*3);}finally{bitmap.UnlockBits(bits);}
         Reference(bgr,expected,width,height);cpu.Add(t.Elapsed.TotalMilliseconds);
+        }
        }
        Console.WriteLine(new JavaScriptSerializer().Serialize(new {source="GPU generated texture; scale/cursor/convert/readback; no capture, encoder or network",width,height,trials=40,gpuMeanMs=Mean(timings),gpuP95Ms=P95(timings),bitmapCpuMeanMs=Mean(cpu),bitmapCpuP95Ms=P95(cpu)}));
       }
+      // Failure checks come after timing, so shader recompilation is excluded.
+      double ignored;Check(!capture.TryCaptureNv12(new byte[1],0,0,false,out ignored),"Invalid destination did not disable GPU conversion");
+      Check(!capture.TryCaptureNv12(actual,0,0,false,out ignored),"Disabled GPU conversion did not fall back");
+      render.Invoke(capture,new object[]{g});Check(bitmap.GetPixel(width-1,height-1).ToArgb()==retained.ToArgb(),"Fallback lost ordinary GPU capture");
      }
     }finally{capture.Dispose();capture.Dispose();}
    }
