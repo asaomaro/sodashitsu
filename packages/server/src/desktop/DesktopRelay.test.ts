@@ -1,3 +1,4 @@
+import {DESKTOP_SHARED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_PROTECTED_PROTOCOL,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
 import { createServer } from "node:http";
@@ -27,14 +28,14 @@ const helper = fileURLToPath(
 );
 async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true, dxgi = false, nativeFixture = false, protectedConfig?:{mode?:"elevated-default"|"elevated-uac";allowed?:boolean;force?:boolean;expectEnv?:"0"|"1"}) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
-    record = join(dir, "inputs.jsonl"),endedMarker=join(dir,"scope-ended"),ledger=join(dir,"ledger.jsonl");
+    record = join(dir, "inputs.jsonl"),lifecycle=join(dir,"lifecycle.jsonl"),endedMarker=join(dir,"scope-ended"),ledger=join(dir,"ledger.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
   const web = createServer();
   await new Promise<void>((r) => web.listen(0, "127.0.0.1", r));
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const provider = new DesktopProvider(configured ? {
-    command: [process.execPath, helper, "--allow-input", "--record", record, ...(protectedConfig?["--protected-end-marker",endedMarker,"--input-ledger",ledger,...(protectedConfig.mode?["--protected-mode",protectedConfig.mode]:[]),...(protectedConfig.force?["--protected-unconditional"]:[]),...(protectedConfig.expectEnv?["--expect-elevated-request",protectedConfig.expectEnv]:[])]:[]), ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
+    command: [process.execPath, helper, "--allow-input", "--record", record,"--lifecycle-ledger",lifecycle, ...(protectedConfig?["--protected-end-marker",endedMarker,"--input-ledger",ledger,...(protectedConfig.mode?["--protected-mode",protectedConfig.mode]:[]),...(protectedConfig.force?["--protected-unconditional"]:[]),...(protectedConfig.expectEnv?["--expect-elevated-request",protectedConfig.expectEnv]:[])]:[]), ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
     allowInput,
     allowNativeVideo: nativeFixture,
     allowElevated:protectedConfig?.allowed===true,
@@ -121,8 +122,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" = false) {
-    const ws = new WebSocket(endpoint, ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" = false) {
+    const ws = new WebSocket(endpoint, ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -149,7 +150,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider,
     endpoint,
     origin,
-    record,endedMarker,ledger,
+    record,lifecycle,endedMarker,ledger,
     revoke: () => revoke("ok"),
     closed: () => closed,
     providerStartCalls: () => providerStartCalls,
@@ -877,4 +878,97 @@ it.each([false,true])("relay independently refuses normal/legacy secure ready fr
  cleanup.push(async()=>{socket?.terminate();mocked.mockRestore();});
  const viewer=await f.viewer("protected");viewer.send(protectedStart);
  await expect.poll(()=>viewer.ws.readyState).toBe(WebSocket.CLOSED);expect(viewer.messages.some(m=>m.type==="ready")).toBe(false);expect(viewer.frames).toHaveLength(0);
+});
+
+
+it("shares one capture across viewers with independent backpressure and exclusive input",async()=>{
+ const f=await fixture(),slow=await f.viewer("shared"),fast=await f.viewer("shared");
+ const options={width:320,fps:10,quality:65,features:true,sharedDesktop:true};
+ slow.send({type:"start",machineId:"remote",options});
+ await vi.waitFor(()=>expect(slow.frames.length).toBe(1));
+ fast.send({type:"start",machineId:"remote",options});
+ await vi.waitFor(()=>expect(fast.frames.length).toBe(1));
+ const first=decodeDesktopFrame(fast.frames[0]!).info.seq;
+ fast.send({type:"ack",seq:first});
+ await vi.waitFor(()=>expect(fast.frames.length).toBeGreaterThan(1));
+ expect(slow.frames).toHaveLength(1);
+ expect((await readFile(f.lifecycle,"utf8")).trim().split("\n").map(line=>JSON.parse(line)).filter(m=>m.type==="spawn")).toHaveLength(1);
+ fast.send({type:"control",enabled:true});await vi.waitFor(()=>expect(fast.messages.at(-1)).toMatchObject({type:"control",enabled:true}));
+ slow.send({type:"control",enabled:true});await vi.waitFor(()=>expect(slow.messages.at(-1)).toMatchObject({type:"control",enabled:false}));
+ slow.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(slow.frames[0]!).info.seq,input:{kind:"key",code:"KeyB",down:true}});
+ fast.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(fast.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ await vi.waitFor(()=>expect(fast.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true));
+ expect(await readFile(f.record,"utf8")).toContain('"code":"KeyA"');expect(await readFile(f.record,"utf8")).not.toContain('"code":"KeyB"');
+ fast.send({type:"stop"});await vi.waitFor(()=>expect(fast.ws.readyState).toBe(WebSocket.CLOSED));
+ slow.send({type:"ack",seq:decodeDesktopFrame(slow.frames[0]!).info.seq});
+ await vi.waitFor(()=>expect(slow.frames.length).toBeGreaterThan(1));
+ slow.send({type:"control",enabled:true});await vi.waitFor(()=>expect(slow.messages.at(-1)).toMatchObject({type:"control",enabled:true}));
+ slow.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(slow.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyC",down:true}});
+ await vi.waitFor(()=>expect(slow.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true));
+ const pid=JSON.parse((await readFile(f.lifecycle,"utf8")).trim()).pid as number;
+ expect(()=>process.kill(pid,0)).not.toThrow();
+ slow.send({type:"stop"});await vi.waitFor(()=>expect(slow.ws.readyState).toBe(WebSocket.CLOSED));
+ await vi.waitFor(()=>{let gone=false;try{process.kill(pid,0);}catch{gone=true;}expect(gone).toBe(true);});
+});
+
+it("rejects a mismatched shared source without ending the existing viewer",async()=>{
+ const f=await fixture(),a=await f.viewer("shared"),b=await f.viewer("shared");
+ const options={width:320,fps:10,quality:65,features:true,sharedDesktop:true};
+ a.send({type:"start",machineId:"remote",options});await vi.waitFor(()=>expect(a.frames.length).toBe(1));
+ b.send({type:"start",machineId:"remote",options:{...options,width:640}});await vi.waitFor(()=>expect(b.ws.readyState).toBe(WebSocket.CLOSED));
+ expect(b.frames).toHaveLength(0);expect(a.ws.readyState).toBe(WebSocket.OPEN);
+ a.send({type:"ack",seq:decodeDesktopFrame(a.frames[0]!).info.seq});await vi.waitFor(()=>expect(a.frames.length).toBeGreaterThan(1));
+});
+
+it("requires the new viewer protocol and B capability before sending sharedDesktop",async()=>{
+ for(const legacy of [false,true]){
+  const f=await fixture(true,legacy),v=await f.viewer(legacy?"shared":false);
+  v.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:320,fps:10,quality:65,features:true}});
+  await vi.waitFor(()=>expect(v.ws.readyState).toBe(WebSocket.CLOSED));
+  expect(v.frames).toHaveLength(0);expect(f.startRequests).toHaveLength(0);
+ }
+});
+
+it("does not expose a locked source through the ordinary shared capture path",async()=>{
+ const f=await fixture(true,false,true,true),v=await f.viewer("shared");
+ v.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:320,fps:10,quality:65,features:true}});
+ await vi.waitFor(()=>expect(v.ws.readyState).toBe(WebSocket.CLOSED));expect(v.frames).toHaveLength(0);expect(v.messages.some(m=>m.type==="ready")).toBe(false);
+});
+
+
+it("keeps a new shared agent grant when the prior release ACK arrives after attach",async()=>{
+ const f=await fixture(),viewer=await f.viewer("shared");
+ viewer.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:320,fps:10,quality:65,features:true}});
+ await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));
+ const share=[...(f.provider as unknown as {shared:Set<{ws:WebSocket}>}).shared][0]!;
+ const send=share.ws.send.bind(share.ws),responses:string[]=[];
+ const spy=vi.spyOn(share.ws,"send").mockImplementation((data:any,...args:any[])=>{
+  if(typeof data==="string"&&JSON.parse(data).type==="control")responses.push(data);
+  else (send as any)(data,...args);
+ });
+ try{
+  viewer.send({type:"agent_grant",enabled:true});await vi.waitFor(()=>expect(viewer.messages.some(m=>m.type==="agent_ticket")).toBe(true));
+  const ticket=viewer.messages.find(m=>m.type==="agent_ticket")!.ticket as string;
+  const attached=f.relay.agents.attach("shared-agent",ticket);
+  await vi.waitFor(()=>expect(responses).toHaveLength(2));
+  spy.mockRestore();for(const response of responses)send(response);
+  await vi.waitFor(()=>expect(viewer.messages.filter(m=>m.type==="control")).toHaveLength(2));
+  expect(viewer.messages.filter(m=>m.type==="agent_state").at(-1)).toMatchObject({active:true});
+  expect(f.relay.agents.observe("shared-agent",attached.leaseId)).toMatchObject({frameSeq:1});
+ }finally{spy.mockRestore();}
+});
+
+
+it("ends a shared generation if an agent control request cannot be sent",async()=>{
+ const f=await fixture(),viewer=await f.viewer("shared");
+ viewer.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:320,fps:10,quality:65,features:true}});
+ await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));
+ const relay=f.relay as unknown as {viewers:Set<{provider:WebSocket;controlRequests?:boolean[]}>;send(ws:WebSocket,value:any):boolean};
+ const v=[...relay.viewers][0]!,send=relay.send.bind(relay);
+ const spy=vi.spyOn(relay,"send").mockImplementation((ws,value)=>ws===v.provider&&value.type==="control"?false:send(ws,value));
+ try{
+  viewer.send({type:"agent_grant",enabled:true});
+  await vi.waitFor(()=>expect(viewer.ws.readyState).toBe(WebSocket.CLOSED));
+  expect(relay.viewers.size).toBe(0);expect(v.controlRequests).toBeUndefined();
+ }finally{spy.mockRestore();}
 });

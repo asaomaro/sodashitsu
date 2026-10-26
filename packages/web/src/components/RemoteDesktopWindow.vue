@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
+import {DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
 
 import "./viewportMaximize.css";
@@ -57,7 +57,7 @@ const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
-const elevatedScreen=ref(false);
+const elevatedScreen=ref(false), sharedScreen=ref(false);
 const lockScreenCover = ref(false);
 const imeKeys = ref(false);
 const extendedInput = ref(false);
@@ -156,8 +156,9 @@ const mediaState = ref("images"),
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>();
 const virtualScreen=ref(false),virtualActive=ref(false);
-function changeVirtualScreen(){if(virtualScreen.value)elevatedScreen.value=false;monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
-function changeElevatedScreen(){if(elevatedScreen.value)virtualScreen.value=false;monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeSharedScreen(){if(sharedScreen.value){elevatedScreen.value=false;virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
@@ -504,7 +505,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -513,7 +514,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(sharedScreen.value?{sharedDesktop:true}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -1042,6 +1043,8 @@ onBeforeUnmount(() => {
           ]
         }}
       </p>
+      <label><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
+      <p v-if="sharedScreen" data-desktop-shared>通常画面の画像配信です。同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。動画・音声・クリップボード・解像度変更は利用できません。</p>
       <label><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
@@ -1211,7 +1214,7 @@ onBeforeUnmount(() => {
         <label
           ><input
             v-model="maximumDisplay"
-            :disabled="elevatedScreen"
+            :disabled="elevatedScreen || sharedScreen"
             type="checkbox"
             @change="toggleDisplay"
           />接続先を最大解像度にする</label
