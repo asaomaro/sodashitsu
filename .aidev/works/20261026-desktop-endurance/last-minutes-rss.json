@@ -1,0 +1,275 @@
+{
+  "scope": "Last minutes only; test worker combines both A/B, codec, Playwright instrumentation. Not separate production server RSS. Linux /proc status KiB.",
+  "samples": [
+    {
+      "utc": "2026-10-26T02:26:04.405382+00:00",
+      "sampleElapsedMs": 0,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "518652 kB",
+        "VmHWM": "518652 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:26:24.405907+00:00",
+      "sampleElapsedMs": 20001,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "518652 kB",
+        "VmHWM": "518652 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:26:44.407261+00:00",
+      "sampleElapsedMs": 40002,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519420 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:27:04.408059+00:00",
+      "sampleElapsedMs": 60003,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519420 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:27:24.408895+00:00",
+      "sampleElapsedMs": 80004,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519420 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:27:44.411122+00:00",
+      "sampleElapsedMs": 100006,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519804 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:28:04.414382+00:00",
+      "sampleElapsedMs": 120009,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519804 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:28:24.415439+00:00",
+      "sampleElapsedMs": 140010,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519804 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:28:44.416682+00:00",
+      "sampleElapsedMs": 160011,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519804 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:29:04.417586+00:00",
+      "sampleElapsedMs": 180012,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519420 kB",
+        "VmHWM": "519804 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:29:24.418439+00:00",
+      "sampleElapsedMs": 200013,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "519804 kB",
+        "VmHWM": "519804 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:29:44.419097+00:00",
+      "sampleElapsedMs": 220014,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "520380 kB",
+        "VmHWM": "520380 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:30:04.419880+00:00",
+      "sampleElapsedMs": 240015,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "520380 kB",
+        "VmHWM": "520380 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:30:24.420998+00:00",
+      "sampleElapsedMs": 260016,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "521148 kB",
+        "VmHWM": "521148 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:30:44.421695+00:00",
+      "sampleElapsedMs": 280016,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "521340 kB",
+        "VmHWM": "521340 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:31:04.422568+00:00",
+      "sampleElapsedMs": 300017,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "521532 kB",
+        "VmHWM": "521532 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:31:24.423542+00:00",
+      "sampleElapsedMs": 320018,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "521532 kB",
+        "VmHWM": "521532 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:31:44.424311+00:00",
+      "sampleElapsedMs": 340019,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "521532 kB",
+        "VmHWM": "521532 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:32:04.425058+00:00",
+      "sampleElapsedMs": 360020,
+      "generated_helper": {
+        "VmRSS": "68772 kB",
+        "VmHWM": "68772 kB",
+        "Threads": "7"
+      },
+      "test_worker_with_A_and_B": {
+        "VmRSS": "522492 kB",
+        "VmHWM": "522492 kB",
+        "Threads": "13"
+      }
+    },
+    {
+      "utc": "2026-10-26T02:32:24.425838+00:00",
+      "sampleElapsedMs": 380020
+    }
+  ]
+}

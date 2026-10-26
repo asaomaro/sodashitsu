@@ -154,6 +154,7 @@ Windowsの補助プログラムを終了すると、そのために起動したl
 | `packages/server/src/desktop/DesktopRelay.ts` | Aで共有接続を中継し、操作権と画面切り替えを管理する。ビルド後にサーバへ反映する |
 | `packages/server/src/desktop/unlockFailure.ts` | ロック画面の終了理由と再接続可否を判定する。ビルド対象の実装ファイル |
 | `scripts/remote-desktop/windows-helper.ps1` | Windows helperの入口。同じフォルダのHost/UnlockのCSを起動時に読み、コンパイルする |
+| `scripts/remote-desktop/WindowsDesktopAudio.cs` | 通常画面の要求時システム音声。PowerShellが追加コンパイルするため同じフォルダに残す。認証画面サービスへの追加は不要 |
 | `scripts/remote-desktop/WindowsDesktopHost.cs` | 通常画面の取得と入力。上のPowerShellと同じフォルダに残す |
 | `scripts/remote-desktop/WindowsDesktopUnlock.cs` | ロック画面の判定、非撮影の入口、専用サービスとの通信。上のPowerShellと同じフォルダに残す |
 | `packages/server/src/machine/DelegationPairing.ts` | BからAへの接続申請。共有前のmachine接続に使う。ビルド対象の実装ファイル |
@@ -281,7 +282,7 @@ GPU動画でシステム音声を使うには、新しいviewer・A/B/helper、W
 
 Windowsの既定の再生デバイスからWASAPI loopbackで取得し、48kHzステレオのOpusで送ります。PCMは所有者と接続PIDを検証するローカル専用パイプで扱います。UDPでは音声専用の再送なしchannel、WSSでは動画用接続を使い、音声の待ちを制限します。欠落した音声は破棄し、溜まった音声を後から再生しません。音声だけが利用できなくなった場合も映像は続きます。ブラウザのAudioDecoder/AudioContextが必要です。
 
-BのNodeがWSL/Linux上の場合、このWindows音声パイプには接続せず、native音声の選択を無効にします。その場合は既存のBブラウザ補助による音声共有を使えます。Windowsの既定デバイス変更後に音声が停止した場合は、動画共有を依頼し直してください。旧helper・旧サービスは音声追加なしで既存共有を続けます。今回の音声更新に認証画面サービスの再インストールは不要です。A/Bのpull・pnpm install・build・handoffとブラウザ再読み込みが必要です。
+BのNodeがWSL/Linux上の場合、このWindows音声パイプには接続せず、native音声の選択を無効にします。その場合は既存のBブラウザ補助による音声共有を使えます。Windowsの既定デバイス変更後に音声が停止した場合は、動画共有を依頼し直してください。旧helper・旧サービスは音声追加なしで既存共有を続けます。今回の音声更新に認証画面サービスの再インストールは不要です。 `validate-audio.ps1`で所有者ACL・接続PID・取消と停止・生成PCMを確認できます。この検証は実音声デバイスを開きません。A/Bのpull・pnpm install・build・handoffとブラウザ再読み込みが必要です。
 
 新しいviewer・A/B・通常画面helperでは［UDPを優先（利用できない場合はWSS）］を選べます。既定は有効で、native H.264をWebRTCの暗号化されたdatachannelで直接送ります。映像の順序待ち・再送待ちを避け、最大3枚と150msの期限で欠けた映像を破棄し、キーフレームを要求して復旧します。描画ACKも直接Bへ返し、破棄した映像で入力用の画像鮮度を延長しません。入力・操作許可は既存の認証済み接続で扱います。ビットレートはACKの待ちと破棄を見て、依頼した上限内で調整します。
 
@@ -406,7 +407,7 @@ benchmarkはさらにsourceの累計CPU/メモリ、同一Node内のA/Bサーバ
 
 2026-10-24の次フレーム準備の比較では、Windows実画面→WSLのA/B→Chromium、1280幅・JPEG65・差分なし・60枚・ACKに100msの待ちを追加した条件で、30fps設定の実効FPSが平均4.79→7.89（各3回）、10fps設定で4.82→7.11（各1回）になりました。30fps設定のhelper CPUは1コア換算平均22.7→37.4%、帯域は平均5.1→8.5Mbpsへ増え、peak RSSは双方約137MiBでした。画面内容は固定していないため帯域・圧縮量は変動します。生成PNG8領域の復号・描画はChromiumで平均16.73→9.94msでした。sr-pc・実WAN・入力反映遅延の測定ではありません。[条件と生データ](../.aidev/works/20261024-desktop-frame-preparation/test-result.md)を参照してください。現在のハーネスでは、非表示の端末の購読が解除されるため、端末echoの指標はnullとして未計測を明示します。
 
-初期目標は、20Mbps/RTT100msの条件で1080p 5fps、視覚的な操作反映p95 500ms以内、端末echo p95の増加100ms以内です。目標値であり達成済みではありません。30分の継続試験や回線制限時のメモリ・queue推移も残っています。取得/encodeが律速ならDXGIやhardware encoderを、帯域/映像伝送が律速なら動画encoding/WebRTCを比較する判断材料にします。
+初期目標は、20Mbps/RTT100msの条件で1080p 5fps、視覚的な操作反映p95 500ms以内、端末echo p95の増加100ms以内です。目標値であり達成済みではありません。生成H264/Opus・loopback UDPの30分試験では、受信欠落と40ms順序入替を加えて映像17,648枚/音声77,585件が継続し、decoder queue最大2/source最大5でした（640×360・要求10fps）。[条件・生出力・メモリの範囲](../.aidev/works/20261026-desktop-endurance/test-result.md)を参照してください。実画面60fps・実音声endpoint・WAN/帯域制限の性能確認は引き続き別に必要です。取得/encodeが律速ならDXGIやhardware encoderを、帯域/映像伝送が律速なら動画encoding/WebRTCを比較する判断材料にします。
 
 実装・検証と模擬ソースの測定値は[検証記録](../.aidev/works/20261017-remote-desktop/test-result.md)、独立点検は[レビュー記録](../.aidev/works/20261017-remote-desktop/review.md)を参照してください。
 

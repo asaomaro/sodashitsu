@@ -1,0 +1,48 @@
+
+Running 1 test using 1 worker
+
+(node:1301396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-26T02:02:04.566Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-26T02:02:04.567Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-26T02:02:04.567Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-26T02:02:04.573Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-ZgKpNF/commands.json","count":0}
+{"ts":"2026-10-26T02:02:05.040Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-26T02:02:05.041Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-26T02:02:05.041Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-26T02:02:05.044Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-bmEOgF/commands.json","count":0}
+generated_audio_soak {"elapsed":62506,"frames":629,"outputs":2705,"queue":2,"active":2,"maxActive":5,"lostVideo":4,"lostAudio":156,"heap":19311016}
+generated_audio_soak {"elapsed":124871,"frames":1241,"outputs":5412,"queue":2,"active":2,"maxActive":5,"lostVideo":8,"lostAudio":310,"heap":25121048}
+generated_audio_soak {"elapsed":187342,"frames":1854,"outputs":8118,"queue":2,"active":1,"maxActive":5,"lostVideo":12,"lostAudio":464,"heap":38198492}
+generated_audio_soak {"elapsed":249729,"frames":2466,"outputs":10780,"queue":2,"active":2,"maxActive":5,"lostVideo":16,"lostAudio":615,"heap":39001372}
+generated_audio_soak {"elapsed":312091,"frames":3079,"outputs":13476,"queue":2,"active":2,"maxActive":5,"lostVideo":20,"lostAudio":768,"heap":37386672}
+generated_audio_soak {"elapsed":374489,"frames":3688,"outputs":16164,"queue":2,"active":3,"maxActive":5,"lostVideo":25,"lostAudio":922,"heap":39236676}
+generated_audio_soak {"elapsed":436835,"frames":4296,"outputs":18863,"queue":2,"active":3,"maxActive":5,"lostVideo":30,"lostAudio":1075,"heap":38190028}
+generated_audio_soak {"elapsed":499949,"frames":4916,"outputs":21572,"queue":2,"active":3,"maxActive":5,"lostVideo":34,"lostAudio":1229,"heap":13580268}
+generated_audio_soak {"elapsed":562608,"frames":5530,"outputs":24277,"queue":2,"active":2,"maxActive":5,"lostVideo":38,"lostAudio":1383,"heap":25264000}
+generated_audio_soak {"elapsed":624835,"frames":6142,"outputs":26968,"queue":2,"active":4,"maxActive":5,"lostVideo":42,"lostAudio":1536,"heap":39346168}
+generated_audio_soak {"elapsed":687243,"frames":6750,"outputs":29668,"queue":2,"active":3,"maxActive":5,"lostVideo":47,"lostAudio":1690,"heap":15184220}
+generated_audio_soak {"elapsed":749732,"frames":7362,"outputs":32382,"queue":2,"active":3,"maxActive":5,"lostVideo":53,"lostAudio":1844,"heap":15809960}
+generated_audio_soak {"elapsed":811863,"frames":7972,"outputs":35084,"queue":2,"active":1,"maxActive":5,"lostVideo":57,"lostAudio":1998,"heap":15193048}
+generated_audio_soak {"elapsed":874007,"frames":8582,"outputs":37787,"queue":2,"active":2,"maxActive":5,"lostVideo":61,"lostAudio":2151,"heap":15205156}
+generated_audio_soak {"elapsed":936396,"frames":9191,"outputs":40487,"queue":2,"active":2,"maxActive":5,"lostVideo":66,"lostAudio":2305,"heap":15219600}
+generated_audio_soak {"elapsed":998528,"frames":9801,"outputs":43171,"queue":2,"active":2,"maxActive":5,"lostVideo":70,"lostAudio":2458,"heap":15210632}
+generated_audio_soak {"elapsed":1061536,"frames":10420,"outputs":45900,"queue":2,"active":4,"maxActive":5,"lostVideo":74,"lostAudio":2613,"heap":17092800}
+generated_audio_soak {"elapsed":1123990,"frames":11032,"outputs":48596,"queue":2,"active":2,"maxActive":5,"lostVideo":79,"lostAudio":2767,"heap":22655332}
+generated_audio_soak {"elapsed":1186588,"frames":11647,"outputs":51304,"queue":2,"active":1,"maxActive":5,"lostVideo":83,"lostAudio":2921,"heap":15229556}
+generated_audio_soak {"elapsed":1249497,"frames":12264,"outputs":54004,"queue":2,"active":1,"maxActive":5,"lostVideo":87,"lostAudio":3074,"heap":15315744}
+generated_audio_soak {"elapsed":1312666,"frames":12880,"outputs":56707,"queue":2,"active":2,"maxActive":5,"lostVideo":92,"lostAudio":3228,"heap":18986020}
+generated_audio_soak {"elapsed":1375741,"frames":13499,"outputs":59400,"queue":2,"active":3,"maxActive":5,"lostVideo":96,"lostAudio":3381,"heap":20915768}
+generated_audio_soak {"elapsed":1438892,"frames":14113,"outputs":62098,"queue":2,"active":3,"maxActive":5,"lostVideo":103,"lostAudio":3534,"heap":38207560}
+generated_audio_soak {"elapsed":1502033,"frames":14732,"outputs":64781,"queue":2,"active":3,"maxActive":5,"lostVideo":107,"lostAudio":3687,"heap":17098228}
+generated_audio_soak {"elapsed":1565622,"frames":15352,"outputs":67473,"queue":2,"active":3,"maxActive":5,"lostVideo":111,"lostAudio":3840,"heap":13790272}
+generated_audio_soak {"elapsed":1628953,"frames":15973,"outputs":70169,"queue":2,"active":3,"maxActive":5,"lostVideo":115,"lostAudio":3993,"heap":42250068}
+generated_audio_soak {"elapsed":1691061,"frames":16583,"outputs":72860,"queue":2,"active":2,"maxActive":5,"lostVideo":119,"lostAudio":4146,"heap":39535984}
+generated_audio_soak {"elapsed":1753467,"frames":17195,"outputs":75562,"queue":2,"active":2,"maxActive":5,"lostVideo":123,"lostAudio":4300,"heap":23720292}
+generated_audio_soak_complete {"duration":1800000,"first":{"elapsed":5231,"frames":67,"outputs":243,"queue":2,"active":4,"maxActive":5,"lostVideo":0,"lostAudio":16,"heap":42612684},"last":{"elapsed":1800081,"frames":17648,"outputs":77585,"queue":2,"active":1,"maxActive":5,"lostVideo":128,"lostAudio":4415,"heap":15417384},"samples":345,"maxHeap":42711404,"maxActive":5}
+{"ts":"2026-10-26T02:32:10.648Z","level":"info","msg":"machine link closed","machine":"b30d427c617216ff80076b8224590190","kind":"transient","reason":"接続が切れました"}
+  ✓  1 src/specs/remote-desktop-audio.spec.ts:7:3 › native system audio generated tone: soak, initially muted, bounded decode, mute/stop (30.1m)
+
+  Slow test file: src/specs/remote-desktop-audio.spec.ts (30.1m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 passed (30.1m)

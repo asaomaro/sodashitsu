@@ -7,8 +7,10 @@
 - [x] 実カーソル形状・位置・可視状態の別送とローカル描画。hotspot/alpha/monochrome inversion、現地と遠隔の動き、旧peer fallback。入力と無関係な閲覧権限の範囲でcursorのみ。
 - [x] native H264のUDP/WebRTC経路（ICE/DTLS/SRTPまたはSCTP、既存WSSへfallback、有限queue、loss/PLI/IDR回復、適応帯域）。TURN等は明示設定だけを使う。
 - [x] nativeシステム音声（WASAPI loopback、マイクなし、要求時のみ、mute/autoplay同意、停止/secure transitionで解放）。
-- [ ] 実画面入力を送らない生成画面によるloss/遅延・継続試験、browser描画の観測、性能/限界の記録。
+- [x] 実画面入力を送らない生成画面によるloss/遅延・継続試験、browser描画の観測、性能/限界の記録。
 
 全PRで差分全体の独立レビュー必須。修正にも再レビュー。大きな変更を同一PRへまとめない。userに再承認を求めず必要作業を続ける。実回線の改善率は測定するまで主張しない。
 
 補助画像snapshotも#207で入力ACKから独立したWSへ分離済み（旧peer/開始前失敗は既存経路へ戻す）。
+
+音声#209/#210、UI完了競合#211、30分生成loss/順序入替試験は `.aidev/works/20261026-desktop-endurance/test-result.md` を参照。ここでの完了は上記の実装/生成試験の範囲。実WAN・実画面60fps・実音声endpointの性能同等性は未測定。
