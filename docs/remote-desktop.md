@@ -269,6 +269,16 @@ soda serve
 
 画像配信は変更箇所だけ送る独自プロトコルです。VNC/RFB互換やnoVNCではありません。追加の動画共有ではブラウザのWebRTC、またはVP8/OpusのWebM中継を使います（後述）。CopyRectはありません。実装は[Windowsの比較・圧縮](../scripts/remote-desktop/WindowsDesktopHost.cs)、[パケット検査](../packages/protocol/src/desktop.ts)、[ブラウザ合成](../packages/web/src/desktop/render.ts)を参照してください。
 
+## GPU動画のコーデック選択
+
+新しいviewer・A/B・Windows補助プログラムが揃うと、GPU動画の［動画コーデック］でH.264、H.264 4:4:4、HEVC、AV1を選べます。既定はH.264です。GPUの登録候補がある形式を「試行」と表示します。候補の存在は圧縮成功の保証ではなく、開始時に実際のhardware encoder出力とブラウザの復号可否を検査します。ソフトウェア圧縮への暗黙の変更はしません。旧版を含む接続ではH.264を使い、新しい項目を送りません。
+
+要求と実際のコーデック、H.264へ復帰した理由を動画欄に表示します。HEVC/AV1/4:4:4が初期化・圧縮・復号できなければ、同じ要求で一度だけH.264へ戻します。復号失敗による切替では保持キーを解放して操作許可を解除し、新しい映像を開始します。操作を続けるには改めて［操作する］を押してください。切替前の入力は再送しません。H.264も利用できなければ画像配信へ戻ります。
+
+HEVCはAnnex-B、AV1はlow-overhead OBUを使い、実際のSPS/sequence headerから復号設定を作ります。UDP欠損後は必要なheaderを含むrandom access frameから復帰します。同じコーデックの自動解像度変更でも、世代と実headerを確認してから再開します。4:4:4はAYUV入力・High 4:4:4 profile・実SPSのchroma formatを確認し、4:2:0を4:4:4として表示しません。
+
+Windowsの生成画像検査は `scripts/remote-desktop/validate-codec-encoders.ps1`、bitstreamの純粋検査は `validate-codec-packets.ps1`、登録候補だけの照会は `probe-codecs.ps1` です。実画面・入力・clipboardを扱いません。今回の両PCではhardware H.264/HEVC圧縮が成功し、H.264 4:4:4/AV1は利用できませんでした。AV1の転送・復号試験は明示したsoftware生成fixtureを使い、hardware AV1の実機確認とは区別しています。詳細は[検証記録](../.aidev/works/20261026-desktop-parity-expansion/test-native-codecs.md)を参照してください。
+
 ## ネイティブのGPU H.264動画
 
 通常画面の［動画・音声］で、経路［GPU H.264（音声なし）］を選び［動画共有を依頼］を押すと、Windows補助プログラムがハードウェアで映像を圧縮します。この経路はBのブラウザや`/desktop-host`の追加共有を必要としません。ブラウザのWebCodecsと、新しいA/B/helperが揃うときだけ選択肢が出ます。ハードウェア対応は開始時に確認し、利用できない場合は画像配信へ戻って知らせます。従来の画像配信が既定です。対応するWindows Node/helperではシステム音声も要求できます（次節）。

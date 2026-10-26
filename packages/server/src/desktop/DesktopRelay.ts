@@ -1,3 +1,4 @@
+import {DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream} from "@sodashitsu/protocol";
 import {DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DesktopNativeProfilePending,DesktopNativeFormatAck,DesktopNativeFormatReady} from "@sodashitsu/protocol";
 import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_FILES_PROTOCOL,DesktopFileRequest,DesktopFileResult} from "@sodashitsu/protocol";
@@ -58,6 +59,7 @@ type Viewer = {
   cursor?:boolean;
   cursorStream?:DesktopCursorStream;
   nativeRateRequested?: boolean;
+  nativeCodecsRequested?:boolean;nativeCodecs?:boolean;
   nativeAdaptiveRequested?:boolean;nativeAdaptive?:boolean;
   nativeMaxFps?: 60;
   videoLaneRequested?: boolean;
@@ -217,7 +219,7 @@ export class DesktopRelay {
       if(offered.length===1&&offered[0]===DESKTOP_RICH_CLIPBOARD_PROTOCOL){this.clipboardLanes.accept(ws,sessionId,origin);return;}
       if (offered.length === 1 && offered[0] === DESKTOP_IMAGE_LANE_PROTOCOL) { this.imageLanes.accept(ws,sessionId,origin);return; }
       if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -227,7 +229,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -291,7 +293,7 @@ export class DesktopRelay {
             }
           }),
       },
-      nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
+      nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
       nativeRateRequested,
       videoLaneRequested,imageLaneRequested,
       nativeVideoRequested,
@@ -372,6 +374,8 @@ export class DesktopRelay {
           });
         } else if(m.type==="native_audio_control"){
           if(v.nativeAudio&&v.ready&&!v.secureDesktop&&v.media?.audioRequested&&m.id===v.media.id&&v.provider)this.send(v.provider,m);
+        } else if(m.type==="native_codec_fallback"){
+          if(v.nativeCodecs&&v.ready&&v.media?.native&&m.id===v.media.id&&v.provider)this.send(v.provider,m);
         } else if(m.type==="native_format_ack") {
           const b=v.media?.barrier;
           if(v.nativeAdaptive&&v.provider&&v.media&&!v.media.datagrams&&b&&m.id===v.media.id&&m.generation===b.generation&&m.baseSeq===b.baseSeq&&performance.now()-b.at<3000)this.send(v.provider,m);
@@ -397,6 +401,7 @@ export class DesktopRelay {
             if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&(!v.nativeVideo || (v.videoLane && !v.videoActive))) { this.send(v.ws,{type:"media_unavailable"}); return; }
             if (m.type === "rtc_signal" && m.signal.kind === "offer") throw new Error();
             if(m.type==="media"&&m.settings?.udp!==undefined&&(!v.nativeDatagrams||m.settings.transport!=="native"))delete m.settings.udp;
+            if(m.type==="media"&&m.settings?.codec!==undefined&&(!v.nativeCodecs||m.settings.transport!=="native"))delete m.settings.codec;
             if(m.type==="media"&&m.settings?.fps!==undefined&&(m.settings.transport!=="native"||v.nativeMaxFps!==60))delete m.settings.fps;
             if(m.type==="clipboard_grant")v.richGranted=m.enabled&&v.richClipboard===true;
             if (m.type === "media") {
@@ -510,6 +515,7 @@ export class DesktopRelay {
         nativeVideo: z.boolean().optional(),nativeDatagrams:z.boolean().optional(),
         nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
+        nativeCodecs:z.boolean().optional(),
         nativeAdaptive:z.literal(true).optional(),
         nativeCadence:z.literal(true).optional(),
         nativeMaxFps:z.literal(60).optional(),
@@ -532,12 +538,13 @@ export class DesktopRelay {
     delete legacyOptions.extendedInput;
     delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
     delete legacyOptions.nativeVideoWindow;
-    delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;delete legacyOptions.nativeAdaptive;
+    delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;delete legacyOptions.nativeAdaptive;delete legacyOptions.nativeCodecs;
     delete legacyOptions.cursor;
     v.cursor=v.cursorRequested===true&&caps.cursor===true;
     if(v.nativeRateRequested&&caps.nativeMaxFps===60)v.nativeMaxFps=60;else delete v.nativeMaxFps;
     if(v.nativeWindowRequested&&caps.nativeVideoWindow===3)v.nativeVideoWindow=3;else delete v.nativeVideoWindow;
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
+    v.nativeCodecs=v.nativeVideo&&v.nativeCodecsRequested===true&&caps.nativeCodecs===true;
     v.nativeAdaptive=v.nativeVideo&&v.nativeAdaptiveRequested===true&&caps.nativeAdaptive===true;
     v.monitors=v.monitorsRequested===true&&caps.monitors===true;
     if(options.monitorDevice&&!v.monitors)throw new DesktopSetupRequired("接続先を更新し、全モニターの共有と切替を許可してください");
@@ -562,6 +569,7 @@ export class DesktopRelay {
       ...(v.richClipboard?{richClipboard:true as const}:{}),
       ...(v.cursor?{cursor:true as const}:{}),
       ...(v.nativeVideo?{nativeVideo:true as const}:{}),
+      ...(v.nativeCodecs?{nativeCodecs:true as const}:{}),
       ...(v.nativeAdaptive?{nativeAdaptive:true as const}:{}),
       ...(v.nativeVideo&&caps.nativeCadence?{nativeCadence:true as const}:{}),
       ...(v.nativeDatagrams?{nativeDatagrams:true as const}:{}),
@@ -686,7 +694,7 @@ export class DesktopRelay {
         if(imageLane&&(!v.imageActive||!binary||isDesktopMediaChunk(bytes)||isDesktopCursor(bytes)||isDesktopAudio(bytes)))throw Error("Image lane only");
         if (lane) {
           if (!v.videoActive) return;
-          if (binary ? !(isDesktopMediaChunk(bytes)||isDesktopAudio(bytes)) : bytes.length > 65536 || !["native_profile_pending","native_format_ready","media_status","media_stream","native_video_stats","rtc_signal","native_frame_notice","native_draw_ack","native_transport_reset","native_audio_status"].includes(JSON.parse(bytes.toString()).type)) throw Error("Video lane only");
+          if (binary ? !(isDesktopMediaChunk(bytes)||isDesktopAudio(bytes)) : bytes.length > 65536 || !["native_codec_reset","native_profile_pending","native_format_ready","media_status","media_stream","native_video_stats","rtc_signal","native_frame_notice","native_draw_ack","native_transport_reset","native_audio_status"].includes(JSON.parse(bytes.toString()).type)) throw Error("Video lane only");
         }
         const sendMedia = (value: unknown) => lane ? v.videoLane!.send(value) : this.send(v.ws, value);
         if(binary&&isDesktopAudio(bytes)){
@@ -750,7 +758,7 @@ export class DesktopRelay {
         } else {
           if (bytes.byteLength > 65536) throw new Error();
           const msg = JSON.parse(bytes.toString());
-          if (["native_profile_pending","native_format_ready","media_status","media_stream","native_video_stats","rtc_signal","native_frame_notice","native_draw_ack","native_transport_reset","native_audio_status"].includes(msg.type)) {
+          if (["native_codec_reset","native_profile_pending","native_format_ready","media_status","media_stream","native_video_stats","rtc_signal","native_frame_notice","native_draw_ack","native_transport_reset","native_audio_status"].includes(msg.type)) {
             if (typeof msg.id === "string" && v.retiredMedia.has(msg.id)) return;
             if (lane && !v.requestedNative) return;
             if (v.videoLane && !lane && v.requestedNative && ((msg.type === "media_status" && msg.state !== "images") || msg.type === "media_stream" || msg.type === "rtc_signal")) return;
@@ -776,12 +784,13 @@ export class DesktopRelay {
             if(ready.nativeVideoWindow!==3||!v.nativeVideo)delete v.nativeVideoWindow;
             v.cursor=v.cursor===true&&ready.cursor===true&&!v.secureDesktop;
             if(v.cursor)v.cursorStream=new DesktopCursorStream(bytes=>this.send(v.ws,bytes),()=>v.ws.bufferedAmount);
+            v.nativeCodecs=v.nativeCodecs===true&&ready.nativeCodecs===true&&v.nativeVideo;
             v.nativeAdaptive=v.nativeAdaptive===true&&ready.nativeAdaptive===true&&v.nativeVideo;
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
             v.files=v.files===true&&ready.files===true&&!v.secureDesktop;
             v.richClipboard=v.richClipboard===true&&ready.richClipboard===true&&ready.allowClipboard===true&&!v.secureDesktop;
-            const { imeKeys, extendedInput, monitorLayout, files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,cursor,imageLane:helperImageLane, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            const { imeKeys, extendedInput, monitorLayout, files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,imageLane:helperImageLane, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);
@@ -801,6 +810,7 @@ export class DesktopRelay {
             const status = DesktopMediaStatus.parse(msg);
             if(status.state==="native"&&!v.nativeVideo)throw new Error();
             if(status.nativeAudio&&(!v.nativeAudio||!v.requestedNativeAudio))throw Error("Audio not requested");
+            if((status.nativeCodecs||status.codec||status.codecRequested||status.codecFallback)&&!v.nativeCodecs)throw Error("Native codec not negotiated");
             if(status.datagrams&&!v.nativeDatagrams)throw Error("Native datagrams not negotiated");
             if (status.state === "images") { if(v.media && status.id!==v.media.id)return; delete v.media; }
             else if (!v.media || v.media.id !== status.id)
@@ -822,15 +832,16 @@ export class DesktopRelay {
             const stream = DesktopMediaStream.parse(msg);
             if (stream.id !== v.media.id || stream.generation <= v.media.generation)
               throw new Error();
-            if((stream.mime==="video/h264")!==!!v.media.native)throw new Error();
-            if(stream.mime==="video/h264"&&(stream.window??1)!==(v.media.window??1))throw new Error();
-            if(stream.mime==="video/h264"&&!!stream.datagrams!==!!v.media.datagrams)throw Error("Native stream route changed");
-            if(stream.mime==="video/h264"&&stream.baseSeq!==undefined){
+            if(isDesktopNativeStream(stream)&&!v.nativeCodecs&&(stream.mime!=="video/h264"||stream.codecName!==undefined))throw Error("Codec stream not negotiated");
+            if((isDesktopNativeStream(stream))!==!!v.media.native)throw new Error();
+            if(isDesktopNativeStream(stream)&&(stream.window??1)!==(v.media.window??1))throw new Error();
+            if(isDesktopNativeStream(stream)&&!!stream.datagrams!==!!v.media.datagrams)throw Error("Native stream route changed");
+            if(isDesktopNativeStream(stream)&&stream.baseSeq!==undefined){
               const b=v.media.barrier;if(!v.nativeAdaptive||!b||b.generation!==stream.generation||stream.baseSeq!==v.media.seq||v.media.pending?.length||performance.now()-b.at>=3000)throw Error("Native stream barrier");b.baseSeq=stream.baseSeq;
             }else if(v.media.native&&v.media.generation!==0)throw Error("Native reconfigure requires barrier");
             v.media.generation = stream.generation;
-            v.media.seq = stream.mime==="video/h264"?(stream.baseSeq??0):0;
-            if(stream.mime==="video/h264")v.media.lastAck=v.media.seq;
+            v.media.seq = isDesktopNativeStream(stream)?(stream.baseSeq??0):0;
+            if(isDesktopNativeStream(stream))v.media.lastAck=v.media.seq;
             sendMedia(stream);
           } else if(msg.type==="native_audio_status"){
             const status=DesktopNativeAudioStatus.parse(msg);
@@ -846,6 +857,10 @@ export class DesktopRelay {
             const ack=DesktopNativeDrawAck.parse(msg),media=v.media;
             if(!v.nativeDatagrams||!media?.native||!media.datagrams||ack.id!==media.id||ack.generation!==media.generation||ack.seq!==media.pending?.[0])throw Error("Native direct ACK order");
             const at=media.freshAt?.get(ack.seq)??media.sentAt?.get(ack.seq);media.pending.shift();media.lastAck=ack.seq;if(!ack.dropped&&at!==undefined)media.drawnAt=at;media.sentAt?.delete(ack.seq);media.freshAt?.delete(ack.seq);
+          } else if(msg.type==="native_codec_reset"){
+            const reset=z.object({type:z.literal("native_codec_reset"),id:z.string().uuid()}).strict().parse(msg);
+            if(!v.nativeCodecs||!v.media?.native||reset.id!==v.media.id)throw Error("Wrong codec reset");
+            this.agents.revoke(v.agent);v.control=false;if(v.provider)this.send(v.provider,{type:"control",enabled:false});this.send(v.ws,{type:"control",enabled:false});
           } else if(msg.type==="native_transport_reset"){
             const reset=z.object({type:z.literal("native_transport_reset"),id:z.string().uuid()}).strict().parse(msg);
             if(!v.nativeDatagrams||!v.media?.datagrams||reset.id!==v.media.id)throw Error("Wrong native reset");

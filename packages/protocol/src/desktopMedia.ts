@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {DesktopNativeCodec,DesktopNativeCodecString,desktopCodecMatches,desktopCodecMime} from "./desktopCodecs.js";
 export const DESKTOP_CLIPBOARD_LIMIT = 8192;
 export const DESKTOP_MEDIA_CHUNK_LIMIT = 512 * 1024;
 export const DesktopIceServers = z
@@ -20,6 +21,7 @@ export const DesktopIceServers = z
   .max(4);
 export const DesktopMediaSettings = z
   .object({
+    codec:DesktopNativeCodec.optional(),
     udp: z.boolean().optional(),
     fps: z.number().int().min(1).max(60).optional(),
     audio: z.boolean().default(false),
@@ -111,6 +113,10 @@ export const DesktopMediaStatus = z
     iceServers: DesktopIceServers.optional(),
     datagrams: z.literal(true).optional(),
     nativeAudio:z.literal(true).optional(),
+    nativeCodecs:z.literal(true).optional(),
+    codecRequested:DesktopNativeCodec.optional(),
+    codec:DesktopNativeCodec.optional(),
+    codecFallback:z.enum(["unavailable","encoder","decoder"]).optional(),
   })
   .strict();
 export const DesktopMediaStream = z.union([
@@ -127,16 +133,17 @@ export const DesktopMediaStream = z.union([
       type: z.literal("media_stream"),
       id: z.string().uuid(),
       generation: z.number().int().min(1).max(0xffffffff),
-      mime: z.literal("video/h264"),
+      mime: z.enum(["video/h264","video/hevc","video/av1"]),
+      codecName:DesktopNativeCodec.optional(),
       baseSeq:z.number().int().min(0).max(0xffffffff-1).optional(),
       datagrams: z.literal(true).optional(),
       window: z.literal(3).optional(),
-      codec: z.string().regex(/^avc1\.[0-9a-f]{6}$/),
+      codec: DesktopNativeCodecString,
       width: z.number().int().min(2).max(4096),
       height: z.number().int().min(2).max(2400),
     })
     .strict()
-    .refine((v) => v.width * v.height <= 8_000_000),
+    .refine((v) => v.width * v.height <= 8_000_000 && desktopCodecMime(v.codecName??"h264")===v.mime && desktopCodecMatches(v.codecName??"h264",v.codec)),
 ]);
 export const DESKTOP_NATIVE_RATE_PROTOCOL = "soda-desktop-native-rate-v1";
 export const DESKTOP_VIDEO_LANE_PROTOCOL = "soda-desktop-video-lane-v1";
@@ -257,3 +264,5 @@ export function decodeDesktopMediaChunk(bytes: Uint8Array) {
   if (!generation || !seq) throw Error("media chunk sequence");
   return { generation, seq, data: bytes.subarray(12) };
 }
+
+export function isDesktopNativeStream(value:z.infer<typeof DesktopMediaStream>):value is Extract<z.infer<typeof DesktopMediaStream>,{codec:string}>{return value.mime==='video/h264'||value.mime==='video/hevc'||value.mime==='video/av1';}

@@ -1,3 +1,4 @@
+import {DesktopNativeCodec,DesktopNativeCodecString,desktopCodecMime,desktopCodecMatches} from "@sodashitsu/protocol";
 import {DesktopNativeResolution} from "./DesktopNativeResolution.js";
 import {DesktopNativeFormatAck} from "@sodashitsu/protocol";
 import {DesktopNativeQuality} from "./DesktopNativeQuality.js";
@@ -23,13 +24,11 @@ const HelperVideo = z
     seq: z.number().int().min(1).max(0xffffffff),
     timestamp: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     key: z.boolean(),
+    codecName:DesktopNativeCodec.optional(),codecFallback:z.enum(["encoder","unavailable"]).optional(),
     captureMs: z.number().finite().min(0).max(60000).optional(),
     conversionMs: z.number().finite().min(0).max(60000).optional(),
     encodeMs: z.number().finite().min(0).max(60000).optional(),
-    codec: z
-      .string()
-      .regex(/^avc1\.[0-9a-f]{6}$/)
-      .optional(),
+    codec: DesktopNativeCodecString.optional(),
     width: z.number().int().min(2).max(4096),
     height: z.number().int().min(2).max(2400),
     data: z
@@ -48,6 +47,7 @@ export class DesktopNativeVideo {
         settings: import("@sodashitsu/protocol").DesktopMediaSettings;
         peer?:DesktopNativeDatagrams;audio?:DesktopNativeAudio;
         started:boolean;quality?:DesktopNativeQuality;resolution?:DesktopNativeResolution;
+        requestedCodec:DesktopNativeCodec;codecName?:DesktopNativeCodec;codecFallback?:"encoder"|"decoder"|"unavailable";retried:boolean;
         generation:number;fps:number;nextFrameAt?:number;
         barrier?:{generation:number;width:number;height:number;at:number;baseSeq?:number};
         bitrate:number;adaptAt:number;acks:number;losses:number;maxAck:number;
@@ -73,7 +73,7 @@ export class DesktopNativeVideo {
   constructor(
     private hooks: {
       enabled: boolean;
-      adaptive?:boolean;cadence?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;
+      codecs?:boolean;adaptive?:boolean;cadence?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;
       iceServers?:z.infer<typeof DesktopIceServers>;
       window?: 1 | 3;
       width: number;
@@ -88,7 +88,7 @@ export class DesktopNativeVideo {
       buffered(): number;
     },
   ) {}
-  fromViewer(raw: unknown): boolean {
+  fromViewer(raw: unknown,replacement?:{requested:DesktopNativeCodec;reason:"encoder"|"decoder"|"unavailable";retried:boolean}): boolean {
     const m = raw as { type: string; enabled?: boolean; settings?: unknown };
     if((m.type==="rtc_signal"||m.type==="media_fallback")&&this.retired.has((raw as {id:string}).id))return true;
     if(m.type==="native_audio_control"){
@@ -100,6 +100,9 @@ export class DesktopNativeVideo {
     }
     if(m.type==="media_fallback"){
       const active=this.active;if(!active?.peer||(raw as {id?:string}).id!==active.id)return false;this.fallback(active);return true;
+    }
+    if(m.type==="native_codec_fallback"){
+      const s=this.active;if(s&&(raw as {id?:string}).id===s.id&&this.hooks.codecs){if(s.codecName!=="h264"&&!s.retried)this.retryH264(s,"decoder");else if(s.peer)this.fallback(s);else this.stop("unavailable");}return true;
     }
     if(m.type==="native_format_ack"){
       if(!this.active?.peer)this.formatAck(raw);return true;
@@ -114,6 +117,7 @@ export class DesktopNativeVideo {
     if (!m.enabled) return false;
     const settings = DesktopMediaSettings.parse(m.settings ?? {});
     if (settings.transport !== "native") return false;
+    if(!this.hooks.codecs)delete settings.codec;
     const id = randomUUID();
     const fps=settings.fps??this.hooks.fps;
     if (!this.hooks.enabled || (settings.audio&&!this.hooks.audioEnabled) || fps>(this.hooks.maxFps??this.hooks.fps)) {
@@ -127,7 +131,7 @@ export class DesktopNativeVideo {
       return true;
     }
     this.active = {
-      id,settings,generation:1,fps,started:false,...(this.hooks.cadence&&settings.adaptive?{quality:new DesktopNativeQuality({fps,kbps:settings.maxBitrateKbps,window:this.hooks.window??1},performance.now())}:{}),bitrate:settings.maxBitrateKbps,adaptAt:performance.now(),acks:0,losses:0,maxAck:0,
+      id,settings,requestedCodec:replacement?.requested??settings.codec??"h264",retried:replacement?.retried??false,...(replacement?{codecFallback:replacement.reason}:{}),generation:1,fps,started:false,...(this.hooks.cadence&&settings.adaptive?{quality:new DesktopNativeQuality({fps,kbps:settings.maxBitrateKbps,window:this.hooks.window??1},performance.now())}:{}),bitrate:settings.maxBitrateKbps,adaptAt:performance.now(),acks:0,losses:0,maxAck:0,
       seq: 0,
       pending: [],
       statsAt: 0,
@@ -138,9 +142,9 @@ export class DesktopNativeVideo {
     };
     const active=this.active;
     const udp=settings.udp===true&&this.hooks.datagrams===true;
-    this.hooks.send({type:"media_status",id,state:"negotiating",audio:false,...(settings.audio?{nativeAudio:true}:{}),...(udp?{datagrams:true,iceServers:this.hooks.iceServers??[]}: {})});
+    this.hooks.send({type:"media_status",id,state:"negotiating",audio:false,...this.codecStatus(active),...(settings.audio?{nativeAudio:true}:{}),...(udp?{datagrams:true,iceServers:this.hooks.iceServers??[]}: {})});
     if(udp){
-      active.peer=new DesktopNativeDatagrams({id,audio:settings.audio,audioFailed:()=>{if(this.active===active){active.settings.audio=false;active.audio?.stop(false);this.hooks.send({type:"native_audio_status",id,state:"unavailable"});}},iceServers:this.hooks.iceServers??[],send:value=>this.hooks.send(value),
+      active.peer=new DesktopNativeDatagrams({id,codecs:this.hooks.codecs===true,audio:settings.audio,audioFailed:()=>{if(this.active===active){active.settings.audio=false;active.audio?.stop(false);this.hooks.send({type:"native_audio_status",id,state:"unavailable"});}},iceServers:this.hooks.iceServers??[],send:value=>this.hooks.send(value),
         ready:()=>{if(this.active===active)this.begin(active);},
         ack:value=>{if(this.active===active)this.ack(value,true);},
         ...(this.hooks.adaptive?{formatAck:(value:unknown)=>{if(this.active===active)this.formatAck(value);}}:{}),
@@ -152,7 +156,7 @@ export class DesktopNativeVideo {
   private begin(s:NonNullable<DesktopNativeVideo["active"]>){
     if(this.active!==s||s.started)return;s.started=true;s.at=performance.now();
     this.hooks.policy(true);
-    this.hooks.write({type:"native_video",enabled:true,id:s.id,bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
+    this.hooks.write({type:"native_video",enabled:true,id:s.id,...(this.hooks.codecs?{codec:s.settings.codec??"h264"}:{}),bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
     if(s.settings.audio&&this.hooks.audioEnabled)s.audio=new DesktopNativeAudio({id:s.id,synthetic:this.hooks.synthetic===true,active:()=>this.active===s&&s.settings.audio,videoTimestamp:()=>s.timestamp,
       write:value=>this.hooks.write(value),state:state=>{if(this.active===s)this.hooks.send({type:"native_audio_status",id:s.id,state});},
       send:bytes=>this.active===s&&(s.peer?s.peer.sendAudio(bytes):this.hooks.buffered()<=65536&&this.hooks.send(bytes))});
@@ -161,7 +165,12 @@ export class DesktopNativeVideo {
     if(this.active!==s||!s.peer)return;
     if(s.started)this.hooks.send({type:"native_transport_reset",id:s.id});
     const settings={...s.settings,udp:false};this.stop("stopped",false);
-    this.fromViewer({type:"media",enabled:true,settings});
+    this.fromViewer({type:"media",enabled:true,settings},s.codecFallback?{requested:s.requestedCodec,reason:s.codecFallback,retried:s.retried}:undefined);
+  }
+  private codecStatus(s:NonNullable<DesktopNativeVideo["active"]>){return this.hooks.codecs?{nativeCodecs:true,codecRequested:s.requestedCodec,...(s.codecName?{codec:s.codecName}:{}),...(s.codecFallback?{codecFallback:s.codecFallback}:{})}:{};}
+  private retryH264(s:NonNullable<DesktopNativeVideo["active"]>,reason:"encoder"|"decoder"){
+    if(this.active!==s||s.retried)return;
+    if(!this.hooks.send({type:"native_codec_reset",id:s.id})){this.stop("congested");return;}const settings={...s.settings,codec:"h264"};this.stop("stopped",false);this.fromViewer({type:"media",enabled:true,settings},{requested:s.requestedCodec,reason,retried:true});
   }
   private ack(raw:unknown,direct:boolean){
     const ack=DesktopNativeVideoAck.parse(raw),s=this.active;
@@ -209,10 +218,11 @@ export class DesktopNativeVideo {
     if(m.type==="native_profile_applied"){
       const s=this.active,b=s?.barrier;if(!s||m.id!==s.id)return true;
       if(!this.hooks.adaptive||!b)throw Error("Unexpected native profile");
-      const p=z.object({type:z.literal("native_profile_applied"),id:z.string().uuid(),generation:z.number().int(),baseSeq:z.number().int(),width:z.number().int(),height:z.number().int(),codec:z.string().regex(/^avc1\.[0-9a-f]{6}$/)}).strict().parse(raw);
+      const p=z.object({type:z.literal("native_profile_applied"),id:z.string().uuid(),generation:z.number().int(),baseSeq:z.number().int(),width:z.number().int(),height:z.number().int(),codec:DesktopNativeCodecString}).strict().parse(raw);
       if(performance.now()-b.at>=3000||p.generation!==b.generation||p.baseSeq!==s.seq||s.pending.length||p.width!==b.width||p.height!==b.height)throw Error("Native profile barrier");
+      if(!desktopCodecMatches(s.codecName??"h264",p.codec))throw Error("Codec family changed during resize");
       b.baseSeq=p.baseSeq;s.generation=p.generation;s.width=p.width;s.height=p.height;s.codec=p.codec;
-      this.hooks.send({type:"media_stream",id:s.id,generation:s.generation,baseSeq:p.baseSeq,mime:"video/h264",codec:p.codec,width:p.width,height:p.height,...(s.peer?{datagrams:true}:{}),...(this.hooks.window===3?{window:3}:{})});
+      this.hooks.send({type:"media_stream",id:s.id,generation:s.generation,baseSeq:p.baseSeq,mime:desktopCodecMime(s.codecName??"h264"),...(this.hooks.codecs?{codecName:s.codecName??"h264"}:{}),codec:p.codec,width:p.width,height:p.height,...(s.peer?{datagrams:true}:{}),...(this.hooks.window===3?{window:3}:{})});
       return true;
     }
     if (m.type !== "native_frame" && m.type !== "native_video_stopped") return false;
@@ -220,7 +230,7 @@ export class DesktopNativeVideo {
     if (!s || m.id !== s.id) return true;
     if(!s.started)throw Error("Native encoder started before peer");
     if (m.type === "native_video_stopped") {
-      if(s.peer)this.fallback(s);else this.stop("unavailable");
+      if(this.hooks.codecs&&s.codecName!=="h264"&&!s.retried&&(s.settings.codec??"h264")!=="h264")this.retryH264(s,"encoder");else if(s.peer)this.fallback(s);else this.stop("unavailable");
       return true;
     }
     const frame = HelperVideo.parse(raw);
@@ -252,13 +262,20 @@ export class DesktopNativeVideo {
       return true;
     }
     if (!s.stream) {
+      const actual=frame.codecName??"h264",requested=s.settings.codec??"h264";
+      if(!this.hooks.codecs&&(actual!=="h264"||frame.codecFallback))throw Error("Native codec not negotiated");
+      if(actual!==requested&&(actual!=="h264"||!frame.codecFallback))throw Error("Unexpected native codec fallback");
+      if(!frame.codec||!desktopCodecMatches(actual,frame.codec))throw Error("Native codec family mismatch");
+      s.codecName=actual;
+      if(frame.codecFallback){s.codecFallback=frame.codecFallback;s.retried=true;s.settings.codec="h264";}
       if (!frame.key || !frame.codec) throw Error("Native video requires initial SPS/IDR");
-      this.hooks.send({ type: "media_status", id: s.id, state: "native", audio: false,...(s.settings.audio?{nativeAudio:true}:{}),...(s.peer?{datagrams:true}:{}) });
+      this.hooks.send({ type: "media_status", id: s.id, state: "native", audio: false,...this.codecStatus(s),...(s.settings.audio?{nativeAudio:true}:{}),...(s.peer?{datagrams:true}:{}) });
       this.hooks.send({
         type: "media_stream",
         id: s.id,
         generation: s.generation,
-        mime: "video/h264",
+        mime: desktopCodecMime(s.codecName??"h264"),
+        ...(this.hooks.codecs?{codecName:s.codecName??"h264"}:{}),
         ...(s.peer?{datagrams:true}:{}),
         ...(this.hooks.window === 3 ? { window: 3 } : {}),
         codec: frame.codec,
