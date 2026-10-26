@@ -29,6 +29,7 @@ public static class SodaDesktopUnlock {
     static IntPtr Job;
     static Process Worker;
     static long Generation;
+    static Guid WorkerNonce;
     const uint DataRights = 0x12019b; // Deliberately excludes FILE_CREATE_PIPE_INSTANCE (4).
     const uint QueryToken = 8;
 
@@ -448,13 +449,14 @@ public static class SodaDesktopUnlock {
             foreach(IntPtr copy in copies)CloseHandle(copy);
         }
     }
-    public static void RunInstalled(bool lease,bool virtualAllowed=false,bool unlockAllowed=true) {
+    public static void RunInstalled(bool lease,bool virtualAllowed=false,bool unlockAllowed=true,bool elevatedAllowed=false) {
         // Give the installed client the protocol pipes directly. There is no
         // parent stdout-copy loop to hang after EOF. Terminating PowerShell also
         // closes the private job and reaps its lease/share child and descendants.
-        using(var child=StartProxy(InstalledExecutable(),lease?(virtualAllowed?(unlockAllowed?"--lease-both":"--lease-virtual"):"--lease"):"--share")) {
+        using(var child=StartProxy(InstalledExecutable(),lease?LeaseArgument(virtualAllowed,unlockAllowed,elevatedAllowed):elevatedAllowed?"--elevated":"--share")) {
             child.Process.WaitForExit();
             if(lease)Require(child.Process.ExitCode==0);
+            else if(elevatedAllowed){if(child.Process.ExitCode!=0){Console.Out.WriteLine("{\"type\":\"protected_desktop_failure\",\"code\":\"worker_unavailable\"}");Console.Out.Flush();}}
             else FinishShare(child.Process.ExitCode,SelectSource,Console.Out);
         }
     }
@@ -466,14 +468,16 @@ public static class SodaDesktopUnlock {
         if(source=="cover"||source=="normal")WorkerFailure(output,"source_transition");
         else WorkerFailure(output,exitCode==0?"worker_ended":"worker_start_or_connection");
     }
-    public static void Lease(bool virtualAllowed=false,bool unlockAllowed=true) {
+    public static void Lease(bool virtualAllowed=false,bool unlockAllowed=true,bool elevatedAllowed=false) {
         Require(SupportedWindows && WindowsIdentity.GetCurrent().User.Value==Owner && Process.GetCurrentProcess().SessionId==(int)WTSGetActiveConsoleSessionId());
         using(var controller=new ServiceController(Name)) {
             // DemandStart only. No installation or elevation performed by this process.
             controller.Refresh();
             if(controller.Status!=ServiceControllerStatus.Stopped)
                 controller.WaitForStatus(ServiceControllerStatus.Stopped,TimeSpan.FromSeconds(8));
-            controller.Start(virtualAllowed?new[]{Process.GetCurrentProcess().Id.ToString(),Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(),unlockAllowed?"both":"virtual"}:new[]{Process.GetCurrentProcess().Id.ToString(),Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString()});
+            var arguments=new List<string>{Process.GetCurrentProcess().Id.ToString(),Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString()};
+            int purpose=(unlockAllowed?1:0)|(virtualAllowed?2:0)|(elevatedAllowed?4:0);Require(purpose>0);
+            if(purpose!=1)arguments.Add(PurposeName(purpose));controller.Start(arguments.ToArray());
             controller.WaitForStatus(ServiceControllerStatus.Running,TimeSpan.FromSeconds(8));
         }
         using(var pipe=ClientPipe(""))using(var writer=Writer(pipe)) {
@@ -498,13 +502,25 @@ public static class SodaDesktopUnlock {
     static readonly Stopwatch Clock=Stopwatch.StartNew();
     static long Now {get{return Clock.ElapsedMilliseconds;}}
     static void Shutdown() {
-        lock(Gate){End=true;ShutdownToken.Cancel();try{if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}}catch{}
-            foreach(var pipe in new[]{WorkerPipe,SharePipe,LeasePipe})try{if(pipe!=null)pipe.Dispose();}catch{} }
+        lock(Gate){End=true;ShutdownToken.Cancel();EndWorker();
+            foreach(var pipe in new[]{SharePipe,LeasePipe})try{if(pipe!=null)pipe.Dispose();}catch{} }
     }
     static bool VirtualShareAllowed(Func<string> source,Func<bool> inputDefault){return source()=="normal"&&inputDefault();}
     static int BrokerPurpose;
-    static int ParseBrokerPurpose(string[] args){Require(args.Length==2||args.Length==3&&(args[2]=="virtual"||args[2]=="both"));return args.Length==2?1:args[2]=="virtual"?2:3;}
-    static bool AllowsBrokerRequest(int purpose,string request){return request=="share"?(purpose&1)!=0:request=="virtual"&&(purpose&2)!=0;}
+    static readonly string[] PurposeNames={null,null,"virtual","both","elevated","unlock-elevated","virtual-elevated","all"};
+    static string PurposeName(int purpose){Require(purpose>=2&&purpose<=7);return PurposeNames[purpose];}
+    static string LeaseArgument(bool virtualAllowed,bool unlockAllowed,bool elevatedAllowed){
+        // Legacy -UnlockLease alone denotes the unlock-only lease.
+        if(!virtualAllowed&&!elevatedAllowed)return "--lease";
+        int purpose=(virtualAllowed?2:0)|(unlockAllowed?1:0)|(elevatedAllowed?4:0);Require(purpose>0);
+        return purpose==1?"--lease":purpose==2?"--lease-virtual":purpose==3?"--lease-both":"--lease-"+PurposeName(purpose);
+    }
+    static int ParseBrokerPurpose(string[] args){Require(args.Length==2||args.Length==3);if(args.Length==2)return 1;for(int i=2;i<=7;i++)if(args[2]==PurposeNames[i])return i;throw new InvalidOperationException("Broker purpose rejected");}
+    static bool AllowsBrokerRequest(int purpose,string request){return request=="share"?(purpose&1)!=0:request=="virtual"?(purpose&2)!=0:(request=="elevated-default"||request=="elevated-uac")&&(purpose&4)!=0;}
+    static Type ProtectedWorkerType(){var type=typeof(SodaDesktopUnlock).Assembly.GetType("SodaDesktopProtectedWorker");Require(type!=null);return type;}
+    static bool CurrentProtectedWorker(long generation,Guid nonce){
+        if(!Live())return false;lock(Gate){try{return generation==Generation&&nonce==WorkerNonce&&Job!=IntPtr.Zero&&Worker!=null&&!Worker.HasExited&&LockStateOf((uint)Session)==1;}catch{return false;}}
+    }
     public static void VerifyLeasePurposes(){
         int unlock=ParseBrokerPurpose(new[]{"pid","ticks"}),virtualOnly=ParseBrokerPurpose(new[]{"pid","ticks","virtual"}),both=ParseBrokerPurpose(new[]{"pid","ticks","both"});
         Require(AllowsBrokerRequest(unlock,"share")&&!AllowsBrokerRequest(unlock,"virtual"));
@@ -512,6 +528,20 @@ public static class SodaDesktopUnlock {
         Require(AllowsBrokerRequest(both,"virtual")&&AllowsBrokerRequest(both,"share")&&!AllowsBrokerRequest(both,"unknown"));
         Require(VirtualShareAllowed(()=>"normal",()=>true)&&!VirtualShareAllowed(()=>"normal",()=>false)&&!VirtualShareAllowed(()=>"secure",()=>true));
         Console.WriteLine("desktop_broker_purpose_checks_passed: unlock-only / virtual-only / both routes separated; no service/device creation or display/input changes");
+    }
+    public static void VerifyProtectedPurposes(){
+        foreach(int purpose in new[]{1,2,3,4,5,6,7}){
+            var args=purpose==1?new[]{"pid","ticks"}:new[]{"pid","ticks",PurposeName(purpose)};
+            Require(ParseBrokerPurpose(args)==purpose);
+            Require(AllowsBrokerRequest(purpose,"share")==((purpose&1)!=0));
+            Require(AllowsBrokerRequest(purpose,"virtual")==((purpose&2)!=0));
+            foreach(string role in new[]{"elevated-default","elevated-uac"})Require(AllowsBrokerRequest(purpose,role)==((purpose&4)!=0));
+            Require(!AllowsBrokerRequest(purpose,"unknown")&&!AllowsBrokerRequest(purpose,"--worker-v2"));
+        }
+        Require(LeaseArgument(false,false,false)=="--lease"&&LeaseArgument(false,true,false)=="--lease");
+        Require(LeaseArgument(false,false,true)=="--lease-elevated"&&LeaseArgument(false,true,true)=="--lease-unlock-elevated"&&LeaseArgument(true,false,true)=="--lease-virtual-elevated"&&LeaseArgument(true,true,true)=="--lease-all");
+        bool invalid=false;try{ParseBrokerPurpose(new[]{"pid","ticks","share"});}catch{invalid=true;}Require(invalid);
+        Console.WriteLine("protected_broker_purpose_checks_passed: all fixed purpose bits/routes and legacy lease compatibility; no service/token/worker/input operations");
     }
     public static void StartService(string[] args) {
         Require(SupportedWindows && WindowsIdentity.GetCurrent().IsSystem);int purpose=ParseBrokerPurpose(args);
@@ -541,7 +571,8 @@ public static class SodaDesktopUnlock {
                 SharePipe=ServerPipe("",false,Logon);Accept(SharePipe);
                 using(var client=Peer(SharePipe))
                 using(var reader=Reader(SharePipe))using(var writer=Writer(SharePipe)) {
-                    CheckOwner(client,false);
+                    Require(client.Handle!=IntPtr.Zero&&!client.HasExited);long clientStarted=client.StartTime.ToUniversalTime().Ticks;
+                    CheckOwner(client,false);Require(!client.HasExited&&client.StartTime.ToUniversalTime().Ticks==clientStarted);
                     string request=Line(reader,64);Require(Live()&&AllowsBrokerRequest(BrokerPurpose,request));
                     if(request=="virtual"){
                         var type=typeof(SodaDesktopUnlock).Assembly.GetType("SodaDesktopVirtualBroker");Require(type!=null&&LockStateOf((uint)Session)==1);
@@ -549,15 +580,25 @@ public static class SodaDesktopUnlock {
                         Func<bool> valid=()=>{try{return Live()&&!client.HasExited&&client.StartTime.ToUniversalTime().Ticks==started&&client.SessionId==Session&&LockStateOf((uint)Session)==1;}catch{return false;}};
                         type.GetMethod("Run").Invoke(null,new object[]{reader,writer,valid});continue;
                     }
-                    Require(request=="share");
+                    bool protectedWorker=request=="elevated-default"||request=="elevated-uac";
+                    Require(request=="share"||protectedWorker);
                     try {
-                        long generation=StartWorker();Accept(WorkerPipe);
+                        Guid nonce=protectedWorker?Guid.NewGuid():Guid.Empty;
+                        long generation=StartWorker(protectedWorker?request:null,nonce);Accept(WorkerPipe);
                         using(var peer=Peer(WorkerPipe))using(var identity=Identity(peer))Require(peer.Id==Worker.Id&&identity.IsSystem&&peer.SessionId==Session);
                         using(var workerReader=Reader(WorkerPipe))using(var workerWriter=Writer(WorkerPipe)) {
+                            if(protectedWorker){
+                                var type=ProtectedWorkerType();string prefix;
+                                using(var broker=Process.GetCurrentProcess())prefix=(string)type.GetMethod("Create").Invoke(null,new object[]{BrokerPurpose,request,Owner,Logon,Session,generation,nonce,broker.Id,broker.StartTime.ToUniversalTime().Ticks,Worker.Id,Worker.StartTime.ToUniversalTime().Ticks});
+                                Func<bool> current=()=>CurrentProtectedWorker(generation,nonce)&&!client.HasExited&&client.StartTime.ToUniversalTime().Ticks==clientStarted;
+                                type.GetMethod("Broker").Invoke(null,new object[]{prefix,workerReader,workerWriter,current,(Action)(()=>EndWorker(generation))});
+                                Require(current());
+                            }
                             var forwarding=new Thread(()=>{try{Copy(reader,workerWriter,65536);}catch{}finally{EndWorker(generation);}}){IsBackground=true};forwarding.Start();
                             bool outputSeen=false;string output;while((output=Line(workerReader,3*1024*1024))!=null) {
+                                if(protectedWorker)Require(CurrentProtectedWorker(generation,nonce)&&!client.HasExited);
                                 outputSeen=true;
-                                if(output=="{\"type\":\"sas_request\"}") {SendSecureAttention();continue;}
+                                if(output=="{\"type\":\"sas_request\"}") {Require(!protectedWorker);SendSecureAttention();continue;}
                                 writer.WriteLine(output);
                             }
                             if(!outputSeen&&Live())WorkerFailure(writer,"worker_no_output");
@@ -567,19 +608,41 @@ public static class SodaDesktopUnlock {
             }catch{} finally{EndWorker();try{if(SharePipe!=null)SharePipe.Dispose();}catch{} }
         }
     }
-    static void EndWorker(long expected=-1) {lock(Gate){if(expected>=0&&expected!=Generation)return;if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}try{if(WorkerPipe!=null)WorkerPipe.Dispose();}catch{}}}
-    static long StartWorker() {
+    static void EndWorker(long expected=-1) {
+        lock(Gate){
+            if(expected>=0&&expected!=Generation)return;
+            // EOF first lets Host's finally release held input on a still-valid
+            // scope. A blocked worker is still reaped by the job after this bound.
+            try{if(WorkerPipe!=null)WorkerPipe.Dispose();}catch{}finally{WorkerPipe=null;}
+            try{if(Worker!=null&&!Worker.HasExited)Worker.WaitForExit(750);}catch{}
+            if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}
+            try{if(Worker!=null)Worker.Dispose();}catch{}finally{Worker=null;WorkerNonce=Guid.Empty;}
+        }
+    }
+    sealed class CleanupProcess:Process {public int DisposeCalls;protected override void Dispose(bool disposing){DisposeCalls++;base.Dispose(disposing);}}
+    public static void VerifyWorkerCleanup(){
+        Require(Job==IntPtr.Zero&&Worker==null&&WorkerPipe==null);long previous=Generation;var process=new CleanupProcess();
+        try{
+            Generation=17;Worker=process;WorkerNonce=Guid.NewGuid();EndWorker(16);if(process.DisposeCalls!=0||Worker!=process||WorkerNonce==Guid.Empty)throw new InvalidOperationException("Stale generation disposed current worker");
+            EndWorker(17);if(process.DisposeCalls!=1||Worker!=null||WorkerPipe!=null||WorkerNonce!=Guid.Empty)throw new InvalidOperationException("Current worker handle or scope was not released");
+            EndWorker(17);if(process.DisposeCalls!=1)throw new InvalidOperationException("Worker handle disposed repeatedly");
+        }finally{Worker=null;WorkerNonce=Guid.Empty;Generation=previous;if(process.DisposeCalls==0)process.Dispose();}
+        Console.WriteLine("protected_worker_cleanup_passed: stale generation cannot close current handles; matching teardown disposes once and clears scope; fake Process only");
+    }
+    static long StartWorker(string mode=null,Guid nonce=default(Guid)) {
         lock(Gate) {
-            Require(Live()&&LockStateOf((uint)Session)==0);Generation++;WorkerPipe=ServerPipe("-worker",true,null);
+            Require(mode==null||mode=="elevated-default"||mode=="elevated-uac");
+            Require(Live()&&LockStateOf((uint)Session)==(mode==null?0:1));Require(mode==null?nonce==Guid.Empty:nonce!=Guid.Empty);
+            Generation++;WorkerNonce=nonce;WorkerPipe=ServerPipe(mode==null?"-worker":"-worker-v2-"+nonce.ToString("N"),true,null);
             Job=CreateJobObject(IntPtr.Zero,null);Require(Job!=IntPtr.Zero);
             var limit=new JOB_LIMIT();limit.basic.flags=0x2000;Require(SetInformationJobObject(Job,9,ref limit,(uint)Marshal.SizeOf(typeof(JOB_LIMIT))));
             IntPtr original,token;Require(OpenProcessToken(Process.GetCurrentProcess().Handle,0x2|0x8,out original));
             try {Require(DuplicateTokenEx(original,0xf01ff,IntPtr.Zero,2,1,out token));
                 try {
                     int session=Session;Require(SetTokenInformation(token,12,ref session,4));
-                    var si=new STARTUPINFO{cb=Marshal.SizeOf(typeof(STARTUPINFO)),desktop=@"WinSta0\Winlogon"};PI process;
-                    Require(CreateProcessAsUser(token,OwnPath,new StringBuilder("\""+OwnPath+"\" --worker"),IntPtr.Zero,IntPtr.Zero,false,0x4|0x08000000,IntPtr.Zero,Path.GetDirectoryName(OwnPath),ref si,out process));
-                    try {Require(AssignProcessToJobObject(Job,process.process));Worker=Process.GetProcessById((int)process.pid);Require(ResumeThread(process.thread)!=0xffffffff);}
+                    var si=new STARTUPINFO{cb=Marshal.SizeOf(typeof(STARTUPINFO)),desktop=mode=="elevated-default"?@"WinSta0\Default":@"WinSta0\Winlogon"};PI process;
+                    Require(CreateProcessAsUser(token,OwnPath,new StringBuilder("\""+OwnPath+"\" "+(mode==null?"--worker":"--worker-v2 "+mode+" "+nonce.ToString("D"))),IntPtr.Zero,IntPtr.Zero,false,0x4|0x08000000,IntPtr.Zero,Path.GetDirectoryName(OwnPath),ref si,out process));
+                    try {Require(AssignProcessToJobObject(Job,process.process));Worker=Process.GetProcessById((int)process.pid);Require(Worker.Handle!=IntPtr.Zero);Require(ResumeThread(process.thread)!=0xffffffff);}
                     catch {using(var failed=Process.GetProcessById((int)process.pid))failed.Kill();throw;}
                     finally {CloseHandle(process.thread);CloseHandle(process.process);}
                 }finally{CloseHandle(token);}
@@ -647,6 +710,25 @@ public static class SodaDesktopUnlock {
         }
         Console.WriteLine("desktop_unlock_duplex_pipe_passed");
     }
+    static void ShareElevated(){
+        Require(LockState()==1);string mode=InputIsDefault()?"elevated-default":"elevated-uac";
+        using(var pipe=ClientPipe(""))using(var writer=Writer(pipe))using(var reader=Reader(pipe)){
+            writer.WriteLine(mode);
+            var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{pipe.Dispose();}}){IsBackground=true};input.Start();
+            Copy(reader,Console.Out,3*1024*1024);
+        }
+    }
+    static void WorkerMainV2(string mode,string nonceText){
+        using(var identity=WindowsIdentity.GetCurrent())Require(identity.IsSystem&&(mode=="elevated-default"||mode=="elevated-uac"));
+        Guid nonce;Require(Guid.TryParseExact(nonceText,"D",out nonce)&&nonce!=Guid.Empty);
+        using(var pipe=ClientPipe("-worker-v2-"+nonce.ToString("N")))using(var reader=Reader(pipe))using(var writer=Writer(pipe)){
+            uint pid;Require(GetNamedPipeServerProcessId(pipe.SafePipeHandle,out pid)&&pid==ServicePid());
+            using(var broker=Process.GetProcessById((int)pid)){
+                Require(broker.SessionId==0&&!broker.HasExited);
+                ProtectedWorkerType().GetMethod("Run").Invoke(null,new object[]{mode,nonce,(int)pid,broker.StartTime.ToUniversalTime().Ticks,reader,writer});
+            }
+        }
+    }
     static void WorkerMain() {
         // Authenticate the private transport before checking the desktop, so a
         // rejected guard can report its stage. No screen/input API runs on rejection.
@@ -660,9 +742,10 @@ public static class SodaDesktopUnlock {
     [STAThread]public static int Main(string[] args) {
         try {
             if(args.Length==0) {ServiceBase.Run(new UnlockService());return 0;}
+            if(args.Length==3&&args[0]=="--worker-v2"){WorkerMainV2(args[1],args[2]);return 0;}
             Require(args.Length==1);
             if(args[0]!="--worker")SetUtf8Console();
-            if(args[0]=="--lease")Lease();else if(args[0]=="--lease-virtual")Lease(true,false);else if(args[0]=="--lease-both")Lease(true,true);else if(args[0]=="--share")Share();else if(args[0]=="--virtual")Share(true);else if(args[0]=="--worker")WorkerMain();else throw new InvalidOperationException();return 0;
+            if(args[0]=="--lease")Lease();else if(args[0]=="--lease-virtual")Lease(true,false);else if(args[0]=="--lease-both")Lease(true,true);else if(args[0]=="--lease-elevated")Lease(false,false,true);else if(args[0]=="--lease-unlock-elevated")Lease(false,true,true);else if(args[0]=="--lease-virtual-elevated")Lease(true,false,true);else if(args[0]=="--lease-all")Lease(true,true,true);else if(args[0]=="--elevated")ShareElevated();else if(args[0]=="--share")Share();else if(args[0]=="--virtual")Share(true);else if(args[0]=="--worker")WorkerMain();else throw new InvalidOperationException();return 0;
         }catch {Console.Error.WriteLine("Sodashitsu unlock helper unavailable.");return 1;}
     }
     sealed class UnlockService:ServiceBase {

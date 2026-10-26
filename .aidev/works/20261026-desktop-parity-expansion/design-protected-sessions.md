@@ -44,3 +44,11 @@ v2 workerはnonceを含む別pipe namespace/prefixを使い、legacy worker IPC�
 captureの前にscope/source-generationのticketを取得し、取得/encode後・公開直前にも同じticketとSID/logon/session/mode/desktopを再検査する。途中で失効したframeは破棄する。入力前にも同じscopeを検査し、失効後の待機inputは破棄する。保持キー解除はscopeがまだ一致する間だけkeyupを送り、既に失効していればtrackerをclearして終了し、新desktopへkeyupを送らない。
 
 WTS ownerはforeground process ownerの意味ではない。7Aではownerの同じinteractive desktop上に、owner自身がRunAsで開いた別accountのwindowも対象にする。foreground processのSID一致で制限する実装にはしない。別WTS sessionや別logonへの越境は常に拒否する。
+
+## 2026-10-27: 7A実装の具体化
+
+管理者画面はDesktopOptions.elevatedDesktopと専用soda-desktop-protected-v1の積で要求し、helper readyのprotectedDesktopはelevated-default/elevated-uacに限る。secureDesktop=trueと禁止機能なしをschemaでも検査。Bのlocal ceiling、Aのcapability交渉、A/B両方のactual-ready拒否を独立に点検し、通常/旧locked sourceへfallbackしない。Source変更は固定理由でcloseし、ブラウザで画面/確定前text/controlを破棄、接続選択はブラウザ設定へ非永続。SASはUI・A・B・worker/serviceの各段で拒否。
+
+serviceはclient/worker process handleを保持し、PIDとcreation time、generation/nonceを固定。EndWorkerはstale generationを無視し、先にpipeを閉じて正常workerにfinallyでheld inputを解放する機会を与え、750ms以内で終了しなければjobで回収する。新しいscopeでkeyupせず、参照とhandleをclear/Disposeする。SYSTEMとして汎用exec/file APIは追加しない。
+
+旧-UnlockLease単独/2引数StartServiceはunlock-onlyで互換、virtual/bothは従来の2/3、新4〜7は固定purpose名。更新済み同梱source全体と管理者保護したexeを使い、実サービス更新は利用者の管理者操作として別途行う。7Aの実機確認と7Bは完了扱いにしない。

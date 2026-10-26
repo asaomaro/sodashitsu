@@ -26,6 +26,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
   const entries = [
     ["enabled", "画面共有を許可"],
     ["allowInput", "マウス・キーボードを許可"],
+    ["allowElevated","管理者権限のアプリ・UAC画面を許可（保護サービス更新が必要）"],
     ["allowMonitors","全モニターの共有と切替を許可"],
     ["allowVirtualDisplay","一時仮想画面の作成を許可（署名済みdriver/保護サービスが必要）"],
     ["allowClipboard", "クリップボードを許可"],

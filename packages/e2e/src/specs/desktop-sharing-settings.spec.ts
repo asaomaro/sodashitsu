@@ -20,10 +20,13 @@ test("local desktop sharing permissions are configurable and persist without sta
   await expect(section.getByRole("button", { name: "共有設定を保存" })).toBeEnabled();
   await expect(section.getByLabel("画面共有を許可", { exact: true })).not.toBeChecked();
   await section.getByLabel("マウス・キーボードの操作を許可").check();
+  await section.getByLabel("管理者権限のアプリ・UAC画面の共有を許可",{exact:true}).check();
   await section.getByRole("button", { name: "共有設定を保存" }).click();
   await expect(section.getByRole("status")).toContainText("保存しました");
   await page.reload();
   section = await open();
   await expect(section.getByLabel("マウス・キーボードの操作を許可")).toBeChecked();
+  await expect(section.getByLabel("管理者権限のアプリ・UAC画面の共有を許可",{exact:true})).toBeChecked();
+  await expect(section.getByLabel("Sodashitsu起動中のロック解除を許可",{exact:true})).not.toBeChecked();
   await expect(section.getByLabel("画面共有を許可", { exact: true })).not.toBeChecked();
 });

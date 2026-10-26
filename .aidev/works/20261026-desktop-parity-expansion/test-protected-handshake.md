@@ -1,6 +1,6 @@
 # 7A途中: private v2 prefix handshake
 
-この差分はservice統合前のmodule。production worker/service/UIへは未接続であり、7Aや第7段階全体を完了とはしない。
+準備commit 3b92da89時点の記録。続くservice/worker/UI統合と最終検証はtest-protected-sessions.mdに記録する。7Bと実UAC確認は別の未完了項目。
 
 WindowsProtectedHandshakeのBrokerは、OS peer認証を済ませたprivate pipeで固定scope tupleを送り、同tupleのworker_scope_readyを受けるまで戻らない。呼出側は成功後にだけviewer configure/input転送を開始する。未知/legacy/wrong-role/oversize prefix、owner失効、期限切れを拒否し、closeを一度だけ呼ぶ。monotonic期限を成功確定時にも検査する。外部live callbackをdeadline用gateの中で呼ばない。
 

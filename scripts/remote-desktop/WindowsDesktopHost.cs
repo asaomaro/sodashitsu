@@ -79,15 +79,20 @@ public static class SodaDesktopHost {
     static Func<object> ProtectedCapture;
     static Func<object,bool> ProtectedPublish;
     static bool SecureAttentionAllowed=true;
+    static string ProtectedMode;
+    static void SetProtectedGuards(Func<bool> current,Func<object> capture,Func<object,bool> publish,string mode){Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;SecureAttentionAllowed=false;ProtectedMode=mode;}
+    static void ClearProtectedGuards(){Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;SecureAttentionAllowed=true;ProtectedMode=null;}
+    static bool CanSecureAttention(){return Secure&&SecureAttentionAllowed&&Control&&AllowedDesktop();}
     static object CaptureScope(){return ProtectedCapture==null?null:ProtectedCapture();}
     static bool PublishScope(object ticket){return ProtectedPublish==null||ticket!=null&&ProtectedPublish(ticket);}
     // Delegates come only from the authenticated installed worker, never configure.
-    public static void RunProtected(Func<bool> current,Func<object> capture,Func<object,bool> publish) {
+    public static void RunProtected(Func<bool> current,Func<object> capture,Func<object,bool> publish,string mode=null) {
         if(current==null||capture==null||publish==null)throw new ArgumentNullException();
+        if(mode!=null&&mode!="elevated-default"&&mode!="elevated-uac")throw new ArgumentException("Protected worker role rejected");
         if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem||!current())throw new InvalidOperationException("Protected desktop unavailable");
-        Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;SecureAttentionAllowed=false;
+        SetProtectedGuards(current,capture,publish,mode);
         try{Run(0,true,false,false,null);}
-        finally{Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;SecureAttentionAllowed=true;}
+        finally{ClearProtectedGuards();}
     }
     static bool AllowedDesktop() { if(VirtualAlive!=null&&!VirtualAlive())return false;if(MemoryDesktop!=null)return MemoryDesktop();return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop(); }
     public static void RunSecure(Func<int> lockState,Func<bool> secureGuard) {
@@ -275,7 +280,7 @@ public static class SodaDesktopHost {
     public static void VerifyProtectedQueuedOutput(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
         if(Secure||MemoryInput!=null||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;int frames=0;System.Threading.Tasks.Task<bool> waiting=null;
-        Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;MemoryOutput=value=>frames++;Stopping=false;
+        SetProtectedGuards(current,capture,publish,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
         using(var reached=new ManualResetEventSlim(false))try{
             var frame=new PreparedFrame{scopeTicket=CaptureScope(),image=new byte[]{1,2,3},info=new Dictionary<string,object>{{"seq",1}}};
             MemoryPreparedWait=()=>reached.Set();
@@ -287,7 +292,7 @@ public static class SodaDesktopHost {
             if(!waiting.Wait(1000)||waiting.Result||frames!=0||!Stopping)throw new Exception("Old frame published after output gate wait");
         }finally{
             if(waiting!=null&&!waiting.IsCompleted)waiting.Wait(2000);
-            MemoryPreparedWait=null;MemoryOutput=null;Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;Stopping=oldStopping;
+            MemoryPreparedWait=null;MemoryOutput=null;ClearProtectedGuards();Stopping=oldStopping;
         }
         Console.WriteLine("protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held");
     }
@@ -295,8 +300,9 @@ public static class SodaDesktopHost {
     public static void VerifyProtectedBoundaries(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
         if(Secure||MemoryInput!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;var sent=new List<INPUT>();
-        Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;MemoryInput=sent.Add;Stopping=false;
+        SetProtectedGuards(current,capture,publish,"elevated-default");MemoryInput=sent.Add;Stopping=false;
         try{
+            Control=true;if(CanSecureAttention())throw new Exception("Protected secure attention allowed");Control=false;
             var frame=new PreparedFrame{scopeTicket=CaptureScope()};
             if(!AdmitPrepared(frame))throw new Exception("Stable prepared frame rejected");
             Keys.Add(65);Key(65,true);Buttons.Add(0);Emit(ButtonInput(0,true));Release();
@@ -307,7 +313,7 @@ public static class SodaDesktopHost {
             Release();if(sent.Count!=6||Keys.Count!=0||Buttons.Count!=0)throw new Exception("Protected release reached new desktop");
             bool denied=false;try{Key(66,true);}catch(InvalidOperationException){denied=true;}
             if(!denied||sent.Count!=6)throw new Exception("Protected Emit bypassed scope guard");
-        }finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;Stopping=oldStopping;}
+        }finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;ClearProtectedGuards();Stopping=oldStopping;}
         Console.WriteLine("protected_host_boundaries_passed: queued frame discarded; key/mouse release and direct input blocked after transition; generated facts/input only");
     }
     static object OpenVirtualOnNormalDesktop(Func<bool> normal,Func<object> open){if(!normal())throw new InvalidOperationException("Virtual display requires the normal input desktop");return open();}
@@ -438,6 +444,7 @@ public static class SodaDesktopHost {
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
             if(nativePipeline)ready["nativeVideoWindow"]=3;
             if(Secure)ready["secureDesktop"]=true;
+            if(ProtectedMode!=null)ready["protectedDesktop"]=ProtectedMode;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             if(ActiveMonitors!=null)ready["monitorLayout"]=ActiveMonitors.Message();
             Output(ready);
@@ -478,7 +485,7 @@ public static class SodaDesktopHost {
                     while(!Stopping && handled++<64 && commands.ProcessOne(msg=> {
                         string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
-                        else if(type=="sas" && Secure && SecureAttentionAllowed && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
+                        else if(type=="sas" && CanSecureAttention()) { Output(new {type="sas_request"}); }
                         else if(type=="clipboard_rich") {
                             try{
                                 if(!richCeiling)throw new InvalidOperationException("Rich clipboard not permitted");

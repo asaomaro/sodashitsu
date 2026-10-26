@@ -1,3 +1,4 @@
+import {DESKTOP_PROTECTED_PROTOCOL,DesktopProtectedFailure,desktopProtectedFailureMessage} from "@sodashitsu/protocol";
 import {DesktopVirtualFailure,desktopVirtualFailureMessage,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream} from "@sodashitsu/protocol";
 import {DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DesktopNativeProfilePending,DesktopNativeFormatAck,DesktopNativeFormatReady} from "@sodashitsu/protocol";
 import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
@@ -49,6 +50,7 @@ import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
 class DesktopSetupRequired extends Error {}
 
 type Viewer = {
+  elevatedRequested?:boolean;elevatedDesktop?:boolean;protectedDesktop?: "elevated-default"|"elevated-uac";
   virtualDisplayRequested?:boolean;virtualDisplay?:boolean;
   monitorsRequested?:boolean;monitors?:boolean;
   fileRequested?:boolean;files?:boolean;fileLane?:ReturnType<DesktopVideoLanes["issue"]>;
@@ -220,7 +222,7 @@ export class DesktopRelay {
       if(offered.length===1&&offered[0]===DESKTOP_RICH_CLIPBOARD_PROTOCOL){this.clipboardLanes.accept(ws,sessionId,origin);return;}
       if (offered.length === 1 && offered[0] === DESKTOP_IMAGE_LANE_PROTOCOL) { this.imageLanes.accept(ws,sessionId,origin);return; }
       if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL),offered.includes(DESKTOP_VIRTUAL_DISPLAY_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL),offered.includes(DESKTOP_VIRTUAL_DISPLAY_PROTOCOL),offered.includes(DESKTOP_PROTECTED_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -230,7 +232,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -294,7 +296,7 @@ export class DesktopRelay {
             }
           }),
       },
-      virtualDisplayRequested,nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
+      elevatedRequested,virtualDisplayRequested,nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
       nativeRateRequested,
       videoLaneRequested,imageLaneRequested,
       nativeVideoRequested,
@@ -433,7 +435,7 @@ export class DesktopRelay {
         } else if (m.type === "keyframe") {
           if (v.provider) this.send(v.provider, m);
         } else if (m.type === "sas") {
-          if (v.secureDesktop && !v.lockScreenCover && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
+          if (v.secureDesktop && !v.protectedDesktop && !v.lockScreenCover && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
             this.send(v.provider, m);
         } else if (m.type === "dismiss_lock_screen") {
           if (v.lockScreenCover && v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
@@ -510,6 +512,7 @@ export class DesktopRelay {
         extendedInput: z.boolean().optional(),
         videoLane: z.boolean().optional(),imageLane:z.boolean().optional(),
         virtualDisplay:z.boolean().optional(),
+        elevatedDesktop:z.boolean().optional(),
         monitors:z.boolean().optional(),
         files:z.boolean().optional(),
         richClipboard:z.boolean().optional(),
@@ -538,7 +541,7 @@ export class DesktopRelay {
     const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
     delete legacyOptions.imeKeys;
     delete legacyOptions.extendedInput;
-    delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
+    delete legacyOptions.elevatedDesktop;delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
     delete legacyOptions.nativeVideoWindow;
     delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;delete legacyOptions.nativeAdaptive;delete legacyOptions.nativeCodecs;
     delete legacyOptions.cursor;
@@ -548,6 +551,8 @@ export class DesktopRelay {
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
     v.nativeCodecs=v.nativeVideo&&v.nativeCodecsRequested===true&&caps.nativeCodecs===true;
     v.nativeAdaptive=v.nativeVideo&&v.nativeAdaptiveRequested===true&&caps.nativeAdaptive===true;
+    v.elevatedDesktop=options.elevatedDesktop===true&&v.elevatedRequested===true&&caps.elevatedDesktop===true&&caps.features===true;
+    if(options.elevatedDesktop&&(!v.elevatedDesktop||options.virtualDisplay||options.monitorDevice||options.display))throw new DesktopSetupRequired(options.virtualDisplay||options.monitorDevice||options.display?desktopProtectedFailureMessage("conflict"):desktopProtectedFailureMessage("not_allowed")+"接続先と接続元を更新し、専用保護サービスを確認してください。");
     v.virtualDisplay=options.virtualDisplay===true&&v.virtualDisplayRequested===true&&caps.virtualDisplay===true;
     if(options.virtualDisplay&&(!v.virtualDisplay||options.monitorDevice))throw new DesktopSetupRequired("接続先を更新し、仮想画面の作成を許可してください。モニター指定との併用はできません。");
     v.monitors=v.monitorsRequested===true&&caps.monitors===true;
@@ -557,6 +562,10 @@ export class DesktopRelay {
     v.nativeAudio=v.nativeVideo&&v.nativeAudioRequested===true&&caps.nativeAudio===true;
     v.nativeDatagrams=v.nativeVideo&&v.nativeDatagramsRequested===true&&caps.nativeDatagrams===true;
     v.nativeInputFreshness=v.nativeVideo&&caps.nativeInputFreshness===true;
+    if(v.elevatedDesktop){
+      v.nativeVideo=false;v.nativeAudio=false;v.nativeDatagrams=false;v.nativeCodecs=false;v.nativeAdaptive=false;v.nativeInputFreshness=false;
+      v.files=false;v.richClipboard=false;v.monitors=false;v.cursor=false;delete v.nativeVideoWindow;delete v.nativeMaxFps;
+    }
     // Capability requires both the viewer opt-in and B's current RPC schema.
     v.imeKeysNegotiated = v.imeKeysRequested && caps.imeKeys === true;
     v.extendedInputNegotiated = v.extendedInputRequested && caps.extendedInput === true;
@@ -568,6 +577,7 @@ export class DesktopRelay {
       throw new Error("B requires an update for image settings");
     const negotiated = {
       ...legacyOptions,
+      ...(v.elevatedDesktop?{elevatedDesktop:true as const}:{}),
       ...(v.virtualDisplay?{virtualDisplay:true as const}:{}),
       ...(v.monitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{}),
       ...(v.files?{files:true as const}:{}),
@@ -768,10 +778,15 @@ export class DesktopRelay {
             if (lane && !v.requestedNative) return;
             if (v.videoLane && !lane && v.requestedNative && ((msg.type === "media_status" && msg.state !== "images") || msg.type === "media_stream" || msg.type === "rtc_signal")) return;
           }
+          if(v.elevatedDesktop&&["unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(msg.type)){this.send(v.ws,{type:"error",message:desktopProtectedFailureMessage("source_changed")});this.stop(v);return;}
+          if(msg.type==="protected_desktop_failure"&&v.elevatedDesktop){const failure=DesktopProtectedFailure.parse(msg);this.send(v.ws,{type:"error",message:desktopProtectedFailureMessage(failure.code)});this.stop(v);return;}
           if(msg.type==="virtual_display_failure"&&v.virtualDisplay){const failure=DesktopVirtualFailure.parse(msg);this.send(v.ws,{type:"error",message:desktopVirtualFailureMessage(failure.code)});this.stop(v);return;}
           if(msg.type==="monitor_topology_changed"&&Object.keys(msg).length===1&&v.monitors&&v.ready&&!v.secureDesktop){this.send(v.ws,{type:"monitor_topology_changed"});this.stop(v);return;}
           if (msg.type === "ready" && !v.ready) {
             const ready = DesktopReady.parse(msg);
+            if(v.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover))throw Error("Requested protected worker not selected");
+            if(ready.protectedDesktop&&!v.elevatedDesktop)throw Error("Unrequested protected worker");
+            if(ready.protectedDesktop)v.protectedDesktop=ready.protectedDesktop;else delete v.protectedDesktop;
             if(v.virtualDisplay&&(ready.virtualDisplay!==true||ready.secureDesktop||ready.lockScreenCover))throw Error("Virtual display not selected");
             v.ready = true;
             v.allowInput = ready.allowInput;
@@ -796,12 +811,12 @@ export class DesktopRelay {
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
             v.files=v.files===true&&ready.files===true&&!v.secureDesktop;
             v.richClipboard=v.richClipboard===true&&ready.richClipboard===true&&ready.allowClipboard===true&&!v.secureDesktop;
-            const { imeKeys, extendedInput, virtualDisplay, monitorLayout, files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,imageLane:helperImageLane, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.virtualDisplay&&virtualDisplay?{virtualDisplay:true}:{}), ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            const { imeKeys, extendedInput, protectedDesktop, virtualDisplay, monitorLayout, files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,imageLane:helperImageLane, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}), ...(v.virtualDisplay&&virtualDisplay?{virtualDisplay:true}:{}), ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);
-          } else if (msg.type === "session_unlocked" && v.secureDesktop && v.ready) {
+          } else if (msg.type === "session_unlocked" && v.secureDesktop && !v.protectedDesktop && v.ready) {
             this.send(v.ws, { type: "session_unlocked" });
             this.stop(v);
           } else if (msg.type === "lock_screen_changed" && v.secureDesktop && v.lockScreenCover && v.ready) {

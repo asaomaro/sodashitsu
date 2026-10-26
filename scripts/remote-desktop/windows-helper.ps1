@@ -1,4 +1,4 @@
-param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
+param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowElevated, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
 $ErrorActionPreference = 'Stop'
 # Loading and compilation are side-effect free: -ValidateOnly never opens a window,
 # captures the screen, queries the input desktop, or sends input.
@@ -12,7 +12,8 @@ $richSource = if (Test-Path -LiteralPath $richPath) { Get-Content -LiteralPath $
 $codecPath = Join-Path $PSScriptRoot 'WindowsCodecProbe.cs'
 $codecSource = if (Test-Path -LiteralPath $codecPath) { Get-Content -LiteralPath $codecPath -Raw } else { '' }
 $virtualSource = @('WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
-$combined = ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource
+$protectedSource = @('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
+$combined = ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
 Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
@@ -21,6 +22,20 @@ if ($CaptureBackend -eq "gdi") { $env:SODA_DESKTOP_CAPTURE = "gdi" }
 [SodaDesktopUnlock]::SetUtf8Console()
 try {
     $virtualRequested = $AllowVirtualDisplay -and $env:SODA_DESKTOP_VIRTUAL_REQUEST -eq '1'
+    $elevatedRequested = $AllowElevated -and $env:SODA_DESKTOP_ELEVATED_REQUEST -eq '1'
+    if ($virtualRequested -and $elevatedRequested) { throw 'Conflicting desktop requests.' }
+    if ($UnlockLease) {
+        [SodaDesktopUnlock]::RunInstalled($true,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent,$AllowElevated.IsPresent)
+        exit 0
+    }
+    if ($elevatedRequested) {
+        if (-not (Test-Path -LiteralPath ([SodaDesktopUnlock]::InstalledExecutable()))) {
+            [Console]::Out.WriteLine('{"type":"protected_desktop_failure","code":"service_missing"}')
+            exit 0
+        }
+        [SodaDesktopUnlock]::RunInstalled($false,$false,$false,$true)
+        exit 0
+    }
     $selected = 'normal'
     if (-not $UnlockLease -and $AllowUnlock -and -not $virtualRequested) { $selected = [SodaDesktopUnlock]::SelectSource() }
     if ($selected -eq 'transition') { [SodaDesktopUnlock]::SourceTransition(); exit 0 }
@@ -28,7 +43,7 @@ try {
         [SodaDesktopUnlock]::RunUserLockScreen($AllowInput.IsPresent)
         exit 0
     }
-    if ($UnlockLease -or $selected -eq 'secure') {
+    if ($selected -eq 'secure') {
         $executable = [SodaDesktopUnlock]::InstalledExecutable()
         if (-not (Test-Path -LiteralPath $executable)) { throw 'Install the unlock service first.' }
         [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent)

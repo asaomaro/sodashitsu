@@ -1,3 +1,4 @@
+import {DesktopProtectedFailure,desktopProtectedFailureMessage} from "@sodashitsu/protocol";
 import {DesktopVirtualFailure} from "@sodashitsu/protocol";
 import {DesktopFiles} from "./DesktopFiles.js";
 import {DESKTOP_FILES_PROTOCOL,DesktopFileRequest,DesktopFileResult} from "@sodashitsu/protocol";
@@ -47,6 +48,7 @@ export interface DesktopProviderConfig {
   allowInput: boolean;
   allowMonitors?:boolean;
   allowVirtualDisplay?:boolean;
+  allowElevated?:boolean;
   fileRoot?:string;
   allowClipboard?: boolean;
   allowMedia?: boolean;
@@ -84,6 +86,7 @@ type Share = {
   ready: boolean;
   control: boolean;
   secureDesktop?: boolean;
+  protectedDesktop?: "elevated-default"|"elevated-uac";
   lockScreenCover?: boolean;
   imeKeys?: boolean;
   extendedInput?: boolean;
@@ -114,7 +117,7 @@ export class DesktopProvider {
   }
   /** Handoff rollback reopens the local lease; a successful handoff creates a new provider. */
   resumeUnlockLease(): void {
-    if ((this.config?.allowUnlock||this.config?.allowVirtualDisplay) && this.config.unlockLeaseCommand)
+    if ((this.config?.allowUnlock||this.config?.allowVirtualDisplay||this.config?.allowElevated) && this.config.unlockLeaseCommand)
       this.unlockLease.start(this.config.unlockLeaseCommand);
   }
   capabilities() {
@@ -127,6 +130,7 @@ export class DesktopProvider {
       extendedInput: true,
       monitors:this.config?.allowMonitors===true,
       virtualDisplay:this.config?.allowVirtualDisplay===true,
+      elevatedDesktop:this.config?.allowElevated===true,
       files:!!this.config?.fileRoot,
       richClipboard:this.config?.allowClipboard===true,
       imageLane: true,
@@ -147,6 +151,10 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
+    if(p.options.elevatedDesktop){
+      if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
+      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||p.options.files||p.options.richClipboard||p.options.nativeVideo||p.options.nativeAudio||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.nativeVideoWindow||p.options.nativeMaxFps||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
+    }
     if(p.options.virtualDisplay&&(!cfg.allowVirtualDisplay||!p.options.features||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の作成が許可されていないか、モニター指定と併用されています");
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
@@ -182,7 +190,7 @@ export class DesktopProvider {
       !allowedRelay(url, cfg.origins())
     )
       throw new RpcError("unauthorized", "Bで許可されていない共有先です");
-    if (cfg.allowUnlock||cfg.allowVirtualDisplay&&cfg.unlockLeaseCommand) this.unlockLease.ensureRunning();
+    if ((cfg.allowUnlock||cfg.allowVirtualDisplay||cfg.allowElevated)&&cfg.unlockLeaseCommand) this.unlockLease.ensureRunning();
     const ws = new WebSocket(url, {
       handshakeTimeout: 10000,
       maxPayload: 65536,
@@ -381,7 +389,7 @@ export class DesktopProvider {
             this.write(s, { type: "control", enabled: s.control });
             this.send(s, { type: "control", enabled: s.control });
           } else if (m.type === "sas") {
-            if (s.secureDesktop && !s.lockScreenCover && s.control && s.ready && performance.now() - s.lastSeen < 5000)
+            if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && s.ready && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "dismiss_lock_screen") {
             if (s.lockScreenCover && s.secureDesktop && s.control && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
@@ -419,7 +427,7 @@ export class DesktopProvider {
     const child = spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
-      env:{...process.env,SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
+      env:{...process.env,SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
       stdio: ["pipe", "pipe", "pipe"],
     });
     s.process = child;
@@ -447,18 +455,25 @@ export class DesktopProvider {
         if (!line) continue;
         try {
           const raw = JSON.parse(line);
+          if(options.elevatedDesktop&&["unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(raw.type)){this.send(s,{type:"protected_desktop_failure",code:raw.type==="unlock_failure"?"worker_unavailable":"source_changed"});this.stop(s);return;}
+          if(raw.type==="protected_desktop_failure"&&options.elevatedDesktop&&cfg.allowElevated){this.send(s,DesktopProtectedFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="virtual_display_failure"&&options.virtualDisplay&&cfg.allowVirtualDisplay){this.send(s,DesktopVirtualFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){this.send(s,{type:"monitor_topology_changed"});this.stop(s);return;}
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
+            if(options.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover)){
+              this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Requested protected worker unavailable");
+            }
+            if(ready.protectedDesktop&&(!options.elevatedDesktop||!cfg.allowElevated))throw Error("Unrequested protected worker");
+            if(ready.protectedDesktop)s.protectedDesktop=ready.protectedDesktop;else delete s.protectedDesktop;
             s.secureDesktop = ready.secureDesktop === true;
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.lockScreenCover = ready.lockScreenCover === true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
             s.extendedInput = options.extendedInput === true && ready.extendedInput === true && !s.lockScreenCover;
-            if (s.secureDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
+            if (s.secureDesktop && !s.protectedDesktop && !cfg.allowUnlock) throw new Error("Unlock is not locally permitted");
             if (
               !s.secureDesktop && options.display &&
               (!ready.display ||
@@ -484,7 +499,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
+              protectedDesktop,virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -506,6 +521,7 @@ export class DesktopProvider {
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
+              ...(options.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true}:{}),
@@ -553,7 +569,7 @@ export class DesktopProvider {
             this.send(s, { type: "session_locked" });
             this.stop(s);
             return;
-          } else if (raw.type === "session_unlocked" && s.ready && s.secureDesktop) {
+          } else if (raw.type === "session_unlocked" && s.ready && s.secureDesktop && !s.protectedDesktop) {
             this.send(s, { type: "session_unlocked" });
             this.stop(s);
             return;
@@ -624,6 +640,7 @@ export class DesktopProvider {
       inputAckPipe: true,
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
+      ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
@@ -758,6 +775,7 @@ export function desktopConfigFromEnv(
       allowInput: env.SODA_DESKTOP_ALLOW_INPUT === "1",
       allowMonitors:env.SODA_DESKTOP_ALLOW_MONITORS==="1",
       allowVirtualDisplay:env.SODA_DESKTOP_ALLOW_VIRTUAL_DISPLAY==="1",
+      allowElevated:env.SODA_DESKTOP_ALLOW_ELEVATED==="1",
       allowClipboard: env.SODA_DESKTOP_ALLOW_CLIPBOARD === "1",
       allowMedia: env.SODA_DESKTOP_ALLOW_MEDIA === "1",
       allowDisplayResize: env.SODA_DESKTOP_ALLOW_DISPLAY_RESIZE === "1",

@@ -19,7 +19,7 @@ public static class SodaDesktopProtectedHandshake {
         object gate=new object();bool finished=false,expired=false,success=false;int closing=0;
         var clock=System.Diagnostics.Stopwatch.StartNew();
         Action cancel=()=>{if(Interlocked.Exchange(ref closing,1)!=0)return;try{close();}catch{}};
-        using(var deadline=new Timer(_=>{lock(gate){if(finished)return;expired=true;}cancel();},null,timeout,Timeout.Infinite)){
+        using(var deadline=new System.Threading.Timer(_=>{lock(gate){if(finished)return;expired=true;}cancel();},null,timeout,Timeout.Infinite)){
             try{
                 if(!live())throw Rejected();
                 writer.WriteLine(scope.Encode());writer.Flush();
