@@ -328,3 +328,67 @@ AssertionError: expected +0 to be 1 // Object.is equality
 
 
 ```
+
+## Final validation: source b08ff6c2
+
+build/typecheck成功。ソースを固定して全体774 suite/11,598件成功（430.59s）。browser27件成功/既存任意1 skip（4.1m）: shared native2窓、shared画像、既存通常/agent/input/native/codec/protected。独立worktree b08ff6c2 のinstall/build/smoke PASS。途中ソース編集なし、全体を重複実行していない。実画面/OS入力/サービス変更なし。
+
+### Full suite
+
+```text
+    at Fetch.sendRequest (file:///workspaces/sodashitsu-desktop-shared-native/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:415:16)
+    at Fetch.send (file:///workspaces/sodashitsu-desktop-shared-native/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:188:27)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at BrowserFrameNavigator.navigate (file:///workspaces/sodashitsu-desktop-shared-native/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/browser/utilities/BrowserFrameNavigator.js:202:24)
+
+ Test Files  774 passed (774)
+      Tests  11598 passed (11598)
+   Start at  07:57:08
+   Duration  430.59s (tests 79%, import 12%, environment 5%, transform 4%)
+
+Environment  |@sodashitsu/web| happy-dom was created 225 times · 77.02s total, 29% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+```
+
+### Browser
+
+```text
+{"ts":"2026-10-26T23:01:04.923Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-26T23:01:04.924Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-26T23:01:04.924Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-26T23:01:04.939Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-ZWhRpm/commands.json","count":0}
+{"ts":"2026-10-26T23:01:05.406Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-26T23:01:05.407Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-26T23:01:05.407Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-26T23:01:05.408Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-EvQBK9/commands.json","count":0}
+NATIVE_WINDOW_BENCH {"pipelined":true,"frames":79,"fps":23.456530237789185,"ackDelayMs":100,"source":"hardware-generated fixture; no actual desktop or physical network"}
+{"ts":"2026-10-26T23:01:12.198Z","level":"info","msg":"machine link closed","machine":"c58f6b5b9d7ee89afbc07cc5db9edb63","kind":"transient","reason":"接続が切れました"}
+  ✓  28 src/specs/remote-desktop-native-video.spec.ts:381:3 › native video three-frame window under 100ms draw ACK delay (7.5s)
+
+  1 skipped
+  27 passed (4.1m)
+
+```
+
+### Independent smoke
+
+```text
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-10-26T22:58:51.009Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"613dc976-b756-4fa5-8289-c83fedead30d","paneId":"bea36c56-f06e-46ff-958b-9f5c61a9ba4d"}
+smoke: custom command popup round trip ok
+smoke(web): auto-login (#token) → connect → pane 表示 ok
+smoke(web): 端末の描画用 canvas が画面内にある（xterm.css 有効。D96）
+smoke(web): tab title ok ("my-notePC: smoke"。H14/AC4）
+smoke(web): typed into pane bea36c56-f06e-46ff-958b-9f5c61a9ba4d
+smoke(web): echo round trip ok（ブラウザでの入力が PTY まで届いた）
+smoke(web): 初めてのブラウザで、はじめの案内が端末の表示のあとに開き、見出しにフォーカスがある
+smoke(web): Esc で閉じると端末へフォーカスが戻り、案内済みだけが保存される
+smoke(web): 開き直しても、はじめの案内は出ない
+smoke(web): はじめの案内を閉じたあと、クリックせずに打った文字が PTY まで届いた
+smoke: PASS
+
+```
