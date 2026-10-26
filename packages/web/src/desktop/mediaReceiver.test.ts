@@ -95,3 +95,9 @@ it("falls back from a live UDP signaling error without rejecting the parent mess
  try{await expect(receiver.signal({kind:"offer",sdp:"generated"})).resolves.toBeUndefined();expect(send).toHaveBeenCalledExactlyOnceWith({type:"media_fallback",id:"test"});}
  finally{receiver.stop();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;vi.unstubAllGlobals();}
 });
+
+it("isolates malformed audio on WSS from video and ignores audio after stop",()=>{
+ vi.stubGlobal("RTCPeerConnection",class{close(){}});Object.defineProperty(HTMLVideoElement.prototype,"requestVideoFrameCallback",{configurable:true,value:()=>1});Object.defineProperty(HTMLVideoElement.prototype,"cancelVideoFrameCallback",{configurable:true,value:()=>{}});
+ const send=vi.fn(),state=vi.fn(),audioState=vi.fn(),id="22222222-2222-4222-8222-222222222222",receiver=new DesktopMediaReceiver(id,send,()=>{},state,[],false,true,audioState),audio={push:vi.fn(()=>{throw Error("bad audio packet");}),stop:vi.fn()};
+ try{(receiver as any).audio=audio;expect(()=>receiver.audioChunk(new Uint8Array([1]))).not.toThrow();expect(audioState).toHaveBeenCalledWith("unavailable");expect(send).toHaveBeenCalledExactlyOnceWith({type:"native_audio_control",id,enabled:false});expect(state).not.toHaveBeenCalled();expect((receiver as any).stopped).toBe(false);receiver.stop();expect(()=>receiver.audioChunk(new Uint8Array())).not.toThrow();}finally{receiver.stop();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;vi.unstubAllGlobals();}
+});

@@ -1,3 +1,5 @@
+import {DesktopNativeAudioReceiver} from "./nativeAudioReceiver.js";
+import {DESKTOP_AUDIO_CHANNEL,DesktopNativeAudioStatus} from "@sodashitsu/protocol";
 import {DesktopDatagramFrames} from "./datagramFrames.js";
 import {DESKTOP_VIDEO_CHANNEL,DESKTOP_CONTROL_CHANNEL,DesktopNativeFrameNotice,DesktopNativeVideoAck} from "@sodashitsu/protocol";
 import { DesktopNativeVideoReceiver } from "./nativeVideoReceiver.js";
@@ -6,6 +8,7 @@ import { decodeDesktopMediaChunk, type DesktopMediaSettings } from "@sodashitsu/
 /** Viewer-owned peer/player. Audio starts muted, queues are bounded, stop releases all resources. */
 export class DesktopMediaReceiver {
   readonly video = document.createElement("video");
+  private audio:DesktopNativeAudioReceiver|undefined;private audioChannel:RTCDataChannel|undefined;private videoTimestamp=-1;
   private datagrams:DesktopDatagramFrames|undefined;
   private nativeControl:RTCDataChannel|undefined;
   private nativeVideo:RTCDataChannel|undefined;
@@ -36,6 +39,8 @@ export class DesktopMediaReceiver {
     private state: (value: string) => void,
     iceServers: RTCIceServer[] = [],
     private udp=false,
+    private requestedNativeAudio=false,
+    private audioState:(state:"starting"|"running"|"stopped"|"unavailable")=>void=()=>{},
   ) {
     this.video.muted = true;
     this.video.autoplay = true;
@@ -57,6 +62,10 @@ export class DesktopMediaReceiver {
           channel.onmessage=e=>{try{if(!(e.data instanceof ArrayBuffer))throw Error("Native binary required");this.datagrams?.fragment(new Uint8Array(e.data));}catch{this.datagramFailure();}};
         }else if(channel.label===DESKTOP_CONTROL_CHANNEL&&!this.nativeControl&&channel.ordered&&channel.maxRetransmits===null&&channel.maxPacketLifeTime===null){
           this.nativeControl=channel;channel.onmessage=()=>this.datagramFailure();
+        }else if(this.requestedNativeAudio&&channel.label===DESKTOP_AUDIO_CHANNEL&&!this.audioChannel&&!channel.ordered&&channel.maxRetransmits===0){
+          this.audioChannel=channel;channel.binaryType="arraybuffer";
+          channel.onmessage=e=>{if(this.stopped)return;try{if(!(e.data instanceof ArrayBuffer))throw Error("Audio binary required");this.audioChunk(new Uint8Array(e.data));}catch{this.audioFailure();}};
+          channel.onclose=()=>{if(!this.stopped)this.audioFailure();};channel.onerror=()=>this.audioFailure();return;
         }else{channel.close();this.datagramFailure();return;}
         channel.onclose=()=>{if(!this.stopped)this.datagramFailure();};channel.onerror=()=>this.datagramFailure();
       };
@@ -171,13 +180,21 @@ export class DesktopMediaReceiver {
   }
   private createNative(){
     const format=this.nativeFormat;if(!format||this.stopped)return;
-    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>this.udp?this.nativeAck(value):this.send(value),frame=>{if(this.stopped)return;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>this.udp?this.datagramFailure():this.fail());
+    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>this.udp?this.nativeAck(value):this.send(value),frame=>{if(this.stopped)return;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>this.udp?this.datagramFailure():this.fail());
   }
   notice(raw:unknown){
     if(this.stopped)return;
     const notice=DesktopNativeFrameNotice.parse(raw);if(!this.udp||notice.id!==this.id||notice.generation!==this.generation||!this.nativeFormat)throw Error("Unexpected native notice");
     this.datagrams!.notice(notice.seq,notice.bytes);
   }
+  audioStatus(raw:unknown){
+    if(this.stopped)return;const status=DesktopNativeAudioStatus.parse(raw);if(!this.requestedNativeAudio||status.id!==this.id)throw Error("Unexpected audio status");
+    if(status.state==="starting"||status.state==="running")this.audio??=new DesktopNativeAudioReceiver(1,()=>this.videoTimestamp,()=>this.audioFailure());
+    else{this.audio?.stop();this.audio=undefined;}
+    this.audioState(status.state);
+  }
+  audioChunk(bytes:Uint8Array){if(this.stopped)return;if(!this.requestedNativeAudio)throw Error("Audio not requested");try{this.audio?.push(bytes);}catch{this.audioFailure();}}
+  private audioFailure(){if(this.stopped)return;this.audio?.stop();this.audio=undefined;this.audioState("unavailable");this.send({type:"native_audio_control",id:this.id,enabled:false});}
   private nativeAck(value:unknown){
     const control=this.nativeControl;if(this.stopped)return;
     if(control?.readyState!=="open"||control.bufferedAmount>16384){this.datagramFailure();return;}
@@ -230,6 +247,7 @@ export class DesktopMediaReceiver {
     this.state("images");
   }
   async sound(enabled: boolean) {
+    if(this.requestedNativeAudio){await this.audio?.sound(enabled);return;}
     this.video.muted = !enabled;
     await this.video.play();
   }
@@ -242,6 +260,7 @@ export class DesktopMediaReceiver {
   stop() {
     if (this.stopped) return;
     this.stopped = true;
+    this.audio?.stop();this.audio=undefined;this.audioChannel=undefined;
     clearInterval(this.timer);clearInterval(this.datagramTimer);this.datagrams?.stop();this.datagrams=undefined;this.nativeControl=this.nativeVideo=undefined;
     this.native?.stop();this.native=undefined;
     this.video.cancelVideoFrameCallback(this.frameCallback);

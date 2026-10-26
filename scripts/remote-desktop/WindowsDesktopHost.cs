@@ -118,6 +118,10 @@ public static class SodaDesktopHost {
         var map=new Dictionary<string,ushort> { {"Enter",13},{"Escape",27},{"Tab",9},{"Space",32},{"Backspace",8},{"Delete",46},{"Insert",45},{"Home",36},{"End",35},{"PageUp",33},{"PageDown",34},{"ArrowLeft",37},{"ArrowUp",38},{"ArrowRight",39},{"ArrowDown",40},{"ShiftLeft",160},{"ShiftRight",161},{"ControlLeft",162},{"ControlRight",163},{"AltLeft",164},{"AltRight",165},{"MetaLeft",91},{"MetaRight",92},{"CapsLock",20},{"ImeOn",0x16},{"ImeOff",0x1A},{"Minus",189},{"Equal",187},{"BracketLeft",219},{"BracketRight",221},{"Backslash",220},{"Semicolon",186},{"Quote",222},{"Backquote",192},{"Comma",188},{"Period",190},{"Slash",191},{"NumpadEnter",13},{"NumpadMultiply",106},{"NumpadAdd",107},{"NumpadComma",108},{"NumpadSubtract",109},{"NumpadDecimal",110},{"NumpadDivide",111},{"NumpadEqual",146},{"NumLock",144},{"ScrollLock",145},{"Pause",19},{"PrintScreen",44},{"ContextMenu",93},{"Convert",28},{"NonConvert",29},{"KanaMode",21},{"IntlBackslash",226},{"IntlRo",226},{"IntlYen",220},{"Lang3",241},{"Lang4",242},{"Lang5",25},{"ZenkakuHankaku",25},{"AudioVolumeMute",173},{"AudioVolumeDown",174},{"AudioVolumeUp",175},{"VolumeMute",173},{"VolumeDown",174},{"VolumeUp",175},{"MediaTrackNext",176},{"MediaTrackPrevious",177},{"MediaStop",178},{"MediaPlayPause",179},{"LaunchMail",180},{"MediaSelect",181},{"LaunchApp1",182},{"LaunchApp2",183},{"BrowserBack",166},{"BrowserForward",167},{"BrowserRefresh",168},{"BrowserStop",169},{"BrowserSearch",170},{"BrowserFavorites",171},{"BrowserHome",172} };
         ushort result; if(!map.TryGetValue(code,out result)) throw new InvalidOperationException("Unsupported key");return result;
     }
+    static void StopAudio(ref IDisposable audio) {
+        var owned=audio;audio=null;if(owned==null)return;
+        try{owned.Dispose();}catch{Release();Environment.Exit(1);}
+    }
     static void Release() {
         lock(Gate) {
             Control=false;
@@ -269,10 +273,13 @@ public static class SodaDesktopHost {
         SodaDesktopDxgi dxgi=null;
         SodaDesktopCursor cursorPump=null;
         bool separateCursor=!Secure&&showCursor&&config.ContainsKey("separateCursor")&&config["separateCursor"] is bool&&(bool)config["separateCursor"];
-        SodaDesktopH264 video=null;string videoId=null;
+        SodaDesktopH264 video=null;string videoId=null;IDisposable audio=null;string audioId=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
+        Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
+        bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
+        int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0)audioCeiling=false;
         bool nativeDatagrams=nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
         int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
@@ -288,6 +295,7 @@ public static class SodaDesktopHost {
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(separateCursor)ready["cursor"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
+            if(audioCeiling)ready["nativeAudio"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
@@ -334,14 +342,23 @@ public static class SodaDesktopHost {
                         string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
                         else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
+                        else if(type=="native_audio") {
+                            string requested=(string)msg["id"];Guid audioGuid;if(!Guid.TryParse(requested,out audioGuid))throw new InvalidOperationException("Audio id");
+                            if((bool)msg["enabled"]){
+                                if(!audioCeiling)throw new InvalidOperationException("System audio not permitted");
+                                StopAudio(ref audio);audioId=null;
+                                if(video!=null&&videoId==requested)try{audio=(IDisposable)Activator.CreateInstance(audioType,new object[]{(string)msg["pipeName"],audioPid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()),(Func<long>)(()=>Clock.ElapsedMilliseconds*1000)});audioId=requested;}catch{audio=null;}
+                            }else if(audioId==requested){StopAudio(ref audio);audioId=null;}
+                        }
                         else if(type=="native_video") {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Video id");
                             if((bool)msg["enabled"]) {
+                                StopAudio(ref audio);audioId=null;
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
                                 commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
                                 try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
-                            } else if(videoId==requested) {commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                            } else if(videoId==requested) {StopAudio(ref audio);audioId=null;commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
                         else if(type=="native_keyframe"||type=="native_bitrate") {
                             if(!nativeDatagrams)throw new InvalidOperationException("Native datagrams not permitted");
@@ -473,7 +490,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;Release();if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
+        } finally { Stopping=true;Release();StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
     }
 }
 

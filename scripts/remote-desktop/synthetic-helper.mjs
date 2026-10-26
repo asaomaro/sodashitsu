@@ -1,4 +1,6 @@
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
+import { createServer } from "node:net";
+import { chmodSync, unlinkSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { createInterface } from "node:readline";
@@ -105,7 +107,27 @@ function run() {
     lastReport = 0,
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
   const nativeAt=process.argv.indexOf("--native-fixture"),nativeFixture=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined;
-  let native;
+  let native, audio;
+  const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
+  const startAudio=m=>{
+    stopAudio();if(!native||native.id!==m.id||secure||!process.argv.includes("--native-audio"))return;
+    const path=process.platform==="win32"?"\\\\.\\pipe\\"+m.pipeName:m.pipePath;
+    if(typeof path!=="string")return;
+    const current=audio={path,server:undefined,socket:undefined,timer:undefined,seq:0,timestamp:Math.max(0,Math.round(native.seq*1000000/native.fps))};
+    const server=current.server=createServer(socket=>{
+      if(audio!==current||current.socket){socket.destroy();return;}current.socket=socket;socket.on("error",()=>{});
+      if(process.argv.includes("--audio-unavailable")){socket.end();return;}
+      socket.write(Buffer.from([83,68,65,80,1,2,16,0,128,187,0,0,192,3,0,0]));
+      current.timer=setInterval(()=>{
+        if(audio!==current||!native||native.id!==m.id)return stopAudio();
+        current.seq++;current.timestamp+=20000;
+        if(socket.writableLength>8192)return;
+        const packet=Buffer.alloc(3856);packet.writeUInt32LE(3840);packet.writeUInt32LE(current.seq,4);packet.writeBigUInt64LE(BigInt(current.timestamp),8);
+        for(let i=0;i<960;i++){const value=Math.round(Math.sin((i+(current.seq-1)*960)*Math.PI*2*440/48000)*12000);packet.writeInt16LE(value,16+i*4);packet.writeInt16LE(value,18+i*4);}socket.write(packet);
+      },20);
+    });server.on("error",()=>stopAudio());server.listen(path,()=>{if(process.platform!=="win32"){try{chmodSync(path,0o600);}catch{stopAudio();}}});
+  };
+  process.on("exit",stopAudio);
   const allowInput = process.argv.includes("--allow-input");
   const markerAt = process.argv.indexOf("--unlock-marker");
   const unlockMarker = markerAt >= 0 ? process.argv[markerAt + 1] : undefined;
@@ -153,6 +175,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
@@ -183,7 +206,9 @@ function run() {
         }
       } else if (m.type === "heartbeat") lastSeen = performance.now();
       else if (m.type === "ack" && m.seq === pending) pending = 0;
+      else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
+        stopAudio();
         if(m.enabled&&nativeFixture&&!secure)native={id:m.id,seq:0,pending:[],next:0,index:0,fps:m.fps,window:m.window===3?3:1};
         else native=undefined;
       }

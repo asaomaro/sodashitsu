@@ -1,0 +1,11 @@
+# Nativeシステム音声の接続
+
+通常Windowsデスクトップだけで、viewer header・A・B capability・helperのnativeAudioが揃い、B allowMediaと明示audio要求がある場合に使用。既定off、再生も初期mute。Windows Nodeのみprivate Windows pipeへ接続可能。WSL Nodeは通知しない。マイクは扱わない。旧認証画面サービスは任意Audio typeを含まず、secure desktopでも音声取得しない。
+
+WindowsDesktopAudio.csはwindows-helperから任意追加コンパイルし、Hostはreflectionで存在を確認。native videoの現在idに一致したprivate requestだけ起動。所有者ACL/NETWORK deny/PID照合後にWASAPI loopbackを開く。停止はkeys release後bounded join、join失敗はwatchdogを止めず終了。
+
+PCM48kHz/stereo16bit/20msを専用local pipeでNodeへ渡し、opusscriptで128kbps raw Opusへ。最大2frame/100ms、videoより150ms古いaudioを破棄。PCMを通信stdoutへ出さない。UDPは別unordered無再送audio datachannel、WSSはvideo bulk lane。音声が映像のinput freshness/ACKを更新しない。audio開始はvideo/controlのopenを待ち、optional audio channelは映像開始を妨げない。
+
+ブラウザのAudioDecoderとAudioContextは［音声を再生］後に作成。raw Opus復号時刻の48k sample clockへの丸めを21us内で照合。seq/pts不連続ではdecoderを更新し、旧outputはclose。decoder/pending各2、scheduled100ms/6source上限。音声失敗は音声だけ停止し映像を継続。mute/stop/share変更でdecoder/source/contextを破棄、非同期resume完了後に所有epochを確認。
+
+検証は生成PCM/H264のみ。実音声deviceの取得・実OS入力・unlockを自動実行しない。ブラウザ試験は実AudioDecoder/AudioContextを使うが最終gain0へ迂回しスピーカーへ出さない。長時間試験はloopback生成データであり、WAN/NAT/実機音声endpointの実績を主張しない。

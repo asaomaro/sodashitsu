@@ -14,7 +14,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_DATAGRAM_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
+import { DESKTOP_AUDIO_PROTOCOL, isDesktopAudio, decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_DATAGRAM_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -117,8 +117,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" = false) {
-    const ws = new WebSocket(endpoint, ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" = false) {
+    const ws = new WebSocket(endpoint, ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -726,4 +726,17 @@ it.each(["native_frame_notice","native_draw_ack","native_transport_reset"])("ign
  const message=type==="native_frame_notice"?{type,id,generation:1,seq:2,bytes:100}:type==="native_draw_ack"?{type,id,generation:1,seq:1}:{type,id};
  server.receiveVideo(Buffer.from(JSON.stringify(message)),false);
  expect(fail).not.toHaveBeenCalled();expect(v.ws.readyState).toBe(WebSocket.OPEN);expect(server.media).toBeUndefined();v.send({type:"stop"});
+});
+
+it.each(["viewer","provider","helper","permission","secure"])("does not enable native audio with missing %s capability/permission",async missing=>{
+ const f=await fixture(true,missing==="provider",true,missing==="secure",true,false,undefined,undefined,true,false,true,false,true);
+ const cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMedia:missing!=="permission",command:[...cfg.command,...(missing==="helper"?[]:["--native-audio"])]});
+ const v=await f.viewer(missing==="viewer"?"native":"audio");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeAudio");if(missing==="viewer"||missing==="provider")expect(f.startRequests[0]!.options).not.toHaveProperty("nativeAudio");v.send({type:"stop"});
+});
+it("forwards explicit native audio but never renews input freshness, and stops its capture with video",async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMedia:true,command:[...cfg.command,"--native-audio"]});
+ const v=await f.viewer("audio");v.send({...start,options:{width:640,fps:10,quality:65,features:true}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")?.nativeAudio).toBe(true);
+ v.send({type:"media",enabled:true,settings:{transport:"native",audio:true}});await expect.poll(()=>v.messages.some(m=>m.type==="native_audio_status"&&m.state==="running")).toBe(true);await expect.poll(()=>v.frames.filter(isDesktopAudio).length).toBeGreaterThan(2);
+ const server=Array.from((f.relay as any).viewers)[0] as any;expect(server.media.drawnAt).toBeUndefined();expect(server.control).toBe(false);
+ v.send({type:"media",enabled:false});await expect.poll(()=>(f.provider as any).active.native.active).toBeUndefined();expect(server.media).toBeUndefined();v.send({type:"stop"});
 });
