@@ -12,8 +12,8 @@ type Entry = { owner: string; root: string; path: string; temporary?: string; fd
 export class FileTransfer {
   private entries = new Map<string, Entry>();
   private queue: Promise<unknown> = Promise.resolve();
-  run(owner: string, root: string, request: WorkFileRequest, guard: () => Promise<void> = async () => {}, local = false): Promise<WorkFileResult> {
-    const next = this.queue.then(() => this.perform(owner, root, request, guard, local));
+  run(owner: string, root: string, request: WorkFileRequest, guard: () => Promise<void> = async () => {}, local = false, fence:()=>void=()=>{}): Promise<WorkFileResult> {
+    const next = this.queue.then(() => this.perform(owner, root, request, guard, local, fence));
     this.queue = next.catch(() => {}); return next;
   }
   private async drop(id: string) {
@@ -23,8 +23,8 @@ export class FileTransfer {
     if (e.temporary) await e.check().then(() => unlink(e.temporary!)).catch(() => {});
   }
   async close() { await this.queue; for (const id of this.entries.keys()) await this.drop(id); }
-  private async perform(owner: string, root: string, p: WorkFileRequest, guard: () => Promise<void>, local: boolean): Promise<WorkFileResult> {
-    await guard();
+  private async perform(owner: string, root: string, p: WorkFileRequest, guard: () => Promise<void>, local: boolean, fence:()=>void): Promise<WorkFileResult> {
+    await guard();fence();
     if (p.action === "check") return {};
     if (p.action === "read_start" || p.action === "write_start") {
       if (this.entries.size >= 40) throw new RpcError("server_busy", "転送の上限です");
@@ -68,6 +68,7 @@ export class FileTransfer {
     if (p.action === "abort") { await this.drop(p.id); return {}; }
     try {
       e.timer.refresh(); await e.check(); await guard();
+      if (p.action === "status") return {bytes:e.bytes,offset:e.offset};
       if (p.action === "finish") {
         if (!e.temporary || e.offset !== e.bytes || e.hash.digest("hex") !== p.sha256) throw new RpcError("invalid_params", "転送サイズまたはSHA-256が一致しません");
         await e.fd.sync(); await e.check(); await guard();
@@ -79,6 +80,7 @@ export class FileTransfer {
         await e.check(); await guard();
         const current = await lstat(e.temporary), final = await e.fd.stat();
         if (!current.isFile() || current.isSymbolicLink() || current.nlink !== 1 || current.dev !== original.dev || current.ino !== original.ino || final.size !== original.size || final.mtimeMs !== original.mtimeMs || final.ctimeMs !== original.ctimeMs) throw new RpcError("invalid_params", "保存前にファイルが変更されました");
+        fence(); // No await between the final authority check and OS publication.
         await link(e.temporary, e.path); // Never overwrite, including a concurrent destination or symlink.
         const published = await lstat(e.path);
         if (!published.isFile() || published.isSymbolicLink() || published.dev !== original.dev || published.ino !== original.ino) throw new RpcError("invalid_params", "保存先が変更されました");

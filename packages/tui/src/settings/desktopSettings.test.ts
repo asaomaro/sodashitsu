@@ -18,3 +18,19 @@ it("loads dedicated permissions and applies toggles without writing shared prefe
   section.items().find((i) => i.label === "画面共有を許可")!.activate!();
   await vi.waitFor(() => expect(port.set).toHaveBeenCalledWith({ ...permissions, enabled: true }));
 });
+it("edits a separately approved file root without changing other desktop permissions", async () => {
+  const state = { permissions, supported: true, canConfigure: true },
+    changed = vi.fn(),
+    port = {
+      get: vi.fn(async () => state),
+      set: vi.fn(async (p) => ({ ...state, permissions: p })),
+    };
+  const section = desktopSettingsSection(port, changed);
+  await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+  const edit = section.items().find((i) => i.label === "ファイル共有フォルダ")!.activate!();
+  expect(typeof edit).toBe("object");
+  if (typeof edit === "object" && edit.kind === "edit") edit.commit(" /tmp/generated-files ");
+  await vi.waitFor(() =>
+    expect(port.set).toHaveBeenCalledWith({ ...permissions, fileRoot: "/tmp/generated-files" }),
+  );
+});

@@ -1,3 +1,5 @@
+import {DesktopFiles} from "./DesktopFiles.js";
+import {DESKTOP_FILES_PROTOCOL,DesktopFileRequest,DesktopFileResult} from "@sodashitsu/protocol";
 import {DesktopRichClipboard} from "./DesktopRichClipboard.js";
 import {DESKTOP_RICH_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -42,6 +44,7 @@ const HelperFrame = z
 export interface DesktopProviderConfig {
   command: string[];
   allowInput: boolean;
+  fileRoot?:string;
   allowClipboard?: boolean;
   allowMedia?: boolean;
   allowNativeVideo?: boolean;
@@ -52,6 +55,7 @@ export interface DesktopProviderConfig {
   origins(): string[];
 }
 type Share = {
+  files?:Promise<DesktopFiles|undefined>;fileSocket?:WebSocket;
   richClipboard?:DesktopRichClipboard;clipboardSocket?:WebSocket;
   imageExpected?:boolean; imageSocket?: WebSocket; imageReady?: boolean; imageFailed?: boolean; heldImage?: Uint8Array;
   videoSocket?: WebSocket;
@@ -118,6 +122,7 @@ export class DesktopProvider {
       imageSettings: true,
       imeKeys: true,
       extendedInput: true,
+      files:!!this.config?.fileRoot,
       richClipboard:this.config?.allowClipboard===true,
       imageLane: true,
       videoLane: true,
@@ -246,6 +251,19 @@ export class DesktopProvider {
               image.on("open",()=>image.send(JSON.stringify({type:"video_provider",ticket:p.imageTicket})));
               image.on("error",()=>image.terminate());image.on("message",()=>image.terminate());
               image.on("close",()=>this.failImages(s));
+            }
+            if(p.fileTicket){
+              if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
+              const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>!s.dead&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000).then(async worker=>{if(s.dead){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
+              socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.fileTicket})));
+              const stop=()=>{void s.files?.then(worker=>worker?.close());socket.terminate();};let pending=0;
+              socket.on("error",stop);socket.on("close",stop);socket.on("message",async(raw,binary)=>{if(s.dead)return;try{
+                const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(++pending>4||binary||bytes.length>100000)throw Error("File request limit");
+                const m=DesktopFileRequest.parse(JSON.parse(bytes.toString())),worker=await s.files;
+                const result=worker?await worker.run(m):{type:"desktop_file_result",id:m.id,ok:false,message:"共有フォルダを利用できません。接続先で設定を確認してください"};
+                if(!s.dead&&socket.readyState===WebSocket.OPEN&&socket.bufferedAmount<262144)socket.send(JSON.stringify(DesktopFileResult.parse(result)));else stop();
+              }catch{stop();}finally{pending--;}});
             }
             if(p.clipboardTicket){
               if(p.options.richClipboard!==true||cfg.allowClipboard!==true)throw Error("Rich clipboard not negotiated");
@@ -450,7 +468,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
+              files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,
               cursor,
@@ -472,6 +490,7 @@ export class DesktopProvider {
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
+              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true}:{}),
               ...(udpEnabled?{nativeDatagrams:true}:{}),
@@ -577,9 +596,10 @@ export class DesktopProvider {
         }
       }
     });
+    const {files:_files,...helperOptions}=options;
     this.write(s, {
       type: "configure",
-      options,
+      options:helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: true,
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
@@ -642,6 +662,7 @@ export class DesktopProvider {
     s.dead = true;
     delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
+    void s.files?.then(worker=>worker?.close());s.fileSocket?.terminate();
     s.richClipboard?.stop();s.clipboardSocket?.terminate();
     s.native?.stop();
     this.companion.end(s);

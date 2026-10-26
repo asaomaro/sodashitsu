@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { DesktopSettings, bundledDesktopCommand } from "./DesktopSettings.js";
 import { DesktopProvider } from "./DesktopProvider.js";
@@ -111,3 +111,5 @@ it("persists opt-in unlock and ties its lease to provider disposal; old permissi
     expect(configure.mock.calls.at(-1)![0]).toBeUndefined();
   } finally { start.mockRestore();stop.mockRestore(); }
 });
+
+it("persists a locally approved file root and refuses invalid roots before changing permissions",async()=>{const options=await fixture(),settings=await DesktopSettings.open(options),root=dirname(options.file);await settings.set({...off,enabled:true,fileRoot:root});expect(options.provider.capabilities()).toMatchObject({files:true});expect((await DesktopSettings.open(options)).get(true).permissions.fileRoot).toBe(root);await expect(settings.set({...off,enabled:true,fileRoot:"relative-directory"})).rejects.toThrow("絶対パス");expect(settings.get(true).permissions.fileRoot).toBe(root);await settings.set({...off,enabled:true,fileRoot:""});expect(options.provider.capabilities()).toMatchObject({files:false});});

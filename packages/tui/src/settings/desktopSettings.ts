@@ -38,6 +38,34 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
       ...(!state?.supported
         ? [{ label: "Windows補助プログラムを利用できません", heading: true }]
         : []),
+      {
+        label: "ファイル共有フォルダ",
+        value: state?.permissions.fileRoot || "無効",
+        disabled: busy || !state?.canConfigure,
+        note: "空欄で無効。このサーバーOSの絶対パス（100MiB/上書きなし）。",
+        activate: () => ({
+          kind: "edit" as const,
+          title: "ファイル共有フォルダ（空欄で無効）",
+          initial: state?.permissions.fileRoot ?? "",
+          commit: (text: string) => {
+            if (busy || !state?.canConfigure) return;
+            busy = true;
+            port
+              .set({ ...state.permissions, fileRoot: text.trim() })
+              .then((result) => {
+                state = result;
+                message = "保存しました。共有を接続し直してください。";
+              })
+              .catch(() => {
+                message = "保存できません。実在するフォルダの絶対パスを確認してください。";
+              })
+              .finally(() => {
+                busy = false;
+                changed();
+              });
+          },
+        }),
+      },
       ...entries.map(([key, label]) => ({
         label,
         value: onOff(state?.permissions[key] === true),
