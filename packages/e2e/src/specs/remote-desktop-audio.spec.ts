@@ -3,7 +3,7 @@ import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
 import { openNativeTab } from "../support/nativeTab.js";
 
-for (const mode of ["udp", "wss", "unavailable", "unsupported", "soak"] as const)
+for (const mode of ["udp", "wss", "unavailable", "unsupported", "resume-race", "resume-failure", "soak"] as const)
   test(`native system audio generated tone: ${mode}, initially muted, bounded decode, mute/stop`, async ({
     page,
     appServer,
@@ -53,8 +53,9 @@ for (const mode of ["udp", "wss", "unavailable", "unsupported", "soak"] as const
       }
     });
     await page.addInitScript(
-      ({ unsupported, soak }) => {
+      ({ unsupported, soak, resumeMode }) => {
         const w = window as any;
+        w.__resumeGates = [];
         w.__audio = {
           decoders: [],
           contexts: [],
@@ -149,6 +150,11 @@ for (const mode of ["udp", "wss", "unavailable", "unsupported", "soak"] as const
             silent.connect(this.destination);
             Object.defineProperty(this, "destination", { get: () => silent });
           }
+          async resume() {
+            await super.resume();
+            const gates=(window as any).__resumeGates;
+            if(resumeMode&&gates.length<(resumeMode==="resume-race"?2:1))await new Promise<void>(resolve=>gates.push(resolve));
+          }
           createBufferSource() {
             const s = super.createBufferSource(),
               start = s.start.bind(s),
@@ -175,7 +181,7 @@ for (const mode of ["udp", "wss", "unavailable", "unsupported", "soak"] as const
           }
         };
       },
-      { unsupported: mode === "unsupported", soak },
+      { unsupported: mode === "unsupported", soak, resumeMode:mode.startsWith("resume-")?mode:"" },
     );
     try {
       const owner = await provider.openClient(),
@@ -221,6 +227,17 @@ for (const mode of ["udp", "wss", "unavailable", "unsupported", "soak"] as const
       expect(await page.evaluate(() => (window as any).__audio.contexts.length)).toBe(0);
       expect(await page.evaluate(() => (window as any).__audio.decoders.length)).toBe(0);
       await view.getByRole("button", { name: "音声を再生", exact: true }).click();
+      if(mode==="resume-race"||mode==="resume-failure"){
+        await expect.poll(()=>page.evaluate(()=>(window as any).__resumeGates.length)).toBe(1);
+        if(mode==="resume-race"){
+          await view.getByRole("button",{name:"音声を再生",exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__resumeGates.length)).toBe(2);
+          await page.evaluate(async()=>{(window as any).__resumeGates[0]();await new Promise(requestAnimationFrame);});
+          await expect(view.locator("[data-native-audio]")).toContainText("ミュート");expect(await page.evaluate(()=>(window as any).__audio.decoders.length)).toBe(0);
+          await page.evaluate(()=>(window as any).__resumeGates[1]());
+        }else{
+          const before=Number(await canvas.getAttribute("data-video-frames"));await page.evaluate(()=>{for(const c of (window as any).__audioChannels as RTCDataChannel[])c.close();});await expect(view.locator("[data-native-audio]")).toContainText("利用できません");await page.evaluate(async()=>{(window as any).__resumeGates[0]();await new Promise(requestAnimationFrame);});await expect(view.getByRole("button",{name:"音声を止める",exact:true})).toHaveCount(0);await expect.poll(async()=>Number(await canvas.getAttribute("data-video-frames"))).toBeGreaterThan(before+10);expect(await page.evaluate(()=>(window as any).__audio.contexts.every((c:AudioContext)=>c.state==="closed"))).toBe(true);return;
+        }
+      }
       await expect(view.locator("[data-native-audio]")).toContainText("再生中");
       await expect
         .poll(() => page.evaluate(() => (window as any).__audio.outputs))

@@ -141,7 +141,7 @@ const mediaState = ref("images"),
   nativeMaxFps=ref(30), nativeFps=ref(60),
   videoFrames = ref(0),
   videoFps = ref(0);
-let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0;
+let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const clipboardGranted = ref(false),
   clipboardText = ref(""),
   clipboardSync = ref(false),
@@ -259,7 +259,7 @@ async function requestVideo() {
   if(!dead&&version===epoch&&request===mediaRequestSeq)send({type:"media",enabled:true,settings});
 }
 function stopVideo() {
-  mediaRequestSeq++;nativeAudioState.value="";mediaAudio.value=false;
+  mediaRequestSeq++;soundRequestSeq++;nativeAudioState.value="";mediaAudio.value=false;
   send({ type: "media", enabled: false });
   receiver?.stop();
   receiver = undefined;
@@ -269,9 +269,10 @@ function stopVideo() {
   releaseInputs();
 }
 async function toggleSound() {
-  const owner=receiver;if(!owner)return;const enabled=!sound.value;
-  try{await owner.sound(enabled);if(receiver===owner)sound.value=enabled;}
-  catch{if(receiver===owner)error.value="音声を再生できませんでした。音声の許可設定を確認してください";}
+  const owner=receiver;if(!owner)return;const enabled=!sound.value,request=++soundRequestSeq,version=epoch;
+  const current=()=>!dead&&version===epoch&&receiver===owner&&request===soundRequestSeq;
+  try{await owner.sound(enabled);if(current()&&(!enabled||mediaAudio.value))sound.value=enabled;}
+  catch{if(current())error.value="音声を再生できませんでした。音声の許可設定を確認してください";}
 }
 const clipboardTimer = setInterval(() => void syncClipboard(), 1000);
 const position = ref({ x: 48, y: 56 });
@@ -606,7 +607,7 @@ function connect(automatic = false) {
                 }
               },
               state.iceServers as RTCIceServer[] | undefined,state.datagrams===true,state.nativeAudio===true,
-              value=>{if(dead||version!==epoch||receiver?.id!==state.id)return;if(!(value==="stopped"&&nativeAudioState.value==="unavailable"))nativeAudioState.value=value;mediaAudio.value=value==="running";if(!mediaAudio.value)sound.value=false;},
+              value=>{if(dead||version!==epoch||receiver?.id!==state.id)return;if(!(value==="stopped"&&nativeAudioState.value==="unavailable"))nativeAudioState.value=value;mediaAudio.value=value==="running";if(!mediaAudio.value){soundRequestSeq++;sound.value=false;}},
             );
           }
         } else if (m.type === "rtc_signal") {

@@ -1,0 +1,7 @@
+# 音声再生の非同期競合
+
+再生A→再生B→Aの遅いresume完了→ミュート→Bの遅い完了で、coreが古い操作を無視してもUIが同じreceiverを見て再生表示へ戻す。
+
+UIの操作連番、接続epoch、receiver所有者、mediaAudioを完了時に確認。stopVideoと音声がrunningでなくなった時にも操作を失効する。coreと伝送方式は変更しない。
+
+独立review_pointerが競合を確認し、実装後に再レビュー。追加の修正必須指摘なし。resume-raceは旧実装の再生表示を検出する有効な回帰。resume-failureは内部soundの値を単独で検査せず、障害時の映像継続とContext破棄を確認する。
