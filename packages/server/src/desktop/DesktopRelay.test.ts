@@ -752,3 +752,15 @@ it("does not send a rich clipboard write to a helper whose local input ceiling i
 it("negotiates a selected monitor only for opted-in viewers and applies it before ready",async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMonitors:true,command:[...cfg.command,"--monitors"]});const v=await f.viewer("monitors");v.send({...start,options:{...start.options,monitorDevice:"left"}});await expect.poll(()=>v.messages.find(m=>m.type==="ready")?.monitorLayout).toMatchObject({selected:"left",bounds:{x:-640,y:-200,width:640,height:480}});expect(f.startRequests[0]!.options).toMatchObject({monitors:true,monitorDevice:"left"});v.send({type:"stop"});});
 it("does not show monitor metadata or send new options to legacy viewers",async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMonitors:true,command:[...cfg.command,"--monitors"]});const v=await f.viewer(false);v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("monitorLayout");expect(f.startRequests[0]!.options).not.toHaveProperty("monitors");expect(f.startRequests[0]!.options).not.toHaveProperty("monitorDevice");v.send({type:"stop"});});
 it("rejects an explicit monitor request when the helper ignores it instead of enabling the wrong screen",async()=>{const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMonitors:true});const v=await f.viewer("monitors");v.send({...start,options:{...start.options,monitorDevice:"left"}});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==="ready")).toBe(false);});
+
+it.each([[true,true],[true,false],[false,true]])('requires both B capability and helper-ready before native cadence commands (%s/%s)',async(capability,helper)=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true);
+ const cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,...(helper?['--native-cadence']:[])]});
+ if(!capability){const caps={...f.provider.capabilities()};Reflect.deleteProperty(caps,'nativeCadence');vi.spyOn(f.provider,'capabilities').mockReturnValue(caps);}
+ const v=await f.viewer('rate');v.send({...start,options:{...start.options,nativeCadence:true}});
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.startRequests[0]!.options.nativeCadence).toBe(capability?true:undefined);
+ expect((f.provider as any).active.native.hooks.cadence).toBe(capability&&helper);
+ expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('nativeCadence');
+ v.send({type:'stop'});
+});

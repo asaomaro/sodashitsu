@@ -1,3 +1,4 @@
+import {DesktopNativeQuality} from "./DesktopNativeQuality.js";
 import {DesktopNativeAudio} from "./DesktopNativeAudio.js";
 import {DesktopNativeAudioControl} from "@sodashitsu/protocol";
 import {DesktopNativeDatagrams} from "./DesktopNativeDatagrams.js";
@@ -43,7 +44,7 @@ export class DesktopNativeVideo {
         id: string;
         settings: import("@sodashitsu/protocol").DesktopMediaSettings;
         peer?:DesktopNativeDatagrams;audio?:DesktopNativeAudio;
-        started:boolean;
+        started:boolean;quality?:DesktopNativeQuality;
         bitrate:number;adaptAt:number;acks:number;losses:number;maxAck:number;
         seq: number;
         pending: {
@@ -67,7 +68,7 @@ export class DesktopNativeVideo {
   constructor(
     private hooks: {
       enabled: boolean;
-      datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;
+      cadence?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;
       iceServers?:z.infer<typeof DesktopIceServers>;
       window?: 1 | 3;
       width: number;
@@ -118,7 +119,7 @@ export class DesktopNativeVideo {
       return true;
     }
     this.active = {
-      id,settings,started:false,bitrate:settings.maxBitrateKbps,adaptAt:performance.now(),acks:0,losses:0,maxAck:0,
+      id,settings,started:false,...(this.hooks.cadence&&settings.adaptive?{quality:new DesktopNativeQuality({fps,kbps:settings.maxBitrateKbps,window:this.hooks.window??1},performance.now())}:{}),bitrate:settings.maxBitrateKbps,adaptAt:performance.now(),acks:0,losses:0,maxAck:0,
       seq: 0,
       pending: [],
       statsAt: 0,
@@ -164,7 +165,7 @@ export class DesktopNativeVideo {
       // Same reliable FIFO as frame notices, before releasing source credit.
       if(!this.hooks.send({...ack,type:"native_draw_ack"})){this.fallback(s);return;}
       s.acks++;if(ack.dropped)s.losses++;s.maxAck=Math.max(s.maxAck,ackMs);
-      if(s.settings.adaptive&&s.acks>=8&&now-s.adaptAt>=1000){
+      if(!s.quality&&s.settings.adaptive&&s.acks>=8&&now-s.adaptAt>=1000){
         let bitrate=s.bitrate;
         if(s.losses||s.maxAck>150)bitrate=Math.max(128,Math.floor(bitrate*.8));
         else if(s.maxAck<60)bitrate=Math.min(s.settings.maxBitrateKbps,Math.ceil(bitrate*1.1));
@@ -172,6 +173,8 @@ export class DesktopNativeVideo {
         s.adaptAt=now;s.acks=s.losses=s.maxAck=0;
       }
     }
+    const rate=s.quality?.sample({ack:ackMs,cost:pending.captureMs+pending.conversionMs+pending.encodeMs,decode:ack.decodeMs??0,lost:ack.dropped===true,buffered:this.hooks.buffered()},now);
+    if(rate){s.bitrate=rate.kbps;this.hooks.write({type:"native_rate",id:s.id,...rate});}
     if(this.hooks.window===3&&now-s.statsAt>=1000){s.statsAt=now;this.hooks.send({type:"native_video_stats",id:s.id,width:s.width!,height:s.height!,window:3,pending:s.pending.length,captureMs:pending.captureMs,conversionMs:pending.conversionMs,encodeMs:pending.encodeMs,ackMs,decodeMs:ack.decodeMs??0});}
     this.hooks.write({type:"native_video_ack",id:s.id,seq:ack.seq});
   }

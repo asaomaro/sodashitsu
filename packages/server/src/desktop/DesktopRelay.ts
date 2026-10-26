@@ -505,6 +505,7 @@ export class DesktopRelay {
         nativeVideo: z.boolean().optional(),nativeDatagrams:z.boolean().optional(),
         nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
+        nativeCadence:z.literal(true).optional(),
         nativeMaxFps:z.literal(60).optional(),
         cursor:z.boolean().optional(),
         features: z.boolean().optional(),
@@ -525,7 +526,7 @@ export class DesktopRelay {
     delete legacyOptions.extendedInput;
     delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
     delete legacyOptions.nativeVideoWindow;
-    delete legacyOptions.nativeMaxFps;
+    delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;
     delete legacyOptions.cursor;
     v.cursor=v.cursorRequested===true&&caps.cursor===true;
     if(v.nativeRateRequested&&caps.nativeMaxFps===60)v.nativeMaxFps=60;else delete v.nativeMaxFps;
@@ -554,6 +555,7 @@ export class DesktopRelay {
       ...(v.richClipboard?{richClipboard:true as const}:{}),
       ...(v.cursor?{cursor:true as const}:{}),
       ...(v.nativeVideo?{nativeVideo:true as const}:{}),
+      ...(v.nativeVideo&&caps.nativeCadence?{nativeCadence:true as const}:{}),
       ...(v.nativeDatagrams?{nativeDatagrams:true as const}:{}),
       ...(v.nativeAudio?{nativeAudio:true as const}:{}),
       ...(v.nativeVideo&&v.nativeMaxFps===60?{nativeMaxFps:60 as const}:{}),
