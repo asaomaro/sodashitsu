@@ -15,6 +15,7 @@ Environment:
 
 --*/
 
+#include <initguid.h>
 #include "Driver.h"
 #include <devpkey.h>
 #include "Driver.tmh"

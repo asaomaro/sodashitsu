@@ -185,6 +185,11 @@
   <ItemGroup>
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'x64' and '$(WDK_NuGet)' != ''">
+    <!-- The x64 NuGet WDK ships stampinf under x64, not the legacy x86 tool default. -->
+    <InfToolPath>$(WDKContentRoot)\bin\$(WDKBuildFolder)\x64\</InfToolPath>
+    <InfToolArchitecture>Native64Bit</InfToolArchitecture>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

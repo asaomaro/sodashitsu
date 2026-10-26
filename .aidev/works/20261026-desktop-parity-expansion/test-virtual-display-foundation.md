@@ -38,3 +38,9 @@ Traceback (most recent call last):
 subprocess.CalledProcessError: Command '['/tmp/soda-idd-modes-cup_zfap/checks']' died with <Signals.SIGABRT: 6>.
 
 ```
+
+## Windows CI 本体build
+
+[run 40325102382](https://github.com/asaomaro/sodashitsu/actions/runs/40325102382) と [run 40325095046](https://github.com/asaomaro/sodashitsu/actions/runs/40325095046) 成功。Windows x64 MSBuild/WDKでSodaVirtualDisplay.dll/INF/catalog packageを生成し、fake lease/native ABIチェックとLinuxの実mode callback境界チェックも成功した。NuGet shimの署名・legacy x86 tool default・DEVPKEY link問題を修正した。driverは署名無効でbuildしており、実機へ導入していない。
+
+前回レビュー後のCI/64bit toolpath/initguid変更を含めreview_transferの最終再レビュー通過。Node/既存runtimeへ接続しない独立基盤の追加のため、既存Node全体テストは繰り返していない。
