@@ -365,3 +365,17 @@ worker.ps1:7 文字:1
     + FullyQualifiedErrorId : InvalidOperationException
  
 ```
+
+## 最終結果
+
+- 前半はPR #223/13files、後半は本PR/22filesへ分割。backendの同一sourceを使用し、merge後のNode/protocol/UI sourceは2250e6b6から変更なし。最後のC#終了順序修正は7a2ff4ddd867b0517be00e2d1d9e647ae2a4975bで固定。
+- 初回full79b4d19b: 772 suites / 11,562 tests成功（370.34秒）。legacy取消をv2に限定する修正が入ったため、改めて最終sourceでbuild/typecheck/fullを実行。
+- 最終build / typecheck成功、772 suites / 11,562 tests成功（375.88秒）。関連123件とTUI専用設定2件も成功。
+- 新protected/local settingsと既存unlock/input/virtual/monitor browser合計19件成功（1.8分）。最初のnew4件も成功。DOM/canvas alphaとブラウザ送受信を観測し、生成helperだけを使用。
+- 別worktree /workspaces/sodashitsu-desktop-protected-checkで7a2ff4ddのfrozen install / build / smoke PASS。
+- sr-pcは7a2ff4ddをTEMP archiveしhelper/broker compile-only、新worker/purpose/cleanup/ABI/Guard/実private pipeと既存helper/input/pipe/monitor、専用marker実配送に成功。exit0/timeout false。repoは5da512c8のまま、tracked status空。実サービスは更新していない。
+- Windows CI: https://github.com/asaomaro/sodashitsu/actions/runs/40365169510 と https://github.com/asaomaro/sodashitsu/actions/runs/40366101783 成功。
+- source非永続checkbox、A/B各permission/proof/SAS、TUIの独立許可、文書をreview_pointerが最終確認。C#IPC/handle/ABI、v2限定graceとlegacy job-first維持をreview_transferが修正再点検。追加must/shouldなし。
+- backend/full/CI検証の重複を避け、Source更新が入った場合だけ関連検査/fullを再実行した。raw log部分の元改行/空白は保持。
+
+7Aのコードを接続済み、既定permissionはoff。Bのサービス更新は管理者の手動操作で別途必要。実SYSTEM worker生成・実UAC/昇格画面取得/入力・実DesktopSwitchの統合動作は未確認。task7全体、7B、署名済みIDD配布とtask8〜10は完了ではない。
