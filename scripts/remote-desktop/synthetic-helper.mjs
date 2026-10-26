@@ -120,8 +120,8 @@ function run() {
       socket.write(Buffer.from([83,68,65,80,1,2,16,0,128,187,0,0,192,3,0,0]));
       current.timer=setInterval(()=>{
         if(audio!==current||!native||native.id!==m.id)return stopAudio();
-        current.seq++;current.timestamp+=20000;
         if(socket.writableLength>8192)return;
+        current.seq++;current.timestamp=Math.max(current.timestamp+20000,Math.floor((performance.now()-native.started)/20)*20000);
         const packet=Buffer.alloc(3856);packet.writeUInt32LE(3840);packet.writeUInt32LE(current.seq,4);packet.writeBigUInt64LE(BigInt(current.timestamp),8);
         for(let i=0;i<960;i++){const value=Math.round(Math.sin((i+(current.seq-1)*960)*Math.PI*2*440/48000)*12000);packet.writeInt16LE(value,16+i*4);packet.writeInt16LE(value,18+i*4);}socket.write(packet);
       },20);
@@ -209,7 +209,7 @@ function run() {
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
         stopAudio();
-        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,seq:0,pending:[],next:0,index:0,fps:m.fps,window:m.window===3?3:1};
+        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,window:m.window===3?3:1};
         else native=undefined;
       }
       else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
@@ -261,7 +261,7 @@ function run() {
     if(options&&native&&native.pending.length<native.window&&performance.now()>=native.next) {
       const packet=nativeFixture.packets[native.index++%nativeFixture.packets.length];
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
-      send({type:"native_frame",id:native.id,seq:native.seq,timestamp:Math.round(native.seq*1000000/native.fps),key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
+      send({type:"native_frame",id:native.id,seq:native.seq,timestamp:process.argv.includes("--native-audio")?Math.round((performance.now()-native.started)*1000):Math.round(native.seq*1000000/native.fps),key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
     }
     if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;
