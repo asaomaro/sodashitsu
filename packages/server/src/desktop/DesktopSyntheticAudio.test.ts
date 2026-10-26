@@ -70,7 +70,7 @@ it.skipIf(process.platform === "win32")(
             client.destroy();
             return false;
           },
-          { timeout: 3000, intervals: [50] },
+          { timeout: 3000, interval: 50 },
         )
         .toBe(true);
       await expect.poll(() => frames.length).toBeGreaterThan(1);

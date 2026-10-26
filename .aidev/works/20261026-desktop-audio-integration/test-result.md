@@ -237,3 +237,5 @@ Caused by: Error: Matcher did not succeed in time.
 
 
 ```
+
+- 追加backpressureテストのpoll指定をVitestの型に合わせinterval:50へ修正（製品変更なし）。server typecheck成功、対象1件再実行pass (3.86s)、1行差分の独立再レビュー通過。
