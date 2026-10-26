@@ -11,7 +11,7 @@ import {
   isDesktopCursor,
   decodeDesktopCursor,
   DESKTOP_NATIVE_RATE_PROTOCOL,
-  DESKTOP_VIDEO_LANE_PROTOCOL,
+  DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
   DesktopNativeVideoStats,
@@ -43,6 +43,7 @@ import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
 class DesktopSetupRequired extends Error {}
 
 type Viewer = {
+  imageLaneRequested?:boolean; imageLane?:ReturnType<DesktopVideoLanes["issue"]>; imageAttached?:boolean; imageViewerReady?:boolean; imageActive?:boolean; receiveImage?:(bytes:Buffer,binary:boolean)=>void;
   cursorRequested?:boolean;
   cursor?:boolean;
   cursorStream?:DesktopCursorStream;
@@ -118,6 +119,7 @@ export class DesktopRelay {
     maxPayload: DESKTOP_MAX_FRAME_BYTES + 2050,
   });
   private readonly videoLanes: DesktopVideoLanes;
+  private readonly imageLanes: DesktopVideoLanes;
   private readonly viewers = new Set<Viewer>();
   private readonly pendingProviders = new Set<WebSocket>();
   private readonly invites = new Map<string, Viewer>();
@@ -131,13 +133,14 @@ export class DesktopRelay {
     private readonly machines: Pick<MachineManager, "route">,
   ) {
     this.videoLanes = new DesktopVideoLanes(id => auth.verifySession(id));
+    this.imageLanes = new DesktopVideoLanes(id=>auth.verifySession(id),DESKTOP_MAX_FRAME_BYTES+4096);
     this.revoked = auth.onSessionRevoked((id) => {
       for (const v of this.viewers) if (v.sessionId === id) this.stop(v);
     });
     this.timer = setInterval(() => {
       const now = performance.now();
       this.agents.tick();
-      this.videoLanes.tick();
+      this.videoLanes.tick();this.imageLanes.tick();
       for (const v of this.viewers)
         if (
           !auth.verifySession(v.sessionId) ||
@@ -152,7 +155,7 @@ export class DesktopRelay {
   async upgrade(req: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> {
     const reject = (status: string) =>
       socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
-    if (this.closed || this.viewers.size + this.pendingProviders.size + this.videoLanes.pendingCount >= 32) {
+    if (this.closed || this.viewers.size + this.pendingProviders.size + this.videoLanes.pendingCount + this.imageLanes.pendingCount >= 32) {
       reject("503 Service Unavailable");
       return;
     }
@@ -188,15 +191,16 @@ export class DesktopRelay {
       reject("503 Service Unavailable");
       return;
     }
-    if (this.closed || socket.destroyed || this.viewers.size + this.pendingProviders.size + this.videoLanes.pendingCount >= 32) {
+    if (this.closed || socket.destroyed || this.viewers.size + this.pendingProviders.size + this.videoLanes.pendingCount + this.imageLanes.pendingCount >= 32) {
       reject("503 Service Unavailable");
       return;
     }
     this.server.handleUpgrade(req, socket, head, (ws) => {
       ws.on("error", () => ws.terminate());
       const offered = String(req.headers["sec-websocket-protocol"] ?? "").split(",").map(v => v.trim());
+      if (offered.length === 1 && offered[0] === DESKTOP_IMAGE_LANE_PROTOCOL) { this.imageLanes.accept(ws,sessionId,origin);return; }
       if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -206,7 +210,7 @@ export class DesktopRelay {
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
     return true;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -272,7 +276,7 @@ export class DesktopRelay {
       },
       cursorRequested,
       nativeRateRequested,
-      videoLaneRequested,
+      videoLaneRequested,imageLaneRequested,
       nativeVideoRequested,
       nativeWindowRequested,
       retiredMedia: new Set(),
@@ -327,7 +331,11 @@ export class DesktopRelay {
         return;
       }
       try {
-        const m = RemoteDesktopViewerMessage.parse(JSON.parse(bytes.toString()));
+        const rawMessage=JSON.parse(bytes.toString());
+        if(rawMessage.type==="image_ready"&&Object.keys(rawMessage).length===1){
+          if(!v.imageLane||!v.ready)throw Error("Unexpected image acknowledgement");v.imageViewerReady=true;this.activateImages(v);return;
+        }
+        const m = RemoteDesktopViewerMessage.parse(rawMessage);
         if (m.type === "start") {
           if (v.started) {
             this.stop(v);
@@ -468,7 +476,7 @@ export class DesktopRelay {
         imageSettings: z.boolean().optional(),
         imeKeys: z.boolean().optional(),
         extendedInput: z.boolean().optional(),
-        videoLane: z.boolean().optional(),
+        videoLane: z.boolean().optional(),imageLane:z.boolean().optional(),
         nativeVideo: z.boolean().optional(),
         nativeInputFreshness: z.boolean().optional(),
         nativeVideoWindow:z.literal(3).optional(),
@@ -539,12 +547,23 @@ export class DesktopRelay {
         });
       this.send(v.ws, {type:"video_ticket",ticket:v.videoLane.viewerTicket});
     }
+    if(v.imageLaneRequested&&caps.imageLane){
+      v.imageLane=this.imageLanes.issue(v.sessionId,v.origin,(bytes,binary)=>v.receiveImage?.(bytes,binary),
+        ()=>{v.imageAttached=true;this.activateImages(v);},
+        ()=>{if(!this.viewers.has(v))return;if(v.imageActive){this.send(v.ws,{type:"error",message:"画像の専用接続が切れました。接続し直してください。"});this.stop(v);return;}v.imageAttached=false;if(v.provider)this.send(v.provider,{type:"image_closed"});this.send(v.ws,{type:"image_closed"});});
+      this.send(v.ws,{type:"image_ticket",ticket:v.imageLane.viewerTicket});
+    }
     await rpc.request("desktop.start", {
       url: url.href,
       ticket,
       ...(v.videoLane ? {videoTicket:v.videoLane.providerTicket} : {}),
+      ...(v.imageLane?{imageTicket:v.imageLane.providerTicket}:{}),
       options: negotiated,
     });
+  }
+  private activateImages(v:Viewer){
+    if(!this.viewers.has(v)||v.imageActive||!v.imageAttached||!v.imageViewerReady||!v.ready||!v.provider)return;
+    v.imageActive=true;this.send(v.provider,{type:"image_ready"});
   }
   private provider(ws: WebSocket): void {
     this.pendingProviders.add(ws);
@@ -556,7 +575,7 @@ export class DesktopRelay {
       this.pendingProviders.delete(ws);
       if (owner) this.stop(owner);
     });
-    const receive = (rawBytes: import("ws").RawData, binary: boolean, lane = false) => {
+    const receive = (rawBytes: import("ws").RawData, binary: boolean, lane = false, imageLane = false) => {
       const bytes = Buffer.isBuffer(rawBytes)
         ? rawBytes
         : Array.isArray(rawBytes)
@@ -588,10 +607,12 @@ export class DesktopRelay {
           clearTimeout(deadline);
           this.pendingProviders.delete(ws);
           v.receiveVideo = (bytes, binary) => receive(bytes, binary, true);
+          v.receiveImage=(bytes,binary)=>receive(bytes,binary,false,true);
           this.send(ws, { type: "attached" });
           return;
         }
         const v = owner;
+        if(imageLane&&(!v.imageActive||!binary||isDesktopMediaChunk(bytes)||isDesktopCursor(bytes)))throw Error("Image lane only");
         if (lane) {
           if (!v.videoActive) return;
           if (binary ? !isDesktopMediaChunk(bytes) : bytes.length > 65536 || !["media_status","media_stream","native_video_stats"].includes(JSON.parse(bytes.toString()).type)) throw Error("Video lane only");
@@ -620,6 +641,7 @@ export class DesktopRelay {
           return;
         }
         if (binary) {
+          if(v.imageActive&&!imageLane)throw Error("Image requires its negotiated lane");
           if (!v.ready || v.pending || v.lockScreenCover) throw new Error();
           const { info, image } = decodeDesktopFrame(new Uint8Array(bytes as Buffer));
           if (info.seq <= v.seq) throw new Error();
@@ -644,7 +666,7 @@ export class DesktopRelay {
           v.frameAt = now;
           v.frames++;
           v.bytes += bytes.byteLength;
-          if (!this.send(v.ws, new Uint8Array(bytes as Buffer))) this.stop(v);
+          if (!(imageLane?v.imageLane!.send(bytes):this.send(v.ws, new Uint8Array(bytes as Buffer)))) this.stop(v);
         } else {
           if (bytes.byteLength > 65536) throw new Error();
           const msg = JSON.parse(bytes.toString());
@@ -672,8 +694,8 @@ export class DesktopRelay {
             v.cursor=v.cursor===true&&ready.cursor===true&&!v.secureDesktop;
             if(v.cursor)v.cursorStream=new DesktopCursorStream(bytes=>this.send(v.ws,bytes),()=>v.ws.bufferedAmount);
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
-            const { imeKeys, extendedInput, nativeVideo,nativeVideoWindow,nativeMaxFps,cursor, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            const { imeKeys, extendedInput, nativeVideo,nativeVideoWindow,nativeMaxFps,cursor,imageLane:helperImageLane, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);
@@ -795,7 +817,7 @@ export class DesktopRelay {
   private stop(v: Viewer): void {
     if (!this.viewers.delete(v)) return;
     this.agents.revoke(v.agent);
-    v.videoLane?.close();
+    v.videoLane?.close();v.imageLane?.close();
     if (v.snapshot) {
       clearTimeout(v.snapshot.timer);
       v.snapshot.reject(new RpcError("unauthorized", "Desktop stopped"));
@@ -819,7 +841,7 @@ export class DesktopRelay {
     for (const v of [...this.viewers]) this.stop(v);
     for (const ws of this.pendingProviders) ws.terminate();
     this.pendingProviders.clear();
-    this.videoLanes.close();
+    this.videoLanes.close();this.imageLanes.close();
   }
   dispose(): void {
     if (this.closed) return;

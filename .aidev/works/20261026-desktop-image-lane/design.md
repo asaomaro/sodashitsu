@@ -1,0 +1,9 @@
+# 補助画像の独立接続
+
+動画を別WSへ分離した後も、1fpsのJPEG snapshotが入力ACK/許可のTCP FIFOを占める。全browserで新headerを提示し、B capabilityがある場合だけimageTicketをRPCへ渡す。旧helperの変更は不要。通常・secureの画像取得/権限境界は既存と同じ。
+
+既存の一回ticket/session/origin/role/親接続の検査を、別のpair poolで再利用する。native laneの512KiB上限を変更せず、image poolだけ画像最大+4096の送信上限。画像1枚の未ACK制約を維持。helperのreadyは親へ、画像は最初1枚だけBで保留する。双方の専用socket attach、Aのsource ready、browserがreadyを処理した明示ACKを全て確認して初めて保留画像を流す。
+
+attach失敗/期限超過は保留中の1枚を既存親へ流す。稼働後の専用接続断は、失われた画像/ACKを再送したり連番を飛ばさず共有全体を停止し、再接続を案内する。入力は再生しない。制御・agent・clipboard・cursorは親を継続し、この接続は画像のみ受信専用。親失効・stopで全socket/保留画像を解放する。
+
+単体で通常/secureのready barrier、旧peer、attach前fallback、入力注入拒否、失効/稼働後切断を確認する。実browserで別socketの画像がcanvasに描かれ親のinput ACKと混ざらないこと、旧native/cursor/IMEの退行を確認する。negativeでready保留とrouteを戻し実行時の失敗を採取し、独立レビューを行う。
