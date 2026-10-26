@@ -402,8 +402,8 @@ public static class SodaDesktopUnlock {
         Console.SetOut(new StreamWriter(Console.OpenStandardOutput(),new UTF8Encoding(false),4096){AutoFlush=true});
         Console.SetError(new StreamWriter(Console.OpenStandardError(),new UTF8Encoding(false),4096){AutoFlush=true});
     }
-    public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source,bool monitors=false) {
-        SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState,monitors);
+    public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source,bool monitors=false,bool virtualDisplay=false) {
+        SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState,monitors,virtualDisplay);
     }
     [StructLayout(LayoutKind.Sequential)]struct STARTUPINFOEX { public STARTUPINFO startup;public IntPtr attributes; }
     [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr GetStdHandle(int id);
@@ -448,11 +448,11 @@ public static class SodaDesktopUnlock {
             foreach(IntPtr copy in copies)CloseHandle(copy);
         }
     }
-    public static void RunInstalled(bool lease) {
+    public static void RunInstalled(bool lease,bool virtualAllowed=false,bool unlockAllowed=true) {
         // Give the installed client the protocol pipes directly. There is no
         // parent stdout-copy loop to hang after EOF. Terminating PowerShell also
         // closes the private job and reaps its lease/share child and descendants.
-        using(var child=StartProxy(InstalledExecutable(),lease?"--lease":"--share")) {
+        using(var child=StartProxy(InstalledExecutable(),lease?(virtualAllowed?(unlockAllowed?"--lease-both":"--lease-virtual"):"--lease"):"--share")) {
             child.Process.WaitForExit();
             if(lease)Require(child.Process.ExitCode==0);
             else FinishShare(child.Process.ExitCode,SelectSource,Console.Out);
@@ -466,14 +466,14 @@ public static class SodaDesktopUnlock {
         if(source=="cover"||source=="normal")WorkerFailure(output,"source_transition");
         else WorkerFailure(output,exitCode==0?"worker_ended":"worker_start_or_connection");
     }
-    public static void Lease() {
+    public static void Lease(bool virtualAllowed=false,bool unlockAllowed=true) {
         Require(SupportedWindows && WindowsIdentity.GetCurrent().User.Value==Owner && Process.GetCurrentProcess().SessionId==(int)WTSGetActiveConsoleSessionId());
         using(var controller=new ServiceController(Name)) {
             // DemandStart only. No installation or elevation performed by this process.
             controller.Refresh();
             if(controller.Status!=ServiceControllerStatus.Stopped)
                 controller.WaitForStatus(ServiceControllerStatus.Stopped,TimeSpan.FromSeconds(8));
-            controller.Start(new[]{Process.GetCurrentProcess().Id.ToString(),Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString()});
+            controller.Start(virtualAllowed?new[]{Process.GetCurrentProcess().Id.ToString(),Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(),unlockAllowed?"both":"virtual"}:new[]{Process.GetCurrentProcess().Id.ToString(),Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString()});
             controller.WaitForStatus(ServiceControllerStatus.Running,TimeSpan.FromSeconds(8));
         }
         using(var pipe=ClientPipe(""))using(var writer=Writer(pipe)) {
@@ -481,9 +481,10 @@ public static class SodaDesktopUnlock {
             while((line=Line(Console.In,64))!=null) {Require(line=="heartbeat");writer.WriteLine(line);}
         }
     }
-    public static void Share() {
+    public static void Share(bool virtualDisplay=false) {
+        if(virtualDisplay)Require(VirtualShareAllowed(SelectSource,InputIsDefault));
         using(var pipe=ClientPipe(""))using(var writer=Writer(pipe))using(var reader=Reader(pipe)) {
-            writer.WriteLine("share");
+            writer.WriteLine(virtualDisplay?"virtual":"share");
             var input=new Thread(()=>{try{Copy(Console.In,writer,65536);}catch{}finally{pipe.Dispose();}}){IsBackground=true};input.Start();
             Copy(reader,Console.Out,3*1024*1024);
         }
@@ -500,11 +501,23 @@ public static class SodaDesktopUnlock {
         lock(Gate){End=true;ShutdownToken.Cancel();try{if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}}catch{}
             foreach(var pipe in new[]{WorkerPipe,SharePipe,LeasePipe})try{if(pipe!=null)pipe.Dispose();}catch{} }
     }
+    static bool VirtualShareAllowed(Func<string> source,Func<bool> inputDefault){return source()=="normal"&&inputDefault();}
+    static int BrokerPurpose;
+    static int ParseBrokerPurpose(string[] args){Require(args.Length==2||args.Length==3&&(args[2]=="virtual"||args[2]=="both"));return args.Length==2?1:args[2]=="virtual"?2:3;}
+    static bool AllowsBrokerRequest(int purpose,string request){return request=="share"?(purpose&1)!=0:request=="virtual"&&(purpose&2)!=0;}
+    public static void VerifyLeasePurposes(){
+        int unlock=ParseBrokerPurpose(new[]{"pid","ticks"}),virtualOnly=ParseBrokerPurpose(new[]{"pid","ticks","virtual"}),both=ParseBrokerPurpose(new[]{"pid","ticks","both"});
+        Require(AllowsBrokerRequest(unlock,"share")&&!AllowsBrokerRequest(unlock,"virtual"));
+        Require(AllowsBrokerRequest(virtualOnly,"virtual")&&!AllowsBrokerRequest(virtualOnly,"share"));
+        Require(AllowsBrokerRequest(both,"virtual")&&AllowsBrokerRequest(both,"share")&&!AllowsBrokerRequest(both,"unknown"));
+        Require(VirtualShareAllowed(()=>"normal",()=>true)&&!VirtualShareAllowed(()=>"normal",()=>false)&&!VirtualShareAllowed(()=>"secure",()=>true));
+        Console.WriteLine("desktop_broker_purpose_checks_passed: unlock-only / virtual-only / both routes separated; no service/device creation or display/input changes");
+    }
     public static void StartService(string[] args) {
-        Require(SupportedWindows && args.Length==2 && WindowsIdentity.GetCurrent().IsSystem);
+        Require(SupportedWindows && WindowsIdentity.GetCurrent().IsSystem);int purpose=ParseBrokerPurpose(args);
         int pid=0;long started=0;Require(Int32.TryParse(args[0],out pid)&&Int64.TryParse(args[1],out started));
         EnableSessionPrivilege();
-        OwnerProcess=Process.GetProcessById(pid);Require(OwnerProcess.StartTime.ToUniversalTime().Ticks==started);CheckOwner(OwnerProcess,true);
+        OwnerProcess=Process.GetProcessById(pid);Require(OwnerProcess.StartTime.ToUniversalTime().Ticks==started);CheckOwner(OwnerProcess,true);BrokerPurpose=purpose;
         // A normal user's helper must authenticate the SYSTEM broker's image.
         // Its default process DACL can deny even QUERY_LIMITED_INFORMATION.
         // Grant it only to the already verified logon, on this process only.
@@ -526,9 +539,17 @@ public static class SodaDesktopUnlock {
         while(Live()) {
             try {
                 SharePipe=ServerPipe("",false,Logon);Accept(SharePipe);
-                using(var peer=Peer(SharePipe))CheckOwner(peer,false);
+                using(var client=Peer(SharePipe))
                 using(var reader=Reader(SharePipe))using(var writer=Writer(SharePipe)) {
-                    Require(Line(reader,64)=="share"&&Live());
+                    CheckOwner(client,false);
+                    string request=Line(reader,64);Require(Live()&&AllowsBrokerRequest(BrokerPurpose,request));
+                    if(request=="virtual"){
+                        var type=typeof(SodaDesktopUnlock).Assembly.GetType("SodaDesktopVirtualBroker");Require(type!=null&&LockStateOf((uint)Session)==1);
+                        long started=client.StartTime.ToUniversalTime().Ticks;
+                        Func<bool> valid=()=>{try{return Live()&&!client.HasExited&&client.StartTime.ToUniversalTime().Ticks==started&&client.SessionId==Session&&LockStateOf((uint)Session)==1;}catch{return false;}};
+                        type.GetMethod("Run").Invoke(null,new object[]{reader,writer,valid});continue;
+                    }
+                    Require(request=="share");
                     try {
                         long generation=StartWorker();Accept(WorkerPipe);
                         using(var peer=Peer(WorkerPipe))using(var identity=Identity(peer))Require(peer.Id==Worker.Id&&identity.IsSystem&&peer.SessionId==Session);
@@ -641,7 +662,7 @@ public static class SodaDesktopUnlock {
             if(args.Length==0) {ServiceBase.Run(new UnlockService());return 0;}
             Require(args.Length==1);
             if(args[0]!="--worker")SetUtf8Console();
-            if(args[0]=="--lease")Lease();else if(args[0]=="--share")Share();else if(args[0]=="--worker")WorkerMain();else throw new InvalidOperationException();return 0;
+            if(args[0]=="--lease")Lease();else if(args[0]=="--lease-virtual")Lease(true,false);else if(args[0]=="--lease-both")Lease(true,true);else if(args[0]=="--share")Share();else if(args[0]=="--virtual")Share(true);else if(args[0]=="--worker")WorkerMain();else throw new InvalidOperationException();return 0;
         }catch {Console.Error.WriteLine("Sodashitsu unlock helper unavailable.");return 1;}
     }
     sealed class UnlockService:ServiceBase {

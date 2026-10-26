@@ -269,6 +269,24 @@ soda serve
 
 画像配信は変更箇所だけ送る独自プロトコルです。VNC/RFB互換やnoVNCではありません。追加の動画共有ではブラウザのWebRTC、またはVP8/OpusのWebM中継を使います（後述）。CopyRectはありません。実装は[Windowsの比較・圧縮](../scripts/remote-desktop/WindowsDesktopHost.cs)、[パケット検査](../packages/protocol/src/desktop.ts)、[ブラウザ合成](../packages/web/src/desktop/render.ts)を参照してください。
 
+## 一時的な仮想画面（Windows 11 x64）
+
+接続先の設定［デスクトップ共有］で［一時的な仮想画面の作成を許可］を有効にし、共有窓で［一時的な仮想画面を使う］を選ぶと、共有専用の仮想画面を作成して接続します。操作許可は新しい共有ごとに取得し直します。この選択はブラウザへ保存せず、通常モニターの選択と併用しません。未許可・未対応・起動失敗の場合に実画面へ切り替えることはありません。
+
+利用にはSodashitsu専用の署名済みIDDドライバーと、新しい保護サービスが必要です。ドライバーsource/buildは `scripts/remote-desktop/virtual-display-driver/` にあります。CIのartifactは未署名のビルド検証用で、そのまま導入する配布物ではありません。UMDFの署名と、Hardware Dashboardを使う場合の要件は[Windows driver signing tutorial](https://learn.microsoft.com/en-us/windows-hardware/drivers/install/windows-driver-signing-tutorial)と[driver signing options](https://learn.microsoft.com/en-us/windows-hardware/drivers/dashboard/driver-signing-offerings)を参照してください。署名済み配布と実headless取得の検証は未完了です。
+
+署名済み配布物を導入するときは、配布元と署名者の証明書を先に確認します。ローカルのWindowsドライブに `SodaVirtualDisplay.inf` / `.dll` / `.cat` を置き、通常のPowerShellで `install-virtual-display-driver.ps1 -PackagePath <folder> -Inspect` を実行すると、3ファイルのSHA256、manifest文字列、そのSHA256、署名証明書のSHA256をJSONで返します。catalogが有効な署名を持たない場合は拒否します。表示されたハッシュを単に信用せず、承認する配布物・証明書と照合してください。
+
+manifestは返された文字列をUTF-8（BOM・末尾改行なし）で保存します。たとえば `$r=<InspectのJSON>|ConvertFrom-Json` のあと、`[IO.File]::WriteAllText($manifestPath,$r.manifest,(New-Object Text.UTF8Encoding($false)))` で保存します。`-ManifestPath <path> -ExpectedManifestSha256 <reviewed hash> -SignerSha256 <reviewed certificate hash> -ValidateOnly` を同じinstallerへ渡すと、内容と署名者の同一性を確認します。catalogのファイルmembershipとDriver Storeへ登録できるかはWindowsによる登録時の検証です。
+
+登録する場合だけ、管理者PowerShellで同じ引数から `-ValidateOnly` を外します。installerは管理者保護した作業場所へコピーしてハッシュを再確認し、Windowsの `pnputil /add-driver` へ渡します。モニター作成や既存デバイスの再起動、証明書storeの変更、testsigningの有効化は行いません。続いて `install-unlock-service.ps1` で保護サービスを導入・更新します。サービスの仮想画面専用の許可はロック解除専用の許可と分離され、片方だけの許可からもう一方の処理へ進めません。
+
+共有ごとに独立したdevice/containerを作り、実PnP instance・adapter・monitorを照合して共有対象を決めます。`DISPLAY1`等の名前が増えたことだけでは選択しません。作成取消・接続切れ・所有者の終了・期限切れ・対象消失で自分のdevice handleだけを解放し、他のアプリの仮想画面設定を全置換しません。通常desktopを確認してから作成を開始し、secure desktopへの遷移や対象変更時は入力を停止します。UAC、昇格アプリ、サインアウト後のサインインはこの機能とは別の未完了項目です。
+
+共有窓には、ドライバー未導入・起動不可・保護サービス未導入/未更新・権限不足・時間切れ・対象消失を固定メッセージで知らせます。native例外のパスやウィンドウ名は転送しません。独自の旧 `SODA_DESKTOP_COMMAND` 設定からGUIで仮想画面を有効にする場合は、同梱helperを使う設定へ移行してください。
+
+検証は生成画像とfake device/owner/clock、実C++ callbackのbuffer試験、Windowsでのcompile-onlyです。`validate-virtual-broker.ps1` / `validate-virtual-package.ps1` は実driver導入・画面取得・OS入力・clipboard変更を行いません。package検査では検証用のTEMPディレクトリーとjunctionだけを作成・削除します。[検証記録](../.aidev/works/20261026-desktop-parity-expansion/test-virtual-display-integration.md)を参照してください。
+
 ## GPU動画のコーデック選択
 
 新しいviewer・A/B・Windows補助プログラムが揃うと、GPU動画の［動画コーデック］でH.264、H.264 4:4:4、HEVC、AV1を選べます。既定はH.264です。GPUの登録候補がある形式を「試行」と表示します。候補の存在は圧縮成功の保証ではなく、開始時に実際のhardware encoder出力とブラウザの復号可否を検査します。ソフトウェア圧縮への暗黙の変更はしません。旧版を含む接続ではH.264を使い、新しい項目を送りません。

@@ -73,6 +73,7 @@ export class DesktopSettings {
           allowClipboard: options.legacy.allowClipboard === true,
           allowDisplayResize: options.legacy.allowDisplayResize === true,
           ...(options.legacy.allowMonitors?{allowMonitors:true}:{}),
+          ...(options.legacy.allowVirtualDisplay?{allowVirtualDisplay:true}:{}),
           ...(options.legacy.allowUnlock ? { allowUnlock: true } : {}),
         }
       : { ...disabled };
@@ -100,6 +101,7 @@ export class DesktopSettings {
           "invalid_params",
           "この環境では同梱のWindows補助プログラムを使用できません。",
         );
+      if (permissions.allowVirtualDisplay && this.options.legacy)throw new RpcError("invalid_params","仮想画面には同梱のWindows補助プログラムを使用してください。");
       if (permissions.allowUnlock && this.options.legacy)
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
       if(permissions.fileRoot?.trim()){const probe=await DesktopFiles.open(permissions.fileRoot.trim(),()=>false);await probe.close();}
@@ -120,6 +122,7 @@ export class DesktopSettings {
       // Custom commands retain their launch syntax; saved local permissions supersede env defaults.
       if (!legacy) {
         if(p.allowMonitors)command.push("-AllowMonitors");
+        if(p.allowVirtualDisplay)command.push("-AllowVirtualDisplay");
         if (p.allowInput) command.push("-AllowInput");
         if (p.allowClipboard) command.push("-AllowClipboard");
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
@@ -131,11 +134,12 @@ export class DesktopSettings {
         allowNativeVideo: !legacy || legacy.allowMedia===true,
         ...(p.fileRoot?.trim()?{fileRoot:p.fileRoot.trim()}:{}),
         allowMonitors:p.allowMonitors===true,
+        allowVirtualDisplay:p.allowVirtualDisplay===true,
         allowInput: p.allowInput,
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
         allowUnlock: p.allowUnlock === true,
-        ...(p.allowUnlock && !legacy ? { unlockLeaseCommand: [...this.command, "-UnlockLease"] } : {}),
+        ...((p.allowUnlock||p.allowVirtualDisplay) && !legacy ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay",...(p.allowUnlock?["-AllowUnlock"]:[])]:[])] } : {}),
         origins: legacy?.origins ?? this.options.origins,
       };
     }

@@ -37,7 +37,7 @@ public sealed class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.
         public readonly DeviceHandle Handle;
         public string InstanceId {get;set;}
         public Device(Created callback){Handle=new DeviceHandle(callback);}
-        public bool Started {get{uint node,status,problem;return !Handle.IsClosed&&!Handle.IsInvalid&&CM_Locate_DevNodeW(out node,InstanceId,0)==0&&CM_Get_DevNode_Status(out status,out problem,node,0)==0&&(status&8)!=0&&problem==0;}}
+        public bool Started {get{uint node,status,problem;if(Handle.IsClosed||Handle.IsInvalid||CM_Locate_DevNodeW(out node,InstanceId,0)!=0)return false;return StartedState(CM_Get_DevNode_Status(out status,out problem,node,0),status,problem);}}
         public SodaDesktopVirtualDisplay.Target ActiveTarget(Guid container){return FindTarget(InstanceId,container);}
         public void Dispose(){Handle.Dispose();}
     }
@@ -68,7 +68,7 @@ public sealed class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.
         void Dispatch(){
             Device transfer;int hr;string id;
             lock(gate){if(!returned||!callbackReady||dispatched||cancelled)return;dispatched=true;transfer=owned;owned=null;hr=result;id=instance;}
-            if(hr<0||String.IsNullOrEmpty(id)||id.Length>512||transfer.Handle.IsInvalid){transfer.Dispose();failed(new InvalidOperationException("Virtual display PnP enumeration failed",hr<0?Marshal.GetExceptionForHR(hr):null));return;}
+            if(hr<0||String.IsNullOrEmpty(id)||id.Length>512||transfer.Handle.IsInvalid){transfer.Dispose();failed(new SodaDesktopVirtualFailure(hr==unchecked((int)0x80070005)?"permission_denied":"driver_unavailable"));return;}
             transfer.InstanceId=id;
             try{complete(transfer);}catch{transfer.Dispose();throw;}
         }
@@ -78,6 +78,9 @@ public sealed class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.
         if(container==Guid.Empty||complete==null||failed==null||IntPtr.Size!=8)throw new ArgumentException();
         // Only the installed SYSTEM broker calls Begin. The nonprivileged helper has no elevation path.
         if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem)throw new InvalidOperationException("Virtual display requires the installed broker");
+        using(var version=Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion")){int build;if(version==null||!Int32.TryParse(Convert.ToString(version.GetValue("CurrentBuildNumber","0")),out build)||build<22000)throw new SodaDesktopVirtualFailure("unsupported");}
+        string store=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"System32","DriverStore","FileRepository");
+        if(!System.IO.Directory.Exists(store)||System.IO.Directory.GetDirectories(store,"sodavirtualdisplay.inf_amd64_*").Length==0)throw new SodaDesktopVirtualFailure("driver_missing");
         return new Operation(container,complete,failed);
     }
     static string InterfaceInstance(string path){uint type,size=2048;var bytes=new byte[size];if(CM_Get_Device_Interface_PropertyW(path,ref InstanceKey,out type,bytes,ref size,0)!=0||type!=18||size<2||size>bytes.Length||size%2!=0)return null;return System.Text.Encoding.Unicode.GetString(bytes,0,(int)size).TrimEnd('\0');}
@@ -109,5 +112,7 @@ public sealed class SodaDesktopVirtualDisplayNative : SodaDesktopVirtualDisplay.
         }
         return null;
     }
-    public static void VerifyLayouts(){if(IntPtr.Size!=8||Marshal.SizeOf(typeof(CreateInfo))!=72||Marshal.SizeOf(typeof(PropertyKey))!=20)throw new InvalidOperationException("Virtual display native ABI");}
+    public static bool MatchesTarget(string instance,Guid container,string device,string monitor){var target=FindTarget(instance,container);return target!=null&&String.Equals(target.DeviceName,device,StringComparison.OrdinalIgnoreCase)&&String.Equals(target.MonitorPath,monitor,StringComparison.OrdinalIgnoreCase);}
+    static bool StartedState(uint result,uint status,uint problem){if(result!=0)return false;if(problem!=0)throw new SodaDesktopVirtualFailure("driver_unavailable");return (status&8)!=0;}
+    public static void VerifyLayouts(){if(!StartedState(0,8,0)||StartedState(1,8,0)||StartedState(0,0,0))throw new InvalidOperationException("Virtual driver status flags");bool rejected=false;try{StartedState(0,0,22);}catch(SodaDesktopVirtualFailure e){rejected=e.Code=="driver_unavailable";}if(!rejected)throw new InvalidOperationException("Disabled virtual driver accepted");if(IntPtr.Size!=8||Marshal.SizeOf(typeof(CreateInfo))!=72||Marshal.SizeOf(typeof(PropertyKey))!=20)throw new InvalidOperationException("Virtual display native ABI");}
 }

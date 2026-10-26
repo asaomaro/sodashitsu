@@ -15,7 +15,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { DESKTOP_AUDIO_PROTOCOL, isDesktopAudio, DESKTOP_RICH_CLIPBOARD_PROTOCOL, decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_DATAGRAM_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
+import { DESKTOP_VIRTUAL_DISPLAY_PROTOCOL, DESKTOP_AUDIO_PROTOCOL, isDesktopAudio, DESKTOP_RICH_CLIPBOARD_PROTOCOL, decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_DATAGRAM_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -118,8 +118,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" = false) {
-    const ws = new WebSocket(endpoint, ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" = false) {
+    const ws = new WebSocket(endpoint, ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -771,3 +771,21 @@ it('negotiates resolution only for its viewer protocol, with unchanged ready for
  const v=await f.viewer('rate');v.send({...start,options:{...start.options,nativeAdaptive:true}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  expect(f.startRequests[0]!.options.nativeAdaptive).toBeUndefined();expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('nativeAdaptive');v.send({type:'stop'});
 });
+
+it("creates only an explicitly requested virtual source with all gates enabled",async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,command:[...cfg.command,"--virtual-display","--headless"]});const v=await f.viewer("virtual");
+ v.send({...start,options:{...start.options,features:true,virtualDisplay:true}});await expect.poll(()=>v.messages.find(m=>m.type==='ready')).toMatchObject({virtualDisplay:true,title:'Generated owned virtual desktop'});expect(f.startRequests[0]!.options.virtualDisplay).toBe(true);v.send({type:'stop'});
+});
+it.each(['viewer','permission','helper'] as const)("rejects a virtual request when the %s gate is missing, without publishing a physical ready",async gate=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:gate!=='permission',command:[...cfg.command,...(gate==='helper'?[]:['--virtual-display'])]});const v=await f.viewer(gate==='viewer'?false:'virtual');
+ v.send({...start,options:{...start.options,features:true,virtualDisplay:true}});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==='ready')).toBe(false);if(gate!=='helper')expect(f.startRequests).toHaveLength(0);
+});
+it("does not send virtual fields to a regular legacy viewer",async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,command:[...cfg.command,'--virtual-display']});const v=await f.viewer(false);v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==='ready')).toBe(true);expect(f.startRequests[0]!.options).not.toHaveProperty('virtualDisplay');expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('virtualDisplay');v.send({type:'stop'});
+});
+
+it("allows an explicitly negotiated virtual source to become ready after sixteen seconds",async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:true,command:[...cfg.command,'--virtual-display','--headless','--configure-delay-ms','16000']});
+ const v=await f.viewer('virtual');const heartbeat=setInterval(()=>{if(v.ws.readyState===WebSocket.OPEN)v.send({type:'heartbeat'});},1000);
+ try{v.send({...start,options:{...start.options,features:true,virtualDisplay:true}});await expect.poll(()=>v.messages.find(m=>m.type==='ready'),{timeout:21000}).toMatchObject({virtualDisplay:true});expect(v.ws.readyState).toBe(WebSocket.OPEN);v.send({type:'stop'});}finally{clearInterval(heartbeat);}
+},30000);

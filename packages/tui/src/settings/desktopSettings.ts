@@ -27,6 +27,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
     ["enabled", "画面共有を許可"],
     ["allowInput", "マウス・キーボードを許可"],
     ["allowMonitors","全モニターの共有と切替を許可"],
+    ["allowVirtualDisplay","一時仮想画面の作成を許可（署名済みdriver/保護サービスが必要）"],
     ["allowClipboard", "クリップボードを許可"],
     ["allowDisplayResize", "解像度変更を許可"],
     ["allowUnlock", "起動中のロック解除を許可（Windows専用サービスが必要）"],

@@ -16,7 +16,7 @@ public static class SodaDesktopVirtualDisplayChecks {
         public void Dispose(){Closed++;}
     }
     static void Need(bool value,string reason){if(!value)throw new Exception(reason);}
-    static void Reject(Action run,string reason){try{run();}catch(InvalidOperationException){return;}catch(TimeoutException){return;}throw new Exception(reason);}
+    static void Reject(Action run,string reason){try{run();}catch(InvalidOperationException){return;}catch(SodaDesktopVirtualFailure){return;}catch(System.TimeoutException){return;}throw new Exception(reason);}
     public static void Run(){
         long now=0;bool live=true;var b=new Backend();var d=new Device();var lease=new SodaDesktopVirtualDisplay(b,()=>live,()=>now);
         Need(lease.Poll()==null,"Creation pending");b.Complete(d);Need(lease.Poll()==null,"Callback is not device started");d.Started=true;Need(lease.Poll()==null,"Started is not active target");d.Active=true;Need(lease.Poll().DeviceName==d.Name,"Owned monitor target");

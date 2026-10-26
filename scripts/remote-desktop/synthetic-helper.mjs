@@ -93,6 +93,7 @@ export function syntheticFrame(width, height, seq, color, mode = "full", layout)
 }
 function heightOf(options) { return options.syntheticHeight ?? options.display?.height ?? Math.round(options.width * 9 / 16); }
 function run() {
+  let configureDelayed=false;
   let options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
     cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
@@ -182,6 +183,8 @@ function run() {
   lines.on("line", (line) => {
     try {
       const m = JSON.parse(line);if(m.type==="release"||(m.type==="control"&&!m.enabled)){held.clear();note(m.type);}
+      const delayAt=process.argv.indexOf("--configure-delay-ms");
+      if(m.type==="configure"&&!configureDelayed&&delayAt>=0){configureDelayed=true;const delay=Number(process.argv[delayAt+1]);if(!Number.isInteger(delay)||delay<1||delay>20000)throw Error("Generated delay bound");setTimeout(()=>lines.emit("line",line),delay);return;}
       if (m.type === "configure" && !options) {
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
@@ -198,6 +201,9 @@ function run() {
         nativeCodecs=m.nativeCodecs===true&&process.argv.includes("--native-codecs")&&!secure;
         nativeAdaptive=m.nativeAdaptive===true&&process.argv.includes("--native-adaptive")&&!secure;
         options = m.options;if(nativeAdaptive&&nativeFixture)options={...options,syntheticHeight:Math.round(nativeFixture.height*options.width/nativeFixture.width)};nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
+        const virtualSource=options.virtualDisplay===true&&m.allowVirtualDisplay===true&&process.argv.includes("--virtual-display")&&!secure;
+        if(process.argv.includes("--headless")&&!virtualSource)throw Error("Generated headless source requires an owned virtual monitor");
+        if(virtualSource&&process.argv.includes("--virtual-missing")){send({type:"virtual_display_failure",code:"driver_missing"});setTimeout(()=>process.exit(0),25);return;}
         if(m.allowMonitors===true&&options.monitors===true&&process.argv.includes("--monitors")&&!secure){
           let monitors=[{id:"left",x:-640,y:-200,width:640,height:480,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:800,height:600,primary:true,scalePercent:150}];if(process.argv.includes("--monitors-one"))monitors=monitors.filter(v=>v.primary);const selected=options.monitorDevice??"right",item=monitors.find(v=>v.id===selected);
           if(selected!=="all"&&!item)throw Error("Monitor missing");const lx=Math.min(...monitors.map(v=>v.x)),ly=Math.min(...monitors.map(v=>v.y)),rx=Math.max(...monitors.map(v=>v.x+v.width)),by=Math.max(...monitors.map(v=>v.y+v.height));const bounds=selected==="all"?{x:lx,y:ly,width:rx-lx,height:by-ly}:{x:item.x,y:item.y,width:item.width,height:item.height};monitorLayout={selected,bounds,allSupported:true,monitors};const width=Math.min(options.width,bounds.width);options={...options,width,syntheticHeight:Math.round(bounds.height*width/bounds.width)};
@@ -212,6 +218,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(virtualSource?{virtualDisplay:true}:{}),
           ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
@@ -226,7 +233,7 @@ function run() {
           ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
           ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
-          title: "Synthetic test source",
+          title: virtualSource?"Generated owned virtual desktop":"Synthetic test source",
           allowInput,
           width: monitorLayout?.bounds.width??options.width,
           height: monitorLayout?.bounds.height??heightOf(options),
