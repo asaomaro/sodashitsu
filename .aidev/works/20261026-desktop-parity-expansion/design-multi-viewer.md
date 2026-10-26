@@ -10,9 +10,9 @@
 
 ## 作業と必須点検
 
-- [ ] 共有helperと有限fanout、世代終了、入力排他を実装（taskcheck必須）。
-- [ ] A/B交渉とUIの明示選択、旧peer拒否、実WebSocket統合検証（taskcheck必須）。
-- [ ] browser2窓の描画・排他・切断後の継続と再取得を観測する。fake helperのみで実画面/OS入力を使わない。
-- [ ] build/typecheck/全体テスト、独立worktree起動確認、独立全体レビューと修正再レビュー、PR/merge/両端反映。
+- [x] 共有helperと有限fanout、世代終了、入力排他を実装（taskcheck必須）。
+- [x] A/B交渉とUIの明示選択、旧peer拒否、実WebSocket統合検証（taskcheck必須）。
+- [x] browser2窓の描画・排他・切断後の継続と再取得を観測する。fake helperのみで実画面/OS入力を使わない。
+- [x] build/typecheck/全体テスト、独立worktree起動確認、独立全体レビューと修正再レビュー、PR/merge/両端反映。
 
 8A完了でもtask8全体は保留。native動画/音声の共有encode・viewerごとの復帰/keyframeとadaptation、保護sourceのowner/logon/epoch別の共有条件は後続差分で検証する。

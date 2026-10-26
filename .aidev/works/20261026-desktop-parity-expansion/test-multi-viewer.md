@@ -373,3 +373,71 @@ AssertionError: expected 1 to be 3 // Object.is equality
 
 
 ```
+
+## Final validation (source aae8b64c)
+
+build/typecheck成功。独立worktree aae8b64c のinstall/build/smoke PASS。全体773 suite/11,583 pass (339.05s)。browser17 pass/1 optional skip (1.8m): new shared2窓、既存通常/agent/input/native video/protected。全ソース固定中に実行し、途中編集なし。全体の重複実行なし。
+
+### Full suite
+
+```text
+    at file:///workspaces/sodashitsu-desktop-multi-viewer/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:416:80
+    at new Promise (<anonymous>)
+    at Fetch.sendRequest (file:///workspaces/sodashitsu-desktop-multi-viewer/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:415:16)
+    at Fetch.send (file:///workspaces/sodashitsu-desktop-multi-viewer/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:188:27)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at BrowserFrameNavigator.navigate (file:///workspaces/sodashitsu-desktop-multi-viewer/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/browser/utilities/BrowserFrameNavigator.js:202:24)
+
+ Test Files  773 passed (773)
+      Tests  11583 passed (11583)
+   Start at  07:30:53
+   Duration  339.05s (tests 83%, import 10%, environment 4%, transform 3%)
+
+Environment  |@sodashitsu/web| happy-dom was created 225 times · 47.54s total, 28% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+```
+### Browser
+
+```text
+{"ts":"2026-10-26T22:32:37.096Z","level":"info","msg":"machine link closed","machine":"91a6014af1a8e1a67529e507c85f8b8c","kind":"transient","reason":"接続が切れました"}
+  ✓  17 src/specs/remote-desktop-native-video.spec.ts:381:3 › native video legacy one-frame window under 100ms draw ACK delay (10.7s)
+{"ts":"2026-10-26T22:32:37.225Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-26T22:32:37.226Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-26T22:32:37.226Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-26T22:32:37.236Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-WgP55d/commands.json","count":0}
+{"ts":"2026-10-26T22:32:37.692Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-26T22:32:37.692Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-26T22:32:37.692Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-26T22:32:37.693Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-GeClPS/commands.json","count":0}
+NATIVE_WINDOW_BENCH {"pipelined":true,"frames":79,"fps":25.04656091461646,"ackDelayMs":100,"source":"hardware-generated fixture; no actual desktop or physical network"}
+{"ts":"2026-10-26T22:32:43.619Z","level":"info","msg":"machine link closed","machine":"eb1c2c13df4e49d0f2870a9d9d92bfcd","kind":"transient","reason":"接続が切れました"}
+  ✓  18 src/specs/remote-desktop-native-video.spec.ts:381:3 › native video three-frame window under 100ms draw ACK delay (6.5s)
+
+  1 skipped
+  17 passed (1.8m)
+
+```
+### Independent smoke
+
+```text
+smoke: client.hello ok
+smoke: workspace.create ok (pane 7e517b0c-39c8-4120-8b4b-f4af1c06de29)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-10-26T22:34:32.055Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"31eaf257-e4d2-4179-9184-82ea65fa0459","paneId":"7e517b0c-39c8-4120-8b4b-f4af1c06de29"}
+smoke: custom command popup round trip ok
+smoke(web): auto-login (#token) → connect → pane 表示 ok
+smoke(web): 端末の描画用 canvas が画面内にある（xterm.css 有効。D96）
+smoke(web): tab title ok ("my-notePC: smoke"。H14/AC4）
+smoke(web): typed into pane 7e517b0c-39c8-4120-8b4b-f4af1c06de29
+smoke(web): echo round trip ok（ブラウザでの入力が PTY まで届いた）
+smoke(web): 初めてのブラウザで、はじめの案内が端末の表示のあとに開き、見出しにフォーカスがある
+smoke(web): Esc で閉じると端末へフォーカスが戻り、案内済みだけが保存される
+smoke(web): 開き直しても、はじめの案内は出ない
+smoke(web): はじめの案内を閉じたあと、クリックせずに打った文字が PTY まで届いた
+smoke: PASS
+
+```
