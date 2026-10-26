@@ -58,3 +58,5 @@ export * from "./workAgentProxy.js";
 export * from "./desktopCursor.js";
 
 export * from "./desktopDatagrams.js";
+
+export * from "./desktopAudio.js";
