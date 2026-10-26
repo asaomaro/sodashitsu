@@ -19,8 +19,10 @@
 
 第3段階の同時表示はphysical配置の一括canvas。複数画面のGPU合成とmonitor別の独立窓は未対応。actual複数モニターのcapture/input試験は行わず、fakeとactual readonly metadataを区別して記録した。
 
-第4段階前半: native動画FPS/bitrateの自動調整を実装・独立レビュー・全体11,500件/ブラウザ17件（2 skip）検証済み。resolution barrierは別差分で進行中、task 4は未完了。
+第4段階前半: native動画FPS/bitrateの自動調整を実装・独立レビュー・全体11,500件/ブラウザ17件（2 skip）検証済み。resolution barrierは後半の別差分で実装し、task 4は完了。
 
 第4段階後半: 解像度の世代barrier、audio/peer維持、source/sentAt/freshAt分離、GPU lease安全、旧peer gateを実装。全体11,509件・ブラウザ22件（任意の長時間/性能2件skip）、両端Windows生成GPU検査・独立レビューと修正再レビューを通過。残り5〜10は未完了。
 
 第5段階: codec交渉、実header正規化、非対応時の一度だけのH264復帰を実装。全体11,521件、新codecブラウザ9件・既存22件、両端Windows生成検査、独立レビュー通過。AV1/444の実hardware対応は当該両PCで未確認（実encode不可）で、software AV1 decode fixtureと区別する。第6〜10段階は未完了。
+
+第6段階: PR #219でIDD/lease基盤、PR #220でローカル許可・protected purpose・helper/UI接続・署名package明示登録手順を実装。全体11,530件、browser12件、両端Windows compile/fake/拒否検査・driver Windows CI・独立レビュー通過。配布artifactは未署名で、署名済み配布/実DriverStore登録/実headless取得は未完了のためチェックは保留する。検証用unsigned版の自動導入、証明書trust/testsigning変更は行わない。第7〜10段階は未完了。
