@@ -36,3 +36,10 @@ it("expires an entirely missing access unit from a later fragment without waitin
  // Notices may arrive after direct rendering/ACK; they cannot resurrect a drop.
  f.frames.notice(1,packet(1).length);f.frames.notice(2,p2.length);f.frames.notice(3,p3.length);expect(f.frame).toHaveBeenCalledOnce();
 });
+
+it('resets only the decoder boundary, discards old fragments and keeps global sequence monotonic',()=>{
+ const f=setup(false),old=packet(1,true,40000);f.frames.fragment(encodeDesktopDatagrams(1,old)[0]!);
+ f.frames.reset(7);f.frames.start();for(const part of encodeDesktopDatagrams(1,old))f.frames.fragment(part);expect(f.frame).not.toHaveBeenCalled();
+ const p=packet(8,true);f.frames.notice(8,p.length);for(const part of encodeDesktopDatagrams(8,p))f.frames.fragment(part);expect(f.frame).toHaveBeenCalledExactlyOnceWith(8,p);
+ expect(()=>f.frames.notice(1,p.length)).toThrow('order');
+});

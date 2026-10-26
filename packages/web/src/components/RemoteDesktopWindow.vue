@@ -29,7 +29,7 @@ import {
 
 import DesktopFiles from "./DesktopFiles.vue";
 import {DesktopFileClient} from "../desktop/fileClient.js";
-import {DESKTOP_MONITORS_PROTOCOL,desktopMonitorAt,type DesktopMonitorLayout,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
+import {DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DesktopNativeProfilePending,DESKTOP_MONITORS_PROTOCOL,desktopMonitorAt,type DesktopMonitorLayout,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopRichClipboardClient,readRichClipboard,writeRichClipboard} from "../desktop/richClipboard.js";
 import {DESKTOP_RICH_CLIPBOARD_PROTOCOL,type DesktopClipboardBundle} from "@sodashitsu/protocol";
 import {DesktopNativeAudioReceiver} from "../desktop/nativeAudioReceiver.js";
@@ -143,6 +143,7 @@ const mediaState = ref("images"),
   mediaBitrate = ref(2500),
   nativeAudio=ref(false),nativeAudioState=ref(""),
   nativeDatagrams=ref(false),nativeUdp=ref(true),nativeUdpActive=ref(false),
+  nativeAdaptive=ref(false),
   nativeMaxFps=ref(30), nativeFps=ref(60),
   videoFrames = ref(0),
   videoFps = ref(0);
@@ -400,7 +401,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  nativeVideo.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
+  nativeVideo.value=false;nativeAdaptive.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -492,7 +493,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -600,7 +601,7 @@ function connect(automatic = false) {
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
-          nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
+          nativeAdaptive.value=r.nativeAdaptive===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
@@ -651,7 +652,7 @@ function connect(automatic = false) {
               (video, count, videoWidth, videoHeight) => {
                 if (dead || version !== epoch || !canvas.value) return;
                 if (
-                  activeSettings.value?.display &&
+                  activeSettings.value?.display && !(mediaState.value==="native"&&nativeAdaptive.value) &&
                   (videoWidth !== activeSettings.value.display.width || videoHeight !== activeSettings.value.display.height)
                 ) {
                   stopVideo();
@@ -686,7 +687,8 @@ function connect(automatic = false) {
             await receiver.signal(signal.signal as Parameters<DesktopMediaReceiver["signal"]>[0]);
         } else if (m.type === "media_stream") {
           const stream = DesktopMediaStream.parse(m);
-          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window,stream.datagrams===true);else receiver.stream(stream.generation, stream.mime);}
+          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window,stream.datagrams===true,stream.baseSeq);else receiver.stream(stream.generation, stream.mime);}
+        } else if(m.type==="native_profile_pending"){const pending=DesktopNativeProfilePending.parse(m);if(receiver?.id===pending.id)receiver.profilePending(pending);
         } else if(m.type==="native_audio_status"){const audio=DesktopNativeAudioStatus.parse(m);if(receiver?.id===audio.id)receiver.audioStatus(audio);
         } else if(m.type==="native_frame_notice"){const notice=DesktopNativeFrameNotice.parse(m);if(receiver?.id===notice.id)receiver.notice(notice);
         } else if(m.type==="native_video_stats") {

@@ -1,3 +1,4 @@
+import {DesktopNativeProfilePending} from "@sodashitsu/protocol";
 import {DesktopNativeAudioReceiver} from "./nativeAudioReceiver.js";
 import {DESKTOP_AUDIO_CHANNEL,DesktopNativeAudioStatus} from "@sodashitsu/protocol";
 import {DesktopDatagramFrames} from "./datagramFrames.js";
@@ -12,6 +13,7 @@ export class DesktopMediaReceiver {
   private datagrams:DesktopDatagramFrames|undefined;
   private nativeControl:RTCDataChannel|undefined;
   private nativeVideo:RTCDataChannel|undefined;
+  private formatEpoch=0;private barrier:{generation:number;at:number}|undefined;
   private nativeFormat:{generation:number;codec:string;width:number;height:number;window?:3}|undefined;
   private lastKey=-Infinity;
   private datagramTimer:ReturnType<typeof setInterval>|undefined;
@@ -93,10 +95,11 @@ export class DesktopMediaReceiver {
     this.frameCallback = this.video.requestVideoFrameCallback(tick);
     this.timer = setInterval(() => {
       const now = performance.now();
-      if (
+      const barrier=this.barrier&&now-this.barrier.at<3000;
+      if ((this.barrier&&now-this.barrier.at>=3000)||(!barrier&&(
         (this.drawnAt && now - this.drawnAt > 2000) ||
         (!this.drawnAt && now - this.startedAt > 12000)
-      ) {
+      ))) {
         if(this.udp)this.datagramFailure();else this.fail();
         return;
       }
@@ -171,16 +174,26 @@ export class DesktopMediaReceiver {
       { once: true },
     );
   }
-  nativeStream(generation:number,codec:string,width:number,height:number,window?:3,datagrams=false) {
+  profilePending(raw:unknown){
+    const m=DesktopNativeProfilePending.parse(raw);if(this.stopped)return;
+    if(m.id!==this.id||!this.nativeFormat||m.generation!==this.generation+1||this.barrier)throw Error("Unexpected video barrier");
+    this.barrier={generation:m.generation,at:performance.now()};
+  }
+  nativeStream(generation:number,codec:string,width:number,height:number,window?:3,datagrams=false,baseSeq?:number) {
     if(this.stopped)return;if(datagrams!==this.udp)throw Error("Native stream route changed");
     if(!datagrams){this.peer?.close();this.peer=undefined;}
+    if(baseSeq!==undefined&&(!this.barrier||generation!==this.barrier.generation||performance.now()-this.barrier.at>=3000))throw Error("Unexpected native format");
     this.native?.stop();this.native=undefined;this.releaseSource();this.video.srcObject=null;
-    this.generation=generation;this.sequence=0;
-    this.nativeFormat={generation,codec,width,height,...(window===3?{window}:{})};this.createNative();if(datagrams)this.datagrams!.start();
+    this.generation=generation;this.sequence=baseSeq??0;
+    this.nativeFormat={generation,codec,width,height,...(window===3?{window}:{})};
+    if(datagrams&&baseSeq!==undefined)this.datagrams!.reset(baseSeq);
+    this.createNative(baseSeq===undefined?undefined:()=>{const ack={type:"native_format_ack",id:this.id,generation,baseSeq};if(this.udp)this.nativeAck(ack);else this.send(ack);});
+    if(datagrams)this.datagrams!.start();
   }
-  private createNative(){
+  private createNative(ready?:()=>void){
     const format=this.nativeFormat;if(!format||this.stopped)return;
-    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>this.udp?this.nativeAck(value):this.send(value),frame=>{if(this.stopped)return;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>this.udp?this.datagramFailure():this.fail());
+    const epoch=++this.formatEpoch,current=()=>!this.stopped&&epoch===this.formatEpoch;
+    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>{if(current()){if(this.udp)this.nativeAck(value);else this.send(value);}},frame=>{if(!current())return;if(this.barrier?.generation===format.generation)this.barrier=undefined;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>{if(current()){if(this.udp)this.datagramFailure();else this.fail();}},()=>{if(current())ready?.();});
   }
   notice(raw:unknown){
     if(this.stopped)return;

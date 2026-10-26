@@ -249,6 +249,11 @@ public static class SodaDesktopHost {
             if(!Secure && lockState!=null && lockState()==0)Output(new {type="session_locked"});
         }
     }
+    public static bool TryCreateNativeVideo(int width,int height,int fps,int bitrate,SodaDesktopDxgi capture,out SodaDesktopH264 encoder,out bool cpuOnly){
+        encoder=null;cpuOnly=false;
+        try{cpuOnly=capture!=null&&!capture.ConfigureVideoOutput(width,height);encoder=SodaDesktopH264.CreateForDesktop(width,height,fps,bitrate,cpuOnly?null:capture);return true;}
+        catch{if(encoder!=null)encoder.Dispose();encoder=null;return false;}
+    }
     static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath,bool locallyAllowMonitors) {
         if(!Secure && !Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
         ActiveMonitors=null;CaptureDevice=null;MonitorNotice=0;MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();SetProcessDPIAware();
@@ -301,7 +306,9 @@ public static class SodaDesktopHost {
         SodaDesktopH264 video=null;string videoId=null;IDisposable audio=null;string audioId=null;
         IDisposable richClipboardWorker=null;System.Reflection.MethodInfo richSubmit=null;Type richType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopRichClipboard");
         bool richCeiling=clipboardCeiling&&richType!=null&&config.ContainsKey("richClipboard")&&config["richClipboard"] is bool&&(bool)config["richClipboard"];
-        SodaDesktopVideoRate videoRate=null;
+        SodaDesktopVideoRate videoRate=null;SodaDesktopVideoProfile videoProfile=null;
+        int videoGeneration=1,videoWidth=w,videoHeight=h;bool videoCpuOnly=false;
+        Bitmap videoBitmap=null;Graphics videoResize=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
@@ -309,6 +316,7 @@ public static class SodaDesktopHost {
         bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
         int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0)audioCeiling=false;
         bool nativeDatagrams=nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
+        bool nativeAdaptive=nativeCeiling&&config.ContainsKey("nativeAdaptive")&&config["nativeAdaptive"] is bool&&(bool)config["nativeAdaptive"];
         bool nativeCadence=nativeCeiling&&config.ContainsKey("nativeCadence")&&config["nativeCadence"] is bool&&(bool)config["nativeCadence"];
         int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
@@ -327,6 +335,7 @@ public static class SodaDesktopHost {
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
+            if(nativeAdaptive)ready["nativeAdaptive"]=true;
             if(nativeCadence)ready["nativeCadence"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
@@ -396,14 +405,22 @@ public static class SodaDesktopHost {
                             if((bool)msg["enabled"]) {
                                 StopAudio(ref audio);audioId=null;
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
-                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
-                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");videoRate=new SodaDesktopVideoRate(videoFps,videoBitrate);if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
+                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoProfile=null;videoGeneration=1;videoWidth=w;videoHeight=h;videoCpuOnly=false;videoNv12=null;if(videoResize!=null)videoResize.Dispose();videoResize=null;if(videoBitmap!=null)videoBitmap.Dispose();videoBitmap=null;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
+                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");videoRate=new SodaDesktopVideoRate(videoFps,videoBitrate);if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");if(!TryCreateNativeVideo(w,h,videoFps,videoBitrate,dxgi,out video,out videoCpuOnly))throw new InvalidOperationException("Native video unavailable");commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                             } else if(videoId==requested) {StopAudio(ref audio);audioId=null;commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
+                        else if(type=="native_profile") {
+                            if(!nativeAdaptive)throw new InvalidOperationException("Native adaptive not negotiated");
+                            if(video!=null&&(string)msg["id"]==videoId){if(videoProfile!=null)throw new InvalidOperationException("Profile already pending");videoProfile=new SodaDesktopVideoProfile(Num(msg,"generation"),videoGeneration,Num(msg,"width"),Num(msg,"height"),w,h,Num(msg,"fps"),Num(msg,"bitrateKbps"),videoRate,Clock.ElapsedMilliseconds);}
+                        }
+                        else if(type=="native_profile_resume") {
+                            if(!nativeAdaptive)throw new InvalidOperationException("Native adaptive not negotiated");
+                            if(video!=null&&(string)msg["id"]==videoId&&videoProfile!=null)videoProfile.Resume(Num(msg,"generation"),Convert.ToInt64(msg["baseSeq"]));
+                        }
                         else if(type=="native_rate") {
                             if(!nativeCadence)throw new InvalidOperationException("Native cadence not negotiated");
-                            if(video!=null&&(string)msg["id"]==videoId)try{int nextFps=Num(msg,"fps"),nextBitrate=Num(msg,"kbps");videoRate.Apply(nextFps,nextBitrate,video.SetBitrate);videoFps=videoRate.Fps;videoNext=Math.Min(videoNext,Clock.Elapsed.TotalMilliseconds+1000.0/videoFps);}catch{commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
+                            if(video!=null&&(string)msg["id"]==videoId&&videoProfile==null)try{int nextFps=Num(msg,"fps"),nextBitrate=Num(msg,"kbps");videoRate.Apply(nextFps,nextBitrate,video.SetBitrate);videoFps=videoRate.Fps;videoNext=Math.Min(videoNext,Clock.Elapsed.TotalMilliseconds+1000.0/videoFps);}catch{commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                         }
                         else if(type=="native_keyframe"||type=="native_bitrate") {
                             if(!nativeDatagrams)throw new InvalidOperationException("Native datagrams not permitted");
@@ -439,45 +456,62 @@ public static class SodaDesktopHost {
                     })) {}
                     if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+sourceTitle;
                     long now=Clock.ElapsedMilliseconds;
+                    if(videoProfile!=null&&video!=null&&videoProfile.Expired(now)){commands.EnableFast(false);video.Dispose();video=null;videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
+                    if(videoProfile!=null&&video!=null&&!videoProfile.Configured&&videoWindow.Count==0){
+                        try{
+                            commands.EnableFast(false);video.Dispose();video=null;
+                            videoWidth=videoProfile.Width;videoHeight=videoProfile.Height;
+                            if(!videoCpuOnly&&dxgi!=null&&!dxgi.ConfigureVideoOutput(videoWidth,videoHeight))videoCpuOnly=true;
+                            videoNv12=null;if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();
+                            videoBitmap=new Bitmap(videoWidth,videoHeight,PixelFormat.Format24bppRgb);videoResize=Graphics.FromImage(videoBitmap);videoResize.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+                            video=SodaDesktopH264.CreateForDesktop(videoWidth,videoHeight,videoRate.MaximumFps,videoProfile.Bitrate,videoCpuOnly?null:dxgi);
+                            videoRate.Adopt(videoProfile.Fps,videoProfile.Bitrate);videoFps=videoRate.Fps;videoGeneration=videoProfile.Generation;videoProfile.Configured=true;videoNext=0;commands.EnableFast(true);
+                        }catch{if(video!=null)video.Dispose();video=null;videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
+                    }
                     if(video!=null && videoWindow.Count>0 && now-videoWindow.OldestAt>2500) {
                         commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
                     }
-                    if(!Stopping && video!=null && videoWindow.CanSend && Clock.Elapsed.TotalMilliseconds>=videoNext) {
+                    if(!Stopping && video!=null && videoWindow.CanSend && (videoProfile==null||(videoProfile.Configured&&(!videoProfile.Prepared||videoProfile.Resumed))) && Clock.Elapsed.TotalMilliseconds>=videoNext) {
                         try {
                             double videoStarted=Clock.Elapsed.TotalMilliseconds;
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
                             Point cursor=Cursor.Position;bool cursorVisible=showCursor&&(cursorPump==null||!cursorPump.Active)&&Bounds.Contains(cursor);
-                            int cursorX=(int)((cursor.X-Bounds.Left)*(double)w/Bounds.Width),cursorY=(int)((cursor.Y-Bounds.Top)*(double)h/Bounds.Height);
+                            int cursorX=(int)((cursor.X-Bounds.Left)*(double)videoWidth/Bounds.Width),cursorY=(int)((cursor.Y-Bounds.Top)*(double)videoHeight/Bounds.Height);
                             SodaDesktopH264.Packet packet=null;double videoCaptureMs;
-                            if(video.GpuInput) {
+                            bool held=videoProfile!=null&&videoProfile.Resumed;
+                            if(held){packet=videoProfile.Take();videoCaptureMs=0;}
+                            else if(video.GpuInput) {
                                 using(var surface=dxgi.CaptureGpuFrame(cursorX,cursorY,cursorVisible,out conversionMs)) {
                                     videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
                                     if(surface!=null)packet=video.EncodeGpuFrame(surface,Clock.ElapsedMilliseconds*1000,conversionMs);
                                 }
                             } else {
-                                if(videoNv12==null)videoNv12=new byte[checked(w*h*3/2)];
-                                bool gpu=dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
-                                if(!gpu)CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);
+                                if(videoNv12==null)videoNv12=new byte[checked(videoWidth*videoHeight*3/2)];
+                                bool gpu=!videoCpuOnly&&dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
+                                if(!gpu){CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);if(videoBitmap!=null)videoResize.DrawImage(scaled,new Rectangle(0,0,videoWidth,videoHeight));}
                                 videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
-                                packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(scaled,Clock.ElapsedMilliseconds*1000);
+                                packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(videoBitmap??scaled,Clock.ElapsedMilliseconds*1000);
                             }
                             if(!AllowedDesktop())break;
                             videoNext=videoStarted+1000.0/videoFps;
                             if(packet!=null) {
+                            if(videoProfile!=null&&!videoProfile.Resumed){videoProfile.Hold(packet,videoSeq);Output(new {type="native_profile_applied",id=videoId,generation=videoProfile.Generation,baseSeq=videoSeq,width=videoWidth,height=videoHeight,codec=packet.codec});continue;}
+                            if(held)videoProfile=null;
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
                             videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;
-                            var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
+                            var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",videoWidth},{"height",videoHeight},{"data",Convert.ToBase64String(packet.data)}};
+                            if(nativeAdaptive)encoded["generation"]=videoGeneration;
                             if(videoWindow.Capacity==3||nativeCadence){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
                             }
                         } catch {
-                            bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0;
+                            bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0&&videoProfile==null;
                             commands.EnableFast(false);if(video!=null)video.Dispose();video=null;
                             if(surfaceFailure&&dxgi!=null)dxgi.DisableGpuSurfaces();
                             // Before any packet is published, a new memory-input
                             // encoder can start cleanly with its own SPS/IDR.
                             if(surfaceFailure&&unpublished)try{video=new SodaDesktopH264(w,h,videoFps,videoBitrate);commands.EnableFast(true);}catch{}
-                            if(video==null){Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                            if(video==null){videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
                         now=Clock.ElapsedMilliseconds;
                     }
@@ -535,7 +569,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;Release();StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
+        } finally { Stopping=true;Release();StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
     }
 }
 
@@ -783,11 +817,11 @@ public sealed class SodaDesktopDxgi : IDisposable {
     Bitmap bitmap;
     byte[] row;
     bool hasFrame,disposed;
-    readonly int width,height;
+    readonly int width,height;int videoWidth,videoHeight;
     public int CpuReadbacks {get;private set;}
     public bool HasDesktopFrame {get{return hasFrame&&!disposed;}}
     public IntPtr GpuDevice {get{if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");return device;}}
-    SodaDesktopDxgi(int width,int height) { this.width=width;this.height=height; }
+    SodaDesktopDxgi(int width,int height) { this.width=videoWidth=width;this.height=videoHeight=height; }
     public static SodaDesktopDxgi TryCreate(string name,Rectangle bounds,int width,int height) {
         if(IntPtr.Size!=8 || width<1 || height<1 || width>4096 || height>2400 || (long)width*height>8000000)return null;
         var capture=new SodaDesktopDxgi(width,height);
@@ -878,9 +912,9 @@ public sealed class SodaDesktopDxgi : IDisposable {
     }
     public bool TryCaptureNv12(byte[] output,int cursorX,int cursorY,bool cursorVisible,out double conversionMs) {lock(captureGate){
         conversionMs=0;
-        if(nvFailed||(width&1)!=0||(height&1)!=0)return false;
+        if(nvFailed||(videoWidth&1)!=0||(videoHeight&1)!=0)return false;
         try {
-            if(output==null||output.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
+            if(output==null||output.Length!=(long)videoWidth*videoHeight*3/2)throw new ArgumentException("NV12 dimensions");
             if(!AcquireFrame())return false;
             var timer=Stopwatch.StartNew();RenderNv12(output,cursorX,cursorY,cursorVisible);conversionMs=timer.Elapsed.TotalMilliseconds;return true;
         } catch {nvFailed=true;DisposeNv12();return false;}
@@ -894,9 +928,9 @@ public sealed class SodaDesktopDxgi : IDisposable {
         try{Method<Upload>(drawing,48)(drawing,resource,0,IntPtr.Zero,pin.AddrOfPinnedObject(),(uint)pitch,0);}finally{pin.Free();}
     }
     void InitializeNv12() {
-        int packedWidth=(width+3)/4;
-        nvTarget=Texture(packedWidth,height*3/2,0,32,0);Check(Method<CreateView>(device,9)(device,nvTarget,IntPtr.Zero,out nvView));
-        nvStaging=Texture(packedWidth,height*3/2,3,0,0x20000);nvRow=new byte[packedWidth*4];
+        int packedWidth=(videoWidth+3)/4;
+        nvTarget=Texture(packedWidth,videoHeight*3/2,0,32,0);Check(Method<CreateView>(device,9)(device,nvTarget,IntPtr.Zero,out nvView));
+        nvStaging=Texture(packedWidth,videoHeight*3/2,3,0,0x20000);nvRow=new byte[packedWidth*4];
         // Store four NV12 bytes in each BGRA texel. This needs only ordinary
         // render targets; unsupported video-processor/NV12 surfaces are avoided.
         string hlsl=@"Texture2D image:register(t0);Texture2D cursorImage:register(t1);SamplerState linearClamp:register(s0);
@@ -921,7 +955,7 @@ float4 main(float4 p:SV_Position):SV_Target{
  int x=int(p.x)*4,y=int(p.y);
  return float4(value(x+2,y),value(x+1,y),value(x,y),value(x+3,y))/255.0;
 }";
-        hlsl=hlsl.Replace("WIDTH",width.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0").Replace("HEIGHT",height.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0");
+        hlsl=hlsl.Replace("WIDTH",videoWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0").Replace("HEIGHT",videoHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)+".0");
         nvShaderSource=hlsl;
         nvShader=Shader(hlsl,"ps_4_0",15);
         cursorTexture=Texture(16,48,0,8,0);Check(Method<CreateView>(device,7)(device,cursorTexture,IntPtr.Zero,out cursorView));
@@ -941,17 +975,17 @@ float4 main(float4 p:SV_Position):SV_Target{
     }
     void RenderNv12Core(byte[] output,int cursorX,int cursorY,bool cursorVisible) {
         if(disposed)throw new ObjectDisposedException("SodaDesktopDxgi");
-        if((width&1)!=0||(height&1)!=0||output==null||output.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
+        if((videoWidth&1)!=0||(videoHeight&1)!=0||output==null||output.Length!=(long)videoWidth*videoHeight*3/2)throw new ArgumentException("NV12 dimensions");
         if(nvShader==IntPtr.Zero)InitializeNv12();
         IntPtr drawing=surfaceContext==IntPtr.Zero?context:surfaceContext;
         byte[] constants=new byte[16];Buffer.BlockCopy(new float[]{cursorX,cursorY,cursorVisible?1:0,0},0,constants,0,16);UploadBytes(cursorConstants,constants,16,drawing);
-        DrawPass(drawing,nvShader,nvView,(width+3)/4,height*3/2,true);ExecuteSurfaceCommands();
+        DrawPass(drawing,nvShader,nvView,(videoWidth+3)/4,videoHeight*3/2,true);ExecuteSurfaceCommands();
         Method<Copy>(context,47)(context,nvStaging,nvTarget);
         CpuReadbacks++;
         Mapped mapped;Check(Method<Map>(context,14)(context,nvStaging,0,1,0,out mapped));
         try {
             if(mapped.data==IntPtr.Zero||mapped.pitch<(uint)nvRow.Length||mapped.pitch>256*1024)throw new InvalidOperationException("Invalid NV12 row pitch");
-            for(int y=0;y<height*3/2;y++)Marshal.Copy(IntPtr.Add(mapped.data,checked(y*(int)mapped.pitch)),output,y*width,width);
+            for(int y=0;y<videoHeight*3/2;y++)Marshal.Copy(IntPtr.Add(mapped.data,checked(y*(int)mapped.pitch)),output,y*videoWidth,videoWidth);
         }finally{Method<Unmap>(context,15)(context,nvStaging,0);}
     }
     void DisposeNv12(){
@@ -1010,7 +1044,7 @@ float4 main(float4 p:SV_Position):SV_Target{
         try{Marshal.StructureToPtr(desc,memory,false);IntPtr view;Check(Method<CreateView>(device,9)(device,texture,memory,out view));return view;}finally{Marshal.FreeHGlobal(memory);}
     }
     public bool TryEnableGpuSurfaces() {lock(captureGate){
-        if(disposed||surfaceFailed||device==IntPtr.Zero||context==IntPtr.Zero||width<2||height<2||(long)width*height>8000000||(width&1)!=0||(height&1)!=0)return false;
+        if(disposed||surfaceFailed||device==IntPtr.Zero||context==IntPtr.Zero||videoWidth<2||videoHeight<2||(long)videoWidth*videoHeight>8000000||(videoWidth&1)!=0||(videoHeight&1)!=0)return false;
         if(surfaces.Count==4)return true;
         bool conversionWasReady=nvShader!=IntPtr.Zero;
         try {
@@ -1020,17 +1054,26 @@ float4 main(float4 p:SV_Position):SV_Target{
                 if(nvShader==IntPtr.Zero)InitializeNv12();
                 string common=nvShaderSource.Substring(0,nvShaderSource.IndexOf("float4 main(",StringComparison.Ordinal));
                 surfaceYShader=Shader(common+"float main(float4 p:SV_Position):SV_Target{return value(int(p.x),int(p.y))/255.0;}","ps_4_0",15);
-                surfaceUvShader=Shader(common+"float2 main(float4 p:SV_Position):SV_Target{int x=int(p.x)*2,y=int(p.y)+"+height.ToString(System.Globalization.CultureInfo.InvariantCulture)+";return float2(value(x,y),value(x+1,y))/255.0;}","ps_4_0",15);
+                surfaceUvShader=Shader(common+"float2 main(float4 p:SV_Position):SV_Target{int x=int(p.x)*2,y=int(p.y)+"+videoHeight.ToString(System.Globalization.CultureInfo.InvariantCulture)+";return float2(value(x,y),value(x+1,y))/255.0;}","ps_4_0",15);
                 // Fixed pool: a texture is never reused until its MF tracked
                 // sample's allocator callback confirms the last consumer released it.
                 for(int i=0;i<4;i++) {
                     var slot=new SurfaceSlot();surfaces.Add(slot);
-                    slot.texture=Texture(width,height,0,0x28,0,103);
+                    slot.texture=Texture(videoWidth,videoHeight,0,0x28,0,103);
                     slot.yView=PlaneView(slot.texture,61);slot.uvView=PlaneView(slot.texture,49);
                 }
             }
             return true;
         } catch {surfaceFailed=true;DisposeSurfaces();if(!conversionWasReady)DisposeNv12();return false;}
+    }}
+    // Call only after the old encoder has shut down. Draw ACK alone does not
+    // return tracked MF samples. On timeout retain this one pool untouched;
+    // the caller uses memory input and never allocates another pool here.
+    public bool ConfigureVideoOutput(int w,int h,int timeoutMs=500){lock(captureGate){
+        if(disposed||w<2||h<2||w>width||h>height||(w&1)!=0||(h&1)!=0||timeoutMs<0||timeoutMs>1000)throw new ArgumentException("Video output dimensions");
+        var timer=Stopwatch.StartNew();
+        lock(surfaceGate){while(surfaces.Exists(slot=>slot.busy)){if(timer.ElapsedMilliseconds>=timeoutMs)return false;Monitor.Wait(surfaceGate,Math.Min(20,Math.Max(1,timeoutMs-(int)timer.ElapsedMilliseconds)));}}
+        DisposeSurfaces();DisposeNv12();Release(ref multithread);nvFailed=surfaceFailed=false;videoWidth=w;videoHeight=h;return true;
     }}
     public void DisableGpuSurfaces(){lock(captureGate){surfaceFailed=true;DisposeSurfaces();}}
     public sealed class GpuFrame:IDisposable {
@@ -1062,7 +1105,7 @@ float4 main(float4 p:SV_Position):SV_Target{
             using(var guard=LockContext()) {
                 var constants=new byte[16];Buffer.BlockCopy(new float[]{cursorX,cursorY,cursorVisible?1:0,0},0,constants,0,16);UploadBytes(cursorConstants,constants,16,surfaceContext);
                 for(int plane=0;plane<2;plane++) {
-                    DrawPass(surfaceContext,plane==0?surfaceYShader:surfaceUvShader,plane==0?slot.yView:slot.uvView,plane==0?width:width/2,plane==0?height:height/2,true);
+                    DrawPass(surfaceContext,plane==0?surfaceYShader:surfaceUvShader,plane==0?slot.yView:slot.uvView,plane==0?videoWidth:videoWidth/2,plane==0?videoHeight:videoHeight/2,true);
                 }
                 ExecuteSurfaceCommands();
             }
@@ -1604,7 +1647,31 @@ public sealed class SodaDesktopVideoRate {
     readonly int maxFps,maxBitrate;
     int bitrate;
     public int Fps {get;private set;}
+    public int MaximumFps {get{return maxFps;}}
+    public void Adopt(int fps,int nextBitrate){Validate(fps,nextBitrate);Fps=fps;bitrate=nextBitrate;}
     public SodaDesktopVideoRate(int fps,int bitrate){if(fps<1||fps>60||bitrate<128||bitrate>12000)throw new ArgumentException("Video rate limits");maxFps=Fps=fps;maxBitrate=this.bitrate=bitrate;}
     public void Apply(int fps,int nextBitrate,Action<int> setBitrate){Validate(fps,nextBitrate);if(nextBitrate!=bitrate)setBitrate(nextBitrate);bitrate=nextBitrate;Fps=fps;}
     public void Validate(int fps,int bitrate){if(fps<1||fps>maxFps||bitrate<128||bitrate>maxBitrate)throw new ArgumentException("Video rate ceiling");}
+}
+
+// One bounded reconfiguration transaction; never an OS/display-mode operation.
+public sealed class SodaDesktopVideoProfile {
+    public readonly int Generation,Width,Height,Fps,Bitrate;
+    public readonly long At;
+    public long BaseSeq {get;private set;}
+    public bool Configured {get;set;}
+    public bool Prepared {get;private set;}
+    public bool Resumed {get;private set;}
+    SodaDesktopH264.Packet held;
+    public SodaDesktopVideoProfile(int generation,int current,int width,int height,int maxWidth,int maxHeight,int fps,int bitrate,SodaDesktopVideoRate rate,long at){
+        if(generation!=current+1||generation<2||width<2||height<2||width>maxWidth||height>maxHeight||(width&1)!=0||(height&1)!=0||Math.Abs((double)width/height-(double)maxWidth/maxHeight)>.02)throw new ArgumentException("Video profile limits");
+        rate.Validate(fps,bitrate);Generation=generation;Width=width;Height=height;Fps=fps;Bitrate=bitrate;At=at;
+    }
+    public void Hold(SodaDesktopH264.Packet packet,long baseSeq){
+        if(Prepared||packet==null||!packet.key||packet.codec==null||packet.data==null||packet.data.Length<1||packet.data.Length>512*1024-9)throw new InvalidOperationException("Profile requires bounded SPS/IDR");
+        held=packet;BaseSeq=baseSeq;Prepared=true;
+    }
+    public void Resume(int generation,long baseSeq){if(!Prepared||Resumed||generation!=Generation||baseSeq!=BaseSeq)throw new InvalidOperationException("Profile resume fence");Resumed=true;}
+    public SodaDesktopH264.Packet Take(){if(!Resumed||held==null)throw new InvalidOperationException("Profile not resumed");var packet=held;held=null;return packet;}
+    public bool Expired(long now){return now-At>=3000;}
 }

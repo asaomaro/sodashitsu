@@ -23,3 +23,11 @@ media_streamのbaseSeqとnative_frameのgenerationはfeature opt-in時だけ。A
 検証: generated H264 fixtures/texture/PCMとmemory endpointsだけ。profileのdrain中old frames、formatより早いUDP、late old packet、fake支援cap非対応、ACK期限、audio continuity、source snapshot/input/grants保持を検査。実OS capture/input/clipboard/解像度変更は自動実行しない。
 
 reviewで明示した必須条件: A relayのaudio generation/seqをvideoから分離し、video generation 2後もWSS/UDP両方でOpus payloadのdecode出力を確認する。切替でaudio owner/mute/seqをresetしない。viewerの旧decoder init/output/errorはformat epoch/decoder identityで隔離する。正常barrier 3秒を映像stale監視2秒が妨げないよう、明示的な有期限barrier state中のみ映像監視を待機する。入力鮮度2秒は延長しない。stop/設定変更/失敗はpendingを失効させ、遅いapplied/resume/format ACKから復活しない。正常切替ではaudio/peerを維持、barrier失敗時の最終images fallbackはaudio/peer停止を伴う（例外をUI/docsで明示）。FPS/bitrateのみではbarrier/世代変更/encoder再作成を行わない。
+
+## 実装で確定した境界
+
+- DesktopNativeFrameNoticeは世代uintを許可するが、A/Bは交渉したcurrent generationとの一致を毎回検査する。旧viewerへ新世代や未知fieldを送らない。
+- transport sentAt/ACK RTTとinput freshAtを分離。保持IDRは切替待機で古くなるため、最初のframeのfreshAtだけ保守的にbarrier開始を継承。2.8秒でformat ACK→100ms後draw ACKでもACK timeoutしない。保持IDRで鮮度を延ばさず、その後のfresh frameで復帰する。
+- native開始時のConfigureVideoOutput/encoder作成はTryCreateNativeVideoの同じtry内。1279×800など奇数サイズの失敗はnative_video_stoppedへ戻し、共有全体を終えない。
+- resolution controllerは2秒かつ8 ACK以上の評価が3回続く処理過負荷またはloss/queueで段階縮小、8回余裕が続けば回復。上限1/.75/.5、最小幅min(640,initial)、偶数寸法と縦横比を保持。raw RTTを解像度の信号にしない。実サイズは初期native frameから固定する。
+- GPU検査は生成textureだけ。1280×800→960×600で新SPS/IDRを作り、使用中poolのresize timeoutで再利用しないこと、image側の寸法不変を確認する。実ユーザーのdesktop capture/input/mode変更は行わない。

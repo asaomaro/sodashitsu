@@ -1,5 +1,5 @@
 import {performance} from "node:perf_hooks";
-import {DesktopMediaSignal,DesktopNativeVideoAck,DesktopNativeKeyframe,encodeDesktopDatagrams,DESKTOP_VIDEO_CHANNEL,DESKTOP_CONTROL_CHANNEL,DESKTOP_AUDIO_CHANNEL,type DesktopIceServers} from "@sodashitsu/protocol";
+import {DesktopNativeFormatAck,DesktopMediaSignal,DesktopNativeVideoAck,DesktopNativeKeyframe,encodeDesktopDatagrams,DESKTOP_VIDEO_CHANNEL,DESKTOP_CONTROL_CHANNEL,DESKTOP_AUDIO_CHANNEL,type DesktopIceServers} from "@sodashitsu/protocol";
 import type {z} from "zod";
 import type {RTCPeerConnection,RTCDataChannel} from "werift";
 /** Explicit native-media request only. Never accepts OS input over data channels. */
@@ -7,7 +7,7 @@ export class DesktopNativeDatagrams {
  private peer:RTCPeerConnection|undefined;private video:RTCDataChannel|undefined;private control:RTCDataChannel|undefined;private audio:RTCDataChannel|undefined;
  private dead=false;private connected=false;private answered=false;private candidates=0;private lastKey=-Infinity;
  private timeout:ReturnType<typeof setTimeout>;
- constructor(private hooks:{id:string;audio?:boolean;audioFailed?():void;iceServers:z.infer<typeof DesktopIceServers>;send(value:unknown):boolean;ready():void;ack(value:unknown):void;keyframe():void;fail():void}){
+ constructor(private hooks:{id:string;audio?:boolean;audioFailed?():void;iceServers:z.infer<typeof DesktopIceServers>;send(value:unknown):boolean;ready():void;ack(value:unknown):void;formatAck?(value:unknown):void;keyframe():void;fail():void}){
   this.timeout=setTimeout(()=>this.failure(),8000);this.timeout.unref();void this.start().catch(()=>this.failure());
  }
  private async start(){
@@ -27,7 +27,8 @@ export class DesktopNativeDatagrams {
    try{
     if(typeof raw!=="string"||raw.length>512||!this.connected)throw Error("Native control limit");
     const m=JSON.parse(raw);if(m.id!==this.hooks.id)throw Error("Wrong native stream");
-    if(m.type==="native_video_ack")this.hooks.ack(DesktopNativeVideoAck.parse(m));
+    if(m.type==="native_format_ack"&&this.hooks.formatAck)this.hooks.formatAck(DesktopNativeFormatAck.parse(m));
+    else if(m.type==="native_video_ack")this.hooks.ack(DesktopNativeVideoAck.parse(m));
     else{DesktopNativeKeyframe.parse(m);const now=performance.now();if(now-this.lastKey>=250){this.lastKey=now;this.hooks.keyframe();}}
    }catch{this.failure();}
   });
