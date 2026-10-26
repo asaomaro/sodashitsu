@@ -107,6 +107,27 @@ function run() {
     lastReport = 0,
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
   const nativeAt=process.argv.indexOf("--native-fixture"),nativeFixture=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined;
+  let richState,richVersion=0,richValue={text:"B generated table",html:'<table><tr><td style="color:green">B generated table</td></tr></table>',rtf:Buffer.from("{\\rtf1 generated}").toString("base64"),png:syntheticFrame(32,32,1,[0,255,0]).data};
+  const clearRich=()=>{if(richState?.data)richState.data.fill(0);richState=undefined;};
+  const rich=m=>{
+    const reply=value=>send({type:"clipboard_rich_result",id:m.id,...value});
+    if(!clipboardAllowed||secure||m.generation!==clipboardGeneration||m.expiresAt<Date.now()||!process.argv.includes("--rich-clipboard")){clearRich();reply({ok:false,stage:"done"});return;}
+    const ok=m.operation==="read"||m.operation==="pull"||m.operation==="cancel"||allowInput;
+    if(!ok){reply({ok:false,stage:"done"});return;}
+    if(m.operation==="read"||m.operation==="begin"){
+      if(richState){reply({ok:false,stage:"done"});return;}
+      const data=m.operation==="read"?Buffer.from(JSON.stringify(richValue)):Buffer.alloc(m.size);
+      if(data.length<1||data.length>4194304){reply({ok:false,stage:"done"});return;}
+      richState={id:m.id,data,offset:0,read:m.operation==="read",gen:clipboardGeneration,version:richVersion};
+      const response={ok:true,stage:"begin",size:data.length};if(process.argv.includes("--rich-delay-read")&&m.operation==="read")setTimeout(()=>reply(response),300);else reply(response);return;
+    }
+    const c=richState;if(!c||c.id!==m.id||c.gen!==clipboardGeneration){reply({ok:false,stage:"done"});return;}
+    if(m.operation==="pull"&&c.read&&m.offset===c.offset){const end=Math.min(c.offset+16384,c.data.length),data=c.data.subarray(c.offset,end).toString("base64");c.offset=end;reply({ok:true,stage:"chunk",offset:end,data});if(end===c.data.length)clearRich();}
+    else if(m.operation==="push"&&!c.read&&m.offset===c.offset){const data=Buffer.from(m.data,"base64");if(data.length<1||data.length>16384||c.offset+data.length>c.data.length)throw Error("Synthetic clipboard chunk");data.copy(c.data,c.offset);c.offset+=data.length;data.fill(0);const response={ok:true,stage:"chunk",offset:c.offset};if(process.argv.includes("--rich-delay-push"))setTimeout(()=>reply(response),300);else reply(response);}
+    else if(m.operation==="commit"&&!c.read&&c.offset===c.data.length){if(process.argv.includes("--rich-mutate-on-commit"))richVersion++;if(c.version!==richVersion){clearRich();reply({ok:false,stage:"done"});return;}richValue=JSON.parse(c.data.toString());richVersion++;clearRich();reply({ok:true,stage:"done"});}
+    else if(m.operation==="cancel"){clearRich();reply({ok:true,stage:"cancelled"});}
+    else{clearRich();reply({ok:false,stage:"done"});}
+  };
   let native, audio;
   const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
   const startAudio=m=>{
@@ -175,6 +196,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
@@ -217,7 +239,8 @@ function run() {
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
       else if (m.type === "keyframe") {forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
-      else if(m.type==="clipboard_control"){clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;}
+      else if(m.type==="clipboard_rich"){rich(m);}
+      else if(m.type==="clipboard_control"){clearRich();clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;}
       else if(m.type==="clipboard"){
         let ok=clipboardAllowed && m.generation===clipboardGeneration && m.expiresAt>=Date.now();
         if(m.operation==="write"){ok=ok&&allowInput;if(ok)clipboard=m.text;send({type:"clipboard_result",id:m.id,ok});}

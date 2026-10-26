@@ -7,7 +7,9 @@ $unlock = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopUnloc
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs') -Raw
 $audioPath = Join-Path $PSScriptRoot 'WindowsDesktopAudio.cs'
 $audioSource = if (Test-Path -LiteralPath $audioPath) { Get-Content -LiteralPath $audioPath -Raw } else { '' }
-$combined = $unlock + "`n" + $source + "`n" + $audioSource
+$richPath = Join-Path $PSScriptRoot 'WindowsDesktopRichClipboard.cs'
+$richSource = if (Test-Path -LiteralPath $richPath) { Get-Content -LiteralPath $richPath -Raw } else { '' }
+$combined = $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
 Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll

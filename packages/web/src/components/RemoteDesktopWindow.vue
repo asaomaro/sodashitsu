@@ -27,6 +27,8 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
+import {DesktopRichClipboardClient,readRichClipboard,writeRichClipboard} from "../desktop/richClipboard.js";
+import {DESKTOP_RICH_CLIPBOARD_PROTOCOL,type DesktopClipboardBundle} from "@sodashitsu/protocol";
 import {DesktopNativeAudioReceiver} from "../desktop/nativeAudioReceiver.js";
 import { DesktopCursorRenderer } from "../desktop/cursor.js";
 import { DesktopEscape, DesktopButtons, DesktopModifiers, DesktopInputSender } from "../desktop/input.js";
@@ -142,6 +144,8 @@ const mediaState = ref("images"),
   videoFrames = ref(0),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
+const richClipboard=ref(false),richPipeReady=ref(false),richBusy=ref(false),richSyncMode=ref(false);
+let richClient:DesktopRichClipboardClient|undefined,richSocket:WebSocket|undefined,richSeq=0,lastRichLocal="",lastRichRemote="";
 const clipboardGranted = ref(false),
   clipboardText = ref(""),
   clipboardSync = ref(false),
@@ -160,7 +164,14 @@ const clipWaits = new Map<
     timer: ReturnType<typeof setTimeout>;
   }
 >();
+function cancelRichFromUi(){windowElement.value?.focus({preventScroll:true});clipboardSync.value=false;cancelRichTransfer();}
+function cancelRichTransfer(){richSeq++;richClient?.cancel();richBusy.value=false;}
+function resetRichClipboard(){
+  cancelRichTransfer();richClient?.stop();richClient=undefined;const pipe=richSocket;richSocket=undefined;pipe?.close();
+  richClipboard.value=richPipeReady.value=false;if(richSyncMode.value)clipboardSync.value=false;richSyncMode.value=false;lastRichLocal=lastRichRemote="";
+}
 function clearClipboard() {
+  cancelRichTransfer();lastRichLocal=lastRichRemote="";
   clipboardSync.value = false;
   clipboardGranted.value = false;
   for (const wait of clipWaits.values()) {
@@ -198,7 +209,30 @@ async function transferClipboard(operation: "read" | "write") {
     clipboardNotice.value = e instanceof Error ? e.message : "転送できません";
   }
 }
+const richActive=(owner:DesktopRichClipboardClient,version:number,request:number)=>!dead&&version===epoch&&request===richSeq&&owner===richClient&&clipboardGranted.value&&richClipboard.value&&richPipeReady.value&&document.hasFocus()&&!document.hidden;
+async function richHash(value:DesktopClipboardBundle){const hash=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(value)));return Array.from(new Uint8Array(hash),v=>v.toString(16).padStart(2,"0")).join("");}
+async function transferRichClipboard(operation:"read"|"write"){
+  const owner=richClient;if(!owner||richBusy.value||clipboardSync.value)return;const version=epoch,request=++richSeq;windowElement.value?.focus({preventScroll:true});richBusy.value=true;
+  try{
+    if(operation==="write"){const bundle=await readRichClipboard();if(!richActive(owner,version,request))return;await owner.write(bundle);if(richActive(owner,version,request))clipboardNotice.value="画像・書式を共有元へ送りました";}
+    else{const bundle=await owner.read();if(!richActive(owner,version,request))return;const skipped=await writeRichClipboard(bundle);if(richActive(owner,version,request))clipboardNotice.value=skipped.length?"対応形式を手元へコピーしました（貼り付け非対応: "+skipped.map(v=>({"text/rtf":"RTF","text/html":"HTML","image/png":"PNG","text/plain":"テキスト"})[v]??v).join(", ")+"）":"画像・書式を手元へコピーしました";}
+  }catch(e){if(version===epoch&&request===richSeq)clipboardNotice.value=e instanceof Error?e.message:"画像・書式を転送できません";}
+  finally{if(request===richSeq)richBusy.value=false;}
+}
+async function syncRichClipboard(){
+  const owner=richClient;if(!owner||richBusy.value||!clipboardSync.value||!document.hasFocus()||document.hidden)return;const version=epoch,request=++richSeq;richBusy.value=true;
+  try{
+    const local=await readRichClipboard(),localHash=await richHash(local);if(!richActive(owner,version,request)||!clipboardSync.value)return;
+    if(localHash!==lastRichLocal){await owner.write(local);if(richActive(owner,version,request)&&clipboardSync.value){lastRichLocal=localHash;lastRichRemote=localHash;}}
+    else{const remote=await owner.read(),remoteHash=await richHash(remote);if(!richActive(owner,version,request)||!clipboardSync.value)return;if(remoteHash!==lastRichRemote){
+      const check=await richHash(await readRichClipboard());if(!richActive(owner,version,request)||!clipboardSync.value||check!==localHash)return;
+      const skipped=await writeRichClipboard(remote);if(!richActive(owner,version,request)||!clipboardSync.value)return;lastRichRemote=remoteHash;lastRichLocal="";if(skipped.length)clipboardNotice.value="対応形式を同期しました（一部の形式はブラウザが貼り付けに対応していません）";
+    }}
+  }catch(e){if(version===epoch&&request===richSeq){clipboardSync.value=false;clipboardNotice.value=e instanceof Error?e.message:"画像・書式の同期が停止しました";}}
+  finally{if(request===richSeq)richBusy.value=false;}
+}
 async function syncClipboard() {
+  if(richSyncMode.value){await syncRichClipboard();return;}
   if (!clipboardSync.value || clipBusy || !document.hasFocus() || document.hidden) return;
   clipBusy = true;
   const version = epoch;
@@ -234,10 +268,13 @@ async function syncClipboard() {
 }
 async function toggleClipboardSync() {
   if (clipboardSync.value) {
-    clipboardSync.value = false;
+    clipboardSync.value = false;cancelRichTransfer();
     return;
   }
+  if(richBusy.value||clipBusy)return;
+  if(richSyncMode.value&&(!richClipboard.value||!richPipeReady.value||!richClient))richSyncMode.value=false;
   try {
+    if(richSyncMode.value){const version=epoch,owner=richClient,request=++richSeq;if(!owner)throw Error("画像・書式の転送経路がありません");const local=await readRichClipboard();if(!richActive(owner,version,request))return;lastRichLocal=await richHash(local);lastRichRemote="";if(!richActive(owner,version,request))return;clipboardSync.value=true;await syncRichClipboard();return;}
     lastClipboard = await navigator.clipboard.readText();
     if (!clipboardGranted.value) return;
     clipboardSync.value = true;
@@ -358,6 +395,7 @@ function stop() {
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
+  resetRichClipboard();
   imageSocket?.close(1000,"desktop stopped");imageSocket=undefined;
   videoSocket?.close(1000, "desktop stopped"); videoSocket=undefined; videoExpected=videoReady=nativeSupported=false;
   ws?.close(1000, "desktop stopped");
@@ -444,7 +482,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -492,7 +530,17 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
-        if(m.type==="image_ticket"){
+        if(m.type==="clipboard_rich_ticket"){
+          if(richSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid clipboard attachment");
+          const pipe=richSocket=new WebSocket(url,DESKTOP_RICH_CLIPBOARD_PROTOCOL);
+          const client=richClient=new DesktopRichClipboardClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>65536)return false;pipe.send(JSON.stringify(value));return true;},()=>!dead&&version===epoch&&clipboardGranted.value&&richClipboard.value&&richPipeReady.value);
+          pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
+          pipe.onmessage=event=>{if(version!==epoch||richSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>32768)throw Error("Invalid clipboard result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
+          pipe.onerror=()=>pipe.close();pipe.onclose=()=>{if(version!==epoch||richSocket!==pipe)return;resetRichClipboard();clipboardNotice.value="画像・書式の接続が終了しました。テキスト共有は継続できます";};
+        }else if(m.type==="clipboard_rich_ready"){richPipeReady.value=true;}
+        else if(m.type==="clipboard_rich_closed"){resetRichClipboard();clipboardNotice.value="画像・書式の接続が終了しました。テキスト共有は継続できます";}
+        else if(m.type==="image_ticket"){
+
           if(imageSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid image attachment");
           const image=imageSocket=new WebSocket(url,DESKTOP_IMAGE_LANE_PROTOCOL);image.binaryType="arraybuffer";
           image.onopen=()=>{if(version===epoch)image.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
@@ -532,7 +580,7 @@ function connect(automatic = false) {
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
-          nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;
+          nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
@@ -1054,7 +1102,7 @@ onBeforeUnmount(() => {
         </p>
       </details>
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
-        <summary>クリップボード（テキスト）</summary>
+        <summary>クリップボード{{ richClipboard ? "（テキスト・画像・書式）" : "（テキスト）" }}</summary>
         <p>
           PC全体のクリップボードを扱います。8192文字まで。同期はこの窓が前面の間だけ動き、同時変更時はAを優先します。
         </p>
@@ -1072,9 +1120,16 @@ onBeforeUnmount(() => {
         ><button :disabled="!clipboardGranted || !allowed" @click="transferClipboard('write')">
           共有元へ送信
         </button>
-        <button :disabled="!clipboardGranted" @click="toggleClipboardSync">
+        <button :disabled="!clipboardGranted||(!clipboardSync&&richBusy)" @click="toggleClipboardSync">
           {{ clipboardSync ? "自動同期を停止" : "双方向の自動同期を開始" }}
         </button>
+        <div v-if="richClipboard" data-rich-clipboard>
+          <p>PNG画像とHTMLの表・書式を転送します。画像2MiB、テキスト/HTML/RTF各512KiB、全体4MiBまで。RTFの貼り付けはブラウザの対応に従います。</p>
+          <button :disabled="!clipboardGranted||!richPipeReady||richBusy||clipboardSync" @click="transferRichClipboard('read')">画像・書式を手元へコピー</button>
+          <button :disabled="!clipboardGranted||!allowed||!richPipeReady||richBusy||clipboardSync" @click="transferRichClipboard('write')">画像・書式を共有元へ送信</button>
+          <label><input v-model="richSyncMode" type="checkbox" :disabled="clipboardSync||richBusy||!richPipeReady" />画像・書式も自動同期する</label>
+          <button v-if="richBusy" @click="cancelRichFromUi()">画像・書式の転送を取り消す</button>
+        </div>
         <p role="status">{{ clipboardNotice }}</p>
       </details>
       <details v-if="ready && allowed && !secureDesktop" data-agent-access>

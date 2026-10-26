@@ -41,6 +41,7 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    richClipboard: z.literal(true).optional(),
     nativeAudio: z.literal(true).optional(),
     nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
@@ -119,6 +120,7 @@ export const DesktopReady = z
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
+    richClipboard:z.literal(true).optional(),
     nativeAudio:z.literal(true).optional(),
     nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
@@ -185,6 +187,7 @@ export const DesktopStartParams = z
   .object({
     url: z.string().url().max(2048),
     ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    clipboardTicket:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     imageTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     videoTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     options: DesktopOptions,
@@ -234,6 +237,7 @@ export interface DesktopResults {
     imageSettings?: boolean;
     imeKeys?: boolean;
     extendedInput?: boolean;
+    richClipboard?: boolean;
     nativeAudio?: boolean;
     nativeDatagrams?: boolean;
     nativeVideo?: boolean;

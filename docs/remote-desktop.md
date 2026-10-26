@@ -155,6 +155,7 @@ Windowsの補助プログラムを終了すると、そのために起動したl
 | `packages/server/src/desktop/unlockFailure.ts` | ロック画面の終了理由と再接続可否を判定する。ビルド対象の実装ファイル |
 | `scripts/remote-desktop/windows-helper.ps1` | Windows helperの入口。同じフォルダのHost/UnlockのCSを起動時に読み、コンパイルする |
 | `scripts/remote-desktop/WindowsDesktopAudio.cs` | 通常画面の要求時システム音声。PowerShellが追加コンパイルするため同じフォルダに残す。認証画面サービスへの追加は不要 |
+| `scripts/remote-desktop/WindowsDesktopRichClipboard.cs` | 通常画面のPNG/HTML/RTFクリップボード。必要な場合はPowerShellと同じフォルダに残す。認証画面サービスへの追加は不要 |
 | `scripts/remote-desktop/WindowsDesktopHost.cs` | 通常画面の取得と入力。上のPowerShellと同じフォルダに残す |
 | `scripts/remote-desktop/WindowsDesktopUnlock.cs` | ロック画面の判定、非撮影の入口、専用サービスとの通信。上のPowerShellと同じフォルダに残す |
 | `packages/server/src/machine/DelegationPairing.ts` | BからAへの接続申請。共有前のmachine接続に使う。ビルド対象の実装ファイル |
@@ -498,9 +499,20 @@ chunkは最大512KiB、世代番号と連番を検査します。各送出queue�
 
 ## クリップボード（テキスト）
 
-Bで `SODA_DESKTOP_ALLOW_CLIPBOARD=1` とWindows helperの `-AllowClipboard` の**両方**を設定します。書込みには既存の `SODA_DESKTOP_ALLOW_INPUT=1` / `-AllowInput` も必要です。Aの窓で「クリップボード共有を許可」を押して初めて利用できます。8192 UTF-16 code unitsまでのテキストだけで、画像・ファイル・リッチテキストは扱いません。通常のWindowsデスクトップ、heartbeat、操作世代、要求期限をhelperでも検査します。
+Bで `SODA_DESKTOP_ALLOW_CLIPBOARD=1` とWindows helperの `-AllowClipboard` の**両方**を設定します。書込みには既存の `SODA_DESKTOP_ALLOW_INPUT=1` / `-AllowInput` も必要です。Aの窓で「クリップボード共有を許可」を押して初めて利用できます。従来のテキスト欄は8192 UTF-16 code unitsまでです。対応版同士では、以下の画像・書式付き転送も使えます。ファイルそのもののクリップボード転送は含みません。通常のWindowsデスクトップ、heartbeat、操作世代、要求期限をhelperでも検査します。
 
 「共有元から取得」「共有元へ送信」は明示操作です。「双方向の自動同期を開始」はAのブラウザclipboard許可も必要で、前面にある間だけ1秒周期で比較します。同時変更はAを優先します。blur/非表示/共有停止で同期と許可を失効させます。再開には再許可が必要です。ブラウザの許可エラー時は手動のテキスト転送を利用してください。clipboard内容はlocalStorageやログへ保存せず、他のブラウザにも配信しません。MCP/agentへclipboardツールは公開していません。
+
+
+### 画像・表の書式をコピーする
+
+A/Bとも更新して`pnpm build`、`soda handoff`後、共有窓を開き直します。Bでクリップボードと入力が許可されている場合、「クリップボード共有を許可」を押すと「画像・書式を手元へコピー」「画像・書式を共有元へ送信」が使えます。入力が許可されていない共有では読み取りだけ利用できます。HTTPSまたはlocalhostと、ブラウザのクリップボード許可が必要です。旧helperや非対応ブラウザでは従来のテキスト欄を使います。
+
+PNG画像とHTML（Excel等の表の書式）を1項目ずつ転送します。HTMLは表示用DOMに挿入せず、クリップボード形式として扱います。ブラウザが公開する対応形式だけを転送するため、Excel固有形式・数式・ブックをそのまま複製する機能ではありません。RTFはバイト列を保持しますが、多くのブラウザはRTFの貼り付けに対応しないため、その場合はHTML/テキスト等を使い、非対応形式を通知します。画像は2MiB・4096辺・800万画素以内、テキスト/HTML/RTFは各512KiB、束全体はJSON/base64込み4MiBまでです。
+
+「画像・書式も自動同期する」を選んで双方向同期を開始できます。同期は窓が前面の間だけ動き、手元の新しいコピーを優先します。ブラウザの形式変換を扱うため、共有元の内容を手元へ反映した後、次回に手元の現在の内容を一度送り返します。未対応形式はその過程で失われる場合があります。手動転送中は自動同期を開始できません。「転送を取り消す」または自動同期停止で途中の処理を取り消せます。
+
+転送は映像・操作と別の接続で16KiBずつ確認し、共有元へは束全体の検証後に書き込みます。途中の取り消し、許可解除、フォーカス喪失、切断、現地での新しいコピーは適用直前にも検査します。応答3秒・無操作5秒・全体60秒で転送を終了します。画像・書式の経路だけが切れた場合も画面操作は続き、テキスト同期へ戻せます。WindowsのClipboard APIは書き込み開始後のOS障害時に元の内容へ戻すことを保証しないため、転送失敗の表示を確認してください。
 
 ## 統合CLI・MCP・OpenAI
 
