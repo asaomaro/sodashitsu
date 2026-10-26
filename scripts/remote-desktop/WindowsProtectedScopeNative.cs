@@ -10,14 +10,16 @@ using System.Threading;
 public sealed class SodaDesktopProtectedScopeNative : IDisposable {
     readonly SodaDesktopProtectedScope scope;
     readonly Process self,broker;
-    readonly Thread observer;
+    Thread observer;
     readonly ManualResetEventSlim ready=new ManualResetEventSlim(false);
-    readonly WinEvent callback;
+    WinEvent callback;
     volatile bool live,disposed;
     int observerId;
     readonly SodaDesktopProtectedEpoch epochs=new SodaDesktopProtectedEpoch();
     ushort markerAtom;
-    int markerThread;
+    IntPtr markerWindow;
+    readonly object markerGate=new object();
+    int markerSequence,markerObject,markerChild;
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]delegate void WinEvent(IntPtr hook,uint kind,IntPtr hwnd,int objectId,int child,uint eventThread,uint time);
     [StructLayout(LayoutKind.Sequential)]struct Message {public IntPtr Window;public uint Kind;public UIntPtr WParam;public IntPtr LParam;public uint Time;public int X,Y;public uint Private;}
     [StructLayout(LayoutKind.Sequential)]struct GroupEntry {public IntPtr Sid;public uint Flags;}
@@ -25,6 +27,8 @@ public sealed class SodaDesktopProtectedScopeNative : IDisposable {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll")]static extern uint GetCurrentThreadId();
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll",CharSet=CharSet.Unicode)]static extern ushort GlobalAddAtom(string name);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll")]static extern ushort GlobalDeleteAtom(ushort atom);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr CreateWindowEx(uint extended,string kind,string title,uint style,int x,int y,int width,int height,IntPtr parent,IntPtr menu,IntPtr instance,IntPtr parameter);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll")]static extern bool DestroyWindow(IntPtr window);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll")]static extern void NotifyWinEvent(uint kind,IntPtr window,int objectId,int child);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr value);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll")]static extern uint WTSGetActiveConsoleSessionId();
@@ -38,6 +42,8 @@ public sealed class SodaDesktopProtectedScopeNative : IDisposable {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll")]static extern bool UnhookWinEvent(IntPtr hook);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool PeekMessage(out Message message,IntPtr window,uint min,uint max,uint remove);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern int GetMessage(out Message message,IntPtr window,uint min,uint max);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll")]static extern bool TranslateMessage(ref Message message);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr DispatchMessage(ref Message message);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool PostThreadMessage(uint thread,uint message,UIntPtr wParam,IntPtr lParam);
     public SodaDesktopProtectedScopeNative(SodaDesktopProtectedScope scope){
         if(scope==null)throw new ArgumentNullException("scope");this.scope=scope;
@@ -47,24 +53,44 @@ public sealed class SodaDesktopProtectedScopeNative : IDisposable {
             broker=Process.GetProcessById(scope.BrokerPid);
             // Open/cache real process handles before validating PID and creation time.
             if(self.HasExited||broker.HasExited||self.Id!=scope.WorkerPid||self.StartTime.ToUniversalTime().Ticks!=scope.WorkerStarted||broker.StartTime.ToUniversalTime().Ticks!=scope.BrokerStarted||self.SessionId!=scope.Session||broker.SessionId!=0)throw new InvalidOperationException("Protected worker process scope mismatch");
-            markerAtom=GlobalAddAtom("Sodashitsu.ProtectedObserver."+scope.Nonce.ToString("D"));
+            StartObserver(scope.Nonce);
+        }catch{Dispose();throw;}
+    }
+    void StartObserver(Guid nonce){
+            markerAtom=GlobalAddAtom("Sodashitsu.ProtectedObserver."+nonce.ToString("D"));
             if(markerAtom<0xc000)throw new InvalidOperationException("Protected observer marker unavailable");
             callback=(hook,kind,window,obj,child,thread,time)=>{
                 if(kind==0x20)epochs.Changed();
-                else if(kind==markerAtom&&window==IntPtr.Zero&&child==0&&thread==(uint)Interlocked.CompareExchange(ref markerThread,0,0))epochs.Marker(obj);
+                else if(kind==markerAtom&&window==markerWindow&&thread==(uint)Interlocked.CompareExchange(ref observerId,0,0)){
+                    lock(markerGate)if(markerSequence!=0&&obj==markerObject&&child==markerChild)epochs.Marker(markerSequence);
+                }
             };
             observer=new Thread(Observe){IsBackground=true};observer.Start();
             if(!ready.Wait(2000)||!live)throw new InvalidOperationException("Protected desktop observer unavailable");
-        }catch{Dispose();throw;}
+    }
+    // Observer-only diagnostic: no token/session/desktop facts, capture or input.
+    SodaDesktopProtectedScopeNative(Guid nonce){try{StartObserver(nonce);}catch{Dispose();throw;}}
+    public static void VerifyMarkerDelivery(){
+        VerifyLayouts();
+        using(var observer=new SodaDesktopProtectedScopeNative(Guid.NewGuid())){
+            long before,after;
+            if(!observer.Checkpoint(out before)||!observer.Checkpoint(out after)||after<before)throw new InvalidOperationException("Private WinEvent marker delivery failed");
+            // An unanswered private marker must revoke subsequent checks forever.
+            long discarded;
+            if(observer.epochs.Checkpoint(id=>{},10,out discarded)||observer.Checkpoint(out discarded))throw new InvalidOperationException("Private marker timeout did not revoke observer");
+        }
+        Console.WriteLine("protected_private_marker_delivery_passed: own private WinEvents only; no screen capture/input/lock/session or service changes");
     }
     void Observe(){
         IntPtr hook=IntPtr.Zero;GCHandle root=GCHandle.Alloc(callback);
         try{
             Message message;PeekMessage(out message,IntPtr.Zero,0,0,0);Interlocked.Exchange(ref observerId,(int)GetCurrentThreadId());
+            markerWindow=CreateWindowEx(0,"STATIC","",0,0,0,0,0,new IntPtr(-3),IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
+            if(markerWindow==IntPtr.Zero)throw new InvalidOperationException("Private marker window unavailable");
             hook=SetWinEventHook(0x20,markerAtom,IntPtr.Zero,callback,0,0,0);live=hook!=IntPtr.Zero;ready.Set();
             if(!live)return;
-            while(!disposed&&GetMessage(out message,IntPtr.Zero,0,0)>0){}
-        }catch{}finally{live=false;if(hook!=IntPtr.Zero)UnhookWinEvent(hook);root.Free();epochs.Dispose();if(markerAtom!=0){GlobalDeleteAtom(markerAtom);markerAtom=0;}}
+            while(!disposed&&GetMessage(out message,IntPtr.Zero,0,0)>0){TranslateMessage(ref message);DispatchMessage(ref message);}
+        }catch{}finally{live=false;if(hook!=IntPtr.Zero)UnhookWinEvent(hook);if(markerWindow!=IntPtr.Zero){DestroyWindow(markerWindow);markerWindow=IntPtr.Zero;}root.Free();epochs.Dispose();if(markerAtom!=0){GlobalDeleteAtom(markerAtom);markerAtom=0;}}
     }
     static string DesktopName(IntPtr desktop){if(desktop==IntPtr.Zero)return null;uint needed;var text=new StringBuilder(256);return GetUserObjectInformation(desktop,2,text,512,out needed)&&needed<=512?text.ToString():null;}
     static bool User(uint session,out string owner,out string logon){
@@ -99,7 +125,14 @@ public sealed class SodaDesktopProtectedScopeNative : IDisposable {
         }catch{facts.System=false;return facts;}
     }
     bool Checkpoint(out long value){
-        return epochs.Checkpoint(sequence=>{Interlocked.Exchange(ref markerThread,(int)GetCurrentThreadId());NotifyWinEvent(markerAtom,IntPtr.Zero,sequence,0);},250,out value);
+        return epochs.Checkpoint(sequence=>{
+            // idEventThread is the window's owner thread, not this calling thread.
+            // Fresh opaque object/child tokens prevent guessed or stale markers.
+            byte[] bytes=new byte[8];using(var random=System.Security.Cryptography.RandomNumberGenerator.Create())random.GetBytes(bytes);
+            int obj=BitConverter.ToInt32(bytes,0)&Int32.MaxValue,child=BitConverter.ToInt32(bytes,4)&Int32.MaxValue;
+            lock(markerGate){markerSequence=sequence;markerObject=obj;markerChild=child;}
+            NotifyWinEvent(markerAtom,markerWindow,obj,child);
+        },250,out value);
     }
     public static void SealSnapshot(SodaDesktopProtectedScope.Facts facts,Func<bool> same,Func<int> lockState){
         try{if(same()&&lockState()==facts.LockState&&same())return;}catch{}
