@@ -1,0 +1,7 @@
+packages/
+x64/
+Debug/
+Release/
+*.user
+*.binlog
+packages-cache/
