@@ -76,6 +76,19 @@ public static class SodaDesktopHost {
     static bool Secure;
     static Func<int> SecureLockState;
     static Func<bool> SecureGuard;
+    static Func<object> ProtectedCapture;
+    static Func<object,bool> ProtectedPublish;
+    static bool SecureAttentionAllowed=true;
+    static object CaptureScope(){return ProtectedCapture==null?null:ProtectedCapture();}
+    static bool PublishScope(object ticket){return ProtectedPublish==null||ticket!=null&&ProtectedPublish(ticket);}
+    // Delegates come only from the authenticated installed worker, never configure.
+    public static void RunProtected(Func<bool> current,Func<object> capture,Func<object,bool> publish) {
+        if(current==null||capture==null||publish==null)throw new ArgumentNullException();
+        if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem||!current())throw new InvalidOperationException("Protected desktop unavailable");
+        Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;SecureAttentionAllowed=false;
+        try{Run(0,true,false,false,null);}
+        finally{Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;SecureAttentionAllowed=true;}
+    }
     static bool AllowedDesktop() { if(VirtualAlive!=null&&!VirtualAlive())return false;if(MemoryDesktop!=null)return MemoryDesktop();return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop(); }
     public static void RunSecure(Func<int> lockState,Func<bool> secureGuard) {
         if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem || !secureGuard())throw new InvalidOperationException("Secure desktop unavailable");
@@ -96,7 +109,7 @@ public static class SodaDesktopHost {
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static void Emit(INPUT value) { if(MemoryInput!=null){MemoryInput(value);return;}if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
+    static void Emit(INPUT value) { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(MemoryInput!=null){MemoryInput(value);return;}if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
     static INPUT KeyInput(ushort token,bool down) {
         ushort vk=(ushort)(token&255);
         bool extended=(token&0x100)!=0 || vk>=33&&vk<=46 || vk==111 || vk==144 || vk==163 || vk==165 || vk>=91&&vk<=93 || vk>=166&&vk<=183;
@@ -241,6 +254,61 @@ public static class SodaDesktopHost {
         public long started;
         public bool full;
         public string contentId;
+        public object scopeTicket;
+    }
+    static bool AdmitPrepared(PreparedFrame frame){
+        if(!AllowedDesktop()||!PublishScope(frame.scopeTicket)){Stopping=true;return false;}return true;
+    }
+    static Action MemoryPreparedWait;
+    static bool PublishPrepared(PreparedFrame frame){
+        var payload=new {type="frame",info=frame.info,data=Convert.ToBase64String(frame.image)};
+        if(MemoryPreparedWait!=null)MemoryPreparedWait();
+        lock(OutputGate){
+            string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
+            // Check after waiting for stdout and after JSON/base64 preparation.
+            if(!AdmitPrepared(frame))return false;
+            if(MemoryOutput!=null)MemoryOutput(payload);
+            else{Console.Out.WriteLine(wire);Console.Out.Flush();}
+            return true;
+        }
+    }
+    public static void VerifyProtectedQueuedOutput(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
+        if(Secure||MemoryInput!=null||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
+        bool oldStopping=Stopping;int frames=0;System.Threading.Tasks.Task<bool> waiting=null;
+        Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;MemoryOutput=value=>frames++;Stopping=false;
+        using(var reached=new ManualResetEventSlim(false))try{
+            var frame=new PreparedFrame{scopeTicket=CaptureScope(),image=new byte[]{1,2,3},info=new Dictionary<string,object>{{"seq",1}}};
+            MemoryPreparedWait=()=>reached.Set();
+            lock(OutputGate){
+                waiting=System.Threading.Tasks.Task.Run(()=>PublishPrepared(frame));
+                if(!reached.Wait(1000))throw new Exception("Queued publication did not reach output gate");
+                transition();
+            }
+            if(!waiting.Wait(1000)||waiting.Result||frames!=0||!Stopping)throw new Exception("Old frame published after output gate wait");
+        }finally{
+            if(waiting!=null&&!waiting.IsCompleted)waiting.Wait(2000);
+            MemoryPreparedWait=null;MemoryOutput=null;Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;Stopping=oldStopping;
+        }
+        Console.WriteLine("protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held");
+    }
+    // The validator supplies generated scope facts and intercepts every input.
+    public static void VerifyProtectedBoundaries(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
+        if(Secure||MemoryInput!=null||MemoryDesktop!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        bool oldStopping=Stopping;var sent=new List<INPUT>();
+        Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;MemoryInput=sent.Add;Stopping=false;
+        try{
+            var frame=new PreparedFrame{scopeTicket=CaptureScope()};
+            if(!AdmitPrepared(frame))throw new Exception("Stable prepared frame rejected");
+            Keys.Add(65);Key(65,true);Buttons.Add(0);Emit(ButtonInput(0,true));Release();
+            if(sent.Count!=4||Keys.Count!=0||Buttons.Count!=0)throw new Exception("Stable protected release failed");
+            Keys.Add(65);Key(65,true);Buttons.Add(0);Emit(ButtonInput(0,true));
+            transition();
+            if(AdmitPrepared(frame)||!Stopping)throw new Exception("Queued protected frame survived scope transition");
+            Release();if(sent.Count!=6||Keys.Count!=0||Buttons.Count!=0)throw new Exception("Protected release reached new desktop");
+            bool denied=false;try{Key(66,true);}catch(InvalidOperationException){denied=true;}
+            if(!denied||sent.Count!=6)throw new Exception("Protected Emit bypassed scope guard");
+        }finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;Stopping=oldStopping;}
+        Console.WriteLine("protected_host_boundaries_passed: queued frame discarded; key/mouse release and direct input blocked after transition; generated facts/input only");
     }
     static object OpenVirtualOnNormalDesktop(Func<bool> normal,Func<object> open){if(!normal())throw new InvalidOperationException("Virtual display requires the normal input desktop");return open();}
     public static void VerifyVirtualDesktopGuard(){
@@ -410,7 +478,7 @@ public static class SodaDesktopHost {
                     while(!Stopping && handled++<64 && commands.ProcessOne(msg=> {
                         string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
-                        else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
+                        else if(type=="sas" && Secure && SecureAttentionAllowed && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
                         else if(type=="clipboard_rich") {
                             try{
                                 if(!richCeiling)throw new InvalidOperationException("Rich clipboard not permitted");
@@ -548,10 +616,11 @@ public static class SodaDesktopHost {
                     long revision=Interlocked.Read(ref inputRevision);
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     if(!Stopping && preparation.CanPrepare(now,pending,video!=null&&DeferNativeSnapshots,forceFull,Interlocked.Read(ref LastNativeInput))) {
+                        object scopeTicket=CaptureScope();if(!PublishScope(scopeTicket)){Stopping=true;break;}
                         long frameStarted=Clock.ElapsedMilliseconds;var t=Stopwatch.StartNew();CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
-                        var prepared=new PreparedFrame {started=frameStarted};
+                        var prepared=new PreparedFrame {started=frameStarted,scopeTicket=scopeTicket};
                         if(deltas || colorMode!="full")ReadPixels(scaled,current,colorMode);
                         if(deltas){rects=DirtyTiles(current,previous,w,h,initialized);changed=rects.Count>0;if(changed)capturedId=BitConverter.ToString(sha.ComputeHash(current)).Replace("-","").ToLowerInvariant();}
                         double capture=t.Elapsed.TotalMilliseconds;t.Restart();
@@ -572,7 +641,7 @@ public static class SodaDesktopHost {
                             } else update=new {kind="unchanged",baseSeq=sequence};
                             byte[] image=stream.ToArray();if(image.Length>2*1024*1024)throw new InvalidOperationException("Frame limit");
                             double encode=t.Elapsed.TotalMilliseconds;
-                            if(!AllowedDesktop())break;
+                            if(!AdmitPrepared(prepared))break;
                             var info=new Dictionary<string,object>{{"seq",sequence+1},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
                             if(deltas)info["contentId"]=capturedId;
                             if(update!=null)info["update"]=update;
@@ -586,9 +655,8 @@ public static class SodaDesktopHost {
                     if(revision!=preparedRevision){preparation.Invalidate(false);preparedRevision=revision;}
                     var outgoing=preparation.Take(pending,Clock.ElapsedMilliseconds,fps);
                     if(!Stopping&&outgoing!=null&&outgoing.info!=null) {
-                        if(!AllowedDesktop()){Stopping=true;return;}
+                        if(!PublishPrepared(outgoing))return;
                         sequence++;pending=sequence;
-                        Output(new {type="frame",info=outgoing.info,data=Convert.ToBase64String(outgoing.image)});
                         lastReport=outgoing.started;contentId=outgoing.contentId;
                         if(outgoing.full){lastFull=outgoing.started;forceFull=false;}
                         if(deltas){var swap=previous;previous=current;current=swap;initialized=true;}
