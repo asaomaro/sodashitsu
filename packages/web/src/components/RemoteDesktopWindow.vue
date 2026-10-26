@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
+
 import "./viewportMaximize.css";
 import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
@@ -143,6 +145,7 @@ const mediaState = ref("images"),
   mediaBitrate = ref(2500),
   nativeAudio=ref(false),nativeAudioState=ref(""),
   nativeDatagrams=ref(false),nativeUdp=ref(true),nativeUdpActive=ref(false),
+  nativeCodecs=ref(false),nativeCodecCandidates=ref<DesktopNativeCodec[]>([]),nativeCodec=ref<DesktopNativeCodec>("h264"),nativeActualCodec=ref<DesktopNativeCodec>(),nativeRequestedCodec=ref<DesktopNativeCodec>(),nativeCodecFallback=ref(""),
   nativeAdaptive=ref(false),
   nativeMaxFps=ref(30), nativeFps=ref(60),
   videoFrames = ref(0),
@@ -294,9 +297,10 @@ async function toggleClipboardSync() {
       "ブラウザのクリップボード読み取りを許可してください。HTTPSまたはlocalhostが必要です。";
   }
 }
+const codecLabel=(codec:DesktopNativeCodec|undefined)=>codec==="hevc"?"HEVC":codec==="av1"?"AV1":codec==="h264-444"?"H.264 4:4:4":"H.264";
 async function requestVideo() {
   const version=epoch,request=++mediaRequestSeq;
-  const settings={audio:requestAudio.value&&(mediaTransport.value!=="native"||nativeAudio.value),transport:mediaTransport.value,adaptive:adaptive.value,maxBitrateKbps:Number(mediaBitrate.value),
+  const settings={audio:requestAudio.value&&(mediaTransport.value!=="native"||nativeAudio.value),transport:mediaTransport.value,...(mediaTransport.value==="native"&&nativeCodecs.value?{codec:nativeCodec.value}:{}),adaptive:adaptive.value,maxBitrateKbps:Number(mediaBitrate.value),
     ...(mediaTransport.value==="native"&&nativeDatagrams.value?{udp:nativeUdp.value}:{}),...(mediaTransport.value==="native"&&nativeMaxFps.value===60?{fps:Number(nativeFps.value)}:{})};
   if(settings.transport==="native"&&settings.audio){
     let supported=false;try{supported=await DesktopNativeAudioReceiver.supported();}catch{}
@@ -401,7 +405,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  nativeVideo.value=false;nativeAdaptive.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
+  nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -493,7 +497,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -601,7 +605,7 @@ function connect(automatic = false) {
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
-          nativeAdaptive.value=r.nativeAdaptive===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
+          nativeCodecs.value=r.nativeCodecs===true;nativeCodecCandidates.value=r.nativeCodecCandidates??[];nativeAdaptive.value=r.nativeAdaptive===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
@@ -634,6 +638,7 @@ function connect(automatic = false) {
           const state = DesktopMediaStatus.parse(m);
           if(state.state==="images" && receiver && receiver.id!==state.id)return;
           mediaState.value = state.state;
+          if(state.state==="negotiating")nativeActualCodec.value=undefined;if(state.codecRequested)nativeRequestedCodec.value=state.codecRequested;if(state.codec)nativeActualCodec.value=state.codec;nativeCodecFallback.value=state.codecFallback??"";
           mediaAudio.value = state.audio||(state.nativeAudio===true&&nativeAudioState.value==="running");nativeUdpActive.value=state.datagrams===true;
           if (state.state === "images") {
             if(mediaTransport.value==="native"&&state.reason==="unavailable")error.value="GPU動画を利用できないため画像配信に戻しました";
@@ -678,7 +683,7 @@ function connect(automatic = false) {
                 }
               },
               state.iceServers as RTCIceServer[] | undefined,state.datagrams===true,state.nativeAudio===true,
-              value=>{if(dead||version!==epoch||receiver?.id!==state.id)return;if(!(value==="stopped"&&nativeAudioState.value==="unavailable"))nativeAudioState.value=value;mediaAudio.value=value==="running";if(!mediaAudio.value){soundRequestSeq++;sound.value=false;}},
+              value=>{if(dead||version!==epoch||receiver?.id!==state.id)return;if(!(value==="stopped"&&nativeAudioState.value==="unavailable"))nativeAudioState.value=value;mediaAudio.value=value==="running";if(!mediaAudio.value){soundRequestSeq++;sound.value=false;}},state.nativeCodecs===true,
             );
           }
         } else if (m.type === "rtc_signal") {
@@ -687,7 +692,7 @@ function connect(automatic = false) {
             await receiver.signal(signal.signal as Parameters<DesktopMediaReceiver["signal"]>[0]);
         } else if (m.type === "media_stream") {
           const stream = DesktopMediaStream.parse(m);
-          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window,stream.datagrams===true,stream.baseSeq);else receiver.stream(stream.generation, stream.mime);}
+          if (receiver?.id === stream.id) {if(isDesktopNativeStream(stream))receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window,stream.datagrams===true,stream.baseSeq);else receiver.stream(stream.generation, stream.mime);}
         } else if(m.type==="native_profile_pending"){const pending=DesktopNativeProfilePending.parse(m);if(receiver?.id===pending.id)receiver.profilePending(pending);
         } else if(m.type==="native_audio_status"){const audio=DesktopNativeAudioStatus.parse(m);if(receiver?.id===audio.id)receiver.audioStatus(audio);
         } else if(m.type==="native_frame_notice"){const notice=DesktopNativeFrameNotice.parse(m);if(receiver?.id===notice.id)receiver.notice(notice);
@@ -1084,7 +1089,7 @@ onBeforeUnmount(() => {
       </nav>
       <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
         <summary>動画・音声</summary>
-        <p v-if="mediaTransport==='native'">接続先のGPUでH.264へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>
+        <p v-if="mediaTransport==='native'">接続先のGPUで{{nativeCodecs?"選択した形式":"H.264"}}へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>
         <p v-else>
           BのWindowsブラウザで /desktop-host
           を開き、対象と同じモニターを選んで共有を許可してください。
@@ -1092,7 +1097,7 @@ onBeforeUnmount(() => {
         <label><input v-model="requestAudio" type="checkbox" :disabled="mediaTransport==='native'&&!nativeAudio" />システム音声を要求</label>
         <label
           >経路<select v-model="mediaTransport" aria-label="動画の経路">
-            <option v-if="nativeVideo" value="native">{{ nativeAudio ? "GPU H.264（システム音声対応）" : "GPU H.264（音声なし）" }}</option>
+            <option v-if="nativeVideo" value="native">{{ nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
             <option v-if="allowMedia" value="auto">WebRTC（接続できなければ中継）</option>
             <option v-if="allowMedia" value="relay">圧縮動画を中継</option>
           </select></label
@@ -1106,7 +1111,9 @@ onBeforeUnmount(() => {
             max="12000"
         /></label>
         <label v-if="mediaTransport==='native'&&nativeDatagrams"><input v-model="nativeUdp" type="checkbox" /> UDPを優先（利用できない場合はWSS）</label>
-        <span v-if="nativeUdpActive" data-native-datagrams>UDP / H.264</span>
+        <span v-if="nativeUdpActive" data-native-datagrams>UDP / {{codecLabel(nativeActualCodec)}}</span>
+        <label v-if="mediaTransport==='native'&&nativeCodecs">動画コーデック<select v-model="nativeCodec" aria-label="動画コーデック"><option value="h264">H.264</option><option v-for="codec in (['hevc','av1','h264-444'] as const)" :key="codec" :value="codec" :disabled="!nativeCodecCandidates.includes(codec)">{{codecLabel(codec)}}{{nativeCodecCandidates.includes(codec)?'（GPUで試行）':'（接続先に候補なし）'}}</option></select></label>
+        <p v-if="mediaTransport==='native'&&nativeCodecs&&nativeRequestedCodec&&mediaState!=='images'" data-native-codec>要求: {{codecLabel(nativeRequestedCodec)}} / 実際: {{nativeActualCodec?codecLabel(nativeActualCodec):'確認中'}}<span v-if="nativeCodecFallback"> — {{nativeCodecFallback==='decoder'?'このブラウザで復号できないため':'接続先で利用できないため'}}H.264へ復帰</span></p>
         <label v-if="mediaTransport==='native'&&nativeMaxFps===60">動画FPS上限<select v-model="nativeFps" aria-label="動画FPS上限"><option :value="30">30 fps</option><option :value="60">60 fps</option></select></label>
         <button @click="requestVideo">動画共有を依頼</button
         ><button @click="stopVideo">動画・音声を停止</button>
@@ -1122,7 +1129,7 @@ onBeforeUnmount(() => {
               negotiating: "動画を接続中",
               rtc: "WebRTC動画",
               relay: "圧縮動画の中継",
-              native: "GPU H.264",
+              native: "GPU "+codecLabel(nativeActualCodec),
             }[mediaState] ?? mediaState
           }}
         </p>

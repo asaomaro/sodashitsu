@@ -1,4 +1,4 @@
-let nativeCadence=false,nativeAdaptive=false;
+let nativeCadence=false,nativeAdaptive=false,nativeCodecs=false;
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
 import { createServer } from "node:net";
 import { chmodSync, unlinkSync } from "node:fs";
@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { createInterface } from "node:readline";
 import { appendFileSync, existsSync, writeFileSync, readFileSync } from "node:fs";
+import {join} from "node:path";
 import { pathToFileURL } from "node:url";
 
 function crc32(bytes) {
@@ -109,6 +110,12 @@ function run() {
     lastReport = 0,
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
   const nativeAt=process.argv.indexOf("--native-fixture"),nativeRaw=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined,nativeProfiles=nativeRaw?.profiles??(nativeRaw?[nativeRaw]:[]),nativeFixture=nativeProfiles[0];
+  const codecFolderAt=process.argv.indexOf("--codec-fixtures"),codecFolder=codecFolderAt>=0?process.argv[codecFolderAt+1]:undefined,codecFixtures={h264:nativeFixture};
+  if(codecFolder)for(const [codec,file]of [["hevc","hevc-hardware-generated.json"],["av1","av1-software-generated.json"]])codecFixtures[codec]=JSON.parse(readFileSync(join(codecFolder,file),"utf8"));
+  const codecProfiles=Object.fromEntries(Object.entries(codecFixtures).map(([name,fixture])=>[name,[fixture]]));
+  const codecProfileAt=process.argv.indexOf("--codec-profile");if(codecProfileAt>=0){const value=JSON.parse(readFileSync(process.argv[codecProfileAt+1],"utf8"));codecProfiles[value.family]=value.profiles;codecFixtures[value.family]=value.profiles[0];}
+  const ledgerAt=process.argv.indexOf("--input-ledger"),ledger=ledgerAt>=0?process.argv[ledgerAt+1]:undefined,held=new Set();
+  const note=type=>{if(ledger)appendFileSync(ledger,JSON.stringify({type,held:[...held]})+"\n");};
   let richState,richVersion=0,richValue={text:"B generated table",html:'<table><tr><td style="color:green">B generated table</td></tr></table>',rtf:Buffer.from("{\\rtf1 generated}").toString("base64"),png:syntheticFrame(32,32,1,[0,255,0]).data};
   const clearRich=()=>{if(richState?.data)richState.data.fill(0);richState=undefined;};
   const rich=m=>{
@@ -174,7 +181,7 @@ function run() {
   lines.on("close", () => process.exit(0));
   lines.on("line", (line) => {
     try {
-      const m = JSON.parse(line);
+      const m = JSON.parse(line);if(m.type==="release"||(m.type==="control"&&!m.enabled)){held.clear();note(m.type);}
       if (m.type === "configure" && !options) {
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
@@ -188,6 +195,7 @@ function run() {
             return;
           }
         }
+        nativeCodecs=m.nativeCodecs===true&&process.argv.includes("--native-codecs")&&!secure;
         nativeAdaptive=m.nativeAdaptive===true&&process.argv.includes("--native-adaptive")&&!secure;
         options = m.options;if(nativeAdaptive&&nativeFixture)options={...options,syntheticHeight:Math.round(nativeFixture.height*options.width/nativeFixture.width)};nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
         if(m.allowMonitors===true&&options.monitors===true&&process.argv.includes("--monitors")&&!secure){
@@ -210,6 +218,7 @@ function run() {
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
+          ...(nativeFixture&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:["h264","hevc","av1"]}:{}),
           ...(nativeFixture&&nativeAdaptive?{nativeAdaptive:true}:{}),
           ...(nativeFixture&&m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure?{nativeCadence:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
@@ -242,11 +251,11 @@ function run() {
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
         stopAudio();
-        if(m.enabled&&nativeFixture&&!secure)native={generation:1,profile:0,barrier:undefined,lastTimestamp:-1,id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};
+        if(m.enabled&&nativeFixture&&!secure){const requested=nativeCodecs?(m.codec??"h264"):"h264",codec=codecFixtures[requested]&&!process.argv.includes("--codec-encoder-failure")?requested:"h264";native={codec,codecFallback:codec!==requested?"unavailable":undefined,generation:1,profile:0,barrier:undefined,lastTimestamp:-1,id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};}
         else native=undefined;
       }
       else if(m.type==="native_profile"&&native&&m.id===native.id){
-        const profile=nativeProfiles.findIndex(p=>p.width===m.width&&p.height===m.height);
+        const profiles=native.codec!=="h264"?codecProfiles[native.codec]:nativeProfiles,profile=profiles.findIndex(p=>p.width===m.width&&p.height===m.height);
         if(!nativeAdaptive||native.barrier||profile<0||m.generation!==native.generation+1)throw Error("Native profile gate");
         native.barrier={...m,profile,stage:"drain"};
       }
@@ -279,6 +288,7 @@ function run() {
         send({type:"session_unlocked"});
         process.exit(0);
       } else if (m.type === "input" && control && m.expiresAt >= Date.now()) {
+        if(m.input.kind==="key"){if(m.input.down)held.add(m.input.code);else held.delete(m.input.code);note(m.input.down?"key-down":"key-up");}
         if(cursorEnabled){
           if(m.input.kind==="pointer"){
             if(!process.argv.includes("--cursor-no-echo")){cursorX=m.input.x;cursorY=m.input.y;}
@@ -300,12 +310,12 @@ function run() {
     const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}
     if (performance.now() - lastSeen > 8000) process.exit(0);
     if(options&&cursorEnabled&&performance.now()-lastCursor>=500)cursor();
-    if(native?.barrier?.stage==="drain"&&!native.pending.length){const b=native.barrier,p=nativeProfiles[b.profile],packet=p.packets[0];b.stage="prepared";send({type:"native_profile_applied",id:native.id,generation:b.generation,baseSeq:native.seq,width:p.width,height:p.height,codec:packet.codec});}
+    if(native?.barrier?.stage==="drain"&&!native.pending.length){const b=native.barrier,p=(native.codec!=="h264"?codecProfiles[native.codec]:nativeProfiles)[b.profile],packet=p.packets[0];b.stage="prepared";send({type:"native_profile_applied",id:native.id,generation:b.generation,baseSeq:native.seq,width:p.width,height:p.height,codec:packet.codec});}
     if(options&&native&&!native.barrier&&native.pending.length<native.window&&performance.now()>=native.next) {
-      const fixture=nativeProfiles[native.profile],packet=fixture.packets[native.index++%fixture.packets.length];
+      const fixture=native.codec!=="h264"?codecProfiles[native.codec][native.profile]:nativeProfiles[native.profile],packet=fixture.packets[native.index++%fixture.packets.length];
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
       native.lastTimestamp=Math.max(native.lastTimestamp+1,Math.round((performance.now()-native.started)*1000));
-      send({type:"native_frame",...(nativeAdaptive?{generation:native.generation,captureMs:native.profile===0?55:5}:{}),id:native.id,seq:native.seq,timestamp:native.lastTimestamp,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:fixture.width,height:fixture.height,data:packet.data});
+      send({type:"native_frame",...(nativeCodecs?{codecName:native.codec,...(native.codecFallback?{codecFallback:native.codecFallback}:{})}:{}),...(nativeAdaptive?{generation:native.generation,captureMs:native.profile===0?55:5}:{}),id:native.id,seq:native.seq,timestamp:native.lastTimestamp,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:fixture.width,height:fixture.height,data:packet.data});
     }
     if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;

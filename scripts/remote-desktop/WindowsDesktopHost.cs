@@ -249,9 +249,10 @@ public static class SodaDesktopHost {
             if(!Secure && lockState!=null && lockState()==0)Output(new {type="session_locked"});
         }
     }
-    public static bool TryCreateNativeVideo(int width,int height,int fps,int bitrate,SodaDesktopDxgi capture,out SodaDesktopH264 encoder,out bool cpuOnly){
+    public static bool TryCreateNativeVideo(int width,int height,int fps,int bitrate,SodaDesktopDxgi capture,out SodaDesktopH264 encoder,out bool cpuOnly){return TryCreateNativeCodec(width,height,fps,bitrate,capture,"h264",out encoder,out cpuOnly);}
+    public static bool TryCreateNativeCodec(int width,int height,int fps,int bitrate,SodaDesktopDxgi capture,string codec,out SodaDesktopH264 encoder,out bool cpuOnly){
         encoder=null;cpuOnly=false;
-        try{cpuOnly=capture!=null&&!capture.ConfigureVideoOutput(width,height);encoder=SodaDesktopH264.CreateForDesktop(width,height,fps,bitrate,cpuOnly?null:capture);return true;}
+        try{cpuOnly=capture!=null&&!capture.ConfigureVideoOutput(width,height);encoder=SodaDesktopH264.CreateCodecForDesktop(width,height,fps,bitrate,cpuOnly?null:capture,codec);return true;}
         catch{if(encoder!=null)encoder.Dispose();encoder=null;return false;}
     }
     static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath,bool locallyAllowMonitors) {
@@ -308,6 +309,7 @@ public static class SodaDesktopHost {
         bool richCeiling=clipboardCeiling&&richType!=null&&config.ContainsKey("richClipboard")&&config["richClipboard"] is bool&&(bool)config["richClipboard"];
         SodaDesktopVideoRate videoRate=null;SodaDesktopVideoProfile videoProfile=null;
         int videoGeneration=1,videoWidth=w,videoHeight=h;bool videoCpuOnly=false;
+        string videoCodec="h264",videoCodecFallback=null;
         Bitmap videoBitmap=null;Graphics videoResize=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
@@ -315,6 +317,9 @@ public static class SodaDesktopHost {
         Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
         bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
         int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0)audioCeiling=false;
+        bool nativeCodecs=nativeCeiling&&config.ContainsKey("nativeCodecs")&&config["nativeCodecs"] is bool&&(bool)config["nativeCodecs"];
+        var codecCandidates=new List<string>();
+        if(nativeCodecs){try{var probe=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopCodecProbe");if(probe==null)nativeCodecs=false;else foreach(var candidate in (Array)probe.GetMethod("Read").Invoke(null,null)){var type=candidate.GetType();if(Convert.ToUInt32(type.GetField("count").GetValue(candidate))>0)codecCandidates.Add((string)type.GetField("codec").GetValue(candidate));}}catch{nativeCodecs=false;}}
         bool nativeDatagrams=nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
         bool nativeAdaptive=nativeCeiling&&config.ContainsKey("nativeAdaptive")&&config["nativeAdaptive"] is bool&&(bool)config["nativeAdaptive"];
         bool nativeCadence=nativeCeiling&&config.ContainsKey("nativeCadence")&&config["nativeCadence"] is bool&&(bool)config["nativeCadence"];
@@ -335,6 +340,7 @@ public static class SodaDesktopHost {
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
+            if(nativeCodecs){ready["nativeCodecs"]=true;ready["nativeCodecCandidates"]=codecCandidates.ToArray();}
             if(nativeAdaptive)ready["nativeAdaptive"]=true;
             if(nativeCadence)ready["nativeCadence"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
@@ -405,8 +411,8 @@ public static class SodaDesktopHost {
                             if((bool)msg["enabled"]) {
                                 StopAudio(ref audio);audioId=null;
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
-                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoProfile=null;videoGeneration=1;videoWidth=w;videoHeight=h;videoCpuOnly=false;videoNv12=null;if(videoResize!=null)videoResize.Dispose();videoResize=null;if(videoBitmap!=null)videoBitmap.Dispose();videoBitmap=null;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
-                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");videoRate=new SodaDesktopVideoRate(videoFps,videoBitrate);if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");if(!TryCreateNativeVideo(w,h,videoFps,videoBitrate,dxgi,out video,out videoCpuOnly))throw new InvalidOperationException("Native video unavailable");commands.EnableFast(true);}
+                                commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoCodec=nativeCodecs&&msg.ContainsKey("codec")?(string)msg["codec"]:"h264";videoCodecFallback=null;videoProfile=null;videoGeneration=1;videoWidth=w;videoHeight=h;videoCpuOnly=false;videoNv12=null;if(videoResize!=null)videoResize.Dispose();videoResize=null;if(videoBitmap!=null)videoBitmap.Dispose();videoBitmap=null;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
+                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");videoRate=new SodaDesktopVideoRate(videoFps,videoBitrate);if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");if(!TryCreateNativeCodec(w,h,videoFps,videoBitrate,dxgi,videoCodec,out video,out videoCpuOnly)){if(videoCodec=="h264")throw new InvalidOperationException("Native video unavailable");videoCodec="h264";videoCodecFallback="unavailable";if(!TryCreateNativeVideo(w,h,videoFps,videoBitrate,dxgi,out video,out videoCpuOnly))throw new InvalidOperationException("Native fallback unavailable");}commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                             } else if(videoId==requested) {StopAudio(ref audio);audioId=null;commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
@@ -464,7 +470,7 @@ public static class SodaDesktopHost {
                             if(!videoCpuOnly&&dxgi!=null&&!dxgi.ConfigureVideoOutput(videoWidth,videoHeight))videoCpuOnly=true;
                             videoNv12=null;if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();
                             videoBitmap=new Bitmap(videoWidth,videoHeight,PixelFormat.Format24bppRgb);videoResize=Graphics.FromImage(videoBitmap);videoResize.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.Bilinear;
-                            video=SodaDesktopH264.CreateForDesktop(videoWidth,videoHeight,videoRate.MaximumFps,videoProfile.Bitrate,videoCpuOnly?null:dxgi);
+                            video=SodaDesktopH264.CreateCodecForDesktop(videoWidth,videoHeight,videoRate.MaximumFps,videoProfile.Bitrate,videoCpuOnly?null:dxgi,videoCodec);
                             videoRate.Adopt(videoProfile.Fps,videoProfile.Bitrate);videoFps=videoRate.Fps;videoGeneration=videoProfile.Generation;videoProfile.Configured=true;videoNext=0;commands.EnableFast(true);
                         }catch{if(video!=null)video.Dispose();video=null;videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                     }
@@ -487,7 +493,7 @@ public static class SodaDesktopHost {
                                 }
                             } else {
                                 if(videoNv12==null)videoNv12=new byte[checked(videoWidth*videoHeight*3/2)];
-                                bool gpu=!videoCpuOnly&&dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
+                                bool gpu=!video.FullChroma&&!videoCpuOnly&&dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
                                 if(!gpu){CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);if(videoBitmap!=null)videoResize.DrawImage(scaled,new Rectangle(0,0,videoWidth,videoHeight));}
                                 videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
                                 packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(videoBitmap??scaled,Clock.ElapsedMilliseconds*1000);
@@ -500,17 +506,18 @@ public static class SodaDesktopHost {
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
                             videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;
                             var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",videoWidth},{"height",videoHeight},{"data",Convert.ToBase64String(packet.data)}};
+                            if(nativeCodecs){encoded["codecName"]=videoCodec;if(videoCodecFallback!=null)encoded["codecFallback"]=videoCodecFallback;}
                             if(nativeAdaptive)encoded["generation"]=videoGeneration;
                             if(videoWindow.Capacity==3||nativeCadence){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
                             }
                         } catch {
-                            bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0&&videoProfile==null;
+                            bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0&&videoProfile==null,codecFallback=nativeCodecs&&videoCodec!="h264";
                             commands.EnableFast(false);if(video!=null)video.Dispose();video=null;
                             if(surfaceFailure&&dxgi!=null)dxgi.DisableGpuSurfaces();
                             // Before any packet is published, a new memory-input
                             // encoder can start cleanly with its own SPS/IDR.
-                            if(surfaceFailure&&unpublished)try{video=new SodaDesktopH264(w,h,videoFps,videoBitrate);commands.EnableFast(true);}catch{}
+                            if((surfaceFailure||codecFallback)&&unpublished)try{video=new SodaDesktopH264(w,h,videoFps,videoBitrate);if(codecFallback){videoCodec="h264";videoCodecFallback="encoder";}videoNv12=null;commands.EnableFast(true);}catch{}
                             if(video==null){videoProfile=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
                         }
                         now=Clock.ElapsedMilliseconds;
@@ -1734,13 +1741,27 @@ public sealed class SodaDesktopVideoBitstream {
         int kind=family=="hevc"?(nal[0]>>1)&63:nal[0]&31;
         if(family=="hevc"?(kind<32||kind>34):(kind!=7&&kind!=8))return;
         if(nal.Length>65536)throw new FormatException("Parameter set limit");parameterSets[kind]=nal;
-        if(family=="h264"&&kind==7){if(nal.Length<4)throw new FormatException("AVC SPS");var bits=new Bits(Rbsp(nal,1));uint profile=bits.Read(8);bits.Skip(16);bits.Ue();if(fullChroma&&(profile!=244||bits.Ue()!=3))throw new NotSupportedException("Encoder did not produce H264 4:4:4");codec="avc1."+nal[1].ToString("x2")+nal[2].ToString("x2")+nal[3].ToString("x2");}
+        if(family=="h264"&&kind==7){if(nal.Length<4)throw new FormatException("AVC SPS");var bits=new Bits(Rbsp(nal,1));uint profile=bits.Read(8);bits.Skip(16);bits.Ue();if(fullChroma&&(profile!=244||bits.Ue()!=3))throw new NotSupportedException("Encoder did not produce H264 4:4:4");if(fullChroma&&bits.Read(1)!=0)throw new NotSupportedException("Separate AVC colour planes");codec="avc1."+nal[1].ToString("x2")+nal[2].ToString("x2")+nal[3].ToString("x2");}
         if(family=="hevc"&&kind==33){var bits=new Bits(Rbsp(nal,2));bits.Skip(8);uint space=bits.Read(2),tier=bits.Read(1),profile=bits.Read(5),flags=bits.Read(32),compatibility=0;for(int i=0;i<32;i++){compatibility=(compatibility<<1)|(flags&1);flags>>=1;}var constraints=new byte[6];for(int i=0;i<6;i++)constraints[i]=(byte)bits.Read(8);uint level=bits.Read(8);int end=6;while(end>0&&constraints[end-1]==0)end--;codec="hev1."+(space==0?"":((char)('A'+space-1)).ToString())+profile+"."+compatibility.ToString("X")+"."+(tier==0?"L":"H")+level;for(int i=0;i<end;i++)codec+="."+constraints[i].ToString("X2");}
     }
     public Unit Normalize(byte[] bytes,byte[] header=null){
         if(bytes==null||bytes.Length==0||bytes.Length>512*1024-9)throw new FormatException("Access unit size");if(family=="av1")return Av1(bytes,header);
         foreach(var nal in Configuration(header))Parameter(nal);var nals=Nals(bytes);bool vcl=false,key=true;var present=new HashSet<int>();
-        foreach(var nal in nals){if(nal.Length<(family=="hevc"?2:1)||(nal[0]&128)!=0)throw new FormatException("Invalid NAL header");Parameter(nal);int kind=family=="hevc"?(nal[0]>>1)&63:nal[0]&31;present.Add(kind);if(family=="hevc"?kind<=31:kind>=1&&kind<=5){vcl=true;key&=family=="hevc"?kind>=16&&kind<=21:kind==5;}}
+        int pictures=0,delimiters=0;
+        foreach(var nal in nals){
+            if(nal.Length<(family=="hevc"?2:1)||(nal[0]&128)!=0)throw new FormatException("Invalid NAL header");
+            int kind=family=="hevc"?(nal[0]>>1)&63:nal[0]&31;
+            if(family=="hevc"&&(((nal[0]&1)<<5)|(nal[1]>>3))!=0)throw new NotSupportedException("Layered HEVC input");
+            if(family=="hevc"&&(nal[1]&7)==0)throw new FormatException("HEVC temporal id");
+            if(kind==(family=="hevc"?35:9)){if(++delimiters>1||vcl)throw new FormatException("Multiple video access units");}
+            if(vcl&&(family=="hevc"?kind>=32&&kind<=34:kind==7||kind==8))throw new FormatException("Video parameter sets after picture");
+            Parameter(nal);present.Add(kind);
+            if(family=="hevc"?kind<=31:kind>=1&&kind<=5){
+                bool first=family=="hevc"?new Bits(Rbsp(nal,2)).Read(1)!=0:new Bits(Rbsp(nal,1)).Ue()==0;
+                if(first&&++pictures>1)throw new FormatException("Multiple video pictures in one unit");if(!vcl&&!first)throw new FormatException("First video slice missing");
+                vcl=true;key&=family=="hevc"?kind>=16&&kind<=21:kind==5;
+            }
+        }
         if(!vcl)throw new FormatException("Video frame missing");if(key&&codec==null)throw new FormatException("Random-access codec header missing");
         if(key){int[] required=family=="hevc"?new[]{32,33,34}:new[]{7,8};var prefix=new List<byte[]>();foreach(int kind in required){if(!parameterSets.ContainsKey(kind))throw new FormatException("Random-access parameter set missing");if(!present.Contains(kind))prefix.Add(parameterSets[kind]);}prefix.AddRange(nals);nals=prefix;}
         return new Unit{Data=Annex(nals),Key=key,Codec=codec};

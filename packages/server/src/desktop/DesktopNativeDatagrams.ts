@@ -1,3 +1,4 @@
+import {DESKTOP_CODEC_VIDEO_CHANNEL} from "@sodashitsu/protocol";
 import {performance} from "node:perf_hooks";
 import {DesktopNativeFormatAck,DesktopMediaSignal,DesktopNativeVideoAck,DesktopNativeKeyframe,encodeDesktopDatagrams,DESKTOP_VIDEO_CHANNEL,DESKTOP_CONTROL_CHANNEL,DESKTOP_AUDIO_CHANNEL,type DesktopIceServers} from "@sodashitsu/protocol";
 import type {z} from "zod";
@@ -7,14 +8,14 @@ export class DesktopNativeDatagrams {
  private peer:RTCPeerConnection|undefined;private video:RTCDataChannel|undefined;private control:RTCDataChannel|undefined;private audio:RTCDataChannel|undefined;
  private dead=false;private connected=false;private answered=false;private candidates=0;private lastKey=-Infinity;
  private timeout:ReturnType<typeof setTimeout>;
- constructor(private hooks:{id:string;audio?:boolean;audioFailed?():void;iceServers:z.infer<typeof DesktopIceServers>;send(value:unknown):boolean;ready():void;ack(value:unknown):void;formatAck?(value:unknown):void;keyframe():void;fail():void}){
+ constructor(private hooks:{id:string;codecs?:boolean;audio?:boolean;audioFailed?():void;iceServers:z.infer<typeof DesktopIceServers>;send(value:unknown):boolean;ready():void;ack(value:unknown):void;formatAck?(value:unknown):void;keyframe():void;fail():void}){
   this.timeout=setTimeout(()=>this.failure(),8000);this.timeout.unref();void this.start().catch(()=>this.failure());
  }
  private async start(){
   const {RTCPeerConnection}=await import("werift");if(this.dead)return;
   // werift otherwise has a public STUN default. Only explicit local config is used.
   const peer=this.peer=new RTCPeerConnection({iceServers:this.hooks.iceServers.map(s=>({urls:s.urls,...(s.username===undefined?{}:{username:s.username}),...(s.credential===undefined?{}:{credential:s.credential})})),iceUseTcp:false});
-  const video=this.video=peer.createDataChannel(DESKTOP_VIDEO_CHANNEL,{ordered:false,maxRetransmits:0});
+  const video=this.video=peer.createDataChannel(this.hooks.codecs?DESKTOP_CODEC_VIDEO_CHANNEL:DESKTOP_VIDEO_CHANNEL,{ordered:false,maxRetransmits:0});
   const control=this.control=peer.createDataChannel(DESKTOP_CONTROL_CHANNEL,{ordered:true});
   const audio=this.audio=this.hooks.audio?peer.createDataChannel(DESKTOP_AUDIO_CHANNEL,{ordered:false,maxRetransmits:0}):undefined;
   const opened=()=>{if(this.dead||this.connected||video.readyState!=="open"||control.readyState!=="open")return;this.connected=true;clearTimeout(this.timeout);this.hooks.ready();};

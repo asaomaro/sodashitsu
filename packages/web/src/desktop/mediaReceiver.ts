@@ -1,3 +1,4 @@
+import {DESKTOP_CODEC_VIDEO_CHANNEL} from "@sodashitsu/protocol";
 import {DesktopNativeProfilePending} from "@sodashitsu/protocol";
 import {DesktopNativeAudioReceiver} from "./nativeAudioReceiver.js";
 import {DESKTOP_AUDIO_CHANNEL,DesktopNativeAudioStatus} from "@sodashitsu/protocol";
@@ -43,6 +44,7 @@ export class DesktopMediaReceiver {
     private udp=false,
     private requestedNativeAudio=false,
     private audioState:(state:"starting"|"running"|"stopped"|"unavailable")=>void=()=>{},
+    private nativeCodecs=false,
   ) {
     this.video.muted = true;
     this.video.autoplay = true;
@@ -59,7 +61,7 @@ export class DesktopMediaReceiver {
     if(udp){
       this.peer.ondatachannel=e=>{
         const channel=e.channel;
-        if(channel.label===DESKTOP_VIDEO_CHANNEL&&!this.nativeVideo&&!channel.ordered&&channel.maxRetransmits===0){
+        if(channel.label===(this.nativeCodecs?DESKTOP_CODEC_VIDEO_CHANNEL:DESKTOP_VIDEO_CHANNEL)&&!this.nativeVideo&&!channel.ordered&&channel.maxRetransmits===0){
           this.nativeVideo=channel;channel.binaryType="arraybuffer";
           channel.onmessage=e=>{try{if(!(e.data instanceof ArrayBuffer))throw Error("Native binary required");this.datagrams?.fragment(new Uint8Array(e.data));}catch{this.datagramFailure();}};
         }else if(channel.label===DESKTOP_CONTROL_CHANNEL&&!this.nativeControl&&channel.ordered&&channel.maxRetransmits===null&&channel.maxPacketLifeTime===null){
@@ -193,7 +195,7 @@ export class DesktopMediaReceiver {
   private createNative(ready?:()=>void){
     const format=this.nativeFormat;if(!format||this.stopped)return;
     const epoch=++this.formatEpoch,current=()=>!this.stopped&&epoch===this.formatEpoch;
-    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>{if(current()){if(this.udp)this.nativeAck(value);else this.send(value);}},frame=>{if(!current())return;if(this.barrier?.generation===format.generation)this.barrier=undefined;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>{if(current()){if(this.udp)this.datagramFailure();else this.fail();}},()=>{if(current())ready?.();});
+    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>{if(current()){if(this.udp)this.nativeAck(value);else this.send(value);}},frame=>{if(!current())return;if(this.barrier?.generation===format.generation)this.barrier=undefined;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>{if(current()){if(this.nativeCodecs){this.send({type:"native_codec_fallback",id:this.id});this.stop();}else if(this.udp)this.datagramFailure();else this.fail();}},()=>{if(current())ready?.();});
   }
   notice(raw:unknown){
     if(this.stopped)return;
