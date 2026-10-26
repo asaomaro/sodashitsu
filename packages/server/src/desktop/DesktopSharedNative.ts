@@ -15,9 +15,10 @@ type Consumer = { id: string; seq: number; pending: number[]; window: 1 | 3; nee
  */
 export class DesktopSharedNative<T extends object> {
   private consumers = new Map<T, Consumer>();
-  private source: { id: string; key: string; requested: z.infer<typeof DesktopNativeCodec>; fallback?: "encoder"|"unavailable"; seq: number; timestamp: number; codec?: string; family?: z.infer<typeof DesktopNativeCodec>; width?: number; height?: number } | undefined;
+  private source: { id: string; key: string; requested: z.infer<typeof DesktopNativeCodec>; fallback?: "encoder"|"unavailable"; seq: number; timestamp: number; keyframeAt: number; codec?: string; family?: z.infer<typeof DesktopNativeCodec>; width?: number; height?: number } | undefined;
   constructor(private hooks: {
     window?: 1 | 3;
+    now?(): number;
     write(value: unknown): void;
     send(member: T, value: unknown): void;
     policy(active: boolean): void;
@@ -38,10 +39,19 @@ export class DesktopSharedNative<T extends object> {
       this.consumers.set(member, { id: start.id, seq: 0, pending: [], window: start.window ?? 1, needsKey: true });
       if (!this.source) {
         const id = randomUUID();
-        this.source = { id, key, requested:start.codec??"h264", seq: 0, timestamp: -1 };
+        this.source = { id, key, requested:start.codec??"h264", seq: 0, timestamp: -1, keyframeAt: -Infinity };
         this.hooks.policy(true);
         const { window: _window, ...configuration } = start;
         this.hooks.write({ ...configuration, id, ...(this.hooks.window === 3 ? { window: 3 } : {}) });
+      }
+      return true;
+    }
+    if (value.type === "native_keyframe") {
+      const consumer=this.consumers.get(member),source=this.source;
+      if(consumer&&value.id===consumer.id&&source){
+        consumer.needsKey=true;
+        const now=this.hooks.now?.()??performance.now();
+        if(now-source.keyframeAt>=100){source.keyframeAt=now;this.hooks.write({type:"native_keyframe",id:source.id});}
       }
       return true;
     }
