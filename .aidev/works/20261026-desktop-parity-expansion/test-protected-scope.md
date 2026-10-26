@@ -133,3 +133,9 @@ protected_host_boundaries_passed: queued frame discarded; key/mouse release and 
 protected_output_gate_passed: generated frame blocked after scope transition while stdout gate was held
 protected_scope_checks_passed: canonical v2 tuple/ack, modes/purpose, owner/logon/session/process/nonce, post-encode epoch, irreversible revocation, no keyup after scope loss; fake facts only
 ```
+
+## Windows CIの実行権限
+
+初回CIの新scope試験は成功したが、既存UnlockProcessChecksの「limited-queryが拒否される」前提が管理者権限のGitHub Windows runnerでは成立せず停止した。既存validatorや権限制御は変更せず、新CIではhelper entry-point compile-only・新scope/generated input/output・monitor fake検査を行う。既存helper full validatorは通常利用者の接続元とsr-pcで成功しており、その検査を省略成功とは扱わない。
+
+初回CI: https://github.com/asaomaro/sodashitsu/actions/runs/40342417337

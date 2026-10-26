@@ -20,9 +20,11 @@ jobs:
       - name: Generated protected scope and input/output boundaries
         shell: powershell
         run: scripts/remote-desktop/validate-protected-scope.ps1
-      - name: Existing helper compilation and generated input/pipe checks
+      - name: Existing helper entry-point compilation
         shell: powershell
-        run: scripts/remote-desktop/validate-unlock-helper.ps1
+        # Full legacy validator includes a limited-query denial test requiring
+        # a non-administrator account; it runs on both user PCs separately.
+        run: scripts/remote-desktop/windows-helper.ps1 -ValidateOnly
       - name: Existing generated monitor checks
         shell: powershell
         run: scripts/remote-desktop/validate-monitors.ps1
