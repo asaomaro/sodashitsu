@@ -1,0 +1,7 @@
+# 複数viewer 8B 独立レビュー
+
+実装とは別コンテキストでreview_pointer/review_transferが差分全体を点検。source/consumerのUUID・連番・ACKの分離、有界pending、参照欠落後のpending=0かつfuture random-access復帰、異なるencoder設定のviewer限定fallback、最後の動画購読解除、helper configureのローカルceilingと正規化、新protocol/caps積と旧peer field抑制、非owner releaseの既存controllerへの非干渉を確認した。
+
+両レビューで必須修正なし。任意推奨だったHEVC要求→H264 fallback証明をlate consumerへ維持する回帰、旧protocol/旧capsの両ケースでnative項目をBへ送らない回帰を追加。browser2画面でのpixel/ACK遅延/復帰/残存peer継続は実装側でpass確認済み。
+
+sharedの音声/UDP/adaptation/保護sourceはまだ含まない。通常単独接続の機能は維持する。task8全体の完了扱いはしない。

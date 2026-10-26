@@ -1,5 +1,6 @@
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
 export const DESKTOP_SHARED_PROTOCOL = "soda-desktop-shared-v1";
+export const DESKTOP_SHARED_NATIVE_PROTOCOL = "soda-desktop-shared-native-v1";
 import {DesktopNativeCodec,DesktopNativeCodecFallback} from "./desktopCodecs.js";
 import {DesktopNativeFormatAck} from "./desktopNativeAdaptive.js";
 import {DesktopProtectedMode} from "./desktopProtected.js";
@@ -48,6 +49,7 @@ export const DesktopOptions = z
     extendedInput: z.literal(true).optional(),
     elevatedDesktop:z.literal(true).optional(),
     sharedDesktop:z.literal(true).optional(),
+    sharedNative:z.literal(true).optional(),
     virtualDisplay:z.literal(true).optional(),
     monitors:z.literal(true).optional(),
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
@@ -271,6 +273,7 @@ export interface DesktopResults {
     virtualDisplay?:boolean;
     elevatedDesktop?:boolean;
     sharedDesktop?:boolean;
+    sharedNative?:boolean;
     files?: boolean;
     richClipboard?: boolean;
     nativeAudio?: boolean;
