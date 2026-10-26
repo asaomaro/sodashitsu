@@ -12,7 +12,7 @@ import {
   DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PROTOCOL,
   DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,
-  DesktopNativeVideoStats,
+  DesktopNativeVideoStats,DESKTOP_DATAGRAM_PROTOCOL,DesktopNativeFrameNotice,
   isExtendedDesktopInput,
   DesktopFrameChain,
   RemoteDesktopInput,
@@ -134,6 +134,7 @@ const mediaState = ref("images"),
   nativeStats = ref<DesktopNativeVideoStats|null>(null),
   mediaTransport = ref<"auto" | "relay" | "native">("auto"),
   mediaBitrate = ref(2500),
+  nativeDatagrams=ref(false),nativeUdp=ref(true),nativeUdpActive=ref(false),
   nativeMaxFps=ref(30), nativeFps=ref(60),
   videoFrames = ref(0),
   videoFps = ref(0);
@@ -252,6 +253,7 @@ function requestVideo() {
       transport: mediaTransport.value,
       adaptive: adaptive.value,
       maxBitrateKbps: Number(mediaBitrate.value),
+      ...(mediaTransport.value==="native"&&nativeDatagrams.value?{udp:nativeUdp.value}:{}),
       ...(mediaTransport.value==="native"&&nativeMaxFps.value===60?{fps:Number(nativeFps.value)}:{}),
     },
   });
@@ -260,7 +262,7 @@ function stopVideo() {
   send({ type: "media", enabled: false });
   receiver?.stop();
   receiver = undefined;
-  mediaState.value = "images";
+  mediaState.value = "images";nativeUdpActive.value=false;
   sound.value = false;
   restoreImage();
   releaseInputs();
@@ -354,7 +356,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  nativeVideo.value=false;nativeMaxFps.value=30;
+  nativeVideo.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -444,7 +446,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL, DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -531,7 +533,7 @@ function connect(automatic = false) {
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
-          nativeMaxFps.value=r.nativeMaxFps===60?60:30;
+          nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
@@ -562,7 +564,7 @@ function connect(automatic = false) {
           const state = DesktopMediaStatus.parse(m);
           if(state.state==="images" && receiver && receiver.id!==state.id)return;
           mediaState.value = state.state;
-          mediaAudio.value = state.audio;
+          mediaAudio.value = state.audio;nativeUdpActive.value=state.datagrams===true;
           if (state.state === "images") {
             if(mediaTransport.value==="native"&&state.reason==="unavailable")error.value="GPU動画を利用できないため画像配信に戻しました";
             else if(mediaTransport.value==="native"&&state.reason==="congested")error.value="動画の描画待ちが続いたため画像配信に戻しました";
@@ -605,7 +607,7 @@ function connect(automatic = false) {
                   releaseInputs();
                 }
               },
-              state.iceServers as RTCIceServer[] | undefined,
+              state.iceServers as RTCIceServer[] | undefined,state.datagrams===true,
             );
           }
         } else if (m.type === "rtc_signal") {
@@ -614,7 +616,8 @@ function connect(automatic = false) {
             await receiver.signal(signal.signal as Parameters<DesktopMediaReceiver["signal"]>[0]);
         } else if (m.type === "media_stream") {
           const stream = DesktopMediaStream.parse(m);
-          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window);else receiver.stream(stream.generation, stream.mime);}
+          if (receiver?.id === stream.id) {if(stream.mime==="video/h264")receiver.nativeStream(stream.generation,stream.codec,stream.width,stream.height,stream.window,stream.datagrams===true);else receiver.stream(stream.generation, stream.mime);}
+        } else if(m.type==="native_frame_notice"){const notice=DesktopNativeFrameNotice.parse(m);if(receiver?.id===notice.id)receiver.notice(notice);
         } else if(m.type==="native_video_stats") {
           const stats=DesktopNativeVideoStats.parse(m);if(receiver?.id===stats.id)nativeStats.value=stats;
         } else if (m.type === "media_unavailable")
@@ -1022,6 +1025,8 @@ onBeforeUnmount(() => {
             min="128"
             max="12000"
         /></label>
+        <label v-if="mediaTransport==='native'&&nativeDatagrams"><input v-model="nativeUdp" type="checkbox" /> UDPを優先（利用できない場合はWSS）</label>
+        <span v-if="nativeUdpActive" data-native-datagrams>UDP / H.264</span>
         <label v-if="mediaTransport==='native'&&nativeMaxFps===60">動画FPS上限<select v-model="nativeFps" aria-label="動画FPS上限"><option :value="30">30 fps</option><option :value="60">60 fps</option></select></label>
         <button @click="requestVideo">動画共有を依頼</button
         ><button @click="stopVideo">動画・音声を停止</button>

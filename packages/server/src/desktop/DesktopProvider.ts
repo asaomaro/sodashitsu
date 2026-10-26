@@ -117,7 +117,7 @@ export class DesktopProvider {
       extendedInput: true,
       imageLane: true,
       videoLane: true,
-      nativeVideo: true,
+      nativeVideo: true,nativeDatagrams:true,
       nativeInputFreshness: true,
       nativeVideoWindow: 3 as const,
       nativeMaxFps: 60 as const,
@@ -264,6 +264,7 @@ export class DesktopProvider {
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
+          if((m.type==="rtc_signal"||m.type==="media_fallback")&&s.ready&&!s.secureDesktop&&s.native?.fromViewer(m))return;
           if(m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
             if(!s.ready||s.secureDesktop){this.send(s,{type:"media_unavailable"});return;}
             else {
@@ -436,7 +437,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              nativeVideo,
+              nativeVideo,nativeDatagrams,
               nativeVideoWindow,
               nativeMaxFps,
               cursor,
@@ -451,11 +452,13 @@ export class DesktopProvider {
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
+            const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,datagrams:udpEnabled,iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(nativeEnabled?{nativeVideo:true}:{}),
+              ...(udpEnabled?{nativeDatagrams:true}:{}),
               ...(nativeWindow===3?{nativeVideoWindow:3}:{}),
               ...(nativeRate?{nativeMaxFps:nativeRate}:{}),
               ...(s.cursor?{cursor:true}:{}),
@@ -560,6 +563,7 @@ export class DesktopProvider {
       options,
       captureBackends: ["dxgi"],
       inputAckPipe: true,
+      nativeDatagrams:options.nativeDatagrams===true&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
       ...(options.nativeMaxFps===60&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
       allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,

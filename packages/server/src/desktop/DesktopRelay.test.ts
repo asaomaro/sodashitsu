@@ -14,7 +14,7 @@ import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
 import type { Writable } from "node:stream";
-import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
+import { decodeDesktopFrame, DESKTOP_IME_PROTOCOL, DesktopReady, DesktopOptions, DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL, DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL, DESKTOP_VIDEO_LANE_PROTOCOL, DESKTOP_DATAGRAM_PROTOCOL, DESKTOP_IMAGE_LANE_PROTOCOL, DESKTOP_NATIVE_RATE_PROTOCOL, DESKTOP_CURSOR_PROTOCOL, isDesktopCursor, encodeDesktopCursor, decodeDesktopMediaChunk, isDesktopMediaChunk } from "@sodashitsu/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -117,8 +117,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" = false) {
-    const ws = new WebSocket(endpoint, ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" = false) {
+    const ws = new WebSocket(endpoint, ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -695,4 +695,35 @@ it("image channel cannot send controls and losing an active channel closes its p
  image.send(JSON.stringify({type:"input",seq:1,input:{kind:"key",code:"F13",down:true}}));
  await expect.poll(()=>image.readyState).toBe(WebSocket.CLOSED);await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
  const recorded=await readFile(f.record,"utf8").catch(()=>"");expect(recorded).not.toContain('"code":"F13"');
+});
+
+it.each(["viewer","provider","helper","secure"])("native datagrams require current viewer/provider/helper and normal desktop, missing=%s",async missing=>{
+ const f=await fixture(true,missing==="provider",true,missing==="secure",true,false,undefined,undefined,true,false,true,false,true);
+ const cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,...(missing==="helper"?[]:["--native-datagrams"])]});
+ const v=await f.viewer(missing==="viewer"?"native":"udp");v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeDatagrams");if(missing==="viewer"||missing==="provider")expect(f.startRequests[0]!.options).not.toHaveProperty("nativeDatagrams");v.send({type:"stop"});
+});
+it("dropped/parent ACKs cannot renew native freshness, while validated source draw ACKs can",async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,"--native-datagrams"]});
+ const v=await f.viewer("udp");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")?.nativeDatagrams).toBe(true);
+ const server=Array.from((f.relay as any).viewers)[0] as any,id="22222222-2222-4222-8222-222222222222";
+ const emit=(m:unknown)=>server.provider.emit("message",Buffer.from(JSON.stringify(m)),false);
+ emit({type:"media_status",id,state:"native",audio:false,datagrams:true});emit({type:"media_stream",id,generation:1,mime:"video/h264",codec:"avc1.42041f",width:640,height:360,window:3,datagrams:true});
+ emit({type:"native_frame_notice",id,generation:1,seq:1,bytes:100});expect(server.media.pending).toEqual([1]);
+ emit({type:"native_draw_ack",id,generation:1,seq:1,dropped:true});expect(server.media.pending).toEqual([]);expect(server.media.drawnAt).toBeUndefined();
+ emit({type:"native_frame_notice",id,generation:1,seq:2,bytes:100});emit({type:"native_draw_ack",id,generation:1,seq:2});expect(server.media.drawnAt).toBeTypeOf("number");
+ emit({type:"native_frame_notice",id,generation:1,seq:3,bytes:100});v.send({type:"native_video_ack",id,generation:1,seq:3,dropped:true});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
+});
+
+it.each(["native_frame_notice","native_draw_ack","native_transport_reset"])("ignores a retired native %s after parent stop overtakes buffered metadata",async type=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),v=await f.viewer("udp");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ const server=Array.from((f.relay as any).viewers)[0] as any,id="22222222-2222-4222-8222-222222222222";
+ // A received a native stream, then the parent's stop precedes a delayed
+ // packet on the independent bulk socket. These are server-side state checks.
+ server.media={id,generation:1,seq:1,native:true,datagrams:true,pending:[1],window:3,sentAt:new Map([[1,performance.now()]])};server.requestedNative=true;
+ v.send({type:"media",enabled:false});await expect.poll(()=>server.media).toBeUndefined();expect(server.retiredMedia.has(id)).toBe(true);
+ const fail=vi.fn();server.videoActive=true;server.videoLane={fail,close:()=>{},buffered:()=>0,send:()=>true};
+ const message=type==="native_frame_notice"?{type,id,generation:1,seq:2,bytes:100}:type==="native_draw_ack"?{type,id,generation:1,seq:1}:{type,id};
+ server.receiveVideo(Buffer.from(JSON.stringify(message)),false);
+ expect(fail).not.toHaveBeenCalled();expect(v.ws.readyState).toBe(WebSocket.OPEN);expect(server.media).toBeUndefined();v.send({type:"stop"});
 });

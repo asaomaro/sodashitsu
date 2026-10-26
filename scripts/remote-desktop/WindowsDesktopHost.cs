@@ -273,6 +273,7 @@ public static class SodaDesktopHost {
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
+        bool nativeDatagrams=nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
         int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
@@ -287,7 +288,7 @@ public static class SodaDesktopHost {
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(separateCursor)ready["cursor"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
-            if(nativeCeiling)ready["nativeVideo"]=true;
+            if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
             if(nativePipeline)ready["nativeVideoWindow"]=3;
@@ -341,6 +342,10 @@ public static class SodaDesktopHost {
                                 try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                             } else if(videoId==requested) {commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                        }
+                        else if(type=="native_keyframe"||type=="native_bitrate") {
+                            if(!nativeDatagrams)throw new InvalidOperationException("Native datagrams not permitted");
+                            if(video!=null&&(string)msg["id"]==videoId)try{if(type=="native_keyframe")video.ForceKeyFrame();else {int rate=Num(msg,"kbps");if(rate>videoBitrate)throw new InvalidOperationException("Video bitrate ceiling");video.SetBitrate(rate);}}catch{commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                         }
                         else if(type=="native_video_ack") {
                             if(video!=null && (string)msg["id"]==videoId) {videoWindow.Ack(Convert.ToInt64(msg["seq"]));}
@@ -1157,6 +1162,8 @@ public sealed class SodaDesktopH264 : IDisposable {
         finally {Release(ref type);}
         Check(Method<Message>(transform,23)(transform,0x10000000,UIntPtr.Zero));Check(Method<Message>(transform,23)(transform,0x10000003,UIntPtr.Zero));
     }
+    public void ForceKeyFrame(){if(disposed)throw new ObjectDisposedException("SodaDesktopH264");Codec("398c1b98-8353-475a-9ef2-8f265d260345",1);}
+    public void SetBitrate(int kbps){if(disposed)throw new ObjectDisposedException("SodaDesktopH264");if(kbps<128||kbps>12000)throw new ArgumentOutOfRangeException("kbps");Codec("f7222374-2144-4815-b550-a37f8e12ee52",(uint)kbps*1000);}
     void Codec(string key,uint value,bool boolean=false) {
         IntPtr api=IntPtr.Zero,variant=Marshal.AllocCoTaskMem(32);
         try {api=Query(transform,"901db4c7-31ce-41a2-85dc-8fa0bf41b8da");for(int i=0;i<32;i++)Marshal.WriteByte(variant,i,0);Marshal.WriteInt16(variant,boolean?(short)11:(short)19);if(boolean)Marshal.WriteInt16(variant,8,value!=0?(short)-1:(short)0);else Marshal.WriteInt32(variant,8,(int)value);Guid id=new Guid(key);Check(Method<CodecValue>(api,9)(api,ref id,variant));}
