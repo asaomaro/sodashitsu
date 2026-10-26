@@ -65,3 +65,16 @@ protected_output_gate_passed: generated frame blocked after scope transition whi
 protected_scope_checks_passed: canonical v2 tuple/ack, modes/purpose, owner/logon/session/process/nonce, post-encode epoch, irreversible revocation, no keyup after scope loss; fake facts only
 protected_private_marker_delivery_passed: own private WinEvents only; no screen capture/input/lock/session or service changes
 ```
+
+## 最終検証
+
+- source 028ea42509d46a1931af8a597d37b39e7773c07aを固定。以後の変更は記録のみ。
+- pnpm build / pnpm typecheck: 成功。
+- 全体771 suites / 11,530 tests 成功、324.56秒。
+- 別worktree /workspaces/sodashitsu-desktop-protected-checkで028ea425のbuild / smoke PASS。
+- 接続元とsr-pcの両方でprivate marker実配送/timeout試験成功。sr-pcではTEMP archiveのみ使用、helper/broker compile-only・generated scope/Host・既存helper/pipe/input/monitor checksも成功（exit0/timeout false）。repo HEAD06189c3f、tracked status空を維持。
+- Windows CI: https://github.com/asaomaro/sodashitsu/actions/runs/40344360115 と https://github.com/asaomaro/sodashitsu/actions/runs/40344941427 成功。
+- 独立レビュー、修正再点検、negative復元後のsource確認通過。
+- 前PRのブラウザ5件からHost/UI/TSに追加変更がないためE2Eは重複実行しない。新しく実行したnative診断の検証範囲は、Default上の自分の非表示window/WinEventに限定する。
+
+第7段階のworker/service/local permission/protocol/UI接続は未完了で、RunProtectedはまだproduction未接続。実UAC、Winlogon上の監視配送、実画面切替は未確認。
