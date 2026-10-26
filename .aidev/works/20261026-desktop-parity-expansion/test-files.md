@@ -4,7 +4,7 @@
 
 事前単体: 7 suites / 38 tests通過（設定保存/範囲/通常ファイル/同名拒否/SHA256/abort/最後のfd.stat中取消/idle/一覧race/control queue/TUI設定）。browser: roundtrip/pause-resume/cancel/no-overwriteの4件通過、追加multi-pauseも単独で通過（5pausedを21秒進めてstatus5件と解除後temporary削除をDOM/browser framesで確認）。multi-pause初回はclock導入がtimer生成より遅くstatus0で失敗、clockをgoto前へ移動してtimerを実際に進める検証へ訂正した。
 
-最終build/typecheck/full/unit/E2E/独立worktree smoke/Windows generated file testsは実行前。
+最終pnpm build/typecheck成功。全体764 suites / 11482 tests成功（369.89秒）。ファイル5件＋clipboard8件のbrowser E2E計13件成功（1.3分）。別worktreeのbuild/smoke成功。sr-pcは稼働側を変更せず独立worktreeでbuildし、生成ファイル8件成功（junction/ancestor拒否、binary転送、取消/最終fence/expiryを含む）。稼働側はmain b69eabf3/cleanを維持した。
 
 ## 取消の仕様
 
@@ -362,5 +362,59 @@ AssertionError: expected "vi.fn()" to be called once, but got 0 times
       Tests  1 failed | 4 skipped (5)
    Start at  13:51:00
    Duration  823ms (transform 55%, import 22%, environment 21%, tests 1%, worker 1%)
+
+```
+
+## Windowsの短縮パス修正
+
+sr-pcのTEMPは8.3表記、realpathは長い名前を返し、旧比較は通常フォルダを拒否した。旧固定版cd3a3cb1で生成7件すべて失敗を確認し、0033892fでWindowsの各ancestor lstat/identity再検査とcanonical rootへの固定を追加。rootとancestor junctionも拒否しつつ、同じ7件＋junctionケース計8件が通過した。B稼働treeを変更していない。初回PS試験はstderrのVite警告をErrorAction Stopが実行エラー扱いしたため、nativeコマンド時だけContinue＋実exitCode確認へ試験の包みを訂正した。
+
+以下は旧版Windows失敗のtraceback末尾の生出力。個人名を含む実行場所JSONはローカルの検証ログに保持し、この記録へ載せない。
+
+```text
+    [90m 45|[39m       throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+    [90m   |[39m             [31m^[39m
+    [90m 46|[39m     return new DesktopFiles(canonical, await directoryGuard(canonical)…
+    [90m 47|[39m   }
+[90m [2m❯[22m setup src/desktop/DesktopFiles.test.ts:[2m16:17[22m[39m
+[90m [2m❯[22m src/desktop/DesktopFiles.test.ts:[2m102:13[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[42m @sodashitsu/server [49m[39m src/desktop/DesktopFiles.test.ts[2m > [22man abort
+ during the final fd stat is fenced before the OS publish call
+[31m[1mRpcError[22m: リンクを経由する共有フォルダは使えません[39m
+[36m [2m❯[22m DesktopFiles.open src/desktop/DesktopFiles.ts:[2m45:13[22m[39m
+    [90m 43|[39m     const canonical = await realpath(root);
+    [90m 44|[39m     if (canonical !== resolve(root) || (await lstat(root)).isSymbolicL…
+    [90m 45|[39m       throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+    [90m   |[39m             [31m^[39m
+    [90m 46|[39m     return new DesktopFiles(canonical, await directoryGuard(canonical)…
+    [90m 47|[39m   }
+[90m [2m❯[22m setup src/desktop/DesktopFiles.test.ts:[2m16:17[22m[39m
+[90m [2m❯[22m src/desktop/DesktopFiles.test.ts:[2m153:13[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m [30m[42m @sodashitsu/server [49m[39m src/desktop/DesktopFiles.test.ts[2m > [22mexpires 
+its viewer metadata together with abandoned file handles
+[31m[1mRpcError[22m: リンクを経由する共有フォルダは使えません[39m
+[36m [2m❯[22m DesktopFiles.open src/desktop/DesktopFiles.ts:[2m45:13[22m[39m
+    [90m 43|[39m     const canonical = await realpath(root);
+    [90m 44|[39m     if (canonical !== resolve(root) || (await lstat(root)).isSymbolicL…
+    [90m 45|[39m       throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+    [90m   |[39m             [31m^[39m
+    [90m 46|[39m     return new DesktopFiles(canonical, await directoryGuard(canonical)…
+    [90m 47|[39m   }
+[90m [2m❯[22m setup src/desktop/DesktopFiles.test.ts:[2m16:17[22m[39m
+[90m [2m❯[22m src/desktop/DesktopFiles.test.ts:[2m182:15[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m7 failed[39m[22m[2m | [22m[33m1 skipped[39m[90m (8)[39m
+[2m   Start at [22m 14:01:54
+[2m   Duration [22m 771ms[2m (transform 58%, import 39%, tests 2%, worker 1%)[22m
 
 ```
