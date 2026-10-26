@@ -1,5 +1,6 @@
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
 import { z } from "zod";
+import {DesktopNativeAudioControl} from "./desktopAudio.js";
 import {
   DesktopMediaRequest,
   DesktopNativeVideoAck,
@@ -40,6 +41,7 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    nativeAudio: z.literal(true).optional(),
     nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
     nativeVideoWindow: z.literal(3).optional(),
@@ -71,6 +73,7 @@ export function isExtendedDesktopInput(input: RemoteDesktopInput): boolean {
   return input.kind === "pointer" ? input.button > 2 : input.kind === "key" && !legacyKeyPattern.test(input.code);
 }
 export const RemoteDesktopViewerMessage = z.union([
+  DesktopNativeAudioControl,
   DesktopMediaRequest,
   DesktopNativeVideoAck,
   DesktopMediaSignal,
@@ -116,6 +119,7 @@ export const DesktopReady = z
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
+    nativeAudio:z.literal(true).optional(),
     nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
     nativeVideoWindow: z.literal(3).optional(),
@@ -230,6 +234,7 @@ export interface DesktopResults {
     imageSettings?: boolean;
     imeKeys?: boolean;
     extendedInput?: boolean;
+    nativeAudio?: boolean;
     nativeDatagrams?: boolean;
     nativeVideo?: boolean;
     nativeVideoWindow?: 3;

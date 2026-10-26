@@ -110,6 +110,7 @@ export const DesktopMediaStatus = z
     reason: z.enum(["requested", "stopped", "unavailable", "congested", "ended"]).optional(),
     iceServers: DesktopIceServers.optional(),
     datagrams: z.literal(true).optional(),
+    nativeAudio:z.literal(true).optional(),
   })
   .strict();
 export const DesktopMediaStream = z.union([

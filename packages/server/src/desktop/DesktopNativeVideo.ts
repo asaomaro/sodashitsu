@@ -1,3 +1,5 @@
+import {DesktopNativeAudio} from "./DesktopNativeAudio.js";
+import {DesktopNativeAudioControl} from "@sodashitsu/protocol";
 import {DesktopNativeDatagrams} from "./DesktopNativeDatagrams.js";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
@@ -40,7 +42,7 @@ export class DesktopNativeVideo {
     | {
         id: string;
         settings: import("@sodashitsu/protocol").DesktopMediaSettings;
-        peer?:DesktopNativeDatagrams;
+        peer?:DesktopNativeDatagrams;audio?:DesktopNativeAudio;
         started:boolean;
         bitrate:number;adaptAt:number;acks:number;losses:number;maxAck:number;
         seq: number;
@@ -65,7 +67,7 @@ export class DesktopNativeVideo {
   constructor(
     private hooks: {
       enabled: boolean;
-      datagrams?:boolean;
+      datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;
       iceServers?:z.infer<typeof DesktopIceServers>;
       window?: 1 | 3;
       width: number;
@@ -83,6 +85,9 @@ export class DesktopNativeVideo {
   fromViewer(raw: unknown): boolean {
     const m = raw as { type: string; enabled?: boolean; settings?: unknown };
     if((m.type==="rtc_signal"||m.type==="media_fallback")&&this.retired.has((raw as {id:string}).id))return true;
+    if(m.type==="native_audio_control"){
+      const control=DesktopNativeAudioControl.parse(raw),s=this.active;if(s?.id===control.id&&this.hooks.audioEnabled){s.settings.audio=false;s.audio?.stop();}return true;
+    }
     if(m.type==="rtc_signal"){
       const active=this.active;if(!active?.peer)return false;
       void active.peer.signal(raw).catch(()=>this.fallback(active));return true;
@@ -102,7 +107,7 @@ export class DesktopNativeVideo {
     if (settings.transport !== "native") return false;
     const id = randomUUID();
     const fps=settings.fps??this.hooks.fps;
-    if (!this.hooks.enabled || settings.audio || fps>(this.hooks.maxFps??this.hooks.fps)) {
+    if (!this.hooks.enabled || (settings.audio&&!this.hooks.audioEnabled) || fps>(this.hooks.maxFps??this.hooks.fps)) {
       this.hooks.send({
         type: "media_status",
         id,
@@ -124,9 +129,9 @@ export class DesktopNativeVideo {
     };
     const active=this.active;
     const udp=settings.udp===true&&this.hooks.datagrams===true;
-    this.hooks.send({type:"media_status",id,state:"negotiating",audio:false,...(udp?{datagrams:true,iceServers:this.hooks.iceServers??[]}: {})});
+    this.hooks.send({type:"media_status",id,state:"negotiating",audio:false,...(settings.audio?{nativeAudio:true}:{}),...(udp?{datagrams:true,iceServers:this.hooks.iceServers??[]}: {})});
     if(udp){
-      active.peer=new DesktopNativeDatagrams({id,iceServers:this.hooks.iceServers??[],send:value=>this.hooks.send(value),
+      active.peer=new DesktopNativeDatagrams({id,audio:settings.audio,audioFailed:()=>{if(this.active===active){active.settings.audio=false;active.audio?.stop(false);this.hooks.send({type:"native_audio_status",id,state:"unavailable"});}},iceServers:this.hooks.iceServers??[],send:value=>this.hooks.send(value),
         ready:()=>{if(this.active===active)this.begin(active);},
         ack:value=>{if(this.active===active)this.ack(value,true);},
         keyframe:()=>{if(this.active===active&&active.started)this.hooks.write({type:"native_keyframe",id});},
@@ -138,6 +143,9 @@ export class DesktopNativeVideo {
     if(this.active!==s||s.started)return;s.started=true;s.at=performance.now();
     this.hooks.policy(true);
     this.hooks.write({type:"native_video",enabled:true,id:s.id,bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
+    if(s.settings.audio&&this.hooks.audioEnabled)s.audio=new DesktopNativeAudio({id:s.id,synthetic:this.hooks.synthetic===true,active:()=>this.active===s&&s.settings.audio,videoTimestamp:()=>s.timestamp,
+      write:value=>this.hooks.write(value),state:state=>{if(this.active===s)this.hooks.send({type:"native_audio_status",id:s.id,state});},
+      send:bytes=>this.active===s&&(s.peer?s.peer.sendAudio(bytes):this.hooks.buffered()<=65536&&this.hooks.send(bytes))});
   }
   private fallback(s:NonNullable<DesktopNativeVideo["active"]>){
     if(this.active!==s||!s.peer)return;
@@ -205,7 +213,7 @@ export class DesktopNativeVideo {
     }
     if (!s.stream) {
       if (!frame.key || !frame.codec) throw Error("Native video requires initial SPS/IDR");
-      this.hooks.send({ type: "media_status", id: s.id, state: "native", audio: false,...(s.peer?{datagrams:true}:{}) });
+      this.hooks.send({ type: "media_status", id: s.id, state: "native", audio: false,...(s.settings.audio?{nativeAudio:true}:{}),...(s.peer?{datagrams:true}:{}) });
       this.hooks.send({
         type: "media_stream",
         id: s.id,
@@ -257,7 +265,7 @@ export class DesktopNativeVideo {
     if (!s) return;
     this.active = undefined;
     this.retired.add(s.id);if(this.retired.size>32)this.retired.delete(this.retired.values().next().value!);
-    s.peer?.close();
+    s.audio?.stop(false);s.peer?.close();
     if(s.started){
     this.hooks.write({ type: "native_video", enabled: false, id: s.id });
     this.hooks.policy(false);
