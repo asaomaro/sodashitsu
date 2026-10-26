@@ -7,7 +7,7 @@ export const DESKTOP_DATAGRAM_BYTES = 16384;
 const HEADER = 20, PAYLOAD = DESKTOP_DATAGRAM_BYTES - HEADER;
 const magic = [83, 68, 85, 68];
 export const DesktopNativeFrameNotice = z.object({
-  type: z.literal("native_frame_notice"), id: z.string().uuid(), generation: z.literal(1),
+  type: z.literal("native_frame_notice"), id: z.string().uuid(), generation: z.number().int().min(1).max(0xffffffff),
   seq: z.number().int().min(1).max(0xffffffff), bytes: z.number().int().min(10).max(DESKTOP_MEDIA_CHUNK_LIMIT),
 }).strict();
 export const DesktopNativeDrawAck = DesktopNativeVideoAck.omit({type:true}).extend({type:z.literal("native_draw_ack")}).strict();

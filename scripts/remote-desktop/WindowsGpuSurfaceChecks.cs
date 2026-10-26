@@ -26,7 +26,7 @@ namespace SodaDesktopTests {
   static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
   static void Set(SodaDesktopDxgi capture,string name,object value){typeof(SodaDesktopDxgi).GetField(name,Private).SetValue(capture,value);}
   static IntPtr Field(SodaDesktopDxgi capture,string name){return (IntPtr)typeof(SodaDesktopDxgi).GetField(name,Private).GetValue(capture);}
-  public static void Run(string fixture,int width=640,int height=360,int fps=30) {
+  public static void Run(string fixture,int width=640,int height=360,int fps=30,string adaptiveFixture=null) {
    int returned=0;var owned=new SodaDesktopDxgi.GpuFrame(IntPtr.Zero,()=>returned++);owned.BeginEncode();owned.Dispose();Check(returned==0,"Dispose reused a frame still owned by MF");
    bool duplicate=false;try{owned.BeginEncode();}catch(InvalidOperationException){duplicate=true;}Check(duplicate,"MF-owned GPU frame submitted twice");
    var retire=new SodaDesktopH264.RetireFrame(owned);retire.Invoke(IntPtr.Zero);retire.Invoke(IntPtr.Zero);owned.Dispose();Check(returned==1,"MF callback did not return frame exactly once");
@@ -102,6 +102,30 @@ namespace SodaDesktopTests {
     // asynchronous. Holding all four verifies there are no stranded busy slots.
     leases.Clear();try{for(int i=0;i<4;i++)leases.Add((SodaDesktopDxgi.GpuFrame)render.Invoke(capture,new object[]{0,0,false}));}finally{foreach(var lease in leases)lease.Dispose();}
     if(!String.IsNullOrEmpty(fixture))File.WriteAllText(fixture,new JavaScriptSerializer().Serialize(new {width,height,packets}),new System.Text.UTF8Encoding(false));
+    if(!String.IsNullOrEmpty(adaptiveFixture)){
+     int nextWidth=(int)Math.Floor(width*.75/2)*2,nextHeight=(int)Math.Round(height*(double)nextWidth/width/2)*2;
+     var originalPool=typeof(SodaDesktopDxgi).GetField("surfaces",Private).GetValue(capture);
+     using(var busy=(SodaDesktopDxgi.GpuFrame)render.Invoke(capture,new object[]{0,0,false})){
+      Check(!capture.ConfigureVideoOutput(nextWidth,nextHeight,0),"Busy MF pool was replaced");
+      Check(Object.ReferenceEquals(originalPool,typeof(SodaDesktopDxgi).GetField("surfaces",Private).GetValue(capture)),"Busy pool ownership changed");
+      using(var other=(SodaDesktopDxgi.GpuFrame)render.Invoke(capture,new object[]{0,0,false}))Check(other.Texture!=busy.Texture,"Held GPU lease was reused after resize timeout");
+     }
+     Check(capture.ConfigureVideoOutput(nextWidth,nextHeight),"Released pool did not resize");Check(capture.TryEnableGpuSurfaces(),"Resized GPU surfaces unavailable");
+     var nextPackets=new List<object>();
+     using(var encoder=SodaDesktopH264.CreateForDesktop(nextWidth,nextHeight,fps,2500,capture)){
+      Check(encoder.GpuInput,"Resize lost GPU input");
+      for(int frame=0;frame<4;frame++){
+       using(var lease=(SodaDesktopDxgi.GpuFrame)render.Invoke(capture,new object[]{10,10,false})){
+        var packet=encoder.EncodeGpuFrame(lease,3000000+(long)Math.Round(frame*1000000.0/fps),0);
+        if(frame==0)Check(packet.key&&packet.codec!=null,"Resized SPS/IDR missing");
+        nextPackets.Add(new {key=packet.key,codec=packet.codec,data=Convert.ToBase64String(packet.data)});
+       }
+      }
+     }
+     Check((int)typeof(SodaDesktopDxgi).GetField("width",Private).GetValue(capture)==width&&(int)typeof(SodaDesktopDxgi).GetField("height",Private).GetValue(capture)==height,"Video resize changed snapshot dimensions");
+     File.WriteAllText(adaptiveFixture,new JavaScriptSerializer().Serialize(new {profiles=new object[]{new {width,height,packets},new {width=nextWidth,height=nextHeight,packets=nextPackets}}}),new System.Text.UTF8Encoding(false));
+     Check(capture.ConfigureVideoOutput(width,height),"Original output did not recover");
+    }
     capture.DisableGpuSurfaces();
     var memoryTimings=new List<double>();var memory=new byte[width*height*3/2];var readback=typeof(SodaDesktopDxgi).GetMethod("RenderNv12",Private);
     using(var encoder=new SodaDesktopH264(width,height,fps,2500))for(int frame=0;frame<90;frame++) {

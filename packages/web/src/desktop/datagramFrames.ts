@@ -5,6 +5,7 @@ export class DesktopDatagramFrames {
  private frames=new Map<number,Frame>();
  private next=1;private noticeSeq=0;private key=true;private dead=false;
  constructor(private hooks:{now():number;frame(seq:number,bytes:Uint8Array):void;drop(seq:number):void;keyframe():void},private ready=true){}
+ reset(baseSeq:number){if(this.dead||!Number.isInteger(baseSeq)||baseSeq<0||baseSeq>=0xffffffff)throw Error("Native sequence base");this.frames.clear();this.next=baseSeq+1;this.noticeSeq=baseSeq;this.key=true;}
  start(){this.ready=true;this.tick();}
  private entry(seq:number,total:number,count:number){
   if(this.dead||seq<this.next)return;

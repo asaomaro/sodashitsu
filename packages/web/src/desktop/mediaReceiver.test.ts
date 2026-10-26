@@ -101,3 +101,24 @@ it("isolates malformed audio on WSS from video and ignores audio after stop",()=
  const send=vi.fn(),state=vi.fn(),audioState=vi.fn(),id="22222222-2222-4222-8222-222222222222",receiver=new DesktopMediaReceiver(id,send,()=>{},state,[],false,true,audioState),audio={push:vi.fn(()=>{throw Error("bad audio packet");}),stop:vi.fn()};
  try{(receiver as any).audio=audio;expect(()=>receiver.audioChunk(new Uint8Array([1]))).not.toThrow();expect(audioState).toHaveBeenCalledWith("unavailable");expect(send).toHaveBeenCalledExactlyOnceWith({type:"native_audio_control",id,enabled:false});expect(state).not.toHaveBeenCalled();expect((receiver as any).stopped).toBe(false);receiver.stop();expect(()=>receiver.audioChunk(new Uint8Array())).not.toThrow();}finally{receiver.stop();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;vi.unstubAllGlobals();}
 });
+
+it('waits up to three seconds for a new decoder format without accepting retired decoder callbacks',async()=>{
+ vi.useFakeTimers();const now=vi.spyOn(performance,'now').mockReturnValue(1000);
+ const decoders:VideoDecoderInit[]=[];let resolve!:()=>void;
+ vi.stubGlobal('VideoDecoder',class{state='configured';static async isConfigSupported(config:VideoDecoderConfig){if(config.codedWidth===960)await new Promise<void>(r=>resolve=r);return {supported:true};}constructor(init:VideoDecoderInit){decoders.push(init);}configure(){}decode(){}close(){this.state='closed';}});
+ vi.stubGlobal('EncodedVideoChunk',class{});
+ vi.stubGlobal('RTCPeerConnection',class{close(){}});
+ Object.defineProperty(HTMLVideoElement.prototype,'requestVideoFrameCallback',{configurable:true,value:()=>1});Object.defineProperty(HTMLVideoElement.prototype,'cancelVideoFrameCallback',{configurable:true,value:()=>{}});
+ const id='22222222-2222-4222-8222-222222222222',send=vi.fn(),state=vi.fn(),draw=vi.fn(),receiver=new DesktopMediaReceiver(id,send,draw,state);
+ try{
+  receiver.nativeStream(1,'avc1.42041f',1280,800,3);await Promise.resolve();
+  const {encodeDesktopMediaChunk,encodeDesktopH264Packet}=await import('@sodashitsu/protocol');
+  receiver.chunk(encodeDesktopMediaChunk(1,1,encodeDesktopH264Packet(1000,true,new Uint8Array([1,2]))));
+  decoders[0]!.output({timestamp:1000,displayWidth:1280,displayHeight:800,close(){}} as VideoFrame);
+  receiver.profilePending({type:'native_profile_pending',id,generation:2});receiver.nativeStream(2,'avc1.420420',960,600,3,false,1);
+  now.mockReturnValue(3500);await vi.advanceTimersByTimeAsync(500);expect(state).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalledWith(expect.objectContaining({type:'native_format_ack'}));
+  decoders[0]!.error(new DOMException('retired decoder'));expect(state).not.toHaveBeenCalled();
+  resolve();await Promise.resolve();await Promise.resolve();expect(send).toHaveBeenCalledWith({type:'native_format_ack',id,generation:2,baseSeq:1});
+  now.mockReturnValue(4100);await vi.advanceTimersByTimeAsync(500);expect(state).toHaveBeenCalledWith('images');
+ }finally{receiver.stop();now.mockRestore();vi.useRealTimers();vi.unstubAllGlobals();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;}
+});

@@ -128,6 +128,7 @@ export const DesktopMediaStream = z.union([
       id: z.string().uuid(),
       generation: z.number().int().min(1).max(0xffffffff),
       mime: z.literal("video/h264"),
+      baseSeq:z.number().int().min(0).max(0xffffffff-1).optional(),
       datagrams: z.literal(true).optional(),
       window: z.literal(3).optional(),
       codec: z.string().regex(/^avc1\.[0-9a-f]{6}$/),

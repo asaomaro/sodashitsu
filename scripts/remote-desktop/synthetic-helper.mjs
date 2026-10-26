@@ -1,4 +1,4 @@
-let nativeCadence=false;
+let nativeCadence=false,nativeAdaptive=false;
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
 import { createServer } from "node:net";
 import { chmodSync, unlinkSync } from "node:fs";
@@ -108,7 +108,7 @@ function run() {
     sentVersion = -1,
     lastReport = 0,
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
-  const nativeAt=process.argv.indexOf("--native-fixture"),nativeFixture=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined;
+  const nativeAt=process.argv.indexOf("--native-fixture"),nativeRaw=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined,nativeProfiles=nativeRaw?.profiles??(nativeRaw?[nativeRaw]:[]),nativeFixture=nativeProfiles[0];
   let richState,richVersion=0,richValue={text:"B generated table",html:'<table><tr><td style="color:green">B generated table</td></tr></table>',rtf:Buffer.from("{\\rtf1 generated}").toString("base64"),png:syntheticFrame(32,32,1,[0,255,0]).data};
   const clearRich=()=>{if(richState?.data)richState.data.fill(0);richState=undefined;};
   const rich=m=>{
@@ -188,12 +188,13 @@ function run() {
             return;
           }
         }
-        options = m.options;nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
+        nativeAdaptive=m.nativeAdaptive===true&&process.argv.includes("--native-adaptive")&&!secure;
+        options = m.options;if(nativeAdaptive&&nativeFixture)options={...options,syntheticHeight:Math.round(nativeFixture.height*options.width/nativeFixture.width)};nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
         if(m.allowMonitors===true&&options.monitors===true&&process.argv.includes("--monitors")&&!secure){
           let monitors=[{id:"left",x:-640,y:-200,width:640,height:480,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:800,height:600,primary:true,scalePercent:150}];if(process.argv.includes("--monitors-one"))monitors=monitors.filter(v=>v.primary);const selected=options.monitorDevice??"right",item=monitors.find(v=>v.id===selected);
           if(selected!=="all"&&!item)throw Error("Monitor missing");const lx=Math.min(...monitors.map(v=>v.x)),ly=Math.min(...monitors.map(v=>v.y)),rx=Math.max(...monitors.map(v=>v.x+v.width)),by=Math.max(...monitors.map(v=>v.y+v.height));const bounds=selected==="all"?{x:lx,y:ly,width:rx-lx,height:by-ly}:{x:item.x,y:item.y,width:item.width,height:item.height};monitorLayout={selected,bounds,allSupported:true,monitors};const width=Math.min(options.width,bounds.width);options={...options,width,syntheticHeight:Math.round(bounds.height*width/bounds.width)};
         }else if(options.monitorDevice&&!secure&&process.argv.includes("--monitors"))throw Error("Monitor not permitted");
-        const modes = [{width:640,height:480},{width:800,height:600},{width:1024,height:768},{width:1280,height:720},{width:1600,height:900},{width:1920,height:1080}];
+        const modes = nativeAdaptive?[{width:nativeFixture.width,height:nativeFixture.height}]:[{width:640,height:480},{width:800,height:600},{width:1024,height:768},{width:1280,height:720},{width:1600,height:900},{width:1920,height:1080}];
         const displayAllowed = !secure && (!monitorLayout||monitorLayout.monitors.length===1) && process.argv.includes("--allow-display-resize") && m.allowDisplayResize === true;
         if (options.display) {
           if (!displayAllowed || !modes.some(mode => mode.width === options.display.width && mode.height === options.display.height)) throw Error("display not allowed");
@@ -209,6 +210,7 @@ function run() {
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
+          ...(nativeFixture&&nativeAdaptive?{nativeAdaptive:true}:{}),
           ...(nativeFixture&&m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure?{nativeCadence:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
@@ -240,9 +242,15 @@ function run() {
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
         stopAudio();
-        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};
+        if(m.enabled&&nativeFixture&&!secure)native={generation:1,profile:0,barrier:undefined,lastTimestamp:-1,id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};
         else native=undefined;
       }
+      else if(m.type==="native_profile"&&native&&m.id===native.id){
+        const profile=nativeProfiles.findIndex(p=>p.width===m.width&&p.height===m.height);
+        if(!nativeAdaptive||native.barrier||profile<0||m.generation!==native.generation+1)throw Error("Native profile gate");
+        native.barrier={...m,profile,stage:"drain"};
+      }
+      else if(m.type==="native_profile_resume"&&native&&m.id===native.id){const b=native.barrier;if(!b||b.stage!=="prepared"||m.generation!==b.generation||m.baseSeq!==native.seq)throw Error("Native resume fence");native.generation=b.generation;native.profile=b.profile;native.index=0;native.fps=b.fps;native.barrier=undefined;}
       else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
       else if(m.type==="native_rate"&&native&&m.id===native.id){if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
@@ -292,10 +300,12 @@ function run() {
     const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}
     if (performance.now() - lastSeen > 8000) process.exit(0);
     if(options&&cursorEnabled&&performance.now()-lastCursor>=500)cursor();
-    if(options&&native&&native.pending.length<native.window&&performance.now()>=native.next) {
-      const packet=nativeFixture.packets[native.index++%nativeFixture.packets.length];
+    if(native?.barrier?.stage==="drain"&&!native.pending.length){const b=native.barrier,p=nativeProfiles[b.profile],packet=p.packets[0];b.stage="prepared";send({type:"native_profile_applied",id:native.id,generation:b.generation,baseSeq:native.seq,width:p.width,height:p.height,codec:packet.codec});}
+    if(options&&native&&!native.barrier&&native.pending.length<native.window&&performance.now()>=native.next) {
+      const fixture=nativeProfiles[native.profile],packet=fixture.packets[native.index++%fixture.packets.length];
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
-      send({type:"native_frame",id:native.id,seq:native.seq,timestamp:process.argv.includes("--native-audio")?Math.round((performance.now()-native.started)*1000):Math.round(native.seq*1000000/native.fps),key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:nativeFixture.width,height:nativeFixture.height,data:packet.data});
+      native.lastTimestamp=Math.max(native.lastTimestamp+1,Math.round((performance.now()-native.started)*1000));
+      send({type:"native_frame",...(nativeAdaptive?{generation:native.generation,captureMs:native.profile===0?55:5}:{}),id:native.id,seq:native.seq,timestamp:native.lastTimestamp,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:fixture.width,height:fixture.height,data:packet.data});
     }
     if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;

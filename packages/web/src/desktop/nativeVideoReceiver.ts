@@ -20,6 +20,7 @@ export class DesktopNativeVideoReceiver {
     private send: (value: unknown) => void,
     private draw: (frame: VideoFrame) => void,
     private fail: () => void,
+    private ready: () => void = () => {},
   ) {
     void this.initialize().catch(() => this.failure());
   }
@@ -41,6 +42,7 @@ export class DesktopNativeVideoReceiver {
     });
     this.decoder = decoder;
     decoder.configure(config);
+    this.ready();
     const queued = this.queued;
     this.queued = [];
     for (const frame of queued) this.push(frame.seq, frame.bytes, frame.at);

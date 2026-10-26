@@ -130,6 +130,7 @@ export class DesktopProvider {
       videoLane: true,
       nativeVideo: true,nativeDatagrams:true,nativeAudio:true,
       nativeInputFreshness: true,
+      nativeAdaptive: true,
       nativeCadence: true,
       nativeVideoWindow: 3 as const,
       nativeMaxFps: 60 as const,
@@ -299,7 +300,7 @@ export class DesktopProvider {
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
           if(m.type==="native_audio_control"&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);return;}
           if((m.type==="rtc_signal"||m.type==="media_fallback")&&s.ready&&!s.secureDesktop&&s.native?.fromViewer(m))return;
-          if(m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
+          if(m.type==="native_format_ack"||m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
             if(!s.ready||s.secureDesktop){this.send(s,{type:"media_unavailable"});return;}
             else {
               if(m.type==="media"&&m.settings?.transport==="native")this.companion.fromViewer(s,{type:"media",enabled:false});
@@ -477,7 +478,7 @@ export class DesktopProvider {
               extendedInput,
               monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
-              nativeMaxFps,nativeCadence,
+              nativeMaxFps,nativeCadence,nativeAdaptive,
               cursor,
               image: appliedImage,
               allowClipboard,
@@ -494,13 +495,14 @@ export class DesktopProvider {
             const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&cfg.allowMedia===true&&(process.platform==="win32"||ready.backend==="synthetic");
             const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,cadence:options.nativeCadence===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true}:{}),
+              ...(nativeEnabled&&options.nativeAdaptive&&nativeAdaptive?{nativeAdaptive:true}:{}),
               ...(udpEnabled?{nativeDatagrams:true}:{}),
               ...(audioEnabled?{nativeAudio:true}:{}),
               ...(nativeWindow===3?{nativeVideoWindow:3}:{}),
@@ -604,7 +606,7 @@ export class DesktopProvider {
         }
       }
     });
-    const {files:_files,nativeCadence:_nativeCadence,...helperOptions}=options;
+    const {files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:helperOptions,
@@ -614,6 +616,7 @@ export class DesktopProvider {
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
+      nativeAdaptive:options.nativeAdaptive===true&&cfg.allowNativeVideo===true,
       nativeCadence:options.nativeCadence===true&&cfg.allowNativeVideo===true,
       nativeDatagrams:options.nativeDatagrams===true&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,

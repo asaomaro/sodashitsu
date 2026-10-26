@@ -1,4 +1,5 @@
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
+import {DesktopNativeFormatAck} from "./desktopNativeAdaptive.js";
 import {DesktopMonitorLayout} from "./desktopMonitors.js";
 import { z } from "zod";
 import {DesktopNativeAudioControl} from "./desktopAudio.js";
@@ -50,6 +51,7 @@ export const DesktopOptions = z
     nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
     nativeVideoWindow: z.literal(3).optional(),
+    nativeAdaptive: z.literal(true).optional(),
     nativeCadence: z.literal(true).optional(),
     nativeMaxFps: z.literal(60).optional(),
     cursor: z.literal(true).optional(),
@@ -79,6 +81,7 @@ export function isExtendedDesktopInput(input: RemoteDesktopInput): boolean {
   return input.kind === "pointer" ? input.button > 2 : input.kind === "key" && !legacyKeyPattern.test(input.code);
 }
 export const RemoteDesktopViewerMessage = z.union([
+  DesktopNativeFormatAck,
   DesktopNativeAudioControl,
   DesktopMediaRequest,
   DesktopNativeVideoAck,
@@ -132,6 +135,7 @@ export const DesktopReady = z
     nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
     nativeVideoWindow: z.literal(3).optional(),
+    nativeAdaptive: z.literal(true).optional(),
     nativeCadence: z.literal(true).optional(),
     nativeMaxFps: z.literal(60).optional(),
     imageLane: z.literal(true).optional(),
@@ -255,6 +259,7 @@ export interface DesktopResults {
     nativeDatagrams?: boolean;
     nativeVideo?: boolean;
     nativeVideoWindow?: 3;
+    nativeAdaptive?: boolean;
     nativeCadence?: boolean;
     nativeMaxFps?: 60;
     cursor?: boolean;

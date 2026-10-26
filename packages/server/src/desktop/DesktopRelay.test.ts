@@ -764,3 +764,10 @@ it.each([[true,true],[true,false],[false,true]])('requires both B capability and
  expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('nativeCadence');
  v.send({type:'stop'});
 });
+
+it('negotiates resolution only for its viewer protocol, with unchanged ready for old viewers',async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true);
+ const cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,'--native-adaptive','--native-cadence']});
+ const v=await f.viewer('rate');v.send({...start,options:{...start.options,nativeAdaptive:true}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.startRequests[0]!.options.nativeAdaptive).toBeUndefined();expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('nativeAdaptive');v.send({type:'stop'});
+});
