@@ -214,3 +214,24 @@ it.each([false,true])("uses an independent 60fps ceiling only when helper capabi
  else {expect(write).not.toHaveBeenCalled();expect(send).toHaveBeenCalledWith(expect.objectContaining({state:"images",reason:"unavailable"}));}
  video.stop();
 });
+
+it.each([[true,true],[true,false],[false,true]])('changes cadence without restarting video, input or image policy only when opted in (%s/%s)',(cadence,adaptive)=>{
+ const clock=vi.spyOn(performance,'now').mockReturnValue(0);
+ try {
+  const write=vi.fn(),send=vi.fn((_value:unknown)=>true),policy=vi.fn();
+  const video=new DesktopNativeVideo({enabled:true,cadence,window:3,width:1280,sourceWidth:1600,sourceHeight:1000,fps:30,write,send,policy,buffered:()=>0});
+  video.fromViewer({type:'media',enabled:true,settings:{transport:'native',adaptive}});
+  const id=write.mock.calls.find(([m])=>m.type==='native_video')![0].id;
+  const template=fixture().frame;
+  for(let seq=1;seq<=24;seq++){
+   clock.mockReturnValue(seq*200);video.fromHelper({...template(id,seq),captureMs:50});
+   clock.mockReturnValue(seq*200+20);video.fromViewer({type:'native_video_ack',id,generation:1,seq});
+  }
+  const updates=write.mock.calls.filter(([m])=>m.type==='native_rate');
+  if(cadence&&adaptive)expect(updates).toEqual([[{type:'native_rate',id,fps:17,kbps:2500}]]);
+  else expect(updates).toEqual([]);
+  expect(policy.mock.calls).toEqual([[true]]);expect(write.mock.calls.filter(([m])=>m.type==='release')).toHaveLength(0);
+  expect(send.mock.calls.filter(([m])=>(m as {type?:string}).type==='media_stream')).toHaveLength(1);
+  video.stop();
+ }finally{clock.mockRestore();}
+});

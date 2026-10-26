@@ -1,3 +1,4 @@
+let nativeCadence=false;
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
 import { createServer } from "node:net";
 import { chmodSync, unlinkSync } from "node:fs";
@@ -187,7 +188,7 @@ function run() {
             return;
           }
         }
-        options = m.options;
+        options = m.options;nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
         if(m.allowMonitors===true&&options.monitors===true&&process.argv.includes("--monitors")&&!secure){
           let monitors=[{id:"left",x:-640,y:-200,width:640,height:480,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:800,height:600,primary:true,scalePercent:150}];if(process.argv.includes("--monitors-one"))monitors=monitors.filter(v=>v.primary);const selected=options.monitorDevice??"right",item=monitors.find(v=>v.id===selected);
           if(selected!=="all"&&!item)throw Error("Monitor missing");const lx=Math.min(...monitors.map(v=>v.x)),ly=Math.min(...monitors.map(v=>v.y)),rx=Math.max(...monitors.map(v=>v.x+v.width)),by=Math.max(...monitors.map(v=>v.y+v.height));const bounds=selected==="all"?{x:lx,y:ly,width:rx-lx,height:by-ly}:{x:item.x,y:item.y,width:item.width,height:item.height};monitorLayout={selected,bounds,allSupported:true,monitors};const width=Math.min(options.width,bounds.width);options={...options,width,syntheticHeight:Math.round(bounds.height*width/bounds.width)};
@@ -208,6 +209,7 @@ function run() {
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
+          ...(nativeFixture&&m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure?{nativeCadence:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
           ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
@@ -238,10 +240,11 @@ function run() {
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
         stopAudio();
-        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,window:m.window===3?3:1};
+        if(m.enabled&&nativeFixture&&!secure)native={id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};
         else native=undefined;
       }
       else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
+      else if(m.type==="native_rate"&&native&&m.id===native.id){if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
       else if (m.type === "keyframe") {forceFull = true;next=0;}

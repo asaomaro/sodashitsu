@@ -301,6 +301,7 @@ public static class SodaDesktopHost {
         SodaDesktopH264 video=null;string videoId=null;IDisposable audio=null;string audioId=null;
         IDisposable richClipboardWorker=null;System.Reflection.MethodInfo richSubmit=null;Type richType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopRichClipboard");
         bool richCeiling=clipboardCeiling&&richType!=null&&config.ContainsKey("richClipboard")&&config["richClipboard"] is bool&&(bool)config["richClipboard"];
+        SodaDesktopVideoRate videoRate=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
@@ -308,6 +309,7 @@ public static class SodaDesktopHost {
         bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
         int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0)audioCeiling=false;
         bool nativeDatagrams=nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
+        bool nativeCadence=nativeCeiling&&config.ContainsKey("nativeCadence")&&config["nativeCadence"] is bool&&(bool)config["nativeCadence"];
         int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
@@ -325,6 +327,7 @@ public static class SodaDesktopHost {
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
+            if(nativeCadence)ready["nativeCadence"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
             if(DeferNativeSnapshots)ready["deferNativeSnapshots"]=true;
             if(nativePipeline)ready["nativeVideoWindow"]=3;
@@ -394,9 +397,13 @@ public static class SodaDesktopHost {
                                 StopAudio(ref audio);audioId=null;
                                 if(!nativeCeiling)throw new InvalidOperationException("Native video not permitted");
                                 commands.EnableFast(false);if(video!=null){video.Dispose();video=null;}videoId=requested;videoSeq=0;videoNext=0;videoWindow=new SodaDesktopVideoWindow(nativePipeline&&msg.ContainsKey("window")&&Num(msg,"window")==3?3:1);
-                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
+                                try {videoFps=Num(msg,"fps");videoBitrate=Num(msg,"bitrateKbps");videoRate=new SodaDesktopVideoRate(videoFps,videoBitrate);if(videoFps>nativeRateCeiling)throw new InvalidOperationException("Video rate ceiling");video=SodaDesktopH264.CreateForDesktop(w,h,videoFps,videoBitrate,dxgi);commands.EnableFast(true);}
                                 catch {Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                             } else if(videoId==requested) {StopAudio(ref audio);audioId=null;commands.EnableFast(false);if(video!=null)video.Dispose();video=null;videoId=null;videoWindow=new SodaDesktopVideoWindow(1);}
+                        }
+                        else if(type=="native_rate") {
+                            if(!nativeCadence)throw new InvalidOperationException("Native cadence not negotiated");
+                            if(video!=null&&(string)msg["id"]==videoId)try{int nextFps=Num(msg,"fps"),nextBitrate=Num(msg,"kbps");videoRate.Apply(nextFps,nextBitrate,video.SetBitrate);videoFps=videoRate.Fps;videoNext=Math.Min(videoNext,Clock.Elapsed.TotalMilliseconds+1000.0/videoFps);}catch{commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;}
                         }
                         else if(type=="native_keyframe"||type=="native_bitrate") {
                             if(!nativeDatagrams)throw new InvalidOperationException("Native datagrams not permitted");
@@ -460,7 +467,7 @@ public static class SodaDesktopHost {
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
                             videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;
                             var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",w},{"height",h},{"data",Convert.ToBase64String(packet.data)}};
-                            if(videoWindow.Capacity==3){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
+                            if(videoWindow.Capacity==3||nativeCadence){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
                             if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
                             }
                         } catch {
@@ -1589,4 +1596,15 @@ public sealed class SodaDesktopMonitorLayout {
     public bool MatchesItems(Item[] items){try{var other=new SodaDesktopMonitorLayout(new SnapshotDriver(items),Selected);if(other.Items.Length!=Items.Length||other.Bounds!=Bounds)return false;foreach(var item in Items){Item match=null;foreach(var next in other.Items)if(next.Id==item.Id){match=next;break;}if(match==null||match.Bounds!=item.Bounds||match.Primary!=item.Primary||match.Scale!=item.Scale)return false;}return true;}catch{return false;}}
     public bool Contains(double x,double y){if(Double.IsNaN(x)||Double.IsNaN(y)||Double.IsInfinity(x)||Double.IsInfinity(y)||x<0||x>1||y<0||y>1)return false;var point=new Point(Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),Bounds.Top+(int)Math.Round(y*(Bounds.Height-1)));foreach(var item in Items)if(item.Bounds.Contains(point))return true;return false;}
     public object Message(){var items=new List<object>();foreach(var item in Items){var value=new Dictionary<string,object>{{"id",item.Id},{"x",item.Bounds.Left},{"y",item.Bounds.Top},{"width",item.Bounds.Width},{"height",item.Bounds.Height},{"primary",item.Primary}};if(item.Scale.HasValue)value["scalePercent"]=item.Scale.Value;items.Add(value);}return new{selected=Selected,bounds=new{x=Bounds.Left,y=Bounds.Top,width=Bounds.Width,height=Bounds.Height},allSupported=AllSupported,monitors=items};}
+}
+
+// A private cadence update cannot raise the encoder's original negotiated limits.
+// It changes capture scheduling, never the MF media type, clock or input grants.
+public sealed class SodaDesktopVideoRate {
+    readonly int maxFps,maxBitrate;
+    int bitrate;
+    public int Fps {get;private set;}
+    public SodaDesktopVideoRate(int fps,int bitrate){if(fps<1||fps>60||bitrate<128||bitrate>12000)throw new ArgumentException("Video rate limits");maxFps=Fps=fps;maxBitrate=this.bitrate=bitrate;}
+    public void Apply(int fps,int nextBitrate,Action<int> setBitrate){Validate(fps,nextBitrate);if(nextBitrate!=bitrate)setBitrate(nextBitrate);bitrate=nextBitrate;Fps=fps;}
+    public void Validate(int fps,int bitrate){if(fps<1||fps>maxFps||bitrate<128||bitrate>maxBitrate)throw new ArgumentException("Video rate ceiling");}
 }

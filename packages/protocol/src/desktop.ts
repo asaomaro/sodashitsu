@@ -50,6 +50,7 @@ export const DesktopOptions = z
     nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
     nativeVideoWindow: z.literal(3).optional(),
+    nativeCadence: z.literal(true).optional(),
     nativeMaxFps: z.literal(60).optional(),
     cursor: z.literal(true).optional(),
     display: DesktopDisplaySize.optional(),
@@ -131,6 +132,7 @@ export const DesktopReady = z
     nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
     nativeVideoWindow: z.literal(3).optional(),
+    nativeCadence: z.literal(true).optional(),
     nativeMaxFps: z.literal(60).optional(),
     imageLane: z.literal(true).optional(),
     cursor: z.literal(true).optional(),
@@ -253,6 +255,7 @@ export interface DesktopResults {
     nativeDatagrams?: boolean;
     nativeVideo?: boolean;
     nativeVideoWindow?: 3;
+    nativeCadence?: boolean;
     nativeMaxFps?: 60;
     cursor?: boolean;
     features?: boolean;

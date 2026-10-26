@@ -130,6 +130,7 @@ export class DesktopProvider {
       videoLane: true,
       nativeVideo: true,nativeDatagrams:true,nativeAudio:true,
       nativeInputFreshness: true,
+      nativeCadence: true,
       nativeVideoWindow: 3 as const,
       nativeMaxFps: 60 as const,
       cursor: true as const,
@@ -476,7 +477,7 @@ export class DesktopProvider {
               extendedInput,
               monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
-              nativeMaxFps,
+              nativeMaxFps,nativeCadence,
               cursor,
               image: appliedImage,
               allowClipboard,
@@ -493,7 +494,7 @@ export class DesktopProvider {
             const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&cfg.allowMedia===true&&(process.platform==="win32"||ready.backend==="synthetic");
             const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({enabled:nativeEnabled,cadence:options.nativeCadence===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
@@ -603,7 +604,7 @@ export class DesktopProvider {
         }
       }
     });
-    const {files:_files,...helperOptions}=options;
+    const {files:_files,nativeCadence:_nativeCadence,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:helperOptions,
@@ -613,6 +614,7 @@ export class DesktopProvider {
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
+      nativeCadence:options.nativeCadence===true&&cfg.allowNativeVideo===true,
       nativeDatagrams:options.nativeDatagrams===true&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
       ...(options.nativeMaxFps===60&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
