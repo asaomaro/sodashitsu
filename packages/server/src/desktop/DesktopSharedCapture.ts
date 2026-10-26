@@ -1,3 +1,4 @@
+import { DesktopSharedNative } from "./DesktopSharedNative.js";
 import { EventEmitter } from "node:events";
 import { PassThrough, Readable, Writable } from "node:stream";
 import { DesktopReady, DesktopFrameInfo, encodeDesktopFrame, decodeDesktopFrame, DESKTOP_MAX_FRAME_BYTES } from "@sodashitsu/protocol";
@@ -30,6 +31,7 @@ export class DesktopSharedCapture {
     child: DesktopHelper;
     members: Set<Subscription>;
     ready?: Record<string, unknown>;
+    native?: DesktopSharedNative<Subscription>;
     control?: Subscription;
     configuration?: string;
     frameSeq: number;
@@ -129,6 +131,8 @@ export class DesktopSharedCapture {
       return;
     }
     if (!s.configured) throw Error("Missing capture configuration");
+    if (g.native?.command(s, value)) return;
+    if (value.type === "policy") return; // The shared native pool sets aggregate image policy.
     if (value.type === "ack") {
       if (!s.pending || value.seq !== s.pending) throw Error("Wrong subscriber ACK");
       s.pending = 0;
@@ -150,12 +154,18 @@ export class DesktopSharedCapture {
   }
 
   private receive(g: NonNullable<DesktopSharedCapture["group"]>, value: any): void {
+    if (g.native?.receive(value)) return;
     if (value.type === "ready" && !g.ready) {
       const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, ...wire } = value;
       const ready = DesktopReady.parse(wire);
-      if (ready.secureDesktop || ready.protectedDesktop || ready.lockScreenCover || ready.virtualDisplay || ready.nativeVideo || ready.allowMedia || ready.allowClipboard)
+      if (ready.secureDesktop || ready.protectedDesktop || ready.lockScreenCover || ready.virtualDisplay || (ready.nativeVideo && !JSON.parse(g.configuration!).allowNativeVideo) || ready.allowMedia || ready.allowClipboard)
         throw Error("Source cannot be shared");
-      g.ready = { ...ready, dynamicQuality: false, inputAckPipe: false };
+      g.ready = { ...ready, dynamicQuality: false, inputAckPipe: false, ...(value.deferNativeSnapshots===true?{deferNativeSnapshots:true}:{}) };
+      if (ready.nativeVideo) g.native = new DesktopSharedNative<Subscription>({
+        window: ready.nativeVideoWindow === 3 ? 3 : 1,
+        write: value => this.write(g, value), send: (s, value) => this.emit(s, value),
+        policy: active => { const config=JSON.parse(g.configuration!);this.write(g,{type:"policy",fps:active?1:config.options.fps,quality:config.options.quality}); },
+      });
       for (const s of g.members) if (s.configured) this.emit(s, g.ready);
     } else if (value.type === "frame" && g.ready) {
       const info = DesktopFrameInfo.parse(value.info);
@@ -195,6 +205,7 @@ export class DesktopSharedCapture {
   private detach(g: NonNullable<DesktopSharedCapture["group"]>, s: Subscription): void {
     if (s.closed) return;
     s.closed = true;
+    g.native?.detach(s);
     g.members.delete(s);
     if (g.control === s) { delete g.control; this.write(g, { type: "control", enabled: false }); }
     for (const [seq, route] of g.inputs) if (route.member === s) g.inputs.delete(seq);
@@ -206,6 +217,7 @@ export class DesktopSharedCapture {
   private end(g: NonNullable<DesktopSharedCapture["group"]>): void {
     if (g.ended) return;
     g.ended = true;
+    g.native?.dispose(); delete g.native;
     delete g.ready;
     for (const s of [...g.members]) this.detach(g, s);
     g.inputs.clear();

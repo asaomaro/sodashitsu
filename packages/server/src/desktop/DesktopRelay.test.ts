@@ -1,3 +1,4 @@
+import {DESKTOP_SHARED_NATIVE_PROTOCOL,decodeDesktopH264Packet} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_PROTECTED_PROTOCOL,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
@@ -122,8 +123,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" = false) {
-    const ws = new WebSocket(endpoint, ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" | "shared-native" | "shared-old-native" = false) {
+    const ws = new WebSocket(endpoint, ime === "shared-old-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -971,4 +972,53 @@ it("ends a shared generation if an agent control request cannot be sent",async()
   await vi.waitFor(()=>expect(viewer.ws.readyState).toBe(WebSocket.CLOSED));
   expect(relay.viewers.size).toBe(0);expect(v.controlRequests).toBeUndefined();
  }finally{spy.mockRestore();}
+});
+
+
+it("shares one native encoder, isolates slow decoder credit, and preserves remaining viewers on stop",async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true);
+ const image=await f.viewer("shared"),a=await f.viewer("shared-native"),b=await f.viewer("shared-native");
+ const options={sharedDesktop:true,width:1280,fps:30,quality:65,features:true};
+ image.send({type:"start",machineId:"remote",options});await vi.waitFor(()=>expect(image.frames.length).toBe(1));
+ for(const v of [a,b]){v.send({type:"start",machineId:"remote",options});await vi.waitFor(()=>expect(v.frames.length).toBe(1));}
+ const media=(v:typeof a)=>v.frames.filter(isDesktopMediaChunk).map(decodeDesktopMediaChunk);
+ const stream=(v:typeof a)=>v.messages.filter(m=>m.type==="media_stream").at(-1)!;
+ const fast=(data:any,binary:boolean)=>{if(binary&&isDesktopMediaChunk(new Uint8Array(data as Buffer))){const packet=decodeDesktopMediaChunk(new Uint8Array(data as Buffer));a.send({type:"native_video_ack",id:stream(a).id,generation:packet.generation,seq:packet.seq});}};
+ a.ws.on("message",fast);
+ try{
+  a.send({type:"media",enabled:true,settings:{transport:"native",audio:false,maxBitrateKbps:2500}});
+  await vi.waitFor(()=>expect(media(a).length).toBeGreaterThan(0));
+  b.send({type:"media",enabled:true,settings:{transport:"native",audio:false,maxBitrateKbps:2500}});
+  await vi.waitFor(()=>expect(media(b).length).toBe(1));
+  const first=media(b)[0]!;await vi.waitFor(()=>expect(media(a).length).toBeGreaterThan(5));expect(media(b)).toHaveLength(1);
+  b.send({type:"native_video_ack",id:stream(b).id,generation:first.generation,seq:first.seq});
+  await vi.waitFor(()=>expect(media(b).length).toBe(2));
+  expect(decodeDesktopH264Packet(media(b)[1]!.data).key).toBe(true);
+  expect(decodeDesktopH264Packet(media(b)[1]!.data).timestamp).toBeGreaterThan(decodeDesktopH264Packet(first.data).timestamp);
+  const ledger=(await readFile(f.lifecycle,"utf8")).trim().split("\n").map(line=>JSON.parse(line));
+  expect(ledger.filter(m=>m.type==="spawn")).toHaveLength(1);expect(ledger.filter(m=>m.type==="native_start")).toHaveLength(1);
+  const before=media(a).length;b.send({type:"stop"});await vi.waitFor(()=>expect(b.ws.readyState).toBe(WebSocket.CLOSED));
+  await vi.waitFor(()=>expect(media(a).length).toBeGreaterThan(before));
+  const last=decodeDesktopFrame(image.frames.at(-1)!).info.seq;image.send({type:"ack",seq:last});
+  await vi.waitFor(()=>expect(image.frames.length).toBeGreaterThan(1),{timeout:2500});
+  expect(a.ws.readyState).toBe(WebSocket.OPEN);
+ }finally{a.ws.off("message",fast);}
+});
+
+it("keeps old shared-only peers on images without sending unknown shared native fields",async()=>{
+ for(const oldCaps of [false,true]) {
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),caps=f.provider.capabilities();
+ if(oldCaps)vi.spyOn(f.provider,"capabilities").mockReturnValue({...caps,sharedNative:false});
+ const viewer=await f.viewer(oldCaps?"shared-native":"shared-old-native");viewer.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:1280,fps:30,quality:65,features:true}});
+ await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));
+ expect(f.startRequests[0]!.options).toHaveProperty("sharedDesktop",true);
+ expect(f.startRequests[0]!.options).not.toHaveProperty("sharedNative");expect(f.startRequests[0]!.options).not.toHaveProperty("nativeVideo");
+ expect(viewer.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeVideo");
+ }
+});
+
+it("enforces the native permission at B before any shared source is started",async()=>{
+ const f=await fixture();
+ await expect(f.provider.start("forged",{url:f.endpoint,ticket:"a".repeat(43),options:{sharedDesktop:true,sharedNative:true,nativeVideo:true,features:true,width:320,fps:10,quality:65}})).rejects.toMatchObject({code:"unauthorized"});
+ await expect(readFile(f.lifecycle,"utf8")).rejects.toMatchObject({code:"ENOENT"});
 });

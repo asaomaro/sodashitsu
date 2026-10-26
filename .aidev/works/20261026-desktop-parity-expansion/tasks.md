@@ -32,3 +32,5 @@
 第7段階7A（2026-10-27）: local allowElevated、purpose bits4〜7、nonce別v2 pipeとsame-tuple ACK、actual workerへのNative Guard接続、専用WS protocol/caps/options/helper-ready積、A/Bのfallback公開前拒否、UIの接続ごとの選択とcontrol再取得を実装。RunProtectedは新worker routeへ接続済みで、既定permissionはoff。実サービス更新・SYSTEM worker生成・実UAC/昇格画面の取得/入力は未検証。7B signinはE2E/peer trust依存のため未実装で、task7のチェックは保留する。
 
 第8段階8A: 同一設定・明示選択の通常画像を最大8viewerで共有取得する経路を実装・独立レビュー・全体11,583件/ブラウザ17件/独立起動確認で検証済み。各viewer ACK/切断/許可を分離し、Bの排他input・seq変換・最後のhelper終了待ちを追加。native動画/音声/保護sourceへの拡張は未完了でtask8全体は保留する。
+
+第8段階8B: 同じ通常sourceのnative encoder共有、consumer別UUID/連番/pending、future-keyからの復帰、設定不一致のviewer限定fallback、画像onlyとnativeの混在を実装中。WS/WSSのみ。音声/UDP/adaptation/保護sourceの共有は未完了でtask8は保留。

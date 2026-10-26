@@ -266,6 +266,7 @@ function run() {
       else if (m.type === "ack" && m.seq === pending) pending = 0;
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
+        if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:m.enabled?"native_start":"native_stop",id:m.id})+"\n");
         stopAudio();
         if(m.enabled&&nativeFixture&&!secure){const requested=nativeCodecs?(m.codec??"h264"):"h264",codec=codecFixtures[requested]&&!process.argv.includes("--codec-encoder-failure")?requested:"h264";native={codec,codecFallback:codec!==requested?"unavailable":undefined,generation:1,profile:0,barrier:undefined,lastTimestamp:-1,id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};}
         else native=undefined;

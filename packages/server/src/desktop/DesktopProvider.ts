@@ -128,6 +128,7 @@ export class DesktopProvider {
   capabilities() {
     return {
       sharedDesktop: true,
+      sharedNative: this.config?.allowNativeVideo === true,
       available: !!this.config,
       allowInput: this.config?.allowInput === true,
       deltas: true,
@@ -157,8 +158,9 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
-    if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || p.options.nativeVideo || p.options.nativeAudio || p.options.nativeDatagrams || p.options.nativeVideoWindow || p.options.nativeCodecs || p.options.nativeAdaptive || p.options.nativeCadence || p.options.nativeMaxFps || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
-      throw new RpcError("invalid_params", "複数viewer共有は通常画面の画像配信を使います。管理者画面・仮想画面・解像度変更とは併用できません。");
+    if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || p.options.nativeAudio || p.options.nativeDatagrams || p.options.nativeAdaptive || p.options.nativeCadence || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
+      throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
+    if(p.options.sharedNative&&(!p.options.sharedDesktop||!p.options.nativeVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画が接続先で許可されていません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
       if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||p.options.files||p.options.richClipboard||p.options.nativeVideo||p.options.nativeAudio||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.nativeVideoWindow||p.options.nativeMaxFps||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
@@ -189,7 +191,7 @@ export class DesktopProvider {
     }
     if (this.config !== cfg) throw new RpcError("unauthorized", "Desktop permissions changed");
     if (this.sharedCapture.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
-    const sharedKey = JSON.stringify(p.options);
+    const sharedKey = JSON.stringify(p.options.sharedDesktop ? sharedHelperOptions(p.options) : p.options);
     if (this.active || (this.shared.size && (!p.options.sharedDesktop || this.sharedKey !== sharedKey)) || this.shared.size >= 8)
       throw new RpcError("server_busy", "Bのデスクトップは異なる設定で共有中か、viewer数の上限です。同じ複数viewer設定で接続してください。");
     const url = new URL(p.url);
@@ -648,10 +650,10 @@ export class DesktopProvider {
         }
       }
     });
-    const {sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
-      options:options.sharedDesktop ? {...helperOptions,deltas:false,adaptive:false} : helperOptions,
+      options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
@@ -660,15 +662,15 @@ export class DesktopProvider {
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
-      nativeCodecs:options.nativeCodecs===true&&cfg.allowNativeVideo===true,
+      nativeCodecs:(options.sharedDesktop||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
       nativeAdaptive:options.nativeAdaptive===true&&cfg.allowNativeVideo===true,
       nativeCadence:options.nativeCadence===true&&cfg.allowNativeVideo===true,
       nativeDatagrams:options.nativeDatagrams===true&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
-      ...(options.nativeMaxFps===60&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
-      allowNativeVideo: options.nativeVideo===true&&cfg.allowNativeVideo===true,
-      deferNativeSnapshots: options.nativeVideo===true&&cfg.allowNativeVideo===true,
-      ...(options.nativeVideoWindow===3&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
+      ...((options.sharedDesktop||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
+      allowNativeVideo: (options.sharedDesktop||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
+      deferNativeSnapshots: (options.sharedDesktop||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
+      ...((options.sharedDesktop||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
       allowClipboard: !options.sharedDesktop && cfg.allowClipboard === true,
       allowDisplayResize: !options.sharedDesktop && cfg.allowDisplayResize === true,
@@ -760,6 +762,9 @@ export class DesktopProvider {
     for (const s of [...this.shared]) this.stop(s);
     this.sharedCapture.dispose();
   }
+}
+function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {
+  return {width:options.width,fps:options.fps,quality:options.quality,...(options.image?{image:options.image}:{}),deltas:false,adaptive:false,features:true,imeKeys:true,extendedInput:true};
 }
 function allowedRelay(url: URL, origins: string[]): boolean {
   if (

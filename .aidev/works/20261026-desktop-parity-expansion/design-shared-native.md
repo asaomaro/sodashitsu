@@ -1,0 +1,11 @@
+# 複数viewer 8B: native encodeの共有と独立復帰
+
+8Aの通常画像fanoutを維持し、同一sourceのnative encoderも一つにする。新しいshared-nativeのprotocol/caps/optionsを積で交渉し、旧BへのsharedDesktop+nativeVideo要求を避ける。画像のみのviewerと動画viewerは同じ通常sourceへ参加できるよう、source key/configを画面取得パラメータとローカルceilingから正規化し、viewer固有のIME/feature交渉から分離する。
+
+各viewerは既存DesktopNativeVideoを保有し、decoder/transport/ACK/入力鮮度を独立する。shared helper transportがnative_videoを一つのsource UUIDへ対応させ、同一codec・bitrate/FPSの要求だけを同encoderへ参加させる。互換でない動画要求はそのviewerだけ画像へ戻し、動作中のencoderを変更しない。最後の動画viewerの終了だけがencoderを停止し、最後の画面viewerの終了がhelperを停止する。
+
+source frameは先に型・sequence・generation・timestamp・codec/サイズ・上限を検証。viewerごとに独立した連番・有界pending windowへ写し、元sourceへのACKは各viewerのACKから分離する。遅いviewerが1枚でも飛ばしたら次のrandom-access frameまでP frameを渡さず、既送pendingのACK完了も待って復帰する。既存helperのcodec normalizerがrandom-access unitにSPS/PPS等を含める契約を検査し、新規viewerに過去の画面frameを再配信しない。viewer ID/seqとsource ID/seqを混同せず、stale ACK/終了が他viewerや新世代を変えない。
+
+8B初期経路はWS video lane。UDP/音声/自動解像度・encoder rate変更はshared codec profileとの合意を別途実装するまで交渉しない。通常単独の全機能は維持する。native動画の共有をもってtask8全体を完了とはせず、残る経路を記録する。
+
+必須taskcheck: source configuration正規化、native ID/seq変換、codec fallback、random-access復帰/held input非干渉、最後の停止/世代切替。生成hardware由来fixtureとfake helper/decoderで検証し、実capture/OS入力を自動実行しない。browser2窓で一方を遅くした描画と復帰・停止後の継続を観測する。独立全体レビューと修正再レビューは省略しない。

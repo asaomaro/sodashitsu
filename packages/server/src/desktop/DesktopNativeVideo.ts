@@ -16,7 +16,7 @@ import {
   encodeDesktopH264Packet,
 } from "@sodashitsu/protocol";
 
-const HelperVideo = z
+export const DesktopNativeHelperFrame = z
   .object({
     type: z.literal("native_frame"),
     id: z.string().uuid(),
@@ -38,6 +38,7 @@ const HelperVideo = z
       .regex(/^[A-Za-z0-9+/]*={0,2}$/),
   })
   .strict();
+const HelperVideo = DesktopNativeHelperFrame;
 /** Viewer-owned native video, independent from agent snapshots and image ACKs. */
 export class DesktopNativeVideo {
   private retired=new Set<string>();
