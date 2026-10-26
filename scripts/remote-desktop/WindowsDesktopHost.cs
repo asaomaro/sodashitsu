@@ -1201,6 +1201,9 @@ public sealed class SodaDesktopH264 : IDisposable {
     bool started,disposed;
     int inputCredits,outputCredits;
     readonly int width,height,fps,bitrate;
+    readonly string codecName;readonly Guid encodedSubtype,inputSubtype;readonly SodaDesktopVideoBitstream packetReader;
+    public string CodecName {get{return codecName;}}
+    public bool FullChroma {get{return codecName=="h264-444";}}
     byte[] bgr,nv12,sequenceHeader;
     SodaDesktopVideoDelay delay;
     public sealed class Packet { public byte[] data;public bool key;public string codec;public long timestamp; }
@@ -1211,9 +1214,22 @@ public sealed class SodaDesktopH264 : IDisposable {
         }
         return new SodaDesktopH264(width,height,fps,bitrateKbps);
     }
+    public static SodaDesktopH264 CreateCodecForDesktop(int width,int height,int fps,int bitrateKbps,SodaDesktopDxgi capture,string codec){
+        if(codec=="h264")return CreateForDesktop(width,height,fps,bitrateKbps,capture);
+        if(codec!="h264-444"&&capture!=null&&capture.HasDesktopFrame&&capture.TryEnableGpuSurfaces()){
+            try{return new SodaDesktopH264(width,height,fps,bitrateKbps,capture.GpuDevice,codec);}catch{capture.DisableGpuSurfaces();}
+        }
+        return new SodaDesktopH264(width,height,fps,bitrateKbps,IntPtr.Zero,codec);
+    }
     public SodaDesktopH264(int width,int height,int fps,int bitrateKbps):this(width,height,fps,bitrateKbps,IntPtr.Zero){}
-    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps,IntPtr gpuDevice) {
+    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps,IntPtr gpuDevice):this(width,height,fps,bitrateKbps,gpuDevice,"h264"){}
+    public SodaDesktopH264(int width,int height,int fps,int bitrateKbps,IntPtr gpuDevice,string codecName) {
         if(IntPtr.Size!=8 || width<2 || height<2 || width>4096 || height>2400 || (width&1)!=0 || (height&1)!=0 || (long)width*height>8000000 || fps<1 || fps>60 || bitrateKbps<128 || bitrateKbps>12000)throw new ArgumentException("Native video limits");
+        if(codecName!="h264"&&codecName!="h264-444"&&codecName!="hevc"&&codecName!="av1")throw new ArgumentException("Native codec");
+        if(codecName=="h264-444"&&gpuDevice!=IntPtr.Zero)throw new NotSupportedException("AYUV memory input required");
+        this.codecName=codecName;encodedSubtype=codecName=="hevc"?new Guid("43564548-0000-0010-8000-00aa00389b71"):codecName=="av1"?new Guid("31305641-0000-0010-8000-00aa00389b71"):H264;
+        inputSubtype=codecName=="h264-444"?new Guid("56555941-0000-0010-8000-00aa00389b71"):NV12;
+        packetReader=codecName=="h264"?null:new SodaDesktopVideoBitstream(codecName=="h264-444"?"h264":codecName,codecName=="h264-444");
         this.width=width;this.height=height;this.fps=fps;this.bitrate=bitrateKbps*1000;
         this.gpuDevice=gpuDevice;if(gpuDevice!=IntPtr.Zero)Marshal.AddRef(gpuDevice);
         try { delay=new SodaDesktopVideoDelay();Initialize(); } catch {Dispose();throw;}
@@ -1223,7 +1239,7 @@ public sealed class SodaDesktopH264 : IDisposable {
         if(gpuDevice!=IntPtr.Zero){uint token;Check(MFCreateDXGIDeviceManager(out token,out deviceManager));Check(Method<ResetDevice>(deviceManager,7)(deviceManager,gpuDevice,token));}
         IntPtr list=IntPtr.Zero;uint count=0;
         try {
-            var input=new TypeInfo {major=Video,subtype=NV12};var output=new TypeInfo {major=Video,subtype=H264};
+            var input=new TypeInfo {major=Video,subtype=inputSubtype};var output=new TypeInfo {major=Video,subtype=encodedSubtype};
             // HARDWARE only. Never silently select the CPU Microsoft encoder.
             var category=new Guid("f79eac7d-e545-4387-bdee-d647d7bde42a");
             if(gpuDevice==IntPtr.Zero)Check(MFTEnumEx(category,0x44,ref input,ref output,out list,out count));
@@ -1237,14 +1253,14 @@ public sealed class SodaDesktopH264 : IDisposable {
                     Check(MFTEnum2(category,0x44,ref input,ref output,attributes,out list,out count));
                 }finally{Release(ref attributes);Release(ref adapter);Release(ref dxgi);}
             }
-            if(count==0 || count>64)throw new NotSupportedException("Hardware H.264 unavailable");
+            if(count==0 || count>64)throw new NotSupportedException("Hardware "+codecName+" unavailable");
             Exception last=null;
             for(int i=0;i<count;i++) {
                 IntPtr candidate=Marshal.ReadIntPtr(list,i*IntPtr.Size);
                 try { ActivateEncoder(candidate);activation=candidate;Marshal.AddRef(activation);return; }
                 catch(Exception e) {last=e;ShutdownTransform();}
             }
-            throw new NotSupportedException("No compatible hardware H.264 encoder",last);
+            throw new NotSupportedException("No compatible hardware "+codecName+" encoder",last);
         } finally {if(list!=IntPtr.Zero){for(int i=0;i<count;i++){IntPtr a=Marshal.ReadIntPtr(list,i*IntPtr.Size);if(a!=IntPtr.Zero)Marshal.Release(a);}Marshal.FreeCoTaskMem(list);}}
     }
     void ActivateEncoder(IntPtr candidate) {
@@ -1261,9 +1277,9 @@ public sealed class SodaDesktopH264 : IDisposable {
         Codec("8d390aac-dc5c-4200-b57f-814d04babab2",0);
         Codec("95f31b26-95a4-41aa-9303-246a7fc6eef1",(uint)fps);
         IntPtr type=IntPtr.Zero;
-        try {type=MediaType(H264);U32(type,"20332624-fb0d-4d9e-bd0d-cbf6786c102e",(uint)bitrate);U32(type,"ad76a80b-2d5c-4e0b-b375-64e520137036",66);Check(Method<SetType>(transform,16)(transform,0,type,0));}
+        try {type=MediaType(encodedSubtype);U32(type,"20332624-fb0d-4d9e-bd0d-cbf6786c102e",(uint)bitrate);U32(type,"ad76a80b-2d5c-4e0b-b375-64e520137036",codecName=="hevc"?1u:codecName=="av1"?1u:codecName=="h264-444"?244u:66u);Check(Method<SetType>(transform,16)(transform,0,type,0));}
         finally {Release(ref type);}
-        try {type=MediaType(NV12);Check(Method<SetType>(transform,15)(transform,0,type,0));}
+        try {type=MediaType(inputSubtype);Check(Method<SetType>(transform,15)(transform,0,type,0));}
         finally {Release(ref type);}
         Check(Method<Message>(transform,23)(transform,0x10000000,UIntPtr.Zero));Check(Method<Message>(transform,23)(transform,0x10000003,UIntPtr.Zero));
     }
@@ -1281,7 +1297,7 @@ public sealed class SodaDesktopH264 : IDisposable {
             U64(type,"1652c33d-d6b2-4012-b834-72030849a37d",((ulong)(uint)width<<32)|(uint)height);
             U64(type,"c459a2e8-3d2c-4e44-b132-fee5156c7bb0",((ulong)(uint)fps<<32)|1);
             U64(type,"c6376a1e-8d0a-4027-be45-6d9a0ad39bb6",((ulong)1<<32)|1);U32(type,"e2724bb8-e676-4806-b4b2-a8d6efb44ccd",2);
-            if(subtype==NV12)U32(type,"644b4e48-1e02-4516-b0eb-c01ca9d49ac6",(uint)width);
+            if(subtype==inputSubtype)U32(type,"644b4e48-1e02-4516-b0eb-c01ca9d49ac6",(uint)(FullChroma?width*4:width));
             U32(type,"3e23d450-2c75-4d25-a00e-b91670d12327",1);U32(type,"c21b8ee5-b956-4071-8daf-325edf5cab11",2);U32(type,"dbfbe4d7-0740-4ee0-8192-850ab0e21935",2);U32(type,"5fb0fce9-be5c-4935-a811-ec838f8eed93",5);return type;
         } catch {Release(ref type);throw;}
     }
@@ -1308,11 +1324,11 @@ public sealed class SodaDesktopH264 : IDisposable {
     public Packet EncodeBitmap(Bitmap bitmap,long timestamp) {
         var timing=Stopwatch.StartNew();
         if(bitmap.Width!=width || bitmap.Height!=height)throw new ArgumentException("Video bitmap size");
-        if(bgr==null){bgr=new byte[width*height*3];nv12=new byte[width*height*3/2];}
+        if(bgr==null){bgr=new byte[width*height*3];nv12=new byte[FullChroma?width*height*4:width*height*3/2];}
         var bits=bitmap.LockBits(new Rectangle(0,0,width,height),ImageLockMode.ReadOnly,PixelFormat.Format24bppRgb);
         try {for(int y=0;y<height;y++)Marshal.Copy(IntPtr.Add(bits.Scan0,y*bits.Stride),bgr,y*width*3,width*3);}
         finally {bitmap.UnlockBits(bits);}
-        ConvertNv12(bgr,nv12,width,height);ConversionMs=timing.Elapsed.TotalMilliseconds;timing.Restart();var packet=Encode(nv12,timestamp);EncodingMs=timing.Elapsed.TotalMilliseconds;return packet;
+        if(FullChroma)ConvertAyuv(bgr,nv12,width,height);else ConvertNv12(bgr,nv12,width,height);ConversionMs=timing.Elapsed.TotalMilliseconds;timing.Restart();var packet=Encode(nv12,timestamp);EncodingMs=timing.Elapsed.TotalMilliseconds;return packet;
     }
     public static void ConvertNv12(byte[] bgr,byte[] nv12,int width,int height) {
         if(width<2||height<2||(width&1)!=0||(height&1)!=0||(long)width*height>8000000||bgr.Length!=(long)width*height*3||nv12.Length!=(long)width*height*3/2)throw new ArgumentException("NV12 dimensions");
@@ -1334,7 +1350,7 @@ public sealed class SodaDesktopH264 : IDisposable {
         }
     }
     public Packet Encode(byte[] nv12,long timestamp) {
-        if(disposed || gpuDevice!=IntPtr.Zero || nv12.Length!=width*height*3/2 || timestamp<0)throw new ArgumentException("Invalid video input");
+        if(disposed || gpuDevice!=IntPtr.Zero || nv12.Length!=(FullChroma?width*height*4:width*height*3/2) || timestamp<0)throw new ArgumentException("Invalid video input");
         Wait(false);IntPtr sample=IntPtr.Zero,buffer=IntPtr.Zero;
         try {
             Check(MFCreateSample(out sample));Check(MFCreateMemoryBuffer((uint)nv12.Length,out buffer));
@@ -1388,8 +1404,8 @@ public sealed class SodaDesktopH264 : IDisposable {
             Check(Method<BufferLock>(buffer,3)(buffer,out data,out max,out length));byte[] bytes;
             try {if(length==0 || length>512*1024-9 || length>max)throw new InvalidOperationException("H.264 frame limit");bytes=new byte[length];Marshal.Copy(data,bytes,0,(int)length);}
             finally {Check(Method<NoArgs>(buffer,4)(buffer));}
-            var packet=ParsePacket(bytes,timestamp);
-            if(packet.key && packet.codec==null && sequenceHeader!=null) {
+            var packet=ParseEncoded(bytes,timestamp);
+            if(packetReader==null&&packet.key && packet.codec==null && sequenceHeader!=null) {
                 if(sequenceHeader.Length+bytes.Length>512*1024-9)throw new InvalidOperationException("H.264 header limit");
                 var combined=new byte[sequenceHeader.Length+bytes.Length];Buffer.BlockCopy(sequenceHeader,0,combined,0,sequenceHeader.Length);Buffer.BlockCopy(bytes,0,combined,sequenceHeader.Length,bytes.Length);packet=ParsePacket(combined,timestamp);
             }
@@ -1400,6 +1416,11 @@ public sealed class SodaDesktopH264 : IDisposable {
         }
         throw new InvalidOperationException("H.264 output format did not stabilize");
     }
+    public static void ConvertAyuv(byte[] bgr,byte[] output,int width,int height){
+        if(width<2||height<2||(long)width*height>8000000||bgr.Length!=(long)width*height*3||output.Length!=(long)width*height*4)throw new ArgumentException("AYUV dimensions");
+        for(int i=0,j=0;i<bgr.Length;i+=3,j+=4){int b=bgr[i],g=bgr[i+1],r=bgr[i+2];output[j]=(byte)(((112*r-102*g-10*b+128)>>8)+128);output[j+1]=(byte)(((-26*r-86*g+112*b+128)>>8)+128);output[j+2]=(byte)(((47*r+157*g+16*b+128)>>8)+16);output[j+3]=255;}
+    }
+    Packet ParseEncoded(byte[] bytes,long timestamp){if(packetReader==null)return ParsePacket(bytes,timestamp);var value=packetReader.Normalize(bytes,sequenceHeader);return new Packet{data=value.Data,key=value.Key,codec=value.Codec,timestamp=timestamp};}
     static Packet ParsePacket(byte[] bytes,long timestamp) {
         bool key=false;string codec=null;
         for(int i=0;i+4<bytes.Length;i++)if(bytes[i]==0 && bytes[i+1]==0 && (bytes[i+2]==1 || (bytes[i+2]==0 && bytes[i+3]==1))) {
@@ -1413,7 +1434,7 @@ public sealed class SodaDesktopH264 : IDisposable {
             IntPtr type=IntPtr.Zero;
             try {
                 int hr=Method<AvailableType>(transform,14)(transform,0,index,out type);if(hr==unchecked((int)0xc00d36b9))break;Check(hr);
-                Guid subtype,key=new Guid("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");Check(Method<GetGuid>(type,10)(type,ref key,out subtype));if(subtype!=H264)continue;
+                Guid subtype,key=new Guid("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");Check(Method<GetGuid>(type,10)(type,ref key,out subtype));if(subtype!=encodedSubtype)continue;
                 ulong size;key=new Guid("1652c33d-d6b2-4012-b834-72030849a37d");hr=Method<Get64>(type,8)(type,ref key,out size);
                 if(hr>=0 && (size>>32)!=(uint)width || hr>=0 && (uint)size!=(uint)height)continue;
                 U64(type,"1652c33d-d6b2-4012-b834-72030849a37d",((ulong)(uint)width<<32)|(uint)height);
@@ -1674,4 +1695,86 @@ public sealed class SodaDesktopVideoProfile {
     public void Resume(int generation,long baseSeq){if(!Prepared||Resumed||generation!=Generation||baseSeq!=BaseSeq)throw new InvalidOperationException("Profile resume fence");Resumed=true;}
     public SodaDesktopH264.Packet Take(){if(!Resumed||held==null)throw new InvalidOperationException("Profile not resumed");var packet=held;held=null;return packet;}
     public bool Expired(long now){return now-At>=3000;}
+}
+// Bounded codec-specific access units. No decoder, GPU, screen or input APIs.
+public sealed class SodaDesktopVideoBitstream {
+    public sealed class Unit {public byte[] Data;public string Codec;public bool Key;}
+    sealed class Bits {
+        readonly byte[] bytes;int position;
+        public Bits(byte[] bytes){this.bytes=bytes;}
+        public uint Read(int count){if(count<0||count>32||position+(long)count>bytes.Length*8L)throw new FormatException("Truncated video header");uint value=0;for(int i=0;i<count;i++,position++)value=(value<<1)|(uint)((bytes[position/8]>>(7-position%8))&1);return value;}
+        public void Skip(int count){while(count>0){int n=Math.Min(32,count);Read(n);count-=n;}}
+        public uint Ue(){int zero=0;while(Read(1)==0)if(++zero>30)throw new FormatException("Video header integer limit");return ((1u<<zero)-1)+Read(zero);}
+    }
+    readonly string family;readonly bool fullChroma;
+    readonly Dictionary<int,byte[]> parameterSets=new Dictionary<int,byte[]>();
+    int lengthSize=4;byte[] av1Header;bool av1Reduced;
+    string codec;
+    public SodaDesktopVideoBitstream(string family,bool fullChroma=false){if(family!="h264"&&family!="hevc"&&family!="av1")throw new ArgumentException("Video codec family");this.family=family;this.fullChroma=fullChroma;}
+    static byte[] Slice(byte[] data,int offset,int length){if(offset<0||length<0||offset+(long)length>data.Length)throw new FormatException("Video header length");var value=new byte[length];Buffer.BlockCopy(data,offset,value,0,length);return value;}
+    static byte[] Rbsp(byte[] nal,int header){var bytes=new List<byte>();int zeros=0;for(int i=header;i<nal.Length;i++){byte b=nal[i];if(zeros>=2&&b==3){if(i+1>=nal.Length||nal[i+1]>3)throw new FormatException("Invalid emulation prevention");zeros=0;continue;}bytes.Add(b);zeros=b==0?zeros+1:0;}return bytes.ToArray();}
+    static int Start(byte[] data,int at){if(at+3<=data.Length&&data[at]==0&&data[at+1]==0){if(data[at+2]==1)return 3;if(at+4<=data.Length&&data[at+2]==0&&data[at+3]==1)return 4;}return 0;}
+    List<byte[]> Nals(byte[] data){
+        var nals=new List<byte[]>();int at=0;
+        if(Start(data,0)>0){while(at<data.Length){int prefix=Start(data,at);if(prefix==0)throw new FormatException("Invalid Annex-B prefix");int begin=at+prefix,end=begin;while(end<data.Length&&Start(data,end)==0)end++;while(end>begin&&data[end-1]==0)end--;if(end<=begin)throw new FormatException("Empty video NAL");nals.Add(Slice(data,begin,end-begin));at=begin;while(at<data.Length&&Start(data,at)==0)at++;if(nals.Count>128)throw new FormatException("NAL count limit");}}
+        else{while(at<data.Length){if(at+lengthSize>data.Length)throw new FormatException("Truncated NAL size");uint size=0;for(int i=0;i<lengthSize;i++)size=(size<<8)|data[at++];if(size==0||size>data.Length-at)throw new FormatException("NAL size limit");nals.Add(Slice(data,at,(int)size));at+=(int)size;if(nals.Count>128)throw new FormatException("NAL count limit");}}
+        return nals;
+    }
+    static byte[] Annex(List<byte[]> nals){using(var output=new MemoryStream()){foreach(var nal in nals){output.Write(new byte[]{0,0,0,1},0,4);output.Write(nal,0,nal.Length);}if(output.Length>512*1024-9)throw new FormatException("Access unit limit");return output.ToArray();}}
+    List<byte[]> Configuration(byte[] header){
+        if(header==null||header.Length==0)return new List<byte[]>();if(header.Length>65536)throw new FormatException("Codec header limit");
+        if(Start(header,0)>0)return Nals(header);
+        var nals=new List<byte[]>();int at,count;
+        if(family=="h264"&&header.Length>=7&&header[0]==1){lengthSize=(header[4]&3)+1;at=6;count=header[5]&31;for(int round=0;round<2;round++){for(int i=0;i<count;i++){if(at+2>header.Length)throw new FormatException("AVC config size");int size=(header[at]<<8)|header[at+1];at+=2;nals.Add(Slice(header,at,size));at+=size;}if(round==0){if(at>=header.Length)throw new FormatException("AVC config PPS");count=header[at++];}}}
+        else if(family=="hevc"&&header.Length>=23&&header[0]==1){lengthSize=(header[21]&3)+1;at=23;for(int array=0;array<header[22];array++){if(at+3>header.Length)throw new FormatException("HEVC config array");at++;count=(header[at]<<8)|header[at+1];at+=2;if(count>128)throw new FormatException("HEVC config NAL count");for(int i=0;i<count;i++){if(at+2>header.Length)throw new FormatException("HEVC config size");int size=(header[at]<<8)|header[at+1];at+=2;nals.Add(Slice(header,at,size));at+=size;}}if(at!=header.Length)throw new FormatException("HEVC config trailing bytes");}
+        else return Nals(header);
+        return nals;
+    }
+    void Parameter(byte[] nal){
+        int kind=family=="hevc"?(nal[0]>>1)&63:nal[0]&31;
+        if(family=="hevc"?(kind<32||kind>34):(kind!=7&&kind!=8))return;
+        if(nal.Length>65536)throw new FormatException("Parameter set limit");parameterSets[kind]=nal;
+        if(family=="h264"&&kind==7){if(nal.Length<4)throw new FormatException("AVC SPS");var bits=new Bits(Rbsp(nal,1));uint profile=bits.Read(8);bits.Skip(16);bits.Ue();if(fullChroma&&(profile!=244||bits.Ue()!=3))throw new NotSupportedException("Encoder did not produce H264 4:4:4");codec="avc1."+nal[1].ToString("x2")+nal[2].ToString("x2")+nal[3].ToString("x2");}
+        if(family=="hevc"&&kind==33){var bits=new Bits(Rbsp(nal,2));bits.Skip(8);uint space=bits.Read(2),tier=bits.Read(1),profile=bits.Read(5),flags=bits.Read(32),compatibility=0;for(int i=0;i<32;i++){compatibility=(compatibility<<1)|(flags&1);flags>>=1;}var constraints=new byte[6];for(int i=0;i<6;i++)constraints[i]=(byte)bits.Read(8);uint level=bits.Read(8);int end=6;while(end>0&&constraints[end-1]==0)end--;codec="hev1."+(space==0?"":((char)('A'+space-1)).ToString())+profile+"."+compatibility.ToString("X")+"."+(tier==0?"L":"H")+level;for(int i=0;i<end;i++)codec+="."+constraints[i].ToString("X2");}
+    }
+    public Unit Normalize(byte[] bytes,byte[] header=null){
+        if(bytes==null||bytes.Length==0||bytes.Length>512*1024-9)throw new FormatException("Access unit size");if(family=="av1")return Av1(bytes,header);
+        foreach(var nal in Configuration(header))Parameter(nal);var nals=Nals(bytes);bool vcl=false,key=true;var present=new HashSet<int>();
+        foreach(var nal in nals){if(nal.Length<(family=="hevc"?2:1)||(nal[0]&128)!=0)throw new FormatException("Invalid NAL header");Parameter(nal);int kind=family=="hevc"?(nal[0]>>1)&63:nal[0]&31;present.Add(kind);if(family=="hevc"?kind<=31:kind>=1&&kind<=5){vcl=true;key&=family=="hevc"?kind>=16&&kind<=21:kind==5;}}
+        if(!vcl)throw new FormatException("Video frame missing");if(key&&codec==null)throw new FormatException("Random-access codec header missing");
+        if(key){int[] required=family=="hevc"?new[]{32,33,34}:new[]{7,8};var prefix=new List<byte[]>();foreach(int kind in required){if(!parameterSets.ContainsKey(kind))throw new FormatException("Random-access parameter set missing");if(!present.Contains(kind))prefix.Add(parameterSets[kind]);}prefix.AddRange(nals);nals=prefix;}
+        return new Unit{Data=Annex(nals),Key=key,Codec=codec};
+    }
+    sealed class Obu {public int Type;public byte[] Data,Raw;}
+    static List<Obu> Obus(byte[] data){
+        var result=new List<Obu>();int at=0;
+        while(at<data.Length){int begin=at;byte value=data[at++];if((value&0x81)!=0||(value&2)==0)throw new FormatException("AV1 low-overhead OBU required");int kind=(value>>3)&15;if(kind==0||kind>=9&&kind<=14)throw new FormatException("Reserved AV1 OBU");if((value&4)!=0){if(at>=data.Length||(data[at]&7)!=0)throw new FormatException("AV1 extension");at++;}
+            uint size=0;bool ended=false;for(int i=0;i<4;i++){if(at>=data.Length)throw new FormatException("Truncated AV1 size");byte part=data[at++];size|=(uint)(part&127)<<(7*i);if((part&128)==0){ended=true;break;}}
+            if(!ended||size>data.Length-at)throw new FormatException("AV1 OBU size limit");var payload=Slice(data,at,(int)size);at+=(int)size;result.Add(new Obu{Type=kind,Data=payload,Raw=Slice(data,begin,at-begin)});if(result.Count>128)throw new FormatException("AV1 OBU count limit");
+        }
+        return result;
+    }
+    void Av1Sequence(Obu obu){
+        if(obu.Data.Length>65536)throw new FormatException("AV1 sequence limit");var bits=new Bits(obu.Data);uint profile=bits.Read(3);if(profile>2)throw new NotSupportedException("AV1 profile");bits.Skip(1);bool reduced=bits.Read(1)!=0;uint level=0,tier=0;
+        if(reduced)level=bits.Read(5);
+        else{
+            bool model=false;int delayLength=0;
+            if(bits.Read(1)!=0){bits.Skip(64);if(bits.Read(1)!=0)bits.Ue();model=bits.Read(1)!=0;if(model){delayLength=(int)bits.Read(5)+1;bits.Skip(42);}}
+            bool initial=bits.Read(1)!=0;int points=(int)bits.Read(5)+1;
+            for(int i=0;i<points;i++){bits.Skip(12);uint candidate=bits.Read(5),candidateTier=candidate>7?bits.Read(1):0;if(i==0){level=candidate;tier=candidateTier;}if(model&&bits.Read(1)!=0)bits.Skip(delayLength*2+1);if(initial&&bits.Read(1)!=0)bits.Skip(4);}
+        }
+        int widthBits=(int)bits.Read(4)+1,heightBits=(int)bits.Read(4)+1;bits.Skip(widthBits+heightBits);
+        if(!reduced&&bits.Read(1)!=0)bits.Skip(7);bits.Skip(3);
+        if(!reduced){bits.Skip(4);bool order=bits.Read(1)!=0;if(order)bits.Skip(2);uint screen=bits.Read(1)!=0?2:bits.Read(1);if(screen>0&&bits.Read(1)==0)bits.Skip(1);if(order)bits.Skip(3);}
+        bits.Skip(3);bool high=bits.Read(1)!=0;int depth=profile==2&&high?(bits.Read(1)!=0?12:10):(high?10:8);
+        codec="av01."+profile+"."+level.ToString("D2",System.Globalization.CultureInfo.InvariantCulture)+(tier==0?"M":"H")+"."+depth.ToString("D2",System.Globalization.CultureInfo.InvariantCulture);av1Reduced=reduced;av1Header=obu.Raw;
+    }
+    Unit Av1(byte[] data,byte[] header){
+        if(header!=null&&header.Length>0){if(header.Length>65536)throw new FormatException("AV1 config limit");var config=(header[0]==0x81&&header.Length>=4)?Slice(header,4,header.Length-4):header;foreach(var obu in Obus(config))if(obu.Type==1)Av1Sequence(obu);}
+        var units=Obus(data);bool present=false,key=false,frame=false;int delimiters=0;
+        foreach(var obu in units){if(obu.Type==2){if(++delimiters>1||frame||obu.Data.Length!=0)throw new FormatException("AV1 temporal unit boundary");}if(obu.Type==1){Av1Sequence(obu);present=true;}if(obu.Type==3||obu.Type==6){if(frame)throw new FormatException("Multiple AV1 frames in one unit");frame=true;if(codec==null)throw new FormatException("AV1 sequence header missing");if(av1Reduced)key=true;else{var bits=new Bits(obu.Data);if(bits.Read(1)==0){uint kind=bits.Read(2),show=bits.Read(1);key=kind==0&&show==1;}}}}
+        if(!frame)throw new FormatException("AV1 frame missing");
+        if(key&&!present){if(av1Header==null)throw new FormatException("AV1 random-access header missing");int insert=units.Count>0&&units[0].Type==2?1:0;units.Insert(insert,new Obu{Type=1,Raw=av1Header});}
+        using(var output=new MemoryStream()){foreach(var obu in units)output.Write(obu.Raw,0,obu.Raw.Length);if(output.Length>512*1024-9)throw new FormatException("AV1 access unit limit");return new Unit{Data=output.ToArray(),Codec=codec,Key=key};}
+    }
 }
