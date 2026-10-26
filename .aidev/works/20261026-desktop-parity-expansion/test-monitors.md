@@ -4,7 +4,7 @@
 
 初回secure browser試験は正しい表示が『ロック画面・閲覧中』なのにexact『閲覧中』を求めて失敗したため期待値を訂正した。Native fake pointer試験のfixture Bounds初期化漏れ/CS var複数宣言、probe script serializer assembly依存も試験の包みを修正した。製品動作の退行とは扱わない。
 
-最終build/typecheck/full/unit/browser/独立worktree smoke/B metadata probeはこれから。
+最終pnpm build/typecheck成功。全体765 suites / 11489 tests成功（355.78秒）。monitor5＋file5＋rich clipboard8のbrowser計18件成功（1.2分）。別worktreeからbuild/smoke成功。sr-pcは稼働HEAD1ebdc94a/cleanを維持しbranch archiveからcombined helper compile/fake checks成功、readonly metadataで1920x1200/125%を取得。B guard30samples median0.0052ms/p95 0.0543ms（1画面、WAN/入力→表示latencyではない）。
 
 ## 修正除去の負例
 
