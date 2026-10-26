@@ -16,7 +16,7 @@ it("reduces quality under delayed ACKs and restores slowly within requested ceil
   }
 });
 
-it("expires a frozen video and restores the native image via the state callback", async () => {
+it.each([false,true])("expires a frozen video using a fresh WSS fallback for datagrams=%s", async udp => {
   vi.useFakeTimers();
   let tick!: () => void;
   vi.stubGlobal(
@@ -39,7 +39,7 @@ it("expires a frozen video and restores the native image via the state callback"
   const state = vi.fn(),
     send = vi.fn(),
     draw = vi.fn();
-  const receiver = new DesktopMediaReceiver("test", send, draw, state);
+  const receiver = new DesktopMediaReceiver("test", send, draw, state,[],udp);
   try {
     Object.defineProperty(receiver.video, "readyState", { value: 2 });
     await vi.advanceTimersByTimeAsync(10);
@@ -47,8 +47,8 @@ it("expires a frozen video and restores the native image via the state callback"
     expect(receiver.active).toBe(true);
     await vi.advanceTimersByTimeAsync(2500);
     expect(receiver.active).toBe(false);
-    expect(send).toHaveBeenCalledWith({ type: "media", enabled: false });
-    expect(state).toHaveBeenCalledWith("images");
+    if(udp){expect(send).toHaveBeenCalledWith({type:"media_fallback",id:"test"});expect(send).not.toHaveBeenCalledWith({type:"media",enabled:false});expect(state).not.toHaveBeenCalledWith("images");}
+    else{expect(send).toHaveBeenCalledWith({ type: "media", enabled: false });expect(state).toHaveBeenCalledWith("images");}
   } finally {
     receiver.stop();
     delete (HTMLVideoElement.prototype as any).requestVideoFrameCallback;

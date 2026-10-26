@@ -20,6 +20,7 @@ export const DesktopIceServers = z
   .max(4);
 export const DesktopMediaSettings = z
   .object({
+    udp: z.boolean().optional(),
     fps: z.number().int().min(1).max(60).optional(),
     audio: z.boolean().default(false),
     transport: z.enum(["auto", "relay", "native"]).default("auto"),
@@ -108,6 +109,7 @@ export const DesktopMediaStatus = z
     audio: z.boolean(),
     reason: z.enum(["requested", "stopped", "unavailable", "congested", "ended"]).optional(),
     iceServers: DesktopIceServers.optional(),
+    datagrams: z.literal(true).optional(),
   })
   .strict();
 export const DesktopMediaStream = z.union([
@@ -125,6 +127,7 @@ export const DesktopMediaStream = z.union([
       id: z.string().uuid(),
       generation: z.number().int().min(1).max(0xffffffff),
       mime: z.literal("video/h264"),
+      datagrams: z.literal(true).optional(),
       window: z.literal(3).optional(),
       codec: z.string().regex(/^avc1\.[0-9a-f]{6}$/),
       width: z.number().int().min(2).max(4096),
@@ -141,6 +144,7 @@ export const DesktopNativeVideoAck = z
   .object({
     type: z.literal("native_video_ack"),
     decodeMs: z.number().finite().min(0).max(60000).optional(),
+    dropped: z.literal(true).optional(),
     id: z.string().uuid(),
     generation: z.number().int().min(1).max(0xffffffff),
     seq: z.number().int().min(1).max(0xffffffff),

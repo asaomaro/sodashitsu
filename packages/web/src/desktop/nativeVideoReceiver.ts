@@ -106,6 +106,11 @@ export class DesktopNativeVideoReceiver {
     this.stop();
     this.fail();
   }
+  discardPending() {
+    if(this.stopped)return;
+    const frames=[...this.pending,...this.queued].sort((a,b)=>a.seq-b.seq);this.stop();
+    for(const frame of frames)this.send({type:"native_video_ack",id:this.settings.id,generation:this.settings.generation,seq:frame.seq,dropped:true});
+  }
   stop() {
     if (this.stopped) return;
     this.stopped = true;

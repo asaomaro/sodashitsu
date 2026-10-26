@@ -1,0 +1,28 @@
+# 独立レビュー
+
+2026-10-26、実装とは別のコンテキストでbase 9a4bf1c5からのUDP追加差分を点検した。既存の画像専用laneは今回の変更対象に含めない。
+
+## 指摘と修正確認
+
+1. 完全欠損した先頭frameのnoticeがWSSで遅れると、後続UDP fragmentが届いても150ms期限が始まらなかった。後続fragmentの最古到着時刻からgapを期限切れにし、偽のbufferを作らずdrop/IDR待ちへ進める修正と、noticeなしの全欠損回帰を確認した。遅れて届くnoticeもdropを復活させない。
+2. ブラウザの映像鮮度timerがUDPでも通常停止を送り、BのWSS fallbackより先に画像配信へ終了させていた。UDP時だけdatagramFailureでmedia_fallbackを送り、legacyは従来停止する修正と、両経路を区別するtimer回帰を確認した。
+3. 新native_frame_notice/native_draw_ack/native_transport_resetが旧id/requestedNativeフィルタに含まれず、親の停止が旧metadataを追い越すとlaneを永久無効化していた。既存のretired-id/経路フィルタへ3種類を追加する修正と、各型の遅延packet回帰を確認した。
+4. 明示停止でUDP表示が残る問題を指摘した。stopVideoでnativeUdpActiveをfalseにする修正を確認した。
+
+現製品差分に修正必須の指摘はない。製品内の一時console diagnosticsは除去されている。git diff --checkは成功した。
+
+## 確認した境界
+
+- 明示native要求とviewer/B/helper交渉後だけweriftを動的読込する。iceServersは明示的な空配列でdefaultのpublic STUNを上書きし、configured ICEだけを使う。依存実装の設定mergeも確認した。
+- 映像DCはunordered/maxRetransmits=0、別のreliable DCはACK/keyframeだけを厳密に受け付ける。OS入力・許可・release・agentは親接続を維持する。DCEPのunordered bitを保持するESM/CJS両方のpnpm patchは、この意図に対応する。
+- fragmentは16KiB以下、frameは512KiB以下、保持は3frame、組立期限150ms。欠損後はdeltaを描かずIDRから再開する。decoder内の未描画frameも先行順でdrop ACKを返し、late VideoFrameは閉じる。
+- Bは最初のpending ACKだけを採用し、draw ACKだけで描画鮮度を更新する。dropはcredit解放だけを行う。Aのnotice/ACK ledgerは同じreliable metadata FIFOで照合し、dropでは画像/描画鮮度を更新しない。
+- encoderは両DCが開いてから開始する。停止・失敗は古いpeerを閉じ、新しいid/encoderのWSSへ一度だけ戻る。旧idのsignal/fallbackは有界なretired集合で処理する。
+- active UDPからの復旧ではAのviewer/agent制御を失効させ、helperの保持入力をreleaseする。未開始handshakeのfallbackでは既存入力状態を解除しない。入力を自動再送する経路はない。
+- force-IDRとbitrate変更はhelper owner threadで行い、keyframe要求間隔とユーザーのbitrate上限を維持する。Native helper生成試験に強制IDRとbitrate変更の実行が追加されている。
+
+## 検証の確認範囲
+
+gapの7件、receiver/assemblyの10件、遅延retired metadataの3件の成功ログを確認した。実ブラウザではselected candidate両端UDP、ICE設定空、製品canvas色、WSS映像payloadなし、直接ACKと新idのWSS再開を確認する試験があり、診断中の5反復は成功している。
+
+この記録時点で、診断除去後の最終ブラウザ試験（接続を維持したまま映像全欠損も含む）とnegative等は進行中。active control/key保持中のfallbackで、WSS復旧後も閲覧中となりキーを再送しないことを実browserで確認する追加回帰を勧めた。最終結果はtest-result.mdへ記録する。実WAN・NAT到達率やUDP化による実測改善率を保証するものではない。

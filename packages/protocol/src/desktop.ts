@@ -40,6 +40,7 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
     nativeVideoWindow: z.literal(3).optional(),
     nativeMaxFps: z.literal(60).optional(),
@@ -115,6 +116,7 @@ export const DesktopReady = z
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
+    nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
     nativeVideoWindow: z.literal(3).optional(),
     nativeMaxFps: z.literal(60).optional(),
@@ -228,6 +230,7 @@ export interface DesktopResults {
     imageSettings?: boolean;
     imeKeys?: boolean;
     extendedInput?: boolean;
+    nativeDatagrams?: boolean;
     nativeVideo?: boolean;
     nativeVideoWindow?: 3;
     nativeMaxFps?: 60;

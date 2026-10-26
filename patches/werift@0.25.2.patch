@@ -1,0 +1,35 @@
+diff --git a/lib/index.mjs b/lib/index.mjs
+index 826fc287d2ffbaef9f2a717209b2b227ccfe6619..5a02fd7b5fd3899ed2c0e3740d091b02b68c7075 100644
+--- a/lib/index.mjs
++++ b/lib/index.mjs
+@@ -17087,10 +17087,10 @@ var RTCSctpTransport = class _RTCSctpTransport {
+       channelType = 128;
+     }
+     if (channel.maxRetransmits !== null) {
+-      channelType = 1;
++      channelType |= 1;
+       reliability = channel.maxRetransmits;
+     } else if (channel.maxPacketLifeTime !== null) {
+-      channelType = 2;
++      channelType |= 2;
+       reliability = channel.maxPacketLifeTime;
+     }
+     const data = Buffer.allocUnsafe(12);
+diff --git a/lib/webrtc/src/transport/sctp.js b/lib/webrtc/src/transport/sctp.js
+index a02a7e92eab6af602c50a8d27b0b46ff175057bf..5dd85465471e632b79a32e49309b880830a2b30c 100644
+--- a/lib/webrtc/src/transport/sctp.js
++++ b/lib/webrtc/src/transport/sctp.js
+@@ -302,11 +302,11 @@ class RTCSctpTransport {
+             channelType = 0x80;
+         }
+         if (channel.maxRetransmits !== null) {
+-            channelType = 1;
++            channelType |= 1;
+             reliability = channel.maxRetransmits;
+         }
+         else if (channel.maxPacketLifeTime !== null) {
+-            channelType = 2;
++            channelType |= 2;
+             reliability = channel.maxPacketLifeTime;
+         }
+         // 5.1.  DATA_CHANNEL_OPEN Message

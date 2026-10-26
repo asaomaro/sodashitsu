@@ -155,6 +155,7 @@ function run() {
           type: "ready",
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
+          ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
           ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
           ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
@@ -186,6 +187,8 @@ function run() {
         if(m.enabled&&nativeFixture&&!secure)native={id:m.id,seq:0,pending:[],next:0,index:0,fps:m.fps,window:m.window===3?3:1};
         else native=undefined;
       }
+      else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
+      else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
       else if (m.type === "keyframe") {forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
