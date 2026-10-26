@@ -60,3 +60,5 @@ export * from "./desktopCursor.js";
 export * from "./desktopDatagrams.js";
 
 export * from "./desktopAudio.js";
+
+export * from "./desktopClipboard.js";

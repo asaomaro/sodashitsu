@@ -274,6 +274,8 @@ public static class SodaDesktopHost {
         SodaDesktopCursor cursorPump=null;
         bool separateCursor=!Secure&&showCursor&&config.ContainsKey("separateCursor")&&config["separateCursor"] is bool&&(bool)config["separateCursor"];
         SodaDesktopH264 video=null;string videoId=null;IDisposable audio=null;string audioId=null;
+        IDisposable richClipboardWorker=null;System.Reflection.MethodInfo richSubmit=null;Type richType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopRichClipboard");
+        bool richCeiling=clipboardCeiling&&richType!=null&&config.ContainsKey("richClipboard")&&config["richClipboard"] is bool&&(bool)config["richClipboard"];
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
@@ -295,6 +297,7 @@ public static class SodaDesktopHost {
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(separateCursor)ready["cursor"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
+            if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
             if(nativeCeiling&&nativeRateCeiling==60)ready["nativeMaxFps"]=60;
@@ -342,6 +345,16 @@ public static class SodaDesktopHost {
                         string type=(string)msg["type"];
                         if(type=="heartbeat")Interlocked.Exchange(ref LastHeartbeat,Clock.ElapsedMilliseconds);
                         else if(type=="sas" && Secure && Control && AllowedDesktop()) { Output(new {type="sas_request"}); }
+                        else if(type=="clipboard_rich") {
+                            try{
+                                if(!richCeiling)throw new InvalidOperationException("Rich clipboard not permitted");
+                                if(richClipboardWorker==null){
+                                    richClipboardWorker=(IDisposable)Activator.CreateInstance(richType,new object[]{(Action<object>)Output,(Func<bool>)(()=>clipboardAllowed&&!Stopping&&AllowedDesktop()&&Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)<6000),(Func<long>)(()=>Interlocked.Read(ref clipboardGeneration)),(Func<long>)(()=>DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),(Func<bool>)(()=>allow&&!Stopping)});
+                                    richSubmit=richType.GetMethod("Submit",new Type[]{typeof(object)});
+                                }
+                                richSubmit.Invoke(richClipboardWorker,new object[]{msg});
+                            }catch{string richId=msg.ContainsKey("id")?msg["id"]as string:null;Guid parsedRich;if(richId!=null&&Guid.TryParse(richId,out parsedRich))Output(new{type="clipboard_rich_result",id=richId,ok=false,stage="done"});}
+                        }
                         else if(type=="native_audio") {
                             string requested=(string)msg["id"];Guid audioGuid;if(!Guid.TryParse(requested,out audioGuid))throw new InvalidOperationException("Audio id");
                             if((bool)msg["enabled"]){
@@ -490,7 +503,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;Release();StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
+        } finally { Stopping=true;Release();StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
     }
 }
 

@@ -1,3 +1,5 @@
+import {DesktopRichClipboard} from "./DesktopRichClipboard.js";
+import {DESKTOP_RICH_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { performance } from "node:perf_hooks";
 import { unlockFailure } from "./unlockFailure.js";
@@ -50,6 +52,7 @@ export interface DesktopProviderConfig {
   origins(): string[];
 }
 type Share = {
+  richClipboard?:DesktopRichClipboard;clipboardSocket?:WebSocket;
   imageExpected?:boolean; imageSocket?: WebSocket; imageReady?: boolean; imageFailed?: boolean; heldImage?: Uint8Array;
   videoSocket?: WebSocket;
   videoReady?: boolean;
@@ -115,6 +118,7 @@ export class DesktopProvider {
       imageSettings: true,
       imeKeys: true,
       extendedInput: true,
+      richClipboard:this.config?.allowClipboard===true,
       imageLane: true,
       videoLane: true,
       nativeVideo: true,nativeDatagrams:true,nativeAudio:true,
@@ -243,6 +247,13 @@ export class DesktopProvider {
               image.on("error",()=>image.terminate());image.on("message",()=>image.terminate());
               image.on("close",()=>this.failImages(s));
             }
+            if(p.clipboardTicket){
+              if(p.options.richClipboard!==true||cfg.allowClipboard!==true)throw Error("Rich clipboard not negotiated");
+              const socket=s.clipboardSocket=new WebSocket(p.url,DESKTOP_RICH_CLIPBOARD_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:32768});
+              socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.clipboardTicket})));
+              const stop=()=>{s.richClipboard?.stop();delete s.richClipboard;socket.terminate();};
+              socket.on("error",stop);socket.on("close",stop);socket.on("message",(raw,binary)=>{if(s.dead)return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>32768)throw Error("Clipboard lane format");if(!s.richClipboard)throw Error("Clipboard not ready");s.richClipboard.fromViewer(JSON.parse(bytes.toString()));}catch{stop();}});
+            }
             this.launch(s, cfg, p.options);
             settled = true;
             resolve({ started: true });
@@ -295,6 +306,7 @@ export class DesktopProvider {
             s.clipboardGranted = m.enabled && s.allowClipboard;
             s.clipboardGeneration++;
             s.clipboardPending.clear();
+            s.richClipboard?.revoke();
             if (s.allowClipboard)
               this.write(s, {
                 type: "clipboard_control",
@@ -438,7 +450,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              nativeVideo,nativeDatagrams,nativeAudio,
+              nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,
               cursor,
@@ -449,6 +461,7 @@ export class DesktopProvider {
               display,
               ...legacyReady
             } = ready;
+            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&!s.dead&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
@@ -459,6 +472,7 @@ export class DesktopProvider {
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
+              ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true}:{}),
               ...(udpEnabled?{nativeDatagrams:true}:{}),
               ...(audioEnabled?{nativeAudio:true}:{}),
@@ -542,6 +556,8 @@ export class DesktopProvider {
             s.cursor.accept({info,data:Buffer.from(data??"","base64")});
           } else if (s.ready&&!s.secureDesktop&&s.native?.fromHelper(raw)) {
             // Native video has its own bounded frame/draw ACK.
+          } else if(raw.type==="clipboard_rich_result"&&s.ready){
+            try{s.richClipboard?.fromHelper(raw);}catch{s.richClipboard?.stop();delete s.richClipboard;s.clipboardSocket?.terminate();}
           } else if (raw.type === "clipboard_result" && s.ready) {
             const result = DesktopClipboardResult.parse(raw);
             if (s.clipboardPending.delete(result.id) && s.clipboardGranted) this.send(s, result);
@@ -566,6 +582,7 @@ export class DesktopProvider {
       options,
       captureBackends: ["dxgi"],
       inputAckPipe: true,
+      richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
       nativeDatagrams:options.nativeDatagrams===true&&cfg.allowNativeVideo===true,
@@ -625,6 +642,7 @@ export class DesktopProvider {
     s.dead = true;
     delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
+    s.richClipboard?.stop();s.clipboardSocket?.terminate();
     s.native?.stop();
     this.companion.end(s);
     s.clipboardGranted = false;

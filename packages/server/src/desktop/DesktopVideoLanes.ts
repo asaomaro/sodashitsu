@@ -7,6 +7,7 @@ type Pair = {
   sessionId: string; origin: string; at: number;
   provider?: WebSocket; viewer?: WebSocket; dead: boolean;
   receive(bytes: Buffer, binary: boolean): void;
+  receiveViewer?: (bytes: Buffer,binary:boolean)=>void;
   ready(): void; failed(): void;
 };
 /** One-use, role/session/parent-bound tickets. The video sockets never accept input. */
@@ -16,8 +17,8 @@ export class DesktopVideoLanes {
   private pending = new Set<WebSocket>();
   constructor(private validSession: (id: string) => boolean, private maxBuffered = 512 * 1024) {}
   get pendingCount() { return this.pending.size; }
-  issue(sessionId: string, origin: string, receive: Pair["receive"], ready: () => void, failed: () => void) {
-    const pair: Pair = { sessionId, origin, receive, ready, failed, at: performance.now(), dead: false };
+  issue(sessionId: string, origin: string, receive: Pair["receive"], ready: () => void, failed: () => void, receiveViewer?:Pair["receive"]) {
+    const pair: Pair = { sessionId, origin, receive, ready, failed,...(receiveViewer?{receiveViewer}:{}), at: performance.now(), dead: false };
     this.pairs.add(pair);
     const providerTicket = randomBytes(32).toString("base64url"), viewerTicket = randomBytes(32).toString("base64url");
     this.tickets.set(hash(providerTicket), { pair, role: "provider" });
@@ -29,6 +30,10 @@ export class DesktopVideoLanes {
         if (pair.dead || !pair.provider || ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > this.maxBuffered) return false;
         ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
         return true;
+      },
+      toProvider:(value:unknown)=>{
+        const ws=pair.provider;if(!pair.receiveViewer||pair.dead||!pair.viewer||ws?.readyState!==WebSocket.OPEN||ws.bufferedAmount>this.maxBuffered)return false;
+        ws.send(value instanceof Uint8Array?value:JSON.stringify(value));return true;
       },
       buffered: () => pair.viewer?.bufferedAmount ?? 0,
       close: () => this.end(pair, false),
@@ -62,8 +67,8 @@ export class DesktopVideoLanes {
           if (p.provider && p.viewer) p.ready();
           return;
         }
-        if (pair.dead || ws !== pair.provider || !pair.viewer || !this.validSession(pair.sessionId)) throw Error("Video receive only");
-        pair.receive(bytes, binary);
+        if(pair.dead||!pair.viewer||!pair.provider||!this.validSession(pair.sessionId))throw Error("Retired bulk connection");
+        if(ws===pair.provider)pair.receive(bytes,binary);else if(ws===pair.viewer&&pair.receiveViewer)pair.receiveViewer(bytes,binary);else throw Error("Video receive only");
       } catch { ws.terminate(); }
     });
   }

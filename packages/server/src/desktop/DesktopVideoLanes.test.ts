@@ -60,3 +60,8 @@ it("bounds pending unauthenticated attachments and cancels the attach deadline o
  expect(f.lanes.pendingCount).toBe(8);expect(sockets[8]!.readyState).toBe(WebSocket.CLOSED);
  vi.advanceTimersByTime(5001);expect(f.lanes.pendingCount).toBe(0);
 });
+
+it("allows viewer-to-provider bulk traffic only on an explicitly bidirectional issued pair",()=>{
+ const lanes=new DesktopVideoLanes(id=>id==="session",65536),receive=vi.fn(),viewerReceive=vi.fn(),pair=lanes.issue("session","https://desktop.example",receive,()=>{},()=>{},viewerReceive),p=new Socket(),v=new Socket();
+ try{lanes.accept(p as unknown as WebSocket,"");p.message({type:"video_provider",ticket:pair.providerTicket});lanes.accept(v as unknown as WebSocket,"session","https://desktop.example");v.message({type:"video_viewer",ticket:pair.viewerTicket});v.message({type:"clipboard_rich",operation:"read"});expect(viewerReceive).toHaveBeenCalledOnce();expect(receive).not.toHaveBeenCalled();expect(pair.toProvider({operation:"read"})).toBe(true);expect(p.sent).toEqual([JSON.stringify({operation:"read"})]);p.bufferedAmount=65537;expect(pair.toProvider({operation:"read"})).toBe(false);pair.close();expect(pair.toProvider({operation:"read"})).toBe(false);}finally{lanes.close();}
+});
