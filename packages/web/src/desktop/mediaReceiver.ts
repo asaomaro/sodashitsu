@@ -110,26 +110,26 @@ export class DesktopMediaReceiver {
     return !this.stopped && this.drawnAt > 0 && performance.now() - this.drawnAt <= 2000;
   }
   async signal(signal: { kind: string; sdp?: string; candidate?: RTCIceCandidateInit }) {
-    const pc = this.peer;
-    if (!pc || this.stopped) return;
-    if (signal.kind === "candidate") {
-      if (!signal.candidate) return;
-      if (pc.remoteDescription) await pc.addIceCandidate(signal.candidate);
-      else {
-        if (this.candidates.length >= 64) throw Error("ICE candidate limit");
-        this.candidates.push(signal.candidate);
+    const pc=this.peer,current=()=>!this.stopped&&this.peer===pc;
+    if(!pc||!current())return;
+    try {
+      if(signal.kind==="candidate"){
+        if(!signal.candidate)return;
+        if(pc.remoteDescription){await pc.addIceCandidate(signal.candidate);if(!current())return;}
+        else{if(this.candidates.length>=64)throw Error("ICE candidate limit");this.candidates.push(signal.candidate);}
+      }else if(signal.kind==="offer"){
+        await pc.setRemoteDescription({type:"offer",sdp:signal.sdp!});if(!current())return;
+        const candidates=this.candidates;this.candidates=[];
+        for(const candidate of candidates){await pc.addIceCandidate(candidate);if(!current())return;}
+        const answer=await pc.createAnswer();if(!current())return;
+        await pc.setLocalDescription(answer);if(!current())return;
+        this.send({type:"rtc_signal",id:this.id,signal:{kind:"answer",sdp:pc.localDescription!.sdp}});
       }
-    } else if (signal.kind === "offer") {
-      await pc.setRemoteDescription({ type: "offer", sdp: signal.sdp! });
-      for (const candidate of this.candidates) await pc.addIceCandidate(candidate);
-      this.candidates = [];
-      await pc.setLocalDescription(await pc.createAnswer());
-      if (this.stopped) return;
-      this.send({
-        type: "rtc_signal",
-        id: this.id,
-        signal: { kind: "answer", sdp: pc.localDescription!.sdp },
-      });
+    }catch(error){
+      // A retired peer's late rejection must not close its replacement share.
+      if(!current())return;
+      if(this.udp){this.datagramFailure();return;}
+      throw error;
     }
   }
   stream(generation: number, mime: string) {
@@ -174,6 +174,7 @@ export class DesktopMediaReceiver {
     this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>this.udp?this.nativeAck(value):this.send(value),frame=>{if(this.stopped)return;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>this.udp?this.datagramFailure():this.fail());
   }
   notice(raw:unknown){
+    if(this.stopped)return;
     const notice=DesktopNativeFrameNotice.parse(raw);if(!this.udp||notice.id!==this.id||notice.generation!==this.generation||!this.nativeFormat)throw Error("Unexpected native notice");
     this.datagrams!.notice(notice.seq,notice.bytes);
   }
@@ -188,6 +189,7 @@ export class DesktopMediaReceiver {
     this.send({type:"media_fallback",id:this.id});this.stop();
   }
   chunk(bytes: Uint8Array) {
+    if(this.stopped)return;
     const chunk = decodeDesktopMediaChunk(bytes);
     if (chunk.generation !== this.generation) return;
     if (chunk.seq !== this.sequence + 1) throw Error("動画の順序が不正です");
