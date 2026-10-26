@@ -8,7 +8,7 @@ Windows 11 x64専用IDD sourceは実Windows CIでcompile/package成功。現在�
 
 自動検証は生成画面・fake helper・fake owner/device/clockだけ。OS driver/serviceの導入・更新、実capture/入力/clipboard/表示設定変更は行わない。installer AST/unsigned catalog拒否とown TEMPのancestor junction拒否・cleanup保持を確認。readonlyのWindows version/DriverStore metadata照会は実作成時のnative backendで使うが、fake試験はBeginを呼ばない。
 
-最終結果は追記する。先行検査: 新ブラウザ6件pass、関連100件pass、16s後ready unit pass、combined broker/helperコンパイル・actual guard/parser/purpose/ABI fake検査pass。最新reason表示と全体は再検証中。
+先行検査: 新ブラウザ6件pass、関連100件pass、16s後ready unit pass、combined broker/helperコンパイル・actual guard/parser/purpose/ABI fake検査pass。最新reason表示と全体は再検証中。
 
 以下は対象修正だけを除去したnegativeの生出力。全件失敗を確認後、元bytesへ復元し一致を確認した。
 
@@ -147,3 +147,13 @@ al-broker.ps1:11 文字:1
  
 
 ```
+
+## 最終検証
+
+- `pnpm build` / `pnpm typecheck` 成功。
+- 全体771 suites / 11,530 tests成功（327.93秒）。sourceを固定して一度実行。
+- browser12件成功（55.3秒、新virtual6＋monitor5＋共有settings1）。最新driver_missingの公開理由表示も確認。
+- 181b0a3dの独立worktreeでinstall/build/smoke成功。認証・起動・実PTY/browser roundtripを確認。
+- Bは181b0a3dのarchiveをTEMPでhelper/broker compile、actual guard/parser/purpose/ABI fake、unsigned/junction拒否を検証し成功。repo29e691b5/clean/HEAD保持。実service/driver登録なし。
+- CI [40332656996](https://github.com/asaomaro/sodashitsu/actions/runs/40332656996) / [40332347113](https://github.com/asaomaro/sodashitsu/actions/runs/40332347113) 成功。actual unsigned driver buildとbroker/packageのpure検査、mode buffer検査を含む。
+- 最終source追加の独立再レビュー両者pass。残る外部前提は署名済みdriver配布と実機capture検証。7〜10は未完了。
