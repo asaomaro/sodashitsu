@@ -72,6 +72,7 @@ export class DesktopSettings {
           allowInput: options.legacy.allowInput,
           allowClipboard: options.legacy.allowClipboard === true,
           allowDisplayResize: options.legacy.allowDisplayResize === true,
+          ...(options.legacy.allowMonitors?{allowMonitors:true}:{}),
           ...(options.legacy.allowUnlock ? { allowUnlock: true } : {}),
         }
       : { ...disabled };
@@ -118,6 +119,7 @@ export class DesktopSettings {
       const command = [...this.command];
       // Custom commands retain their launch syntax; saved local permissions supersede env defaults.
       if (!legacy) {
+        if(p.allowMonitors)command.push("-AllowMonitors");
         if (p.allowInput) command.push("-AllowInput");
         if (p.allowClipboard) command.push("-AllowClipboard");
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
@@ -128,6 +130,7 @@ export class DesktopSettings {
         command,
         allowNativeVideo: !legacy || legacy.allowMedia===true,
         ...(p.fileRoot?.trim()?{fileRoot:p.fileRoot.trim()}:{}),
+        allowMonitors:p.allowMonitors===true,
         allowInput: p.allowInput,
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,

@@ -44,6 +44,7 @@ const HelperFrame = z
 export interface DesktopProviderConfig {
   command: string[];
   allowInput: boolean;
+  allowMonitors?:boolean;
   fileRoot?:string;
   allowClipboard?: boolean;
   allowMedia?: boolean;
@@ -122,6 +123,7 @@ export class DesktopProvider {
       imageSettings: true,
       imeKeys: true,
       extendedInput: true,
+      monitors:this.config?.allowMonitors===true,
       files:!!this.config?.fileRoot,
       richClipboard:this.config?.allowClipboard===true,
       imageLane: true,
@@ -139,6 +141,7 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
+    if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
       throw new RpcError("unauthorized", "Bでディスプレイ解像度の変更が許可されていません");
     if (this.active?.dead && this.active.process) {
@@ -436,6 +439,7 @@ export class DesktopProvider {
         if (!line) continue;
         try {
           const raw = JSON.parse(line);
+          if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){this.send(s,{type:"monitor_topology_changed"});this.stop(s);return;}
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
@@ -461,6 +465,8 @@ export class DesktopProvider {
                 : options.image.colorMode !== "full" || !options.image.showCursor)
             )
               throw new Error("Helper does not support requested image settings");
+            if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
+            if(ready.monitorLayout&&(ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Monitor capture size mismatch");
             s.ready = true;
             s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true;
             s.dynamicQuality = ready.dynamicQuality === true;
@@ -468,7 +474,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
+              monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,
               cursor,
@@ -490,6 +496,7 @@ export class DesktopProvider {
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
+              ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true}:{}),
@@ -602,6 +609,7 @@ export class DesktopProvider {
       options:helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: true,
+      allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
@@ -731,6 +739,7 @@ export function desktopConfigFromEnv(
     return {
       command: command as string[],
       allowInput: env.SODA_DESKTOP_ALLOW_INPUT === "1",
+      allowMonitors:env.SODA_DESKTOP_ALLOW_MONITORS==="1",
       allowClipboard: env.SODA_DESKTOP_ALLOW_CLIPBOARD === "1",
       allowMedia: env.SODA_DESKTOP_ALLOW_MEDIA === "1",
       allowDisplayResize: env.SODA_DESKTOP_ALLOW_DISPLAY_RESIZE === "1",

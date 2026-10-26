@@ -29,7 +29,7 @@ import {
 
 import DesktopFiles from "./DesktopFiles.vue";
 import {DesktopFileClient} from "../desktop/fileClient.js";
-import {DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
+import {DESKTOP_MONITORS_PROTOCOL,desktopMonitorAt,type DesktopMonitorLayout,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopRichClipboardClient,readRichClipboard,writeRichClipboard} from "../desktop/richClipboard.js";
 import {DESKTOP_RICH_CLIPBOARD_PROTOCOL,type DesktopClipboardBundle} from "@sodashitsu/protocol";
 import {DesktopNativeAudioReceiver} from "../desktop/nativeAudioReceiver.js";
@@ -147,6 +147,9 @@ const mediaState = ref("images"),
   videoFrames = ref(0),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
+const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>();
+function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
+function changeMonitor(){maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
 function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=false;}
 function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data?.files.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}const files:File[]=[];for(const item of Array.from(data.items)){if(item.webkitGetAsEntry?.()?.isDirectory){error.value="フォルダは送信できません。ファイルを選択してください";continue;}const file=item.getAsFile();if(file)files.push(file);}filePanel.value.addFiles(files);}
@@ -401,7 +404,7 @@ function stop() {
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
-  resetRichClipboard();resetFiles();
+  resetRichClipboard();resetFiles();monitorLayout.value=undefined;
   imageSocket?.close(1000,"desktop stopped");imageSocket=undefined;
   videoSocket?.close(1000, "desktop stopped"); videoSocket=undefined; videoExpected=videoReady=nativeSupported=false;
   ws?.close(1000, "desktop stopped");
@@ -488,7 +491,8 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  let monitorChanged=false;
+  const socket = new WebSocket(url, [DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -496,7 +500,8 @@ function connect(automatic = false) {
       send({
         type: "start",
         machineId: props.machineId,
-        options: { ...options, features: true },
+        options: {
+            ...(monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -536,7 +541,8 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
-        if(m.type==="files_ticket"){
+        if(m.type==="monitor_topology_changed"){monitorChanged=true;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";releaseInputs();}
+        else if(m.type==="files_ticket"){
           if(fileSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid file attachment");
           const pipe=fileSocket=new WebSocket(url,DESKTOP_FILES_PROTOCOL);const client=fileClient.value=new DesktopFileClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>262144)return false;pipe.send(JSON.stringify(value));return true;},()=>pipe.close());
           pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
@@ -598,6 +604,7 @@ function connect(automatic = false) {
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
+          monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
           filesCap.value=r.files===true;
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
@@ -758,6 +765,7 @@ function connect(automatic = false) {
     const wasReady = ready.value;
     stop();
     status.value = "終了";
+    if(monitorChanged){status.value="停止";return;}
     if (!wasReady && activeSettings.value?.display) {
       maximumDisplay.value = false;
       requestedDisplay = undefined;
@@ -804,15 +812,17 @@ function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   if ((event === "down" || (event === "move" && e.buttons === 0)) && (x < 0 || x > 1 || y < 0 || y > 1)) return;
   if (event === "down") { canvas.value.focus(); canvas.value.setPointerCapture(e.pointerId); }
   const position = { x: Math.max(0, Math.min(1,x)), y: Math.max(0, Math.min(1,y)) };
-  cursorRenderer?.local(position.x,position.y);
+  const onMonitor=!monitorLayout.value||!!desktopMonitorAt(monitorLayout.value,position.x,position.y);
+  if(onMonitor)cursorRenderer?.local(position.x,position.y);
   for (const change of mouseButtons.update(e.buttons)) {
+    if(!onMonitor&&change.event==="down")continue;
     if (change.button > 2 && !extendedInput.value) {
       error.value = "接続先を更新すると、マウスの戻る・進むを利用できます";
       continue;
     }
     input({kind:"pointer",...position,...change});
   }
-  if (event === "move") input({kind:"pointer",...position,event:"move",button:0});
+  if (event === "move"&&onMonitor) input({kind:"pointer",...position,event:"move",button:0});
   if (event === "up" && canvas.value.hasPointerCapture(e.pointerId)) canvas.value.releasePointerCapture(e.pointerId);
 }
 function submitText() {
@@ -822,6 +832,7 @@ function submitText() {
   text.value = "";
 }
 function wheel(e: WheelEvent) {
+  if(monitorLayout.value&&canvas.value){const rect=canvas.value.getBoundingClientRect();if(!rect.width||!rect.height||!desktopMonitorAt(monitorLayout.value,(e.clientX-rect.left)/rect.width,(e.clientY-rect.top)/rect.height))return;}
   escapePress.reset(); input({kind:"wheel",delta:Math.max(-1200,Math.min(1200,Math.round(-e.deltaY)))});
 }
 async function windowFocusOut(e: FocusEvent) {
@@ -996,6 +1007,7 @@ onBeforeUnmount(() => {
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
       <p v-if="error" class="desktop-alert" role="alert">{{ error }}</p>
+      <button v-if="!ready&&error" @click="resetMonitor">既定のモニターで接続し直す</button>
       <div v-show="infoOpen" class="desktop-controls">
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
@@ -1118,6 +1130,7 @@ onBeforeUnmount(() => {
           送信→描画ACK {{nativeStats.ackMs.toFixed(0)}} ms · 復号・描画 {{nativeStats.decodeMs.toFixed(1)}} ms · ACK待ち {{nativeStats.pending}} / {{nativeStats.window}}枚
         </p>
       </details>
+      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" />
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード{{ richClipboard ? "（テキスト・画像・書式）" : "（テキスト）" }}</summary>

@@ -1,4 +1,5 @@
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
+import {DesktopMonitorLayout} from "./desktopMonitors.js";
 import { z } from "zod";
 import {DesktopNativeAudioControl} from "./desktopAudio.js";
 import {
@@ -41,6 +42,8 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    monitors:z.literal(true).optional(),
+    monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
     files: z.literal(true).optional(),
     richClipboard: z.literal(true).optional(),
     nativeAudio: z.literal(true).optional(),
@@ -121,6 +124,7 @@ export const DesktopReady = z
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
+    monitorLayout:DesktopMonitorLayout.optional(),
     files:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
     nativeAudio:z.literal(true).optional(),
@@ -202,6 +206,7 @@ export const DesktopPermissions = z.object({
   allowClipboard: z.boolean(),
   allowDisplayResize: z.boolean(),
   allowUnlock: z.boolean().optional(),
+  allowMonitors:z.boolean().optional(),
   fileRoot: z.string().max(4096).refine(v=>!v.includes("\0")).optional(),
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
@@ -241,6 +246,7 @@ export interface DesktopResults {
     imageSettings?: boolean;
     imeKeys?: boolean;
     extendedInput?: boolean;
+    monitors?:boolean;
     files?: boolean;
     richClipboard?: boolean;
     nativeAudio?: boolean;

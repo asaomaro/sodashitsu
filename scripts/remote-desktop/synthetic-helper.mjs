@@ -39,7 +39,7 @@ export function reduceColor(r, g, b, mode = "full") {
   if (mode === "rgb332") return [q(r, 3), q(g, 3), q(b, 2)];
   return [r, g, b];
 }
-export function syntheticFrame(width, height, seq, color, mode = "full") {
+export function syntheticFrame(width, height, seq, color, mode = "full", layout) {
   const captureStart = performance.now(),
     raw = Buffer.alloc((width * 3 + 1) * height);
   for (let y = 0; y < height; y++)
@@ -58,6 +58,7 @@ export function syntheticFrame(width, height, seq, color, mode = "full") {
         raw[i + 1] = color[1];
         raw[i + 2] = color[2];
       }
+      if(layout){const px=layout.bounds.x+Math.round(x*(layout.bounds.width-1)/Math.max(1,width-1)),py=layout.bounds.y+Math.round(y*(layout.bounds.height-1)/Math.max(1,height-1));const monitor=layout.monitors.find(m=>px>=m.x&&px<m.x+m.width&&py>=m.y&&py<m.y+m.height);raw[i]=monitor?.primary?255:0;raw[i+1]=0;raw[i+2]=monitor&&!monitor.primary?255:0;}
       if (mode !== "full")
         [raw[i], raw[i + 1], raw[i + 2]] = reduceColor(raw[i], raw[i + 1], raw[i + 2], mode);
     }
@@ -88,9 +89,9 @@ export function syntheticFrame(width, height, seq, color, mode = "full") {
     data: image.toString("base64"),
   };
 }
-function heightOf(options) { return options.display?.height ?? Math.round(options.width * 9 / 16); }
+function heightOf(options) { return options.syntheticHeight ?? options.display?.height ?? Math.round(options.width * 9 / 16); }
 function run() {
-  let options,
+  let options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
     cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
     outputBlocked = false,
@@ -187,15 +188,21 @@ function run() {
           }
         }
         options = m.options;
+        if(m.allowMonitors===true&&options.monitors===true&&process.argv.includes("--monitors")&&!secure){
+          let monitors=[{id:"left",x:-640,y:-200,width:640,height:480,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:800,height:600,primary:true,scalePercent:150}];if(process.argv.includes("--monitors-one"))monitors=monitors.filter(v=>v.primary);const selected=options.monitorDevice??"right",item=monitors.find(v=>v.id===selected);
+          if(selected!=="all"&&!item)throw Error("Monitor missing");const lx=Math.min(...monitors.map(v=>v.x)),ly=Math.min(...monitors.map(v=>v.y)),rx=Math.max(...monitors.map(v=>v.x+v.width)),by=Math.max(...monitors.map(v=>v.y+v.height));const bounds=selected==="all"?{x:lx,y:ly,width:rx-lx,height:by-ly}:{x:item.x,y:item.y,width:item.width,height:item.height};monitorLayout={selected,bounds,allSupported:true,monitors};const width=Math.min(options.width,bounds.width);options={...options,width,syntheticHeight:Math.round(bounds.height*width/bounds.width)};
+        }else if(options.monitorDevice&&!secure&&process.argv.includes("--monitors"))throw Error("Monitor not permitted");
         const modes = [{width:640,height:480},{width:800,height:600},{width:1024,height:768},{width:1280,height:720},{width:1600,height:900},{width:1920,height:1080}];
-        const displayAllowed = !secure && process.argv.includes("--allow-display-resize") && m.allowDisplayResize === true;
+        const displayAllowed = !secure && (!monitorLayout||monitorLayout.monitors.length===1) && process.argv.includes("--allow-display-resize") && m.allowDisplayResize === true;
         if (options.display) {
           if (!displayAllowed || !modes.some(mode => mode.width === options.display.width && mode.height === options.display.height)) throw Error("display not allowed");
           options = {...options, width:options.display.width};
+          if(monitorLayout){const bounds={...monitorLayout.bounds,width:options.display.width,height:options.display.height};monitorLayout={...monitorLayout,bounds,monitors:monitorLayout.monitors.map(v=>({...v,width:bounds.width,height:bounds.height}))};options={...options,syntheticHeight:bounds.height};}
         }
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),
@@ -208,8 +215,8 @@ function run() {
           ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
           title: "Synthetic test source",
           allowInput,
-          width: options.width,
-          height: heightOf(options),
+          width: monitorLayout?.bounds.width??options.width,
+          height: monitorLayout?.bounds.height??heightOf(options),
           backend: process.argv.includes("--dxgi") && m.captureBackends?.includes("dxgi") ? "windows-dxgi" : "synthetic",
           ...(secure ? {secureDesktop:true} : {}),
           ...(lockCover ? {lockScreenCover:true} : {}),
@@ -279,6 +286,7 @@ function run() {
     }
   });
   setInterval(() => {
+    const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}
     if (performance.now() - lastSeen > 8000) process.exit(0);
     if(options&&cursorEnabled&&performance.now()-lastCursor>=500)cursor();
     if(options&&native&&native.pending.length<native.window&&performance.now()>=native.next) {
@@ -360,6 +368,7 @@ function run() {
         stable ? 1 : seq,
         deltaTest ? color : undefined,
         options.image?.colorMode,
+        monitorLayout,
       );
     if (optimized)
       frame.info.contentId = createHash("sha256")
