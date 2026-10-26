@@ -4,7 +4,8 @@ import {DesktopFiles} from "./DesktopFiles.js";
 import {DESKTOP_FILES_PROTOCOL,DesktopFileRequest,DesktopFileResult} from "@sodashitsu/protocol";
 import {DesktopRichClipboard} from "./DesktopRichClipboard.js";
 import {DESKTOP_RICH_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn } from "node:child_process";
+import { DesktopSharedCapture, type DesktopHelper } from "./DesktopSharedCapture.js";
 import { performance } from "node:perf_hooks";
 import { unlockFailure } from "./unlockFailure.js";
 import { z } from "zod";
@@ -80,7 +81,8 @@ type Share = {
   quality: number;
   video: boolean;
   ws: WebSocket;
-  process?: ChildProcessWithoutNullStreams;
+  process?: DesktopHelper;
+  shared?: boolean;
   dead: boolean;
   attached: boolean;
   ready: boolean;
@@ -104,6 +106,9 @@ type Share = {
 export class DesktopProvider {
   private readonly unlockLease = new DesktopUnlockLease();
   private active: Share | undefined;
+  private readonly sharedCapture = new DesktopSharedCapture();
+  private readonly shared = new Set<Share>();
+  private sharedKey: string | undefined;
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
   readonly companion: DesktopCompanionHub;
   constructor(private config: DesktopProviderConfig | undefined) {
@@ -122,6 +127,7 @@ export class DesktopProvider {
   }
   capabilities() {
     return {
+      sharedDesktop: true,
       available: !!this.config,
       allowInput: this.config?.allowInput === true,
       deltas: true,
@@ -151,6 +157,8 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
+    if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || p.options.nativeVideo || p.options.nativeAudio || p.options.nativeDatagrams || p.options.nativeVideoWindow || p.options.nativeCodecs || p.options.nativeAdaptive || p.options.nativeCadence || p.options.nativeMaxFps || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
+      throw new RpcError("invalid_params", "複数viewer共有は通常画面の画像配信を使います。管理者画面・仮想画面・解像度変更とは併用できません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
       if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||p.options.files||p.options.richClipboard||p.options.nativeVideo||p.options.nativeAudio||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.nativeVideoWindow||p.options.nativeMaxFps||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
@@ -159,8 +167,9 @@ export class DesktopProvider {
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
       throw new RpcError("unauthorized", "Bでディスプレイ解像度の変更が許可されていません");
-    if (this.active?.dead && this.active.process) {
-      const child = this.active.process,
+    const finishing = this.active?.dead ? this.active.process : this.sharedCapture.retiring;
+    if (finishing) {
+      const child = finishing,
         pending = { owner, cancelled: false };
       this.pendingStarts.add(pending);
       try {
@@ -179,7 +188,10 @@ export class DesktopProvider {
       }
     }
     if (this.config !== cfg) throw new RpcError("unauthorized", "Desktop permissions changed");
-    if (this.active) throw new RpcError("server_busy", "Bのデスクトップは共有中です");
+    if (this.sharedCapture.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
+    const sharedKey = JSON.stringify(p.options);
+    if (this.active || (this.shared.size && (!p.options.sharedDesktop || this.sharedKey !== sharedKey)) || this.shared.size >= 8)
+      throw new RpcError("server_busy", "Bのデスクトップは異なる設定で共有中か、viewer数の上限です。同じ複数viewer設定で接続してください。");
     const url = new URL(p.url);
     if (
       url.pathname !== "/desktop-share" ||
@@ -198,6 +210,7 @@ export class DesktopProvider {
       followRedirects: false,
     });
     const s: Share = {
+      shared: p.options.sharedDesktop === true,
       inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); }),
       imageExpected:!!p.imageTicket,
       chain: new DesktopFrameChain(),
@@ -232,7 +245,8 @@ export class DesktopProvider {
       }, 1000),
     };
     s.timer.unref();
-    this.active = s;
+    if (s.shared) { this.shared.add(s); this.sharedKey = sharedKey; }
+    else this.active = s;
     ws.on("error", () => this.stop(s));
     ws.on("close", () => this.stop(s));
     return new Promise((resolve, reject) => {
@@ -385,7 +399,8 @@ export class DesktopProvider {
           } else if (m.type === "keyframe") {
             this.write(s, m);
           } else if (m.type === "control") {
-            s.control = m.enabled && s.allowInput && s.ready;
+            const enabled = m.enabled && s.allowInput && s.ready;
+            s.control = s.process?.requestControl ? s.process.requestControl(enabled) : enabled;
             this.write(s, { type: "control", enabled: s.control });
             this.send(s, { type: "control", enabled: s.control });
           } else if (m.type === "sas") {
@@ -424,12 +439,13 @@ export class DesktopProvider {
     cfg: DesktopProviderConfig,
     options: z.infer<typeof DesktopStartParams>["options"],
   ): void {
-    const child = spawn(cfg.command[0]!, cfg.command.slice(1), {
+    const spawnHelper = () => spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
       env:{...process.env,SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
       stdio: ["pipe", "pipe", "pipe"],
     });
+    const child = options.sharedDesktop ? this.sharedCapture.attach(this.sharedKey!, spawnHelper) : spawnHelper();
     s.process = child;
     child.once("error", () => this.stop(s));
     child.once("close", () => {
@@ -632,12 +648,12 @@ export class DesktopProvider {
         }
       }
     });
-    const {files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
-      options:helperOptions,
+      options:options.sharedDesktop ? {...helperOptions,deltas:false,adaptive:false} : helperOptions,
       captureBackends: ["dxgi"],
-      inputAckPipe: true,
+      inputAckPipe: !options.sharedDesktop,
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
@@ -654,8 +670,8 @@ export class DesktopProvider {
       deferNativeSnapshots: options.nativeVideo===true&&cfg.allowNativeVideo===true,
       ...(options.nativeVideoWindow===3&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
-      allowClipboard: cfg.allowClipboard === true,
-      allowDisplayResize: cfg.allowDisplayResize === true,
+      allowClipboard: !options.sharedDesktop && cfg.allowClipboard === true,
+      allowDisplayResize: !options.sharedDesktop && cfg.allowDisplayResize === true,
     });
   }
   private failImages(s:Share){
@@ -702,6 +718,7 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    if (s.shared) { this.shared.delete(s); if (!this.shared.size) this.sharedKey = undefined; }
     delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
     void s.files?.then(worker=>worker?.close());s.fileSocket?.terminate();
@@ -732,6 +749,7 @@ export class DesktopProvider {
   clientGone(owner: string): void {
     for (const pending of this.pendingStarts) if (pending.owner === owner) pending.cancelled = true;
     if (this.active?.owner === owner) this.stop(this.active);
+    for (const s of [...this.shared]) if (s.owner === owner) this.stop(s);
   }
   // Also used when pausing clients for handoff; rollback can reuse this provider.
   dispose(): void {
@@ -739,6 +757,8 @@ export class DesktopProvider {
     this.companion.dispose();
     for (const pending of this.pendingStarts) pending.cancelled = true;
     if (this.active) this.stop(this.active);
+    for (const s of [...this.shared]) this.stop(s);
+    this.sharedCapture.dispose();
   }
 }
 function allowedRelay(url: URL, origins: string[]): boolean {

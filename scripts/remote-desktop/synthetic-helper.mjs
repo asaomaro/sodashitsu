@@ -93,6 +93,8 @@ export function syntheticFrame(width, height, seq, color, mode = "full", layout)
 }
 function heightOf(options) { return options.syntheticHeight ?? options.display?.height ?? Math.round(options.width * 9 / 16); }
 function run() {
+  const lifecycleAt=process.argv.indexOf("--lifecycle-ledger"),lifecycle=lifecycleAt>=0?process.argv[lifecycleAt+1]:undefined;
+  if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"spawn",pid:process.pid})+"\n");
   let configureDelayed=false;
   let options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
