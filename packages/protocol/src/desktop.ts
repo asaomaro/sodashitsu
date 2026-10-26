@@ -1,6 +1,7 @@
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
 import {DesktopNativeCodec,DesktopNativeCodecFallback} from "./desktopCodecs.js";
 import {DesktopNativeFormatAck} from "./desktopNativeAdaptive.js";
+import {DesktopProtectedMode} from "./desktopProtected.js";
 import {DesktopMonitorLayout} from "./desktopMonitors.js";
 import { z } from "zod";
 import {DesktopNativeAudioControl} from "./desktopAudio.js";
@@ -44,6 +45,7 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    elevatedDesktop:z.literal(true).optional(),
     virtualDisplay:z.literal(true).optional(),
     monitors:z.literal(true).optional(),
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
@@ -129,6 +131,7 @@ export const DesktopReady = z
     height: z.number().int().positive().max(32768),
     backend: z.enum(["windows-gdi", "windows-dxgi", "synthetic"]),
     secureDesktop: z.boolean().optional(),
+    protectedDesktop:DesktopProtectedMode.optional(),
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
@@ -157,7 +160,8 @@ export const DesktopReady = z
     image: DesktopImageSettings.optional(),
   })
   .strict()
-  .refine((v) => !v.lockScreenCover || v.secureDesktop === true);
+  .refine((v) => !v.lockScreenCover || v.secureDesktop === true)
+  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&!v.nativeVideo&&!v.nativeAudio&&!v.nativeDatagrams));
 export const DesktopFrameInfo = z
   .object({
     seq: z.number().int().positive(),
@@ -221,6 +225,7 @@ export const DesktopPermissions = z.object({
   allowUnlock: z.boolean().optional(),
   allowMonitors:z.boolean().optional(),
   allowVirtualDisplay:z.boolean().optional(),
+  allowElevated:z.boolean().optional(),
   fileRoot: z.string().max(4096).refine(v=>!v.includes("\0")).optional(),
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
@@ -262,6 +267,7 @@ export interface DesktopResults {
     extendedInput?: boolean;
     monitors?:boolean;
     virtualDisplay?:boolean;
+    elevatedDesktop?:boolean;
     files?: boolean;
     richClipboard?: boolean;
     nativeAudio?: boolean;

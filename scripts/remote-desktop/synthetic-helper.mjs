@@ -162,7 +162,11 @@ function run() {
   const allowInput = process.argv.includes("--allow-input");
   const markerAt = process.argv.indexOf("--unlock-marker");
   const unlockMarker = markerAt >= 0 ? process.argv[markerAt + 1] : undefined;
-  const secure = process.argv.includes("--secure") && (!unlockMarker || !existsSync(unlockMarker));
+  let secure = process.argv.includes("--secure") && (!unlockMarker || !existsSync(unlockMarker));
+  const protectedAt=process.argv.indexOf("--protected-mode"),configuredProtected=protectedAt>=0?process.argv[protectedAt+1]:undefined;
+  if(configuredProtected&&!['elevated-default','elevated-uac'].includes(configuredProtected))throw Error("Generated protected role");
+  const protectedEndAt=process.argv.indexOf("--protected-end-marker"),protectedEndMarker=protectedEndAt>=0?process.argv[protectedEndAt+1]:undefined;
+  let protectedMode,protectedEnded=false;
   const coverAt = process.argv.indexOf("--cover-marker"), coverMarker = coverAt >= 0 ? process.argv[coverAt + 1] : undefined;
   const lockCover = secure && process.argv.includes("--lock-cover") && (!coverMarker || !existsSync(coverMarker));
   const recordAt = process.argv.indexOf("--record"),
@@ -186,6 +190,8 @@ function run() {
       const delayAt=process.argv.indexOf("--configure-delay-ms");
       if(m.type==="configure"&&!configureDelayed&&delayAt>=0){configureDelayed=true;const delay=Number(process.argv[delayAt+1]);if(!Number.isInteger(delay)||delay<1||delay>20000)throw Error("Generated delay bound");setTimeout(()=>lines.emit("line",line),delay);return;}
       if (m.type === "configure" && !options) {
+        const expectedEnvAt=process.argv.indexOf("--expect-elevated-request");if(expectedEnvAt>=0&&process.env.SODA_DESKTOP_ELEVATED_REQUEST!==process.argv[expectedEnvAt+1])throw Error("Generated source request environment mismatch");
+        if(configuredProtected&&((m.options.elevatedDesktop===true&&m.allowElevated===true)||process.argv.includes("--protected-unconditional"))){protectedMode=configuredProtected;secure=true;}
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
         const failureAt = process.argv.indexOf("--startup-failure");
@@ -218,6 +224,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(protectedMode?{protectedDesktop:protectedMode}:{}),
           ...(virtualSource?{virtualDisplay:true}:{}),
           ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
@@ -290,7 +297,7 @@ function run() {
         if (coverMarker) writeFileSync(coverMarker,"dismissed");
         send({type:"lock_screen_changed"});
         process.exit(0);
-      } else if (m.type === "sas" && secure && control) {
+      } else if (m.type === "sas" && secure && !protectedMode && control) {
         if (unlockMarker) writeFileSync(unlockMarker,"unlocked");
         send({type:"session_unlocked"});
         process.exit(0);
@@ -314,6 +321,8 @@ function run() {
     }
   });
   setInterval(() => {
+    if(protectedMode&&protectedEndMarker&&existsSync(protectedEndMarker)&&!protectedEnded){protectedEnded=true;control=false;held.clear();note("scope-ended");send({type:"protected_desktop_failure",code:"source_changed"});setTimeout(()=>process.exit(0),20);return;}
+    if(protectedEnded)return;
     const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}
     if (performance.now() - lastSeen > 8000) process.exit(0);
     if(options&&cursorEnabled&&performance.now()-lastCursor>=500)cursor();

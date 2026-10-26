@@ -78,6 +78,8 @@ async function save() {
       <label
         ><input v-model="draft.allowInput" type="checkbox" />マウス・キーボードの操作を許可</label
       >
+      <label><input v-model="draft.allowElevated" type="checkbox" />管理者権限のアプリ・UAC画面の共有を許可</label>
+      <p v-if="draft.allowElevated">接続先Windowsで専用保護サービスの導入・更新が必要です。接続時にも管理者画面を選び、操作は接続ごとに許可します。</p>
       <label><input v-model="draft.allowVirtualDisplay" type="checkbox" />一時的な仮想画面の作成を許可</label>
       <p v-if="draft.allowVirtualDisplay">接続先Windows 11 x64に署名済み仮想画面ドライバーと専用保護サービスの導入が必要です。</p>
       <label><input v-model="draft.allowMonitors" type="checkbox" />全モニターの共有と切替を許可</label>

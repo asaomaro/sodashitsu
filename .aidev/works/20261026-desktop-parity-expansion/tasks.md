@@ -28,3 +28,5 @@
 第6段階: PR #219でIDD/lease基盤、PR #220でローカル許可・protected purpose・helper/UI接続・署名package明示登録手順を実装。全体11,530件、browser12件、両端Windows compile/fake/拒否検査・driver Windows CI・独立レビュー通過。配布artifactは未署名で、署名済み配布/実DriverStore登録/実headless取得は未完了のためチェックは保留する。検証用unsigned版の自動導入、証明書trust/testsigning変更は行わない。第7〜10段階は未完了。
 
 第7段階の準備: worker scope v2・期待owner/logon/session/process/nonce・不可逆epoch・通知処理marker待機・取得/圧縮/出力待ち後のframe拒否と入力遮断の基盤を追加中。RunProtectedはまだproduction routeから呼ばず、管理者画面/UAC/signinの有効化は未完了。7Aのservice worker handshake、purpose/ローカル許可、protocol/helper/UI接続を次の差分で実装する。7Bの最小agentはE2E依存を解消してから有効化する。
+
+第7段階7A（2026-10-27）: local allowElevated、purpose bits4〜7、nonce別v2 pipeとsame-tuple ACK、actual workerへのNative Guard接続、専用WS protocol/caps/options/helper-ready積、A/Bのfallback公開前拒否、UIの接続ごとの選択とcontrol再取得を実装。RunProtectedは新worker routeへ接続済みで、既定permissionはoff。実サービス更新・SYSTEM worker生成・実UAC/昇格画面の取得/入力は未検証。7B signinはE2E/peer trust依存のため未実装で、task7のチェックは保留する。

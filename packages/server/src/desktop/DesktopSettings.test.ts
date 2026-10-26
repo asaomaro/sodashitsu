@@ -125,3 +125,22 @@ it("keeps virtual-display permission separate and starts a virtual-purpose broke
  await settings.set({...off,enabled:true,allowUnlock:true,allowVirtualDisplay:false});
  expect(options.provider.capabilities().virtualDisplay).toBe(false);expect(configure.mock.calls.at(-1)![0]?.unlockLeaseCommand).toEqual(["synthetic-helper","-UnlockLease"]);
 });
+
+it.each([[false,false],[true,false],[false,true],[true,true]] as const)('maps elevated permission independently of unlock=%s and virtual=%s',async(allowUnlock,allowVirtualDisplay)=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,'configure');
+ const {DesktopUnlockLease}=await import('./DesktopUnlockLease.js');const start=vi.spyOn(DesktopUnlockLease.prototype,'start').mockImplementation(()=>undefined),stop=vi.spyOn(DesktopUnlockLease.prototype,'stop').mockImplementation(()=>undefined);
+ try{
+  const settings=await DesktopSettings.open(options);await settings.set({...off,enabled:true,allowElevated:true,allowUnlock,allowVirtualDisplay});
+  expect(settings.get(true).permissions).toMatchObject({allowElevated:true,allowInput:false,allowUnlock,allowVirtualDisplay});
+  expect(options.provider.capabilities()).toMatchObject({elevatedDesktop:true,allowInput:false,virtualDisplay:allowVirtualDisplay});
+  const config=configure.mock.calls.at(-1)![0]!;expect(config.command).toContain('-AllowElevated');
+  expect(config.unlockLeaseCommand).toEqual(['synthetic-helper','-UnlockLease',...(allowVirtualDisplay?['-AllowVirtualDisplay']:[]),...(allowUnlock?['-AllowUnlock']:[]),'-AllowElevated']);
+  expect(start).toHaveBeenLastCalledWith(config.unlockLeaseCommand);expect(JSON.parse(await readFile(options.file,'utf8'))).toMatchObject({allowElevated:true});
+  await settings.set({...off,enabled:true,allowElevated:false});expect(options.provider.capabilities().elevatedDesktop).toBe(false);expect(configure.mock.calls.at(-1)![0]!.command).not.toContain('-AllowElevated');
+ }finally{options.provider.dispose();start.mockRestore();stop.mockRestore();}
+});
+it('refuses enabling elevated access for legacy custom commands',async()=>{
+ const options=await fixture(),settings=await DesktopSettings.open({...options,legacy:{command:['synthetic'],allowInput:false,origins:options.origins}});
+ await expect(settings.set({...off,enabled:true,allowElevated:true})).rejects.toThrow('同梱');expect(options.provider.capabilities().elevatedDesktop).toBe(false);
+ options.provider.dispose();
+});

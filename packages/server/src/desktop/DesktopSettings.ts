@@ -22,10 +22,10 @@ export function bundledDesktopCommand(
   const script = fileURLToPath(
     new URL("../../../../scripts/remote-desktop/windows-helper.ps1", import.meta.url),
   );
-  const source = fileURLToPath(
-    new URL("../../../../scripts/remote-desktop/WindowsDesktopHost.cs", import.meta.url),
-  );
-  if (!existsSync(script) || !existsSync(source)) return;
+  const required = ["windows-helper.ps1","WindowsDesktopHost.cs","WindowsDesktopUnlock.cs",
+    "WindowsVirtualDisplay.cs","WindowsVirtualDisplayNative.cs","WindowsVirtualDisplayChannel.cs",
+    "WindowsProtectedEpoch.cs","WindowsProtectedScope.cs","WindowsProtectedScopeNative.cs","WindowsProtectedHandshake.cs","WindowsProtectedWorker.cs"];
+  if (!required.every(name=>existsSync(fileURLToPath(new URL(`../../../../scripts/remote-desktop/${name}`,import.meta.url))))) return;
   let path = script;
   if (os !== "win32") {
     if (!env.WSL_DISTRO_NAME) return;
@@ -74,6 +74,7 @@ export class DesktopSettings {
           allowDisplayResize: options.legacy.allowDisplayResize === true,
           ...(options.legacy.allowMonitors?{allowMonitors:true}:{}),
           ...(options.legacy.allowVirtualDisplay?{allowVirtualDisplay:true}:{}),
+          ...(options.legacy.allowElevated?{allowElevated:true}:{}),
           ...(options.legacy.allowUnlock ? { allowUnlock: true } : {}),
         }
       : { ...disabled };
@@ -101,6 +102,7 @@ export class DesktopSettings {
           "invalid_params",
           "この環境では同梱のWindows補助プログラムを使用できません。",
         );
+      if(permissions.allowElevated&&this.options.legacy)throw new RpcError("invalid_params","管理者画面には同梱のWindows補助プログラムを使用してください。");
       if (permissions.allowVirtualDisplay && this.options.legacy)throw new RpcError("invalid_params","仮想画面には同梱のWindows補助プログラムを使用してください。");
       if (permissions.allowUnlock && this.options.legacy)
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
@@ -123,6 +125,7 @@ export class DesktopSettings {
       if (!legacy) {
         if(p.allowMonitors)command.push("-AllowMonitors");
         if(p.allowVirtualDisplay)command.push("-AllowVirtualDisplay");
+        if(p.allowElevated)command.push("-AllowElevated");
         if (p.allowInput) command.push("-AllowInput");
         if (p.allowClipboard) command.push("-AllowClipboard");
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
@@ -135,11 +138,12 @@ export class DesktopSettings {
         ...(p.fileRoot?.trim()?{fileRoot:p.fileRoot.trim()}:{}),
         allowMonitors:p.allowMonitors===true,
         allowVirtualDisplay:p.allowVirtualDisplay===true,
+        allowElevated:p.allowElevated===true,
         allowInput: p.allowInput,
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
         allowUnlock: p.allowUnlock === true,
-        ...((p.allowUnlock||p.allowVirtualDisplay) && !legacy ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay",...(p.allowUnlock?["-AllowUnlock"]:[])]:[])] } : {}),
+        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
         origins: legacy?.origins ?? this.options.origins,
       };
     }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
 
 import "./viewportMaximize.css";
@@ -55,6 +56,8 @@ const infoOpen = ref(false);
 const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
+const protectedMode=ref<"elevated-default"|"elevated-uac">();
+const elevatedScreen=ref(false);
 const lockScreenCover = ref(false);
 const imeKeys = ref(false);
 const extendedInput = ref(false);
@@ -153,7 +156,8 @@ const mediaState = ref("images"),
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>();
 const virtualScreen=ref(false),virtualActive=ref(false);
-function changeVirtualScreen(){monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeVirtualScreen(){if(virtualScreen.value)elevatedScreen.value=false;monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeElevatedScreen(){if(elevatedScreen.value)virtualScreen.value=false;monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
@@ -424,6 +428,7 @@ function stop() {
     inputs.clear();
   }
   secureDesktop.value = false;
+  protectedMode.value=undefined;
   lockScreenCover.value = false;
   imeKeys.value = false;
   extendedInput.value = false;
@@ -499,7 +504,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -508,7 +513,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -594,11 +599,12 @@ function connect(automatic = false) {
         } else if (m.type === "ready") {
           const r = DesktopReady.parse(m);
           secureDesktop.value = r.secureDesktop === true;
+          protectedMode.value=r.protectedDesktop;
           lockScreenCover.value = r.lockScreenCover === true;
           imeKeys.value = r.imeKeys === true;
           extendedInput.value = r.extendedInput === true;
           if (secureDesktop.value) text.value = "";
-          title.value = secureDesktop.value ? "Windowsのロック解除" : r.title;
+          title.value = protectedMode.value ? (protectedMode.value==="elevated-uac"?"WindowsのUAC確認画面":"Windowsの管理者画面") : secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
           ready.value = connected.value = true;
           if(r.imageLane)send({type:"image_ready"});
@@ -621,7 +627,7 @@ function connect(automatic = false) {
             error.value = "Bでディスプレイ解像度の変更が許可されていません";
           }
           if (!secureDesktop.value) scheduleDisplay();
-          status.value = secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
+          status.value = protectedMode.value ? "管理者画面・閲覧中" : secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
         } else if ((m.type === "session_unlocked" && secureDesktop.value) || (m.type === "session_locked" && !secureDesktop.value) || (m.type === "lock_screen_changed" && (secureDesktop.value || !ready.value))) {
           const exhausted = ++startupRetries > 3;
           maximumDisplay.value = false;
@@ -775,6 +781,7 @@ function connect(automatic = false) {
     stop();
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
+    if(elevatedScreen.value){status.value="停止";if(!error.value)error.value=wasReady?"管理者画面の共有が終了しました。接続し直し、操作を許可し直してください。":"管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";return;}
     if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定、署名済みドライバーと保護サービスの導入・更新を確認してください。";return;}
     if (!wasReady && activeSettings.value?.display) {
       maximumDisplay.value = false;
@@ -1017,12 +1024,12 @@ onBeforeUnmount(() => {
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
       <p v-if="error" class="desktop-alert" role="alert">{{ error }}</p>
-      <button v-if="!ready&&error" @click="resetMonitor">既定のモニターで接続し直す</button>
+      <button v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
       <div v-show="infoOpen" class="desktop-controls">
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
       </p>
-      <p v-if="secureDesktop && !lockScreenCover" data-desktop-locked>
+      <p v-if="secureDesktop && !protectedMode && !lockScreenCover" data-desktop-locked>
         Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。
         <button :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
@@ -1035,6 +1042,8 @@ onBeforeUnmount(() => {
           ]
         }}
       </p>
+      <label><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
+      <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。共有終了時にこの画面を解放します。</p>
       <nav>
@@ -1202,6 +1211,7 @@ onBeforeUnmount(() => {
         <label
           ><input
             v-model="maximumDisplay"
+            :disabled="elevatedScreen"
             type="checkbox"
             @change="toggleDisplay"
           />接続先を最大解像度にする</label

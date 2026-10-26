@@ -17,6 +17,9 @@ it("loads dedicated permissions and applies toggles without writing shared prefe
   await vi.waitFor(() => expect(changed).toHaveBeenCalled());
   section.items().find((i) => i.label === "画面共有を許可")!.activate!();
   await vi.waitFor(() => expect(port.set).toHaveBeenCalledWith({ ...permissions, enabled: true }));
+  await vi.waitFor(()=>expect(section.items().find(i=>i.label.startsWith("管理者権限"))!.disabled).toBe(false));
+  section.items().find(i=>i.label.startsWith("管理者権限"))!.activate!();
+  await vi.waitFor(()=>expect(port.set).toHaveBeenLastCalledWith({...permissions,enabled:true,allowElevated:true}));
 });
 it("edits a separately approved file root without changing other desktop permissions", async () => {
   const state = { permissions, supported: true, canConfigure: true },

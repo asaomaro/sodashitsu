@@ -1,0 +1,18 @@
+import {expect,it} from 'vitest';
+import {DesktopOptions,DesktopReady,DesktopPermissions} from './desktop.js';
+import {DesktopProtectedFailure,desktopProtectedFailureMessage} from './desktopProtected.js';
+const base={type:'ready',title:'generated',allowInput:true,width:640,height:480,backend:'synthetic'};
+it('keeps protected sharing opt-in and its local ceiling independent',()=>{
+ expect(DesktopOptions.parse({})).not.toHaveProperty('elevatedDesktop');expect(DesktopOptions.parse({elevatedDesktop:true})).toMatchObject({elevatedDesktop:true});expect(DesktopOptions.safeParse({elevatedDesktop:false}).success).toBe(false);
+ const p=DesktopPermissions.parse({enabled:true,allowInput:false,allowClipboard:false,allowDisplayResize:false,allowElevated:true});expect(p).not.toHaveProperty('allowUnlock');expect(p).not.toHaveProperty('allowVirtualDisplay');
+});
+it.each(['elevated-default','elevated-uac'])('requires secure human-only metadata for %s',mode=>{
+ const ready={...base,secureDesktop:true,protectedDesktop:mode};expect(DesktopReady.safeParse(ready).success).toBe(true);
+ for(const extra of [{secureDesktop:false},{lockScreenCover:true},{virtualDisplay:true},{files:true},{nativeVideo:true},{nativeAudio:true},{nativeDatagrams:true},{richClipboard:true},{allowMedia:true},{allowClipboard:true},{display:{modes:[{width:640,height:480}]}},{protectedDesktop:'WinSta0\\Default'},{nonce:'must-stay-private'}])expect(DesktopReady.safeParse({...ready,...extra}).success).toBe(false);
+});
+it('accepts fixed failure codes without forwarding native strings or unknown fields',()=>{
+ expect(DesktopProtectedFailure.safeParse({type:'protected_desktop_failure',code:'source_changed'}).success).toBe(true);
+ expect(DesktopProtectedFailure.safeParse({type:'protected_desktop_failure',code:'source_changed',message:'private native path'}).success).toBe(false);
+ expect(DesktopProtectedFailure.safeParse({type:'protected_desktop_failure',code:'native exception'}).success).toBe(false);
+ expect(desktopProtectedFailureMessage('source_changed')).toContain('接続し直し');
+});
