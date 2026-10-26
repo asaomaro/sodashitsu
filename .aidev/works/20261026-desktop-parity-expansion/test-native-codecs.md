@@ -79,3 +79,11 @@ ts.ps1:3 ����:1
  
 
 ```
+
+## 最終検証
+
+- `pnpm build` / `pnpm typecheck`: 成功。
+- 新codec実ブラウザ: 9件成功（1.2分）。既存native動画/UDP/adaptive/audio: 22件成功、任意の長時間/性能2件skip（2.7分）。
+- 独立worktree192bbc49: install/build/smoke成功。製品起動・認証・PTY/browser roundtripを確認。
+- 両端Windows: combined helper compile、pure packetチェック、実hardware生成encode検査成功。Bは192bbc49のarchiveをTEMPで検査し、実repo985adc3d/cleanを保持した。
+- 全体test: 770 suites / 11,521 tests成功（356.17秒）。ソースを固定し一度実行。
