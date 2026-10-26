@@ -1,6 +1,6 @@
 # 第1段階 検証記録
 
-事前局所試験: protocol6/server controller6/web controller4計16、Relay68、memory clipboard E2E8件通過。Windows fake IBoard/HTML/RTF/PNG→DIB生成画素検証、Host/Unlock/Audio/Rich全体ValidateOnly compile通過。実OS clipboard/input/captureは実行していない。最終build/typecheck/full unitは実行中。
+事前局所試験: protocol6/server controller6/web controller4計16、Relay68、memory clipboard E2E8件通過。Windows fake IBoard/HTML/RTF/PNG→DIB生成画素検証、Host/Unlock/Audio/Rich全体ValidateOnly compile通過。実OS clipboard/input/captureは実行していない。最終pnpm build/typecheck成功。全体761 suites / 11465 tests成功（378.09秒）。復元後browser E2E8件成功（36.7秒）。別worktreeからbuild後pnpm smoke成功。sr-pcは作業treeを変更せずbranch archiveをTEMPでcombined compile/fakeチェック成功、HEAD2b26ba30とtracked cleanを維持。
 
 各修正だけを外した負例で期待失敗後、元bytesに復元し一致をassert。ブラウザは負例build後に実行し最後に復元build。pipe-fallbackのreset/toggleには二重防御がありresetだけ除去では通過、両方を除去すると失敗した。通過を失敗扱いしない。以下は失敗時の生出力（Windows出力は元のCP932から文字コード変換のみ）。
 
