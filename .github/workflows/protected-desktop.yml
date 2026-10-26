@@ -1,7 +1,7 @@
 name: Protected desktop boundaries (generated checks)
 on:
   push:
-    branches: [feat/desktop-secure-sessions]
+    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer]
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
   pull_request:
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
@@ -17,9 +17,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Generated protected scope and input/output boundaries
+      - name: Generated scope boundaries and private read-only WinEvent delivery
         shell: powershell
-        run: scripts/remote-desktop/validate-protected-scope.ps1
+        run: scripts/remote-desktop/validate-protected-scope.ps1 -ReadOnlyObserver
       - name: Existing helper entry-point compilation
         shell: powershell
         # Full legacy validator includes a limited-query denial test requiring
