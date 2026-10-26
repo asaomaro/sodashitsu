@@ -193,9 +193,9 @@ Bの`soda serve`を起動する環境に次を設定します。
 
 接続中のB発操作委譲の接続先originも共有先として許可されます。したがってこのPoCで`SODA_DESKTOP_COMMAND`を設定することは、**既存の操作委譲先と明示したoriginにデスクトップ共有を許可する設定**です。ユーザー別ACLや都度の現地承認ダイアログはありません。信頼する接続先だけで検証してください。
 
-Windows helperは[scripts/remote-desktop/windows-helper.ps1](../scripts/remote-desktop/windows-helper.ps1)、[WindowsDesktopHost.cs](../scripts/remote-desktop/WindowsDesktopHost.cs)、[WindowsDesktopUnlock.cs](../scripts/remote-desktop/WindowsDesktopUnlock.cs)の3ファイルを、Windowsから読める同じフォルダーへ配置して使います。PowerShell 5.1/.NET Frameworkの標準APIを使用するPoCで、通常共有ではWindowsサービスやキャプチャドライバーを使いません。ロック解除を許可する場合だけ、上記の専用サービスが必要です。
+Windows helperは[scripts/remote-desktop/](../scripts/remote-desktop/)内のPowerShellとCSを、Windowsから読める同じフォルダーへ揃えて配置します。`windows-helper.ps1`とHost/Unlockだけでなく、起動時に読み込むVirtualDisplayとProtectedのCSも必要です。リポジトリを利用する場合は個別に抜き出さず、同じrevisionのフォルダーをそのまま保ってください。PowerShell 5.1/.NET Frameworkを使い、通常共有ではWindowsサービスやキャプチャドライバーを使いません。ロック解除や仮想画面などを許可する場合は、前述の専用サービスの導入・更新が別途必要です。
 
-BがWindows直接起動の場合は、同じ3ファイルを配置して、そのPCのPowerShellで起動前に設定します（閲覧用）:
+BがWindows直接起動の場合も、上記のフォルダーを配置して、そのPCのPowerShellで起動前に設定します（閲覧用）:
 
 ```powershell
 $desktopHelper = (Resolve-Path 'C:\SodaDesktop\windows-helper.ps1').Path
