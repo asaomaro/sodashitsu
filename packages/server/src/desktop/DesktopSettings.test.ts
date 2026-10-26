@@ -115,3 +115,13 @@ it("persists opt-in unlock and ties its lease to provider disposal; old permissi
 it("persists a locally approved file root and refuses invalid roots before changing permissions",async()=>{const options=await fixture(),settings=await DesktopSettings.open(options),root=dirname(options.file);await settings.set({...off,enabled:true,fileRoot:root});expect(options.provider.capabilities()).toMatchObject({files:true});expect((await DesktopSettings.open(options)).get(true).permissions.fileRoot).toBe(root);await expect(settings.set({...off,enabled:true,fileRoot:"relative-directory"})).rejects.toThrow("絶対パス");expect(settings.get(true).permissions.fileRoot).toBe(root);await settings.set({...off,enabled:true,fileRoot:""});expect(options.provider.capabilities()).toMatchObject({files:false});});
 
 it("requires a separate local monitor permission and adds the bundled helper ceiling",async()=>{const options=await fixture(),settings=await DesktopSettings.open(options),configure=vi.spyOn(options.provider,"configure");await settings.set({...off,enabled:true,allowMonitors:true});expect(options.provider.capabilities()).toMatchObject({monitors:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowMonitors:true,command:["synthetic-helper","-AllowMonitors"]});await settings.set({...off,enabled:true,allowMonitors:false});expect(options.provider.capabilities()).toMatchObject({monitors:false});});
+
+it("keeps virtual-display permission separate and starts a virtual-purpose broker lease",async()=>{
+ const options=await fixture(),settings=await DesktopSettings.open(options),configure=vi.spyOn(options.provider,"configure");
+ await settings.set({...off,enabled:true,allowUnlock:false,allowVirtualDisplay:true});
+ expect(options.provider.capabilities()).toMatchObject({virtualDisplay:true,monitors:false});
+ expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowVirtualDisplay:true,allowUnlock:false,command:["synthetic-helper","-AllowVirtualDisplay"],unlockLeaseCommand:["synthetic-helper","-UnlockLease","-AllowVirtualDisplay"]});
+ expect((await DesktopSettings.open(options)).get(true).permissions.allowVirtualDisplay).toBe(true);
+ await settings.set({...off,enabled:true,allowUnlock:true,allowVirtualDisplay:false});
+ expect(options.provider.capabilities().virtualDisplay).toBe(false);expect(configure.mock.calls.at(-1)![0]?.unlockLeaseCommand).toEqual(["synthetic-helper","-UnlockLease"]);
+});

@@ -1,4 +1,4 @@
-param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
+param([int]$MonitorIndex = 0, [switch]$AllowInput, [switch]$AllowClipboard, [switch]$AllowMonitors, [switch]$AllowVirtualDisplay, [switch]$AllowDisplayResize, [switch]$ValidateOnly, [switch]$AllowUnlock, [switch]$UnlockLease, [ValidateSet("auto","gdi")][string]$CaptureBackend = "auto")
 $ErrorActionPreference = 'Stop'
 # Loading and compilation are side-effect free: -ValidateOnly never opens a window,
 # captures the screen, queries the input desktop, or sends input.
@@ -11,7 +11,8 @@ $richPath = Join-Path $PSScriptRoot 'WindowsDesktopRichClipboard.cs'
 $richSource = if (Test-Path -LiteralPath $richPath) { Get-Content -LiteralPath $richPath -Raw } else { '' }
 $codecPath = Join-Path $PSScriptRoot 'WindowsCodecProbe.cs'
 $codecSource = if (Test-Path -LiteralPath $codecPath) { Get-Content -LiteralPath $codecPath -Raw } else { '' }
-$combined = $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource
+$virtualSource = @('WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
+$combined = ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
 Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
@@ -19,8 +20,9 @@ if ($ValidateOnly) { Write-Output 'desktop_helper_compiled'; exit 0 }
 if ($CaptureBackend -eq "gdi") { $env:SODA_DESKTOP_CAPTURE = "gdi" }
 [SodaDesktopUnlock]::SetUtf8Console()
 try {
+    $virtualRequested = $AllowVirtualDisplay -and $env:SODA_DESKTOP_VIRTUAL_REQUEST -eq '1'
     $selected = 'normal'
-    if (-not $UnlockLease -and $AllowUnlock) { $selected = [SodaDesktopUnlock]::SelectSource() }
+    if (-not $UnlockLease -and $AllowUnlock -and -not $virtualRequested) { $selected = [SodaDesktopUnlock]::SelectSource() }
     if ($selected -eq 'transition') { [SodaDesktopUnlock]::SourceTransition(); exit 0 }
     if ($selected -eq 'cover') {
         [SodaDesktopUnlock]::RunUserLockScreen($AllowInput.IsPresent)
@@ -29,12 +31,12 @@ try {
     if ($UnlockLease -or $selected -eq 'secure') {
         $executable = [SodaDesktopUnlock]::InstalledExecutable()
         if (-not (Test-Path -LiteralPath $executable)) { throw 'Install the unlock service first.' }
-        [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent)
+        [SodaDesktopUnlock]::RunInstalled($UnlockLease.IsPresent,$AllowVirtualDisplay.IsPresent,$AllowUnlock.IsPresent)
         exit 0
     }
     if ($AllowUnlock) {
-        [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent)
+        [SodaDesktopUnlock]::RunNormal($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent)
         exit 0
     }
-    [SodaDesktopHost]::Run($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $null, $AllowMonitors.IsPresent) }
+    [SodaDesktopHost]::Run($MonitorIndex, $AllowInput.IsPresent, $AllowClipboard.IsPresent, $AllowDisplayResize.IsPresent, (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs'), $null, $AllowMonitors.IsPresent, $AllowVirtualDisplay.IsPresent) }
 catch { [Console]::Error.WriteLine('Desktop sharing stopped or unavailable.'); exit 1 }

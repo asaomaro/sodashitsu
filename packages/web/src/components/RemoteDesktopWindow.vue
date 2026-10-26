@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
+import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
 
 import "./viewportMaximize.css";
 import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
@@ -152,6 +152,8 @@ const mediaState = ref("images"),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>();
+const virtualScreen=ref(false),virtualActive=ref(false);
+function changeVirtualScreen(){monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
@@ -405,7 +407,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
+  virtualActive.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -497,7 +499,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -506,7 +508,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -609,7 +611,7 @@ function connect(automatic = false) {
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
-          monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
+          virtualActive.value=r.virtualDisplay===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
           filesCap.value=r.files===true;
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
@@ -773,6 +775,7 @@ function connect(automatic = false) {
     stop();
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
+    if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定、署名済みドライバーと保護サービスの導入・更新を確認してください。";return;}
     if (!wasReady && activeSettings.value?.display) {
       maximumDisplay.value = false;
       requestedDisplay = undefined;
@@ -1032,6 +1035,8 @@ onBeforeUnmount(() => {
           ]
         }}
       </p>
+      <label><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
+      <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。共有終了時にこの画面を解放します。</p>
       <nav>
 
         <button :disabled="!ready" @click="send({ type: 'keyframe' })">再同期</button
@@ -1139,7 +1144,7 @@ onBeforeUnmount(() => {
           送信→描画ACK {{nativeStats.ackMs.toFixed(0)}} ms · 復号・描画 {{nativeStats.decodeMs.toFixed(1)}} ms · ACK待ち {{nativeStats.pending}} / {{nativeStats.window}}枚
         </p>
       </details>
-      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
+      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" />
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード{{ richClipboard ? "（テキスト・画像・書式）" : "（テキスト）" }}</summary>

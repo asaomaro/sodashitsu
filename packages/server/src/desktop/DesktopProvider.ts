@@ -1,3 +1,4 @@
+import {DesktopVirtualFailure} from "@sodashitsu/protocol";
 import {DesktopFiles} from "./DesktopFiles.js";
 import {DESKTOP_FILES_PROTOCOL,DesktopFileRequest,DesktopFileResult} from "@sodashitsu/protocol";
 import {DesktopRichClipboard} from "./DesktopRichClipboard.js";
@@ -45,6 +46,7 @@ export interface DesktopProviderConfig {
   command: string[];
   allowInput: boolean;
   allowMonitors?:boolean;
+  allowVirtualDisplay?:boolean;
   fileRoot?:string;
   allowClipboard?: boolean;
   allowMedia?: boolean;
@@ -112,7 +114,7 @@ export class DesktopProvider {
   }
   /** Handoff rollback reopens the local lease; a successful handoff creates a new provider. */
   resumeUnlockLease(): void {
-    if (this.config?.allowUnlock && this.config.unlockLeaseCommand)
+    if ((this.config?.allowUnlock||this.config?.allowVirtualDisplay) && this.config.unlockLeaseCommand)
       this.unlockLease.start(this.config.unlockLeaseCommand);
   }
   capabilities() {
@@ -124,6 +126,7 @@ export class DesktopProvider {
       imeKeys: true,
       extendedInput: true,
       monitors:this.config?.allowMonitors===true,
+      virtualDisplay:this.config?.allowVirtualDisplay===true,
       files:!!this.config?.fileRoot,
       richClipboard:this.config?.allowClipboard===true,
       imageLane: true,
@@ -144,6 +147,7 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
+    if(p.options.virtualDisplay&&(!cfg.allowVirtualDisplay||!p.options.features||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の作成が許可されていないか、モニター指定と併用されています");
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
       throw new RpcError("unauthorized", "Bでディスプレイ解像度の変更が許可されていません");
@@ -178,7 +182,7 @@ export class DesktopProvider {
       !allowedRelay(url, cfg.origins())
     )
       throw new RpcError("unauthorized", "Bで許可されていない共有先です");
-    if (cfg.allowUnlock) this.unlockLease.ensureRunning();
+    if (cfg.allowUnlock||cfg.allowVirtualDisplay&&cfg.unlockLeaseCommand) this.unlockLease.ensureRunning();
     const ws = new WebSocket(url, {
       handshakeTimeout: 10000,
       maxPayload: 65536,
@@ -214,7 +218,7 @@ export class DesktopProvider {
         s.native?.tick();
         if (
           performance.now() - s.lastSeen > 12000 ||
-          (performance.now() - s.started > 15000 && !s.ready)
+          (performance.now() - s.started > (p.options.virtualDisplay?25000:15000) && !s.ready)
         )
           this.stop(s);
       }, 1000),
@@ -415,6 +419,7 @@ export class DesktopProvider {
     const child = spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
+      env:{...process.env,SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
       stdio: ["pipe", "pipe", "pipe"],
     });
     s.process = child;
@@ -442,6 +447,7 @@ export class DesktopProvider {
         if (!line) continue;
         try {
           const raw = JSON.parse(line);
+          if(raw.type==="virtual_display_failure"&&options.virtualDisplay&&cfg.allowVirtualDisplay){this.send(s,DesktopVirtualFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){this.send(s,{type:"monitor_topology_changed"});this.stop(s);return;}
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
@@ -468,6 +474,7 @@ export class DesktopProvider {
                 : options.image.colorMode !== "full" || !options.image.showCursor)
             )
               throw new Error("Helper does not support requested image settings");
+            if(options.virtualDisplay&&(ready.virtualDisplay!==true||s.secureDesktop||ready.lockScreenCover)){this.send(s,{type:"virtual_display_failure",code:"helper_incompatible"});throw Error("Helper did not create requested virtual monitor");}
             if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
             if(ready.monitorLayout&&(ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Monitor capture size mismatch");
             s.ready = true;
@@ -477,7 +484,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
+              virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -499,6 +506,7 @@ export class DesktopProvider {
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
+              ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
@@ -615,6 +623,7 @@ export class DesktopProvider {
       captureBackends: ["dxgi"],
       inputAckPipe: true,
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
+      allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowSystemAudio:options.nativeAudio===true&&cfg.allowMedia===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
@@ -748,6 +757,7 @@ export function desktopConfigFromEnv(
       command: command as string[],
       allowInput: env.SODA_DESKTOP_ALLOW_INPUT === "1",
       allowMonitors:env.SODA_DESKTOP_ALLOW_MONITORS==="1",
+      allowVirtualDisplay:env.SODA_DESKTOP_ALLOW_VIRTUAL_DISPLAY==="1",
       allowClipboard: env.SODA_DESKTOP_ALLOW_CLIPBOARD === "1",
       allowMedia: env.SODA_DESKTOP_ALLOW_MEDIA === "1",
       allowDisplayResize: env.SODA_DESKTOP_ALLOW_DISPLAY_RESIZE === "1",

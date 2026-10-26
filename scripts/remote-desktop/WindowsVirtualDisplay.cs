@@ -2,6 +2,11 @@
 using System;
 using System.Threading;
 
+public sealed class SodaDesktopVirtualFailure : Exception {
+    public string Code{get;private set;}
+    public SodaDesktopVirtualFailure(string code):base("Virtual display unavailable"){Code=code;}
+    public static string Of(Exception error){for(int i=0;error!=null&&i<6;i++,error=error.InnerException){var known=error as SodaDesktopVirtualFailure;if(known!=null)return known.Code;if(error is System.TimeoutException)return "timeout";}return "failed";}
+}
 public sealed class SodaDesktopVirtualDisplay : IDisposable {
     public sealed class Target {
         public readonly string InstanceId, AdapterInstanceId, DeviceName, MonitorPath;
@@ -53,18 +58,18 @@ public sealed class SodaDesktopVirtualDisplay : IDisposable {
     public Target Poll(){
         IDevice current;bool established;lock(gate){if(ended)throw new ObjectDisposedException("VirtualDisplay");current=device;established=target!=null;}
         try {
-            if(!ownerLive())throw new InvalidOperationException("Virtual display owner expired");
-            lock(gate){if(target==null&&clock()>=deadline)throw new TimeoutException("Virtual display creation deadline");}
+            if(!ownerLive())throw new SodaDesktopVirtualFailure("lease_lost");
+            lock(gate){if(target==null&&clock()>=deadline)throw new System.TimeoutException("Virtual display creation deadline");}
             lock(gate){if(failure!=null)throw new InvalidOperationException("Virtual display creation failed",failure);}
-            if(current==null||!current.Started){if(established)throw new InvalidOperationException("Virtual display device stopped");if(clock()>=deadline)throw new TimeoutException("Virtual display did not start");return null;}
+            if(current==null||!current.Started){if(established)throw new SodaDesktopVirtualFailure("driver_unavailable");if(clock()>=deadline)throw new System.TimeoutException("Virtual display did not start");return null;}
             var found=current.ActiveTarget(container);
-            if(found==null){if(established)throw new InvalidOperationException("Virtual monitor disappeared");if(clock()>=deadline)throw new TimeoutException("Virtual monitor not active");return null;}
+            if(found==null){if(established)throw new SodaDesktopVirtualFailure("target_changed");if(clock()>=deadline)throw new System.TimeoutException("Virtual monitor not active");return null;}
             if(String.IsNullOrEmpty(current.InstanceId)||!String.Equals(found.InstanceId,current.InstanceId,StringComparison.OrdinalIgnoreCase)||
                !String.Equals(found.AdapterInstanceId,current.InstanceId,StringComparison.OrdinalIgnoreCase)||found.ContainerId!=container||
-               String.IsNullOrEmpty(found.MonitorPath)||String.IsNullOrEmpty(found.DeviceName))throw new InvalidOperationException("Virtual display target identity mismatch");
+               String.IsNullOrEmpty(found.MonitorPath)||String.IsNullOrEmpty(found.DeviceName))throw new SodaDesktopVirtualFailure("target_changed");
             lock(gate){if(ended||!ReferenceEquals(device,current)||!ownerLive())throw new InvalidOperationException("Virtual display lease expired");
-                if(target!=null&&(!String.Equals(target.MonitorPath,found.MonitorPath,StringComparison.OrdinalIgnoreCase)||!String.Equals(target.DeviceName,found.DeviceName,StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException("Virtual display target changed");
-                if(target==null&&clock()>=deadline)throw new TimeoutException("Virtual display creation deadline");
+                if(target!=null&&(!String.Equals(target.MonitorPath,found.MonitorPath,StringComparison.OrdinalIgnoreCase)||!String.Equals(target.DeviceName,found.DeviceName,StringComparison.OrdinalIgnoreCase)))throw new SodaDesktopVirtualFailure("target_changed");
+                if(target==null&&clock()>=deadline)throw new System.TimeoutException("Virtual display creation deadline");
                 target=found;return found;}
         }catch{Dispose();throw;}
     }

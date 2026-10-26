@@ -1,10 +1,10 @@
 name: Virtual display driver (compile only)
 on:
   push:
-    branches: [feat/desktop-virtual-display]
-    paths: ['scripts/remote-desktop/virtual-display-driver/**', 'scripts/remote-desktop/*VirtualDisplay*', 'scripts/remote-desktop/validate-virtual-display.ps1', '.github/workflows/virtual-display-driver.yml']
+    branches: [feat/desktop-virtual-display, feat/desktop-virtual-display-integration]
+    paths: ['scripts/remote-desktop/virtual-display-driver/**', 'scripts/remote-desktop/*VirtualDisplay*', 'scripts/remote-desktop/validate-virtual-*.ps1', 'scripts/remote-desktop/install-virtual-display-driver.ps1', '.github/workflows/virtual-display-driver.yml']
   pull_request:
-    paths: ['scripts/remote-desktop/virtual-display-driver/**', 'scripts/remote-desktop/*VirtualDisplay*', 'scripts/remote-desktop/validate-virtual-display.ps1', '.github/workflows/virtual-display-driver.yml']
+    paths: ['scripts/remote-desktop/virtual-display-driver/**', 'scripts/remote-desktop/*VirtualDisplay*', 'scripts/remote-desktop/validate-virtual-*.ps1', 'scripts/remote-desktop/install-virtual-display-driver.ps1', '.github/workflows/virtual-display-driver.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +29,13 @@ jobs:
       - name: Fake lease state and native ABI checks
         shell: powershell
         run: scripts/remote-desktop/validate-virtual-display.ps1
+      - name: Broker/package pure checks when integrated
+        shell: powershell
+        run: |
+          foreach ($check in @('validate-virtual-broker.ps1','validate-virtual-package.ps1')) {
+            $script = Join-Path 'scripts/remote-desktop' $check
+            if (Test-Path -LiteralPath $script) { & $script }
+          }
       - name: Build unsigned driver, without installing
         shell: powershell
         run: |

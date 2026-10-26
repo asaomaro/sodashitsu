@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const DESKTOP_VIRTUAL_DISPLAY_PROTOCOL = "soda-desktop-virtual-display-v1";
 export const DESKTOP_MONITORS_PROTOCOL = "soda-desktop-monitors-v1";
 export const DesktopMonitorRect = z
   .object({
@@ -57,4 +58,10 @@ export function desktopMonitorAt(layout: DesktopMonitorLayout, x: number, y: num
   return layout.monitors.find(
     (m) => px >= m.x && px < m.x + m.width && py >= m.y && py < m.y + m.height,
   );
+}
+
+export const DesktopVirtualFailure=z.object({type:z.literal('virtual_display_failure'),code:z.enum(['driver_missing','driver_unavailable','broker_missing','broker_unavailable','permission_denied','unsupported','timeout','target_changed','lease_lost','helper_incompatible','failed'])}).strict();
+export function desktopVirtualFailureMessage(code: z.infer<typeof DesktopVirtualFailure>['code']):string {
+ const messages={driver_missing:'仮想画面ドライバーが未導入です。署名済みパッケージを接続先へ登録してください。',driver_unavailable:'仮想画面ドライバーを起動できません。接続先でドライバーの状態を確認してください。',broker_missing:'仮想画面用の保護サービスが未導入です。',broker_unavailable:'仮想画面用の保護サービスに接続できません。サービスの導入・更新を確認してください。',permission_denied:'仮想画面の作成に必要な権限がありません。',unsupported:'仮想画面はWindows 11 x64の対応ドライバーを必要とします。',timeout:'仮想画面の起動が制限時間を超えました。',target_changed:'共有対象の仮想画面が消失または変更されました。',lease_lost:'仮想画面の所有者または接続が失効しました。',helper_incompatible:'接続先の補助プログラムが仮想画面に対応していません。更新してください。',failed:'仮想画面を開始できません。接続先の設定とドライバーを確認してください。'};
+ return messages[code];
 }
