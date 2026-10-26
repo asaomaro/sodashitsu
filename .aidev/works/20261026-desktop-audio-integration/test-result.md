@@ -6,7 +6,7 @@
 - 最終全体テスト: **757 suites / 11,446 tests passed**、409.01s。ソースを凍結して実行。独立worktreeでinstall/build/smoke PASS。
 - 最終browser4件passed（28.1s、音声DC単体closeでもUDP映像継続、再依頼で初期mute復帰）。
 - 長時間試験の初回は生成helperがaudio/video別々の論理時計を進め、CPU負荷でaudioが150ms以上古くなって正しく破棄された。試験helperを共通の単調時計へ変更し、同じ負荷下90秒再試験で914video/3836audio、video6/audio221drop、queue2/source5、継続成功。製品の鮮度判定は変更していない。
-- 修正済み生成helperによる30分継続は追記予定。
+- 修正済み生成helperによる30分継続は完了。`../20261026-desktop-endurance/test-result.md`参照。
 
 ## 修正前の実ブラウザ失敗
 
