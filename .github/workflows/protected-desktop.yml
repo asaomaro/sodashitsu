@@ -1,7 +1,7 @@
 name: Protected desktop boundaries (generated checks)
 on:
   push:
-    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer, feat/desktop-elevated-handshake]
+    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer, feat/desktop-elevated-handshake, feat/desktop-protected-worker-backend]
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
   pull_request:
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
