@@ -53,9 +53,13 @@ public static class SodaDesktopHost {
     static bool DeferNativeSnapshots=false;
     static long LastNativeInput=-1000;
     static long LastHeartbeat=0;
-    static Rectangle Bounds;
+    static Rectangle Bounds;static SodaDesktopMonitorLayout ActiveMonitors;static int MonitorNotice;static string CaptureDevice;
+    static SodaDesktopMonitorLayout.IDriver MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();
+    static Func<bool> MemoryDesktop;static Action<INPUT> MemoryInput;static Action<object> MemoryOutput;
+    static bool SourceMatches(string device){SodaDesktopMonitorLayout.Item[] ignored;return SourceMatches(device,out ignored);}
+    static bool SourceMatches(string device,out SodaDesktopMonitorLayout.Item[] current){current=null;if(ActiveMonitors==null)return SodaDesktopDisplay.Matches(device,Bounds);bool same=false;try{current=MonitorDriver.Read();same=ActiveMonitors.MatchesItems(current);}catch{}if(!same&&Interlocked.CompareExchange(ref MonitorNotice,1,0)==0)Output(new{type="monitor_topology_changed"});return same;}
 
-    static void Output(object value) { lock(OutputGate){Console.Out.WriteLine(OutputJson.Serialize(value)); Console.Out.Flush();} }
+    static void Output(object value) { lock(OutputGate){if(MemoryOutput!=null){MemoryOutput(value);return;}Console.Out.WriteLine(OutputJson.Serialize(value)); Console.Out.Flush();} }
     static void InputAck(long seq) {
         if(InputAckPipe){Console.Error.WriteLine("\nSODA_DESKTOP_INPUT_ACK "+seq.ToString(System.Globalization.CultureInfo.InvariantCulture));Console.Error.Flush();}
         else Output(new {type="input_ack",seq});
@@ -72,7 +76,7 @@ public static class SodaDesktopHost {
     static bool Secure;
     static Func<int> SecureLockState;
     static Func<bool> SecureGuard;
-    static bool AllowedDesktop() { return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop(); }
+    static bool AllowedDesktop() { if(MemoryDesktop!=null)return MemoryDesktop();return Secure ? SecureGuard!=null && SecureGuard() : DefaultDesktop(); }
     public static void RunSecure(Func<int> lockState,Func<bool> secureGuard) {
         if(!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem || !secureGuard())throw new InvalidOperationException("Secure desktop unavailable");
         SecureLockState=lockState;SecureGuard=secureGuard;Secure=true;
@@ -92,7 +96,7 @@ public static class SodaDesktopHost {
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static void Emit(INPUT value) { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
+    static void Emit(INPUT value) { if(MemoryInput!=null){MemoryInput(value);return;}if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
     static INPUT KeyInput(ushort token,bool down) {
         ushort vk=(ushort)(token&255);
         bool extended=(token&0x100)!=0 || vk>=33&&vk<=46 || vk==111 || vk==144 || vk==163 || vk==165 || vk>=91&&vk<=93 || vk>=166&&vk<=183;
@@ -133,6 +137,8 @@ public static class SodaDesktopHost {
     static bool Apply(Dictionary<string,object> input) {
         lock(Gate) {
             if(!Control || Stopping || Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>6000 || !AllowedDesktop()) { Release();return false; }
+            SodaDesktopMonitorLayout.Item[] currentMonitors=null;
+            if(CaptureDevice!=null&&!SourceMatches(CaptureDevice,out currentMonitors)){Stopping=true;Release();return false;}
             string kind=(string)input["kind"];
             if(kind=="key") {
                 string code=(string)input["code"];ushort key=VirtualKey(code);bool down=(bool)input["down"];
@@ -146,10 +152,10 @@ public static class SodaDesktopHost {
             } else if(kind=="pointer") {
                 double x=Convert.ToDouble(input["x"]),y=Convert.ToDouble(input["y"]);
                 if(Double.IsNaN(x)||Double.IsNaN(y)||x<0||x>1||y<0||y>1)throw new InvalidOperationException();
+                if(ActiveMonitors!=null&&!ActiveMonitors.Contains(x,y)){int released=Num(input,"button");if(released<0||released>4)throw new InvalidOperationException();if((string)input["event"]=="up"&&Buttons.Remove(released))Emit(ButtonInput(released,false));return true;}
                 // Read the same native pixel coordinate space used by capture.
                 // WinForms virtual bounds can be DPI-virtualized by the host.
-                var devices=new List<string>();foreach(var screen in Screen.AllScreens)devices.Add(screen.DeviceName);
-                Rectangle all=SodaDesktopDisplay.VirtualRectangle(new SodaDesktopDisplay.NativeDriver(null),devices);
+                var monitors=currentMonitors??MonitorDriver.Read();if(monitors.Length<1)throw new InvalidOperationException("Monitor not found");Rectangle all=monitors[0].Bounds;foreach(var monitor in monitors)all=Rectangle.Union(all,monitor.Bounds);
                 Point absolute=SodaDesktopDisplay.AbsolutePointer(Bounds,all,x,y);
                 Mouse(0x8000|0x4000|1,0,absolute.X,absolute.Y);
                 int button=Num(input,"button");if(button<0||button>4)throw new InvalidOperationException();
@@ -159,6 +165,20 @@ public static class SodaDesktopHost {
             } else throw new InvalidOperationException();
             return true;
         }
+    }
+    sealed class MemoryMonitors:SodaDesktopMonitorLayout.IDriver {public SodaDesktopMonitorLayout.Item[] Items;public int Reads;public SodaDesktopMonitorLayout.Item[] Read(){Reads++;return Items;}}
+    // A fresh validation process only. Every desktop, topology, emit and output
+    // endpoint is memory-backed before any production input code is called.
+    public static void VerifyQueuedMonitorInput(){
+        if(Control||CaptureDevice!=null||ActiveMonitors!=null||MemoryInput!=null||MemoryDesktop!=null||MemoryOutput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        Rectangle oldBounds=Bounds;bool oldStopping=Stopping;long oldHeartbeat=LastHeartbeat;var oldDriver=MonitorDriver;int oldNotice=MonitorNotice;
+        var sent=new List<INPUT>();int notices=0;var fake=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("a",new Rectangle(0,0,800,600),true,100)}};
+        MemoryInput=sent.Add;MemoryDesktop=()=>true;MemoryOutput=value=>{notices++;};MonitorDriver=fake;ActiveMonitors=new SodaDesktopMonitorLayout(fake,"a");CaptureDevice="a";Bounds=ActiveMonitors.Bounds;Control=true;Stopping=false;MonitorNotice=0;LastHeartbeat=Clock.ElapsedMilliseconds;
+        try{
+            var queue=new SodaDesktopCommandQueue<string>(8,v=>false,v=>{});queue.Submit("keyA");queue.Submit("pointer");queue.Submit("clipboard-wait-completes-after-topology-change");queue.Submit("keyB");
+            while(queue.ProcessOne(value=>{if(value=="clipboard-wait-completes-after-topology-change")fake.Items=new[]{new SodaDesktopMonitorLayout.Item("a",new Rectangle(0,0,1024,768),true,100)};else if(value=="pointer")Apply(new Dictionary<string,object>{{"kind","pointer"},{"x",0.5},{"y",0.5},{"event","move"},{"button",0}});else Apply(new Dictionary<string,object>{{"kind","key"},{"code",value=="keyA"?"KeyA":"KeyB"},{"down",true}});})){}
+            if(!Stopping||Control||Keys.Count!=0||sent.Count!=3||sent[0].data.key.vk!=65||(sent[0].data.key.flags&2)!=0||sent[1].type!=0||sent[2].data.key.vk!=65||(sent[2].data.key.flags&2)==0||notices!=1||fake.Reads!=4)throw new InvalidOperationException("Queued input after topology change was not rejected and released");
+        }finally{Release();MemoryInput=null;MemoryDesktop=null;MemoryOutput=null;ActiveMonitors=null;CaptureDevice=null;MonitorDriver=oldDriver;Bounds=oldBounds;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;MonitorNotice=oldNotice;}
     }
     // Compare exact scaled pixels, then merge adjacent 64px tiles into rectangles.
     static byte[] Levels(int bits) {
@@ -223,25 +243,29 @@ public static class SodaDesktopHost {
         public string contentId;
     }
     static SodaDesktopDisplay.Lease DisplayLease;
-    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null) {
-        try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath); }
+    public static void Run(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard=false,bool locallyAllowDisplayResize=false,string sourcePath=null,Func<int> lockState=null,bool locallyAllowMonitors=false) {
+        try { RunCore(monitorIndex,locallyAllowInput,locallyAllowClipboard,locallyAllowDisplayResize,sourcePath,locallyAllowMonitors); }
         finally { if(DisplayLease!=null){try{DisplayLease.Dispose();}catch{Console.Error.WriteLine("Display restore failed; restore resolution locally in Windows Settings.");}DisplayLease=null;}
             if(!Secure && lockState!=null && lockState()==0)Output(new {type="session_locked"});
         }
     }
-    static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath) {
+    static void RunCore(int monitorIndex,bool locallyAllowInput,bool locallyAllowClipboard,bool locallyAllowDisplayResize,string sourcePath,bool locallyAllowMonitors) {
         if(!Secure && !Environment.UserInteractive)throw new InvalidOperationException("Interactive Windows session required");
-        SetProcessDPIAware();
+        ActiveMonitors=null;CaptureDevice=null;MonitorNotice=0;MonitorDriver=new SodaDesktopMonitorLayout.NativeDriver();SetProcessDPIAware();
         var screens=Screen.AllScreens;
-        if(monitorIndex<0 || monitorIndex>=screens.Length)throw new InvalidOperationException("Monitor not found");
-        var screen=screens[monitorIndex];
-        if(!Secure)SodaDesktopDisplay.WaitForPrevious(screen.DeviceName);
-        Bounds=SodaDesktopDisplay.RectangleOf(new SodaDesktopDisplay.NativeDriver(null).Current(screen.DeviceName));
-        if(!AllowedDesktop() || Bounds.Width<1 || Bounds.Height<1 || (long)Bounds.Width*Bounds.Height>40000000)throw new InvalidOperationException("Desktop unavailable");
+        if(screens.Length<1)throw new InvalidOperationException("Monitor not found");
+        bool defaultExists=monitorIndex>=0&&monitorIndex<screens.Length;string sourceDevice=screens[defaultExists?monitorIndex:0].DeviceName;
         string first=ReadBoundedLine();if(first==null || first.Length>65536)return;
         var config=Obj(Json.DeserializeObject(first));if((string)config["type"]!="configure")throw new InvalidOperationException();
         var options=Obj(config["options"]);int maxWidth=Num(options,"width"),fps=Num(options,"fps"),quality=Num(options,"quality");
         if(maxWidth<320||maxWidth>1920||fps<1||fps>30||quality<20||quality>90)throw new InvalidOperationException();
+        bool monitorCeiling=!Secure&&locallyAllowMonitors&&config.ContainsKey("allowMonitors")&&(bool)config["allowMonitors"]&&options.ContainsKey("monitors")&&(bool)options["monitors"];
+        if(!defaultExists&&!(monitorCeiling&&options.ContainsKey("monitorDevice")))throw new InvalidOperationException("Monitor not found");
+        if(monitorCeiling){string selected=options.ContainsKey("monitorDevice")?(string)options["monitorDevice"]:sourceDevice;if(selected=="all"){foreach(var item in new SodaDesktopMonitorLayout.NativeDriver().Read())SodaDesktopDisplay.WaitForPrevious(item.Id);}else SodaDesktopDisplay.WaitForPrevious(selected);ActiveMonitors=new SodaDesktopMonitorLayout(new SodaDesktopMonitorLayout.NativeDriver(),selected);if(selected!="all")sourceDevice=selected;else if(ActiveMonitors.Items.Length==1)sourceDevice=ActiveMonitors.Items[0].Id;}
+        else{if(!Secure&&options.ContainsKey("monitorDevice"))throw new InvalidOperationException("Monitor selection not permitted");if(!Secure)SodaDesktopDisplay.WaitForPrevious(sourceDevice);}
+        Bounds=ActiveMonitors!=null?ActiveMonitors.Bounds:SodaDesktopDisplay.RectangleOf(new SodaDesktopDisplay.NativeDriver(null).Current(sourceDevice));
+        if(!AllowedDesktop() || Bounds.Width<1 || Bounds.Height<1 || (long)Bounds.Width*Bounds.Height>40000000)throw new InvalidOperationException("Desktop unavailable");
+        string sourceTitle=ActiveMonitors!=null&&ActiveMonitors.Selected=="all"?"All monitors":sourceDevice;
         int maxFps=fps,maxQuality=quality;
         bool clipboardCeiling=!Secure && locallyAllowClipboard && config.ContainsKey("allowClipboard") && (bool)config["allowClipboard"];
         bool clipboardAllowed=false;long clipboardGeneration=0;
@@ -250,14 +274,15 @@ public static class SodaDesktopHost {
         string colorMode="full";bool showCursor=true;
         if(options.ContainsKey("image")){var image=Obj(options["image"]);colorMode=(string)image["colorMode"];showCursor=(bool)image["showCursor"];}
         if(colorMode!="full"&&colorMode!="rgb565"&&colorMode!="rgb332"&&colorMode!="gray16")throw new InvalidOperationException("Invalid color mode");
-        bool displayCeiling=!Secure && screens.Length==1 && locallyAllowDisplayResize && config.ContainsKey("allowDisplayResize") && (bool)config["allowDisplayResize"];
-        var displayModes=displayCeiling?new SodaDesktopDisplay.NativeDriver(sourcePath).Modes(screen.DeviceName):new List<SodaDesktopDisplay.Mode>();
+        bool displayCeiling=!Secure && (ActiveMonitors!=null?ActiveMonitors.Items.Length:screens.Length)==1 && locallyAllowDisplayResize && config.ContainsKey("allowDisplayResize") && (bool)config["allowDisplayResize"];
+        var displayModes=displayCeiling?new SodaDesktopDisplay.NativeDriver(sourcePath).Modes(sourceDevice):new List<SodaDesktopDisplay.Mode>();
         if(!Secure && options.ContainsKey("display")) {
             if(!displayCeiling)throw new InvalidOperationException("Display resize not permitted");
             var requested=Obj(options["display"]);
-            DisplayLease=new SodaDesktopDisplay.Lease(new SodaDesktopDisplay.NativeDriver(sourcePath),screen.DeviceName,Num(requested,"width"),Num(requested,"height"));
-            Bounds=DisplayLease.Bounds;maxWidth=Bounds.Width;
+            DisplayLease=new SodaDesktopDisplay.Lease(new SodaDesktopDisplay.NativeDriver(sourcePath),sourceDevice,Num(requested,"width"),Num(requested,"height"));
+            Bounds=DisplayLease.Bounds;maxWidth=Bounds.Width;if(ActiveMonitors!=null)ActiveMonitors=new SodaDesktopMonitorLayout(new SodaDesktopMonitorLayout.NativeDriver(),ActiveMonitors.Selected);
         }
+        CaptureDevice=sourceDevice;
         int w=Math.Min(Bounds.Width,maxWidth),h=(int)Math.Round(Bounds.Height*(double)w/Bounds.Width);
         if(h>2400){w=(int)Math.Round(w*2400.0/h);h=2400;}
         if((long)w*h>8000000)throw new InvalidOperationException();
@@ -289,10 +314,10 @@ public static class SodaDesktopHost {
         // Only new providers opt in. Old providers/helpers keep their existing wire contract.
         if(!Secure && Environment.GetEnvironmentVariable("SODA_DESKTOP_CAPTURE")!="gdi" && config.ContainsKey("captureBackends")) {
             var backends=config["captureBackends"] as object[];
-            if(backends!=null && Array.IndexOf(backends,"dxgi")>=0)dxgi=SodaDesktopDxgi.TryCreate(screen.DeviceName,Bounds,w,h);
+            if((ActiveMonitors==null||ActiveMonitors.Selected!="all"||ActiveMonitors.Items.Length==1)&&backends!=null && Array.IndexOf(backends,"dxgi")>=0)dxgi=SodaDesktopDxgi.TryCreate(sourceDevice,Bounds,w,h);
         }
         try {
-            var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+screen.DeviceName},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
+            var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+sourceTitle},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(separateCursor)ready["cursor"]=true;
@@ -305,6 +330,7 @@ public static class SodaDesktopHost {
             if(nativePipeline)ready["nativeVideoWindow"]=3;
             if(Secure)ready["secureDesktop"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
+            if(ActiveMonitors!=null)ready["monitorLayout"]=ActiveMonitors.Message();
             Output(ready);
             if(separateCursor)cursorPump=new SodaDesktopCursor(()=>dxgi,Bounds,showCursor,()=>!Stopping&&AllowedDesktop(),OutputGate,Output);
             var jpeg=Array.Find(ImageCodecInfo.GetImageEncoders(),c=>c.MimeType=="image/jpeg");
@@ -320,7 +346,6 @@ public static class SodaDesktopHost {
                     msg=>(string)msg["type"]=="input",
                     msg=>{
                         if(Stopping)return;
-                        if(!SodaDesktopDisplay.Matches(screen.DeviceName,Bounds)){Stopping=true;Release();return;}
                         ApplyInput(msg,ref inputSeq,()=>Interlocked.Increment(ref inputRevision));
                     },msg=>{string type=(string)msg["type"];return type=="ack"||type=="native_video_ack"||type=="heartbeat";});
                 Action beforeCaptureDispose=()=>{
@@ -339,7 +364,7 @@ public static class SodaDesktopHost {
                 using(var sha=SHA256.Create()) {
                 while(!Stopping) {
                     if(!Secure)Application.DoEvents();
-                    if(!AllowedDesktop() || !SodaDesktopDisplay.Matches(screen.DeviceName,Bounds))break;
+                    if(!AllowedDesktop() || !SourceMatches(sourceDevice))break;
                     int handled=0;
                     while(!Stopping && handled++<64 && commands.ProcessOne(msg=> {
                         string type=(string)msg["type"];
@@ -405,7 +430,7 @@ public static class SodaDesktopHost {
                         } else if(type=="stop") { Stopping=true;return; }
                         else throw new InvalidOperationException();
                     })) {}
-                    if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+screen.DeviceName;
+                    if(form!=null)form.Text="Sodashitsu - "+(Control?"CONTROL":"VIEW ONLY")+" - "+sourceTitle;
                     long now=Clock.ElapsedMilliseconds;
                     if(video!=null && videoWindow.Count>0 && now-videoWindow.OldestAt>2500) {
                         commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
@@ -1524,4 +1549,44 @@ public sealed class SodaDesktopCursor : IDisposable {
     }
     public bool Stop(int milliseconds){if(milliseconds<1||milliseconds>1000)throw new ArgumentOutOfRangeException("milliseconds");stopping=true;Active=false;return Thread.CurrentThread!=thread&&thread.Join(milliseconds);}
     public void Dispose(){if(!Stop(1000))throw new System.TimeoutException("Cursor worker did not stop");}
+}
+
+// Read-only topology plus physical-coordinate geometry. Fake driver tests never
+// call Screen, enumerate native monitors, capture pixels or send input.
+public sealed class SodaDesktopMonitorLayout {
+    public sealed class Item {
+        public readonly string Id;public readonly Rectangle Bounds;public readonly bool Primary;public readonly int? Scale;
+        public Item(string id,Rectangle bounds,bool primary,int? scale=null){Id=id;Bounds=bounds;Primary=primary;Scale=scale;}
+    }
+    public interface IDriver {Item[] Read();}
+    public sealed class NativeDriver:IDriver {
+        delegate bool MonitorProc(IntPtr monitor,IntPtr dc,IntPtr rectangle,IntPtr state);
+        [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct MonitorInfo {public int size;public RectangleNative bounds,work;public uint flags;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]public string device;}
+        [StructLayout(LayoutKind.Sequential)]struct RectangleNative {public int left,top,right,bottom;}
+        [DllImport("user32.dll")]static extern bool EnumDisplayMonitors(IntPtr dc,IntPtr clip,MonitorProc callback,IntPtr state);
+        [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="GetMonitorInfoW")]static extern bool GetMonitorInfo(IntPtr monitor,ref MonitorInfo info);
+        [DllImport("shcore.dll")]static extern int GetScaleFactorForMonitor(IntPtr monitor,out int scale);
+        public Item[] Read(){
+            var monitors=new List<MonitorInfo>();var scales=new Dictionary<string,int>();
+            MonitorProc read=(monitor,dc,rect,state)=>{var info=new MonitorInfo{size=Marshal.SizeOf(typeof(MonitorInfo))};if(!GetMonitorInfo(monitor,ref info))return false;monitors.Add(info);try{int scale;if(GetScaleFactorForMonitor(monitor,out scale)==0&&scale>=50&&scale<=1000)scales[info.device]=scale;}catch(EntryPointNotFoundException){}catch(DllNotFoundException){}return true;};
+            if(!EnumDisplayMonitors(IntPtr.Zero,IntPtr.Zero,read,IntPtr.Zero))throw new InvalidOperationException("Monitor enumeration failed");
+            var result=new List<Item>();var driver=new SodaDesktopDisplay.NativeDriver(null);
+            foreach(var monitor in monitors){int scale;result.Add(new Item(monitor.device,SodaDesktopDisplay.RectangleOf(driver.Current(monitor.device)),(monitor.flags&1)!=0,scales.TryGetValue(monitor.device,out scale)?(int?)scale:null));}
+            return result.ToArray();
+        }
+    }
+    public readonly Item[] Items;public readonly string Selected;public readonly Rectangle Bounds;public readonly bool AllSupported;
+    static bool Valid(Rectangle bounds){return bounds.Width>0&&bounds.Height>0&&bounds.Width<=32768&&bounds.Height<=32768&&(long)bounds.Width*bounds.Height<=40000000;}
+    public SodaDesktopMonitorLayout(IDriver driver,string selected){
+        var items=driver.Read();if(items==null||items.Length<1||items.Length>16)throw new InvalidOperationException("Monitor count");
+        var ids=new HashSet<string>();Rectangle all=items[0].Bounds;Item chosen=null;
+        foreach(var item in items){if(item==null||String.IsNullOrEmpty(item.Id)||item.Id.Length>128||item.Id=="all"||!ids.Add(item.Id)||!Valid(item.Bounds)||item.Bounds.Left<-65536||item.Bounds.Left>65536||item.Bounds.Top<-65536||item.Bounds.Top>65536||item.Scale.HasValue&&(item.Scale.Value<50||item.Scale.Value>1000))throw new InvalidOperationException("Monitor layout");all=Rectangle.Union(all,item.Bounds);if(item.Id==selected)chosen=item;}
+        AllSupported=Valid(all);if(selected=="all"){if(!AllSupported)throw new InvalidOperationException("Combined monitor area limit");Bounds=all;}else{if(chosen==null)throw new InvalidOperationException("Monitor not found");Bounds=chosen.Bounds;}
+        Items=(Item[])items.Clone();Selected=selected;
+    }
+    sealed class SnapshotDriver:IDriver {readonly Item[] items;public SnapshotDriver(Item[] items){this.items=items;}public Item[] Read(){return items;}}
+    public bool Matches(IDriver driver){try{return MatchesItems(driver.Read());}catch{return false;}}
+    public bool MatchesItems(Item[] items){try{var other=new SodaDesktopMonitorLayout(new SnapshotDriver(items),Selected);if(other.Items.Length!=Items.Length||other.Bounds!=Bounds)return false;foreach(var item in Items){Item match=null;foreach(var next in other.Items)if(next.Id==item.Id){match=next;break;}if(match==null||match.Bounds!=item.Bounds||match.Primary!=item.Primary||match.Scale!=item.Scale)return false;}return true;}catch{return false;}}
+    public bool Contains(double x,double y){if(Double.IsNaN(x)||Double.IsNaN(y)||Double.IsInfinity(x)||Double.IsInfinity(y)||x<0||x>1||y<0||y>1)return false;var point=new Point(Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),Bounds.Top+(int)Math.Round(y*(Bounds.Height-1)));foreach(var item in Items)if(item.Bounds.Contains(point))return true;return false;}
+    public object Message(){var items=new List<object>();foreach(var item in Items){var value=new Dictionary<string,object>{{"id",item.Id},{"x",item.Bounds.Left},{"y",item.Bounds.Top},{"width",item.Bounds.Width},{"height",item.Bounds.Height},{"primary",item.Primary}};if(item.Scale.HasValue)value["scalePercent"]=item.Scale.Value;items.Add(value);}return new{selected=Selected,bounds=new{x=Bounds.Left,y=Bounds.Top,width=Bounds.Width,height=Bounds.Height},allSupported=AllSupported,monitors=items};}
 }

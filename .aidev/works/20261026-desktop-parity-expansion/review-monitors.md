@@ -1,0 +1,7 @@
+# 第3段階 independent review
+
+review_transfer: main queueのbatch先頭だけのtopology検査では途中の待ちの後のinputを覆わないmustを指摘。共通Applyの実Emit前検査とproduction queue/Applyのmemory regressionを追加。最終再点検でmust/should解消。
+
+review_pointer: 最大解像度中のtopology changeがoncloseで別原因へ上書きされるshould、fast/common/pointerの重複列挙のshouldを指摘。connect世代flag＋display要求解除、snapshot再利用と1enum/inputのproduction memory試験を追加。追加topology-display E2Eと除去負例を確認し最終点検通過。旧helper/secure/gap/button-state/切替grant解除にも追加指摘なし。
+
+fakeと実機metadata probeを混同しない。実OScapture/inputや実複数画面での描画/操作は自動試験していない。

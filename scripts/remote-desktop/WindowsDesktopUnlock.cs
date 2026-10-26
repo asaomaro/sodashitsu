@@ -402,8 +402,8 @@ public static class SodaDesktopUnlock {
         Console.SetOut(new StreamWriter(Console.OpenStandardOutput(),new UTF8Encoding(false),4096){AutoFlush=true});
         Console.SetError(new StreamWriter(Console.OpenStandardError(),new UTF8Encoding(false),4096){AutoFlush=true});
     }
-    public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source) {
-        SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState);
+    public static void RunNormal(int monitor,bool input,bool clipboard,bool resize,string source,bool monitors=false) {
+        SodaDesktopHost.Run(monitor,input,clipboard,resize,source,LockState,monitors);
     }
     [StructLayout(LayoutKind.Sequential)]struct STARTUPINFOEX { public STARTUPINFO startup;public IntPtr attributes; }
     [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr GetStdHandle(int id);
