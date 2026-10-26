@@ -139,3 +139,18 @@ protected_scope_checks_passed: canonical v2 tuple/ack, modes/purpose, owner/logo
 初回CIの新scope試験は成功したが、既存UnlockProcessChecksの「limited-queryが拒否される」前提が管理者権限のGitHub Windows runnerでは成立せず停止した。既存validatorや権限制御は変更せず、新CIではhelper entry-point compile-only・新scope/generated input/output・monitor fake検査を行う。既存helper full validatorは通常利用者の接続元とsr-pcで成功しており、その検査を省略成功とは扱わない。
 
 初回CI: https://github.com/asaomaro/sodashitsu/actions/runs/40342417337
+
+## 最終結果
+
+- source commit: e8bfe999bbc5ad68bf155d5edbe965f827699db3。以降はCI YAMLと記録だけの変更でsourceを固定。
+- pnpm build / pnpm typecheck: 成功。
+- 全体: 771 suites / 11,530 tests 成功、341.91秒。
+- 関連E2E: image lane / delta / input / unlock、5件成功、26.8秒。synthetic helperのみ。
+- 独立worktree /workspaces/sodashitsu-desktop-protected-check（e8bfe999）: frozen install、build、smoke PASS。
+- 接続元Windows: new scope + actual Host output gate fake regression、native ABI、既存helper entry-point/pipe/input/monitor checks成功。
+- sr-pc: TEMPへfeature e8bfe999をarchiveしてhelper/broker compile-only、new scope/Host/ABI、既存helper/pipe/input/monitor checks成功（exit0、timeout false）。repo HEADは06189c3fのまま、tracked status空、導入物とOS状態を変更せず確認。
+- 修正後Windows CI: https://github.com/asaomaro/sodashitsu/actions/runs/40342706791 と https://github.com/asaomaro/sodashitsu/actions/runs/40342717583 成功。
+- 独立レビュー2件・各修正再レビュー・negative復元確認通過。CI権限前提修正も別途再点検通過。
+- diff空白検査はcode/YAMLで成功。上記raw log記録内のCRLFとPowerShellの空白は、生出力保持のため変更していない。
+
+第7段階のチェックは未完了のまま。今回の基盤に続けて、7Aのlocal permission/purpose/v2 worker handshake/helper-ready/peer gate/UIを別差分で接続する。実WinEventのmarker配送・順序・timeoutはruntime有効化前にread-only実機確認を行う。7Bの永続signin agentとE2E依存も残る。
