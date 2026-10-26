@@ -6,7 +6,7 @@
 - [x] 2. デスクトップ内のupload/download/D&D、転送一覧、cancel/resume。既存remote_work転送と区別し、既存ファイルの暗黙上書きを避ける（taskcheck必須）。
 - [x] 3. 複数monitorの検出/切替/同時表示、個別座標/DPI/対象変化時解除（taskcheck必須）。
 - [x] 4. native動画の回線/負荷に応じたFPS/解像度の適応。設定上限・表示倍率/OS解像度と分離（taskcheck必須）。
-- [ ] 5. native codec選択（H264 4:4:4、HEVC、AV1）。OS/GPU/browserの実capabilityを交渉し、非対応を偽装せずfallback（taskcheck必須）。
+- [x] 5. native codec選択（H264 4:4:4、HEVC、AV1）。OS/GPU/browserの実capabilityを交渉し、非対応を偽装せずfallback（taskcheck必須）。
 - [ ] 6. 仮想display/headless。ドライバーの存在/導入/権限を区別、実機設定を自動で変更しない検証経路も用意（taskcheck必須）。
 - [ ] 7. UAC/昇格アプリ/サインアウト後signin。既存保護サービスの許可と世代/利用者操作を守る（taskcheck必須）。
 - [ ] 8. 複数viewer。共有sourceと各viewerのbackpressure/許可/取消を分離、操作は明示排他（taskcheck必須）。
@@ -22,3 +22,5 @@
 第4段階前半: native動画FPS/bitrateの自動調整を実装・独立レビュー・全体11,500件/ブラウザ17件（2 skip）検証済み。resolution barrierは別差分で進行中、task 4は未完了。
 
 第4段階後半: 解像度の世代barrier、audio/peer維持、source/sentAt/freshAt分離、GPU lease安全、旧peer gateを実装。全体11,509件・ブラウザ22件（任意の長時間/性能2件skip）、両端Windows生成GPU検査・独立レビューと修正再レビューを通過。残り5〜10は未完了。
+
+第5段階: codec交渉、実header正規化、非対応時の一度だけのH264復帰を実装。全体11,521件、新codecブラウザ9件・既存22件、両端Windows生成検査、独立レビュー通過。AV1/444の実hardware対応は当該両PCで未確認（実encode不可）で、software AV1 decode fixtureと区別する。第6〜10段階は未完了。
