@@ -1,7 +1,7 @@
 name: Protected desktop boundaries (generated checks)
 on:
   push:
-    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer]
+    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer, feat/desktop-elevated-handshake, feat/desktop-protected-worker-backend]
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
   pull_request:
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
@@ -25,6 +25,12 @@ jobs:
         # Full legacy validator includes a limited-query denial test requiring
         # a non-administrator account; it runs on both user PCs separately.
         run: scripts/remote-desktop/windows-helper.ps1 -ValidateOnly
+      - name: Generated protected worker handshake and purpose checks
+        shell: powershell
+        run: scripts/remote-desktop/validate-protected-worker.ps1
+      - name: Installed image compilation only
+        shell: powershell
+        run: scripts/remote-desktop/install-unlock-service.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
       - name: Existing generated monitor checks
         shell: powershell
         run: scripts/remote-desktop/validate-monitors.ps1

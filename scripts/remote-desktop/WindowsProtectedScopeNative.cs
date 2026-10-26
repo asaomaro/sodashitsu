@@ -46,12 +46,13 @@ public sealed class SodaDesktopProtectedScopeNative : IDisposable {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern IntPtr DispatchMessage(ref Message message);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("user32.dll",CharSet=CharSet.Unicode)]static extern bool PostThreadMessage(uint thread,uint message,UIntPtr wParam,IntPtr lParam);
     public SodaDesktopProtectedScopeNative(SodaDesktopProtectedScope scope){
-        if(scope==null)throw new ArgumentNullException("scope");this.scope=scope;
+        if(scope==null)throw new ArgumentNullException("scope");VerifyLayouts();this.scope=scope;
         using(var identity=WindowsIdentity.GetCurrent())if(!identity.IsSystem)throw new InvalidOperationException("Protected worker identity required");
         self=Process.GetCurrentProcess();
         try{
             broker=Process.GetProcessById(scope.BrokerPid);
-            // Open/cache real process handles before validating PID and creation time.
+            // Explicitly retain kernel handles for the entire scope lifetime.
+            if(self.Handle==IntPtr.Zero||broker.Handle==IntPtr.Zero)throw new InvalidOperationException("Protected process handle unavailable");
             if(self.HasExited||broker.HasExited||self.Id!=scope.WorkerPid||self.StartTime.ToUniversalTime().Ticks!=scope.WorkerStarted||broker.StartTime.ToUniversalTime().Ticks!=scope.BrokerStarted||self.SessionId!=scope.Session||broker.SessionId!=0)throw new InvalidOperationException("Protected worker process scope mismatch");
             StartObserver(scope.Nonce);
         }catch{Dispose();throw;}
