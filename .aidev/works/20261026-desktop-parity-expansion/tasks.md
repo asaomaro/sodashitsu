@@ -18,3 +18,5 @@
 第2段階のresumeは同一共有窓での一時停止から再開。切断/再読込をまたぐresume、Explorerから手元への直接D&D、フォルダ一式は未対応とUI/docsへ明記し、一般的なリモート製品の全転送機能との同等性は主張しない。
 
 第3段階の同時表示はphysical配置の一括canvas。複数画面のGPU合成とmonitor別の独立窓は未対応。actual複数モニターのcapture/input試験は行わず、fakeとactual readonly metadataを区別して記録した。
+
+第4段階前半: native動画FPS/bitrateの自動調整を実装・独立レビュー・全体11,500件/ブラウザ17件（2 skip）検証済み。resolution barrierは別差分で進行中、task 4は未完了。
