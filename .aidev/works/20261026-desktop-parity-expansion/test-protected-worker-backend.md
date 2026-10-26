@@ -74,3 +74,13 @@ protected_scope_checks_passed: canonical v2 tuple/ack, modes/purpose, owner/logo
 protected_handshake_checks_passed: same-tuple prefix before configure, legacy/wrong mode/bounds rejected, owner lifetime and silent worker deadline; generated identities + fake streams + actual private duplex pipes; no worker/service/capture/input
 protected_worker_factory_passed: generated scope only; no service, worker spawn, token/desktop APIs, capture or input
 ```
+
+## 最終結果
+
+- source72c560008f3ee3df6ee0133b0b3784aa77c55234、13filesへ分割。Node/protocol/UIは後半PR。
+- Windows接続元でhelper/broker compilerとgenerated worker/purpose/Scope/SAS/Dispose/private duplex pipe checks成功。
+- sr-pcはTEMP archiveで同じcompile-only/生成checksと既存helper/pipe/input/monitor、private marker診断成功。exit0/timeout false、repo HEAD5da512c8のまま、tracked status空を維持。
+- 本worktreeのfrozen install/build成功、smoke PASS。production TS不変の前半で全Nodeテストを重複実行せず、後半の固定したcombined sourceでfull build/typecheck/testを実行する。
+- Windows CI https://github.com/asaomaro/sodashitsu/actions/runs/40362051585 と https://github.com/asaomaro/sodashitsu/actions/runs/40362459448 成功。
+- 分割後の独立レビューも通過。C#10ファイルが後半worktreeの点検済みsourceとbyte一致することをレビュー側でも確認。
+- SCM登録更新、SYSTEM worker起動、実UAC/capture/inputは行っていない。
