@@ -41,6 +41,7 @@ export const DesktopOptions = z
     features: z.boolean().optional(),
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
+    files: z.literal(true).optional(),
     richClipboard: z.literal(true).optional(),
     nativeAudio: z.literal(true).optional(),
     nativeDatagrams: z.literal(true).optional(),
@@ -120,6 +121,7 @@ export const DesktopReady = z
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
+    files:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
     nativeAudio:z.literal(true).optional(),
     nativeDatagrams:z.literal(true).optional(),
@@ -187,6 +189,7 @@ export const DesktopStartParams = z
   .object({
     url: z.string().url().max(2048),
     ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    fileTicket:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     clipboardTicket:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     imageTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     videoTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
@@ -199,6 +202,7 @@ export const DesktopPermissions = z.object({
   allowClipboard: z.boolean(),
   allowDisplayResize: z.boolean(),
   allowUnlock: z.boolean().optional(),
+  fileRoot: z.string().max(4096).refine(v=>!v.includes("\0")).optional(),
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
 export interface DesktopSettingsResult {
@@ -237,6 +241,7 @@ export interface DesktopResults {
     imageSettings?: boolean;
     imeKeys?: boolean;
     extendedInput?: boolean;
+    files?: boolean;
     richClipboard?: boolean;
     nativeAudio?: boolean;
     nativeDatagrams?: boolean;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import "./viewportMaximize.css";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
@@ -27,6 +27,9 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
+import DesktopFiles from "./DesktopFiles.vue";
+import {DesktopFileClient} from "../desktop/fileClient.js";
+import {DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopRichClipboardClient,readRichClipboard,writeRichClipboard} from "../desktop/richClipboard.js";
 import {DESKTOP_RICH_CLIPBOARD_PROTOCOL,type DesktopClipboardBundle} from "@sodashitsu/protocol";
 import {DesktopNativeAudioReceiver} from "../desktop/nativeAudioReceiver.js";
@@ -144,6 +147,9 @@ const mediaState = ref("images"),
   videoFrames = ref(0),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
+const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
+function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=false;}
+function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data?.files.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}const files:File[]=[];for(const item of Array.from(data.items)){if(item.webkitGetAsEntry?.()?.isDirectory){error.value="フォルダは送信できません。ファイルを選択してください";continue;}const file=item.getAsFile();if(file)files.push(file);}filePanel.value.addFiles(files);}
 const richClipboard=ref(false),richPipeReady=ref(false),richBusy=ref(false),richSyncMode=ref(false);
 let richClient:DesktopRichClipboardClient|undefined,richSocket:WebSocket|undefined,richSeq=0,lastRichLocal="",lastRichRemote="";
 const clipboardGranted = ref(false),
@@ -395,7 +401,7 @@ function stop() {
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
-  resetRichClipboard();
+  resetRichClipboard();resetFiles();
   imageSocket?.close(1000,"desktop stopped");imageSocket=undefined;
   videoSocket?.close(1000, "desktop stopped"); videoSocket=undefined; videoExpected=videoReady=nativeSupported=false;
   ws?.close(1000, "desktop stopped");
@@ -482,7 +488,7 @@ function connect(automatic = false) {
   const version = epoch,
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  const socket = new WebSocket(url, [DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -530,7 +536,15 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
-        if(m.type==="clipboard_rich_ticket"){
+        if(m.type==="files_ticket"){
+          if(fileSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid file attachment");
+          const pipe=fileSocket=new WebSocket(url,DESKTOP_FILES_PROTOCOL);const client=fileClient.value=new DesktopFileClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>262144)return false;pipe.send(JSON.stringify(value));return true;},()=>pipe.close());
+          pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
+          pipe.onmessage=event=>{if(version!==epoch||fileSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>100000)throw Error("Invalid file result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
+          pipe.onerror=()=>pipe.close();pipe.onclose=()=>{if(version===epoch&&fileSocket===pipe)resetFiles();};
+        }else if(m.type==="files_ready"){filesReady.value=true;}
+        else if(m.type==="files_closed"){resetFiles();}
+        else if(m.type==="clipboard_rich_ticket"){
           if(richSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid clipboard attachment");
           const pipe=richSocket=new WebSocket(url,DESKTOP_RICH_CLIPBOARD_PROTOCOL);
           const client=richClient=new DesktopRichClipboardClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>65536)return false;pipe.send(JSON.stringify(value));return true;},()=>!dead&&version===epoch&&clipboardGranted.value&&richClipboard.value&&richPipeReady.value);
@@ -584,6 +598,7 @@ function connect(automatic = false) {
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
+          filesCap.value=r.files===true;
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
           displayModes.value = r.display?.modes ?? [];
@@ -936,6 +951,8 @@ onBeforeUnmount(() => {
       :style="embedded && !maximized ? undefined : windowStyle"
       role="dialog"
       aria-label="リモートデスクトップ"
+      @dragover.prevent
+      @drop.prevent.stop="dropFiles"
       data-remote-desktop
       tabindex="-1"
       @keydown.capture="desktopKey($event, true)"
@@ -1101,6 +1118,7 @@ onBeforeUnmount(() => {
           送信→描画ACK {{nativeStats.ackMs.toFixed(0)}} ms · 復号・描画 {{nativeStats.decodeMs.toFixed(1)}} ms · ACK待ち {{nativeStats.pending}} / {{nativeStats.window}}枚
         </p>
       </details>
+      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" />
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード{{ richClipboard ? "（テキスト・画像・書式）" : "（テキスト）" }}</summary>
         <p>

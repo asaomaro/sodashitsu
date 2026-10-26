@@ -1,3 +1,4 @@
+import {DesktopFiles} from "./DesktopFiles.js";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
@@ -100,6 +101,7 @@ export class DesktopSettings {
         );
       if (permissions.allowUnlock && this.options.legacy)
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
+      if(permissions.fileRoot?.trim()){const probe=await DesktopFiles.open(permissions.fileRoot.trim(),()=>false);await probe.close();}
       await writeFileAtomic(this.options.file, JSON.stringify(permissions) + "\n");
       this.permissions = permissions;
       this.apply();
@@ -125,6 +127,7 @@ export class DesktopSettings {
         ...legacy,
         command,
         allowNativeVideo: !legacy || legacy.allowMedia===true,
+        ...(p.fileRoot?.trim()?{fileRoot:p.fileRoot.trim()}:{}),
         allowInput: p.allowInput,
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
@@ -133,6 +136,7 @@ export class DesktopSettings {
         origins: legacy?.origins ?? this.options.origins,
       };
     }
+    if(config&&!p.fileRoot?.trim())delete config.fileRoot;
     this.options.provider.configure(config);
   }
 }

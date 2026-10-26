@@ -44,6 +44,7 @@ export const WorkFileRequest = z.discriminatedUnion("action", [
   z.object({ action: z.literal("write"), id: transferId, offset: z.number().int().min(0).max(WORK_FILE_MAX_BYTES), data: z.string().max(87384).regex(/^[A-Za-z0-9+/]*={0,2}$/) }).strict(),
   z.object({ action: z.literal("finish"), id: transferId, sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
   z.object({ action: z.literal("abort"), id: transferId }).strict(),
+  z.object({ action: z.literal("status"), id: transferId }).strict(),
 ]);
 export type WorkFileRequest = z.infer<typeof WorkFileRequest>;
 export interface WorkFileResult { id?: string; bytes?: number; data?: string; offset?: number; done?: boolean; sha256?: string; destination?: string }

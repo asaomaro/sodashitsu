@@ -62,3 +62,5 @@ export * from "./desktopDatagrams.js";
 export * from "./desktopAudio.js";
 
 export * from "./desktopClipboard.js";
+
+export * from "./desktopFiles.js";

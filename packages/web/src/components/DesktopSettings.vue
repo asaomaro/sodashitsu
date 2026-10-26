@@ -51,7 +51,7 @@ async function save() {
       "保存しました。共有中の場合はいったん停止します。再接続すると新しい許可が反映されます。";
   } catch {
     if (current === generation)
-      message.value = "保存できませんでした。接続先PCのlocalhost画面から設定してください。";
+      message.value = "保存できませんでした。接続先PCのlocalhost画面と、共有フォルダの絶対パス・存在を確認してください。";
   } finally {
     busy.value = false;
   }
@@ -87,6 +87,8 @@ async function save() {
           type="checkbox"
         />ディスプレイ解像度の変更を許可</label
       >
+      <label>ファイル共有フォルダ（空欄で無効）<input v-model="draft.fileRoot" type="text" maxlength="4096" placeholder="このサーバーOSの絶対パス" /></label>
+      <p>このフォルダの中だけを送受信します。既存ファイルは上書きしません。WSLサーバーでは/mnt/c等のパスを指定します。</p>
       <button type="button" @click="save">共有設定を保存</button>
     </fieldset>
     <p v-if="message" role="status">{{ message }}</p>
