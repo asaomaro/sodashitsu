@@ -4,7 +4,8 @@
 
 - 新規2件passed (14.0s)。
 - 修正したtoggleSoundだけ旧実装へ戻しwebを再build、resume-raceが失敗。バイト一致復元後webを再build完了まで待ち、音声browser6件passed (34.6s)。
-- 型検査/最終全体テスト結果は追記。
+- 最終build/typecheck成功。全体758 suites /11,447 tests passed (384.23s)。ソース凍結で実行。
+- 接続元rootの既存変更を3wayで保持して反映し、web build/typecheck成功。
 
 ## 旧実装での実失敗
 
