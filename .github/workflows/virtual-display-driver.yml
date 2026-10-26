@@ -1,0 +1,43 @@
+name: Virtual display driver (compile only)
+on:
+  push:
+    branches: [feat/desktop-virtual-display]
+    paths: ['scripts/remote-desktop/virtual-display-driver/**', 'scripts/remote-desktop/*VirtualDisplay*', 'scripts/remote-desktop/validate-virtual-display.ps1', '.github/workflows/virtual-display-driver.yml']
+  pull_request:
+    paths: ['scripts/remote-desktop/virtual-display-driver/**', 'scripts/remote-desktop/*VirtualDisplay*', 'scripts/remote-desktop/validate-virtual-display.ps1', '.github/workflows/virtual-display-driver.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: virtual-display-driver-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mode-buffers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: python3 scripts/remote-desktop/virtual-display-driver/validate-modes.py
+  build:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+        with:
+          msbuild-architecture: x64
+      - name: Fake lease state and native ABI checks
+        shell: powershell
+        run: scripts/remote-desktop/validate-virtual-display.ps1
+      - name: Build unsigned driver, without installing
+        shell: powershell
+        run: |
+          $tool = Join-Path $env:RUNNER_TEMP 'soda-nuget-6.14.0.exe'
+          Invoke-WebRequest 'https://dist.nuget.org/win-x86-commandline/v6.14.0/nuget.exe' -OutFile $tool
+          scripts/remote-desktop/virtual-display-driver/build.ps1 -NuGetPath $tool -MSBuildPath (Get-Command MSBuild.exe).Source
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: virtual-display-unsigned-build-only
+          path: scripts/remote-desktop/virtual-display-driver/x64/Release/
+          retention-days: 7
+          if-no-files-found: error
