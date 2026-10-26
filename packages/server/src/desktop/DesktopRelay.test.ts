@@ -1035,8 +1035,8 @@ it("negotiates shared UDP only for the new viewer and provider capability",async
   await vi.waitFor(()=>expect(image.frames.length).toBe(1));
   const viewer=await f.viewer(mode==="old-protocol"?"shared-old-udp":"shared-udp");viewer.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:1280,fps:30,quality:65,features:true}});
   await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));
-  if(mode!=="new"){expect(f.startRequests[0]!.options).not.toHaveProperty("sharedDatagrams");expect(f.startRequests[0]!.options).not.toHaveProperty("nativeDatagrams");}
-  else{expect(f.startRequests[0]!.options).toMatchObject({sharedDatagrams:true,nativeDatagrams:true,sharedNative:true});expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({nativeDatagrams:true});}
+  if(mode!=="new"){expect(f.startRequests.at(-1)!.options).not.toHaveProperty("sharedDatagrams");expect(f.startRequests.at(-1)!.options).not.toHaveProperty("nativeDatagrams");}
+  else{expect(f.startRequests.at(-1)!.options).toMatchObject({sharedDatagrams:true,nativeDatagrams:true,sharedNative:true});expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({nativeDatagrams:true});}
  }
 });
 

@@ -6,6 +6,10 @@
 
 以下はguardだけを戻した実行時の生ログ。各回元bytesへ完全復元した。compile errorのnegativeではない。最終全体検証は追記する。
 
+## テスト参照先の訂正
+
+最初の全体試験は11,602 pass /1 fail。後から追加した先行画像viewerにより、互換性試験がstartRequests[0]でUDP viewerでなく画像viewerを見ていた。製品の回帰ではない。最後の要求を参照するよう訂正し、関連145件passを確認した。この誤りの影響を受けたold-caps/old-protocol/helper-normalizationの初回negativeは無効として数えず、訂正後に再実行して実行時の失敗とbytes復元を確認した。ほかの5negativeは影響しない。以下は訂正後の有効なnegative。
+
 ## Negative: keyframe-id
 
 ```text
@@ -150,32 +154,21 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
  RUN  v5.0.1 /workspaces/sodashitsu-desktop-shared-datagrams
 
- ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 516ms
-   × negotiates shared UDP only for the new viewer and provider capability 514ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 247ms
+   × negotiates shared UDP only for the new viewer and provider capability 244ms
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared UDP only for the new viewer and provider capability
-AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { sharedDatagrams: true, …(2) }
-(7 matching properties omitted from actual)
+AssertionError: expected { width: 1280, fps: 30, …(9) } to not have property "sharedDatagrams"
 
-- Expected
-+ Received
+- Expected:
+undefined
 
-  {
--   "nativeDatagrams": true,
--   "sharedDatagrams": true,
--   "sharedNative": true,
-+   "extendedInput": true,
-+   "features": true,
-+   "fps": 30,
-+   "imeKeys": true,
-+   "quality": 65,
-+   "sharedDesktop": true,
-+   "width": 1280,
-  }
++ Received:
+true
 
- ❯ src/desktop/DesktopRelay.test.ts:1039:44
+ ❯ src/desktop/DesktopRelay.test.ts:1038:64
 
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
@@ -183,8 +176,8 @@ AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { shar
 
  Test Files  1 failed (1)
       Tests  1 failed | 115 skipped (116)
-   Start at  08:18:48
-   Duration  1.59s (transform 52%, tests 35%, import 12%)
+   Start at  08:44:37
+   Duration  1.42s (transform 64%, tests 19%, import 17%)
 
 
 ```
@@ -201,32 +194,21 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
  RUN  v5.0.1 /workspaces/sodashitsu-desktop-shared-datagrams
 
- ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 613ms
-   × negotiates shared UDP only for the new viewer and provider capability 611ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 397ms
+   × negotiates shared UDP only for the new viewer and provider capability 396ms
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
  FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared UDP only for the new viewer and provider capability
-AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { sharedDatagrams: true, …(2) }
-(7 matching properties omitted from actual)
+AssertionError: expected { width: 1280, fps: 30, …(9) } to not have property "sharedDatagrams"
 
-- Expected
-+ Received
+- Expected:
+undefined
 
-  {
--   "nativeDatagrams": true,
--   "sharedDatagrams": true,
--   "sharedNative": true,
-+   "extendedInput": true,
-+   "features": true,
-+   "fps": 30,
-+   "imeKeys": true,
-+   "quality": 65,
-+   "sharedDesktop": true,
-+   "width": 1280,
-  }
++ Received:
+true
 
- ❯ src/desktop/DesktopRelay.test.ts:1039:44
+ ❯ src/desktop/DesktopRelay.test.ts:1038:64
 
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
@@ -234,8 +216,8 @@ AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { shar
 
  Test Files  1 failed (1)
       Tests  1 failed | 115 skipped (116)
-   Start at  08:18:50
-   Duration  1.51s (transform 44%, tests 44%, import 12%)
+   Start at  08:44:39
+   Duration  1.55s (transform 58%, tests 28%, import 14%)
 
 
 ```
@@ -337,6 +319,189 @@ AssertionError: expected { type: 'release', held: [] } to match object { type: '
 ```
 
 ## Negative: helper-normalization
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-shared-datagrams
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 1484ms
+   × negotiates shared UDP only for the new viewer and provider capability 1482ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared UDP only for the new viewer and provider capability
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/desktop/DesktopRelay.test.ts:1037:53
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 115 skipped (116)
+   Start at  08:44:42
+   Duration  2.44s (tests 63%, transform 29%, import 8%)
+
+
+```
+
+## Initial full-suite failure (test selector corrected)
+
+```text
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared UDP only for the new viewer and provider capability
+AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { sharedDatagrams: true, …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "nativeDatagrams": true,
+-   "sharedDatagrams": true,
+-   "sharedNative": true,
++   "extendedInput": true,
++   "features": true,
++   "fps": 30,
++   "imeKeys": true,
++   "quality": 65,
++   "sharedDesktop": true,
++   "width": 1280,
+  }
+
+ ❯ src/desktop/DesktopRelay.test.ts:1039:44
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 773 passed (774)
+      Tests  1 failed | 11602 passed (11603)
+   Start at  08:33:53
+   Duration  410.68s (tests 79%, import 11%, environment 5%, transform 4%)
+
+Environment  |@sodashitsu/web| happy-dom was created 225 times · 72.96s total, 29% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+```
+
+## Invalid attempt (excluded): old-caps
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-shared-datagrams
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 516ms
+   × negotiates shared UDP only for the new viewer and provider capability 514ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared UDP only for the new viewer and provider capability
+AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { sharedDatagrams: true, …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "nativeDatagrams": true,
+-   "sharedDatagrams": true,
+-   "sharedNative": true,
++   "extendedInput": true,
++   "features": true,
++   "fps": 30,
++   "imeKeys": true,
++   "quality": 65,
++   "sharedDesktop": true,
++   "width": 1280,
+  }
+
+ ❯ src/desktop/DesktopRelay.test.ts:1039:44
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 115 skipped (116)
+   Start at  08:18:48
+   Duration  1.59s (transform 52%, tests 35%, import 12%)
+
+
+```
+
+## Invalid attempt (excluded): old-protocol
+
+```text
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-shared-datagrams
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (116 tests | 1 failed | 115 skipped) 613ms
+   × negotiates shared UDP only for the new viewer and provider capability 611ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared UDP only for the new viewer and provider capability
+AssertionError: expected { width: 1280, fps: 30, …(5) } to match object { sharedDatagrams: true, …(2) }
+(7 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "nativeDatagrams": true,
+-   "sharedDatagrams": true,
+-   "sharedNative": true,
++   "extendedInput": true,
++   "features": true,
++   "fps": 30,
++   "imeKeys": true,
++   "quality": 65,
++   "sharedDesktop": true,
++   "width": 1280,
+  }
+
+ ❯ src/desktop/DesktopRelay.test.ts:1039:44
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 115 skipped (116)
+   Start at  08:18:50
+   Duration  1.51s (transform 44%, tests 44%, import 12%)
+
+
+```
+
+## Invalid attempt (excluded): helper-normalization
 
 ```text
 (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
