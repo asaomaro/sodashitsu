@@ -348,3 +348,20 @@ protected_scope_checks_passed: canonical v2 tuple/ack, modes/purpose, owner/logo
 protected_handshake_checks_passed: same-tuple prefix before configure, legacy/wrong mode/bounds rejected, owner lifetime and silent worker deadline; generated identities + fake streams + actual private duplex pipes; no worker/service/capture/input
 protected_worker_factory_passed: generated scope only; no service, worker spawn, token/desktop APIs, capture or input
 ```
+
+## 最終のlegacy取消順序
+
+前半のgraceを全workerへ適用せず、WorkerNonceを持つ完全scope v2だけに限定する。legacy RunSecureはowner/logon tupleを持たないため、既存のjob close→pipe closeを維持する。v2はpipe EOF→最大750ms→job close、待機例外でもjobを閉じ、両方でhandle Dispose/null/nonce clearを維持する。生成callbackで両順序を検証。scoped判定を常時trueに戻す負例が下記runtime assertionで失敗し、元bytes復元後に成功。
+
+```text
+desktop_broker_purpose_checks_passed: unlock-only / virtual-only / both routes separated; no service/device creation or display/input changes
+protected_broker_purpose_checks_passed: all fixed purpose bits/routes and legacy lease compatibility; no service/token/worker/input operations
+"0" 個の引数を指定して "VerifyWorkerCleanup" を呼び出し中に例外が発生しました: "Legacy teardown must remain job-first without grace"
+発生場所 \\wsl.localhost\Ubuntu\workspaces\sodashitsu-desktop-elevated-handshake\scripts\remote-desktop\validate-protected-
+worker.ps1:7 文字:1
++ [SodaDesktopUnlock]::VerifyWorkerCleanup()
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : InvalidOperationException
+ 
+```

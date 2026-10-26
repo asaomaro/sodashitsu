@@ -49,6 +49,6 @@ WTS ownerはforeground process ownerの意味ではない。7Aではownerの同�
 
 管理者画面はDesktopOptions.elevatedDesktopと専用soda-desktop-protected-v1の積で要求し、helper readyのprotectedDesktopはelevated-default/elevated-uacに限る。secureDesktop=trueと禁止機能なしをschemaでも検査。Bのlocal ceiling、Aのcapability交渉、A/B両方のactual-ready拒否を独立に点検し、通常/旧locked sourceへfallbackしない。Source変更は固定理由でcloseし、ブラウザで画面/確定前text/controlを破棄、接続選択はブラウザ設定へ非永続。SASはUI・A・B・worker/serviceの各段で拒否。
 
-serviceはclient/worker process handleを保持し、PIDとcreation time、generation/nonceを固定。EndWorkerはstale generationを無視し、先にpipeを閉じて正常workerにfinallyでheld inputを解放する機会を与え、750ms以内で終了しなければjobで回収する。新しいscopeでkeyupせず、参照とhandleをclear/Disposeする。SYSTEMとして汎用exec/file APIは追加しない。
+serviceはclient/worker process handleを保持し、PIDとcreation time、generation/nonceを固定。EndWorkerはstale generationを無視し、完全scope v2のみ先にpipeを閉じて正常workerにfinallyでheld inputを解放する機会を与え、750ms以内で終了しなければjobで回収する。legacyは従来のjob-firstを維持する。新しいscopeでkeyupせず、参照とhandleをclear/Disposeする。SYSTEMとして汎用exec/file APIは追加しない。
 
 旧-UnlockLease単独/2引数StartServiceはunlock-onlyで互換、virtual/bothは従来の2/3、新4〜7は固定purpose名。更新済み同梱source全体と管理者保護したexeを使い、実サービス更新は利用者の管理者操作として別途行う。7Aの実機確認と7Bは完了扱いにしない。

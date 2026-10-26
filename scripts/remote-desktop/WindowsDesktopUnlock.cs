@@ -611,23 +611,36 @@ public static class SodaDesktopUnlock {
     static void EndWorker(long expected=-1) {
         lock(Gate){
             if(expected>=0&&expected!=Generation)return;
-            // EOF first lets Host's finally release held input on a still-valid
-            // scope. A blocked worker is still reaped by the job after this bound.
-            try{if(WorkerPipe!=null)WorkerPipe.Dispose();}catch{}finally{WorkerPipe=null;}
-            try{if(Worker!=null&&!Worker.HasExited)Worker.WaitForExit(750);}catch{}
-            if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}
+            // Only v2 can release input after EOF with full owner/logon/epoch
+            // validation. Preserve job-first cancellation for legacy workers.
+            ReapCurrentWorker(
+                ()=>{try{if(WorkerPipe!=null)WorkerPipe.Dispose();}finally{WorkerPipe=null;}},
+                ()=>{if(Worker!=null&&!Worker.HasExited)Worker.WaitForExit(750);},
+                ()=>{if(Job!=IntPtr.Zero){CloseHandle(Job);Job=IntPtr.Zero;}});
             try{if(Worker!=null)Worker.Dispose();}catch{}finally{Worker=null;WorkerNonce=Guid.Empty;}
         }
+    }
+    static void ReapCurrentWorker(Action closePipe,Action wait,Action closeJob){
+        bool scoped=WorkerNonce!=Guid.Empty;
+        if(!scoped)try{closeJob();}catch{}
+        try{closePipe();}catch{}
+        if(scoped){try{wait();}catch{}finally{try{closeJob();}catch{}}}
     }
     sealed class CleanupProcess:Process {public int DisposeCalls;protected override void Dispose(bool disposing){DisposeCalls++;base.Dispose(disposing);}}
     public static void VerifyWorkerCleanup(){
         Require(Job==IntPtr.Zero&&Worker==null&&WorkerPipe==null);long previous=Generation;var process=new CleanupProcess();
         try{
+            var order=new List<string>();WorkerNonce=Guid.Empty;ReapCurrentWorker(()=>order.Add("pipe"),()=>order.Add("wait"),()=>order.Add("job"));
+            if(String.Join(",",order)!="job,pipe")throw new InvalidOperationException("Legacy teardown must remain job-first without grace");
+            order.Clear();WorkerNonce=Guid.NewGuid();ReapCurrentWorker(()=>order.Add("pipe"),()=>order.Add("wait"),()=>order.Add("job"));
+            if(String.Join(",",order)!="pipe,wait,job")throw new InvalidOperationException("V2 teardown did not allow scoped release before job close");
+            order.Clear();ReapCurrentWorker(()=>order.Add("pipe"),()=>{order.Add("wait");throw new Exception("generated wait failure");},()=>order.Add("job"));
+            if(String.Join(",",order)!="pipe,wait,job")throw new InvalidOperationException("V2 wait failure skipped job cleanup");
             Generation=17;Worker=process;WorkerNonce=Guid.NewGuid();EndWorker(16);if(process.DisposeCalls!=0||Worker!=process||WorkerNonce==Guid.Empty)throw new InvalidOperationException("Stale generation disposed current worker");
             EndWorker(17);if(process.DisposeCalls!=1||Worker!=null||WorkerPipe!=null||WorkerNonce!=Guid.Empty)throw new InvalidOperationException("Current worker handle or scope was not released");
             EndWorker(17);if(process.DisposeCalls!=1)throw new InvalidOperationException("Worker handle disposed repeatedly");
         }finally{Worker=null;WorkerNonce=Guid.Empty;Generation=previous;if(process.DisposeCalls==0)process.Dispose();}
-        Console.WriteLine("protected_worker_cleanup_passed: stale generation cannot close current handles; matching teardown disposes once and clears scope; fake Process only");
+        Console.WriteLine("protected_worker_cleanup_passed: legacy job-first / v2 pipe-wait-job; stale generation cannot close current handles; matching teardown disposes once and clears scope; fake Process only");
     }
     static long StartWorker(string mode=null,Guid nonce=default(Guid)) {
         lock(Gate) {
