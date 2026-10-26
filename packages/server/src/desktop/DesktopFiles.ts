@@ -1,8 +1,50 @@
 import { lstat, opendir, realpath } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { DesktopFileRequest, type DesktopFileResult, RpcError } from "@sodashitsu/protocol";
 import { FileTransfer } from "../work/FileTransfer.js";
 import { directoryGuard, inside } from "../work/files.js";
+/** Windows 8.3/case spelling can differ from realpath without being a reparse point. */
+async function canonicalFolder(path: string): Promise<string> {
+  const absolute = resolve(path),
+    canonical = await realpath(absolute),
+    before = await lstat(absolute);
+  if (!before.isDirectory() || before.isSymbolicLink())
+    throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+  if (canonical !== absolute) {
+    if (process.platform !== "win32")
+      throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+    const root = parse(absolute).root,
+      snapshots = [];
+    let current = root;
+    for (const part of absolute.slice(root.length).split(sep)) {
+      if (!part) continue;
+      current = join(current, part);
+      const st = await lstat(current);
+      if (!st.isDirectory() || st.isSymbolicLink())
+        throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+      snapshots.push({ path: current, dev: st.dev, ino: st.ino });
+    }
+    for (const snapshot of snapshots) {
+      const st = await lstat(snapshot.path);
+      if (
+        !st.isDirectory() ||
+        st.isSymbolicLink() ||
+        st.dev !== snapshot.dev ||
+        st.ino !== snapshot.ino
+      )
+        throw new RpcError("invalid_params", "共有フォルダの実体が変更されました");
+    }
+  }
+  const after = await lstat(canonical);
+  if (
+    !after.isDirectory() ||
+    after.isSymbolicLink() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino
+  )
+    throw new RpcError("invalid_params", "共有フォルダの実体が変更されました");
+  return canonical;
+}
 /** Per-share explicit file grant, confined to the locally approved folder. */
 export class DesktopFiles {
   private granted = false;
@@ -40,9 +82,7 @@ export class DesktopFiles {
   static async open(root: string, allowed: () => boolean) {
     if (!isAbsolute(root))
       throw new RpcError("invalid_params", "共有フォルダは絶対パスを指定してください");
-    const canonical = await realpath(root);
-    if (canonical !== resolve(root) || (await lstat(root)).isSymbolicLink())
-      throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
+    const canonical = await canonicalFolder(root);
     return new DesktopFiles(canonical, await directoryGuard(canonical), allowed);
   }
   run(raw: unknown): Promise<DesktopFileResult> {
@@ -103,13 +143,13 @@ export class DesktopFiles {
           if (isAbsolute(part) || /^[A-Za-z]:/.test(part) || part.split(/[\\/]/).includes(".."))
             throw Error("共有フォルダ内の相対パスを指定してください");
           const path = resolve(this.root, part),
-            canonical = await realpath(path);
-          if (!inside(this.root, path) || canonical !== path)
+            canonical = await canonicalFolder(path);
+          if (!inside(this.root, path) || !inside(this.root, canonical))
             throw Error("リンクや共有フォルダの外へは移動できません");
-          const check = await directoryGuard(path),
+          const check = await directoryGuard(canonical),
             entries: NonNullable<NonNullable<DesktopFileResult["result"]>["entries"]> = [];
           let truncated = false;
-          const dir = await opendir(path);
+          const dir = await opendir(canonical);
           for await (const entry of dir) {
             if (entries.length >= 500) {
               truncated = true;
@@ -121,7 +161,7 @@ export class DesktopFiles {
               entry.name.startsWith(".soda-transfer-")
             )
               continue;
-            const st = await lstat(resolve(path, entry.name));
+            const st = await lstat(resolve(canonical, entry.name));
             if (st.isSymbolicLink() || (!st.isFile() && !st.isDirectory())) continue;
             entries.push({ name: entry.name, directory: st.isDirectory(), bytes: st.size });
           }
@@ -134,14 +174,20 @@ export class DesktopFiles {
             truncated,
           });
         }
-        const result = await this.transfer.run(
-          this.owner,
-          this.root,
-          m.request,
-          guard,
-          false,
-          fence,
-        );
+        let request = m.request;
+        if (request.action === "read_start" || request.action === "write_start") {
+          if (
+            isAbsolute(request.path) ||
+            /^[A-Za-z]:/.test(request.path) ||
+            request.path.split(/[\\/]/).includes("..")
+          )
+            throw Error("共有フォルダ内の相対パスを指定してください");
+          const file = resolve(this.root, request.path),
+            parent = await canonicalFolder(dirname(file));
+          if (!inside(this.root, parent)) throw Error("共有フォルダの外へは移動できません");
+          request = { ...request, path: relative(this.root, join(parent, basename(file))) };
+        }
+        const result = await this.transfer.run(this.owner, this.root, request, guard, false, fence);
         if (
           (m.request.action === "read_start" || m.request.action === "write_start") &&
           result.id

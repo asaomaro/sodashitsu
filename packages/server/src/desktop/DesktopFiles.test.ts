@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import type {FileTransfer} from "../work/FileTransfer.js";
+import type { FileTransfer } from "../work/FileTransfer.js";
 import { DesktopFiles } from "./DesktopFiles.js";
 const clean: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -29,7 +29,16 @@ it("requires explicit file grant, lists only regular entries and denies traversa
   const f = await setup();
   await writeFile(join(f.root, "a.txt"), "a");
   await mkdir(join(f.root, "dir"));
-  await symlink(tmpdir(), join(f.root, "outside"));
+  await symlink(
+    tmpdir(),
+    join(f.root, "outside"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  await symlink(f.root, join(f.root, "alias"), process.platform === "win32" ? "junction" : "dir");
+  await expect(DesktopFiles.open(join(f.root, "alias"), () => true)).rejects.toThrow("リンク");
+  await expect(DesktopFiles.open(join(f.root, "alias", "dir"), () => true)).rejects.toThrow(
+    "リンク",
+  );
   expect((await f.run({ action: "list", path: "" })).ok).toBe(false);
   expect((await f.run({ action: "grant", enabled: true })).ok).toBe(true);
   expect((await f.run({ action: "list", path: "" })).result?.entries?.map((e) => e.name)).toEqual([
@@ -111,7 +120,7 @@ it("an abort received during final hash verification prevents publication", asyn
     offset: 65536,
     data: data.subarray(65536).toString("base64"),
   });
-  const store = (f.files as unknown as {transfer:FileTransfer}).transfer,
+  const store = (f.files as unknown as { transfer: FileTransfer }).transfer,
     original = store.run.bind(store);
   let abort: Promise<unknown> | undefined,
     checks = 0;
