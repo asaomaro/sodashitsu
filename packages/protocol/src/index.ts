@@ -70,3 +70,5 @@ export * from "./desktopFiles.js";
 export * from "./desktopMonitors.js";
 
 export * from "./desktopProtected.js";
+
+export * from "./desktopNativePlatform.js";
