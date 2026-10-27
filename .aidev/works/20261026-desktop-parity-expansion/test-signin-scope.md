@@ -7,3 +7,5 @@ Base main5765f05dcadadaf64f4e74b79bf5de56671919d6（PR261）。新しいC# sourc
 この環境にはWindows PowerShell/C# compilerがないため、Windows CIで実際のAdd-Typeと生成テストを確認する。source copyの5変種を各fresh processでcompileし、意図したassert失敗を確認してbytes復元・fresh正常compileを行うvalidatorを追加した。結果はCI完了後に追記する。実OS query・SYSTEM worker起動・capture/input・service/driver導入は行わない。
 
 JS/TSの製品実装・依存・設定の変更はない。baseのsource12041件/810files、root12103件/818filesとsource browser12件の結果を流用し、新差分の全体テスト成功として数えない。新たな検証はWindows生成compile/負例と独立レビューへ絞る。
+
+Cross reviewで同一console内のsignin開始を終端でも拒否するshouldを受け、state/name/tokenの再照会とhandle解放・遷移の生成回帰を追加。OS照会の非atomic性とepoch barrier依存も契約へ明記した。

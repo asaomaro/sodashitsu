@@ -2,7 +2,7 @@
 
 - [x] 一次資料を確認し、7Bを分割。候補だけでcapture/inputを許可しない設計を独立点検。
 - [ ] SYSTEM/primary token/enabled SeTcb、worker/console、WTS/name/token、WinSta0/input/thread desktopの積を実装（taskcheck）。
-- [ ] 生成host/privilege buffer/ABIとsource変種5件のWindows compile/負例/bytes復元を確認。
+- [ ] 生成host/privilege buffer/ABIとsource変種6件のWindows compile/負例/bytes復元を確認。
 - [ ] 独立crossと追加修正差分の再点検、結果の記録。
 - [ ] PR/main/既存dirty-rootへの保護付き反映。runtime routeはまだ追加しない。
 

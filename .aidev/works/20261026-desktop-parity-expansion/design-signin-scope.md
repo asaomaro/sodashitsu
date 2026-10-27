@@ -10,7 +10,7 @@ MicrosoftのWTSQueryUserTokenはログオン利用者のprimary tokenを返し�
 
 WTSGetActiveConsoleSessionIdの0xFFFFFFFFはconsoleの未接続/切替中を含むため拒否する。WTSActiveは仕様上ログオン済み利用者の状態なので受け入れない。WTSConnectedについても、それだけでsigned-outと判断せず、成功した空のusername queryとtoken不在・正しいinput desktopとの積を必要とする。
 
-読み取り専用のOS呼び出しを小さなhost interfaceへ閉じ、生成hostでquery順序・handle close・変化時拒否を検査する。結果にはsession/opaque epochなど必要な値だけを渡し、username・token・認証情報を保存/表示しない。取得前のscopeを保持して取得後/入力前に再確認する上位の世代barrierは後続差分へ接続する。今回のguardだけでframe/inputを許可しない。
+読み取り専用のOS呼び出しを小さなhost interfaceへ閉じ、生成hostでquery順序・handle close・変化時拒否を検査する。結果には候補のsessionだけを渡し、username・token・認証情報を保存/表示しない。取得前のscopeを保持して取得後/入力前に再確認する上位の世代barrierは後続差分へ接続する。今回のguardだけでframe/inputを許可しない。
 
 SYSTEMのprimary tokenのSeTcbは`GetTokenInformation(TokenPrivileges)`で読む。偽装client用の`PrivilegeCheck`へprimary tokenを渡さない。bufferを有限サイズで取得し、LUIDの一致と現在有効な属性を検査する。重複・不正長・無効/除去済みの対象privilegeは拒否し、有効化操作は行わない。独立点検でAPI契約の不一致を発見し、この方式へ修正した。
 
@@ -28,3 +28,5 @@ SYSTEMのprimary tokenのSeTcbは`GetTokenInformation(TokenPrivileges)`で読む
 - [WTSGetActiveConsoleSessionId](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-wtsgetactiveconsolesessionid): consoleと切替時の戻り値。
 - [WTS_CONNECTSTATE_CLASS](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ne-wtsapi32-wts_connectstate_class): WTSActive/WTSConnectedの意味。上記の積による拒否方針は本製品の保守的な設計で、実OS互換性の確認済みという意味ではない。
 - [GetTokenInformation](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation) / [TOKEN_PRIVILEGES](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-token_privileges): primary tokenの読み取りと可変長のprivilege配列。
+
+終了直前にもWTS state/name/token不在を再確認し、同一console上でsigninが始まった変化も拒否する。ただし複数のOS照会はatomic snapshotではなく、返却時点の不在や途中のABAを保証しない。後続のWTS/desktop event epoch barrierを必須とし、候補だけで取得・入力を許可しない。

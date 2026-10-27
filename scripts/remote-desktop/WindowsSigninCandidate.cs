@@ -18,29 +18,31 @@ public static class SodaDesktopSigninCandidate {
     }
     // WTSConnected alone proves neither absence of a user nor a secure desktop.
     // Only ERROR_NO_TOKEN is a candidate; arbitrary token-query failure is not.
+    static bool SessionWithoutUser(Host host,uint session) {
+        int state;
+        if(!host.SessionState(session,out state) || state!=1 || !host.EmptyUserName(session))return false;
+        IntPtr token=IntPtr.Zero;
+        int error=0;
+        try {
+            bool success=host.QueryToken(session,out token,out error);
+            return !success && error==1008 && token==IntPtr.Zero;
+        } finally {
+            if(token!=IntPtr.Zero && token!=new IntPtr(-1))host.CloseToken(token);
+        }
+    }
     public static bool Read(Host host, uint expectedSession, out Candidate candidate) {
         candidate=null;
         if(host==null || expectedSession==0 || expectedSession>Int32.MaxValue)return false;
         try {
             if(!host.SystemWithTcb || host.WorkerSession!=(int)expectedSession || host.ConsoleSession()!=expectedSession)return false;
-            int state;
-            if(!host.SessionState(expectedSession,out state) || state!=1 || !host.EmptyUserName(expectedSession))return false;
-            IntPtr token=IntPtr.Zero;
-            int error=0;
-            bool absent=false;
-            try {
-                bool success=host.QueryToken(expectedSession,out token,out error);
-                absent=!success && error==1008 && token==IntPtr.Zero;
-            } finally {
-                if(token!=IntPtr.Zero && token!=new IntPtr(-1))host.CloseToken(token);
-            }
-            if(!absent)return false;
+            if(!SessionWithoutUser(host,expectedSession))return false;
             string station,input,thread;
             if(!host.DesktopNames(out station,out input,out thread) ||
                !String.Equals(station,"WinSta0",StringComparison.OrdinalIgnoreCase) ||
                !String.Equals(input,"Winlogon",StringComparison.OrdinalIgnoreCase) ||
                !String.Equals(thread,"Winlogon",StringComparison.OrdinalIgnoreCase))return false;
-            if(host.ConsoleSession()!=expectedSession || host.WorkerSession!=(int)expectedSession || !host.SystemWithTcb)return false;
+            if(!SessionWithoutUser(host,expectedSession) || host.WorkerSession!=(int)expectedSession || !host.SystemWithTcb)return false;
+            if(host.ConsoleSession()!=expectedSession)return false;
             candidate=new Candidate(expectedSession);
             return true;
         } catch {

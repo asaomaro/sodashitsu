@@ -5,7 +5,10 @@ using System.Collections.Generic;
 public static class SodaDesktopSigninCandidateChecks {
     sealed class Fake : SodaDesktopSigninCandidate.Host {
         public bool System=true,StateOk=true,NameEmpty=true,TokenSuccess=false,NamesOk=true,ThrowToken=false,ThrowClose=false;
-        public int State=1,Session=4,Error=1008,Closed,ConsoleReads,WorkerReads,SystemReads,TokenReads;
+        public int State=1,Session=4,Error=1008,Closed,ConsoleReads,WorkerReads,SystemReads,TokenReads,StateReads,UserReads;
+        public int SecondState=1,SecondError=1008;
+        public bool SecondEmpty=true,SecondTokenSuccess=false,SecondThrowToken=false;
+        public IntPtr SecondToken=IntPtr.Zero;
         public int SecondWorker=4;
         public bool SecondSystem=true;
         public uint FirstConsole=4,SecondConsole=4;
@@ -16,13 +19,13 @@ public static class SodaDesktopSigninCandidateChecks {
         public bool SystemWithTcb { get { Hit("system");return ++SystemReads==1?System:SecondSystem; } }
         public int WorkerSession { get { Hit("worker");return ++WorkerReads==1?Session:SecondWorker; } }
         public uint ConsoleSession() { Hit("console");return ++ConsoleReads==1?FirstConsole:SecondConsole; }
-        public bool SessionState(uint session,out int state) { Hit("state");Check(session==4,"Wrong session queried");state=State;return StateOk; }
-        public bool EmptyUserName(uint session) { Hit("user");Check(session==4,"Wrong user session queried");return NameEmpty; }
+        public bool SessionState(uint session,out int state) { Hit("state");Check(session==4,"Wrong session queried");state=++StateReads==1?State:SecondState;return StateOk; }
+        public bool EmptyUserName(uint session) { Hit("user");Check(session==4,"Wrong user session queried");return ++UserReads==1?NameEmpty:SecondEmpty; }
         public bool QueryToken(uint session,out IntPtr token,out int error) {
-            Hit("token");Check(session==4,"Wrong token session queried");TokenReads++;token=Token;error=Error;
-            if(ThrowToken)throw new Exception("private token diagnostic");return TokenSuccess;
+            Hit("token");Check(session==4,"Wrong token session queried");bool first=++TokenReads==1;token=first?Token:SecondToken;error=first?Error:SecondError;
+            if(first?ThrowToken:SecondThrowToken)throw new Exception("private token diagnostic");return first?TokenSuccess:SecondTokenSuccess;
         }
-        public void CloseToken(IntPtr token) { Closed++;Check(token==Token,"Wrong token closed");Hit("close");if(ThrowClose)throw new Exception("private cleanup diagnostic"); }
+        public void CloseToken(IntPtr token) { Closed++;Check(token==(TokenReads==1?Token:SecondToken),"Wrong token closed");Hit("close");if(ThrowClose)throw new Exception("private cleanup diagnostic"); }
         public bool DesktopNames(out string station,out string input,out string thread) { Hit("names");station=Station;input=Input;thread=Thread;return NamesOk; }
     }
     static void Check(bool value,string message) { if(!value)throw new InvalidOperationException(message); }
@@ -75,6 +78,15 @@ public static class SodaDesktopSigninCandidateChecks {
         Reject("console switched during query",h=>h.SecondConsole=8);
         Reject("worker scope changed",h=>h.SecondWorker=8);
         Reject("caller authority changed",h=>h.SecondSystem=false);
+        Reject("user signed in during query",h=>h.SecondState=0);
+        Reject("user name appeared during query",h=>h.SecondEmpty=false);
+        Reject("final token query denied",h=>h.SecondError=5);
+        foreach(bool success in new[]{false,true}) {
+            var host=new Fake {SecondTokenSuccess=success,SecondToken=new IntPtr(31)};
+            Check(!Read(host) && host.Closed==1,"Final token query leaked a handle or accepted a user");
+        }
+        var lateThrow=new Fake {SecondToken=new IntPtr(31),SecondThrowToken=true};
+        Check(!Read(lateThrow) && lateThrow.Closed==1,"Final throwing token query leaked a handle");
         foreach(string call in new[]{"system","worker","console","state","user","token","names"}) { string value=call;Reject("query threw at "+value,h=>h.ThrowAt=value); }
         foreach(uint session in new uint[]{0,UInt32.MaxValue,2147483648U}) {
             var host=new Fake();SodaDesktopSigninCandidate.Candidate candidate;

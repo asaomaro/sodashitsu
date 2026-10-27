@@ -14,8 +14,9 @@ if ($NegativeControls) {
         @('state','WindowsSigninCandidate.cs','state!=1','state<0','Unsafe signin candidate accepted: WTS state 0'),
         @('token-error','WindowsSigninCandidate.cs','error==1008','error>=0','Unsafe signin candidate accepted: token query error 0'),
         @('token-close','WindowsSigninCandidate.cs','host.CloseToken(token);','{}','Token was leaked or desktop inspected'),
-        @('console-after','WindowsSigninCandidate.cs','if(host.ConsoleSession()!=expectedSession || host.WorkerSession!=(int)expectedSession || !host.SystemWithTcb)','if(host.WorkerSession!=(int)expectedSession || !host.SystemWithTcb)','Unsafe signin candidate accepted: console switched during query'),
-        @('enabled-privilege','WindowsSigninCandidateNative.cs','enabled=(attributes&2)!=0 && (attributes&4)==0;','enabled=true;','Disabled or removed target privilege accepted')
+        @('console-after','WindowsSigninCandidate.cs','if(host.ConsoleSession()!=expectedSession)return false;','if(expectedSession==0)return false;','Unsafe signin candidate accepted: console switched during query'),
+        @('session-after','WindowsSigninCandidate.cs','!SessionWithoutUser(host,expectedSession) || ','','Unsafe signin candidate accepted: user signed in during query'),
+        @('enabled-privilege','WindowsSigninCandidateNative.cs','enabled=(attributes&2)!=0 && (attributes&4)==0;','enabled=(attributes&2)!=0 || (attributes&4)==0;','Disabled or removed target privilege accepted')
     )
     try {
         foreach ($variant in $variants) {
