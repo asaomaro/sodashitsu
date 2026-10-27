@@ -8,6 +8,8 @@ import {
 import { DesktopFolderName, type DesktopFileRequest } from "@sodashitsu/protocol";
 import { DesktopFileResumeStore, type ResumeFile } from "../desktop/fileResumeStore.js";
 import { onBeforeUnmount, ref } from "vue";
+import ReceivedDownloads from "./ReceivedDownloads.vue";
+const receivedDownloads=ref<InstanceType<typeof ReceivedDownloads>>();
 import {
   WORK_FILE_MAX_BYTES,
   WORK_FILE_CHUNK_BYTES,
@@ -350,6 +352,7 @@ function resume(job: Job) {
   void pump();
 }
 async function run(job: Job) {
+  const retention=receivedDownloads.value?.begin();
   if (job.folderJob) {
     if (remember.value && !props.canResumeFolders && !job.checkpoint) {
       job.state = "failed";
@@ -357,12 +360,12 @@ async function run(job: Job) {
       return;
     }
     if (job.checkpoint || (props.canResumeFolders && props.machineId && remember.value))
-      await runFolderCheckpoint(job);
-    else await runFolder(job);
+      await runFolderCheckpoint(job,retention);
+    else await runFolder(job,retention);
     return;
   }
   if (job.checkpoint || (props.canResume && props.machineId && remember.value)) {
-    await runCheckpoint(job);
+    await runCheckpoint(job,retention);
     return;
   }
   job.state = "running";
@@ -451,6 +454,7 @@ async function run(job: Job) {
           a.href = url;
           a.download = job.name;
           a.click();
+          receivedDownloads.value?.publish(retention,job.key,job.name,blob);
           setTimeout(() => URL.revokeObjectURL(url), 30000);
           job.chunks = [];
           job.state = "completed";
@@ -482,7 +486,7 @@ async function folderRequest(job: Job, request: DesktopFileRequest["request"]) {
   }
   return owner.request(request);
 }
-async function runFolderCheckpoint(job: Job) {
+async function runFolderCheckpoint(job: Job,retention?:object) {
   const group = job.folderJob!;
   job.state = "running";
   try {
@@ -598,7 +602,7 @@ async function runFolderCheckpoint(job: Job) {
       group.savedSource = record.folder;
       job.saved = true;
     }
-    await runFolder(job);
+    await runFolder(job,retention);
   } catch (e) {
     job.committing = false;
     if (job.saved && !job.cancel) {
@@ -618,7 +622,7 @@ async function runFolderCheckpoint(job: Job) {
     }
   }
 }
-async function runFolder(job: Job) {
+async function runFolder(job: Job,retention?:object) {
   const group = job.folderJob!;
   job.state = "running";
   try {
@@ -738,6 +742,7 @@ async function runFolder(job: Job) {
           a.href = url;
           a.download = job.name;
           a.click();
+          receivedDownloads.value?.publish(retention,job.key,job.name,blob);
           setTimeout(() => URL.revokeObjectURL(url), 30000);
           job.chunks = [];
           job.message = "ZIPをブラウザのダウンロードへ渡しました";
@@ -774,7 +779,7 @@ async function runFolder(job: Job) {
     }
   }
 }
-async function runCheckpoint(job: Job) {
+async function runCheckpoint(job: Job,retention?:object) {
   job.state = "running";
   try {
     if (job.restored) {
@@ -889,6 +894,7 @@ async function runCheckpoint(job: Job) {
           a.href = url;
           a.download = job.name;
           a.click();
+          receivedDownloads.value?.publish(retention,job.key,job.name,blob);
           setTimeout(() => URL.revokeObjectURL(url), 30000);
           job.message = "ブラウザのダウンロードへ渡しました";
           break;
@@ -1009,6 +1015,7 @@ defineExpose({ addFiles, handleDrop });
     >
     <template v-if="enabled">
       <p>共有フォルダ: {{ root }}（1ファイル100MiB、上書きなし）</p>
+      <ReceivedDownloads ref="receivedDownloads" :enabled="enabled" />
       <label
         >共有フォルダ内の場所<input
           v-model="folder"
