@@ -8,7 +8,7 @@ import tempfile
 source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
 cases = [
-    ("queued-source", "canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())", "canPublish(ticket,revision:input!.revision,now:milliseconds(),active:true)", "queued source revocation never writes"),
+    ("queued-source", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:true)", "queued source revocation never writes"),
     ("text-source", "guard active(),now()<=expires else", "guard now()<=expires else", "text continued after source revocation"),
     ("release-source", 'if releaseAllowed() { try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers)) }', 'try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers))', "source revocation clears trackers without injection"),
 ]
