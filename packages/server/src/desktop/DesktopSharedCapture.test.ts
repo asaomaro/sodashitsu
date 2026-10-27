@@ -277,3 +277,24 @@ it("keeps shared clipboard ownership independent of input and does not let anoth
  a.session.kill();expect(f.child.commands.filter(m=>m.type==="clipboard_control").at(-1)).toEqual({type:"clipboard_control",enabled:true,generation:1});
  b.send({type:"clipboard",id:1,generation:1,operation:"read",expiresAt:Date.now()+1000});const cmd=f.child.commands.at(-1);f.child.send({type:"clipboard_result",id:cmd.id,ok:true,text:"only b"});await vi.waitFor(()=>expect(b.messages.at(-1)).toMatchObject({type:"clipboard_result",id:1,text:"only b"}));f.pool.dispose();
 });
+
+const deltaConfiguration={type:"configure",options:{width:320,deltas:true}};
+const withContent=(seq:number,contentId="a".repeat(64))=>{const f=frame(seq);return {...f,info:{...f.info,contentId}};};
+const unchanged=(seq:number,baseSeq:number,contentId="a".repeat(64))=>({type:"frame",info:{seq,width:1,height:1,format:"image/png",captureMs:0,encodeMs:0,contentId,update:{kind:"unchanged",baseSeq}},data:""});
+it("recovers a late delta subscriber only from a newly captured full frame",async()=>{
+ const f=fixture(),a=f.join("source",deltaConfiguration);f.child.send(ready);f.child.send(withContent(1));a.send({type:"ack",seq:1});f.child.send(unchanged(2,1));a.send({type:"ack",seq:2});const b=f.join("source",deltaConfiguration);
+ expect(b.messages.map(m=>m.type)).toEqual(["ready"]);expect(f.child.commands.filter(m=>m.type==="keyframe")).toHaveLength(1);f.child.send(withContent(3));await vi.waitFor(()=>expect(b.messages.at(-1)?.info.seq).toBe(3));a.send({type:"ack",seq:3});b.send({type:"ack",seq:3});f.child.send(unchanged(4,3));expect(a.messages.at(-1).info.update.baseSeq).toBe(3);expect(b.messages.at(-1).info.update.baseSeq).toBe(3);f.pool.dispose();
+});
+it("lets a fast delta viewer continue and requests a fresh full image after a slow ACK",async()=>{
+ const f=fixture(),slow=f.join("source",deltaConfiguration),fast=f.join("source",deltaConfiguration);f.child.send(ready);f.child.send(withContent(1));fast.send({type:"ack",seq:1});f.child.send(unchanged(2,1));fast.send({type:"ack",seq:2});f.child.send(unchanged(3,2));fast.send({type:"ack",seq:3});
+ expect(slow.messages.filter(m=>m.type==="frame").map(m=>m.info.seq)).toEqual([1]);expect(fast.messages.filter(m=>m.type==="frame").map(m=>m.info.seq)).toEqual([1,2,3]);slow.send({type:"ack",seq:1});expect(f.child.commands.at(-1)).toEqual({type:"keyframe"});f.child.send(withContent(4));await vi.waitFor(()=>expect(slow.messages.at(-1).info.seq).toBe(4));expect(fast.messages.at(-1).info.seq).toBe(4);expect(f.child.commands.filter(m=>m.type==="ack").map(m=>m.seq)).toEqual([1,2,3,4]);f.pool.dispose();
+});
+it.each(["legacy","base","content"])("rejects an invalid shared delta source: %s",kind=>{
+ const f=fixture(),a=f.join("source",kind==="legacy"?{type:"configure",options:{width:320}}:deltaConfiguration);f.child.send(ready);f.child.send(withContent(1));a.send({type:"ack",seq:1});f.child.send(unchanged(2,kind==="base"?999:1,kind==="content"?"b".repeat(64):"a".repeat(64)));expect(a.session.exitCode).toBe(0);f.pool.dispose();
+});
+it("aggregates keyframe requests and never sends an unmatched delta to a late subscriber",()=>{
+ vi.useFakeTimers();const f=fixture();try{const a=f.join("source",deltaConfiguration);f.child.send(ready);f.child.send(withContent(1));const b=f.join("source",deltaConfiguration);for(let i=0;i<50;i++)b.send({type:"keyframe"});expect(f.child.commands.filter(m=>m.type==="keyframe")).toHaveLength(1);vi.advanceTimersByTime(100);f.child.send(unchanged(2,1));expect(b.messages.some(m=>m.type==="frame")).toBe(false);expect(f.child.commands.filter(m=>m.type==="keyframe")).toHaveLength(2);a.send({type:"ack",seq:1});expect(f.child.commands.filter(m=>m.type==="keyframe")).toHaveLength(2);}finally{f.pool.dispose();vi.useRealTimers();}
+});
+it("allows an older helper to keep sending full images in a delta-enabled cohort",()=>{
+ const f=fixture(),a=f.join("source",deltaConfiguration);f.child.send(ready);f.child.send(frame(1));a.send({type:"ack",seq:1});f.child.send(frame(2));expect(a.messages.filter(m=>m.type==="frame")).toHaveLength(2);expect(a.session.exitCode).toBe(null);f.pool.dispose();
+});

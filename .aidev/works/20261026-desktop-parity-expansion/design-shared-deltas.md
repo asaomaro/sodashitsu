@@ -1,0 +1,7 @@
+# 8K 通常共有の差分画像
+
+明示opt-in・同一cohort、新viewer/A/B capabilityで交渉する。旧shared cohortの完全画像は維持。helperは既存deltas/keyframe経路を使い、無視する旧helperは完全画像を続けられる。保護/仮想/他OS nativeへ適用しない。
+
+sourceにDesktopFrameChainでbase/contentId/寸法/順を検査。consumerもlast送信metadataだけ持ち、画像ACK待ちのconsumerへdeltaを積まない。ACK後にsourceのbaseへ追いつけないconsumerと途中参加は新しい完全画像を要求する。要求はsource全体で100msに1回へ制限。保存画像は再送せず、新たな取得を待ち、入力鮮度を延長しない。完全画像が来るまで該当consumerのdeltaだけを捨て、他窓は継続する。
+
+共有nativeの画像fallback、独立cursor/clipboard/audioとの併用、late join/遅いACK/source不正base/旧peer/旧helper full fallback、暗号化2browserを生成fixtureで検査。実OS capture/input/clipboardは行わない。taskcheck/独立全体レビュー必須。

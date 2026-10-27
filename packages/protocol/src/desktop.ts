@@ -12,6 +12,7 @@ import {DesktopNativeFormatAck} from "./desktopNativeAdaptive.js";
 import {DesktopProtectedMode} from "./desktopProtected.js";
 import {DesktopMonitorLayout} from "./desktopMonitors.js";
 import { z } from "zod";
+export const DESKTOP_SHARED_DELTAS_PROTOCOL="soda-desktop-shared-deltas-v1";
 import {DesktopNativeAudioControl} from "./desktopAudio.js";
 import {
   DesktopMediaRequest,
@@ -56,6 +57,7 @@ export const DesktopOptions = z
     elevatedDesktop:z.literal(true).optional(),
     nativePlatform:DesktopNativePlatform.optional(),
     sharedDesktop:z.literal(true).optional(),
+    sharedDeltas:z.literal(true).optional(),
     sharedCursor:z.literal(true).optional(),
     sharedClipboard:z.literal(true).optional(),
     sharedMicrophone:z.literal(true).optional(),
@@ -309,6 +311,7 @@ export interface DesktopResults {
     elevatedDesktop?:boolean;
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
+    sharedDeltas?:boolean;
     sharedCursor?:boolean;
     sharedClipboard?:boolean;
     sharedFiles?:boolean;

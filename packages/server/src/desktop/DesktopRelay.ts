@@ -1,3 +1,4 @@
+import {DESKTOP_SHARED_DELTAS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DesktopSharedClipboardFailure} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CURSOR_PROTOCOL,DesktopSharedCursorFailure} from "@sodashitsu/protocol";
 import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
@@ -67,6 +68,7 @@ type Viewer = {
   virtualDisplayRequested?:boolean;virtualDisplay?:boolean;
   monitorsRequested?:boolean;monitors?:boolean;
   sharedCursorRequested?:boolean;sharedCursor?:boolean;
+  sharedDeltasRequested?:boolean;sharedDeltas?:boolean;
   sharedClipboardRequested?:boolean;sharedClipboard?:boolean;
   foldersRequested?:boolean;folders?:boolean;
   fileCheckpointsRequested?:boolean;fileCheckpoints?:boolean;
@@ -244,7 +246,7 @@ export class DesktopRelay {
       if(offered.length===1&&offered[0]===DESKTOP_RICH_CLIPBOARD_PROTOCOL){this.clipboardLanes.accept(ws,sessionId,origin);return;}
       if (offered.length === 1 && offered[0] === DESKTOP_IMAGE_LANE_PROTOCOL) { this.imageLanes.accept(ws,sessionId,origin);return; }
       if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL),offered.includes(DESKTOP_VIRTUAL_DISPLAY_PROTOCOL),offered.includes(DESKTOP_PROTECTED_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTOCOL),offered.includes(DESKTOP_SHARED_NATIVE_PROTOCOL),offered.includes(DESKTOP_SHARED_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_PROTOCOL),offered.includes(DESKTOP_SHARED_AUDIO_PROTOCOL),offered.includes(DESKTOP_NATIVE_PLATFORM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_OPUS_FEATURE),offered.includes(DESKTOP_SHARED_RESOLUTION_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTECTED_PROTOCOL),offered.includes(DESKTOP_SHARED_MICROPHONE_PROTOCOL),offered.includes(DESKTOP_FILE_CHECKPOINTS_PROTOCOL),offered.includes(DESKTOP_FOLDERS_PROTOCOL),offered.includes(DESKTOP_SHARED_CURSOR_PROTOCOL),offered.includes(DESKTOP_SHARED_CLIPBOARD_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL),offered.includes(DESKTOP_VIRTUAL_DISPLAY_PROTOCOL),offered.includes(DESKTOP_PROTECTED_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTOCOL),offered.includes(DESKTOP_SHARED_NATIVE_PROTOCOL),offered.includes(DESKTOP_SHARED_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_PROTOCOL),offered.includes(DESKTOP_SHARED_AUDIO_PROTOCOL),offered.includes(DESKTOP_NATIVE_PLATFORM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_OPUS_FEATURE),offered.includes(DESKTOP_SHARED_RESOLUTION_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTECTED_PROTOCOL),offered.includes(DESKTOP_SHARED_MICROPHONE_PROTOCOL),offered.includes(DESKTOP_FILE_CHECKPOINTS_PROTOCOL),offered.includes(DESKTOP_FOLDERS_PROTOCOL),offered.includes(DESKTOP_SHARED_CURSOR_PROTOCOL),offered.includes(DESKTOP_SHARED_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_SHARED_DELTAS_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -265,7 +267,7 @@ export class DesktopRelay {
     if (!sent && v.sharedDesktop) this.stop(v);
     return sent;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false,sharedProtectedRequested=false,sharedMicrophoneRequested=false,fileCheckpointsRequested=false,foldersRequested=false,sharedCursorRequested=false,sharedClipboardRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false,sharedProtectedRequested=false,sharedMicrophoneRequested=false,fileCheckpointsRequested=false,foldersRequested=false,sharedCursorRequested=false,sharedClipboardRequested=false,sharedDeltasRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -331,7 +333,7 @@ export class DesktopRelay {
             }
           }),
       },
-      sharedCursorRequested,sharedClipboardRequested,foldersRequested,fileCheckpointsRequested,sharedMicrophoneRequested,sharedProtectedRequested,sharedResolutionRequested,microphoneOpusRequested,nativePlatformRequested,sharedAudioRequested,microphoneRequested,sharedDatagramsRequested,sharedNativeRequested,sharedRequested,elevatedRequested,virtualDisplayRequested,nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
+      sharedCursorRequested,sharedClipboardRequested,sharedDeltasRequested,foldersRequested,fileCheckpointsRequested,sharedMicrophoneRequested,sharedProtectedRequested,sharedResolutionRequested,microphoneOpusRequested,nativePlatformRequested,sharedAudioRequested,microphoneRequested,sharedDatagramsRequested,sharedNativeRequested,sharedRequested,elevatedRequested,virtualDisplayRequested,nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
       nativeRateRequested,
       videoLaneRequested,imageLaneRequested,
       nativeVideoRequested,
@@ -552,6 +554,7 @@ export class DesktopRelay {
         virtualDisplay:z.boolean().optional(),
         elevatedDesktop:z.boolean().optional(),
         sharedDesktop:z.boolean().optional(),
+        sharedDeltas:z.boolean().optional(),
         sharedCursor:z.boolean().optional(),
         sharedClipboard:z.boolean().optional(),
         sharedFiles:z.boolean().optional(),
@@ -597,7 +600,7 @@ export class DesktopRelay {
     delete legacyOptions.imeKeys;
     delete legacyOptions.extendedInput;
     delete legacyOptions.sharedRate;delete legacyOptions.nativePlatform;delete legacyOptions.sharedAudio;delete legacyOptions.sharedDatagrams;delete legacyOptions.sharedNative;delete legacyOptions.sharedDesktop;
-    delete legacyOptions.sharedClipboard;delete legacyOptions.sharedCursor;delete legacyOptions.folders;delete legacyOptions.fileCheckpoints;delete legacyOptions.sharedMicrophone;delete legacyOptions.sharedProtected;delete legacyOptions.sharedResolution;delete legacyOptions.microphoneOpus;delete legacyOptions.microphone;delete legacyOptions.elevatedDesktop;delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
+    delete legacyOptions.sharedDeltas;delete legacyOptions.sharedClipboard;delete legacyOptions.sharedCursor;delete legacyOptions.folders;delete legacyOptions.fileCheckpoints;delete legacyOptions.sharedMicrophone;delete legacyOptions.sharedProtected;delete legacyOptions.sharedResolution;delete legacyOptions.microphoneOpus;delete legacyOptions.microphone;delete legacyOptions.elevatedDesktop;delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
     delete legacyOptions.nativeVideoWindow;
     delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;delete legacyOptions.nativeAdaptive;delete legacyOptions.nativeCodecs;
     delete legacyOptions.cursor;
@@ -611,6 +614,10 @@ export class DesktopRelay {
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
     v.nativeCodecs=v.nativeVideo&&v.nativeCodecsRequested===true&&caps.nativeCodecs===true;
     v.nativeAdaptive=v.nativeVideo&&v.nativeAdaptiveRequested===true&&caps.nativeAdaptive===true;
+    const sharedDeltasAvailable=v.sharedDeltasRequested===true&&caps.sharedDeltas===true&&caps.deltas===true&&caps.sharedDesktop===true&&caps.features===true;
+    if(v.sharedDeltasRequested)this.send(v.ws,{type:"shared_deltas_available",enabled:sharedDeltasAvailable});
+    v.sharedDeltas=options.sharedDeltas===true&&sharedDeltasAvailable;
+    if(options.sharedDeltas&&(!v.sharedDeltas||!options.sharedDesktop||options.elevatedDesktop||options.virtualDisplay||options.deltas!==true))throw new DesktopSetupRequired("差分画像共有には通常共有と差分設定を選び、全ての窓と接続先を更新してください。");
     const sharedClipboardAvailable=v.sharedClipboardRequested===true&&caps.sharedClipboard===true&&caps.sharedDesktop===true&&caps.features===true;
     if(v.sharedClipboardRequested)this.send(v.ws,{type:"shared_clipboard_available",enabled:sharedClipboardAvailable});
     v.sharedClipboard=options.sharedClipboard===true&&sharedClipboardAvailable;
@@ -671,6 +678,7 @@ export class DesktopRelay {
       ...legacyOptions,
       ...(v.microphone?{microphone:true as const,...(v.microphoneOpus?{microphoneOpus:true as const}:{})}:{}),
       ...(v.sharedDesktop?{sharedDesktop:true as const}:{}),
+      ...(v.sharedDeltas?{sharedDeltas:true as const}:{}),
       ...(v.sharedCursor?{sharedCursor:true as const}:{}),
       ...(v.sharedClipboard?{sharedClipboard:true as const}:{}),
       ...(v.sharedMicrophone&&v.microphone?{sharedMicrophone:true as const}:{}),
