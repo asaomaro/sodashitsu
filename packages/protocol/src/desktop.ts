@@ -181,6 +181,7 @@ export const DesktopFrameInfo = z
     width: z.number().int().positive().max(4096),
     height: z.number().int().positive().max(2400),
     format: z.enum(["image/jpeg", "image/png"]),
+    sourceInputSeq:z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
     timing: z.enum(["measured","encode-only","unavailable"]).optional(),
     captureMs: z.number().finite().min(0).max(60000),
     encodeMs: z.number().finite().min(0).max(60000),
@@ -248,6 +249,8 @@ export const DesktopPermissions = z.object({
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
 export interface DesktopSettingsResult {
+  nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
+  setupMessage?:string;
   permissions: DesktopPermissions;
   supported: boolean;
   canConfigure: boolean;

@@ -67,7 +67,7 @@ it("discovers the shipped Windows files without executing PowerShell or requirin
       expect.stringContaining("windows-helper.ps1"),
     ]),
   );
-  expect(bundledDesktopCommand("linux", {})).toBeUndefined();
+  expect(bundledDesktopCommand("freebsd", {})).toBeUndefined();
 });
 it("serializes concurrent writes so stored permissions match effective permissions", async () => {
   const options = await fixture(),
@@ -152,4 +152,10 @@ it("saves system audio separately from screen companion permissions and requires
  await settings.set({...off,enabled:true,allowSystemAudio:false,allowMicrophone:true,microphoneEndpoint:"virtual-render-id"});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowSystemAudio:false,allowMicrophone:true,microphoneEndpoint:"virtual-render-id"});
  expect((await DesktopSettings.open(options)).get(true).permissions).toMatchObject({allowMicrophone:true,microphoneEndpoint:"virtual-render-id"});
  await settings.set(off);expect(options.provider.capabilities()).toMatchObject({available:false,microphone:false});
+});
+
+it("keeps native OS permission guidance separate from local input permission and rejects Windows-only roles",async()=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"linux-portal"});expect(settings.get(true)).toMatchObject({nativePlatform:"linux-portal",setupMessage:expect.stringContaining("Portal"),permissions:{enabled:false,allowInput:false}});
+ await settings.set({...off,enabled:true,allowInput:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"linux-portal",allowInput:true,allowNativeVideo:false});expect(configure.mock.calls.at(-1)![0]?.command).not.toContain("-AllowInput");
+ await expect(settings.set({...off,enabled:true,allowElevated:true})).rejects.toThrow("native backend");await expect(settings.set({...off,enabled:true,allowClipboard:true})).rejects.toThrow("native backend");
 });

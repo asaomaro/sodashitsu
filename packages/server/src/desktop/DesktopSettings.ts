@@ -1,3 +1,5 @@
+import {nativePlatformFor,nativeDesktopCommand,nativeDesktopSetup} from "./DesktopNativePlatform.js";
+import type {DesktopNativePlatform} from "@sodashitsu/protocol";
 import {DesktopFiles} from "./DesktopFiles.js";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -19,6 +21,7 @@ export function bundledDesktopCommand(
   os = process.platform,
   env = process.env,
 ): string[] | undefined {
+  if(nativePlatformFor(os,env))return nativeDesktopCommand(os,env);
   const script = fileURLToPath(
     new URL("../../../../scripts/remote-desktop/windows-helper.ps1", import.meta.url),
   );
@@ -51,17 +54,21 @@ interface Options {
   origins(): string[];
   legacy?: DesktopProviderConfig | undefined;
   startup?: DesktopPermissions;
+  nativePlatform?:DesktopNativePlatform;
   /** Synthetic helper injection for tests; never exposed through RPC. */
   command?: string[] | undefined;
 }
 export class DesktopSettings {
   private permissions: DesktopPermissions;
+  private readonly platform:DesktopNativePlatform|undefined;
   private queue: Promise<unknown> = Promise.resolve();
   private constructor(
     private readonly options: Options,
     private readonly command: string[] | undefined,
     permissions: DesktopPermissions,
   ) {
+    this.platform=options.nativePlatform??options.legacy?.nativePlatform??(!options.legacy&&!options.command?nativePlatformFor():undefined);
+    if(this.nativePlatform)permissions={...permissions,allowClipboard:false,allowDisplayResize:false,allowUnlock:false,allowMonitors:false,allowVirtualDisplay:false,allowElevated:false,allowSystemAudio:false,allowMicrophone:false};
     this.permissions = permissions;
     this.apply();
   }
@@ -88,20 +95,22 @@ export class DesktopSettings {
     const command = options.legacy?.command ?? options.command ?? bundledDesktopCommand();
     if (options.startup?.enabled && !command)
       throw new Error(
-        "デスクトップ共有の補助プログラムがありません。Windows版またはWSL版の配布物を確認してください。",
+        "デスクトップ共有の補助プログラムがありません。接続先OS向けの導入手順を確認してください。",
       );
     return new DesktopSettings(options, command, permissions);
   }
+  private get nativePlatform(){return this.platform;}
   get(canConfigure: boolean): DesktopSettingsResult {
-    return { permissions: { ...this.permissions }, supported: !!this.command, canConfigure };
+    return {...(this.nativePlatform?{nativePlatform:this.nativePlatform,setupMessage:nativeDesktopSetup(this.nativePlatform)}:{}), permissions: { ...this.permissions }, supported: !!this.command, canConfigure };
   }
   set(raw: DesktopPermissions): Promise<DesktopSettingsResult> {
     const permissions = DesktopPermissions.parse(raw);
     const work = this.queue.then(async () => {
+      if(this.nativePlatform&&(permissions.allowClipboard||permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowMonitors||permissions.allowVirtualDisplay||permissions.allowElevated||permissions.allowSystemAudio||permissions.allowMicrophone))throw new RpcError("invalid_params","このnative backendでは画面共有と対応する入力だけを許可できます。");
       if (permissions.enabled && !this.command)
         throw new RpcError(
           "invalid_params",
-          "この環境では同梱のWindows補助プログラムを使用できません。",
+          "この環境では画面共有の補助プログラムを使用できません。接続先OS向けの導入手順を確認してください。",
         );
       if(permissions.allowElevated&&this.options.legacy)throw new RpcError("invalid_params","管理者画面には同梱のWindows補助プログラムを使用してください。");
       if (permissions.allowVirtualDisplay && this.options.legacy)throw new RpcError("invalid_params","仮想画面には同梱のWindows補助プログラムを使用してください。");
@@ -124,7 +133,7 @@ export class DesktopSettings {
     if (p.enabled && this.command) {
       const command = [...this.command];
       // Custom commands retain their launch syntax; saved local permissions supersede env defaults.
-      if (!legacy) {
+      if (!legacy && !this.nativePlatform) {
         if(p.allowMonitors)command.push("-AllowMonitors");
         if(p.allowVirtualDisplay)command.push("-AllowVirtualDisplay");
         if(p.allowElevated)command.push("-AllowElevated");
@@ -136,7 +145,8 @@ export class DesktopSettings {
       config = {
         ...legacy,
         command,
-        allowNativeVideo: !legacy || legacy.allowMedia===true,
+        ...(this.nativePlatform?{nativePlatform:this.nativePlatform}:{}),
+        allowNativeVideo: !this.nativePlatform&&(!legacy || legacy.allowMedia===true),
         ...(p.fileRoot?.trim()?{fileRoot:p.fileRoot.trim()}:{}),
         allowMonitors:p.allowMonitors===true,
         allowVirtualDisplay:p.allowVirtualDisplay===true,

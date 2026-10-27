@@ -24,7 +24,7 @@ export function supportsDesktopInput(capabilities: DesktopInputCapabilities | un
 
 export const DesktopNativeFailureCode = z.enum([
   "dependencies", "unsupported", "permission_denied", "permission_cancelled",
-  "source_changed", "backend_failure", "input_unavailable",
+  "source_changed", "source_stalled", "backend_failure", "input_unavailable",
 ]);
 export type DesktopNativeFailureCode = z.infer<typeof DesktopNativeFailureCode>;
 export const DesktopNativePlatformFailure = z.object({
@@ -38,6 +38,7 @@ export function desktopNativePlatformFailureMessage(code: DesktopNativeFailureCo
     permission_denied: "接続先OSで画面共有が許可されていません。画面収録・画面共有の許可を確認してください。",
     permission_cancelled: "接続先で画面共有の選択が取り消されました。必要な場合は接続し直してください。",
     source_changed: "接続先の画面・セッションまたはOSの共有許可が変わりました。接続し直し、操作を許可し直してください。",
+    source_stalled: "接続先の共有サービスから新しい画像が届かないため停止しました。この実験版は静止時にも画像を送るPortalが必要です。",
     backend_failure: "接続先の画面共有を継続できません。接続先のOSと補助プログラムを確認してください。",
     input_unavailable: "接続先OSで操作が許可されていないか、この入力には対応していません。",
   };

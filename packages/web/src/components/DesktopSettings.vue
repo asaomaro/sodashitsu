@@ -64,7 +64,8 @@ async function save() {
     <p v-if="state && !state.canConfigure">
       変更するには、共有するPCのlocalhostの画面、または端末版から設定を開いてください。
     </p>
-    <p v-if="state && !state.supported">
+    <p v-if="state?.setupMessage">{{state.setupMessage}}</p>
+    <p v-if="state && !state.supported && !state.nativePlatform">
       同梱のWindows補助プログラムが利用できません。WindowsまたはWSLで使用してください。
     </p>
     <fieldset :disabled="busy || !state?.canConfigure">
@@ -78,6 +79,7 @@ async function save() {
       <label
         ><input v-model="draft.allowInput" type="checkbox" />マウス・キーボードの操作を許可</label
       >
+      <template v-if="!state?.nativePlatform">
       <label><input v-model="draft.allowElevated" type="checkbox" />管理者権限のアプリ・UAC画面の共有を許可</label>
       <p v-if="draft.allowElevated">接続先Windowsで専用保護サービスの導入・更新が必要です。接続時にも管理者画面を選び、操作は接続ごとに許可します。</p>
       <label><input v-model="draft.allowVirtualDisplay" type="checkbox" />一時的な仮想画面の作成を許可</label>
@@ -97,6 +99,7 @@ async function save() {
           type="checkbox"
         />ディスプレイ解像度の変更を許可</label
       >
+      </template>
       <label>ファイル共有フォルダ（空欄で無効）<input v-model="draft.fileRoot" type="text" maxlength="4096" placeholder="このサーバーOSの絶対パス" /></label>
       <p>このフォルダの中だけを送受信します。既存ファイルは上書きしません。WSLサーバーでは/mnt/c等のパスを指定します。</p>
       <button type="button" @click="save">共有設定を保存</button>

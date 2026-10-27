@@ -93,6 +93,7 @@ export function syntheticFrame(width, height, seq, color, mode = "full", layout)
 }
 function heightOf(options) { return options.syntheticHeight ?? options.display?.height ?? Math.round(options.width * 9 / 16); }
 function run() {
+  const platformAt=process.argv.indexOf("--native-platform"),nativePlatform=platformAt>=0?process.argv[platformAt+1]:undefined;if(nativePlatform&&!["linux-portal","macos-sck"].includes(nativePlatform))throw Error("Fixture platform");
   const lifecycleAt=process.argv.indexOf("--lifecycle-ledger"),lifecycle=lifecycleAt>=0?process.argv[lifecycleAt+1]:undefined;
   if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"spawn",pid:process.pid})+"\n");
   let configureDelayed=false;
@@ -140,7 +141,7 @@ function run() {
     else if(m.operation==="cancel"){clearRich();reply({ok:true,stage:"cancelled"});}
     else{clearRich();reply({ok:false,stage:"done"});}
   };
-  let native, audio;
+  let native, audio,nativeAcceptedInput=0;
   const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"audio_stop",id:old.id})+"\n");clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
   const startAudio=m=>{
     stopAudio();if(!native||native.id!==m.id||secure||!process.argv.includes("--native-audio"))return;
@@ -259,8 +260,9 @@ function run() {
           allowInput,
           width: monitorLayout?.bounds.width??options.width,
           height: monitorLayout?.bounds.height??heightOf(options),
-          backend: process.argv.includes("--dxgi") && m.captureBackends?.includes("dxgi") ? "windows-dxgi" : "synthetic",
+          backend: nativePlatform??(process.argv.includes("--dxgi") && m.captureBackends?.includes("dxgi") ? "windows-dxgi" : "synthetic"),
           ...(secure ? {secureDesktop:true} : {}),
+          ...(nativePlatform?{inputCapabilities:{keys:["KeyA","ControlLeft","Space","ArrowLeft","ArrowRight"],text:true,pointerButtons:[0,1,2,3,4],wheel:true}}:{}),
           ...(lockCover ? {lockScreenCover:true} : {}),
           ...(displayAllowed ? {display:{modes}} : {}),
           image: options.image ?? { colorMode: "full", showCursor: true },
@@ -328,6 +330,7 @@ function run() {
         }
         if (process.argv.includes("--delta-test") && m.input.kind === "text") version++;
         if (record) appendFileSync(record, JSON.stringify(m.input) + "\n");
+        if(nativePlatform)nativeAcceptedInput=m.seq;
         if(process.argv.includes("--block-stdout-on-input")&&!blockedSeq) { blockedSeq=m.seq;outputBlocked=true;process.stdout.write('{"type":"input_ack","seq":'); }
         if (!process.argv.includes("--stall-input")) {
           if(inputAckPipe)process.stderr.write("SODA_DESKTOP_INPUT_ACK "+m.seq+"\n");else send({ type: "input_ack", seq: m.seq });
@@ -430,6 +433,7 @@ function run() {
       frame.info.contentId = createHash("sha256")
         .update("static-" + version)
         .digest("hex");
+    if(nativePlatform){frame.info.timing="unavailable";frame.info.sourceInputSeq=nativeAcceptedInput;}
     frame.info.seq = seq;
     forceFull = false;
     sentVersion = version;

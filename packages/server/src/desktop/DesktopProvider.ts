@@ -1,3 +1,4 @@
+import {DesktopNativePlatformFailure,desktopNativePlatformFailureMessage,supportsDesktopInput,type DesktopNativePlatform,type DesktopInputCapabilities} from "@sodashitsu/protocol";
 import { DesktopMicrophone } from "./DesktopMicrophone.js";
 import { DesktopMicrophoneRequest, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import {DesktopProtectedFailure,desktopProtectedFailureMessage} from "@sodashitsu/protocol";
@@ -47,6 +48,7 @@ const HelperFrame = z
   })
   .strict();
 export interface DesktopProviderConfig {
+  nativePlatform?:DesktopNativePlatform;
   command: string[];
   allowInput: boolean;
   allowMonitors?:boolean;
@@ -66,6 +68,7 @@ export interface DesktopProviderConfig {
   origins(): string[];
 }
 type Share = {
+  inputCapabilities?:DesktopInputCapabilities;
   microphone?:DesktopMicrophone; microphoneSocket?:WebSocket;
   files?:Promise<DesktopFiles|undefined>;fileSocket?:WebSocket;
   richClipboard?:DesktopRichClipboard;clipboardSocket?:WebSocket;
@@ -133,15 +136,16 @@ export class DesktopProvider {
   }
   capabilities() {
     return {
-      sharedDesktop: true,
-      sharedAudio:this.config?.allowNativeVideo===true,
+      ...(this.config?.nativePlatform?{nativePlatform:this.config.nativePlatform}:{}),
+      sharedDesktop: !this.config?.nativePlatform,
+      sharedAudio:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedNative: this.config?.allowNativeVideo === true,
       sharedDatagrams: this.config?.allowNativeVideo === true,
       available: !!this.config,
       allowInput: this.config?.allowInput === true,
-      deltas: true,
-      imageSettings: true,
-      imeKeys: true,
+      deltas: !this.config?.nativePlatform,
+      imageSettings: !this.config?.nativePlatform,
+      imeKeys: !this.config?.nativePlatform,
       extendedInput: true,
       monitors:this.config?.allowMonitors===true,
       virtualDisplay:this.config?.allowVirtualDisplay===true,
@@ -151,14 +155,13 @@ export class DesktopProvider {
       imageLane: true,
       videoLane: true,
       microphone:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      nativeVideo: true,nativeDatagrams:true,nativeAudio:true,
-      nativeInputFreshness: true,
-      nativeCodecs: true,
-      nativeAdaptive: true,
-      nativeCadence: true,
+      nativeVideo: !this.config?.nativePlatform,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:!this.config?.nativePlatform,
+      nativeInputFreshness: !this.config?.nativePlatform,
+      nativeCodecs: !this.config?.nativePlatform,
+      ...(!this.config?.nativePlatform?{nativeAdaptive:true as const,nativeCadence:true as const}:{}),
       nativeVideoWindow: 3 as const,
       nativeMaxFps: 60 as const,
-      cursor: true as const,
+      cursor: !this.config?.nativePlatform,
       features: true,
       displayResize: this.config?.allowDisplayResize === true,
     };
@@ -167,6 +170,8 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
+    if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
+    if(cfg.nativePlatform&&(p.options.sharedDesktop||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
     if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || p.options.microphone || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || p.options.nativeAdaptive || p.options.nativeCadence || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
     if(p.options.sharedAudio&&(!p.options.sharedDesktop||!p.options.sharedNative||!p.options.nativeAudio))throw new RpcError("invalid_params","共有音声には対応する共有動画が必要です。");
@@ -253,7 +258,7 @@ export class DesktopProvider {
         s.native?.tick();
         if (
           performance.now() - s.lastSeen > 12000 ||
-          (performance.now() - s.started > (p.options.virtualDisplay?25000:15000) && !s.ready)
+          (performance.now() - s.started > (cfg.nativePlatform?130000:p.options.virtualDisplay?25000:15000) && !s.ready)
         )
           this.stop(s);
       }, 1000),
@@ -433,6 +438,7 @@ export class DesktopProvider {
             if (s.lockScreenCover && s.secureDesktop && s.control && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "input") {
+            if(!supportsDesktopInput(s.inputCapabilities,m.input))return;
             if (isExtendedDesktopInput(m.input) && !s.extendedInput) return;
             if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !s.imeKeys) return;
             if (
@@ -501,6 +507,9 @@ export class DesktopProvider {
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
+            if(cfg.nativePlatform?(ready.backend!==cfg.nativePlatform||!ready.inputCapabilities):ready.backend==="linux-portal"||ready.backend==="macos-sck")throw Error("Unexpected native backend proof");
+            if(!cfg.nativePlatform&&ready.inputCapabilities)throw Error("Unrequested input capabilities");
+            if(ready.inputCapabilities)s.inputCapabilities=ready.inputCapabilities;
             if(options.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover)){
               this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Requested protected worker unavailable");
             }
@@ -538,7 +547,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              protectedDesktop,virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,microphone,richClipboard,
+              protectedDesktop,virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -562,6 +571,7 @@ export class DesktopProvider {
             this.send(s, {
               ...legacyReady,
               ...(options.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}),
+              ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true}:{}),
@@ -606,6 +616,7 @@ export class DesktopProvider {
                   });
                 },
               });
+          } else if(raw.type==="platform_failure"&&cfg.nativePlatform){const failure=DesktopNativePlatformFailure.parse(raw);if(failure.backend!==cfg.nativePlatform)throw Error("Wrong platform failure");this.send(s,failure);this.stop(s);
           } else if (raw.type === "session_locked" && cfg.allowUnlock && s.ready && !s.secureDesktop) {
             this.send(s, { type: "session_locked" });
             this.stop(s);
@@ -626,6 +637,7 @@ export class DesktopProvider {
             return;
           } else if (raw.type === "frame" && s.ready && !s.lockScreenCover) {
             const frame = HelperFrame.parse(raw);
+            if(cfg.nativePlatform?(!frame.info.timing||frame.info.sourceInputSeq===undefined):(frame.info.timing!==undefined||frame.info.sourceInputSeq!==undefined))throw Error("Unnegotiated capture timing");
             if (
               s.pending ||
               frame.info.seq <= s.seq ||
@@ -673,7 +685,7 @@ export class DesktopProvider {
         }
       }
     });
-    const {sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
@@ -821,7 +833,10 @@ export function desktopConfigFromEnv(
       command.some((v) => typeof v !== "string" || !v || v.includes("\0"))
     )
       return;
+    const nativePlatform=env.SODA_DESKTOP_NATIVE_PLATFORM;
+    if(nativePlatform!==undefined&&nativePlatform!=="linux-portal"&&nativePlatform!=="macos-sck")return;
     return {
+      ...(nativePlatform?{nativePlatform}:{}),
       command: command as string[],
       allowInput: env.SODA_DESKTOP_ALLOW_INPUT === "1",
       allowMonitors:env.SODA_DESKTOP_ALLOW_MONITORS==="1",

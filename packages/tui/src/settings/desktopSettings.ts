@@ -40,13 +40,14 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
     label: "デスクトップ共有",
     items: () => [
       { label: message, heading: true },
+      ...(state?.setupMessage?[{label:state.setupMessage,heading:true}]:[]),
       ...(!state?.supported
-        ? [{ label: "Windows補助プログラムを利用できません", heading: true }]
+        ? [{ label: state?.nativePlatform?"OS向け補助プログラムの利用条件を確認してください":"Windows補助プログラムを利用できません", heading: true }]
         : []),
       {
         label: "マイク転送先の仮想再生デバイスID",
-        value: state?.permissions.microphoneEndpoint || "未設定",
-        disabled: busy || !state?.canConfigure,
+        value: state?.nativePlatform?"このbackendは未対応":state?.permissions.microphoneEndpoint || "未設定",
+        disabled: busy || !state?.canConfigure || !!state?.nativePlatform,
         note: "仮想オーディオケーブルのrender側ID。録音側をアプリで選択します。",
         activate: () => ({
           kind: "edit" as const, title: "マイク転送先の仮想再生デバイスID", initial: state?.permissions.microphoneEndpoint ?? "",
@@ -84,7 +85,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
           },
         }),
       },
-      ...entries.map(([key, label]) => ({
+      ...entries.filter(([key])=>!state?.nativePlatform||key==="enabled"||key==="allowInput").map(([key, label]) => ({
         label,
         value: onOff(state?.permissions[key] === true),
         toggle: true,

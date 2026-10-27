@@ -670,3 +670,16 @@ Windowsの実ディスプレイを対象に、対応する解像度へ一時的�
 ### 複数viewerのシステム音声
 
 対応する両端では、同じ通常画面のGPU動画とシステム音声を最大8viewerへ配信できます。音声取得・Opus圧縮は接続先で一つにまとめ、各viewerが個別に音声を要求・再生・ミュート・停止します。一方のUDPからWSSへの復帰や動画・音声停止は他方を止めません。音声要求がなくなると取得を止め、再開は新しい取得として扱います。Bのシステム音声送信許可も必要です。旧peerは画像/動画のみで接続します。shared mic・共通encoderの自動調整・保護画面の共有条件は別対応です。
+
+
+### Linux native実験版とmacOSの準備状況
+
+LinuxのPortal共有は部分実装です。通常インストールでは有効になりません。試す場合は接続先の起動環境に`SODA_DESKTOP_LINUX_PORTAL=1`を明示し、接続先のローカル設定で共有・必要なら入力を許可します。PyGObject、GStreamerのGIとPipeWire/JPEGプラグイン、systemd-logind、ScreenCast Portal v6（`pipewire-serial`を返す実装）が必要です。画面を取得せず依存importだけを確認するコマンドは`/usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe`です。実Portalとcompositorの互換性は未検証です。
+
+共有開始時に接続先OSの選択画面でモニターを選びます。入力にはRemoteDesktop Portalの追加許可が必要です。選択の保存・前回画面の自動復元は行いません。OSの選択待ちは最大115秒です。Windows/WSLの既存経路には影響しません。画像はJPEGフルカラー、幅・fps・品質・カーソル表示を指定でき、対応する生キー・中央/戻る/進むボタン・ホイール・文字を転送します。Ctrl+SpaceをIMEキーへ変換しません。非対応キーは通知します。
+
+**静止画面でも新しいsampleを送り続けるPortalが必要です。** 1.5秒間新しいsampleがなければ理由を表示して共有を停止します。damage時のみ画像を送る環境では静止するだけで停止するため、通常利用には適しません。保持画像の再送を新しい取得や入力後の確認画像に見せかけません。この制限の解消はtask9の残件です。ロック・非アクティブ化・利用者/セッション/画像サイズの変更・Portal終了も共有を終了し、再接続と再許可が必要です。
+
+Linux版のGPU動画・音声・マイク・OSクリップボード・解像度変更・複数monitor/viewer・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSはプロトコル・利用条件表示だけで、ScreenCaptureKit実装と補助プログラムの配布は未完了です。どちらもWindows版と同等の対応完了とはしていません。
+
+生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
