@@ -78,3 +78,5 @@ export * from "./desktopMicrophone.js";
 export * from "./desktopFolders.js";
 
 export * from "./desktopFeatures.js";
+
+export * from "./desktopAgentEndpoint.js";

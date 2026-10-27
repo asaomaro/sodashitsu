@@ -4,7 +4,7 @@ import {
   type RemoteDesktopInput as Input,
   type DesktopResults,
 } from "@sodashitsu/protocol";
-import type { DesktopAgentSession } from "./desktopSession.js";
+import type { DesktopAgentConnection } from "./desktopSession.js";
 type Observation = DesktopResults["desktop.agent.observe"];
 const specials: Record<string, string> = {
   CTRL: "ControlLeft",
@@ -169,7 +169,7 @@ async function jsonBounded(response: Response) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 export async function runOpenAiComputer(
-  session: DesktopAgentSession,
+  session: DesktopAgentConnection,
   task: string,
   options: {
     model: string;

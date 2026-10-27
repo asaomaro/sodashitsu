@@ -1,9 +1,10 @@
 import { writeFile } from "node:fs/promises";
-import { DesktopMethods } from "@sodashitsu/protocol";
+import { DesktopMethods,isDesktopAgentEncryptedGrant,parseDesktopAgentGrant } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
 import { withSession } from "../withSession.js";
-import { DesktopAgentSession } from "../desktopSession.js";
+import {DesktopEncryptedAgentSession} from "../desktopEndpointSession.js";
+import { DesktopAgentSession,type DesktopAgentConnection } from "../desktopSession.js";
 import { desktopLines, desktopWrite } from "../desktopIo.js";
 import { desktopMcp } from "../desktopMcp.js";
 import { runOpenAiComputer } from "../desktopModel.js";
@@ -23,14 +24,16 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
   if (cmd.opts.machine && cmd.opts.machine !== "local")
     throw Error("Connect to A with --url; desktop grants cannot be forwarded through --machine");
   const ticket = process.env.SODA_DESKTOP_GRANT;
-  DesktopMethods["desktop.agent.attach"].parse({ ticket });
+  const encrypted=isDesktopAgentEncryptedGrant(ticket??"");
+  if(encrypted){const grant=parseDesktopAgentGrant(ticket!);if(!cmd.endpointFingerprint||cmd.endpointFingerprint!==grant.provider||url.origin!==grant.origin)throw Error("Specify an independent matching endpoint fingerprint and Root origin");}
+  else{if(cmd.endpointFingerprint!==undefined||cmd.identityDir!==undefined)throw Error("Endpoint identity options require an encrypted grant");DesktopMethods["desktop.agent.attach"].parse({ticket});}
   if (cmd.action === "model" && !process.env.OPENAI_API_KEY)
     throw Error(
       "Set OPENAI_API_KEY; screenshots will be sent to OpenAI only when this command runs",
     );
-  await withSession(cmd.opts, store, async (client) => {
-    await client.hello();
-    let session: DesktopAgentSession | undefined;
+  const run=async(factory:(signal:AbortSignal)=>Promise<DesktopAgentConnection>,closeClient:()=>void)=>{
+    const lifetime=new AbortController();
+    let session: DesktopAgentConnection | undefined;
     let stopping = false;
     const stop = () => {
       if (stopping) return;
@@ -38,15 +41,15 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
       // Node's special stdout cannot reliably cancel an outstanding pipe write.
       // Release the desktop first; bound CLI shutdown if that write keeps Node alive.
       setTimeout(() => process.exit(1), 2500).unref();
-      session?.close();
-      client.close();
+      lifetime.abort();session?.close();
+      closeClient();
       process.stdin.destroy();
     };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
     process.stdout.on("error", stop);
     const attach = async () => {
-      session = await DesktopAgentSession.attach(client, ticket!);
+      session = await factory(lifetime.signal);
       session.abort.signal.addEventListener("abort", () => process.stdin.destroy(), { once: true });
       return session;
     };
@@ -120,7 +123,7 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
         }
       }
     } catch (e) {
-      if (!session?.abort.signal.aborted) throw e;
+      if (!lifetime.signal.aborted&&!session?.abort.signal.aborted) throw e;
     } finally {
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
@@ -129,5 +132,7 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
       session?.close();
       process.stdin.pause();
     }
-  });
+  };
+  if(encrypted)return run(signal=>DesktopEncryptedAgentSession.open({opts:cmd.opts,sessions:store,code:ticket!,fingerprint:cmd.endpointFingerprint,identityDir:cmd.identityDir,signal}),()=>{});
+  return withSession(cmd.opts,store,async client=>{await client.hello();return run(()=>DesktopAgentSession.attach(client,ticket!),()=>client.close());});
 }

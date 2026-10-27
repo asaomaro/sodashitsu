@@ -50,6 +50,7 @@ export const DesktopEndpointStart = z
       value.session === value.hello.session &&
       value.hello.generation === 1 &&
       value.hello.role !== "provider" &&
+      (value.hello.role!=="agent"||!value.parent&&!value.attachment&&!value.binding) &&
       [value.parent, value.attachment, value.binding].filter((value) => value !== undefined)
         .length %
         3 ===

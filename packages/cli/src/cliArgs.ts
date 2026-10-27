@@ -59,9 +59,9 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl work exec [--timeout <ms>] [--encoding utf-8|shift_jis|utf-16le] [--pane <id>] [--url <URL>] [--token <TOKEN>] -- <command>",
   "sodactl work handoff [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl desktop identity [--initialize] [--identity-dir <absolute-path>]",
-  "sodactl desktop session [--url <URL>] [--token <TOKEN>]",
-  "sodactl desktop mcp [--url <URL>] [--token <TOKEN>]",
-  "sodactl desktop model --task <text> [--model <id>] [--max-steps <N>] [--auto-act] [--url <URL>] [--token <TOKEN>]",
+  "sodactl desktop session [--endpoint-fingerprint <sha256>] [--identity-dir <absolute-path>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl desktop mcp [--endpoint-fingerprint <sha256>] [--identity-dir <absolute-path>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl desktop model --task <text> [--model <id>] [--max-steps <N>] [--auto-act] [--endpoint-fingerprint <sha256>] [--identity-dir <absolute-path>] [--url <URL>] [--token <TOKEN>]",
   "sodactl preview register --name <name> --port <N> [--replace] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl preview list [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl preview viewers [--pane <id>] [--url <URL>] [--token <TOKEN>]",
@@ -323,7 +323,7 @@ export type Command =
   | { kind: "work-agent-internal"; action: "run" | "mcp"; file: string }
   | { kind: "work"; action: "bind" | "status" | "unbind" | "skills" | "skill" | "file" | "exec" | "memory" | "handoff"; opts: GlobalOpts; args: string[]; values: Record<string, string> }
   | {kind:"desktop-identity";initialize:boolean;identityDir:string|undefined}
-  | {kind:"desktop";action:"session"|"mcp"|"model";opts:GlobalOpts;task:string|undefined;model:string;maxSteps:number;autoAct:boolean}
+  | {kind:"desktop";action:"session"|"mcp"|"model";opts:GlobalOpts;task:string|undefined;model:string;maxSteps:number;autoAct:boolean;endpointFingerprint?:string;identityDir?:string}
   | { kind: "preview"; action: "register" | "list" | "viewers" | "helper" | "open" | "stop" | "remove"; opts: GlobalOpts; ref: string | undefined; pane: string | undefined; viewer: string | undefined; name: string | undefined; port: number | undefined; replace: boolean }
   | { kind: "help" }
   | { kind: "skill" }
@@ -587,13 +587,14 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
         return {kind:"desktop-identity",initialize:bools.has("--initialize"),identityDir:values.get("--identity-dir")};
       }
       if(word1!=="session"&&word1!=="mcp"&&word1!=="model")throw new CliUsageError("expected desktop identity|session|mcp|model",USAGE);
-      const {positionals,values,bools}=parseFlags(rest0,{values:["--url","--token","--task","--model","--max-steps"],bools:["--auto-act"]});
+      const {positionals,values,bools}=parseFlags(rest0,{values:["--url","--token","--task","--model","--max-steps","--endpoint-fingerprint","--identity-dir"],bools:["--auto-act"]});
       rejectExtra(positionals,0,USAGE);const task=values.get("--task"),maxSteps=Number(values.get("--max-steps")??10);
       if(!Number.isInteger(maxSteps)||maxSteps<1||maxSteps>20)throw new CliUsageError("max-steps must be 1..20",USAGE);
       if(word1==="model"&&(!task?.trim()||task.length>4096))throw new CliUsageError("model requires --task (1..4096 characters)",USAGE);
       if(word1!=="model"&&(task!==undefined||values.has("--model")||values.has("--max-steps")||bools.has("--auto-act")))throw new CliUsageError("model options require desktop model",USAGE);
       const model=values.get("--model")??"gpt-6.1-sol";if(!/^[A-Za-z0-9._:-]{1,100}$/.test(model))throw new CliUsageError("invalid model id",USAGE);
-      return {kind:"desktop",action:word1,opts:globalOptsFrom(values,env),task,model,maxSteps,autoAct:bools.has("--auto-act")};
+      const endpointFingerprint=values.get("--endpoint-fingerprint");if(endpointFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(endpointFingerprint))throw new CliUsageError("endpoint-fingerprint must be64 lowercase hex characters",USAGE);
+      return {kind:"desktop",action:word1,opts:globalOptsFrom(values,env),task,model,maxSteps,autoAct:bools.has("--auto-act"),...(endpointFingerprint?{endpointFingerprint}:{}),...(values.has("--identity-dir")?{identityDir:values.get("--identity-dir")!}:{})};
     }
     case "machine": {
       const sub=argv[1];

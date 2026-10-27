@@ -41,13 +41,14 @@ const Viewer = z
     (value) =>
       value.session === value.hello.session &&
       value.hello.generation === 1 &&
-      value.hello.role === "viewer" &&
+      (value.hello.role === "viewer" || value.hello.role === "agent" && !value.parent && !value.attachment && !value.binding) &&
       [value.parent, value.attachment, value.binding].filter((value) => value !== undefined)
         .length %
         3 ===
         0,
   );
 type Root = {
+  role:"viewer"|"agent";
   session: string;
   machine: string;
   auth: string;
@@ -190,6 +191,7 @@ export class DesktopEndpointRelay {
               const parent = this.roots.get(metadata.parent);
               if (
                 !parent ||
+                parent.role!=="viewer" ||
                 parent.closed ||
                 parent.auth !== session ||
                 parent.origin !== origin ||
@@ -201,8 +203,9 @@ export class DesktopEndpointRelay {
                 throw Error("invalid endpoint parent");
               root = parent;
             } else {
-              if (this.roots.size >= 8) throw Error("endpoint limit");
+              if ([...this.roots.values()].filter(root=>root.role===metadata.hello.role).length >= 8) throw Error("endpoint limit");
               const created: Root = {
+                role:metadata.hello.role as "viewer"|"agent",
                 session: metadata.session,
                 machine: metadata.machineId,
                 auth: session,

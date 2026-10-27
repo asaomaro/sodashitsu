@@ -1,3 +1,5 @@
+import {DesktopEndpointAgentRequest,DesktopEndpointAgentAttach,formatDesktopAgentGrant} from "@sodashitsu/protocol";
+import type {DesktopEndpointAgentRpc} from "./DesktopEndpointAgentRpc.js";
 import {DesktopEndpointDrain} from "./DesktopEndpointDrain.js";
 import {desktopFeaturesFromProtocols} from "@sodashitsu/protocol";
 import { lstat } from "node:fs/promises";
@@ -28,7 +30,18 @@ import type { DesktopProvider } from "./DesktopProvider.js";
 
 type Permit = Awaited<ReturnType<DesktopEndpointStore["endpoint"]>>;
 type Invite = { ticket: string; protocol: string; at: number; busy: boolean };
+type AgentGrant = {hash:string;scope:string;fingerprint:string;permit:Permit;revision:number;expires:number};
 type Context = {
+  role:"viewer"|"agent";
+  grant?:AgentGrant|undefined;
+  grantRevision:number;
+  agentFeature:boolean;
+  agentPending:boolean;
+  agentAt:number;
+  agent?:DesktopEndpointAgentRpc;
+  agentEnding?:boolean;
+  agentDeadline?:number;
+  agentTimer?:ReturnType<typeof setTimeout>;
   owner: string;
   session: string;
   machine: string;
@@ -50,6 +63,7 @@ type Connection = {
   transport: WebSocket;
   local?: DesktopEndpointLocalSocket;
   closed: boolean;
+  agentBusy?:boolean;
   close(): void;
 };
 const unavailable = () => Error("暗号化デスクトップの相手・鍵・接続先の許可を確認してください。");
@@ -81,12 +95,14 @@ export class DesktopEndpointService {
     required: true,
     peers: [],
   };
+  private agentCredentials=0;
   private readonly contexts = new Map<string, Context>();
   private readonly connections = new Map<string, Connection>();
   private readonly pending = new Set<{
     owner: string;
     session: string;
     parent: string | undefined;
+    role:"viewer"|"agent";
     cancelled: boolean;
   }>();
   private plane: Promise<DesktopEndpointBackplane> | undefined;
@@ -252,9 +268,10 @@ export class DesktopEndpointService {
     return this.refresh();
   }
   private stopPeer(fingerprint: string, role: string): void {
-    if (role !== "viewer") return;
-    for (const context of [...this.contexts.values()])
-      if (context.fingerprint === fingerprint) quiet(context.close);
+    for (const context of [...this.contexts.values()]) {
+      if(context.role===role&&context.fingerprint===fingerprint)quiet(context.close);
+      if(role==="agent"&&context.grant?.fingerprint===fingerprint){context.grantRevision++;context.grant=undefined;quiet(()=>context.root?.revokeAgent());}
+    }
   }
   private stopAll(): void {
     for (const pending of this.pending) pending.cancelled = true;
@@ -297,8 +314,9 @@ export class DesktopEndpointService {
       !this.snapshot.available ||
       !this.snapshot.initialized ||
       !this.options.provider.capabilities().available ||
-      p.hello.role !== "viewer" ||
-      this.pending.size >= 8 ||
+      (p.hello.role !== "viewer" && p.hello.role !== "agent") ||
+      (p.hello.role==="agent"&&!!p.parent) ||
+      this.pending.size + this.agentCredentials >= 8 ||
       this.connections.size +
         [...this.pending].filter((pending) => !this.connections.has(pending.session)).length >=
         64 ||
@@ -308,14 +326,13 @@ export class DesktopEndpointService {
       throw unavailable();
     if (
       !p.parent &&
-      this.contexts.size +
+      [...this.contexts.values()].filter(context=>context.role===p.hello.role).length +
         [...this.pending].filter(
-          (pending) => !pending.parent && !this.contexts.has(pending.session),
-        ).length >=
-        8
+          (pending) => pending.role===p.hello.role && !pending.parent && !this.contexts.has(pending.session),
+        ).length >= 8
     )
       throw unavailable();
-    const pending = { owner, session: p.session, parent: p.parent, cancelled: false },
+    const pending = { owner, session: p.session, parent: p.parent, role:p.hello.role as "viewer"|"agent", cancelled: false },
       epoch = this.lifetime,
       source = this.options.provider.epoch;
     this.pending.add(pending);
@@ -329,6 +346,7 @@ export class DesktopEndpointService {
         invite = context?.invites.get(p.attachment!);
         if (
           !context ||
+          context.role!=="viewer" ||
           context.owner !== owner ||
           context.machine !== p.machineId ||
           context.fingerprint !== fingerprint ||
@@ -364,8 +382,8 @@ export class DesktopEndpointService {
           throw unavailable();
         context.invites.delete(p.attachment!);
       } else {
-        if (this.contexts.size >= 8) throw unavailable();
-        const permit = await this.store.endpoint(fingerprint, "viewer");
+        if ([...this.contexts.values()].filter(context=>context.role===p.hello.role).length >= 8) throw unavailable();
+        const role=p.hello.role as "viewer"|"agent",permit = await this.store.endpoint(fingerprint, role);
         const active = () =>
           !this.closed &&
           this.owner &&
@@ -378,6 +396,7 @@ export class DesktopEndpointService {
           permit.active();
         if (!active()) throw unavailable();
         const created: Context = {
+          role,grantRevision:0,agentFeature:false,agentPending:false,agentAt:-Infinity,
           owner,
           session: p.session,
           machine: p.machineId,
@@ -386,13 +405,15 @@ export class DesktopEndpointService {
           permit,
           closed: false,
           opened: false,
-          closeNegotiated:false,
+          closeNegotiated:role==="agent",
           invites: new Map(),
           connections: new Set(),
           active: () => !created.closed && active(),
           close: () => {
             if (created.closed) return;
             created.closed = true;
+            clearTimeout(created.agentTimer);created.grantRevision++;created.grant=undefined;
+            quiet(()=>created.agent?.close());
             quiet(() => created.root?.close());
             this.contexts.delete(created.session);
             created.invites.clear();
@@ -413,6 +434,46 @@ export class DesktopEndpointService {
     } finally {
       this.pending.delete(pending);
     }
+  }
+  private async agentViewerRequest(context:Context,raw:unknown,emit:(value:unknown)=>void,bootstrap=false):Promise<void>{
+    if(context.role!=="viewer"||!context.agentFeature||!context.opened||!context.root||!context.active())throw unavailable();
+    const message=DesktopEndpointAgentRequest.parse(raw);
+    if(message.type==="agent_endpoint_grant"&&!message.enabled){context.grantRevision++;context.grant=undefined;context.root.revokeAgent();return;}
+    const now=performance.now();
+    if(context.agentPending||this.pending.size+this.agentCredentials>=8||!bootstrap&&now-context.agentAt<1000){emit({type:"agent_endpoint_error",message:"処理中です。少し待ってから再度お試しください。"});return;}
+    if(!bootstrap)context.agentAt=now;context.agentPending=true;this.agentCredentials++;
+    const revision=message.type==="agent_endpoint_grant"?++context.grantRevision:context.grantRevision;
+    try{
+      if(message.type==="agent_endpoint_peers"){
+        const status=await this.store.status();if(!context.active())throw unavailable();
+        emit({type:"agent_endpoint_available",peers:status.initialized?status.peers.filter(peer=>peer.role==="agent").map(({fingerprint,label})=>({fingerprint,label})):[]});return;
+      }
+      context.grant=undefined;context.root.revokeAgent();
+      const [permit,provider]=await Promise.all([this.store.endpoint(message.recipient!,"agent"),context.permit.identity.fingerprint()]);
+      if(!context.active()||revision!==context.grantRevision||!permit.active())throw unavailable();
+      const at=performance.now(),granted=context.root.grantAgent({fingerprint:message.recipient!,active:()=>context.active()&&revision===context.grantRevision&&permit.active()});
+      context.grant={hash:createHash("sha256").update(granted.ticket).digest("hex"),scope:granted.scope,fingerprint:message.recipient!,permit,revision,expires:at+30000};
+      const code=formatDesktopAgentGrant({version:1,machineId:context.machine,origin:context.origin.replace(/^ws/,"http"),provider,recipient:message.recipient!,scope:granted.scope,ticket:granted.ticket,expiresAt:granted.expiresAt});
+      emit({type:"agent_endpoint_ticket",code,expiresAt:granted.expiresAt});
+    }catch{
+      if(context.active()&&revision===context.grantRevision)emit({type:"agent_endpoint_error",message:"接続先で許可したエージェントと共有状態を確認してください。"});
+    }finally{context.agentPending=false;this.agentCredentials--;}
+  }
+  private async agentRequest(context:Context,raw:Uint8Array):Promise<string>{
+    if(!context.active()||context.role!=="agent"||context.agentEnding)throw unavailable();
+    const text=decode.decode(raw);
+    if(context.agent)return context.agent.request(text);
+    if(context.agentDeadline===undefined||performance.now()>=context.agentDeadline)throw unavailable();
+    const request=DesktopEndpointAgentAttach.parse(JSON.parse(text)),hash=createHash("sha256").update(request.params.ticket).digest("hex");
+    const viewer=[...this.contexts.values()].find(value=>value.role==="viewer"&&value.grant?.hash===hash),grant=viewer?.grant;
+    if(!viewer||!grant||!viewer.active()||grant.scope!==request.params.scope||grant.fingerprint!==context.fingerprint||viewer.machine!==context.machine||viewer.origin!==context.origin||grant.revision!==viewer.grantRevision||!grant.permit.active()||performance.now()>=grant.expires)throw unavailable();
+    const plane=await this.getPlane();
+    if(!context.active()||!viewer.active()||viewer.grant!==grant||!grant.permit.active()||performance.now()>=grant.expires||performance.now()>=context.agentDeadline)throw unavailable();
+    const rpc=plane.agent(context.fingerprint,grant.scope,()=>context.active()&&viewer.active()&&grant.permit.active()&&grant.revision===viewer.grantRevision,reason=>{if(reason==="released")context.agentEnding=true;else context.close();});
+    context.agent=rpc;
+    const response=await rpc.request(JSON.stringify({id:request.id,method:request.method,params:{ticket:request.params.ticket}}));
+    if(!context.active()||!viewer.active()||viewer.grant!==grant||!grant.permit.active())throw unavailable();
+    viewer.grant=undefined;context.opened=true;clearTimeout(context.agentTimer);return response;
   }
   private async getPlane(): Promise<DesktopEndpointBackplane> {
     this.plane ??= DesktopEndpointBackplane.create(this.options.provider);
@@ -472,11 +533,18 @@ export class DesktopEndpointService {
       const kind = record[0],
         data = record.subarray(1);
       if(drain.closing){if(kind===5&&lane==="control"&&data.length===0)drain.acknowledge();else if(kind!==0&&kind!==1)throw unavailable();return;}
+      if(context.role==="agent"){
+        if(kind!==1||lane!=="agent"||data.length>65536||connection.agentBusy||context.agentEnding)throw unavailable();
+        connection.agentBusy=true;const owned=new Uint8Array(data);
+        void this.agentRequest(context,owned).then(response=>{
+          if(!active())throw unavailable();send("agent",1,encode.encode(response));if(context.agentEnding)drain.begin(true);
+        }).catch(connection.close).finally(()=>{owned.fill(0);connection.agentBusy=false;});return;
+      }
       if (kind === 2) {
         if (lane !== "control" || connecting || opened || data.length > 8192) throw unavailable();
         connecting = true;
         const request = DesktopEndpointConnect.parse(JSON.parse(decode.decode(data)));
-        if(!childProtocol)context.closeNegotiated=desktopFeaturesFromProtocols(request.protocols).has("endpointClose");
+        if(!childProtocol){const features=desktopFeaturesFromProtocols(request.protocols);context.closeNegotiated=features.has("endpointClose");context.agentFeature=features.has("endpointAgent");}
         if (
           (childProtocol &&
             (request.protocols.length !== 1 || request.protocols[0] !== childProtocol)) ||
@@ -537,6 +605,7 @@ export class DesktopEndpointService {
             opened = true;
             if (!childProtocol) context.opened = true;
             send("control", 3, new Uint8Array());
+            if(!childProtocol&&context.agentFeature){send("agent",1,encode.encode(JSON.stringify({type:"agent_endpoint_available",peers:[]})));void this.agentViewerRequest(context,{type:"agent_endpoint_peers"},value=>send("agent",1,encode.encode(JSON.stringify(value))),true).catch(connection.close);}
           } catch {
             connection.close();
           }
@@ -550,6 +619,14 @@ export class DesktopEndpointService {
         lane !== desktopEndpointLane(childProtocol, data, kind === 0)
       )
         throw unavailable();
+      if(!childProtocol&&kind===1){
+        const message=JSON.parse(decode.decode(data)) as {type?:string;enabled?:unknown};
+        if(message.type==="agent_grant"&&message.enabled!==false)throw unavailable();
+        if(message.type==="stop"||message.type==="control"&&message.enabled===true||message.type==="agent_grant"&&message.enabled===false){context.grantRevision++;context.grant=undefined;context.root?.revokeAgent();}
+        if(lane==="agent"&&(message.type==="agent_endpoint_grant"||message.type==="agent_endpoint_peers")){
+          void this.agentViewerRequest(context,message,value=>send("agent",1,encode.encode(JSON.stringify(value)))).catch(connection.close);return;
+        }
+      }
       connection.local.send(kind === 0 ? data : decode.decode(data));
     };
     connection.wire = new DesktopEndpointWire({
@@ -557,7 +634,7 @@ export class DesktopEndpointService {
       identity: context.permit.identity,
       session: p.session,
       role: "provider",
-      peerRole: "viewer",
+      peerRole: context.role,
       expectedFingerprint: context.fingerprint,
       active,
       sendRaw: (data) => {
@@ -570,7 +647,7 @@ export class DesktopEndpointService {
         transport.send(data);
       },
       onRecord: receive,
-      onReady: () => {},
+      onReady: () => {if(context.role==="agent"){context.agentDeadline=performance.now()+10000;context.agentTimer=setTimeout(connection.close,10000);context.agentTimer.unref();}},
       onClose: connection.close,
     });
     this.connections.set(connection.session, connection);

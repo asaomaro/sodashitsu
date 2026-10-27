@@ -1,0 +1,7 @@
+- [ ] Feature hint, strict grant codec and role/purpose protocol (taskcheck)
+- [ ] B Service viewer grant/agent lane binding and immediate revocation (taskcheck)
+- [ ] Node CLI pin/cookie/protected identity encrypted transport and shared runner (taskcheck)
+- [ ] Web recipient/code/cancel UI and old-peer fallback (taskcheck)
+- [ ] Generated multi-endpoint/CLI/browser regressions and negative controls
+- [ ] Full build/typecheck/test, independent smoke/cross/delta review
+- [ ] PR/main and batched endpoint deployment; report actual remaining platform/hardware work
