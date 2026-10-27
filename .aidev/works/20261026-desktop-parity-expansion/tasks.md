@@ -74,3 +74,6 @@
 第12段階: --terminal-hereで実行PC/作業PC/操作paneを分離し、両方向の対話と起動元質問フォームを実装。起動承認・専用PTY・owner切断失効・B発行1秒入力lease・seq/ACK・有限queue・短RPCの質問poll・終了時raw復帰を追加。全体11829件・生成browser3件・負例5件・型検査・独立build/smoke・独立レビュー2件と追加修正再レビュー通過。実アカウント/Windows実端末での対話は未検証。
 
 第11段階11C/第8段階: 通常共有sourceのマイクを単一member/idで排他管理し、画像先行・明示handover・古いstop・first退出・native音声再開と独立した継続を追加。全体11841件/browser6件/強化交差回帰/型検査/独立build・smoke/負例4件/独立レビューと追加差分再レビュー通過。Windows通常共有の実装は拡張済みで、他OSのmic/実デバイス検証は残件。
+
+
+第8段階8H: 通常共有sourceで既存file laneを利用し、各viewerのgrant/owner/queue/一時ファイルを独立管理。旧B capabilityを必要条件とし保護共有では無効。画像only先行加入、別窓ID拒否、途中退出cleanup、暗号化共有の往復を生成検証。全体11846件/browser7件/負例2件/型検査/独立build・smoke/独立レビューと追加差分再レビュー通過。task8全体とtask13の切断再開・フォルダ・直接D&D・独立monitor窓は引き続き未完了。
