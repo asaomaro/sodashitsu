@@ -1,6 +1,6 @@
 # 共有解像度の検証
 
-source bc1e4941。build/typecheck、全体11789件、独立worktree build/smokeが通過。4種類の既存互換browserは別記の結果を追記する。新browserはWSS/UDP/slow-format/late-fixedの4件成功と、codec gateを一度にしたlate-fixed-udp-drop単独成功の合計5件を確認した。同じ製品source/distでの結果で、fixture gateだけを修正した。
+source bc1e4941。build/typecheck、全体11789件、独立worktree build/smokeが通過。既存互換browser7件（単独解像度調整5・共有UDP1・共有rate1）も通過。新browserはWSS/UDP/slow-format/late-fixedの4件成功と、codec gateを一度にしたlate-fixed-udp-drop単独成功の合計5件を確認した。同じ製品source/distでの結果で、fixture gateだけを修正した。
 
 生成H264の1280×800→960×600、2実browserのcanvas描画と継続、renderer別generation/baseSeq、遅いdecoderの画像復帰、固定viewer途中参加で1280へ復帰、保持IDRのUDP fragment損失後の将来keyframe描画、1 encoder/1 audio sourceとAudioDecoder/Context各1を確認。音は仮想出力へ接続し、実speaker/microphone/実画面/OS入力は使用しない。
 
@@ -349,5 +349,23 @@ smoke(web): Esc で閉じると端末へフォーカスが戻り、案内済み�
 smoke(web): 開き直しても、はじめの案内は出ない
 smoke(web): はじめの案内を閉じたあと、クリックせずに打った文字が PTY まで届いた
 smoke: PASS
+
+```
+
+### Existing compatibility browser
+
+```text
+{"ts":"2026-10-27T10:11:36.549Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T10:11:36.550Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T10:11:36.550Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T10:11:36.561Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-DPJo0L/commands.json","count":0}
+{"ts":"2026-10-27T10:11:37.018Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T10:11:37.018Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T10:11:37.018Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T10:11:37.019Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-AgdzmM/commands.json","count":0}
+{"ts":"2026-10-27T10:11:44.308Z","level":"info","msg":"machine link closed","machine":"584ce776157d8624d52207d5dd7fa85a","kind":"transient","reason":"接続が切れました"}
+  ✓  7 src/specs/remote-desktop-shared-rate.spec.ts:10:1 › shared video adapts its one encoder through the browser without restarting either viewer (7.9s)
+
+  7 passed (1.3m)
 
 ```
