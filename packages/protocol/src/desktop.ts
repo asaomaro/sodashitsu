@@ -67,6 +67,7 @@ export const DesktopOptions = z
     monitors:z.literal(true).optional(),
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
     files: z.literal(true).optional(),
+    fileCheckpoints:z.literal(true).optional(),
     richClipboard: z.literal(true).optional(),
     microphone: z.literal(true).optional(),
     microphoneOpus:z.literal(true).optional(),
@@ -160,6 +161,7 @@ export const DesktopReady = z
     virtualDisplay:z.literal(true).optional(),
     monitorLayout:DesktopMonitorLayout.optional(),
     files:z.literal(true).optional(),
+    fileCheckpoints:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
     microphone:z.literal(true).optional(),
     microphoneOpus:z.literal(true).optional(),
@@ -312,6 +314,7 @@ export interface DesktopResults {
     sharedRate?:boolean;
     sharedResolution?:boolean;
     files?: boolean;
+    fileCheckpoints?:boolean;
     richClipboard?: boolean;
     microphone?: boolean;
     microphoneOpus?: boolean;

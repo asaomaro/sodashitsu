@@ -1,6 +1,7 @@
 import { lstat, opendir, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { DesktopFileRequest, type DesktopFileResult, RpcError } from "@sodashitsu/protocol";
+import type { DesktopFileCheckpoints } from "./DesktopFileCheckpoints.js";
 import { FileTransfer } from "../work/FileTransfer.js";
 import { directoryGuard, inside } from "../work/files.js";
 /** Windows 8.3/case spelling can differ from realpath without being a reparse point. */
@@ -78,23 +79,40 @@ export class DesktopFiles {
     private root: string,
     private check: () => Promise<void>,
     private allowed: () => boolean,
+    private checkpoints?: DesktopFileCheckpoints,
+    private valid: () => boolean = () => true,
   ) {}
-  static async open(root: string, allowed: () => boolean) {
+  static async open(
+    root: string,
+    allowed: () => boolean,
+    checkpoints?: DesktopFileCheckpoints,
+    valid: () => boolean = () => true,
+  ) {
     if (!isAbsolute(root))
       throw new RpcError("invalid_params", "共有フォルダは絶対パスを指定してください");
     const canonical = await canonicalFolder(root);
-    return new DesktopFiles(canonical, await directoryGuard(canonical), allowed);
+    return new DesktopFiles(
+      canonical,
+      await directoryGuard(canonical),
+      allowed,
+      checkpoints,
+      valid,
+    );
   }
   run(raw: unknown): Promise<DesktopFileResult> {
     const m = DesktopFileRequest.parse(raw),
       version = this.epoch;
     const operationId = "id" in m.request ? m.request.id : undefined;
+    const checkpointCancelled =
+      m.request.action === "checkpoint_abort" &&
+      this.checkpoints?.cancel(this.root, this.owner, m.request.checkpoint) === true;
     if (m.request.action === "abort" && this.activeIds.has(m.request.id))
       this.cancelledIds.add(m.request.id);
     // Revoke immediately, including while file/hash work is queued.
     if (m.request.action === "grant" && !m.request.enabled) {
       this.granted = false;
       this.epoch++;
+      this.checkpoints?.revoke(this.owner);
     }
     const result = this.queue.then(async (): Promise<DesktopFileResult> => {
       const reply = (result: NonNullable<DesktopFileResult["result"]>): DesktopFileResult => ({
@@ -120,6 +138,10 @@ export class DesktopFiles {
           this.granted = true;
           return reply({ enabled: true, root: this.root });
         }
+        if (m.request.action === "checkpoint_abort") {
+          if (!checkpointCancelled) throw Error("再開記録が失効したか別の接続で利用中です");
+          return reply({});
+        }
         const fence = () => {
           if (
             this.dead ||
@@ -138,6 +160,24 @@ export class DesktopFiles {
           fence();
         };
         await guard();
+        if (m.request.action.startsWith("checkpoint_")) {
+          if (!this.checkpoints) throw Error("接続元と接続先を更新して再開対応で接続してください");
+          const { DesktopCheckpointRequest } = await import("@sodashitsu/protocol");
+          const request = DesktopCheckpointRequest.parse(m.request);
+          return reply(
+            await this.checkpoints.run(
+              {
+                owner: this.owner,
+                root: this.root,
+                guard,
+                fence,
+                connected: () => !this.dead && this.allowed(),
+                valid: this.valid,
+              },
+              request,
+            ),
+          );
+        }
         if (m.request.action === "list") {
           const part = m.request.path;
           if (isAbsolute(part) || /^[A-Za-z]:/.test(part) || part.split(/[\\/]/).includes(".."))
@@ -174,7 +214,8 @@ export class DesktopFiles {
             truncated,
           });
         }
-        let request = m.request;
+        const { WorkFileRequest } = await import("@sodashitsu/protocol");
+        let request = WorkFileRequest.parse(m.request);
         if (request.action === "read_start" || request.action === "write_start") {
           if (
             isAbsolute(request.path) ||
@@ -223,6 +264,7 @@ export class DesktopFiles {
   }
   async close() {
     this.dead = true;
+    this.checkpoints?.detach(this.owner);
     this.granted = false;
     this.epoch++;
     await this.queue;

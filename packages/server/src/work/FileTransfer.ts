@@ -8,8 +8,11 @@ import { openVerified, readRange } from "../agent/safeFile.js";
 import { directoryGuard, inside } from "./files.js";
 
 type Entry = { owner: string; root: string; path: string; temporary?: string; fd: FileHandle; bytes: number; offset: number; hash: Hash; check: () => Promise<void>; timer: ReturnType<typeof setTimeout> };
+/** Internal checkpoint suspension: authority ended before IO; keep the unpublished stream. */
+export class FileTransferInterrupted extends Error {}
 /** Bounded binary streams. Only a verified, complete file is published, without replacing an existing destination. */
 export class FileTransfer {
+  constructor(private readonly retainInterrupted = false) {}
   private entries = new Map<string, Entry>();
   private queue: Promise<unknown> = Promise.resolve();
   run(owner: string, root: string, request: WorkFileRequest, guard: () => Promise<void> = async () => {}, local = false, fence:()=>void=()=>{}): Promise<WorkFileResult> {
@@ -70,7 +73,7 @@ export class FileTransfer {
       e.timer.refresh(); await e.check(); await guard();
       if (p.action === "status") return {bytes:e.bytes,offset:e.offset};
       if (p.action === "finish") {
-        if (!e.temporary || e.offset !== e.bytes || e.hash.digest("hex") !== p.sha256) throw new RpcError("invalid_params", "転送サイズまたはSHA-256が一致しません");
+        if (!e.temporary || e.offset !== e.bytes || e.hash.copy().digest("hex") !== p.sha256) throw new RpcError("invalid_params", "転送サイズまたはSHA-256が一致しません");
         await e.fd.sync(); await e.check(); await guard();
         const original = await e.fd.stat(), named = await lstat(e.temporary);
         if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || named.dev !== original.dev || named.ino !== original.ino || original.size !== e.bytes) throw new RpcError("invalid_params", "転送用ファイルが変更されました");
@@ -102,7 +105,7 @@ export class FileTransfer {
       if (data.toString("base64") !== p.data || data.length > WORK_FILE_CHUNK_BYTES || !data.length || e.offset + data.length > e.bytes) throw new RpcError("invalid_params", "転送データが不正です");
       await e.fd.writeFile(data); e.hash.update(data); e.offset += data.length;
       return { offset: e.offset };
-    } catch (error) { await this.drop(p.id); throw error; }
+    } catch (error) { if (!this.retainInterrupted || !(error instanceof FileTransferInterrupted)) await this.drop(p.id); throw error; }
   }
 }
 

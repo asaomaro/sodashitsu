@@ -1,10 +1,32 @@
 import { z } from "zod";
 import { WorkFileRequest } from "./work.js";
 export const DESKTOP_FILES_PROTOCOL = "soda-desktop-files-v1";
+export const DESKTOP_FILE_CHECKPOINTS_PROTOCOL = "soda-desktop-file-checkpoints-v1";
+const checkpoint = z.string().regex(/^[a-f0-9]{64}$/);
+const offset = z.number().int().min(0).max(104857600);
+const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 const path = z
   .string()
   .max(4096)
   .refine((v) => !v.includes("\0"));
+export const DesktopCheckpointRequest = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("checkpoint_upload"), path, bytes: offset, sha256 }).strict(),
+  z.object({ action: z.literal("checkpoint_download"), path }).strict(),
+  z.object({ action: z.literal("checkpoint_attach"), checkpoint, offset }).strict(),
+  z
+    .object({
+      action: z.literal("checkpoint_write"),
+      checkpoint,
+      offset,
+      data: z.string().max(87384),
+    })
+    .strict(),
+  z.object({ action: z.literal("checkpoint_read"), checkpoint, offset }).strict(),
+  z.object({ action: z.literal("checkpoint_finish"), checkpoint }).strict(),
+  z.object({ action: z.literal("checkpoint_status"), checkpoint }).strict(),
+  z.object({ action: z.literal("checkpoint_abort"), checkpoint }).strict(),
+]);
+export type DesktopCheckpointRequest = z.infer<typeof DesktopCheckpointRequest>;
 export const DesktopFileRequest = z
   .object({
     type: z.literal("desktop_file"),
@@ -13,6 +35,7 @@ export const DesktopFileRequest = z
       z.object({ action: z.literal("grant"), enabled: z.boolean() }).strict(),
       z.object({ action: z.literal("list"), path }).strict(),
       WorkFileRequest,
+      DesktopCheckpointRequest,
     ]),
   })
   .strict();
@@ -26,6 +49,8 @@ export const DesktopFileResult = z
     result: z
       .object({
         id: z.string().uuid().optional(),
+        checkpoint: checkpoint.optional(),
+        expiresInMs: z.number().int().min(1).max(900000).optional(),
         bytes: z.number().int().min(0).max(104857600).optional(),
         offset: z.number().int().min(0).max(104857600).optional(),
         data: z.string().max(87384).optional(),
