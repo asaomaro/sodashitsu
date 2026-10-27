@@ -56,14 +56,15 @@ final class InputGuard {
     let sink: EventSink
     var allowed: Bool
     var active: () -> Bool
+    var releaseAllowed: () -> Bool
     var control = false
     var revision: UInt64 = 0
     var seq: Int64 = 0
     private(set) var keys = Set<UInt16>()
     private(set) var buttons = Set<Int>()
     private var x: Double = 0, y: Double = 0
-    init(sink: EventSink, allowed: Bool, active: @escaping () -> Bool) {
-        self.sink = sink; self.allowed = allowed; self.active = active
+    init(sink: EventSink, allowed: Bool, active: @escaping () -> Bool, releaseAllowed: (() -> Bool)?=nil) {
+        self.sink = sink; self.allowed = allowed; self.active = active;self.releaseAllowed=releaseAllowed ?? active
     }
     var modifiers: Set<UInt16> { keys.intersection([54,55,56,58,59,60,61,62]) }
     var capabilities: [String: Any] {
@@ -72,11 +73,11 @@ final class InputGuard {
     }
     func release() {
         revision &+= 1
-        for button in buttons.sorted() { try? sink.post(InjectedEvent(kind:"pointer",down:false,x:x,y:y,button:button,modifiers:modifiers)) }
+        for button in buttons.sorted() where releaseAllowed() { try? sink.post(InjectedEvent(kind:"pointer",down:false,x:x,y:y,button:button,modifiers:modifiers)) }
         buttons.removeAll()
         for key in keys.sorted().reversed() {
             keys.remove(key)
-            try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers))
+            if releaseAllowed() { try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers)) }
         }
         control = false
     }
@@ -129,7 +130,7 @@ func unicodeChunks(_ text: String) -> [[UInt16]] {
 func postText(_ text: String, expires: Int64, active: () -> Bool, now: () -> Int64,
               emit: ([UInt16], Bool) throws -> Void, cleanup: () -> Void) throws {
     var down=false
-    defer { if down { cleanup() } }
+    defer { if down && active() { cleanup() } }
     for chunk in unicodeChunks(text) {
         guard active(),now()<=expires else { throw NativeError("source_changed") }
         try emit(chunk,true);down=true
@@ -152,6 +153,7 @@ final class QuartzSink: EventSink {
         return result
     }
     func post(_ value: InjectedEvent) throws {
+        guard active() else { throw NativeError("source_changed") }
         let event: CGEvent?
         switch value.kind {
         case "key":
@@ -178,15 +180,26 @@ final class QuartzSink: EventSink {
                 guard let text=CGEvent(keyboardEventSource:nil,virtualKey:0,keyDown:down) else { throw NativeError("input_unavailable") }
                 chars.withUnsafeBufferPointer { buffer in text.keyboardSetUnicodeString(stringLength:chars.count,unicodeString:buffer.baseAddress!) }
                 text.post(tap:.cghidEventTap)
-            },cleanup:{ CGEvent(keyboardEventSource:nil,virtualKey:0,keyDown:false)?.post(tap:.cghidEventTap) })
+            },cleanup:{ if self.active() { CGEvent(keyboardEventSource:nil,virtualKey:0,keyDown:false)?.post(tap:.cghidEventTap) } })
             return
         default: throw NativeError("input_unavailable")
         }
         guard let event=event else { throw NativeError("input_unavailable") }
         if value.expires>0 { guard active(),utcMilliseconds()<=value.expires else { throw NativeError("source_changed") } }
         event.flags=flags(value.modifiers)
+        guard active() else { throw NativeError("source_changed") }
         event.post(tap:.cghidEventTap)
     }
+}
+
+struct DisplayStamp: Equatable {
+    let bounds: CGRect
+    let pixelWidth: Int
+    let pixelHeight: Int
+}
+func displayStamp(_ id: CGDirectDisplayID) -> DisplayStamp? {
+    guard CGDisplayIsActive(id) != 0,let mode=CGDisplayCopyDisplayMode(id) else { return nil }
+    return DisplayStamp(bounds:CGDisplayBounds(id),pixelWidth:mode.pixelWidth,pixelHeight:mode.pixelHeight)
 }
 
 struct FrameTicket { let revision: UInt64; let started: Double; let inputSeq: Int64 }
@@ -263,10 +276,11 @@ final class DesktopSource {
     private let factsOverride: (() -> Bool)?
     init(facts: (() -> Bool)?=nil) { factsOverride=facts }
     let gate=NSRecursiveLock()
-    var dead=false,ready=false
+    var dead=false,ready=false,stopping=false
     var input: InputGuard?
     var display: SCDisplay?
     var bounds=CGRect.zero
+    var stamp: DisplayStamp?
     var filter: SCContentFilter?
     var configuration: SCStreamConfiguration?
     var width=0,height=0,fps=0,quality=0
@@ -298,11 +312,11 @@ final class DesktopSource {
     func sourceActive() -> Bool {
         if let facts=factsOverride { return !dead && facts() }
         guard !dead,sessionActive(),CGPreflightScreenCaptureAccess(),let display=display,
-              CGDisplayIsActive(display.displayID) != 0,CGDisplayBounds(display.displayID)==bounds else { return false }
+              stamp != nil,displayStamp(display.displayID)==stamp else { return false }
         return !inputCeiling || (AXIsProcessTrusted() && CGPreflightPostEventAccess())
     }
     func publishable(_ ticket:FrameTicket) -> Bool {
-        !dead && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())
+        !dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())
     }
     func start() {
         signal(SIGPIPE,SIG_IGN)
@@ -400,17 +414,18 @@ final class DesktopSource {
                 guard i+1<args.count,let id=UInt32(args[i+1]) else { throw NativeError("unsupported") };requested=id
             } else { requested=nil }
             guard let selected=contents.displays.first(where:{$0.displayID==(requested ?? CGMainDisplayID())}) else { throw NativeError("source_changed") }
-            display=selected;bounds=CGDisplayBounds(selected.displayID)
+            guard let selectedStamp=displayStamp(selected.displayID) else { throw NativeError("source_changed") }
+            display=selected;stamp=selectedStamp;bounds=selectedStamp.bounds
             guard sourceActive() else { throw NativeError("source_changed") }
-            let sourceWidth=CGDisplayPixelsWide(selected.displayID),sourceHeight=CGDisplayPixelsHigh(selected.displayID)
+            let sourceWidth=selectedStamp.pixelWidth,sourceHeight=selectedStamp.pixelHeight
             guard sourceWidth>0,sourceHeight>0,sourceWidth<=32768,sourceHeight<=32768 else { throw NativeError("unsupported") }
             let scale=min(1.0,Double(width)/Double(sourceWidth),2400.0/Double(sourceHeight))
             width=max(1,Int(Double(sourceWidth)*scale));height=max(1,Int(Double(sourceHeight)*scale))
             let configuration=SCStreamConfiguration();configuration.width=width;configuration.height=height;configuration.showsCursor=showCursor
             self.configuration=configuration;filter=SCContentFilter(display:selected,excludingApplications:[],exceptingWindows:[])
-            input=InputGuard(sink:QuartzSink(bounds:bounds,active:{ [weak self] in guard let self=self else { return false };return self.sourceActive() && milliseconds()-self.lastCapture<1500 }),allowed:inputCeiling,active:{ [weak self] in
+            input=InputGuard(sink:QuartzSink(bounds:bounds,active:{ [weak self] in self?.sourceActive()==true }),allowed:inputCeiling,active:{ [weak self] in
                 guard let self=self else { return false };return self.ready && milliseconds()-self.lastCapture<1500 && self.sourceActive()
-            })
+            },releaseAllowed:{ [weak self] in self?.sourceActive()==true })
             while !dead && !Task.isCancelled {
                 let ticket=locked { FrameTicket(revision:input!.revision,started:milliseconds(),inputSeq:input!.seq) }
                 guard sourceActive() else { throw NativeError("source_changed") }
@@ -442,7 +457,7 @@ final class DesktopSource {
     }
     func stop(_ code: String?) {
         locked {
-            if dead { return };dead=true;captureTask?.cancel();timer?.invalidate();input?.release()
+            if dead || stopping { return };stopping=true;input?.release();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
             output.finish { Darwin.exit(code==nil ? 0 : 1) }
@@ -526,7 +541,20 @@ func generatedTests() throws -> Int {
         try postText("first and second generated chunks",expires:2000,active:{textActive},now:{1000},emit:{_,down in textEvents.append(down ? "down":"up");textActive=false},cleanup:{textEvents.append("release")})
         throw GeneratedFailure(detail:"text continued after source revocation")
     } catch is NativeError {}
-    try check(textEvents == ["down","release"],"text revocation posts only cleanup keyup")
+    try check(textEvents == ["down"],"text revocation posts no further events")
+    var textNow:Int64=1000;var expiredEvents=[String]()
+    do {
+        try postText("expiry",expires:1500,active:{true},now:{textNow},emit:{_,down in expiredEvents.append(down ? "down":"up");textNow=2000},cleanup:{expiredEvents.append("release")})
+        throw GeneratedFailure(detail:"text ignored expiration")
+    } catch is NativeError {}
+    try check(expiredEvents==["down","release"],"expired text releases only in same active source")
+    let releaseSink=GeneratedSink();var releaseScope=true
+    let releaseGuard=InputGuard(sink:releaseSink,allowed:true,active:{releaseScope})
+    releaseGuard.control=true;_ = try releaseGuard.input(key(1,"KeyA",true),now:1000)
+    let sent=releaseSink.events.count;releaseScope=false;releaseGuard.release()
+    try check(releaseSink.events.count==sent && releaseGuard.keys.isEmpty,"source revocation clears trackers without injection")
+    let logical=CGRect(x:0,y:0,width:100,height:100)
+    try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100) != DisplayStamp(bounds:logical,pixelWidth:200,pixelHeight:200),"retina backing change retires same logical bounds")
     var clock:Double=0
     let blocked=writeRecord(Data([1]),valid:{true},clock:{clock},attempt:{_ in .again},wait:{clock+=501})
     try check(blocked == .failed,"blocked output has a finite deadline")
