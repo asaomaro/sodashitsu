@@ -1,0 +1,7 @@
+# 機能ヒントの固定長化
+
+フォルダ再開などを追加する前に、parent接続のprotocol32件上限を増やさず拡張できる機能ヒントを用意する。128bitの固定長hexを、既存のsoda-desktop-接頭辞/英小文字数字hyphen/64文字制限に収まる1tokenで表す。現在の新sharedDeltas token1件だけを置き換え、既存のキー/動画/file/clipboard等のtokenは維持。
+
+新Rootは従来sharedDeltas v1と新hint bit0の両方を読む。未知bitは無視し、壊れた/重複したhintは機能を有効にしない。これはclient能力の申告だけで、B capability・helper条件・利用者の明示選択/許可を置き換えない。
+
+旧Rootはhintを無視して既存機能を継続する。新hintしかない組合せでは旧Rootは共有差分の申告を有効にせず、既定の完全画像を使う。以前の差分共有選択が残る場合は解除して接続し直し、両端更新後に有効化する。E2Eの既存protocol数/形式を変えず新helper fieldも追加しない。旧v1/newhint/未知bit/旧B/暗号化と既存共有deltaのブラウザを検査、taskcheck/独立全体review必須。

@@ -76,3 +76,5 @@ export * from "./desktopNativePlatform.js";
 export * from "./desktopMicrophone.js";
 
 export * from "./desktopFolders.js";
+
+export * from "./desktopFeatures.js";
