@@ -1,0 +1,9 @@
+# 通常source共有時のマイク入力
+
+Windows通常共有の画像/native動画と同じsourceで、マイクを明示開始した1viewerだけが既存の仮想audio endpointへ入力できるようにする。保護/仮想/他OSを同時に広げない。実音声デバイスは触らず、生成sink/生成browser microphoneで検証する。
+
+新root feature×B capability×helper ready microphoneの積で交渉し、旧peerへ新options/readyを漏らさない。共通helper configureは閲覧窓の参加順やマイク希望に依存せず、Bのローカルmicrophone permissionと固定endpointを上限とする。各viewerのマイク送信許可/WS/ticket/Opus交渉は独立し、旧viewerの画像共有も維持する。
+
+SharedCaptureは実helperのnative_microphone routeに単一のmember/id所有者を持つ。占有中の別viewer開始はhelperへ渡さず、そのviewerだけunavailableにする。所有者停止/切断/全体失効で、自分のidの停止を実helperへ送って解放する。遅れた前所有者のstopは新所有者へ影響しない。B DesktopMicrophoneは所有権を確認してからpipe作成を始め、非所有者のPCMは適用しない。映像sourceの最初のviewer終了や音声の停止は別viewerのマイクownerを消さない。鍵盤controlとマイクの明示許可は混同しない。
+
+検証対象: old root/B/helper gate、Bローカル許可、画像先行→新マイク参加、2viewer占有競合と明示handover、owner退出、古いstop、最初のviewer退出後source維持、Opus/PCM、暗号化接続、独立音声leaseと復帰、実helperの生成compile。プロトコル/owner状態/cleanupはtaskcheck対象、最終差分全体を独立レビューする。

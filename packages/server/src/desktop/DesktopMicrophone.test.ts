@@ -47,3 +47,6 @@ for(const mode of["tone","oversize-duration","mixed-pcm"]as const)it.skipIf(proc
  if(mode!=="tone"){await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.state==="unavailable")).toBe(true);expect(chunks).toEqual([]);}else{await expect.poll(()=>Buffer.concat(chunks).length).toBe(1932);const bytes=Buffer.concat(chunks).subarray(12);let energy=0;for(let i=0;i<960;i++)energy+=bytes.readInt16LE(i*2)**2;expect(Math.sqrt(energy/960)).toBeGreaterThan(1000);expect(send).toHaveBeenCalledWith({type:"microphone_ack",id,seq:1});}
  }finally{mic.stop();encoder.delete();client?.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));if(path)await rm(path,{force:true});}
 });
+it("rejects a busy shared microphone before allocating a pipe",()=>{
+ const write=vi.fn(),claim=vi.fn(()=>false),release=vi.fn(),send=vi.fn(()=>true),mic=new DesktopMicrophone({synthetic:true,allowed:()=>true,write,send,claim,release});mic.fromViewer({type:"microphone_start",id});expect(claim).toHaveBeenCalledWith(id);expect(write).not.toHaveBeenCalled();expect(release).not.toHaveBeenCalled();expect(send).toHaveBeenCalledWith({type:"microphone_status",id,state:"unavailable"});mic.stop();
+});
