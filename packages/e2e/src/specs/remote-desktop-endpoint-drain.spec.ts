@@ -13,6 +13,8 @@ for (const mode of ["encrypted"] as string[])
     appServer,
   }) => {
     test.setTimeout(90000);
+    // Keep decrypt pending past an immediate transport close, as on a busy PC.
+    await context.addInitScript(()=>{const decrypt=crypto.subtle.decrypt.bind(crypto.subtle);crypto.subtle.decrypt=async(algorithm,key,data)=>{await new Promise(r=>setTimeout(r,20));return decrypt(algorithm,key,data);};});
     const dir = await mkdtemp(join(tmpdir(), "soda-shared-cursor-")),
       ledger = join(dir, "lifecycle");
     const savedMedia = process.env.SODA_DESKTOP_ALLOW_MEDIA;
@@ -113,6 +115,7 @@ for (const mode of ["encrypted"] as string[])
       const offered = view.getByLabel("独立カーソルを共有（全ての窓で同じ選択が必要）", {
         exact: true,
       });
+      await view.locator("summary").filter({hasText:"画質・計測"}).click();
       for (let attempt = 0; attempt < 3; attempt++) {
         await expect(offered).toBeVisible();
         await expect(view.getByRole("alert")).toContainText("共有を開始できません");
@@ -121,7 +124,7 @@ for (const mode of ["encrypted"] as string[])
           view.getByLabel("差分画像を共有（全ての窓で同じ選択が必要）", { exact: true }),
         ).toBeVisible();
         if (attempt < 2) {
-          await view.getByRole("button", { name: "再同期", exact: true }).click();
+          await view.getByRole("button", { name: "適用して再接続", exact: true }).click();
           await expect(view.locator("[data-desktop-status]")).toHaveText(/停止|終了/);
         }
       }
