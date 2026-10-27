@@ -38,3 +38,7 @@ jobs:
       - name: Generated microphone PCM and private pipe checks (no audio devices)
         shell: powershell
         run: scripts/remote-desktop/validate-microphone.ps1
+
+      - name: Generated endpoint key protection (current user, no desktop)
+        shell: powershell
+        run: scripts/remote-desktop/validate-endpoint-key.ps1
