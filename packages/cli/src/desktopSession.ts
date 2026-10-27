@@ -1,7 +1,15 @@
 import { DesktopMethods, type RemoteDesktopInput, type DesktopResults } from "@sodashitsu/protocol";
 import type { SodaClient } from "./wsClient.js";
 
-export class DesktopAgentSession {
+export interface DesktopAgentConnection {
+ readonly abort:AbortController;
+ readonly expiresAt:number;
+ observe(afterFrameSeq?:number):Promise<DesktopResults["desktop.agent.observe"]>;
+ act(observationId:string,inputs:RemoteDesktopInput[]):Promise<DesktopResults["desktop.agent.act"]>;
+ release():Promise<DesktopResults["desktop.agent.release"]>;
+ close():void;
+}
+export class DesktopAgentSession implements DesktopAgentConnection {
   readonly abort = new AbortController();
   private timer: ReturnType<typeof setTimeout>;
   private closed = false;

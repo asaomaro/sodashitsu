@@ -1,7 +1,7 @@
 import type { Readable, Writable } from "node:stream";
 import { DesktopMethods } from "@sodashitsu/protocol";
 import { desktopLines, desktopWrite } from "./desktopIo.js";
-import type { DesktopAgentSession } from "./desktopSession.js";
+import type { DesktopAgentConnection } from "./desktopSession.js";
 
 const inputSchema = {
   type: "object",
@@ -100,13 +100,13 @@ export const desktopMcpTools = [
 export async function desktopMcp(
   input: Readable,
   output: Writable,
-  attach: () => Promise<DesktopAgentSession>,
+  attach: () => Promise<DesktopAgentConnection>,
   outputFailed?: () => void,
 ) {
   let ending = false,
     cancelled = false,
     initialized = false,
-    session: DesktopAgentSession | undefined,
+    session: DesktopAgentConnection | undefined,
     busy: unknown = undefined,
     pending: Promise<void> | undefined;
   const write = async (value: unknown) => {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_FILE_CHECKPOINTS_PROTOCOL} from "@sodashitsu/protocol";
+import {DesktopEndpointAgentPeers,DesktopEndpointAgentTicket,DesktopEndpointAgentError,parseDesktopAgentGrant} from "@sodashitsu/protocol";
 import {desktopFeaturesProtocol} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CURSOR_PROTOCOL} from "@sodashitsu/protocol";
@@ -66,6 +67,7 @@ import {
 
 const props = defineProps<{ machineId: string; label: string; embedded?: boolean; monitorWindow?: MonitorWindowLaunch }>();
 let desktopSockets=createDesktopSocketFactory(props.machineId);const endpointEncrypted=ref(false);
+const endpointAgentAvailable=ref(false),endpointAgentPeers=ref<{fingerprint:string;label:string}[]>([]),endpointAgentSelected=ref(""),endpointAgentNotice=ref(""),endpointAgentBusy=ref(false);
 function usePlainDesktop(){stop();desktopSockets.dispose();desktopSockets=createDesktopSocketFactory(props.machineId);endpointEncrypted.value=false;connect();}
 const emit = defineEmits<{ close: [] }>();
 const infoOpen = ref(false);
@@ -417,7 +419,15 @@ const inputs = new Map<number, number>();
 const inputSender = new DesktopInputSender(sendInput);
 const escapePress = new DesktopEscape(), mouseButtons = new DesktopButtons(), modifiers = new DesktopModifiers();
 let drag: { x: number; y: number; left: number; top: number } | undefined;
+function grantAgentAccess(){
+  if(endpointEncrypted.value){if(!endpointAgentAvailable.value||!endpointAgentPeers.value.some(peer=>peer.fingerprint===endpointAgentSelected.value))return;windowElement.value?.focus({preventScroll:true});endpointAgentBusy.value=true;endpointAgentNotice.value="";send({type:"agent_endpoint_grant",enabled:true,recipient:endpointAgentSelected.value});}
+  else send({type:"agent_grant",enabled:true});
+}
+function revokeAgentAccess(){endpointAgentBusy.value=false;send(endpointEncrypted.value&&endpointAgentAvailable.value?{type:"agent_endpoint_grant",enabled:false}:{type:"agent_grant",enabled:false});}
+function refreshAgentPeers(){if(!endpointAgentAvailable.value)return;windowElement.value?.focus({preventScroll:true});endpointAgentBusy.value=true;endpointAgentNotice.value="";send({type:"agent_endpoint_peers"});}
 function send(value: unknown) {
+  const message=value as {type?:unknown;enabled?:unknown}|null;
+  if(endpointEncrypted.value&&message?.type==="control"&&message.enabled===true&&(endpointAgentBusy.value||agentExpires.value))revokeAgentAccess();
   if (ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
     ws.send(JSON.stringify(value));
 }
@@ -484,6 +494,7 @@ function stop(preserveCapabilities=false) {
   dismissPending = false;
   agentActive.value = false;
   agentTicket.value = "";
+  endpointAgentAvailable.value=false;endpointAgentPeers.value=[];endpointAgentSelected.value="";endpointAgentNotice.value="";endpointAgentBusy.value=false;
   agentExpires.value = 0;
   info.value = null;
   canvas.value?.getContext("2d")?.clearRect(0, 0, canvas.value.width, canvas.value.height);
@@ -566,7 +577,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -617,6 +628,20 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
+        if(m.type==="agent_endpoint_available"){
+          if(!endpointEncrypted.value)throw Error("暗号化エージェントの接続状態が不正です");
+          const message=DesktopEndpointAgentPeers.parse(m);endpointAgentAvailable.value=true;endpointAgentPeers.value=message.peers;
+          if(!message.peers.some(peer=>peer.fingerprint===endpointAgentSelected.value))endpointAgentSelected.value=message.peers[0]?.fingerprint??"";endpointAgentBusy.value=false;return;
+        }
+        if(m.type==="agent_endpoint_ticket"){
+          if(!endpointEncrypted.value||!endpointAgentAvailable.value)throw Error("暗号化エージェントの接続状態が不正です");
+          const message=DesktopEndpointAgentTicket.parse(m),grant=parseDesktopAgentGrant(message.code);
+          if(grant.recipient!==endpointAgentSelected.value||grant.machineId!==props.machineId||grant.origin!==location.origin){revokeAgentAccess();endpointAgentNotice.value="候補が変わったため許可を取り消しました。";return;}
+          agentTicket.value=message.code;agentExpires.value=message.expiresAt;endpointAgentBusy.value=false;return;
+        }
+        if(m.type==="agent_endpoint_error"){
+          if(!endpointEncrypted.value)throw Error("暗号化エージェントの接続状態が不正です");endpointAgentNotice.value=DesktopEndpointAgentError.parse(m).message;endpointAgentBusy.value=false;return;
+        }
         if(m.type==="shared_protected_available"){
           if(typeof m.enabled!=="boolean")throw Error("Invalid protected sharing capability");
           sharedProtectedAvailable.value=m.enabled;return;
@@ -810,13 +835,13 @@ function connect(automatic = false) {
             else wait.reject(new Error("共有元のクリップボード操作が拒否されました"));
           }
         } else if (m.type === "agent_ticket") {
-          if (typeof m.ticket === "string" && /^[A-Za-z0-9_-]{43}$/.test(m.ticket))
+          if (!endpointEncrypted.value&&typeof m.ticket === "string" && /^[A-Za-z0-9_-]{43}$/.test(m.ticket))
             agentTicket.value = m.ticket;
         } else if (m.type === "agent_state") {
           inputSender.clear();
           agentActive.value = m.active === true;
           agentExpires.value = typeof m.expiresAt === "number" ? m.expiresAt : 0;
-          if (agentActive.value || !agentExpires.value) agentTicket.value = "";
+          if (agentActive.value || !agentExpires.value){agentTicket.value = "";endpointAgentBusy.value=false;}
           control.value = false;
           cursorRenderer?.clearPrediction();
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
@@ -824,6 +849,7 @@ function connect(automatic = false) {
           inputSender.clear();
           escapePress.reset(); mouseButtons.reset(); modifiers.reset();
           control.value = m.enabled === true && allowed.value;
+          if(control.value){endpointAgentBusy.value=false;agentActive.value=false;agentExpires.value=0;agentTicket.value="";}
           if(!control.value)cursorRenderer?.clearPrediction();
           status.value = agentActive.value
             ? "エージェント操作中"
@@ -967,7 +993,7 @@ function canvasBlur(e: FocusEvent) {
 }
 async function leaveDesktop() {
   relinquish();
-  if (agentExpires.value) send({type:"agent_grant",enabled:false});
+  if (agentExpires.value || endpointAgentBusy.value) revokeAgentAccess();
   if (maximized.value) await toggleMaximize();
   await nextTick();
   const active = document.activeElement;
@@ -1309,15 +1335,21 @@ onBeforeUnmount(() => {
         </div>
         <p role="status">{{ clipboardNotice }}</p>
       </details>
-      <details v-if="ready && allowed && !secureDesktop && !endpointEncrypted" data-agent-access>
+      <details v-if="ready && allowed && !secureDesktop && (!endpointEncrypted || endpointAgentAvailable)" data-agent-access>
         <summary>エージェント連携</summary>
         <p>
           この共有画面の取得・PC操作を最大2分許可します。取得画像をモデルへ渡す用途を含みます。発行コードは30秒以内・1回だけ使用できます。
         </p>
-        <button @click="send({ type: 'agent_grant', enabled: true })">
+        <template v-if="endpointEncrypted">
+          <p>接続先PCで登録したエージェントの鍵を選びます。CLIでは別途確認した接続先PCの指紋も指定してください。</p>
+          <label>許可するエージェント<select v-model="endpointAgentSelected" :disabled="endpointAgentBusy" aria-label="許可するエージェント"><option v-for="peer in endpointAgentPeers" :key="peer.fingerprint" :value="peer.fingerprint">{{ peer.label }} / {{ peer.fingerprint }}</option></select></label>
+          <button :disabled="endpointAgentBusy" @click="refreshAgentPeers">候補を更新</button>
+          <p v-if="!endpointAgentPeers.length">接続先PCの暗号化接続の設定で、エージェントの指紋を登録してください。</p>
+        </template>
+        <button :disabled="endpointEncrypted && (endpointAgentBusy || !endpointAgentSelected)" @click="grantAgentAccess">
           エージェントへの画面提供・操作を許可
         </button>
-        <button v-if="agentExpires" @click="send({ type: 'agent_grant', enabled: false })">
+        <button v-if="agentExpires || endpointAgentBusy" @click="revokeAgentAccess">
           エージェント許可を取り消す
         </button>
         <input
@@ -1326,6 +1358,7 @@ onBeforeUnmount(() => {
           readonly
           aria-label="エージェント接続コード"
         />
+        <p v-if="endpointAgentNotice" role="status">{{ endpointAgentNotice }}</p>
         <p v-if="agentActive">
           エージェントが操作中です。操作を引き取るか、共有を停止すると失効します。
         </p>

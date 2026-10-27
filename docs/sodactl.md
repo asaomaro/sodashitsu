@@ -1078,3 +1078,8 @@ sodactl work memory read decisions.md
 #### デスクトップのエージェント鍵（ローカル）
 
 `sodactl desktop identity [--initialize] [--identity-dir <絶対パス>]` はローカルの公開フィンガープリントと準備状態だけを返します。通常は読み取りだけで、`--initialize` の指定時だけ鍵を作ります。ログインや `--machine` は使いません。保存先・権限・暗号化エージェント接続の対応範囲は [リモートデスクトップ](remote-desktop.md#cliのエージェント鍵の準備) を参照してください。
+
+
+#### 暗号化したエージェント接続
+
+`desktop session` / `desktop mcp` / `desktop model` は、`SODA_DESKTOP_GRANT` に暗号化コードを設定した場合、`--endpoint-fingerprint <別途確認した共有元PCの指紋>` を必須にします。`--identity-dir <絶対パス>` はCLI鍵の保存先を変更した場合の指定です。鍵の準備・登録・画面からの許可・2分の寿命・双方向の使い方は [リモートデスクトップ](remote-desktop.md#暗号化接続からエージェントへ許可する) を参照してください。

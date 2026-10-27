@@ -86,11 +86,11 @@ export class DesktopEndpointBackplane {
    const granted=this.relay.grantEndpointAgent(root.session,{fingerprint,scope:root.agentScope,active:()=>!root.closed&&scope.active()&&active()});return{...granted,scope:root.agentScope};
   },revokeAgent:()=>this.relay.revokeEndpointAgent(root.session),open:(protocols,onRecord,onClose)=>this.open(root,protocols,onRecord,onClose)};
  }
- agent(fingerprint:string,scope:string,active:()=>boolean):DesktopEndpointAgentRpc {
+ agent(fingerprint:string,scope:string,active:()=>boolean,onClose?:(reason:"released"|"stopped")=>void):DesktopEndpointAgentRpc {
   const root=[...this.roots.values()].find(value=>value.agentScope===scope);
   if(this.closed||!root||root.closed||!root.scope.active()||this.agentOwners.size>=8)throw failure();
   let rpc:DesktopEndpointAgentRpc;
-  rpc=new DesktopEndpointAgentRpc(this.relay.agents,fingerprint,()=>!this.closed&&!root.closed&&root.scope.active()&&active(),{scope,onClose:()=>{this.agentOwners.delete(rpc);}});if(this.closed||root.closed||!root.scope.active()){rpc.close();throw failure();}this.agentOwners.set(rpc,root);return rpc;
+  rpc=new DesktopEndpointAgentRpc(this.relay.agents,fingerprint,()=>!this.closed&&!root.closed&&root.scope.active()&&active(),{scope,onClose:reason=>{this.agentOwners.delete(rpc);onClose?.(reason);}});if(this.closed||root.closed||!root.scope.active()){rpc.close();throw failure();}this.agentOwners.set(rpc,root);return rpc;
  }
  private channel(root:RootState):LinkChannel|undefined {
   if(root.closed||!root.scope.active()||root.channels.size)return;
