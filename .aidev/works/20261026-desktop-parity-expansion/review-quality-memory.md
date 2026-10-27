@@ -1,0 +1,3 @@
+# 独立レビュー
+
+review_pointer/review_transferで別コンテキストから点検。希望routeの一時fallback後の復元漏れ、未編集旧窓のunmountが他窓の最新保存を上書きする2件を修正。readyで希望値から再導出し、無条件unmount保存を除去。実component/生成browserに回帰を追加し、修正だけ除去したnegativeで検出を確認。修正再レビュー2件で追加mustなし。
