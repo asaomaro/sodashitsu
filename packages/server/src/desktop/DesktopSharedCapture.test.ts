@@ -245,3 +245,27 @@ it("does not let an old microphone stop release a newer stream of the same membe
   a.send({type:"native_microphone",id:"old",enabled:false});a.session.requestMicrophone!("old",false);expect(b.session.requestMicrophone!("other",true)).toBe(false);expect(f.child.commands.at(-1)).toMatchObject({id:"new",enabled:true});
  }finally{f.pool.dispose();}
 });
+
+const cursorConfiguration={type:"configure",options:{width:320,cursor:true},separateCursor:true};
+const cursorShape={kind:2 as const,width:1,height:1,pitch:4,hotspotX:0,hotspotY:0};
+const cursorPose=(seq:number,shapeId=1,shape=false)=>({type:"cursor",seq,visible:true,x:.25,y:.5,shapeId,...(shape?{shape:cursorShape,data:Buffer.from([0,255,0,255]).toString("base64")}: {})});
+it("sends a current cursor shape to late subscribers without replaying image frames",async()=>{
+ const f=fixture(),first=f.join("source",cursorConfiguration);f.child.send({...ready,cursor:true});f.child.send(frame(1));f.child.send(cursorPose(1,1,true));f.child.send(cursorPose(2));
+ const late=f.join("source",cursorConfiguration);await vi.waitFor(()=>expect(late.messages.some(m=>m.type==="cursor")).toBe(true));
+ expect(late.messages.filter(m=>m.type==="frame")).toHaveLength(0);expect(late.messages.at(-1)).toMatchObject({type:"cursor",seq:2,shape:cursorShape,data:Buffer.from([0,255,0,255]).toString("base64")});
+ f.child.send(cursorPose(3));expect(first.messages.at(-1)).not.toHaveProperty("shape");expect(late.messages.at(-1)).not.toHaveProperty("shape");
+ f.child.send(cursorPose(4,2,true));expect(first.messages.at(-1)).toHaveProperty("shape");expect(late.messages.at(-1)).toHaveProperty("shape");
+ f.child.send({type:"cursor",seq:5,visible:false,x:0,y:0,shapeId:0});const hidden=f.join("source",cursorConfiguration);expect(hidden.messages.at(-1)).toMatchObject({type:"cursor",visible:false});
+ f.child.send(cursorPose(6,2));expect(hidden.messages.at(-1)).toHaveProperty("shape");expect(first.messages.at(-1)).not.toHaveProperty("shape");f.pool.dispose();
+});
+it("keeps cursor positions flowing while one viewer holds its image ACK",async()=>{
+ const f=fixture(),slow=f.join("source",cursorConfiguration),fast=f.join("source",cursorConfiguration);f.child.send({...ready,cursor:true});f.child.send(frame(1));fast.send({type:"ack",seq:1});f.child.send(cursorPose(1,1,true));f.child.send(frame(2));f.child.send(cursorPose(2));
+ await vi.waitFor(()=>expect(slow.messages.filter(m=>m.type==="cursor")).toHaveLength(2));expect(slow.messages.filter(m=>m.type==="frame")).toHaveLength(1);expect(fast.messages.filter(m=>m.type==="frame")).toHaveLength(2);expect(fast.messages.at(-1)).toMatchObject({type:"cursor",seq:2});f.pool.dispose();
+});
+it("rejects malformed cursor shapes and an unnegotiated cursor source",async()=>{
+ const f=fixture(),a=f.join("source",cursorConfiguration),b=f.join("source",cursorConfiguration);f.child.send({...ready,cursor:true});f.child.send({...cursorPose(1,1,true),data:""});expect(a.session.exitCode).toBe(0);expect(b.session.exitCode).toBe(0);
+ const old=fixture(),legacy=old.join();old.child.send({...ready,cursor:true});expect(legacy.session.exitCode).toBe(0);
+});
+it("does not substitute an older cursor shape for an unknown shape id",async()=>{
+ const f=fixture(),a=f.join("source",cursorConfiguration);f.child.send({...ready,cursor:true});f.child.send(cursorPose(1,1,true));f.child.send(cursorPose(2,2));expect(a.messages.filter(m=>m.type==="cursor")).toHaveLength(1);f.child.send(cursorPose(3,2,true));expect(a.messages.at(-1)).toMatchObject({type:"cursor",shapeId:2,shape:cursorShape});f.pool.dispose();
+});

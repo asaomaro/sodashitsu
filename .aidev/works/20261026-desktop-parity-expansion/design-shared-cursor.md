@@ -1,0 +1,7 @@
+# 8I 通常共有sourceの独立カーソル
+
+通常共有に明示opt-inを追加。全窓で同じ選択が必要で、旧cohortの焼込画像を暗黙にcursor無しへ変えない。新viewer protocol＋A/B capability＋helper ready.cursorの積。共有cursor要求は既存cursor protocolも必要。旧peer/default offは従来を維持し、showCursor off/protected/virtualとは併用しない。
+
+sourceはshape最大1件/pose1件を保持し、sequenceとshape bytesを検査。consumerごとshapeIdを持ち、途中参加/shape変更時に必要なshapeだけ送る。画像ACK待ちとcursorは独立、画像の再送はしない。各Providerの既存DesktopCursorStreamがsocket backpressureとpeer shape再送を扱う。操作ownerの短いlocal predictionと実位置への復帰は既存rendererを使用する。source閉鎖/lock/scope失効では全consumerとcursorを破棄する。
+
+新opt-inはcohort key/helper configurationに含め、選択の違うviewerは明示拒否する。API/設定変更/helper旧版・途中参加・遅いviewer・native画像/動画・暗号化と旧peerを生成fixtureで検証。taskcheckと独立全体review必須。実OSのcapture/input/clipboard/録音/設定変更はしない。
