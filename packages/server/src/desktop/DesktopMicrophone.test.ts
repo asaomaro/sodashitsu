@@ -33,3 +33,17 @@ it.skipIf(process.platform==="win32")("coalesces a burst behind a pipe write to 
  await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.type==="microphone_ack"&&m.seq===6)).toBe(true);await expect.poll(()=>Buffer.concat(chunks).length).toBe(1932*2);const packet=Buffer.concat(chunks);expect(packet.readUInt32LE()).toBe(1);expect(packet.readUInt32LE(1932)).toBe(6);expect(send.mock.calls.some(([m]:any)=>m.state==="unavailable")).toBe(false);
  }finally{mic.stop();client?.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));if(path)await rm(path,{force:true});}
 });
+
+it("refuses an unnegotiated Opus start before opening any helper pipe",()=>{
+ const write=vi.fn(),send=vi.fn((_m:unknown)=>true),mic=new DesktopMicrophone({synthetic:true,allowed:()=>true,write,send});mic.fromViewer({type:"microphone_start",id,codec:"opus"});expect(write).not.toHaveBeenCalled();expect(send).toHaveBeenCalledWith({type:"microphone_status",id,state:"unavailable"});mic.stop();
+});
+for(const mode of["tone","oversize-duration","mixed-pcm"]as const)it.skipIf(process.platform==="win32")(`decodes generated Opus only into the fixed private PCM sink: ${mode}`,async()=>{
+ const{default:Opus}=await import("opusscript"),encoder=new Opus(48000,1,Opus.Application.VOIP);encoder.encoderCTL(4002,32000);
+ let path="",client:Socket|undefined;const chunks:Buffer[]=[],send=vi.fn((_m:unknown)=>true),server=createServer(socket=>{client=socket;socket.on("error",()=>{});socket.on("data",bytes=>chunks.push(Buffer.from(bytes)));socket.write(DESKTOP_MICROPHONE_HELLO);});
+ const mic=new DesktopMicrophone({synthetic:true,allowOpus:true,allowed:()=>true,send,write:raw=>{const m=raw as any;if(m.enabled){path=m.pipePath;server.listen(path,()=>void chmod(path,0o600));}}});
+ try{mic.fromViewer({type:"microphone_start",id,codec:"opus"});await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.state==="running")).toBe(true);
+ const pcm=mode==="oversize-duration"?Buffer.concat([tone(),tone(),tone()]):tone(),packet=encoder.encode(pcm,pcm.length/2);expect(packet.length).toBeLessThan(384);
+ mic.fromViewer(mode==="mixed-pcm"?{type:"microphone_frame",id,seq:1,data:tone().toString("base64")}:{type:"microphone_opus",id,seq:1,data:packet.toString("base64")});
+ if(mode!=="tone"){await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.state==="unavailable")).toBe(true);expect(chunks).toEqual([]);}else{await expect.poll(()=>Buffer.concat(chunks).length).toBe(1932);const bytes=Buffer.concat(chunks).subarray(12);let energy=0;for(let i=0;i<960;i++)energy+=bytes.readInt16LE(i*2)**2;expect(Math.sqrt(energy/960)).toBeGreaterThan(1000);expect(send).toHaveBeenCalledWith({type:"microphone_ack",id,seq:1});}
+ }finally{mic.stop();encoder.delete();client?.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));if(path)await rm(path,{force:true});}
+});

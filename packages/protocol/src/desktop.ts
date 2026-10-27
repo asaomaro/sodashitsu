@@ -63,6 +63,7 @@ export const DesktopOptions = z
     files: z.literal(true).optional(),
     richClipboard: z.literal(true).optional(),
     microphone: z.literal(true).optional(),
+    microphoneOpus:z.literal(true).optional(),
     nativeAudio: z.literal(true).optional(),
     nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
@@ -153,6 +154,7 @@ export const DesktopReady = z
     files:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
     microphone:z.literal(true).optional(),
+    microphoneOpus:z.literal(true).optional(),
     nativeAudio:z.literal(true).optional(),
     nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
@@ -300,6 +302,7 @@ export interface DesktopResults {
     files?: boolean;
     richClipboard?: boolean;
     microphone?: boolean;
+    microphoneOpus?: boolean;
     nativeAudio?: boolean;
     nativeDatagrams?: boolean;
     nativeVideo?: boolean;
