@@ -51,3 +51,5 @@
 第8段階8E: 共有動画のFPS/bitrate希望をviewerごとに計算し、max集約して共通encoderへ反映。A/B/helper proofで交渉し、旧経路は固定。共有動画用UI、2browser描画とsource rate変更、音声lease継続の生成検査を追加。共有解像度適応・protected scope合成は後続でtask8全体は未完了。
 
 第10段階10A: endpoint暗号状態機械を追加中。独立pin/peerRole、両hello署名、ephemeral ECDH/HKDF/AES-GCM、9 lane/direction別鍵、replay/ordered FIFO/受信8件16MiB上限、握手/Session closeを生成検証。まだ製品routeには有効化しておらず、鍵保存とpin確認/全lane中継/agent recipient/多viewerとprotected scope接続が残る。task10全体は未完了。
+
+第10段階10B: endpoint秘密鍵/peer pinの保存層を追加。WindowsCurrentUser DPAPI/固定system helper/ACL・fixed volume、POSIX owner/mode/ancestor、atomic sync、失効race/復元後再検査を生成検証。まだRPC/UI/製品routeへ未公開。単一owner instanceとhandoff時closeは10Cの統合必須条件。task10全体は未完了。

@@ -1,0 +1,17 @@
+# 10B: endpoint秘密鍵とpeer pinのowner保存
+
+この差分は保存層のみ。RPC/UI/製品配信routeにはまだ公開しない。初期化は明示呼出しだけで、statusは保存先を作らない。破損・秘密鍵/public key不一致・保護方式不一致で自動再生成しない。
+
+WindowsはCurrentUser DPAPIでprivate keyとpeer pinを一括保護。raw binaryのprivate child pipeのみを使い、引数/ログへ秘密を置かない。SystemRootは信頼済みserver起動環境の値だけから取り、system PowerShellの絶対path/cwd/PSModulePathを固定する。プロジェクト・RPC・PATH/CWDのプログラム探索を使わない。DPAPI失敗でplaintextへfallbackしない。
+
+Windowsの保存先はDriveInfo.Fixedのlocal driveのみ。UNC/mapped network/removableを拒否し、対象/全ancestorのowner/ACL/reparseを検査する。CurrentUser/SYSTEM/Administratorsを信頼し、OS TrustedInstallerはancestorだけ許容。第三者の書込み/親のDeleteChild・DACL変更等を拒否し、旧正規DPAPI vaultへのrollbackを防ぐ。ACLの設定変更は行わず、不安全なら停止する。
+
+POSIXは葉directory700/file600、current user所有、no symlink、全ancestorのowner/rootと非書込みを検査。root-owned sticky ancestorは/tmp等の通常fixture用に許す。filesystem/OSとその管理者は信頼境界。owner-file形式はat-rest encryptionではない。読み取り時にも親を再検査する。
+
+write.lockで同時書込みを拒否し、lock中の読取りも前後で拒否する。temp file.sync後、POSIX rename＋directory fsync、Windows MoveFileEx(REPLACE_EXISTING|WRITE_THROUGH)で更新する。初回の親dirとlock解放も同期し、完了後に新trustを公開する。古いlockを自動で奪わない。保存結果が不明な失敗で自動再送/暗黙再生成をしない。媒体そのものや特権管理者への耐性は約束しない。
+
+役割viewer/agentごとにpinを持ち、失効要求で即時deny/既発行permitを不可逆に無効化する。古いtrustの完了で後続revokeを解除しない。restore完了後に再loadし、key/pin/deny/revision/pending/closeを再確認。hookがthrowしてもpin削除の永続化を続け、結果でactive-session cleanup失敗を通知する。
+
+統合の必須条件: Storeは1つのowner process/instanceに限定。別Storeの既発行permitへのbroadcastはこの保存層にはない。composeServerで単一ownerを保証し、handoff/disposeでStore.closeを必ず先行させる。permit.activeをsource/process epochと合わせ、全laneのasync結果公開前にも確認する。複数のownerプロセスを許可する運用は、このまま有効化しない。
+
+生成試験はtemporary filesystem、fake protector、メモリACL、own generated DPAPI bytes/throwaway filesのみ。実endpointの鍵生成・変更、実ACLの変更、画面capture/input/audio deviceは行わない。一次資料はMicrosoft ProtectedData/DataProtectionScope/MoveFileEx、Node fsとLinux fsync。一般的なprivate key保存の構成を参考に独自実装し、他製品のコードはコピーしていない。
