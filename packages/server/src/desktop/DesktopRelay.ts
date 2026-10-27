@@ -51,7 +51,7 @@ import {
   isDesktopMediaChunk,
   type RemoteDesktopInput,
 } from "@sodashitsu/protocol";
-import { DesktopAgentAccess, type AgentTarget, type AgentFrame } from "./DesktopAgentAccess.js";
+import { DesktopAgentAccess, type AgentTarget, type AgentFrame, type DesktopAgentRecipient } from "./DesktopAgentAccess.js";
 import type { AuthService } from "../auth/AuthService.js";
 import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { MachineLink } from "../machine/MachineLink.js";
@@ -271,6 +271,14 @@ export class DesktopRelay {
     if (!sent && v.sharedDesktop) this.stop(v);
     return sent;
   }
+  /** Provider-private endpoint integration only; never register on public RPC. */
+  grantEndpointAgent(sessionId:string,recipient:DesktopAgentRecipient){
+    if(this.closed||!this.auth.verifySession(sessionId))throw new RpcError("unauthorized","Endpoint viewer is unavailable");
+    const viewers=[...this.viewers].filter(v=>v.sessionId===sessionId),v=viewers[0];
+    if(viewers.length!==1||!v||!v.ready||!v.allowInput||v.secureDesktop||!v.provider||v.ws.readyState!==WebSocket.OPEN)throw new RpcError("unauthorized","Endpoint viewer is unavailable");
+    const grant=this.agents.grant(v.agent,recipient);this.send(v.ws,{type:"control",enabled:false});return grant;
+  }
+  revokeEndpointAgent(sessionId:string):void{for(const v of this.viewers)if(v.sessionId===sessionId)this.agents.revoke(v.agent);}
   private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false,sharedProtectedRequested=false,sharedMicrophoneRequested=false,fileCheckpointsRequested=false,foldersRequested=false,sharedCursorRequested=false,sharedClipboardRequested=false,sharedDeltasRequested=false,folderCheckpointsRequested=false,sharedMonitorsRequested=false): void {
     const now = performance.now();
     const v: Viewer = {

@@ -13,7 +13,7 @@ export interface AgentTarget {
 }
 /** Provider-private binding. active includes the recipient trust revision and
  * viewer/source/origin/machine lifetime; never construct from public RPC data. */
-export interface DesktopAgentRecipient {fingerprint:string;active():boolean}
+export interface DesktopAgentRecipient {fingerprint:string;scope?:string;active():boolean}
 type Grant = {
   recipient?:DesktopAgentRecipient;
   ownerActive?:()=>boolean;
@@ -32,17 +32,20 @@ const secret = () => randomBytes(32).toString("base64url");
 const digest = (image: Uint8Array) => createHash("sha256").update(image).digest("hex");
 /** Explicit viewer-issued capabilities. No enumeration, persistence, or authority from machine login. */
 export class DesktopAgentAccess {
+  private readonly ownerRevoked=new Map<string,Set<()=>void>>();
+  /** Provider-local owner notification; never exposed through RPC. */
+  onOwnerRevoked(owner:string,callback:()=>void):()=>void{const callbacks=this.ownerRevoked.get(owner)??new Set<()=>void>();callbacks.add(callback);this.ownerRevoked.set(owner,callbacks);return()=>{callbacks.delete(callback);if(!callbacks.size&&this.ownerRevoked.get(owner)===callbacks)this.ownerRevoked.delete(owner);};}
   private grants = new Map<AgentTarget, Grant>();
   private tickets = new Map<string, Grant>();
   private leases = new Map<string, Grant>();
   grant(target: AgentTarget,recipient?:DesktopAgentRecipient) {
-    if(recipient&&(!/^[a-f0-9]{64}$/.test(recipient.fingerprint)||!this.bindingActive(recipient)))throw new RpcError("unauthorized","Agent recipient is unavailable");
+    if(recipient&&(!/^[a-f0-9]{64}$/.test(recipient.fingerprint)||recipient.scope!==undefined&&!/^[A-Za-z0-9_-]{43}$/.test(recipient.scope)||!this.bindingActive(recipient)))throw new RpcError("unauthorized","Agent recipient is unavailable");
     this.revoke(target);
     const now = performance.now(),
       ticket = secret();
     const g: Grant = {
       target,
-      ...(recipient?{recipient:{fingerprint:recipient.fingerprint,active:recipient.active}}:{}),
+      ...(recipient?{recipient:{fingerprint:recipient.fingerprint,...(recipient.scope?{scope:recipient.scope}:{}),active:recipient.active}}:{}),
       expires: now + 120000,
       ticketExpires: now + 30000,
       busy: false,
@@ -59,16 +62,16 @@ export class DesktopAgentAccess {
   private validBinding(g:Grant):boolean {return (!g.recipient||this.bindingActive(g.recipient))&&(!g.ownerActive||this.bindingActive({fingerprint:"",active:g.ownerActive}));}
   attach(owner: string, ticket: string) {return this.claim(owner,ticket);}
   /** Only the authenticated provider endpoint path may supply this fingerprint. */
-  attachRecipient(owner:string,ticket:string,fingerprint:string,ownerActive?:()=>boolean) {
-    if(!/^[a-f0-9]{64}$/.test(fingerprint))throw new RpcError("unauthorized","Agent recipient is unavailable");
-    return this.claim(owner,ticket,fingerprint,ownerActive);
+  attachRecipient(owner:string,ticket:string,fingerprint:string,ownerActive?:()=>boolean,scope?:string) {
+    if(!/^[a-f0-9]{64}$/.test(fingerprint)||scope!==undefined&&!/^[A-Za-z0-9_-]{43}$/.test(scope))throw new RpcError("unauthorized","Agent recipient is unavailable");
+    return this.claim(owner,ticket,fingerprint,ownerActive,scope);
   }
-  private claim(owner: string, ticket: string,fingerprint?:string,ownerActive?:()=>boolean) {
+  private claim(owner: string, ticket: string,fingerprint?:string,ownerActive?:()=>boolean,scope?:string) {
     const key = digest(Buffer.from(ticket)),
       g = this.tickets.get(key);
     if(g&&!this.validBinding(g)){this.revoke(g.target);throw new RpcError("unauthorized","Agent grant is missing or expired");}
     // A wrong or legacy recipient must not consume somebody else's ticket.
-    if(!g||g.dead||g.recipient?.fingerprint!==fingerprint||performance.now()>=g.ticketExpires||performance.now()>=g.expires)throw new RpcError("unauthorized","Agent grant is missing or expired");
+    if(!g||g.dead||g.recipient?.fingerprint!==fingerprint||g.recipient?.scope!==scope||performance.now()>=g.ticketExpires||performance.now()>=g.expires)throw new RpcError("unauthorized","Agent grant is missing or expired");
     this.tickets.delete(key);
     g.owner = owner;
     if(ownerActive)g.ownerActive=ownerActive;
@@ -174,6 +177,7 @@ export class DesktopAgentAccess {
     this.grants.delete(target);
     if (g.lease) this.leases.delete(g.lease);
     for (const [key, value] of this.tickets) if (value === g) this.tickets.delete(key);
+    if(g.owner)for(const callback of [...(this.ownerRevoked.get(g.owner)??[])])try{callback();}catch{/* Continue all revocations. */}
     // Revocation remains complete even if a helper cleanup callback throws.
     for(const cleanup of [()=>target.releaseInputs(),()=>target.control(false),()=>target.state(false,0)])try{cleanup();}catch{/* best effort after authority was destroyed */}
   }

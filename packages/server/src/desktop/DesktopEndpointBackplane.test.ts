@@ -53,7 +53,7 @@ it("supports the existing separate image lane without exposing its private cooki
  const ticket=v.messages.find(m=>m.type==="image_ticket")!.ticket,frames:Uint8Array[]=[];
  const child=await v.root.open([DESKTOP_IMAGE_LANE_PROTOCOL],(bytes,binary)=>{expect(binary).toBe(true);frames.push(bytes.slice());},()=>{});child.send(JSON.stringify({type:"video_viewer",ticket}));v.send({type:"image_ready"});
  await expect.poll(()=>frames.length).toBe(1);expect(v.frames).toEqual([]);v.send({type:"ack",seq:decodeDesktopFrame(frames[0]!).info.seq});await expect.poll(()=>frames.length).toBeGreaterThan(1);
- v.root.close();expect(()=>child.send("{}")).toThrow();expect(Object.keys(v.root).sort()).toEqual(["active","close","open"]);
+ v.root.close();expect(()=>child.send("{}")).toThrow();expect(Object.keys(v.root).sort()).toEqual(["active","close","grantAgent","open","revokeAgent"]);
 });
 it("rejects child-before-parent, duplicate parents and more than eight roots",async()=>{
  const f=await fixture(),root=f.plane.root(f.publicMachine,()=>true);
@@ -107,4 +107,36 @@ it("rejects another root's image ticket without consuming the legitimate attachm
  const f=await fixture(),a=await f.viewer([DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL]),b=await f.viewer();a.start();await expect.poll(()=>a.messages.some(m=>m.type==="image_ticket")).toBe(true);
  const ticket=a.messages.find(m=>m.type==="image_ticket")!.ticket,closed=vi.fn();const attacker=await b.root.open([DESKTOP_IMAGE_LANE_PROTOCOL],()=>{},closed);attacker.send(JSON.stringify({type:"video_viewer",ticket}));await expect.poll(()=>closed.mock.calls.length).toBe(1);expect(a.root.active()).toBe(true);
  const frames:Uint8Array[]=[],legitimate=await a.root.open([DESKTOP_IMAGE_LANE_PROTOCOL],(bytes,binary)=>{if(binary)frames.push(bytes.slice());},()=>{});legitimate.send(JSON.stringify({type:"video_viewer",ticket}));a.send({type:"image_ready"});await expect.poll(()=>frames.length).toBe(1);expect(a.closed).not.toHaveBeenCalled();
+});
+it("binds a recipient grant to its own private viewer scope and forwards only permitted agent input",async()=>{
+ const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]),fingerprint="a".repeat(64);v.start();await expect.poll(()=>v.frames.length).toBe(1);
+ const grant=v.root.grantAgent({fingerprint,active:()=>true}),rpc=f.plane.agent(fingerprint,grant.scope,()=>true);
+ const call=async(id:number,method:string,params:unknown)=>JSON.parse(await rpc.request(JSON.stringify({id:String(id),method,params})));
+ const {leaseId}=(await call(1,"desktop.agent.attach",{ticket:grant.ticket})).result,observed=(await call(2,"desktop.agent.observe",{leaseId})).result;
+ const inputs=[{kind:"key",code:"ControlLeft",down:true},{kind:"key",code:"Space",down:true},{kind:"key",code:"Space",down:false},{kind:"key",code:"ControlLeft",down:false}];
+ expect((await call(3,"desktop.agent.act",{leaseId,observationId:observed.observationId,inputs})).result.acknowledged).toBe(4);expect(await f.log()).toEqual(inputs);
+ expect((await call(4,"desktop.agent.release",{leaseId})).result.released).toBe(true);expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
+});
+it("rejects another root scope or recipient without consuming a rightful grant",async()=>{
+ const f=await fixture(),a=await f.viewer([DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL]),b=await f.viewer([DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL]),fingerprint="a".repeat(64);a.start(true);await expect.poll(()=>a.frames.length).toBe(1);b.start(true);await expect.poll(()=>b.frames.length).toBe(1);
+ const grant=a.root.grantAgent({fingerprint,active:()=>true}),other=b.root.grantAgent({fingerprint,active:()=>true});
+ const wrongScope=f.plane.agent(fingerprint,other.scope,()=>true);await expect(wrongScope.request(JSON.stringify({id:"1",method:"desktop.agent.attach",params:{ticket:grant.ticket}}))).rejects.toThrow();
+ const wrongRecipient=f.plane.agent("b".repeat(64),grant.scope,()=>true);await expect(wrongRecipient.request(JSON.stringify({id:"1",method:"desktop.agent.attach",params:{ticket:grant.ticket}}))).rejects.toThrow();
+ const rightful=f.plane.agent(fingerprint,grant.scope,()=>true);expect(JSON.parse(await rightful.request(JSON.stringify({id:"1",method:"desktop.agent.attach",params:{ticket:grant.ticket}}))).result.leaseId).toHaveLength(43);rightful.close();
+});
+it("keeps a second root's agent alive when another root closes or its owner callback runs late",async()=>{
+ const f=await fixture(),a=await f.viewer([DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL]),b=await f.viewer([DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL]),fingerprint="a".repeat(64);a.start(true);await expect.poll(()=>a.frames.length).toBe(1);b.start(true);await expect.poll(()=>b.frames.length).toBe(1);
+ const ag=a.root.grantAgent({fingerprint,active:()=>true}),bg=b.root.grantAgent({fingerprint,active:()=>true}),ar=f.plane.agent(fingerprint,ag.scope,()=>true),br=f.plane.agent(fingerprint,bg.scope,()=>true);
+ const attach=(rpc:typeof ar,ticket:string)=>rpc.request(JSON.stringify({id:"1",method:"desktop.agent.attach",params:{ticket}}));await attach(ar,ag.ticket);const {leaseId}=JSON.parse(await attach(br,bg.ticket)).result;
+ a.root.close();ar.close();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(1);expect(JSON.parse(await br.request(JSON.stringify({id:"2",method:"desktop.agent.observe",params:{leaseId}}))).result.imageBase64).toBeTruthy();expect(b.root.active()).toBe(true);expect((await f.log(f.lifecycle)).filter(row=>row.type==="spawn")).toHaveLength(1);
+ b.root.revokeAgent();await expect(br.request(JSON.stringify({id:"3",method:"desktop.agent.observe",params:{leaseId}}))).rejects.toThrow();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
+});
+it("preserves the input ceiling and reclaims the finite private owner capacity",async()=>{
+ const denied=await fixture(false),v=await denied.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);expect(()=>v.root.grantAgent({fingerprint:"a".repeat(64),active:()=>true})).toThrow();expect(await denied.log()).toEqual([]);
+ const f=await fixture(),allowed=await f.viewer([DESKTOP_INPUT_PROTOCOL]);allowed.start();await expect.poll(()=>allowed.frames.length).toBe(1);const grant=allowed.root.grantAgent({fingerprint:"a".repeat(64),active:()=>true}),owners=Array.from({length:8},()=>f.plane.agent("a".repeat(64),grant.scope,()=>true));
+ expect(()=>f.plane.agent("a".repeat(64),grant.scope,()=>true)).toThrow();owners[0]!.close();const newer=f.plane.agent("a".repeat(64),grant.scope,()=>true);owners[0]!.close();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(8);await f.plane.close();await expect(newer.request('{}')).rejects.toThrow();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
+});
+it("does not register an agent owner if its active callback invalidates the provider during construction",async()=>{
+ const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);const grant=v.root.grantAgent({fingerprint:"a".repeat(64),active:()=>true});
+ expect(()=>f.plane.agent("a".repeat(64),grant.scope,()=>{f.provider.configure(f.config);return true;})).toThrow();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
 });

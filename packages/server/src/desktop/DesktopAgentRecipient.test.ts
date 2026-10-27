@@ -75,3 +75,14 @@ it("returns a structured observation wait without consuming the grant or retryin
  expect(JSON.parse(await rpc.request(request(3,"desktop.agent.observe",{leaseId}))).error.code).toBe("server_busy");
  vi.spyOn(performance,"now").mockReturnValue(performance.now()+201);expect(JSON.parse(await rpc.request(request(4,"desktop.agent.observe",{leaseId}))).result.imageBase64).toBe("AQID");expect(f.target.input).not.toHaveBeenCalled();
 });
+it("requires the exact private viewer scope without consuming the rightful ticket",()=>{
+ const f=fixture(),scope="s".repeat(43),grant=f.api.grant(f.target,{...f.recipient,scope});
+ expect(()=>f.api.attachRecipient("absent",grant.ticket,fingerprint)).toThrow();expect(()=>f.api.attachRecipient("wrong",grant.ticket,fingerprint,()=>true,"w".repeat(43))).toThrow();
+ expect(f.api.attachRecipient("right",grant.ticket,fingerprint,()=>true,scope).leaseId).toHaveLength(43);
+});
+it("rejects pending capture immediately on human revoke and still delivers an explicit release response",async()=>{
+ const f=fixture(),closed=vi.fn(()=>{throw Error("generated close callback");}),rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true,{onClose:closed});rpcs.push(rpc);let done!:()=>void;
+ const {leaseId}=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;
+ f.target.capture=()=>new Promise<void>(resolve=>{done=resolve;});const pending=rpc.request(request(2,"desktop.agent.observe",{leaseId})),rejected=expect(pending).rejects.toThrow();let cancelled=false;void pending.catch(()=>{cancelled=true;});f.api.revoke(f.target);await Promise.resolve();const immediately=cancelled;done();await rejected;expect(immediately).toBe(true);expect(closed).toHaveBeenCalledOnce();await Promise.resolve();
+ const next=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(next);const grant=f.api.grant(f.target,f.recipient),attached=JSON.parse(await next.request(request(1,"desktop.agent.attach",{ticket:grant.ticket}))).result;expect(JSON.parse(await next.request(request(2,"desktop.agent.release",{leaseId:attached.leaseId}))).result).toEqual({released:true});
+});
