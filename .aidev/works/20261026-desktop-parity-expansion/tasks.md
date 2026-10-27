@@ -63,3 +63,10 @@
 第11段階11B: マイクのOpus 32kbps/20msを追加。root featureとB capability双方の積で交渉し、旧版/非対応browserは従来PCMを維持。B decoderは1920byteの固定PCMだけ既存private sinkへ渡し、混在codec/異常durationを停止。生成WebCodecs encoder/Node decoder/実browser5件、WSS・暗号化UDP/WSSで検証済み。全体11760通過＋終了競合/ビルド鮮度修正後140件、typecheck、独立build/smoke、独立レビュー・修正再レビューを通過。共有source mic/他OS/実デバイス検証は残件。
 
 第8段階8F: 共有動画の解像度希望のmax集約、source/viewer別世代・連番とformat/実描画barrier、途中参加の保持IDR除外、UDP破棄creditと描画完了の分離、有限待機と音声owner維持を実装。生成ブラウザのWSS/UDP/遅いdecoder/固定途中参加/切替IDR損失を確認。全体11789件・新browser5件・型検査・独立build/smoke・負例6件・独立レビューと修正再レビューを通過。protected scope合成は後続でtask8全体は保留。
+
+
+- [ ] 12. エージェント実行PC・作業PC・操作paneの分離（2026-10-27追加）。A→BだけでなくB→Aの既存machine接続・許可による起動を案内し、work agent起動元paneから別PC上のCLIを対話操作できる端末中継を実装する。実行先/作業先/表示先の明示、元PCでの承認、固定された要求/pane/実行instance、同時操作の排他、質問フォームの表示先、切断/再接続/取消/終了を設計・生成CLIと実browserで検証する。ログイン情報や一般machine権限を起動元へ転送しない（taskcheck必須）。
+
+- [ ] 13. 残る転送・monitor導線: 切断/再読込をまたぐ転送再開、フォルダ転送、Explorerへの直接D&D、monitor別の独立窓。OS/browser制約を確認し、対応可能な経路と必要なネイティブ補助機能を明示する（taskcheck必須）。
+
+第8段階8G: protected画像sourceの最大8viewer共有、purpose固定/新worker proof、排他入力、first viewer退出後の実child維持、scope失効の全窓停止、初回busyからの明示参加を実装。全体11810件・新browser3件/既存6件・型検査・独立build/smoke・負例3件・Windows生成CI・独立レビュー2件と追加差分再レビュー通過。導入済み保護サービスの更新と実UAC取得/入力は実機検証待ち。task8全体は実機検証と残る通常共有経路の拡張を含め保留。

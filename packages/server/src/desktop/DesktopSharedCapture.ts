@@ -3,7 +3,7 @@ import type {DesktopNativeAudioHooks,DesktopAudioLease} from "./DesktopNativeAud
 import { DesktopSharedNative } from "./DesktopSharedNative.js";
 import { EventEmitter } from "node:events";
 import { PassThrough, Readable, Writable } from "node:stream";
-import { DesktopReady, DesktopFrameInfo, encodeDesktopFrame, decodeDesktopFrame, DESKTOP_MAX_FRAME_BYTES } from "@sodashitsu/protocol";
+import { DesktopProtectedFailure, DesktopReady, DesktopFrameInfo, encodeDesktopFrame, decodeDesktopFrame, DESKTOP_MAX_FRAME_BYTES } from "@sodashitsu/protocol";
 
 /** The subset used by DesktopProvider, for both OS children and shared subscriptions. */
 export interface DesktopHelper extends EventEmitter {
@@ -25,8 +25,8 @@ type Subscription = DesktopHelper & {
   stderr: PassThrough;
 };
 
-/** One ordinary desktop helper, bounded independent full-image consumers, one input owner.
- * No saved frame is replayed to a new consumer. Protected desktops are never pooled.
+/** One purpose-bound desktop helper, bounded full-image consumers, one input owner.
+ * No saved frame is replayed. Protected sources require explicit worker proof.
  */
 export class DesktopSharedCapture {
   private group: {
@@ -38,6 +38,7 @@ export class DesktopSharedCapture {
     audio?: DesktopSharedAudio<Subscription>;
     control?: Subscription;
     configuration?: string;
+    protectedSource?:boolean;
     frameSeq: number;
     inputSeq: number;
     inputs: Map<number, { member: Subscription; seq: number }>;
@@ -136,7 +137,7 @@ export class DesktopSharedCapture {
       const configuration = JSON.stringify(value);
       if (g.configuration && g.configuration !== configuration) throw Error("Capture configuration changed");
       s.configured = true;
-      if (!g.configuration) { g.configuration = configuration; this.write(g, value); }
+      if (!g.configuration) { g.configuration = configuration;g.protectedSource=value.allowSharedProtected===true; this.write(g, value); }
       else if (g.ready) this.emit(s, g.ready);
       return;
     }
@@ -168,7 +169,9 @@ export class DesktopSharedCapture {
     if (value.type === "ready" && !g.ready) {
       const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, ...wire } = value;
       const ready = DesktopReady.parse(wire);
-      if (ready.secureDesktop || ready.protectedDesktop || ready.lockScreenCover || ready.virtualDisplay || (ready.nativeVideo && !JSON.parse(g.configuration!).allowNativeVideo) || ready.allowMedia || ready.allowClipboard)
+      const protectedSource=ready.secureDesktop===true&&!!ready.protectedDesktop&&ready.sharedProtected===true&&!ready.lockScreenCover;
+      if(g.protectedSource&&!protectedSource){for(const member of[...g.members])this.emit(member,{type:"protected_desktop_failure",code:"service_incompatible"});this.end(g);return;}
+      if ((g.protectedSource?(!protectedSource||ready.nativeVideo||ready.nativeAudio||ready.microphone||ready.cursor||ready.files||ready.richClipboard):ready.secureDesktop||ready.protectedDesktop||ready.sharedProtected) || ready.lockScreenCover || ready.virtualDisplay || (ready.nativeVideo && !JSON.parse(g.configuration!).allowNativeVideo) || ready.allowMedia || ready.allowClipboard)
         throw Error("Source cannot be shared");
       g.ready = { ...ready, dynamicQuality: false, inputAckPipe: false, ...(value.deferNativeSnapshots===true?{deferNativeSnapshots:true}:{}) };
       if (ready.nativeVideo) g.native = new DesktopSharedNative<Subscription>({
@@ -197,7 +200,8 @@ export class DesktopSharedCapture {
       if (route) { g.inputs.delete(value.seq); this.emit(route.member, { type: "input_ack", seq: route.seq }); }
     } else {
       // A source/lock transition ends the entire generation before more data is accepted.
-      if (value.type === "session_locked") for (const s of g.members) this.emit(s, { type: "session_locked" });
+      if(g.protectedSource&&["protected_desktop_failure","unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(value.type)){const failure=value.type==="protected_desktop_failure"?DesktopProtectedFailure.parse(value):{type:"protected_desktop_failure",code:value.type==="unlock_failure"?"worker_unavailable":"source_changed"};for(const member of [...g.members])this.emit(member,failure);}
+      else if (value.type === "session_locked") for (const s of g.members) this.emit(s, { type: "session_locked" });
       this.end(g);
     }
   }

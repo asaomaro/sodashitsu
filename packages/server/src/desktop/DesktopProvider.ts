@@ -171,6 +171,7 @@ export class DesktopProvider {
     return {
       ...(this.endpointOnly?{endpointRequired:true}:{}),
       ...(this.config?.nativePlatform?{nativePlatform:this.config.nativePlatform}:{}),
+      sharedProtected:!this.config?.nativePlatform&&this.config?.allowElevated===true,
       sharedDesktop: !this.config?.nativePlatform,
       sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
@@ -212,8 +213,9 @@ export class DesktopProvider {
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
     if(cfg.nativePlatform&&(p.options.sharedDesktop||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
-    if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || p.options.microphone || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
+    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || p.options.microphone || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
+    if(p.options.sharedProtected&&(!p.options.sharedDesktop||!p.options.elevatedDesktop||!p.options.features||!cfg.allowElevated))throw new RpcError("unauthorized","保護画面の複数viewer共有は許可されていません。");
     if(p.options.sharedResolution&&(!p.options.sharedNative||!p.options.nativeAdaptive))throw new RpcError("invalid_params","Shared resolution not negotiated");
     if(p.options.sharedRate&&(!p.options.sharedNative||!p.options.nativeCadence))throw new RpcError("invalid_params","共有動画の自動調整には対応する共有経路が必要です。");
     if(p.options.sharedAudio&&(!p.options.sharedDesktop||!p.options.sharedNative||!p.options.nativeAudio))throw new RpcError("invalid_params","共有音声には対応する共有動画が必要です。");
@@ -251,7 +253,7 @@ export class DesktopProvider {
     }
     if (this.config !== cfg||this.sourceEpoch!==epoch||scope&&!scope.active()) throw new RpcError("unauthorized", "Desktop permissions changed");
     if (this.sharedCapture.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
-    const sharedKey = JSON.stringify(p.options.sharedDesktop ? sharedHelperOptions(p.options) : p.options);
+    const sharedKey = JSON.stringify(p.options.sharedDesktop ? {purpose:p.options.sharedProtected?"protected":"normal",options:sharedHelperOptions(p.options)} : p.options);
     if (this.active || (this.shared.size && (!p.options.sharedDesktop || this.sharedKey !== sharedKey)) || this.shared.size >= 8)
       throw new RpcError("server_busy", "Bのデスクトップは異なる設定で共有中か、viewer数の上限です。同じ複数viewer設定で接続してください。");
     const url = new URL(p.url);
@@ -557,6 +559,7 @@ export class DesktopProvider {
             if(options.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover)){
               this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Requested protected worker unavailable");
             }
+            if(options.sharedProtected&&ready.sharedProtected!==true){this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Shared protected worker proof missing");}
             if(ready.protectedDesktop&&(!options.elevatedDesktop||!cfg.allowElevated))throw Error("Unrequested protected worker");
             if(ready.protectedDesktop)s.protectedDesktop=ready.protectedDesktop;else delete s.protectedDesktop;
             s.secureDesktop = ready.secureDesktop === true;
@@ -591,7 +594,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              protectedDesktop,virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -616,6 +619,7 @@ export class DesktopProvider {
             this.send(s, {
               ...legacyReady,
               ...(options.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}),
+              ...(options.sharedProtected&&sharedProtected?{sharedProtected:true}:{}),
               ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
@@ -731,7 +735,8 @@ export class DesktopProvider {
         }
       }
     });
-    const {sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop;
+    const {sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
@@ -740,20 +745,21 @@ export class DesktopProvider {
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
+      ...(options.sharedProtected?{allowSharedProtected:true}:{}),
       richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
       allowMicrophone:options.microphone===true&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint,
       ...(options.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
-      allowSystemAudio:(options.sharedDesktop||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
+      allowSystemAudio:(poolMedia||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
-      nativeCodecs:(options.sharedDesktop||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
-      nativeAdaptive:(options.sharedDesktop||options.nativeAdaptive===true)&&cfg.allowNativeVideo===true,
-      nativeCadence:(options.sharedDesktop||options.nativeCadence===true)&&cfg.allowNativeVideo===true,
-      nativeDatagrams:(options.sharedDesktop||options.nativeDatagrams===true)&&cfg.allowNativeVideo===true,
+      nativeCodecs:(poolMedia||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
+      nativeAdaptive:(poolMedia||options.nativeAdaptive===true)&&cfg.allowNativeVideo===true,
+      nativeCadence:(poolMedia||options.nativeCadence===true)&&cfg.allowNativeVideo===true,
+      nativeDatagrams:(poolMedia||options.nativeDatagrams===true)&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
-      ...((options.sharedDesktop||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
-      allowNativeVideo: (options.sharedDesktop||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
-      deferNativeSnapshots: (options.sharedDesktop||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
-      ...((options.sharedDesktop||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
+      ...((poolMedia||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
+      allowNativeVideo: (poolMedia||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
+      deferNativeSnapshots: (poolMedia||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
+      ...((poolMedia||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
       allowClipboard: !options.sharedDesktop && cfg.allowClipboard === true,
       allowDisplayResize: !options.sharedDesktop && cfg.allowDisplayResize === true,
