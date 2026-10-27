@@ -1,4 +1,6 @@
 import { z } from "zod";
+export const DESKTOP_SHARED_CURSOR_PROTOCOL="soda-desktop-shared-cursor-v1";
+export const DesktopSharedCursorFailure=z.object({type:z.literal("shared_cursor_failure"),code:z.literal("helper_incompatible")}).strict();
 export const DESKTOP_CURSOR_PROTOCOL = "soda-desktop-cursor-v1";
 export const DESKTOP_CURSOR_MAX_BYTES = 512 * 1024;
 const Shape = z.object({
