@@ -102,3 +102,6 @@
 
 
 第8段階8M: 通常sharedMonitors/allの一括取得を共有し、各モニターを別ブラウザ窓で表示・操作する導線を追加。非secret strict URL/既存login・pin/noopener、canvasとcursor同一viewport、物理端clamp、reload閲覧、構成変更時epoch失効・遅延decoder例外の失効を実装。別窓は全体画像を受信して切り取る方式で、モニター別の独立取得・圧縮は未対応。Explorerからの直接drag-outなどを残すためtask8/13全体は引き続き未完了。検証の最終結果はtest-monitor-windows.mdへ記録する。
+
+
+第13段階13D: 検証済み受信file/ZIPのwindow内一時保持と単一DownloadURLによる取り出し・再保存を実験機能として追加。default off、8件/100MiB/単調時計5分、開始時opaque ticketと取消/再許可/別instance/URL生成後の失効を実装。source全体11994/root12056、新browser6＋既存27、負例4/独立build・smoke/独立taskcheck・全体reviewと外部主張fact-checkを通過。実OSでのdrop成功は未検証、Explorer画面内からの直接dragやmonitor別独立取得・圧縮等が残るためtask13全体は未完了。
