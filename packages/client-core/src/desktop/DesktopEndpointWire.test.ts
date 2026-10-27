@@ -64,7 +64,7 @@ it("fails closed when the owner permit or source epoch is revoked",async()=>{
  f.revokeRight();f.right.poll();expect(f.rightClose).toHaveBeenCalledTimes(1);
 });
 it("bounds queued data before a peer authenticates",async()=>{
- const f=await fixture(),pending=Array.from({length:8},()=>f.left.send("files",encode("data")).catch(()=>{}));await expect(f.left.send("files",encode("overflow"))).rejects.toThrow();await Promise.all(pending);expect(f.left.bufferedAmount).toBe(0);expect(f.leftClose).toHaveBeenCalledTimes(1);
+ const f=await fixture(),pending=Array.from({length:32},()=>f.left.send("files",encode("data")).catch(()=>{}));await expect(f.left.send("files",encode("overflow"))).rejects.toThrow();await Promise.all(pending);expect(f.left.bufferedAmount).toBe(0);expect(f.leftClose).toHaveBeenCalledTimes(1);
 });
 it("rejects oversized input and role confusion",async()=>{
  const f=await fixture();await expect(f.left.receive(new Uint8Array(4*1024*1024+1))).rejects.toThrow();expect(f.leftClose).toHaveBeenCalledTimes(1);
@@ -90,7 +90,7 @@ it("bounds received ciphertext while a decrypt is stalled and clears queued plai
  const gate=new Promise<void>(resolve=>{resume=resolve;}),begun=new Promise<void>(resolve=>{started=resolve;});
  vi.spyOn(crypto.subtle,"decrypt").mockImplementation(async(...args)=>{started();await gate;return decrypt(...args);});
  const pending=[f.right.receive(packet).catch(()=>{})];await begun;
- for(let n=0;n<7;n++)pending.push(f.right.receive(packet).catch(()=>{}));
+ for(let n=0;n<31;n++)pending.push(f.right.receive(packet).catch(()=>{}));
  await expect(f.right.receive(packet)).rejects.toThrow();expect(f.rightClose).toHaveBeenCalledTimes(1);resume();await Promise.all(pending);expect(f.rightRecords).toEqual([]);
 });
 it("rejects unsigned rotation control from a viewer",async()=>{
@@ -148,4 +148,32 @@ it("rejects a late asynchronous start even if the timer callback has not run",as
  const subtle=new Proxy(crypto.subtle,{get(target,key){if(key==="generateKey")return async(...args:Parameters<typeof target.generateKey>)=>{await gate;return target.generateKey(...args);};const value=Reflect.get(target,key,target);return typeof value==="function"?value.bind(target):value;}});
  const delayed=new Proxy(crypto,{get(target,key){if(key==="subtle")return subtle;const value=Reflect.get(target,key,target);return typeof value==="function"?value.bind(target):value;}});
  const f=await fixture({providerCrypto:delayed,concurrentStart:true});f.advance(15000);resume();await expect(f.rightStarting).rejects.toThrow();expect(f.rightClose).toHaveBeenCalledTimes(1);expect(f.rightReady).not.toHaveBeenCalled();expect(f.rightRaw).toEqual([]);
+});
+
+it("accepts an authenticated startup burst while the first decrypt is stalled",async()=>{
+ const f=await fixture();await f.pump();
+ for(let n=0;n<12;n++)await f.left.send("control",encode("metadata"+n));
+ const decrypt=crypto.subtle.decrypt.bind(crypto.subtle);let resume!:()=>void,started!:()=>void;
+ const gate=new Promise<void>(resolve=>{resume=resolve;}),begun=new Promise<void>(resolve=>{started=resolve;});
+ vi.spyOn(crypto.subtle,"decrypt").mockImplementation(async(...args)=>{started();await gate;return decrypt(...args);});
+ const pending=[f.right.receive(f.leftRaw.shift()!).catch(()=>{})];await begun;
+ try {
+  while(f.leftRaw.length)pending.push(f.right.receive(f.leftRaw.shift()!).catch(()=>{}));
+  expect(f.rightClose).not.toHaveBeenCalled();
+ }finally{resume();await Promise.all(pending);}
+ expect(f.rightRecords.map(row=>new TextDecoder().decode(row.bytes))).toEqual(Array.from({length:12},(_,n)=>"metadata"+n));
+});
+it("keeps the aggregate ciphertext byte budget below the pending record count",async()=>{
+ const f=await fixture();await f.pump();await f.left.send("control",encode("metadata"));
+ const decrypt=crypto.subtle.decrypt.bind(crypto.subtle);let resume!:()=>void,started!:()=>void;
+ const gate=new Promise<void>(resolve=>{resume=resolve;}),begun=new Promise<void>(resolve=>{started=resolve;});
+ vi.spyOn(crypto.subtle,"decrypt").mockImplementation(async(...args)=>{started();await gate;return decrypt(...args);});
+ const pending=[f.right.receive(f.leftRaw.shift()!).catch(()=>{})];await begun;
+ try {
+  for(let n=0;n<3;n++)pending.push(f.right.receive(new Uint8Array(4*1024*1024)).catch(()=>{}));
+  expect(f.rightClose).not.toHaveBeenCalled();
+  await expect(f.right.receive(new Uint8Array(4*1024*1024))).rejects.toThrow();
+  expect(f.rightClose).toHaveBeenCalledTimes(1);
+ }finally{resume();await Promise.all(pending);}
+ expect(f.rightRecords).toEqual([]);
 });

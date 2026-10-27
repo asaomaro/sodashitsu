@@ -25,7 +25,7 @@ export interface DesktopEndpointWireOptions {
  rotateRecords?:number;
 }
 const failure=()=>Error("Desktop encrypted connection is unavailable");
-const MAX_RECORD=4*1024*1024-63,MAX_QUEUED=16*1024*1024,MAX_PENDING=8;
+const MAX_RECORD=4*1024*1024-63,MAX_QUEUED=16*1024*1024,MAX_PENDING=32;
 const utf8=new TextEncoder();
 /** Endpoint-only ordered transport. No relay, storage, UI, OS input or capture.
  * Each physical socket owns its handshake, counters, FIFO and rekey barrier.
