@@ -9,7 +9,7 @@ function Invoke-Generated([string]$operation,[byte[]]$bytes,[int]$expected) {
         [void]$child.Start();$copy=$child.StandardOutput.BaseStream.CopyToAsync($memory);$errors=$child.StandardError.ReadToEndAsync()
         $child.StandardInput.BaseStream.Write($bytes,0,$bytes.Length);$child.StandardInput.Close()
         if(-not $child.WaitForExit(10000) -or -not $copy.Wait(1000) -or -not $errors.Wait(1000)){throw 'Generated endpoint helper timed out'}
-        if($child.ExitCode -ne $expected){throw 'Generated endpoint helper exit mismatch'}
+        if($child.ExitCode -ne $expected){throw ('Generated endpoint helper exit mismatch: operation='+$operation+', expected='+$expected+', actual='+$child.ExitCode+', diagnostic='+$errors.Result)}
         return ,$memory.ToArray()
     } finally {if(-not $child.HasExited){$child.Kill()};$child.Dispose();$memory.Dispose()}
 }
