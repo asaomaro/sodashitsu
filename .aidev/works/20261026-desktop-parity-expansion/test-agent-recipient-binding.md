@@ -122,3 +122,4 @@ Error {
    Start at  05:47:52
    Duration  623ms (transform 65%, import 22%, tests 12%)
 
+All original source bytes were restored after every negative control.
