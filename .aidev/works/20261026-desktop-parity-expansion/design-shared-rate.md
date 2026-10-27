@@ -1,0 +1,7 @@
+# Shared rate 8E
+
+A-B capability/optionsのsharedRateと既存nativeCadenceで、通常共有動画のFPS/bitrate適応を交渉する。viewerへsharedRateの新fieldは送らず、既知のnativeCadence Readyから共有動画専用checkboxを出す。helperのnativeCadence証明なしではA/Bとも固定へ戻す。画像adaptiveと解像度adaptiveは共有では無効のまま。
+
+consumerごとに既存DesktopNativeQualityがACK/encode/decode/loss/backlogから希望FPS/kbpsを出し、poolは各希望のmaxを共通encoderに適用する。一窓の低速だけで他窓を下げない。固定consumerは上限値を維持。加入時は上限へ、離脱時も再集約する。idはconsumer所有者に結び、限界値を超えるrateは拒否。root source IDへ翻訳し、音声とformat世代は再生成しない。
+
+source/decoder credit/次のkeyからの復帰/UDP→WSSは既存独立経路を維持する。新viewer schemaやWindows helperの新コマンドは追加しない。共有解像度適応とprotected scope合成は後続でtask8全体は保留。

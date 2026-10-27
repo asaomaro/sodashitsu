@@ -294,7 +294,7 @@ function run() {
       }
       else if(m.type==="native_profile_resume"&&native&&m.id===native.id){const b=native.barrier;if(!b||b.stage!=="prepared"||m.generation!==b.generation||m.baseSeq!==native.seq)throw Error("Native resume fence");native.generation=b.generation;native.profile=b.profile;native.index=0;native.fps=b.fps;native.barrier=undefined;}
       else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
-      else if(m.type==="native_rate"&&native&&m.id===native.id){if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;}
+      else if(m.type==="native_rate"&&native&&m.id===native.id){if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"native_rate",id:m.id,fps:m.fps,kbps:m.kbps})+"\n");}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
       else if (m.type === "keyframe") {forceFull = true;next=0;}
@@ -351,7 +351,7 @@ function run() {
       const fixture=native.codec!=="h264"?codecProfiles[native.codec][native.profile]:nativeProfiles[native.profile],packet=fixture.packets[native.index++%fixture.packets.length];
       native.pending.push(++native.seq);native.next=performance.now()+1000/native.fps;
       native.lastTimestamp=Math.max(native.lastTimestamp+1,Math.round((performance.now()-native.started)*1000));
-      send({type:"native_frame",...(nativeCodecs?{codecName:native.codec,...(native.codecFallback?{codecFallback:native.codecFallback}:{})}:{}),...(nativeAdaptive?{generation:native.generation,captureMs:native.profile===0?55:5}:{}),id:native.id,seq:native.seq,timestamp:native.lastTimestamp,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:fixture.width,height:fixture.height,data:packet.data});
+      send({type:"native_frame",...(nativeCodecs?{codecName:native.codec,...(native.codecFallback?{codecFallback:native.codecFallback}:{})}:{}),...(nativeAdaptive?{generation:native.generation,captureMs:native.profile===0?55:5}:{}),...(process.argv.includes("--native-test-cost")?{captureMs:80}:{}),id:native.id,seq:native.seq,timestamp:native.lastTimestamp,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:fixture.width,height:fixture.height,data:packet.data});
     }
     if(native&&process.argv.includes("--stall-images-during-native"))return;
     if (!options || lockCover || pending || performance.now() < next) return;

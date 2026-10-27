@@ -1149,3 +1149,11 @@ it("does not reuse a native pre-input image as an agent observation after the in
  const target=[...(f.relay as any).viewers][0].agent;expect(target.frame()).toBeDefined();target.control(true);await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await target.input({kind:"key",code:"ControlLeft",down:true});expect(target.frame()===undefined).toBe(true);
  await expect(target.capture()).rejects.toThrow("Fresh full frame unavailable");viewer.send({type:"stop"});
 },6000);
+
+it.each(["none","provider","helper"])("negotiates shared cadence only with the current provider and helper: missing %s",async missing=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,command:[...cfg.command,...(missing==="helper"?[]:["--native-cadence"])]});
+ if(missing==="provider"){const caps=f.provider.capabilities();vi.spyOn(f.provider,"capabilities").mockImplementation(()=>{const copy={...caps};delete (copy as any).sharedRate;return copy;});}
+ const viewer=await f.viewer("shared-native");viewer.send({...start,options:{...start.options,width:640,features:true,sharedDesktop:true}});await expect.poll(()=>viewer.messages.some(m=>m.type==="ready")).toBe(true);const options=f.startRequests.at(-1)!.options;
+ if(missing==="provider"){expect(options).not.toHaveProperty("sharedRate");expect(options).not.toHaveProperty("nativeCadence");}else expect(options).toMatchObject({sharedRate:true,nativeCadence:true});
+ viewer.send({type:"media",enabled:true,settings:{transport:"native",adaptive:true}});await expect.poll(()=>[...(f.provider as any).shared][0]?.native?.active?.started).toBe(true);const active=[...(f.provider as any).shared][0].native.active;expect(!!active.quality).toBe(missing==="none");expect(viewer.ws.readyState).toBe(WebSocket.OPEN);viewer.send({type:"stop"});
+});

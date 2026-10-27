@@ -56,6 +56,7 @@ export const DesktopOptions = z
     sharedNative:z.literal(true).optional(),
     sharedDatagrams:z.literal(true).optional(),
     sharedAudio:z.literal(true).optional(),
+    sharedRate:z.literal(true).optional(),
     virtualDisplay:z.literal(true).optional(),
     monitors:z.literal(true).optional(),
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
@@ -294,6 +295,7 @@ export interface DesktopResults {
     sharedNative?:boolean;
     sharedDatagrams?:boolean;
     sharedAudio?:boolean;
+    sharedRate?:boolean;
     files?: boolean;
     richClipboard?: boolean;
     microphone?: boolean;

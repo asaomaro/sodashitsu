@@ -47,3 +47,5 @@
 第8段階8D: 通常native sourceのシステム音声取得・Opus圧縮を共通化し、viewer別音声lease/停止/UDP→WSS復帰/加入前queue除外を実装。旧peerと音声許可OFF・画像先行を実WSで検査し、全体11628件/browser11件を通過。共有sourceのadaptationとprotected scopeの合成は後続。
 
 第9段階9A: Linux Portal実験版とnative契約を実装。OS picker・private FD/serial固定、入力capability、生Ctrl+Space、logind I/O失効、入力後画像のfloorを生成検証。Linuxはlocal SODA_DESKTOP_LINUX_PORTAL=1必須。damage-only producerの静止時には新画像を保証できず1.5秒で明示停止するため、通常利用互換性は未完了。macOSは契約/導入条件表示のみでhelper未実装。task9のチェックは保留する。
+
+第8段階8E: 共有動画のFPS/bitrate希望をviewerごとに計算し、max集約して共通encoderへ反映。A/B/helper proofで交渉し、旧経路は固定。共有動画用UI、2browser描画とsource rate変更、音声lease継続の生成検査を追加。共有解像度適応・protected scope合成は後続でtask8全体は未完了。

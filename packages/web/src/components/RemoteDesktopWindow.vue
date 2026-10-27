@@ -156,7 +156,7 @@ const mediaState = ref("images"),
   nativeAudio=ref(false),nativeAudioState=ref(""),
   nativeDatagrams=ref(false),nativeUdp=ref(savedViewerPreferences.udp),nativeUdpActive=ref(false),
   nativeCodecs=ref(false),nativeCodecCandidates=ref<DesktopNativeCodec[]>([]),nativeCodec=ref<DesktopNativeCodec>(savedViewerPreferences.codec),nativeActualCodec=ref<DesktopNativeCodec>(),nativeRequestedCodec=ref<DesktopNativeCodec>(),nativeCodecFallback=ref(""),
-  nativeAdaptive=ref(false),
+  nativeAdaptive=ref(false),nativeCadence=ref(false),
   nativeMaxFps=ref(30), nativeFps=ref(savedViewerPreferences.fps),
   videoFrames = ref(0),
   videoFps = ref(0);
@@ -314,7 +314,7 @@ async function toggleClipboardSync() {
 const codecLabel=(codec:DesktopNativeCodec|undefined)=>codec==="hevc"?"HEVC":codec==="av1"?"AV1":codec==="h264-444"?"H.264 4:4:4":"H.264";
 async function requestVideo() {
   const version=epoch,request=++mediaRequestSeq;
-  const settings={audio:requestAudio.value&&(mediaTransport.value!=="native"||nativeAudio.value),transport:mediaTransport.value,...(mediaTransport.value==="native"&&nativeCodecs.value?{codec:nativeCodec.value}:{}),adaptive:adaptive.value&&!sharedScreen.value,maxBitrateKbps:Number(mediaBitrate.value),
+  const settings={audio:requestAudio.value&&(mediaTransport.value!=="native"||nativeAudio.value),transport:mediaTransport.value,...(mediaTransport.value==="native"&&nativeCodecs.value?{codec:nativeCodec.value}:{}),adaptive:adaptive.value&&(!sharedScreen.value||nativeCadence.value),maxBitrateKbps:Number(mediaBitrate.value),
     ...(mediaTransport.value==="native"&&nativeDatagrams.value?{udp:nativeUdp.value}:{}),...(mediaTransport.value==="native"&&nativeMaxFps.value===60?{fps:Number(nativeFps.value)}:{})};
   if(settings.transport==="native"&&settings.audio){
     let supported=false;try{supported=await DesktopNativeAudioReceiver.supported();}catch{}
@@ -424,7 +424,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  virtualActive.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
+  virtualActive.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=nativeCadence.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -652,7 +652,7 @@ function connect(automatic = false) {
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
-          nativeCodecs.value=r.nativeCodecs===true;nativeCodecCandidates.value=r.nativeCodecCandidates??[];nativeAdaptive.value=r.nativeAdaptive===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
+          nativeCodecs.value=r.nativeCodecs===true;nativeCodecCandidates.value=r.nativeCodecCandidates??[];nativeAdaptive.value=r.nativeAdaptive===true;nativeCadence.value=r.nativeCadence===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
           mediaTransport.value=preferredTransport.value;
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
@@ -1147,6 +1147,8 @@ onBeforeUnmount(() => {
       </nav>
       <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
         <summary>動画・音声</summary>
+        <label v-if="sharedScreen&&nativeCadence"><input v-model="adaptive" aria-label="共有動画のFPS・帯域を自動調整" type="checkbox" />動画のFPS・帯域を自動調整</label>
+        <p v-if="sharedScreen&&nativeCadence" data-shared-rate>全viewerの希望を満たすFPS・帯域で圧縮します。1窓だけ遅い場合は、その窓だけ次のキーフレームから復帰します。画像の自動調整と動画の解像度変更は行いません。</p>
         <p v-if="mediaTransport==='native'">接続先のGPUで{{nativeCodecs?"選択した形式":"H.264"}}へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>
         <p v-else>
           BのWindowsブラウザで /desktop-host
