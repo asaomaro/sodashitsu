@@ -1,4 +1,6 @@
 import { z } from "zod";
+export const DESKTOP_SHARED_CLIPBOARD_PROTOCOL="soda-desktop-shared-clipboard-v1";
+export const DesktopSharedClipboardFailure=z.object({type:z.literal("shared_clipboard_failure"),code:z.literal("helper_incompatible")}).strict();
 export const DESKTOP_RICH_CLIPBOARD_PROTOCOL = "soda-desktop-rich-clipboard-v1";
 export const DESKTOP_CLIPBOARD_CHUNK_BYTES = 16 * 1024;
 export const DESKTOP_CLIPBOARD_BUNDLE_BYTES = 4 * 1024 * 1024;

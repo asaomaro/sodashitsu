@@ -80,7 +80,11 @@ for (const mode of [
               }
             }
             c.writes++;
-            if(c.copyRace){c.copyRace=false;c.text="A copied during remote apply";c.html="<b>A copied during remote apply</b>";}
+            if (c.copyRace) {
+              c.copyRace = false;
+              c.text = "A copied during remote apply";
+              c.html = "<b>A copied during remote apply</b>";
+            }
           },
         },
       });
@@ -93,13 +97,28 @@ for (const mode of [
           readonly offered?: string | string[],
         ) {
           super(url, offered);
-          if (offered === "soda-desktop-rich-clipboard-v1") w.__clip.sockets.push(this);
+          if (
+            (typeof offered === "string"
+              ? offered
+              : offered?.length === 1
+                ? offered[0]
+                : undefined) === "soda-desktop-rich-clipboard-v1"
+          )
+            w.__clip.sockets.push(this);
         }
         send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
           if (typeof data === "string") {
             const m = JSON.parse(data);
             if (m.type === "clipboard_rich")
-              w.__clip.events.push({ protocol: this.offered, operation: m.operation });
+              w.__clip.events.push({
+                protocol:
+                  typeof this.offered === "string"
+                    ? this.offered
+                    : this.offered?.length === 1
+                      ? this.offered[0]
+                      : this.offered,
+                operation: m.operation,
+              });
           }
           super.send(data);
         }
@@ -141,14 +160,28 @@ for (const mode of [
         write = rich.getByRole("button", { name: "画像・書式を共有元へ送信", exact: true });
       await expect(read).toBeEnabled();
       if (mode === "copy-race") {
-        await page.evaluate(()=>{(window as any).__clip.copyRace=true;});
+        await page.evaluate(() => {
+          (window as any).__clip.copyRace = true;
+        });
         await view.getByLabel("画像・書式も自動同期する").check();
         await view.getByRole("button", { name: "双方向の自動同期を開始", exact: true }).click();
-        await expect.poll(()=>page.evaluate(()=>(window as any).__clip.events.filter((e:any)=>e.operation==="commit").length)).toBeGreaterThan(0);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () =>
+                (window as any).__clip.events.filter((e: any) => e.operation === "commit").length,
+            ),
+          )
+          .toBeGreaterThan(0);
         await view.getByRole("button", { name: "自動同期を停止", exact: true }).click();
-        await expect(read).toBeEnabled();await read.click();
-        await expect.poll(()=>page.evaluate(()=>(window as any).__clip.writes)).toBeGreaterThanOrEqual(2);
-        expect(await page.evaluate(()=>(window as any).__clip.text)).toBe("A copied during remote apply");
+        await expect(read).toBeEnabled();
+        await read.click();
+        await expect
+          .poll(() => page.evaluate(() => (window as any).__clip.writes))
+          .toBeGreaterThanOrEqual(2);
+        expect(await page.evaluate(() => (window as any).__clip.text)).toBe(
+          "A copied during remote apply",
+        );
         return;
       }
       if (mode === "busy-start") {

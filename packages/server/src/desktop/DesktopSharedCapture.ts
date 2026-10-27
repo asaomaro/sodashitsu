@@ -3,6 +3,7 @@ import {
   DESKTOP_CURSOR_MAX_BYTES,
   type DesktopCursorInfo,
 } from "@sodashitsu/protocol";
+import { DesktopSharedClipboard } from "./DesktopSharedClipboard.js";
 import { DesktopSharedAudio } from "./DesktopSharedAudio.js";
 import type { DesktopNativeAudioHooks, DesktopAudioLease } from "./DesktopNativeAudio.js";
 import { DesktopSharedNative } from "./DesktopSharedNative.js";
@@ -27,6 +28,7 @@ export interface DesktopHelper extends EventEmitter {
   kill(signal?: NodeJS.Signals | number): boolean;
   createAudio?(hooks: DesktopNativeAudioHooks): DesktopAudioLease;
   requestControl?(enabled: boolean): boolean;
+  requestClipboard?(enabled: boolean, generation: number): boolean;
   requestMicrophone?(id: string, enabled: boolean): boolean;
 }
 
@@ -52,6 +54,7 @@ export class DesktopSharedCapture {
         native?: DesktopSharedNative<Subscription>;
         audio?: DesktopSharedAudio<Subscription>;
         control?: Subscription;
+        clipboard?: DesktopSharedClipboard<Subscription>;
         microphone?: { member: Subscription; id: string };
         cursorSeq: number;
         cursorPose?: DesktopCursorInfo;
@@ -171,6 +174,10 @@ export class DesktopSharedCapture {
         current.microphone = { member, id };
         return true;
       },
+      requestClipboard: (enabled: boolean,generation: number) => {
+        if(member.closed||!member.configured||current.ended)return false;
+        return current.clipboard?.grant(member,enabled,generation)===true;
+      },
       requestControl: (enabled: boolean) => {
         if (member.closed || !member.configured || !current.ready || current.ended) return false;
         if (!enabled) {
@@ -243,6 +250,7 @@ export class DesktopSharedCapture {
       return;
     }
     if (!s.configured) throw Error("Missing capture configuration");
+    if (g.clipboard?.command(s,value)) return;
     if (g.native?.command(s, value)) return;
     if (value.type === "native_microphone") {
       if (g.microphone?.member !== s || g.microphone.id !== value.id) return;
@@ -275,6 +283,7 @@ export class DesktopSharedCapture {
   }
 
   private receive(g: NonNullable<DesktopSharedCapture["group"]>, value: any): void {
+    if (g.clipboard?.receive(value)) return;
     if (g.native?.receive(value)) return;
     if (value.type === "ready" && !g.ready) {
       const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, ...wire } = value;
@@ -304,12 +313,13 @@ export class DesktopSharedCapture {
         ready.virtualDisplay ||
         (ready.nativeVideo && !JSON.parse(g.configuration!).allowNativeVideo) ||
         ready.allowMedia ||
-        ready.allowClipboard
+        (ready.allowClipboard && !JSON.parse(g.configuration!).allowClipboard)
       )
         throw Error("Source cannot be shared");
       const configuration = JSON.parse(g.configuration!);
       if (ready.cursor && (!configuration.separateCursor || configuration.options.cursor !== true))
         throw Error("Unexpected shared cursor source");
+      if(configuration.allowClipboard===true&&ready.allowClipboard===true&&!g.protectedSource)g.clipboard=new DesktopSharedClipboard<Subscription>({allowed:()=>!g.ended&&g.ready?.allowClipboard===true,write:value=>this.write(g,value),send:(member,value)=>this.emit(member,value)});
       g.ready = {
         ...ready,
         dynamicQuality: false,
@@ -442,6 +452,7 @@ export class DesktopSharedCapture {
       this.write(g, { type: "native_microphone", id: g.microphone.id, enabled: false });
       delete g.microphone;
     }
+    g.clipboard?.detach(s);
     g.audio?.detach(s);
     g.native?.detach(s);
     g.members.delete(s);

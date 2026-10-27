@@ -269,3 +269,11 @@ it("rejects malformed cursor shapes and an unnegotiated cursor source",async()=>
 it("does not substitute an older cursor shape for an unknown shape id",async()=>{
  const f=fixture(),a=f.join("source",cursorConfiguration);f.child.send({...ready,cursor:true});f.child.send(cursorPose(1,1,true));f.child.send(cursorPose(2,2));expect(a.messages.filter(m=>m.type==="cursor")).toHaveLength(1);f.child.send(cursorPose(3,2,true));expect(a.messages.at(-1)).toMatchObject({type:"cursor",shapeId:2,shape:cursorShape});f.pool.dispose();
 });
+
+it("keeps shared clipboard ownership independent of input and does not let another viewer revoke it",async()=>{
+ const f=fixture(),cfg={type:"configure",options:{width:320},allowClipboard:true,richClipboard:true},a=f.join("source",cfg),b=f.join("source",cfg);
+ f.child.send({...ready,allowClipboard:true,richClipboard:true});await vi.waitFor(()=>expect(b.messages).toHaveLength(1));
+ expect(a.session.requestControl!(true)).toBe(true);expect(b.session.requestClipboard!(true,1)).toBe(true);expect(a.session.requestClipboard!(false,1)).toBe(false);expect(a.session.requestClipboard!(true,2)).toBe(false);
+ a.session.kill();expect(f.child.commands.filter(m=>m.type==="clipboard_control").at(-1)).toEqual({type:"clipboard_control",enabled:true,generation:1});
+ b.send({type:"clipboard",id:1,generation:1,operation:"read",expiresAt:Date.now()+1000});const cmd=f.child.commands.at(-1);f.child.send({type:"clipboard_result",id:cmd.id,ok:true,text:"only b"});await vi.waitFor(()=>expect(b.messages.at(-1)).toMatchObject({type:"clipboard_result",id:1,text:"only b"}));f.pool.dispose();
+});
