@@ -169,6 +169,7 @@ export class DesktopProvider {
   }
   capabilities() {
     return {
+      ...(this.endpointOnly?{endpointRequired:true}:{}),
       ...(this.config?.nativePlatform?{nativePlatform:this.config.nativePlatform}:{}),
       sharedDesktop: !this.config?.nativePlatform,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,

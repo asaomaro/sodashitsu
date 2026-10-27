@@ -1,8 +1,18 @@
-import { DesktopMethods, RpcError } from "@sodashitsu/protocol";
+import { DesktopMethods,DesktopEndpointMethods, RpcError } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps): void {
+  const endpoint=deps.desktopEndpoint;
+  if(endpoint) {
+    const owner=(ctx:{connection?:{localSettings?:boolean}})=>{if(ctx.connection?.localSettings!==true)throw new RpcError("unauthorized","暗号化接続の鍵と相手は、このPCのlocalhostの設定画面で管理してください。");};
+    surface.register("desktop.endpoint.status",{schema:DesktopEndpointMethods["desktop.endpoint.status"],handler:ctx=>{owner(ctx);return endpoint.status();}});
+    surface.register("desktop.endpoint.initialize",{schema:DesktopEndpointMethods["desktop.endpoint.initialize"],handler:ctx=>{owner(ctx);return endpoint.initialize();}});
+    surface.register("desktop.endpoint.required",{schema:DesktopEndpointMethods["desktop.endpoint.required"],handler:(ctx,p)=>{owner(ctx);return endpoint.setRequired(p.required);}});
+    surface.register("desktop.endpoint.trust",{schema:DesktopEndpointMethods["desktop.endpoint.trust"],handler:(ctx,p)=>{owner(ctx);return endpoint.trust(p);}});
+    surface.register("desktop.endpoint.revoke",{schema:DesktopEndpointMethods["desktop.endpoint.revoke"],handler:(ctx,p)=>{owner(ctx);return endpoint.revoke(p.fingerprint,p.role);}});
+    surface.register("desktop.endpoint.start",{schema:DesktopEndpointMethods["desktop.endpoint.start"],handler:(ctx,p)=>endpoint.start(ctx.clientId,p)});
+  }
   const agents = deps.desktopRelay?.agents;
   if (agents) {
     surface.register("desktop.agent.attach", {

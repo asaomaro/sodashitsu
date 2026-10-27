@@ -1,0 +1,11 @@
+# 人が操作する共有窓の暗号化接続
+
+B ownerはStateDirLock獲得後に保存状態を読む。鍵・許可・必須設定の管理RPCはconnection.localSettingsのみ。初期化は明示操作で、破損・既存dirの鍵欠落・独立marker欠落との不整合はfail closed。必須設定の変更は即時guard/revoke、durable vault/marker両方の完了まで維持し、保存開始と完了の両方でpolicy世代を進める。handoffでは新要求を拒否し全sessionを停止、保留保存をdrainしてからowner lockを返す。
+
+ブラウザはIndexedDBへnon-extractable署名鍵を保存。pinとrequiredはIndexedDB、requiredの補助guardはlocalStorageへ保存する。どちらかにrequiredが残れば暗号化のみ。設定読取はWebSocket選択より前にawaitし、待機中の失効・破棄にもrevisionを再検査する。初回/再接続で自動鍵作成・自動pin・plaintext fallbackはしない。
+
+Aの/desktop-e2eは既存Cookie/Originとone-use provider ticketでscopeを作り、公開hello/署名proofと暗号recordを有限queueで中継する。鍵・描画・操作・private B cookieは扱わない。Bはprivate Backplaneを同owner内に持つ。親の暗号認証を終えてから既存Providerを起動し、追加laneは暗号化したticketとparent/attachment/protocolに対するfresh child hello HMACを必須にする。childも独立Wireでpin確認し、旧ticketの再利用や別親への流用を拒否する。
+
+画像/動画/mic/files/richの5追加物理接続は既存viewer WebSocket相当adapterへ渡す。control/image/video/cursor/audio/microphone/clipboard/files/agentの9lane分類を封入/復号の双方で照合する。親失効は全childとprivate sourceを停止し、child単体失敗は該当laneを止める。通常共有の個別許可は変更しない。公開経路でagentを許可せず、暗号化窓では既存agent UIを隠す。agent受信者経路は別作業。
+
+既定の通常接続との互換は維持する。B required時は旧共有開始を拒否し、暗号化設定へ誘導する。一般TLS/UDPと独立pin式の違い、信頼する配信JSと両PC、OS実デバイス未検証範囲は利用者文書へ記載する。

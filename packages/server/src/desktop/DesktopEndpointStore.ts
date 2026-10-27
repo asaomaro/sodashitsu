@@ -11,7 +11,7 @@ const Fingerprint=z.string().regex(/^[a-f0-9]{64}$/);
 const Role=z.enum(["viewer","agent"]);
 export const DesktopTrustedPeer=z.object({fingerprint:Fingerprint,role:Role,label:z.string().trim().min(1).max(80)}).strict();
 export type DesktopTrustedPeer=z.infer<typeof DesktopTrustedPeer>;
-const Vault=z.object({version:z.literal(1),publicKey:z.string().regex(/^04[a-f0-9]{128}$/),secret:z.string().min(1).max(4096).regex(/^[A-Za-z0-9+/]+={0,2}$/),peers:z.array(DesktopTrustedPeer).max(64).refine(peers=>new Set(peers.map(peer=>peer.role+":"+peer.fingerprint)).size===peers.length)}).strict();
+const Vault=z.object({version:z.literal(1),required:z.boolean().default(false),publicKey:z.string().regex(/^04[a-f0-9]{128}$/),secret:z.string().min(1).max(4096).regex(/^[A-Za-z0-9+/]+={0,2}$/),peers:z.array(DesktopTrustedPeer).max(64).refine(peers=>new Set(peers.map(peer=>peer.role+":"+peer.fingerprint)).size===peers.length)}).strict();
 const Envelope=z.object({version:z.literal(1),mode:z.enum(["owner-file","dpapi-user"]),data:z.string().min(4).max(90000).regex(/^[A-Za-z0-9+/]+={0,2}$/)}).strict();
 type Vault=z.infer<typeof Vault>;
 const failure=()=>Error("Desktop endpoint key storage is unavailable");
@@ -25,6 +25,7 @@ export class DesktopEndpointStore {
  private readonly revisions=new Map<string,number>();
  private readonly pending=new Set<string>();
  private closed=false;
+ private policyRevision=0;
  private queue:Promise<unknown>=Promise.resolve();
  constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string)=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void}) {
   this.options={...options,stateDir:resolve(options.stateDir)};this.directory=join(this.options.stateDir,"desktop-endpoint");this.platform=options.platform??process.platform;this.protector=options.protector??desktopSecretProtector(this.platform);
@@ -51,6 +52,8 @@ export class DesktopEndpointStore {
   try{this.check(await lstat(this.directory),true);return true;}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw failure();}
  }
  close():void{this.closed=true;}
+ /** Owner must await authorized in-flight persistence before StateDirLock release. */
+ async settled():Promise<void>{await this.queue;}
  private async load(ownedWrite=false):Promise<Vault|undefined> {
   if(this.closed)throw failure();
   await this.pathPolicy(this.options.stateDir);if(!await this.directoryExists())return;
@@ -71,20 +74,40 @@ export class DesktopEndpointStore {
  private async identity(data:Vault):Promise<DesktopEndpointIdentity> {
   const secret=Buffer.from(data.secret,"base64");try{return await DesktopEndpointIdentity.restore(crypto,secret,data.publicKey);}catch{throw failure();}finally{secret.fill(0);}
  }
- async status():Promise<{initialized:false}|{initialized:true;fingerprint:string;peers:DesktopTrustedPeer[]}> {
-  const data=await this.load();if(!data)return {initialized:false};const identity=await this.identity(data);return {initialized:true,fingerprint:await identity.fingerprint(),peers:data.peers.filter(peer=>!this.denied.has(peer.role+":"+peer.fingerprint)).map(peer=>({...peer}))};
+ async status():Promise<{initialized:false;required?:true}|{initialized:true;required:boolean;fingerprint:string;peers:DesktopTrustedPeer[]}> {
+  const data=await this.load(),marker=await this.readMarker();if(!data)return marker?{initialized:false,required:true}:{initialized:false};const identity=await this.identity(data);return {initialized:true,required:data.required||marker,fingerprint:await identity.fingerprint(),peers:data.peers.filter(peer=>!this.denied.has(peer.role+":"+peer.fingerprint)).map(peer=>({...peer}))};
+ }
+ private async readMarker():Promise<boolean> {
+  await this.pathPolicy(this.options.stateDir);const path=join(this.options.stateDir,"desktop-endpoint-required.json");
+  let stat:Stats;try{stat=await lstat(path);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw failure();}
+  this.check(stat,false);if(stat.size>256)throw failure();if(this.platform==="win32")await this.pathPolicy(path);
+  const handle=await open(path,constants.O_RDONLY|(this.platform!=="win32"?constants.O_NOFOLLOW:0));
+  try{const actual=await handle.stat();this.check(actual,false);if(actual.ino!==stat.ino||actual.dev!==stat.dev||actual.size>256)throw failure();return z.object({version:z.literal(1),required:z.boolean()}).strict().parse(JSON.parse(await handle.readFile("utf8"))).required;}catch{throw failure();}finally{await handle.close();}
+ }
+ private async writeMarker(required:boolean):Promise<void> {
+  await this.pathPolicy(this.options.stateDir);const stage=await mkdtemp(join(this.directory,".policy-")),temp=join(stage,"required.json"),destination=join(this.options.stateDir,"desktop-endpoint-required.json");
+  try {
+   const handle=await open(temp,"wx",0o600);try{await handle.writeFile(JSON.stringify({version:1,required}));await handle.sync();}finally{await handle.close();}
+   if(this.platform==="win32")await (this.options.commitWindowsVault??commitDesktopWindowsVault)(temp,destination);else await rename(temp,destination);
+   await this.syncDirectory(this.options.stateDir);if(this.platform==="win32")await this.pathPolicy(destination);
+  }finally{await rm(stage,{recursive:true,force:true});}
  }
  /** Permit remains bound to this owner instance. Its consumer must also bind
   * active() to the source/process epoch and check it after asynchronous work. */
  async endpoint(peerFingerprint:string,role:z.infer<typeof Role>):Promise<{identity:DesktopEndpointIdentity;active():boolean}> {
-  Fingerprint.parse(peerFingerprint);Role.parse(role);const key=role+":"+peerFingerprint,revision=this.revisions.get(key)??0,data=await this.load();if(!data||this.denied.has(key)||this.pending.has(key)||!data.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw Error("Desktop endpoint peer is not trusted");
+  Fingerprint.parse(peerFingerprint);Role.parse(role);const policy=this.policyRevision,key=role+":"+peerFingerprint,revision=this.revisions.get(key)??0,data=await this.load();if(!data||this.denied.has(key)||this.pending.has(key)||!data.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw Error("Desktop endpoint peer is not trusted");
   const identity=await this.identity(data),latest=await this.load();
-  if(this.closed||this.denied.has(key)||this.pending.has(key)||(this.revisions.get(key)??0)!==revision||!latest||latest.publicKey!==data.publicKey||latest.secret!==data.secret||!latest.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw Error("Desktop endpoint peer is not trusted");return {identity,active:()=>!this.closed&&!this.denied.has(key)&&!this.pending.has(key)&&(this.revisions.get(key)??0)===revision};
+  if(this.closed||policy!==this.policyRevision||this.denied.has(key)||this.pending.has(key)||(this.revisions.get(key)??0)!==revision||!latest||latest.publicKey!==data.publicKey||latest.secret!==data.secret||!latest.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw Error("Desktop endpoint peer is not trusted");return {identity,active:()=>!this.closed&&policy===this.policyRevision&&!this.denied.has(key)&&!this.pending.has(key)&&(this.revisions.get(key)??0)===revision};
  }
  initialize():Promise<{fingerprint:string}> {return this.mutate(async data=>{
   if(data)return {data,result:{fingerprint:await (await this.identity(data)).fingerprint()}};
-  let secret="";const identity=await DesktopEndpointIdentity.create(crypto,async value=>{secret=Buffer.from(value).toString("base64");});const created:Vault={version:1,publicKey:identity.publicKey,secret,peers:[]};return {data:created,result:{fingerprint:await identity.fingerprint()}};
+  let secret="";const identity=await DesktopEndpointIdentity.create(crypto,async value=>{secret=Buffer.from(value).toString("base64");});const created:Vault={version:1,required:false,publicKey:identity.publicKey,secret,peers:[]};return {data:created,result:{fingerprint:await identity.fingerprint()}};
  });}
+ /** A policy change also invalidates every issued/pending endpoint permit. */
+ setRequired(required:boolean):Promise<void> {
+  z.boolean().parse(required);this.policyRevision++;
+  return this.mutate(async data=>{if(!data)throw failure();await this.identity(data);if(required)await this.writeMarker(true);return {data:{...data,required},result:undefined,...(!required?{committed:()=>this.writeMarker(false)}:{})};});
+ }
  trust(raw:DesktopTrustedPeer):Promise<void> {
   const peer=DesktopTrustedPeer.parse(raw),key=peer.role+":"+peer.fingerprint,revision=(this.revisions.get(key)??0)+1;this.revisions.set(key,revision);this.pending.add(key);return this.mutate(async data=>{if(!data)throw failure();await this.identity(data);const peers=data.peers.filter(value=>value.fingerprint!==peer.fingerprint||value.role!==peer.role);if(peers.length>=64)throw failure();return {data:{...data,peers:[...peers,peer]},result:undefined,committed:()=>{if(this.revisions.get(key)===revision){this.denied.delete(key);this.pending.delete(key);}}};});
  }
@@ -92,14 +115,14 @@ export class DesktopEndpointStore {
   Fingerprint.parse(fingerprint);Role.parse(role);const key=role+":"+fingerprint;this.revisions.set(key,(this.revisions.get(key)??0)+1);this.denied.add(key);this.pending.delete(key);let hookFailed=false;try{this.options.revoke?.({fingerprint,role,label:"revoked"});}catch{hookFailed=true;}
   return this.mutate(async data=>{if(!data)throw failure();return {data:{...data,peers:data.peers.filter(peer=>peer.fingerprint!==fingerprint||peer.role!==role)},result:undefined};}).then(()=>{if(hookFailed)throw Error("Desktop peer was revoked; active-session cleanup failed");});
  }
- private mutate<T>(change:(data:Vault|undefined)=>Promise<{data:Vault;result:T;committed?:()=>void}>):Promise<T> {
+ private mutate<T>(change:(data:Vault|undefined)=>Promise<{data:Vault;result:T;committed?:()=>void|Promise<void>}>):Promise<T> {
   const run=this.queue.then(async()=>{
    if(this.closed)throw failure();
    await this.pathPolicy(this.options.stateDir);const parent=await lstat(this.options.stateDir);if(!parent.isDirectory()||parent.isSymbolicLink()||this.platform!=="win32"&&(parent.uid!==process.getuid?.()||(parent.mode&0o022)!==0))throw failure();
    try{await mkdir(this.directory,{mode:0o700});}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw failure();}if(!await this.directoryExists())throw failure();await this.syncDirectory(this.options.stateDir);if(this.platform==="win32")await this.pathPolicy(this.directory);
    const lock=join(this.directory,"write.lock"),nonce=randomUUID();let lease;
    try{lease=await open(lock,"wx",0o600);}catch{throw Error("Desktop endpoint key storage is busy");}
-   let stage:string|undefined,updated:{data:Vault;result:T;committed?:()=>void}|undefined;
+   let stage:string|undefined,updated:{data:Vault;result:T;committed?:()=>void|Promise<void>}|undefined;
    try {
     await lease.writeFile(nonce);await lease.sync();updated=await change(await this.load(true));Vault.parse(updated.data);
     const clear=new TextEncoder().encode(JSON.stringify(updated.data));let protectedBytes:Uint8Array;
@@ -112,7 +135,7 @@ export class DesktopEndpointStore {
    }finally {
     try{if(stage)await rm(stage,{recursive:true,force:true});}finally{const ours=await lease.stat();await lease.close();try{const current=await lstat(lock);if(current.ino===ours.ino&&current.dev===ours.dev){await rm(lock);await this.syncDirectory(this.directory);}}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw failure();}}
    }
-   if(!updated)throw failure();updated.committed?.();return updated.result;
+   if(!updated)throw failure();await updated.committed?.();return updated.result;
   });this.queue=run.catch(()=>undefined);return run;
  }
 }

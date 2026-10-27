@@ -45,6 +45,7 @@ export * from "./accountCost.js";
 export * from "./delegation.js";
 
 export * from "./desktop.js";
+export * from "./desktopEndpoint.js";
 
 export * from "./desktopMedia.js";
 export * from "./desktopCdp.js";

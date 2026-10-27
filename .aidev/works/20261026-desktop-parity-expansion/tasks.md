@@ -57,3 +57,5 @@
 第10段階10C: endpointのordered wire部品を追加。全9laneの双方向通信、個別FIFO、低い側からの認証済rekey要求、旧seal drain、世代更新、期限・owner失効・bounded queueを生成検証。2実browser/不透明WS中継で反復rekeyとviewer別失効を確認。まだ製品route未接続で、task10全体は未完了。
 
 第10段階10D1: B owner内のprivate loopback backplane、scope token/epoch/通常start拒否、local許可の再検査、root別cookie/route/child ticket、例外時の全cleanupを実装。生成Providerから暗号Wire/不透明WS/実browserのPNG描画・生CtrlSpace・rekey・失効を検証。まだ公開route/UIへ未接続で、requireEndpointは本段階ではメモリ内のみ。全lane E2Eとtask10は未完了。
+
+第10段階10D2: 人が操作するWeb共有窓の暗号化接続を製品routeへ接続。Bのowner-only鍵/許可/必須設定、ブラウザ非抽出CryptoKey/独立pin確認、opaque A、root/child HMAC結合、全通常lane、失効/handoffを実装。生成画像・生入力・WSS/UDP映像/Opus音声・仮想マイク・ファイル往復・memory rich clipboardを実画面から検証中。agent受信者経路は未実装のため暗号化窓では連携欄を非表示。task10全体と他の残件のチェックは保留する。

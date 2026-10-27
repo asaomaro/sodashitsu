@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {createDesktopSocketFactory} from "../desktop/DesktopEndpointSocket.js";
+import DesktopEndpointPairing from "./DesktopEndpointPairing.vue";
 import {DESKTOP_NATIVE_PLATFORM_PROTOCOL,supportsDesktopInput,type DesktopInputCapabilities} from "@sodashitsu/protocol";
 import { DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
@@ -55,6 +57,8 @@ import {
 } from "../desktop/settings.js";
 
 const props = defineProps<{ machineId: string; label: string; embedded?: boolean }>();
+let desktopSockets=createDesktopSocketFactory(props.machineId);const endpointEncrypted=ref(false);
+function usePlainDesktop(){stop();desktopSockets.dispose();desktopSockets=createDesktopSocketFactory(props.machineId);endpointEncrypted.value=false;connect();}
 const emit = defineEmits<{ close: [] }>();
 const infoOpen = ref(false);
 const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
@@ -499,6 +503,7 @@ function preset(event: Event) {
   (event.target as HTMLSelectElement).value = "";
 }
 function connect(automatic = false) {
+  if(dead)return;
   if (automatic !== true) startupRetries = 0;
   let options: ConnectionSettings;
   try {
@@ -531,10 +536,12 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
+  endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
+    endpointEncrypted.value=desktopSockets.encrypted;
     if (version === epoch)
       send({
         type: "start",
@@ -583,7 +590,7 @@ function connect(automatic = false) {
         if(m.type==="monitor_topology_changed"){monitorChanged=true;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";releaseInputs();}
         else if(m.type==="microphone_ticket"){
           if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
-          const pipe=microphoneSocket=new WebSocket(url,DESKTOP_MICROPHONE_PROTOCOL);
+          const pipe=microphoneSocket=desktopSockets.open(url,DESKTOP_MICROPHONE_PROTOCOL);
           const client=microphoneClient=new DesktopMicrophoneClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>8192)return false;pipe.send(JSON.stringify(value));return true;},state=>microphoneState.value=state);
           pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
           pipe.onmessage=event=>{if(version!==epoch||microphoneSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>1024)throw Error("Invalid microphone result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
@@ -592,7 +599,7 @@ function connect(automatic = false) {
         else if(m.type==="microphone_closed"){resetMicrophone();error.value="マイク転送の接続が切れました。デスクトップを接続し直してください。";}
         else if(m.type==="files_ticket"){
           if(fileSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid file attachment");
-          const pipe=fileSocket=new WebSocket(url,DESKTOP_FILES_PROTOCOL);const client=fileClient.value=new DesktopFileClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>262144)return false;pipe.send(JSON.stringify(value));return true;},()=>pipe.close());
+          const pipe=fileSocket=desktopSockets.open(url,DESKTOP_FILES_PROTOCOL);const client=fileClient.value=new DesktopFileClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>262144)return false;pipe.send(JSON.stringify(value));return true;},()=>pipe.close());
           pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
           pipe.onmessage=event=>{if(version!==epoch||fileSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>100000)throw Error("Invalid file result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
           pipe.onerror=()=>pipe.close();pipe.onclose=()=>{if(version===epoch&&fileSocket===pipe)resetFiles();};
@@ -600,7 +607,7 @@ function connect(automatic = false) {
         else if(m.type==="files_closed"){resetFiles();}
         else if(m.type==="clipboard_rich_ticket"){
           if(richSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid clipboard attachment");
-          const pipe=richSocket=new WebSocket(url,DESKTOP_RICH_CLIPBOARD_PROTOCOL);
+          const pipe=richSocket=desktopSockets.open(url,DESKTOP_RICH_CLIPBOARD_PROTOCOL);
           const client=richClient=new DesktopRichClipboardClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>65536)return false;pipe.send(JSON.stringify(value));return true;},()=>!dead&&version===epoch&&clipboardGranted.value&&richClipboard.value&&richPipeReady.value);
           pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
           pipe.onmessage=event=>{if(version!==epoch||richSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>32768)throw Error("Invalid clipboard result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
@@ -610,7 +617,7 @@ function connect(automatic = false) {
         else if(m.type==="image_ticket"){
 
           if(imageSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid image attachment");
-          const image=imageSocket=new WebSocket(url,DESKTOP_IMAGE_LANE_PROTOCOL);image.binaryType="arraybuffer";
+          const image=imageSocket=desktopSockets.open(url,DESKTOP_IMAGE_LANE_PROTOCOL);image.binaryType="arraybuffer";
           image.onopen=()=>{if(version===epoch)image.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
           image.onmessage=e=>{if(version===epoch&&imageSocket===image)void socket.onmessage?.call(socket,e);};
           image.onerror=()=>image.close();
@@ -618,7 +625,7 @@ function connect(automatic = false) {
         else if (m.type === "video_ticket") {
           if (videoSocket || typeof m.ticket !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(m.ticket)) throw Error("Invalid video attachment");
           videoExpected=true; videoReady=false; nativeVideo.value=false;
-          const video = videoSocket = new WebSocket(url, DESKTOP_VIDEO_LANE_PROTOCOL);
+          const video = videoSocket = desktopSockets.open(url, DESKTOP_VIDEO_LANE_PROTOCOL);
           video.binaryType="arraybuffer";
           video.onopen=()=>{if(version===epoch)video.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
           video.onmessage=event=>{if(version===epoch&&videoSocket===video)void socket.onmessage?.call(socket,event);};
@@ -815,8 +822,10 @@ function connect(automatic = false) {
       status.value = "停止";
     }
   };
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     if (version !== epoch) return;
+    endpointEncrypted.value=desktopSockets.encrypted;
+    if(endpointEncrypted.value&&event.reason&&!error.value)error.value=event.reason;
     const wasReady = ready.value;
     stop();
     status.value = "終了";
@@ -833,7 +842,8 @@ function connect(automatic = false) {
       error.value = "共有元が終了しました。Bの補助プログラム設定を確認してください。";
   };
   socket.onerror = () => {
-    if (version === epoch) error.value = "共有用の接続を確立できませんでした";
+    endpointEncrypted.value=desktopSockets.encrypted;
+    if (version === epoch) error.value = endpointEncrypted.value?"暗号化接続を確立できません。指紋と接続先の許可を確認してください。":"共有用の接続を確立できませんでした";
   };
 }
 function restoreImage() {
@@ -1006,6 +1016,7 @@ onBeforeUnmount(() => {
   dead = true;
   clearInterval(heartbeat);
   stop();
+  desktopSockets.dispose();
   window.removeEventListener("blur", relinquish);
   document.removeEventListener("visibilitychange", visibility);
 });
@@ -1067,6 +1078,8 @@ onBeforeUnmount(() => {
       <p v-if="error" class="desktop-alert" role="alert">{{ error }}</p>
       <button v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
       <div v-show="infoOpen" class="desktop-controls">
+        <p v-if="ready&&endpointEncrypted" data-endpoint-encrypted>暗号化接続（相手の指紋を確認済み）</p>
+        <DesktopEndpointPairing :machine-id="props.machineId" @reconnect="connect()" @plain="usePlainDesktop()" />
       <p v-if="title" class="target">
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
       </p>
@@ -1239,7 +1252,7 @@ onBeforeUnmount(() => {
         </div>
         <p role="status">{{ clipboardNotice }}</p>
       </details>
-      <details v-if="ready && allowed && !secureDesktop" data-agent-access>
+      <details v-if="ready && allowed && !secureDesktop && !endpointEncrypted" data-agent-access>
         <summary>エージェント連携</summary>
         <p>
           この共有画面の取得・PC操作を最大2分許可します。取得画像をモデルへ渡す用途を含みます。発行コードは30秒以内・1回だけ使用できます。

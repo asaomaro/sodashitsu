@@ -31,6 +31,11 @@ function transcript(own:DesktopE2eHello,peer:DesktopE2eHello):Uint8Array<ArrayBu
 export class DesktopEndpointIdentity {
  #key:Key;
  private constructor(private crypto:CryptoProvider,key:Key,readonly publicKey:string){this.#key=key;}
+ static async createStored(crypto:CryptoProvider,persist:(privateKey:Key,publicKey:string)=>Promise<void>):Promise<DesktopEndpointIdentity> {
+  const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},false,["sign","verify"]);if(!("privateKey" in pair))return fail();
+  const publicKey=hex(await crypto.subtle.exportKey("raw",pair.publicKey)),identity=await this.fromStoredKey(crypto,pair.privateKey,publicKey);
+  await persist(pair.privateKey,publicKey);return identity;
+ }
  static async create(crypto:CryptoProvider,persist?:(privateKey:Uint8Array,publicKey:string)=>Promise<void>):Promise<DesktopEndpointIdentity> {
   const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
   if(!("privateKey" in pair))return fail();
@@ -40,7 +45,16 @@ export class DesktopEndpointIdentity {
  static async restore(crypto:CryptoProvider,secret:Uint8Array,publicKey:string):Promise<DesktopEndpointIdentity> {
   if(!secret.length||secret.length>4096)return fail();
   try {
-   const key=await crypto.subtle.importKey("pkcs8",owned(secret),{name:"ECDSA",namedCurve:"P-256"},false,["sign"]),pub=await crypto.subtle.importKey("raw",owned(bytes(publicKey,65)),{name:"ECDSA",namedCurve:"P-256"},false,["verify"]),challenge=crypto.getRandomValues(new Uint8Array(32));
+   const key=await crypto.subtle.importKey("pkcs8",owned(secret),{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
+   return await this.fromStoredKey(crypto,key,publicKey);
+  }catch{return fail();}
+ }
+ /** Restore a structured-cloned IndexedDB key without exporting its secret. */
+ static async fromStoredKey(crypto:CryptoProvider,key:Key,publicKey:string):Promise<DesktopEndpointIdentity> {
+  try {
+   const algorithm=key.algorithm as {name?:string;namedCurve?:string};
+   if(key.type!=="private"||key.extractable||key.usages.length!==1||key.usages[0]!=="sign"||algorithm.name!=="ECDSA"||algorithm.namedCurve!=="P-256")return fail();
+   const pub=await crypto.subtle.importKey("raw",owned(bytes(publicKey,65)),{name:"ECDSA",namedCurve:"P-256"},false,["verify"]),challenge=crypto.getRandomValues(new Uint8Array(32));
    const signature=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},key,challenge);
    if(!await crypto.subtle.verify({name:"ECDSA",hash:"SHA-256"},pub,signature,challenge))return fail();
    return new DesktopEndpointIdentity(crypto,key,publicKey);
