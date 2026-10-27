@@ -2,7 +2,7 @@
 
 共有FPS/bitrateのみ。解像度適応・protected合成は別対応。max集約により一窓の低速が他窓を下げず、全consumerの希望が低下したとき共通encoderを下げる。固定/旧peerは初期上限を保持。sourceID/audio/format世代を維持。
 
-負例は該当箇所を外して実行時失敗を確認、正確なbyte列へ復元。proofはA ReadyとB生成の二つの独立guardをともに外す（片方だけではもう片方が防御する）。browserは変更版をbuildし直す。
+負例は該当箇所を外して実行時失敗を確認、正確なbyte列へ復元。proofはBのmessage入口でhelper証明なしのadaptiveを無効化する防御を外す。browserは変更版をbuildし直す。
 
 ## aggregate
 
@@ -177,6 +177,8 @@ AssertionError: expected false to be true // Object.is equality
 
 ## proof
 
+Bのmessage入口でhelper証明を使わずoptionsだけを見る修正前へ戻す。
+
 ```text
 (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
   - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
@@ -187,12 +189,12 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
  RUN  v5.0.1 /workspaces/sodashitsu-desktop-shared-adaptive
 
- ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (136 tests | 1 failed | 133 skipped) 401ms
-   × negotiates shared cadence only with the current provider and helper: missing helper 115ms
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (136 tests | 1 failed | 135 skipped) 136ms
+   × forces shared encoder adaptation off at B without helper proof even for direct provider messages 135ms
 
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
 
- FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > negotiates shared cadence only with the current provider and helper: missing helper
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > forces shared encoder adaptation off at B without helper proof even for direct provider messages
 AssertionError: expected true to be false // Object.is equality
 
 - Expected
@@ -201,16 +203,21 @@ AssertionError: expected true to be false // Object.is equality
 - false
 + true
 
- ❯ src/desktop/DesktopRelay.test.ts:1158:268
-
+ ❯ src/desktop/DesktopRelay.test.ts:1055:20
+    1053|  try{
+    1054|   share.ws.emit("message",Buffer.from(JSON.stringify({type:"media",ena…
+    1055|   expect(adaptive).toBe(false);
+       |                    ^
+    1056|  }finally{spy.mockRestore();}
+    1057| });
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
 
 
  Test Files  1 failed (1)
-      Tests  1 failed | 2 passed | 133 skipped (136)
-   Start at  12:07:39
-   Duration  1.66s (transform 58%, tests 25%, import 16%)
+      Tests  1 failed | 135 skipped (136)
+   Start at  12:18:51
+   Duration  1.18s (transform 67%, import 20%, tests 12%)
 
 ```
 
@@ -266,3 +273,5 @@ undefined
 /workspaces/sodashitsu-desktop-shared-adaptive/packages/e2e:
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-shared-rate.spec.ts
 ```
+
+最初の全体は11646成功/1失敗。旧helper証明なしのB入口の期待が残っていたため、その防御も追加し、対象4件と負例を確認。code変更があるので再build後に全体を再実行する。

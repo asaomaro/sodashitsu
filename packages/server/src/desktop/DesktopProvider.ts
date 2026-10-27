@@ -91,7 +91,7 @@ type Share = {
   video: boolean;
   ws: WebSocket;
   process?: DesktopHelper;
-  shared?: boolean;
+  shared?: boolean;sharedRate?:boolean;
   dead: boolean;
   attached: boolean;
   ready: boolean;
@@ -351,7 +351,7 @@ export class DesktopProvider {
           const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
           if (nativeDraw) delete rawMessage.nativeDraw;
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
-          if(p.options.sharedDesktop&&!p.options.sharedRate&&m.type==="media"&&m.settings)m.settings.adaptive=false;
+          if(p.options.sharedDesktop&&(!p.options.sharedRate||!s.sharedRate)&&m.type==="media"&&m.settings)m.settings.adaptive=false;
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
           if(m.type==="native_audio_control"&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);return;}
@@ -569,6 +569,7 @@ export class DesktopProvider {
             const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic");
             const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
+            s.sharedRate=options.sharedRate===true&&nativeCadence===true&&nativeEnabled;
             s.native=new DesktopNativeVideo({enabled:nativeEnabled,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,

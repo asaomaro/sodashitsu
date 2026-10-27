@@ -1043,7 +1043,7 @@ it("negotiates shared UDP only for the new viewer and provider capability",async
  }
 });
 
-it("forces shared encoder adaptation off at B even for direct provider messages",async()=>{
+it("forces shared encoder adaptation off at B without helper proof even for direct provider messages",async()=>{
  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),viewer=await f.viewer("shared-native");
  viewer.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:1280,fps:30,quality:65,features:true}});
  await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));
