@@ -1,0 +1,8 @@
+"0" ŒÂ‚Ìˆø”‚ğw’è‚µ‚Ä "Run" ‚ğŒÄ‚Ño‚µ’†‚É—áŠO‚ª”­¶‚µ‚Ü‚µ‚½: "Wrong PID activated endpoint"
+”­¶êŠ \\wsl.localhost\Ubuntu\workspaces\sodashitsu-desktop-microphone\scripts\remote-desktop\validate-microphone.ps1
+:4 •¶š:1
++ [SodaMicrophoneChecks]::Run()
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : Exception
+ 

@@ -144,3 +144,12 @@ it('refuses enabling elevated access for legacy custom commands',async()=>{
  await expect(settings.set({...off,enabled:true,allowElevated:true})).rejects.toThrow('同梱');expect(options.provider.capabilities().elevatedDesktop).toBe(false);
  options.provider.dispose();
 });
+
+it("saves system audio separately from screen companion permissions and requires a local microphone endpoint",async()=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open(options);
+ await settings.set({...off,enabled:true,allowSystemAudio:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowSystemAudio:true,allowNativeVideo:true,allowMicrophone:false});expect(configure.mock.calls.at(-1)![0]?.allowMedia).not.toBe(true);
+ await expect(settings.set({...off,enabled:true,allowMicrophone:true})).rejects.toThrow("デバイスID");
+ await settings.set({...off,enabled:true,allowSystemAudio:false,allowMicrophone:true,microphoneEndpoint:"virtual-render-id"});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowSystemAudio:false,allowMicrophone:true,microphoneEndpoint:"virtual-render-id"});
+ expect((await DesktopSettings.open(options)).get(true).permissions).toMatchObject({allowMicrophone:true,microphoneEndpoint:"virtual-render-id"});
+ await settings.set(off);expect(options.provider.capabilities()).toMatchObject({available:false,microphone:false});
+});

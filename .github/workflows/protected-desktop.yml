@@ -34,3 +34,7 @@ jobs:
       - name: Existing generated monitor checks
         shell: powershell
         run: scripts/remote-desktop/validate-monitors.ps1
+
+      - name: Generated microphone PCM and private pipe checks (no audio devices)
+        shell: powershell
+        run: scripts/remote-desktop/validate-microphone.ps1

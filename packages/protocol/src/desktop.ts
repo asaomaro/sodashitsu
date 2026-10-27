@@ -57,6 +57,7 @@ export const DesktopOptions = z
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
     files: z.literal(true).optional(),
     richClipboard: z.literal(true).optional(),
+    microphone: z.literal(true).optional(),
     nativeAudio: z.literal(true).optional(),
     nativeDatagrams: z.literal(true).optional(),
     nativeVideo: z.literal(true).optional(),
@@ -145,6 +146,7 @@ export const DesktopReady = z
     monitorLayout:DesktopMonitorLayout.optional(),
     files:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
+    microphone:z.literal(true).optional(),
     nativeAudio:z.literal(true).optional(),
     nativeDatagrams:z.literal(true).optional(),
     nativeVideo: z.boolean().optional(),
@@ -167,7 +169,7 @@ export const DesktopReady = z
   })
   .strict()
   .refine((v) => !v.lockScreenCover || v.secureDesktop === true)
-  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&!v.nativeVideo&&!v.nativeAudio&&!v.nativeDatagrams));
+  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&!v.nativeVideo&&!v.nativeAudio&&!v.microphone&&!v.nativeDatagrams));
 export const DesktopFrameInfo = z
   .object({
     seq: z.number().int().positive(),
@@ -216,6 +218,7 @@ export const DesktopStartParams = z
   .object({
     url: z.string().url().max(2048),
     ticket: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+    microphoneTicket:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     fileTicket:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     clipboardTicket:z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     imageTicket: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
@@ -227,6 +230,9 @@ export const DesktopPermissions = z.object({
   enabled: z.boolean(),
   allowInput: z.boolean(),
   allowClipboard: z.boolean(),
+  allowSystemAudio: z.boolean().optional(),
+  allowMicrophone: z.boolean().optional(),
+  microphoneEndpoint: z.string().max(512).refine(v=>!v.includes("\0")).optional(),
   allowDisplayResize: z.boolean(),
   allowUnlock: z.boolean().optional(),
   allowMonitors:z.boolean().optional(),
@@ -279,6 +285,7 @@ export interface DesktopResults {
     sharedDatagrams?:boolean;
     files?: boolean;
     richClipboard?: boolean;
+    microphone?: boolean;
     nativeAudio?: boolean;
     nativeDatagrams?: boolean;
     nativeVideo?: boolean;
