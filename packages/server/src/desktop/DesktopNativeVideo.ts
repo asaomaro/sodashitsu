@@ -74,7 +74,7 @@ export class DesktopNativeVideo {
   constructor(
     private hooks: {
       enabled: boolean;
-      codecs?:boolean;adaptive?:boolean;cadence?:boolean;sharedRate?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;audioFactory?:(hooks:DesktopNativeAudioHooks)=>DesktopAudioLease;
+      codecs?:boolean;sharedResolution?:boolean;adaptive?:boolean;cadence?:boolean;sharedRate?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;audioFactory?:(hooks:DesktopNativeAudioHooks)=>DesktopAudioLease;
       iceServers?:z.infer<typeof DesktopIceServers>;
       window?: 1 | 3;
       width: number;
@@ -157,7 +157,7 @@ export class DesktopNativeVideo {
   private begin(s:NonNullable<DesktopNativeVideo["active"]>){
     if(this.active!==s||s.started)return;s.started=true;s.at=performance.now();
     this.hooks.policy(true);
-    this.hooks.write({type:"native_video",enabled:true,id:s.id,...(this.hooks.sharedRate?{adaptive:s.settings.adaptive}:{}),...(this.hooks.codecs?{codec:s.settings.codec??"h264"}:{}),bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
+    this.hooks.write({type:"native_video",enabled:true,id:s.id,...(this.hooks.sharedRate?{adaptive:s.settings.adaptive}:{}),...(this.hooks.sharedResolution?{resolution:true}:{}),...(this.hooks.codecs?{codec:s.settings.codec??"h264"}:{}),bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
     if(s.settings.audio&&this.hooks.audioEnabled)s.audio=(this.hooks.audioFactory??(hooks=>new DesktopNativeAudio(hooks)))({id:s.id,synthetic:this.hooks.synthetic===true,active:()=>this.active===s&&s.settings.audio,videoTimestamp:()=>s.timestamp,
       write:value=>this.hooks.write(value),state:state=>{if(this.active===s)this.hooks.send({type:"native_audio_status",id:s.id,state});},
       send:bytes=>this.active===s&&(s.peer?s.peer.sendAudio(bytes):this.hooks.buffered()<=65536&&this.hooks.send(bytes))});
@@ -195,7 +195,7 @@ export class DesktopNativeVideo {
     const rate=!s.barrier?s.quality?.sample({ack:ackMs,cost:pending.captureMs+pending.conversionMs+pending.encodeMs,decode:ack.decodeMs??0,lost:ack.dropped===true,buffered:Math.max(this.hooks.buffered(),s.peer?.buffered()??0)},now):undefined;
     if(rate){s.bitrate=rate.kbps;s.fps=rate.fps;this.hooks.write({type:"native_rate",id:s.id,...rate});}
     if(this.hooks.window===3&&now-s.statsAt>=1000){s.statsAt=now;this.hooks.send({type:"native_video_stats",id:s.id,width:s.width!,height:s.height!,window:3,pending:s.pending.length,captureMs:pending.captureMs,conversionMs:pending.conversionMs,encodeMs:pending.encodeMs,ackMs,decodeMs:ack.decodeMs??0});}
-    this.hooks.write({type:"native_video_ack",id:s.id,seq:ack.seq});
+    this.hooks.write({type:"native_video_ack",id:s.id,seq:ack.seq,...(this.hooks.sharedResolution&&ack.dropped?{dropped:true}:{})});
     if(!s.barrier&&s.resolution){
       const size=s.resolution.sample(Math.max(pending.captureMs+pending.conversionMs+pending.encodeMs,ack.decodeMs??0),now,ack.dropped===true||Math.max(this.hooks.buffered(),s.peer?.buffered()??0)>65536);
       if(size&&(size.width!==s.width||size.height!==s.height))this.profile(s,size);
@@ -203,6 +203,7 @@ export class DesktopNativeVideo {
   }
   private profile(s:NonNullable<DesktopNativeVideo["active"]>,size:{width:number;height:number}){
     if(this.active!==s||s.barrier||!s.stream||s.generation>=0xffffffff)return;
+    if(this.hooks.sharedResolution){this.hooks.write({type:"native_resolution",id:s.id,...size});return;}
     s.barrier={...size,generation:s.generation+1,at:performance.now()};
     if(!this.hooks.send({type:"native_profile_pending",id:s.id,generation:s.barrier.generation})){this.stop("congested");return;}
     this.hooks.write({type:"native_profile",id:s.id,generation:s.barrier.generation,...size,fps:s.fps,bitrateKbps:s.bitrate});
@@ -216,6 +217,13 @@ export class DesktopNativeVideo {
   }
   fromHelper(raw: unknown): boolean {
     const m = raw as { type: string; id?: string };
+    if(m.type==="native_profile_prepare"){
+      const s=this.active;if(!s||m.id!==s.id)return true;
+      const p=z.object({type:z.literal("native_profile_prepare"),id:z.string().uuid(),generation:z.number().int(),width:z.number().int().min(2),height:z.number().int().min(2)}).strict().parse(raw);
+      if(!this.hooks.sharedResolution||!this.hooks.adaptive||!s.stream||s.barrier||p.generation!==s.generation+1||p.width>this.hooks.width||Math.abs(p.width/p.height-this.hooks.sourceWidth/this.hooks.sourceHeight)>.02)throw Error("Shared native profile preparation");
+      s.barrier={width:p.width,height:p.height,generation:p.generation,at:performance.now()};
+      if(!this.hooks.send({type:"native_profile_pending",id:s.id,generation:p.generation}))this.stop("congested");return true;
+    }
     if(m.type==="native_profile_applied"){
       const s=this.active,b=s?.barrier;if(!s||m.id!==s.id)return true;
       if(!this.hooks.adaptive||!b)throw Error("Unexpected native profile");
@@ -287,7 +295,7 @@ export class DesktopNativeVideo {
       s.codec = frame.codec;
       s.width = frame.width;
       s.height = frame.height;
-      if(this.hooks.adaptive&&s.settings.adaptive)s.resolution=new DesktopNativeResolution({width:frame.width,height:frame.height,fps:s.settings.fps??this.hooks.fps});
+      if(this.hooks.adaptive&&s.settings.adaptive){const width=this.hooks.sharedResolution?Math.min(this.hooks.width,this.hooks.sourceWidth):frame.width,height=this.hooks.sharedResolution?Math.round(this.hooks.sourceHeight*width/this.hooks.sourceWidth/2)*2:frame.height;s.resolution=new DesktopNativeResolution({width,height,fps:s.settings.fps??this.hooks.fps});}
     }
     const payload = encodeDesktopH264Packet(
       frame.timestamp,

@@ -699,8 +699,12 @@ Linux版のGPU動画・音声・マイク・OSクリップボード・解像度�
 
 生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
 
-### 共有動画のFPS・帯域の自動調整
+### 共有動画のFPS・帯域・解像度の自動調整
 
 対応する両端とhelperでは、複数viewer共有の「動画・音声」に「動画のFPS・帯域を自動調整」が表示されます。同じsource設定で参加し、各viewerの取得/復号負荷・ACK・損失から希望値を計算します。共通encoderは各希望の最大値を採用するため、1窓だけ遅い場合はその窓が次のキーフレームから復帰し、他の窓の画質は下げません。全viewerの希望が低くなった場合に共通FPS・帯域を下げます。固定設定のviewerがいれば、その設定を維持します。
 
-調整時に動画・システム音声・操作許可は取り直しません。旧provider/helperでは固定の配信を続けます。共有画像の自動調整と、共有動画の転送解像度の自動変更はまだ行いません。
+両端とhelperが解像度調整にも対応している場合は、各viewerの処理負荷・損失から求めた転送解像度の最大値を共通encoderへ反映します。固定設定や旧viewerがいる間は元の転送解像度を維持します。実ディスプレイの解像度は変更しません。
+
+解像度変更では、共有元の設定、各viewerの古い映像ACK、decoder設定のACK、新世代の最初の映像の実描画を順に確認します。途中参加には保持していた映像を配らず、そのviewerの希望を満たす寸法の新しいキーフレームを待ちます。UDPで破棄された映像のACKは描画完了に数えず、回復用キーフレームを要求します。返答しないviewerは有限の待機でnative動画から外し、他のviewerの共有を続けます。UDPの障害時は既存のWSS復帰を使い、動画を使えない場合も画像閲覧へ戻ります。
+
+調整時に共通の動画・システム音声・操作許可は取り直しません。旧provider/helperでは固定の配信を続けます。共有画像の自動調整は行いません。

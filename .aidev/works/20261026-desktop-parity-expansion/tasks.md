@@ -61,3 +61,5 @@
 第10段階10D2: 人が操作するWeb共有窓の暗号化接続を製品routeへ接続。Bのowner-only鍵/許可/必須設定、ブラウザ非抽出CryptoKey/独立pin確認、opaque A、root/child HMAC結合、全通常lane、失効/handoffを実装。生成画像・生入力・WSS/UDP映像/Opus音声・仮想マイク・ファイル往復・memory rich clipboardを生成ソースの実ブラウザから検証済み。全体11753件/browser6件/型検査/独立build・smoke/負例5件/独立レビューと修正再レビュー通過。agent受信者経路は未実装のため暗号化窓では連携欄を非表示。task10全体と他の残件のチェックは保留する。
 
 第11段階11B: マイクのOpus 32kbps/20msを追加。root featureとB capability双方の積で交渉し、旧版/非対応browserは従来PCMを維持。B decoderは1920byteの固定PCMだけ既存private sinkへ渡し、混在codec/異常durationを停止。生成WebCodecs encoder/Node decoder/実browser5件、WSS・暗号化UDP/WSSで検証済み。全体11760通過＋終了競合/ビルド鮮度修正後140件、typecheck、独立build/smoke、独立レビュー・修正再レビューを通過。共有source mic/他OS/実デバイス検証は残件。
+
+第8段階8F: 共有動画の解像度希望のmax集約、source/viewer別世代・連番とformat/実描画barrier、途中参加の保持IDR除外、UDP破棄creditと描画完了の分離、有限待機と音声owner維持を実装。生成ブラウザのWSS/UDP/遅いdecoder/固定途中参加/切替IDR損失を確認。全体11789件・新browser5件・型検査・独立build/smoke・負例6件・独立レビューと修正再レビューを通過。protected scope合成は後続でtask8全体は保留。

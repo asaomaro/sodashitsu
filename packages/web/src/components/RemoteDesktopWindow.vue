@@ -2,7 +2,7 @@
 import {createDesktopSocketFactory} from "../desktop/DesktopEndpointSocket.js";
 import DesktopEndpointPairing from "./DesktopEndpointPairing.vue";
 import {DESKTOP_NATIVE_PLATFORM_PROTOCOL,supportsDesktopInput,type DesktopInputCapabilities} from "@sodashitsu/protocol";
-import { DESKTOP_MICROPHONE_OPUS_FEATURE, DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
+import { DESKTOP_SHARED_RESOLUTION_PROTOCOL, DESKTOP_MICROPHONE_OPUS_FEATURE, DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
@@ -536,7 +536,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -1098,7 +1098,7 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止画面でも画像を送り続けるPortalが必要で、1.5秒無更新になると停止します。</template></p>
       <label v-if="!platformBackend"><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
-      <p v-if="sharedScreen" data-desktop-shared>{{ nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。対応する接続先ではシステム音声も共有できます。クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
+      <p v-if="sharedScreen" data-desktop-shared>{{ nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
       <label v-if="!platformBackend"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label v-if="!platformBackend"><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
@@ -1160,8 +1160,8 @@ onBeforeUnmount(() => {
       </nav>
       <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
         <summary>動画・音声</summary>
-        <label v-if="sharedScreen&&nativeCadence"><input v-model="adaptive" aria-label="共有動画のFPS・帯域を自動調整" type="checkbox" />動画のFPS・帯域を自動調整</label>
-        <p v-if="sharedScreen&&nativeCadence" data-shared-rate>全viewerの希望を満たすFPS・帯域で圧縮します。1窓だけ遅い場合は、その窓だけ次のキーフレームから復帰します。画像の自動調整と動画の解像度変更は行いません。</p>
+        <label v-if="sharedScreen&&nativeCadence"><input v-model="adaptive" aria-label="共有動画のFPS・帯域を自動調整" type="checkbox" />動画のFPS・帯域<template v-if="nativeAdaptive">・解像度</template>を自動調整</label>
+        <p v-if="sharedScreen&&nativeCadence" data-shared-rate>全viewerの希望を満たすFPS・帯域<template v-if="nativeAdaptive">・解像度</template>で圧縮します。1窓だけ遅い場合は、その窓だけ次のキーフレームから復帰します。画像の自動調整は行いません。<template v-if="nativeAdaptive">固定設定の窓がある間は元の動画解像度を維持します。</template><template v-else>この接続では動画の解像度変更を行いません。</template></p>
         <p v-if="mediaTransport==='native'">接続先のGPUで{{nativeCodecs?"選択した形式":"H.264"}}へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>
         <p v-else>
           BのWindowsブラウザで /desktop-host

@@ -173,7 +173,7 @@ export class DesktopSharedCapture {
       g.ready = { ...ready, dynamicQuality: false, inputAckPipe: false, ...(value.deferNativeSnapshots===true?{deferNativeSnapshots:true}:{}) };
       if (ready.nativeVideo) g.native = new DesktopSharedNative<Subscription>({
         sourceStopped:()=>{g.audio?.dispose();delete g.audio;},
-        window: ready.nativeVideoWindow === 3 ? 3 : 1,
+        adaptive:ready.nativeAdaptive===true,window: ready.nativeVideoWindow === 3 ? 3 : 1,
         write: value => this.write(g, value), send: (s, value) => this.emit(s, value),
         policy: active => { const config=JSON.parse(g.configuration!);this.write(g,{type:"policy",fps:active?1:config.options.fps,quality:config.options.quality}); },
       });

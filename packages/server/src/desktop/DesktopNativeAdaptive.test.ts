@@ -3,9 +3,9 @@ import {performance} from 'node:perf_hooks';
 import {decodeDesktopMediaChunk} from '@sodashitsu/protocol';
 import {DesktopNativeVideo} from './DesktopNativeVideo.js';
 import {DesktopNativeResolution} from './DesktopNativeResolution.js';
-function fixture(){
+function fixture(shared=false){
  const send=vi.fn((_value:unknown)=>true),write=vi.fn<(v:Record<string,unknown>)=>void>(),policy=vi.fn();
- const video=new DesktopNativeVideo({enabled:true,adaptive:true,cadence:true,window:3,width:1280,sourceWidth:1600,sourceHeight:1000,fps:30,send,write,policy,buffered:()=>0});
+ const video=new DesktopNativeVideo({enabled:true,sharedResolution:shared,adaptive:true,cadence:true,window:3,width:1280,sourceWidth:1600,sourceHeight:1000,fps:30,send,write,policy,buffered:()=>0});
  video.fromViewer({type:'media',enabled:true,settings:{transport:'native'}});
  const id=write.mock.calls.find(([m])=>m.type==='native_video')![0].id as string;
  const frame=(seq:number,generation=1)=>({type:'native_frame',id,generation,seq,timestamp:seq*33333,key:seq===1||generation===2,...(generation===2?{width:960,height:600,codec:'avc1.420420'}:{width:1280,height:800,codec:'avc1.42041f'}),data:Buffer.from([0,0,0,1,0x65,1,2]).toString('base64')});
@@ -55,4 +55,15 @@ it('reduces resolution after sustained loss/queue even with cheap pixels, and do
  const sample=(congested:boolean)=>{let size;for(let i=0;i<10;i++){now+=200;size=q.sample(1,now,congested)??size;}return size;};
  expect(sample(true)).toBeUndefined();expect(sample(false)).toBeUndefined();expect(sample(false)).toBeUndefined();
  expect(sample(true)).toBeUndefined();expect(sample(true)).toBeUndefined();expect(sample(true)).toEqual({width:960,height:600});
+});
+
+it.each([false,true])('preserves UDP drop credit separately from a shared draw commit: %s',shared=>{
+ const f=fixture(shared);try{f.video.fromHelper(f.frame(1));(f.video as any).ack({type:'native_video_ack',id:f.id,generation:1,seq:1,dropped:true},true);expect(f.write.mock.calls.filter(([m])=>m.type==='native_video_ack').at(-1)?.[0]).toEqual({type:'native_video_ack',id:f.id,seq:1,...(shared?{dropped:true}:{})});}finally{f.video.stop();}
+});
+
+it('shared profile preparation keeps the held IDR input age and never writes a private source profile directly',()=>{
+ const clock=vi.spyOn(performance,'now').mockReturnValue(1000);const f=fixture(true);try{f.video.fromHelper(f.frame(1));f.ack(1);f.profile();expect(f.write).toHaveBeenLastCalledWith({type:'native_resolution',id:f.id,width:960,height:600});expect(f.write.mock.calls.some(([m])=>m.type==='native_profile')).toBe(false);f.video.fromHelper({type:'native_profile_prepare',id:f.id,generation:2,width:960,height:600});f.applied(1);clock.mockReturnValue(2900);f.video.fromViewer({type:'native_format_ack',id:f.id,generation:2,baseSeq:1});f.video.fromHelper(f.frame(2,2));clock.mockReturnValue(3200);f.ack(2,2);expect(f.video.hasFreshDraw()).toBe(false);f.video.fromHelper(f.frame(3,2));f.ack(3,2);expect(f.video.hasFreshDraw()).toBe(true);}finally{f.video.stop();clock.mockRestore();}
+});
+it.each(['unopted','unstarted','generation','dimensions'])('rejects a shared prepare before publishing a barrier: %s',kind=>{
+ const f=fixture(kind!=='unopted');try{if(kind!=='unstarted')f.video.fromHelper(f.frame(1));const p={type:'native_profile_prepare',id:f.id,generation:kind==='generation'?3:2,width:kind==='dimensions'?1600:960,height:600};expect(()=>f.video.fromHelper(p)).toThrow('Shared native profile preparation');expect(f.send.mock.calls.some(([m])=>(m as any).type==='native_profile_pending')).toBe(false);}finally{f.video.stop();}
 });
