@@ -448,3 +448,25 @@ AssertionError: Generated world writer allowed
 endpoint_key_generated_checks_passed
 AssertionError: Generated nonlocal drive accepted
 ```
+
+## Final verification
+
+Frozen product ea1799f0: pnpm build/typecheck passed, full tests 11,694 passed. Independent worktree build/smoke passed. Two independent reviews and the validation-only cleanup re-review have no remaining findings.
+
+Windows CI initially exposed a generated test transport problem: Process.StandardInput constructs an AutoFlush text writer; UTF8 BOM hosts inserted its preamble into the raw pipe. The validator sets a no-preamble Console.InputEncoding before that writer is constructed and restores it even after startup/cleanup failures. The production Node binary pipe/helper is unchanged. Explicit UTF8(true) negative control fails unprotect; UTF8(false) passes. Raw output follows.
+
+### Binary pipe positive
+
+```text
+endpoint_key_generated_checks_passed
+endpoint_acl_generated_checks_passed
+endpoint_vault_committed
+endpoint_commit_generated_checks_passed
+```
+
+### Binary pipe negative
+
+```text
+Generated endpoint helper exit mismatch: operation=unprotect, expected=0, actual=1, diagnostic=Endpoint key protection failed
+
+```
