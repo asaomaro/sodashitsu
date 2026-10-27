@@ -8,6 +8,7 @@
     "test": "playwright test"
   },
   "dependencies": {
+    "@sodashitsu/client-core": "workspace:^",
     "@sodashitsu/protocol": "workspace:*",
     "@sodashitsu/server": "workspace:*",
     "ws": "^8.21.3"
