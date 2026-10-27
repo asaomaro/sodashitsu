@@ -57,6 +57,7 @@ export const DesktopOptions = z
     nativePlatform:DesktopNativePlatform.optional(),
     sharedDesktop:z.literal(true).optional(),
     sharedCursor:z.literal(true).optional(),
+    sharedClipboard:z.literal(true).optional(),
     sharedMicrophone:z.literal(true).optional(),
     sharedProtected:z.literal(true).optional(),
     sharedNative:z.literal(true).optional(),
@@ -309,6 +310,7 @@ export interface DesktopResults {
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
     sharedCursor?:boolean;
+    sharedClipboard?:boolean;
     sharedFiles?:boolean;
     sharedMicrophone?:boolean;
     sharedProtected?:boolean;

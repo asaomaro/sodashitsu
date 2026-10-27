@@ -177,6 +177,7 @@ export class DesktopProvider {
       sharedProtected:!this.config?.nativePlatform&&this.config?.allowElevated===true,
       sharedDesktop: !this.config?.nativePlatform,
       sharedCursor:!this.config?.nativePlatform,
+      sharedClipboard:!this.config?.nativePlatform&&this.config?.allowClipboard===true,
       sharedFiles: !this.config?.nativePlatform && !!this.config?.fileRoot,
       sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
@@ -222,8 +223,9 @@ export class DesktopProvider {
     if(cfg.nativePlatform&&(p.options.sharedDesktop||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
-    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || p.options.richClipboard || p.options.monitors || p.options.monitorDevice || (p.options.cursor&&!p.options.sharedCursor)))
+    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || (p.options.richClipboard&&!p.options.sharedClipboard) || p.options.monitors || p.options.monitorDevice || (p.options.cursor&&!p.options.sharedCursor)))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
+    if(p.options.sharedClipboard&&(!p.options.sharedDesktop||!p.options.features||p.options.elevatedDesktop||p.options.virtualDisplay||!cfg.allowClipboard))throw new RpcError("invalid_params","通常共有のクリップボードには両端の更新と接続先の許可が必要です。");
     if(p.options.sharedCursor&&(!p.options.sharedDesktop||!p.options.cursor||!p.options.features||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.image?.showCursor===false))throw new RpcError("invalid_params","通常共有のカーソル表示を有効にしてください。共有独立カーソルは両端の更新が必要です。");
     if(p.options.sharedProtected&&(!p.options.sharedDesktop||!p.options.elevatedDesktop||!p.options.features||!cfg.allowElevated))throw new RpcError("unauthorized","保護画面の複数viewer共有は許可されていません。");
     if(p.options.sharedResolution&&(!p.options.sharedNative||!p.options.nativeAdaptive))throw new RpcError("invalid_params","Shared resolution not negotiated");
@@ -264,7 +266,7 @@ export class DesktopProvider {
     }
     if (this.config !== cfg||this.sourceEpoch!==epoch||scope&&!scope.active()) throw new RpcError("unauthorized", "Desktop permissions changed");
     if (this.sharedCapture.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
-    const sharedKey = JSON.stringify(p.options.sharedDesktop ? {purpose:p.options.sharedProtected?"protected":"normal",options:sharedHelperOptions(p.options)} : p.options);
+    const sharedKey = JSON.stringify(p.options.sharedDesktop ? {purpose:p.options.sharedProtected?"protected":"normal",options:sharedHelperOptions(p.options),...(p.options.sharedClipboard?{clipboard:true}:{})} : p.options);
     if (this.active || (this.shared.size && (!p.options.sharedDesktop || this.sharedKey !== sharedKey)) || this.shared.size >= 8)
       throw new RpcError("server_busy", "Bのデスクトップは異なる設定で共有中か、viewer数の上限です。同じ複数viewer設定で接続してください。");
     const url = new URL(p.url);
@@ -438,11 +440,13 @@ export class DesktopProvider {
               this.write(s, { type: "policy", fps: s.video ? 1 : m.fps, quality: m.quality });
             }
           } else if (m.type === "clipboard_grant") {
-            s.clipboardGranted = m.enabled && s.allowClipboard;
             s.clipboardGeneration++;
+            s.clipboardGranted = m.enabled && s.allowClipboard;
+            if(p.options.sharedClipboard)s.clipboardGranted=s.process?.requestClipboard?.(s.clipboardGranted,s.clipboardGeneration)===true;
+            if(p.options.sharedClipboard&&m.enabled&&s.allowClipboard&&!s.clipboardGranted)this.send(s,{type:"clipboard_busy"});
             s.clipboardPending.clear();
             s.richClipboard?.revoke();
-            if (s.allowClipboard)
+            if (s.allowClipboard&&!p.options.sharedClipboard)
               this.write(s, {
                 type: "clipboard_control",
                 enabled: s.clipboardGranted,
@@ -620,6 +624,7 @@ export class DesktopProvider {
             if(options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic")&&s.microphoneSocket)s.microphone=new DesktopMicrophone({allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",...(options.sharedMicrophone?{claim:(id:string)=>s.process?.requestMicrophone?.(id,true)===true,release:(id:string)=>{s.process?.requestMicrophone?.(id,false);}}:{}),allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
+            if(options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
@@ -748,7 +753,7 @@ export class DesktopProvider {
       }
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop;
-    const {sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
@@ -758,7 +763,7 @@ export class DesktopProvider {
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
       ...(options.sharedProtected?{allowSharedProtected:true}:{}),
-      richClipboard:options.richClipboard===true&&cfg.allowClipboard===true,
+      richClipboard:(options.sharedClipboard||options.richClipboard===true)&&cfg.allowClipboard===true,
       allowMicrophone:(poolMedia||options.microphone===true)&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint,
       ...((poolMedia||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
       allowSystemAudio:(poolMedia||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
@@ -773,7 +778,7 @@ export class DesktopProvider {
       deferNativeSnapshots: (poolMedia||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
       ...((poolMedia||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
-      allowClipboard: !options.sharedDesktop && cfg.allowClipboard === true,
+      allowClipboard: (!options.sharedDesktop||options.sharedClipboard===true) && cfg.allowClipboard === true,
       allowDisplayResize: !options.sharedDesktop && cfg.allowDisplayResize === true,
     });
   }

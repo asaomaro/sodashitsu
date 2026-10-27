@@ -85,3 +85,5 @@
 第13段階13B: フォルダ選択/D&Dで階層・empty dirsを新規保存先へ送信し、ZIP受信を追加。1000項目/100MiB/深さ32/manifest48KiB、取消の同期fence、source snapshot/portable paths/link拒否、partial cleanupと完成済み・利用者file保持を検証。全体11898件/browser21件/負例3件/型検査/独立build・smoke/独立レビュー・追加差分再レビュー通過。フォルダの再開は同接続中のみ、全体atomic置換ではない。Explorer直接drag-out/monitor独立窓/フォルダのreload後再開等は残件でtask13全体は保留する。
 
 第8段階8I: 通常共有の独立カーソルを明示opt-inで実装。全窓で同じcohort、新viewer/A/B/helper proofを必要とし、途中参加へ現在のshape/poseを配信。画像ACK待ちと位置更新を分離。旧peer/default offは焼込画像を維持。新browser plain/encrypted/native/旧helper復帰4件、負例2件、独立レビューとtest修正再レビューを通過。task8全体は共有clipboard/delta等を残し、未完了。
+
+第8段階8J: 通常共有のclipboard経路を明示cohortとして追加。input/micと別の1owner許可、source世代/text ID/rich UUID変換、取消/退出時失効、旧viewer/B/helper gateを実装。生成memory clipboardのplain/encrypted往復・競合拒否/引継ぎ・cancel直後再送・旧helper復帰を検査。独立点検/全体レビューとtest追加差分再レビュー通過。共有deltaなどを残すためtask8全体は未完了。
