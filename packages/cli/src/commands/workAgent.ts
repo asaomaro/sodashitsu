@@ -1,3 +1,5 @@
+import {relayWorkAgentTerminal} from "../workAgentTerminal.js";
+import {processTerminal} from "./attach.js";
 import { workAgentArgumentError } from "@sodashitsu/protocol";
 import type { Command } from "../cliArgs.js";
 import type { SessionStore } from "../session.js";
@@ -11,11 +13,12 @@ export async function requestWorkAgent(cmd: Extract<Command, { kind: "work-agent
   const error = workAgentArgumentError(cmd.agentKind, cmd.args);
   if (error) throw new RpcFailure("invalid_params", error);
   if (cmd.opts.machine) throw new RpcFailure("invalid_params", "接続先のpaneでwork agentを実行してください");
+  if(cmd.terminalHere&&!processTerminal().isTTY)throw new RpcFailure("not_a_tty","--terminal-here needs a terminal on stdin and stdout");
   await withSession(cmd.opts, store, async c => {
     const ref = cmd.pane ?? selfPaneId(cmd.opts);
     if (!ref) throw new RpcFailure("caller_pane_unknown", "paneで実行するか--paneを指定してください");
     const snapshot = (await c.hello()).snapshot, paneId = resolvePaneRef(snapshot, ref);
-    const request = await c.request("work.agent_request", { paneId, agentKind: cmd.agentKind, args: cmd.args });
+    const request = await c.request("work.agent_request", { paneId, agentKind: cmd.agentKind, args: cmd.args,...(cmd.terminalHere?{terminalHere:true as const}:{}) });
     process.stderr.write(`操作元のSodashitsuで起動要求を受け付けてください。要求 ${request.id}\nCLI: sodactl work accept <このPCのmachine名> ${request.id}\n`);
     let cancelled = false;
     const cancel = () => { cancelled = true; void c.request("work.agent_reject", { id: request.id }).catch(() => {}); };
@@ -24,7 +27,7 @@ export async function requestWorkAgent(cmd: Extract<Command, { kind: "work-agent
       while (!cancelled && Date.now() < request.expiresAt) {
         const found = (await c.request("work.agent_requests", { paneId })).requests.find(r => r.id === request.id);
         if (!found) throw Error("起動要求は期限切れです");
-        if (found.state === "launched") { printJson({ status: "launched", requestId: request.id, target: request.folder }); return; }
+        if (found.state === "launched") { if(cmd.terminalHere){await relayWorkAgentTerminal(c,request.id);return;}printJson({ status: "launched", requestId: request.id, target: request.folder }); return; }
         if (found.state === "failed" || found.state === "rejected") throw Error(`起動要求: ${found.state}`);
         await new Promise(resolve => setTimeout(resolve, 500));
       }

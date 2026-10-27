@@ -119,3 +119,43 @@ it("retains a launched non-plugin claim after ten minutes but expires it at 24 h
   now+=600001;await expect(requests.check(request.id,claim)).resolves.toEqual({});
   now+=24*60*60*1000;await expect(requests.check(request.id,claim)).rejects.toThrow();
 });
+
+it("binds terminal IO to the requester connection and executor claim, and cancels questions when closed",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"soda-work-terminal-"));
+ try{
+  await mkdir(join(dir,"home"));const paneId=randomUUID(),workspaceId=randomUUID();
+  const work=new WorkContext(join(dir,"state"),()=>undefined,()=>dir,{home:join(dir,"home"),env:{}});
+  let complete!:(value:{status:"cancelled"})=>void;
+  const asks={open:vi.fn(()=>new Promise<{status:"cancelled"}>(resolve=>{complete=resolve;})),close:vi.fn(()=>complete?.({status:"cancelled"}))};
+  const requests=new WorkAgentRequests(work,()=>({workspaceId}),()=>dir,Date.now,asks);
+  await expect(requests.create({paneId,agentKind:"claude",args:[],terminalHere:true})).rejects.toMatchObject({code:"unauthorized"});
+  const r=await requests.create({paneId,agentKind:"claude",args:[],terminalHere:true},undefined,"requester",()=>{});
+  expect(await requests.terminalRead("requester",r.id,{ack:0})).toEqual({state:"waiting"});
+  await expect(requests.terminalRead("other",r.id,{ack:0})).rejects.toMatchObject({code:"unauthorized"});
+  const {claim}=await requests.claim(r.id);await expect(requests.terminalOpen(r.id,randomUUID())).rejects.toThrow();
+  const {epoch}=await requests.terminalOpen(r.id,claim);requests.finish(r.id,claim,"launched");
+  await requests.terminalExchange(r.id,claim,{epoch,ack:0,output:{seq:1,data:Buffer.from("screen").toString("base64")}});
+  expect(await requests.terminalRead("requester",r.id,{epoch,ack:0})).toMatchObject({state:"open",output:[{seq:1}]});
+  const question=requests.terminalAsk("ask-client",r.id,claim,{},()=>{});void question.catch(()=>{});await vi.waitFor(()=>expect(asks.open).toHaveBeenCalled());
+  requests.terminalClose("requester",r.id);await expect(question).rejects.toThrow();expect(asks.close).toHaveBeenCalledWith("ask-client");
+  await expect(requests.terminalExchange(r.id,claim,{epoch,ack:0})).rejects.toThrow();
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+it("revokes a disconnected requester before delayed claim/open validation can complete",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"soda-work-terminal-owner-"));try{
+  await mkdir(join(dir,"home"));const paneId=randomUUID(),workspaceId=randomUUID();const work=new WorkContext(join(dir,"state"),()=>undefined,()=>dir,{home:join(dir,"home"),env:{}});
+  const requests=new WorkAgentRequests(work,()=>({workspaceId}),()=>dir),r=await requests.create({paneId,agentKind:"claude",args:[],terminalHere:true},undefined,"owner",()=>{}),{claim}=await requests.claim(r.id);
+  const original=work.scope.bind(work);let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});vi.spyOn(work,"scope").mockImplementationOnce(async p=>{await gate;return original(p);});
+  const opening=requests.terminalOpen(r.id,claim);void opening.catch(()=>{});requests.clientGone("owner");release();await expect(opening).rejects.toThrow();expect(requests.list().requests[0]?.state).toBe("failed");
+  await expect(requests.terminalRead("owner",r.id,{ack:0})).rejects.toThrow();
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+it("does not publish a terminal request if its owner disconnects during inspect",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"soda-work-terminal-create-"));try{
+  await mkdir(join(dir,"home"));const paneId=randomUUID(),workspaceId=randomUUID();const work=new WorkContext(join(dir,"state"),()=>undefined,()=>dir,{home:join(dir,"home"),env:{}}),requests=new WorkAgentRequests(work,()=>({workspaceId}),()=>dir);
+  const original=work.inspect.bind(work);let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});vi.spyOn(work,"inspect").mockImplementationOnce(async p=>{await gate;return original(p);});let live=true;
+  const creating=requests.create({paneId,agentKind:"claude",args:[],terminalHere:true},undefined,"owner",()=>{if(!live)throw Error("connection closed");});void creating.catch(()=>{});live=false;requests.clientGone("owner");release();await expect(creating).rejects.toThrow(/closed/);expect(requests.list().requests).toEqual([]);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

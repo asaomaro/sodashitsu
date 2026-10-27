@@ -1,3 +1,5 @@
+import {WorkAgentTerminalBridge} from "./WorkAgentTerminalBridge.js";
+import type {TerminalManager} from "../terminal/TerminalManager.js";
 import { createServer, type Socket } from "node:net";
 import { chmod, rm } from "node:fs/promises";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
@@ -25,7 +27,7 @@ export class WorkAgentLauncher {
     private readonly starter: AgentStarter, private readonly connect: (machine: string) => Promise<WorkAgentRemote>,
     private readonly asks?: Pick<AskService, "open" | "onClientGone">,
     private readonly prompt?: (paneId:string,instanceId:string,text:string,signal:AbortSignal,guards:{prepare:()=>Promise<void>;check:()=>void})=>Promise<void>,
-    private readonly options: { logger?: Pick<Logger,"info"|"warn">; reconnectGraceMs?: number } = {}) {}
+    private readonly options: { terminals?:TerminalManager;logger?: Pick<Logger,"info"|"warn">; reconnectGraceMs?: number } = {}) {}
 
   async launch(machineId: string, requestId: string) {
     if (this.stopped || this.leases.size >= 20) throw new RpcError("server_busy", "エージェント起動の上限です");
@@ -50,6 +52,7 @@ export class WorkAgentLauncher {
       const directory = await privateDirs(this.stateDir, ["work-agents", "launches", randomUUID()]);
       const socketPath = process.platform === "win32" ? `\\\\.\\pipe\\soda-work-${randomUUID()}` : join(tmpdir(), `soda-work-${randomUUID()}.sock`);
       const secret = randomBytes(32).toString("hex"), sockets = new Set<Socket>();
+      let terminal:WorkAgentTerminalBridge|undefined;
       let closed = false, busy = false, paneId: string | undefined, launching = true, closeRequested = false;
       const abort = new AbortController();
       const agentName = `remote-${randomUUID().slice(0,8)}`;
@@ -58,6 +61,7 @@ export class WorkAgentLauncher {
       const cancel = (socket: Socket) => {
         if (job?.socket !== socket) return;
         job.cancelled = true;
+        if(p.terminalHere&&job.remote&&!job.execId)job.remote.close();
         if (job.askOwner) this.asks?.onClientGone(job.askOwner);
         if (job.execId) void job.remote?.request("exec.cancel", { id: job.execId }).catch(() => {});
       };
@@ -83,6 +87,21 @@ export class WorkAgentLauncher {
       const ask = async (raw: unknown, owner: NonNullable<typeof job>) => {
         check();
         await remote.request("work.agent_check",{id:requestId,claim:claim!});
+        if(p.terminalHere){
+          const channel=await this.connect(machineId);owner.remote=channel;
+          try{
+            check();if(owner.cancelled)return {status:"cancelled"};
+            const params=checkWorkAgentAsk(raw),started=await channel.request("work.agent_terminal_ask_start",{id:requestId,claim:claim!,params:raw}),until=Date.now()+params.timeoutMs+5000;
+            while(Date.now()<until){
+              check();if(owner.cancelled)return {status:"cancelled"};
+              const result=await channel.request("work.agent_terminal_ask_read",{id:requestId,claim:claim!,questionId:started.questionId});
+              check();if(result.state==="done")return owner.cancelled?{status:"cancelled"}:result.result;
+              if(result.state==="failed")return {status:"cancelled"};
+              await new Promise(resolve=>setTimeout(resolve,100));
+            }
+            return {status:"timeout"};
+          }finally{channel.close();if(owner.remote===channel)delete owner.remote;}
+        }
         if (!this.asks || !paneId) throw new RpcError("not_found", "操作元の質問フォームを利用できません");
         const params = checkWorkAgentAsk(raw), files: string[] = [];
         owner.askOwner = `work-agent-${randomUUID()}`;
@@ -179,7 +198,7 @@ export class WorkAgentLauncher {
             void (async () => {
               try {
                 await connection.ready(); check();
-                if (m.operation === "describe") respond({ result: { agentKind: p.agentKind, args: p.args, cwd: project, machineId, workspaceId: p.workspaceId, folder: p.folder, ...(p.task?{task:p.task}:{}) } });
+                if (m.operation === "describe") respond({ result: { agentKind: p.agentKind, args: p.args, cwd: project, machineId, workspaceId: p.workspaceId, folder: p.folder,...(p.terminalHere?{terminalHere:true}:{}), ...(p.task?{task:p.task}:{}) } });
                 else if (m.operation === "ask") respond({ result: await ask(m.tool, owner) });
                 else if (m.operation === "tool") respond({ result: await execute(m.tool, owner) });
                 else respond({ error: "Unknown work agent operation" });
@@ -205,6 +224,7 @@ export class WorkAgentLauncher {
       cleanup = (reason = "requested_close") => {
         if (closed) return; closed = true;
         log("closed", reason);
+        terminal?.dispose();
         abort.abort(); void localTransfers.close(); if(reportTimer)clearInterval(reportTimer);
         clearInterval(timer); clearTimeout(expiry);
         if (job?.askOwner) this.asks?.onClientGone(job.askOwner);
@@ -213,7 +233,8 @@ export class WorkAgentLauncher {
           s.end(JSON.stringify({ type: "proxy_closed", reason }) + "\n");
           const force = setTimeout(() => s.destroy(), 1000); force.unref();
         }
-        server.close(); remote.close();
+        server.close();
+        if(p.terminalHere)void remote.request("work.agent_terminal_end",{id:requestId,claim:claim!}).catch(()=>{}).finally(()=>remote.close());else remote.close();
         this.active.delete(activeKey!); this.leases.delete(cleanup!);
         void rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => {});
         if (process.platform !== "win32") void rm(socketPath, { force: true });
@@ -225,17 +246,26 @@ export class WorkAgentLauncher {
       const config = join(directory, "capability.json");
       await createExclusive(config, JSON.stringify({ socketPath, secret }));
       await remote.request("work.inspect", scope); check();
-      const created = await this.session.createWorkspace(project, `Remote ${p.agentKind} ${p.paneId.slice(0, 8)}`); paneId = created.pane.id;
+      const cli = fileURLToPath(new URL("../../../cli/dist/main.js", import.meta.url));
+      // A terminal relay must never have an executor shell underneath the CLI.
+      const created = await this.session.createWorkspace(project, `Remote ${p.agentKind} ${p.paneId.slice(0, 8)}`,undefined,
+        p.terminalHere?{shell:process.execPath,args:[cli,"work-agent-run",config]}:undefined); paneId = created.pane.id;
       const markers = await privateDirs(this.stateDir, ["work-agents", "panes"]);
       await createExclusive(join(markers, paneId), "Restart with sodactl work agent; plain native resume is not allowed.\n");
-      const cli = fileURLToPath(new URL("../../../cli/dist/main.js", import.meta.url));
-      // Wait for the freshly spawned shell to become inspectable. Never type into a busy pane.
-      for (let i = 0; i < 40 && !await this.starter.isShellAvailable(paneId); i++) await new Promise(resolve => setTimeout(resolve, 100));
-      check();
-      await this.starter.start({ paneId, kind: p.agentKind, name: agentName, args: [] }, undefined,
-        { skipInterrupt: true, command: { executable: process.execPath, args: [cli, "work-agent-run", config] } });
+      if(!p.terminalHere){
+        // Never type a startup command into a busy interactive pane.
+        for (let i = 0; i < 40 && !await this.starter.isShellAvailable(paneId); i++) await new Promise(resolve => setTimeout(resolve, 100));
+        check();
+        await this.starter.start({ paneId, kind: p.agentKind, name: agentName, args: [] }, undefined,
+          { skipInterrupt: true, command: { executable: process.execPath, args: [cli, "work-agent-run", config] } });
+      }
       const bootTimer = setTimeout(() => startFailed?.(), 30000);
       try { await ready; } finally { clearTimeout(bootTimer); }
+      if(p.terminalHere){
+        const host=this.options.terminals?.get(paneId!);if(!host)throw new RpcError("not_found","Terminal relay is not supported by this executor");
+        const opened=await remote.request("work.agent_terminal_open",{id:requestId,claim});
+        terminal=new WorkAgentTerminalBridge(host,connection,{id:requestId,claim,epoch:opened.epoch},()=>{check();if(this.options.terminals?.get(paneId!)!==host)throw new RpcError("not_found","Execution terminal changed");},(cols,rows)=>this.session.resizePane(paneId!,cols,rows),()=>cleanup?.("requested_close"));
+      }
       await remote.request("work.agent_finish", { id: requestId, claim, state: "launched" });
       if(p.task){
         const report=async()=>{

@@ -46,7 +46,7 @@ import { DEFAULT_CONTROL_SIZE, MAX_STREAM_DIMENSION } from "./sessionStream.js";
  * 20260926-agent-skill-file で `main.ts` の `printHelp` の一覧をここへ一本化した）。
  */
 export const USAGE_LINES: readonly string[] = [
-  "sodactl work agent [--pane <id>] [--url <URL>] [--token <TOKEN>] claude|codex [agent-args...]",
+  "sodactl work agent [--terminal-here] [--pane <id>] [--url <URL>] [--token <TOKEN>] claude|codex [agent-args...]",
   "sodactl work requests [--url <URL>] [--token <TOKEN>]",
   "sodactl work accept <machine> <request-id> [--url <URL>] [--token <TOKEN>]",
   "sodactl work bind <machine> <workspace> [--kind claude|codex] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
@@ -317,7 +317,7 @@ export type DisplayAction =
   | { kind: "features" };
 
 export type Command =
-  | { kind: "work-agent"; opts: GlobalOpts; agentKind: "claude" | "codex"; args: string[]; pane?: string }
+  | { kind: "work-agent"; opts: GlobalOpts; agentKind: "claude" | "codex"; args: string[]; pane?: string;terminalHere?:true }
   | { kind: "work-agent-control"; opts: GlobalOpts; action: "requests" | "accept"; machine?: string; requestId?: string }
   | { kind: "work-agent-internal"; action: "run" | "mcp"; file: string }
   | { kind: "work"; action: "bind" | "status" | "unbind" | "skills" | "skill" | "file" | "exec" | "memory" | "handoff"; opts: GlobalOpts; args: string[]; values: Record<string, string> }
@@ -541,16 +541,17 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
     }
     case "work": {
       if (word1 === "agent") {
-        let index = 2;
+        let index = 2;let terminalHere=false;
         const values = new Map<string, string>();
         while (argv[index]?.startsWith("--")) {
           const flag = argv[index++]!;
+          if(flag==="--terminal-here"&&!terminalHere){terminalHere=true;continue;}
           if (!["--pane", "--url", "--token"].includes(flag) || !argv[index] || values.has(flag)) throw new CliUsageError("work agent options must precede claude|codex", USAGE);
           values.set(flag, argv[index++]!);
         }
         const kind = argv[index++];
         if (kind !== "claude" && kind !== "codex") throw new CliUsageError("work agent requires claude|codex", USAGE);
-        return { kind: "work-agent", opts: globalOptsFrom(values, env), agentKind: kind, args: argv.slice(index), ...(values.has("--pane") ? { pane: values.get("--pane")! } : {}) };
+        return { kind: "work-agent",...(terminalHere?{terminalHere:true as const}:{}), opts: globalOptsFrom(values, env), agentKind: kind, args: argv.slice(index), ...(values.has("--pane") ? { pane: values.get("--pane")! } : {}) };
       }
       if (word1 === "requests" || word1 === "accept") {
         const { positionals, values } = parseFlags(argv.slice(2), URL_TOKEN);

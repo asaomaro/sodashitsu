@@ -9,7 +9,14 @@ export function registerWorkMethods(surface: ControlSurface, deps: MethodDeps): 
   };
   const requests = deps.workAgentRequests;
   if (requests) {
-    surface.register("work.agent_request", { schema: WorkAgentMethods["work.agent_request"], handler: (ctx, p) => { auth(ctx); return requests.create(p); } });
+    surface.register("work.agent_terminal_ask_start",{schema:WorkAgentMethods["work.agent_terminal_ask_start"],handler:(ctx,p)=>{auth(ctx);return requests.terminalAskStart(ctx.clientId,p.id,p.claim,p.params,()=>auth(ctx));}});
+    surface.register("work.agent_terminal_ask_read",{schema:WorkAgentMethods["work.agent_terminal_ask_read"],handler:(ctx,p)=>{auth(ctx);return requests.terminalAskRead(ctx.clientId,p.id,p.claim,p.questionId);}});
+    surface.register("work.agent_terminal_end",{schema:WorkAgentMethods["work.agent_terminal_end"],handler:(ctx,p)=>{auth(ctx);return requests.terminalEnd(p.id,p.claim);}});
+    surface.register("work.agent_terminal_open",{schema:WorkAgentMethods["work.agent_terminal_open"],handler:(ctx,p)=>{auth(ctx);return requests.terminalOpen(p.id,p.claim);}});
+    surface.register("work.agent_terminal_exchange",{schema:WorkAgentMethods["work.agent_terminal_exchange"],handler:(ctx,p)=>{auth(ctx);return requests.terminalExchange(p.id,p.claim,p);}});
+    surface.register("work.agent_terminal_read",{schema:WorkAgentMethods["work.agent_terminal_read"],handler:(ctx,p)=>{auth(ctx);return requests.terminalRead(ctx.clientId,p.id,p);}});
+    surface.register("work.agent_terminal_close",{schema:WorkAgentMethods["work.agent_terminal_close"],handler:(ctx,p)=>{auth(ctx);return requests.terminalClose(ctx.clientId,p.id);}});
+    surface.register("work.agent_request", { schema: WorkAgentMethods["work.agent_request"], handler: (ctx, p) => { auth(ctx); return requests.create(p,undefined,ctx.clientId,()=>auth(ctx)); } });
     surface.register("work.agent_requests", { schema: WorkAgentMethods["work.agent_requests"], handler: (ctx, p) => { auth(ctx); return requests.list(p.paneId); } });
     surface.register("work.agent_claim", { schema: WorkAgentMethods["work.agent_claim"], handler: (ctx, p) => { auth(ctx); return requests.claim(p.id); } });
     surface.register("work.agent_finish", { schema: WorkAgentMethods["work.agent_finish"], handler: (ctx, p) => { auth(ctx); return requests.finish(p.id, p.claim, p.state); } });

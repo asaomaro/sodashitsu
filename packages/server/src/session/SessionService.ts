@@ -466,6 +466,7 @@ export class SessionService {
     cwd: string | undefined,
     label: string | undefined,
     newCwd?: NewCwd,
+    command?:{shell:string;args:string[];env?:Readonly<Record<string,string>>},
   ): Promise<{ workspace: Workspace; tab: Tab; pane: Pane; cwdFallback?: true }> {
     // **明示した `cwd`（worktree を開く）が方針に勝ち、代わりへは回さない**（design D5。使えなければ今までどおり spawn_failed）。
     const pending = cwd !== undefined ? { cwd, fellBack: false } : this.placeFor(newCwd, followSource(newCwd), this.defaultCwd);
@@ -485,7 +486,7 @@ export class SessionService {
       cols: HEADLESS_COLS,
       rows: HEADLESS_ROWS,
     });
-    const spawn = await this.spawnForPane(reserved.pane.id, resolvedCwd);
+    const spawn = await this.spawnForPane(reserved.pane.id, resolvedCwd,command);
     if (!spawn.ok) {
       // まだ Map に入れていないので、モデル側のロールバックは不要（イベントも出していない）。
       throw new RpcError("spawn_failed", `failed to start a shell for workspace ${reserved.workspace.id}`);

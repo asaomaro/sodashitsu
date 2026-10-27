@@ -1,0 +1,21 @@
+# 別PCのエージェントを起動元paneで操作する
+
+利用者の追加要求: エージェント実行PC/作業対象PC/操作画面を分け、AのCLIでBを作業する場合もBのCLIでAを作業する場合も、作業対象PCの起動元paneから対話できるようにする。既存machine登録と起動承認を保ち、一般ログイン情報/反対方向の一般machine権限を中継しない。
+
+役割のA/B呼称は実装上の固定方向ではない。既存work agentの起動承認側（実行PC）をexecutor、要求側（作業PC）をrequesterとする。requesterのCLIで明示的にterminal-hereを選び、executorがそのPC/PJ/端末中継要求を見て承認する。未対応peerは選択を拒否し、通常起動へ黙ってfallbackしない。元の起動方式は互換を維持する。
+
+executorは自分のエージェントpaneを引き続き持つ。既存OutputFanoutを限定sinkへ購読し、requester側の揮発性terminal brokerへ同じmachine channelで配送する。生入力とサイズ変更は逆向きの限定queueをexecutorが引き取る。executorの一般pane/read/inputメソッド・cookie・claimをrequester CLIへ公開せず、実行paneをCLIに選ばせない。root PJと起動要求/claim/元pane/実host寿命に固定し、毎交換で既存work scopeを再確認する。
+
+端末は有限queue、世代、連番、ACKを持つ。再送は同じ世代/連番でdedupeし、すでに適用したキーを繰り返さない。不明な書込やexecの再実行は行わない。サイズ変更は現在のものにまとめ、端末表示はsnapshotと増分を順序通り届ける。B側のCLIはTTYだけでraw入力し、終了時にraw/alternate screen/listenersを必ず戻す。中継を操作するrequester接続は1つに限定し、別接続が勝手に奪わない。executor所有者による従来の自分のpane操作は別権限であり、隠さない。
+
+質問フォームは中継を選択したrequesterの元paneへ送る。専用ask_userの本文だけを渡し、資料はrequester内のprivate一時ファイルへ生成、回答/取消/期限/接続終了で破棄する。executorやrequesterの任意path/URLを受け取らない。ブラウザ不在時は既存askのunavailableを返す。
+
+旧版の通常起動、片方向machine委譲だけでの対話、役割を逆転した起動、質問の表示先、切断/再接続・PJ/claim変更・元pane終了・実行CLI終了・期限切れ・遅い表示・連番重複/queue上限を生成CLIと実ブラウザで検証する。実利用者のCLI/login/ファイル/OS入力は自動操作しない。プロトコルと状態保存なしbroker/terminal bridgeをtaskcheck対象にし、実装後に差分全体を独立レビューする。
+
+## レビューで確定した境界
+
+- requester切断はcreate/claim/openのどのawait中でも要求を失効させる。createはlive認可callback必須、公開直前も再検査。
+- 入力のleaseはrequester serverが毎readで発行するランダム1秒票。CLIはキーを受けた時の票を固定する。Bの受付/非同期検査後に期限を更新せず、Aへ残り時間を渡してRPC往復を含めて判定する。時計差を換算しない。
+- executorは親シェルなしの専用PTYにwork-agent-runを直接起動する。Ctrl+Z byteは送信前拒否し、CLI終了後の一般shellへ落とさない。
+- askは短いstart/read RPCで待機し、1回のRPCの10秒上限で5分の質問を取り消さない。本文一時ファイルはBだけで生成・破棄する。
+- snapshotは通常出力と区別し、CLIのUTF8/query filter途中状態を破棄して再描画する。

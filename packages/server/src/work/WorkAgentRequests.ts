@@ -1,3 +1,6 @@
+import type {AskResult} from "@sodashitsu/protocol";
+import { WorkAgentTerminal } from "./WorkAgentTerminal.js";
+import type {WorkTerminalInput,WorkTerminalOutput} from "./WorkAgentTerminal.js";
 import { randomUUID } from "node:crypto";
 import { RpcError, workAgentArgumentError, type WorkAgentRequest } from "@sodashitsu/protocol";
 import type { WorkContext } from "./WorkContext.js";
@@ -25,17 +28,20 @@ interface PluginTask {
 /** Volatile requests on B. They never authorize execution on A by themselves. */
 export class WorkAgentRequests {
   private readonly entries = new Map<string, { request: WorkAgentRequest; claim?: string; plugin?: PluginTask }>();
+  private readonly terminals=new Map<string,{owner:string;broker?:WorkAgentTerminal;asks:Set<string>;question?:{id:string;owner:string;result?:AskResult;failed?:true}}>();
   constructor(private readonly work: WorkContext, private readonly pane: (id: string) => { workspaceId: string } | undefined,
-    private readonly folder: (workspace: string) => string | undefined, private readonly now = Date.now) {}
+    private readonly folder: (workspace: string) => string | undefined, private readonly now = Date.now,private readonly terminalAsks?:{open:(owner:string,paneId:string,raw:unknown,guard:()=>void)=>Promise<AskResult>;close:(owner:string)=>void}) {}
   list(paneId?: string) {
     for (const [id, e] of this.entries) {
       let valid = true; try { e.plugin?.valid(); } catch { valid = false; }
-      if (!valid || e.request.expiresAt <= this.now() || !this.pane(e.request.paneId)) this.entries.delete(id);
+      if (!valid || e.request.expiresAt <= this.now() || !this.pane(e.request.paneId)) { this.closeTerminal(id,"request_ended");this.terminals.delete(id);this.entries.delete(id); }
     }
     return { requests: [...this.entries.values()].map(e => ({ ...e.request, args: [...e.request.args] })).filter(r => !paneId || r.paneId === paneId) };
   }
-  async create(p: { paneId: string; agentKind: "claude" | "codex"; args: string[] }, plugin?: PluginTask & { taskFile: string; pluginKey: string }): Promise<WorkAgentRequest> {
+  async create(p: { paneId: string; agentKind: "claude" | "codex"; args: string[];terminalHere?:true|undefined }, plugin?: PluginTask & { taskFile: string; pluginKey: string },terminalOwner?:string,terminalAuthorized?:()=>void): Promise<WorkAgentRequest> {
     this.list();
+    if(p.terminalHere&&(!terminalOwner||!terminalAuthorized))throw new RpcError("unauthorized","Terminal requester connection required");
+    if(p.terminalHere)terminalAuthorized!();
     const error = workAgentArgumentError(p.agentKind, p.args);
     if (error) throw new RpcError("invalid_params", error);
     const pane = this.pane(p.paneId), folder = pane && this.folder(pane.workspaceId);
@@ -45,13 +51,69 @@ export class WorkAgentRequests {
     if (this.pane(p.paneId)?.workspaceId !== pane.workspaceId || this.folder(pane.workspaceId) !== folder)
       throw new RpcError("invalid_params", "起動中にPC/PJが変わりました");
     this.list();
+    if(p.terminalHere)terminalAuthorized!();
     if (this.entries.size >= 100 || [...this.entries.values()].some(e => e.request.paneId === p.paneId && ["pending", "claimed"].includes(e.request.state)))
       throw new RpcError("server_busy", "このpaneには受付中の起動要求があります");
     const request: WorkAgentRequest = { id: randomUUID(), paneId: p.paneId, workspaceId: pane.workspaceId, folder,
       root: inspection.root, identity: inspection.identity, agentKind: p.agentKind, args: [...p.args], expiresAt: this.now() + 600000, state: "pending",
+      ...(p.terminalHere?{terminalHere:true as const}:{}),
       ...(plugin ? { task: { pluginKey: plugin.pluginKey, taskFile: plugin.taskFile } } : {}) };
     this.entries.set(request.id, { request, ...(plugin ? { plugin } : {}) });
+    if(p.terminalHere)this.terminals.set(request.id,{owner:terminalOwner!,asks:new Set()});
     return { ...request, args: [...request.args] };
+  }
+  clientGone(owner:string){
+    for(const [id,entry] of this.terminals)if(entry.owner===owner){this.closeTerminal(id,"requester_disconnected");const request=this.entries.get(id);if(request)request.request.state="failed";this.terminals.delete(id);}
+  }
+  private closeTerminal(id:string,reason:string){const entry=this.terminals.get(id);entry?.broker?.close(reason);for(const owner of entry?.asks??[])this.terminalAsks?.close(owner);entry?.asks.clear();}
+  async terminalAskStart(owner:string,id:string,claim:string,raw:unknown,authorized:()=>void){
+    await this.validate(id,claim);const entry=this.terminals.get(id);
+    if(!entry?.broker||entry.broker.closedReason)throw new RpcError("not_found","Terminal relay is not open");
+    if(entry.question&&!entry.question.result&&!entry.question.failed)throw new RpcError("server_busy","A terminal question is already open");
+    const question:{id:string;owner:string;result?:AskResult;failed?:true}={id:randomUUID(),owner};entry.question=question;
+    void this.terminalAsk(owner,id,claim,raw,authorized).then(result=>{question.result=result;},()=>{question.failed=true;});
+    return {questionId:question.id};
+  }
+  async terminalAskRead(owner:string,id:string,claim:string,questionId:string){
+    await this.validate(id,claim);const question=this.terminals.get(id)?.question;
+    if(!question||question.id!==questionId||question.owner!==owner)throw new RpcError("unauthorized","Terminal question changed");
+    if(question.failed)return {state:"failed" as const};
+    return question.result?{state:"done" as const,result:question.result}:{state:"pending" as const};
+  }
+  async terminalAsk(owner:string,id:string,claim:string,raw:unknown,authorized:()=>void){
+    if(!this.terminalAsks)throw new RpcError("not_found","Requester questions are unavailable");
+    return this.operate(id,claim,async(_scope,paneId,guard)=>{
+      const entry=this.terminals.get(id);if(!entry?.broker||entry.broker.closedReason)throw new RpcError("not_found","Terminal relay is not open");
+      const check=()=>{authorized();guard();if(entry.broker?.closedReason||this.terminals.get(id)!==entry)throw new RpcError("not_found","Terminal relay ended");};
+      check();entry.asks.add(owner);try{return await this.terminalAsks!.open(owner,paneId,raw,check);}finally{entry.asks.delete(owner);}
+    });
+  }
+  async terminalOpen(id:string,claim:string){
+    await this.validate(id,claim);const entry=this.terminals.get(id);
+    if(!entry)throw new RpcError("not_found","Terminal relay was not requested");
+    entry.broker??=new WorkAgentTerminal(entry.owner,this.now);return {epoch:entry.broker.epoch};
+  }
+  terminalEnd(id:string,claim:string){
+    const request=this.entries.get(id);if(!request||request.claim!==claim)throw new RpcError("unauthorized","Terminal executor changed");
+    this.closeTerminal(id,"executor_closed");return {};
+  }
+  async terminalExchange(id:string,claim:string,p:{epoch:string;ack:number;output?:WorkTerminalOutput|undefined}){
+    await this.validate(id,claim);const entry=this.terminals.get(id);
+    if(!entry?.broker)throw new RpcError("not_found","Terminal relay is not open");
+    return entry.broker.exchange(p);
+  }
+  async terminalRead(owner:string,id:string,p:{epoch?:string|undefined;ack:number;input?:WorkTerminalInput|undefined}){
+    this.list();const entry=this.terminals.get(id),request=this.entries.get(id);
+    if(!entry||entry.owner!==owner||!request)throw new RpcError("unauthorized","Terminal relay belongs to another connection");
+    if(!entry.broker)return {state:"waiting" as const};
+    if(entry.broker.closedReason)return {state:"closed" as const,reason:entry.broker.closedReason};
+    await this.validate(id,request.claim!);
+    if(!p.epoch){if(p.ack||p.input)throw new RpcError("invalid_params","Terminal generation required");return {state:"open" as const,...entry.broker.read(owner,{epoch:entry.broker.epoch,ack:0})};}
+    return {state:"open" as const,...entry.broker.read(owner,{...p,epoch:p.epoch})};
+  }
+  terminalClose(owner:string,id:string){
+    const entry=this.terminals.get(id);if(!entry||entry.owner!==owner)throw new RpcError("unauthorized","Terminal relay belongs to another connection");
+    this.closeTerminal(id,"requester_closed");const request=this.entries.get(id);if(request)request.request.state="failed";return {};
   }
   async claim(id: string) {
     this.list(); const e = this.entries.get(id);
@@ -108,7 +170,7 @@ export class WorkAgentRequests {
     const p = e.request;
     await this.work.scope({ workspaceId: p.workspaceId, expectedFolder: p.folder, expectedRoot: p.root, expectedIdentity: p.identity, agentKind: p.agentKind });
     e.plugin?.valid();
-    if (this.entries.get(id) !== e || p.expiresAt<=this.now() || this.pane(p.paneId)?.workspaceId !== p.workspaceId) throw new RpcError("not_found", "依頼元が変わりました");
+    if (this.entries.get(id) !== e || e.claim!==claim || !["claimed","launched"].includes(e.request.state) || p.expiresAt<=this.now() || this.pane(p.paneId)?.workspaceId !== p.workspaceId) throw new RpcError("not_found", "依頼元が変わりました");
     return e;
   }
   async poll(id: string, claim: string, paneId: string, state: z.infer<typeof WorkAgentState>) {
@@ -136,7 +198,7 @@ export class WorkAgentRequests {
     const e=await this.validate(id,claim),p=e.request;
     const guard=()=>{
       e.plugin?.valid();
-      if(this.entries.get(id)!==e || p.expiresAt<=this.now() || this.pane(p.paneId)?.workspaceId!==p.workspaceId || this.folder(p.workspaceId)!==p.folder)
+      if(this.entries.get(id)!==e || e.claim!==claim || !["claimed","launched"].includes(e.request.state) || p.expiresAt<=this.now() || this.pane(p.paneId)?.workspaceId!==p.workspaceId || this.folder(p.workspaceId)!==p.folder)
         throw new RpcError("not_found","依頼元の接続・PJが変わりました");
     };
     guard();
