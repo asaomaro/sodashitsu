@@ -42,3 +42,7 @@ jobs:
       - name: Generated endpoint key protection (current user, no desktop)
         shell: powershell
         run: scripts/remote-desktop/validate-endpoint-key.ps1
+
+      - name: Generated signed-out candidate checks (no native queries)
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-candidate.ps1 -NegativeControls
