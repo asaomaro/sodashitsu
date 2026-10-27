@@ -9,6 +9,25 @@ import {desktopSecretProtector,type DesktopSecretProtector} from "./DesktopEndpo
 const dirs:string[]=[];
 afterEach(async()=>{await Promise.all(dirs.splice(0).map(path=>rm(path,{recursive:true,force:true})));});
 async function fixture(options:Partial<ConstructorParameters<typeof DesktopEndpointStore>[0]>={}){const dir=await mkdtemp(join(tmpdir(),"soda-endpoint-store-"));dirs.push(dir);const base={stateDir:dir,...(process.platform==="win32"?{platform:"win32" as const,protector:{...desktopSecretProtector("linux"),mode:"dpapi-user" as const},checkWindowsPath:async()=>{},commitWindowsVault:rename}:{}),...options};if(process.platform==="win32"&&base.protector?.mode==="owner-file")base.protector={...base.protector,mode:"dpapi-user"};const store=new DesktopEndpointStore(base);return {dir,store,reopen:()=>new DesktopEndpointStore(base),file:join(store.directory,"identity.json")};}
+it("persists required policy in both protected vault and independent durable marker",async()=>{
+ const f=await fixture();await f.store.initialize();await f.store.setRequired(true);expect(await f.reopen().status()).toMatchObject({initialized:true,required:true});
+ const saved=await readFile(f.file);await rm(f.file);expect(await f.reopen().status()).toEqual({initialized:false,required:true});await writeFile(f.file,saved,{mode:0o600});
+ await rm(join(f.dir,"desktop-endpoint-required.json"));expect(await f.reopen().status()).toMatchObject({initialized:true,required:true});
+ await f.store.setRequired(false);expect(await f.reopen().status()).toMatchObject({initialized:true,required:false});
+});
+it("invalidates existing permits and keeps a durable required marker after a failed enable write",async()=>{
+ const plain=desktopSecretProtector("linux");let fail=false;
+ const f=await fixture({protector:{...plain,protect:async bytes=>{if(fail)throw Error("generated policy write failure");return new Uint8Array(bytes);}}});await f.store.initialize();await f.store.trust(peer);const permit=await f.store.endpoint(peer.fingerprint,"viewer");fail=true;
+ await expect(f.store.setRequired(true)).rejects.toThrow();expect(permit.active()).toBe(false);expect(await f.reopen().status()).toMatchObject({initialized:true,required:true});
+});
+it("never clears required when the final disable marker write fails",async()=>{
+ const f=await fixture();await f.store.initialize();await f.store.setRequired(true);
+ const write=vi.spyOn(f.store as any,"writeMarker").mockRejectedValue(Error("generated marker failure"));await expect(f.store.setRequired(false)).rejects.toThrow();write.mockRestore();expect(await f.reopen().status()).toMatchObject({required:true});
+});
+it("drains authorized persistence before an owner can release its process lock",async()=>{
+ const begun=deferred(),release=deferred(),plain=desktopSecretProtector("linux"),f=await fixture({protector:{...plain,protect:async bytes=>{begun.resolve();await release.promise;return new Uint8Array(bytes);}}});
+ const saving=f.store.initialize();await begun.promise;f.store.close();let settled=false;const draining=f.store.settled().then(()=>{settled=true;});await Promise.resolve();expect(settled).toBe(false);release.resolve();const result=await saving;await draining;expect(settled).toBe(true);expect(await f.reopen().initialize()).toEqual(result);await expect(f.store.initialize()).rejects.toThrow();
+});
 const peer={fingerprint:"a1".repeat(32),role:"viewer" as const,label:"Generated browser"};
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(done=>{resolve=done;});return {promise,resolve};}
 it("is read-only before explicit initialization and preserves one identity across restart",async()=>{

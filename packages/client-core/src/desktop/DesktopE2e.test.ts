@@ -1,8 +1,34 @@
 import {expect,it,vi} from "vitest";
-import {randomUUID} from "node:crypto";
+import {randomUUID,randomBytes} from "node:crypto";
+import {desktopEndpointChildProof,verifyDesktopEndpointChild} from "./DesktopEndpointBinding.js";
 import {DESKTOP_E2E_LANES,DesktopEndpointHandshake,DesktopEndpointIdentity,DesktopReplayWindow} from "./DesktopE2e.js";
 const crypto=globalThis.crypto;
 const data=new TextEncoder().encode("generated remote desktop pixels / 音声 / input");
+it("binds one-use child attachment to its parent, protocol, recipient and complete fresh hello",async()=>{
+ const a=await DesktopEndpointIdentity.create(crypto),b=await DesktopEndpointIdentity.create(crypto),handshake=await DesktopEndpointHandshake.create(crypto,a,{session:randomUUID(),role:"viewer",peerRole:"provider",generation:1,expectedFingerprint:await b.fingerprint()}),hello=handshake.hello,ticket=randomBytes(32).toString("base64url"),parent=randomUUID(),attachment=randomUUID(),protocol="soda-desktop-files-v1";
+ try {
+  const proof=await desktopEndpointChildProof(crypto,ticket,parent,attachment,protocol,hello);expect(await verifyDesktopEndpointChild(crypto,ticket,parent,attachment,protocol,hello,proof)).toBe(true);
+  for(const [key,value] of Object.entries({nonce:"00".repeat(32),identity:b.publicKey,session:randomUUID(),role:"agent",generation:2,ephemeral:b.publicKey}))expect(await verifyDesktopEndpointChild(crypto,ticket,parent,attachment,protocol,{...hello,[key]:value},proof)).toBe(false);
+  expect(await verifyDesktopEndpointChild(crypto,randomBytes(32).toString("base64url"),parent,attachment,protocol,hello,proof)).toBe(false);
+  expect(await verifyDesktopEndpointChild(crypto,ticket,randomUUID(),attachment,protocol,hello,proof)).toBe(false);
+  expect(await verifyDesktopEndpointChild(crypto,ticket,parent,randomUUID(),protocol,hello,proof)).toBe(false);
+  expect(await verifyDesktopEndpointChild(crypto,ticket,parent,attachment,"soda-desktop-microphone-v1",hello,proof)).toBe(false);
+  expect(await verifyDesktopEndpointChild(crypto,ticket,parent,attachment,protocol,hello,"00".repeat(32))).toBe(false);
+ }finally{handshake.close();}
+});
+it("restores a structured cloned nonextractable identity without exporting its private key",async()=>{
+ let saved:Parameters<typeof DesktopEndpointIdentity.fromStoredKey>[1]|undefined,publicKey="";
+ const first=await DesktopEndpointIdentity.createStored(crypto,async(key,pub)=>{saved=structuredClone(key);publicKey=pub;});
+ expect(saved!.extractable).toBe(false);await expect(crypto.subtle.exportKey("pkcs8",saved!)).rejects.toThrow();
+ const restored=await DesktopEndpointIdentity.fromStoredKey(crypto,saved!,publicKey);expect(await restored.fingerprint()).toBe(await first.fingerprint());
+ const other=await DesktopEndpointIdentity.create(crypto);await expect(DesktopEndpointIdentity.fromStoredKey(crypto,saved!,other.publicKey)).rejects.toThrow("authentication");
+});
+it("refuses extractable or fabricated stored signing keys",async()=>{
+ const pair=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);if(!("privateKey" in pair))throw Error("Generated key missing");
+ const publicKey=Array.from(new Uint8Array(await crypto.subtle.exportKey("raw",pair.publicKey)),b=>b.toString(16).padStart(2,"0")).join("");
+ await expect(DesktopEndpointIdentity.fromStoredKey(crypto,pair.privateKey,publicKey)).rejects.toThrow("authentication");
+ await expect(DesktopEndpointIdentity.fromStoredKey(crypto,{type:"private",extractable:false,algorithm:{name:"ECDSA",namedCurve:"P-256"},usages:["sign"]} as unknown as typeof pair.privateKey,publicKey)).rejects.toThrow("authentication");
+});
 async function pair(){
  const a=await DesktopEndpointIdentity.create(crypto),b=await DesktopEndpointIdentity.create(crypto),session=randomUUID();
  const ah=await DesktopEndpointHandshake.create(crypto,a,{session,role:"viewer",peerRole:"provider",generation:7,expectedFingerprint:await b.fingerprint()}),bh=await DesktopEndpointHandshake.create(crypto,b,{session,role:"provider",peerRole:"viewer",generation:7,expectedFingerprint:await a.fingerprint()});

@@ -281,6 +281,7 @@ export interface DesktopResults {
   "desktop.settings.get": DesktopSettingsResult;
   "desktop.settings.set": DesktopSettingsResult;
   "desktop.capabilities": {
+    endpointRequired?:boolean;
     available: boolean;
     allowInput: boolean;
     deltas?: boolean;

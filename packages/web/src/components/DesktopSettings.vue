@@ -2,6 +2,7 @@
 import { inject, onBeforeUnmount, ref, watch } from "vue";
 import type { DesktopPermissions, DesktopSettingsResult } from "@sodashitsu/protocol";
 import { ConnectionKey } from "../injection.js";
+import DesktopEndpointSettings from "./DesktopEndpointSettings.vue";
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 const connection = inject(ConnectionKey);
 const state = ref<DesktopSettingsResult>();
@@ -104,6 +105,7 @@ async function save() {
       <p>このフォルダの中だけを送受信します。既存ファイルは上書きしません。WSLサーバーでは/mnt/c等のパスを指定します。</p>
       <button type="button" @click="save">共有設定を保存</button>
     </fieldset>
+    <DesktopEndpointSettings :can-configure="state?.canConfigure===true" />
     <p v-if="message" role="status">{{ message }}</p>
   </section>
 </template>

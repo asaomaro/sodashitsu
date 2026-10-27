@@ -6,6 +6,8 @@ import { SessionTransfer } from "./work/SessionTransfer.js";
 import { DesktopSettings } from "./desktop/DesktopSettings.js";
 import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
 import { DesktopRelay } from "./desktop/DesktopRelay.js";
+import {DesktopEndpointService} from "./desktop/DesktopEndpointService.js";
+import {DesktopEndpointRelay} from "./desktop/DesktopEndpointRelay.js";
 import { DesktopProvider, desktopConfigFromEnv, desktopOriginsFromEnv } from "./desktop/DesktopProvider.js";
 import { registerDesktopCdpMethods } from "./surface/methods/desktopCdp.js";
 import { DesktopCdpLauncher } from "./desktop/DesktopCdpLauncher.js";
@@ -453,6 +455,8 @@ export async function composeServer(
   });
   const exec = new ExecService();
   const desktopRelay = new DesktopRelay(auth, originRejections, machines);
+  const desktopEndpoint=new DesktopEndpointService({stateDir:options.stateDir,provider:desktop,origins:desktopOriginsFromEnv(process.env,()=>delegations.list().delegations.filter(d=>d.state==="online").map(d=>d.url))});
+  const desktopEndpointRelay=new DesktopEndpointRelay(auth,originRejections,machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const agentFork = new AgentForkRunner({
@@ -769,6 +773,7 @@ export async function composeServer(
     previewHelpers,
     desktop,
     desktopSettings,
+    desktopEndpoint,
     exec,
     work,
     workTransfers,
@@ -836,7 +841,7 @@ export async function composeServer(
         relayToMachine(conn, route.link);
       },
     };
-  }, (req,socket,head)=>req.url === "/desktop-companion" ? desktopCompanion.upgrade(req,socket,head) : req.url?.startsWith("/desktop-share") ? desktopRelay.upgrade(req,socket,head) : delegations.upgrade(req,socket,head), (req,socket,head)=>desktopCdp.upgrade(req,socket,head));
+  }, (req,socket,head)=>req.url === "/desktop-companion" ? desktopCompanion.upgrade(req,socket,head) : req.url === "/desktop-e2e" ? desktopEndpointRelay.upgrade(req,socket,head) : req.url?.startsWith("/desktop-share") ? desktopRelay.upgrade(req,socket,head) : delegations.upgrade(req,socket,head), (req,socket,head)=>desktopCdp.upgrade(req,socket,head));
   // `/ws` は `listen()` の最後（復元と poller の開始の後）まで受け付けない（D102）。
   wsServer.setReady(false);
   new WsGateway(wsServer, surface, clients, sizeAuthority, terminals, bus, auth, logger, {
@@ -844,6 +849,7 @@ export async function composeServer(
       exec.clientGone(clientId);
       workTransfers.clientGone(clientId);
       desktop.clientGone(clientId);
+      desktopEndpoint.clientGone(clientId);
       desktopRelay.clientGone(clientId);
       previewHelpers.clientGone(clientId);
       previews.clientGone(clientId);
@@ -862,6 +868,7 @@ export async function composeServer(
       exec.clientGone(clientId);
       workTransfers.clientGone(clientId);
       desktop.clientGone(clientId);
+      desktopEndpoint.clientGone(clientId);
       desktopRelay.clientGone(clientId);
       previewHelpers.clientGone(clientId);
       previews.clientGone(clientId);
@@ -917,6 +924,7 @@ export async function composeServer(
       paneHistory?.start(internal.paneHistorySaveIntervalMs);
     },
     flushSession: async () => {
+      await desktopEndpoint.prepareHandoff();
       await persist.flush();
       await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
     },
@@ -924,6 +932,8 @@ export async function composeServer(
       workAgentLauncher.close("server_restarting");
       exec.dispose();
       workTransfers.dispose();
+      desktopEndpoint.suspend();
+      desktopEndpointRelay.closeShares();
       desktopRelay.closeShares();
       desktop.dispose();
       wsServer.setReady(false);
@@ -936,6 +946,7 @@ export async function composeServer(
       paneSocket.pause();
     },
     reopenClients: () => {
+      desktopEndpoint.resume();
       desktop.resumeUnlockLease();
       wsServer.setReady(true);
       bridgeEndpoint.setReady(true);
@@ -1048,6 +1059,7 @@ export async function composeServer(
       try {
         // 0'. auth.json を読む（ロックを取った後。上記）。token は待ち受けに成功してから作る（D102）。
         await auth.initialize();
+        await desktopEndpoint.activate();
         // 0'（続き）. 共有の設定（20260927-cli-mode）。壊れていれば退避して空から始める（起動は止めない）。
         const loadedPrefs = await prefs.load();
         if (typeof loadedPrefs === "object") logger.warn("prefs.json was corrupt; starting with empty prefs", { backupPath: loadedPrefs.corrupt });
@@ -1248,6 +1260,8 @@ export async function composeServer(
         await localLogin.stop();
         // 引き継いだのに使う前に失敗した PTY は手放す（見えないプロセスを残さない）。
         if (takenPending !== undefined) discardHandedOffPanes(takenPending.panes, { logger, ...(internal.workerPty ? {closeFd:(fd:number)=>internal.workerPty!.discard(fd),kill:()=>{}} : {}) }); // 復元に入る前の失敗だけ
+        await desktopEndpoint.close().catch(()=>undefined);
+        desktopEndpointRelay.dispose();
         await lock.release();
         throw err;
       }
@@ -1267,9 +1281,11 @@ export async function composeServer(
         workAgentLauncher.close();
         exec.dispose();
         workTransfers.dispose();
+        desktopEndpointRelay.dispose();
         desktopRelay.dispose();
         desktopCompanion.dispose();
         desktop.dispose();
+        await desktopEndpoint.close();
         await control.beginClosing();
         // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
         // （手元の `/ws` と同じ code にそろえる。ブラウザ・sodactl はどちらも繋ぎ直しの扱いで、今は code で分けていない）。
@@ -1351,9 +1367,11 @@ export async function composeServer(
         workAgentLauncher.close();
         exec.dispose();
         workTransfers.dispose();
+        desktopEndpointRelay.dispose();
         desktopRelay.dispose();
         desktopCompanion.dispose();
         desktop.dispose();
+        await desktopEndpoint.close();
         await previewHelpers.dispose();
         previews.dispose();
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
@@ -1374,6 +1392,8 @@ export async function composeServer(
         // 手元からのログインの秘密を消す（20260927-cli-mode。止まったサーバの秘密を残さない。書いていなければ何もしない）。
         await localLogin.stop();
         // session.json を書き終えてから放す（D103。持っていなければ——ロックで断られた起動等——何もしない）。
+        await desktopEndpoint.close().catch(()=>undefined);
+        desktopEndpointRelay.dispose();
         await lock.release();
       }
     },

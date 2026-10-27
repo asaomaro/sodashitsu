@@ -3,7 +3,7 @@ import {createServer} from "node:http";
 import type {AddressInfo} from "node:net";
 import {WebSocket,type RawData} from "ws";
 import {z} from "zod";
-import {DESKTOP_FILES_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DesktopStartParams} from "@sodashitsu/protocol";
+import {DESKTOP_FILES_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DesktopStartParams,DesktopEndpointMachine} from "@sodashitsu/protocol";
 import type {LinkChannel} from "../machine/MachineLink.js";
 import {DesktopProvider,type DesktopProviderEndpointScope} from "./DesktopProvider.js";
 import {DesktopRelay} from "./DesktopRelay.js";
@@ -65,7 +65,7 @@ export class DesktopEndpointBackplane {
   }catch{await plane.close();throw failure();}
  }
  root(publicMachine:string,active:()=>boolean):DesktopEndpointRoot {
-  if(this.closed||this.roots.size>=8||!z.string().uuid().safeParse(publicMachine).success||!active())throw failure();
+  if(this.closed||this.roots.size>=8||!DesktopEndpointMachine.safeParse(publicMachine).success||!active())throw failure();
   const scope=this.provider.endpointScope(this.origin,()=>!this.closed&&active());
   const root:RootState={session:randomUUID(),machine:randomUUID(),publicMachine,cookie:"SodaDesktopEndpoint="+randomBytes(32).toString("hex"),scope,closed:false,parent:false,sockets:new Set(),channels:new Set(),close:()=>{
    if(root.closed)return;root.closed=true;
@@ -91,7 +91,7 @@ export class DesktopEndpointBackplane {
      const message=Envelope.parse(JSON.parse(text));id=message.id;
      let result:unknown;
      if(message.method==="client.hello") {z.object({protocol:z.literal(1),kind:z.literal("external")}).strict().parse(message.params);result={};}
-     else if(message.method==="desktop.capabilities"){z.object({}).strict().parse(message.params);result=this.provider.capabilities();}
+     else if(message.method==="desktop.capabilities"){z.object({}).strict().parse(message.params);const {endpointRequired:_required,...caps}=this.provider.capabilities();result=caps;}
      else result=await root.scope.start(owner,DesktopStartParams.parse(message.params));
      if(ended||root.closed||!root.scope.active()){channel.close(1008,"endpoint expired");return;}
      onText(JSON.stringify({id,result}));

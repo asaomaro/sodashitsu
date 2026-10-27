@@ -36,6 +36,7 @@ export interface MethodDeps {
   desktopRelay?: import("../../desktop/DesktopRelay.js").DesktopRelay;
   desktopSettings?: import("../../desktop/DesktopSettings.js").DesktopSettings;
   desktop?: import("../../desktop/DesktopProvider.js").DesktopProvider;
+  desktopEndpoint?:import("../../desktop/DesktopEndpointService.js").DesktopEndpointService;
   previewHelpers?: import("../../preview/ManagedPreviewHelpers.js").ManagedPreviewHelpers;
   previews?: import("../../preview/PreviewService.js").PreviewService;
   notificationTest?: () => void;

@@ -3,6 +3,7 @@ import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
 import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
 import { DesktopMethods, type DesktopResults } from "./desktop.js";
+import {DesktopEndpointMethods,type DesktopEndpointResults} from "./desktopEndpoint.js";
 import { DesktopCdpOpenParams, DesktopCdpSendParams, VscodeSharingMethods, type VscodeSharingResults } from "./desktopCdp.js";
 import { MachineAddParams, MachineManageParams, type ManagedConnection } from "./delegation.js";
 import { PreviewMethods, PreviewHelperMethods, type PreviewResults, type PreviewHelperResults } from "./preview.js";
@@ -1481,6 +1482,7 @@ export const METHOD_SCHEMAS = {
   ...PreviewMethods,
   ...PreviewHelperMethods,
   ...DesktopMethods,
+  ...DesktopEndpointMethods,
   ...ViewerTabMethods,
   "client.hello": ClientHelloParams,
   "client.view": ClientViewParams,
@@ -1651,7 +1653,7 @@ export const METHOD_SCHEMAS = {
 
 export type MethodName = keyof typeof METHOD_SCHEMAS;
 
-export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResults, VscodeSharingResults, PreviewResults, PreviewHelperResults, DesktopResults, ViewerTabResults {
+export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResults, VscodeSharingResults, PreviewResults, PreviewHelperResults, DesktopResults, DesktopEndpointResults, ViewerTabResults {
   "schedule.list": ScheduleListResult;
   "schedule.save": ScheduledJob;
   "schedule.remove": {};

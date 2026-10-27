@@ -52,3 +52,10 @@ it("allows permission changes only through the local-settings connection, never 
   const result = await surface.invoke({ ...base, connection: { localSettings: true } } as unknown as Parameters<typeof surface.invoke>[0], "desktop.settings.set", p);
   expect(result.ok).toBe(true); expect(set).toHaveBeenCalledWith(p);
 });
+
+it("restricts all endpoint identity and trust management to the local settings connection",async()=>{
+ const surface=new ControlSurface(),desktopEndpoint={status:vi.fn(async()=>({})),initialize:vi.fn(async()=>({})),setRequired:vi.fn(async()=>({})),trust:vi.fn(async()=>({})),revoke:vi.fn(async()=>({}))};registerDesktopMethods(surface,{desktopEndpoint}as unknown as MethodDeps);
+ const base={clientId:"generated",sink:{clientId:"generated",bufferedAmount:0,sendOutput(){},sendSnapshot(){}}},peer={fingerprint:"ab".repeat(32),role:"viewer",label:"generated"};
+ for(const[method,params]of[["desktop.endpoint.status",{}],["desktop.endpoint.initialize",{}],["desktop.endpoint.required",{required:true}],["desktop.endpoint.trust",peer],["desktop.endpoint.revoke",{fingerprint:peer.fingerprint,role:peer.role}]]as const){for(const context of[base,{...base,sameMachine:true},{...base,connection:{localSettings:false}}])expect(await surface.invoke(context as Parameters<typeof surface.invoke>[0],method,params)).toMatchObject({ok:false,error:{code:"unauthorized"}});expect((await surface.invoke({...base,connection:{localSettings:true}}as unknown as Parameters<typeof surface.invoke>[0],method,params)).ok).toBe(true);}
+ for(const call of Object.values(desktopEndpoint))expect(call).toHaveBeenCalledTimes(1);
+});

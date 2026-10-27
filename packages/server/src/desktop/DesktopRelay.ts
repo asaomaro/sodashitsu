@@ -531,6 +531,7 @@ export class DesktopRelay {
     const caps = z
       .object({
         available: z.boolean(),
+        endpointRequired:z.boolean().optional(),
         allowInput: z.boolean(),
         deltas: z.boolean().optional(),
         imageSettings: z.boolean().optional(),
@@ -566,6 +567,7 @@ export class DesktopRelay {
     if (!caps.available) throw new DesktopSetupRequired(
       "接続先PCでデスクトップ共有が許可されていません。接続先の設定「デスクトップ共有」で許可するか、soda serve --desktop で起動してください。",
     );
+    if(caps.endpointRequired)throw new DesktopSetupRequired("接続先では暗号化接続が必須です。この窓でブラウザの鍵を作成し、接続先PCの指紋と相互の許可を設定してください。");
     const ticket = randomBytes(32).toString("base64url");
     v.ticketHash = hash(ticket);
     this.invites.set(v.ticketHash, v);
