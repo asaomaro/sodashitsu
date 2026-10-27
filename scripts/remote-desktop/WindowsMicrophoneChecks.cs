@@ -5,8 +5,8 @@ using System.IO.Pipes;
 using System.Threading;
 public static class SodaMicrophoneChecks {
     sealed class Sink:SodaDesktopMicrophone.ISink {
-        public int Frames,Attempts,DelayMs;public bool Disposed;public long Energy;
-        public void Write(byte[] pcm,Func<bool> allowed){Interlocked.Increment(ref Attempts);if(DelayMs>0)Thread.Sleep(DelayMs);if(!allowed())return;long energy=0;for(int i=0;i<pcm.Length;i+=2){int value=BitConverter.ToInt16(pcm,i);energy+=(long)value*value;}Energy=energy;Interlocked.Increment(ref Frames);}
+        public int Frames,Attempts,Completed,DelayMs;public bool Disposed;public long Energy;
+        public void Write(byte[] pcm,Func<bool> allowed){Interlocked.Increment(ref Attempts);if(DelayMs>0)Thread.Sleep(DelayMs);if(!allowed()){Interlocked.Increment(ref Completed);return;}long energy=0;for(int i=0;i<pcm.Length;i+=2){int value=BitConverter.ToInt16(pcm,i);energy+=(long)value*value;}Energy=energy;Interlocked.Increment(ref Frames);Interlocked.Increment(ref Completed);}
         public void Dispose(){Disposed=true;}
     }
     static void Require(bool value,string message){if(!value)throw new Exception(message);}
@@ -25,12 +25,12 @@ public static class SodaMicrophoneChecks {
         using(var worker=new SodaDesktopMicrophone(name,Process.GetCurrentProcess().Id,()=>true,(Func<SodaDesktopMicrophone.ISink>)(()=>delayed)))
         using(var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)) {
             client.Connect(2000);var hello=new byte[16];int offset=0;while(offset<16){int n=client.Read(hello,offset,16-offset);if(n==0)throw new Exception("Missing delayed hello");offset+=n;}
-            var fresh=Frame(1,false);client.Write(fresh,0,fresh.Length);Until(()=>delayed.Attempts==1);Thread.Sleep(200);Require(delayed.Frames==0,"PCM expired during sink wait was played");
+            var fresh=Frame(1,false);client.Write(fresh,0,fresh.Length);Until(()=>delayed.Completed==1);Require(delayed.Frames==0,"PCM expired during sink wait was played");
         }
         bool activated=false;name="SodaDesktopMicrophone-"+Guid.NewGuid().ToString("N");
         using(var worker=new SodaDesktopMicrophone(name,Process.GetCurrentProcess().Id+100000,()=>true,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();})))
-        using(var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)){client.Connect(2000);Thread.Sleep(100);worker.Dispose();Require(!activated,"Wrong PID activated endpoint");}
-        activated=false;using(var worker=new SodaDesktopMicrophone("SodaDesktopMicrophone-"+Guid.NewGuid().ToString("N"),Process.GetCurrentProcess().Id,()=>false,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();}))){Thread.Sleep(50);}Require(!activated,"Denied owner activated endpoint");
+        using(var client=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)){client.Connect(2000);var bytes=new byte[16];var read=client.BeginRead(bytes,0,bytes.Length,null,null);int count;var wait=read.AsyncWaitHandle;try{Require(wait.WaitOne(3000),"Wrong PID connection did not close");count=client.EndRead(read);}finally{wait.Close();}worker.Dispose();Require(!activated&&count==0,"Wrong PID activated endpoint");}
+        activated=false;using(var worker=new SodaDesktopMicrophone("SodaDesktopMicrophone-"+Guid.NewGuid().ToString("N"),Process.GetCurrentProcess().Id,()=>false,(Func<SodaDesktopMicrophone.ISink>)(()=>{activated=true;return new Sink();}))){}Require(!activated,"Denied owner activated endpoint");
         return "microphone_generated_pcm_checks_passed";
     }
 }

@@ -11,3 +11,5 @@ BのNodeがランダムなprivate pipe名、接続PID、期限100msを付与す�
 一次資料: [AnyDesk audio](https://support.anydesk.com/Audio)、[Microsoft MS-RDPEAI](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpeai/d04ffa42-5a0f-4f80-abb1-cc26f71c9452)。構成の参考とし、他製品のコードは移植していない。
 
 検証はfake getUserMedia/生成oscillator、hardware出力から切り離したブラウザgraph、synthetic helper、in-memory native sink、private pipe、metadataとcompileだけ。実mic録音・speaker再生・OS入力・画面取得・driver導入は行わない。
+
+参考実装の確認: [FreeRDP audin](https://github.com/FreeRDP/FreeRDP/blob/master/channels/audin/client/audin_main.c) の独立input channel/固定format/開始・停止の分離、[RustDesk audio service](https://github.com/rustdesk/rustdesk/blob/master/src/server/audio_service.rs) のloopbackとvoice-inputの扱いを確認。sourceのコピーはせず、本製品の認証・helper・ブラウザに合わせて実装した。
