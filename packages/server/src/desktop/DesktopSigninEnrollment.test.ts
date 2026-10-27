@@ -34,7 +34,7 @@ it("rejects unsupported enrollment fields, owners, peers and unsafe origins",()=
   {peers:[]},{peers:[...record().peers,...record().peers]},{peers:Array.from({length:9},(_,i)=>({fingerprint:String(i).repeat(64),label:"peer"}))},
   {command:"powershell.exe"},{path:"C:\\private"},{extensions:[]},{permissions:{input:true}},
   ...["http://192.0.2.1","http://root.invalid","https://root.invalid/","https://root.invalid:443","https://u:p@root.invalid","https://root.invalid/path","https://root.invalid?token=secret","https://root.invalid#fragment"].map(origin=>({origin}))];
- for(const patch of invalid)expect(()=>DesktopSigninEnrollment.decode(bytes({...record(),...patch}),ownerSid)).toThrow("Desktop signin enrollment is unavailable");
+ for(const patch of invalid){const expectedOwner="ownerSid" in patch?patch.ownerSid:ownerSid;expect(()=>DesktopSigninEnrollment.decode(bytes({...record(),...patch}),expectedOwner)).toThrow("Desktop signin enrollment is unavailable");}
  expect(()=>DesktopSigninEnrollment.decode(bytes(record()),"S-1-5-21-1-2-3-1002")).toThrow();
 });
 it("classifies only the finite desktop metadata and encrypted endpoint requests",()=>{

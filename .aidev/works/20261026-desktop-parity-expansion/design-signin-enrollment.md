@@ -13,3 +13,5 @@ Root bridgeが送るJSONは16KiBで制限し、client.hello、desktop.capabiliti
 この差分の完成後も7B2の秘密保存/配布/service/専用agent接続、7B3 worker/epoch、7B4 UI/結合は未完了とする。
 
 owner SIDの数字表現/上限と3つのwell-known service SID（18/19/20）を検査するが、全service accountや実在するuser accountの識別は行わない。後続の管理者enrollment/読み込みで、固定ownerの実identityとaccount typeを照合することを必須とする。parserのexpectedOwnerSidはその信頼済みloaderから渡し、Root入力から採らない。
+
+数値構造の確認に用いた一次資料: [SID components](https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-components)、[SID](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-sid)、[SID_IDENTIFIER_AUTHORITY](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-sid_identifier_authority)。本parserの件数・形式制限は完全なWindows account検証の代用ではない。
