@@ -1,3 +1,5 @@
+import {DesktopEndpointAgentRpc} from "./DesktopEndpointAgentRpc.js";
+import type {DesktopAgentRecipient} from "./DesktopAgentAccess.js";
 import {createHash,randomBytes,randomUUID} from "node:crypto";
 import {createServer} from "node:http";
 import type {AddressInfo} from "node:net";
@@ -21,12 +23,14 @@ export interface DesktopEndpointLocalSocket {
 }
 export interface DesktopEndpointRoot {
  active():boolean;
+ grantAgent(recipient:DesktopAgentRecipient):{ticket:string;expiresAt:number;scope:string};
+ revokeAgent():void;
  /** Endpoint code only. Copy records synchronously before deferred processing. */
  open(protocols:readonly string[],onRecord:(bytes:Uint8Array,binary:boolean)=>void,onClose:()=>void):Promise<DesktopEndpointLocalSocket>;
  /** Invoke synchronously from trust revocation, owner close and source changes. */
  close():void;
 }
-type RootState={session:string;machine:string;publicMachine:string;cookie:string;scope:DesktopProviderEndpointScope;closed:boolean;parent:boolean;sockets:Set<WebSocket>;channels:Set<LinkChannel>;close():void};
+type RootState={session:string;machine:string;publicMachine:string;cookie:string;agentScope:string;scope:DesktopProviderEndpointScope;closed:boolean;parent:boolean;sockets:Set<WebSocket>;channels:Set<LinkChannel>;close():void};
 /** Trusted B-owner backplane. Nothing is mounted on the public HTTP server.
  * Reuses desktop permission/helper/ACK/lane logic on private loopback only.
  * Cookie, private route ID, provider tickets and plaintext never go to A. */
@@ -37,6 +41,7 @@ export class DesktopEndpointBackplane {
  private readonly routes=new Map<string,RootState>();
  private readonly revoked=new Set<(id:string)=>void>();
  private readonly relay:DesktopRelay;
+ private readonly agentOwners=new Map<DesktopEndpointAgentRpc,RootState>();
  private origin="";
  private closed=false;
  private closing:Promise<void>|undefined;
@@ -67,16 +72,25 @@ export class DesktopEndpointBackplane {
  root(publicMachine:string,active:()=>boolean):DesktopEndpointRoot {
   if(this.closed||this.roots.size>=8||!DesktopEndpointMachine.safeParse(publicMachine).success||!active())throw failure();
   const scope=this.provider.endpointScope(this.origin,()=>!this.closed&&active());
-  const root:RootState={session:randomUUID(),machine:randomUUID(),publicMachine,cookie:"SodaDesktopEndpoint="+randomBytes(32).toString("hex"),scope,closed:false,parent:false,sockets:new Set(),channels:new Set(),close:()=>{
+  const root:RootState={session:randomUUID(),machine:randomUUID(),publicMachine,cookie:"SodaDesktopEndpoint="+randomBytes(32).toString("hex"),agentScope:randomBytes(32).toString("base64url"),scope,closed:false,parent:false,sockets:new Set(),channels:new Set(),close:()=>{
    if(root.closed)return;root.closed=true;
    // Stop native/UDP/helper ownership before revoking the plaintext sockets.
-   cleanup(()=>scope.close());this.roots.delete(root.session);this.routes.delete(root.machine);this.cookies.delete(secretHash(root.cookie));root.cookie="";
+   cleanup(()=>scope.close());for(const [rpc,owner] of [...this.agentOwners])if(owner===root)cleanup(()=>rpc.close());this.roots.delete(root.session);this.routes.delete(root.machine);this.cookies.delete(secretHash(root.cookie));root.cookie="";
    for(const channel of [...root.channels])cleanup(()=>channel.close(1000,"endpoint stopped"));root.channels.clear();
    for(const callback of this.revoked)cleanup(()=>callback(root.session));
    for(const socket of root.sockets)cleanup(()=>socket.terminate());root.sockets.clear();
   }};
   this.roots.set(root.session,root);this.cookies.set(secretHash(root.cookie),root);this.routes.set(root.machine,root);
-  return {active:()=>!root.closed&&scope.active(),close:root.close,open:(protocols,onRecord,onClose)=>this.open(root,protocols,onRecord,onClose)};
+  return {active:()=>!root.closed&&scope.active(),close:root.close,grantAgent:recipient=>{
+   if(root.closed||!scope.active()||!root.parent)throw failure();const fingerprint=recipient.fingerprint,active=recipient.active;
+   const granted=this.relay.grantEndpointAgent(root.session,{fingerprint,scope:root.agentScope,active:()=>!root.closed&&scope.active()&&active()});return{...granted,scope:root.agentScope};
+  },revokeAgent:()=>this.relay.revokeEndpointAgent(root.session),open:(protocols,onRecord,onClose)=>this.open(root,protocols,onRecord,onClose)};
+ }
+ agent(fingerprint:string,scope:string,active:()=>boolean):DesktopEndpointAgentRpc {
+  const root=[...this.roots.values()].find(value=>value.agentScope===scope);
+  if(this.closed||!root||root.closed||!root.scope.active()||this.agentOwners.size>=8)throw failure();
+  let rpc:DesktopEndpointAgentRpc;
+  rpc=new DesktopEndpointAgentRpc(this.relay.agents,fingerprint,()=>!this.closed&&!root.closed&&root.scope.active()&&active(),{scope,onClose:()=>{this.agentOwners.delete(rpc);}});if(this.closed||root.closed||!root.scope.active()){rpc.close();throw failure();}this.agentOwners.set(rpc,root);return rpc;
  }
  private channel(root:RootState):LinkChannel|undefined {
   if(root.closed||!root.scope.active()||root.channels.size)return;
@@ -136,7 +150,7 @@ export class DesktopEndpointBackplane {
   }catch{ws.terminate();if(!child)root.close();throw failure();}
  }
  close():Promise<void> {
-  if(this.closing)return this.closing;this.closed=true;clearInterval(this.timer);for(const root of [...this.roots.values()])cleanup(root.close);cleanup(()=>this.relay.dispose());
+  if(this.closing)return this.closing;this.closed=true;clearInterval(this.timer);for(const root of [...this.roots.values()])cleanup(root.close);for(const rpc of [...this.agentOwners.keys()])cleanup(()=>rpc.close());this.agentOwners.clear();cleanup(()=>this.relay.dispose());
   this.closing=new Promise<void>(resolve=>this.server.close(()=>resolve()));return this.closing;
  }
 }
