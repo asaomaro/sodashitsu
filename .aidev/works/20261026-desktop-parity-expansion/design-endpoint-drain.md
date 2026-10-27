@@ -1,0 +1,9 @@
+# 暗号化接続の終端応答
+
+共有cohort不一致でBのprivate Relayが能力情報/errorを送ってすぐcloseすると、EndpointServiceが未sealのqueueをwire.closeで破棄し、browserが本来のbusy/capabilityではなく暗号確立失敗だけを受け取る。新endpointClose hint bit3で、両端更新時だけ認証済EOF(kind4)とACK(kind5)を使う。旧peerは従来closeを維持。
+
+Bはlocal close時点でsource操作を既に失効し、その後の新application要求は転送しない。受理済sendのseal完了後にcontrol FIFOへEOFを置き、browserのEOF ACKか最大2秒で接続/contextを閉じる。全ての送信に既存context/permit/epoch検査を維持し、revocation/handoff/transport failureは即closeする。bounded wire queueを増やさない。childは親の交渉結果を継承する。
+
+browserはcontrol FIFO上の先行capability/errorを処理してEOF ACKを送り、generic暗号化エラーで上書きしないclean closeを出す。通常の画像・入力の権限やagent routeは変更しない。
+
+生成crypto/メモリsource/2browserでbusy応答・全能力情報・反復再接続・許可失効と旧peerを確認。drainはfake clock/gateでqueue完了前EOF禁止/期限/ACK/失効を検証。negative controlと独立taskcheck/全体レビュー必須。
