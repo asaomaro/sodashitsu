@@ -80,3 +80,6 @@
 
 
 第13段階13A: 明示opt-inのupload/downloadを切断・再読込後にfresh grantと手動操作で再開。Bは有限checkpoint/完了receipt、browserはWebLocksとIDB atomic chunk/offset・8件/合計100MiB。取消の同期fence、旧peer gate、changed source、他窓所有/保存不可/容量上限を検証。全体11860件/browser14件/負例3件/型検査/独立build・smoke/独立レビューと追加修正再レビュー通過。Bの再起動・handoff・共有設定変更をまたぐ保持は対象外。フォルダ転送/Explorer直接D&D/monitor独立窓などの残件は未完了。
+
+
+第13段階13B: フォルダ選択/D&Dで階層・empty dirsを新規保存先へ送信し、ZIP受信を追加。1000項目/100MiB/深さ32/manifest48KiB、取消の同期fence、source snapshot/portable paths/link拒否、partial cleanupと完成済み・利用者file保持を検証。全体11898件/browser21件/負例3件/型検査/独立build・smoke/独立レビュー・追加差分再レビュー通過。フォルダの再開は同接続中のみ、全体atomic置換ではない。Explorer直接drag-out/monitor独立窓/フォルダのreload後再開等は残件でtask13全体は保留する。

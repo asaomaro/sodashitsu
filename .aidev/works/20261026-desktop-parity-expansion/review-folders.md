@@ -1,0 +1,7 @@
+# フォルダ転送の独立レビュー
+
+review_transfer: 全差分のtaskcheck/独立レビュー。パス・リンク拒否、fresh topdir、同期取消、FileTransfer公開前fence、空dirだけのcleanupにmustなし。pack中file/dir変更のゲート回帰をshouldとして追加。FDが閉じた後にsourceを変更し最終snapshot拒否する2件と、concurrent destination保持を追加。39focused成功、追加差分再レビューでshould解消。
+
+review_pointer: 全差分/新規modules/依存とgate/Frontend stale async/pause/cancelを独立読取。mustなし。EEXIST案内、準備中のidle touch、docs、生成資料だけのD&D prototype fixtureを追加点検。upload開始の120s化が初回置換で未反映と指摘し、実装1行と期限のparameterized2回帰を追加。fileClient7件成功、追加差分再レビューで未反映解消を確認。
+
+ブラウザの初回drop失敗はfixtureがDataTransferItem wrapperの一時instanceへmethodを付けたために起きた。生成した資料の名前だけprototypeでentryを返し、他itemは元APIへ委ねるよう試験のみ修正。focused drop/最終21件成功。製品codeを変えて試験を弱めていない。
