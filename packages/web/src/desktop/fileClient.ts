@@ -25,7 +25,7 @@ export class DesktopFileClient {
     }
   }
   request(request: DesktopFileRequest["request"]): Promise<Result> {
-    const control = request.action === "abort" || (request.action === "grant" && !request.enabled);
+    const control = request.action === "abort" || request.action === "checkpoint_abort" || (request.action === "grant" && !request.enabled);
     if (this.dead || this.queue.length >= (control ? 18 : 16)) {
       if (control && !this.dead) this.fail();
       return Promise.reject(Error("ファイル転送の接続が終了したか処理上限です"));

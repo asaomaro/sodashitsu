@@ -77,3 +77,6 @@
 
 
 第8段階8H: 通常共有sourceで既存file laneを利用し、各viewerのgrant/owner/queue/一時ファイルを独立管理。旧B capabilityを必要条件とし保護共有では無効。画像only先行加入、別窓ID拒否、途中退出cleanup、暗号化共有の往復を生成検証。全体11846件/browser7件/負例2件/型検査/独立build・smoke/独立レビューと追加差分再レビュー通過。task8全体とtask13の切断再開・フォルダ・直接D&D・独立monitor窓は引き続き未完了。
+
+
+第13段階13A: 明示opt-inのupload/downloadを切断・再読込後にfresh grantと手動操作で再開。Bは有限checkpoint/完了receipt、browserはWebLocksとIDB atomic chunk/offset・8件/合計100MiB。取消の同期fence、旧peer gate、changed source、他窓所有/保存不可/容量上限を検証。全体11860件/browser14件/負例3件/型検査/独立build・smoke/独立レビューと追加修正再レビュー通過。Bの再起動・handoff・共有設定変更をまたぐ保持は対象外。フォルダ転送/Explorer直接D&D/monitor独立窓などの残件は未完了。

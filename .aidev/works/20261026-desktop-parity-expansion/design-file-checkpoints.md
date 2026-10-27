@@ -1,0 +1,13 @@
+# 13A 切断・再読込をまたぐファイル転送再開
+
+対象はupload/download。既存の単独/通常共有・暗号化file laneを使う。旧peerには新fieldを送らず、viewer専用feature・A/B capabilityの積をreadyへ公開する。新機能はopt-in。再接続後はfresh grantと人の再開操作が必要で、自動送信しない。
+
+Bはprovider内に最大8件・100MiB/件・idle15分のcheckpointを持つ。256bit bearer tokenはファイル許可の代わりではなく、fresh grant/root再検査と同時に必要。各checkpointは別FileTransfer/owner、現在のShareだけが利用し、他の生きているviewerからの取得を拒否する。切断では所有者を外し、許可解除/取消/設定変更/handoff/期限で破棄。B再起動後の保持は対象外。uploadはSHA256固定、確認済みoffsetに追加し、既存のatomic非上書きfinishを使う。完了receiptも期限内保持し、応答消失による再送を防ぐ。downloadは再接続時に元ファイル全体hashを照合し、B内でprefixを読み直してclient保存offsetへ進める。prefixのネットワーク再転送はしない。全体hashは最終保存前にも一致を要求する。
+
+ブラウザは明示opt-in時のみIndexedDBへ元File/uploadとdownloadのchunkを保存。全体最大8件・予約合計100MiB、idle15分。metadataと各chunkを同一transactionで更新し、元Fileは別storeに一度保存する。quota/保存不可は表示して再開可能と偽らない。初回保存後に切断したjobだけをfresh grant後の一覧へ復元し、人が再開または取消する。秘密tokenをURL/logへ書かない。
+
+独立taskcheck: protocol gate、provider lifetime、grant/所有者の失効、queueと保存の競合、atomic非上書き。独立全体review必須。
+
+受入: 両方向のreload/応答消失、changed source、他viewerによるtoken横取り、期限/取消/permission/config失効、quotaとstorage不可、旧peer、暗号化共有での実browser byte一致。生成ファイル/private tempのみを使用し、実desktop入力/clipboard/録音や設定変更はしない。
+
+取消は受付時にtoken/root/ownerを確認して同期失効し、publish fenceへ即反映する。失効済みtokenの取消は冪等。取消はファイルを読み書き・公開せず、現在のfile laneとtokenがあればgrant解除後でも掃除できる。生きている別ownerのtokenは取消できない。ブラウザはjobごとのWebLockをcomponent lifetimeで保持し、IDB操作は所有leaseを検査する。他窓の生存jobは復元一覧から除外。Bの取消確認前には保存済みデータを削除しない。
