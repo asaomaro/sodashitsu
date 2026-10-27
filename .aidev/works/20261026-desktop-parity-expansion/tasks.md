@@ -118,3 +118,8 @@
 ### 第10段階 agent準備3: 宛先・期限に束縛した内部許可
 
 宛先の鍵と登録revision、操作列のowner有効性、単調時計の期限を確認するAgentAccessとprivate RPC ownerを追加。`tasks-agent-recipient-binding.md` / `test-agent-recipient-binding.md` を参照。公開の暗号化agent経路・private backplane接続・CLI/画面公開は未完了。
+
+
+### 第10段階 agent準備4: provider-private共有画面への接続
+
+画面固有scopeと宛先に結合したprivate grant/agent owner、即時取消、終了時の回収を追加。`tasks-agent-private-backplane.md` / `test-agent-private-backplane.md` を参照。公開のagent role・Service/CLI/画面UIの暗号化接続は後続で未完了。
