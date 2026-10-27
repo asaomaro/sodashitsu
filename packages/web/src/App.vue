@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NativePreviewHost from "./components/NativePreviewHost.vue";
+import DesktopMonitorPage from "./components/DesktopMonitorPage.vue";
 import DesktopCompanionPage from "./components/DesktopCompanionPage.vue";
 import SystemFooter from "./components/SystemFooter.vue";
 import WorkAgentRequests from "./components/WorkAgentRequests.vue";
@@ -50,6 +51,7 @@ import { useViewStore } from "./store/view.js";
  * 部品の配線（circular port の bind を含む）は `main.ts`（composition root）の責務——ここはテンプレートの
  * 切り替えと、現在の tab のレイアウト木を `PaneLayout` へ渡すだけ。
  */
+const desktopMonitor = location.pathname === "/desktop-view";
 const desktopCompanion = location.pathname === "/desktop-host";
 const view = useViewStore();
 const settings = useSettingsStore();
@@ -68,9 +70,10 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
 </script>
 
 <template>
-  <WorkAgentRequests v-if="!view.authRequired && !desktopCompanion && view.connectionState === 'open'" />
-  <NativePreviewHost v-if="!view.authRequired && !desktopCompanion && view.connectionState !== 'detached'" />
+  <WorkAgentRequests v-if="!view.authRequired && !desktopCompanion && !desktopMonitor && view.connectionState === 'open'" />
+  <NativePreviewHost v-if="!view.authRequired && !desktopCompanion && !desktopMonitor && view.connectionState !== 'detached'" />
   <LoginView v-if="view.authRequired" />
+  <DesktopMonitorPage v-else-if="desktopMonitor" />
   <DesktopCompanionPage v-else-if="desktopCompanion" />
   <DetachedView v-else-if="view.connectionState === 'detached'" />
   <div v-else class="app-shell" :style="{ '--soda-pane-gap': paneGapPx }">
