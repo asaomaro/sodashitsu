@@ -44,7 +44,7 @@ import {
 import { DesktopAgentAccess, type AgentTarget, type AgentFrame } from "./DesktopAgentAccess.js";
 import type { AuthService } from "../auth/AuthService.js";
 import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
-import type { MachineManager } from "../machine/MachineManager.js";
+import type { MachineLink } from "../machine/MachineLink.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
 import { unlockFailure } from "./unlockFailure.js";
 
@@ -155,9 +155,9 @@ export class DesktopRelay {
   private closed = false;
   readonly agents = new DesktopAgentAccess();
   constructor(
-    private readonly auth: AuthService,
-    private readonly origins: OriginRejectionLog,
-    private readonly machines: Pick<MachineManager, "route">,
+    private readonly auth: Pick<AuthService,"authorizeUpgrade"|"verifySession"|"onSessionRevoked">,
+    private readonly origins: Pick<OriginRejectionLog,"admit">,
+    private readonly machines: {route(id:string):{kind:"ok";link:Pick<MachineLink,"openChannel">}|{kind:"unknown"|"offline"}},
   ) {
     this.microphoneLanes=new DesktopVideoLanes(id=>auth.verifySession(id),8192);
     this.fileLanes=new DesktopVideoLanes(id=>auth.verifySession(id),262144);
