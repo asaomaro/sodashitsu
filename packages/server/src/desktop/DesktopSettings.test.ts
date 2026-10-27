@@ -159,3 +159,6 @@ it("keeps native OS permission guidance separate from local input permission and
  await settings.set({...off,enabled:true,allowInput:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"linux-portal",allowInput:true,allowNativeVideo:false});expect(configure.mock.calls.at(-1)![0]?.command).not.toContain("-AllowInput");
  await expect(settings.set({...off,enabled:true,allowElevated:true})).rejects.toThrow("native backend");await expect(settings.set({...off,enabled:true,allowClipboard:true})).rejects.toThrow("native backend");
 });
+it("passes the saved local input ceiling to the bundled macOS helper without changing custom commands",async()=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"macos-sck"});await settings.set({...off,enabled:true,allowInput:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"macos-sck",allowInput:true,command:["synthetic-helper","--allow-input"]});await settings.set({...off,enabled:true,allowInput:false});expect(configure.mock.calls.at(-1)![0]?.command).toEqual(["synthetic-helper"]);
+});

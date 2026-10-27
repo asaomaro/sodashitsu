@@ -25,3 +25,6 @@ release/
 # Python native helper validation cache
 __pycache__/
 *.pyc
+
+# Locally compiled native macOS desktop helper
+/scripts/remote-desktop/macos-desktop-helper

@@ -1,7 +1,7 @@
 name: Native desktop generated checks
 on:
   pull_request:
-    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/test-linux-portal-helper.py', '.github/workflows/native-desktop.yml']
+    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', '.github/workflows/native-desktop.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,3 +17,15 @@ jobs:
         run: /usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe
       - name: Fake D-Bus / input, generated JPEG and publication races
         run: /usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py
+
+  macos-generated:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Compile and ad-hoc sign (no permission prompt)
+        run: bash scripts/remote-desktop/build-macos-desktop.sh
+      - name: Generated input and JPEG checks (no capture or OS input)
+        run: scripts/remote-desktop/macos-desktop-helper --self-test
+      - name: Generated negative controls (temporary source copies only)
+        run: python3 scripts/remote-desktop/test-macos-desktop-helper.py
