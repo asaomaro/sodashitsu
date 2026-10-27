@@ -1,3 +1,5 @@
+import {DesktopEndpointDrain} from "./DesktopEndpointDrain.js";
+import {desktopFeaturesFromProtocols} from "@sodashitsu/protocol";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
@@ -37,6 +39,7 @@ type Context = {
   active(): boolean;
   root?: DesktopEndpointRoot;
   opened: boolean;
+  closeNegotiated:boolean;
   invites: Map<string, Invite>;
   connections: Set<Connection>;
   close(): void;
@@ -383,6 +386,7 @@ export class DesktopEndpointService {
           permit,
           closed: false,
           opened: false,
+          closeNegotiated:false,
           invites: new Map(),
           connections: new Set(),
           active: () => !created.closed && active(),
@@ -442,6 +446,7 @@ export class DesktopEndpointService {
         connection.closed = true;
         this.connections.delete(connection.session);
         context.connections.delete(connection);
+        drain.dispose();
         quiet(() => connection.local?.close());
         quiet(() => connection.wire?.close());
         transport.terminate();
@@ -449,25 +454,29 @@ export class DesktopEndpointService {
       },
     };
     const active = () => !connection.closed && context.active();
+    const drain=new DesktopEndpointDrain({active,terminal:()=>connection.wire.send("control",new Uint8Array([4])),close:connection.close});
     const send = (lane: DesktopE2eLane, kind: number, data: Uint8Array) => {
       if (!active()) {
         connection.close();
         return;
       }
+      if(drain.closing)return;
       if (lane === "audio" && connection.wire.bufferedAmount > 4096) return;
       const record = new Uint8Array(data.length + 1);
       record[0] = kind;
       record.set(data, 1);
-      void connection.wire.send(lane, record).catch(() => connection.close());
+      drain.track(connection.wire.send(lane, record));
     };
     const receive = (lane: DesktopE2eLane, record: Uint8Array) => {
       if (!active() || !record.length) throw unavailable();
       const kind = record[0],
         data = record.subarray(1);
+      if(drain.closing){if(kind===5&&lane==="control"&&data.length===0)drain.acknowledge();else if(kind!==0&&kind!==1)throw unavailable();return;}
       if (kind === 2) {
         if (lane !== "control" || connecting || opened || data.length > 8192) throw unavailable();
         connecting = true;
         const request = DesktopEndpointConnect.parse(JSON.parse(decode.decode(data)));
+        if(!childProtocol)context.closeNegotiated=desktopFeaturesFromProtocols(request.protocols).has("endpointClose");
         if (
           (childProtocol &&
             (request.protocols.length !== 1 || request.protocols[0] !== childProtocol)) ||
@@ -518,7 +527,7 @@ export class DesktopEndpointService {
                 }
                 send(desktopEndpointLane(childProtocol, payload, binary), binary ? 0 : 1, payload);
               },
-              () => connection.close(),
+              () => drain.begin(opened&&context.closeNegotiated),
             );
             if (!active()) {
               local.close();

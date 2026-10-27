@@ -69,6 +69,7 @@ class DesktopEndpointSocket extends EventTarget implements WebSocket {
   private delegate: WebSocket | undefined;
   private wire: DesktopEndpointWire | undefined;
   private opening = false;
+  private ending = false;
   private stopped = false;
   private stopReason = "";
   private readonly session: string;
@@ -281,6 +282,13 @@ class DesktopEndpointSocket extends EventTarget implements WebSocket {
         if (!this.active() || !borrowed.length) throw Error(unavailable);
         const kind = borrowed[0],
           payload = new Uint8Array(borrowed.subarray(1));
+        if(kind===4){
+          if(lane!=="control"||payload.length||this.readyState!==WebSocket.OPEN)throw Error(unavailable);
+          this.ending=true;
+          this.readyState=WebSocket.CLOSING;
+          void this.wire!.send("control",new Uint8Array([5])).then(()=>this.finish(true),()=>this.fail());
+          return;
+        }
         if (kind === 3) {
           if (lane !== "control" || payload.length || this.readyState !== WebSocket.CONNECTING)
             throw Error(unavailable);
@@ -372,10 +380,12 @@ class DesktopEndpointSocket extends EventTarget implements WebSocket {
     this.pending++;
     this.pendingBytes += size;
     const task = this.sending.then(async () => {
+      if(this.ending)return;
       if (!this.active() || this.readyState !== WebSocket.OPEN) throw Error(unavailable);
       const raw =
         snapshot instanceof Blob ? new Uint8Array(await snapshot.arrayBuffer()) : snapshot;
       try {
+        if(this.ending)return;
         if (!this.active()) throw Error(unavailable);
         const binary = typeof data !== "string",
           record = new Uint8Array(raw.length + 1);
@@ -387,7 +397,7 @@ class DesktopEndpointSocket extends EventTarget implements WebSocket {
       }
     });
     this.sending = task
-      .catch(() => this.fail())
+      .catch(() => {if(!this.ending)this.fail();})
       .finally(() => {
         if (snapshot instanceof Uint8Array) snapshot.fill(0);
         this.pending--;
