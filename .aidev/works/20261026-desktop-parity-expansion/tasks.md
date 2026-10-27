@@ -95,3 +95,5 @@
 第13段階準備: protocol32件上限を維持する固定128bit機能hintを追加し、sharedDeltasの1tokenを移行。旧v1受信/未知bit無視/不正重複拒否/B能力証明を維持。全体11948件、関連生成browser11件、負例2件、独立点検/全体レビューと独立build/smoke通過。フォルダ再読込後再開等のtask13本体は継続。
 
 第13段階13C: 明示保存のfolder upload/ZIP downloadを切断・再読込後にfresh grant/manual attachで再開。B volatile256bit/root-owner-epoch/8件各100MiB15分とbrowser既存合計100MiB/8件・WebLocks・atomic chunkを統合。file別offset/done/receiptと元snapshot再検査、token取得前/保留/遅延startの同期取消、完成fileとempty dir保持を検証。source11961件、生成browser unique22件、負例4件と独立taskcheck/全体review・修正再レビュー・独立build/smoke通過。B再起動保持は対象外、Explorer直接drag-out/monitor独立窓は残るのでtask13全体は保留。
+
+第10段階追加修正: private Relay終了時の未seal応答欠落を、新hint交渉の認証EOF/ACK・最大2秒drainで修正。source権限延長は行わず、新app要求を抑止しrevocation/handoffは即close。EOF中のBlob/seal待機send競合も修正。全体source11970/root12032、生成browser unique8、負例5件/bytes復元/独立build/smokeと独立点検・全体review通過。agent受信者routeなどが残るためtask10全体は未完了。
