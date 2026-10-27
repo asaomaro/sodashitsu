@@ -275,3 +275,7 @@ undefined
 ```
 
 最初の全体は11646成功/1失敗。旧helper証明なしのB入口の期待が残っていたため、その防御も追加し、対象4件と負例を確認。code変更があるので再build後に全体を再実行する。
+
+## 最終結果（source e11b8ab1）
+
+build/typecheck成功。全体781 suites / 11647 tests成功（389.14s）。共有動画/音声/UDP/WSS/browser5件成功（1.1m）。独立worktreeでbuild/smoke PASS。独立レビュー2件＋e11の追加差分再レビュー通過。Windows boundaries CI22s成功。実画面・実入力・実音声デバイスは使っていない。
