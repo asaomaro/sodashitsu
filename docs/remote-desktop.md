@@ -540,7 +540,7 @@ stdin/stdoutは1行1JSONです。起動時に`ready`と期限を返します。C
 2. 仮想ケーブルの **render（再生）側ID** を、接続先のローカル設定「マイク転送先の仮想オーディオ再生デバイスID」へ入れ、「接続元からのマイク転送を許可」をONにして保存します。物理スピーカーのIDは指定しないでください。
 3. デスクトップを接続し直し、接続先アプリのマイクを、その仮想ケーブルの **capture（録音）側** に設定します。接続側でマイク転送を開始します。
 
-初期実装はWindows Nodeの通常・単独共有が対象です。WSL/Linux Node、共有source、仮想画面、UAC/ロック画面にはマイクを提供しません。音声入力は48kHz/mono/16bit PCMを20msごとに専用の認証済み接続で送り、約0.77MbpsにJSONの付加分が加わります。未ACKは最大12枚（240ms分）、Bで待機するPCMは最新1枚だけ保持し、private pipeのPCMは100msで期限切れになります。マイク入力のOpus圧縮は未対応です。実デバイス・実通話アプリでの確認は別途必要で、検証済みなのは生成音声と仮想sinkです。
+初期実装はWindows Nodeの通常・単独共有が対象です。WSL/Linux Node、共有source、仮想画面、UAC/ロック画面にはマイクを提供しません。音声入力は48kHz/mono/16bit PCMを20msごとに専用の認証済み接続で送り、PCM本体は約0.77Mbps、base64/JSONを含めると約1.1Mbpsです。未ACKは最大12枚（240ms分）、Bで待機するPCMは最新1枚だけ保持し、private pipeのPCMは100msで期限切れになります。マイク入力のOpus圧縮は未対応です。実デバイス・実通話アプリでの確認は別途必要で、検証済みなのは生成音声と仮想sinkです。
 
 参考実装として[FreeRDPの音声入力チャネル](https://github.com/FreeRDP/FreeRDP/blob/master/channels/audin/client/audin_main.c)と[RustDeskのaudio service](https://github.com/rustdesk/rustdesk/blob/master/src/server/audio_service.rs)の構成を確認し、コードは独自に実装しました。仕様の一次資料は[AnyDeskの接続先音声再生設定](https://support.anydesk.com/Audio)と[Microsoft RDPの音声入力転送仕様](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpeai/d04ffa42-5a0f-4f80-abb1-cc26f71c9452)です。RDPとのプロトコル互換や、他製品の機能すべてとの同等性を意味しません。
 
