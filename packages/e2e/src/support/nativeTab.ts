@@ -5,11 +5,12 @@ export async function openNativeTab(page: Page, kind: "web-preview" | "desktop" 
   if (machine) await machine.locator(".machine-select").click();
   // Fresh fixture notices can overlap the toolbar.
   for (const notice of await page.locator(".toast-close").all()) await notice.click();
-  await page.getByRole("button", { name: "接続ビューを追加・選択", exact: true }).click();
   const labels = { "web-preview": "Webプレビュー", desktop: "デスクトップ", vscode: "VSCode" };
   const notice = page.locator(".toast-close").first();
   await page.addLocatorHandler(notice, async button => { await button.click(); });
   try {
+    // Notices can arrive after the initial sweep and cover the chooser itself.
+    await page.getByRole("button", { name: "接続ビューを追加・選択", exact: true }).click();
     await page.getByRole("menuitem", { name: `＋ ${labels[kind]}`, exact: true }).click();
     await expect(page.locator(`[data-native-tab="${kind}"]`)).toBeVisible();
     // Secondary desktop controls are explicitly opened for feature tests.
