@@ -380,3 +380,18 @@ Running 1 test using 1 worker
   1 passed (8.8s)
 
 ```
+
+## main統合と両端反映（2026-10-27）
+
+PR #237 main f05e6ce38f88aef961efcb44dbf912b303ca5435。rootの既存ローカル変更を3wayで保持し、衝突解消を独立2件で再読。root build/typecheck/smoke/browser4件通過。全体11813pass/11815中2件timeoutは無関係な画面試験で、個別25件が再実行で通過。B build/helper生成/DPAPI生成試験後、B→A順でhandoff。実endpoint鍵は作成せず、必須設定も変更していない。
+
+```text
+{"id":"f933a0dd-1910-448a-b54e-2341847a35b6","status":"exited","stdout":"endpoint_key_generated_checks_passed\r\nendpoint_acl_generated_checks_passed\r\nendpoint_vault_committed\r\nendpoint_commit_generated_checks_passed\r\n","stderr":"","stdoutTruncated":false,"stderrTruncated":false,"exitCode":0,"signal":null,"timedOut":false,"cancelled":false}
+{"videoLanesBuilt":true,"services":[{"Name":"SodaDesktopUnlock-68F6FB663A79FE16","Status":4}],"head":"f05e6ce38f88aef961efcb44dbf912b303ca5435","audioDistTime":"2026-10-27T07:59:44.5592860Z","richBuilt":true,"richSourceHash":"4A1E886445A2A813F06A4B6D754A9F81176EDB40A6263F8D6513E7A0320BD958","audioBuilt":true,"native60Built":true,"recoveryBuilt":true,"endpointServiceBuilt":true,"sharedAudioBuilt":true,"inputAcksBuilt":true,"audioSourceTime":"2026-10-27T03:27:16.3904652Z","endpointVault":false,"endpointRequiredMarker":false,"audioSourceHash":"F5DBE89EBE58EC5E4BE14750B7A8AE263A778C5734B341C9C7925E702386DC0F","videoLaneHash":"E0F69A178E5F992F160F13EB6A9F95B4C34EEC4818F954DC516C8179C576E03D","status":{},"filesBuilt":true,"audioPacketBuilt":true,"nativePlatformBuilt":true,"handoff":[{"ts":"2026-10-27T08:01:43.889Z","msg":"handoff: requested; running preflight"},{"ts":"2026-10-27T08:01:46.377Z","msg":"handoff: replacing this server with the version on disk"},{"ts":"2026-10-27T08:01:48.499Z","msg":"handoff: complete"}],"sharedRateBuilt":true,"endpointRelayBuilt":true}
+
+exitCode 0
+stderr 
+soda: handing off 7 pane(s) of pid 21406 to the soda on disk…
+soda: handoff complete: 7 pane(s) kept running
+
+```
