@@ -6,6 +6,9 @@
  * （`package.json` の `main`/`types` はこのファイルを指す）。
  */
 export { composeServer, type ComposedServer } from "./composeServer.js";
+/** Generated endpoint transport tests: no public HTTP/RPC activation. */
+export {DesktopEndpointBackplane} from "./desktop/DesktopEndpointBackplane.js";
+export {DesktopProvider} from "./desktop/DesktopProvider.js";
 export type { ImageFetcher } from "./ask/AskMedia.js";
 export type { RawServeArgs, ServeOptions } from "./config.js";
 /**

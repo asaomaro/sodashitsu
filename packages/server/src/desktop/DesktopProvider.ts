@@ -67,7 +67,15 @@ export interface DesktopProviderConfig {
   iceServers?: z.infer<typeof DesktopIceServers>;
   origins(): string[];
 }
+type EndpointScope={origin:string;epoch:number;active():boolean};
+export interface DesktopProviderEndpointScope {
+ active():boolean;
+ start(owner:string,params:z.infer<typeof DesktopStartParams>):Promise<{started:true}>;
+ release(owner:string):void;
+ close():void;
+}
 type Share = {
+  endpointActive?:()=>boolean;
   inputCapabilities?:DesktopInputCapabilities;
   microphone?:DesktopMicrophone; microphoneSocket?:WebSocket;
   files?:Promise<DesktopFiles|undefined>;fileSocket?:WebSocket;
@@ -113,6 +121,31 @@ type Share = {
 
 /** Opt-in B-side provider. Executable and input ceiling are local settings, never RPC arguments. */
 export class DesktopProvider {
+  private endpointOnly=false;
+  private sourceEpoch=0;
+  private readonly endpointScopes=new WeakSet<EndpointScope>();
+  get epoch():number{return this.sourceEpoch;}
+  /** Owner-process integration only. Never expose this switch as machine RPC. */
+  requireEndpoint(required:boolean):void {
+    if(this.endpointOnly===required)return;
+    this.dispose();this.endpointOnly=required;this.resumeUnlockLease();
+  }
+  /** A private loopback backplane may reuse the existing permission/input/media
+   * implementation without allowing a remote caller to choose a new origin. */
+  endpointScope(origin:string,active:()=>boolean):DesktopProviderEndpointScope {
+    const url=new URL(origin);
+    if(url.protocol!=="http:"||url.hostname!=="127.0.0.1"||!url.port||url.origin!==origin)throw new RpcError("unauthorized","Private desktop endpoint unavailable");
+    const epoch=this.sourceEpoch,owners=new Set<string>();let closed=false;
+    const scope:EndpointScope={origin,epoch,active:()=>!closed&&epoch===this.sourceEpoch&&active()};
+    this.endpointScopes.add(scope);
+    return {active:scope.active,start:async(owner,params)=>{
+      if(!scope.active())throw new RpcError("unauthorized","Desktop endpoint expired");
+      owners.add(owner);return this.start(owner,params,scope);
+    },release:owner=>{owners.delete(owner);this.clientGone(owner);},close:()=>{
+      if(closed)return;closed=true;this.endpointScopes.delete(scope);
+      for(const owner of owners)this.clientGone(owner);owners.clear();
+    }};
+  }
   private readonly unlockLease = new DesktopUnlockLease();
   private active: Share | undefined;
   private readonly sharedCapture = new DesktopSharedCapture();
@@ -167,9 +200,12 @@ export class DesktopProvider {
       displayResize: this.config?.allowDisplayResize === true,
     };
   }
-  async start(owner: string, raw: z.infer<typeof DesktopStartParams>): Promise<{ started: true }> {
+  async start(owner: string, raw: z.infer<typeof DesktopStartParams>,scope?:EndpointScope): Promise<{ started: true }> {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
+    const epoch=this.sourceEpoch;
+    const endpoint=scope!==undefined&&this.endpointScopes.has(scope)&&scope.epoch===epoch&&scope.active();
+    if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
     if(cfg.nativePlatform&&(p.options.sharedDesktop||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
@@ -208,7 +244,7 @@ export class DesktopProvider {
         this.pendingStarts.delete(pending);
       }
     }
-    if (this.config !== cfg) throw new RpcError("unauthorized", "Desktop permissions changed");
+    if (this.config !== cfg||this.sourceEpoch!==epoch||scope&&!scope.active()) throw new RpcError("unauthorized", "Desktop permissions changed");
     if (this.sharedCapture.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
     const sharedKey = JSON.stringify(p.options.sharedDesktop ? sharedHelperOptions(p.options) : p.options);
     if (this.active || (this.shared.size && (!p.options.sharedDesktop || this.sharedKey !== sharedKey)) || this.shared.size >= 8)
@@ -220,7 +256,7 @@ export class DesktopProvider {
       url.hash ||
       url.username ||
       url.password ||
-      !allowedRelay(url, cfg.origins())
+      !(endpoint?url.protocol==="ws:"&&url.origin.replace(/^ws/,"http")===scope!.origin:allowedRelay(url, cfg.origins()))
     )
       throw new RpcError("unauthorized", "Bで許可されていない共有先です");
     if ((cfg.allowUnlock||cfg.allowVirtualDisplay||cfg.allowElevated)&&cfg.unlockLeaseCommand) this.unlockLease.ensureRunning();
@@ -231,6 +267,7 @@ export class DesktopProvider {
       followRedirects: false,
     });
     const s: Share = {
+      ...(scope?{endpointActive:scope.active}:{}),
       shared: p.options.sharedDesktop === true,
       inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); }),
       imageExpected:!!p.imageTicket,
@@ -257,7 +294,7 @@ export class DesktopProvider {
       frameAt: 0,
       started: performance.now(),
       timer: setInterval(() => {
-        s.native?.tick();
+        if(!this.live(s))return;s.native?.tick();
         if (
           performance.now() - s.lastSeen > 12000 ||
           (performance.now() - s.started > (cfg.nativePlatform?130000:p.options.virtualDisplay?25000:15000) && !s.ready)
@@ -279,9 +316,9 @@ export class DesktopProvider {
         }
       };
       ws.once("close", fail);
-      ws.once("open", () => ws.send(JSON.stringify({ type: "provider", ticket: p.ticket })));
+      ws.once("open", () => {if(this.live(s))ws.send(JSON.stringify({ type: "provider", ticket: p.ticket }));});
       ws.on("message", (bytes, binary) => {
-        if (s.dead) return;
+        if (!this.live(s)) return;
         if (binary) {
           this.stop(s);
           return;
@@ -308,14 +345,14 @@ export class DesktopProvider {
             if(p.fileTicket){
               if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
               const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
-              s.files=DesktopFiles.open(cfg.fileRoot,()=>!s.dead&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000).then(async worker=>{if(s.dead){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000).then(async worker=>{if(!this.live(s)){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
               socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.fileTicket})));
               const stop=()=>{void s.files?.then(worker=>worker?.close());socket.terminate();};let pending=0;
-              socket.on("error",stop);socket.on("close",stop);socket.on("message",async(raw,binary)=>{if(s.dead)return;try{
+              socket.on("error",stop);socket.on("close",stop);socket.on("message",async(raw,binary)=>{if(!this.live(s))return;try{
                 const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(++pending>4||binary||bytes.length>100000)throw Error("File request limit");
                 const m=DesktopFileRequest.parse(JSON.parse(bytes.toString())),worker=await s.files;
                 const result=worker?await worker.run(m):{type:"desktop_file_result",id:m.id,ok:false,message:"共有フォルダを利用できません。接続先で設定を確認してください"};
-                if(!s.dead&&socket.readyState===WebSocket.OPEN&&socket.bufferedAmount<262144)socket.send(JSON.stringify(DesktopFileResult.parse(result)));else stop();
+                if(this.live(s)&&socket.readyState===WebSocket.OPEN&&socket.bufferedAmount<262144)socket.send(JSON.stringify(DesktopFileResult.parse(result)));else stop();
               }catch{stop();}finally{pending--;}});
             }
             if(p.microphoneTicket){
@@ -323,14 +360,14 @@ export class DesktopProvider {
               const socket=s.microphoneSocket=new WebSocket(p.url,DESKTOP_MICROPHONE_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:4096});
               socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.microphoneTicket})));
               const stop=()=>{s.microphone?.stop();socket.terminate();};socket.on("error",stop);socket.on("close",stop);
-              socket.on("message",(raw,binary)=>{if(s.dead)return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>4096||!s.microphone)throw Error("Microphone not ready");s.microphone.fromViewer(DesktopMicrophoneRequest.parse(JSON.parse(bytes.toString())));}catch{stop();}});
+              socket.on("message",(raw,binary)=>{if(!this.live(s))return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>4096||!s.microphone)throw Error("Microphone not ready");s.microphone.fromViewer(DesktopMicrophoneRequest.parse(JSON.parse(bytes.toString())));}catch{stop();}});
             }
             if(p.clipboardTicket){
               if(p.options.richClipboard!==true||cfg.allowClipboard!==true)throw Error("Rich clipboard not negotiated");
               const socket=s.clipboardSocket=new WebSocket(p.url,DESKTOP_RICH_CLIPBOARD_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:32768});
               socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.clipboardTicket})));
               const stop=()=>{s.richClipboard?.stop();delete s.richClipboard;socket.terminate();};
-              socket.on("error",stop);socket.on("close",stop);socket.on("message",(raw,binary)=>{if(s.dead)return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>32768)throw Error("Clipboard lane format");if(!s.richClipboard)throw Error("Clipboard not ready");s.richClipboard.fromViewer(JSON.parse(bytes.toString()));}catch{stop();}});
+              socket.on("error",stop);socket.on("close",stop);socket.on("message",(raw,binary)=>{if(!this.live(s))return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>32768)throw Error("Clipboard lane format");if(!s.richClipboard)throw Error("Clipboard not ready");s.richClipboard.fromViewer(JSON.parse(bytes.toString()));}catch{stop();}});
             }
             this.launch(s, cfg, p.options);
             settled = true;
@@ -560,8 +597,8 @@ export class DesktopProvider {
               display,
               ...legacyReady
             } = ready;
-            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&!s.dead&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if(options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic")&&s.microphoneSocket)s.microphone=new DesktopMicrophone({synthetic:ready.backend==="synthetic",allowed:()=>!s.dead&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
+            if(options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic")&&s.microphoneSocket)s.microphone=new DesktopMicrophone({synthetic:ready.backend==="synthetic",allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
@@ -724,21 +761,21 @@ export class DesktopProvider {
   private sendImage(s:Share,data:Uint8Array):boolean{
     if(!s.imageReady)return this.send(s,data);
     const image=s.imageSocket;
-    if(s.dead)return false;
+    if(!this.live(s))return false;
     if(image?.readyState!==WebSocket.OPEN||image.bufferedAmount>DESKTOP_MAX_FRAME_BYTES+4096){this.stop(s);return false;}
     image.send(data);return true;
   }
   private sendVideo(s: Share, data: unknown): boolean {
     const video = s.videoSocket;
     if (!s.videoReady) return this.send(s, data);
-    if (s.dead) return false;
+    if (!this.live(s)) return false;
     if (video?.readyState !== WebSocket.OPEN || video.bufferedAmount > 512 * 1024) { s.videoReady=false; video?.terminate(); return false; }
     video.send(data instanceof Uint8Array ? data : JSON.stringify(data));
     return true;
   }
   private send(s: Share, data: unknown): boolean {
     if (
-      s.dead ||
+      !this.live(s) ||
       s.ws.readyState !== WebSocket.OPEN ||
       s.ws.bufferedAmount > DESKTOP_MAX_FRAME_BYTES + 4096
     ) {
@@ -749,7 +786,7 @@ export class DesktopProvider {
     return true;
   }
   private write(s: Share, value: unknown): void {
-    if (!s.process || s.dead) return;
+    if (!s.process || !this.live(s)) return;
     if (s.process.stdin.writableLength > 64 * 1024) {
       this.stop(s);
       return;
@@ -757,6 +794,10 @@ export class DesktopProvider {
     s.process.stdin.write(JSON.stringify(value) + "\n", (err) => {
       if (err) this.stop(s);
     });
+  }
+  private live(s:Share):boolean {
+    if(s.dead)return false;
+    if(s.endpointActive&&!s.endpointActive()){this.stop(s);return false;}return true;
   }
   private stop(s: Share): void {
     if (s.dead) return;
@@ -797,6 +838,7 @@ export class DesktopProvider {
   }
   // Also used when pausing clients for handoff; rollback can reuse this provider.
   dispose(): void {
+    this.sourceEpoch++;
     this.unlockLease.stop();
     this.companion.dispose();
     for (const pending of this.pendingStarts) pending.cancelled = true;
