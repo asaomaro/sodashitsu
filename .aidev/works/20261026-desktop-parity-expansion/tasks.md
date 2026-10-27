@@ -113,3 +113,8 @@
 ### 第10段階 agent準備2: CLI鍵準備
 
 ローカル専用 `desktop identity` の状態確認・明示初期化、保存先の先行検査、Windows生成DPAPI/CLI検証を追加。`tasks-cli-identity.md` / `test-cli-identity.md` を参照。暗号化agentの公開接続経路・recipientに束縛した許可・CLI session/MCP/model切替は引き続き未完了。
+
+
+### 第10段階 agent準備3: 宛先・期限に束縛した内部許可
+
+宛先の鍵と登録revision、操作列のowner有効性、単調時計の期限を確認するAgentAccessとprivate RPC ownerを追加。`tasks-agent-recipient-binding.md` / `test-agent-recipient-binding.md` を参照。公開の暗号化agent経路・private backplane接続・CLI/画面公開は未完了。
