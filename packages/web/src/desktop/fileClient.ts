@@ -29,6 +29,7 @@ export class DesktopFileClient {
       request.action === "abort" ||
       request.action === "checkpoint_abort" ||
       request.action === "folder_abort" ||
+      request.action === "folder_resume_abort" ||
       (request.action === "grant" && !request.enabled);
     if (this.dead || this.queue.length >= (control ? 18 : 16)) {
       if (control && !this.dead) this.fail();
@@ -60,7 +61,7 @@ export class DesktopFileClient {
           if (task.control) this.fail();
           else this.pump();
         },
-        ["folder_download_start", "folder_upload_start"].includes(task.request.action)
+        ["folder_download_start", "folder_upload_start", "folder_resume_start", "folder_resume_attach"].includes(task.request.action)
           ? 120000
           : 30000,
       );

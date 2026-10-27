@@ -1,3 +1,4 @@
+import type {DesktopFolderCheckpoints} from "./DesktopFolderCheckpoints.js";
 import {DesktopFolders} from "./DesktopFolders.js";
 import {canonicalFolder} from "./desktopFilePaths.js";
 import { lstat, opendir } from "node:fs/promises";
@@ -17,6 +18,7 @@ export class DesktopFiles {
   private readonly owner = crypto.randomUUID();
   private activeIds = new Set<string>();
   private cancelledIds = new Set<string>();
+  private folderCancelledIds=new Set<string>();
   private expirations = new Map<string, ReturnType<typeof setTimeout>>();
   private forget(id: string) {
     clearTimeout(this.expirations.get(id));
@@ -43,6 +45,7 @@ export class DesktopFiles {
     private checkpoints?: DesktopFileCheckpoints,
     private valid: () => boolean = () => true,
     folderSupport=false,
+    private folderCheckpoints?:DesktopFolderCheckpoints,
   ) {if(folderSupport)this.folders=new DesktopFolders(root);}
   static async open(
     root: string,
@@ -50,6 +53,7 @@ export class DesktopFiles {
     checkpoints?: DesktopFileCheckpoints,
     valid: () => boolean = () => true,
     folderSupport=false,
+    folderCheckpoints?:DesktopFolderCheckpoints,
   ) {
     if (!isAbsolute(root))
       throw new RpcError("invalid_params", "共有フォルダは絶対パスを指定してください");
@@ -61,12 +65,19 @@ export class DesktopFiles {
       checkpoints,
       valid,
       folderSupport,
+      folderCheckpoints,
     );
   }
   run(raw: unknown): Promise<DesktopFileResult> {
     const m = DesktopFileRequest.parse(raw),
       version = this.epoch;
-    const operationId = "id" in m.request ? m.request.id : undefined;
+    const operationId = "id" in m.request ? m.request.id : ((m.request.action==="folder_resume_start"||m.request.action==="folder_resume_run")?m.request.request.id:undefined);
+    if(m.request.action==="folder_abort"){
+      if(this.folderCancelledIds.size>=4096){this.granted=false;this.epoch++;this.folderCheckpoints?.revoke(this.owner);this.folders?.cancelAll();}
+      else this.folderCancelledIds.add(m.request.id);
+      this.folderCheckpoints?.cancelStart(this.root,this.owner,m.request.id);
+    }
+    const folderResumeCancelled=m.request.action==="folder_resume_abort"&&this.folderCheckpoints?.cancel(this.root,this.owner,m.request.checkpoint)===true;
     const folderCancelled=m.request.action==="folder_abort"&&this.folders?.cancel(m.request.id)===true;
     const checkpointCancelled =
       m.request.action === "checkpoint_abort" &&
@@ -78,6 +89,7 @@ export class DesktopFiles {
       this.granted = false;
       this.epoch++;
       this.checkpoints?.revoke(this.owner);
+      this.folderCheckpoints?.revoke(this.owner);
       this.folders?.cancelAll();
     }
     const result = this.queue.then(async (): Promise<DesktopFileResult> => {
@@ -105,6 +117,7 @@ export class DesktopFiles {
           this.granted = true;
           return reply({ enabled: true, root: this.root });
         }
+        if(m.request.action==="folder_resume_abort"){if(!folderResumeCancelled)throw Error("別の接続で利用中か再開に未対応です");return reply({});}
         if(m.request.action==="folder_abort"){if(!folderCancelled)throw Error("フォルダ転送は利用できません");return reply({});}
         if (m.request.action === "checkpoint_abort") {
           if (!checkpointCancelled) throw Error("再開記録が失効したか別の接続で利用中です");
@@ -118,7 +131,7 @@ export class DesktopFiles {
             !this.allowed() ||
             (m.request.action !== "abort" &&
               operationId !== undefined &&
-              this.cancelledIds.has(operationId))
+              (this.cancelledIds.has(operationId)||this.folderCancelledIds.has(operationId)))
           )
             throw Error("ファイル転送の許可が終了しました");
         };
@@ -128,6 +141,7 @@ export class DesktopFiles {
           fence();
         };
         await guard();
+        if(m.request.action.startsWith("folder_resume_")){if(!this.folderCheckpoints)throw Error("フォルダの切断後再開には両端の更新が必要です");const {DesktopFolderCheckpointRequest}=await import("@sodashitsu/protocol");return reply(await this.folderCheckpoints.run({owner:this.owner,root:this.root,guard,fence,connected:()=>!this.dead&&this.allowed(),valid:this.valid},DesktopFolderCheckpointRequest.parse(m.request)));}
         if(m.request.action.startsWith("folder_")){if(!this.folders)throw Error("両端を更新してフォルダ転送に対応した接続を使ってください");const {DesktopFolderRequest}=await import("@sodashitsu/protocol");return reply(await this.folders.run(DesktopFolderRequest.parse(m.request),guard,fence));}
         if (m.request.action.startsWith("checkpoint_")) {
           if (!this.checkpoints) throw Error("接続元と接続先を更新して再開対応で接続してください");
@@ -235,6 +249,7 @@ export class DesktopFiles {
     this.dead = true;
     this.folders?.cancelAll();
     this.checkpoints?.detach(this.owner);
+    this.folderCheckpoints?.detach(this.owner);
     this.granted = false;
     this.epoch++;
     await this.queue;

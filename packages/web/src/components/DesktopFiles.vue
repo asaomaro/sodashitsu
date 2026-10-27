@@ -5,7 +5,7 @@ import {
   type FolderSource,
   type DroppedEntry,
 } from "../desktop/folderSource.js";
-import { DesktopFolderName } from "@sodashitsu/protocol";
+import { DesktopFolderName, type DesktopFileRequest } from "@sodashitsu/protocol";
 import { DesktopFileResumeStore, type ResumeFile } from "../desktop/fileResumeStore.js";
 import { onBeforeUnmount, ref } from "vue";
 import {
@@ -18,6 +18,7 @@ const props = defineProps<{
   client: DesktopFileClient;
   canResume?: boolean;
   canFolders?: boolean;
+  canResumeFolders?: boolean;
   machineId?: string;
 }>();
 const resumeStore = new DesktopFileResumeStore();
@@ -36,6 +37,8 @@ type Job = {
   key: string;
   folderJob?: {
     source?: FolderSource;
+    savedSource?: ResumeFile["folder"];
+    completed?: Set<string>;
     index: number;
     fileOffset: number;
     started: boolean;
@@ -266,12 +269,15 @@ function download(name: string, size: number) {
   void pump();
 }
 async function restore() {
-  if (!props.canResume || !props.machineId) return;
+  if ((!props.canResume && !props.canResumeFolders) || !props.machineId) return;
   try {
     for (const record of await resumeStore.list(props.machineId, root.value)) {
       if (dead || !enabled.value) return;
       if (jobs.value.some((j) => j.key === record.key)) continue;
       jobs.value.push({
+        ...(record.folder
+          ? { folderJob: { index: 0, fileOffset: 0, started: true, savedSource: record.folder } }
+          : {}),
         key: record.key,
         direction: record.direction,
         name: record.name,
@@ -294,14 +300,17 @@ async function restore() {
   }
 }
 async function discard(job: Job) {
-  if (job.folderJob) {
+  if (job.folderJob && !job.checkpoint) {
     await owner.request({ action: "folder_abort", id: job.key }).catch(() => {});
     job.chunks = [];
     return;
   }
   if (job.checkpoint) {
     try {
-      await owner.request({ action: "checkpoint_abort", checkpoint: job.checkpoint });
+      await owner.request({
+        action: job.folderJob ? "folder_resume_abort" : "checkpoint_abort",
+        checkpoint: job.checkpoint,
+      });
       if (job.saved) await resumeStore.removeJob(job.key);
       job.checkpoint = undefined;
       job.saved = false;
@@ -325,7 +334,8 @@ function cancel(job: Job) {
   if (job.committing) return;
   if (["completed", "cancelled", "failed"].includes(job.state)) return;
   job.cancel = true;
-  if (job.folderJob) void owner.request({ action: "folder_abort", id: job.key }).catch(() => {});
+  if (job.folderJob && !job.checkpoint)
+    void owner.request({ action: "folder_abort", id: job.key }).catch(() => {});
   if (job.state !== "running") {
     job.state = "cancelled";
     void discard(job);
@@ -341,7 +351,14 @@ function resume(job: Job) {
 }
 async function run(job: Job) {
   if (job.folderJob) {
-    await runFolder(job);
+    if (remember.value && !props.canResumeFolders && !job.checkpoint) {
+      job.state = "failed";
+      job.message = "フォルダの切断後再開には両端の更新が必要です";
+      return;
+    }
+    if (job.checkpoint || (props.canResumeFolders && props.machineId && remember.value))
+      await runFolderCheckpoint(job);
+    else await runFolder(job);
     return;
   }
   if (job.checkpoint || (props.canResume && props.machineId && remember.value)) {
@@ -454,12 +471,160 @@ async function run(job: Job) {
     } else if (job.state === "failed") await discard(job);
   }
 }
+async function folderRequest(job: Job, request: DesktopFileRequest["request"]) {
+  if (job.checkpoint) {
+    const { DesktopFolderRequest } = await import("@sodashitsu/protocol");
+    return owner.request({
+      action: "folder_resume_run",
+      checkpoint: job.checkpoint,
+      request: DesktopFolderRequest.parse(request),
+    });
+  }
+  return owner.request(request);
+}
+async function runFolderCheckpoint(job: Job) {
+  const group = job.folderJob!;
+  job.state = "running";
+  try {
+    if (!props.canResumeFolders || !props.machineId)
+      throw Error("両端を更新してフォルダ再開を有効にしてください");
+    if (job.restored) {
+      const payload = await resumeStore.payload({
+        key: job.key,
+        checkpoint: job.checkpoint!,
+        offset: job.offset,
+      });
+      if (job.direction === "upload") {
+        if (!payload.file || !group.savedSource) throw Error("保存済みフォルダデータがありません");
+        if (
+          hex(await crypto.subtle.digest("SHA-256", await payload.file.arrayBuffer())) !== job.hash
+        )
+          throw Error("保存済みフォルダデータが変更されました");
+        let at = 0;
+        const files = group.savedSource.entries
+          .filter((e) => !e.directory)
+          .map((e) => {
+            const file = new File(
+              [payload.file!.slice(at, at + e.bytes)],
+              e.path.split("/").at(-1)!,
+            );
+            at += e.bytes;
+            return { path: e.path, file };
+          });
+        group.source = { name: group.savedSource.name, entries: group.savedSource.entries, files };
+      }
+      const status = await owner.request({
+        action: "folder_resume_attach",
+        checkpoint: job.checkpoint!,
+        offset: job.offset,
+      });
+      if (status.id !== job.key || status.bytes !== job.size)
+        throw Error("フォルダの再開記録が一致しません");
+      job.offset = status.offset!;
+      if (group.source) {
+        const states = status.folderFiles;
+        if (!states || states.length !== group.source.files.length)
+          throw Error("フォルダの保存状態が一致しません");
+        const byPath = new Map(states.map((f) => [f.path, f]));
+        if (
+          byPath.size !== states.length ||
+          group.source.files.some((f) => {
+            const st = byPath.get(f.path);
+            return !st || st.offset > f.file.size || (st.done && st.offset !== f.file.size);
+          }) ||
+          states.reduce((n, f) => n + f.offset, 0) !== job.offset
+        )
+          throw Error("フォルダの再開位置が一致しません");
+        group.completed = new Set(states.filter((f) => f.done).map((f) => f.path));
+        group.index = 0;
+        while (group.completed.has(group.source.files[group.index]?.path ?? "")) group.index++;
+        const current = group.source.files[group.index];
+        group.fileOffset = current ? (byPath.get(current.path)?.offset ?? 0) : 0;
+        group.hash = undefined;
+        await resumeStore.progress(job.key, job.offset);
+      } else if (status.sha256 !== job.hash) throw Error("ZIPの内容が変更されました");
+      job.restored = false;
+    }
+    if (!job.checkpoint) {
+      let payload: File | undefined;
+      if (group.source) {
+        payload = new File(
+          group.source.files.map((f) => f.file),
+          job.name,
+        );
+        job.hash = hex(await crypto.subtle.digest("SHA-256", await payload.arrayBuffer()));
+      }
+      if (dead || job.cancel) return;
+      const result = await owner.request({
+        action: "folder_resume_start",
+        request: group.source
+          ? {
+              action: "folder_upload_start",
+              id: job.key,
+              parent: job.path,
+              name: group.source.name,
+              entries: group.source.entries,
+            }
+          : { action: "folder_download_start", id: job.key, path: job.path },
+      });
+      if (!result.checkpoint || result.id !== job.key || result.bytes === undefined)
+        throw Error("フォルダの再開準備を確認できません");
+      job.checkpoint = result.checkpoint;
+      if (dead || job.cancel) return;
+      group.started = true;
+      job.size = result.bytes;
+      if (!group.source) {
+        if (!result.sha256) throw Error("ZIPのSHA-256がありません");
+        job.hash = result.sha256;
+      }
+      const record: ResumeFile = {
+        key: job.key,
+        machine: props.machineId,
+        root: root.value,
+        name: job.name,
+        path: job.path,
+        direction: job.direction,
+        size: job.size,
+        offset: 0,
+        checkpoint: job.checkpoint,
+        hash: job.hash!,
+        expires: Date.now() + 900000,
+        folder: {
+          name: group.source?.name ?? job.name.replace(/\.zip$/u, ""),
+          entries: group.source?.entries ?? [],
+        },
+      };
+      await resumeStore.create(record, payload);
+      group.savedSource = record.folder;
+      job.saved = true;
+    }
+    await runFolder(job);
+  } catch (e) {
+    job.committing = false;
+    if (job.saved && !job.cancel) {
+      job.state = "paused";
+      job.pause = true;
+      job.restored = true;
+      job.message = "再接続し、許可後に再開できます: " + String(e);
+    } else {
+      job.state = "failed";
+      job.message = String(e);
+      await discard(job);
+    }
+  } finally {
+    if (job.cancel) {
+      job.state = "cancelled";
+      await discard(job);
+    }
+  }
+}
 async function runFolder(job: Job) {
   const group = job.folderJob!;
   job.state = "running";
   try {
     if (!group.started) {
-      const result = await owner.request(
+      const result = await folderRequest(
+        job,
         group.source
           ? {
               action: "folder_upload_start",
@@ -485,10 +650,11 @@ async function runFolder(job: Job) {
         return;
       }
       if (group.source) {
+        while (group.completed?.has(group.source.files[group.index]?.path ?? "")) group.index++;
         const current = group.source.files[group.index];
         if (!current) {
           job.committing = true;
-          const result = await owner.request({ action: "folder_finish", id: job.key });
+          const result = await folderRequest(job, { action: "folder_finish", id: job.key });
           job.committing = false;
           if (!result.done || result.offset !== job.size)
             throw Error("フォルダの保存結果を確認できません");
@@ -508,7 +674,7 @@ async function runFolder(job: Job) {
               .arrayBuffer(),
           );
           if (dead || job.cancel) return;
-          const result = await owner.request({
+          const result = await folderRequest(job, {
             action: "folder_write",
             id: job.key,
             path: current.path,
@@ -519,8 +685,9 @@ async function runFolder(job: Job) {
             throw Error("フォルダの転送位置が一致しません");
           job.offset = result.offset;
           group.fileOffset += data.length;
+          if (job.saved) await resumeStore.progress(job.key, job.offset);
         } else {
-          await owner.request({
+          await folderRequest(job, {
             action: "folder_file_finish",
             id: job.key,
             path: current.path,
@@ -531,7 +698,7 @@ async function runFolder(job: Job) {
           group.hash = undefined;
         }
       } else {
-        const result = await owner.request({
+        const result = await folderRequest(job, {
             action: "folder_read",
             id: job.key,
             offset: job.offset,
@@ -544,10 +711,21 @@ async function runFolder(job: Job) {
           (!chunk.length && !result.done)
         )
           throw Error("ZIPの転送データが不正です");
-        job.chunks.push(chunk);
+        if (job.saved) {
+          if (chunk.length) await resumeStore.progress(job.key, result.offset, chunk);
+        } else job.chunks.push(chunk);
         job.offset = result.offset;
         if (result.done) {
-          const blob = new Blob(job.chunks as BlobPart[]);
+          const chunks = job.saved
+            ? (
+                await resumeStore.payload({
+                  key: job.key,
+                  checkpoint: job.checkpoint!,
+                  offset: job.offset,
+                })
+              ).chunks
+            : job.chunks;
+          const blob = new Blob(chunks as BlobPart[]);
           if (
             job.offset !== job.size ||
             result.sha256 !== job.hash ||
@@ -568,17 +746,29 @@ async function runFolder(job: Job) {
       }
     }
     if (!dead && !job.cancel) {
+      if (job.saved) {
+        await resumeStore.removeJob(job.key);
+        job.saved = false;
+        await owner
+          .request({ action: "folder_resume_abort", checkpoint: job.checkpoint! })
+          .catch(() => {});
+      }
       job.state = "completed";
       await list();
     }
   } catch (e) {
     job.committing = false;
-    if (!dead && !job.cancel) {
+    if (job.saved && !job.cancel) {
+      job.state = "paused";
+      job.pause = true;
+      job.restored = true;
+      job.message = "再接続し、許可後に再開できます: " + String(e);
+    } else if (!dead && !job.cancel) {
       job.state = "failed";
       job.message = String(e) + "。転送完了済みファイルは残ります";
     }
   } finally {
-    if (dead || job.cancel || job.state === "failed") {
+    if ((dead && !job.saved) || job.cancel || job.state === "failed") {
       await discard(job);
       if (job.cancel) job.state = "cancelled";
     }
@@ -768,7 +958,7 @@ const timer = setInterval(async () => {
   try {
     for (const job of jobs.value) {
       if (dead) break;
-      if (job.state === "paused" && (job.id || job.folderJob?.started))
+      if (!job.checkpoint && job.state === "paused" && (job.id || job.folderJob?.started))
         try {
           await owner.request(
             job.folderJob
@@ -808,10 +998,10 @@ defineExpose({ addFiles, handleDrop });
     <button :disabled="busy" @click="grant">
       {{ enabled ? "ファイル転送を解除" : "ファイル転送を許可" }}
     </button>
-    <p v-if="canResume" data-file-resume-notice>
+    <p v-if="canResume || canResumeFolders" data-file-resume-notice>
       再開用データを保存すると、切断・再読込後に許可し直して再開できます。ブラウザ合計100MiB・8件、最後の操作から15分まで。接続先の再起動・設定変更では失効します。
     </p>
-    <label v-if="canResume"
+    <label v-if="canResume || canResumeFolders"
       ><input
         v-model="remember"
         type="checkbox"
@@ -836,7 +1026,7 @@ defineExpose({ addFiles, handleDrop });
             maxlength="255" /></label
         ><button @click="chooseFolder">フォルダを選んで送信</button>
         <p>
-          フォルダをドロップしても送信できます。1000項目・合計100MiBまで。同名フォルダには混ぜません。取消・失敗でも転送完了済みファイルは残ります。フォルダの再開はこの窓の接続中だけです。
+          フォルダをドロップしても送信できます。1000項目・合計100MiBまで。同名フォルダには混ぜません。取消・失敗でも転送完了済みファイルは残ります。<template v-if="canResumeFolders">再開用保存を選ぶと切断・再読込後にも再開できます。</template><template v-else>フォルダの再開はこの窓の接続中だけです。</template>
         </p></template
       >
       <p>一覧の場所: {{ listedFolder || "." }}</p>
@@ -887,7 +1077,7 @@ defineExpose({ addFiles, handleDrop });
         ><span>{{ job.message }}</span>
       </li>
     </ol>
-    <p v-if="canResume">
+    <p v-if="canResume || canResumeFolders">
       保存を選んだ転送は再接続後に許可し直して再開できます。ブラウザを閉じている間に期限切れになったデータは、次回のファイル転送利用時に削除します。完了表示は接続先保存の確認後です。受信はブラウザの保存先を確認してください。
     </p>
     <p v-else>

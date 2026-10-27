@@ -1,4 +1,4 @@
-import {DesktopFolderRequest} from "./desktopFolders.js";
+import {DesktopFolderRequest,DesktopFolderCheckpointRequest,DesktopFolderPath} from "./desktopFolders.js";
 import { z } from "zod";
 import { WorkFileRequest } from "./work.js";
 export const DESKTOP_FILES_PROTOCOL = "soda-desktop-files-v1";
@@ -38,6 +38,7 @@ export const DesktopFileRequest = z
       WorkFileRequest,
       DesktopCheckpointRequest,
       DesktopFolderRequest,
+      DesktopFolderCheckpointRequest,
     ]),
   })
   .strict();
@@ -52,6 +53,7 @@ export const DesktopFileResult = z
       .object({
         id: z.string().uuid().optional(),
         checkpoint: checkpoint.optional(),
+        folderFiles:z.array(z.object({path:DesktopFolderPath,offset,done:z.boolean()}).strict()).max(1000).optional(),
         entriesDone:z.number().int().min(0).max(1000).optional(),
         expiresInMs: z.number().int().min(1).max(900000).optional(),
         bytes: z.number().int().min(0).max(104857600).optional(),

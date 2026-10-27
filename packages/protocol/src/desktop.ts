@@ -73,6 +73,7 @@ export const DesktopOptions = z
     files: z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
     folders:z.literal(true).optional(),
+    folderCheckpoints:z.literal(true).optional(),
     richClipboard: z.literal(true).optional(),
     microphone: z.literal(true).optional(),
     microphoneOpus:z.literal(true).optional(),
@@ -168,6 +169,7 @@ export const DesktopReady = z
     files:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
     folders:z.literal(true).optional(),
+    folderCheckpoints:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
     microphone:z.literal(true).optional(),
     microphoneOpus:z.literal(true).optional(),
@@ -325,6 +327,7 @@ export interface DesktopResults {
     files?: boolean;
     fileCheckpoints?:boolean;
     folders?:boolean;
+    folderCheckpoints?:boolean;
     richClipboard?: boolean;
     microphone?: boolean;
     microphoneOpus?: boolean;
