@@ -206,7 +206,7 @@ function run() {
       if(m.type==="configure"&&!configureDelayed&&delayAt>=0){configureDelayed=true;const delay=Number(process.argv[delayAt+1]);if(!Number.isInteger(delay)||delay<1||delay>20000)throw Error("Generated delay bound");setTimeout(()=>lines.emit("line",line),delay);return;}
       if (m.type === "configure" && !options) {
         const expectedEnvAt=process.argv.indexOf("--expect-elevated-request");if(expectedEnvAt>=0&&process.env.SODA_DESKTOP_ELEVATED_REQUEST!==process.argv[expectedEnvAt+1])throw Error("Generated source request environment mismatch");
-        if(configuredProtected&&((m.options.elevatedDesktop===true&&m.allowElevated===true)||process.argv.includes("--protected-unconditional"))){protectedMode=configuredProtected;secure=true;}
+        if(configuredProtected&&(((m.options.elevatedDesktop===true||m.allowSharedProtected===true)&&m.allowElevated===true)||process.argv.includes("--protected-unconditional"))){protectedMode=configuredProtected;secure=true;}
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
         const failureAt = process.argv.indexOf("--startup-failure");
@@ -239,7 +239,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
-          ...(protectedMode?{protectedDesktop:protectedMode}:{}),
+          ...(protectedMode?{protectedDesktop:protectedMode,...(m.allowSharedProtected===true&&!process.argv.includes("--no-shared-protected")?{sharedProtected:true}:{})}:{}),
           ...(virtualSource?{virtualDisplay:true}:{}),
           ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),

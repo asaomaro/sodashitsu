@@ -1,3 +1,4 @@
+export const DESKTOP_SHARED_PROTECTED_PROTOCOL="soda-desktop-shared-protected-v1";
 export const DESKTOP_SHARED_RESOLUTION_PROTOCOL="soda-desktop-shared-resolution-v1";
 import {DesktopNativePlatform,DesktopInputCapabilities} from "./desktopNativePlatform.js";
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
@@ -54,6 +55,7 @@ export const DesktopOptions = z
     elevatedDesktop:z.literal(true).optional(),
     nativePlatform:DesktopNativePlatform.optional(),
     sharedDesktop:z.literal(true).optional(),
+    sharedProtected:z.literal(true).optional(),
     sharedNative:z.literal(true).optional(),
     sharedDatagrams:z.literal(true).optional(),
     sharedAudio:z.literal(true).optional(),
@@ -148,6 +150,8 @@ export const DesktopReady = z
     inputCapabilities: DesktopInputCapabilities.optional(),
     secureDesktop: z.boolean().optional(),
     protectedDesktop:DesktopProtectedMode.optional(),
+    sharedProtected:z.literal(true).optional(),
+    sharedProtectedAvailable:z.literal(true).optional(),
     lockScreenCover: z.boolean().optional(),
     imeKeys: z.boolean().optional(),
     extendedInput: z.boolean().optional(),
@@ -297,6 +301,7 @@ export interface DesktopResults {
     elevatedDesktop?:boolean;
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
+    sharedProtected?:boolean;
     sharedNative?:boolean;
     sharedDatagrams?:boolean;
     sharedAudio?:boolean;

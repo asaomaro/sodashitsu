@@ -80,6 +80,20 @@ public static class SodaDesktopHost {
     static Func<object,bool> ProtectedPublish;
     static bool SecureAttentionAllowed=true;
     static string ProtectedMode;
+    static bool SharedProtectedProof(Dictionary<string,object> config,string mode) {
+        object flag;return (mode=="elevated-default"||mode=="elevated-uac")&&config.TryGetValue("allowSharedProtected",out flag)&&flag is bool&&(bool)flag;
+    }
+    public static void VerifySharedProtectedProof() {
+        var config=new Dictionary<string,object>();
+        foreach(string mode in new string[]{null,"elevated-default","elevated-uac"}) {
+            if(SharedProtectedProof(config,mode))throw new InvalidOperationException("Missing shared proof flag");
+            foreach(object flag in new object[]{false,"true",1,true}) {
+                config["allowSharedProtected"]=flag;
+                if(SharedProtectedProof(config,mode)!=(mode!=null&&flag is bool&&(bool)flag))throw new InvalidOperationException("Shared protected proof boundary");
+            }
+            config.Clear();
+        }
+    }
     static void SetProtectedGuards(Func<bool> current,Func<object> capture,Func<object,bool> publish,string mode){Secure=true;SecureGuard=current;ProtectedCapture=capture;ProtectedPublish=publish;SecureAttentionAllowed=false;ProtectedMode=mode;}
     static void ClearProtectedGuards(){Secure=false;SecureGuard=null;ProtectedCapture=null;ProtectedPublish=null;SecureAttentionAllowed=true;ProtectedMode=null;}
     static bool CanSecureAttention(){return Secure&&SecureAttentionAllowed&&Control&&AllowedDesktop();}
@@ -450,6 +464,7 @@ public static class SodaDesktopHost {
             if(nativePipeline)ready["nativeVideoWindow"]=3;
             if(Secure)ready["secureDesktop"]=true;
             if(ProtectedMode!=null)ready["protectedDesktop"]=ProtectedMode;
+            if(SharedProtectedProof(config,ProtectedMode))ready["sharedProtected"]=true;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             if(ActiveMonitors!=null)ready["monitorLayout"]=ActiveMonitors.Message();
             if(microphoneCeiling)ready["microphone"]=true;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {DESKTOP_SHARED_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {createDesktopSocketFactory} from "../desktop/DesktopEndpointSocket.js";
 import DesktopEndpointPairing from "./DesktopEndpointPairing.vue";
 import {DESKTOP_NATIVE_PLATFORM_PROTOCOL,supportsDesktopInput,type DesktopInputCapabilities} from "@sodashitsu/protocol";
@@ -66,7 +67,7 @@ const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
 const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<DesktopInputCapabilities>();
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
-const elevatedScreen=ref(false), sharedScreen=ref(false);
+const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false);
 const lockScreenCover = ref(false);
 const imeKeys = ref(false);
 const extendedInput = ref(false);
@@ -168,8 +169,8 @@ let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>();
 const virtualScreen=ref(false),virtualActive=ref(false);
 function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
-function changeSharedScreen(){if(sharedScreen.value){elevatedScreen.value=false;virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
-function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeSharedScreen(){if(sharedScreen.value){if(!sharedProtectedAvailable.value)elevatedScreen.value=false;virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
@@ -416,7 +417,7 @@ const microphoneCodec=ref("PCM"),microphoneAvailable=ref(false),microphonePipeRe
 let microphoneSocket:WebSocket|undefined,microphoneClient:DesktopMicrophoneClient|undefined;
 function resetMicrophone(){microphoneClient?.stop();microphoneClient=undefined;microphoneSocket?.close();microphoneSocket=undefined;microphoneAvailable.value=false;microphonePipeReady.value=false;microphoneState.value="stopped";}
 function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphonePipeReady.value&&!secureDesktop.value)void microphoneClient?.start();}
-function stop() {
+function stop(preserveCapabilities=false) {
   resetMicrophone();
   epoch++;
   cursorRenderer?.stop();cursorRenderer=undefined;separateCursor.value=false;
@@ -428,6 +429,7 @@ function stop() {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
+  if(!preserveCapabilities)sharedProtectedAvailable.value=false;
   virtualActive.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=nativeCadence.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
@@ -536,7 +538,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -547,7 +549,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(sharedScreen.value?{sharedDesktop:true}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(sharedScreen.value?{sharedDesktop:true,...(elevatedScreen.value?{elevatedDesktop:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -587,6 +589,10 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
+        if(m.type==="shared_protected_available"){
+          if(typeof m.enabled!=="boolean")throw Error("Invalid protected sharing capability");
+          sharedProtectedAvailable.value=m.enabled;return;
+        }
         if(m.type==="monitor_topology_changed"){monitorChanged=true;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";releaseInputs();}
         else if(m.type==="microphone_ticket"){
           if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
@@ -642,7 +648,7 @@ function connect(automatic = false) {
         } else if (m.type === "ready") {
           const r = DesktopReady.parse(m);
           secureDesktop.value = r.secureDesktop === true;
-          protectedMode.value=r.protectedDesktop;
+          protectedMode.value=r.protectedDesktop;sharedProtectedAvailable.value=r.sharedProtectedAvailable===true;
           lockScreenCover.value = r.lockScreenCover === true;
           imeKeys.value = r.imeKeys === true;
           extendedInput.value = r.extendedInput === true;
@@ -827,7 +833,7 @@ function connect(automatic = false) {
     endpointEncrypted.value=desktopSockets.encrypted;
     if(endpointEncrypted.value&&event.reason&&!error.value)error.value=event.reason;
     const wasReady = ready.value;
-    stop();
+    stop(true);
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
     if(elevatedScreen.value){status.value="停止";if(!error.value)error.value=wasReady?"管理者画面の共有が終了しました。接続し直し、操作を許可し直してください。":"管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";return;}
@@ -1098,7 +1104,7 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止画面でも画像を送り続けるPortalが必要で、1.5秒無更新になると停止します。</template></p>
       <label v-if="!platformBackend"><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
-      <p v-if="sharedScreen" data-desktop-shared>{{ nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
+      <p v-if="sharedScreen" data-desktop-shared>{{ protectedMode ? "許可済みの管理者画面を画像で共有しています。" : nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。<template v-if="!protectedMode">対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。</template>クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
       <label v-if="!platformBackend"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label v-if="!platformBackend"><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>

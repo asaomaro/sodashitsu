@@ -1,3 +1,4 @@
+import {DESKTOP_SHARED_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_RESOLUTION_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_NATIVE_PLATFORM_PROTOCOL,DesktopNativePlatform,DesktopNativePlatformFailure,desktopNativePlatformFailureMessage,supportsDesktopInput,type DesktopInputCapabilities} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_AUDIO_PROTOCOL} from "@sodashitsu/protocol";
@@ -62,7 +63,7 @@ type Viewer = {
   monitorsRequested?:boolean;monitors?:boolean;
   fileRequested?:boolean;files?:boolean;fileLane?:ReturnType<DesktopVideoLanes["issue"]>;
   sharedRate?:boolean;sharedAudioRequested?:boolean;sharedAudio?:boolean;
-  microphoneRequested?:boolean;microphone?:boolean;sharedResolutionRequested?:boolean;sharedResolution?:boolean;microphoneOpusRequested?:boolean;microphoneOpus?:boolean;microphoneLane?:ReturnType<DesktopVideoLanes["issue"]>;
+  microphoneRequested?:boolean;microphone?:boolean;sharedProtectedRequested?:boolean;sharedProtectedAvailable?:boolean;sharedProtected?:boolean;sharedResolutionRequested?:boolean;sharedResolution?:boolean;microphoneOpusRequested?:boolean;microphoneOpus?:boolean;microphoneLane?:ReturnType<DesktopVideoLanes["issue"]>;
   richRequested?:boolean;richClipboard?:boolean;richGranted?:boolean;clipboardLane?:ReturnType<DesktopVideoLanes["issue"]>;
   nativeAudioRequested?:boolean;nativeAudio?:boolean;requestedNativeAudio?:boolean;
   nativeDatagramsRequested?:boolean;nativeDatagrams?:boolean;
@@ -234,7 +235,7 @@ export class DesktopRelay {
       if(offered.length===1&&offered[0]===DESKTOP_RICH_CLIPBOARD_PROTOCOL){this.clipboardLanes.accept(ws,sessionId,origin);return;}
       if (offered.length === 1 && offered[0] === DESKTOP_IMAGE_LANE_PROTOCOL) { this.imageLanes.accept(ws,sessionId,origin);return; }
       if (offered.length === 1 && offered[0] === DESKTOP_VIDEO_LANE_PROTOCOL) { this.videoLanes.accept(ws, sessionId, origin); return; }
-      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL),offered.includes(DESKTOP_VIRTUAL_DISPLAY_PROTOCOL),offered.includes(DESKTOP_PROTECTED_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTOCOL),offered.includes(DESKTOP_SHARED_NATIVE_PROTOCOL),offered.includes(DESKTOP_SHARED_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_PROTOCOL),offered.includes(DESKTOP_SHARED_AUDIO_PROTOCOL),offered.includes(DESKTOP_NATIVE_PLATFORM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_OPUS_FEATURE),offered.includes(DESKTOP_SHARED_RESOLUTION_PROTOCOL));
+      if (origin !== undefined) this.viewer(ws, sessionId, origin, String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PROTOCOL), String(req.headers["sec-websocket-protocol"]??"").split(",").map(v=>v.trim()).includes(DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL), offered.includes(DESKTOP_VIDEO_LANE_PROTOCOL),offered.includes(DESKTOP_NATIVE_RATE_PROTOCOL),offered.includes(DESKTOP_CURSOR_PROTOCOL),offered.includes(DESKTOP_IMAGE_LANE_PROTOCOL),offered.includes(DESKTOP_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_AUDIO_PROTOCOL),offered.includes(DESKTOP_RICH_CLIPBOARD_PROTOCOL),offered.includes(DESKTOP_FILES_PROTOCOL),offered.includes(DESKTOP_MONITORS_PROTOCOL),offered.includes(DESKTOP_NATIVE_ADAPTIVE_PROTOCOL),offered.includes(DESKTOP_NATIVE_CODEC_PROTOCOL),offered.includes(DESKTOP_VIRTUAL_DISPLAY_PROTOCOL),offered.includes(DESKTOP_PROTECTED_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTOCOL),offered.includes(DESKTOP_SHARED_NATIVE_PROTOCOL),offered.includes(DESKTOP_SHARED_DATAGRAM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_PROTOCOL),offered.includes(DESKTOP_SHARED_AUDIO_PROTOCOL),offered.includes(DESKTOP_NATIVE_PLATFORM_PROTOCOL),offered.includes(DESKTOP_MICROPHONE_OPUS_FEATURE),offered.includes(DESKTOP_SHARED_RESOLUTION_PROTOCOL),offered.includes(DESKTOP_SHARED_PROTECTED_PROTOCOL));
       else this.provider(ws);
     });
   }
@@ -255,7 +256,7 @@ export class DesktopRelay {
     if (!sent && v.sharedDesktop) this.stop(v);
     return sent;
   }
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false): void {
+  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false,sharedProtectedRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -321,7 +322,7 @@ export class DesktopRelay {
             }
           }),
       },
-      sharedResolutionRequested,microphoneOpusRequested,nativePlatformRequested,sharedAudioRequested,microphoneRequested,sharedDatagramsRequested,sharedNativeRequested,sharedRequested,elevatedRequested,virtualDisplayRequested,nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
+      sharedProtectedRequested,sharedResolutionRequested,microphoneOpusRequested,nativePlatformRequested,sharedAudioRequested,microphoneRequested,sharedDatagramsRequested,sharedNativeRequested,sharedRequested,elevatedRequested,virtualDisplayRequested,nativeCodecsRequested,nativeAdaptiveRequested,cursorRequested,nativeDatagramsRequested,nativeAudioRequested,richRequested,fileRequested,monitorsRequested,
       nativeRateRequested,
       videoLaneRequested,imageLaneRequested,
       nativeVideoRequested,
@@ -542,6 +543,7 @@ export class DesktopRelay {
         virtualDisplay:z.boolean().optional(),
         elevatedDesktop:z.boolean().optional(),
         sharedDesktop:z.boolean().optional(),
+        sharedProtected:z.boolean().optional(),
         sharedNative:z.boolean().optional(),
         sharedDatagrams:z.boolean().optional(),
         nativePlatform:DesktopNativePlatform.optional(),
@@ -580,7 +582,7 @@ export class DesktopRelay {
     delete legacyOptions.imeKeys;
     delete legacyOptions.extendedInput;
     delete legacyOptions.sharedRate;delete legacyOptions.nativePlatform;delete legacyOptions.sharedAudio;delete legacyOptions.sharedDatagrams;delete legacyOptions.sharedNative;delete legacyOptions.sharedDesktop;
-    delete legacyOptions.sharedResolution;delete legacyOptions.microphoneOpus;delete legacyOptions.microphone;delete legacyOptions.elevatedDesktop;delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
+    delete legacyOptions.sharedProtected;delete legacyOptions.sharedResolution;delete legacyOptions.microphoneOpus;delete legacyOptions.microphone;delete legacyOptions.elevatedDesktop;delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
     delete legacyOptions.nativeVideoWindow;
     delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;delete legacyOptions.nativeAdaptive;delete legacyOptions.nativeCodecs;
     delete legacyOptions.cursor;
@@ -594,6 +596,9 @@ export class DesktopRelay {
     v.nativeVideo=v.nativeVideoRequested&&caps.nativeVideo===true;
     v.nativeCodecs=v.nativeVideo&&v.nativeCodecsRequested===true&&caps.nativeCodecs===true;
     v.nativeAdaptive=v.nativeVideo&&v.nativeAdaptiveRequested===true&&caps.nativeAdaptive===true;
+    v.sharedProtectedAvailable=v.sharedProtectedRequested===true&&caps.sharedProtected===true&&caps.elevatedDesktop===true&&caps.sharedDesktop===true&&caps.features===true;
+    // A busy initial single-view request still needs the explicit join controls.
+    if(v.sharedProtectedRequested)this.send(v.ws,{type:"shared_protected_available",enabled:v.sharedProtectedAvailable});
     v.elevatedDesktop=options.elevatedDesktop===true&&v.elevatedRequested===true&&caps.elevatedDesktop===true&&caps.features===true;
     if(options.elevatedDesktop&&(!v.elevatedDesktop||options.virtualDisplay||options.monitorDevice||options.display))throw new DesktopSetupRequired(options.virtualDisplay||options.monitorDevice||options.display?desktopProtectedFailureMessage("conflict"):desktopProtectedFailureMessage("not_allowed")+"接続先と接続元を更新し、専用保護サービスを確認してください。");
     v.virtualDisplay=options.virtualDisplay===true&&v.virtualDisplayRequested===true&&caps.virtualDisplay===true;
@@ -608,8 +613,9 @@ export class DesktopRelay {
     v.nativeDatagrams=v.nativeVideo&&v.nativeDatagramsRequested===true&&caps.nativeDatagrams===true;
     v.nativeInputFreshness=v.nativeVideo&&caps.nativeInputFreshness===true;
     v.sharedDesktop=options.sharedDesktop===true&&v.sharedRequested===true&&caps.sharedDesktop===true&&caps.features===true;
-    if(options.sharedDesktop&&(!v.sharedDesktop||options.elevatedDesktop||options.virtualDisplay||options.display))throw new DesktopSetupRequired("複数viewer共有は両端の更新と通常画面の画像配信が必要です。管理者画面・仮想画面・解像度変更とは併用できません。");
-    v.sharedNative=v.sharedDesktop===true&&v.sharedNativeRequested===true&&caps.sharedNative===true&&v.nativeVideo===true;
+    v.sharedProtected=v.sharedProtectedAvailable===true&&v.sharedDesktop===true&&v.elevatedDesktop===true;
+    if(options.sharedDesktop&&(!v.sharedDesktop||(options.elevatedDesktop&&!v.sharedProtected)||options.virtualDisplay||options.display))throw new DesktopSetupRequired("複数viewer共有は両端の対応が必要です。管理者画面との併用には対応する保護サービスも必要です。仮想画面・解像度変更とは併用できません。");
+    v.sharedNative=v.sharedDesktop===true&&!v.elevatedDesktop&&v.sharedNativeRequested===true&&caps.sharedNative===true&&v.nativeVideo===true;
     v.sharedAudio=v.sharedNative===true&&v.sharedAudioRequested===true&&caps.sharedAudio===true&&v.nativeAudio===true;
     v.sharedDatagrams=v.sharedNative===true&&v.sharedDatagramsRequested===true&&caps.sharedDatagrams===true&&v.nativeDatagrams===true;
     v.sharedRate=v.sharedNative===true&&caps.sharedRate===true&&caps.nativeCadence===true;
@@ -637,6 +643,7 @@ export class DesktopRelay {
       ...legacyOptions,
       ...(v.microphone?{microphone:true as const,...(v.microphoneOpus?{microphoneOpus:true as const}:{})}:{}),
       ...(v.sharedDesktop?{sharedDesktop:true as const}:{}),
+      ...(v.sharedProtected?{sharedProtected:true as const}:{}),
       ...(v.sharedNative?{sharedNative:true as const}:{}),
       ...(v.sharedResolution?{sharedResolution:true as const}:{}),
       ...(v.sharedAudio?{sharedAudio:true as const}:{}),
@@ -863,6 +870,7 @@ export class DesktopRelay {
           if(msg.type==="monitor_topology_changed"&&Object.keys(msg).length===1&&v.monitors&&v.ready&&!v.secureDesktop){this.send(v.ws,{type:"monitor_topology_changed"});this.stop(v);return;}
           if (msg.type === "ready" && !v.ready) {
             const ready = DesktopReady.parse(msg);
+            if(v.sharedProtected&&ready.sharedProtected!==true)throw Error("Shared protected helper proof missing");
             if(v.nativePlatform?(ready.backend!==v.nativePlatform||!ready.inputCapabilities):(ready.backend==="linux-portal"||ready.backend==="macos-sck"||ready.inputCapabilities))throw Error("Unexpected native backend");
             if(ready.inputCapabilities)v.inputCapabilities=ready.inputCapabilities;
             if(v.elevatedDesktop&&(!ready.protectedDesktop||!ready.secureDesktop||ready.lockScreenCover))throw Error("Requested protected worker not selected");
@@ -894,8 +902,8 @@ export class DesktopRelay {
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
             v.files=v.files===true&&ready.files===true&&!v.secureDesktop;
             v.richClipboard=v.richClipboard===true&&ready.richClipboard===true&&ready.allowClipboard===true&&!v.secureDesktop;
-            const { imeKeys, extendedInput, protectedDesktop, virtualDisplay, monitorLayout, files, nativeVideo,nativeDatagrams,nativeAudio,microphone,microphoneOpus,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,inputCapabilities,imageLane:helperImageLane, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.nativePlatform&&inputCapabilities?{inputCapabilities}:{}), ...(v.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}), ...(v.virtualDisplay&&virtualDisplay?{virtualDisplay:true}:{}), ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.microphone?{microphone:true,...(v.microphoneOpus&&ready.microphoneOpus?{microphoneOpus:true}:{})}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            const { imeKeys, extendedInput, sharedProtected:helperSharedProtected, sharedProtectedAvailable:_helperSharedAvailable, protectedDesktop, virtualDisplay, monitorLayout, files, nativeVideo,nativeDatagrams,nativeAudio,microphone,microphoneOpus,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,inputCapabilities,imageLane:helperImageLane, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.sharedProtectedAvailable?{sharedProtectedAvailable:true}:{}),...(v.sharedProtected&&helperSharedProtected?{sharedProtected:true}:{}), ...(v.nativePlatform&&inputCapabilities?{inputCapabilities}:{}), ...(v.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}), ...(v.virtualDisplay&&virtualDisplay?{virtualDisplay:true}:{}), ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.microphone?{microphone:true,...(v.microphoneOpus&&ready.microphoneOpus?{microphoneOpus:true}:{})}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);

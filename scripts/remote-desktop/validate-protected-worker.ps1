@@ -5,6 +5,7 @@ Add-Type -Path @($files | ForEach-Object { Join-Path $PSScriptRoot $_ }) -Refere
 [SodaDesktopUnlock]::VerifyLeasePurposes()
 [SodaDesktopUnlock]::VerifyProtectedPurposes()
 [SodaDesktopUnlock]::VerifyWorkerCleanup()
+[SodaDesktopHost]::VerifySharedProtectedProof()
 [SodaDesktopProtectedScopeChecks]::Run()
 [SodaDesktopProtectedHandshakeChecks]::Run()
 [SodaDesktopProtectedScopeNative]::VerifyLayouts()
