@@ -547,3 +547,7 @@ undefined
 
 
 ```
+
+## Final result
+
+Product freeze acfdf5d6: build passed; full tests 785 files /11,720 passed. Independent worktree build/smoke passed. Browser2passed after all negative controls and after test-only alias fix a0eff6a0. Whole typecheck passed all packages except the initial Node/browser WebSocket test type collision; corrected E2E package typecheck then passed. Both reviewers re-reviewed that test-only fix with no findings. No product source changed during the frozen full run.
