@@ -1,0 +1,39 @@
+name: Desktop Node identity (generated keys)
+on:
+  pull_request:
+    paths:
+      - 'packages/client-core/src/desktop/*.node*'
+      - 'packages/client-core/package.json'
+      - 'packages/server/src/desktop/DesktopEndpoint*'
+      - 'packages/server/src/desktop/DesktopWindows*'
+      - 'scripts/remote-desktop/**'
+      - '.github/workflows/desktop-node-identity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-node-identity-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install pinned pnpm in the runner temporary directory
+        shell: powershell
+        run: npm install --prefix "$env:RUNNER_TEMP\soda-pnpm" pnpm@9.15.9 --ignore-scripts
+      - name: Build the Node identity library without desktop or PTY activation
+        shell: powershell
+        run: |
+          $pnpm = Join-Path $env:RUNNER_TEMP 'soda-pnpm\node_modules\pnpm\bin\pnpm.cjs'
+          node $pnpm install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node $pnpm -r --filter '@sodashitsu/client-core...' run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Generated current-user DPAPI vault and pinned agent handshake
+        shell: powershell
+        run: node scripts/remote-desktop/validate-node-identity.mjs

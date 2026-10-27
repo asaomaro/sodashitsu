@@ -105,3 +105,6 @@
 
 
 第13段階13D: 検証済み受信file/ZIPのwindow内一時保持と単一DownloadURLによる取り出し・再保存を実験機能として追加。default off、8件/100MiB/単調時計5分、開始時opaque ticketと取消/再許可/別instance/URL生成後の失効を実装。source全体11994/root12056、新browser6＋既存27、負例4/独立build・smoke/独立taskcheck・全体reviewと外部主張fact-checkを通過。実OSでのdrop成功は未検証、Explorer画面内からの直接dragやmonitor別独立取得・圧縮等が残るためtask13全体は未完了。
+
+
+第10段階agent準備1: 既存の所有者鍵Store/DPAPI/ACL/fixed helperをclient-coreの明示Node subpathへ共通化し、server旧importはre-exportで保持。Node専用localIdentityは復元後の鍵/policy/ownerを再検査し、activeをowner close/policyで失効。単一owner・外部Store変更非監視・RPC非公開を明記。source全体12000/root12062、暗号browser各6、直接source負例5/独立build・smoke/独立taskcheck・全体reviewとWindows生成DPAPI CIを通過。CLI identityコマンド/agent recipient routeとCLI/MCP/model/UIは後続でtask10全体は未完了。
