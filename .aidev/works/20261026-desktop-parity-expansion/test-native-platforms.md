@@ -284,3 +284,7 @@ Caused by: Error: Matcher did not succeed in time.
    Duration  23.03s (tests 96%, transform 3%, import 1%)
 
 ```
+
+## 最終結果（source9d65412b）
+
+build/typecheck成功。全体780 suites / 11641 tests成功（369.88s）。native/既存入力browser3件成功（20.8s）。独立worktreeでbuild・smoke PASS。Python生成18件成功。Windows boundaries CI23s、Linux generated CI3m34s通過。実Portal/実入力/OSロック操作は行っていない。
