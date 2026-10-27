@@ -42,6 +42,7 @@ import {
   DESKTOP_CLIPBOARD_LIMIT,
 } from "@sodashitsu/protocol";
 
+import {monitorPointer,monitorViewport,monitorWindowUrl,type MonitorWindowLaunch} from "../desktop/monitorWindow.js";
 import DesktopFiles from "./DesktopFiles.vue";
 import {DesktopFileClient} from "../desktop/fileClient.js";
 import {DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DesktopNativeProfilePending,DESKTOP_MONITORS_PROTOCOL,desktopMonitorAt,type DesktopMonitorLayout,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
@@ -63,7 +64,7 @@ import {
   type ConnectionSettings,
 } from "../desktop/settings.js";
 
-const props = defineProps<{ machineId: string; label: string; embedded?: boolean }>();
+const props = defineProps<{ machineId: string; label: string; embedded?: boolean; monitorWindow?: MonitorWindowLaunch }>();
 let desktopSockets=createDesktopSocketFactory(props.machineId);const endpointEncrypted=ref(false);
 function usePlainDesktop(){stop();desktopSockets.dispose();desktopSockets=createDesktopSocketFactory(props.machineId);endpointEncrypted.value=false;connect();}
 const emit = defineEmits<{ close: [] }>();
@@ -128,7 +129,7 @@ const status = ref("接続中"),
 const agentActive = ref(false),
   agentTicket = ref(""),
   agentExpires = ref(0);
-const savedSettings = loadSettings(props.machineId);
+const savedSettings = props.monitorWindow?.settings ?? loadSettings(props.machineId);
 const savedViewerPreferences = loadViewerPreferences(props.machineId);
 const preferredTransport = ref(savedViewerPreferences.transport);
 const deltas = ref(savedSettings.deltas),
@@ -145,13 +146,27 @@ const info = ref<DesktopFrameInfo | null>(null),
   drawMs = ref(0),
   inputAckMs = ref(0),
   rendered = ref(0);
-const canvasSize = computed(() => {
-  const size = info.value ?? { width: 1, height: 1 };
-  const scale = fit.value
-    ? Math.min(screenSize.value.width / size.width, screenSize.value.height / size.height)
-    : 1;
-  return { width: `${size.width * scale}px`, height: `${size.height * scale}px` };
+const localMonitor=ref(props.monitorWindow?.monitor??""),monitorWindowNotice=ref("");
+const crop=computed(()=>monitorViewport(monitorLayout.value,localMonitor.value));
+const canvasScale=computed(()=>{
+  const size=info.value??{width:1,height:1},area=crop.value??{width:1,height:1};
+  return fit.value?Math.min(screenSize.value.width/(size.width*area.width),screenSize.value.height/(size.height*area.height)):1;
 });
+const canvasSize = computed(() => {
+  const size=info.value??{width:1,height:1},scale=canvasScale.value;
+  return {width:`${size.width*scale}px`,height:`${size.height*scale}px`,...(crop.value?{left:`${-crop.value.x*size.width*scale}px`,top:`${-crop.value.y*size.height*scale}px`}:{})};
+});
+const viewportSize=computed(()=>{
+  const size=info.value??{width:1,height:1},area=crop.value,scale=canvasScale.value;
+  return area?{width:`${size.width*area.width*scale}px`,height:`${size.height*area.height*scale}px`}:undefined;
+});
+function changeLocalMonitor(){releaseInputs();}
+function openMonitorWindow(){
+  if(!ready.value||!sharedScreen.value||!sharedMonitorsScreen.value||elevatedScreen.value||virtualScreen.value||monitorLayout.value?.selected!=="all"||!crop.value||!activeSettings.value)return;
+  const url=monitorWindowUrl({machineId:props.machineId,label:props.label,monitor:localMonitor.value,settings:activeSettings.value,cursor:sharedCursorScreen.value&&showCursor.value,clipboard:sharedClipboardScreen.value,deltas:sharedDeltasScreen.value&&deltas.value},location.origin);
+  window.open(url.href,"_blank","noopener,noreferrer,popup,width=1100,height=800");
+  monitorWindowNotice.value="別窓で開きます。開かない場合は、このサイトのポップアップを許可してください。";
+}
 const adaptive = ref(savedSettings.adaptive),
   dynamicQuality = ref(false),
   allowMedia = ref(false),
@@ -174,6 +189,8 @@ const mediaState = ref("images"),
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>(),sharedMonitorDevice=ref<string>();
 const virtualScreen=ref(false),virtualActive=ref(false);
+if(props.monitorWindow){sharedScreen.value=true;sharedMonitorsScreen.value=true;sharedMonitorDevice.value="all";sharedCursorScreen.value=props.monitorWindow.cursor;sharedClipboardScreen.value=props.monitorWindow.clipboard;sharedDeltasScreen.value=props.monitorWindow.deltas;}
+
 function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedScreen(){sharedMonitorDevice.value=undefined;if(sharedScreen.value){if(!sharedProtectedAvailable.value)elevatedScreen.value=false;virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function joinSharedMonitor(){monitorDevice.value=sharedMonitorDevice.value?.trim()||undefined;changeMonitor();}
@@ -183,7 +200,7 @@ function changeSharedClipboard(){releaseInputs();connect();const el=canvas.value
 function changeSharedCursor(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
-function changeMonitor(){if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
+function changeMonitor(){if(!props.monitorWindow)localMonitor.value="";if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),fileCheckpoints=ref(false),folderCheckpoints=ref(false),foldersCap=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
 function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=fileCheckpoints.value=folderCheckpoints.value=foldersCap.value=false;}
 function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data||!data.files.length&&!data.items.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}void filePanel.value.handleDrop(data);}
@@ -667,6 +684,9 @@ function connect(automatic = false) {
           protectedMode.value=r.protectedDesktop;sharedProtectedAvailable.value=r.sharedProtectedAvailable===true;
           lockScreenCover.value = r.lockScreenCover === true;
           imeKeys.value = r.imeKeys === true;
+          if(localMonitor.value&&!monitorViewport(r.monitorLayout,localMonitor.value)){
+            error.value="選択したモニターを表示できません。全モニター共有を確認し、元の窓から開き直してください。";stop();return;
+          }
           extendedInput.value = r.extendedInput === true;
           if (secureDesktop.value) text.value = "";
           title.value = protectedMode.value ? (protectedMode.value==="elevated-uac"?"WindowsのUAC確認画面":"Windowsの管理者画面") : secureDesktop.value ? "Windowsのロック解除" : r.title;
@@ -901,7 +921,7 @@ function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
   if ((event === "down" || (event === "move" && e.buttons === 0)) && (x < 0 || x > 1 || y < 0 || y > 1)) return;
   if (event === "down") { canvas.value.focus(); canvas.value.setPointerCapture(e.pointerId); }
-  const position = { x: Math.max(0, Math.min(1,x)), y: Math.max(0, Math.min(1,y)) };
+  const position = crop.value&&monitorLayout.value?monitorPointer(monitorLayout.value,localMonitor.value,x,y)!:{ x: Math.max(0, Math.min(1,x)), y: Math.max(0, Math.min(1,y)) };
   const onMonitor=!monitorLayout.value||!!desktopMonitorAt(monitorLayout.value,position.x,position.y);
   if(onMonitor)cursorRenderer?.local(position.x,position.y);
   for (const change of mouseButtons.update(e.buttons)) {
@@ -1241,6 +1261,11 @@ onBeforeUnmount(() => {
           送信→描画ACK {{nativeStats.ackMs.toFixed(0)}} ms · 復号・描画 {{nativeStats.decodeMs.toFixed(1)}} ms · ACK待ち {{nativeStats.pending}} / {{nativeStats.window}}枚
         </p>
       </details>
+      <div v-if="ready&&sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&monitorLayout?.selected==='all'" data-monitor-windows>
+        <label>この窓に表示するモニター<select aria-label="この窓に表示するモニター" v-model="localMonitor" @change="changeLocalMonitor"><option value="">全体</option><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}</option></select></label>
+        <button :disabled="!crop" @click="openMonitorWindow">選択モニターを別窓で開く</button>
+        <p>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
+      </div>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
@@ -1327,6 +1352,7 @@ onBeforeUnmount(() => {
         class="screen"
         :class="{ controlling: control, actual: !fit }"
       >
+        <div class="monitor-viewport" :class="{cropped:!!crop}" :style="viewportSize" :data-monitor-viewport="crop?localMonitor:undefined">
         <canvas
           v-show="!lockScreenCover"
           ref="canvas"
@@ -1348,6 +1374,7 @@ onBeforeUnmount(() => {
           @blur="canvasBlur"
         />
         <canvas v-if="separateCursor" ref="cursorCanvas" class="cursor-overlay" :style="canvasSize" aria-hidden="true" data-remote-cursor />
+        </div>
         <div v-if="lockScreenCover" class="lock-screen-cover" data-desktop-lock-cover>
           <p>接続先はWindowsのロック画面です。</p>
           <button :disabled="!ready || !allowed || dismissInFlight" @click="dismissLockScreen">サインイン画面へ進む</button>
@@ -1534,4 +1561,11 @@ details p {
 .desktop-window.embedded { position:relative; inset:auto; width:100%; height:100%; min-width:0; min-height:0; resize:none; z-index:auto; box-shadow:none; }
 .embedded > header { cursor:default; }
 .embedded > header strong { flex:0 1 auto; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+</style>
+
+<style scoped>
+.monitor-viewport:not(.cropped){display:contents;}
+.monitor-viewport.cropped{position:relative;overflow:hidden;flex:none;}
+.screen:not(.actual) .monitor-viewport.cropped{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);}
+.screen .monitor-viewport.cropped canvas{position:absolute;transform:none;max-width:none;max-height:none;}
 </style>
