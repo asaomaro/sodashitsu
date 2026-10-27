@@ -1,0 +1,9 @@
+# 7B1 検証記録
+
+Base main5765f05dcadadaf64f4e74b79bf5de56671919d6（PR261）。新しいC# sourceと独立validatorは既存helper/service/capture/input/HTTP/RPCへ組み込まない。Native hostを生成検証から生成・実行せず、fake host・生成TOKEN_PRIVILEGES buffer・Marshal layoutだけを使う。
+
+独立設計点検はmust/shouldなし。taskcheckでprimary tokenをPrivilegeCheckへ渡すAPI契約違反を1件発見。GetTokenInformation(TokenPrivileges)と有限bufferの純粋parserへ修正し、無効/除去/重複/不正長の回帰を追加。追加差分の再点検は実施中。
+
+この環境にはWindows PowerShell/C# compilerがないため、Windows CIで実際のAdd-Typeと生成テストを確認する。source copyの5変種を各fresh processでcompileし、意図したassert失敗を確認してbytes復元・fresh正常compileを行うvalidatorを追加した。結果はCI完了後に追記する。実OS query・SYSTEM worker起動・capture/input・service/driver導入は行わない。
+
+JS/TSの製品実装・依存・設定の変更はない。baseのsource12041件/810files、root12103件/818filesとsource browser12件の結果を流用し、新差分の全体テスト成功として数えない。新たな検証はWindows生成compile/負例と独立レビューへ絞る。
