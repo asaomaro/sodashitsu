@@ -136,3 +136,19 @@ it("ignores recovery from a retired consumer and never applies it to a new sourc
  expect(f.commands.some(m=>m.type==="native_keyframe")).toBe(false);
  f.native.command(f.a,{type:"native_keyframe",id});expect(f.commands.filter(m=>m.type==="native_keyframe")).toHaveLength(1);f.native.dispose();
 });
+
+it("aggregates adaptive requests without a single slow viewer lowering the other viewer",()=>{
+ const f=setup();f.start(f.a,f.aid,{adaptive:true});f.start(f.b,f.bid,{adaptive:true});
+ const rate=(member:object,id:string,fps:number,kbps:number)=>f.native.command(member,{type:"native_rate",id,fps,kbps});
+ rate(f.a,f.aid,10,1000);expect(f.commands.filter(m=>m.type==="native_rate")).toHaveLength(0);
+ rate(f.b,f.bid,15,1500);expect(f.commands.at(-1)).toMatchObject({type:"native_rate",id:f.frame(1,true).id,fps:15,kbps:1500});
+ rate(f.a,f.aid,20,2000);expect(f.commands.at(-1)).toMatchObject({fps:20,kbps:2000});
+ f.native.detach(f.a);expect(f.commands.at(-1)).toMatchObject({fps:15,kbps:1500});
+ f.start(f.a,f.aid,{adaptive:true});expect(f.commands.at(-1)).toMatchObject({fps:30,kbps:2500});expect(f.commands.filter(m=>m.type==="native_video"&&m.enabled)).toHaveLength(1);f.native.dispose();
+});
+it("fixed peers retain their ceiling, and rate messages cannot cross ids, generations or limits",()=>{
+ const f=setup();f.start(f.a,f.aid,{adaptive:true});f.start(f.b,f.bid);
+ f.native.command(f.a,{type:"native_rate",id:f.aid,fps:10,kbps:1000});f.native.command(f.b,{type:"native_rate",id:f.bid,fps:5,kbps:128});f.native.command(f.a,{type:"native_rate",id:f.bid,fps:5,kbps:128});expect(f.commands.some(m=>m.type==="native_rate")).toBe(false);
+ expect(()=>f.native.command(f.a,{type:"native_rate",id:f.aid,fps:31,kbps:2500})).toThrow(/limits/);expect(()=>f.native.command(f.a,{type:"native_rate",id:f.aid,fps:10,kbps:2501})).toThrow(/limits/);
+ f.native.detach(f.b);expect(f.commands.at(-1)).toMatchObject({fps:10,kbps:1000});f.native.detach(f.a);f.start(f.a,"11111111-1111-4111-8111-111111111111",{adaptive:true});const count=f.commands.length;f.native.command(f.a,{type:"native_rate",id:f.aid,fps:5,kbps:128});expect(f.commands).toHaveLength(count);f.native.dispose();
+});

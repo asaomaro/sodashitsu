@@ -60,7 +60,7 @@ type Viewer = {
   virtualDisplayRequested?:boolean;virtualDisplay?:boolean;
   monitorsRequested?:boolean;monitors?:boolean;
   fileRequested?:boolean;files?:boolean;fileLane?:ReturnType<DesktopVideoLanes["issue"]>;
-  sharedAudioRequested?:boolean;sharedAudio?:boolean;
+  sharedRate?:boolean;sharedAudioRequested?:boolean;sharedAudio?:boolean;
   microphoneRequested?:boolean;microphone?:boolean;microphoneLane?:ReturnType<DesktopVideoLanes["issue"]>;
   richRequested?:boolean;richClipboard?:boolean;richGranted?:boolean;clipboardLane?:ReturnType<DesktopVideoLanes["issue"]>;
   nativeAudioRequested?:boolean;nativeAudio?:boolean;requestedNativeAudio?:boolean;
@@ -432,7 +432,7 @@ export class DesktopRelay {
             if(m.type==="media"&&m.settings?.fps!==undefined&&(m.settings.transport!=="native"||v.nativeMaxFps!==60))delete m.settings.fps;
             if(m.type==="clipboard_grant")v.richGranted=m.enabled&&v.richClipboard===true;
             if (m.type === "media") {
-              if(v.sharedDesktop&&m.settings)m.settings.adaptive=false;
+              if(v.sharedDesktop&&!v.sharedRate&&m.settings)m.settings.adaptive=false;
               if (v.media) { v.retiredMedia.add(v.media.id); if(v.retiredMedia.size>32)v.retiredMedia.delete(v.retiredMedia.values().next().value!); }
               delete v.media;
               v.requestedNative = m.enabled && m.settings?.transport === "native";
@@ -544,6 +544,7 @@ export class DesktopRelay {
         sharedDatagrams:z.boolean().optional(),
         nativePlatform:DesktopNativePlatform.optional(),
         sharedAudio:z.boolean().optional(),
+        sharedRate:z.boolean().optional(),
         monitors:z.boolean().optional(),
         files:z.boolean().optional(),
         richClipboard:z.boolean().optional(),
@@ -573,7 +574,7 @@ export class DesktopRelay {
     const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
     delete legacyOptions.imeKeys;
     delete legacyOptions.extendedInput;
-    delete legacyOptions.nativePlatform;delete legacyOptions.sharedAudio;delete legacyOptions.sharedDatagrams;delete legacyOptions.sharedNative;delete legacyOptions.sharedDesktop;
+    delete legacyOptions.sharedRate;delete legacyOptions.nativePlatform;delete legacyOptions.sharedAudio;delete legacyOptions.sharedDatagrams;delete legacyOptions.sharedNative;delete legacyOptions.sharedDesktop;
     delete legacyOptions.microphone;delete legacyOptions.elevatedDesktop;delete legacyOptions.virtualDisplay;delete legacyOptions.monitors;delete legacyOptions.monitorDevice;delete legacyOptions.files;delete legacyOptions.richClipboard;delete legacyOptions.nativeVideo;delete legacyOptions.nativeDatagrams;delete legacyOptions.nativeAudio;
     delete legacyOptions.nativeVideoWindow;
     delete legacyOptions.nativeMaxFps;delete legacyOptions.nativeCadence;delete legacyOptions.nativeAdaptive;delete legacyOptions.nativeCodecs;
@@ -605,6 +606,7 @@ export class DesktopRelay {
     v.sharedNative=v.sharedDesktop===true&&v.sharedNativeRequested===true&&caps.sharedNative===true&&v.nativeVideo===true;
     v.sharedAudio=v.sharedNative===true&&v.sharedAudioRequested===true&&caps.sharedAudio===true&&v.nativeAudio===true;
     v.sharedDatagrams=v.sharedNative===true&&v.sharedDatagramsRequested===true&&caps.sharedDatagrams===true&&v.nativeDatagrams===true;
+    v.sharedRate=v.sharedNative===true&&caps.sharedRate===true&&caps.nativeCadence===true;
     if(v.elevatedDesktop||v.sharedDesktop){
       v.nativeVideo=false;v.nativeAudio=false;v.nativeDatagrams=false;v.nativeCodecs=false;v.nativeAdaptive=false;v.nativeInputFreshness=false;
       v.files=false;v.richClipboard=false;v.monitors=false;v.cursor=false;delete v.nativeVideoWindow;delete v.nativeMaxFps;
@@ -630,6 +632,7 @@ export class DesktopRelay {
       ...(v.sharedDesktop?{sharedDesktop:true as const}:{}),
       ...(v.sharedNative?{sharedNative:true as const}:{}),
       ...(v.sharedAudio?{sharedAudio:true as const}:{}),
+      ...(v.sharedRate?{sharedRate:true as const}:{}),
       ...(v.sharedDatagrams?{sharedDatagrams:true as const}:{}),
       ...(v.elevatedDesktop?{elevatedDesktop:true as const}:{}),
       ...(v.virtualDisplay?{virtualDisplay:true as const}:{}),
@@ -640,7 +643,7 @@ export class DesktopRelay {
       ...(v.nativeVideo?{nativeVideo:true as const}:{}),
       ...(v.nativeCodecs?{nativeCodecs:true as const}:{}),
       ...(v.nativeAdaptive?{nativeAdaptive:true as const}:{}),
-      ...(v.nativeVideo&&!v.sharedDesktop&&caps.nativeCadence?{nativeCadence:true as const}:{}),
+      ...(v.nativeVideo&&(!v.sharedDesktop||v.sharedRate)&&caps.nativeCadence?{nativeCadence:true as const}:{}),
       ...(v.nativeDatagrams?{nativeDatagrams:true as const}:{}),
       ...(v.nativeAudio?{nativeAudio:true as const}:{}),
       ...(v.nativeVideo&&v.nativeMaxFps===60?{nativeMaxFps:60 as const}:{}),
@@ -879,6 +882,7 @@ export class DesktopRelay {
             if(v.cursor)v.cursorStream=new DesktopCursorStream(bytes=>this.send(v.ws,bytes),()=>v.ws.bufferedAmount);
             v.nativeCodecs=v.nativeCodecs===true&&ready.nativeCodecs===true&&v.nativeVideo;
             v.nativeAdaptive=v.nativeAdaptive===true&&ready.nativeAdaptive===true&&v.nativeVideo;
+            v.sharedRate=v.sharedRate===true&&ready.nativeCadence===true&&v.nativeVideo;
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
             v.files=v.files===true&&ready.files===true&&!v.secureDesktop;
             v.richClipboard=v.richClipboard===true&&ready.richClipboard===true&&ready.allowClipboard===true&&!v.secureDesktop;

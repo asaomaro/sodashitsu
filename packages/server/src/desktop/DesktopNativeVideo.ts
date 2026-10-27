@@ -74,7 +74,7 @@ export class DesktopNativeVideo {
   constructor(
     private hooks: {
       enabled: boolean;
-      codecs?:boolean;adaptive?:boolean;cadence?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;audioFactory?:(hooks:DesktopNativeAudioHooks)=>DesktopAudioLease;
+      codecs?:boolean;adaptive?:boolean;cadence?:boolean;sharedRate?:boolean;datagrams?:boolean;audioEnabled?:boolean;synthetic?:boolean;audioFactory?:(hooks:DesktopNativeAudioHooks)=>DesktopAudioLease;
       iceServers?:z.infer<typeof DesktopIceServers>;
       window?: 1 | 3;
       width: number;
@@ -157,7 +157,7 @@ export class DesktopNativeVideo {
   private begin(s:NonNullable<DesktopNativeVideo["active"]>){
     if(this.active!==s||s.started)return;s.started=true;s.at=performance.now();
     this.hooks.policy(true);
-    this.hooks.write({type:"native_video",enabled:true,id:s.id,...(this.hooks.codecs?{codec:s.settings.codec??"h264"}:{}),bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
+    this.hooks.write({type:"native_video",enabled:true,id:s.id,...(this.hooks.sharedRate?{adaptive:s.settings.adaptive}:{}),...(this.hooks.codecs?{codec:s.settings.codec??"h264"}:{}),bitrateKbps:s.settings.maxBitrateKbps,fps:s.settings.fps??this.hooks.fps,...(this.hooks.window===3?{window:3}:{})});
     if(s.settings.audio&&this.hooks.audioEnabled)s.audio=(this.hooks.audioFactory??(hooks=>new DesktopNativeAudio(hooks)))({id:s.id,synthetic:this.hooks.synthetic===true,active:()=>this.active===s&&s.settings.audio,videoTimestamp:()=>s.timestamp,
       write:value=>this.hooks.write(value),state:state=>{if(this.active===s)this.hooks.send({type:"native_audio_status",id:s.id,state});},
       send:bytes=>this.active===s&&(s.peer?s.peer.sendAudio(bytes):this.hooks.buffered()<=65536&&this.hooks.send(bytes))});

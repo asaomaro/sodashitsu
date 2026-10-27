@@ -48,4 +48,6 @@
 
 第9段階9A: Linux Portal実験版とnative契約を実装。OS picker・private FD/serial固定、入力capability、生Ctrl+Space、logind I/O失効、入力後画像のfloorを生成検証。Linuxはlocal SODA_DESKTOP_LINUX_PORTAL=1必須。damage-only producerの静止時には新画像を保証できず1.5秒で明示停止するため、通常利用互換性は未完了。macOSは契約/導入条件表示のみでhelper未実装。task9のチェックは保留する。
 
+第8段階8E: 共有動画のFPS/bitrate希望をviewerごとに計算し、max集約して共通encoderへ反映。A/B/helper proofで交渉し、旧経路は固定。共有動画用UI、2browser描画とsource rate変更、音声lease継続の生成検査を追加。共有解像度適応・protected scope合成は後続でtask8全体は未完了。
+
 第10段階10A: endpoint暗号状態機械を追加中。独立pin/peerRole、両hello署名、ephemeral ECDH/HKDF/AES-GCM、9 lane/direction別鍵、replay/ordered FIFO/受信8件16MiB上限、握手/Session closeを生成検証。まだ製品routeには有効化しておらず、鍵保存とpin確認/全lane中継/agent recipient/多viewerとprotected scope接続が残る。task10全体は未完了。
