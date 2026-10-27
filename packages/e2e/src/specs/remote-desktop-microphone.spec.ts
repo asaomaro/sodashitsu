@@ -6,7 +6,7 @@ import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
 import { openNativeTab, closeNativeTab } from "../support/nativeTab.js";
 
-test("explicit microphone sends generated PCM to B, stops tracks and never restarts on reopen",async({page,appServer})=>{
+for(const codec of ["pcm","opus"] as const)test(`explicit microphone sends generated ${codec} to B, stops tracks and never restarts on reopen`,async({page,appServer})=>{
  test.setTimeout(60000);
  const dir=await mkdtemp(join(tmpdir(),"soda-mic-browser-")),ledger=join(dir,"microphone.jsonl");
  const saved=process.env.SODA_DESKTOP_COMMAND;
@@ -16,17 +16,18 @@ test("explicit microphone sends generated PCM to B, stops tracks and never resta
  page.on("websocket",socket=>{if(socket.url().endsWith("/desktop-share")){socket.on("framesent",({payload})=>{if(typeof payload==="string")sent.push(JSON.parse(payload));});socket.on("framereceived",({payload})=>{if(typeof payload==="string")received.push(JSON.parse(payload));});}});
  // Generated oscillator only. Neither the fixture nor the product graph is
  // connected to a hardware output; getUserMedia never opens a real microphone.
- await page.addInitScript(()=>{
+ await page.addInitScript(({codec})=>{
+  if(codec==="pcm")Object.defineProperty(window,"AudioEncoder",{value:undefined});
   const w=window as any,Context=AudioContext;w.__mic={requests:0,stops:0,maxOutstanding:0};
   const Original=WebSocket,descriptor=Object.getOwnPropertyDescriptor(Original.prototype,"onmessage")!,pending=new Set<number>();
   window.WebSocket=class extends Original {
-   override send(value:string|ArrayBufferLike|Blob|ArrayBufferView){if(typeof value==="string"){const m=JSON.parse(value);if(m.type==="microphone_frame"){pending.add(m.seq);w.__mic.maxOutstanding=Math.max(w.__mic.maxOutstanding,pending.size);}}super.send(value);}
+   override send(value:string|ArrayBufferLike|Blob|ArrayBufferView){if(typeof value==="string"){const m=JSON.parse(value);if(m.type==="microphone_frame"||m.type==="microphone_opus"){pending.add(m.seq);w.__mic.maxOutstanding=Math.max(w.__mic.maxOutstanding,pending.size);}}super.send(value);}
    override set onmessage(fn:((this:WebSocket,event:MessageEvent)=>any)|null){descriptor.set!.call(this,fn?function(this:WebSocket,event:MessageEvent){const m=typeof event.data==="string"?JSON.parse(event.data):undefined;if(m?.type==="microphone_ack"){setTimeout(()=>{for(const seq of pending)if(seq<=m.seq)pending.delete(seq);fn.call(this,event);},120);}else fn.call(this,event);}:null);}
    override get onmessage(){return descriptor.get!.call(this);}
   };
   window.AudioContext=class extends Context {private silent:MediaStreamAudioDestinationNode|undefined;override get destination(){return (this.silent??=this.createMediaStreamDestination()) as unknown as AudioDestinationNode;}};
   Object.defineProperty(navigator.mediaDevices,"getUserMedia",{value:async()=>{w.__mic.requests++;const context=new AudioContext({sampleRate:48000}),osc=context.createOscillator(),destination=context.createMediaStreamDestination();osc.frequency.value=440;osc.connect(destination);osc.start();await context.resume();const track=destination.stream.getAudioTracks()[0]!,original=track.stop.bind(track);track.stop=()=>{w.__mic.stops++;original();osc.stop();void context.close();};return destination.stream;}});
- });
+ },{codec});
  try {
   const owner=await provider.openClient(),agent=await appServer.openClient();
   await owner.request("desktop.settings.set",{enabled:true,allowInput:false,allowClipboard:false,allowDisplayResize:false,allowMicrophone:true,microphoneEndpoint:"synthetic-virtual-render"});
@@ -36,7 +37,7 @@ test("explicit microphone sends generated PCM to B, stops tracks and never resta
   expect(await page.evaluate(()=>(window as any).__mic.requests)).toBe(0);await mic.getByRole("button",{name:"マイク転送を開始",exact:true}).click();await expect(mic.locator("[data-microphone-state]")).toHaveText("マイク転送中");
   await expect.poll(()=>received.filter(m=>m.type==="microphone_ack").length).toBeGreaterThan(3);
   await expect.poll(()=>page.evaluate(()=>(window as any).__mic.maxOutstanding)).toBeGreaterThanOrEqual(4);expect(await page.evaluate(()=>(window as any).__mic.maxOutstanding)).toBeLessThanOrEqual(12);
-  const frame=sent.find(m=>m.type==="microphone_frame");expect(Buffer.from(frame.data,"base64")).toHaveLength(1920);
+  const frame=sent.find(m=>m.type===(codec==="opus"?"microphone_opus":"microphone_frame"));if(codec==="pcm")expect(Buffer.from(frame.data,"base64")).toHaveLength(1920);else{expect(Buffer.from(frame.data,"base64").length).toBeLessThan(384);await expect(mic.locator("[data-microphone-codec]")).toHaveText("Opus 32 kbps");}
   // User-visible status/ACK above is the readiness barrier. The helper ledger
   // additionally proves decoded PCM reached the generated B sink, not speakers.
   await expect.poll(async()=>{const rows=(await readFile(ledger,"utf8")).trim().split("\n").map(s=>JSON.parse(s));return rows.some(m=>m.type==="microphone_frame"&&m.rms>1000);}).toBe(true);

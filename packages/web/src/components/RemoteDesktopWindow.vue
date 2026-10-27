@@ -2,7 +2,7 @@
 import {createDesktopSocketFactory} from "../desktop/DesktopEndpointSocket.js";
 import DesktopEndpointPairing from "./DesktopEndpointPairing.vue";
 import {DESKTOP_NATIVE_PLATFORM_PROTOCOL,supportsDesktopInput,type DesktopInputCapabilities} from "@sodashitsu/protocol";
-import { DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
+import { DESKTOP_MICROPHONE_OPUS_FEATURE, DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
@@ -412,7 +412,7 @@ function relinquish() {
   cursorRenderer?.clearPrediction();
   inputs.clear();
 }
-const microphoneAvailable=ref(false),microphonePipeReady=ref(false),microphoneState=ref<MicrophoneState>("stopped");
+const microphoneCodec=ref("PCM"),microphoneAvailable=ref(false),microphonePipeReady=ref(false),microphoneState=ref<MicrophoneState>("stopped");
 let microphoneSocket:WebSocket|undefined,microphoneClient:DesktopMicrophoneClient|undefined;
 function resetMicrophone(){microphoneClient?.stop();microphoneClient=undefined;microphoneSocket?.close();microphoneSocket=undefined;microphoneAvailable.value=false;microphonePipeReady.value=false;microphoneState.value="stopped";}
 function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphonePipeReady.value&&!secureDesktop.value)void microphoneClient?.start();}
@@ -536,7 +536,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -591,7 +591,7 @@ function connect(automatic = false) {
         else if(m.type==="microphone_ticket"){
           if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
           const pipe=microphoneSocket=desktopSockets.open(url,DESKTOP_MICROPHONE_PROTOCOL);
-          const client=microphoneClient=new DesktopMicrophoneClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>8192)return false;pipe.send(JSON.stringify(value));return true;},state=>microphoneState.value=state);
+          const client=microphoneClient=new DesktopMicrophoneClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>8192)return false;pipe.send(JSON.stringify(value));return true;},state=>microphoneState.value=state,{opus:m.codec==="opus",codec:codec=>microphoneCodec.value=codec==="opus"?"Opus 32 kbps":"PCM"});
           pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
           pipe.onmessage=event=>{if(version!==epoch||microphoneSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>1024)throw Error("Invalid microphone result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
           pipe.onerror=()=>pipe.close();pipe.onclose=()=>{if(version===epoch&&microphoneSocket===pipe)resetMicrophone();};
@@ -1219,6 +1219,7 @@ onBeforeUnmount(() => {
         <p>このPCのマイクを接続先の仮想オーディオデバイスへ送ります。接続先アプリで、そのデバイスの録音側を選んでください。</p>
         <button type="button" :disabled="!microphonePipeReady || !['stopped','unavailable'].includes(microphoneState)" @click="startMicrophone">マイク転送を開始</button>
         <button type="button" :disabled="['stopped','unavailable'].includes(microphoneState)" @click="microphoneClient?.stop()">マイク転送を停止</button>
+        <p data-microphone-codec>{{microphoneCodec}}</p>
         <p data-microphone-state>{{ microphoneState==='running'?'マイク転送中':microphoneState==='preparing'?'マイクの許可・準備中':microphoneState==='starting'?'接続先を準備中':microphoneState==='unavailable'?'マイクを利用できません。両端の許可と仮想デバイスを確認してください。':'マイク停止' }}</p>
       </details>
       <details v-if="ready && allowClipboard" data-desktop-clipboard>

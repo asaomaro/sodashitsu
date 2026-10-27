@@ -21,3 +21,11 @@ it("bounds unacknowledged fresh frames across network RTT and stops capture on B
  frame(0);expect(f.send).toHaveBeenCalledTimes(1);for(let i=0;i<13;i++)frame();expect(f.send).toHaveBeenCalledTimes(13);expect(f.send.mock.calls[1]![0]).toMatchObject({type:"microphone_frame",seq:1});
  f.client.receive({type:"microphone_ack",id,seq:12});frame();expect(f.send).toHaveBeenCalledTimes(14);f.client.receive({type:"microphone_status",id,state:"unavailable"});expect(f.track.stop).toHaveBeenCalledOnce();expect(f.state).toHaveBeenLastCalledWith("unavailable");f.client.stop();
 });
+
+it("does not open a recording device after a delayed codec probe is cancelled",async()=>{
+ const f=setup();let resolve!:(v:any)=>void;vi.stubGlobal("AudioEncoder",{isConfigSupported:()=>new Promise(done=>resolve=done)});vi.stubGlobal("AudioData",class{});const client=new DesktopMicrophoneClient(f.send,f.state,{opus:true});const starting=client.start();client.stop();resolve({supported:true});await starting;expect(f.calls()).toBe(0);expect(f.send).not.toHaveBeenCalled();
+});
+it("bounds Opus encoder backlog and stops the generated capture when output stalls",async()=>{
+ vi.useFakeTimers();const f=setup(),encoders:any[]=[];vi.stubGlobal("AudioData",class{close=vi.fn();});vi.stubGlobal("AudioEncoder",class{static isConfigSupported=async()=>({supported:true});state="configured";encodeQueueSize=0;configure=vi.fn();encode=vi.fn(()=>{this.encodeQueueSize++;});close=vi.fn(()=>{this.state="closed";});constructor(public init:any){encoders.push(this);}});
+ const client=new DesktopMicrophoneClient(f.send,f.state,{opus:true});try{const starting=client.start();await vi.advanceTimersByTimeAsync(0);f.finish();await starting;const id=f.send.mock.calls[0]![0].id;expect(f.send.mock.calls[0]![0]).toMatchObject({codec:"opus"});client.receive({type:"microphone_status",id,state:"running"});for(let i=0;i<10;i++)f.nodes[0].port.onmessage({data:{pcm:new ArrayBuffer(1920),at:1}});expect(encoders[0].encode).toHaveBeenCalledTimes(2);await vi.advanceTimersByTimeAsync(201);expect(f.track.stop).toHaveBeenCalledOnce();expect(encoders[0].close).toHaveBeenCalledOnce();expect(f.state).toHaveBeenLastCalledWith("unavailable");encoders[0].init.output({timestamp:20000});expect(f.send.mock.calls.filter(([m])=>m.type==="microphone_opus")).toHaveLength(0);}finally{client.stop();vi.useRealTimers();}
+});

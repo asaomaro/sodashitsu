@@ -440,6 +440,7 @@ for (const transport of ["wss", "udp"] as const)
       expect(await page.evaluate(() => (window as any).__generated.requests)).toBe(0);
       await mic.getByRole("button", { name: "マイク転送を開始", exact: true }).click();
       await expect(mic.locator("[data-microphone-state]")).toHaveText("マイク転送中");
+    await expect(mic.locator("[data-microphone-codec]")).toHaveText("Opus 32 kbps");
       await expect
         .poll(async () => {
           const rows = (await readFile(ledger, "utf8").catch(() => ""))
