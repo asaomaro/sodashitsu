@@ -1097,9 +1097,11 @@ onBeforeUnmount(() => {
           :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
-      <p v-if="error" class="desktop-alert" role="alert">{{ error }}</p>
-      <button v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
+      <p v-if="error&&!infoOpen" class="desktop-alert" role="alert">{{ error }}</p>
+      <button v-if="!ready&&error&&!elevatedScreen&&!infoOpen" @click="resetMonitor">既定のモニターで接続し直す</button>
       <div v-show="infoOpen" class="desktop-controls">
+        <p v-if="error" role="alert">{{ error }}</p>
+        <button v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
         <p v-if="ready&&endpointEncrypted" data-endpoint-encrypted>暗号化接続（相手の指紋を確認済み）</p>
         <DesktopEndpointPairing :machine-id="props.machineId" @reconnect="connect()" @plain="usePlainDesktop()" />
       <p v-if="title" class="target">

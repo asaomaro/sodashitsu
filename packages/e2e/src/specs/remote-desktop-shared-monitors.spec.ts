@@ -6,7 +6,15 @@ import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
 import { openNativeTab } from "../support/nativeTab.js";
 // Synthetic mixed-DPI topology/capture/input only; no real monitor enumeration or input.
-for (const mode of ["plain", "primary", "encrypted", "native", "topology", "old-helper"] as const)
+for (const mode of [
+  "plain",
+  "primary",
+  "all",
+  "encrypted",
+  "native",
+  "topology",
+  "old-helper",
+] as const)
   test(`shared selected monitor fresh window join ${mode}`, async ({
     page,
     context,
@@ -119,9 +127,10 @@ for (const mode of ["plain", "primary", "encrypted", "native", "topology", "old-
         return;
       }
       await expect(first.getByLabel("表示モニター")).toHaveValue("right");
-      if (mode !== "primary") await first.getByLabel("表示モニター").selectOption("left");
+      if (mode !== "primary")
+        await first.getByLabel("表示モニター").selectOption(mode === "all" ? "all" : "left");
       await expect(first.getByLabel("表示モニター")).toHaveValue(
-        mode === "primary" ? "right" : "left",
+        mode === "primary" ? "right" : mode === "all" ? "all" : "left",
       );
       await expect(c1).toHaveAttribute("data-rendered-frames", /^[1-9]/);
       // Create the other browser only AFTER the secondary-monitor source is running.
@@ -137,21 +146,30 @@ for (const mode of ["plain", "primary", "encrypted", "native", "topology", "old-
       await expect(view.locator("[data-desktop-status]")).toHaveText(/停止|終了/);
       await view.getByLabel("複数viewerで同じ画面を共有", { exact: true }).check();
       await expect(view.locator("[data-desktop-status]")).toHaveText(/停止|終了/);
+      if (mode === "plain") {
+        await view
+          .getByRole("button", { name: "既定のモニターで接続し直す", exact: true })
+          .click({ timeout: 5000 });
+        await expect(view.locator("[data-desktop-status]")).toHaveText(/停止|終了/);
+      }
       await expect(view.getByLabel(label, { exact: true })).toBeVisible();
       await view.getByLabel(label, { exact: true }).check();
       if (mode !== "primary") {
         await expect(view.locator("[data-desktop-status]")).toHaveText(/停止|終了/);
-        await view.getByLabel("参加するモニターID", { exact: true }).fill("left");
+        await view
+          .getByLabel("参加するモニターID", { exact: true })
+          .fill(mode === "all" ? "all" : "left");
       } else {
         await expect(view.getByLabel("表示モニター")).toHaveValue("right");
         await expect(view.getByLabel("参加するモニターID", { exact: true })).toHaveValue("");
       }
       await view.getByRole("button", { name: "このモニターで接続", exact: true }).click();
       await expect(view.getByLabel("表示モニター")).toHaveValue(
-        mode === "primary" ? "right" : "left",
+        mode === "primary" ? "right" : mode === "all" ? "all" : "left",
       );
       if (mode === "primary") {
-        await first.getByRole("button", { name: "再同期", exact: true }).click();
+        await first.locator("summary").filter({ hasText: "画質・計測" }).click();
+        await first.getByRole("button", { name: "適用して再接続", exact: true }).click();
         await expect(first.getByLabel("表示モニター")).toHaveValue("right");
         await expect(first.getByLabel("共有画面")).toHaveAttribute(
           "data-rendered-frames",
@@ -166,6 +184,19 @@ for (const mode of ["plain", "primary", "encrypted", "native", "topology", "old-
             c.evaluate((el, mode) => {
               const c = el as HTMLCanvasElement,
                 p = c.getContext("2d")!.getImageData(20, 20, 1, 1).data;
+              if (mode === "all") {
+                const red = c.getContext("2d")!.getImageData(1000, 500, 1, 1).data,
+                  gap = c.getContext("2d")!.getImageData(20, 650, 1, 1).data;
+                return (
+                  c.width === 1280 &&
+                  c.height === 711 &&
+                  p[2]! > 200 &&
+                  p[0]! < 30 &&
+                  red[0]! > 200 &&
+                  red[2]! < 30 &&
+                  [gap[0], gap[1], gap[2]].every((v) => v! < 30)
+                );
+              }
               return mode === "primary"
                 ? c.width === 800 && c.height === 600 && p[0]! > 200 && p[1]! < 30 && p[2]! < 30
                 : c.width === 640 &&
