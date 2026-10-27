@@ -1,3 +1,4 @@
+export const DESKTOP_SHARED_MICROPHONE_PROTOCOL="soda-desktop-shared-microphone-v1";
 export const DESKTOP_SHARED_PROTECTED_PROTOCOL="soda-desktop-shared-protected-v1";
 export const DESKTOP_SHARED_RESOLUTION_PROTOCOL="soda-desktop-shared-resolution-v1";
 import {DesktopNativePlatform,DesktopInputCapabilities} from "./desktopNativePlatform.js";
@@ -55,6 +56,7 @@ export const DesktopOptions = z
     elevatedDesktop:z.literal(true).optional(),
     nativePlatform:DesktopNativePlatform.optional(),
     sharedDesktop:z.literal(true).optional(),
+    sharedMicrophone:z.literal(true).optional(),
     sharedProtected:z.literal(true).optional(),
     sharedNative:z.literal(true).optional(),
     sharedDatagrams:z.literal(true).optional(),
@@ -301,6 +303,7 @@ export interface DesktopResults {
     elevatedDesktop?:boolean;
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
+    sharedMicrophone?:boolean;
     sharedProtected?:boolean;
     sharedNative?:boolean;
     sharedDatagrams?:boolean;

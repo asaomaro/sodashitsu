@@ -9,13 +9,14 @@ import { DesktopMicrophoneRequest, DESKTOP_MICROPHONE_HELLO, DESKTOP_MICROPHONE_
 export class DesktopMicrophone {
   private dead=false;private lastStart=-Infinity;
   private current: {codec:"opus"|undefined;decoder?:OpusScript;id:string;name:string;socket?:Socket;seq:number;ready:boolean;busy:boolean;header:Buffer;timer?:ReturnType<typeof setTimeout>;retry?:ReturnType<typeof setTimeout>;at:number;tokens:number;rateAt:number;latest?:{seq:number;pcm:Buffer;at:number};packet?:Buffer}|undefined;
-  constructor(private hooks:{allowOpus?:boolean;allowed():boolean;synthetic?:boolean;write(value:unknown):void;send(value:DesktopMicrophoneResult):boolean}) {}
+  constructor(private hooks:{allowOpus?:boolean;allowed():boolean;synthetic?:boolean;claim?(id:string):boolean;release?(id:string):void;write(value:unknown):void;send(value:DesktopMicrophoneResult):boolean}) {}
   fromViewer(raw:unknown) {
     const m=DesktopMicrophoneRequest.parse(raw);
     if(this.dead)return;
     if(m.type==="microphone_stop"){if(this.current?.id===m.id)this.finish("stopped");return;}
     if(m.type==="microphone_start") {
       if(m.codec==="opus"&&!this.hooks.allowOpus||performance.now()-this.lastStart<1000||this.current||!this.hooks.allowed()||(process.platform!=="win32"&&!this.hooks.synthetic)) {this.hooks.send({type:"microphone_status",id:m.id,state:"unavailable"});return;}
+      if(this.hooks.claim&&!this.hooks.claim(m.id)){this.hooks.send({type:"microphone_status",id:m.id,state:"unavailable"});return;}
       this.lastStart=performance.now();
       const name="SodaDesktopMicrophone-"+randomUUID().replaceAll("-", "");
       const c:NonNullable<DesktopMicrophone["current"]>=this.current={codec:m.codec,id:m.id,name,seq:0,ready:false,busy:false,header:Buffer.alloc(0),at:performance.now(),tokens:12,rateAt:performance.now()};
@@ -58,7 +59,7 @@ export class DesktopMicrophone {
   }
   private finish(state:"stopped"|"unavailable") {
     const c=this.current;if(!c)return;this.current=undefined;clearTimeout(c.timer);clearTimeout(c.retry);c.socket?.destroy();c.decoder?.delete();delete c.decoder;c.header.fill(0);c.latest?.pcm.fill(0);delete c.latest;c.packet?.fill(0);delete c.packet;
-    this.hooks.write({type:"native_microphone",id:c.id,enabled:false});if(!this.dead)this.hooks.send({type:"microphone_status",id:c.id,state});
+    this.hooks.write({type:"native_microphone",id:c.id,enabled:false});this.hooks.release?.(c.id);if(!this.dead)this.hooks.send({type:"microphone_status",id:c.id,state});
   }
   stop(){if(this.dead)return;this.dead=true;this.finish("stopped");}
 }

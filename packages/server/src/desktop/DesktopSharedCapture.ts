@@ -15,6 +15,7 @@ export interface DesktopHelper extends EventEmitter {
   kill(signal?: NodeJS.Signals | number): boolean;
   createAudio?(hooks:DesktopNativeAudioHooks):DesktopAudioLease;
   requestControl?(enabled: boolean): boolean;
+  requestMicrophone?(id:string,enabled:boolean):boolean;
 }
 
 type Subscription = DesktopHelper & {
@@ -37,6 +38,7 @@ export class DesktopSharedCapture {
     native?: DesktopSharedNative<Subscription>;
     audio?: DesktopSharedAudio<Subscription>;
     control?: Subscription;
+    microphone?:{member:Subscription;id:string};
     configuration?: string;
     protectedSource?:boolean;
     frameSeq: number;
@@ -94,6 +96,12 @@ export class DesktopSharedCapture {
         if(!current.audio)current.audio=new DesktopSharedAudio<Subscription>({id:source.id,synthetic:current.ready.backend==="synthetic",timestamp:source.timestamp,active:()=>!current.ended&&source.active(),write:value=>this.write(current,value)});
         return current.audio.attach(member,hooks);
       },
+      requestMicrophone:(id:string,enabled:boolean)=>{
+        if(!enabled){if(current.microphone?.member===member&&current.microphone.id===id){this.write(current,{type:"native_microphone",id,enabled:false});delete current.microphone;}return false;}
+        if(member.closed||!member.configured||current.ended||!current.ready?.microphone||current.protectedSource)return false;
+        if(current.microphone)return current.microphone.member===member&&current.microphone.id===id;
+        current.microphone={member,id};return true;
+      },
       requestControl: (enabled: boolean) => {
         if (member.closed || !member.configured || !current.ready || current.ended) return false;
         if (!enabled) {
@@ -143,6 +151,10 @@ export class DesktopSharedCapture {
     }
     if (!s.configured) throw Error("Missing capture configuration");
     if (g.native?.command(s, value)) return;
+    if(value.type==="native_microphone"){
+      if(g.microphone?.member!==s||g.microphone.id!==value.id)return;
+      this.write(g,value);if(value.enabled===false)delete g.microphone;return;
+    }
     if (value.type === "policy") return; // The shared native pool sets aggregate image policy.
     if (value.type === "ack") {
       if (!s.pending || value.seq !== s.pending) throw Error("Wrong subscriber ACK");
@@ -220,6 +232,7 @@ export class DesktopSharedCapture {
   private detach(g: NonNullable<DesktopSharedCapture["group"]>, s: Subscription): void {
     if (s.closed) return;
     s.closed = true;
+    if(g.microphone?.member===s){this.write(g,{type:"native_microphone",id:g.microphone.id,enabled:false});delete g.microphone;}
     g.audio?.detach(s);
     g.native?.detach(s);
     g.members.delete(s);

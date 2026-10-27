@@ -219,3 +219,29 @@ it.each(["protected_desktop_failure","session_locked","session_unlocked","lock_s
 it.each(["normal","unproved","lock","media","native","virtual"])("rejects an incompatible protected source before any image: %s",async kind=>{
  const f=fixture(),a=f.join("protected",protectedConfiguration);try{const value:any={...ready,secureDesktop:true,protectedDesktop:"elevated-default",sharedProtected:true};if(kind==="normal"){delete value.secureDesktop;delete value.protectedDesktop;delete value.sharedProtected;}if(kind==="unproved")delete value.sharedProtected;if(kind==="lock")value.lockScreenCover=true;if(kind==="media")value.allowMedia=true;if(kind==="native")value.nativeVideo=true;if(kind==="virtual")value.virtualDisplay=true;f.child.send(value);f.child.send(frame(1));await vi.waitFor(()=>expect(f.child.exitCode).toBe(0));expect(a.messages.filter(m=>m.type==="ready"||m.type==="frame")).toHaveLength(0);}finally{f.pool.dispose();}
 });
+
+it("owns one microphone independently of input and releases only its own stream across viewer departure",async()=>{
+ const f=fixture(),config={type:"configure",options:{width:320},allowMicrophone:true},first=f.join("source",config),a=f.join("source",config),b=f.join("source",config);
+ try{
+  f.child.send({...ready,microphone:true});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({microphone:true}));
+  expect(a.session.requestMicrophone!("stream-a",true)).toBe(true);expect(b.session.requestMicrophone!("stream-b",true)).toBe(false);
+  a.send({type:"native_microphone",id:"stream-a",enabled:true,pipeName:"generated"});b.send({type:"native_microphone",id:"stream-b",enabled:true,pipeName:"wrong"});
+  expect(f.child.commands.filter(m=>m.type==="native_microphone")).toEqual([{type:"native_microphone",id:"stream-a",enabled:true,pipeName:"generated"}]);
+  first.session.stdin.end();await vi.waitFor(()=>expect(first.session.exitCode).toBe(0));expect(f.child.exitCode).toBeNull();expect(b.session.requestMicrophone!("stream-b",true)).toBe(false);
+  a.send({type:"native_microphone",id:"stream-a",enabled:false});expect(b.session.requestMicrophone!("stream-b",true)).toBe(true);
+  b.send({type:"native_microphone",id:"stream-b",enabled:true,pipeName:"next"});a.send({type:"native_microphone",id:"stream-a",enabled:false});a.session.requestMicrophone!("stream-a",false);
+  expect(a.session.requestMicrophone!("another",true)).toBe(false);expect(f.child.commands.at(-1)).toMatchObject({id:"stream-b",enabled:true});
+  b.session.stdin.end();await vi.waitFor(()=>expect(b.session.exitCode).toBe(0));expect(f.child.commands.at(-1)).toMatchObject({id:"stream-b",enabled:false});expect(a.session.requestMicrophone!("final",true)).toBe(true);
+ }finally{f.pool.dispose();}
+});
+it.each([false,true])("refuses a microphone lease without normal ready proof (protected=%s)",async protectedMode=>{
+ const f=fixture(),a=f.join("source",protectedMode?protectedConfiguration:undefined);
+ try{f.child.send(protectedMode?{...ready,secureDesktop:true,protectedDesktop:"elevated-default",sharedProtected:true}:ready);await vi.waitFor(()=>expect(a.messages.length).toBe(1));expect(a.session.requestMicrophone!("forged",true)).toBe(false);}finally{f.pool.dispose();}
+});
+it("does not let an old microphone stop release a newer stream of the same member",async()=>{
+ const f=fixture(),config={type:"configure",options:{width:320},allowMicrophone:true},a=f.join("source",config),b=f.join("source",config);
+ try{
+  f.child.send({...ready,microphone:true});await vi.waitFor(()=>expect(b.messages.length).toBe(1));expect(a.session.requestMicrophone!("old",true)).toBe(true);a.send({type:"native_microphone",id:"old",enabled:true,pipeName:"generated-old"});a.send({type:"native_microphone",id:"old",enabled:false});expect(a.session.requestMicrophone!("new",true)).toBe(true);a.send({type:"native_microphone",id:"new",enabled:true,pipeName:"generated-new"});
+  a.send({type:"native_microphone",id:"old",enabled:false});a.session.requestMicrophone!("old",false);expect(b.session.requestMicrophone!("other",true)).toBe(false);expect(f.child.commands.at(-1)).toMatchObject({id:"new",enabled:true});
+ }finally{f.pool.dispose();}
+});

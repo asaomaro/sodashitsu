@@ -72,3 +72,5 @@
 第8段階8G: protected画像sourceの最大8viewer共有、purpose固定/新worker proof、排他入力、first viewer退出後の実child維持、scope失効の全窓停止、初回busyからの明示参加を実装。全体11810件・新browser3件/既存6件・型検査・独立build/smoke・負例3件・Windows生成CI・独立レビュー2件と追加差分再レビュー通過。導入済み保護サービスの更新と実UAC取得/入力は実機検証待ち。task8全体は実機検証と残る通常共有経路の拡張を含め保留。
 
 第12段階: --terminal-hereで実行PC/作業PC/操作paneを分離し、両方向の対話と起動元質問フォームを実装。起動承認・専用PTY・owner切断失効・B発行1秒入力lease・seq/ACK・有限queue・短RPCの質問poll・終了時raw復帰を追加。全体11829件・生成browser3件・負例5件・型検査・独立build/smoke・独立レビュー2件と追加修正再レビュー通過。実アカウント/Windows実端末での対話は未検証。
+
+第11段階11C/第8段階: 通常共有sourceのマイクを単一member/idで排他管理し、画像先行・明示handover・古いstop・first退出・native音声再開と独立した継続を追加。全体11841件/browser6件/強化交差回帰/型検査/独立build・smoke/負例4件/独立レビューと追加差分再レビュー通過。Windows通常共有の実装は拡張済みで、他OSのmic/実デバイス検証は残件。
