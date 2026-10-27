@@ -5,7 +5,7 @@ import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
 
 import "./viewportMaximize.css";
-import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
@@ -47,6 +47,7 @@ import { renderDesktopUpdate } from "../desktop/render.js";
 import {
   loadSettings,
   saveSettings,
+  loadViewerPreferences, saveViewerPreferences, normalizeViewerPreferences,
   normalizeSettings,
   presets,
   type ConnectionSettings,
@@ -115,6 +116,8 @@ const agentActive = ref(false),
   agentTicket = ref(""),
   agentExpires = ref(0);
 const savedSettings = loadSettings(props.machineId);
+const savedViewerPreferences = loadViewerPreferences(props.machineId);
+const preferredTransport = ref(savedViewerPreferences.transport);
 const deltas = ref(savedSettings.deltas),
   colorMode = ref(savedSettings.image.colorMode),
   showCursor = ref(savedSettings.image.showCursor);
@@ -122,7 +125,7 @@ const width = ref(savedSettings.width),
   fps = ref(savedSettings.fps),
   quality = ref(savedSettings.quality),
   text = ref(""),
-  fit = ref(true),
+  fit = ref(savedViewerPreferences.fit),
   maximized = ref(false);
 const info = ref<DesktopFrameInfo | null>(null),
   stats = ref({ fps: 0, mbps: 0, ackP95Ms: 0 }),
@@ -146,13 +149,13 @@ const mediaState = ref("images"),
   requestAudio = ref(false),
   nativeVideo = ref(false),
   nativeStats = ref<DesktopNativeVideoStats|null>(null),
-  mediaTransport = ref<"auto" | "relay" | "native">("auto"),
-  mediaBitrate = ref(2500),
+  mediaTransport = ref<"auto" | "relay" | "native">(savedViewerPreferences.transport),
+  mediaBitrate = ref(savedViewerPreferences.bitrate),
   nativeAudio=ref(false),nativeAudioState=ref(""),
-  nativeDatagrams=ref(false),nativeUdp=ref(true),nativeUdpActive=ref(false),
-  nativeCodecs=ref(false),nativeCodecCandidates=ref<DesktopNativeCodec[]>([]),nativeCodec=ref<DesktopNativeCodec>("h264"),nativeActualCodec=ref<DesktopNativeCodec>(),nativeRequestedCodec=ref<DesktopNativeCodec>(),nativeCodecFallback=ref(""),
+  nativeDatagrams=ref(false),nativeUdp=ref(savedViewerPreferences.udp),nativeUdpActive=ref(false),
+  nativeCodecs=ref(false),nativeCodecCandidates=ref<DesktopNativeCodec[]>([]),nativeCodec=ref<DesktopNativeCodec>(savedViewerPreferences.codec),nativeActualCodec=ref<DesktopNativeCodec>(),nativeRequestedCodec=ref<DesktopNativeCodec>(),nativeCodecFallback=ref(""),
   nativeAdaptive=ref(false),
-  nativeMaxFps=ref(30), nativeFps=ref(60),
+  nativeMaxFps=ref(30), nativeFps=ref(savedViewerPreferences.fps),
   videoFrames = ref(0),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
@@ -466,6 +469,19 @@ function requestedSettings(): ConnectionSettings {
     image: { colorMode: colorMode.value, showCursor: showCursor.value },
   });
 }
+function persistImagePreferences() {
+  let value: ConnectionSettings;
+  try { value = requestedSettings(); } catch { return; }
+  if (!saveSettings(props.machineId, value)) settingNotice.value = "このブラウザに画質設定を保存できません。";
+}
+function persistViewerPreferences() {
+  let value;
+  try { value = normalizeViewerPreferences({ transport: preferredTransport.value, bitrate: Number(mediaBitrate.value), codec: nativeCodec.value, fps: Number(nativeFps.value), udp: nativeUdp.value, fit: fit.value }); } catch { return; }
+  if (!saveViewerPreferences(props.machineId, value)) settingNotice.value = "このブラウザに動画・表示設定を保存できません。";
+}
+function chooseMediaTransport() { preferredTransport.value = mediaTransport.value; persistViewerPreferences(); }
+watch([width, fps, quality, deltas, adaptive, colorMode, showCursor], persistImagePreferences, { flush: "sync" });
+watch([mediaBitrate, nativeCodec, nativeFps, nativeUdp, fit], persistViewerPreferences, { flush: "sync" });
 function preset(event: Event) {
   const name = (event.target as HTMLSelectElement).value;
   if (!Object.hasOwn(presets, name)) return;
@@ -633,6 +649,7 @@ function connect(automatic = false) {
           nativeSupported=r.nativeVideo===true;
           nativeCodecs.value=r.nativeCodecs===true;nativeCodecCandidates.value=r.nativeCodecCandidates??[];nativeAdaptive.value=r.nativeAdaptive===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
+          mediaTransport.value=preferredTransport.value;
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
           virtualActive.value=r.virtualDisplay===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
@@ -1130,7 +1147,7 @@ onBeforeUnmount(() => {
         </p>
         <label><input v-model="requestAudio" type="checkbox" :disabled="mediaTransport==='native'&&!nativeAudio" />システム音声を要求</label>
         <label
-          >経路<select v-model="mediaTransport" aria-label="動画の経路">
+          >経路<select v-model="mediaTransport" aria-label="動画の経路" @change="chooseMediaTransport">
             <option v-if="nativeVideo" value="native">{{ nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
             <option v-if="allowMedia" value="auto">WebRTC（接続できなければ中継）</option>
             <option v-if="allowMedia" value="relay">圧縮動画を中継</option>
