@@ -33,6 +33,7 @@ for (const mode of [
     });
     const upload = mode.endsWith("upload"),
       data = Buffer.alloc(1048576, 0x6a);
+    let finalZipSize = 0;
     // Delay chunks in the test transport so UI pause has a deterministic opportunity.
     // The browser still uses the production WS/endpoint lane and file actions.
     await page.addInitScript(() => {
@@ -293,6 +294,11 @@ for (const mode of [
       await jobs.getByRole("button", { name: "再開", exact: true }).click();
       if (mode === "final-download") {
         await expect(jobs).toContainText("generated interruption after saved ZIP final chunk");
+        const completedOffset = (await jobs.textContent())!.match(/(\d+)\s*\/\s*(\d+)\s*bytes/)!;
+        expect(completedOffset).toBeTruthy();
+        expect(completedOffset[1]).toBe(completedOffset[2]);
+        finalZipSize = Number(completedOffset[2]);
+        expect(finalZipSize).toBeGreaterThan(data.length);
         await page.reload();
         await openNativeTab(
           page,
@@ -329,6 +335,7 @@ for (const mode of [
       );
       const resumed = sent.find((r) => r.action === (upload ? "folder_write" : "folder_read"));
       expect(resumed?.offset).toBeGreaterThanOrEqual(before);
+      if (mode === "final-download") expect(resumed?.offset).toBe(finalZipSize);
       if (identity) await expect(view.locator("[data-endpoint-encrypted]")).toBeVisible();
       await expect
         .poll(() =>

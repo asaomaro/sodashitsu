@@ -212,3 +212,5 @@ AssertionError: expected true to be false // Object.is equality
 ```
 
 source全体: 11961件/797filesすべて通過。root全体12023件/805filesすべて通過。
+
+独立記録再点検のshouldに従い、final-downloadに保存直後のDOM offset==ZIP sizeと、再読込後最初のfolder_read.offset==ZIP sizeを明示追加。source/root各1件単独通過（13.4/14.4秒）。製品コード変更なし。
