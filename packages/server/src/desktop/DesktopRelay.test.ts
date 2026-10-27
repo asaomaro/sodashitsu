@@ -1146,6 +1146,6 @@ it("does not reuse a native pre-input image as an agent observation after the in
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal"]});const viewer=await f.viewer("native-platform");viewer.send({...start,options:{...start.options,features:true}});await expect.poll(()=>viewer.frames.length).toBe(1);
  // Keep the first image pending so the generated helper cannot supply a new
  // post-input observation. The real input/ACK still travels both WebSockets.
- const target=[...(f.relay as any).viewers][0].agent;expect(target.frame()).toBeDefined();target.control(true);await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await target.input({kind:"key",code:"ControlLeft",down:true});expect(target.frame()).toBeUndefined();
+ const target=[...(f.relay as any).viewers][0].agent;expect(target.frame()).toBeDefined();target.control(true);await expect.poll(()=>viewer.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);await target.input({kind:"key",code:"ControlLeft",down:true});expect(target.frame()===undefined).toBe(true);
  await expect(target.capture()).rejects.toThrow("Fresh full frame unavailable");viewer.send({type:"stop"});
 },6000);
