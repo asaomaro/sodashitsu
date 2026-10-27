@@ -9,3 +9,8 @@ it.each([
   ["bind", "remote"], ["bind", "r", "w", "--kind", "unknown"], ["exec", "--", "x", "y"], ["exec", "echo"],
   ["exec", "--timeout", "0", "--", "true"], ["file", "delete"], ["memory", "delete"], ["skills", "extra"], ["skill"], ["handoff", "--", "unexpected"],
 ])("rejects malformed work arguments %j", (...args) => { expect(() => parseArgs(["work", ...args])).toThrow(); });
+it("keeps terminal placement outside the native agent argument list",()=>{
+ expect(parseArgs(["work","agent","--terminal-here","claude","--resume"])).toMatchObject({kind:"work-agent",terminalHere:true,args:["--resume"]});
+ expect(parseArgs(["work","agent","codex"])).not.toHaveProperty("terminalHere");
+ expect(()=>parseArgs(["work","agent","--terminal-here","--terminal-here","claude"])).toThrow();
+});

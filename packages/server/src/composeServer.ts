@@ -1,3 +1,4 @@
+import {openWorkAgentAsk} from "./work/WorkAgentAsk.js";
 import { ExecService } from "./exec/ExecService.js";
 import { WorkContext } from "./work/WorkContext.js";
 import { WorkAgentRequests } from "./work/WorkAgentRequests.js";
@@ -519,7 +520,7 @@ export async function composeServer(
   const workAgentRequests = new WorkAgentRequests(work, id => {
     const pane = session.getPane(id), tab = pane && session.snapshot().tabs.find(t => t.id === pane.tabId);
     return tab ? { workspaceId: tab.workspaceId } : undefined;
-  }, id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir);
+  }, id => session.snapshot().workspaces.find(w => w.id === id)?.projectDir,Date.now,{open:(owner,paneId,raw,guard)=>openWorkAgentAsk(asks,options.stateDir,owner,paneId,raw,guard),close:owner=>asks.onClientGone(owner)});
   const builtinViews=new BuiltinViews(session,displays,bus,workspaceTools);
   // 拡張の登録と起動（20261007-ext-host）。利用者の設定（`<stateDir>/extensions.json`）に登録したプログラムを起動・停止し、標準入出力の NDJSON でやり取りする。
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
@@ -766,7 +767,7 @@ export async function composeServer(
       agentPromptPrepare:guards.prepare,
       agentPromptGuard:agent=>{guards.check();if(agent.state!=="idle")throw new RpcError("agent_pane_busy","担当の入力待ちを確認できません");}},"agent.prompt",{paneId,instanceId,text});
     if(!result.ok)throw new RpcError(result.error.code,result.error.message);
-  }, {logger});
+  }, {logger,terminals});
   registerAllMethods(surface, {
     workAgentRequests,
     workAgentLauncher,
@@ -848,6 +849,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       exec.clientGone(clientId);
       workTransfers.clientGone(clientId);
+      workAgentRequests.clientGone(clientId);
       desktop.clientGone(clientId);
       desktopEndpoint.clientGone(clientId);
       desktopRelay.clientGone(clientId);
@@ -867,6 +869,7 @@ export async function composeServer(
     onClientGone: (clientId) => {
       exec.clientGone(clientId);
       workTransfers.clientGone(clientId);
+      workAgentRequests.clientGone(clientId);
       desktop.clientGone(clientId);
       desktopEndpoint.clientGone(clientId);
       desktopRelay.clientGone(clientId);

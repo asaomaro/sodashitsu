@@ -1,3 +1,4 @@
+import type {AskResult} from "./ask.js";
 import { z } from "zod";
 import { WorkKind, WorkFileRequest } from "./work.js";
 import { normalizeAskSpec, ASK_SPEC_MAX_BYTES } from "./ask.js";
@@ -71,16 +72,26 @@ export interface WorkAgentRequest {
   agentKind: "claude" | "codex"; args: string[]; expiresAt: number;
   state: "pending" | "claimed" | "launched" | "failed" | "rejected";
   task?: z.infer<typeof WorkAgentTask>;
+  terminalHere?:true;
 }
 export const WorkAgentRequestSchema = z.object({
   id: z.string().uuid(), paneId: entity, workspaceId: entity,
   folder: z.string().min(1).max(32768), root: z.string().min(1).max(32768), identity: z.string().regex(/^[a-f0-9]{64}$/),
   agentKind: WorkKind, args: WorkAgentArgv, expiresAt: z.number().int().positive(),
   state: z.enum(["pending", "claimed", "launched", "failed", "rejected"]),
-  task: WorkAgentTask.optional(),
+  task: WorkAgentTask.optional(),terminalHere:z.literal(true).optional(),
 }).strict();
+export const WorkTerminalInput=z.object({seq:z.number().int().positive().safe(),data:z.string().min(1).max(43692).optional(),lease:z.string().uuid().optional(),cols:z.number().int().min(2).max(500).optional(),rows:z.number().int().min(2).max(300).optional()}).strict();
+export const WorkTerminalOutput=z.object({seq:z.number().int().positive().safe(),data:z.string().min(1).max(43692),snapshot:z.literal(true).optional()}).strict();
 export const WorkAgentMethods = {
-  "work.agent_request": z.object({ paneId: entity, agentKind: WorkKind, args: WorkAgentArgv }).strict(),
+  "work.agent_terminal_ask_start":z.object({...lease,params:z.unknown()}).strict(),
+  "work.agent_terminal_ask_read":z.object({...lease,questionId:z.string().uuid()}).strict(),
+  "work.agent_terminal_open":z.object(lease).strict(),
+  "work.agent_terminal_end":z.object(lease).strict(),
+  "work.agent_terminal_exchange":z.object({...lease,epoch:z.string().uuid(),ack:z.number().int().nonnegative().safe(),output:WorkTerminalOutput.optional()}).strict(),
+  "work.agent_terminal_read":z.object({id:z.string().uuid(),epoch:z.string().uuid().optional(),ack:z.number().int().nonnegative().safe(),input:WorkTerminalInput.optional()}).strict(),
+  "work.agent_terminal_close":z.object({id:z.string().uuid()}).strict(),
+  "work.agent_request": z.object({ paneId: entity, agentKind: WorkKind, args: WorkAgentArgv,terminalHere:z.literal(true).optional() }).strict(),
   "work.agent_requests": z.object({ paneId: entity.optional() }).strict(),
   "work.agent_claim": z.object({ id: z.string().uuid() }).strict(),
   "work.agent_finish": z.object({ id: z.string().uuid(), claim: z.string().uuid(), state: z.enum(["launched", "failed"]) }).strict(),
@@ -93,6 +104,13 @@ export const WorkAgentMethods = {
   "work.agent_tool": z.object({...lease,tool:WorkAgentTool}).strict(),
 } as const;
 export interface WorkAgentResults {
+  "work.agent_terminal_ask_start":{questionId:string};
+  "work.agent_terminal_ask_read":{state:"pending"}|{state:"failed"}|{state:"done";result:AskResult};
+  "work.agent_terminal_open":{epoch:string};
+  "work.agent_terminal_end":{};
+  "work.agent_terminal_exchange":{epoch:string;input:((z.infer<typeof WorkTerminalInput>&{expiresInMs:number})|{seq:number;discarded:true})[];outputAck:number};
+  "work.agent_terminal_read":{state:"waiting"}|{state:"closed";reason:string}|{state:"open";epoch:string;output:z.infer<typeof WorkTerminalOutput>[];inputAck:number;inputLease:string;connected:boolean};
+  "work.agent_terminal_close":{};
   "work.agent_request": WorkAgentRequest;
   "work.agent_requests": { requests: WorkAgentRequest[] };
   "work.agent_claim": { request: WorkAgentRequest; claim: string };

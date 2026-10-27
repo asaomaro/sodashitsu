@@ -1071,3 +1071,6 @@ sodactl work memory read decisions.md
 ### リモート作業エージェントから操作元へ質問する
 
 `work agent`の専用MCPでは`ask_user`を使うと、操作元のエージェントpaneにフォームを表示して回答JSONを受け取れます。質問には通常のask-form定義を渡し、接続先で読んだMarkdownはパスではなく`documents[].markdown`へ本文を渡します。ファイル編集・Git・テスト・メモは引き続き`remote_work`で接続先へ送ります。[フォームの具体例と上限](remote-work.md#操作元への質問フォームと接続先資料)を参照してください。
+
+
+`work agent --terminal-here claude|codex [agent-args...]` は、別PCのエージェントの端末と質問フォームを起動元paneへ中継します。実行するPCでの起動承認と両側の更新が必要です。終了は `Ctrl+B q`。方向・権限・切断時の入力破棄と制限は [接続先での作業](remote-work.md#エージェントの端末を起動元paneで操作する) を参照してください。
