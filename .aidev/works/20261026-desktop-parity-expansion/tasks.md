@@ -87,3 +87,5 @@
 第8段階8I: 通常共有の独立カーソルを明示opt-inで実装。全窓で同じcohort、新viewer/A/B/helper proofを必要とし、途中参加へ現在のshape/poseを配信。画像ACK待ちと位置更新を分離。旧peer/default offは焼込画像を維持。新browser plain/encrypted/native/旧helper復帰4件、負例2件、独立レビューとtest修正再レビューを通過。task8全体は共有clipboard/delta等を残し、未完了。
 
 第8段階8J: 通常共有のclipboard経路を明示cohortとして追加。input/micと別の1owner許可、source世代/text ID/rich UUID変換、取消/退出時失効、旧viewer/B/helper gateを実装。生成memory clipboardのplain/encrypted往復・競合拒否/引継ぎ・cancel直後再送・旧helper復帰を検査。独立点検/全体レビューとtest追加差分再レビュー通過。共有deltaなどを残すためtask8全体は未完了。
+
+第8段階8K: 通常共有の差分画像を明示cohortで追加。source/consumer別frame chain、slow ACK/late join後のfresh full復帰、source合計100ms keyframe制限を実装。保存画像の再送で鮮度を延長しない。旧peer/cohortと旧helper full fallbackを維持。pool7/relay5追加、新browser plain/encrypted/slow/native/saved-off5件、独立レビューとUI/文書の指摘再点検を通過。task8全体とmonitor独立窓などの残件は継続。

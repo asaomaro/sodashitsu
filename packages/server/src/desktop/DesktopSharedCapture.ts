@@ -13,6 +13,7 @@ import {
   DesktopProtectedFailure,
   DesktopReady,
   DesktopFrameInfo,
+  DesktopFrameChain,
   encodeDesktopFrame,
   decodeDesktopFrame,
   DESKTOP_MAX_FRAME_BYTES,
@@ -34,6 +35,7 @@ export interface DesktopHelper extends EventEmitter {
 
 type Subscription = DesktopHelper & {
   cursorShape: number;
+  images: DesktopFrameChain;
   configured: boolean;
   pending: number;
   closed: boolean;
@@ -62,6 +64,9 @@ export class DesktopSharedCapture {
         configuration?: string;
         protectedSource?: boolean;
         frameSeq: number;
+        images: DesktopFrameChain;
+        deltas: boolean;
+        keyframeAt: number;
         inputSeq: number;
         inputs: Map<number, { member: Subscription; seq: number }>;
         ended: boolean;
@@ -84,6 +89,9 @@ export class DesktopSharedCapture {
         child,
         members: new Set(),
         frameSeq: 0,
+        images: new DesktopFrameChain(),
+        deltas: false,
+        keyframeAt: -Infinity,
         inputSeq: 0,
         inputs: new Map(),
         cursorSeq: 0,
@@ -128,6 +136,7 @@ export class DesktopSharedCapture {
       pending: 0,
       closed: false,
       cursorShape: 0,
+      images: new DesktopFrameChain(),
       exitCode: null as number | null,
       signalCode: null as NodeJS.Signals | null,
       stdout: new PassThrough(),
@@ -174,9 +183,9 @@ export class DesktopSharedCapture {
         current.microphone = { member, id };
         return true;
       },
-      requestClipboard: (enabled: boolean,generation: number) => {
-        if(member.closed||!member.configured||current.ended)return false;
-        return current.clipboard?.grant(member,enabled,generation)===true;
+      requestClipboard: (enabled: boolean, generation: number) => {
+        if (member.closed || !member.configured || current.ended) return false;
+        return current.clipboard?.grant(member, enabled, generation) === true;
       },
       requestControl: (enabled: boolean) => {
         if (member.closed || !member.configured || !current.ready || current.ended) return false;
@@ -242,15 +251,17 @@ export class DesktopSharedCapture {
       if (!g.configuration) {
         g.configuration = configuration;
         g.protectedSource = value.allowSharedProtected === true;
+        g.deltas = value.options?.deltas === true;
         this.write(g, value);
       } else if (g.ready) {
         this.emit(s, g.ready);
         this.cursor(g, s);
+        if (g.deltas) this.imageKeyframe(g);
       }
       return;
     }
     if (!s.configured) throw Error("Missing capture configuration");
-    if (g.clipboard?.command(s,value)) return;
+    if (g.clipboard?.command(s, value)) return;
     if (g.native?.command(s, value)) return;
     if (value.type === "native_microphone") {
       if (g.microphone?.member !== s || g.microphone.id !== value.id) return;
@@ -262,7 +273,9 @@ export class DesktopSharedCapture {
     if (value.type === "ack") {
       if (!s.pending || value.seq !== s.pending) throw Error("Wrong subscriber ACK");
       s.pending = 0;
-    } else if (value.type === "heartbeat" || value.type === "keyframe") this.write(g, value);
+      if (g.deltas && s.images.last?.seq !== g.images.last?.seq) this.imageKeyframe(g);
+    } else if (value.type === "keyframe") this.imageKeyframe(g);
+    else if (value.type === "heartbeat") this.write(g, value);
     else if (value.type === "control") {
       if (g.control === s && value.enabled === true) this.write(g, value);
     } else if (value.type === "release") {
@@ -319,7 +332,16 @@ export class DesktopSharedCapture {
       const configuration = JSON.parse(g.configuration!);
       if (ready.cursor && (!configuration.separateCursor || configuration.options.cursor !== true))
         throw Error("Unexpected shared cursor source");
-      if(configuration.allowClipboard===true&&ready.allowClipboard===true&&!g.protectedSource)g.clipboard=new DesktopSharedClipboard<Subscription>({allowed:()=>!g.ended&&g.ready?.allowClipboard===true,write:value=>this.write(g,value),send:(member,value)=>this.emit(member,value)});
+      if (
+        configuration.allowClipboard === true &&
+        ready.allowClipboard === true &&
+        !g.protectedSource
+      )
+        g.clipboard = new DesktopSharedClipboard<Subscription>({
+          allowed: () => !g.ended && g.ready?.allowClipboard === true,
+          write: (value) => this.write(g, value),
+          send: (member, value) => this.emit(member, value),
+        });
       g.ready = {
         ...ready,
         dynamicQuality: false,
@@ -368,7 +390,7 @@ export class DesktopSharedCapture {
     } else if (value.type === "frame" && g.ready) {
       const info = DesktopFrameInfo.parse(value.info);
       if (
-        info.update ||
+        (info.update && !g.deltas) ||
         info.seq <= g.frameSeq ||
         typeof value.data !== "string" ||
         !/^[A-Za-z0-9+/]*={0,2}$/.test(value.data) ||
@@ -376,15 +398,23 @@ export class DesktopSharedCapture {
       )
         throw Error("Shared capture requires full ordered frames");
       decodeDesktopFrame(encodeDesktopFrame(info, Buffer.from(value.data, "base64")));
+      g.images.accept(info);
       g.frameSeq = info.seq;
+      let recover = false;
       // Bounded acceptance at the source replaces the slowest subscriber's ACK.
       // Every subscriber still ACKs exactly its own delivered frame.
       for (const s of g.members) {
         if (!s.configured || s.pending || s.closed) continue;
+        if (info.update && s.images.last?.seq !== info.update.baseSeq) {
+          recover = true;
+          continue;
+        }
+        s.images.accept(info);
         s.pending = info.seq;
         this.emit(s, value);
       }
       this.write(g, { type: "ack", seq: info.seq });
+      if (recover) this.imageKeyframe(g);
     } else if (value.type === "input_ack" && Number.isSafeInteger(value.seq)) {
       const route = g.inputs.get(value.seq);
       if (route) {
@@ -427,6 +457,12 @@ export class DesktopSharedCapture {
       ...(attach ? { shape: g.cursorShape!.shape, data: g.cursorShape!.data } : {}),
     });
     if (attach) s.cursorShape = pose.shapeId;
+  }
+  private imageKeyframe(g: NonNullable<DesktopSharedCapture["group"]>): void {
+    const now = performance.now();
+    if (now - g.keyframeAt < 100) return;
+    g.keyframeAt = now;
+    this.write(g, { type: "keyframe" });
   }
   private emit(s: Subscription, value: unknown): void {
     if (s.closed) return;
