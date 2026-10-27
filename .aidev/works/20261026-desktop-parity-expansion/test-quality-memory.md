@@ -4415,3 +4415,46 @@ undefined
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-quality-memory.spec.ts
 
 ```
+
+## Final browser verification after main integration
+
+```text
+
+Running 3 tests using 1 worker
+
+(node:1225088) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-10-27T00:40:25.216Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:25.217Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:25.217Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T00:40:25.223Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-BlGD1M/commands.json","count":0}
+{"ts":"2026-10-27T00:40:25.691Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:25.691Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:25.691Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T00:40:25.692Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-Qo0D0S/commands.json","count":0}
+{"ts":"2026-10-27T00:40:31.374Z","level":"info","msg":"machine link closed","machine":"adfa37876806b421a27ff8312c85b4d5","kind":"transient","reason":"接続が切れました"}
+  ✓  1 src/specs/remote-desktop-quality-memory.spec.ts:5:1 › quality drafts survive browser reload without Apply, including codec, route, rate and fit (7.0s)
+{"ts":"2026-10-27T00:40:32.043Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:32.044Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:32.044Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T00:40:32.053Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-ArzXIz/commands.json","count":0}
+{"ts":"2026-10-27T00:40:32.495Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:32.496Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:32.496Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T00:40:32.497Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-ReACFn/commands.json","count":0}
+{"ts":"2026-10-27T00:40:36.832Z","level":"info","msg":"machine link closed","machine":"70443169a56cd01d46640c9592d68a8a","kind":"transient","reason":"接続が切れました"}
+  ✓  2 src/specs/remote-desktop-settings.spec.ts:6:1 › connection presets and reduced colors reach the canvas, persist per machine, and reconnect read-only (4.9s)
+{"ts":"2026-10-27T00:40:37.002Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:37.003Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:37.003Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T00:40:37.010Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-wd34J2/commands.json","count":0}
+{"ts":"2026-10-27T00:40:37.443Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:37.443Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-27T00:40:37.443Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-27T00:40:37.444Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-RPzEGN/commands.json","count":0}
+{"ts":"2026-10-27T00:40:48.071Z","level":"info","msg":"machine link closed","machine":"2e72606857797a31d36d929dc1ed82d6","kind":"transient","reason":"接続が切れました"}
+  ✓  3 src/specs/remote-desktop-shared-datagrams.spec.ts:10:1 › shared UDP viewers recover packet loss and one peer can fall back to WSS independently (11.2s)
+
+  3 passed (24.9s)
+
+```
