@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
+import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
 
@@ -404,7 +406,12 @@ function relinquish() {
   cursorRenderer?.clearPrediction();
   inputs.clear();
 }
+const microphoneAvailable=ref(false),microphonePipeReady=ref(false),microphoneState=ref<MicrophoneState>("stopped");
+let microphoneSocket:WebSocket|undefined,microphoneClient:DesktopMicrophoneClient|undefined;
+function resetMicrophone(){microphoneClient?.stop();microphoneClient=undefined;microphoneSocket?.close();microphoneSocket=undefined;microphoneAvailable.value=false;microphonePipeReady.value=false;microphoneState.value="stopped";}
+function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphonePipeReady.value&&!secureDesktop.value)void microphoneClient?.start();}
 function stop() {
+  resetMicrophone();
   epoch++;
   cursorRenderer?.stop();cursorRenderer=undefined;separateCursor.value=false;
   if (clipboardGranted.value) send({ type: "clipboard_grant", enabled: false });
@@ -521,7 +528,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -571,6 +578,15 @@ function connect(automatic = false) {
       } else {
         const m = JSON.parse(String(event.data));
         if(m.type==="monitor_topology_changed"){monitorChanged=true;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";releaseInputs();}
+        else if(m.type==="microphone_ticket"){
+          if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
+          const pipe=microphoneSocket=new WebSocket(url,DESKTOP_MICROPHONE_PROTOCOL);
+          const client=microphoneClient=new DesktopMicrophoneClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>8192)return false;pipe.send(JSON.stringify(value));return true;},state=>microphoneState.value=state);
+          pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
+          pipe.onmessage=event=>{if(version!==epoch||microphoneSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>1024)throw Error("Invalid microphone result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
+          pipe.onerror=()=>pipe.close();pipe.onclose=()=>{if(version===epoch&&microphoneSocket===pipe)resetMicrophone();};
+        }else if(m.type==="microphone_ready"){microphonePipeReady.value=true;}
+        else if(m.type==="microphone_closed"){resetMicrophone();error.value="マイク転送の接続が切れました。デスクトップを接続し直してください。";}
         else if(m.type==="files_ticket"){
           if(fileSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid file attachment");
           const pipe=fileSocket=new WebSocket(url,DESKTOP_FILES_PROTOCOL);const client=fileClient.value=new DesktopFileClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>262144)return false;pipe.send(JSON.stringify(value));return true;},()=>pipe.close());
@@ -626,6 +642,7 @@ function connect(automatic = false) {
           ready.value = connected.value = true;
           if(r.imageLane)send({type:"image_ready"});
           synthetic.value = r.backend === "synthetic";
+          microphoneAvailable.value=r.microphone===true&&!r.secureDesktop;
           allowMedia.value = r.allowMedia === true;
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
@@ -1175,6 +1192,13 @@ onBeforeUnmount(() => {
       </details>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" />
+      <details v-if="ready && microphoneAvailable" data-desktop-microphone>
+        <summary>マイク入力</summary>
+        <p>このPCのマイクを接続先の仮想オーディオデバイスへ送ります。接続先アプリで、そのデバイスの録音側を選んでください。</p>
+        <button type="button" :disabled="!microphonePipeReady || !['stopped','unavailable'].includes(microphoneState)" @click="startMicrophone">マイク転送を開始</button>
+        <button type="button" :disabled="['stopped','unavailable'].includes(microphoneState)" @click="microphoneClient?.stop()">マイク転送を停止</button>
+        <p data-microphone-state>{{ microphoneState==='running'?'マイク転送中':microphoneState==='preparing'?'マイクの許可・準備中':microphoneState==='starting'?'接続先を準備中':microphoneState==='unavailable'?'マイクを利用できません。両端の許可と仮想デバイスを確認してください。':'マイク停止' }}</p>
+      </details>
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード{{ richClipboard ? "（テキスト・画像・書式）" : "（テキスト）" }}</summary>
         <p>

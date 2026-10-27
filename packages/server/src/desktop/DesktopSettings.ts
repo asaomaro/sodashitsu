@@ -70,6 +70,7 @@ export class DesktopSettings {
       ? {
           enabled: true,
           allowInput: options.legacy.allowInput,
+          ...(options.legacy.allowSystemAudio??options.legacy.allowMedia?{allowSystemAudio:true}:{}),
           allowClipboard: options.legacy.allowClipboard === true,
           allowDisplayResize: options.legacy.allowDisplayResize === true,
           ...(options.legacy.allowMonitors?{allowMonitors:true}:{}),
@@ -106,6 +107,7 @@ export class DesktopSettings {
       if (permissions.allowVirtualDisplay && this.options.legacy)throw new RpcError("invalid_params","仮想画面には同梱のWindows補助プログラムを使用してください。");
       if (permissions.allowUnlock && this.options.legacy)
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
+      if(permissions.allowMicrophone&&!permissions.microphoneEndpoint?.trim())throw new RpcError("invalid_params","マイク転送先の仮想オーディオ再生デバイスIDを指定してください。");
       if(permissions.fileRoot?.trim()){const probe=await DesktopFiles.open(permissions.fileRoot.trim(),()=>false);await probe.close();}
       await writeFileAtomic(this.options.file, JSON.stringify(permissions) + "\n");
       this.permissions = permissions;
@@ -140,6 +142,9 @@ export class DesktopSettings {
         allowVirtualDisplay:p.allowVirtualDisplay===true,
         allowElevated:p.allowElevated===true,
         allowInput: p.allowInput,
+        allowSystemAudio: p.allowSystemAudio === true,
+        allowMicrophone: p.allowMicrophone === true,
+        ...(p.microphoneEndpoint?.trim()?{microphoneEndpoint:p.microphoneEndpoint.trim()}:{}),
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
         allowUnlock: p.allowUnlock === true,

@@ -160,6 +160,17 @@ function run() {
       },20);
     });server.on("error",()=>stopAudio());server.listen(path,()=>{if(process.platform!=="win32"){try{chmodSync(path,0o600);}catch{stopAudio();}}});
   };
+  let microphone;
+  const stopMicrophone=()=>{if(!microphone)return;const old=microphone;microphone=undefined;old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"microphone_stop",id:old.id})+"\n");};
+  const startMicrophone=m=>{
+    stopMicrophone();if(secure||!process.argv.includes("--microphone-fixture"))return;
+    const path=process.platform==="win32"?"\\\\.\\pipe\\"+m.pipeName:m.pipePath;
+    const current=microphone={id:m.id,path,server:undefined,socket:undefined,pending:Buffer.alloc(0),seq:0};
+    const server=current.server=createServer(socket=>{if(microphone!==current||current.socket){socket.destroy();return;}current.socket=socket;socket.on("error",()=>{});socket.on("close",()=>{if(microphone===current)stopMicrophone();});socket.write(new Uint8Array([83,68,77,73,1,1,16,0,128,187,0,0,192,3,0,0]));
+      socket.on("data",bytes=>{if(microphone!==current)return;current.pending=Buffer.concat([current.pending,bytes]);if(current.pending.length>8192){stopMicrophone();return;}while(current.pending.length>=1932){const packet=current.pending.subarray(0,1932);current.pending=current.pending.subarray(1932);const seq=packet.readUInt32LE(),expiry=packet.readDoubleLE(4);if(seq<=current.seq||!Number.isFinite(expiry)||expiry>Date.now()+150){stopMicrophone();return;}current.seq=seq;if(expiry<Date.now())continue;let energy=0;for(let i=12;i<1932;i+=2)energy+=packet.readInt16LE(i)**2;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"microphone_frame",id:m.id,seq,rms:Math.sqrt(energy/960)})+"\n");packet.fill(0);}});
+    });server.on("error",stopMicrophone);server.listen(path,()=>{if(process.platform!=="win32"){try{chmodSync(path,0o600);}catch{stopMicrophone();}}});if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"microphone_start",id:m.id})+"\n");
+  };
+  process.on("exit",stopMicrophone);
   process.on("exit",stopAudio);
   const allowInput = process.argv.includes("--allow-input");
   const markerAt = process.argv.indexOf("--unlock-marker");
@@ -230,6 +241,7 @@ function run() {
           ...(virtualSource?{virtualDisplay:true}:{}),
           ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
+          ...(m.allowMicrophone===true&&m.microphoneEndpoint&&process.argv.includes("--microphone-fixture")&&!secure?{microphone:true}:{}),
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
@@ -264,6 +276,7 @@ function run() {
         }
       } else if (m.type === "heartbeat") lastSeen = performance.now();
       else if (m.type === "ack" && m.seq === pending) pending = 0;
+      else if(m.type==="native_microphone"){if(m.enabled)startMicrophone(m);else if(microphone?.id===m.id)stopMicrophone();}
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
       else if(m.type==="native_video") {
         if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:m.enabled?"native_start":"native_stop",id:m.id})+"\n");

@@ -408,7 +408,7 @@ DXGIのdirty/move rectanglesはまだ利用せず、従来のタイル比較を�
 - x64の通常デスクトップはDXGI Desktop Duplicationで取得し、D3D11の線形サンプリングでGPU上で縮小してからCPUへ読み戻します。JPEG/PNG圧縮・差分転送・入力は従来の経路です。画像経路自体はGPU動画エンコードではありません。追加のnative H.264は上記を参照してください。初回のポインター更新のみ・画像未到着はそのフレームだけGDIを使い、有効なデスクトップ画像が届いてからDXGIへ移ります。回転画面、利用できないGPU/API、初期化・取得失敗はその接続中GDI `StretchBlt`へ戻します。ロック解除用のsecure desktopは常にGDIです。追加DLLやWindows SDKの導入は不要です。[Microsoft Desktop Duplication API](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api) / [StretchBlt](https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-stretchblt)
 - 同一権限の通常のネイティブダイアログも取得対象になる設計ですが、実機互換性は未検証です。GPU描画や動画、cursor形状、混在DPI/複数モニター、日本語配列の記号/IME、アプリごとのUnicode入力は別途検証が必要です。旧peer・認証画面のカーソルは取得位置への標準矢印の近似です。
 - OSやブラウザが取る特殊キーをすべて転送できるとは限りません。通常共有にはCtrl+Alt+Delの送信ボタンはなく、許可済みのロック解除経路でのみ提供します。Esc1回は接続先へ送ります。修飾キーなしのEscを500ms以内に2回押すとローカルの操作解除になります。
-- マイク、ファイル転送、plugin operation、TUI画像表示、Linux/macOSのnative capture backendは含みません。クリップボード・音声・CLIは後述の追加許可が必要です。
+- エージェントからのマイク開始、ファイル転送、plugin operation、TUI画像表示、Linux/macOSのnative capture backendは含みません。クリップボード・音声・CLIは後述の追加許可が必要です。
 - 1画像2MiB、最大4096×2400かつ800万pixel。UIの送信幅は最大1920、fps上限30、JPEG品質20～90。送信画像は1枚の描画ACKを待ち、5秒ACKがなければ共有を閉じます。通常画面のhelperはACK待ち中に次の1枚だけを取得・圧縮して準備します。準備完了後200msを超えた画像や、入力・保持キーの解放・画質変更・再同期より前の準備画像は破棄して取り直します。準備中の画像は差分の基準にせず、実際に送った画像だけを基準にします。認証画面（Winlogon）は従来どおりACKを受けてから次の取得を始めます。
 - 画像の寸法をヘッダーで検査してからブラウザで復号し、復号後も実寸を確認します。入力の種類・座標・サイズ・順番・参照frameを制限し、古い入力の再送をしません。通信/pipeの詰まりは共有を終了します。
 - heartbeatはブラウザ→A→B→helperへ届きます。A/Bの接続監視とWindows helper側の独立watchdogを使います。helperの8秒watchdogは取得ループが詰まった場合も押下解除を試みて終了します。実際の障害時のキー解除は実機PoCの受け入れ項目です。
@@ -527,6 +527,22 @@ stdin/stdoutは1行1JSONです。起動時に`ready`と期限を返します。C
 
 この参照クライアントはモデルを呼ばず、自動で操作を決めません。統合CLI・MCP・OpenAI接続は以下を使います。プラグインoperationは未実装です。
 
+
+## 音声受信とマイク転送
+
+共有するPCのlocalhost画面またはTUIの「デスクトップ共有」で「システム音声の送信を許可」を有効にします。接続側の「動画・音声」で「システム音声を要求」を選んで共有を依頼し、再生を開始します。通常のWindows native音声は既存のOpus経路を使います。音声許可はマウス・キーボードとは独立し、OFFではブラウザ補助の音声要求も拒否します。
+
+マイクは接続側の「マイク入力」→「マイク転送を開始」で初めてブラウザのマイクを要求します。「停止」、共有終了、接続切断でトラックと待機音声を破棄します。画質設定を復元しても自動で録音を再開しません。
+
+接続先アプリからマイクとして選ぶには、接続先Windowsに仮想オーディオケーブルが必要です。署名済みの製品を別途導入し、次の手順で設定します。この機能は仮想ドライバーを同梱・自動導入せず、既定のスピーカーにも切り替えません。
+
+1. 接続先で `powershell.exe -NoProfile -File scripts/remote-desktop/list-audio-endpoints.ps1` を実行します。表示するのはデバイスの名前・方向・IDだけで、録音や再生は行いません。
+2. 仮想ケーブルの **render（再生）側ID** を、接続先のローカル設定「マイク転送先の仮想オーディオ再生デバイスID」へ入れ、「接続元からのマイク転送を許可」をONにして保存します。物理スピーカーのIDは指定しないでください。
+3. デスクトップを接続し直し、接続先アプリのマイクを、その仮想ケーブルの **capture（録音）側** に設定します。接続側でマイク転送を開始します。
+
+初期実装はWindows Nodeの通常・単独共有が対象です。WSL/Linux Node、共有source、仮想画面、UAC/ロック画面にはマイクを提供しません。音声入力は48kHz/mono/16bit PCMを20msごとに専用の認証済み接続で送り、PCM本体は約0.77Mbps、base64/JSONを含めると約1.1Mbpsです。未ACKは最大12枚（240ms分）、Bで待機するPCMは最新1枚だけ保持し、private pipeのPCMは100msで期限切れになります。マイク入力のOpus圧縮は未対応です。実デバイス・実通話アプリでの確認は別途必要で、検証済みなのは生成音声と仮想sinkです。
+
+参考実装として[FreeRDPの音声入力チャネル](https://github.com/FreeRDP/FreeRDP/blob/master/channels/audin/client/audin_main.c)と[RustDeskのaudio service](https://github.com/rustdesk/rustdesk/blob/master/src/server/audio_service.rs)の構成を確認し、コードは独自に実装しました。仕様の一次資料は[AnyDeskの接続先音声再生設定](https://support.anydesk.com/Audio)と[Microsoft RDPの音声入力転送仕様](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpeai/d04ffa42-5a0f-4f80-abb1-cc26f71c9452)です。RDPとのプロトコル互換や、他製品の機能すべてとの同等性を意味しません。
 
 ## 動画・システム音声（追加機能）
 

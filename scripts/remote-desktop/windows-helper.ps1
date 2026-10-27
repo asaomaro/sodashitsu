@@ -7,13 +7,15 @@ $unlock = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopUnloc
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs') -Raw
 $audioPath = Join-Path $PSScriptRoot 'WindowsDesktopAudio.cs'
 $audioSource = if (Test-Path -LiteralPath $audioPath) { Get-Content -LiteralPath $audioPath -Raw } else { '' }
+$micPath = Join-Path $PSScriptRoot 'WindowsDesktopMicrophone.cs'
+$micSource = if (Test-Path -LiteralPath $micPath) { Get-Content -LiteralPath $micPath -Raw } else { '' }
 $richPath = Join-Path $PSScriptRoot 'WindowsDesktopRichClipboard.cs'
 $richSource = if (Test-Path -LiteralPath $richPath) { Get-Content -LiteralPath $richPath -Raw } else { '' }
 $codecPath = Join-Path $PSScriptRoot 'WindowsCodecProbe.cs'
 $codecSource = if (Test-Path -LiteralPath $codecPath) { Get-Content -LiteralPath $codecPath -Raw } else { '' }
 $virtualSource = @('WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
 $protectedSource = @('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
-$combined = ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource
+$combined = ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource + "`n" + $micSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
 Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
