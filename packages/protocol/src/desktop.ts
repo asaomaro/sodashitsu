@@ -1,3 +1,4 @@
+import {DesktopNativePlatform,DesktopInputCapabilities} from "./desktopNativePlatform.js";
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
 export const DESKTOP_SHARED_PROTOCOL = "soda-desktop-shared-v1";
 export const DESKTOP_SHARED_NATIVE_PROTOCOL = "soda-desktop-shared-native-v1";
@@ -50,6 +51,7 @@ export const DesktopOptions = z
     imeKeys: z.literal(true).optional(),
     extendedInput: z.literal(true).optional(),
     elevatedDesktop:z.literal(true).optional(),
+    nativePlatform:DesktopNativePlatform.optional(),
     sharedDesktop:z.literal(true).optional(),
     sharedNative:z.literal(true).optional(),
     sharedDatagrams:z.literal(true).optional(),
@@ -138,7 +140,8 @@ export const DesktopReady = z
     allowInput: z.boolean(),
     width: z.number().int().positive().max(32768),
     height: z.number().int().positive().max(32768),
-    backend: z.enum(["windows-gdi", "windows-dxgi", "synthetic"]),
+    backend: z.enum(["windows-gdi", "windows-dxgi", "synthetic", "linux-portal", "macos-sck"]),
+    inputCapabilities: DesktopInputCapabilities.optional(),
     secureDesktop: z.boolean().optional(),
     protectedDesktop:DesktopProtectedMode.optional(),
     lockScreenCover: z.boolean().optional(),
@@ -178,6 +181,8 @@ export const DesktopFrameInfo = z
     width: z.number().int().positive().max(4096),
     height: z.number().int().positive().max(2400),
     format: z.enum(["image/jpeg", "image/png"]),
+    sourceInputSeq:z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    timing: z.enum(["measured","encode-only","unavailable"]).optional(),
     captureMs: z.number().finite().min(0).max(60000),
     encodeMs: z.number().finite().min(0).max(60000),
     contentId: z
@@ -244,6 +249,8 @@ export const DesktopPermissions = z.object({
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
 export interface DesktopSettingsResult {
+  nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
+  setupMessage?:string;
   permissions: DesktopPermissions;
   supported: boolean;
   canConfigure: boolean;
@@ -282,6 +289,7 @@ export interface DesktopResults {
     monitors?:boolean;
     virtualDisplay?:boolean;
     elevatedDesktop?:boolean;
+    nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
     sharedNative?:boolean;
     sharedDatagrams?:boolean;

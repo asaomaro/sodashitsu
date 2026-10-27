@@ -21,3 +21,7 @@ blob-report/
 
 # 配布物（scripts/package.mjs）
 release/
+
+# Python native helper validation cache
+__pycache__/
+*.pyc

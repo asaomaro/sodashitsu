@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {DESKTOP_NATIVE_PLATFORM_PROTOCOL,supportsDesktopInput,type DesktopInputCapabilities} from "@sodashitsu/protocol";
 import { DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
@@ -59,6 +60,7 @@ const infoOpen = ref(false);
 const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
+const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<DesktopInputCapabilities>();
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
 const elevatedScreen=ref(false), sharedScreen=ref(false);
 const lockScreenCover = ref(false);
@@ -431,6 +433,7 @@ function stop() {
   videoSocket?.close(1000, "desktop stopped"); videoSocket=undefined; videoExpected=videoReady=nativeSupported=false;
   ws?.close(1000, "desktop stopped");
   ws = undefined;
+  platformBackend.value=undefined;inputCapabilities.value=undefined;
   ready.value = connected.value = false;
   if (secureDesktop.value) {
     text.value = '';
@@ -528,7 +531,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -642,6 +645,8 @@ function connect(automatic = false) {
           ready.value = connected.value = true;
           if(r.imageLane)send({type:"image_ready"});
           synthetic.value = r.backend === "synthetic";
+          platformBackend.value=r.backend==="linux-portal"||r.backend==="macos-sck"?r.backend:undefined;inputCapabilities.value=r.inputCapabilities;
+          if(platformBackend.value&&activeSettings.value)activeSettings.value={...activeSettings.value,deltas:false,adaptive:false,image:{colorMode:"full",showCursor:activeSettings.value.image.showCursor}};
           microphoneAvailable.value=r.microphone===true&&!r.secureDesktop;
           allowMedia.value = r.allowMedia === true;
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
@@ -848,6 +853,7 @@ function canInput() {
   return !lockScreenCover.value && (!receiver || receiver.active) && control.value && ready.value && lastDrawn > 0;
 }
 function sendInput(value: RemoteDesktopInput) {
+  if(!supportsDesktopInput(inputCapabilities.value,value)){error.value="この接続先OSでは、このキー・入力操作に対応していません。";return;}
   // A scheduled move must still belong to the current share and permission.
   if (!canInput()) return;
   const id = ++seq;
@@ -1077,11 +1083,12 @@ onBeforeUnmount(() => {
           ]
         }}
       </p>
-      <label><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
+      <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止画面でも画像を送り続けるPortalが必要で、1.5秒無更新になると停止します。</template></p>
+      <label v-if="!platformBackend"><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
       <p v-if="sharedScreen" data-desktop-shared>{{ nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。対応する接続先ではシステム音声も共有できます。クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
-      <label><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
+      <label v-if="!platformBackend"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
-      <label><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
+      <label v-if="!platformBackend"><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。共有終了時にこの画面を解放します。</p>
       <nav>
 
@@ -1115,15 +1122,15 @@ onBeforeUnmount(() => {
             >JPEG品質<input v-model="quality" aria-label="JPEG品質" type="number" min="20" max="90"
           /></label>
           <label
-            >色<select v-model="colorMode" aria-label="送信する色">
+            >色<select v-model="colorMode" :disabled="!!platformBackend" aria-label="送信する色">
               <option value="full">フルカラー</option>
               <option value="rgb565">約6.5万色</option>
               <option value="rgb332">256色</option>
               <option value="gray16">16階調グレー</option>
             </select></label
           >
-          <label><input v-model="deltas" :disabled="sharedScreen" type="checkbox" />差分転送</label>
-          <label><input v-model="adaptive" :disabled="sharedScreen" type="checkbox" />自動画質調整</label>
+          <label><input v-model="deltas" :disabled="sharedScreen||!!platformBackend" type="checkbox" />差分転送</label>
+          <label><input v-model="adaptive" :disabled="sharedScreen||!!platformBackend" type="checkbox" />自動画質調整</label>
           <label><input v-model="showCursor" type="checkbox" />共有元のカーソルを表示</label>
           <p>
             幅は縦横比を保った上限、fpsは目標上限です。JPEG品質を下げると文字がにじむ場合があります。
@@ -1331,8 +1338,8 @@ onBeforeUnmount(() => {
         }}</span
         ><output data-desktop-metrics
           >{{ mediaState!=='images' ? '画像: ' : '' }}{{ stats.fps.toFixed(1) }} fps · {{ stats.mbps.toFixed(2) }} Mbps · relay→描画ACK p95
-          {{ stats.ackP95Ms.toFixed(0) }} ms · 取得 {{ info?.captureMs.toFixed(1) ?? "—" }} / encode
-          {{ info?.encodeMs.toFixed(1) ?? "—" }} / 描画 {{ drawMs.toFixed(1) }} ms · 入力ACK
+          {{ stats.ackP95Ms.toFixed(0) }} ms · 取得 {{ info?.timing==='unavailable'||info?.timing==='encode-only'?"—":info?.captureMs.toFixed(1) ?? "—" }} / encode
+          {{ info?.timing==='unavailable'?"—":info?.encodeMs.toFixed(1) ?? "—" }} / 描画 {{ drawMs.toFixed(1) }} ms · 入力ACK
           {{ inputAckMs.toFixed(0) }} ms</output
         >
       </footer>

@@ -1,0 +1,19 @@
+name: Native desktop generated checks
+on:
+  pull_request:
+    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/test-linux-portal-helper.py', '.github/workflows/native-desktop.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-generated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Generated media dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+      - name: Import-only probe (no portal, capture or input)
+        run: /usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe
+      - name: Fake D-Bus / input, generated JPEG and publication races
+        run: /usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py
