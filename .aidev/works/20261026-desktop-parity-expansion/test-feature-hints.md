@@ -118,3 +118,5 @@ SyntaxError: Cannot convert 0xgggggggggggggggggggggggggggggggg to a BigInt
 
 
 ```
+
+root反映後: build/typecheck、全体12010件/804files、関連browser11件すべて通過。
