@@ -6,16 +6,17 @@ import { DesktopNativeHelperFrame } from "./DesktopNativeVideo.js";
 const Start = z.object({
   type: z.literal("native_video"), enabled: z.boolean(), id: z.string().uuid(),
   codec: DesktopNativeCodec.optional(), bitrateKbps: z.number().int().min(128).max(12000).optional(),
+  adaptive:z.boolean().optional(),
   fps: z.number().int().min(1).max(60).optional(), window: z.literal(3).optional(),
 }).strict();
-type Consumer = { id: string; seq: number; pending: number[]; window: 1 | 3; needsKey: boolean };
+type Consumer = {adaptive:boolean;maximum:{fps:number;kbps:number};rate:{fps:number;kbps:number}; id: string; seq: number; pending: number[]; window: 1 | 3; needsKey: boolean };
 
 /** One encoder and independent decoder credit. A missed reference frame requires a
  * future random-access unit; frames captured before a viewer joined are not replayed.
  */
 export class DesktopSharedNative<T extends object> {
   private consumers = new Map<T, Consumer>();
-  private source: { id: string; key: string; requested: z.infer<typeof DesktopNativeCodec>; fallback?: "encoder"|"unavailable"; seq: number; timestamp: number; keyframeAt: number; codec?: string; family?: z.infer<typeof DesktopNativeCodec>; width?: number; height?: number } | undefined;
+  private source: {rate:{fps:number;kbps:number}; id: string; key: string; requested: z.infer<typeof DesktopNativeCodec>; fallback?: "encoder"|"unavailable"; seq: number; timestamp: number; keyframeAt: number; codec?: string; family?: z.infer<typeof DesktopNativeCodec>; width?: number; height?: number } | undefined;
   constructor(private hooks: {
     window?: 1 | 3;
     now?(): number;
@@ -37,15 +38,22 @@ export class DesktopSharedNative<T extends object> {
         this.hooks.send(member, { type: "native_video_stopped", id: start.id });
         return true;
       }
-      this.consumers.set(member, { id: start.id, seq: 0, pending: [], window: start.window ?? 1, needsKey: true });
+      this.consumers.set(member, {adaptive:start.adaptive===true,maximum:{fps:start.fps,kbps:start.bitrateKbps},rate:{fps:start.fps,kbps:start.bitrateKbps}, id: start.id, seq: 0, pending: [], window: start.window ?? 1, needsKey: true });
       if (!this.source) {
         const id = randomUUID();
-        this.source = { id, key, requested:start.codec??"h264", seq: 0, timestamp: -1, keyframeAt: -Infinity };
+        this.source = {rate:{fps:start.fps,kbps:start.bitrateKbps}, id, key, requested:start.codec??"h264", seq: 0, timestamp: -1, keyframeAt: -Infinity };
         this.hooks.policy(true);
-        const { window: _window, ...configuration } = start;
+        const { adaptive:_adaptive,window: _window, ...configuration } = start;
         this.hooks.write({ ...configuration, id, ...(this.hooks.window === 3 ? { window: 3 } : {}) });
       }
-      return true;
+      this.rate();return true;
+    }
+    if(value.type==="native_rate"||value.type==="native_bitrate"){
+      const consumer=this.consumers.get(member);if(!consumer||value.id!==consumer.id||!consumer.adaptive)return true;
+      const change=z.object({type:z.enum(["native_rate","native_bitrate"]),id:z.string().uuid(),fps:z.number().int().min(1).max(60).optional(),kbps:z.number().int().min(128).max(12000)}).strict().parse(raw);
+      if(change.type==="native_rate"&&change.fps===undefined)throw Error("Missing shared cadence");
+      if((change.fps??consumer.rate.fps)>consumer.maximum.fps||change.kbps>consumer.maximum.kbps)throw Error("Shared rate exceeds requested limits");
+      consumer.rate={fps:change.fps??consumer.rate.fps,kbps:change.kbps};this.rate();return true;
     }
     if (value.type === "native_keyframe") {
       const consumer=this.consumers.get(member),source=this.source;
@@ -105,12 +113,23 @@ export class DesktopSharedNative<T extends object> {
     return true;
   }
 
+  private rate(){
+    const source=this.source;if(!source||!this.consumers.size)return;
+    // Preserve every viewer's current quality request. One constrained viewer
+    // drops/rejoins independently; only a unanimous lower request lowers the
+    // common encoder. A fixed/old peer keeps its configured ceiling.
+    const rates=[...this.consumers.values()].map(value=>value.rate);
+    const rate={fps:Math.max(...rates.map(value=>value.fps)),kbps:Math.max(...rates.map(value=>value.kbps))};
+    if(rate.fps===source.rate.fps&&rate.kbps===source.rate.kbps)return;
+    source.rate=rate;this.hooks.write({type:"native_rate",id:source.id,...rate});
+  }
   audioSource(member:T,id:string) {
     const source=this.source;if(!source||this.consumers.get(member)?.id!==id)return;
     return {id:source.id,timestamp:()=>source.timestamp,active:()=>this.source===source};
   }
   detach(member: T): void {
-    if (!this.consumers.delete(member) || this.consumers.size || !this.source) return;
+    if (!this.consumers.delete(member) || !this.source) return;
+    if(this.consumers.size){this.rate();return;}
     const source = this.source;
     this.hooks.sourceStopped?.();
     this.source = undefined;

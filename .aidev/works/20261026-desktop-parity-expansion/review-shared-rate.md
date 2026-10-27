@@ -1,0 +1,5 @@
+# 独立レビュー
+
+review_pointer/review_transferがsource533cbf93を別コンテキストで最終点検。前回A/UIでadaptive=falseにされるmustと音声lease未生成のshouldを修正し、実browser2窓と生成lease回帰を追加。max集約・上限/id/generation・加入/退役・旧peer・docs/task8残件は整合、追加mustなし。
+
+全体で旧helper証明なしのB入口の期待が失敗したため、e11b8ab1でReady由来s.sharedRateを入口でも確認。追加差分を両reviewerが再レビューし、追加mustなし。修正後の全体11647件/browser5件/独立build・smoke/Windows CIを親が確認。
