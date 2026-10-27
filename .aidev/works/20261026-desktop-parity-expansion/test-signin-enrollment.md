@@ -409,7 +409,7 @@ undefined
 ## 最終結果
 
 - 製品code9879のsource全体12048件/811files PASS、guarded-root全体12110件/819files PASS（それぞれ単一run）。source/root build/typecheck PASS。
-- 全体runの後、SID fixtureがowner不一致だけで拒否されないよう、SID変更時は同じexpectedOwnerSidを渡す形へ強化。製品実装は変更せず、source/root/checkのunit各7件とserver typecheckを追加確認。全体件数へ7件を足す集計はしない。
+- 全体runとは別に、SID fixtureがowner不一致だけで拒否されないよう、SID変更時は同じexpectedOwnerSidを渡す形へ強化。製品実装は変更せず、source/root/checkのunit各7件とserver typecheckを追加確認。全体件数へ7件を足す集計はしない。
 - 追加2負例は3つのservice SID除外/数値構造検査をそれぞれ外し、SID条件自体で失敗することを確認。元の製品source bytesは完全復元し、check normal server buildも通過。
 - 独立crossとtest-only追加差分の再レビューに残るmust/shouldなし。新たなbrowser経路やservice entry pointは作っておらず、E2Eでサインアウト共有を検証したという主張はしない。
 - PR/mainの結果は後続receiptへ記録する。秘密の保護保存、実account type、service接続/失効、worker epoch、取得/入力とUIは後続。
