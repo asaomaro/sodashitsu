@@ -24,7 +24,10 @@ try{
   let stdout="",stderr="";child.stdout.on("data",data=>stdout+=data);child.stderr.on("data",data=>stderr+=data);const timeout=setTimeout(()=>child.kill(),30000);
   try{const [code]=await once(child,"close");if(code!==0)throw Error(`Generated CLI failed (${code}): ${stderr}`);return JSON.parse(stdout);}finally{clearTimeout(timeout);}
  }
- const absent=await run(false);if(JSON.stringify(absent)!==JSON.stringify({initialized:false,role:"agent"})||(await readdir(root)).length)throw Error("Readonly CLI state mismatch: "+JSON.stringify({absent,files:await readdir(root)}));
+ // Windows PowerShell may initialize AppData in the generated USERPROFILE.
+ // No Sodashitsu key/session/storage directory may appear during status.
+ const absent=await run(false),files=await readdir(root);
+ if(JSON.stringify(absent)!==JSON.stringify({initialized:false,role:"agent"})||files.some(name=>process.platform!=="win32"||name!=="AppData"))throw Error("Readonly CLI state mismatch: "+JSON.stringify({absent,files}));
  const first=await run(true),second=await run(false),third=await run(true);
  if(first.initialized!==true||first.role!=="agent"||!/^[a-f0-9]{64}$/.test(first.fingerprint)||Object.keys(first).sort().join(",")!=="fingerprint,initialized,role"||JSON.stringify(first)!==JSON.stringify(second)||JSON.stringify(first)!==JSON.stringify(third))throw Error("Generated CLI public identity changed");
  if(requests!==0)throw Error("Local identity command contacted Root");
