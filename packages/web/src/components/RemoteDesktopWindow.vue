@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
+import { DESKTOP_SHARED_AUDIO_PROTOCOL, DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
@@ -528,7 +528,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -1078,7 +1078,7 @@ onBeforeUnmount(() => {
         }}
       </p>
       <label><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
-      <p v-if="sharedScreen" data-desktop-shared>{{ nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。音声・クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
+      <p v-if="sharedScreen" data-desktop-shared>{{ nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。対応する接続先ではシステム音声も共有できます。クリップボード・解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
       <label><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>

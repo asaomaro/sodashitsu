@@ -1,3 +1,5 @@
+import {DesktopSharedAudio} from "./DesktopSharedAudio.js";
+import type {DesktopNativeAudioHooks,DesktopAudioLease} from "./DesktopNativeAudio.js";
 import { DesktopSharedNative } from "./DesktopSharedNative.js";
 import { EventEmitter } from "node:events";
 import { PassThrough, Readable, Writable } from "node:stream";
@@ -11,6 +13,7 @@ export interface DesktopHelper extends EventEmitter {
   exitCode: number | null;
   signalCode: NodeJS.Signals | null;
   kill(signal?: NodeJS.Signals | number): boolean;
+  createAudio?(hooks:DesktopNativeAudioHooks):DesktopAudioLease;
   requestControl?(enabled: boolean): boolean;
 }
 
@@ -32,6 +35,7 @@ export class DesktopSharedCapture {
     members: Set<Subscription>;
     ready?: Record<string, unknown>;
     native?: DesktopSharedNative<Subscription>;
+    audio?: DesktopSharedAudio<Subscription>;
     control?: Subscription;
     configuration?: string;
     frameSeq: number;
@@ -83,6 +87,12 @@ export class DesktopSharedCapture {
       stdout: new PassThrough(), stderr: new PassThrough(),
       stdin: undefined as unknown as Writable,
       kill: () => { this.detach(current, member); return true; },
+      createAudio:(hooks:DesktopNativeAudioHooks)=>{
+        const source=current.native?.audioSource(member,hooks.id);
+        if(!source||current.ended||member.closed||!current.ready?.nativeAudio){hooks.state("unavailable");return {stop(){}};}
+        if(!current.audio)current.audio=new DesktopSharedAudio<Subscription>({id:source.id,synthetic:current.ready.backend==="synthetic",timestamp:source.timestamp,active:()=>!current.ended&&source.active(),write:value=>this.write(current,value)});
+        return current.audio.attach(member,hooks);
+      },
       requestControl: (enabled: boolean) => {
         if (member.closed || !member.configured || !current.ready || current.ended) return false;
         if (!enabled) {
@@ -162,6 +172,7 @@ export class DesktopSharedCapture {
         throw Error("Source cannot be shared");
       g.ready = { ...ready, dynamicQuality: false, inputAckPipe: false, ...(value.deferNativeSnapshots===true?{deferNativeSnapshots:true}:{}) };
       if (ready.nativeVideo) g.native = new DesktopSharedNative<Subscription>({
+        sourceStopped:()=>{g.audio?.dispose();delete g.audio;},
         window: ready.nativeVideoWindow === 3 ? 3 : 1,
         write: value => this.write(g, value), send: (s, value) => this.emit(s, value),
         policy: active => { const config=JSON.parse(g.configuration!);this.write(g,{type:"policy",fps:active?1:config.options.fps,quality:config.options.quality}); },
@@ -205,6 +216,7 @@ export class DesktopSharedCapture {
   private detach(g: NonNullable<DesktopSharedCapture["group"]>, s: Subscription): void {
     if (s.closed) return;
     s.closed = true;
+    g.audio?.detach(s);
     g.native?.detach(s);
     g.members.delete(s);
     if (g.control === s) { delete g.control; this.write(g, { type: "control", enabled: false }); }
@@ -217,6 +229,7 @@ export class DesktopSharedCapture {
   private end(g: NonNullable<DesktopSharedCapture["group"]>): void {
     if (g.ended) return;
     g.ended = true;
+    g.audio?.dispose();delete g.audio;
     g.native?.dispose(); delete g.native;
     delete g.ready;
     for (const s of [...g.members]) this.detach(g, s);

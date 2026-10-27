@@ -42,3 +42,6 @@
 
 
 画質記憶はPR #228でmainへ統合。画像/動画/表示のマシン別autosave、無効draft維持、一時fallbackからの希望route復帰、旧窓終了による上書き防止を実装。全体11605件/browser3件/負例4件/独立レビュー・再レビューと独立smoke通過。音声/マイクはPR #229で実装・検証済み。Windows通常単独共有の初期経路は実装済みで、全体11619件/browser12件、Windows生成sink・CI・独立レビュー通過。実デバイスと実通話アプリでの検証、入力Opus/共有audio/他OS拡張は残る。task6/7B/8全体/9/10も未完了。
+
+
+第8段階8D: 通常native sourceのシステム音声取得・Opus圧縮を共通化し、viewer別音声lease/停止/UDP→WSS復帰/加入前queue除外を実装。旧peerと音声許可OFF・画像先行を実WSで検査し、全体11628件/browser11件を通過。共有sourceのadaptationとprotected scopeの合成は後続。
