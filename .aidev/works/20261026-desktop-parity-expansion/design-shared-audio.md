@@ -1,0 +1,7 @@
+# 8D 複数viewerのシステム音声
+
+同じ通常native sourceのWASAPI PCM取得とOpus encoderを一個に集約し、viewerごとのUUID/音声状態/送信経路/停止をleaseとして扱う。専用shared-audio protocol、B cap、sharedNative、nativeAudio、ローカルallowSystemAudio、helper readyの積を要求する。画像only先行時もhelper configを共通の音声ceilingへ正規化するが、音声を要求するleaseがあるときだけ取得する。古いpeerへ新option/readyを追加しない。
+
+共通source ID/clockを現在のnative consumer ID照合後に取得。private PCM→OpusはDesktopNativeAudio既存の有限queueと停止処理を使い、加入前にNodeへ届きqueueされたPCMは新viewerへ渡さない。既存OS入力bufferの遅延をゼロと主張しない。送信不可viewerはdropし、別viewerとsourceを止めない。最後の音声leaseで取得停止、最後のnative consumer/取得元終了でpool自体を退役し、後の開始は新sourceへ束縛する。単独経路は同じ実装を従来どおり生成する。
+
+生成PCM、fake source、実ブラウザ/NodeのWSS・UDP/DTLSで検証。ブラウザgraphを仮想MediaStreamへ終端しhardwareへ再生しない。実録音/実speaker再生/画面取得/OS入力なし。shared mic、adaptation、protected sourceの合成は別差分。
