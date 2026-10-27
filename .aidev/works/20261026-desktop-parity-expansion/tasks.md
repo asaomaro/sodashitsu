@@ -99,3 +99,6 @@
 第10段階追加修正: private Relay終了時の未seal応答欠落を、新hint交渉の認証EOF/ACK・最大2秒drainで修正。source権限延長は行わず、新app要求を抑止しrevocation/handoffは即close。EOF中のBlob/seal待機send競合も修正。全体source11970/root12032、生成browser unique8、負例5件/bytes復元/独立build/smokeと独立点検・全体review通過。agent受信者routeなどが残るためtask10全体は未完了。
 
 第8段階8L: 通常共有の同monitor選択/全画面一括を追加。新hint/B cap/許可/helper proof、同一device cohort、fresh窓のID参加、要求値と実表示の分離、topology全窓停止を実装。retry UI overlayも修正。全体source11979/root12041、生成browser unique13、負例5件/bytes復元/独立build・smokeと独立点検・全体/修正再レビュー通過。異monitorを同時に別OS窓へ配信する機能は、入力解放ACKを伴う別作業で未実装。task8/13全体の完了とはしない。
+
+
+第8段階8M: 通常sharedMonitors/allの一括取得を共有し、各モニターを別ブラウザ窓で表示・操作する導線を追加。非secret strict URL/既存login・pin/noopener、canvasとcursor同一viewport、物理端clamp、reload閲覧、構成変更時epoch失効・遅延decoder例外の失効を実装。別窓は全体画像を受信して切り取る方式で、モニター別の独立取得・圧縮は未対応。Explorerからの直接drag-outなどを残すためtask8/13全体は引き続き未完了。検証の最終結果はtest-monitor-windows.mdへ記録する。
