@@ -91,3 +91,5 @@
 第8段階8K: 通常共有の差分画像を明示cohortで追加。source/consumer別frame chain、slow ACK/late join後のfresh full復帰、source合計100ms keyframe制限を実装。保存画像の再送で鮮度を延長しない。旧peer/cohortと旧helper full fallbackを維持。pool7/relay5追加、新browser plain/encrypted/slow/native/saved-off5件、独立レビューとUI/文書の指摘再点検を通過。task8全体とmonitor独立窓などの残件は継続。
 
 第9段階9B: macOS14+の実験的fresh JPEG/InputGuard、local opt-inと権限分離、source publication/cleanup再検査を実装。Mac SDKcompile/generated33/負例3、Node11934+再検査1・root11996+再検査1、生成browser Linux/Mac/plain/encrypted3、独立レビューと修正再点検を通過。実Macは未登録で、OS許可遷移/DPI/キー配列/アプリ互換と性能は未検証。Linux静止PortalとMac実機などを残しtask9全体は未完了。
+
+第13段階準備: protocol32件上限を維持する固定128bit機能hintを追加し、sharedDeltasの1tokenを移行。旧v1受信/未知bit無視/不正重複拒否/B能力証明を維持。全体11948件、関連生成browser11件、負例2件、独立点検/全体レビューと独立build/smoke通過。フォルダ再読込後再開等のtask13本体は継続。
