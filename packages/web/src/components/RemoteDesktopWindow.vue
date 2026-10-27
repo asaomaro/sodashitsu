@@ -626,7 +626,7 @@ function connect(automatic = false) {
         else if(m.type==="clipboard_busy"){clipboardNotice.value="他の窓がクリップボードを共有中です。その窓で解除してから許可してください。";}
         else if(m.type==="shared_clipboard_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared clipboard capability");sharedClipboardAvailable.value=m.enabled;if(!m.enabled)sharedClipboardScreen.value=false;}
         else if(m.type==="shared_cursor_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared cursor capability");sharedCursorAvailable.value=m.enabled;if(!m.enabled)sharedCursorScreen.value=false;}
-        else if(m.type==="monitor_topology_changed"){monitorChanged=true;sharedMonitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";releaseInputs();}
+        else if(m.type==="monitor_topology_changed"){monitorChanged=true;sharedMonitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";stop();status.value="停止";}
         else if(m.type==="microphone_ticket"){
           if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
           const pipe=microphoneSocket=desktopSockets.open(url,DESKTOP_MICROPHONE_PROTOCOL);
@@ -859,6 +859,7 @@ function connect(automatic = false) {
         }
       }
     } catch (e) {
+      if(dead||version!==epoch)return;
       error.value = e instanceof Error ? e.message : "表示に失敗しました";
       stop();
       status.value = "停止";
