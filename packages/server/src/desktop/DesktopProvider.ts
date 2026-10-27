@@ -193,6 +193,7 @@ export class DesktopProvider {
       elevatedDesktop:this.config?.allowElevated===true,
       files:!!this.config?.fileRoot,
       fileCheckpoints:!!this.config?.fileRoot,
+      folders:!!this.config?.fileRoot,
       richClipboard:this.config?.allowClipboard===true,
       imageLane: true,
       videoLane: true,
@@ -218,6 +219,7 @@ export class DesktopProvider {
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
     if(cfg.nativePlatform&&(p.options.sharedDesktop||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
+    if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
     if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || p.options.richClipboard || p.options.monitors || p.options.monitorDevice || p.options.cursor))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
@@ -359,7 +361,7 @@ export class DesktopProvider {
             if(p.fileTicket){
               if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
               const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
-              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot).then(async worker=>{if(!this.live(s)){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true).then(async worker=>{if(!this.live(s)){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
               socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.fileTicket})));
               const stop=()=>{void s.files?.then(worker=>worker?.close());socket.terminate();};let pending=0;
               socket.on("error",stop);socket.on("close",stop);socket.on("message",async(raw,binary)=>{if(!this.live(s))return;try{
@@ -601,7 +603,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,folders:_helperFolders, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -630,7 +632,7 @@ export class DesktopProvider {
               ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
-              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true}:{})}:{}),
+              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true}:{}),...(options.folders?{folders:true}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true}:{}),
               ...(nativeEnabled&&options.nativeCodecs&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),
@@ -743,7 +745,7 @@ export class DesktopProvider {
       }
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop;
-    const {sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,

@@ -1,51 +1,11 @@
-import { lstat, opendir, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import {DesktopFolders} from "./DesktopFolders.js";
+import {canonicalFolder} from "./desktopFilePaths.js";
+import { lstat, opendir } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { DesktopFileRequest, type DesktopFileResult, RpcError } from "@sodashitsu/protocol";
 import type { DesktopFileCheckpoints } from "./DesktopFileCheckpoints.js";
 import { FileTransfer } from "../work/FileTransfer.js";
 import { directoryGuard, inside } from "../work/files.js";
-/** Windows 8.3/case spelling can differ from realpath without being a reparse point. */
-async function canonicalFolder(path: string): Promise<string> {
-  const absolute = resolve(path),
-    canonical = await realpath(absolute),
-    before = await lstat(absolute);
-  if (!before.isDirectory() || before.isSymbolicLink())
-    throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
-  if (canonical !== absolute) {
-    if (process.platform !== "win32")
-      throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
-    const root = parse(absolute).root,
-      snapshots = [];
-    let current = root;
-    for (const part of absolute.slice(root.length).split(sep)) {
-      if (!part) continue;
-      current = join(current, part);
-      const st = await lstat(current);
-      if (!st.isDirectory() || st.isSymbolicLink())
-        throw new RpcError("invalid_params", "リンクを経由する共有フォルダは使えません");
-      snapshots.push({ path: current, dev: st.dev, ino: st.ino });
-    }
-    for (const snapshot of snapshots) {
-      const st = await lstat(snapshot.path);
-      if (
-        !st.isDirectory() ||
-        st.isSymbolicLink() ||
-        st.dev !== snapshot.dev ||
-        st.ino !== snapshot.ino
-      )
-        throw new RpcError("invalid_params", "共有フォルダの実体が変更されました");
-    }
-  }
-  const after = await lstat(canonical);
-  if (
-    !after.isDirectory() ||
-    after.isSymbolicLink() ||
-    before.dev !== after.dev ||
-    before.ino !== after.ino
-  )
-    throw new RpcError("invalid_params", "共有フォルダの実体が変更されました");
-  return canonical;
-}
 /** Per-share explicit file grant, confined to the locally approved folder. */
 export class DesktopFiles {
   private granted = false;
@@ -53,6 +13,7 @@ export class DesktopFiles {
   private epoch = 0;
   private queue: Promise<unknown> = Promise.resolve();
   private transfer = new FileTransfer();
+  private folders:DesktopFolders|undefined;
   private readonly owner = crypto.randomUUID();
   private activeIds = new Set<string>();
   private cancelledIds = new Set<string>();
@@ -81,12 +42,14 @@ export class DesktopFiles {
     private allowed: () => boolean,
     private checkpoints?: DesktopFileCheckpoints,
     private valid: () => boolean = () => true,
-  ) {}
+    folderSupport=false,
+  ) {if(folderSupport)this.folders=new DesktopFolders(root);}
   static async open(
     root: string,
     allowed: () => boolean,
     checkpoints?: DesktopFileCheckpoints,
     valid: () => boolean = () => true,
+    folderSupport=false,
   ) {
     if (!isAbsolute(root))
       throw new RpcError("invalid_params", "共有フォルダは絶対パスを指定してください");
@@ -97,12 +60,14 @@ export class DesktopFiles {
       allowed,
       checkpoints,
       valid,
+      folderSupport,
     );
   }
   run(raw: unknown): Promise<DesktopFileResult> {
     const m = DesktopFileRequest.parse(raw),
       version = this.epoch;
     const operationId = "id" in m.request ? m.request.id : undefined;
+    const folderCancelled=m.request.action==="folder_abort"&&this.folders?.cancel(m.request.id)===true;
     const checkpointCancelled =
       m.request.action === "checkpoint_abort" &&
       this.checkpoints?.cancel(this.root, this.owner, m.request.checkpoint) === true;
@@ -113,6 +78,7 @@ export class DesktopFiles {
       this.granted = false;
       this.epoch++;
       this.checkpoints?.revoke(this.owner);
+      this.folders?.cancelAll();
     }
     const result = this.queue.then(async (): Promise<DesktopFileResult> => {
       const reply = (result: NonNullable<DesktopFileResult["result"]>): DesktopFileResult => ({
@@ -127,6 +93,7 @@ export class DesktopFiles {
         if (m.request.action === "grant") {
           if (!m.request.enabled) {
             await this.transfer.close();
+            await this.folders?.clear();
             for (const id of this.activeIds) this.forget(id);
             this.cancelledIds.clear();
             return reply({ enabled: false });
@@ -138,6 +105,7 @@ export class DesktopFiles {
           this.granted = true;
           return reply({ enabled: true, root: this.root });
         }
+        if(m.request.action==="folder_abort"){if(!folderCancelled)throw Error("フォルダ転送は利用できません");return reply({});}
         if (m.request.action === "checkpoint_abort") {
           if (!checkpointCancelled) throw Error("再開記録が失効したか別の接続で利用中です");
           return reply({});
@@ -160,6 +128,7 @@ export class DesktopFiles {
           fence();
         };
         await guard();
+        if(m.request.action.startsWith("folder_")){if(!this.folders)throw Error("両端を更新してフォルダ転送に対応した接続を使ってください");const {DesktopFolderRequest}=await import("@sodashitsu/protocol");return reply(await this.folders.run(DesktopFolderRequest.parse(m.request),guard,fence));}
         if (m.request.action.startsWith("checkpoint_")) {
           if (!this.checkpoints) throw Error("接続元と接続先を更新して再開対応で接続してください");
           const { DesktopCheckpointRequest } = await import("@sodashitsu/protocol");
@@ -264,11 +233,13 @@ export class DesktopFiles {
   }
   async close() {
     this.dead = true;
+    this.folders?.cancelAll();
     this.checkpoints?.detach(this.owner);
     this.granted = false;
     this.epoch++;
     await this.queue;
     await this.transfer.close();
+    await this.folders?.close();
     for (const id of this.activeIds) this.forget(id);
     this.cancelledIds.clear();
   }

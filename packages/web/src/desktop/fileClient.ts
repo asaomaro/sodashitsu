@@ -25,7 +25,11 @@ export class DesktopFileClient {
     }
   }
   request(request: DesktopFileRequest["request"]): Promise<Result> {
-    const control = request.action === "abort" || request.action === "checkpoint_abort" || (request.action === "grant" && !request.enabled);
+    const control =
+      request.action === "abort" ||
+      request.action === "checkpoint_abort" ||
+      request.action === "folder_abort" ||
+      (request.action === "grant" && !request.enabled);
     if (this.dead || this.queue.length >= (control ? 18 : 16)) {
       if (control && !this.dead) this.fail();
       return Promise.reject(Error("ファイル転送の接続が終了したか処理上限です"));
@@ -49,12 +53,17 @@ export class DesktopFileClient {
       if (index < 0) return;
       const task = this.queue.splice(index, 1)[0]!;
       this.pending.set(task.id, task);
-      task.timer = setTimeout(() => {
-        this.pending.delete(task.id);
-        task.reject(Error("ファイル転送の応答がありません。保存結果を確認してください"));
-        if (task.control) this.fail();
-        else this.pump();
-      }, 30000);
+      task.timer = setTimeout(
+        () => {
+          this.pending.delete(task.id);
+          task.reject(Error("ファイル転送の応答がありません。保存結果を確認してください"));
+          if (task.control) this.fail();
+          else this.pump();
+        },
+        ["folder_download_start", "folder_upload_start"].includes(task.request.action)
+          ? 120000
+          : 30000,
+      );
       if (!this.send({ type: "desktop_file", id: task.id, request: task.request })) {
         this.pending.delete(task.id);
         clearTimeout(task.timer);
