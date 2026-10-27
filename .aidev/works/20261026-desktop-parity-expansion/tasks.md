@@ -35,7 +35,10 @@
 
 第8段階8B: 同じ通常sourceのnative encoder共有、consumer別UUID/連番/pending、future-keyからの復帰、設定不一致のviewer限定fallback、画像onlyとnativeの混在を実装・独立レビュー・全体11,598件/ブラウザ27件/独立起動確認で検証済み。WS/WSSのみ。音声/UDP/adaptation/保護sourceの共有は未完了でtask8は保留。
 
-第8段階8C: viewer別UDP/DTLSとWSS復帰、source keyframe要求のID変換・合計100ms制限、Bでの共有encoder adaptation抑止、画像onlyからのUDP参加を実装中。音声/自動調整/保護source等の共有とtask6/7B/9/10は未完了。
+第8段階8C: PR #227でviewer別UDP/DTLSとWSS復帰、source keyframe要求のID変換・合計100ms制限、Bでの共有encoder adaptation抑止、画像onlyからのUDP参加を実装・独立レビュー済み。合計11603件（全体11602＋再build後のPTY1）とbrowser24件で検証。音声/自動調整/保護source等の共有とtask6/7B/9/10は未完了。
 
 
 - [ ] 11. 音声受信の独立許可と、手元マイクを接続先アプリへ渡す経路（2026-10-27追加）。Windows通常単独共有の音声許可、専用lane、生成PCM、private pipe、仮想audio render endpoint、明示getUserMedia、停止時track/queue破棄、旧peer gateを実装中。システム音声受信は既存Opusを利用。マイクは固定48kHz mono PCM/20ms、最大12未ACK・B最新1待機・stale期限で開始。仮想ケーブルの署名済み導入/録音側アプリ選択は利用者側で必要で、自動driver導入や物理speakerへのfallbackはしない。実音声デバイスでの録音/再生は未検証。Opus入力圧縮、共有source mic/audio、Linux/macOS入力は残件。
+
+
+画質記憶はPR #228でmainへ統合。画像/動画/表示のマシン別autosave、無効draft維持、一時fallbackからの希望route復帰、旧窓終了による上書き防止を実装。全体11605件/browser3件/負例4件/独立レビュー・再レビューと独立smoke通過。音声/マイクはPR #229で実装・検証済み。Windows通常単独共有の初期経路は実装済みで、全体11619件/browser12件、Windows生成sink・CI・独立レビュー通過。実デバイスと実通話アプリでの検証、入力Opus/共有audio/他OS拡張は残る。task6/7B/8全体/9/10も未完了。
