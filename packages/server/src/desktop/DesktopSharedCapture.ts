@@ -330,6 +330,7 @@ export class DesktopSharedCapture {
       )
         throw Error("Source cannot be shared");
       const configuration = JSON.parse(g.configuration!);
+      if(ready.monitorLayout&&(configuration.allowMonitors!==true||configuration.options.monitors!==true||(configuration.options.monitorDevice&&ready.monitorLayout.selected!==configuration.options.monitorDevice)))throw Error("Unexpected shared monitor layout");
       if (ready.cursor && (!configuration.separateCursor || configuration.options.cursor !== true))
         throw Error("Unexpected shared cursor source");
       if (
@@ -441,7 +442,9 @@ export class DesktopSharedCapture {
                 code: value.type === "unlock_failure" ? "worker_unavailable" : "source_changed",
               };
         for (const member of [...g.members]) this.emit(member, failure);
-      } else if (value.type === "session_locked")
+      } else if(value.type==="monitor_topology_changed"&&Object.keys(value).length===1&&g.ready?.monitorLayout)
+        for(const member of [...g.members])this.emit(member,{type:"monitor_topology_changed"});
+      else if (value.type === "session_locked")
         for (const s of g.members) this.emit(s, { type: "session_locked" });
       this.end(g);
     }

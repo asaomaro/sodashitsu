@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const DesktopSharedMonitorsFailure=z.object({type:z.literal("shared_monitors_failure"),code:z.literal("helper_incompatible")}).strict();
 export const DESKTOP_VIRTUAL_DISPLAY_PROTOCOL = "soda-desktop-virtual-display-v1";
 export const DESKTOP_MONITORS_PROTOCOL = "soda-desktop-monitors-v1";
 export const DesktopMonitorRect = z

@@ -97,3 +97,5 @@
 第13段階13C: 明示保存のfolder upload/ZIP downloadを切断・再読込後にfresh grant/manual attachで再開。B volatile256bit/root-owner-epoch/8件各100MiB15分とbrowser既存合計100MiB/8件・WebLocks・atomic chunkを統合。file別offset/done/receiptと元snapshot再検査、token取得前/保留/遅延startの同期取消、完成fileとempty dir保持を検証。source11961件、生成browser unique22件、負例4件と独立taskcheck/全体review・修正再レビュー・独立build/smoke通過。B再起動保持は対象外、Explorer直接drag-out/monitor独立窓は残るのでtask13全体は保留。
 
 第10段階追加修正: private Relay終了時の未seal応答欠落を、新hint交渉の認証EOF/ACK・最大2秒drainで修正。source権限延長は行わず、新app要求を抑止しrevocation/handoffは即close。EOF中のBlob/seal待機send競合も修正。全体source11970/root12032、生成browser unique8、負例5件/bytes復元/独立build/smokeと独立点検・全体review通過。agent受信者routeなどが残るためtask10全体は未完了。
+
+第8段階8L: 通常共有の同monitor選択/全画面一括を追加。新hint/B cap/許可/helper proof、同一device cohort、fresh窓のID参加、要求値と実表示の分離、topology全窓停止を実装。retry UI overlayも修正。全体source11979/root12041、生成browser unique13、負例5件/bytes復元/独立build・smokeと独立点検・全体/修正再レビュー通過。異monitorを同時に別OS窓へ配信する機能は、入力解放ACKを伴う別作業で未実装。task8/13全体の完了とはしない。

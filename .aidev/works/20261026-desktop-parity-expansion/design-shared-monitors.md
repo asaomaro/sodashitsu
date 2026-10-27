@@ -1,0 +1,9 @@
+# 複数viewerのモニター選択
+
+現在の共有sourceはmonitors/monitorDeviceを拒否するため、通常のモニター選択を複数viewerで使用できない。新sharedMonitorsのviewer hint/B capabilityで交渉し、通常共有かつBのallowMonitorsがある場合に同じmonitorDevice・構成のcapture helperを共有する。旧cohortはmonitors=falseを維持。入力ownerは既存の同じhelper FIFOなので、別helper間のkeyup/input競合は導入しない。
+
+helperのready.monitorLayoutが必要、指定deviceと実際のselected一致を確認。topology変化は全memberへ通知し、source終了と操作許可解除。途中参加にはreadyのlayoutだけを配り、古いimageを再配信しない。別deviceの共有が既存sourceへ黙ってjoinすることはない。異なるcohortはbusyを表示し、終了後に明示再接続する。
+
+この段階は同じ選択モニターを複数人で共有するもの。別monitorを同時に別OS窓へ配信する機能は、入力broker/release ACK barrierを伴う別作業で、完了とはしない。virtual/protected/他OS nativeは併用しない。helper通常monitor機能は既存を再利用し、C#へ新shared fieldを送らない。
+
+実モニター取得/入力は実行せず、生成topology/2browser canvas/late join/異device拒否/退出/入力owner解除/旧peer gateを検査する。taskcheck/独立全体レビュー必須。
