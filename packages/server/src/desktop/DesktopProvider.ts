@@ -129,6 +129,7 @@ export class DesktopProvider {
     return {
       sharedDesktop: true,
       sharedNative: this.config?.allowNativeVideo === true,
+      sharedDatagrams: this.config?.allowNativeVideo === true,
       available: !!this.config,
       allowInput: this.config?.allowInput === true,
       deltas: true,
@@ -158,8 +159,9 @@ export class DesktopProvider {
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
-    if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || p.options.nativeAudio || p.options.nativeDatagrams || p.options.nativeAdaptive || p.options.nativeCadence || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
+    if (p.options.sharedDesktop && (!p.options.features || p.options.elevatedDesktop || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || p.options.nativeAudio || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || p.options.nativeAdaptive || p.options.nativeCadence || p.options.richClipboard || p.options.files || p.options.monitors || p.options.monitorDevice || p.options.cursor))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
+    if(p.options.sharedDatagrams&&(!p.options.sharedNative||!p.options.nativeDatagrams||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画のUDP経路が許可されていません。");
     if(p.options.sharedNative&&(!p.options.sharedDesktop||!p.options.nativeVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画が接続先で許可されていません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
@@ -325,6 +327,7 @@ export class DesktopProvider {
           const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
           if (nativeDraw) delete rawMessage.nativeDraw;
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
+          if(p.options.sharedDesktop&&m.type==="media"&&m.settings)m.settings.adaptive=false;
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
           if(m.type==="native_audio_control"&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);return;}
@@ -650,7 +653,7 @@ export class DesktopProvider {
         }
       }
     });
-    const {sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
@@ -665,7 +668,7 @@ export class DesktopProvider {
       nativeCodecs:(options.sharedDesktop||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
       nativeAdaptive:options.nativeAdaptive===true&&cfg.allowNativeVideo===true,
       nativeCadence:options.nativeCadence===true&&cfg.allowNativeVideo===true,
-      nativeDatagrams:options.nativeDatagrams===true&&cfg.allowNativeVideo===true,
+      nativeDatagrams:(options.sharedDesktop||options.nativeDatagrams===true)&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
       ...((options.sharedDesktop||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
       allowNativeVideo: (options.sharedDesktop||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
