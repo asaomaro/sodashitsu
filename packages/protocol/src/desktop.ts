@@ -1,3 +1,4 @@
+export const DESKTOP_SHARED_RESOLUTION_PROTOCOL="soda-desktop-shared-resolution-v1";
 import {DesktopNativePlatform,DesktopInputCapabilities} from "./desktopNativePlatform.js";
 export const DESKTOP_IMAGE_LANE_PROTOCOL = "soda-desktop-images-v1";
 export const DESKTOP_SHARED_PROTOCOL = "soda-desktop-shared-v1";
@@ -57,6 +58,7 @@ export const DesktopOptions = z
     sharedDatagrams:z.literal(true).optional(),
     sharedAudio:z.literal(true).optional(),
     sharedRate:z.literal(true).optional(),
+    sharedResolution:z.literal(true).optional(),
     virtualDisplay:z.literal(true).optional(),
     monitors:z.literal(true).optional(),
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
@@ -299,6 +301,7 @@ export interface DesktopResults {
     sharedDatagrams?:boolean;
     sharedAudio?:boolean;
     sharedRate?:boolean;
+    sharedResolution?:boolean;
     files?: boolean;
     richClipboard?: boolean;
     microphone?: boolean;
