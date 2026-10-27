@@ -28,7 +28,7 @@ const label = computed(
       :ref="(el) => previews.target(tab.id, el as HTMLElement | null)"
       class="preview-target"
     />
-    <RemoteDesktopWindow
+    <RemoteDesktopWindow :key="tab.machineId"
       v-else-if="tab.kind === 'desktop' && tab.machineId !== 'local'"
       embedded
       :machine-id="tab.machineId"

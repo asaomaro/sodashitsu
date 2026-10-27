@@ -1,4 +1,9 @@
-import { DesktopOptions } from "@sodashitsu/protocol";
+import { DesktopOptions, DesktopNativeCodec, DesktopMediaSettings } from "@sodashitsu/protocol";
+
+const RenderingSettings = DesktopOptions.pick({
+  width: true, fps: true, quality: true, deltas: true, adaptive: true, image: true,
+  features: true, display: true,
+}).strict();
 
 export type ConnectionSettings = DesktopOptions & {
   deltas: boolean;
@@ -32,7 +37,7 @@ export const presets: Record<"low" | "balanced" | "quality", ConnectionSettings>
   },
 };
 export function normalizeSettings(raw: unknown): ConnectionSettings {
-  const { features, display, ...parsed } = DesktopOptions.parse(raw);
+  const { features, display, ...parsed } = RenderingSettings.parse(raw);
   return {
     ...parsed,
     deltas: parsed.deltas ?? true,
@@ -57,4 +62,27 @@ export function saveSettings(machineId: string, settings: ConnectionSettings): b
   } catch {
     return false;
   }
+}
+
+const ViewerPreferences = DesktopOptions.pick({}).extend({
+  transport: DesktopMediaSettings.shape.transport.default("auto"),
+  bitrate: DesktopMediaSettings.shape.maxBitrateKbps,
+  codec: DesktopNativeCodec.default("h264"),
+  fps: DesktopMediaSettings.shape.fps.default(60).refine(value=>value===30||value===60),
+  udp: DesktopOptions.shape.adaptive.default(true),
+  fit: DesktopOptions.shape.adaptive.default(true),
+}).strict();
+export function normalizeViewerPreferences(raw: unknown) { return ViewerPreferences.parse(raw); }
+export type ViewerPreferences = ReturnType<typeof normalizeViewerPreferences>;
+const viewerKey = (machineId: string) => `soda:desktop:viewer:v1:${machineId}`;
+export function loadViewerPreferences(machineId: string): ViewerPreferences {
+  try {
+    const value = localStorage.getItem(viewerKey(machineId));
+    return normalizeViewerPreferences(value ? JSON.parse(value) : {});
+  } catch { return normalizeViewerPreferences({}); }
+}
+/** Quality/scale preferences only. Starting capture or granting access stays explicit. */
+export function saveViewerPreferences(machineId: string, preferences: ViewerPreferences): boolean {
+  try { localStorage.setItem(viewerKey(machineId), JSON.stringify(normalizeViewerPreferences(preferences))); return true; }
+  catch { return false; }
 }

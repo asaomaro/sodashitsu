@@ -1,3 +1,4 @@
+import { DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_NATIVE_PROTOCOL,decodeDesktopH264Packet} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_PROTOCOL} from "@sodashitsu/protocol";
@@ -124,8 +125,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" | "shared-native" | "shared-old-native" | "shared-udp" | "shared-old-udp" = false) {
-    const ws = new WebSocket(endpoint, ime === "shared-old-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" | "shared-native" | "shared-old-native" | "shared-udp" | "shared-old-udp" | "microphone" = false) {
+    const ws = new WebSocket(endpoint, ime === "microphone" ? [DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -1035,8 +1036,8 @@ it("negotiates shared UDP only for the new viewer and provider capability",async
   await vi.waitFor(()=>expect(image.frames.length).toBe(1));
   const viewer=await f.viewer(mode==="old-protocol"?"shared-old-udp":"shared-udp");viewer.send({type:"start",machineId:"remote",options:{sharedDesktop:true,width:1280,fps:30,quality:65,features:true}});
   await vi.waitFor(()=>expect(viewer.frames.length).toBe(1));
-  if(mode!=="new"){expect(f.startRequests[0]!.options).not.toHaveProperty("sharedDatagrams");expect(f.startRequests[0]!.options).not.toHaveProperty("nativeDatagrams");}
-  else{expect(f.startRequests[0]!.options).toMatchObject({sharedDatagrams:true,nativeDatagrams:true,sharedNative:true});expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({nativeDatagrams:true});}
+  if(mode!=="new"){expect(f.startRequests.at(-1)!.options).not.toHaveProperty("sharedDatagrams");expect(f.startRequests.at(-1)!.options).not.toHaveProperty("nativeDatagrams");}
+  else{expect(f.startRequests.at(-1)!.options).toMatchObject({sharedDatagrams:true,nativeDatagrams:true,sharedNative:true});expect(viewer.messages.find(m=>m.type==="ready")).toMatchObject({nativeDatagrams:true});}
  }
 });
 
@@ -1082,4 +1083,29 @@ it("preserves another viewer's held key and control when non-owner video stops a
  }finally{
   f.provider.dispose();await vi.waitFor(()=>{let gone=false;try{process.kill(childPid,0);}catch{gone=true;}expect(gone).toBe(true);});
  }
+});
+
+
+it.each(["viewer","provider","helper","none"])("microphone requires new viewer, B permission and helper readiness: %s",async missing=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMicrophone:missing!=="provider",microphoneEndpoint:"synthetic-virtual",command:[...cfg.command,...(missing==="helper"?[]:["--microphone-fixture"])]});
+ const v=await f.viewer(missing==="viewer"?false:"microphone");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ expect(v.messages.find(m=>m.type==="ready")?.microphone).toBe(missing==="none"?true:undefined);if(missing==="viewer"||missing==="provider")expect(f.startRequests[0]!.options).not.toHaveProperty("microphone");v.send({type:"stop"});
+});
+it("keeps microphone on its own ticket and delivers generated PCM without input control",async()=>{
+ const f=await fixture(false),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMicrophone:true,microphoneEndpoint:"synthetic-virtual",command:[...cfg.command,"--microphone-fixture"]});
+ const v=await f.viewer("microphone");v.send(start);await expect.poll(()=>v.messages.find(m=>m.type==="ready")?.microphone).toBe(true);
+ const ticket=String(v.messages.find(m=>m.type==="microphone_ticket")?.ticket),pipe=new WebSocket(f.endpoint,DESKTOP_MICROPHONE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),responses:any[]=[];
+ pipe.on("error",()=>{});pipe.on("message",bytes=>responses.push(JSON.parse(bytes.toString())));
+ try{await new Promise<void>((resolve,reject)=>{pipe.once("open",resolve);pipe.once("error",reject);});pipe.send(JSON.stringify({type:"video_viewer",ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="microphone_ready")).toBe(true);
+ const id="22222222-2222-4222-8222-222222222222";pipe.send(JSON.stringify({type:"microphone_start",id}));await expect.poll(()=>responses.some(m=>m.type==="microphone_status"&&m.state==="running")).toBe(true);
+ const pcm=Buffer.alloc(1920);for(let i=0;i<960;i++)pcm.writeInt16LE(Math.round(Math.sin(i*Math.PI*2*440/48000)*12000),i*2);pipe.send(JSON.stringify({type:"microphone_frame",id,seq:1,data:pcm.toString("base64")}));await expect.poll(()=>responses.some(m=>m.type==="microphone_ack"&&m.seq===1)).toBe(true);
+ await expect.poll(async()=>{const records=(await readFile(f.lifecycle,"utf8")).trim().split("\n").map(s=>JSON.parse(s));return records.some(m=>m.type==="microphone_frame"&&m.rms>1000);}).toBe(true);
+ pipe.terminate();await expect.poll(async()=>JSON.parse((await readFile(f.lifecycle,"utf8")).trim().split("\n").at(-1)!).type).toBe("microphone_stop");expect(v.ws.readyState).toBe(WebSocket.OPEN);
+ }finally{pipe.terminate();v.send({type:"stop"});}
+});
+it("rejects system audio for both media paths when the separate local permission is off, and still accepts default silent media",async()=>{
+ const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowMedia:true,allowSystemAudio:false,command:[...cfg.command,"--native-audio"]});
+ const v=await f.viewer("audio");v.send({...start,options:{...start.options,features:true}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeAudio");const calls=vi.spyOn(f.provider.companion,"fromViewer");
+ v.send({type:"media",enabled:true,settings:{audio:true,transport:"relay"}});await expect.poll(()=>v.messages.some(m=>m.type==="media_unavailable")).toBe(true);expect(calls.mock.calls.some(([,m]:any)=>m.type==="media"&&m.enabled&&m.settings?.audio)).toBe(false);
+ v.send({type:"media",enabled:true});await expect.poll(()=>calls.mock.calls.some(([,m]:any)=>m.type==="media"&&m.enabled)).toBe(true);expect(v.ws.readyState).toBe(WebSocket.OPEN);v.send({type:"stop"});
 });

@@ -1,0 +1,9 @@
+# 独立レビュー
+
+review_pointer / review_transferが別コンテキストで全差分を読み取り点検。
+
+初回must: pipe prefixが1文字ずれて全開始拒否、TimeoutException名前衝突、systemAudio許可がcompanion経路を迂回。prefix.Length、明示System.TimeoutException、native/companionの共通許可guard（optional settings保持）に修正。private pipeのEnd*より先にwait handleを閉じる問題も生成native検査で発見し修正。
+
+should: 古いsocket dataの世代fence、sink待機中に期限切れになるPCMの最終検査を修正。後者は遅延sink生成回帰と修正除去負例で検査。旧socket fenceはコード再レビューで確認し、専用の遅延data回帰は追加していない。
+
+RTTを考慮した未ACK12/累積ACK/B最新1保持/zero化、worklet creditを追加後も独立再レビュー。追加mustなし。全体テスト、実録音再生、OS操作をレビュー側は重複実行していない。

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { DESKTOP_MICROPHONE_PROTOCOL } from "@sodashitsu/protocol";
+import { DesktopMicrophoneClient, type MicrophoneState } from "../desktop/microphoneClient.js";
 import {DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_NATIVE_CODEC_PROTOCOL,isDesktopNativeStream,type DesktopNativeCodec} from "@sodashitsu/protocol";
 
 import "./viewportMaximize.css";
-import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   decodeDesktopFrame,
   DESKTOP_IME_PROTOCOL,
@@ -45,6 +47,7 @@ import { renderDesktopUpdate } from "../desktop/render.js";
 import {
   loadSettings,
   saveSettings,
+  loadViewerPreferences, saveViewerPreferences, normalizeViewerPreferences,
   normalizeSettings,
   presets,
   type ConnectionSettings,
@@ -113,6 +116,8 @@ const agentActive = ref(false),
   agentTicket = ref(""),
   agentExpires = ref(0);
 const savedSettings = loadSettings(props.machineId);
+const savedViewerPreferences = loadViewerPreferences(props.machineId);
+const preferredTransport = ref(savedViewerPreferences.transport);
 const deltas = ref(savedSettings.deltas),
   colorMode = ref(savedSettings.image.colorMode),
   showCursor = ref(savedSettings.image.showCursor);
@@ -120,7 +125,7 @@ const width = ref(savedSettings.width),
   fps = ref(savedSettings.fps),
   quality = ref(savedSettings.quality),
   text = ref(""),
-  fit = ref(true),
+  fit = ref(savedViewerPreferences.fit),
   maximized = ref(false);
 const info = ref<DesktopFrameInfo | null>(null),
   stats = ref({ fps: 0, mbps: 0, ackP95Ms: 0 }),
@@ -144,13 +149,13 @@ const mediaState = ref("images"),
   requestAudio = ref(false),
   nativeVideo = ref(false),
   nativeStats = ref<DesktopNativeVideoStats|null>(null),
-  mediaTransport = ref<"auto" | "relay" | "native">("auto"),
-  mediaBitrate = ref(2500),
+  mediaTransport = ref<"auto" | "relay" | "native">(savedViewerPreferences.transport),
+  mediaBitrate = ref(savedViewerPreferences.bitrate),
   nativeAudio=ref(false),nativeAudioState=ref(""),
-  nativeDatagrams=ref(false),nativeUdp=ref(true),nativeUdpActive=ref(false),
-  nativeCodecs=ref(false),nativeCodecCandidates=ref<DesktopNativeCodec[]>([]),nativeCodec=ref<DesktopNativeCodec>("h264"),nativeActualCodec=ref<DesktopNativeCodec>(),nativeRequestedCodec=ref<DesktopNativeCodec>(),nativeCodecFallback=ref(""),
+  nativeDatagrams=ref(false),nativeUdp=ref(savedViewerPreferences.udp),nativeUdpActive=ref(false),
+  nativeCodecs=ref(false),nativeCodecCandidates=ref<DesktopNativeCodec[]>([]),nativeCodec=ref<DesktopNativeCodec>(savedViewerPreferences.codec),nativeActualCodec=ref<DesktopNativeCodec>(),nativeRequestedCodec=ref<DesktopNativeCodec>(),nativeCodecFallback=ref(""),
   nativeAdaptive=ref(false),
-  nativeMaxFps=ref(30), nativeFps=ref(60),
+  nativeMaxFps=ref(30), nativeFps=ref(savedViewerPreferences.fps),
   videoFrames = ref(0),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
@@ -401,7 +406,12 @@ function relinquish() {
   cursorRenderer?.clearPrediction();
   inputs.clear();
 }
+const microphoneAvailable=ref(false),microphonePipeReady=ref(false),microphoneState=ref<MicrophoneState>("stopped");
+let microphoneSocket:WebSocket|undefined,microphoneClient:DesktopMicrophoneClient|undefined;
+function resetMicrophone(){microphoneClient?.stop();microphoneClient=undefined;microphoneSocket?.close();microphoneSocket=undefined;microphoneAvailable.value=false;microphonePipeReady.value=false;microphoneState.value="stopped";}
+function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphonePipeReady.value&&!secureDesktop.value)void microphoneClient?.start();}
 function stop() {
+  resetMicrophone();
   epoch++;
   cursorRenderer?.stop();cursorRenderer=undefined;separateCursor.value=false;
   if (clipboardGranted.value) send({ type: "clipboard_grant", enabled: false });
@@ -459,6 +469,19 @@ function requestedSettings(): ConnectionSettings {
     image: { colorMode: colorMode.value, showCursor: showCursor.value },
   });
 }
+function persistImagePreferences() {
+  let value: ConnectionSettings;
+  try { value = requestedSettings(); } catch { return; }
+  if (!saveSettings(props.machineId, value)) settingNotice.value = "このブラウザに画質設定を保存できません。";
+}
+function persistViewerPreferences() {
+  let value;
+  try { value = normalizeViewerPreferences({ transport: preferredTransport.value, bitrate: Number(mediaBitrate.value), codec: nativeCodec.value, fps: Number(nativeFps.value), udp: nativeUdp.value, fit: fit.value }); } catch { return; }
+  if (!saveViewerPreferences(props.machineId, value)) settingNotice.value = "このブラウザに動画・表示設定を保存できません。";
+}
+function chooseMediaTransport() { preferredTransport.value = mediaTransport.value; persistViewerPreferences(); }
+watch([width, fps, quality, deltas, adaptive, colorMode, showCursor], persistImagePreferences, { flush: "sync" });
+watch([mediaBitrate, nativeCodec, nativeFps, nativeUdp, fit], persistViewerPreferences, { flush: "sync" });
 function preset(event: Event) {
   const name = (event.target as HTMLSelectElement).value;
   if (!Object.hasOwn(presets, name)) return;
@@ -505,7 +528,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = new WebSocket(url, [DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = new WebSocket(url, [...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   socket.binaryType = "arraybuffer";
   socket.onopen = () => {
@@ -555,6 +578,15 @@ function connect(automatic = false) {
       } else {
         const m = JSON.parse(String(event.data));
         if(m.type==="monitor_topology_changed"){monitorChanged=true;maximumDisplay.value=false;requestedDisplay=undefined;monitorDevice.value=undefined;ready.value=false;control.value=false;error.value="接続先のモニター構成が変更されました。接続し直してください。";releaseInputs();}
+        else if(m.type==="microphone_ticket"){
+          if(microphoneSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid microphone attachment");
+          const pipe=microphoneSocket=new WebSocket(url,DESKTOP_MICROPHONE_PROTOCOL);
+          const client=microphoneClient=new DesktopMicrophoneClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>8192)return false;pipe.send(JSON.stringify(value));return true;},state=>microphoneState.value=state);
+          pipe.onopen=()=>{if(version===epoch)pipe.send(JSON.stringify({type:"video_viewer",ticket:m.ticket}));};
+          pipe.onmessage=event=>{if(version!==epoch||microphoneSocket!==pipe)return;try{if(typeof event.data!=="string"||event.data.length>1024)throw Error("Invalid microphone result");client.receive(JSON.parse(event.data));}catch{client.stop();pipe.close();}};
+          pipe.onerror=()=>pipe.close();pipe.onclose=()=>{if(version===epoch&&microphoneSocket===pipe)resetMicrophone();};
+        }else if(m.type==="microphone_ready"){microphonePipeReady.value=true;}
+        else if(m.type==="microphone_closed"){resetMicrophone();error.value="マイク転送の接続が切れました。デスクトップを接続し直してください。";}
         else if(m.type==="files_ticket"){
           if(fileSocket||typeof m.ticket!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(m.ticket))throw Error("Invalid file attachment");
           const pipe=fileSocket=new WebSocket(url,DESKTOP_FILES_PROTOCOL);const client=fileClient.value=new DesktopFileClient(value=>{if(pipe.readyState!==WebSocket.OPEN||pipe.bufferedAmount>262144)return false;pipe.send(JSON.stringify(value));return true;},()=>pipe.close());
@@ -610,12 +642,14 @@ function connect(automatic = false) {
           ready.value = connected.value = true;
           if(r.imageLane)send({type:"image_ready"});
           synthetic.value = r.backend === "synthetic";
+          microphoneAvailable.value=r.microphone===true&&!r.secureDesktop;
           allowMedia.value = r.allowMedia === true;
           separateCursor.value=r.cursor===true&&!secureDesktop.value;
           if(separateCursor.value)cursorRenderer=new DesktopCursorRenderer(()=>canvas.value,()=>cursorCanvas.value,r.width,r.height,()=>control.value);
           nativeSupported=r.nativeVideo===true;
           nativeCodecs.value=r.nativeCodecs===true;nativeCodecCandidates.value=r.nativeCodecCandidates??[];nativeAdaptive.value=r.nativeAdaptive===true;nativeMaxFps.value=r.nativeMaxFps===60?60:30;nativeDatagrams.value=r.nativeDatagrams===true;nativeAudio.value=r.nativeAudio===true;richClipboard.value=r.richClipboard===true;
           nativeVideo.value=nativeSupported&&(!videoExpected||videoReady);
+          mediaTransport.value=preferredTransport.value;
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
           virtualActive.value=r.virtualDisplay===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
@@ -1113,7 +1147,7 @@ onBeforeUnmount(() => {
         </p>
         <label><input v-model="requestAudio" type="checkbox" :disabled="mediaTransport==='native'&&!nativeAudio" />システム音声を要求</label>
         <label
-          >経路<select v-model="mediaTransport" aria-label="動画の経路">
+          >経路<select v-model="mediaTransport" aria-label="動画の経路" @change="chooseMediaTransport">
             <option v-if="nativeVideo" value="native">{{ nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
             <option v-if="allowMedia" value="auto">WebRTC（接続できなければ中継）</option>
             <option v-if="allowMedia" value="relay">圧縮動画を中継</option>
@@ -1158,6 +1192,13 @@ onBeforeUnmount(() => {
       </details>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" />
+      <details v-if="ready && microphoneAvailable" data-desktop-microphone>
+        <summary>マイク入力</summary>
+        <p>このPCのマイクを接続先の仮想オーディオデバイスへ送ります。接続先アプリで、そのデバイスの録音側を選んでください。</p>
+        <button type="button" :disabled="!microphonePipeReady || !['stopped','unavailable'].includes(microphoneState)" @click="startMicrophone">マイク転送を開始</button>
+        <button type="button" :disabled="['stopped','unavailable'].includes(microphoneState)" @click="microphoneClient?.stop()">マイク転送を停止</button>
+        <p data-microphone-state>{{ microphoneState==='running'?'マイク転送中':microphoneState==='preparing'?'マイクの許可・準備中':microphoneState==='starting'?'接続先を準備中':microphoneState==='unavailable'?'マイクを利用できません。両端の許可と仮想デバイスを確認してください。':'マイク停止' }}</p>
+      </details>
       <details v-if="ready && allowClipboard" data-desktop-clipboard>
         <summary>クリップボード{{ richClipboard ? "（テキスト・画像・書式）" : "（テキスト）" }}</summary>
         <p>

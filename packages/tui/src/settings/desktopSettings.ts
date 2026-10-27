@@ -29,6 +29,8 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
     ["allowElevated","管理者権限のアプリ・UAC画面を許可（保護サービス更新が必要）"],
     ["allowMonitors","全モニターの共有と切替を許可"],
     ["allowVirtualDisplay","一時仮想画面の作成を許可（署名済みdriver/保護サービスが必要）"],
+    ["allowMicrophone", "接続元からのマイク転送を許可（仮想デバイス設定が必要）"],
+    ["allowSystemAudio", "システム音声の送信を許可"],
     ["allowClipboard", "クリップボードを許可"],
     ["allowDisplayResize", "解像度変更を許可"],
     ["allowUnlock", "起動中のロック解除を許可（Windows専用サービスが必要）"],
@@ -41,6 +43,19 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
       ...(!state?.supported
         ? [{ label: "Windows補助プログラムを利用できません", heading: true }]
         : []),
+      {
+        label: "マイク転送先の仮想再生デバイスID",
+        value: state?.permissions.microphoneEndpoint || "未設定",
+        disabled: busy || !state?.canConfigure,
+        note: "仮想オーディオケーブルのrender側ID。録音側をアプリで選択します。",
+        activate: () => ({
+          kind: "edit" as const, title: "マイク転送先の仮想再生デバイスID", initial: state?.permissions.microphoneEndpoint ?? "",
+          commit: (text:string) => {
+            if(busy||!state?.canConfigure)return;busy=true;
+            port.set({...state.permissions,microphoneEndpoint:text.trim()}).then(result=>{state=result;message="保存しました。接続し直してください。";}).catch(()=>{message="保存できません。デバイスIDと許可を確認してください。";}).finally(()=>{busy=false;changed();});
+          },
+        }),
+      },
       {
         label: "ファイル共有フォルダ",
         value: state?.permissions.fileRoot || "無効",

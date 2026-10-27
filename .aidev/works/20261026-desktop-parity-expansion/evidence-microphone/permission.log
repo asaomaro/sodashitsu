@@ -1,0 +1,55 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-desktop-microphone
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopMicrophone.test.ts (3 tests | 1 failed | 2 skipped) 7ms
+   × never opens a pipe without local permission, and a stopped owner cannot restart 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopMicrophone.test.ts > never opens a pipe without local permission, and a stopped owner cannot restart
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 2 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "enabled": true,
+        "id": "22222222-2222-4222-8222-222222222222",
+        "pipeName": "SodaDesktopMicrophone-9821d5438aae4d99b03109699aa73bcb",
+        "pipePath": "/tmp/SodaDesktopMicrophone-9821d5438aae4d99b03109699aa73bcb.sock",
+        "type": "native_microphone",
+      },
+    ]
+
+  2nd vi.fn() call:
+
+    Array [
+      Object {
+        "enabled": false,
+        "id": "22222222-2222-4222-8222-222222222222",
+        "type": "native_microphone",
+      },
+    ]
+
+
+Number of calls: 2
+
+ ❯ src/desktop/DesktopMicrophone.test.ts:21:65
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  09:20:55
+   Duration  759ms (transform 78%, import 21%, tests 1%)
+

@@ -401,6 +401,11 @@ public static class SodaDesktopHost {
         SodaDesktopCursor cursorPump=null;
         bool separateCursor=!Secure&&showCursor&&config.ContainsKey("separateCursor")&&config["separateCursor"] is bool&&(bool)config["separateCursor"];
         SodaDesktopH264 video=null;string videoId=null;IDisposable audio=null;string audioId=null;
+        IDisposable microphone=null;string microphoneId=null;
+        Type microphoneType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopMicrophone");
+        string microphoneEndpoint=config.ContainsKey("microphoneEndpoint")?config["microphoneEndpoint"] as string:null;
+        bool microphoneCeiling=!Secure&&microphoneType!=null&&config.ContainsKey("allowMicrophone")&&config["allowMicrophone"] is bool&&(bool)config["allowMicrophone"]&&!String.IsNullOrWhiteSpace(microphoneEndpoint)&&microphoneEndpoint.Length<=512;
+        int microphonePid=microphoneCeiling&&config.ContainsKey("microphoneClientPid")?Num(config,"microphoneClientPid"):0;if(microphonePid<=0)microphoneCeiling=false;
         IDisposable richClipboardWorker=null;System.Reflection.MethodInfo richSubmit=null;Type richType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopRichClipboard");
         bool richCeiling=clipboardCeiling&&richType!=null&&config.ContainsKey("richClipboard")&&config["richClipboard"] is bool&&(bool)config["richClipboard"];
         SodaDesktopVideoRate videoRate=null;SodaDesktopVideoProfile videoProfile=null;
@@ -447,6 +452,7 @@ public static class SodaDesktopHost {
             if(ProtectedMode!=null)ready["protectedDesktop"]=ProtectedMode;
             if(displayModes.Count>0)ready["display"]=new {modes=displayModes.ConvertAll(m=>new {width=m.Width,height=m.Height})};
             if(ActiveMonitors!=null)ready["monitorLayout"]=ActiveMonitors.Message();
+            if(microphoneCeiling)ready["microphone"]=true;
             Output(ready);
             if(separateCursor)cursorPump=new SodaDesktopCursor(()=>dxgi,Bounds,showCursor,()=>!Stopping&&AllowedDesktop(),OutputGate,Output);
             var jpeg=Array.Find(ImageCodecInfo.GetImageEncoders(),c=>c.MimeType=="image/jpeg");
@@ -495,6 +501,12 @@ public static class SodaDesktopHost {
                                 }
                                 richSubmit.Invoke(richClipboardWorker,new object[]{msg});
                             }catch{string richId=msg.ContainsKey("id")?msg["id"]as string:null;Guid parsedRich;if(richId!=null&&Guid.TryParse(richId,out parsedRich))Output(new{type="clipboard_rich_result",id=richId,ok=false,stage="done"});}
+                        }
+                        else if(type=="native_microphone") {
+                            string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Microphone id");
+                            if((bool)msg["enabled"]){if(!microphoneCeiling||microphone!=null)throw new InvalidOperationException("Microphone not permitted");
+                                microphone=(IDisposable)Activator.CreateInstance(microphoneType,new object[]{(string)msg["pipeName"],microphonePid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()&&SourceMatches(sourceDevice)),microphoneEndpoint});microphoneId=requested;
+                            }else if(microphoneId==requested){StopAudio(ref microphone);microphoneId=null;}
                         }
                         else if(type=="native_audio") {
                             string requested=(string)msg["id"];Guid audioGuid;if(!Guid.TryParse(requested,out audioGuid))throw new InvalidOperationException("Audio id");
@@ -674,7 +686,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;Release();StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
+        } finally { Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
     }
 }
 
