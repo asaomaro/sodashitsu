@@ -9,6 +9,8 @@ source3f615441（base79eadbcf）。生成CLIだけを使い、実ユーザーの
 
 ## 負例
 
+以下は標準出力の抜粋。起動/終了見出しの一部を省略し、失敗の詳細は出力された行をそのまま記録する。
+
 各guardを1つずつ外して実行し、finallyで元バイト列へ復元して完全一致を確認。askは10秒打ち切りへ戻してfresh buildしてから実ブラウザで検証。元に戻した後もfresh build/typecheckを行い、最終ブラウザ3件を再実行して成功。
 
 ### lease
@@ -249,7 +251,6 @@ Running 1 test using 1 worker
   ✘  1 src/specs/work-agent-terminal.spec.ts:12:45 › work agent terminal on requester, execution PC A (22.7s)
 
 
-  1) src/specs/work-agent-terminal.spec.ts:12:45 › work agent terminal on requester, execution PC A 
 
     Error: expect(locator).toBeVisible() failed
 
