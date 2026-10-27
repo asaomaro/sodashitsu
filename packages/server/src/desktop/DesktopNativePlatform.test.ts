@@ -9,3 +9,4 @@ it("probes imports only and requires matching dependency proof",()=>{
 });
 
 it("keeps unverified Linux Portal capture disabled without an explicit local opt-in",()=>{const probe=vi.fn();expect(nativeDesktopCommand("linux",{},probe)).toBeUndefined();expect(probe).not.toHaveBeenCalled();});
+it("keeps macOS capture disabled without an explicit local experimental opt-in",()=>{const probe=vi.fn();expect(nativeDesktopCommand("darwin",{},probe)).toBeUndefined();expect(probe).not.toHaveBeenCalled();});

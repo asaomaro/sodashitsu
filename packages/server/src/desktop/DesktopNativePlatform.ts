@@ -11,6 +11,7 @@ export function nativeDesktopCommand(os=process.platform,env=process.env,probe:t
  // Portal cadence/real compositor compatibility is not yet verified. Local
  // administrator opt-in only; normal Linux installations stay unchanged.
  if(platform==="linux-portal"&&env.SODA_DESKTOP_LINUX_PORTAL!=="1")return;
+ if(platform==="macos-sck"&&env.SODA_DESKTOP_MACOS_SCK!=="1")return;
  const path=fileURLToPath(new URL(platform==="linux-portal"?"../../../../scripts/remote-desktop/linux-portal-helper.py":"../../../../scripts/remote-desktop/macos-desktop-helper",import.meta.url));
  if(!existsSync(path))return;
  const command=platform==="linux-portal"?["/usr/bin/python3","-I",path]:[path];
@@ -20,5 +21,5 @@ export function nativeDesktopCommand(os=process.platform,env=process.env,probe:t
  try{const value=JSON.parse(String(result.stdout));if(value.backend===platform&&value.dependencies===true)return command;}catch{}
 }
 export function nativeDesktopSetup(platform:DesktopNativePlatform):string {
- return platform==="linux-portal"?"Linux実験版（SODA_DESKTOP_LINUX_PORTAL=1）: systemd-logind・静止時も継続送信するPortal・PyGObject・GStreamer/PipeWire・ScreenCast Portal v6が必要です。共有開始時に接続先OSでモニターを選択してください。操作はRemoteDesktop Portalの追加許可が必要です。":"macOS: ScreenCaptureKit補助プログラムと画面収録の許可が必要です。操作にはアクセシビリティの許可も必要です。";
+ return platform==="linux-portal"?"Linux実験版（SODA_DESKTOP_LINUX_PORTAL=1）: systemd-logind・静止時も継続送信するPortal・PyGObject・GStreamer/PipeWire・ScreenCast Portal v6が必要です。共有開始時に接続先OSでモニターを選択してください。操作はRemoteDesktop Portalの追加許可が必要です。":"macOS 14以降の実験版（SODA_DESKTOP_MACOS_SCK=1）: 補助プログラムをローカルでビルドし、画面収録を許可してください。操作にはアクセシビリティの許可も必要です。GPU動画・音声・保護画面は未対応です。";
 }

@@ -142,6 +142,7 @@ export class DesktopSettings {
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
         if (p.allowUnlock) command.push("-AllowUnlock");
       }
+      if(!legacy&&this.nativePlatform==="macos-sck"&&p.allowInput)command.push("--allow-input");
       config = {
         ...legacy,
         command,

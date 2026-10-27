@@ -701,7 +701,7 @@ LinuxのPortal共有は部分実装です。通常インストールでは有効
 
 **静止画面でも新しいsampleを送り続けるPortalが必要です。** 1.5秒間新しいsampleがなければ理由を表示して共有を停止します。damage時のみ画像を送る環境では静止するだけで停止するため、通常利用には適しません。保持画像の再送を新しい取得や入力後の確認画像に見せかけません。この制限の解消はtask9の残件です。ロック・非アクティブ化・利用者/セッション/画像サイズの変更・Portal終了も共有を終了し、再接続と再許可が必要です。
 
-Linux版のGPU動画・音声・マイク・OSクリップボード・解像度変更・複数monitor/viewer・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSはプロトコル・利用条件表示だけで、ScreenCaptureKit実装と補助プログラムの配布は未完了です。どちらもWindows版と同等の対応完了とはしていません。
+Linux版のGPU動画・音声・マイク・OSクリップボード・解像度変更・複数monitor/viewer・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
 
 生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
 
@@ -763,3 +763,15 @@ Linux版のGPU動画・音声・マイク・OSクリップボード・解像度�
 送信はファイル単位でSHA-256を確認して保存します。フォルダ全体の一括置換ではありません。取消・許可解除・切断・失敗時は未完成のファイルと空の作成済みフォルダを片付け、転送完了済みファイルや利用者が追加したファイルは残します。フォルダの一時停止からの再開は同じ接続中だけで、ファイルの再開用保存はフォルダには適用されません。再読込後に送り直す場合は別の保存名を使ってください。
 
 通常・複数viewer・暗号化接続に対応します。古い両端の組み合わせでは従来のファイル転送を使い、管理者画面の共有には対応しません。1つの窓で同時に準備できるフォルダは2件、操作がない転送は60秒で片付けます。Explorerから手元への直接ドラッグやモニター別の独立窓は別の残件です。
+
+### macOS 14以降の実験的な通常画像共有
+
+Mac上で `bash scripts/remote-desktop/build-macos-desktop.sh` を実行し、`SODA_DESKTOP_MACOS_SCK=1` を付けてSodashitsuを起動します。ビルドはXcode Command Line Toolsを使い、生成した実行ファイルにad-hoc署名を付けます。証明書やOSサービスは導入しません。更新後に画面収録・アクセシビリティの許可を取り直す必要がある場合があります。
+
+接続先のローカル設定で共有を許可し、macOSの「プライバシーとセキュリティ」で画面収録を許可してください。明示的にOSの許可要求を出す場合は、Mac現地で `scripts/remote-desktop/macos-desktop-helper --request-screen-permission` を実行します。許可後は共有を接続し直してください。操作は別にローカル設定で許可し、macOSのアクセシビリティ/PostEvent許可も必要です。未許可なら閲覧のみで開始し、自動で操作可能には変わりません。カスタム起動コマンドの場合は、現地で `--allow-input` も指定してください。
+
+既定のメイン画面を、毎回新しく取得したJPEG画像で配信します。現地でカスタムコマンドへ `--display-id <CGDisplayID>` を追加すれば対象を固定できます。GPU動画・音声・マイク・OS clipboard・解像度変更・複数viewer・保護画面・signinは扱いません。対応キー・5button・ホイール・文字列だけを能力表で通知します。CapsLockやメディアキーなど、載っていない操作は対応していません。Ctrl+Spaceはキーと修飾をそのまま送ります。
+
+通常ログイン中の同じ利用者・console session・画面を対象とし、権限・画面・sessionの変更、sleep、loginwindow前面、取得停止で終了します。ロックやサインアウトを越える無人接続を提供するものではありません。実機での権限遷移・静止時・DPI・キー配列・アプリ別の文字入力は未検証です。Mac CIで確認するのはSDK compile、OSの画面を使わない生成JPEGとFakeSinkの検査です。FPSや遅延が一般的な専用アプリと同等だと確認したものではありません。
+
+`--probe` は起動に必要な部品だけ、`--self-test` は生成データだけを検査します。どちらも画面取得・OS入力・clipboard操作・権限promptを行いません。APIは[AppleのScreenCaptureKit](https://developer.apple.com/documentation/screencapturekit/scscreenshotmanager/captureimage(contentfilter:configuration:completionhandler:))を使用します。
