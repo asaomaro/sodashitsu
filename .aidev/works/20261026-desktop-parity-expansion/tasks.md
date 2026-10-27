@@ -108,3 +108,8 @@
 
 
 第10段階agent準備1: 既存の所有者鍵Store/DPAPI/ACL/fixed helperをclient-coreの明示Node subpathへ共通化し、server旧importはre-exportで保持。Node専用localIdentityは復元後の鍵/policy/ownerを再検査し、activeをowner close/policyで失効。単一owner・外部Store変更非監視・RPC非公開を明記。source全体12000/root12062、暗号browser各6、直接source負例5/独立build・smoke/独立taskcheck・全体reviewとWindows生成DPAPI CIを通過。CLI identityコマンド/agent recipient routeとCLI/MCP/model/UIは後続でtask10全体は未完了。
+
+
+### 第10段階 agent準備2: CLI鍵準備
+
+ローカル専用 `desktop identity` の状態確認・明示初期化、保存先の先行検査、Windows生成DPAPI/CLI検証を追加。`tasks-cli-identity.md` / `test-cli-identity.md` を参照。暗号化agentの公開接続経路・recipientに束縛した許可・CLI session/MCP/model切替は引き続き未完了。

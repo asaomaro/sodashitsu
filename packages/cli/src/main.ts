@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {desktopIdentity} from "./commands/desktopIdentity.js";
 import { requestWorkAgent, controlWorkAgent } from "./commands/workAgent.js";
 import { runWorkAgent } from "./workAgentRun.js";
 import { workAgentMcp } from "./workAgentMcp.js";
@@ -100,6 +101,7 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd.kind === "skill") return runSkill(); // サーバへつながない（セッションのキャッシュも読まない）
+  if(cmd.kind === "desktop-identity"){printJson(await desktopIdentity(cmd));return;}
   const store = new FsSessionStore();
   switch (cmd.kind) {
     case "work-agent": return requestWorkAgent(cmd, store);
