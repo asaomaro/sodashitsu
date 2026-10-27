@@ -4,7 +4,7 @@ Base main5765f05dcadadaf64f4e74b79bf5de56671919d6（PR261）。新しいC# sourc
 
 独立設計点検はmust/shouldなし。taskcheckでprimary tokenをPrivilegeCheckへ渡すAPI契約違反を1件発見。GetTokenInformation(TokenPrivileges)と有限bufferの純粋parserへ修正し、無効/除去/重複/不正長の回帰を追加。追加差分の再点検も通過し、残るmust/shouldはない。
 
-この環境にはWindows PowerShell/C# compilerがないため、Windows CIで実際のAdd-Typeと生成テストを確認する。source copyの5変種を各fresh processでcompileし、意図したassert失敗を確認してbytes復元・fresh正常compileを行うvalidatorを追加した。最終結果は下記へ記録する。実OS query・SYSTEM worker起動・capture/input・service/driver導入は行わない。
+この環境にはWindows PowerShell/C# compilerがないため、Windows CIで実際のAdd-Typeと生成テストを確認する。source copyの当初5変種（終端再確認の追加後は6変種）を各fresh processでcompileし、意図したassert失敗を確認してbytes復元・fresh正常compileを行うvalidatorを追加した。最終結果は下記へ記録する。実OS query・SYSTEM worker起動・capture/input・service/driver導入は行わない。
 
 JS/TSの製品実装・依存・設定の変更はない。baseのsource12041件/810files、root12103件/818filesとsource browser12件の結果を流用し、新差分の全体テスト成功として数えない。新たな検証はWindows生成compile/負例と独立レビューへ絞る。
 
@@ -12,7 +12,7 @@ Cross reviewで同一console内のsignin開始を終端でも拒否するshould�
 
 ## Windows CI / 最終点検
 
-Code head0a5978b1d9520ea5b6e21068e185caad9c1ff3d6。Protected CI40600363558 attempt2/job122527649512 PASS2026-10-27T23:14:18Z、Node identity CI40600363647/job122526667036 PASS23:13:03Z。通常compile/生成host/privilege parser/ABI、source copyの6負例、それぞれ元bytes復元後のfresh compile/正常検証を通過。実native queryはしていない。
+Code head0a5978b1d9520ea5b6e21068e185caad9c1ff3d6。Protected CI40600363558 attempt2/job122527649512 PASS2026-10-27T23:14:18Z、Node identity CI40600363647/job122526667036 PASS23:13:03Z。通常compile/生成host/privilege parser/ABI、source copyの6負例、各変種で元bytesの復元を確認し、全6変種が復元された後にfresh compile/正常検証を1回通過。実native queryはしていない。
 
 初回attempt1は既存validate-microphone.ps1が成功markerを出した後にexit5となり、新しいcandidate stepに到達せず失敗。既存mic sourceはこの差分で変更・参照しておらず、直前89b4d21eの同検証は通過済み。失敗jobを1回だけ再実行し、micを含む全stepが通過した。原因は断定せず初回生ログも保持する。
 
