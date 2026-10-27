@@ -544,6 +544,7 @@ export class DesktopRelay {
         virtualDisplay:z.boolean().optional(),
         elevatedDesktop:z.boolean().optional(),
         sharedDesktop:z.boolean().optional(),
+        sharedFiles:z.boolean().optional(),
         sharedMicrophone:z.boolean().optional(),
         sharedProtected:z.boolean().optional(),
         sharedNative:z.boolean().optional(),
@@ -607,7 +608,7 @@ export class DesktopRelay {
     if(options.virtualDisplay&&(!v.virtualDisplay||options.monitorDevice))throw new DesktopSetupRequired("接続先を更新し、仮想画面の作成を許可してください。モニター指定との併用はできません。");
     v.monitors=v.monitorsRequested===true&&caps.monitors===true;
     if(options.monitorDevice&&!v.monitors)throw new DesktopSetupRequired("接続先を更新し、全モニターの共有と切替を許可してください");
-    v.files=v.fileRequested===true&&caps.files===true;
+    v.files=v.fileRequested===true&&caps.files===true&&(!options.sharedDesktop||caps.sharedFiles===true);
     v.richClipboard=v.richRequested===true&&caps.richClipboard===true;
     v.sharedMicrophone=v.sharedMicrophoneRequested===true&&caps.sharedMicrophone===true&&options.sharedDesktop===true&&caps.sharedDesktop===true&&v.sharedRequested===true&&caps.features===true;
     v.microphone=v.microphoneRequested===true&&caps.microphone===true&&(!options.sharedDesktop||v.sharedMicrophone)&&!options.elevatedDesktop&&!options.virtualDisplay;
@@ -624,7 +625,7 @@ export class DesktopRelay {
     v.sharedRate=v.sharedNative===true&&caps.sharedRate===true&&caps.nativeCadence===true;
     if(v.elevatedDesktop||v.sharedDesktop){
       v.nativeVideo=false;v.nativeAudio=false;v.nativeDatagrams=false;v.nativeCodecs=false;v.nativeAdaptive=false;v.nativeInputFreshness=false;
-      v.files=false;v.richClipboard=false;v.monitors=false;v.cursor=false;delete v.nativeVideoWindow;delete v.nativeMaxFps;
+      if(v.elevatedDesktop)v.files=false;v.richClipboard=false;v.monitors=false;v.cursor=false;delete v.nativeVideoWindow;delete v.nativeMaxFps;
     }
     v.sharedResolution=v.sharedNative===true&&v.sharedResolutionRequested===true&&v.nativeAdaptiveRequested===true&&caps.sharedResolution===true&&caps.nativeAdaptive===true;
     if(v.sharedNative){

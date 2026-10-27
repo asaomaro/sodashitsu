@@ -303,6 +303,7 @@ export interface DesktopResults {
     elevatedDesktop?:boolean;
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
+    sharedFiles?:boolean;
     sharedMicrophone?:boolean;
     sharedProtected?:boolean;
     sharedNative?:boolean;

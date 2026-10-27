@@ -1,0 +1,5 @@
+# 8H 通常共有sourceのファイル転送
+
+DesktopFilesはOS helperに依存しない。各Shareが別のowner UUID・grant/epoch・FileTransfer・laneを持つ既存の境界を維持し、取得sourceだけを共有する。BはfileRoot設定済み通常backendでsharedFiles capabilityを公開し、Aは既存files viewer protocol・B files/sharedFilesの積でshared options.filesを送る。新しいhelper fieldやviewer protocolを増やさない。旧Aは従来通り共有filesを抑止、旧BはsharedFilesを返さないので新Aがfilesを送らない。管理者purposeはA/B両方で禁止する。
+
+受入: 新旧peer/未許可folder/未対応viewerの積、別viewer grantとid混用の拒否、先頭viewer退出後の残る転送完了と途中ファイル掃除、非上書き・通常転送回帰、暗号化viewerの往復を生成ファイル/一時フォルダで確認。taskcheckと独立全体レビュー必須。

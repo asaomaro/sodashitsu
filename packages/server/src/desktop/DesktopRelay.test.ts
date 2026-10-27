@@ -10,7 +10,7 @@ import {DESKTOP_PROTECTED_PROTOCOL,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/pro
 import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -129,8 +129,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     provider.dispose();
     await new Promise<void>((r) => web.close(() => r()));
   });
-  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" | "shared-microphone" | "shared-old-microphone" | "shared-protected" | "shared-protected-old" | "shared-resolution" | "shared-native" | "shared-old-native" | "shared-udp" | "shared-old-udp" | "microphone-opus" | "microphone" | "shared-audio" | "shared-old-audio" | "native-platform" = false) {
-    const ws = new WebSocket(endpoint, (ime === "shared-microphone"||ime === "shared-old-microphone") ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL,...(ime === "shared-microphone"?[DESKTOP_SHARED_MICROPHONE_PROTOCOL]:[])] : ime === "shared-protected" ? [DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-protected-old" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "native-platform" ? [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : (ime === "shared-audio"||ime === "shared-old-audio") ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_AUDIO_PROTOCOL,DESKTOP_INPUT_PROTOCOL,...(ime === "shared-audio"?[DESKTOP_SHARED_AUDIO_PROTOCOL]:[])] : ime === "microphone-opus" ? [DESKTOP_MICROPHONE_OPUS_FEATURE,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "microphone" ? [DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-resolution" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
+  async function viewer(ime: boolean | "extended" | "native" | "pipeline" | "lane" | "rate" | "cursor" | "images" | "udp" | "audio" | "rich" | "monitors" | "virtual" | "protected" | "shared" | "shared-files" | "shared-microphone" | "shared-old-microphone" | "shared-protected" | "shared-protected-old" | "shared-resolution" | "shared-native" | "shared-old-native" | "shared-udp" | "shared-old-udp" | "microphone-opus" | "microphone" | "shared-audio" | "shared-old-audio" | "native-platform" = false) {
+    const ws = new WebSocket(endpoint, ime === "shared-files" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : (ime === "shared-microphone"||ime === "shared-old-microphone") ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL,...(ime === "shared-microphone"?[DESKTOP_SHARED_MICROPHONE_PROTOCOL]:[])] : ime === "shared-protected" ? [DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-protected-old" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "native-platform" ? [DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : (ime === "shared-audio"||ime === "shared-old-audio") ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_AUDIO_PROTOCOL,DESKTOP_INPUT_PROTOCOL,...(ime === "shared-audio"?[DESKTOP_SHARED_AUDIO_PROTOCOL]:[])] : ime === "microphone-opus" ? [DESKTOP_MICROPHONE_OPUS_FEATURE,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "microphone" ? [DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-udp" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-resolution" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-old-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared-native" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "shared" ? [DESKTOP_SHARED_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime === "protected" ? [DESKTOP_PROTECTED_PROTOCOL,DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "virtual" ? [DESKTOP_VIRTUAL_DISPLAY_PROTOCOL] : ime === "monitors" ? [DESKTOP_MONITORS_PROTOCOL] : ime === "rich" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL] : ime === "audio" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_AUDIO_PROTOCOL] : ime === "udp" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL] : ime === "images" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL] : ime === "cursor" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_CURSOR_PROTOCOL] : ime === "rate" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL] : ime === "lane" ? [DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL] : ime === "pipeline" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL] : ime === "native" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL] : ime === "extended" ? [DESKTOP_IME_PROTOCOL,DESKTOP_INPUT_PROTOCOL] : ime ? [DESKTOP_IME_PROTOCOL] : [], { headers: { cookie: "test=ok", origin } });
     const messages: Record<string, unknown>[] = [],
       frames: Uint8Array[] = [];
     ws.on("error", () => undefined);
@@ -1249,4 +1249,71 @@ it("keeps another viewer's microphone through shared native video and audio rest
   }
   expect(responses.filter(m=>m.type==="microphone_status").at(-1)).toMatchObject({state:"running"});expect(voice.ws.readyState).toBe(WebSocket.OPEN);
  }finally{clearInterval(microphonePulse);clearInterval(heartbeat);pipe.terminate();video.send({type:"stop"});voice.send({type:"stop"});}
+});
+
+
+it.each(["none", "provider", "viewer", "folder"])("negotiates shared files with existing file protocol and B capability: %s", async missing => {
+  const f = await fixture(), cfg = (f.provider as any).config;
+  f.provider.configure({...cfg, ...(missing === "folder" ? {} : {fileRoot: join(f.record, "..")})});
+  if (missing === "provider") {
+    const caps = f.provider.capabilities.bind(f.provider);
+    vi.spyOn(f.provider, "capabilities").mockImplementation(() => {
+      const {sharedFiles, ...old} = caps(); return old as ReturnType<typeof caps>;
+    });
+  }
+  const image = missing === "none" ? await f.viewer("shared") : undefined;
+  if (image) {
+    image.send({...start, options:{...start.options, features:true, sharedDesktop:true}});
+    await expect.poll(() => image.messages.some(m => m.type === "ready")).toBe(true);
+  }
+  const v = await f.viewer(missing === "viewer" ? "shared" : "shared-files");
+  v.send({...start, options:{...start.options, features:true, sharedDesktop:true}});
+  await expect.poll(() => v.messages.some(m => m.type === "ready")).toBe(true);
+  expect(v.messages.find(m => m.type === "ready")?.files).toBe(missing === "none" ? true : undefined);
+  expect(f.startRequests.at(-1)!.options.files).toBe(missing === "none" ? true : undefined);
+  if (image) {
+    expect((await readFile(f.lifecycle,"utf8")).trim().split("\n").map(line=>JSON.parse(line)).filter(m=>m.type==="spawn")).toHaveLength(1);
+    image.send({type:"stop"});
+  }
+  v.send({type:"stop"});
+});
+
+it("isolates shared viewer file grants, transfer ownership and detachment", async () => {
+  const f = await fixture(), cfg = (f.provider as any).config;
+  f.provider.configure({...cfg,fileRoot:join(f.record,"..")});
+  const a = await f.viewer("shared-files"), b = await f.viewer("shared-files");
+  const options = {...start.options, features:true, sharedDesktop:true};
+  a.send({...start,options}); await expect.poll(() => a.messages.find(m => m.type === "ready")?.files).toBe(true);
+  b.send({...start,options}); await expect.poll(() => b.messages.find(m => m.type === "ready")?.files).toBe(true);
+  const lane = async (v: typeof a) => {
+    const socket = new WebSocket(f.endpoint,DESKTOP_FILES_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}});
+    const messages:any[]=[];socket.on("error",()=>{});socket.on("message",data=>messages.push(JSON.parse(data.toString())));
+    cleanup.push(async()=>socket.terminate());
+    await new Promise<void>((resolve,reject)=>{socket.once("open",resolve);socket.once("error",reject);});
+    socket.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));
+    await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
+    return async (request:unknown) => {
+      const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));
+      await expect.poll(()=>messages.some(m=>m.id===id)).toBe(true);
+      return messages.find(m=>m.id===id);
+    };
+  };
+  const one=await lane(a),two=await lane(b);
+  expect((await one({action:"grant",enabled:true})).ok).toBe(true);
+  expect((await two({action:"list",path:""})).ok).toBe(false);
+  expect((await two({action:"grant",enabled:true})).ok).toBe(true);
+  const pending=await one({action:"write_start",path:"one.bin",bytes:3});
+  expect(pending.ok).toBe(true);
+  expect((await two({action:"write",id:pending.result.id,offset:0,data:"YWJj"})).ok).toBe(false);
+  expect((await one({action:"status",id:pending.result.id})).result.offset).toBe(0);
+  const own=await two({action:"write_start",path:"two.bin",bytes:3});expect(own.ok).toBe(true);
+  a.send({type:"stop"});await expect.poll(()=>a.ws.readyState).toBe(WebSocket.CLOSED);
+  await expect.poll(async()=> (await readdir(join(f.record,".."))).filter(name=>name.startsWith(".soda-transfer-")).length).toBe(1);
+  expect(await readdir(join(f.record,".."))).not.toContain("one.bin");
+  expect((await two({action:"write",id:own.result.id,offset:0,data:"YWJj"})).result.offset).toBe(3);
+  const hash=(await import("node:crypto")).createHash("sha256").update("abc").digest("hex");
+  expect((await two({action:"finish",id:own.result.id,sha256:hash})).ok).toBe(true);
+  expect(await readFile(join(f.record,"..","two.bin"),"utf8")).toBe("abc");
+  expect((await readdir(join(f.record,".."))).filter(name=>name.startsWith(".soda-transfer-"))).toHaveLength(0);
+  b.send({type:"stop"});
 });

@@ -1,0 +1,7 @@
+# 通常共有sourceのファイル転送レビュー
+
+review_pointerのtaskcheck/全体レビュー: mustなし。旧peer gate、filesをhelper設定へ渡さないこと、各Shareのowner/grant/epoch/queue、elevated禁止を確認。画像only先行加入の回帰追加を推奨。
+
+review_transferの独立全体レビュー: mustなし。先頭viewerが未完了uploadを持って退出したときの一時ファイル回収を推奨。
+
+双方の推奨を回帰へ追加し、focused5件成功。review_transferが追加差分を再点検し、指摘なし、should解消。docsと設計の追加差分も確認済み。
