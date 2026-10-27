@@ -141,12 +141,13 @@ function run() {
     else{clearRich();reply({ok:false,stage:"done"});}
   };
   let native, audio;
-  const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
+  const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"audio_stop",id:old.id})+"\n");clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
   const startAudio=m=>{
     stopAudio();if(!native||native.id!==m.id||secure||!process.argv.includes("--native-audio"))return;
     const path=process.platform==="win32"?"\\\\.\\pipe\\"+m.pipeName:m.pipePath;
     if(typeof path!=="string")return;
-    const current=audio={path,server:undefined,socket:undefined,timer:undefined,seq:0,timestamp:Math.max(0,Math.round(native.seq*1000000/native.fps))};
+    if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"audio_start",id:m.id})+"\n");
+    const current=audio={id:m.id,path,server:undefined,socket:undefined,timer:undefined,seq:0,timestamp:Math.max(0,Math.round(native.seq*1000000/native.fps))};
     const server=current.server=createServer(socket=>{
       if(audio!==current||current.socket){socket.destroy();return;}current.socket=socket;socket.on("error",()=>{});
       if(process.argv.includes("--audio-unavailable")){socket.end();return;}

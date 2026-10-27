@@ -22,6 +22,7 @@ export class DesktopSharedNative<T extends object> {
     write(value: unknown): void;
     send(member: T, value: unknown): void;
     policy(active: boolean): void;
+    sourceStopped?():void;
   }) {}
 
   command(member: T, raw: unknown): boolean {
@@ -72,6 +73,7 @@ export class DesktopSharedNative<T extends object> {
     if (!source || value.id !== source.id) return true;
     if (value.type === "native_video_stopped") {
       const members = [...this.consumers];
+      this.hooks.sourceStopped?.();
       this.consumers.clear(); this.source = undefined;
       this.hooks.policy(false);
       for (const [member, consumer] of members) this.hooks.send(member, { type: "native_video_stopped", id: consumer.id });
@@ -103,9 +105,14 @@ export class DesktopSharedNative<T extends object> {
     return true;
   }
 
+  audioSource(member:T,id:string) {
+    const source=this.source;if(!source||this.consumers.get(member)?.id!==id)return;
+    return {id:source.id,timestamp:()=>source.timestamp,active:()=>this.source===source};
+  }
   detach(member: T): void {
     if (!this.consumers.delete(member) || this.consumers.size || !this.source) return;
     const source = this.source;
+    this.hooks.sourceStopped?.();
     this.source = undefined;
     this.hooks.write({ type: "native_video", enabled: false, id: source.id });
     this.hooks.policy(false);

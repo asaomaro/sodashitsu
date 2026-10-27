@@ -6,6 +6,11 @@ import {tmpdir} from "node:os";
 import {encodeDesktopAudio,DESKTOP_AUDIO_MAX_BYTES} from "@sodashitsu/protocol";
 import {DesktopPcmStream,type DesktopPcmFrame} from "./DesktopPcmStream.js";
 import type OpusScript from "opusscript";
+export interface DesktopNativeAudioHooks {
+ id:string;synthetic:boolean;write(value:unknown):void;send(bytes:Uint8Array,receivedAt?:number):boolean;
+ state(state:"starting"|"running"|"unavailable"|"stopped"):void;active():boolean;videoTimestamp():number;
+}
+export interface DesktopAudioLease {stop(notify?:boolean):void;}
 /** PCM stays in a private local pipe. Only bounded Opus packets reach the viewer. */
 export class DesktopNativeAudio {
  private dead=false;private requested=false;private ready=false;private socket:Socket|undefined;private encoder:OpusScript|undefined;
@@ -13,7 +18,7 @@ export class DesktopNativeAudio {
  private retry:ReturnType<typeof setTimeout>|undefined;private task:ReturnType<typeof setImmediate>|undefined;private deadline=0;
  private pending:(DesktopPcmFrame&{at:number})[]=[];
  private parser:DesktopPcmStream;
- constructor(private hooks:{id:string;synthetic:boolean;write(value:unknown):void;send(bytes:Uint8Array):boolean;state(state:"starting"|"running"|"unavailable"|"stopped"):void;active():boolean;videoTimestamp():number}){
+ constructor(private hooks:DesktopNativeAudioHooks){
   this.parser=new DesktopPcmStream(()=>{if(this.alive()){this.ready=true;clearTimeout(this.headerTimer);this.hooks.state("running");}},frame=>this.queue(frame));
   if(this.hooks.active())this.hooks.state("starting");void this.start().catch(()=>this.fail());
  }
@@ -48,7 +53,7 @@ export class DesktopNativeAudio {
     try{
      if(!this.alive()||performance.now()-frame.at>100||this.hooks.videoTimestamp()-frame.timestamp>150000)continue;
      const bytes=this.encoder!.encode(frame.pcm,960);if(bytes.length<1||bytes.length>DESKTOP_AUDIO_MAX_BYTES)throw Error("Opus packet limit");
-     this.hooks.send(encodeDesktopAudio(1,frame.seq,frame.timestamp,bytes));
+     this.hooks.send(encodeDesktopAudio(1,frame.seq,frame.timestamp,bytes),frame.at);
     }finally{frame.pcm.fill(0);}
    }
   }catch{for(const frame of frames)frame.pcm.fill(0);this.fail();}
