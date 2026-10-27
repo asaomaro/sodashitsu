@@ -807,3 +807,11 @@ Mac上で `bash scripts/remote-desktop/build-macos-desktop.sh` を実行し、`S
 この追加保持はメモリ内だけで、切断後の再開用保存（15分・ブラウザ保存）とは別です。既にダウンロードやドラッグ先へ渡したファイルは、保持を解除しても削除できません。OSで扱いにくい文字や区切り文字を含む名前は、取り出し用の名前で置き換えます。
 
 ドラッグにはChromium固有の単一ファイル形式 `DownloadURL` を使います（[Microsoft Edgeの説明](https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/DownloadURL-list/explainer.md)、[Chromiumの実装](https://raw.githubusercontent.com/chromium/chromium/main/content/browser/download/drag_download_file.cc)）。Chrome・Edge向けの実験機能で、private Blob URLによる各OSへの実保存は未検証です。複数ファイル用の `DownloadURL-list` は使いません。ブラウザやOSが対応しない場合は通常のダウンロード・「もう一度保存」を使ってください。
+
+### CLIのエージェント鍵の準備
+
+`sodactl desktop identity` は、この端末のエージェント用の鍵が準備済みかをJSONで表示します。未準備なら `{"initialized":false,"role":"agent"}` で、フォルダーや鍵を作りません。`sodactl desktop identity --initialize` を明示すると鍵を保存し、公開フィンガープリントを返します。再実行しても同じ鍵を使います。
+
+既定の保存先は `~/.sodactl/desktop-agent/desktop-endpoint/` です。保存先の親を変更する場合は `--identity-dir <絶対パス>` を指定します。Windowsはローカル固定ドライブと現在の利用者のDPAPI、他OSは利用者所有のファイル権限を使います。安全でない権限やリンクを見つけた場合は停止し、既存の権限を自動変更しません。鍵ファイルの削除・コピーでフィンガープリントが変わると、後続の相手側の登録との対応も変わります。
+
+このコマンドはログイン・サーバへの接続・`SODA_DESKTOP_GRANT` を使わず、`--machine` では実行できません。相手の登録や操作の許可は行いません。現段階では鍵の準備に対応しており、暗号化したエージェント受信者の接続経路、宛先を指定した画面からの許可、`session`/`mcp`/`model` の暗号化経路への切替は後続の対応です。

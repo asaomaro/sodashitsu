@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Path)
+param([Parameter(Mandatory=$true)][string]$Path,[switch]$AllowMissing)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 try {
     if($Path -notmatch '^[A-Za-z]:\\'){throw 'local path required'}
@@ -6,7 +6,17 @@ try {
     $drive=[IO.DriveInfo]::new([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Path)))
     if(-not (Test-SodaEndpointDrive $drive.DriveType)){throw 'fixed volume required'}
     $user=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    $item=Get-Item -LiteralPath $Path -Force;$first=$true
+    $candidate=[IO.Path]::GetFullPath($Path)
+    while($true) {
+        try {$item=Get-Item -LiteralPath $candidate -Force -ErrorAction Stop;break}
+        catch [System.Management.Automation.ItemNotFoundException] {
+            if(-not $AllowMissing){throw 'missing directory'}
+            $parent=[IO.Path]::GetDirectoryName($candidate)
+            if(-not $parent -or $parent -eq $candidate){throw 'missing ancestor'}
+            $candidate=$parent
+        }
+    }
+    $first=$true
     while($null -ne $item) {
         if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'reparse'}
         $acl=Get-Acl -LiteralPath $item.FullName

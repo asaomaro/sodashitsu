@@ -4,6 +4,9 @@ on:
     paths:
       - 'packages/client-core/src/desktop/*.node*'
       - 'packages/client-core/package.json'
+      - 'packages/cli/src/commands/desktopIdentity*'
+      - 'packages/cli/src/cliArgs.ts'
+      - 'packages/cli/src/main.ts'
       - 'packages/server/src/desktop/DesktopEndpoint*'
       - 'packages/server/src/desktop/DesktopWindows*'
       - 'scripts/remote-desktop/**'
@@ -32,8 +35,11 @@ jobs:
           $pnpm = Join-Path $env:RUNNER_TEMP 'soda-pnpm\node_modules\pnpm\bin\pnpm.cjs'
           node $pnpm install --frozen-lockfile --ignore-scripts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node $pnpm -r --filter '@sodashitsu/client-core...' run build
+          node $pnpm -r --filter '@sodashitsu/cli...' run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Generated current-user DPAPI vault and pinned agent handshake
         shell: powershell
-        run: node scripts/remote-desktop/validate-node-identity.mjs
+        run: |
+          node scripts/remote-desktop/validate-node-identity.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/remote-desktop/validate-cli-identity.mjs

@@ -27,7 +27,7 @@ export class DesktopEndpointStore {
  private closed=false;
  private policyRevision=0;
  private queue:Promise<unknown>=Promise.resolve();
- constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string)=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void}) {
+ constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string,allowMissing?:boolean)=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void}) {
   this.options={...options,stateDir:resolve(options.stateDir)};this.directory=join(this.options.stateDir,"desktop-endpoint");this.platform=options.platform??process.platform;this.protector=options.protector??desktopSecretProtector(this.platform);
   if(this.platform==="win32"&&this.protector.mode!=="dpapi-user")throw failure();
  }
@@ -35,9 +35,10 @@ export class DesktopEndpointStore {
   if(stat.isSymbolicLink()||!(directory?stat.isDirectory():stat.isFile()))throw failure();
   if(this.platform!=="win32"&&(stat.uid!==process.getuid?.()||(stat.mode&0o077)!==0))throw failure();
  }
- private async pathPolicy(path:string):Promise<void> {
-  if(this.platform==="win32"){await (this.options.checkWindowsPath??checkDesktopWindowsPath)(path);return;}
+ private async pathPolicy(path:string,allowMissing=false):Promise<void> {
+  if(this.platform==="win32"){await (this.options.checkWindowsPath??checkDesktopWindowsPath)(path,allowMissing);return;}
   let current=resolve(path);
+  if(allowMissing)while(true){try{await lstat(current);break;}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw failure();const parent=dirname(current);if(parent===current)throw failure();current=parent;}}
   while(true){
    const stat=await lstat(current);if(!stat.isDirectory()||stat.isSymbolicLink()||(stat.uid!==process.getuid?.()&&stat.uid!==0))throw failure();
    // A root-owned sticky ancestor (/tmp) cannot replace another user's child.
@@ -50,6 +51,29 @@ export class DesktopEndpointStore {
  }
  private async directoryExists():Promise<boolean> {
   try{this.check(await lstat(this.directory),true);return true;}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw failure();}
+ }
+ /** Read-only: validates ancestors even when the requested directory is absent. */
+ async directoryAvailable():Promise<boolean> {
+  if(this.closed)throw failure();await this.pathPolicy(this.options.stateDir,true);
+  try{await this.stateRoot();return true;}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw error;}
+ }
+ private async stateRoot():Promise<void> {
+  const parent=await lstat(this.options.stateDir);if(!parent.isDirectory()||parent.isSymbolicLink()||this.platform!=="win32"&&(parent.uid!==process.getuid?.()||(parent.mode&0o022)!==0))throw failure();
+ }
+ /** Explicit initialization only. Never changes existing permissions. */
+ prepareDirectory():Promise<void> {
+  const run=this.queue.then(async()=>{
+   if(this.closed)throw failure();await this.pathPolicy(this.options.stateDir,true);
+   const missing:string[]=[];let current=this.options.stateDir;
+   while(true){try{const stat=await lstat(current);if(!stat.isDirectory()||stat.isSymbolicLink())throw failure();break;}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;missing.push(current);const parent=dirname(current);if(parent===current)throw failure();current=parent;}}
+   await this.pathPolicy(current);
+   for(const path of missing.reverse()){
+    if(this.closed)throw failure();await this.pathPolicy(dirname(path));
+    try{await mkdir(path,{mode:0o700});}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw failure();}
+    await this.pathPolicy(path);const stat=await lstat(path);if(!stat.isDirectory()||stat.isSymbolicLink()||this.platform!=="win32"&&(stat.uid!==process.getuid?.()||(stat.mode&0o022)!==0))throw failure();
+   }
+   await this.stateRoot();
+  });this.queue=run.catch(()=>undefined);return run;
  }
  close():void{this.closed=true;}
  /** Owner must await authorized in-flight persistence before StateDirLock release. */
@@ -127,7 +151,7 @@ export class DesktopEndpointStore {
  private mutate<T>(change:(data:Vault|undefined)=>Promise<{data:Vault;result:T;committed?:()=>void|Promise<void>}>):Promise<T> {
   const run=this.queue.then(async()=>{
    if(this.closed)throw failure();
-   await this.pathPolicy(this.options.stateDir);const parent=await lstat(this.options.stateDir);if(!parent.isDirectory()||parent.isSymbolicLink()||this.platform!=="win32"&&(parent.uid!==process.getuid?.()||(parent.mode&0o022)!==0))throw failure();
+   await this.pathPolicy(this.options.stateDir);await this.stateRoot();
    try{await mkdir(this.directory,{mode:0o700});}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw failure();}if(!await this.directoryExists())throw failure();await this.syncDirectory(this.options.stateDir);if(this.platform==="win32")await this.pathPolicy(this.directory);
    const lock=join(this.directory,"write.lock"),nonce=randomUUID();let lease;
    try{lease=await open(lock,"wx",0o600);}catch{throw Error("Desktop endpoint key storage is busy");}
