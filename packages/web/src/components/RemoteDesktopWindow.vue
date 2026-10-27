@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_FILE_CHECKPOINTS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_MICROPHONE_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_PROTECTED_PROTOCOL} from "@sodashitsu/protocol";
@@ -175,9 +176,9 @@ function changeSharedScreen(){if(sharedScreen.value){if(!sharedProtectedAvailabl
 function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
-const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),fileCheckpoints=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
-function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=fileCheckpoints.value=false;}
-function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data?.files.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}const files:File[]=[];for(const item of Array.from(data.items)){if(item.webkitGetAsEntry?.()?.isDirectory){error.value="フォルダは送信できません。ファイルを選択してください";continue;}const file=item.getAsFile();if(file)files.push(file);}filePanel.value.addFiles(files);}
+const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),fileCheckpoints=ref(false),foldersCap=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
+function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=fileCheckpoints.value=foldersCap.value=false;}
+function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data||!data.files.length&&!data.items.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}void filePanel.value.handleDrop(data);}
 const richClipboard=ref(false),richPipeReady=ref(false),richBusy=ref(false),richSyncMode=ref(false);
 let richClient:DesktopRichClipboardClient|undefined,richSocket:WebSocket|undefined,richSeq=0,lastRichLocal="",lastRichRemote="";
 const clipboardGranted = ref(false),
@@ -540,7 +541,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -673,7 +674,7 @@ function connect(automatic = false) {
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
           virtualActive.value=r.virtualDisplay===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
-          filesCap.value=r.files===true;fileCheckpoints.value=r.fileCheckpoints===true;
+          filesCap.value=r.files===true;fileCheckpoints.value=r.fileCheckpoints===true;foldersCap.value=r.folders===true;
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
           displayModes.value = r.display?.modes ?? [];
@@ -1221,7 +1222,7 @@ onBeforeUnmount(() => {
         </p>
       </details>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
-      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :machine-id="props.machineId" />
+      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :can-folders="foldersCap" :machine-id="props.machineId" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
         <summary>マイク入力</summary>
         <p v-if="sharedScreen">複数窓での共有中は、1つの窓からだけマイクを送信できます。切り替える場合は、送信中の窓で停止してください。</p>

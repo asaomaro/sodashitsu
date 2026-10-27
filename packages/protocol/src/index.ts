@@ -74,3 +74,5 @@ export * from "./desktopProtected.js";
 
 export * from "./desktopNativePlatform.js";
 export * from "./desktopMicrophone.js";
+
+export * from "./desktopFolders.js";

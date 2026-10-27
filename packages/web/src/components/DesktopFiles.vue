@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import {
+  chooseFolderSource,
+  droppedFolderSource,
+  type FolderSource,
+  type DroppedEntry,
+} from "../desktop/folderSource.js";
+import { DesktopFolderName } from "@sodashitsu/protocol";
 import { DesktopFileResumeStore, type ResumeFile } from "../desktop/fileResumeStore.js";
 import { onBeforeUnmount, ref } from "vue";
 import {
@@ -7,9 +14,16 @@ import {
   type DesktopFileResult,
 } from "@sodashitsu/protocol";
 import type { DesktopFileClient } from "../desktop/fileClient.js";
-const props = defineProps<{ client: DesktopFileClient; canResume?: boolean; machineId?: string }>();
+const props = defineProps<{
+  client: DesktopFileClient;
+  canResume?: boolean;
+  canFolders?: boolean;
+  machineId?: string;
+}>();
 const resumeStore = new DesktopFileResumeStore();
-const remember = ref(false);
+const remember = ref(false),
+  folderName = ref("");
+let selectionGeneration = 0;
 const enabled = ref(false),
   busy = ref(false),
   message = ref(""),
@@ -20,6 +34,13 @@ const enabled = ref(false),
 const entries = ref<NonNullable<NonNullable<DesktopFileResult["result"]>["entries"]>>([]);
 type Job = {
   key: string;
+  folderJob?: {
+    source?: FolderSource;
+    index: number;
+    fileOffset: number;
+    started: boolean;
+    hash?: string | undefined;
+  };
   checkpoint?: string | undefined;
   saved?: boolean;
   restored?: boolean;
@@ -70,6 +91,7 @@ async function list() {
 async function grant() {
   if (busy.value) return;
   busy.value = true;
+  selectionGeneration++;
   try {
     const next = !enabled.value;
     const response = owner.request({ action: "grant", enabled: next });
@@ -134,6 +156,86 @@ function addFiles(files: FileList | File[]) {
   }
   void pump();
 }
+function addFolder(source: FolderSource, parent: string) {
+  if (!enabled.value || dead || !props.canFolders) return;
+  trimHistory();
+  if (jobs.value.filter((j) => !["completed", "cancelled", "failed"].includes(j.state)).length >= 8)
+    throw Error("同時に登録できるのは8件です");
+  const name = DesktopFolderName.parse(folderName.value || source.name);
+  jobs.value.push({
+    key: crypto.randomUUID(),
+    direction: "upload",
+    name,
+    path: parent,
+    size: source.files.reduce((s, f) => s + f.file.size, 0),
+    offset: 0,
+    state: "queued",
+    pause: false,
+    cancel: false,
+    chunks: [],
+    folderJob: { source: { ...source, name }, index: 0, fileOffset: 0, started: false },
+  });
+  opened.value = true;
+  void pump();
+}
+async function chooseFolder() {
+  const generation = selectionGeneration,
+    parent = folder.value;
+  try {
+    if (!enabled.value) throw Error("先にファイル転送を許可してください");
+    const source = await chooseFolderSource();
+    if (!dead && generation === selectionGeneration) addFolder(source, parent);
+  } catch (e) {
+    if (!dead && (e as { name?: string }).name !== "AbortError") message.value = String(e);
+  }
+}
+async function handleDrop(data: DataTransfer) {
+  const generation = selectionGeneration,
+    parent = folder.value,
+    files: File[] = [],
+    dirs: DroppedEntry[] = [];
+  for (const item of Array.from(data.items)) {
+    const entry = item.webkitGetAsEntry?.();
+    if (entry?.isDirectory) dirs.push(entry as unknown as DroppedEntry);
+    else {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  if (!data.items.length) files.push(...Array.from(data.files));
+  if (files.length) addFiles(files);
+  try {
+    if (dirs.length && !props.canFolders) throw Error("両端を更新するとフォルダを送信できます");
+    if (dirs.length && !enabled.value) throw Error("先にファイル転送を許可してください");
+    for (const dir of dirs) {
+      const source = await droppedFolderSource(dir);
+      if (dead || generation !== selectionGeneration) return;
+      addFolder(source, parent);
+    }
+  } catch (e) {
+    if (!dead) message.value = String(e);
+  }
+}
+function downloadFolder(name: string) {
+  if (!enabled.value || !props.canFolders) return;
+  trimHistory();
+  if (jobs.value.filter((j) => !["completed", "cancelled", "failed"].includes(j.state)).length >= 8)
+    return;
+  jobs.value.push({
+    key: crypto.randomUUID(),
+    direction: "download",
+    name: name + ".zip",
+    path: listedPath(name),
+    size: 0,
+    offset: 0,
+    state: "queued",
+    pause: false,
+    cancel: false,
+    chunks: [],
+    folderJob: { index: 0, fileOffset: 0, started: false },
+  });
+  void pump();
+}
 function selected(event: Event) {
   const target = event.target as HTMLInputElement;
   if (target.files) addFiles(target.files);
@@ -192,6 +294,11 @@ async function restore() {
   }
 }
 async function discard(job: Job) {
+  if (job.folderJob) {
+    await owner.request({ action: "folder_abort", id: job.key }).catch(() => {});
+    job.chunks = [];
+    return;
+  }
   if (job.checkpoint) {
     try {
       await owner.request({ action: "checkpoint_abort", checkpoint: job.checkpoint });
@@ -218,6 +325,7 @@ function cancel(job: Job) {
   if (job.committing) return;
   if (["completed", "cancelled", "failed"].includes(job.state)) return;
   job.cancel = true;
+  if (job.folderJob) void owner.request({ action: "folder_abort", id: job.key }).catch(() => {});
   if (job.state !== "running") {
     job.state = "cancelled";
     void discard(job);
@@ -232,6 +340,10 @@ function resume(job: Job) {
   void pump();
 }
 async function run(job: Job) {
+  if (job.folderJob) {
+    await runFolder(job);
+    return;
+  }
   if (job.checkpoint || (props.canResume && props.machineId && remember.value)) {
     await runCheckpoint(job);
     return;
@@ -340,6 +452,136 @@ async function run(job: Job) {
       job.state = "cancelled";
       await discard(job);
     } else if (job.state === "failed") await discard(job);
+  }
+}
+async function runFolder(job: Job) {
+  const group = job.folderJob!;
+  job.state = "running";
+  try {
+    if (!group.started) {
+      const result = await owner.request(
+        group.source
+          ? {
+              action: "folder_upload_start",
+              id: job.key,
+              parent: job.path,
+              name: group.source.name,
+              entries: group.source.entries,
+            }
+          : { action: "folder_download_start", id: job.key, path: job.path },
+      );
+      if (result.id !== job.key || result.bytes === undefined)
+        throw Error("フォルダ転送の開始を確認できません");
+      group.started = true;
+      if (!group.source) {
+        job.size = result.bytes;
+        if (!result.sha256) throw Error("ZIPのSHA-256を確認できません");
+        job.hash = result.sha256;
+      }
+    }
+    while (!dead && !job.cancel) {
+      if (job.pause) {
+        job.state = "paused";
+        return;
+      }
+      if (group.source) {
+        const current = group.source.files[group.index];
+        if (!current) {
+          job.committing = true;
+          const result = await owner.request({ action: "folder_finish", id: job.key });
+          job.committing = false;
+          if (!result.done || result.offset !== job.size)
+            throw Error("フォルダの保存結果を確認できません");
+          job.message = result.destination;
+          break;
+        }
+        if (!group.hash)
+          group.hash = hex(await crypto.subtle.digest("SHA-256", await current.file.arrayBuffer()));
+        if (dead || job.cancel) return;
+        if (group.fileOffset < current.file.size) {
+          const data = new Uint8Array(
+            await current.file
+              .slice(
+                group.fileOffset,
+                Math.min(group.fileOffset + WORK_FILE_CHUNK_BYTES, current.file.size),
+              )
+              .arrayBuffer(),
+          );
+          if (dead || job.cancel) return;
+          const result = await owner.request({
+            action: "folder_write",
+            id: job.key,
+            path: current.path,
+            offset: group.fileOffset,
+            data: base64(data),
+          });
+          if (result.offset !== job.offset + data.length)
+            throw Error("フォルダの転送位置が一致しません");
+          job.offset = result.offset;
+          group.fileOffset += data.length;
+        } else {
+          await owner.request({
+            action: "folder_file_finish",
+            id: job.key,
+            path: current.path,
+            sha256: group.hash,
+          });
+          group.index++;
+          group.fileOffset = 0;
+          group.hash = undefined;
+        }
+      } else {
+        const result = await owner.request({
+            action: "folder_read",
+            id: job.key,
+            offset: job.offset,
+          }),
+          chunk = Uint8Array.from(atob(result.data ?? ""), (c) => c.charCodeAt(0));
+        if (
+          result.offset !== job.offset + chunk.length ||
+          result.offset > job.size ||
+          chunk.length > WORK_FILE_CHUNK_BYTES ||
+          (!chunk.length && !result.done)
+        )
+          throw Error("ZIPの転送データが不正です");
+        job.chunks.push(chunk);
+        job.offset = result.offset;
+        if (result.done) {
+          const blob = new Blob(job.chunks as BlobPart[]);
+          if (
+            job.offset !== job.size ||
+            result.sha256 !== job.hash ||
+            hex(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())) !== job.hash
+          )
+            throw Error("ZIPのSHA-256が一致しません");
+          if (dead || job.cancel) return;
+          const url = URL.createObjectURL(blob),
+            a = document.createElement("a");
+          a.href = url;
+          a.download = job.name;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 30000);
+          job.chunks = [];
+          job.message = "ZIPをブラウザのダウンロードへ渡しました";
+          break;
+        }
+      }
+    }
+    if (!dead && !job.cancel) {
+      job.state = "completed";
+      await list();
+    }
+  } catch (e) {
+    job.committing = false;
+    if (!dead && !job.cancel) {
+      job.state = "failed";
+      job.message = String(e) + "。転送完了済みファイルは残ります";
+    }
+  } finally {
+    if (dead || job.cancel || job.state === "failed") {
+      await discard(job);
+      if (job.cancel) job.state = "cancelled";
+    }
   }
 }
 async function runCheckpoint(job: Job) {
@@ -526,9 +768,13 @@ const timer = setInterval(async () => {
   try {
     for (const job of jobs.value) {
       if (dead) break;
-      if (job.state === "paused" && job.id)
+      if (job.state === "paused" && (job.id || job.folderJob?.started))
         try {
-          await owner.request({ action: "status", id: job.id });
+          await owner.request(
+            job.folderJob
+              ? { action: "folder_status", id: job.key }
+              : { action: "status", id: job.id! },
+          );
         } catch (e) {
           if (!dead && job.state === "paused") {
             job.state = "failed";
@@ -543,13 +789,14 @@ const timer = setInterval(async () => {
 }, 20000);
 onBeforeUnmount(() => {
   dead = true;
+  selectionGeneration++;
   resumeStore.releaseAll();
   clearInterval(timer);
   for (const job of jobs.value) if (!job.checkpoint) cancel(job);
   if (!jobs.value.some((job) => job.checkpoint))
     void owner.request({ action: "grant", enabled: false }).catch(() => {});
 });
-defineExpose({ addFiles });
+defineExpose({ addFiles, handleDrop });
 </script>
 <template>
   <details
@@ -579,7 +826,19 @@ defineExpose({ addFiles });
           @keydown.enter.prevent="list" /></label
       ><button @click="list">一覧を更新</button>
       <input ref="input" type="file" multiple aria-label="送信するファイル" @change="selected" />
-      <p>このデスクトップ窓にファイルをドロップして送信できます。フォルダは送信できません。</p>
+      <p v-if="!canFolders">
+        このデスクトップ窓にファイルをドロップして送信できます。フォルダ転送には両端の更新が必要です。
+      </p>
+      <template v-else
+        ><label
+          >送信フォルダの保存名（空欄なら元の名前）<input
+            v-model="folderName"
+            maxlength="255" /></label
+        ><button @click="chooseFolder">フォルダを選んで送信</button>
+        <p>
+          フォルダをドロップしても送信できます。1000項目・合計100MiBまで。同名フォルダには混ぜません。取消・失敗でも転送完了済みファイルは残ります。フォルダの再開はこの窓の接続中だけです。
+        </p></template
+      >
       <p>一覧の場所: {{ listedFolder || "." }}</p>
       <ul>
         <li v-for="entry in entries" :key="entry.name">
@@ -591,7 +850,9 @@ defineExpose({ addFiles });
             "
           >
             📁 {{ entry.name }}</button
-          ><template v-else
+          ><button v-if="entry.directory && canFolders" @click="downloadFolder(entry.name)">
+            {{ entry.name }} をZIPで受信</button
+          ><template v-else-if="!entry.directory"
             >{{ entry.name }}（{{ entry.bytes }} bytes）<button
               @click="download(entry.name, entry.bytes)"
             >

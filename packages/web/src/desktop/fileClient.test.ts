@@ -109,3 +109,43 @@ it("closes the dedicated lane if even the control queue is full", async () => {
   expect(end).toHaveBeenCalledOnce();
   await settled;
 });
+
+it.each(["folder_upload_start", "folder_download_start"] as const)(
+  "allows bounded directory preparation beyond 30s: %s",
+  async (action) => {
+    vi.useFakeTimers();
+    const sent: DesktopFileRequest[] = [],
+      client = new DesktopFileClient(
+        (v) => {
+          sent.push(v);
+          return true;
+        },
+        () => {},
+      ),
+      id = "22222222-2222-4222-8222-222222222222";
+    const request = client.request(
+      action === "folder_upload_start"
+        ? { action, id, parent: "", name: "folder", entries: [] }
+        : { action, id, path: "folder" },
+    );
+    let settled = false;
+    const outcome = request.then(
+      () => {
+        settled = true;
+        return "resolved";
+      },
+      () => {
+        settled = true;
+        return "rejected";
+      },
+    );
+    await vi.advanceTimersByTimeAsync(30001);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(89998);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(2);
+    expect(await outcome).toBe("rejected");
+    expect(sent).toHaveLength(1);
+    client.stop();
+  },
+);

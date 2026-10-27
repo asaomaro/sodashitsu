@@ -20,6 +20,7 @@
     "@sodashitsu/tui": "workspace:*",
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",
+    "fflate": "0.8.3",
     "node-pty": "1.2.0-beta.15",
     "opusscript": "0.1.1",
     "smol-toml": "^1.8.0",
