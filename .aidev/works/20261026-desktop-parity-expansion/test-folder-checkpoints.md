@@ -211,4 +211,4 @@ AssertionError: expected true to be false // Object.is equality
 
 ```
 
-source全体: 11961件/797filesすべて通過。root全体は実行中。
+source全体: 11961件/797filesすべて通過。root全体12023件/805filesすべて通過。
