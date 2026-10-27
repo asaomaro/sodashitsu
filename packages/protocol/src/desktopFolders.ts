@@ -108,3 +108,26 @@ export const DesktopFolderRequest = z.discriminatedUnion("action", [
   z.object({ action: z.literal("folder_abort"), id }).strict(),
 ]);
 export type DesktopFolderRequest = z.infer<typeof DesktopFolderRequest>;
+
+const checkpoint = z.string().regex(/^[a-f0-9]{64}$/);
+export const DesktopFolderCheckpointRequest = z.union([
+  z
+    .object({ action: z.literal("folder_resume_start"), request: DesktopFolderRequest })
+    .strict()
+    .refine(
+      (p) =>
+        p.request.action === "folder_upload_start" || p.request.action === "folder_download_start",
+    ),
+  z.object({ action: z.literal("folder_resume_attach"), checkpoint, offset }).strict(),
+  z
+    .object({ action: z.literal("folder_resume_run"), checkpoint, request: DesktopFolderRequest })
+    .strict()
+    .refine(
+      (p) =>
+        !["folder_upload_start", "folder_download_start", "folder_abort"].includes(
+          p.request.action,
+        ),
+    ),
+  z.object({ action: z.literal("folder_resume_abort"), checkpoint }).strict(),
+]);
+export type DesktopFolderCheckpointRequest = z.infer<typeof DesktopFolderCheckpointRequest>;

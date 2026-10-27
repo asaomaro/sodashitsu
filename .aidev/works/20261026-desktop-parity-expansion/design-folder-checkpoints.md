@@ -1,0 +1,11 @@
+# フォルダ転送の切断後再開
+
+通常のfolder v1を維持し、明示保存かつ新viewer/A/B能力証明が揃った場合だけfolder checkpointを使う。B owner内に最大8件・各100MiB・15分の揮発jobを保持。256bit tokenはroot/設定epoch/source epochに固定、新接続はfresh file grantと明示attachを要する。旧ownerが生存中の横取りは拒否。detachで旧operationを即fenceし、queueを越えて新ownerへattachする。取消/許可解除/設定変更/handoffは即失効。B再起動保持は対象外。
+
+uploadは既に作成した同じ新規ディレクトリとFileTransferを維持し、ファイル別offset/doneを確認して再開する。失われたfinish ACKにはreceiptを返す。一般の既存フォルダとのmergeや上書きは行わない。完成file/作成dirのidentityと内容を再接続時に検査し、利用者の変更があれば停止する。cleanupは未完streamと確認できるempty dirだけ、完成fileは保持する。
+
+downloadはprivate ZIPを15分保持し、元ツリーのsnapshotをattach時と転送の完了前に再検査。ブラウザが保存したchunk位置から読み直す。最終chunk/finish receiptを失っても再取得できる。元の共有フォルダ以外の任意pathをtoken経由で取得する機能は持たせない。
+
+browserは既存明示保存checkbox/IDB/WebLocks/8件合計100MiB制限に統合。uploadはmanifestと連結Blobを保存し元File群を復元、downloadはZIP chunksをoffsetとatomic保存。再読込後はpaused、fresh grant後の手動再開だけ。保存不可・容量超過で黙って非保存へ切替えない。
+
+所有/世代/取消/partial commit/失われたACK/source変更/別root/期限/暗号化を生成データで確認。taskcheckと最終独立レビュー必須。実OS clipboard/capture/inputは実行しない。

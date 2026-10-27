@@ -1,3 +1,4 @@
+import { DesktopFolderName, DesktopFolderManifest } from "@sodashitsu/protocol";
 const LIMIT = 104857600,
   TTL = 900000;
 export type ResumeFile = {
@@ -12,6 +13,7 @@ export type ResumeFile = {
   checkpoint: string;
   hash: string;
   expires: number;
+  folder?: { name: string; entries: DesktopFolderManifest };
 };
 type Chunk = { key: string; offset: number; data: Uint8Array };
 const valid = (r: ResumeFile) =>
@@ -30,7 +32,12 @@ const valid = (r: ResumeFile) =>
   r.offset <= r.size &&
   /^[a-f0-9]{64}$/.test(r.checkpoint) &&
   /^[a-f0-9]{64}$/.test(r.hash) &&
-  Number.isFinite(r.expires);
+  Number.isFinite(r.expires) &&
+  (!r.folder ||
+    (DesktopFolderName.safeParse(r.folder.name).success &&
+      DesktopFolderManifest.safeParse(r.folder.entries).success &&
+      (r.direction !== "upload" ||
+        r.folder.entries.reduce((n, e) => n + (e.directory ? 0 : e.bytes), 0) === r.size)));
 const request = <T>(r: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
     r.onsuccess = () => resolve(r.result);
@@ -130,6 +137,15 @@ export class DesktopFileResumeStore {
     t.objectStore("chunks").delete(IDBKeyRange.bound([key, 0], [key, LIMIT]));
   }
   async create(record: ResumeFile, file?: File): Promise<void> {
+    // Parse a plain manifest: Vue reactive proxies cannot be stored by IndexedDB.
+    if (record.folder)
+      record = {
+        ...record,
+        folder: {
+          name: record.folder.name,
+          entries: DesktopFolderManifest.parse(record.folder.entries),
+        },
+      };
     if (
       !valid(record) ||
       record.offset !== 0 ||

@@ -14,7 +14,7 @@ import {
   type DesktopFolderRequest,
   type DesktopFileResult,
 } from "@sodashitsu/protocol";
-import { FileTransfer } from "../work/FileTransfer.js";
+import { FileTransfer, FileTransferInterrupted } from "../work/FileTransfer.js";
 import { directoryGuard, inside } from "../work/files.js";
 import { readRange } from "../agent/safeFile.js";
 import { canonicalFolder } from "./desktopFilePaths.js";
@@ -40,6 +40,8 @@ type Job = {
   archive?: string;
   fd?: FileHandle;
   sha256?: string;
+  completed?: Result;
+  snapshot?: () => Promise<void>;
 };
 /** A group owns its streams and empty directories, never completed/user files. */
 export class DesktopFolders {
@@ -48,7 +50,51 @@ export class DesktopFolders {
   private cancelled = new Set<string>();
   private dead = false;
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private root: string) {}
+  constructor(
+    private root: string,
+    private resumable = false,
+  ) {}
+  async keepAlive() {
+    for (const j of this.jobs.values()) {
+      this.fence(j);
+      for (const f of j.files.values())
+        if (f.stream) await j.transfer.run(j.owner, j.root!, { action: "status", id: f.stream });
+    }
+  }
+  async inspect(id: string) {
+    const j = this.jobs.get(id);
+    if (!j) throw Error("再開記録が終了しました");
+    this.fence(j);
+    await j.snapshot?.();
+    for (const check of j.dirs.values()) await check();
+    this.touch(j);
+    return this.state(j, true);
+  }
+  private state(j: Job, files = false): Result {
+    return {
+      id: j.id,
+      bytes: j.bytes,
+      offset: j.offset,
+      entriesDone: j.done,
+      ...(j.sha256 ? { sha256: j.sha256 } : {}),
+      ...(j.upload && files
+        ? {
+            folderFiles: [...j.files].map(([path, f]) => ({
+              path,
+              offset: f.offset,
+              done: f.done,
+            })),
+          }
+        : {}),
+      ...j.completed,
+    };
+  }
+  async seek(id: string, offset: number) {
+    const j = this.jobs.get(id);
+    if (!j || j.upload || offset > j.bytes || (offset !== j.bytes && offset % 65536 !== 0))
+      throw Error("再開位置が不正です");
+    j.offset = offset;
+  }
   cancel(id: string): boolean {
     if (this.cancelled.size >= 4096) {
       this.dead = true;
@@ -83,9 +129,9 @@ export class DesktopFolders {
       throw Error("フォルダ転送が終了しました");
   }
   private touch(j: Job) {
-    j.expires = performance.now() + 60000;
+    j.expires = performance.now() + (this.resumable ? 900000 : 60000);
     clearTimeout(j.timer);
-    j.timer = setTimeout(() => this.cancel(j.id), 60000);
+    j.timer = setTimeout(() => this.cancel(j.id), this.resumable ? 900000 : 60000);
     j.timer.unref();
   }
   private async cleanup(j: Job, success = false) {
@@ -96,7 +142,7 @@ export class DesktopFolders {
     await j.fd?.close().catch(() => {});
     if (j.archive) await unlink(j.archive).catch(() => {});
     if (j.scratch) await rmdir(j.scratch).catch(() => {});
-    if (!success)
+    if (!success && !j.completed)
       for (const dir of [...j.created].reverse())
         await dir
           .check()
@@ -143,10 +189,10 @@ export class DesktopFolders {
         bytes: 0,
         offset: 0,
         done: 0,
-        transfer: new FileTransfer(),
+        transfer: new FileTransfer(this.resumable),
         owner: randomUUID(),
         cancelled: false,
-        expires: performance.now() + 60000,
+        expires: performance.now() + (this.resumable ? 900000 : 60000),
         timer: undefined as unknown as ReturnType<typeof setTimeout>,
       };
       this.jobs.set(id, j);
@@ -169,11 +215,13 @@ export class DesktopFolders {
       bytes: job.bytes,
       offset: job.offset,
       entriesDone: job.done,
+      ...(this.resumable ? this.state(job) : {}),
       ...extra,
     });
     try {
       await guard();
       this.touch(job);
+      if (job.completed) return result();
       if (p.action === "folder_upload_start") {
         const parent = await this.location(p.parent),
           checkParent = await directoryGuard(parent),
@@ -344,6 +392,9 @@ export class DesktopFolders {
         await guard();
         job.bytes = size;
         job.sha256 = hash.digest("hex");
+        job.snapshot = async () => {
+          for (const check of checks) await check();
+        };
         return result({ sha256: job.sha256 });
       }
       if (p.action === "folder_write" || p.action === "folder_file_finish") {
@@ -384,6 +435,26 @@ export class DesktopFolders {
             false,
             fence,
           );
+          if (this.resumable) {
+            const target = join(job.root!, p.path),
+              stat = await lstat(target);
+            const previous = job.snapshot;
+            job.snapshot = async () => {
+              await previous?.();
+              const now = await lstat(target);
+              if (
+                !now.isFile() ||
+                now.isSymbolicLink() ||
+                now.nlink !== 1 ||
+                now.dev !== stat.dev ||
+                now.ino !== stat.ino ||
+                now.size !== stat.size ||
+                now.mtimeMs !== stat.mtimeMs ||
+                now.ctimeMs !== stat.ctimeMs
+              )
+                throw Error("保存済みファイルが変更されました");
+            };
+          }
           file.done = true;
           file.stream = undefined;
           job.done++;
@@ -399,7 +470,10 @@ export class DesktopFolders {
         job.offset += data.length;
         const done = job.offset === job.bytes,
           r = result({ data: data.toString("base64"), done, sha256: job.sha256! });
-        if (done) await this.cleanup(job, true);
+        if (done) {
+          await job.snapshot?.();
+          if (!this.resumable) await this.cleanup(job, true);
+        }
         return r;
       }
       if (p.action === "folder_finish") {
@@ -408,7 +482,8 @@ export class DesktopFolders {
         for (const check of job.dirs.values()) await check();
         await guard();
         const r = result({ done: true, destination: job.root! });
-        await this.cleanup(job, true);
+        if (this.resumable) job.completed = r;
+        else await this.cleanup(job, true);
         return r;
       }
       if (p.action === "folder_abort") {
@@ -428,7 +503,7 @@ export class DesktopFolders {
           );
       return result();
     } catch (e) {
-      await this.cleanup(job);
+      if (!(this.resumable && e instanceof FileTransferInterrupted)) await this.cleanup(job);
       throw e;
     }
   }

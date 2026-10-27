@@ -93,3 +93,5 @@
 第9段階9B: macOS14+の実験的fresh JPEG/InputGuard、local opt-inと権限分離、source publication/cleanup再検査を実装。Mac SDKcompile/generated33/負例3、Node11934+再検査1・root11996+再検査1、生成browser Linux/Mac/plain/encrypted3、独立レビューと修正再点検を通過。実Macは未登録で、OS許可遷移/DPI/キー配列/アプリ互換と性能は未検証。Linux静止PortalとMac実機などを残しtask9全体は未完了。
 
 第13段階準備: protocol32件上限を維持する固定128bit機能hintを追加し、sharedDeltasの1tokenを移行。旧v1受信/未知bit無視/不正重複拒否/B能力証明を維持。全体11948件、関連生成browser11件、負例2件、独立点検/全体レビューと独立build/smoke通過。フォルダ再読込後再開等のtask13本体は継続。
+
+第13段階13C: 明示保存のfolder upload/ZIP downloadを切断・再読込後にfresh grant/manual attachで再開。B volatile256bit/root-owner-epoch/8件各100MiB15分とbrowser既存合計100MiB/8件・WebLocks・atomic chunkを統合。file別offset/done/receiptと元snapshot再検査、token取得前/保留/遅延startの同期取消、完成fileとempty dir保持を検証。source11961件、生成browser unique22件、負例4件と独立taskcheck/全体review・修正再レビュー・独立build/smoke通過。B再起動保持は対象外、Explorer直接drag-out/monitor独立窓は残るのでtask13全体は保留。
