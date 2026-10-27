@@ -1,6 +1,6 @@
 /** Client capability hints, never an authorization grant. Fixed 128-bit wire budget. */
 export const DESKTOP_FEATURES_PREFIX = "soda-desktop-features-v2-";
-const featureBits = { sharedDeltas: 0, folderCheckpoints: 1 } as const;
+const featureBits = { sharedDeltas: 0, folderCheckpoints: 1, sharedMonitors: 2 } as const;
 export type DesktopFeature = keyof typeof featureBits;
 export function desktopFeaturesProtocol(features: readonly DesktopFeature[]): string {
   let bits = 0n;

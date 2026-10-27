@@ -298,3 +298,11 @@ it("aggregates keyframe requests and never sends an unmatched delta to a late su
 it("allows an older helper to keep sending full images in a delta-enabled cohort",()=>{
  const f=fixture(),a=f.join("source",deltaConfiguration);f.child.send(ready);f.child.send(frame(1));a.send({type:"ack",seq:1});f.child.send(frame(2));expect(a.messages.filter(m=>m.type==="frame")).toHaveLength(2);expect(a.session.exitCode).toBe(null);f.pool.dispose();
 });
+
+const monitorLayout={selected:"right",bounds:{x:0,y:0,width:320,height:200},allSupported:true,monitors:[{id:"left",x:-160,y:0,width:160,height:200,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:320,height:200,primary:true,scalePercent:150}]};
+it("shares only the proved selected monitor layout and ends every member on topology changes",()=>{
+ const f=fixture(),config={type:"configure",options:{width:320,monitors:true,monitorDevice:"right"},allowMonitors:true},a=f.join("right",config),b=f.join("right",config);f.child.send({...ready,monitorLayout});expect(a.messages[0].monitorLayout).toEqual(monitorLayout);expect(b.messages[0].monitorLayout).toEqual(monitorLayout);f.child.send(frame(1));const late=f.join("right",config);expect(late.messages.map(m=>m.type)).toEqual(["ready"]);expect(late.messages[0].monitorLayout.selected).toBe("right");expect(()=>f.join("left",{...config,options:{...config.options,monitorDevice:"left"}})).toThrow(/busy/);a.session.kill();b.send({type:"ack",seq:1});f.child.send(frame(2));expect(b.messages.some(m=>m.type==="frame"&&m.info.seq===2)).toBe(true);f.child.send({type:"monitor_topology_changed"});for(const v of [b,late]){expect(v.messages.at(-1)).toEqual({type:"monitor_topology_changed"});expect(v.session.exitCode).toBe(0);}expect(f.spawn).toHaveBeenCalledTimes(1);f.pool.dispose();
+});
+it.each(["unrequested","wrong-device"])("rejects an unexpected shared monitor proof: %s",mode=>{
+ const f=fixture(),config=mode==="unrequested"?{type:"configure",options:{width:320}}:{type:"configure",options:{width:320,monitors:true,monitorDevice:"left"},allowMonitors:true},a=f.join("source",config);f.child.send({...ready,monitorLayout});expect(a.messages.some(m=>m.type==="ready")).toBe(false);expect(a.session.exitCode).toBe(0);f.pool.dispose();
+});

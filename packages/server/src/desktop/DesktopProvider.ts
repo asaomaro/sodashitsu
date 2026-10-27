@@ -179,6 +179,7 @@ export class DesktopProvider {
       sharedProtected:!this.config?.nativePlatform&&this.config?.allowElevated===true,
       sharedDesktop: !this.config?.nativePlatform,
       sharedDeltas:!this.config?.nativePlatform,
+      sharedMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
       sharedCursor:!this.config?.nativePlatform,
       sharedClipboard:!this.config?.nativePlatform&&this.config?.allowClipboard===true,
       sharedFiles: !this.config?.nativePlatform && !!this.config?.fileRoot,
@@ -228,7 +229,8 @@ export class DesktopProvider {
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
-    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || (p.options.richClipboard&&!p.options.sharedClipboard) || p.options.monitors || p.options.monitorDevice || (p.options.cursor&&!p.options.sharedCursor)))
+    if(p.options.sharedMonitors&&(!p.options.sharedDesktop||!p.options.monitors||!cfg.allowMonitors||p.options.elevatedDesktop||p.options.virtualDisplay))throw new RpcError("invalid_params","共有モニターには通常共有とモニター許可が必要です");
+    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || (p.options.richClipboard&&!p.options.sharedClipboard) || ((p.options.monitors||p.options.monitorDevice)&&!p.options.sharedMonitors) || (p.options.cursor&&!p.options.sharedCursor)))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
     if(p.options.sharedDeltas&&(!p.options.sharedDesktop||!p.options.features||p.options.deltas!==true||p.options.elevatedDesktop||p.options.virtualDisplay))throw new RpcError("invalid_params","通常共有の差分画像には両端の更新と差分設定が必要です。");
     if(p.options.sharedClipboard&&(!p.options.sharedDesktop||!p.options.features||p.options.elevatedDesktop||p.options.virtualDisplay||!cfg.allowClipboard))throw new RpcError("invalid_params","通常共有のクリップボードには両端の更新と接続先の許可が必要です。");
@@ -606,6 +608,7 @@ export class DesktopProvider {
             )
               throw new Error("Helper does not support requested image settings");
             if(options.virtualDisplay&&(ready.virtualDisplay!==true||s.secureDesktop||ready.lockScreenCover)){this.send(s,{type:"virtual_display_failure",code:"helper_incompatible"});throw Error("Helper did not create requested virtual monitor");}
+            if(options.sharedMonitors&&!ready.monitorLayout){this.send(s,{type:"shared_monitors_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
             if(ready.monitorLayout&&(ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Monitor capture size mismatch");
             s.ready = true;
@@ -759,7 +762,7 @@ export class DesktopProvider {
       }
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop;
-    const {sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
@@ -884,7 +887,7 @@ export class DesktopProvider {
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {
-  return {width:options.width,fps:options.fps,quality:options.quality,...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{})};
+  return {width:options.width,fps:options.fps,quality:options.quality,...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
 }
 function allowedRelay(url: URL, origins: string[]): boolean {
   if (
