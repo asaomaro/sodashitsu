@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
+public sealed class SodaDesktopSigninInactiveException:InvalidOperationException {}
 public sealed class SodaDesktopSigninScopeNative:IDisposable {
     readonly int session;readonly Guid nonce;readonly bool registerWts,displayNotifications;readonly Process self,broker;
     readonly SodaDesktopSigninCandidateNative candidate=new SodaDesktopSigninCandidateNative();
@@ -34,6 +35,7 @@ public sealed class SodaDesktopSigninScopeNative:IDisposable {
         protected override void WndProc(ref Message message){if(message.Msg==0x2b1||displayNotifications&&message.Msg==0x7e)changed();base.WndProc(ref message);}
         public void Dispose(){DestroyHandle();}
     }
+    internal static void RequireCandidate(bool candidate){if(!candidate)throw new SodaDesktopSigninInactiveException();}
     static Exception Failure(){return new InvalidOperationException("Signin scope is unavailable");}
     public SodaDesktopSigninScopeNative(string owner,int session,int brokerPid,long brokerStarted,Guid nonce){
         VerifyLayouts();this.session=session;this.nonce=nonce;registerWts=true;displayNotifications=true;
@@ -42,9 +44,9 @@ public sealed class SodaDesktopSigninScopeNative:IDisposable {
             self=Process.GetCurrentProcess();broker=Process.GetProcessById(brokerPid);
             string expected=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninWorker.exe");
             if(self.Handle==IntPtr.Zero||broker.Handle==IntPtr.Zero||self.HasExited||broker.HasExited||self.SessionId!=session||broker.SessionId!=0||broker.StartTime.ToUniversalTime().Ticks!=brokerStarted||!String.Equals(self.MainModule.FileName,expected,StringComparison.OrdinalIgnoreCase)||!String.Equals(broker.MainModule.FileName,expected,StringComparison.OrdinalIgnoreCase))throw Failure();
-            SodaDesktopSigninCandidate.Candidate facts;if(!SodaDesktopSigninCandidate.Read(candidate,(uint)session,out facts))throw Failure();
+            SodaDesktopSigninCandidate.Candidate facts;RequireCandidate(SodaDesktopSigninCandidate.Read(candidate,(uint)session,out facts));
             observer=new Thread(Observe){IsBackground=true};observer.Start();if(!ready.WaitOne(2000)||!live||closed)throw Failure();
-        }catch{Dispose();throw Failure();}
+        }catch(SodaDesktopSigninInactiveException){Dispose();throw;}catch{Dispose();throw Failure();}
     }
     // Diagnostic owns only its private window/WinEvents. No session subscription,
     // native candidate read, SYSTEM token query, desktop capture or OS input.

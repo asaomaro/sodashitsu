@@ -4,6 +4,7 @@ import { computed, inject } from "vue";
 import { MachineSwitcherKey } from "../injection.js";
 import { LOCAL_MACHINE_ID } from "@sodashitsu/client-core";
 import { useMachinesStore } from "../store/machines.js";
+import {desktopWindowUrl} from "../desktop/monitorWindow.js";
 import { useViewStore } from "../store/view.js";
 
 /**
@@ -54,6 +55,8 @@ const accessibleName = computed(() => {
   return parts.join("・");
 });
 
+function openDesktop():void{if(props.machineId===LOCAL_MACHINE_ID||state.value!=="online")return;window.open(desktopWindowUrl({machineId:props.machineId,label:props.label},location.origin).href,"_blank","noopener");}
+
 function onSelect(): void {
   if (selected.value || !selectable.value) return;
   void switcher?.switchTo(props.machineId);
@@ -96,11 +99,15 @@ function onButtonKeydown(ev: KeyboardEvent): void {
       <span class="machine-label">{{ compact ? shortLabel : label }}</span>
       <span v-if="!compact" class="machine-state" :data-state="state">{{ stateText }}</span>
     </button>
+    <button v-if="machineId !== LOCAL_MACHINE_ID" type="button" class="machine-desktop"
+      :disabled="state !== 'online'" :aria-label="`${label} のデスクトップを別窓で開く`"
+      title="デスクトップを別窓で開く" @click="openDesktop" @keydown="onButtonKeydown">▤</button>
 
   </div>
 </template>
 
 <style scoped>
+.machine-desktop{flex:none;padding:0.15em 0.4em;}
 .machine-header {
   display: flex;
   align-items: center;
