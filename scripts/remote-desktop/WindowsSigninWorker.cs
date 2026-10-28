@@ -64,6 +64,14 @@ public static class SodaDesktopSigninWorker {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]static extern bool EnumDisplayDevicesW(string device,uint index,ref Device value,uint flags);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll")]static extern bool SetProcessDPIAware();
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll")]static extern bool IsProcessDPIAware();
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct Mode {
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]internal string Name;
+        internal ushort Spec,Driver,Size,Extra;internal uint Fields;internal int X,Y;internal uint Orientation,FixedOutput;
+        internal short Color,Duplex,YResolution,TTOption,Collate;
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]internal string Form;
+        internal ushort LogPixels;internal uint Bits,Width,Height,Flags,Frequency,ICMMethod,ICMIntent,MediaType,DitherType,Reserved1,Reserved2,PanningWidth,PanningHeight;
+    }
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]static extern bool EnumDisplaySettingsExW(string device,int index,ref Mode mode,uint flags);
     static SodaDesktopSigninTarget.Snapshot Target(){
         Device primary=new Device();bool found=false,ended=false;
         for(uint i=0;i<=32;i++){
@@ -74,7 +82,13 @@ public static class SodaDesktopSigninWorker {
             var monitor=new Device{Size=(uint)Marshal.SizeOf(typeof(Device))};if(!EnumDisplayDevicesW(primary.Name,i,ref monitor,1)){ended=true;break;}Require(i<8);
             identity.Append('|').Append(monitor.Name).Append('|').Append(monitor.Id).Append('|').Append(monitor.Key).Append('|').Append(monitor.Flags);
         }Require(ended);
-        return new SodaDesktopSigninTarget.Snapshot(new[]{GetSystemMetrics(0),GetSystemMetrics(1),GetSystemMetrics(76),GetSystemMetrics(77),GetSystemMetrics(78),GetSystemMetrics(79),GetSystemMetrics(80)},identity.ToString());
+        var mode=new Mode{Size=(ushort)Marshal.SizeOf(typeof(Mode))};Require(EnumDisplaySettingsExW(primary.Name,-1,ref mode,0));
+        return BindTarget(identity.ToString(),mode,new[]{GetSystemMetrics(0),GetSystemMetrics(1),GetSystemMetrics(76),GetSystemMetrics(77),GetSystemMetrics(78),GetSystemMetrics(79),GetSystemMetrics(80)});
+    }
+    static SodaDesktopSigninTarget.Snapshot BindTarget(string identity,Mode mode,int[] metrics){
+        Require((mode.Fields&0x180080)==0x180080&&mode.Orientation<=3);
+        var binding=new StringBuilder(identity).Append('|').Append(mode.Orientation).Append('|').Append(mode.X).Append('|').Append(mode.Y).Append('|').Append(mode.Width).Append('|').Append(mode.Height).Append('|').Append(mode.Bits).Append('|').Append(mode.Fields);
+        return new SodaDesktopSigninTarget.Snapshot(metrics,binding.ToString());
     }
     static void Emit(Input value,Func<bool> current){Require(current());Require(SendInput(1,new[]{value},Marshal.SizeOf(typeof(Input)))==1);}
     static ushort VirtualKey(string code){
@@ -86,21 +100,21 @@ public static class SodaDesktopSigninWorker {
         ushort result;Require(map.TryGetValue(code,out result));return result;
     }
     static Input KeyEvent(ushort key,bool down){var result=new Input{Type=1};result.Data.Key.Vk=(ushort)(key&255);result.Data.Key.Flags=(down?0u:2u)|(((key&0x100)!=0||key>=33&&key<=46||key==111||key==144||key==163||key==165||key>=91&&key<=93||key>=166&&key<=183)?1u:0u);return result;}
-    static void Apply(Dictionary<string,object> value,Action<Input> emit,HashSet<ushort> held,HashSet<int> buttons){
+    static void Apply(Dictionary<string,object> value,Action<Input> emit,Action<Input> cleanup,HashSet<ushort> held,HashSet<int> buttons){
         string kind=Text(value,"kind",16);
         if(kind=="key"){
-            Keys(value,"kind","code","down");ushort key=VirtualKey(Text(value,"code",32));bool down=Boolean(value,"down");if(down){held.Add(key);emit(KeyEvent(key,true));}else if(held.Remove(key))emit(KeyEvent(key,false));return;
+            Keys(value,"kind","code","down");ushort key=VirtualKey(Text(value,"code",32));bool down=Boolean(value,"down");if(down){emit(KeyEvent(key,true));held.Add(key);}else if(held.Contains(key)){emit(KeyEvent(key,false));held.Remove(key);}return;
         }
         if(kind=="text"){
-            Keys(value,"kind","text");foreach(char c in Text(value,"text",1024)){var key=new Input{Type=1};key.Data.Key.Scan=c;key.Data.Key.Flags=4;emit(key);key.Data.Key.Flags=6;emit(key);}return;
+            Keys(value,"kind","text");string text=Text(value,"text",1024);Require(text.Length>0);foreach(char c in text){var key=new Input{Type=1};key.Data.Key.Scan=c;key.Data.Key.Flags=4;bool down=false;try{emit(key);down=true;key.Data.Key.Flags=6;emit(key);down=false;}finally{if(down){key.Data.Key.Flags=6;cleanup(key);}}}return;
         }
         if(kind=="wheel"){Keys(value,"kind","delta");var wheel=new Input();wheel.Data.Mouse.Flags=0x800;wheel.Data.Mouse.Data=unchecked((uint)(int)Integer(value,"delta",-1200,1200));emit(wheel);return;}
         Require(kind=="pointer");Keys(value,"kind","x","y","event","button");
         string action=Text(value,"event",8);int button=(int)Integer(value,"button",0,4);Require(action=="move"||action=="down"||action=="up");
         Require((value["x"] is int||value["x"] is long||value["x"] is double||value["x"] is decimal)&&(value["y"] is int||value["y"] is long||value["y"] is double||value["y"] is decimal));double x=Convert.ToDouble(value["x"]),y=Convert.ToDouble(value["y"]);Require(!Double.IsNaN(x)&&!Double.IsInfinity(x)&&x>=0&&x<=1&&!Double.IsNaN(y)&&!Double.IsInfinity(y)&&y>=0&&y<=1);
         var pointer=new Input();pointer.Data.Mouse.Flags=0x8001;pointer.Data.Mouse.X=(int)Math.Round(x*65535);pointer.Data.Mouse.Y=(int)Math.Round(y*65535);emit(pointer);
-        if(action=="move")return;bool press=action=="down";if(press)buttons.Add(button);else if(!buttons.Remove(button))return;
-        var click=new Input();click.Data.Mouse.Flags=button==0?(press?2u:4u):button==1?(press?32u:64u):button==2?(press?8u:16u):(press?128u:256u);click.Data.Mouse.Data=button>=3?(uint)(button-2):0u;emit(click);
+        if(action=="move")return;bool press=action=="down";if(!press&&!buttons.Contains(button))return;
+        var click=new Input();click.Data.Mouse.Flags=button==0?(press?2u:4u):button==1?(press?32u:64u):button==2?(press?8u:16u):(press?128u:256u);click.Data.Mouse.Data=button>=3?(uint)(button-2):0u;emit(click);if(press)buttons.Add(button);else buttons.Remove(button);
     }
     static void Release(HashSet<ushort> held,HashSet<int> buttons,Func<bool> current){
         foreach(ushort key in held)if(current())Emit(KeyEvent(key,false),current);held.Clear();
@@ -131,7 +145,7 @@ public static class SodaDesktopSigninWorker {
                             else if(type=="quality"){Keys(message,"type","fps","quality");fps=(int)Integer(message,"fps",1,30);quality=(int)Integer(message,"quality",20,90);}
                             else if(type=="keyframe"){Keys(message,"type");}
                             else if(type=="input"){
-                                Keys(message,"type","seq","frameSeq","input");long seq=Integer(message,"seq",1,9007199254740991),frame=Integer(message,"frameSeq",1,9007199254740991);var permit=scope.BeginInput(seq,frame,read);Require(permit!=null);var value=message["input"] as Dictionary<string,object>;Require(value!=null);try{Apply(value,item=>Emit(item,()=>package.Current()&&permit.Current(read)),held,buttons);}finally{permit.Close();}Require(current());Send(writer,new{type="input_ack",seq});
+                                Keys(message,"type","seq","frameSeq","input");long seq=Integer(message,"seq",1,9007199254740991),frame=Integer(message,"frameSeq",1,9007199254740991);var permit=scope.BeginInput(seq,frame,read);Require(permit!=null);var value=message["input"] as Dictionary<string,object>;Require(value!=null);try{Apply(value,item=>Emit(item,()=>package.Current()&&permit.Current(read)),item=>{if(current())Emit(item,current);},held,buttons);}finally{permit.Close();}Require(current());Send(writer,new{type="input_ack",seq});
                             }else throw Failure();
                         }
                         if(commands.IsCompleted||stop)break;
@@ -156,21 +170,22 @@ public static class SodaDesktopSigninWorker {
         }
     }
     public static void VerifyGeneratedData(){
-        Require(Marshal.SizeOf(typeof(Device))==840&&Marshal.SizeOf(typeof(Input))==40&&Marshal.SizeOf(typeof(Mouse))==32&&Marshal.SizeOf(typeof(Key))==24);
+        Require(Marshal.SizeOf(typeof(Mode))==220&&Marshal.OffsetOf(typeof(Mode),"Orientation").ToInt32()==84&&Marshal.SizeOf(typeof(Device))==840&&Marshal.SizeOf(typeof(Input))==40&&Marshal.SizeOf(typeof(Mouse))==32&&Marshal.SizeOf(typeof(Key))==24);
         Require(VirtualKey("ControlLeft")==162&&VirtualKey("Space")==32&&VirtualKey("ImeOn")==0x16&&VirtualKey("ImeOff")==0x1a);
         var enter=KeyEvent(VirtualKey("NumpadEnter"),true);Require(enter.Data.Key.Vk==13&&(enter.Data.Key.Flags&1)!=0);
         Require(Line(new StringReader("generated\r\n"),32)=="generated");bool rejected=false;try{Line(new StringReader("12345\n"),4);}catch(InvalidOperationException){rejected=true;}Require(rejected);
         rejected=false;try{Keys(Object("{\"type\":\"stop\",\"extra\":true}"),"type");}catch(InvalidOperationException){rejected=true;}Require(rejected);
-        var held=new HashSet<ushort>();var buttons=new HashSet<int>();var emitted=new List<Input>();
-        rejected=false;try{Apply(Object("{\"kind\":\"pointer\",\"x\":0.5,\"y\":0.5,\"event\":\"invalid\",\"button\":0}"),value=>emitted.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==0);
-        rejected=false;try{Apply(Object("{\"kind\":\"pointer\",\"x\":0.5,\"y\":0.5,\"event\":\"down\",\"button\":5}"),value=>emitted.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==0);
+        var held=new HashSet<ushort>();var buttons=new HashSet<int>();var emitted=new List<Input>();var cleaned=new List<Input>();
+        rejected=false;try{Apply(Object("{\"kind\":\"pointer\",\"x\":0.5,\"y\":0.5,\"event\":\"invalid\",\"button\":0}"),value=>emitted.Add(value),value=>cleaned.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==0);
+        rejected=false;try{Apply(Object("{\"kind\":\"pointer\",\"x\":0.5,\"y\":0.5,\"event\":\"down\",\"button\":5}"),value=>emitted.Add(value),value=>cleaned.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==0);
         long now=0;var facts=new SodaDesktopSigninScope.Facts{Candidate=true,Observer=true,BrokerAlive=true,WorkerAlive=true,Session=1,BrokerPid=100,BrokerStarted=1,WorkerPid=101,WorkerStarted=2,Nonce=new Guid("11111111-1111-4111-8111-111111111111"),Epoch=0};
         var scope=new SodaDesktopSigninScope(1,100,1,101,2,facts.Nonce,true,()=>now);Func<SodaDesktopSigninScope.Facts> read=()=>facts;var frame=scope.Capture(read);Require(scope.Publish(frame,read)&&scope.Drawn(1,read)&&scope.Control(true,read));var permit=scope.BeginInput(1,1,read);Require(permit!=null);
-        rejected=false;try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(permit.Current(read));emitted.Add(value);now+=600;},held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==3);permit.Close();
+        rejected=false;try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(permit.Current(read));emitted.Add(value);now+=600;},value=>cleaned.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==3&&cleaned.Count==1&&cleaned[0].Data.Key.Flags==6&&cleaned[0].Data.Key.Scan==emitted[2].Data.Key.Scan);permit.Close();
         var initial=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"generated-primary");var snapshot=initial;var target=new SodaDesktopSigninTarget(initial,()=>snapshot);Require(target.Current());snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"generated-new-primary");Require(!target.Current());snapshot=initial;Require(!target.Current());
         target=new SodaDesktopSigninTarget(initial,()=>snapshot);snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1280,800,0,0,1280,800,1},"generated-primary");Require(!target.Current());
-        snapshot=initial;target=new SodaDesktopSigninTarget(initial,()=>snapshot);emitted.Clear();rejected=false;
-        try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(target.Current());emitted.Add(value);snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"changed-primary");},held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==1);
+        snapshot=initial;target=new SodaDesktopSigninTarget(initial,()=>snapshot);emitted.Clear();cleaned.Clear();rejected=false;
+        try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(target.Current());emitted.Add(value);snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"changed-primary");},value=>{if(target.Current())cleaned.Add(value);},held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==1&&cleaned.Count==0);
+        var mode=new Mode{Fields=0x180080,Width=1920,Height=1200,Orientation=0,Bits=32};var metrics=new[]{1920,1200,0,0,1920,1200,1};var normal=BindTarget("generated-primary",mode,metrics);snapshot=normal;target=new SodaDesktopSigninTarget(normal,()=>snapshot);mode.Orientation=2;snapshot=BindTarget("generated-primary",mode,metrics);Require(!target.Current());
         SodaDesktopSigninWorkerNative.VerifyLayouts();Console.WriteLine("signin_worker_generated_data_and_abi_passed");
     }
     public static void Main(string[] args){

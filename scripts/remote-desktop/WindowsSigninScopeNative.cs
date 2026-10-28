@@ -8,7 +8,7 @@ using System.Threading;
 using System.Windows.Forms;
 
 public sealed class SodaDesktopSigninScopeNative:IDisposable {
-    readonly int session;readonly Guid nonce;readonly bool registerWts;readonly Process self,broker;
+    readonly int session;readonly Guid nonce;readonly bool registerWts,displayNotifications;readonly Process self,broker;
     readonly SodaDesktopSigninCandidateNative candidate=new SodaDesktopSigninCandidateNative();
     readonly SodaDesktopProtectedEpoch epoch=new SodaDesktopProtectedEpoch();
     readonly ManualResetEvent ready=new ManualResetEvent(false);readonly object markerGate=new object();
@@ -29,14 +29,14 @@ public sealed class SodaDesktopSigninScopeNative:IDisposable {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]static extern IntPtr DispatchMessageW(ref MSG message);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll")]static extern bool PostThreadMessageW(uint thread,uint message,UIntPtr wParam,IntPtr lParam);
     sealed class PrivateWindow:NativeWindow,IDisposable {
-        readonly Action changed;
-        internal PrivateWindow(Action changed){this.changed=changed;CreateHandle(new CreateParams{Caption="",Parent=new IntPtr(-3)});}
-        protected override void WndProc(ref Message message){if(message.Msg==0x2b1)changed();base.WndProc(ref message);}
+        readonly Action changed;readonly bool displayNotifications;
+        internal PrivateWindow(Action changed,bool displayNotifications){this.changed=changed;this.displayNotifications=displayNotifications;CreateHandle(new CreateParams{Caption="",Parent=displayNotifications?IntPtr.Zero:new IntPtr(-3)});}
+        protected override void WndProc(ref Message message){if(message.Msg==0x2b1||displayNotifications&&message.Msg==0x7e)changed();base.WndProc(ref message);}
         public void Dispose(){DestroyHandle();}
     }
     static Exception Failure(){return new InvalidOperationException("Signin scope is unavailable");}
     public SodaDesktopSigninScopeNative(string owner,int session,int brokerPid,long brokerStarted,Guid nonce){
-        VerifyLayouts();this.session=session;this.nonce=nonce;registerWts=true;
+        VerifyLayouts();this.session=session;this.nonce=nonce;registerWts=true;displayNotifications=true;
         try{
             if(session<1||nonce==Guid.Empty||!SodaDesktopSigninVault.SystemPrimary()||!candidate.SystemWithTcb)throw Failure();
             self=Process.GetCurrentProcess();broker=Process.GetProcessById(brokerPid);
@@ -48,9 +48,9 @@ public sealed class SodaDesktopSigninScopeNative:IDisposable {
     }
     // Diagnostic owns only its private window/WinEvents. No session subscription,
     // native candidate read, SYSTEM token query, desktop capture or OS input.
-    SodaDesktopSigninScopeNative(Guid nonce){this.nonce=nonce;try{VerifyLayouts();observer=new Thread(Observe){IsBackground=true};observer.Start();if(!ready.WaitOne(2000)||!live)throw Failure();}catch{Dispose();throw;}}
+    SodaDesktopSigninScopeNative(Guid nonce,bool displayNotifications){this.nonce=nonce;this.displayNotifications=displayNotifications;try{VerifyLayouts();observer=new Thread(Observe){IsBackground=true};observer.Start();if(!ready.WaitOne(2000)||!live)throw Failure();}catch{Dispose();throw;}}
     public static void VerifyPrivateMarker(){
-        using(var value=new SodaDesktopSigninScopeNative(Guid.NewGuid())){
+        foreach(bool window in new[]{false,true})using(var value=new SodaDesktopSigninScopeNative(Guid.NewGuid(),window)){
             long before,after;if(!value.Checkpoint(out before)||!value.Checkpoint(out after)||before!=0||after!=0)throw Failure();
             long ignored;if(value.epoch.Checkpoint(id=>{},10,out ignored)||value.Checkpoint(out ignored))throw Failure();
         }
@@ -61,7 +61,7 @@ public sealed class SodaDesktopSigninScopeNative:IDisposable {
         try{
             MSG message;PeekMessageW(out message,IntPtr.Zero,0,0,0);Interlocked.Exchange(ref observerId,(int)GetCurrentThreadId());
             atom=GlobalAddAtomW("Sodashitsu.SigninObserver."+nonce.ToString("D"));if(atom<0xc000)throw Failure();
-            using(var own=new PrivateWindow(()=>epoch.Changed())){
+            using(var own=new PrivateWindow(()=>epoch.Changed(),displayNotifications)){
                 window=own.Handle;try{if(registerWts){registered=WTSRegisterSessionNotification(window,1);if(!registered)throw Failure();}
                 callback=(hook,kind,hwnd,obj,child,thread,time)=>{
                     if(kind==0x20)epoch.Changed();
