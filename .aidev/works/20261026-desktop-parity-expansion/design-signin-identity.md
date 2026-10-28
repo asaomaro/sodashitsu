@@ -1,0 +1,11 @@
+# 7B2d: 専用鍵と登録済みviewerの積
+
+7B2cの有限RPCが受けたviewerへ、既存の専用保存先の鍵を渡すgateを実装する。新しいMachine-scope秘密形式やhuman ownerのCurrentUser鍵へのfallbackを増やさず、専用hostがSYSTEMとして既存CurrentUser DPAPI storeを使う。ここでのCurrentUserはSYSTEMを意味する。固定private保存先・SYS token・package hash/祖先ACLの検査は起動前のhostの必須条件で、このpure gateだけでOS identityやpathを証明しない。通常user serverのstoreを流用しない。
+
+gateに渡すstore interfaceはstatus/endpoint/close/settledだけに限定。初期化、trust/requiredの変更、修復、保存先変更を公開しない。enrollment viewer allowlistと現在のstoreのviewer trustを両方要求する。required=true、enrollment provider pinとstatus/復元した実鍵のfingerprintの一致を検査する。agent roleは許可しない。Rootからのhelloの公開値だけを相手の認証にせず、後段sealed handshakeを必要とする。
+
+CallScopeのrevision/provider/input ceiling、signal/activeを非同期処理の前後に照合し、局所取消/owner失効/同期の再入abort後の鍵公開を拒否する。返したpermitはscopeとlocal permitの現在値に束縛し、一度失効を観測したら復活しない。allowInputは上限だけで、この値や鍵所持をOS入力の許可にしない。native workerのpurpose/console/epochと明示control leaseは別に必要。
+
+取得処理の固定5秒期限はtimerと単調時計の両方で検査。最大8個の実行中readを追跡し、callerが取消/timeoutしてもread本体が終了するまでslotを回収しない。gate closeは先に全permitを失効させpendingを拒否しstoreを閉じる。settledはclose後だけ許し、read本体とstore queueの完了を待つ。hostはその後にprocess/state lockを解放する。OS helper停止をこのgateだけで保証せず、専用hostは終了の最終期限を持つ。
+
+この差分でstoreは作らず、実SYSTEM/実鍵/実画面にアクセスしない。installer/controllerの明示初期化とpeer登録、固定path host、signin worker/UIは後続。生成鍵とfake storeでpin/trust/失効/期限/取消/read slotを検証し、taskcheck・cross・修正再点検とsource負例を行う。
