@@ -1,0 +1,7 @@
+# 7B 専用runtimeの接続
+
+通常server/WsGateway/BridgeEndpointをSYSTEMへ持ち込まず、既存Rootのmachine-delegationへ接続する専用bridgeを実装する。公開listenerは作らない。送受信は固定bridge形式で、16channel・1000個の単調増加ID・TEXT16KiB・応答と総送信待ち64KiB、PING64byteだけを扱う。BINARY/未知frame/不正TEXT UTF8/過大headerはbodyを保持する前に拒否。RPCは既存SigninDispatchの4要求のみ、bridge認証をviewerの暗号化本人確認に代用しない。
+
+Connectorは保護enrollmentの固定origin/machine/tokenだけを使う。redirect/圧縮/任意agent/証明書検査の無効化はせず、WSSではTLS検査を必須にする。既存enrollmentが許すloopback HTTPだけはWSを許し、外部HTTPへ広げない。15秒PING/45秒PONG期限、5秒handshake、切断時全channelを同期失効し、接続だけを1〜30秒backoffで再開する。画面の許可や要求を再送しない。任意診断/URL/tokenを外へ出さない。shutdown中のopen/close/古いsocket callbackとtimerも世代で遮断する。
+
+この境界を実socketと生成鍵/記録で検証し、続いて専用main/暗号化viewer/Winlogon worker/installer/controller/UIを接続する。実service・画面・入力や実鍵の登録は自動試験しない。既存dirty rootは全件bytes guardなしに変更しない。
