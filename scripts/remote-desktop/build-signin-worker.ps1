@@ -4,7 +4,7 @@ $ErrorActionPreference='Stop'
 if(-not [Environment]::Is64BitProcess){throw 'Use 64-bit Windows PowerShell'}
 $sid=[Security.Principal.SecurityIdentifier]::new($OwnerSid)
 if($sid.Value -cne $OwnerSid -or $OwnerSid -in @('S-1-5-18','S-1-5-19','S-1-5-20') -or $OwnerSid -notmatch '\AS-[0-9-]+\z'){throw 'Specify a canonical non-system owner SID'}
-$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninTarget.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs')
+$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninTarget.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninPresence.cs')
 $combined=($names|ForEach-Object {[IO.File]::ReadAllText((Join-Path $PSScriptRoot $_))}) -join "`n"
 foreach($marker in @('__SIGNIN_OWNER_SID__','__SIGNIN_WORKER_OWNER_SID__')){if(([regex]::Matches($combined,[regex]::Escape($marker))).Count -ne 1){throw 'Owner marker changed'};$combined=$combined.Replace($marker,$OwnerSid)}
 $usings=[regex]::Matches($combined,'(?m)^using [^;]+;')|ForEach-Object {$_.Value}|Select-Object -Unique

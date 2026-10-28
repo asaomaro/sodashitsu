@@ -13,18 +13,26 @@ using System.Threading;
 using System.Web.Script.Serialization;
 
 public static class SodaDesktopSigninWorker {
+    internal enum Purpose { View, Input, Presence }
+    internal static string PurposeName(Purpose value){if(value==Purpose.View)return "view";if(value==Purpose.Input)return "input";if(value==Purpose.Presence)return "presence";throw Failure();}
+    static Purpose ParsePurpose(string value){if(value=="view")return Purpose.View;if(value=="input")return Purpose.Input;if(value=="presence")return Purpose.Presence;throw Failure();}
+    static void DispatchPurpose(Purpose purpose,Action presence,Action capture){PurposeName(purpose);if(purpose==Purpose.Presence)presence();else capture();}
+    static void CleanupPurpose(Purpose purpose,Action release){PurposeName(purpose);if(purpose!=Purpose.Presence)release();}
+    static bool PresenceCommand(Purpose purpose,Dictionary<string,object> message,SodaDesktopSigninPresence presence,out bool stopped){
+        stopped=false;if(purpose!=Purpose.Presence)return false;Keys(message,"type");string type=Text(message,"type",32);Require(presence.Command(type));stopped=type=="stop";return true;
+    }
     internal const string Owner="__SIGNIN_WORKER_OWNER_SID__";
     static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=3000000,RecursionLimit=8};
     static Exception Failure(){return new InvalidOperationException("Signin worker is unavailable");}
     static void Require(bool value){if(!value)throw Failure();}
     internal static string Line(TextReader reader,int maximum){var text=new StringBuilder();int value;while((value=reader.Read())!=-1){if(value==10){if(text.Length>0&&text[text.Length-1]==13)text.Length--;return text.ToString();}if(text.Length>=maximum)throw Failure();text.Append((char)value);}if(text.Length!=0)throw Failure();return null;}
     static void Send(TextWriter writer,object value){writer.WriteLine(Json.Serialize(value));writer.Flush();}
-    internal static void Broker(bool input,TextReader parentIn,TextWriter parentOut){
+    internal static void Broker(Purpose purpose,TextReader parentIn,TextWriter parentOut){
         Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0);
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open()){
             uint console=SodaDesktopSigninWorkerNative.WTSGetActiveConsoleSessionId();Require(console>0&&console<=Int32.MaxValue);Guid nonce=Guid.NewGuid();
             using(var pipe=SodaDesktopSigninWorkerNative.Server(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
-                uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,input,runtime.Path,out pid);
+                uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,out pid);
                 try{
                     var pending=pipe.BeginWaitForConnection(null,null);var timer=Stopwatch.StartNew();
                     using(var wait=pending.AsyncWaitHandle){while(!wait.WaitOne(20)){Require(timer.ElapsedMilliseconds<5000&&package.Current()&&child.Running());}pipe.EndWaitForConnection(pending);}
@@ -125,7 +133,8 @@ public static class SodaDesktopSigninWorker {
         foreach(ushort key in held)if(current())Emit(KeyEvent(key,false),current);held.Clear();
         foreach(int button in buttons)if(current()){var click=new Input();click.Data.Mouse.Flags=button==0?4u:button==1?64u:button==2?16u:256u;click.Data.Mouse.Data=button>=3?(uint)(button-2):0u;Emit(click,current);}buttons.Clear();
     }
-    static void Run(Guid nonce,int brokerPid,long brokerStarted,int session,bool input){
+    static void Run(Guid nonce,int brokerPid,long brokerStarted,int session,Purpose purpose){
+        bool input=purpose==Purpose.Input;Require(PurposeName(purpose)!=null);
         Require(SodaDesktopSigninVault.SystemPrimary());
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var pipe=new NamedPipeClientStream(".",SodaDesktopSigninWorkerNative.PipeName(Owner,nonce),PipeDirection.InOut,PipeOptions.None,System.Security.Principal.TokenImpersonationLevel.Anonymous)){
             pipe.Connect(5000);uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeServerProcessId(pipe.SafePipeHandle,out actual)&&actual==(uint)brokerPid);
@@ -134,11 +143,13 @@ public static class SodaDesktopSigninWorker {
                 var initialTarget=Target();var target=new SodaDesktopSigninTarget(initialTarget,Target);
                 Func<SodaDesktopSigninScope.Facts> read=()=>{if(!target.Current())return new SodaDesktopSigninScope.Facts();var facts=native.Read();if(!target.Current())facts.Candidate=false;return facts;};
                 Func<bool> current=()=>package.Current()&&scope.Current(read);var commands=new BlockingCollection<string>(32);var held=new HashSet<ushort>();var buttons=new HashSet<int>();bool stop=false,configured=false;long pending=0,lastBeat=0,next=0;int width=1280,fps=10,quality=65;
+                var presence=new SodaDesktopSigninPresence(()=>clock.ElapsedMilliseconds,current);
                 var thread=new Thread(()=>{try{string line;while((line=Line(reader,16384))!=null){if(!commands.TryAdd(line))break;}}catch{}finally{try{commands.CompleteAdding();}catch{}}}){IsBackground=true};thread.Start();
                 try{
-                    while(!stop&&current()&&clock.ElapsedMilliseconds-lastBeat<15000){
+                    while(!stop&&current()&&(purpose==Purpose.Presence?presence.Current():clock.ElapsedMilliseconds-lastBeat<15000)){
                         string line;while(commands.TryTake(out line)){
                             Require(current());var message=Object(line);string type=Text(message,"type",32);
+                            bool presenceStopped;if(PresenceCommand(purpose,message,presence,out presenceStopped)){if(presenceStopped){stop=true;break;}continue;}
                             if(type=="configure"){
                                 Keys(message,"type","width","fps","quality");Require(!configured);width=(int)Integer(message,"width",320,1920);fps=(int)Integer(message,"fps",1,30);quality=(int)Integer(message,"quality",20,90);configured=true;
                                 int w=initialTarget.Width,h=initialTarget.Height;Require(w>0&&h>0&&w<=8192&&h<=8192&&(long)w*h<=16000000&&current());Send(writer,new{type="ready",title="Windowsのサインイン画面",allowInput=input,width=w,height=h,backend="windows-gdi",secureDesktop=true,imeKeys=true,extendedInput=true});
@@ -154,6 +165,7 @@ public static class SodaDesktopSigninWorker {
                             }else throw Failure();
                         }
                         if(commands.IsCompleted||stop)break;
+                        DispatchPurpose(purpose,()=>{Require(presence.Pulse(record=>{string encoded=Json.Serialize(record);Require(presence.Current());writer.WriteLine(encoded);writer.Flush();}));Thread.Sleep(20);},()=>{
                         if(configured&&pending==0&&clock.ElapsedMilliseconds>=next){
                             var ticket=scope.Capture(read);Require(ticket!=null&&current());var capture=Stopwatch.StartNew();int w=initialTarget.Width,h=initialTarget.Height;Require(w>0&&h>0&&w<=8192&&h<=8192&&(long)w*h<=16000000);
                             using(var original=new Bitmap(w,h,PixelFormat.Format24bppRgb)){
@@ -168,14 +180,24 @@ public static class SodaDesktopSigninWorker {
                                     Require(scope.Publish(ticket,read)&&current());pending=ticket.Serial;writer.WriteLine(encoded);writer.Flush();next=clock.ElapsedMilliseconds+1000/fps;
                                 }
                             }
-                        }Thread.Sleep(2);
+                        }});Thread.Sleep(2);
                     }
-                }finally{Release(held,buttons,current);scope.Close();pipe.Dispose();if(!thread.Join(1000))Environment.Exit(1);commands.Dispose();}
+                }finally{presence.Close();CleanupPurpose(purpose,()=>Release(held,buttons,current));scope.Close();pipe.Dispose();if(!thread.Join(1000))Environment.Exit(1);commands.Dispose();}
             }
         }
     }
     static void Generated(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     public static void VerifyGeneratedData(){
+        SodaDesktopSigninPresence.VerifyGeneratedData();
+        int pulses=0,captures=0,releases=0;DispatchPurpose(Purpose.Presence,()=>pulses++,()=>captures++);CleanupPurpose(Purpose.Presence,()=>releases++);
+        Generated(pulses==1&&captures==0,"Presence dispatched capture");Generated(releases==0,"Presence dispatched input cleanup");
+        foreach(var normalPurpose in new[]{Purpose.View,Purpose.Input}){DispatchPurpose(normalPurpose,()=>pulses++,()=>captures++);CleanupPurpose(normalPurpose,()=>releases++);}Generated(pulses==1&&captures==2&&releases==2,"Normal purpose routing changed");
+        long presenceClock=0;var generatedPresence=new SodaDesktopSigninPresence(()=>presenceClock,()=>true);bool presenceStopped;
+        Generated(PresenceCommand(Purpose.Presence,Object("{\"type\":\"heartbeat\"}"),generatedPresence,out presenceStopped)&&!presenceStopped,"Presence heartbeat route rejected");
+        foreach(string command in new[]{"configure","control","input","release","ack","quality","keyframe"}){bool denied=false;try{PresenceCommand(Purpose.Presence,Object("{\"type\":\""+command+"\"}"),new SodaDesktopSigninPresence(()=>presenceClock,()=>true),out presenceStopped);}catch(InvalidOperationException){denied=true;}Generated(denied,"Presence route accepted active command");}
+        Generated(PresenceCommand(Purpose.Presence,Object("{\"type\":\"stop\"}"),generatedPresence,out presenceStopped)&&presenceStopped&&!generatedPresence.Current(),"Presence stop route rejected");
+        Generated(PurposeName(ParsePurpose("presence"))=="presence","Presence purpose changed");
+        bool rejectedPurpose=false;try{PurposeName((Purpose)99);}catch(InvalidOperationException){rejectedPurpose=true;}Generated(rejectedPurpose,"Unknown presence purpose accepted");
         Require(Marshal.SizeOf(typeof(Mode))==220&&Marshal.OffsetOf(typeof(Mode),"Orientation").ToInt32()==84&&Marshal.SizeOf(typeof(Device))==840&&Marshal.SizeOf(typeof(Input))==40&&Marshal.SizeOf(typeof(Mouse))==32&&Marshal.SizeOf(typeof(Key))==24);
         Require(VirtualKey("ControlLeft")==162&&VirtualKey("Space")==32&&VirtualKey("ImeOn")==0x16&&VirtualKey("ImeOff")==0x1a);
         var enter=KeyEvent(VirtualKey("NumpadEnter"),true);Require(enter.Data.Key.Vk==13&&(enter.Data.Key.Flags&1)!=0);
@@ -201,9 +223,9 @@ public static class SodaDesktopSigninWorker {
     public static void Main(string[] args){
         try{
             Require(Environment.Is64BitProcess&&SodaDesktopSigninVault.SystemPrimary());SodaDesktopSigninPackage.OwnerSid(Owner);SetProcessDPIAware();Require(IsProcessDPIAware());
-            if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view")){using(var input=Utf8Reader(Console.OpenStandardInput()))using(var output=Utf8Writer(Console.OpenStandardOutput()))Broker(args[1]=="input",input,output);return;}
-            Require(args.Length==6&&args[0]=="--worker");Guid nonce=Guid.Empty;int broker=0,session=0;long started=0;Require(Guid.TryParseExact(args[1],"D",out nonce)&&nonce!=Guid.Empty&&args[1]==nonce.ToString("D")&&Int32.TryParse(args[2],out broker)&&broker>0&&Int64.TryParse(args[3],out started)&&started>0&&Int32.TryParse(args[4],out session)&&session>0&&(args[5]=="input"||args[5]=="view"));
-            Run(nonce,broker,started,session,args[5]=="input");
+            if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view"||args[1]=="presence")){using(var input=Utf8Reader(Console.OpenStandardInput()))using(var output=Utf8Writer(Console.OpenStandardOutput()))Broker(ParsePurpose(args[1]),input,output);return;}
+            Require(args.Length==6&&args[0]=="--worker");Guid nonce=Guid.Empty;int broker=0,session=0;long started=0;Require(Guid.TryParseExact(args[1],"D",out nonce)&&nonce!=Guid.Empty&&args[1]==nonce.ToString("D")&&Int32.TryParse(args[2],out broker)&&broker>0&&Int64.TryParse(args[3],out started)&&started>0&&Int32.TryParse(args[4],out session)&&session>0&&(args[5]=="input"||args[5]=="view"||args[5]=="presence"));
+            Run(nonce,broker,started,session,ParsePurpose(args[5]));
         }catch{Environment.Exit(1);}
     }
 }

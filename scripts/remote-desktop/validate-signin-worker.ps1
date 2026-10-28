@@ -1,7 +1,7 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated data/clock/topology/input sinks only. No privileged entry point is run.
-$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninTarget.cs','WindowsSigninScopeChecks.cs')
+$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsProtectedEpoch.cs','WindowsSigninCandidate.cs','WindowsSigninCandidateNative.cs','WindowsSigninScope.cs','WindowsSigninScopeNative.cs','WindowsSigninWorkerNative.cs','WindowsSigninWorker.cs','WindowsSigninPresence.cs','WindowsSigninTarget.cs','WindowsSigninScopeChecks.cs')
 $root=Join-Path ([IO.Path]::GetTempPath()) ('soda-signin-worker-checks-'+[guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root)|Out-Null
 $original=@{};$bytes=@{}
@@ -27,7 +27,16 @@ try {
             @('rotation','WindowsSigninWorker.cs','.Append(mode.Orientation)','','Rotated primary was accepted'),
             @('unicode-cleanup','WindowsSigninWorker.cs','cleanup(key);','{}','Unicode keyup cleanup was omitted'),
             @('broker-utf8-output','WindowsSigninWorker.cs','new StreamWriter(stream,new UTF8Encoding(false),65536,true)','new StreamWriter(stream,new ASCIIEncoding(),65536,true)','Broker UTF8 output changed'),
-            @('broker-utf8-input','WindowsSigninWorker.cs','new StreamReader(stream,new UTF8Encoding(false,true),false,16384,true)','new StreamReader(stream,new ASCIIEncoding(),false,16384,true)','Broker UTF8 input changed')
+            @('broker-utf8-input','WindowsSigninWorker.cs','new StreamReader(stream,new UTF8Encoding(false,true),false,16384,true)','new StreamReader(stream,new ASCIIEncoding(),false,16384,true)','Broker UTF8 input changed'),
+            @('presence-source-latch','WindowsSigninPresence.cs','if(ended)return false;','ended=false;','Presence source revived'),
+            @('presence-commands','WindowsSigninPresence.cs','if(command!="heartbeat"){ended=true;return false;}','if(command!="heartbeat"){return true;}','Presence accepted non-observer command'),
+            @('presence-callback-age','WindowsSigninPresence.cs','return false;}at=Now();if(ended||at>=deadline||at-lastBeat>=15000)','return false;}at=Now();if(ended)','Presence callback extended deadline'),
+            @('presence-backward','WindowsSigninPresence.cs','if(at<lastNow)','if(at<lastNow-1)','Presence backward clock accepted'),
+            @('presence-reentry','WindowsSigninPresence.cs','if(publish==null||publishing)','if(publish==null||publishing&&sequence<0)','Reentrant presence publication accepted'),
+            @('presence-clock-fault','WindowsSigninPresence.cs','return at;}catch{ended=true;throw;}','return at;}catch{throw;}','Presence clock exception revived'),
+            @('presence-capture-route','WindowsSigninWorker.cs','if(purpose==Purpose.Presence)presence();else capture();','if(purpose==Purpose.Presence)capture();else capture();','Presence dispatched capture'),
+            @('presence-cleanup-route','WindowsSigninWorker.cs','if(purpose!=Purpose.Presence)release();','release();','Presence dispatched input cleanup'),
+            @('presence-command-route','WindowsSigninWorker.cs','Require(presence.Command(type));','presence.Command(type);','Presence route accepted active command')
         )
         foreach($variant in $variants){
             $name=$variant[1];$before=$original[$name]
@@ -43,7 +52,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_13_source_negative_controls_and_restore_passed'
+        'signin_worker_22_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0
