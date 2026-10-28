@@ -31,7 +31,7 @@ try {
     if($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists((Join-Path $stage 'DesktopSigninService.exe'))){throw 'Service staging compilation failed'}
     if($NegativeControls) {
         $variants=@(
-            @('private-runtime','if(ace.AccessMask!=0)return false;','if(false)return false;','Foreign runtime read accepted'),
+            @('private-runtime','if(ace.AccessMask!=0)return false;','','Foreign runtime read accepted'),
             @('parent-environment','EnvironmentBlock=block.Append(''\0'').ToString();','block.Append("SODA_SIGNIN_HOST_SECRET=generated-private-parent-marker\0");EnvironmentBlock=block.Append(''\0'').ToString();','Generated child did not become ready'),
             @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)==1);','Require(true);Require(ResumeThread(process.Thread)==1);','Post-create revocation accepted'),
             @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
@@ -41,7 +41,9 @@ try {
         $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
         foreach($variant in $variants){
             if(([regex]::Matches($combined,[regex]::Escape($variant[1]))).Count -ne 1){throw ('Negative guard changed: '+$variant[0])}
-            $mutant=Join-Path $root 'mutant.cs';[IO.File]::WriteAllText($mutant,$combined.Replace($variant[1],$variant[2]))
+            $mutant=Join-Path $root 'mutant.cs';$originalBytes=[Text.UTF8Encoding]::new($false).GetBytes($combined)
+            try {
+            [IO.File]::WriteAllText($mutant,$combined.Replace($variant[1],$variant[2]))
             $mutantFixture=Join-Path $root ('negative-'+$variant[0]);[IO.Directory]::CreateDirectory($mutantFixture)|Out-Null
             $literal={param($s) "'"+$s.Replace("'","''")+"'"}
             $program="`$ErrorActionPreference='Stop';try{Add-Type -Path $(& $literal $mutant) -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll,System.ServiceProcess.dll;[SodaDesktopSigninHostChecks]::Run($(& $literal $exe),$(& $literal $mutantFixture))}catch{[Console]::Out.WriteLine(`$_.Exception.ToString());exit 1};exit 0"
@@ -49,8 +51,10 @@ try {
             $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE
             'negative '+$variant[0];$output|ForEach-Object {Write-Output ([string]$_)}
             if($code -ne 1 -or -not (($output|Out-String).Contains('System.InvalidOperationException: '+$variant[3]))){throw ('Negative did not fail intended assertion: '+$variant[0])}
-            [IO.File]::WriteAllText($mutant,$combined)
-            if([IO.File]::ReadAllText($mutant) -cne $combined){throw 'Restoration failed'}
+            } finally {
+                [IO.File]::WriteAllBytes($mutant,$originalBytes)
+                if([Convert]::ToBase64String([IO.File]::ReadAllBytes($mutant)) -cne [Convert]::ToBase64String($originalBytes)){throw 'Restoration failed'}
+            }
         }
         [SodaDesktopSigninHostChecks]::Run($exe,$fixture)
         'signin_host_source_negatives_and_restore_passed'
