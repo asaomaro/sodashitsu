@@ -36,3 +36,5 @@ signin_worker_22_source_negative_controls_and_restore_passed
 ```
 
 Windows `build-signin-worker.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001`: PASS, `signin_worker_compiled_no_execution`. Final script/docs delta independently reviewed; no must/should.
+
+Frozen product 400b51fd CI: Protected desktop boundaries run40735757062/job122983717318 PASS2026-10-28T17:28:01Z; Node identity run40735756716/job122983707921 PASS17:28:23Z. Main merge/root reflection are recorded in the deployment receipt.
