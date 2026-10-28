@@ -54,7 +54,7 @@ public static class SodaDesktopSigninPackageChecks {
         if(String.IsNullOrEmpty(parent)||!Path.IsPathRooted(parent))throw new InvalidOperationException("Generated fixture parent required");
         string root=Path.Combine(parent,"native-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);bool failed=true;
         try {
-            string path=Path.Combine(root,"generated.txt"),other=Path.Combine(root,"other.txt");File.WriteAllText(path,"generated");File.WriteAllText(other,"generated other");
+            string path=Path.Combine(root,"generated.txt"),other=Path.Combine(root,"other.txt");File.WriteAllBytes(path,Encoding.ASCII.GetBytes("generated"));File.WriteAllBytes(other,Encoding.ASCII.GetBytes("generated other"));
             string user;using(var identity=WindowsIdentity.GetCurrent())user=identity.User.Value;
             int reads=0;Func<byte[],bool> ordinary=descriptor=>{reads++;var raw=new RawSecurityDescriptor(descriptor,0);return raw.Owner!=null&&(raw.Owner.Value==user||raw.Owner.Value=="S-1-5-32-544")&&raw.DiscretionaryAcl!=null;};
             var held=SodaDesktopSigninPackageNative.OpenCore(path,false,true,1000,ordinary,null);bool renamed=false;
