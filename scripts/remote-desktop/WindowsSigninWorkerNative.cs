@@ -46,7 +46,7 @@ internal static class SodaDesktopSigninWorkerNative {
             var pipe=new NamedPipeServerStream(PipeDirection.InOut,true,false,handle);handle=null;return pipe;
         }finally{if(handle!=null)handle.Dispose();Marshal.FreeHGlobal(descriptor);}
     }
-    internal static SodaDesktopSigninProcess.Child Start(string owner,Guid nonce,int session,bool input,string runtime,out uint pid){
+    internal static SodaDesktopSigninProcess.Child Start(string owner,Guid nonce,int session,SodaDesktopSigninWorker.Purpose purpose,string runtime,out uint pid){
         VerifyLayouts();pid=0;Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0&&session>0&&WTSGetActiveConsoleSessionId()==(uint)session);
         IntPtr token=IntPtr.Zero,copy=IntPtr.Zero,job=IntPtr.Zero,list=IntPtr.Zero,jobValue=IntPtr.Zero,environment=IntPtr.Zero;var child=new PI();bool initialized=false,transferred=false;
         try{
@@ -58,7 +58,7 @@ internal static class SodaDesktopSigninWorkerNative {
                 IntPtr size=IntPtr.Zero;InitializeProcThreadAttributeList(IntPtr.Zero,1,0,ref size);Require(size.ToInt64()>0&&size.ToInt64()<65536);list=Marshal.AllocHGlobal(size);Require(InitializeProcThreadAttributeList(list,1,0,ref size));initialized=true;
                 jobValue=Marshal.AllocHGlobal(IntPtr.Size);Marshal.WriteIntPtr(jobValue,job);Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x2000d),jobValue,new IntPtr(IntPtr.Size),IntPtr.Zero,IntPtr.Zero));
                 string application=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninWorker.exe");
-                var plan=new SodaDesktopSigninHost.Plan(application,"--worker "+nonce.ToString("D")+" "+self.Id+" "+self.StartTime.ToUniversalTime().Ticks+" "+session+" "+(input?"input":"view"),Environment.GetFolderPath(Environment.SpecialFolder.System),runtime);
+                var plan=new SodaDesktopSigninHost.Plan(application,"--worker "+nonce.ToString("D")+" "+self.Id+" "+self.StartTime.ToUniversalTime().Ticks+" "+session+" "+SodaDesktopSigninWorker.PurposeName(purpose),Environment.GetFolderPath(Environment.SpecialFolder.System),runtime);
                 environment=Marshal.StringToHGlobalUni(plan.EnvironmentBlock);var startup=new SX{Info=new SI{Size=Marshal.SizeOf(typeof(SX)),Desktop=@"WinSta0\Winlogon"},Attributes=list};
                 Require(WTSGetActiveConsoleSessionId()==(uint)session);
                 // No handle inheritance across sessions. The pipe authenticates
