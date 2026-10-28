@@ -23,6 +23,9 @@ jobs:
       - name: Generated package data, ACL, and ordinary temporary file handle checks
         shell: powershell
         run: scripts/remote-desktop/validate-signin-package.ps1 -NegativeControls
+      - name: Generated ordinary signin host child and descendant checks (no service install)
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-host.ps1 -NegativeControls
       - name: Generated SYSTEM enrollment crypto and ACL checks (no real vault reads)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-vault.ps1
