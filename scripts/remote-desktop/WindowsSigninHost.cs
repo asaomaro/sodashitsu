@@ -40,6 +40,12 @@ public static class SodaDesktopSigninHost {
             return true;
         }catch{return false;}
     }
+    // Installer precreates this immutable one-byte private file. Holding a read
+    // lease denies write/delete and an administrator's exclusive quiescence open.
+    internal static SodaDesktopSigninPackageNative.Held Barrier(string runtime,Func<byte[],bool> policy){
+        string path=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(runtime),"quiescence.lock");
+        return SodaDesktopSigninPackageNative.OpenCore(path,false,true,1,policy,stream=>{if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();});
+    }
     internal sealed class RuntimeLease:IDisposable {
         readonly List<SodaDesktopSigninPackageNative.Held> held;internal readonly string Path;
         RuntimeLease(string path,List<SodaDesktopSigninPackageNative.Held> held){Path=path;this.held=held;}
@@ -51,6 +57,7 @@ public static class SodaDesktopSigninHost {
                 var drive=new DriveInfo(System.IO.Path.GetPathRoot(path));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();
                 for(string current=path;!String.IsNullOrEmpty(current);current=System.IO.Path.GetDirectoryName(current)){if(items.Count>=64)throw Failure();items.Add(current);}
                 items.Reverse();foreach(string current in items){bool leaf=current==path;held.Add(SodaDesktopSigninPackageNative.OpenCore(current,true,leaf,0,bytes=>leaf?PrivateRuntimeAcl(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false),null));}
+                held.Add(Barrier(path,PrivateRuntimeAcl));
                 var result=new RuntimeLease(path,held);transferred=true;return result;
             }finally{if(!transferred)SodaDesktopSigninPackageNative.Release(held);}
         }
@@ -63,7 +70,7 @@ public static class SodaDesktopSigninHost {
             if(stop.WaitOne(0)||!package.Current())return;
             child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&package.Current());
             while(!stop.WaitOne(250)&&package.Current()&&child.Running()){}
-            if(!stop.WaitOne(0))throw Failure();
+            if(!stop.WaitOne(0)&&(!package.Current()||!child.ExitedSuccessfully()))throw Failure();
         }finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.

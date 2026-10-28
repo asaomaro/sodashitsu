@@ -58,6 +58,23 @@ public static class SodaDesktopSigninVault {
             if(result.Length<1 || result.Length>16384){Array.Clear(result,0,result.Length);throw Failure();}return result;
         }catch{throw Failure();}finally{if(copy!=null)Array.Clear(copy,0,copy.Length);if(entropy!=null)Array.Clear(entropy,0,entropy.Length);}
     }
+    // Separate DPAPI domain for a single local administration request. ACLs
+    // remain mandatory: machine DPAPI alone does not isolate local accounts.
+    static byte[] AdminEntropy(string owner,string nonce){
+        Guid value;if(nonce==null||!Guid.TryParseExact(nonce,"D",out value)||value==Guid.Empty||value.ToString("D")!=nonce)throw Failure();
+        return Encoding.UTF8.GetBytes("Sodashitsu signin admin v1\0"+Owner(owner)+"\0"+nonce);
+    }
+    static byte[] AdminCrypt(byte[] input,string owner,string nonce,bool encrypt){
+        byte[] copy=null,entropy=null,result=null;
+        try{
+            if(input==null||input.Length<1||input.Length>(encrypt?16384:65536))throw Failure();
+            copy=(byte[])input.Clone();entropy=AdminEntropy(owner,nonce);
+            result=encrypt?ProtectedData.Protect(copy,entropy,DataProtectionScope.LocalMachine):ProtectedData.Unprotect(copy,entropy,DataProtectionScope.LocalMachine);
+            if(result.Length<1||result.Length>(encrypt?65536:16384)){Array.Clear(result,0,result.Length);throw Failure();}return result;
+        }catch{throw Failure();}finally{if(copy!=null)Array.Clear(copy,0,copy.Length);if(entropy!=null)Array.Clear(entropy,0,entropy.Length);}
+    }
+    public static byte[] ProtectAdmin(byte[] plain,string owner,string nonce){return AdminCrypt(plain,owner,nonce,true);}
+    public static byte[] UnprotectAdmin(byte[] cipher,string owner,string nonce){return AdminCrypt(cipher,owner,nonce,false);}
     public sealed class FileFacts {
         readonly Info info;
         readonly uint type;
