@@ -9,7 +9,7 @@ import {DesktopSigninConnector,type DesktopSigninSocket} from "./DesktopSigninCo
 import type {DesktopSigninHandlers} from "./DesktopSigninDispatch.js";
 
 const owner="S-1-5-21-1-2-3-1001",revision="11111111-1111-4111-8111-111111111111";
-function enrollment(origin="https://root.invalid") {return DesktopSigninEnrollment.decode(Buffer.from(JSON.stringify({version:1,purpose:"desktop-signin",revision,ownerSid:owner,origin,machineId:"a".repeat(32),token:"t".repeat(43),provider:"2".repeat(64),allowSignin:true,peers:[{fingerprint:"3".repeat(64),label:"generated"}]})),owner);}
+function enrollment(origin="https://root.invalid",caPem?:string) {return DesktopSigninEnrollment.decode(Buffer.from(JSON.stringify({version:1,purpose:"desktop-signin",revision,ownerSid:owner,origin,...(caPem===undefined?{}:{caPem}),machineId:"a".repeat(32),token:"t".repeat(43),provider:"2".repeat(64),allowSignin:true,peers:[{fingerprint:"3".repeat(64),label:"generated"}]})),owner);}
 function handlers(){return {
   hello:vi.fn<DesktopSigninHandlers["hello"]>(async id=>({clientId:id,snapshot:{protocol:1,serverVersion:"generated",host:{os:"windows",windowsBuild:1,hostname:"generated"},workspaces:[],tabs:[],panes:[],groups:[],focus:null,limits:{scrollbackLines:0}}})),
   capabilities:vi.fn<DesktopSigninHandlers["capabilities"]>(()=>({available:false,allowInput:false})),
@@ -117,4 +117,21 @@ it("installs error handling before aborting a real CONNECTING websocket",async()
   const connector=new DesktopSigninConnector({enrollment:enrollment("http://127.0.0.1:"+(server.address() as AddressInfo).port),handlers:handlers(),signal:abort.signal,active:()=>true,socket:(url,options)=>{socket=new WebSocket(url,options);abort.abort();return socket;}});connectors.push(connector);
   try{expect(socket!.listenerCount("error")).toBeGreaterThan(0);}
   finally{socket!.on("error",()=>{});connector.close();socket!.terminate();for(const peer of server.clients)peer.terminate();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+it.each(["matched","wrong","hostname"])("uses enrollment CA with verified TLS: %s",async mode=>{
+  const {execFileSync}=await import("node:child_process"),{mkdtempSync,readFileSync,rmSync}=await import("node:fs"),{join}=await import("node:path"),{tmpdir}=await import("node:os"),{createServer}=await import("node:https"),{WebSocket}=await import("ws");
+  const directory=mkdtempSync(join(tmpdir(),"soda-signin-tls-"));
+  let server:ReturnType<typeof createServer>|undefined,wss:WebSocketServer|undefined;
+  const abort=new AbortController();let connector:DesktopSigninConnector|undefined;
+  try{
+    execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-keyout",join(directory,"key.pem"),"-out",join(directory,"cert.pem"),"-days","1","-subj","/CN=generated.invalid","-addext","subjectAltName=IP:"+(mode==="hostname"?"127.0.0.2":"127.0.0.1")],{stdio:"ignore"});
+    execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-keyout",join(directory,"other-key.pem"),"-out",join(directory,"other-cert.pem"),"-days","1","-subj","/CN=other"],{stdio:"ignore"});
+    server=createServer({key:readFileSync(join(directory,"key.pem")),cert:readFileSync(join(directory,"cert.pem"))});wss=new WebSocketServer({noServer:true});let upgrades=0;
+    server.on("tlsClientError",()=>{});server.on("upgrade",(request,socket,head)=>{upgrades++;wss!.handleUpgrade(request,socket,head,()=>{});});
+    await new Promise<void>(resolve=>server!.listen(0,"127.0.0.1",resolve));const port=(server.address() as AddressInfo).port;
+    let complete!:(value:string)=>void;const result=new Promise<string>(resolve=>{complete=resolve;});
+    connector=new DesktopSigninConnector({enrollment:enrollment("https://127.0.0.1:"+port,readFileSync(join(directory,mode==="wrong"?"other-cert.pem":"cert.pem"),"utf8")),handlers:handlers(),signal:abort.signal,active:()=>true,socket:(url,options)=>{const socket=new WebSocket(url,options);socket.once("open",()=>complete("opened"));socket.once("error",error=>complete((error as NodeJS.ErrnoException).code??"unknown"));return socket;}});connectors.push(connector);
+    await expect(result).resolves.toBe(mode==="matched"?"opened":mode==="hostname"?"ERR_TLS_CERT_ALTNAME_INVALID":"DEPTH_ZERO_SELF_SIGNED_CERT");expect(upgrades).toBe(mode==="matched"?1:0);
+  }finally{abort.abort();connector?.close();if(wss){for(const socket of wss.clients)socket.terminate();await new Promise<void>(resolve=>wss!.close(()=>resolve()));}if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));rmSync(directory,{recursive:true,force:true});}
 });

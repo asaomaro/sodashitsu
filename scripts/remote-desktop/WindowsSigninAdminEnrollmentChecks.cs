@@ -25,6 +25,37 @@ public static class SodaDesktopSigninAdminEnrollmentChecks {
   data=Record();op=Operation();data["origin"]="http://public.example";op["origin"]="http://public.example";Denied(()=>Canonical(data,op),"Enrollment public plaintext origin accepted");
   data=Record();op=Operation();data["origin"]="http://127.0.0.1:1234";op["origin"]="http://127.0.0.1:1234";canonical=Canonical(data,op);Array.Clear(canonical,0,canonical.Length);
   data=Record();op=Operation();op["peers"]=new[]{new{fingerprint=new string('b',64),label="\ufeff generated \ufeff"}};canonical=Canonical(data,op);Array.Clear(canonical,0,canonical.Length);
+  string generatedCa=@"-----BEGIN CERTIFICATE-----
+MIIDHDCCAgSgAwIBAgIUJsgHxmutxVJyyaaP684x4YIUePAwDQYJKoZIhvcNAQEL
+BQAwFDESMBAGA1UEAwwJMTI3LjAuMC4xMCAXDTI2MDkyNzE5MDUxNloYDzIxMjYw
+OTAzMTkwNTE2WjAUMRIwEAYDVQQDDAkxMjcuMC4wLjEwggEiMA0GCSqGSIb3DQEB
+AQUAA4IBDwAwggEKAoIBAQCfTpNqlnv1PVenx/URrnj3S2FeKWCSy332TXCrP2c3
+Th1pogQ4Zy49UayzxUErLOoGRCpNGnKFJAuUA8zXo2DvEApPjfsigAwGyXR9mFRl
+4TL4n7AcfNrsMp+k4zmLaivPsajGZ7JVfOJVbEGcQe+opS5CSlQHRdP6TdtNAewn
+Oa1YlDF7ywnqvOBAHNAoZDW1C58nGceVfzQjQjdxwLzg5JbvOri0BDnwItiiHZ4g
+UzzpkuNE0/2kPOhAhe0PI7+6nkK2N1V5+KJ+v2oCcHfNK1SwfXPbatxfgILyySxJ
+kwOI6JyT5ug4sR8IAcXE/ZY/nnCW55QqLl4Mk5cHB9WlAgMBAAGjZDBiMB0GA1Ud
+DgQWBBSFEySahyw5GJ3bGMFkKFFZujhdojAfBgNVHSMEGDAWgBSFEySahyw5GJ3b
+GMFkKFFZujhdojAPBgNVHRMBAf8EBTADAQH/MA8GA1UdEQQIMAaHBH8AAAEwDQYJ
+KoZIhvcNAQELBQADggEBAHzS+SMDjue36J+zBPIyDEtwabspKWM/ofX6Mmbej1U2
+BIAaqqc3E0fwEy1MakSk6uQUtIWIkXh2wYFiZs9KzXR7iRRePG0ainurXRNvb8av
+Ab9H7ivOE7HFRIqJAmhpGm3zLxyNKXBgnDKPt70pgWiN54KjuJ+NIgQOtNFylheG
+oPIbVgGa3lonyFZypsbIih3KwqiK3Jqojhq8MVNlE37p5SFVHma2ca1GP3AA9728
+Tfv077jZ6kvtozbtGERI7CFga1Rd1lynArDbE6747FgMu+w4ldYkqEyPoZUs9WmI
+xqpT7vN3gtk3E5ywAAQMReygJffpimYopL42UtSwpvE=
+-----END CERTIFICATE-----
+".Replace("\r\n","\n");data=Record();op=Operation();data["caPem"]=generatedCa;op["caPem"]=generatedCa;canonical=Canonical(data,op);Check(Encoding.UTF8.GetString(canonical).Contains("caPem"),"Enrollment CA lost");Array.Clear(canonical,0,canonical.Length);
+  data["caPem"]=generatedCa.Replace("\n","\r\n");Denied(()=>Canonical(data,op),"Enrollment mismatched CA accepted");
+  data["caPem"]=generatedCa+"extra";Denied(()=>Canonical(data,op),"Enrollment mismatched CA accepted");op["caPem"]=data["caPem"];Denied(()=>Canonical(data,op),"Enrollment malformed CA accepted");
+  data["caPem"]=generatedCa+generatedCa;op["caPem"]=data["caPem"];Denied(()=>Canonical(data,op),"Enrollment multiple CA accepted");
+  byte[] publicDer=Convert.FromBase64String(generatedCa.Replace("-----BEGIN CERTIFICATE-----","").Replace("-----END CERTIFICATE-----",""));
+  using(var publicCertificate=new System.Security.Cryptography.X509Certificates.X509Certificate2(publicDer)){
+   var certificates=new System.Security.Cryptography.X509Certificates.X509Certificate2Collection(publicCertificate);
+   foreach(var format in new[]{System.Security.Cryptography.X509Certificates.X509ContentType.Pkcs7,System.Security.Cryptography.X509Certificates.X509ContentType.Pkcs12}){
+    byte[] container=certificates.Export(format);try{string wrapped="-----BEGIN CERTIFICATE-----\n"+Convert.ToBase64String(container)+"\n-----END CERTIFICATE-----\n";data=Record();op=Operation();data["caPem"]=wrapped;op["caPem"]=wrapped;Denied(()=>Canonical(data,op),"Enrollment certificate container accepted: "+format);}finally{Array.Clear(container,0,container.Length);}
+   }
+  }
+  byte[] trailing=new byte[publicDer.Length+1];Buffer.BlockCopy(publicDer,0,trailing,0,publicDer.Length);trailing[trailing.Length-1]=1;string trailingPem="-----BEGIN CERTIFICATE-----\n"+Convert.ToBase64String(trailing)+"\n-----END CERTIFICATE-----\n";data=Record();op=Operation();data["caPem"]=trailingPem;op["caPem"]=trailingPem;Denied(()=>Canonical(data,op),"Enrollment trailing DER accepted");Array.Clear(publicDer,0,publicDer.Length);Array.Clear(trailing,0,trailing.Length);
   string root=Path.Combine(Path.GetTempPath(),"soda-enrollment-file-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
   try{
    string path=Path.Combine(root,"enrollment.dpapi");byte[] generated=Encoding.UTF8.GetBytes("generated opaque DPAPI bytes only");

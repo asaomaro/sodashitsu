@@ -1,3 +1,4 @@
+import {readFileSync} from "node:fs";
 import {afterEach,expect,it,vi} from "vitest";
 import {DesktopSigninAdminRequest,type DesktopSigninAdminOperation} from "./DesktopSigninAdminRequest.js";
 import {desktopSigninAdministration,type DesktopSigninAdminBackend,type DesktopSigninAdministrationDependencies} from "./DesktopSigninAdministration.js";
@@ -23,3 +24,5 @@ it("bounds a hung operation and refuses to forget its pending completion",async(
 it("uses unsafe stop when pending work never settles after cancellation",async()=>{vi.useFakeTimers();const f=fixture();f.backend.status.mockImplementation(()=>new Promise(()=>{}));const work=f.run(),result=expect(work).rejects.toThrow();await vi.advanceTimersByTimeAsync(13000);await result;expect(f.deps.unsafeStop).toHaveBeenCalledOnce();});
 
 it("never retries an uncertain result write",async()=>{const f=fixture();f.deps.result=vi.fn(async()=>{throw Error('write outcome unknown');});await expect(f.run()).rejects.toThrow();expect(f.deps.result).toHaveBeenCalledOnce();expect(f.backend.close).toHaveBeenCalledOnce();});
+
+it("retains explicit CA in claim-bound enrollment without publishing it",async()=>{const caPem=readFileSync(new URL("../../../tui/src/testing/tls/cert.pem",import.meta.url),"utf8"),f=fixture({...enrolled,caPem});let written:unknown;f.backend.enrollment.mockImplementation(async bytes=>{written=JSON.parse(Buffer.from(bytes).toString());});await f.run();expect(written).toMatchObject({caPem});expect(JSON.stringify(f.results)).not.toContain("BEGIN CERTIFICATE");});

@@ -55,7 +55,7 @@ export async function desktopSigninAdministration(claim:{request:DesktopSigninAd
     else if(operation.kind==='revoke')await step(()=>backend!.revoke(operation.fingerprint,permit));
     else{
      if(!operation.peers.every(peer=>before.peers.some(actual=>actual.fingerprint===peer.fingerprint)))throw failure();
-     const record={version:1,purpose:'desktop-signin',revision:deps.uuid(),ownerSid:binding.ownerSid,provider:before.fingerprint,allowSignin:true,origin:operation.origin,machineId:operation.machineId,token:operation.token,allowInput:operation.allowInput,peers:operation.peers};
+     const record={version:1,purpose:'desktop-signin',revision:deps.uuid(),ownerSid:binding.ownerSid,provider:before.fingerprint,allowSignin:true,origin:operation.origin,...(operation.caPem===undefined?{}:{caPem:operation.caPem}),machineId:operation.machineId,token:operation.token,allowInput:operation.allowInput,peers:operation.peers};
      const bytes=Buffer.from(JSON.stringify(record));try{DesktopSigninEnrollment.decode(bytes,binding.ownerSid);await step(()=>backend!.enrollment(bytes,permit));}finally{bytes.fill(0);}
     }
    }

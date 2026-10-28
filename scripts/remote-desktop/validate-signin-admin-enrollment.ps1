@@ -12,6 +12,7 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated enrollment checks failed'}
  if($NegativeControls){
   $variants=@(
+   @('ca-binding','ca!=Text(operation["caPem"],8192)||','','Enrollment mismatched CA accepted'),
    @('token','token!=Text(operation["token"],43)||','','Enrollment claim field mismatch accepted: token'),
    @('machine','machineId!=Text(operation["machineId"],32)||','','Enrollment claim field mismatch accepted: machineId'),
    @('input','||input!=Boolean(operation["allowInput"])','','Enrollment input scope extended'),
@@ -25,7 +26,7 @@ try{
    }finally{[IO.File]::WriteAllBytes((Join-Path $root $name),$bytes[$name]);if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root $name))) -cne [Convert]::ToBase64String($bytes[$name])){throw 'Source bytes not restored'}}
   }
   $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Restored persistence checks failed'}
-  'signin_admin_enrollment_6_source_negative_controls_and_restore_passed'
+  'signin_admin_enrollment_7_source_negative_controls_and_restore_passed'
  }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

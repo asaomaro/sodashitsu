@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 public static class SodaDesktopSigninAdminEnrollment {
@@ -24,8 +25,9 @@ public static class SodaDesktopSigninAdminEnrollment {
     public static byte[] Canonical(byte[] record,byte[] claimed,string owner){
         try{
             owner=SodaDesktopSigninVault.Owner(owner);Dictionary<string,object> request=Parse(claimed),operation=Object(request["operation"]),data=Parse(record);
-            if(Text(request["ownerSid"],184)!=owner)throw Failure();Keys(operation,"kind","origin","machineId","token","allowInput","peers");if(Text(operation["kind"],16)!="enroll")throw Failure();
-            Keys(data,"version","purpose","revision","ownerSid","provider","allowSignin","origin","machineId","token","allowInput","peers");
+            if(Text(request["ownerSid"],184)!=owner)throw Failure();bool hasCa=operation.ContainsKey("caPem");if(hasCa)Keys(operation,"kind","origin","machineId","token","allowInput","peers","caPem");else Keys(operation,"kind","origin","machineId","token","allowInput","peers");if(Text(operation["kind"],16)!="enroll")throw Failure();
+            if(hasCa)Keys(data,"version","purpose","revision","ownerSid","provider","allowSignin","origin","machineId","token","allowInput","peers","caPem");else Keys(data,"version","purpose","revision","ownerSid","provider","allowSignin","origin","machineId","token","allowInput","peers");
+            string ca=null;if(hasCa){ca=Text(data["caPem"],8192);if(ca!=Text(operation["caPem"],8192)||!Regex.IsMatch(ca,@"\A-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+\r?\n-----END CERTIFICATE-----\r?\n?\z"))throw Failure();byte[] der=Convert.FromBase64String(ca.Replace("-----BEGIN CERTIFICATE-----","").Replace("-----END CERTIFICATE-----",""));try{if(X509Certificate2.GetCertContentType(der)!=X509ContentType.Cert)throw Failure();using(var certificate=new X509Certificate2(der)){byte[] raw=certificate.RawData;if(certificate.HasPrivateKey||Convert.ToBase64String(raw)!=Convert.ToBase64String(der))throw Failure();bool isCa=false;foreach(X509Extension extension in certificate.Extensions)if(extension.Oid.Value=="2.5.29.19")isCa=new X509BasicConstraintsExtension(extension,extension.Critical).CertificateAuthority;if(!isCa)throw Failure();}}finally{Array.Clear(der,0,der.Length);}}
             if(!(data["version"] is int)||(int)data["version"]!=1||Text(data["purpose"],64)!="desktop-signin"||Text(data["ownerSid"],184)!=owner||!Boolean(data["allowSignin"]))throw Failure();
             string revision=Pattern(data["revision"],"\\A[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\\z",36),provider=Fingerprint(data["provider"]),origin=Text(data["origin"],2048),machineId=Pattern(data["machineId"],"\\A[a-f0-9]{32}\\z",32),token=Pattern(data["token"],"\\A[A-Za-z0-9_-]{43}\\z",43);bool input=Boolean(data["allowInput"]);
             Uri uri;if(!Uri.TryCreate(origin,UriKind.Absolute,out uri)||uri.UserInfo!=""||uri.Query!=""||uri.Fragment!=""||uri.AbsolutePath!="/"||uri.GetLeftPart(UriPartial.Authority)!=origin||uri.Scheme!="https"&&(uri.Scheme!="http"||uri.Host!="localhost"&&uri.Host!="127.0.0.1"&&uri.Host!="[::1]"&&uri.Host!="::1"))throw Failure();
@@ -36,6 +38,7 @@ public static class SodaDesktopSigninAdminEnrollment {
                 if(!names.Add(fingerprint)||fingerprint!=Fingerprint(actual["fingerprint"])||label!=Text(peer["label"],80)||label!=Label(actual["label"]))throw Failure();list.Add(new{fingerprint,label});
             }
             var result=new SortedDictionary<string,object>(StringComparer.Ordinal){{"version",1},{"purpose","desktop-signin"},{"revision",revision},{"ownerSid",owner},{"provider",provider},{"allowSignin",true},{"origin",origin},{"machineId",machineId},{"token",token},{"allowInput",input},{"peers",list}};
+            if(hasCa)result.Add("caPem",ca);
             byte[] bytes=new UTF8Encoding(false,true).GetBytes(Json().Serialize(result));if(bytes.Length>16384){Array.Clear(bytes,0,bytes.Length);throw Failure();}return bytes;
         }catch{throw Failure();}
     }

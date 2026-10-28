@@ -1,3 +1,4 @@
+import {DesktopSigninCertificate} from "./DesktopSigninCertificate.js";
 import {inspect} from "node:util";
 import {z} from "zod";
 import {DesktopEndpointFingerprint} from "@sodashitsu/protocol";
@@ -11,7 +12,7 @@ const operation=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('initialize')}).strict(),
  z.object({kind:z.literal('trust'),peer}).strict(),
  z.object({kind:z.literal('revoke'),fingerprint:DesktopEndpointFingerprint}).strict(),
- z.object({kind:z.literal('enroll'),origin,machineId:z.string().regex(/^[a-f0-9]{32}$/),token:z.string().regex(/^[A-Za-z0-9_-]{43}$/),allowInput:z.boolean(),peers:z.array(peer).min(1).max(8).refine(values=>new Set(values.map(v=>v.fingerprint)).size===values.length)}).strict(),
+ z.object({kind:z.literal('enroll'),origin,caPem:DesktopSigninCertificate.optional(),machineId:z.string().regex(/^[a-f0-9]{32}$/),token:z.string().regex(/^[A-Za-z0-9_-]{43}$/),allowInput:z.boolean(),peers:z.array(peer).min(1).max(8).refine(values=>new Set(values.map(v=>v.fingerprint)).size===values.length)}).strict(),
  z.object({kind:z.literal('disable')}).strict(),
 ]);
 const record=z.object({version:z.literal(1),purpose:z.literal('desktop-signin-admin'),nonce:uuid,ownerSid:owner,issuedAt:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),expiresAt:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),operation}).strict();

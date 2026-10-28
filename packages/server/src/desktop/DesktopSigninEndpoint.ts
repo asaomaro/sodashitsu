@@ -96,7 +96,7 @@ export class DesktopSigninEndpoint {
       };
       drain=new DesktopEndpointDrain({active,terminal:()=>context.wire!.send("control",new Uint8Array([4])),close:context.close});
       const url=new URL(p.url);agent=new (url.protocol==="wss:"?HttpsAgent:HttpAgent)({keepAlive:false,maxSockets:1,maxTotalSockets:1});
-      transport=(this.options.socket??((url,options)=>new WebSocket(url,DESKTOP_ENDPOINT_PROTOCOL,options)))(p.url,{agent,rejectUnauthorized:true,followRedirects:false,perMessageDeflate:false,handshakeTimeout:5000,maxPayload:4*1024*1024});
+      transport=(this.options.socket??((url,options)=>new WebSocket(url,DESKTOP_ENDPOINT_PROTOCOL,options)))(p.url,{agent,...(this.options.enrollment.delegation().caPem===undefined?{}:{ca:this.options.enrollment.delegation().caPem}),rejectUnauthorized:true,followRedirects:false,perMessageDeflate:false,handshakeTimeout:5000,maxPayload:4*1024*1024});
       transport.on("error",context.close);transport.on("close",context.close);
       if(!active()){context.close();throw failure();}
       context.wire=new DesktopEndpointWire({crypto,identity:permit.identity,session:p.session,role:"provider",peerRole:"viewer",expectedFingerprint:fingerprint,active,

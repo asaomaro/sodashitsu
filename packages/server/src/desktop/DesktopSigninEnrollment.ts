@@ -1,3 +1,4 @@
+import {DesktopSigninCertificate} from "./DesktopSigninCertificate.js";
 import {inspect} from "node:util";
 import {z} from "zod";
 import {ClientHelloParams,DesktopEndpointFingerprint,DesktopEndpointStart} from "@sodashitsu/protocol";
@@ -18,7 +19,7 @@ const owner=z.string().max(184).regex(/^S-1-[0-9]+(?:-[0-9]+){1,15}$/)
 const peer=z.object({fingerprint:DesktopEndpointFingerprint,label:z.string().trim().min(1).max(80)}).strict();
 const record=z.object({
   version:z.literal(1),purpose:z.literal("desktop-signin"),revision:z.string().uuid(),ownerSid:owner,
-  origin,machineId:z.string().regex(/^[a-f0-9]{32}$/),token:z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  origin,caPem:DesktopSigninCertificate.optional(),machineId:z.string().regex(/^[a-f0-9]{32}$/),token:z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   provider:DesktopEndpointFingerprint,allowSignin:z.literal(true),allowInput:z.boolean().default(false),
   peers:z.array(peer).min(1).max(8).refine(values=>new Set(values.map(value=>value.fingerprint)).size===values.length),
 }).strict();
@@ -48,9 +49,9 @@ export class DesktopSigninEnrollment {
     }catch{throw unavailable();}
   }
   /** Only an explicit network adapter should request the delegation credential. */
-  delegation():{url:string;machineId:string;token:string} {
+  delegation():{url:string;machineId:string;token:string;caPem?:string} {
     const url=new URL(this.#data.origin);url.protocol=url.protocol==="https:"?"wss:":"ws:";url.pathname="/machine-delegation";
-    return {url:url.href,machineId:this.#data.machineId,token:this.#data.token};
+    return {url:url.href,machineId:this.#data.machineId,token:this.#data.token,...(this.#data.caPem===undefined?{}:{caPem:this.#data.caPem})};
   }
   publicStatus():{revision:string;origin:string;machineId:string;provider:string;allowInput:boolean;peers:z.infer<typeof peer>[]} {
     const data=this.#data;
