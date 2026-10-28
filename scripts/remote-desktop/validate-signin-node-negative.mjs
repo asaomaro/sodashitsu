@@ -9,7 +9,7 @@ import {spawnSync} from "node:child_process";
 const root=await mkdtemp(join(tmpdir(),"soda-signin-node-negative-"));
 const files=["signin-bootstrap.mjs","build-signin-package.mjs","validate-signin-bootstrap.mjs","validate-signin-package.mjs"];
 const original=new Map();
-const env={...process.env};for(const name of ["NODE_OPTIONS","NODE_PATH","NODE_EXTRA_CA_CERTS","OPENSSL_CONF","OPENSSL_MODULES","SSLKEYLOGFILE"])delete env[name];
+const env={};for(const name of ["PATH","SystemRoot","SYSTEMROOT","WINDIR","TEMP","TMP","TMPDIR"])if(process.env[name])env[name]=process.env[name];
 const run=(validator,flags=[])=>spawnSync(process.execPath,[...flags,join(root,validator)],{cwd:root,env,encoding:"utf8",timeout:15000,maxBuffer:1048576});
 const recipes=[
   {name:"builtin-set",file:files[0],validator:files[2],patches:[['if(!builtins.has(name))throw failure();','',1]]},

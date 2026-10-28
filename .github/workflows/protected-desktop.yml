@@ -20,7 +20,7 @@ jobs:
       - name: Generated ACL descriptor facts (no filesystem ACL writes)
         shell: powershell
         run: scripts/remote-desktop/validate-endpoint-acl-facts.ps1
-      - name: Generated fixed package data and ACL checks (no install or process launch)
+      - name: Generated package data, ACL, and ordinary temporary file handle checks
         shell: powershell
         run: scripts/remote-desktop/validate-signin-package.ps1 -NegativeControls
       - name: Generated SYSTEM enrollment crypto and ACL checks (no real vault reads)

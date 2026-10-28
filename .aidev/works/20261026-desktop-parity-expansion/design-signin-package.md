@@ -11,3 +11,5 @@ native verifierはSYSTEM primary・自身の固定exe配置・local NTFSを先�
 release準備toolは明示したstagingだけへmanifestを新規作成し、既存file/ACLの修復やservice導入をしない。実際の専用main/worker/serviceとinstallerが揃う前に常駐可能とはしない。生成asset/ACL/file factsとordinary-account拒否、未束縛依存の拒否を検証する。安全/状態に関わるためnative/taskcheckとbootstrap/taskcheck、最終cross/修正差分再点検を必須とする。
 
 一次資料: [GetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)に従いhandleのREAD_CONTROLと返却SDのLocalFreeを扱う。[CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)の共有とreparse/backup semanticsを確認。属性のaccessは共有flagだけでは防げないためACLも検査する。[BY_HANDLE_FILE_INFORMATION](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information)の64bit indexのReFS制約を踏まえ、この固定packageはNTFSに限定する。実OS互換性の確認済みという意味ではない。
+
+検証はordinary tempだけで実native handle経路も通す。OpenCore/Releaseのinternal seamへ生成SD policyを渡すが、production Verifyは固定ACL policyのまま。kernel handle→SD→FileStreamの移譲・sharing・各失敗後解放を検査し、実Systemでは試験しない。[SD形式の資料](https://learn.microsoft.com/en-us/windows/win32/secauthz/absolute-and-self-relative-security-descriptors)も照合し、返却SDの連続したself-relative形式をmanaged bytesへコピーする契約を確認した。
