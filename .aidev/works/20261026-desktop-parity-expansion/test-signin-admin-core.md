@@ -10,7 +10,9 @@ The journal uses same-directory non-replacing MoveFileExW with WRITE_THROUGH and
 
 Independent taskchecks/cross: request/crypto and journal core/lifecycle reviewed in separate contexts; all must/should resolved. Remaining integration responsibilities are explicit in tasks-signin-management.md and design-signin-admin.md.
 
-Final whole tests, external smoke, CI and merge pending.
+Product8697f299 source build/typecheck/bundle PASS; full12,337/824 single PASS352.07s. Guarded root17 files (no custom overlap), build/typecheck/bundle PASS; full12,399/832 single PASS356.81s. Browser source2 PASS13.0s/root2 PASS8.7s. Frozen external worktree8697f299 install/build/bundle/smoke PASS and clean. Existing generated vault validation PASS after the Vault additions.
+
+Final independent whole cross reviewed all17 files and records: no must/should. Product CI protected40756514446/job123056760751 PASS; Node40756514423/job123056760643 PASS. Final documentation-head CI/merge pending. No whole suite repeated for documentation-only changes.
 
 ## Request source control owner
 
