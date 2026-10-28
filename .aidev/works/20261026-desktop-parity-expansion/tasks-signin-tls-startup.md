@@ -4,6 +4,7 @@
 - [x] Verified CA transport on both delegation and sealed endpoint; preserve hostname checks and reject redirects (taskcheck).
 - [x] Dedicated main selects local claimed administration or normal presence/network once; no admin fallthrough, retain local lease through teardown (taskcheck).
 - [x] Generated CA/container/DER checks, actual TLS success and failure, source controls with exact restoration; independent cross and fixes.
-- [ ] Build/type/bundle, whole tests, external smoke, final independent records review and delivery.
+- [x] Build/type/bundle, whole tests, external smoke and independent cross.
+- [ ] Final record review/CI, main merge and guarded delivery receipt.
 
 No installer/controller activation, actual SYSTEM/service entry, keys/trust registration, desktop/input/audio device operations or handoff. Installer and SCM/controller remain following slices.
