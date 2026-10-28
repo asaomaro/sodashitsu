@@ -2,7 +2,7 @@ param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
 # Generated JSON, clocks and ownership callbacks only. No privileged entrypoint,
 # credential/key read/write, service, private installed state or desktop action.
-foreach($script in @('SigninAdminStorage.ps1','read-signin-admin.ps1','write-signin-admin-result.ps1')){
+foreach($script in @('SigninAdminStorage.ps1','read-signin-admin.ps1','write-signin-admin-result.ps1','commit-signin-vault.ps1','write-signin-enrollment.ps1')){
  $tokens=$null;$errors=$null;[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $script),[ref]$tokens,[ref]$errors)|Out-Null
  if($errors.Count -ne 0){throw ('Admin helper parse failed: '+$script)}
 }
@@ -16,6 +16,7 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated admin execution checks failed'}
  if($NegativeControls){
   $variants=@(
+   @('kind','WindowsSigninAdminDeadline.cs','if(Kind!="status"&&Kind!="initialize"&&Kind!="trust"&&Kind!="revoke"&&Kind!="enroll"&&Kind!="disable")throw Failure();','if(Kind=="invalid")throw Failure();','Native deadline accepted unknown request kind'),
    @('wall','WindowsSigninAdminDeadline.cs','now>=expires','now>expires+1','Native wall expiry accepted'),
    @('monotonic','WindowsSigninAdminDeadline.cs','tick>=until','tick>until+1','Native monotonic expiry accepted'),
    @('owner','WindowsSigninAdminDeadline.cs','!active||','active&&false||','Native owner loss accepted'),
@@ -31,7 +32,7 @@ try{
    }finally{[IO.File]::WriteAllBytes((Join-Path $root $name),$bytes[$name]);if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root $name))) -cne [Convert]::ToBase64String($bytes[$name])){throw 'Source bytes not restored'}}
   }
   $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Restored execution checks failed'}
-  'signin_admin_execution_8_source_negative_controls_and_restore_passed'
+  'signin_admin_execution_9_source_negative_controls_and_restore_passed'
  }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

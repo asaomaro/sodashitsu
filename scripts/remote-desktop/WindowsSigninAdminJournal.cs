@@ -23,7 +23,7 @@ public sealed class SodaDesktopSigninAdminJournal {
         return files.Length==1&&String.Equals(Path.GetFileName(files[0]),"admin.pending",StringComparison.Ordinal)?"claim":"recovery";
     }
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true,ExactSpelling=true)]static extern SafeFileHandle CreateFileW(string name,uint access,uint share,IntPtr security,uint creation,uint flags,IntPtr template);
-    static FileStream Read(string path){var handle=CreateFileW(path,0x80000000,5,IntPtr.Zero,3,0x200000,IntPtr.Zero);try{if(handle.IsInvalid)throw Failure();return new FileStream(handle,FileAccess.Read);}catch{handle.Dispose();throw;}}
+    internal static FileStream Read(string path){var handle=CreateFileW(path,0x80000000,5,IntPtr.Zero,3,0x200000,IntPtr.Zero);try{if(handle.IsInvalid)throw Failure();return new FileStream(handle,FileAccess.Read);}catch{handle.Dispose();throw;}}
     byte[] Bytes(FileStream stream){
         Current();var before=SodaDesktopSigninVault.Facts(stream.SafeFileHandle);if(!before.Regular)throw Failure();
         var bytes=new byte[(int)stream.Length];bool transferred=false;

@@ -21,7 +21,9 @@ export interface DesktopSigninRuntimeDependencies {
  endpoint(options:ConstructorParameters<typeof DesktopSigninEndpoint>[0]):Endpoint;
  connector(options:ConstructorParameters<typeof DesktopSigninConnector>[0]):Pick<DesktopSigninConnector,"close">;
 }
-const defaults:DesktopSigninRuntimeDependencies={now:()=>performance.now(),unsafeStop:()=>process.exit(1),presence:options=>new DesktopSigninPresenceProcess(options),enrollment:readDesktopSigninEnrollment,store:context=>new DesktopEndpointStore({stateDir:context.stateDir}),identity:options=>new DesktopSigninIdentity(options),endpoint:options=>new DesktopSigninEndpoint(options),connector:options=>new DesktopSigninConnector(options)};
+/** Even an accidental mutable call on this dedicated runtime store must fail. */
+export function desktopSigninReadonlyStore(context:DesktopSigninContext):Store{return new DesktopEndpointStore({stateDir:context.stateDir,writeAllowed:()=>false});}
+const defaults:DesktopSigninRuntimeDependencies={now:()=>performance.now(),unsafeStop:()=>process.exit(1),presence:options=>new DesktopSigninPresenceProcess(options),enrollment:readDesktopSigninEnrollment,store:desktopSigninReadonlyStore,identity:options=>new DesktopSigninIdentity(options),endpoint:options=>new DesktopSigninEndpoint(options),connector:options=>new DesktopSigninConnector(options)};
 const digest=(enrollment:DesktopSigninEnrollment,status:Awaited<ReturnType<Store["status"]>>)=>createHash("sha256").update(JSON.stringify([enrollment.publicStatus(),enrollment.delegation(),status])).digest("hex");
 /** One fresh native presence epoch. No generic server, listener, project, key
  * writer or shell is instantiated. Every owned read/worker teardown completes

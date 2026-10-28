@@ -7,7 +7,7 @@ public static class SodaDesktopSigninAdminExecutionChecks {
  static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
  static void Denied(Action run,string message){bool failed=false;try{run();}catch{failed=true;}Check(failed,message);}
  static byte[] Encode(object value){return Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(value));}
- static byte[] Request(){return Encode(new{version=1,purpose="desktop-signin-admin",ownerSid=Owner,nonce=Nonce,issuedAt=10000,expiresAt=11000,operation=new{kind="status"}});}
+ static byte[] Request(string kind="status"){return Encode(new{version=1,purpose="desktop-signin-admin",ownerSid=Owner,nonce=Nonce,issuedAt=10000,expiresAt=11000,operation=new{kind}});}
  static Dictionary<string,object> Result(){return new Dictionary<string,object>{{"version",1},{"purpose","desktop-signin-admin-result"},{"ownerSid",Owner},{"nonce",Nonce},{"cipherSha256",new string('a',64)},{"outcome","success"},{"status",new{initialized=true,required=true,fingerprint=new string('b',64),peers=new[]{new{fingerprint=new string('c',64),label="Generated viewer",role="viewer"}}}}};}
  static void RejectedResult(Dictionary<string,object> value,string message){byte[] bytes=Encode(value);try{Denied(()=>SodaDesktopSigninAdminResult.Decode(bytes,Owner,Nonce,new string('a',64)),message);}finally{Array.Clear(bytes,0,bytes.Length);}}
  public static void Run(){
@@ -17,6 +17,7 @@ public static class SodaDesktopSigninAdminExecutionChecks {
    tick=0;deadline=new SodaDesktopSigninAdminDeadline(plain,Owner,Nonce,()=>wall,()=>tick,()=>active);active=false;Check(!deadline.Current(),"Native owner loss accepted");active=true;Check(!deadline.Current(),"Native owner loss revived");
    wall=10000;tick=0;deadline=new SodaDesktopSigninAdminDeadline(plain,Owner,Nonce,()=>wall,()=>tick,()=>true);wall=10001;tick=1;Check(deadline.Current(),"Native fresh lease rejected");wall=10000;Check(!deadline.Current(),"Native backward clock accepted");
    wall=10000;tick=0;bool reenter=false,invoked=false;SodaDesktopSigninAdminDeadline recursive=null;recursive=new SodaDesktopSigninAdminDeadline(plain,Owner,Nonce,()=>wall,()=>tick,()=>{if(reenter&&!invoked){invoked=true;recursive.Current();}return true;});reenter=true;Check(!recursive.Current(),"Native reentrant deadline accepted");reenter=false;Check(!recursive.Current(),"Native reentrant deadline revived");
+   byte[] invalidKind=Request("exec");try{Denied(()=>new SodaDesktopSigninAdminDeadline(invalidKind,Owner,Nonce,()=>10000,()=>0,()=>true),"Native deadline accepted unknown request kind");}finally{Array.Clear(invalidKind,0,invalidKind.Length);}
    Denied(()=>new SodaDesktopSigninAdminDeadline(plain,Owner,Other,()=>10000,()=>0,()=>true),"Native request nonce mismatch accepted");
    Denied(()=>new SodaDesktopSigninAdminDeadline(plain,"S-1-5-21-1-2-3-1002",Nonce,()=>10000,()=>0,()=>true),"Native request owner mismatch accepted");
   }finally{Array.Clear(plain,0,plain.Length);}

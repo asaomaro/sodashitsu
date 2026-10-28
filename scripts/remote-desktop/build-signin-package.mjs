@@ -9,7 +9,18 @@ import {createHash,randomUUID} from "node:crypto";
 export const signinPackagePaths=Object.freeze([
   "DesktopSigninService.exe","DesktopSigninWorker.exe","bootstrap.mjs","node.exe","packages/server/dist/signin/main.bundle.cjs",
   "scripts/remote-desktop/EndpointAclPolicy.ps1","scripts/remote-desktop/SigninAclPolicy.ps1","scripts/remote-desktop/WindowsSigninVault.cs",
-  "scripts/remote-desktop/check-endpoint-acl.ps1","scripts/remote-desktop/commit-endpoint-vault.ps1","scripts/remote-desktop/protect-endpoint-key.ps1","scripts/remote-desktop/read-signin-enrollment.ps1",
+  "scripts/remote-desktop/check-endpoint-acl.ps1","scripts/remote-desktop/protect-endpoint-key.ps1","scripts/remote-desktop/read-signin-enrollment.ps1",
+        "scripts/remote-desktop/SigninAdminStorage.ps1",
+        "scripts/remote-desktop/WindowsSigninAdminEnvelope.cs",
+        "scripts/remote-desktop/WindowsSigninAdminJournal.cs",
+        "scripts/remote-desktop/WindowsSigninAdminDeadline.cs",
+        "scripts/remote-desktop/WindowsSigninAdminResult.cs",
+        "scripts/remote-desktop/WindowsSigninAdminEnrollment.cs",
+        "scripts/remote-desktop/WindowsSigninAdminPersistence.cs",
+        "scripts/remote-desktop/read-signin-admin.ps1",
+        "scripts/remote-desktop/write-signin-admin-result.ps1",
+        "scripts/remote-desktop/commit-signin-vault.ps1",
+        "scripts/remote-desktop/write-signin-enrollment.ps1",
 ]);
 export function signinPackageMaximum(path) {
   if(!signinPackagePaths.includes(path))throw failure();

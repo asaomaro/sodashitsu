@@ -1,9 +1,9 @@
 # Only dot-sourced by fixed installed SYSTEM helpers. No path is accepted from
 # the administration request. This function does not create or repair storage.
+. (Join-Path $PSScriptRoot 'EndpointAclPolicy.ps1')
+. (Join-Path $PSScriptRoot 'SigninAclPolicy.ps1')
 function Open-SodaSigninAdminStorage([string]$OwnerSid,[Func[bool]]$Current) {
  if(-not [SodaDesktopSigninVault]::SystemPrimary() -or -not [SodaDesktopSigninVault]::PipeOutput() -or -not [SodaDesktopSigninVault]::UserAccount($OwnerSid)){throw 'private SYSTEM helper required'}
- . (Join-Path $PSScriptRoot 'EndpointAclPolicy.ps1')
- . (Join-Path $PSScriptRoot 'SigninAclPolicy.ps1')
  $slot=[IO.Path]::GetDirectoryName([SodaDesktopSigninVault]::StoragePath($OwnerSid));$path=Join-Path $slot 'admin'
  if($path -notmatch '^[A-Za-z]:\\' -or $path.Substring(2).Contains(':')){throw 'local path required'}
  $drive=[IO.DriveInfo]::new([IO.Path]::GetPathRoot($path));if($drive.DriveType -ne [IO.DriveType]::Fixed -or $drive.DriveFormat -ne 'NTFS'){throw 'private fixed NTFS required'}
