@@ -33,7 +33,7 @@ public static class SodaDesktopSigninHostChecks {
             Wait(()=>File.Exists(marker),"Generated child did not become ready");
             Check(File.ReadAllText(marker)=="generated_environment_and_job_passed","Child environment or job incorrect");
             Check(!sentinel.WaitOne(0),"Unexpected handle inherited");
-            try{Wait(()=>child.Active()==2&&File.Exists(Path.Combine(directory,"descendant")),"Grandchild not owned by job");}
+            try{Wait(()=>{int pid;string file=Path.Combine(directory,"descendant");return child.Active()>=2&&File.Exists(file)&&Int32.TryParse(File.ReadAllText(file),out pid)&&child.Owns(pid);},"Grandchild not owned by job");}
             catch{Console.WriteLine("generated_job_active="+child.Active()+" descendant_marker="+File.Exists(Path.Combine(directory,"descendant"))+" child_running="+child.Running());throw;}
             Check(child.Running(),"Generated child ended early");
             Check(child.Stop()&&child.Active()==0&&!child.Running(),"Descendant cleanup failed");
@@ -58,7 +58,7 @@ public static class SodaDesktopSigninHostChecks {
     // SodaDesktopSigninHost instead. No desktop/account/key APIs are exercised.
     public static void Main(string[] args){
         if((args.Length!=2&&args.Length!=3)||!Path.IsPathRooted(args[1]))Environment.Exit(2);
-        if(args[0]=="--generated-descendant"){File.WriteAllText(Path.Combine(args[1],"descendant"),"generated");Thread.Sleep(30000);return;}
+        if(args[0]=="--generated-descendant"){File.WriteAllText(Path.Combine(args[1],"descendant"),Process.GetCurrentProcess().Id.ToString());Thread.Sleep(30000);return;}
         if(args[0]!="--generated-child"||args.Length!=3)Environment.Exit(2);
         SetEvent(new IntPtr(Int64.Parse(args[2],System.Globalization.CultureInfo.InvariantCulture)));
         bool inJob;bool good=IsProcessInJob(GetCurrentProcess(),IntPtr.Zero,out inJob)&&inJob;

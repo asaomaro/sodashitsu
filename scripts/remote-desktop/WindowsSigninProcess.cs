@@ -18,6 +18,7 @@ internal static class SodaDesktopSigninProcess {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr CreateJobObjectW(IntPtr sa,string name);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool SetInformationJobObject(IntPtr job,int kind,ref Limits limit,uint size);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool QueryInformationJobObject(IntPtr job,int kind,out Accounting data,uint size,IntPtr returned);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool IsProcessInJob(IntPtr process,IntPtr job,out bool result);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool TerminateJobObject(IntPtr job,uint code);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool InitializeProcThreadAttributeList(IntPtr list,int count,uint flags,ref IntPtr size);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool UpdateProcThreadAttribute(IntPtr list,uint flags,IntPtr attribute,IntPtr value,IntPtr size,IntPtr previous,IntPtr returned);
@@ -32,6 +33,7 @@ internal static class SodaDesktopSigninProcess {
     internal sealed class Child:IDisposable {
         IntPtr process,job;bool stopped;readonly object gate=new object();
         internal Child(IntPtr process,IntPtr job){this.process=process;this.job=job;}
+        internal bool Owns(int pid){lock(gate){try{using(var item=Process.GetProcessById(pid)){bool owned;Require(IsProcessInJob(item.Handle,job,out owned));return owned;}}catch{return false;}}}
         internal bool Running(){lock(gate){return !stopped&&WaitForSingleObject(process,0)==258;}}
         internal uint Active(){lock(gate){Accounting data=new Accounting();Require(job!=IntPtr.Zero&&QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero));return data.Active;}}
         internal bool Stop(){lock(gate){
@@ -65,7 +67,7 @@ internal static class SodaDesktopSigninProcess {
             environment=Marshal.StringToHGlobalUni(plan.EnvironmentBlock);
             Require(current());
             Require(CreateProcessW(plan.Application,new StringBuilder("\""+plan.Application+"\" "+plan.Arguments),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x08000000|0x400|4,environment,plan.WorkingDirectory,ref startup,out process));
-            Require(current());Require(ResumeThread(process.Thread)!=0xffffffff);
+            Require(current());Require(ResumeThread(process.Thread)==1);
             var result=new Child(process.Process,job);transferred=true;return result;
         }finally{
             if(!transferred&&process.Process!=IntPtr.Zero){
