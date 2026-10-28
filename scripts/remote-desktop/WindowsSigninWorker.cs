@@ -10,6 +10,7 @@ using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 public static class SodaDesktopSigninWorker {
@@ -44,8 +45,9 @@ public static class SodaDesktopSigninWorker {
             using(var pipe=SodaDesktopSigninWorkerNative.Server(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
                 uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,out pid);
                 try{
-                    var pending=pipe.BeginWaitForConnection(null,null);var timer=Stopwatch.StartNew();
-                    using(var wait=pending.AsyncWaitHandle){while(!wait.WaitOne(20)){Require(timer.ElapsedMilliseconds<5000&&package.Current()&&child.Running());}pipe.EndWaitForConnection(pending);}
+                    var pending=Task.Factory.FromAsync(pipe.BeginWaitForConnection,pipe.EndWaitForConnection,null);var timer=Stopwatch.StartNew();
+                    pending.ContinueWith(failed=>failed.Exception.Handle(error=>true),TaskContinuationOptions.OnlyOnFaulted|TaskContinuationOptions.ExecuteSynchronously);
+                    while(!pending.IsCompleted){Require(timer.ElapsedMilliseconds<5000&&package.Current()&&child.Running());Thread.Sleep(20);}Require(timer.ElapsedMilliseconds<5000);pending.GetAwaiter().GetResult();
                     uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeClientProcessId(pipe.SafePipeHandle,out actual)&&actual==pid&&child.Running());
                     using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,65536,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true))using(var stop=new ManualResetEvent(false)){
                         var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};

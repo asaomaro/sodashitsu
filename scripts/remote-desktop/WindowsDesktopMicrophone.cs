@@ -26,17 +26,17 @@ public sealed class SodaDesktopMicrophone : IDisposable {
         try {
             if(!Alive())return;
             server=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous,4096,4096,SodaDesktopAudio.OwnerSecurity());pipe=server;
-            var connection=server.BeginWaitForConnection(null,null);Complete(connection,2000,()=>{server.EndWaitForConnection(connection);return 0;});
+            Complete(callback=>server.BeginWaitForConnection(callback,null),2000,value=>{server.EndWaitForConnection(value);return 0;});
             uint pid;if(!Alive()||!GetNamedPipeClientProcessId(server.SafePipeHandle,out pid)||pid!=(uint)clientPid)return;
             // Enumerate/activate no endpoint before the private pipe is authenticated.
             using(var sink=factory()) {
                 if(!Alive())return;
-                var hello=server.BeginWrite(Hello,0,Hello.Length,null,null);Complete(hello,100,()=>{server.EndWrite(hello);return 0;});
+                Complete(callback=>server.BeginWrite(Hello,0,Hello.Length,callback,null),100,value=>{server.EndWrite(value);return 0;});
                 uint previous=0;
                 while(Alive()) {
                     int offset=0;var clock=Stopwatch.StartNew();
                     while(offset<packet.Length) {
-                        var read=server.BeginRead(packet,offset,packet.Length-offset,null,null);int count=Complete(read,Math.Max(1,2000-(int)clock.ElapsedMilliseconds),()=>server.EndRead(read));if(count<=0)throw new EndOfStreamException();offset+=count;
+                        int count=Complete(callback=>server.BeginRead(packet,offset,packet.Length-offset,callback,null),Math.Max(1,2000-(int)clock.ElapsedMilliseconds),value=>server.EndRead(value),packet);if(count<=0)throw new EndOfStreamException();offset+=count;
                     }
                     uint seq=BitConverter.ToUInt32(packet,0);double expiry=BitConverter.ToDouble(packet,4),now=(DateTime.UtcNow-new DateTime(1970,1,1,0,0,0,DateTimeKind.Utc)).TotalMilliseconds;
                     if(seq<=previous||Double.IsNaN(expiry)||Double.IsInfinity(expiry)||expiry>now+150)throw new InvalidDataException("Microphone frame order");previous=seq;
@@ -45,10 +45,10 @@ public sealed class SodaDesktopMicrophone : IDisposable {
                 }
             }
         } catch { /* No endpoint IDs or audio contents in logs. */ }
-        finally {Array.Clear(packet,0,packet.Length);Array.Clear(pcm,0,pcm.Length);pipe=null;if(server!=null)server.Dispose();}
+        finally {stopping=true;Array.Clear(packet,0,packet.Length);Array.Clear(pcm,0,pcm.Length);pipe=null;if(server!=null)server.Dispose();}
     }
-    T Complete<T>(IAsyncResult pending,int timeout,Func<T> finish) {
-        var wait=pending.AsyncWaitHandle;try{var clock=Stopwatch.StartNew();while(!wait.WaitOne(10)){if(!Alive()||clock.ElapsedMilliseconds>=timeout)throw new System.TimeoutException("Microphone pipe timeout");}if(!Alive())throw new OperationCanceledException();return finish();}finally{wait.Close();}
+    T Complete<T>(Func<AsyncCallback,IAsyncResult> begin,int timeout,Func<IAsyncResult,T> finish,byte[] clearWhenRetired=null) {
+        return SodaDesktopPipeOperation.Wait(begin,finish,timeout,Alive,()=>{if(stopping&&clearWhenRetired!=null)Array.Clear(clearWhenRetired,0,clearWhenRetired.Length);});
     }
     public void Dispose(){stopping=true;var stream=pipe;if(stream!=null)try{stream.Dispose();}catch{}if(Thread.CurrentThread!=thread&&!thread.Join(1000))throw new System.TimeoutException("Microphone worker stop");}
     sealed class Wasapi : ISink {
