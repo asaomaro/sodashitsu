@@ -3,7 +3,7 @@
 Base main d1d191683b7336b15e62c455b165c7ddb3ea388fを取込み。製品moduleは2028d0d2と同一。専用SYSTEM hostが固定配置を先に検査する契約のreadonly key gateで、実SYSTEM/実鍵/実画面へ接続しない。
 
 - 関連unit38件通過（生成P256鍵で署名検証含む）。最初は新WTのclient-core dist未生成で試験前に停止、protocol/client-core build後に実行した。
-- Source/root full build/typecheck通過。read-slotのtest-only fixture修正後はsource関連38とserver typecheckを再確認。rootも同fixtureへguardして更新し、server typecheckを再確認する。全体unitの結果は完了後に追記。
+- Source/root full build/typecheck通過。read-slotのtest-only fixture修正後はsource関連38とserver typecheckを再確認。rootも同fixtureへguardして更新しserver typecheckを通過。全体unitの最終結果は下記。
 - 独立taskcheck/cross must/shouldなし。check2028d0d2のfrozen install→build→smoke→unit38が成功。main取込み差分は#266の記録だけで製品TS bytes一致を検査。fixture差分再点検/関連38も成功。check/node_modules/.cache/signin-identity/{install,build,smoke,unit,unit-delta}.log。
 - Source9負例（enrollment/required/実鍵pin/deadline/await後owner/issued latch/local callback再入/read実数slot/settled）は別WTの製品TSを直接変更し意図したAssertionErrorを確認、毎回finallyで元bytes復元。復元後38件成功。製品distへ変異したとは主張せず、vitestが読む製品TSへ適用。
 - read-slot負例の初回は元fixtureが9件目の拒否をawaitし、5秒期限とVitest timeoutが競合したため不採用。観測行は `Error: Test timed out in 5000ms.`。9件目を開始→即呼出し数8のassert→finallyでextraAbort取消/全fake read解放へfixtureを修正し、再実行では意図した呼出し数assertが失敗した。timeoutを負例成功へ数えない。
@@ -398,6 +398,44 @@ AssertionError: expected true to be false // Object.is equality
       Tests  1 failed | 37 skipped (38)
    Start at  20:11:24
    Duration  910ms (transform 72%, import 23%, tests 4%)
+
+
+```
+
+## 最終結果
+
+- Source build/typecheck・全体12146件/814files PASS（単一run、323.14秒）。root build/typecheckも成功。fixtureのみ変更後のsource/root server typecheckも通過。
+- Root全体は12207 PASS/1 FAIL（計12208件/822files、328.30秒）。失敗は変更していないSettingsDialog通知切替testのtoast true/false assert。コード/条件を変えず同file単独を再実行し146件/1file PASS（20.86秒）。root unique12208件を検証したが、単一全体runのPASSとはせず、146件を追加件数へ足さない。
+- 関連38件、source9負例/元bytes復元、独立build/smoke/taskcheck/crossとfixture差分再点検・unit38に残るmust/shouldなし。checkの製品TS bytesは正本と一致。
+- この変更pathでは既存CI workflow非該当で、CI PASSとは主張しない。System identity/固定path/package host、controller、worker/UIは未完成。このgate単独の鍵所持をOS入力許可にしない。実SYSTEM起動・実鍵登録・実画面取得/入力は未実施。
+
+### Root全体の失敗（生ログ）
+
+```text
+ FAIL  |@sodashitsu/web| src/components/SettingsDialog.test.ts > SettingsDialog — 通知の節 — 切り替え（AC6・AC-I2） > 押した時点で反映され、保存される（確定ボタンは無い）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/components/SettingsDialog.test.ts:96:54
+     94|
+     95|     await switches(wrapper)[0]!.trigger("click");
+     96|     expect(useNotificationsStore(pinia).prefs.toast).toBe(false);
+       |                                                      ^
+     97|     expect(useNotificationsStore(createPinia()).prefs.toast, "再読み込みしても…
+     98|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 821 passed (822)
+      Tests  1 failed | 12207 passed (12208)
+   Start at  20:21:12
+   Duration  328.30s (tests 83%, import 9%, environment 4%, transform 4%)
 
 
 ```

@@ -2,7 +2,7 @@
 
 - [x] SYSTEM専用storeとenrollmentの積、readonly interface、owner/CallScope/期限/slotを設計。
 - [x] 実装・関連unit・独立taskcheck（安全/状態）。
-- [ ] source負例/元bytes復元、全体build/typecheck/test。
+- [x] source負例/元bytes復元、全体build/typecheck/test。
 - [x] 独立build/smoke/cross・修正再点検。
 - [ ] PR/main・保護付きroot反映。
 
