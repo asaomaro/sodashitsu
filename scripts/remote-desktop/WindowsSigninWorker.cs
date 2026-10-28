@@ -41,6 +41,9 @@ public static class SodaDesktopSigninWorker {
                 }finally{if(!child.Stop())Environment.FailFast("Signin worker could not stop");child.Dispose();}
             }
         }
+        // Emitted only after Job zero-active confirmation, output pump join,
+        // and all native child/package/runtime leases have been released.
+        Console.Out.WriteLine("{\"type\":\"signin_stopped\"}");Console.Out.Flush();
     }
     static Dictionary<string,object> Object(string text){var value=Json.DeserializeObject(text) as Dictionary<string,object>;if(value==null)throw Failure();return value;}
     static void Keys(Dictionary<string,object> value,params string[] keys){Require(value.Count==keys.Length);foreach(string key in keys)Require(value.ContainsKey(key));}
