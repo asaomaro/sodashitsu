@@ -38,6 +38,9 @@ jobs:
       - name: Generated local admin request crypto domains (no real credentials)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-admin.ps1 -NegativeControls
+      - name: Generated admin public result and native deadline checks (no privileged entry)
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-admin-execution.ps1 -NegativeControls
       - name: Generated local admin journal transitions (ordinary temporary files)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-admin-journal.ps1 -NegativeControls

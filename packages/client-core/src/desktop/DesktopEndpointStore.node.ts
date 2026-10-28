@@ -27,9 +27,16 @@ export class DesktopEndpointStore {
  private closed=false;
  private policyRevision=0;
  private queue:Promise<unknown>=Promise.resolve();
- constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string,allowMissing?:boolean)=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void}) {
+ constructor(private options:{stateDir:string;protector?:DesktopSecretProtector;platform?:NodeJS.Platform;checkWindowsPath?:(path:string,allowMissing?:boolean)=>Promise<void>;commitWindowsVault?:(source:string,destination:string)=>Promise<void>;revoke?:(peer:DesktopTrustedPeer)=>void;writeAllowed?:()=>boolean}) {
   this.options={...options,stateDir:resolve(options.stateDir)};this.directory=join(this.options.stateDir,"desktop-endpoint");this.platform=options.platform??process.platform;this.protector=options.protector??desktopSecretProtector(this.platform);
   if(this.platform==="win32"&&this.protector.mode!=="dpapi-user")throw failure();
+ }
+ /** Optional finite local-admin lease. Normal owner persistence keeps its
+  * existing policy. Admin callers also guard the native commit itself. */
+ private writePermit():void {
+  if(!this.options.writeAllowed)return;let allowed=false;
+  try{if(!this.closed)allowed=this.options.writeAllowed();}catch{}
+  if(this.closed||!allowed)throw failure();
  }
  private check(stat:Stats,directory:boolean):void {
   if(stat.isSymbolicLink()||!(directory?stat.isDirectory():stat.isFile()))throw failure();
@@ -63,13 +70,13 @@ export class DesktopEndpointStore {
  /** Explicit initialization only. Never changes existing permissions. */
  prepareDirectory():Promise<void> {
   const run=this.queue.then(async()=>{
-   if(this.closed)throw failure();await this.pathPolicy(this.options.stateDir,true);
+   if(this.closed)throw failure();this.writePermit();await this.pathPolicy(this.options.stateDir,true);
    const missing:string[]=[];let current=this.options.stateDir;
    while(true){try{const stat=await lstat(current);if(!stat.isDirectory()||stat.isSymbolicLink())throw failure();break;}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;missing.push(current);const parent=dirname(current);if(parent===current)throw failure();current=parent;}}
    await this.pathPolicy(current);
    for(const path of missing.reverse()){
     if(this.closed)throw failure();await this.pathPolicy(dirname(path));
-    try{await mkdir(path,{mode:0o700});}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw failure();}
+    this.writePermit();try{await mkdir(path,{mode:0o700});}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw failure();}
     await this.pathPolicy(path);const stat=await lstat(path);if(!stat.isDirectory()||stat.isSymbolicLink()||this.platform!=="win32"&&(stat.uid!==process.getuid?.()||(stat.mode&0o022)!==0))throw failure();
    }
    await this.stateRoot();
@@ -109,10 +116,10 @@ export class DesktopEndpointStore {
   try{const actual=await handle.stat();this.check(actual,false);if(actual.ino!==stat.ino||actual.dev!==stat.dev||actual.size>256)throw failure();return z.object({version:z.literal(1),required:z.boolean()}).strict().parse(JSON.parse(await handle.readFile("utf8"))).required;}catch{throw failure();}finally{await handle.close();}
  }
  private async writeMarker(required:boolean):Promise<void> {
-  await this.pathPolicy(this.options.stateDir);const stage=await mkdtemp(join(this.directory,".policy-")),temp=join(stage,"required.json"),destination=join(this.options.stateDir,"desktop-endpoint-required.json");
+  await this.pathPolicy(this.options.stateDir);this.writePermit();const stage=await mkdtemp(join(this.directory,".policy-")),temp=join(stage,"required.json"),destination=join(this.options.stateDir,"desktop-endpoint-required.json");
   try {
-   const handle=await open(temp,"wx",0o600);try{await handle.writeFile(JSON.stringify({version:1,required}));await handle.sync();}finally{await handle.close();}
-   if(this.platform==="win32")await (this.options.commitWindowsVault??commitDesktopWindowsVault)(temp,destination);else await rename(temp,destination);
+   this.writePermit();const handle=await open(temp,"wx",0o600);try{this.writePermit();await handle.writeFile(JSON.stringify({version:1,required}));await handle.sync();}finally{await handle.close();}
+   this.writePermit();if(this.platform==="win32")await (this.options.commitWindowsVault??commitDesktopWindowsVault)(temp,destination);else await rename(temp,destination);
    await this.syncDirectory(this.options.stateDir);if(this.platform==="win32")await this.pathPolicy(destination);
   }finally{await rm(stage,{recursive:true,force:true});}
  }
@@ -150,25 +157,25 @@ export class DesktopEndpointStore {
  }
  private mutate<T>(change:(data:Vault|undefined)=>Promise<{data:Vault;result:T;committed?:()=>void|Promise<void>}>):Promise<T> {
   const run=this.queue.then(async()=>{
-   if(this.closed)throw failure();
-   await this.pathPolicy(this.options.stateDir);await this.stateRoot();
+   if(this.closed)throw failure();this.writePermit();
+   await this.pathPolicy(this.options.stateDir);await this.stateRoot();this.writePermit();
    try{await mkdir(this.directory,{mode:0o700});}catch(error){if((error as NodeJS.ErrnoException).code!=="EEXIST")throw failure();}if(!await this.directoryExists())throw failure();await this.syncDirectory(this.options.stateDir);if(this.platform==="win32")await this.pathPolicy(this.directory);
    const lock=join(this.directory,"write.lock"),nonce=randomUUID();let lease;
-   try{lease=await open(lock,"wx",0o600);}catch{throw Error("Desktop endpoint key storage is busy");}
+   this.writePermit();try{lease=await open(lock,"wx",0o600);}catch{throw Error("Desktop endpoint key storage is busy");}
    let stage:string|undefined,updated:{data:Vault;result:T;committed?:()=>void|Promise<void>}|undefined;
    try {
-    await lease.writeFile(nonce);await lease.sync();updated=await change(await this.load(true));Vault.parse(updated.data);
+    this.writePermit();await lease.writeFile(nonce);await lease.sync();this.writePermit();updated=await change(await this.load(true));Vault.parse(updated.data);this.writePermit();
     const clear=new TextEncoder().encode(JSON.stringify(updated.data));let protectedBytes:Uint8Array;
     try{protectedBytes=await this.protector.protect(clear);}finally{clear.fill(0);}
     try {
-     stage=await mkdtemp(join(this.directory,".write-"));const temp=join(stage,"identity.json"),file=await open(temp,"wx",0o600);
-     try{await file.writeFile(JSON.stringify({version:1,mode:this.protector.mode,data:Buffer.from(protectedBytes).toString("base64")}));await file.sync();}finally{await file.close();}
-     if(this.platform==="win32")await (this.options.commitWindowsVault??commitDesktopWindowsVault)(temp,join(this.directory,"identity.json"));else await rename(temp,join(this.directory,"identity.json"));await this.syncDirectory(this.directory);if(this.platform==="win32")await this.pathPolicy(join(this.directory,"identity.json"));
+     this.writePermit();stage=await mkdtemp(join(this.directory,".write-"));const temp=join(stage,"identity.json"),file=await open(temp,"wx",0o600);
+     try{this.writePermit();await file.writeFile(JSON.stringify({version:1,mode:this.protector.mode,data:Buffer.from(protectedBytes).toString("base64")}));await file.sync();}finally{await file.close();}
+     this.writePermit();if(this.platform==="win32")await (this.options.commitWindowsVault??commitDesktopWindowsVault)(temp,join(this.directory,"identity.json"));else await rename(temp,join(this.directory,"identity.json"));await this.syncDirectory(this.directory);if(this.platform==="win32")await this.pathPolicy(join(this.directory,"identity.json"));
     }finally{protectedBytes.fill(0);}
    }finally {
     try{if(stage)await rm(stage,{recursive:true,force:true});}finally{const ours=await lease.stat();await lease.close();try{const current=await lstat(lock);if(current.ino===ours.ino&&current.dev===ours.dev){await rm(lock);await this.syncDirectory(this.directory);}}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw failure();}}
    }
-   if(!updated)throw failure();await updated.committed?.();return updated.result;
+   if(!updated)throw failure();this.writePermit();await updated.committed?.();this.writePermit();return updated.result;
   });this.queue=run.catch(()=>undefined);return run;
  }
 }
