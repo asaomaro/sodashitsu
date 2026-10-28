@@ -1,0 +1,15 @@
+# 7B2e: 固定配置と起動前のcode検査
+
+Base main8916a272。専用SYSTEM hostが開発repoや汎用serverを起動しないため、固定packageの検査と最小bootstrapを用意する。installer/SCM登録/常駐起動とsignin worker/UIはまだ接続しない。実SYSTEMの起動・実Program Filesの変更・実鍵/画面の操作は行わない。
+
+配置は64bit Program Files/Sodashitsu/DesktopSignin-<owner SIDのSHA256全64桁>に固定。ownerは将来の管理者installerがcompiled hostへ固定する値で、Root入力から取らない。manifestはpurpose/version/owner/revisionと固定asset一覧だけを持ち、canonical表現・未知/重複field・size/hash/総量を検査する。Node、専用service/worker、bootstrap、単一bundleと必要なhelperだけを認め、repo/plugin/node_modulesや未知sidecarを含めない。manifestは署名付き配布の代用ではなく、信頼済み管理者が導入したbootstrapと保護ACLを起点にする。悪意ある管理者や未承認releaseの安全性を主張しない。
+
+native verifierはSYSTEM primary・自身の固定exe配置・local NTFSを先に確認。祖先とpackageのdirectory/fileをreparseを辿らずopenし、handleのowner/DACL/属性を検査する。package内の他user書込み・権限変更を拒否し、祖先では既存childの置換と属性変更を拒否する。全assetのSHA256/長さ/1linkとfile同一性、余分なfile/dirを確認する。取得したread-only/no-write/no-delete共有のhandleはchildの終了まで保持する契約とする。これだけでSYSTEMそのものの信頼や管理者変更への防御を成立させない。
+
+単一CJS bundleをbootstrapから読む。通常のNode module探索へ未知specifierをfallbackせず、明示したbuiltinだけをrequireへ渡す。bundleのimport.meta.urlは固定bundle URLへ置換する生成契約とし、dynamic importも許さない。これは未束縛依存の誤読込みを防ぐ仕組みで、信頼済みbundleを悪意あるcodeから隔離するsandboxではない。実hostは環境をallowlistで組み直し、NODE_OPTIONS/NODE_PATH/debug/profile・外部CA/module指定を引き継がない。サービスの公開RPCは引き続き専用4要求だけで、bootstrapへ任意path/codeを渡すrouteを作らない。
+
+release準備toolは明示したstagingだけへmanifestを新規作成し、既存file/ACLの修復やservice導入をしない。実際の専用main/worker/serviceとinstallerが揃う前に常駐可能とはしない。生成asset/ACL/file factsとordinary-account拒否、未束縛依存の拒否を検証する。安全/状態に関わるためnative/taskcheckとbootstrap/taskcheck、最終cross/修正差分再点検を必須とする。
+
+一次資料: [GetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-getsecurityinfo)に従いhandleのREAD_CONTROLと返却SDのLocalFreeを扱う。[CreateFileW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew)の共有とreparse/backup semanticsを確認。属性のaccessは共有flagだけでは防げないためACLも検査する。[BY_HANDLE_FILE_INFORMATION](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information)の64bit indexのReFS制約を踏まえ、この固定packageはNTFSに限定する。実OS互換性の確認済みという意味ではない。
+
+検証はordinary tempだけで実native handle経路も通す。OpenCore/Releaseのinternal seamへ生成SD policyを渡すが、production Verifyは固定ACL policyのまま。kernel handle→SD→FileStreamの移譲・sharing・各失敗後解放を検査し、実Systemでは試験しない。[SD形式の資料](https://learn.microsoft.com/en-us/windows/win32/secauthz/absolute-and-self-relative-security-descriptors)も照合し、返却SDの連続したself-relative形式をmanaged bytesへコピーする契約を確認した。
