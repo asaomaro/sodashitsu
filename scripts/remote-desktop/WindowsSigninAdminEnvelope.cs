@@ -23,6 +23,13 @@ public sealed class SodaDesktopSigninAdminEnvelope:IDisposable {
             cipher=Convert.FromBase64String(data.cipher);if(Convert.ToBase64String(cipher)!=data.cipher)throw Failure();value=new SodaDesktopSigninAdminEnvelope(data.ownerSid,data.nonce,cipher);canonical=value.Encode();if(new UTF8Encoding(false,true).GetString(canonical)!=text)throw Failure();transferred=true;return value;
         }catch{throw Failure();}finally{if(cipher!=null)Array.Clear(cipher,0,cipher.Length);if(canonical!=null)Array.Clear(canonical,0,canonical.Length);if(!transferred&&value!=null)value.Dispose();}
     }
+    // Serialize sensitive reply bytes inside .NET, not through PowerShell
+    // pipeline/ConvertTo-Json parameter logging. Caller owns/zeros both buffers.
+    public byte[] ClaimReply(string digest,byte[] plain){
+        if(disposed||digest==null||digest.Length!=64||plain==null||plain.Length<1||plain.Length>16384)throw Failure();foreach(char c in digest)if(!(c>='a'&&c<='f'||c>='0'&&c<='9'))throw Failure();
+        var fields=new SortedDictionary<string,object>(StringComparer.Ordinal){{"state","claimed"},{"nonce",Nonce},{"cipherSha256",digest},{"requestBase64",Convert.ToBase64String(plain)}};
+        byte[] bytes=new UTF8Encoding(false,true).GetBytes(new JavaScriptSerializer{MaxJsonLength=32768,RecursionLimit=4}.Serialize(fields)+"\n");if(bytes.Length>32768){Array.Clear(bytes,0,bytes.Length);throw Failure();}return bytes;
+    }
     public byte[] Decrypt(){if(disposed)throw Failure();return SodaDesktopSigninVault.UnprotectAdmin(cipher,Owner,Nonce);}
     public void Dispose(){if(disposed)return;disposed=true;Array.Clear(cipher,0,cipher.Length);}
 }

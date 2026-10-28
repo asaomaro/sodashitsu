@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Web.Script.Serialization;
 public sealed class SodaDesktopSigninAdminDeadline {
-    readonly Func<long> wall,monotonic;readonly Func<bool> owned;readonly long expires,until;long lastWall,lastMono;bool ended,checking;
+    public readonly string Kind;readonly Func<long> wall,monotonic;readonly Func<bool> owned;readonly long expires,until;long lastWall,lastMono;bool ended,checking;
     static Exception Failure(){return new InvalidOperationException("Signin administration deadline is unavailable");}
     static long Integer(object raw){if(!(raw is int)&&!(raw is long))throw Failure();return Convert.ToInt64(raw);}
     public SodaDesktopSigninAdminDeadline(byte[] plain,string owner,string nonce,Func<long> wall,Func<long> monotonic,Func<bool> owned){
@@ -13,6 +13,8 @@ public sealed class SodaDesktopSigninAdminDeadline {
         string text=new UTF8Encoding(false,true).GetString(plain);if(text.Contains("__type"))throw Failure();var json=new JavaScriptSerializer{MaxJsonLength=16384,RecursionLimit=8};var value=json.DeserializeObject(text) as Dictionary<string,object>;
         if(value==null||value.Count!=7)throw Failure();foreach(string key in new[]{"version","purpose","ownerSid","nonce","issuedAt","expiresAt","operation"})if(!value.ContainsKey(key))throw Failure();
         Guid id;if(Integer(value["version"])!=1||!(value["purpose"] is string)||(string)value["purpose"]!="desktop-signin-admin"||!(value["ownerSid"] is string)||(string)value["ownerSid"]!=SodaDesktopSigninVault.Owner(owner)||!Guid.TryParseExact(nonce,"D",out id)||id==Guid.Empty||id.ToString("D")!=nonce||!(value["nonce"] is string)||(string)value["nonce"]!=nonce||!(value["operation"] is Dictionary<string,object>))throw Failure();
+        var operation=(Dictionary<string,object>)value["operation"];object rawKind;if(!operation.TryGetValue("kind",out rawKind)||!(rawKind is string))throw Failure();Kind=(string)rawKind;
+        if(Kind!="status"&&Kind!="initialize"&&Kind!="trust"&&Kind!="revoke"&&Kind!="enroll"&&Kind!="disable")throw Failure();
         long issued=Integer(value["issuedAt"]);expires=Integer(value["expiresAt"]);if(issued<0||expires>9007199254740991||expires<=issued||expires-issued>300000)throw Failure();
         this.wall=wall;this.monotonic=monotonic;this.owned=owned;lastWall=wall();lastMono=monotonic();if(lastWall<issued||lastWall>=expires||lastMono<0||lastMono>Int64.MaxValue-300000)throw Failure();until=lastMono+Math.Min(5000,expires-lastWall);if(!Current())throw Failure();
     }
