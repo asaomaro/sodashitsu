@@ -1,0 +1,17 @@
+# 7B2b: SYSTEM専用enrollmentの保護保存・読み込み
+
+専用serviceを起動する前に、登録情報の秘密を保護するreaderを用意する。汎用serverのSYSTEM起動や遠隔のfile/execを追加しない。実service導入・実アカウントへの鍵登録・実画面取得/入力は自動実行しない。
+
+## 保存場所と信頼
+
+保存先はCommonApplicationDataのsodashitsu/desktop-signin/<owner SIDのSHA256>/enrollment.dpapiへ固定し、遠隔要求や任意pathを受けない。設定対象owner SIDと、ファイル所有者SYSTEM/Administratorsを区別する。loaderはSYSTEM primary token、canonical SIDと実account type(User)、local fixed volume、reparse拒否、各祖先の置換権限、private directory/fileの機密ACLを確認する。不明なaccount/照会失敗は拒否し、実interactive ownerのenrollment手続きは後続で確定する。User型だから全service accountを除外できるとは主張しない。
+
+DPAPIはLocalMachine、用途/version/owner SIDを含むentropyを使う。他ownerやCurrentUser鍵のblobへfallbackしない。Machine scopeではciphertextを読める利用者が復号できるため、既存CurrentUser key用policyのEveryone Read許可を流用しない。private file/directoryはSYSTEM/AdministratorsだけがReadData/Writeできることを要求する。ACLは修復・変更せず不明なら停止する。
+
+読み込み中はFileStreamのread-only/no-write/no-delete共有とhandle情報を使い、regular disk file/1link/有限sizeを検査する。handle経由ACLを読み取り前・復号後に検査し、cipher/plaintextのbufferをfinallyで消去する。credentialのfile/argv/logへの平文書き出しをしない。返却は専用Node親へのprivate stdout pipeだけに限定し、Node側で既存strict enrollment parserとowner/lifetime/abortを照合する。
+
+このreaderだけではserviceのコード配置を信頼しない。SYSTEMで起動する前にinstaller/hostがNode/JS/helper一式を管理者保護した固定配置・hashで検査することを必須とし、開発リポジトリやproject extensionsをSYSTEMで実行しない。書き込み・鍵準備・peer登録・serviceの開始/更新・即時失効のcontrollerは後続。外部から設定ファイルを書き換えてもruntimeの即時失効を保証しない。変更は専用controllerかservice停止後に行う。
+
+## 検証
+
+生成ACL/DPAPIデータとfake childだけで、機密ACLの拒否、owner用途の分離、size/EOF/改変、解放、owner/abort中の結果破棄、秘密の非出力を確認する。Native readerをCIのSYSTEMとして起動しない。実OS保護領域を読み込まない。新旧のCurrentUser key保護は変更せず、その生成検証を維持する。security/stateの独立taskcheckと全体cross/deltaを省略しない。

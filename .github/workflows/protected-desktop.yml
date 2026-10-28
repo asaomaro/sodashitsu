@@ -20,6 +20,9 @@ jobs:
       - name: Generated ACL descriptor facts (no filesystem ACL writes)
         shell: powershell
         run: scripts/remote-desktop/validate-endpoint-acl-facts.ps1
+      - name: Generated SYSTEM enrollment crypto and ACL checks (no real vault reads)
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-vault.ps1
       - name: Generated scope boundaries and private read-only WinEvent delivery
         shell: powershell
         run: scripts/remote-desktop/validate-protected-scope.ps1 -ReadOnlyObserver
