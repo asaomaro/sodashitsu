@@ -76,7 +76,7 @@ public static class SodaDesktopSigninHost {
         internal Service(){ServiceName="SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(Owner);CanStop=true;CanShutdown=true;AutoLog=false;}
         protected override void OnStart(string[] args){
             if(args==null||args.Length!=0||!Environment.Is64BitProcess||!SodaDesktopSigninVault.SystemPrimary()||thread!=null)throw Failure();
-            thread=new Thread(()=>{try{Run(stop);}catch{ExitCode=1;}finally{ThreadPool.QueueUserWorkItem(_=>{try{Stop();}catch{}});}});thread.IsBackground=true;thread.Start();
+            thread=new Thread(()=>{try{SodaDesktopSigninHost.Run(stop);}catch{ExitCode=1;}finally{ThreadPool.QueueUserWorkItem(_=>{try{Stop();}catch{}});}});thread.IsBackground=true;thread.Start();
         }
         protected override void OnStop(){stop.Set();if(thread!=null&&Thread.CurrentThread!=thread&&!thread.Join(12000))Environment.FailFast("Signin host could not stop");}
         protected override void OnShutdown(){OnStop();}
