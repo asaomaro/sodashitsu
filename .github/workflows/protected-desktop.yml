@@ -1,7 +1,7 @@
 name: Protected desktop boundaries (generated checks)
 on:
   push:
-    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer, feat/desktop-elevated-handshake, feat/desktop-protected-worker-backend]
+    branches: [feat/desktop-secure-sessions, fix/desktop-protected-observer, feat/desktop-elevated-handshake, feat/desktop-protected-worker-backend, feat/desktop-signin-worker]
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
   pull_request:
     paths: ['scripts/remote-desktop/**', '.github/workflows/protected-desktop.yml']
@@ -17,6 +17,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Generated signin scope and private marker (no capture, input, or service)
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-scope.ps1
       - name: Generated ACL descriptor facts (no filesystem ACL writes)
         shell: powershell
         run: scripts/remote-desktop/validate-endpoint-acl-facts.ps1
