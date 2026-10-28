@@ -6,7 +6,7 @@ Native queries use bounded buffers<=64KiB, bounded text/pointer/action arrays, r
 
 Owner-bound Global controller mutex is created with private SYSTEM/Administrators ACL. Existing objects are verified without repair, finite wait1..30000ms, abandoned acquisition is refused and its acquired ownership released, recheck policy after wait. Lease is thread-affine and idempotently disposed. Mutex is serialization only, never package/service/quiescence authority. Generated tests exercise ACL policy only, not privileged named-object creation/Acquire.
 
-Initial ACL negative replacement used constant false and failed C# unreachable-code warning before intended assertion; this is not counted. Replace by removal of the whole guard; initial5 controls passed, expanded parser7 controls passed. Expanded mutex9 controls and final review/CI follow. Product source mutations happen only in temporary byte-identical copies; each accepted control requires intended InvalidOperationException and exact restoration. No real service/register/start/stop, user identities/trust, desktop/input/audio devices, global certificates or handoff.
+Initial ACL negative replacement used constant false and failed C# unreachable-code warning before intended assertion; this is not counted. Replace by removal of the whole guard; initial5 controls passed, expanded parser7 controls passed. Expanded mutex9 controls and final review passed; CI and delivery results appear below. Product source mutations happen only in temporary byte-identical copies; each accepted control requires intended InvalidOperationException and exact restoration. No real service/register/start/stop, user identities/trust, desktop/input/audio devices, global certificates or handoff.
 
 JS product is unchanged from TLS/startup6676c804 (cf5777db changes native test-fixture normalization and records only); reuse its frozen build/type/full/browser/external results honestly once final. Do not claim JS suite rerun for these C#-only files. Controller/installer/quiescence and real deployment remain unfinished.
 
@@ -36,3 +36,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 negative acl-control
 System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Untrusted service control right accepted: DC" ---> System.InvalidOperationException: Untrusted service control right accepted: DC
 ```
+
+## Final verification
+
+Product8b1f1818 native9 controls PASS and independent whole cross/delta reviews clear. Windows CI both PASS: protected40777424020/job123130213173 (including the new generated-only SCM policy step) and Node40777423772/job123130212569. Guarded root7 files base-match/new, no custom overlap. JS/bundle unchanged from frozen6676c804: source whole12,452/834 PASS369.97s, root12,514/842 PASS361.33s, browser2 each14.2/9.4s, external frozen install/build/bundle/smoke PASS clean. Reused unchanged-JS results; no duplicate JS suite for these native-only additions. Final documentation CI/main follows.
