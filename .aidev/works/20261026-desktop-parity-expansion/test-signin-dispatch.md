@@ -239,3 +239,41 @@ Number of calls: 0
 
 
 ```
+
+## 全体検証の中断と再検証
+
+Source/rootのbuildとtypecheckは成功後に各全体unitへ進んだが、同時実行した全体runは両方exit143で中断、最終summaryなし。sourceにはgraph.test.ts worker終了timeout、rootにはApp.test.tsのgraph表示test timeoutがあった。これらを全体PASSやunique件数へ換算しない。中断原因は断定しない。コード/条件を変えず、sourceのApp/graphを単独maxWorkers1で実行すると46件/2filesが9.03秒でPASS。その後、全体unitを順番に実行し直す。結果は完了後に追記する。
+
+## 最終結果
+
+- Source/root build/typecheck成功後の初回同時全体runはexit143で中断、全体PASSとして数えない。その後のsource単独全体は12107 PASS/1 FAIL、812 PASS files/1 FAIL file（合計12108件/813files）、334.15秒。失敗は変更していないAgentForkDialogの既存worktree submit testで、forkAgent呼出し回数0のassert。コード/条件を変えず単独で同fileを再実行し9件/1file PASS（2.57秒）。source unique12108件を検証したが、単一全体runのPASSではない。新規moduleは既存Web画面からimportされない。
+- Root単独全体12170件/821files PASS（単一run、347.47秒）。関連43件、source7負例/元bytes復元は既述。全体を成功と偽装したり、単独再実行の9件を追加件数として足さない。
+- 独立checkのinstall/build/smoke、関連43件、taskcheck/修正再点検/cross/記録差分点検に残るmust/shouldなし。独立unitの初回はbuild前のmodule未生成で試験前に停止、build後に43件通過。historical logsは/tmp/signin-dispatch-independent-{install,build,smoke,unit}.log（その後の実行環境切替で/tmpと旧実行sessionは保持されず、再開後のログはworkspace cacheへ保存）。
+- この変更のpathでは既存CI workflowは起動しない（statusCheckRollup空）。CI成功と主張しない。service/installer/controller/worker/UIへの接続と実SYSTEM/実取得/入力は未実施。
+
+### source全体の失敗（生ログ）
+
+```text
+ FAIL  |@sodashitsu/web| src/components/AgentForkDialog.test.ts > AgentForkDialog（20261009-agent-fork PR2） > 新しい worktree: ブランチ名・作成先・変更の件数の注意。既にあるブランチ名では、確定を押せない（理由）
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'p1', …(2) ]
+
+Number of calls: 0
+
+ ❯ src/components/AgentForkDialog.test.ts:75:31
+     73|     expect((wrapper.get("[data-fork-submit]").element as HTMLButtonEle…
+     74|     await wrapper.get("form").trigger("submit");
+     75|     expect(actions.forkAgent).toHaveBeenCalledWith("p1", { kind: "work…
+       |                               ^
+     76|   });
+     77|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 812 passed (813)
+      Tests  1 failed | 12107 passed (12108)
+   Start at  19:52:18
+   Duration  334.15s (tests 83%, import 9%, environment 4%, transform 4%)
+
+
+```
