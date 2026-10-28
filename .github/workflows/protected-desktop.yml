@@ -17,6 +17,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Generated ACL descriptor facts (no filesystem ACL writes)
+        shell: powershell
+        run: scripts/remote-desktop/validate-endpoint-acl-facts.ps1
       - name: Generated scope boundaries and private read-only WinEvent delivery
         shell: powershell
         run: scripts/remote-desktop/validate-protected-scope.ps1 -ReadOnlyObserver
