@@ -56,6 +56,12 @@ it("bounds a stalled helper and removes its abort listener",async()=>{
  const p=f.read(owner,{active:()=>true,signal:controller.signal}),outcome=p.catch(error=>error as Error);
  await vi.advanceTimersByTimeAsync(5000);expect(await outcome).toBeInstanceOf(Error);expect(f.child.kill).toHaveBeenCalledTimes(1);expect(remove).toHaveBeenCalled();expect(vi.getTimerCount()).toBe(0);
 });
+it("rejects oversized output before waiting for helper close",async()=>{
+ const f=fixture(),p=f.read(owner,{active:()=>true}),outcome=p.catch(error=>error as Error),raw=Buffer.alloc(16385,1);
+ try {f.child.stdout.emit("data",raw);expect(f.child.kill).toHaveBeenCalledTimes(1);expect(await outcome).toBeInstanceOf(Error);}
+ finally {f.child.emit("close",1);}
+ expect(raw.every(value=>value===0)).toBe(true);
+});
 it("rejects a late secret even before the timer callback runs",async()=>{
  let now=0;const f=fixture(()=>now),p=f.read(owner,{active:()=>true}),outcome=p.catch(error=>error as Error),raw=bytes();
  f.child.stdout.emit("data",raw);now=5000;f.child.emit("close",0);
