@@ -24,3 +24,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 ```
 
 Native host compile-only and staging compilation PASS; host9 controls and exact restoration PASS; worker compilation/generated27 controls PASS. Host source-control share marker also moved from the extracted native literal to the unchanged shared-read wrapper. Initial host run stopped at stale guard-marker lookup, not a regression success; after marker update all intended assertions pass. No privileged host/worker Main is run. New CI step invokes generated ordinary-temp-file checks only. Final CI/main delivery follows.
+
+## Final verification
+
+Product85c8b624 Windows CI both PASS: protected40779565161/job123137485195 (new generated quiescence4, existing package/host9/worker27 and other native checks) and Node40779565059/job123137484543. Guarded root9 files base-match/new, no custom overlap. All JavaScript/bundle files unchanged from frozen6676: source12452/834 PASS369.97s, root12514/842 PASS361.33s, browser2 each14.2/9.4s and external frozen install/build/bundle/smoke PASS clean. Independent final native and fixture-marker re-review clear. Final doc CI/main confirmation follows.
