@@ -47,6 +47,9 @@ jobs:
       - name: Generated claim-bound enrollment (no installed storage or keys)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-admin-enrollment.ps1 -NegativeControls
+      - name: Validate signin SCM policy with generated data only
+        shell: powershell
+        run: ./scripts/remote-desktop/validate-signin-service-policy.ps1 -NegativeControls
       - name: Generated local admin journal transitions (ordinary temporary files)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-admin-journal.ps1 -NegativeControls
