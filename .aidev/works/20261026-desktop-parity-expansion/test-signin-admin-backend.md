@@ -194,3 +194,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 negative group-cleanup
 System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Native failure leaked a handle" ---> System.InvalidOperationException: Native failure leaked a handle
 ```
+
+## Final product verification
+
+Product cb30c02f source whole12,432/832 single PASS347.83s. Root guarded26 files (all base-match/new; no custom overlap), build/type/bundle PASS; root whole12,494/840 single PASS379.75s. Browser source2 PASS14.3s, root2 PASS11.2s. External frozen cb30c02f install/build/bundle/smoke PASS, clean. Product Windows CI both PASS: protected40774179283/job123118991301 and Node40774179268/job123118992334. Final documentation CI/main confirmation follows. No actual privileged operations or handoff.
