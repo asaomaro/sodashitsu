@@ -1,4 +1,4 @@
-// Generated ordinary Node code only. No installed package, credentials or OS IO.
+// Generated ordinary Node code only. No installed package, credentials or OS input.
 import assert from "node:assert/strict";
 import {mkdtemp,mkdir,readFile,writeFile,rm} from "node:fs/promises";
 import {join,dirname} from "node:path";
