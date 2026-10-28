@@ -38,8 +38,8 @@ try {
             @('reparse','WindowsSigninPackageNative.cs','(Value.Attributes&1024)==0','true','Unsafe package file facts accepted'),
             @('links','WindowsSigninPackageNative.cs','Value.Links==1&&','true&&','Unsafe package file facts accepted'),
             @('file-id','WindowsSigninPackageNative.cs','Value.Volume==other.Value.Volume&&','','Changed package file accepted'),
-            @('share-write','WindowsSigninPackageNative.cs',',1,IntPtr.Zero,3,',',3,IntPtr.Zero,3,','Package write share unexpectedly allowed'),
-            @('share-delete','WindowsSigninPackageNative.cs',',1,IntPtr.Zero,3,',',5,IntPtr.Zero,3,','Package delete share unexpectedly allowed'),
+            @('share-write','WindowsSigninPackageNative.cs','OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen)','OpenSharedCore(path,directory,package,maximum,3,policy,afterOpen)','Package write share unexpectedly allowed'),
+            @('share-delete','WindowsSigninPackageNative.cs','OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen)','OpenSharedCore(path,directory,package,maximum,5,policy,afterOpen)','Package delete share unexpectedly allowed'),
             @('failure-cleanup','WindowsSigninPackageNative.cs','if(held!=null)held.Dispose();else if(handle!=null)handle.Dispose();','if(held==null&&handle!=null)handle.Dispose();','Native failure leaked a handle'),
             @('group-cleanup','WindowsSigninPackageNative.cs','for(int i=held.Count-1;i>=0;i--)','for(int i=held.Count-2;i>=0;i--)','Native failure leaked a handle')
         )

@@ -48,8 +48,10 @@ public static class SodaDesktopSigninPackageNative {
     }
     // Internal test seams exercise the same native ownership path on generated
     // ordinary-user files. Verify always supplies the fixed CodeAcl policy.
-    internal static Held OpenCore(string path,bool directory,bool package,long maximum,Func<byte[],bool> policy,Action<FileStream> afterOpen){
-        var handle=CreateFileW(path,directory?0x20080u:0x80020000u,1,IntPtr.Zero,3,(directory?0x02000000u:0x08000000u)|0x00200000u,IntPtr.Zero);
+    internal static Held OpenCore(string path,bool directory,bool package,long maximum,Func<byte[],bool> policy,Action<FileStream> afterOpen){return OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen);}
+    internal static Held OpenExclusiveCore(string path,Func<byte[],bool> policy,Action<FileStream> afterOpen){return OpenSharedCore(path,false,true,1,0,policy,afterOpen);}
+    static Held OpenSharedCore(string path,bool directory,bool package,long maximum,uint share,Func<byte[],bool> policy,Action<FileStream> afterOpen){
+        var handle=CreateFileW(path,directory?0x20080u:0x80020000u,share,IntPtr.Zero,3,(directory?0x02000000u:0x08000000u)|0x00200000u,IntPtr.Zero);
         Held held=null;
         try {
             if(handle==null||handle.IsInvalid)throw Failure();
@@ -60,7 +62,8 @@ public static class SodaDesktopSigninPackageNative {
         }catch{if(held!=null)held.Dispose();else if(handle!=null)handle.Dispose();throw;}
     }
     internal static void Release(List<Held> held){for(int i=held.Count-1;i>=0;i--){try{held[i].Dispose();}catch{}}held.Clear();}
-    static void Check(Held held){if(!held.Before.Same(Facts(held.Handle),held.Directory,held.Maximum)||!SodaDesktopSigninPackage.CodeAcl(Security(held.Handle),held.Package))throw Failure();}
+    internal static void CheckCore(Held held,Func<byte[],bool> policy){if(!held.Before.Same(Facts(held.Handle),held.Directory,held.Maximum)||!policy(Security(held.Handle)))throw Failure();}
+    static void Check(Held held){CheckCore(held,bytes=>SodaDesktopSigninPackage.CodeAcl(bytes,held.Package));}
     static string Full(string root,string relative){return Path.Combine(root,relative.Replace('/',Path.DirectorySeparatorChar));}
     static bool Within(string root,string path){return String.Equals(root,path,StringComparison.OrdinalIgnoreCase)||path.StartsWith(root+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase);}
     static byte[] Read(Held file){
