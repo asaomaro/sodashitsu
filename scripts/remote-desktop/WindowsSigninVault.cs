@@ -26,6 +26,7 @@ public static class SodaDesktopSigninVault {
     }
     public static bool SystemPrimary(){using(var identity=WindowsIdentity.GetCurrent())return identity.IsSystem && identity.ImpersonationLevel==TokenImpersonationLevel.None;}
     public static bool PipeOutput(){using(var handle=new SafeFileHandle(GetStdHandle(-11),false))return !handle.IsInvalid && GetFileType(handle)==3;}
+    public static bool PipeInput(){using(var handle=new SafeFileHandle(GetStdHandle(-10),false))return !handle.IsInvalid && GetFileType(handle)==3;}
     public static bool UserAccount(string owner){
         try {
             var sid=new SecurityIdentifier(Owner(owner));var bytes=new byte[sid.BinaryLength];sid.GetBinaryForm(bytes,0);

@@ -1,6 +1,6 @@
 # 7B4b: finite local administration
 
-- [ ] Strict finite request, owner/nonce/deadline, redaction, one-attempt lease and journal branch (taskcheck).
+- [x] Strict finite request, owner/nonce/deadline, redaction, one-attempt lease and journal branch (taskcheck).
 - [ ] Protected request encryption/claim/result and immutable quiescence boundary (taskcheck).
 - [ ] Dedicated store management and enrollment writer; expired operations cannot persist (taskcheck).
 - [ ] Startup irrevocable admin dispatch, clean native host exit and fixed package asset updates (taskcheck).

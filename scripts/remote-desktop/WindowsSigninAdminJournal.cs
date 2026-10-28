@@ -45,6 +45,10 @@ public sealed class SodaDesktopSigninAdminJournal {
             Current();var value=new ClaimData(Digest(bytes),bytes);transferred=true;return value;
         }}finally{if(!transferred&&bytes!=null)Array.Clear(bytes,0,bytes.Length);}
     }
+    public ClaimData Claimed(){
+        Current();if(Directory.GetFileSystemEntries(directory).Length!=1||State()!="recovery")throw Failure();
+        using(var file=Read(PathOf("admin.claimed"))){byte[] bytes=Bytes(file);try{Current();return new ClaimData(Digest(bytes),bytes);}catch{Array.Clear(bytes,0,bytes.Length);throw;}}
+    }
     void Match(string name,string expected){
         if(!Hash(expected))throw Failure();byte[] bytes=null;
         try{using(var file=Read(PathOf(name)))bytes=Bytes(file);if(Digest(bytes)!=expected)throw Failure();Current();}finally{if(bytes!=null)Array.Clear(bytes,0,bytes.Length);}

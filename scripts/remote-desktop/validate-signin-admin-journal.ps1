@@ -14,6 +14,7 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated journal checks failed'}
  if($NegativeControls){
   $variants=@(
+   @('claim-inspection','if(Directory.GetFileSystemEntries(directory).Length!=1||State()!="recovery")throw Failure();','if(State()!="recovery")throw Failure();','Claim inspection accepted completed result residue'),
    @('claim-identity','if(!before.Same(SodaDesktopSigninVault.Facts(claimed.SafeFileHandle)))throw Failure();','if(before==null)throw Failure();','Replaced pending identity was dispatched'),
    @('residue','if(State()!="claim")throw Failure();','if(false)throw Failure();','Claim accepted journal residue'),
    @('claim-digest','if(Digest(bytes)!=expected)throw Failure();','if(false)throw Failure();','Result accepted changed claim digest'),
@@ -28,7 +29,7 @@ try{
    }finally{[IO.File]::WriteAllBytes((Join-Path $root $name),$bytes[$name]);if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root $name))) -cne [Convert]::ToBase64String($bytes[$name])){throw 'Source bytes not restored'}}
   }
   $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Restored journal checks failed'}
-  'signin_admin_journal_5_source_negative_controls_and_restore_passed'
+  'signin_admin_journal_6_source_negative_controls_and_restore_passed'
  }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

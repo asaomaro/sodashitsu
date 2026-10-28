@@ -23,8 +23,9 @@ public static class SodaDesktopSigninAdminJournalChecks {
    string ordinary=DirectoryFor(root);File.WriteAllBytes(PathOf(ordinary,"admin.pending"),Data);bool cleanup=false,sawAck=false;
    var normal=new SodaDesktopSigninAdminJournal(ordinary,()=>{if(cleanup&&File.Exists(PathOf(ordinary,"admin.ack"))&&File.Exists(PathOf(ordinary,"admin.claimed"))&&File.Exists(PathOf(ordinary,"admin.result")))sawAck=true;return true;});
    var claim=normal.Claim();Check(claim.Sha256==Hash(Data)&&Convert.ToBase64String(claim.CipherEnvelope)==Convert.ToBase64String(Data)&&!File.Exists(PathOf(ordinary,"admin.pending"))&&normal.State()=="recovery","Claim was not durable before dispatch");Array.Clear(claim.CipherEnvelope,0,claim.CipherEnvelope.Length);
+   var inspected=normal.Claimed();Check(inspected.Sha256==Hash(Data)&&Convert.ToBase64String(inspected.CipherEnvelope)==Convert.ToBase64String(Data),"Claim inspection changed request");Array.Clear(inspected.CipherEnvelope,0,inspected.CipherEnvelope.Length);
    Denied(()=>normal.Result(new string('0',64),Result),"Result accepted changed claim digest");Check(!File.Exists(PathOf(ordinary,"admin.result")),"Bad claim produced result");
-   normal.Result(Hash(Data),Result);Denied(()=>normal.Acknowledge(Hash(Data),new string('0',64)),"Ack accepted changed result digest");
+   normal.Result(Hash(Data),Result);Denied(()=>normal.Claimed(),"Claim inspection accepted completed result residue");Denied(()=>normal.Acknowledge(Hash(Data),new string('0',64)),"Ack accepted changed result digest");
    cleanup=true;normal.Acknowledge(Hash(Data),Hash(Result));Check(sawAck,"Ack was not published before original removal");Check(normal.State()=="normal","Completed acknowledgment did not clear journal");
    string interrupted=DirectoryFor(root);File.WriteAllBytes(PathOf(interrupted,"admin.pending"),Data);bool cancelAtAck=false,active=true;
    var stopped=new SodaDesktopSigninAdminJournal(interrupted,()=>{if(cancelAtAck&&File.Exists(PathOf(interrupted,"admin.ack")))active=false;return active;});
