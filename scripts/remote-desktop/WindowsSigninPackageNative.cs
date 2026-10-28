@@ -86,13 +86,15 @@ public static class SodaDesktopSigninPackageNative {
         public string Bootstrap {get{return Get("bootstrap.mjs");}}
         public void Dispose(){lock(gate){if(closed)return;closed=true;Release(held);}}
     }
-    public static Lease Verify(string owner){
+    public static Lease Verify(string owner){return VerifyImage(owner,"DesktopSigninService.exe");}
+    public static Lease VerifyWorker(string owner){return VerifyImage(owner,"DesktopSigninWorker.exe");}
+    static Lease VerifyImage(string owner,string image){
         var held=new List<Held>();bool transferred=false;
         try {
             if(!SodaDesktopSigninVault.SystemPrimary()||!Environment.Is64BitProcess)throw Failure();
             VerifyLayouts();
             string program=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),root=Path.Combine(program,"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner));
-            using(var self=Process.GetCurrentProcess())if(!String.Equals(self.MainModule.FileName,Full(root,"DesktopSigninService.exe"),StringComparison.OrdinalIgnoreCase))throw Failure();
+            using(var self=Process.GetCurrentProcess())if(!String.Equals(self.MainModule.FileName,Full(root,image),StringComparison.OrdinalIgnoreCase))throw Failure();
             if(root.Length>512||root.Length<3||root[1]!=':'||root[2]!='\\')throw Failure();
             var drive=new DriveInfo(Path.GetPathRoot(root));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();
             var allDirectories=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var packageDirectories=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var files=new HashSet<string>(StringComparer.OrdinalIgnoreCase);

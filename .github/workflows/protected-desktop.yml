@@ -20,6 +20,9 @@ jobs:
       - name: Generated signin scope and private marker (no capture, input, or service)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-scope.ps1
+      - name: Dedicated signin worker compilation and generated data (no worker launch)
+        shell: powershell
+        run: scripts/remote-desktop/build-signin-worker.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
       - name: Generated ACL descriptor facts (no filesystem ACL writes)
         shell: powershell
         run: scripts/remote-desktop/validate-endpoint-acl-facts.ps1
