@@ -73,3 +73,5 @@ it.each(["unissued","duplicate","quota"])("bounds native input acknowledgements 
   else{f.process.send(key(100));if(mode==="duplicate")f.output({type:"input_ack",seq:100});f.output({type:"input_ack",seq:mode==="duplicate"?100:1});}
   expect(f.closed).toHaveBeenCalledOnce();f.finish();
 });
+
+it("ends a missing native source before ready without losing confirmed teardown",async()=>{const f=fixture();f.output({type:"signin_unavailable"});expect(f.closed).toHaveBeenCalledOnce();f.finish();await expect(f.process.settled()).resolves.toBeUndefined();expect(f.unsafeStop).not.toHaveBeenCalled();});

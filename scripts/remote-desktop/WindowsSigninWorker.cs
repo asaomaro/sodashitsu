@@ -21,6 +21,15 @@ public static class SodaDesktopSigninWorker {
     static bool PresenceCommand(Purpose purpose,Dictionary<string,object> message,SodaDesktopSigninPresence presence,out bool stopped){
         stopped=false;if(purpose!=Purpose.Presence)return false;Keys(message,"type");string type=Text(message,"type",32);Require(presence.Command(type));stopped=type=="stop";return true;
     }
+    static void InactivePresence(Purpose purpose,Action<string> publish,Func<string> receive){
+        PurposeName(purpose);publish(purpose==Purpose.Presence?"signin_inactive":"signin_unavailable");
+        // Keep the process alive until a command arrives through the broker's
+        // pump. That pump starts only AFTER live PID/pipe authentication. This
+        // removes the inactive-exit race without a timing-based sleep.
+        string line=receive();if(line==null)return;var message=Object(line);string type=Text(message,"type",32);
+        if(purpose!=Purpose.Presence&&type=="configure"){Keys(message,"type","width","fps","quality");Integer(message,"width",320,1920);Integer(message,"fps",1,30);Integer(message,"quality",20,90);return;}
+        Keys(message,"type");Require(type=="heartbeat"||type=="stop");
+    }
     internal const string Owner="__SIGNIN_WORKER_OWNER_SID__";
     static readonly JavaScriptSerializer Json=new JavaScriptSerializer{MaxJsonLength=3000000,RecursionLimit=8};
     static Exception Failure(){return new InvalidOperationException("Signin worker is unavailable");}
@@ -31,6 +40,7 @@ public static class SodaDesktopSigninWorker {
         Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0);
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open()){
             uint console=SodaDesktopSigninWorkerNative.WTSGetActiveConsoleSessionId();Require(console>0&&console<=Int32.MaxValue);Guid nonce=Guid.NewGuid();
+            if(purpose==Purpose.Presence){Require(package.Current());Send(parentOut,new{type="signin_context",ownerSid=Owner,packageRoot=Path.GetDirectoryName(package.Bootstrap),stateDir=runtime.Path});}
             using(var pipe=SodaDesktopSigninWorkerNative.Server(SodaDesktopSigninWorkerNative.PipeName(Owner,nonce))){
                 uint pid;var child=SodaDesktopSigninWorkerNative.Start(Owner,nonce,(int)console,purpose,runtime.Path,out pid);
                 try{
@@ -138,7 +148,9 @@ public static class SodaDesktopSigninWorker {
         Require(SodaDesktopSigninVault.SystemPrimary());
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var pipe=new NamedPipeClientStream(".",SodaDesktopSigninWorkerNative.PipeName(Owner,nonce),PipeDirection.InOut,PipeOptions.None,System.Security.Principal.TokenImpersonationLevel.Anonymous)){
             pipe.Connect(5000);uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeServerProcessId(pipe.SafePipeHandle,out actual)&&actual==(uint)brokerPid);
-            using(var native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce))using(var self=Process.GetCurrentProcess())using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,16384,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),65536,true)){
+            using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,16384,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),65536,true)){
+            SodaDesktopSigninScopeNative native;try{native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce);}catch(SodaDesktopSigninInactiveException){InactivePresence(purpose,type=>Send(writer,new{type}),()=>Line(reader,16384));return;}
+            using(native)using(var self=Process.GetCurrentProcess()){
                 var clock=Stopwatch.StartNew();var scope=new SodaDesktopSigninScope(session,brokerPid,brokerStarted,self.Id,self.StartTime.ToUniversalTime().Ticks,nonce,input,()=>clock.ElapsedMilliseconds);
                 var initialTarget=Target();var target=new SodaDesktopSigninTarget(initialTarget,Target);
                 Func<SodaDesktopSigninScope.Facts> read=()=>{if(!target.Current())return new SodaDesktopSigninScope.Facts();var facts=native.Read();if(!target.Current())facts.Candidate=false;return facts;};
@@ -183,12 +195,17 @@ public static class SodaDesktopSigninWorker {
                         }});Thread.Sleep(2);
                     }
                 }finally{presence.Close();CleanupPurpose(purpose,()=>Release(held,buttons,current));scope.Close();pipe.Dispose();if(!thread.Join(1000))Environment.Exit(1);commands.Dispose();}
-            }
+            }}
         }
     }
     static void Generated(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     public static void VerifyGeneratedData(){
         SodaDesktopSigninPresence.VerifyGeneratedData();
+        bool inactive=false;try{SodaDesktopSigninScopeNative.RequireCandidate(false);}catch(SodaDesktopSigninInactiveException){inactive=true;}Generated(inactive,"Inactive candidate was not classified");
+        int inactivePublished=0,inactiveReceived=0;bool brokerAuthenticated=false;
+        InactivePresence(Purpose.Presence,type=>{Generated(type=="signin_inactive","Presence inactive type changed");inactivePublished++;},()=>{Generated(inactivePublished==1,"Inactive result not published before wait");brokerAuthenticated=true;inactiveReceived++;return "{\"type\":\"heartbeat\"}";});
+        Generated(brokerAuthenticated&&inactiveReceived==1,"Inactive worker exited before broker authentication");
+        foreach(var viewerPurpose in new[]{Purpose.View,Purpose.Input}){string closure=null;InactivePresence(viewerPurpose,type=>closure=type,()=>"{\"type\":\"configure\",\"width\":1280,\"fps\":10,\"quality\":65}");Generated(closure=="signin_unavailable","Viewer inactive promoted to presence");}
         int pulses=0,captures=0,releases=0;DispatchPurpose(Purpose.Presence,()=>pulses++,()=>captures++);CleanupPurpose(Purpose.Presence,()=>releases++);
         Generated(pulses==1&&captures==0,"Presence dispatched capture");Generated(releases==0,"Presence dispatched input cleanup");
         foreach(var normalPurpose in new[]{Purpose.View,Purpose.Input}){DispatchPurpose(normalPurpose,()=>pulses++,()=>captures++);CleanupPurpose(normalPurpose,()=>releases++);}Generated(pulses==1&&captures==2&&releases==2,"Normal purpose routing changed");

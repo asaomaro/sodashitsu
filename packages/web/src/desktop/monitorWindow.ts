@@ -44,3 +44,14 @@ export function monitorPointer(layout: DesktopMonitorLayout, id: string, x: numb
   return {x:Math.max(offsetX,Math.min(offsetX+monitor.width-1,x*layout.bounds.width))/Math.max(1,layout.bounds.width-1),
     y:Math.max(offsetY,Math.min(offsetY+monitor.height-1,y*layout.bounds.height))/Math.max(1,layout.bounds.height-1)};
 }
+
+/** A desktop entry without a remote workspace; carries no key, ticket or grant. */
+export type DesktopWindowLaunch={machineId:string;label:string};
+export function parseDesktopWindow(raw:unknown):DesktopWindowLaunch{
+ if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("Invalid desktop window");const value=raw as Record<string,unknown>;
+ if(Object.keys(value).length!==2||Object.keys(value).some(key=>key!=="machineId"&&key!=="label")||typeof value.machineId!=="string"||!/^[a-zA-Z0-9-]{1,128}$/.test(value.machineId)||typeof value.label!=="string"||value.label.length>256||value.label.includes("\0"))throw Error("Invalid desktop window");return {machineId:value.machineId,label:value.label};
+}
+export function desktopWindowUrl(raw:DesktopWindowLaunch,origin:string):URL{const url=new URL("/desktop-view",origin);url.hash=encodeURIComponent(JSON.stringify(parseDesktopWindow(raw)));return url;}
+export function readDesktopWindow(hash:string):DesktopWindowLaunch|MonitorWindowLaunch{
+ if(hash.length>8192)throw Error("Desktop window URL too long");const value=JSON.parse(decodeURIComponent(hash.slice(1)));return value&&typeof value==="object"&&Object.hasOwn(value,"monitor")?parseMonitorWindow(value):parseDesktopWindow(value);
+}

@@ -36,7 +36,11 @@ try {
             @('presence-clock-fault','WindowsSigninPresence.cs','return at;}catch{ended=true;throw;}','return at;}catch{throw;}','Presence clock exception revived'),
             @('presence-capture-route','WindowsSigninWorker.cs','if(purpose==Purpose.Presence)presence();else capture();','if(purpose==Purpose.Presence)capture();else capture();','Presence dispatched capture'),
             @('presence-cleanup-route','WindowsSigninWorker.cs','if(purpose!=Purpose.Presence)release();','release();','Presence dispatched input cleanup'),
-            @('presence-command-route','WindowsSigninWorker.cs','Require(presence.Command(type));','presence.Command(type);','Presence route accepted active command')
+            @('presence-command-route','WindowsSigninWorker.cs','Require(presence.Command(type));','presence.Command(type);','Presence route accepted active command'),
+            @('inactive-classification','WindowsSigninScopeNative.cs','if(!candidate)throw new SodaDesktopSigninInactiveException();','if(!candidate)return;','Inactive candidate was not classified'),
+            @('inactive-auth-wait','WindowsSigninWorker.cs','string line=receive();','string line=null;','Inactive worker exited before broker authentication'),
+            @('inactive-viewer-denial','WindowsSigninWorker.cs','publish(purpose==Purpose.Presence?"signin_inactive":"signin_unavailable");','publish("signin_inactive");','Viewer inactive promoted to presence'),
+            @('inactive-publication','WindowsSigninWorker.cs','publish(purpose==Purpose.Presence?"signin_inactive":"signin_unavailable");','{}','Inactive result not published before wait')
         )
         foreach($variant in $variants){
             $name=$variant[1];$before=$original[$name]
@@ -52,7 +56,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_22_source_negative_controls_and_restore_passed'
+        'signin_worker_26_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

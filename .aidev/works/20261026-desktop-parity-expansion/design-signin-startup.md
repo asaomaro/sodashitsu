@@ -1,0 +1,17 @@
+# 7B3d: dedicated signin Node startup
+
+The installed bootstrap loads one self-contained CJS entry with builtin-only require and no dynamic imports/addons. `pnpm build:signin` bundles only the dedicated main, replaces every helper-relative import.meta.url with the bootstrap's fixed bundle URL, and never executes or installs the result. The native host supplies a fixed owner SID; main accepts no paths/commands and imports no general server entry point. Ordinary repository server startup does not invoke it.
+
+Each cycle first starts only the fixed native presence broker. Native metadata comes from verified package/runtime leases; the Node facade pins owner/package path and the owner-hash runtime slot, but exposes this context only after a signed-out pulse. A 1-second pulse window and 120-second lifetime are monotonic and terminal; delayed callbacks cannot refresh an expired prior window. No native viewer/capture/input is created by a presence probe.
+
+The cycle then reads the protected enrollment and the dedicated readonly identity store. Both must require the same provider key and every enrolled viewer must remain locally trusted. The 5-second policy lease starts before the oldest enrollment read; watcher results never re-age an old snapshot at completion. Any changed enrollment credential/revision/peer/input policy or store snapshot revokes the cycle. The finite handlers are hello, capabilities, endpoint status/start and clientGone; only the existing sealed viewer offer/grant starts a native viewer.
+
+Every factory has a post-creation ownership check. Cancellation during construction also reaps its returned object. Teardown closes delegation/identity/endpoint, confirms native zero-active stop and waits for pending reads. Unconfirmed teardown terminates the dedicated Node owner so its native parent Job reaps descendants. A clean inactive/ended cycle can retry a fresh presence after five seconds; it never replays a grant.
+
+Native absence of a signed-out candidate is classified only after fixed SYSTEM/session/process/nonce proof. The worker publishes signin_inactive (presence) or signin_unavailable (viewer), then waits for its first parent command. The broker starts forwarding only AFTER live PID/pipe authentication, so a fast inactive worker cannot race that check. The Job must still be empty before the final stop marker and exit 0. Candidate absence does not imply permission for another desktop.
+
+A signed-out host has no workspace. The machine header can therefore launch `/desktop-view` directly while retaining the controller connection. Its strict fragment contains only machineId/label. Existing monitor windows retain their format. Login, browser identity, provider pin, local trust and fresh consent are still required; the fragment provides no credential or permission.
+
+Validation: pure process/clock/ownership tests; actual Runtime/Root delegation/RPC/readonly identity/sealed browser wire with generated private keys/pixels; source and policy revocation observed in DOM and cleared pixels; native compile/generated/source-copy controls. The native presence/vault/capture edges are test seams. Actual SYSTEM Main, service registration, user key/trust enrollment and real desktop capture/input are not executed.
+
+Still required: local admin enrollment/key controller, staging/installer integration and actual installed service tests. This phase does not enable signin merely by building/handoff, and does not complete roadmap task 7B or general remote-desktop parity.
