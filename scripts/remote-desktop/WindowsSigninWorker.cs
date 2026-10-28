@@ -53,6 +53,29 @@ public static class SodaDesktopSigninWorker {
     [StructLayout(LayoutKind.Sequential)]struct Input{internal uint Type;internal Data Data;}
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll",SetLastError=true)]static extern uint SendInput(uint count,Input[] input,int size);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll")]static extern int GetSystemMetrics(int index);
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]struct Device {
+        internal uint Size;
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=32)]internal string Name;
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]internal string Description;
+        internal uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]internal string Id;
+        [MarshalAs(UnmanagedType.ByValTStr,SizeConst=128)]internal string Key;
+    }
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll",CharSet=CharSet.Unicode,ExactSpelling=true)]static extern bool EnumDisplayDevicesW(string device,uint index,ref Device value,uint flags);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll")]static extern bool SetProcessDPIAware();
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("user32.dll")]static extern bool IsProcessDPIAware();
+    static SodaDesktopSigninTarget.Snapshot Target(){
+        Device primary=new Device();bool found=false,ended=false;
+        for(uint i=0;i<=32;i++){
+            var item=new Device{Size=(uint)Marshal.SizeOf(typeof(Device))};if(!EnumDisplayDevicesW(null,i,ref item,0)){ended=true;break;}Require(i<32);
+            if((item.Flags&4)!=0){Require(!found&&(item.Flags&1)!=0&&!String.IsNullOrEmpty(item.Name));found=true;primary=item;}
+        }Require(ended&&found);var identity=new StringBuilder(primary.Name).Append('|').Append(primary.Id).Append('|').Append(primary.Key).Append('|').Append(primary.Flags);ended=false;
+        for(uint i=0;i<=8;i++){
+            var monitor=new Device{Size=(uint)Marshal.SizeOf(typeof(Device))};if(!EnumDisplayDevicesW(primary.Name,i,ref monitor,1)){ended=true;break;}Require(i<8);
+            identity.Append('|').Append(monitor.Name).Append('|').Append(monitor.Id).Append('|').Append(monitor.Key).Append('|').Append(monitor.Flags);
+        }Require(ended);
+        return new SodaDesktopSigninTarget.Snapshot(new[]{GetSystemMetrics(0),GetSystemMetrics(1),GetSystemMetrics(76),GetSystemMetrics(77),GetSystemMetrics(78),GetSystemMetrics(79),GetSystemMetrics(80)},identity.ToString());
+    }
     static void Emit(Input value,Func<bool> current){Require(current());Require(SendInput(1,new[]{value},Marshal.SizeOf(typeof(Input)))==1);}
     static ushort VirtualKey(string code){
         if(code.Length==4&&code.StartsWith("Key")&&code[3]>='A'&&code[3]<='Z')return (ushort)code[3];
@@ -63,19 +86,21 @@ public static class SodaDesktopSigninWorker {
         ushort result;Require(map.TryGetValue(code,out result));return result;
     }
     static Input KeyEvent(ushort key,bool down){var result=new Input{Type=1};result.Data.Key.Vk=(ushort)(key&255);result.Data.Key.Flags=(down?0u:2u)|(((key&0x100)!=0||key>=33&&key<=46||key==111||key==144||key==163||key==165||key>=91&&key<=93||key>=166&&key<=183)?1u:0u);return result;}
-    static void Apply(Dictionary<string,object> value,Func<bool> current,HashSet<ushort> held,HashSet<int> buttons){
+    static void Apply(Dictionary<string,object> value,Action<Input> emit,HashSet<ushort> held,HashSet<int> buttons){
         string kind=Text(value,"kind",16);
         if(kind=="key"){
-            Keys(value,"kind","code","down");ushort key=VirtualKey(Text(value,"code",32));bool down=Boolean(value,"down");if(down){held.Add(key);Emit(KeyEvent(key,true),current);}else if(held.Remove(key))Emit(KeyEvent(key,false),current);return;
+            Keys(value,"kind","code","down");ushort key=VirtualKey(Text(value,"code",32));bool down=Boolean(value,"down");if(down){held.Add(key);emit(KeyEvent(key,true));}else if(held.Remove(key))emit(KeyEvent(key,false));return;
         }
         if(kind=="text"){
-            Keys(value,"kind","text");foreach(char c in Text(value,"text",1024)){var key=new Input{Type=1};key.Data.Key.Scan=c;key.Data.Key.Flags=4;Emit(key,current);key.Data.Key.Flags=6;Emit(key,current);}return;
+            Keys(value,"kind","text");foreach(char c in Text(value,"text",1024)){var key=new Input{Type=1};key.Data.Key.Scan=c;key.Data.Key.Flags=4;emit(key);key.Data.Key.Flags=6;emit(key);}return;
         }
-        if(kind=="wheel"){Keys(value,"kind","delta");var wheel=new Input();wheel.Data.Mouse.Flags=0x800;wheel.Data.Mouse.Data=unchecked((uint)(int)Integer(value,"delta",-1200,1200));Emit(wheel,current);return;}
-        Require(kind=="pointer");Keys(value,"kind","x","y","event","button");double x=Convert.ToDouble(value["x"]),y=Convert.ToDouble(value["y"]);Require(!Double.IsNaN(x)&&!Double.IsInfinity(x)&&x>=0&&x<=1&&!Double.IsNaN(y)&&!Double.IsInfinity(y)&&y>=0&&y<=1);
-        var pointer=new Input();pointer.Data.Mouse.Flags=0x8001;pointer.Data.Mouse.X=(int)Math.Round(x*65535);pointer.Data.Mouse.Y=(int)Math.Round(y*65535);Emit(pointer,current);
-        string action=Text(value,"event",8);int button=(int)Integer(value,"button",0,4);if(action=="move")return;Require(action=="down"||action=="up");bool press=action=="down";if(press)buttons.Add(button);else if(!buttons.Remove(button))return;
-        var click=new Input();click.Data.Mouse.Flags=button==0?(press?2u:4u):button==1?(press?32u:64u):button==2?(press?8u:16u):(press?128u:256u);click.Data.Mouse.Data=button>=3?(uint)(button-2):0u;Emit(click,current);
+        if(kind=="wheel"){Keys(value,"kind","delta");var wheel=new Input();wheel.Data.Mouse.Flags=0x800;wheel.Data.Mouse.Data=unchecked((uint)(int)Integer(value,"delta",-1200,1200));emit(wheel);return;}
+        Require(kind=="pointer");Keys(value,"kind","x","y","event","button");
+        string action=Text(value,"event",8);int button=(int)Integer(value,"button",0,4);Require(action=="move"||action=="down"||action=="up");
+        Require((value["x"] is int||value["x"] is long||value["x"] is double||value["x"] is decimal)&&(value["y"] is int||value["y"] is long||value["y"] is double||value["y"] is decimal));double x=Convert.ToDouble(value["x"]),y=Convert.ToDouble(value["y"]);Require(!Double.IsNaN(x)&&!Double.IsInfinity(x)&&x>=0&&x<=1&&!Double.IsNaN(y)&&!Double.IsInfinity(y)&&y>=0&&y<=1);
+        var pointer=new Input();pointer.Data.Mouse.Flags=0x8001;pointer.Data.Mouse.X=(int)Math.Round(x*65535);pointer.Data.Mouse.Y=(int)Math.Round(y*65535);emit(pointer);
+        if(action=="move")return;bool press=action=="down";if(press)buttons.Add(button);else if(!buttons.Remove(button))return;
+        var click=new Input();click.Data.Mouse.Flags=button==0?(press?2u:4u):button==1?(press?32u:64u):button==2?(press?8u:16u):(press?128u:256u);click.Data.Mouse.Data=button>=3?(uint)(button-2):0u;emit(click);
     }
     static void Release(HashSet<ushort> held,HashSet<int> buttons,Func<bool> current){
         foreach(ushort key in held)if(current())Emit(KeyEvent(key,false),current);held.Clear();
@@ -87,7 +112,9 @@ public static class SodaDesktopSigninWorker {
             pipe.Connect(5000);uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeServerProcessId(pipe.SafePipeHandle,out actual)&&actual==(uint)brokerPid);
             using(var native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce))using(var self=Process.GetCurrentProcess())using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,16384,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),65536,true)){
                 var clock=Stopwatch.StartNew();var scope=new SodaDesktopSigninScope(session,brokerPid,brokerStarted,self.Id,self.StartTime.ToUniversalTime().Ticks,nonce,input,()=>clock.ElapsedMilliseconds);
-                Func<bool> current=()=>package.Current()&&scope.Current(native.Read);var commands=new BlockingCollection<string>(32);var held=new HashSet<ushort>();var buttons=new HashSet<int>();bool stop=false,configured=false;long pending=0,lastBeat=0,next=0;int width=1280,fps=10,quality=65;
+                var initialTarget=Target();var target=new SodaDesktopSigninTarget(initialTarget,Target);
+                Func<SodaDesktopSigninScope.Facts> read=()=>{if(!target.Current())return new SodaDesktopSigninScope.Facts();var facts=native.Read();if(!target.Current())facts.Candidate=false;return facts;};
+                Func<bool> current=()=>package.Current()&&scope.Current(read);var commands=new BlockingCollection<string>(32);var held=new HashSet<ushort>();var buttons=new HashSet<int>();bool stop=false,configured=false;long pending=0,lastBeat=0,next=0;int width=1280,fps=10,quality=65;
                 var thread=new Thread(()=>{try{string line;while((line=Line(reader,16384))!=null){if(!commands.TryAdd(line))break;}}catch{}finally{try{commands.CompleteAdding();}catch{}}}){IsBackground=true};thread.Start();
                 try{
                     while(!stop&&current()&&clock.ElapsedMilliseconds-lastBeat<15000){
@@ -95,21 +122,21 @@ public static class SodaDesktopSigninWorker {
                             Require(current());var message=Object(line);string type=Text(message,"type",32);
                             if(type=="configure"){
                                 Keys(message,"type","width","fps","quality");Require(!configured);width=(int)Integer(message,"width",320,1920);fps=(int)Integer(message,"fps",1,30);quality=(int)Integer(message,"quality",20,90);configured=true;
-                                int w=GetSystemMetrics(0),h=GetSystemMetrics(1);Require(w>0&&h>0&&w<=8192&&h<=8192&&(long)w*h<=16000000&&current());Send(writer,new{type="ready",title="Windowsのサインイン画面",allowInput=input,width=w,height=h,backend="windows-gdi",secureDesktop=true,imeKeys=true,extendedInput=true});
+                                int w=initialTarget.Width,h=initialTarget.Height;Require(w>0&&h>0&&w<=8192&&h<=8192&&(long)w*h<=16000000&&current());Send(writer,new{type="ready",title="Windowsのサインイン画面",allowInput=input,width=w,height=h,backend="windows-gdi",secureDesktop=true,imeKeys=true,extendedInput=true});
                             }else if(type=="heartbeat"){Keys(message,"type");lastBeat=clock.ElapsedMilliseconds;}
                             else if(type=="stop"){Keys(message,"type");stop=true;break;}
-                            else if(type=="control"){Keys(message,"type","enabled");Release(held,buttons,current);bool enabled=scope.Control(Boolean(message,"enabled"),native.Read);Send(writer,new{type="control",enabled});}
+                            else if(type=="control"){Keys(message,"type","enabled");Release(held,buttons,current);bool enabled=scope.Control(Boolean(message,"enabled"),read);Send(writer,new{type="control",enabled});}
                             else if(type=="release"){Keys(message,"type");Release(held,buttons,current);}
-                            else if(type=="ack"){Keys(message,"type","seq");long seq=Integer(message,"seq",1,9007199254740991);Require(seq==pending&&scope.Drawn(seq,native.Read));pending=0;}
+                            else if(type=="ack"){Keys(message,"type","seq");long seq=Integer(message,"seq",1,9007199254740991);Require(seq==pending&&scope.Drawn(seq,read));pending=0;}
                             else if(type=="quality"){Keys(message,"type","fps","quality");fps=(int)Integer(message,"fps",1,30);quality=(int)Integer(message,"quality",20,90);}
                             else if(type=="keyframe"){Keys(message,"type");}
                             else if(type=="input"){
-                                Keys(message,"type","seq","frameSeq","input");long seq=Integer(message,"seq",1,9007199254740991),frame=Integer(message,"frameSeq",1,9007199254740991);Require(scope.Input(seq,frame,native.Read));var value=message["input"] as Dictionary<string,object>;Require(value!=null);Apply(value,current,held,buttons);Require(current());Send(writer,new{type="input_ack",seq});
+                                Keys(message,"type","seq","frameSeq","input");long seq=Integer(message,"seq",1,9007199254740991),frame=Integer(message,"frameSeq",1,9007199254740991);var permit=scope.BeginInput(seq,frame,read);Require(permit!=null);var value=message["input"] as Dictionary<string,object>;Require(value!=null);try{Apply(value,item=>Emit(item,()=>package.Current()&&permit.Current(read)),held,buttons);}finally{permit.Close();}Require(current());Send(writer,new{type="input_ack",seq});
                             }else throw Failure();
                         }
                         if(commands.IsCompleted||stop)break;
                         if(configured&&pending==0&&clock.ElapsedMilliseconds>=next){
-                            var ticket=scope.Capture(native.Read);Require(ticket!=null&&current());var capture=Stopwatch.StartNew();int w=GetSystemMetrics(0),h=GetSystemMetrics(1);Require(w>0&&h>0&&w<=8192&&h<=8192&&(long)w*h<=16000000);
+                            var ticket=scope.Capture(read);Require(ticket!=null&&current());var capture=Stopwatch.StartNew();int w=initialTarget.Width,h=initialTarget.Height;Require(w>0&&h>0&&w<=8192&&h<=8192&&(long)w*h<=16000000);
                             using(var original=new Bitmap(w,h,PixelFormat.Format24bppRgb)){
                                 using(var graphics=Graphics.FromImage(original))graphics.CopyFromScreen(0,0,0,0,new Size(w,h),CopyPixelOperation.SourceCopy);
                                 Require(current());double captureMs=capture.Elapsed.TotalMilliseconds;var encode=Stopwatch.StartNew();double ratio=Math.Min(1,Math.Min((double)width/w,2400d/h));int outW=Math.Max(1,(int)(w*ratio)),outH=Math.Max(1,(int)(h*ratio));
@@ -119,7 +146,7 @@ public static class SodaDesktopSigninWorker {
                                     using(var parameters=new EncoderParameters(1)){parameters.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)quality);scaled.Save(bytes,codec,parameters);}
                                     Require(bytes.Length>0&&bytes.Length<=2097152);
                                     string encoded=Json.Serialize(new{type="frame",info=new{seq=ticket.Serial,width=outW,height=outH,format="image/jpeg",captureMs,encodeMs=encode.Elapsed.TotalMilliseconds},data=Convert.ToBase64String(bytes.ToArray())});
-                                    Require(scope.Publish(ticket,native.Read)&&current());pending=ticket.Serial;writer.WriteLine(encoded);writer.Flush();next=clock.ElapsedMilliseconds+1000/fps;
+                                    Require(scope.Publish(ticket,read)&&current());pending=ticket.Serial;writer.WriteLine(encoded);writer.Flush();next=clock.ElapsedMilliseconds+1000/fps;
                                 }
                             }
                         }Thread.Sleep(2);
@@ -129,16 +156,26 @@ public static class SodaDesktopSigninWorker {
         }
     }
     public static void VerifyGeneratedData(){
-        Require(Marshal.SizeOf(typeof(Input))==40&&Marshal.SizeOf(typeof(Mouse))==32&&Marshal.SizeOf(typeof(Key))==24);
+        Require(Marshal.SizeOf(typeof(Device))==840&&Marshal.SizeOf(typeof(Input))==40&&Marshal.SizeOf(typeof(Mouse))==32&&Marshal.SizeOf(typeof(Key))==24);
         Require(VirtualKey("ControlLeft")==162&&VirtualKey("Space")==32&&VirtualKey("ImeOn")==0x16&&VirtualKey("ImeOff")==0x1a);
         var enter=KeyEvent(VirtualKey("NumpadEnter"),true);Require(enter.Data.Key.Vk==13&&(enter.Data.Key.Flags&1)!=0);
         Require(Line(new StringReader("generated\r\n"),32)=="generated");bool rejected=false;try{Line(new StringReader("12345\n"),4);}catch(InvalidOperationException){rejected=true;}Require(rejected);
         rejected=false;try{Keys(Object("{\"type\":\"stop\",\"extra\":true}"),"type");}catch(InvalidOperationException){rejected=true;}Require(rejected);
+        var held=new HashSet<ushort>();var buttons=new HashSet<int>();var emitted=new List<Input>();
+        rejected=false;try{Apply(Object("{\"kind\":\"pointer\",\"x\":0.5,\"y\":0.5,\"event\":\"invalid\",\"button\":0}"),value=>emitted.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==0);
+        rejected=false;try{Apply(Object("{\"kind\":\"pointer\",\"x\":0.5,\"y\":0.5,\"event\":\"down\",\"button\":5}"),value=>emitted.Add(value),held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==0);
+        long now=0;var facts=new SodaDesktopSigninScope.Facts{Candidate=true,Observer=true,BrokerAlive=true,WorkerAlive=true,Session=1,BrokerPid=100,BrokerStarted=1,WorkerPid=101,WorkerStarted=2,Nonce=new Guid("11111111-1111-4111-8111-111111111111"),Epoch=0};
+        var scope=new SodaDesktopSigninScope(1,100,1,101,2,facts.Nonce,true,()=>now);Func<SodaDesktopSigninScope.Facts> read=()=>facts;var frame=scope.Capture(read);Require(scope.Publish(frame,read)&&scope.Drawn(1,read)&&scope.Control(true,read));var permit=scope.BeginInput(1,1,read);Require(permit!=null);
+        rejected=false;try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(permit.Current(read));emitted.Add(value);now+=600;},held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==3);permit.Close();
+        var initial=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"generated-primary");var snapshot=initial;var target=new SodaDesktopSigninTarget(initial,()=>snapshot);Require(target.Current());snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"generated-new-primary");Require(!target.Current());snapshot=initial;Require(!target.Current());
+        target=new SodaDesktopSigninTarget(initial,()=>snapshot);snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1280,800,0,0,1280,800,1},"generated-primary");Require(!target.Current());
+        snapshot=initial;target=new SodaDesktopSigninTarget(initial,()=>snapshot);emitted.Clear();rejected=false;
+        try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(target.Current());emitted.Add(value);snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"changed-primary");},held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==1);
         SodaDesktopSigninWorkerNative.VerifyLayouts();Console.WriteLine("signin_worker_generated_data_and_abi_passed");
     }
     public static void Main(string[] args){
         try{
-            Require(Environment.Is64BitProcess&&SodaDesktopSigninVault.SystemPrimary());SodaDesktopSigninPackage.OwnerSid(Owner);
+            Require(Environment.Is64BitProcess&&SodaDesktopSigninVault.SystemPrimary());SodaDesktopSigninPackage.OwnerSid(Owner);SetProcessDPIAware();Require(IsProcessDPIAware());
             if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view")){Broker(args[1]=="input");return;}
             Require(args.Length==6&&args[0]=="--worker");Guid nonce=Guid.Empty;int broker=0,session=0;long started=0;Require(Guid.TryParseExact(args[1],"D",out nonce)&&nonce!=Guid.Empty&&args[1]==nonce.ToString("D")&&Int32.TryParse(args[2],out broker)&&broker>0&&Int64.TryParse(args[3],out started)&&started>0&&Int32.TryParse(args[4],out session)&&session>0&&(args[5]=="input"||args[5]=="view"));
             Run(nonce,broker,started,session,args[5]=="input");

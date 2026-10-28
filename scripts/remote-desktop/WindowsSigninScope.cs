@@ -13,6 +13,19 @@ public sealed class SodaDesktopSigninScope {
         internal readonly SodaDesktopSigninScope Owner;internal readonly long Epoch,Serial,At;
         internal Frame(SodaDesktopSigninScope owner,long epoch,long serial,long at){Owner=owner;Epoch=epoch;Serial=serial;At=at;}
     }
+    public sealed class InputPermit {
+        readonly SodaDesktopSigninScope owner;readonly long sequence,frame,revision,at;bool closed;
+        internal InputPermit(SodaDesktopSigninScope owner,long sequence,long frame,long revision,long at){this.owner=owner;this.sequence=sequence;this.frame=frame;this.revision=revision;this.at=at;}
+        public bool Current(Func<Facts> read){lock(owner.gate){
+            if(closed)return false;
+            try{
+                if(!owner.CurrentCore(read)){closed=true;return false;}long now=owner.Now();
+                bool valid=!closed&&!owner.ended&&owner.control&&owner.allowInput&&owner.controlRevision==revision&&owner.input==sequence&&owner.drawn==frame&&now>=at&&now-at<1500&&now<owner.deadline;
+                if(!valid)closed=true;return valid;
+            }catch{closed=true;return false;}
+        }}
+        public void Close(){lock(owner.gate)closed=true;}
+    }
     readonly object gate=new object();readonly Func<long> now;
     readonly int session,brokerPid,workerPid;readonly long brokerStarted,workerStarted,deadline;
     readonly Guid nonce;readonly bool allowInput;
@@ -57,5 +70,6 @@ public sealed class SodaDesktopSigninScope {
         if(ended||at>=deadline||!control||revision!=controlRevision||sequence<=input||frameSequence!=drawn||at<drawnAt||at-drawnAt>=1500)return false;
         input=sequence;return true;
     }}
+    public InputPermit BeginInput(long sequence,long frame,Func<Facts> read){lock(gate){if(!Input(sequence,frame,read))return null;return new InputPermit(this,sequence,frame,controlRevision,drawnAt);}}
     public void Close(){lock(gate){ended=true;control=false;}}
 }
