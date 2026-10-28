@@ -1,4 +1,4 @@
-import {desktopSigninStartup} from "../desktop/DesktopSigninStartup.js";
+import {desktopSigninEntry} from "../desktop/DesktopSigninEntry.js";
 /** The installed bootstrap invokes this export once. No automatic import-time
  * startup and no general server/CLI entry point exists in this bundle. */
 export async function main():Promise<void>{
@@ -6,6 +6,6 @@ export async function main():Promise<void>{
  const owner=process.argv[3],controller=new AbortController(),stop=()=>controller.abort();
  process.once("SIGTERM",stop);process.once("SIGINT",stop);
  try{
-  await desktopSigninStartup(owner,controller.signal);
+  await desktopSigninEntry(owner,process.stdin,controller);
  }finally{controller.abort();process.removeListener("SIGTERM",stop);process.removeListener("SIGINT",stop);}
 }

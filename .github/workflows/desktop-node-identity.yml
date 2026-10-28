@@ -26,6 +26,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
+      - name: Generated stdin stop protocol and clean Node exit (no service or desktop)
+        shell: powershell
+        run: node scripts/remote-desktop/validate-signin-stop.mjs
       - name: Install pinned pnpm in the runner temporary directory
         shell: powershell
         run: npm install --prefix "$env:RUNNER_TEMP\soda-pnpm" pnpm@9.15.9 --ignore-scripts

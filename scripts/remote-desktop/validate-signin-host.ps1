@@ -31,6 +31,10 @@ try {
     if($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists((Join-Path $stage 'DesktopSigninService.exe'))){throw 'Service staging compilation failed'}
     if($NegativeControls) {
         $variants=@(
+            @('graceful-force','if(stopped)return graceful;','if(stopped)return graceful||stopped;','Forced child was misclassified as clean'),
+            @('graceful-frame','Encoding.ASCII.GetBytes("signin_stop\n")','Encoding.ASCII.GetBytes("signin_st0p\n")','Cooperative child did not finish cleanly'),
+            @('graceful-exit','code!=0||!QueryInformationJobObject(job,1,out data','code==259||!QueryInformationJobObject(job,1,out data','Graceful completion ignored nonzero child exit'),
+            @('graceful-descendants','if(data.Active==0){if(timer.ElapsedMilliseconds>=milliseconds)return false;stopped=true;graceful=true;return true;}','if(data.Active<=2){if(timer.ElapsedMilliseconds>=milliseconds)return false;stopped=true;graceful=true;return true;}','Graceful completion ignored live descendant'),
             @('quiescence-marker','if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();','if(stream.ReadByte()==-2)throw Failure();','Invalid quiescence marker accepted'),
             @('quiescence-write-share','OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen)','OpenSharedCore(path,directory,package,maximum,3,policy,afterOpen)','Live quiescence lease allowed writes'),
             @('finite-exit-code','&&code==0;','&&code!=259;','Finite child exit code was ignored'),
@@ -39,7 +43,7 @@ try {
             @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)==1);','Require(true);Require(ResumeThread(process.Thread)==1);','Post-create revocation accepted'),
             @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
             @('job-membership','return owned;','return false;','Grandchild not owned by job'),
-            @('job-accounting','return data.Active;','return data.Active+1;','Finite child cleanup failed')
+            @('job-accounting','return data.Active;','return data.Active+1;','Cooperative child did not finish cleanly')
         )
         $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
         foreach($variant in $variants){

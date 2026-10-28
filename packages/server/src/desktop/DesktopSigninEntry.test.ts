@@ -1,0 +1,8 @@
+import {PassThrough} from 'node:stream';
+import {expect,it,vi} from 'vitest';
+import {desktopSigninEntry} from './DesktopSigninEntry.js';
+const owner='S-1-5-21-1-2-3-1001';
+function fixture(){const input=new PassThrough(),controller=new AbortController(),startup=vi.fn<NonNullable<Parameters<typeof desktopSigninEntry>[3]>>(async(_owner,signal)=>new Promise(resolve=>signal.addEventListener('abort',()=>resolve('normal'),{once:true}))),run=desktopSigninEntry(owner,input,controller,startup);void run.catch(()=>{});return {input,controller,startup,run};}
+it('finishes normal entry only after parent stop and startup teardown',async()=>{const f=fixture();f.input.write('signin_stop\n');await expect(f.run).resolves.toBe('normal');expect(f.controller.signal.aborted).toBe(true);expect(f.input.listenerCount('data')).toBe(0);});
+it.each(['wrong','eof'])('cannot classify %s input as a clean main exit after readonly teardown',async mode=>{const f=fixture();if(mode==='wrong')f.input.write('invalid\n');else f.input.emit('end');await expect(f.run).rejects.toThrow('Signin stop signal is unavailable');expect(f.controller.signal.aborted).toBe(true);expect(f.input.listenerCount('data')).toBe(0);});
+it('preserves an uncertain administrative write failure after valid parent stop',async()=>{const input=new PassThrough(),controller=new AbortController(),run=desktopSigninEntry(owner,input,controller,async(_owner,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('generated uncertain write')),{once:true})));void run.catch(()=>{});input.write('signin_stop\n');await expect(run).rejects.toThrow('generated uncertain write');expect(input.listenerCount('data')).toBe(0);});
