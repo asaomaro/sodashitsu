@@ -34,6 +34,7 @@ try {
             @('private-runtime','if(ace.AccessMask!=0)return false;','if(false)return false;','Foreign runtime read accepted'),
             @('parent-environment','EnvironmentBlock=block.Append(''\0'').ToString();','block.Append("SODA_SIGNIN_HOST_SECRET=generated-private-parent-marker\0");EnvironmentBlock=block.Append(''\0'').ToString();','Generated child did not become ready'),
             @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)!=0xffffffff);','Require(true);Require(ResumeThread(process.Thread)!=0xffffffff);','Post-create revocation accepted'),
+            @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
             @('job-accounting','return data.Active;','return data.Active+1;','Grandchild not owned by job')
         )
         $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
