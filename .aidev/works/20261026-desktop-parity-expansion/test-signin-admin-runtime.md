@@ -10,7 +10,9 @@ Windows native public result/deadline8 source-copy controls PASS (generated JSON
 
 Engine tracks pending operations and bounds each5s plus teardown8s; unconfirmed stop terminates the dedicated process. Incomplete result explicitly permits partial prior changes, never promises rollback or replays; unknown result write is not retried. Backend must enforce the lease at actual identity/enrollment persistence before this engine is connected. Native result writer revalidates the actual encrypted claimed owner/nonce/digest/deadline and rebuilds only closed public result fields.
 
-Build/typecheck/bundle, whole tests, external smoke, final CI and delivery pending.
+Product666f9154 source build/typecheck/bundle PASS; source full12,404/829 single PASS352.50s. Guarded root25 files (no custom overlap) build/typecheck/bundle PASS; root full12,466/837 single PASS355.51s. Browser source2 PASS13.2s; root2 PASS8.4s. Frozen external666f9154 install/build/bundle/smoke PASS and clean. Whole suites are not repeated for documentation-only final changes.
+
+Product CI protected40762865522/job123079128755 PASS; Node40762865550/job123079129042 PASS. Final documentation-head CI/merge pending. All final code reviews clear; record delta review follows.
 
 ## Actual product-source control store
 
