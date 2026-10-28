@@ -23,8 +23,12 @@ try {
     try {$result=$compiler.CompileAssemblyFromSource($p,[string[]]@($combined));if($result.Errors.HasErrors){throw ($result.Errors|Out-String)}}finally{$compiler.Dispose()}
     $fixture=Join-Path $root 'fixture';[IO.Directory]::CreateDirectory($fixture)|Out-Null
     [SodaDesktopSigninHostChecks]::Run($exe,$fixture)
-    & (Join-Path $PSScriptRoot 'build-signin-host.ps1') -ValidateOnly -OwnerSid $owner
+    $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
+    & $shell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'build-signin-host.ps1') -ValidateOnly -OwnerSid $owner
     if($LASTEXITCODE -ne 0){throw 'Service compile-only validation failed'}
+    $stage=Join-Path $root 'stage';[IO.Directory]::CreateDirectory($stage)|Out-Null
+    & $shell -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot 'build-signin-host.ps1') -OutputDirectory $stage -OwnerSid $owner
+    if($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists((Join-Path $stage 'DesktopSigninService.exe'))){throw 'Service staging compilation failed'}
     if($NegativeControls) {
         $variants=@(
             @('private-runtime','if(ace.AccessMask!=0)return false;','if(false)return false;','Foreign runtime read accepted'),
