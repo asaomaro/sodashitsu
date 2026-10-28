@@ -19,7 +19,7 @@ public static class SodaDesktopSigninWorker {
     static void Require(bool value){if(!value)throw Failure();}
     internal static string Line(TextReader reader,int maximum){var text=new StringBuilder();int value;while((value=reader.Read())!=-1){if(value==10){if(text.Length>0&&text[text.Length-1]==13)text.Length--;return text.ToString();}if(text.Length>=maximum)throw Failure();text.Append((char)value);}if(text.Length!=0)throw Failure();return null;}
     static void Send(TextWriter writer,object value){writer.WriteLine(Json.Serialize(value));writer.Flush();}
-    internal static void Broker(bool input){
+    internal static void Broker(bool input,TextReader parentIn,TextWriter parentOut){
         Require(SodaDesktopSigninVault.SystemPrimary()&&Process.GetCurrentProcess().SessionId==0);
         using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open()){
             uint console=SodaDesktopSigninWorkerNative.WTSGetActiveConsoleSessionId();Require(console>0&&console<=Int32.MaxValue);Guid nonce=Guid.NewGuid();
@@ -30,8 +30,8 @@ public static class SodaDesktopSigninWorker {
                     using(var wait=pending.AsyncWaitHandle){while(!wait.WaitOne(20)){Require(timer.ElapsedMilliseconds<5000&&package.Current()&&child.Running());}pipe.EndWaitForConnection(pending);}
                     uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeClientProcessId(pipe.SafePipeHandle,out actual)&&actual==pid&&child.Running());
                     using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,65536,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true))using(var stop=new ManualResetEvent(false)){
-                        var inbound=new Thread(()=>{try{string line;while((line=Line(Console.In,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
-                        var outbound=new Thread(()=>{try{string line;while((line=Line(reader,3000000))!=null){Console.Out.WriteLine(line);Console.Out.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
+                        var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
+                        var outbound=new Thread(()=>{try{string line;while((line=Line(reader,3000000))!=null){parentOut.WriteLine(line);parentOut.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
                         inbound.Start();outbound.Start();timer.Restart();while(!stop.WaitOne(50)&&child.Running()&&package.Current()&&timer.ElapsedMilliseconds<120000){}
                         if(!child.Stop())Environment.FailFast("Signin worker could not stop");pipe.Dispose();
                         // Closing this broker's stdin is controlled by the Node
@@ -43,8 +43,10 @@ public static class SodaDesktopSigninWorker {
         }
         // Emitted only after Job zero-active confirmation, output pump join,
         // and all native child/package/runtime leases have been released.
-        Console.Out.WriteLine("{\"type\":\"signin_stopped\"}");Console.Out.Flush();
+        parentOut.WriteLine("{\"type\":\"signin_stopped\"}");parentOut.Flush();
     }
+    static StreamReader Utf8Reader(Stream stream){return new StreamReader(stream,new UTF8Encoding(false,true),false,16384,true);}
+    static StreamWriter Utf8Writer(Stream stream){return new StreamWriter(stream,new UTF8Encoding(false),65536,true){AutoFlush=true};}
     static Dictionary<string,object> Object(string text){var value=Json.DeserializeObject(text) as Dictionary<string,object>;if(value==null)throw Failure();return value;}
     static void Keys(Dictionary<string,object> value,params string[] keys){Require(value.Count==keys.Length);foreach(string key in keys)Require(value.ContainsKey(key));}
     static long Integer(Dictionary<string,object> value,string key,long minimum,long maximum){object item=value[key];Require(item is int||item is long);long result=Convert.ToInt64(item);Require(result>=minimum&&result<=maximum);return result;}
@@ -190,12 +192,16 @@ public static class SodaDesktopSigninWorker {
         snapshot=initial;target=new SodaDesktopSigninTarget(initial,()=>snapshot);emitted.Clear();cleaned.Clear();rejected=false;
         try{Apply(Object("{\"kind\":\"text\",\"text\":\"generated\"}"),value=>{Require(target.Current());emitted.Add(value);snapshot=new SodaDesktopSigninTarget.Snapshot(new[]{1920,1200,0,0,1920,1200,1},"changed-primary");},value=>{if(target.Current())cleaned.Add(value);},held,buttons);}catch(InvalidOperationException){rejected=true;}Require(rejected&&emitted.Count==1&&cleaned.Count==0);
         var mode=new Mode{Fields=0x180080,Width=1920,Height=1200,Orientation=0,Bits=32};var metrics=new[]{1920,1200,0,0,1920,1200,1};var normal=BindTarget("generated-primary",mode,metrics);snapshot=normal;target=new SodaDesktopSigninTarget(normal,()=>snapshot);mode.Orientation=2;snapshot=BindTarget("generated-primary",mode,metrics);Generated(!target.Current(),"Rotated primary was accepted");
+        using(var memory=new MemoryStream()){
+            using(var output=Utf8Writer(memory))output.WriteLine("生成");Generated(new UTF8Encoding(false,true).GetString(memory.ToArray())=="生成"+Environment.NewLine,"Broker UTF8 output changed");
+            memory.Position=0;using(var input=Utf8Reader(memory))Generated(Line(input,32)=="生成","Broker UTF8 input changed");
+        }
         SodaDesktopSigninWorkerNative.VerifyLayouts();Console.WriteLine("signin_worker_generated_data_and_abi_passed");
     }
     public static void Main(string[] args){
         try{
             Require(Environment.Is64BitProcess&&SodaDesktopSigninVault.SystemPrimary());SodaDesktopSigninPackage.OwnerSid(Owner);SetProcessDPIAware();Require(IsProcessDPIAware());
-            if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view")){Broker(args[1]=="input");return;}
+            if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view")){using(var input=Utf8Reader(Console.OpenStandardInput()))using(var output=Utf8Writer(Console.OpenStandardOutput()))Broker(args[1]=="input",input,output);return;}
             Require(args.Length==6&&args[0]=="--worker");Guid nonce=Guid.Empty;int broker=0,session=0;long started=0;Require(Guid.TryParseExact(args[1],"D",out nonce)&&nonce!=Guid.Empty&&args[1]==nonce.ToString("D")&&Int32.TryParse(args[2],out broker)&&broker>0&&Int64.TryParse(args[3],out started)&&started>0&&Int32.TryParse(args[4],out session)&&session>0&&(args[5]=="input"||args[5]=="view"));
             Run(nonce,broker,started,session,args[5]=="input");
         }catch{Environment.Exit(1);}

@@ -80,3 +80,5 @@ export * from "./desktopFolders.js";
 export * from "./desktopFeatures.js";
 
 export * from "./desktopAgentEndpoint.js";
+
+export {DesktopSigninRequired,DesktopSigninGrant} from "./desktopSignin.js";

@@ -2,7 +2,7 @@
 import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_FILE_CHECKPOINTS_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopEndpointAgentPeers,DesktopEndpointAgentTicket,DesktopEndpointAgentError,parseDesktopAgentGrant} from "@sodashitsu/protocol";
-import {desktopFeaturesProtocol} from "@sodashitsu/protocol";
+import {DesktopSigninRequired,desktopFeaturesProtocol} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CURSOR_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_MICROPHONE_PROTOCOL} from "@sodashitsu/protocol";
@@ -74,6 +74,15 @@ const infoOpen = ref(false);
 const toolbarCollapsed = ref(false), inputCollapsed = ref(false);
 const textInput = ref<HTMLInputElement>();
 const secureDesktop = ref(false);
+const signinOffer=ref<ReturnType<typeof DesktopSigninRequired.parse>>(),signinSession=ref(false);
+let signinTimer:ReturnType<typeof setTimeout>|undefined,signinUntil=0;
+function grantSignin(control:boolean){
+  const offer=signinOffer.value;
+  if(!endpointEncrypted.value||!offer||performance.now()>=signinUntil||control&&!offer.allowInput)return;
+  signinOffer.value=undefined;clearTimeout(signinTimer);signinSession.value=true;
+  status.value="Windowsのサインイン画面に接続中";
+  send({type:"signin_grant",id:offer.id,control});
+}
 const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<DesktopInputCapabilities>();
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
 const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
@@ -457,6 +466,7 @@ function resetMicrophone(){microphoneClient?.stop();microphoneClient=undefined;m
 function startMicrophone(){if(ready.value&&microphoneAvailable.value&&microphonePipeReady.value&&!secureDesktop.value)void microphoneClient?.start();}
 function stop(preserveCapabilities=false) {
   resetMicrophone();
+  clearTimeout(signinTimer);signinOffer.value=undefined;signinSession.value=false;
   epoch++;
   cursorRenderer?.stop();cursorRenderer=undefined;separateCursor.value=false;
   if (clipboardGranted.value) send({ type: "clipboard_grant", enabled: false });
@@ -577,7 +587,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -628,6 +638,14 @@ function connect(automatic = false) {
         send({ type: "ack", seq: frame.info.seq });
       } else {
         const m = JSON.parse(String(event.data));
+        if(m.type==="signin_required"){
+          if(!endpointEncrypted.value||signinOffer.value||signinSession.value||ready.value)throw Error("サインイン接続の状態が不正です");
+          const offer=DesktopSigninRequired.parse(m),remaining=offer.validForMs;
+          signinUntil=performance.now()+remaining;
+          if(remaining<=0||remaining>120000)throw Error("サインイン接続の許可期限が切れています");
+          signinOffer.value=offer;status.value="サインイン画面への接続許可を待っています";
+          signinTimer=setTimeout(()=>{error.value="サインイン接続の許可期限が切れました。接続し直してください。";stop();},remaining);return;
+        }
         if(m.type==="agent_endpoint_available"){
           if(!endpointEncrypted.value)throw Error("暗号化エージェントの接続状態が不正です");
           const message=DesktopEndpointAgentPeers.parse(m);endpointAgentAvailable.value=true;endpointAgentPeers.value=message.peers;
@@ -705,7 +723,9 @@ function connect(automatic = false) {
           videoReady=false; nativeVideo.value=false;
         } else if (m.type === "ready") {
           const r = DesktopReady.parse(m);
+          if(signinOffer.value||signinSession.value&&(!r.secureDesktop||r.protectedDesktop||r.allowMedia||r.nativeVideo||r.allowClipboard||r.files||r.microphone))throw Error("サインイン画面の機能が不正です");
           secureDesktop.value = r.secureDesktop === true;
+          if(signinSession.value&&activeSettings.value)activeSettings.value={...activeSettings.value,display:undefined,deltas:false,adaptive:false,image:{colorMode:"full",showCursor:false}};
           protectedMode.value=r.protectedDesktop;sharedProtectedAvailable.value=r.sharedProtectedAvailable===true;
           lockScreenCover.value = r.lockScreenCover === true;
           imeKeys.value = r.imeKeys === true;
@@ -714,7 +734,7 @@ function connect(automatic = false) {
           }
           extendedInput.value = r.extendedInput === true;
           if (secureDesktop.value) text.value = "";
-          title.value = protectedMode.value ? (protectedMode.value==="elevated-uac"?"WindowsのUAC確認画面":"Windowsの管理者画面") : secureDesktop.value ? "Windowsのロック解除" : r.title;
+          title.value = signinSession.value ? "Windowsのサインイン画面" : protectedMode.value ? (protectedMode.value==="elevated-uac"?"WindowsのUAC確認画面":"Windowsの管理者画面") : secureDesktop.value ? "Windowsのロック解除" : r.title;
           allowed.value = r.allowInput;
           ready.value = connected.value = true;
           if(r.imageLane)send({type:"image_ready"});
@@ -741,7 +761,7 @@ function connect(automatic = false) {
             error.value = "Bでディスプレイ解像度の変更が許可されていません";
           }
           if (!secureDesktop.value) scheduleDisplay();
-          status.value = protectedMode.value ? "管理者画面・閲覧中" : secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
+          status.value = signinSession.value ? "サインイン画面・閲覧中" : protectedMode.value ? "管理者画面・閲覧中" : secureDesktop.value ? "ロック画面・閲覧中" : "閲覧中";
         } else if ((m.type === "session_unlocked" && secureDesktop.value) || (m.type === "session_locked" && !secureDesktop.value) || (m.type === "lock_screen_changed" && (secureDesktop.value || !ready.value))) {
           const exhausted = ++startupRetries > 3;
           maximumDisplay.value = false;
@@ -1146,6 +1166,12 @@ onBeforeUnmount(() => {
       </header>
       <p v-if="error&&!infoOpen" class="desktop-alert" role="alert">{{ error }}</p>
       <button v-if="!ready&&error&&!elevatedScreen&&!infoOpen" @click="resetMonitor">既定のモニターで接続し直す</button>
+      <div v-if="signinOffer" data-desktop-signin-consent role="group" aria-label="サインイン画面への接続許可">
+        <p>Windowsのサインイン画面に接続します。今回の接続だけ許可し、最長120秒で終了します。ログインや画面構成の変更後は接続し直してください。</p>
+        <button @click="grantSignin(false)">閲覧だけ許可</button>
+        <button v-if="signinOffer.allowInput" @click="grantSignin(true)">キーボード・マウス操作も許可</button>
+        <button @click="close">キャンセル</button>
+      </div>
       <div v-show="infoOpen" class="desktop-controls">
         <p v-if="error" role="alert">{{ error }}</p>
         <button v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
@@ -1155,8 +1181,9 @@ onBeforeUnmount(() => {
         {{ title }} <b v-if="synthetic">模擬画面（実デスクトップではありません）</b>
       </p>
       <p v-if="secureDesktop && !protectedMode && !lockScreenCover" data-desktop-locked>
-        Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。
-        <button :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
+        <template v-if="signinSession">Windows標準の認証画面を表示しています。終了すると操作許可も破棄します。</template>
+        <template v-else>Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。</template>
+        <button v-if="!signinSession" :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
       <p v-if="activeSettings && ready" data-desktop-applied>
         画像設定: <template v-if="activeSettings.display">{{activeSettings.display.width}}×{{activeSettings.display.height}}等倍（幅上限より優先）</template><template v-else>幅上限{{ activeSettings.width }}</template> / {{ activeSettings.fps }}fps上限 / JPEG
@@ -1168,16 +1195,18 @@ onBeforeUnmount(() => {
         }}
       </p>
       <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止画面でも画像を送り続けるPortalが必要で、1.5秒無更新になると停止します。</template></p>
-      <label v-if="!platformBackend"><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
+      <template v-if="!signinSession">
+      <label v-if="!platformBackend&&!signinSession"><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
       <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button @click="joinSharedMonitor">このモニターで接続</button><small>共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。</small></div>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedDeltasAvailable" data-shared-deltas><input v-model="sharedDeltasScreen" :disabled="!deltas" type="checkbox" @change="changeSharedDeltas" />差分画像を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedClipboardAvailable" data-shared-clipboard><input v-model="sharedClipboardScreen" type="checkbox" @change="changeSharedClipboard" />クリップボード経路を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedCursorAvailable" data-shared-cursor><input v-model="sharedCursorScreen" :disabled="!showCursor" type="checkbox" @change="changeSharedCursor" />独立カーソルを共有（全ての窓で同じ選択が必要）</label>
       <p v-if="sharedScreen" data-desktop-shared>{{ protectedMode ? "許可済みの管理者画面を画像で共有しています。" : nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。<template v-if="!protectedMode">対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。</template><template v-if="sharedClipboardScreen&&!elevatedScreen">クリップボードは別に1窓だけへ許可でき、操作権とは独立です。他の窓の許可は奪えません。</template><template v-else>クリップボードは利用できません。</template>OSの解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
-      <label v-if="!platformBackend"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
+      </template>
+      <label v-if="!platformBackend&&!signinSession"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
-      <label v-if="!platformBackend"><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
+      <label v-if="!platformBackend&&!signinSession"><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。共有終了時にこの画面を解放します。</p>
       <nav>
 
@@ -1211,7 +1240,7 @@ onBeforeUnmount(() => {
             >JPEG品質<input v-model="quality" aria-label="JPEG品質" type="number" min="20" max="90"
           /></label>
           <label
-            >色<select v-model="colorMode" :disabled="!!platformBackend" aria-label="送信する色">
+            >色<select v-model="colorMode" :disabled="!!platformBackend||signinSession" aria-label="送信する色">
               <option value="full">フルカラー</option>
               <option value="rgb565">約6.5万色</option>
               <option value="rgb332">256色</option>
