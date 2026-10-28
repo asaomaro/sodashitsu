@@ -44,7 +44,7 @@ oPIbVgGa3lonyFZypsbIih3KwqiK3Jqojhq8MVNlE37p5SFVHma2ca1GP3AA9728
 Tfv077jZ6kvtozbtGERI7CFga1Rd1lynArDbE6747FgMu+w4ldYkqEyPoZUs9WmI
 xqpT7vN3gtk3E5ywAAQMReygJffpimYopL42UtSwpvE=
 -----END CERTIFICATE-----
-";data=Record();op=Operation();data["caPem"]=generatedCa;op["caPem"]=generatedCa;canonical=Canonical(data,op);Check(Encoding.UTF8.GetString(canonical).Contains("caPem"),"Enrollment CA lost");Array.Clear(canonical,0,canonical.Length);
+".Replace("\r\n","\n");data=Record();op=Operation();data["caPem"]=generatedCa;op["caPem"]=generatedCa;canonical=Canonical(data,op);Check(Encoding.UTF8.GetString(canonical).Contains("caPem"),"Enrollment CA lost");Array.Clear(canonical,0,canonical.Length);
   data["caPem"]=generatedCa.Replace("\n","\r\n");Denied(()=>Canonical(data,op),"Enrollment mismatched CA accepted");
   data["caPem"]=generatedCa+"extra";Denied(()=>Canonical(data,op),"Enrollment mismatched CA accepted");op["caPem"]=data["caPem"];Denied(()=>Canonical(data,op),"Enrollment malformed CA accepted");
   data["caPem"]=generatedCa+generatedCa;op["caPem"]=data["caPem"];Denied(()=>Canonical(data,op),"Enrollment multiple CA accepted");
