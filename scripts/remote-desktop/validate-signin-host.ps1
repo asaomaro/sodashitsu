@@ -32,7 +32,7 @@ try {
     if($NegativeControls) {
         $variants=@(
             @('quiescence-marker','if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();','if(stream.ReadByte()==-2)throw Failure();','Invalid quiescence marker accepted'),
-            @('quiescence-write-share','directory?0x20080u:0x80020000u,1,IntPtr.Zero','directory?0x20080u:0x80020000u,3,IntPtr.Zero','Live quiescence lease allowed writes'),
+            @('quiescence-write-share','OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen)','OpenSharedCore(path,directory,package,maximum,3,policy,afterOpen)','Live quiescence lease allowed writes'),
             @('finite-exit-code','&&code==0;','&&code!=259;','Finite child exit code was ignored'),
             @('private-runtime','if(ace.AccessMask!=0)return false;','','Foreign runtime read accepted'),
             @('parent-environment','EnvironmentBlock=block.Append(''\0'').ToString();','block.Append("SODA_SIGNIN_HOST_SECRET=generated-private-parent-marker\0");EnvironmentBlock=block.Append(''\0'').ToString();','Parent environment retained'),
