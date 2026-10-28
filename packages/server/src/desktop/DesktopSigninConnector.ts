@@ -66,7 +66,7 @@ export class DesktopSigninConnector {
       this.#agent=new (credential.url.startsWith("wss:")?HttpsAgent:HttpAgent)({keepAlive:false,maxSockets:1,maxTotalSockets:1});
       socket=(this.options.socket??((url,options)=>new WebSocket(url,options)))(credential.url,{
         headers:{authorization:"Bearer "+credential.token,"x-soda-machine-id":credential.machineId},
-        agent:this.#agent,rejectUnauthorized:true,followRedirects:false,handshakeTimeout:5000,
+        agent:this.#agent,...(credential.caPem===undefined?{}:{ca:credential.caPem}),rejectUnauthorized:true,followRedirects:false,handshakeTimeout:5000,
         perMessageDeflate:false,maxPayload:32768,
       });
       socket.on("error",finish);socket.on("close",finish);
