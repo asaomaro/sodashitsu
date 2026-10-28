@@ -1,0 +1,9 @@
+# 7B2c: 専用agentの有限要求処理と寿命
+
+7B2aの分類と7B2bの保護読み取りの次に、最小hostがdelegationの論理channelを接続する要求処理を作る。一般WsGateway/ControlSurfaceをimportしない。入口は既存WsConnection形で、公開listener・service起動・SYSTEM実行は追加しない。
+
+client.helloを最初の一回だけ受け、capabilities/status/startの固定handlerへ渡す。startは登録machine/origin/viewerに加え、hello公開鍵のSHA256が登録viewer一覧内であることを必要とする。これはRootからの公開値なので認証の証拠にはせず、後段sealed handshakeと現在のtrust/revisionの積を必須とする。input ceiling/provider/revisionとactive/AbortSignalを固定call scopeとして渡す。handlerは非同期処理の副作用と公開前にもscopeを検査し、取消を守る必要がある。
+
+最大16channel、各一要求だけ処理、16KiB要求/64KiB応答・送信待ち、最大1000個の重複しないrequest ID、固定120秒channel寿命・5秒要求期限を設ける。timerに加え単調時刻を検査する。未知要求、hello前操作、binary、同時要求、容量超過、失効/abort、期限、handler例外でchannelを閉じる。要求をqueueしない。closeは先に失効を確定してsignal取消、clientGoneによるpending/接続cleanup、transport closeを行う。例外を外部へ転送・ログ出力しない。service全体closeは終端で、再登録/再接続では新instanceを作る。
+
+hostはbundle検証・SYS/保護enrollment・revision失効通知・署名付き専用worker/epochを担当する。このdispatcher単独ではサインイン画面の取得/入力を許可しない。一般service installer/controller/worker/UIは後続。生成接続と遅延handlerで要求・寿命・取消を検証し、source負例を実行する。安全/状態に関わるためtaskcheck、最終cross、修正差分再点検を必須にする。
