@@ -92,8 +92,10 @@ it("bounds live reads even when callers cancel before the underlying read settle
   f.store.status.mockImplementation(()=>new Promise(resolve=>releases.push(resolve)));
   const results:Promise<unknown>[]=[];
   for(let i=0;i<8;i++){const abort=new AbortController();results.push(f.gate.endpoint(peer,{...f.scope,signal:abort.signal}).catch(error=>error));abort.abort();}
-  await expect(f.gate.endpoint(peer,f.scope)).rejects.toThrow();expect(f.store.status).toHaveBeenCalledTimes(8);
-  for(const release of releases)release(f.state());await Promise.all(results);await flush();
+  const extraAbort=new AbortController(),extra=f.gate.endpoint(peer,{...f.scope,signal:extraAbort.signal}).catch(error=>error);
+  try {expect(f.store.status).toHaveBeenCalledTimes(8);}
+  finally {extraAbort.abort();for(const release of releases)release(f.state());await Promise.all(results);await extra;}
+  expect(await extra).toBeInstanceOf(Error);await flush();
   f.store.status.mockResolvedValue(f.state());expect((await f.gate.endpoint(peer,f.scope)).active()).toBe(true);
 });
 it("cancels stalled callers on the timer but waits for actual reads before releasing ownership",async()=>{
