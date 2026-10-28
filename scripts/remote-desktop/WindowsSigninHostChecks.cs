@@ -16,6 +16,7 @@ public static class SodaDesktopSigninHostChecks {
     static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     static byte[] Acl(string sddl){var sd=new RawSecurityDescriptor(sddl);var bytes=new byte[sd.BinaryLength];sd.GetBinaryForm(bytes,0);return bytes;}
     static void Wait(Func<bool> done,string message){var timer=Stopwatch.StartNew();while(timer.ElapsedMilliseconds<5000){if(done())return;Thread.Sleep(20);}throw new InvalidOperationException(message);}
+    static void Publish(string path,string text){string stage=path+"."+Process.GetCurrentProcess().Id+".tmp";File.WriteAllText(stage,text);File.Move(stage,path);}
     static string Quote(string value){return "\""+value+"\"";}
     internal static SodaDesktopSigninHost.Plan Fixture(string exe,string directory,string mode){return new SodaDesktopSigninHost.Plan(exe,mode+" "+Quote(directory)+(mode=="--generated-child"?" "+sentinelValue.ToString(System.Globalization.CultureInfo.InvariantCulture):""),Environment.GetFolderPath(Environment.SpecialFolder.System),directory);}
     public static void Run(string exe,string directory){
@@ -58,7 +59,7 @@ public static class SodaDesktopSigninHostChecks {
     // SodaDesktopSigninHost instead. No desktop/account/key APIs are exercised.
     public static void Main(string[] args){
         if((args.Length!=2&&args.Length!=3)||!Path.IsPathRooted(args[1]))Environment.Exit(2);
-        if(args[0]=="--generated-descendant"){File.WriteAllText(Path.Combine(args[1],"descendant"),Process.GetCurrentProcess().Id.ToString());Thread.Sleep(30000);return;}
+        if(args[0]=="--generated-descendant"){Publish(Path.Combine(args[1],"descendant"),Process.GetCurrentProcess().Id.ToString());Thread.Sleep(30000);return;}
         if(args[0]!="--generated-child"||args.Length!=3)Environment.Exit(2);
         SetEvent(new IntPtr(Int64.Parse(args[2],System.Globalization.CultureInfo.InvariantCulture)));
         bool inJob;bool good=IsProcessInJob(GetCurrentProcess(),IntPtr.Zero,out inJob)&&inJob;
@@ -68,6 +69,6 @@ public static class SodaDesktopSigninHostChecks {
         if(!good)Environment.Exit(3);
         var exe=Process.GetCurrentProcess().MainModule.FileName;
         var start=new ProcessStartInfo(exe,"--generated-descendant "+Quote(args[1])){UseShellExecute=false,CreateNoWindow=true};
-        using(var descendant=Process.Start(start)){File.WriteAllText(Path.Combine(args[1],"ready"),"generated_environment_and_job_passed");Thread.Sleep(30000);}
+        using(var descendant=Process.Start(start)){Publish(Path.Combine(args[1],"ready"),"generated_environment_and_job_passed");Thread.Sleep(30000);}
     }
 }
