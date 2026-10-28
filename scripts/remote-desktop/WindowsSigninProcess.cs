@@ -33,14 +33,14 @@ internal static class SodaDesktopSigninProcess {
         IntPtr process,job;bool stopped;readonly object gate=new object();
         internal Child(IntPtr process,IntPtr job){this.process=process;this.job=job;}
         internal bool Running(){lock(gate){return !stopped&&WaitForSingleObject(process,0)==258;}}
-        internal uint Active(){lock(gate){Accounting data;Require(job!=IntPtr.Zero&&QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero));return data.Active;}}
+        internal uint Active(){lock(gate){Accounting data=new Accounting();Require(job!=IntPtr.Zero&&QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero));return data.Active;}}
         internal bool Stop(){lock(gate){
             if(stopped)return true;
             // Keep the job open for accounting, then close only after zero active.
             if(job==IntPtr.Zero||!TerminateJobObject(job,1))return false;
             var deadline=Stopwatch.StartNew();
             while(deadline.ElapsedMilliseconds<8000){
-                Accounting data;if(!QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero))return false;
+                Accounting data=new Accounting();if(!QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero))return false;
                 if(data.Active==0&&WaitForSingleObject(process,0)==0){stopped=true;return true;}Thread.Sleep(10);
             }return false;
         }}
