@@ -33,7 +33,8 @@ public static class SodaDesktopSigninHostChecks {
             Wait(()=>File.Exists(marker),"Generated child did not become ready");
             Check(File.ReadAllText(marker)=="generated_environment_and_job_passed","Child environment or job incorrect");
             Check(!sentinel.WaitOne(0),"Unexpected handle inherited");
-            Wait(()=>child.Active()==2&&File.Exists(Path.Combine(directory,"descendant")),"Grandchild not owned by job");
+            try{Wait(()=>child.Active()==2&&File.Exists(Path.Combine(directory,"descendant")),"Grandchild not owned by job");}
+            catch{Console.WriteLine("generated_job_active="+child.Active()+" descendant_marker="+File.Exists(Path.Combine(directory,"descendant"))+" child_running="+child.Running());throw;}
             Check(child.Running(),"Generated child ended early");
             Check(child.Stop()&&child.Active()==0&&!child.Running(),"Descendant cleanup failed");
             Check(child.Stop(),"Stop is not idempotent");
