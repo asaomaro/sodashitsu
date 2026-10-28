@@ -8,7 +8,11 @@ Related 41 PASS (presence21 + context20). Six actual TS product-source mutations
 
 Native ValidateOnly and generated ABI/data plus27 source-copy negative controls PASS; includes exact context argv route rejection. Current-user/generated sinks only; privileged Main, service/token/desktop/device operations were not executed. Before source build, first typecheck failed because fresh worktree protocol dist was absent; build precedes final typecheck.
 
-Final build/typecheck/full tests, external smoke, CI and merge receipts pending.
+Final product8360c543: source build/typecheck/builtin bundle PASS; full12,281/823 single PASS348.28s. Guarded root8 files (docs custom preserved): build/typecheck/bundle PASS, full12,343/831 single PASS358.24s. Browser startup source2 PASS12.5s/root2 PASS11.4s. Frozen external worktree8360c543 install/build/bundle/smoke PASS, clean. No repeat whole suite needed for documentation-only final delta.
+
+Product-head CI: protected40753551539/job123046315590 PASS; Node40753564385/job123046361305 PASS. Final documentation-head CI/merge pending.
+
+Generated native27 source controls completed on product source after the #274 APM correction was incorporated. TS six controls are actual product mutations with intended assertions, source bytes exactly restored before build/full tests. Architecture includes already-stopped-service recovery distinction and separately registered SYSTEM machine identity. All must/should findings resolved. No real privileged operation or handoff.
 
 ## TS source negative: authority
 
