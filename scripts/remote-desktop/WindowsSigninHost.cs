@@ -70,7 +70,8 @@ public static class SodaDesktopSigninHost {
             if(stop.WaitOne(0)||!package.Current())return;
             child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&package.Current());
             while(!stop.WaitOne(250)&&package.Current()&&child.Running()){}
-            if(!stop.WaitOne(0)&&(!package.Current()||!child.ExitedSuccessfully()))throw Failure();
+            if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
+            else if(!package.Current()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
         }finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.
@@ -85,7 +86,7 @@ public static class SodaDesktopSigninHost {
             if(args==null||args.Length!=0||!Environment.Is64BitProcess||!SodaDesktopSigninVault.SystemPrimary()||thread!=null)throw Failure();
             thread=new Thread(()=>{try{SodaDesktopSigninHost.Run(stop);}catch{ExitCode=1;}finally{ThreadPool.QueueUserWorkItem(_=>{try{Stop();}catch{}});}});thread.IsBackground=true;thread.Start();
         }
-        protected override void OnStop(){stop.Set();if(thread!=null&&Thread.CurrentThread!=thread&&!thread.Join(12000))Environment.FailFast("Signin host could not stop");}
+        protected override void OnStop(){stop.Set();if(thread!=null&&Thread.CurrentThread!=thread&&!thread.Join(25000))Environment.FailFast("Signin host could not stop");}
         protected override void OnShutdown(){OnStop();}
         protected override void Dispose(bool disposing){if(disposing){OnStop();stop.Dispose();}base.Dispose(disposing);}
     }

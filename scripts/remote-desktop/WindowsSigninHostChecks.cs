@@ -32,6 +32,17 @@ public static class SodaDesktopSigninHostChecks {
         }
         using(var exclusive=new FileStream(barrier,FileMode.Open,FileAccess.Read,FileShare.None))Check(exclusive.Length==1,"Released quiescence barrier unavailable");
         File.WriteAllBytes(barrier,new byte[]{84});bool badBarrier=false;try{using(var lease=SodaDesktopSigninHost.Barrier(runtime,descriptor=>true)){} }catch(InvalidOperationException){badBarrier=true;}Check(badBarrier,"Invalid quiescence marker accepted");File.Delete(barrier);Directory.Delete(runtime);
+        foreach(string mode in new[]{"--generated-stop-success","--generated-stop-failure","--generated-stop-hang","--generated-stop-descendant"})using(var child=SodaDesktopSigninProcess.Start(Fixture(exe,directory,mode),()=>true)){
+            if(mode=="--generated-stop-descendant")Wait(()=>File.Exists(Path.Combine(directory,"descendant")),"Graceful fixture descendant was not ready");
+            bool clean=child.TryGraceful(mode=="--generated-stop-success"||mode=="--generated-stop-failure"?3000:100);
+            if(mode=="--generated-stop-success")Check(clean&&child.ExitedSuccessfully()&&child.Active()==0,"Cooperative child did not finish cleanly");
+            else if(mode=="--generated-stop-failure")Check(!clean,"Graceful completion ignored nonzero child exit");
+            else if(mode=="--generated-stop-descendant")Check(!clean,"Graceful completion ignored live descendant");
+            else Check(!clean,"Graceful completion ignored timeout");
+            Check(child.Stop()&&child.Active()==0,"Graceful fallback did not stop every descendant");
+        }
+        using(var forced=SodaDesktopSigninProcess.Start(Fixture(exe,directory,"--generated-stop-hang"),()=>true)){Check(forced.Stop(),"Generated force stop failed");Check(!forced.TryGraceful(100),"Forced child was misclassified as clean");}
+        File.Delete(Path.Combine(directory,"descendant"));
         foreach(string mode in new[]{"--generated-exit-success","--generated-exit-failure"})using(var child=SodaDesktopSigninProcess.Start(Fixture(exe,directory,mode),()=>true)){
             Wait(()=>!child.Running(),"Generated finite child did not exit");Check(child.ExitedSuccessfully()==(mode=="--generated-exit-success"),"Finite child exit code was ignored");Check(child.Stop()&&child.Active()==0,"Finite child cleanup failed");
         }
@@ -70,6 +81,14 @@ public static class SodaDesktopSigninHostChecks {
     // SodaDesktopSigninHost instead. No desktop/account/key APIs are exercised.
     public static void Main(string[] args){
         if((args.Length!=2&&args.Length!=3)||!Path.IsPathRooted(args[1]))Environment.Exit(2);
+        if(args[0]=="--generated-stop-hang"){Thread.Sleep(30000);return;}
+        if(args[0]=="--generated-stop-success"||args[0]=="--generated-stop-failure"||args[0]=="--generated-stop-descendant"){
+            Process descendant=null;
+            try{
+                if(args[0]=="--generated-stop-descendant")descendant=Process.Start(new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"--generated-descendant "+Quote(args[1])){UseShellExecute=false,CreateNoWindow=true});
+                if(Console.ReadLine()!="signin_stop"){Environment.Exit(9);return;}if(args[0]=="--generated-stop-failure")Environment.Exit(7);
+            }finally{if(descendant!=null)descendant.Dispose();}return;
+        }
         if(args[0]=="--generated-exit-success")return;
         if(args[0]=="--generated-exit-failure"){Environment.Exit(7);return;}
         if(args[0]=="--generated-descendant"){Publish(Path.Combine(args[1],"descendant"),Process.GetCurrentProcess().Id.ToString());Thread.Sleep(30000);return;}
