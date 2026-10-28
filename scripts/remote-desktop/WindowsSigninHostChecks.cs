@@ -24,6 +24,17 @@ public static class SodaDesktopSigninHostChecks {
         Check(SodaDesktopSigninHost.PrivateRuntimeAcl(Acl("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)")),"Private runtime rejected");
         Check(!SodaDesktopSigninHost.PrivateRuntimeAcl(Acl("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FR;;;WD)")),"Foreign runtime read accepted");
         Check(!SodaDesktopSigninHost.PrivateRuntimeAcl(Acl("O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;0x10000000;;;WD)")),"Foreign runtime write accepted");
+        string runtime=Path.Combine(directory,"generated-runtime"),barrier=Path.Combine(directory,"quiescence.lock");Directory.CreateDirectory(runtime);File.WriteAllBytes(barrier,new byte[]{83});
+        using(var lease=SodaDesktopSigninHost.Barrier(runtime,descriptor=>true)){
+            bool blocked=false;try{using(var exclusive=new FileStream(barrier,FileMode.Open,FileAccess.Read,FileShare.None)){} }catch(IOException){blocked=true;}Check(blocked,"Live quiescence lease allowed exclusive access");
+            blocked=false;try{using(var writer=new FileStream(barrier,FileMode.Open,FileAccess.Write,FileShare.Read)){} }catch(IOException){blocked=true;}Check(blocked,"Live quiescence lease allowed writes");
+            blocked=false;try{File.Delete(barrier);}catch(IOException){blocked=true;}Check(blocked,"Live quiescence lease allowed replacement");
+        }
+        using(var exclusive=new FileStream(barrier,FileMode.Open,FileAccess.Read,FileShare.None))Check(exclusive.Length==1,"Released quiescence barrier unavailable");
+        File.WriteAllBytes(barrier,new byte[]{84});bool badBarrier=false;try{using(var lease=SodaDesktopSigninHost.Barrier(runtime,descriptor=>true)){} }catch(InvalidOperationException){badBarrier=true;}Check(badBarrier,"Invalid quiescence marker accepted");File.Delete(barrier);Directory.Delete(runtime);
+        foreach(string mode in new[]{"--generated-exit-success","--generated-exit-failure"})using(var child=SodaDesktopSigninProcess.Start(Fixture(exe,directory,mode),()=>true)){
+            Wait(()=>!child.Running(),"Generated finite child did not exit");Check(child.ExitedSuccessfully()==(mode=="--generated-exit-success"),"Finite child exit code was ignored");Check(child.Stop()&&child.Active()==0,"Finite child cleanup failed");
+        }
         using(var sentinel=new EventWaitHandle(false,EventResetMode.ManualReset)){
         sentinelValue=sentinel.SafeWaitHandle.DangerousGetHandle().ToInt64();
         Check(SetHandleInformation(new IntPtr(sentinelValue),1,1),"Could not prepare inheritable fixture event");
@@ -59,6 +70,8 @@ public static class SodaDesktopSigninHostChecks {
     // SodaDesktopSigninHost instead. No desktop/account/key APIs are exercised.
     public static void Main(string[] args){
         if((args.Length!=2&&args.Length!=3)||!Path.IsPathRooted(args[1]))Environment.Exit(2);
+        if(args[0]=="--generated-exit-success")return;
+        if(args[0]=="--generated-exit-failure"){Environment.Exit(7);return;}
         if(args[0]=="--generated-descendant"){Publish(Path.Combine(args[1],"descendant"),Process.GetCurrentProcess().Id.ToString());Thread.Sleep(30000);return;}
         if(args[0]!="--generated-child"||args.Length!=3)Environment.Exit(2);
         SetEvent(new IntPtr(Int64.Parse(args[2],System.Globalization.CultureInfo.InvariantCulture)));

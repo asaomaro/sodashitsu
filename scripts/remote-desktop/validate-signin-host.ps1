@@ -31,12 +31,15 @@ try {
     if($LASTEXITCODE -ne 0 -or -not [IO.File]::Exists((Join-Path $stage 'DesktopSigninService.exe'))){throw 'Service staging compilation failed'}
     if($NegativeControls) {
         $variants=@(
+            @('quiescence-marker','if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();','if(stream.ReadByte()==-2)throw Failure();','Invalid quiescence marker accepted'),
+            @('quiescence-write-share','directory?0x20080u:0x80020000u,1,IntPtr.Zero','directory?0x20080u:0x80020000u,3,IntPtr.Zero','Live quiescence lease allowed writes'),
+            @('finite-exit-code','&&code==0;','&&code!=259;','Finite child exit code was ignored'),
             @('private-runtime','if(ace.AccessMask!=0)return false;','','Foreign runtime read accepted'),
             @('parent-environment','EnvironmentBlock=block.Append(''\0'').ToString();','block.Append("SODA_SIGNIN_HOST_SECRET=generated-private-parent-marker\0");EnvironmentBlock=block.Append(''\0'').ToString();','Parent environment retained'),
             @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)==1);','Require(true);Require(ResumeThread(process.Thread)==1);','Post-create revocation accepted'),
             @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
             @('job-membership','return owned;','return false;','Grandchild not owned by job'),
-            @('job-accounting','return data.Active;','return data.Active+1;','Descendant cleanup failed')
+            @('job-accounting','return data.Active;','return data.Active+1;','Finite child cleanup failed')
         )
         $shell=Join-Path ([Environment]::GetFolderPath('System')) 'WindowsPowerShell\v1.0\powershell.exe'
         foreach($variant in $variants){

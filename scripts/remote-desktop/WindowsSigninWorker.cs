@@ -158,7 +158,7 @@ public static class SodaDesktopSigninWorker {
     static void Run(Guid nonce,int brokerPid,long brokerStarted,int session,Purpose purpose){
         bool input=purpose==Purpose.Input;Require(PurposeName(purpose)!=null);
         Require(SodaDesktopSigninVault.SystemPrimary());
-        using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var pipe=new NamedPipeClientStream(".",SodaDesktopSigninWorkerNative.PipeName(Owner,nonce),PipeDirection.InOut,PipeOptions.None,System.Security.Principal.TokenImpersonationLevel.Anonymous)){
+        using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open())using(var pipe=new NamedPipeClientStream(".",SodaDesktopSigninWorkerNative.PipeName(Owner,nonce),PipeDirection.InOut,PipeOptions.None,System.Security.Principal.TokenImpersonationLevel.Anonymous)){
             pipe.Connect(5000);uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeServerProcessId(pipe.SafePipeHandle,out actual)&&actual==(uint)brokerPid);
             using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,16384,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),65536,true)){
             SodaDesktopSigninScopeNative native;try{native=new SodaDesktopSigninScopeNative(Owner,session,brokerPid,brokerStarted,nonce);}catch(SodaDesktopSigninInactiveException){InactivePresence(purpose,type=>Send(writer,new{type}),()=>Line(reader,16384));return;}

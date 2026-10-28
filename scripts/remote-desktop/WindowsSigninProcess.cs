@@ -26,6 +26,7 @@ internal static class SodaDesktopSigninProcess {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern bool CreateProcessW(string application,StringBuilder command,IntPtr processSa,IntPtr threadSa,bool inherit,uint flags,IntPtr env,string directory,ref SX startup,out PI process);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern uint ResumeThread(IntPtr thread);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern uint WaitForSingleObject(IntPtr handle,uint timeout);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool GetExitCodeProcess(IntPtr process,out uint code);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr handle);
     static void Require(bool value){if(!value)throw SodaDesktopSigninHost.Failure();}
     static void Close(ref IntPtr value){if(value!=IntPtr.Zero&&value!=new IntPtr(-1))CloseHandle(value);value=IntPtr.Zero;}
@@ -35,6 +36,7 @@ internal static class SodaDesktopSigninProcess {
         internal Child(IntPtr process,IntPtr job){this.process=process;this.job=job;}
         internal bool Owns(int pid){lock(gate){try{using(var item=Process.GetProcessById(pid)){bool owned;Require(IsProcessInJob(item.Handle,job,out owned));return owned;}}catch{return false;}}}
         internal bool Running(){lock(gate){return !stopped&&WaitForSingleObject(process,0)==258;}}
+        internal bool ExitedSuccessfully(){lock(gate){uint code;return process!=IntPtr.Zero&&WaitForSingleObject(process,0)==0&&GetExitCodeProcess(process,out code)&&code==0;}}
         internal uint Active(){lock(gate){Accounting data=new Accounting();Require(job!=IntPtr.Zero&&QueryInformationJobObject(job,1,out data,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero));return data.Active;}}
         internal bool Stop(){lock(gate){
             if(stopped)return true;
