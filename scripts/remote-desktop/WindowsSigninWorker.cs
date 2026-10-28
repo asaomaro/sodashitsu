@@ -65,6 +65,16 @@ public static class SodaDesktopSigninWorker {
         // and all native child/package/runtime leases have been released.
         parentOut.WriteLine("{\"type\":\"signin_stopped\"}");parentOut.Flush();
     }
+    // Context inspection verifies the installed SYSTEM image and private runtime
+    // but never queries/opens a desktop or creates a Winlogon child.
+    static void Context(TextWriter output){
+        Require(SodaDesktopSigninVault.SystemPrimary()&&SodaDesktopSigninVault.PipeOutput()&&Process.GetCurrentProcess().SessionId==0);
+        using(var package=SodaDesktopSigninPackageNative.VerifyWorker(Owner))using(var runtime=SodaDesktopSigninHost.RuntimeLease.Open()){
+            Require(package.Current());Send(output,new{type="signin_context",ownerSid=Owner,packageRoot=Path.GetDirectoryName(package.Bootstrap),stateDir=runtime.Path});
+        }
+        output.WriteLine("{\"type\":\"signin_stopped\"}");output.Flush();
+    }
+    static bool ContextRoute(string[] args,Action inspect){if(args.Length!=1||args[0]!="--context")return false;inspect();return true;}
     static StreamReader Utf8Reader(Stream stream){return new StreamReader(stream,new UTF8Encoding(false,true),false,16384,true);}
     static StreamWriter Utf8Writer(Stream stream){return new StreamWriter(stream,new UTF8Encoding(false),65536,true){AutoFlush=true};}
     static Dictionary<string,object> Object(string text){var value=Json.DeserializeObject(text) as Dictionary<string,object>;if(value==null)throw Failure();return value;}
@@ -237,11 +247,15 @@ public static class SodaDesktopSigninWorker {
             using(var output=Utf8Writer(memory))output.WriteLine("生成");Generated(new UTF8Encoding(false,true).GetString(memory.ToArray())=="生成"+Environment.NewLine,"Broker UTF8 output changed");
             memory.Position=0;using(var input=Utf8Reader(memory))Generated(Line(input,32)=="生成","Broker UTF8 input changed");
         }
+        int contextCalls=0;Generated(ContextRoute(new[]{"--context"},()=>contextCalls++)&&contextCalls==1,"Context route not dispatched");
+        foreach(var argv in new[]{new string[0],new[]{"--context","input"},new[]{"--broker","presence"},new[]{"--worker"},new[]{"context"}})Generated(!ContextRoute(argv,()=>contextCalls++)&&contextCalls==1,"Context route accepted other purpose");
         SodaDesktopSigninWorkerNative.VerifyLayouts();Console.WriteLine("signin_worker_generated_data_and_abi_passed");
     }
     public static void Main(string[] args){
         try{
-            Require(Environment.Is64BitProcess&&SodaDesktopSigninVault.SystemPrimary());SodaDesktopSigninPackage.OwnerSid(Owner);SetProcessDPIAware();Require(IsProcessDPIAware());
+            Require(Environment.Is64BitProcess&&SodaDesktopSigninVault.SystemPrimary());SodaDesktopSigninPackage.OwnerSid(Owner);
+            if(ContextRoute(args,()=>{using(var output=Utf8Writer(Console.OpenStandardOutput()))Context(output);}))return;
+            SetProcessDPIAware();Require(IsProcessDPIAware());
             if(args.Length==2&&args[0]=="--broker"&&(args[1]=="input"||args[1]=="view"||args[1]=="presence")){using(var input=Utf8Reader(Console.OpenStandardInput()))using(var output=Utf8Writer(Console.OpenStandardOutput()))Broker(ParsePurpose(args[1]),input,output);return;}
             Require(args.Length==6&&args[0]=="--worker");Guid nonce=Guid.Empty;int broker=0,session=0;long started=0;Require(Guid.TryParseExact(args[1],"D",out nonce)&&nonce!=Guid.Empty&&args[1]==nonce.ToString("D")&&Int32.TryParse(args[2],out broker)&&broker>0&&Int64.TryParse(args[3],out started)&&started>0&&Int32.TryParse(args[4],out session)&&session>0&&(args[5]=="input"||args[5]=="view"||args[5]=="presence"));
             Run(nonce,broker,started,session,ParsePurpose(args[5]));

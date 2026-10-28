@@ -21,13 +21,13 @@ export function desktopSigninContext(raw:unknown,ownerSid:string,expectedRoot:st
  * published only after a native signed-out pulse, never from an argv/env path. */
 export class DesktopSigninPresenceProcess {
  #child:ReturnType<DesktopSigninWorkerDependencies["spawn"]>|undefined;#spawning=true;#closing=false;#done=false;#notified=false;#proof=false;#tail=false;
- #line="";#bytes=0;#decoder=new TextDecoder("utf-8",{fatal:true});#context:DesktopSigninContext|undefined;#seq=0;#until=0;
+ #line="";#bytes=0;#decoder=new TextDecoder("utf-8",{fatal:true});#context:DesktopSigninContext|undefined;#invalid=false;#seq=0;#until=0;
  readonly #deadline:number;readonly #readyUntil:number;#readyDone=false;
  #ready:Promise<DesktopSigninContext|null>;#readyResolve!:(value:DesktopSigninContext|null)=>void;#readyReject!:(error:Error)=>void;
  #stopped:Promise<void>;#resolve!:()=>void;#reject!:(error:Error)=>void;
  #health:ReturnType<typeof setInterval>|undefined;#beat:ReturnType<typeof setInterval>|undefined;#stop:ReturnType<typeof setTimeout>|undefined;
  readonly #abort=()=>this.close();
- constructor(private readonly options:{ownerSid:string;active():boolean;signal:AbortSignal;closed():void},private readonly deps=defaults){
+ constructor(private readonly options:{ownerSid:string;active():boolean;signal:AbortSignal;closed():void},private readonly deps=defaults,private readonly purpose:"presence"|"context"="presence"){
   this.#ready=new Promise((resolve,reject)=>{this.#readyResolve=resolve;this.#readyReject=reject;});void this.#ready.catch(()=>{});
   this.#stopped=new Promise((resolve,reject)=>{this.#resolve=resolve;this.#reject=reject;});void this.#stopped.catch(()=>{});
   const at=deps.now();this.#deadline=at+120000;this.#readyUntil=at+10000;
@@ -36,17 +36,17 @@ export class DesktopSigninPresenceProcess {
   try{
    const command=fileURLToPath(new URL("../../../../DesktopSigninWorker.exe",import.meta.url));
    const env:NodeJS.ProcessEnv={};for(const key of ["SystemRoot","windir","PATH","TEMP","TMP"]){const value=process.env[key];if(typeof value==="string")env[key]=value;}
-   this.#child=deps.spawn(command,["--broker","presence"],{stdio:["pipe","pipe","pipe"],windowsHide:true,cwd:win32.dirname(command),env});this.#spawning=false;
+   this.#child=deps.spawn(command,(purpose==="context"?["--context"]:["--broker","presence"]),{stdio:["pipe","pipe","pipe"],windowsHide:true,cwd:win32.dirname(command),env});this.#spawning=false;
    const child=this.#child;child.on("error",()=>this.close());child.on("close",code=>this.finished(code));
    if(!child.stdin||!child.stdout||!child.stderr){try{child.kill();}catch{}this.finished(null);return;}
    child.stdin.on("error",()=>this.close());child.stdout.on("error",()=>this.close());child.stderr.on("error",()=>this.close());child.stderr.on("data",(bytes:Buffer)=>bytes.fill(0));child.stdout.on("data",(bytes:Buffer)=>this.receive(bytes));
    if(this.#closing||!this.owned()){this.close();this.stopChild();return;}
    this.#health=setInterval(()=>{if(!this.owned()){this.close();return;}if(this.deps.now()>=(this.#seq?this.#until:this.#readyUntil))this.close();},100);this.#health.unref();
-   this.#beat=setInterval(()=>this.heartbeat(),2000);this.#beat.unref();this.heartbeat();
+   if(purpose==="presence"){this.#beat=setInterval(()=>this.heartbeat(),2000);this.#beat.unref();this.heartbeat();}
   }catch{this.#spawning=false;if(this.#child){this.close();return;}this.#closing=true;this.#done=true;options.signal.removeEventListener("abort",this.#abort);this.notify();this.#readyReject(failure());this.#reject(failure());throw failure();}
  }
  private owned():boolean{try{return !this.#closing&&!this.#done&&!this.options.signal.aborted&&this.options.active()&&this.deps.now()<this.#deadline&&!this.#closing&&!this.#done&&!this.options.signal.aborted;}catch{return false;}}
- active():boolean{if(!this.owned()||!this.#seq||this.deps.now()>=this.#until){if(this.#seq)this.close();return false;}return true;}
+ active():boolean{if(this.purpose==="context")return false;if(!this.owned()||!this.#seq||this.deps.now()>=this.#until){if(this.#seq)this.close();return false;}return true;}
  private notify():void{if(this.#notified)return;this.#notified=true;try{this.options.closed();}catch{}}
  private heartbeat():void{if(!this.owned()){this.close();return;}const child=this.#child,text='{"type":"heartbeat"}\n';if(!child||child.stdin.writableLength+text.length>4096){this.close();return;}try{child.stdin.write(text);}catch{this.close();}}
  private receive(bytes:Buffer):void{
@@ -54,15 +54,16 @@ export class DesktopSigninPresenceProcess {
   try{if(this.#proof&&bytes.length)this.#tail=true;if(bytes.length>16384)throw failure();const text=this.#decoder.decode(bytes,{stream:true});bytes.fill(0);let start=0,index:number;
    while((index=text.indexOf("\n",start))>=0){const part=text.slice(start,index);this.#bytes+=Buffer.byteLength(part);if(this.#bytes>16384)throw failure();const line=this.#line+part;this.#line="";this.#bytes=0;this.record(line.endsWith("\r")?line.slice(0,-1):line);start=index+1;if(this.#done)return;}
    const rest=text.slice(start);if(this.#proof&&rest.length)this.#tail=true;this.#bytes+=Buffer.byteLength(rest);if(this.#bytes>16384)throw failure();this.#line+=rest;
-  }catch{bytes.fill(0);this.close();}
+  }catch{this.#invalid=true;bytes.fill(0);this.close();}
  }
  private record(line:string):void{
-  if(this.#proof){this.#tail=true;return;}if(line==='{"type":"signin_stopped"}'){this.#proof=true;this.close();return;}if(this.#closing)return;
+  if(this.#proof){this.#tail=true;return;}if(line==='{"type":"signin_stopped"}'){this.#proof=true;this.retire(true);return;}if(this.#closing)return;
   if(!this.owned()||!this.#seq&&this.deps.now()>=this.#readyUntil||this.#seq&&this.deps.now()>=this.#until)throw failure();
   const priorUntil=this.#seq?this.#until:this.#readyUntil;
   const value=JSON.parse(line) as {type?:string};if(value.type==="signin_context"){
    if(this.#context||this.#seq)throw failure();this.#context=desktopSigninContext(value,this.options.ownerSid,this.deps.root());return;
   }
+  if(this.purpose==="context")throw failure();
   if(value.type==="signin_inactive"){z.object({type:z.literal("signin_inactive")}).strict().parse(value);if(!this.#context||this.#seq)throw failure();this.close();return;}
   const pulse=pulseSchema.parse(value);if(!this.#context||pulse.seq!==this.#seq+1||!this.owned())throw failure();const at=this.deps.now();if(at>=priorUntil||at>=this.#deadline||this.#closing||this.#done||this.options.signal.aborted)throw failure();this.#seq=pulse.seq;this.#until=Math.min(this.#deadline,at+pulse.validForMs);
   if(!this.#readyDone){this.#readyDone=true;this.#readyResolve(this.#context);}
@@ -71,10 +72,26 @@ export class DesktopSigninPresenceProcess {
  private finished(code:number|null):void{
   if(this.#done)return;let complete=false;try{complete=this.#decoder.decode().length===0&&this.#line.length===0&&this.#bytes===0;}catch{}
   this.#done=true;this.#closing=true;clearInterval(this.#health);clearInterval(this.#beat);clearTimeout(this.#stop);this.options.signal.removeEventListener("abort",this.#abort);this.#line="";this.#bytes=0;this.notify();
-  if(code===0&&this.#proof&&!this.#tail&&complete){if(!this.#readyDone){this.#readyDone=true;this.#readyResolve(null);}this.#resolve();return;}
+  if(code===0&&this.#proof&&!this.#tail&&complete){if(!this.#readyDone){this.#readyDone=true;this.#readyResolve(this.contextResult());}this.#resolve();return;}
   if(!this.#readyDone){this.#readyDone=true;this.#readyReject(failure());}this.#reject(failure());try{this.deps.unsafeStop();}catch{}
  }
- close():void{if(this.#done)return;if(!this.#closing){this.#closing=true;clearInterval(this.#health);clearInterval(this.#beat);this.notify();}this.stopChild();}
+ private contextResult():DesktopSigninContext|null{
+  if(this.purpose!=="context"||!this.#context||this.#invalid||this.options.signal.aborted)return null;
+  try{if(!this.options.active())return null;const at=this.deps.now();return !this.#invalid&&!this.options.signal.aborted&&at<this.#readyUntil?this.#context:null;}catch{return null;}
+ }
+ private retire(proven=false):void{if(this.purpose==="context"&&!proven)this.#invalid=true;if(this.#done)return;if(!this.#closing){this.#closing=true;clearInterval(this.#health);clearInterval(this.#beat);this.notify();}this.stopChild();}
+ close():void{this.retire();}
  ready():Promise<DesktopSigninContext|null>{return this.#ready;}
  settled():Promise<void>{return this.#stopped;}
+}
+
+/** Metadata inspection has no presence authority. Withhold even valid metadata
+ * until the native process has released all leases and proved a clean exit. */
+export class DesktopSigninContextProcess {
+ readonly #process:DesktopSigninPresenceProcess;
+ constructor(options:{ownerSid:string;active():boolean;signal:AbortSignal;closed():void},deps?:DesktopSigninPresenceDependencies){this.#process=new DesktopSigninPresenceProcess(options,deps,"context");}
+ active():false{return false;}
+ async ready():Promise<DesktopSigninContext>{const context=await this.#process.ready();if(!context)throw failure();return context;}
+ close():void{this.#process.close();}
+ settled():Promise<void>{return this.#process.settled();}
 }
