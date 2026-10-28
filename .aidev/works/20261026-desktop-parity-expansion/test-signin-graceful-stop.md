@@ -12,9 +12,9 @@ Generated native child scenarios cover cooperative success, exit7 refusal, hung 
 
 Native review found force-stop being reused as clean and success beyond elapsed deadline; fixed clean/forced state and final deadline guard, then natural-exit Job-zero too. JS review found readonly read abort escaping as failure, then an old-timer race masking normal cancellation; fixed only the normal readonly branch with actual Entry→Startup→Cycle integration and a fake-clock stop4s/timer5s/read-settle6s regression. Pending reads remain owned until settlement; failure to settle rejects/unsafe. Admin unknown writes are never suppressed. Independent taskchecks and delta reviews clear; final records/whole cross follow.
 
-Build/type/full/browser/external/native worker regressions/CI pending. No real SYS/service entry, protected desktop/input/audio devices, user keys/trust, certificates or installed service setup. B's separate ordinary-server build/handoff is tracked independently and cannot validate this dedicated uninstalled service.
+Final verification results are recorded below; final delivery confirmation remains pending. No real SYS/service entry, protected desktop/input/audio devices, user keys/trust, certificates or installed service setup. B's separate ordinary-server build/handoff is tracked independently and cannot validate this dedicated uninstalled service.
 
-Final native host compile/staging/generated13 controls PASS; worker compilation/generated27 controls PASS. Build/typecheck/builtin bundle PASS after Entry extraction. Independent final whole cross (native/JS/validator/records) clear. Generated stdin validator has an idempotent fixture callback to keep multiple end/error events from duplicating its output; the product abort itself is idempotent. Whole source suite in progress, root/browser/external/delivery remain pending.
+Final native host compile/staging/generated13 controls PASS; worker compilation/generated27 controls PASS. Build/typecheck/builtin bundle PASS after Entry extraction. Independent final whole cross (native/JS/validator/records) clear. Generated stdin validator has an idempotent fixture callback to keep multiple end/error events from duplicating its output; the product abort itself is idempotent. Whole source/root/browser/external results are recorded below; final delivery confirmation remains pending.
 
 Source control prefix: AssertionError: expected "vi.fn()" to be called at least once
 
@@ -31,3 +31,7 @@ Source control readonly-timer: AssertionError: promise rejected "Error: Signin r
 Source control admin-nonclean: AssertionError: promise resolved "'admin'" instead of rejecting
 
 Source control entry: AssertionError: promise resolved "'normal'" instead of rejecting
+
+## Final product verification
+
+Product8e81e541 source build/type/builtin bundle PASS; source whole12,470/836 single PASS322.36s. Guarded root16 files (all base-match/new, no custom overlap) build/type/bundle PASS and whole12,532/844 single PASS323.24s. Browser source2 PASS12.8s, root2 PASS8.0s. External frozen8e81e541 install/build/bundle/smoke PASS and clean. Product Windows CI both PASS: protected40784338250/job123153644681 and Node40784338824/job123153646491, including generated no-addons Node stdin validator. Native host13 and worker27 controls PASS; independent final cross and revisions clear. Final documentation CI/main confirmation follows. No actual privileged service/desktop action; ordinary server deployment/reconnect is a separate record.
