@@ -16,7 +16,7 @@ import {DESKTOP_PROTECTED_PROTOCOL,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/pro
 import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join,dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -1476,4 +1476,28 @@ it("preserves an unproven input cleanup fault across reconnect, reconfigure and 
  const f=await fixture(),provider=f.provider as any,cfg=provider.config;f.provider.configure({...cfg,allowMonitors:true,command:[...cfg.command,"--static","--monitors"]});const v=await f.viewer("independent-monitors");v.send({...start,options:{...start.options,features:true,sharedDesktop:true,sharedMonitors:true,independentMonitors:true,monitorDevice:"left"}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled===true)).toBe(true);
  [...provider.physicalHelpers][0].kill();await expect.poll(()=>provider.resources.faulted).toBe(true);await expect(f.provider.start("after-fault",{} as any)).rejects.toThrow("入力解放");
  f.provider.configure(cfg);await expect(f.provider.start("after-configure",{} as any)).rejects.toThrow("入力解放");const endpoint=f.provider.endpointScope("http://127.0.0.1:12345",()=>true);await expect(endpoint.start("endpoint",{} as any)).rejects.toThrow("入力解放");endpoint.close();
+});
+
+it.each(["pipe","json","shared","folder"])("copies a trusted %s selection through the file lane only after physical cleanup",async mode=>{
+ const f=await fixture(),cfg=(f.provider as any).config,root=dirname(f.record),path=join(root,"selected-generated.txt");await writeFile(path,"generated native source");
+ f.provider.configure({...cfg,fileRoot:root,command:[...cfg.command,"--pointer-witness-generated",...(mode==="pipe"?["--input-ack-pipe"]:[])]});
+ const folder=join(root,"selected-folder");if(mode==="folder"){await mkdir(folder);await mkdir(join(folder,"empty"));await writeFile(join(folder,"data.txt"),"generated native source");}
+ const runtime=(f.provider as any).nativeSelection;vi.spyOn(runtime,"prepare").mockResolvedValue(undefined);const capture=vi.spyOn(runtime,"capture").mockResolvedValue([mode==="folder"?folder:path]);vi.spyOn(runtime,"paths").mockImplementation(async(paths:any)=>paths);
+ const v=await f.viewer(mode==="shared"?"shared-files":"checkpoints");v.send({...start,options:{...start.options,files:true,...(mode==="shared"?{sharedDesktop:true,features:true}:{})}});
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);await expect.poll(()=>v.messages.some(m=>m.type==="files_ticket")).toBe(true);
+ const socket=new WebSocket(f.endpoint,DESKTOP_FILES_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),responses:any[]=[];socket.on("error",()=>{});socket.on("message",data=>responses.push(JSON.parse(data.toString())));cleanup.push(async()=>socket.terminate());
+ await new Promise<void>((resolve,reject)=>{socket.once("open",resolve);socket.once("error",reject);});socket.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
+ const run=async(request:unknown)=>{const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>responses.some(m=>m.id===id)).toBe(true);return responses.find(m=>m.id===id);};
+ expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active,epoch=state.resources.identity(share,"control").epoch,gesture=crypto.randomUUID();
+ const prepared=await run({action:"native_prepare",gesture,origin:f.origin,seq:1});expect(prepared.ok).toBe(true);expect(capture).toHaveBeenCalledWith(expect.objectContaining({epoch,x:-400,y:50,window:42,pid:7}),expect.any(Number),expect.any(AbortSignal));
+ const offer=prepared.result.native;expect(offer.entries[0].name).toBe(mode==="folder"?"selected-folder":"selected-generated.txt");if(mode==="folder")expect(offer.entries).toEqual(expect.arrayContaining([expect.objectContaining({name:"selected-folder\\empty",directory:true,bytes:0})]));expect(offer.generation).toBe(epoch);expect(JSON.stringify(offer)).not.toContain(root);
+ const activated=await run({action:"native_activate",gesture,lease:offer.lease});expect(activated.ok).toBe(true);expect(state.resources.identity(share,"control")).toBeUndefined();expect(share.control).toBe(false);expect(share.pointerWitness).toBeUndefined();
+ const read=await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:mode==="folder"?offer.entries.findIndex((entry:any)=>entry.name.endsWith("data.txt")):0,offset:0,length:23});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("generated native source");
+ if(mode==="shared"){
+  const other=await f.viewer("shared-files");other.send({...start,options:{...start.options,files:true,sharedDesktop:true,features:true}});await expect.poll(()=>other.frames.length).toBeGreaterThan(0);other.send({type:"control",enabled:true});await expect.poll(()=>other.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ }
+ expect((await run({action:"native_abort",gesture})).ok).toBe(true);expect((await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:0,offset:0,length:1})).ok).toBe(false);
+ v.send({type:"stop"});
 });

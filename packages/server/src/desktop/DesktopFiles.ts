@@ -1,3 +1,4 @@
+import {DesktopNativeFiles,type NativeFileHooks} from "./DesktopNativeFiles.js";
 import type {DesktopFolderCheckpoints} from "./DesktopFolderCheckpoints.js";
 import {DesktopFolders} from "./DesktopFolders.js";
 import {canonicalFolder} from "./desktopFilePaths.js";
@@ -15,6 +16,7 @@ export class DesktopFiles {
   private queue: Promise<unknown> = Promise.resolve();
   private transfer = new FileTransfer();
   private folders:DesktopFolders|undefined;
+  private native:DesktopNativeFiles|undefined;
   private readonly owner = crypto.randomUUID();
   private activeIds = new Set<string>();
   private cancelledIds = new Set<string>();
@@ -46,7 +48,8 @@ export class DesktopFiles {
     private valid: () => boolean = () => true,
     folderSupport=false,
     private folderCheckpoints?:DesktopFolderCheckpoints,
-  ) {if(folderSupport)this.folders=new DesktopFolders(root);}
+    native?:NativeFileHooks,
+  ) {if(folderSupport)this.folders=new DesktopFolders(root);if(native)this.native=new DesktopNativeFiles(root,this.owner,native);}
   static async open(
     root: string,
     allowed: () => boolean,
@@ -54,6 +57,7 @@ export class DesktopFiles {
     valid: () => boolean = () => true,
     folderSupport=false,
     folderCheckpoints?:DesktopFolderCheckpoints,
+    native?:NativeFileHooks,
   ) {
     if (!isAbsolute(root))
       throw new RpcError("invalid_params", "共有フォルダは絶対パスを指定してください");
@@ -66,11 +70,13 @@ export class DesktopFiles {
       valid,
       folderSupport,
       folderCheckpoints,
+      native,
     );
   }
   run(raw: unknown): Promise<DesktopFileResult> {
     const m = DesktopFileRequest.parse(raw),
       version = this.epoch;
+    if(m.request.action==="native_abort")this.native?.cancel(m.request.gesture);
     const operationId = "id" in m.request ? m.request.id : ((m.request.action==="folder_resume_start"||m.request.action==="folder_resume_run")?m.request.request.id:undefined);
     if(m.request.action==="folder_abort"){
       if(this.folderCancelledIds.size>=4096){this.granted=false;this.epoch++;this.folderCheckpoints?.revoke(this.owner);this.folders?.cancelAll();}
@@ -87,6 +93,7 @@ export class DesktopFiles {
     // Revoke immediately, including while file/hash work is queued.
     if (m.request.action === "grant" && !m.request.enabled) {
       this.granted = false;
+      this.native?.cancel();
       this.epoch++;
       this.checkpoints?.revoke(this.owner);
       this.folderCheckpoints?.revoke(this.owner);
@@ -143,6 +150,7 @@ export class DesktopFiles {
           fence();
         };
         await guard();
+        if(m.request.action.startsWith("native_")){if(!this.native)throw Error("Explorerドラッグを利用できません");return reply(await this.native.run(m.request,()=>{fence();if(!this.valid())throw Error("共有元が変更されました");}));}
         if(m.request.action.startsWith("folder_resume_")){if(!this.folderCheckpoints)throw Error("フォルダの切断後再開には両端の更新が必要です");const {DesktopFolderCheckpointRequest}=await import("@sodashitsu/protocol");return reply(await this.folderCheckpoints.run({owner:this.owner,root:this.root,guard,fence,connected:()=>!this.dead&&this.allowed(),valid:this.valid},DesktopFolderCheckpointRequest.parse(m.request)));}
         if(m.request.action.startsWith("folder_")){if(!this.folders)throw Error("両端を更新してフォルダ転送に対応した接続を使ってください");const {DesktopFolderRequest}=await import("@sodashitsu/protocol");return reply(await this.folders.run(DesktopFolderRequest.parse(m.request),guard,fence));}
         if (m.request.action.startsWith("checkpoint_")) {
@@ -249,6 +257,7 @@ export class DesktopFiles {
   }
   async close() {
     this.dead = true;
+    this.native?.cancel();
     this.folders?.cancelAll();
     this.checkpoints?.detach(this.owner);
     this.folderCheckpoints?.detach(this.owner);
@@ -257,6 +266,7 @@ export class DesktopFiles {
     await this.queue;
     await this.transfer.close();
     await this.folders?.close();
+    await this.native?.close();
     for (const id of this.activeIds) this.forget(id);
     this.cancelledIds.clear();
   }

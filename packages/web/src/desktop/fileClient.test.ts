@@ -149,3 +149,16 @@ it.each(["folder_upload_start", "folder_download_start"] as const)(
     client.stop();
   },
 );
+
+it("gives native abort the reserved slot while selected-file bytes are pending",async()=>{
+ const sent:DesktopFileRequest[]=[],client=new DesktopFileClient(value=>{sent.push(value);return true;},()=>{}),gesture=crypto.randomUUID(),lease=crypto.randomUUID();
+ const reading=client.request({action:"native_read",gesture,lease,request:crypto.randomUUID(),index:0,offset:0,length:1}),aborting=client.request({action:"native_abort",gesture});
+ expect(sent.map(value=>value.request.action)).toEqual(["native_read","native_abort"]);
+ for(const value of [...sent].reverse())client.receive({type:"desktop_file_result",id:value.id,ok:true,result:{}});
+ await Promise.all([reading,aborting]);client.stop();
+});
+it("rejects a missing native read at five seconds without extending to the ordinary file deadline",async()=>{
+ vi.useFakeTimers();const end=vi.fn(),client=new DesktopFileClient(()=>true,end);let settled=false;
+ const reading=client.request({action:"native_read",gesture:crypto.randomUUID(),lease:crypto.randomUUID(),request:crypto.randomUUID(),index:0,offset:0,length:1});const outcome=reading.then(()=>({ok:true}),error=>{settled=true;return {ok:false,error};});
+ await vi.advanceTimersByTimeAsync(4999);expect(settled).toBe(false);await vi.advanceTimersByTimeAsync(1);expect(settled).toBe(true);expect(await outcome).toMatchObject({ok:false,error:expect.any(Error)});expect(end).not.toHaveBeenCalled();client.stop();
+});

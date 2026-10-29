@@ -32,3 +32,12 @@ N4 input binding (public native file actions/helper gateway/UI still pending):
 - [x] Windows generated memory tests and84 targeted Node tests,13 actual-product-source negatives, independent whole/correction reviews.
 - [ ] Frozen whole checks, related browser input/shared validation, guarded root integration and scoped delivery.
 - [ ] B selection worker/manifest/read/activation wire, strict release attachment and browser-PC authenticated native helper/controller.
+
+N4 PR#302 delivered: testeddfac5d19, mainca2cc152. Source12614/root12676 tests, source/root related browser3 each, clean build/smoke and4 Windows jobs passed; independent19-path frozen root match.
+
+N5 B integration:
+- [x] Disposable STA selection worker and bounded owned-process/compile lifecycle; generated tests, no real Explorer access.
+- [x] Existing explicit file grant/root, fresh private pointer, immutable snapshot, strict release activation, finite read/heartbeat/abort wire.
+- [x] Normal and private-endpoint trusted origin, sticky prequeue abort, process-wide snapshot quota held through drain, directory/emptydir offer schema.
+- [ ] Final source controls, frozen full/root/browser/Windows CI/clean smoke and independent whole/correction review.
+- [ ] Browser-PC authenticated helper gateway, browser gesture controller and actual Explorer target validation.

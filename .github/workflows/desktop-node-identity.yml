@@ -79,3 +79,6 @@ jobs:
       - name: Generated physical pointer witness input path (memory endpoints only)
         shell: powershell
         run: scripts/remote-desktop/validate-pointer-witness.ps1
+      - name: Generated Explorer selection worker and owned blocked-input exit
+        shell: powershell
+        run: scripts/remote-desktop/validate-explorer-selection-worker.ps1
