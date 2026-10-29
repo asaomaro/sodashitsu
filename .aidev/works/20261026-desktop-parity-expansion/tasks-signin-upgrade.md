@@ -9,6 +9,6 @@
 - [x] Six copied-source controls/restored positive and final marker-bound positive completion; controls copy predates final metadata binding (exact-head CI reruns all).
 - [x] Existing run-journal nine controls/regression passed (26.99s); final public compile-only passed after optional fixture/marker metadata changes.
 - [x] Independent source/correction/records reviews clear.
-- [ ] Exact-head Windows CI and guarded delivery.
+- [x] Exact-head Windows CI and guarded delivery: PR#291/main b424a643.
 
 No old-version compatibility/migration is required by the user. This tool never starts/stops/kills/registers/deletes a service or modifies/reset keys/trust/enrollment/runtime. Native SCM mutations, actual private ACL creation and real installed update are untested/unperformed. Partial upgrade recovery remains a separate unfinished task.

@@ -147,3 +147,14 @@ jobs:
       - name: Generated stopped package upgrade, interruption and source controls
         shell: powershell
         run: scripts/remote-desktop/validate-signin-upgrade.ps1 -NegativeControls
+  maintenance-recovery:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Maintenance recovery compilation only (no SCM/state access)
+        shell: powershell
+        run: scripts/remote-desktop/recover-signin-maintenance.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('b' * 64)
+      - name: Generated exact transition recovery and seven source controls
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-maintenance-recovery.ps1 -NegativeControls

@@ -33,7 +33,7 @@ public static class SodaDesktopSigninUpgrade {
     using(var files=new SodaDesktopSigninUpgradeFiles(paths,Guid.NewGuid().ToString("N"),retained,policy,createDirectory,createFile)){
      Func<bool> preparing=()=>retained()&&files.Current()&&old!=null&&old.Current();Require(preparing());files.CreateStage();release.Copy(paths.Stage,createDirectory,policy,preparing,createFile);stage=new Package(paths.Stage,owner,release.ManifestSha256,policy,retained);
      Func<bool> clean=()=>preparing()&&stage.Current()&&Boundary(runs,owner,oldHash,fingerprint,preparing,policy).Digest()==boundary.Digest();
-     service.Disable(clean);Require(clean());files.Mark(owner,oldHash,release.ManifestSha256,fingerprint,state,boundary);
+     service.Disable(clean);Require(clean());files.Mark(owner,oldHash,release.ManifestSha256,fingerprint,state,boundary);if(afterStep!=null)afterStep("marker-written");
      // The private parents, marker and exclusive barrier remain held while
      // no-delete package/root/journal pins are closed for Windows rename.
      Require(clean());old.Dispose();old=null;stage.Dispose();stage=null;service.Inspect(true);Require(retained()&&files.Current());
