@@ -5,7 +5,7 @@ Windows normal-desktop independent capture/encoding cohorts. Old compatibility w
 ## Focused verification
 
 - Desktop owner/channel/shared capture/relay plus browser settings/launch: 271 passed before the final topology/fault additions; additional topology all-source stop and reconnect/configure/endpoint fault persistence: 2 passed.
-- Browser old clipping: plain/encrypted/native/topology plus invalid launch URL 5 passed. Independent plain/encrypted2 passed; generated H264 independent2-window1 passed separately. Final combined browser run pending.
+- Browser old clipping: plain/encrypted/native/topology plus invalid launch URL 5 passed. Independent plain/encrypted2 passed; generated H264 independent2-window1 passed separately. Final ordered combined browser run8/8 PASS1.2m, recorded below.
 - validate-resource-fence.ps1 -NegativeControls: actual Host Apply/Release/ResourceCleanup key-up/button-up/Unicode-up failures cannot emit normal or terminal cleanup ACK. Five actual-source negative controls failed the intended assertions; each source restored byte-for-byte and positive checks rerun.
 - Existing validate-unlock-helper.ps1 all generated suites passed, including input priority, lock cover, preparation, display lease, UTF8/no-console and ACK pipe checks. windows-helper.ps1 ValidateOnly passed.
 - scripts/package.mjs --no-build --no-install --no-archive passed; packaged windows-helper.ps1 ValidateOnly passed with all required private runtime assets present.
@@ -26,7 +26,7 @@ All-file exact-byte preflight initially refused4 changed root files. Existing ot
 
 ## Final checks and delivery
 
-Source/root full checks, combined browser, external clean smoke and exact-head PR/CI receipt pending. Logs: node_modules/.cache/independent-monitors/ in source and root worktrees. Actual mixed-DPI/GPU/input desktop/failed SendInput recovery and real audio devices remain external verification, not validated by these generated results.
+Final source/root whole suites, combined browser, clean smoke and exact-head CI all passed; see final receipt below. Logs: node_modules/.cache/independent-monitors/ in source and root worktrees. Actual mixed-DPI/GPU/input desktop/failed SendInput recovery and real audio devices remain external verification, not validated by these generated results.
 
 ## Raw intended-negative output
 
@@ -75,6 +75,19 @@ desktop_resource_cleanup_5_source_negative_controls_and_restore_passed
 
 Frozen product5774edcd source `pnpm build`, `pnpm typecheck` passed. Whole suite838files/12,487tests passed423.60s, maxWorkers4. Separate detached5774edcd worktree install/build/`pnpm smoke` passed; final git status empty. Both browser terminal canvas/typed PTY round trip and guidance focus/close were observed. Packaged helper compiled from generated release folder.
 
-Combined browser run first reported7passes/1failure while the full suite was active: the new native case reached the next checkbox before the previous shared reconnect completed. The test now observes browser status `閲覧中` after each shared/cursor/independent change, rather than accepting an old positive canvas counter as readiness. Ordered combined rerun pending. This is test sequencing only; product files unchanged. Root full tests running after the source whole suite completed; never two whole suites concurrently.
+Combined browser run first reported7passes/1failure while the full suite was active: the new native case reached the next checkbox before the previous shared reconnect completed. The test now observes browser status `閲覧中` after each shared/cursor/independent change, rather than accepting an old positive canvas counter as readiness. Ordered combined rerun passed8/8, recorded below. This is test sequencing only; product files unchanged. Root full tests running after the source whole suite completed; never two whole suites concurrently.
 
-Ordered final browser run:8/8 PASS1.2m (plain/encrypted/native/topology, independent plain/encrypted/native, invalid URL). Source product unchanged from5774edcd. Final source taskcheck/cross/correction review clear; root integrated full tests/browser are pending before merge.
+Ordered final browser run:8/8 PASS1.2m (plain/encrypted/native/topology, independent plain/encrypted/native, invalid URL). Source product unchanged from5774edcd. Final source taskcheck/cross/correction review clear; root integrated full tests/browser subsequently passed before merge, recorded below.
+
+## Final validation and delivery receipt
+
+Source838files/12487tests PASS423.60s. Integrated root846files/12549tests PASS391.90s, with source/root whole suites run serially at maxWorkers4. Both build/typecheck passed. Source Chromium8/8 PASS1.2m; integrated root Chromium8/8 PASS1.0m. Clean detached product5774edcd install/build/smoke PASS, git status empty. Final test-only29a94edf adds browser ready waits; no product changes after5774edcd.
+
+PR [#293](https://github.com/asaomaro/sodashitsu/pull/293), exact head `29a94edf0193be7c9fcc26d796fc7e93310599fb`, merged main `265cd9836b0e369062fa6f792ef417e9a851bd2e`. Exact-head checks:
+
+- windows: SUCCESS, https://github.com/asaomaro/sodashitsu/actions/runs/40854014905/job/123380343285
+- boundaries: SUCCESS, https://github.com/asaomaro/sodashitsu/actions/runs/40854014864/job/123380343764
+- upgrade: SUCCESS, https://github.com/asaomaro/sodashitsu/actions/runs/40854014864/job/123380343857
+- maintenance-recovery: SUCCESS, https://github.com/asaomaro/sodashitsu/actions/runs/40854014864/job/123380343443
+
+Readonly source/correction/root-merge/records reviews completed. Root all32 reflected files were hash-checked unchanged after validation; custom local-desktop/LAN work and appended document bytes retained. No live handoff or actual service/driver/ACL/key/trust changes. Real multi-device/mixed-DPI/GPU/audio/desktop switching remain unclaimed. This receipt is a documentation-only follow-up to the tested product.
