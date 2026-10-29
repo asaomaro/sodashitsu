@@ -40,3 +40,7 @@ Independent reviewers `review_pointer` and `review_transfer` reviewed the kernel
 This change adds unused C# modules, their generated validator, workflow and records. The JS product tree remains identical to main `5ef0ab45635f7e5f5460d8921ebb63b2362f736d`; it does not claim a new JS whole-suite run. Folder baseline validation is recorded in `test-durable-folders.md`.
 
 The future host must enforce request registration/ownership, bounded cancellable pipe I/O and five-second chunk deadlines, fifteen-minute operation expiry, and actual native process exit before freeing its PC-wide slot. WaitIdle(false), DoDragDrop return or a transport ACK cannot establish cleanup. Co-location proof is separate from IPC authentication. Actual Explorer drops and other operating systems are not validated here; user has WSL but no Linux/macOS desktop test device.
+
+## Delivery receipt
+
+PR#299 tested head `70687cac217f6606caa83eab28c73693348b16c4` merged to main `947448402ce02dfa4c1ec6099458de914917197a`; the trees match. CI runs40896024778/40896024817: windows, boundaries, maintenance-recovery and upgrade all succeeded. A clean detached external worktree built and `pnpm smoke` passed. `review_pointer` independently confirmed all ten root reflection paths match the frozen tested head and manifest hashes with no overlaps. No active A/B process restart or deployment was performed.
