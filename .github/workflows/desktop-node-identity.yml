@@ -85,3 +85,6 @@ jobs:
       - name: Generated real CSharp pump and Node host (memory target, no OLE)
         shell: powershell
         run: scripts/remote-desktop/validate-native-host.ps1
+      - name: Generated private audio/microphone pipe bridge (memory only, no audio devices)
+        shell: powershell
+        run: node scripts/remote-desktop/validate-audio-pipe.mjs

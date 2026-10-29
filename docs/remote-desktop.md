@@ -348,7 +348,7 @@ Windowsの生成画像検査は `scripts/remote-desktop/validate-codec-encoders.
 
 ## ネイティブのGPU H.264動画
 
-通常画面の［動画・音声］で、経路［GPU H.264（音声なし）］を選び［動画共有を依頼］を押すと、Windows補助プログラムがハードウェアで映像を圧縮します。この経路はBのブラウザや`/desktop-host`の追加共有を必要としません。ブラウザのWebCodecsと、新しいA/B/helperが揃うときだけ選択肢が出ます。ハードウェア対応は開始時に確認し、利用できない場合は画像配信へ戻って知らせます。従来の画像配信が既定です。対応するWindows Node/helperではシステム音声も要求できます（次節）。
+通常画面の［動画・音声］で、経路［GPU H.264（音声なし）］を選び［動画共有を依頼］を押すと、Windows補助プログラムがハードウェアで映像を圧縮します。この経路はBのブラウザや`/desktop-host`の追加共有を必要としません。ブラウザのWebCodecsと、新しいA/B/helperが揃うときだけ選択肢が出ます。ハードウェア対応は開始時に確認し、利用できない場合は画像配信へ戻って知らせます。従来の画像配信が既定です。対応するWindows Node、またはWindows補助プログラムを起動するWSLのNodeではシステム音声も要求できます（次節）。
 
 同梱helperでは、B側の既存のデスクトップ共有許可と、認証済みviewerからの明示開始が必要です。独自helperコマンドでは従来の`SODA_DESKTOP_ALLOW_MEDIA=1`に加え、新しいhelper側の対応が必要です。ロック画面では常に無効です。旧版A/B/helperの組み合わせでは新機能を提示せず、画像共有を続けます。接続元と接続先の両方をpull/build/handoffして、ブラウザを再読み込みしてください。
 
@@ -356,11 +356,11 @@ Windowsの生成画像検査は `scripts/remote-desktop/validate-codec-encoders.
 
 新しいviewer・A/B・helperが揃うと、GPU動画に独立した［動画FPS上限］が表示され、30／60fpsを指定できます。画像設定のfps上限（最大30）やJPEG品質とは別です。旧版との組み合わせは従来の動画上限を使い、未知の設定を送りません。60fpsは要求上限で、GPU・解像度・回線による到達は保証しません。この設定はA/Bのbuild・handoffとブラウザ再読み込み後に使えます。
 
-GPU動画でシステム音声を使うには、新しいviewer・A/B/helper、Windows上のNode、Bの動画・音声共有許可が必要です。対応時は経路名が［GPU H.264（システム音声対応）］になり、［システム音声を要求］を選んで［動画共有を依頼］を押します。既定は音声取得なしです。取得開始後もAは初めはミュートで、［音声を再生］を押して再生します。［音声を止める］で消音し、動画停止・共有終了・認証画面への移行で取得と再生を解放します。マイクは取得しません。
+GPU動画でシステム音声を使うには、新しいviewer・A/B/helper、Windows上またはWindows補助プログラムを起動するWSLのNode、Bの動画・音声共有許可が必要です。対応時は経路名が［GPU H.264（システム音声対応）］になり、［システム音声を要求］を選んで［動画共有を依頼］を押します。既定は音声取得なしです。取得開始後もAは初めはミュートで、［音声を再生］を押して再生します。［音声を止める］で消音し、動画停止・共有終了・認証画面への移行で取得と再生を解放します。マイクは取得しません。
 
 Windowsの既定の再生デバイスからWASAPI loopbackで取得し、48kHzステレオのOpusで送ります。PCMは所有者と接続PIDを検証するローカル専用パイプで扱います。UDPでは音声専用の再送なしchannel、WSSでは動画用接続を使い、音声の待ちを制限します。欠落した音声は破棄し、溜まった音声を後から再生しません。音声だけが利用できなくなった場合も映像は続きます。ブラウザのAudioDecoder/AudioContextが必要です。
 
-BのNodeがWSL/Linux上の場合、このWindows音声パイプには接続せず、native音声の選択を無効にします。その場合は既存のBブラウザ補助による音声共有を使えます。Windowsの既定デバイス変更後に音声が停止した場合は、動画共有を依頼し直してください。旧helper・旧サービスは音声追加なしで既存共有を続けます。今回の音声更新に認証画面サービスの再インストールは不要です。 `validate-audio.ps1`で所有者ACL・接続PID・取消と停止・生成PCMを確認できます。この検証は実音声デバイスを開きません。A/Bのpull・pnpm install・build・handoffとブラウザ再読み込みが必要です。
+BのNodeがWSLの場合、通常のWindows PowerShell補助プログラムを使う共有では、専用のWindows中継を介して音声パイプへ接続します。共有準備中に同梱コードを一時フォルダへコンパイルして事前確認し、準備に失敗した場合は音声・マイクを提供しません。接続先のWindowsユーザーと中継プロセスのPIDを照合し、PCMは専用の標準入出力で扱います。Windows Nodeは直接接続を使います。native Linuxのデスクトップ音声への対応ではありません。Windowsの既定デバイス変更後に音声が停止した場合は、動画共有を依頼し直してください。認証画面サービスの再インストールは不要です。`validate-audio.ps1`で所有者ACL・接続PID・取消と停止・生成PCMを、build後の`node scripts/remote-desktop/validate-audio-pipe.mjs`で専用中継のPID・バイナリ転送・所有プロセスの停止を確認できます。いずれも実音声デバイスを開きません。A/Bのpull・pnpm install・build・handoffとブラウザ再読み込みが必要です。
 
 新しいviewer・A/B・通常画面helperでは［UDPを優先（利用できない場合はWSS）］を選べます。既定は有効で、native H.264をWebRTCの暗号化されたdatachannelで直接送ります。映像の順序待ち・再送待ちを避け、最大3枚と150msの期限で欠けた映像を破棄し、キーフレームを要求して復旧します。描画ACKも直接Bへ返し、破棄した映像で入力用の画像鮮度を延長しません。入力・操作許可は既存の認証済み接続で扱います。ビットレートはACKの待ちと破棄を見て、依頼した上限内で調整します。
 
@@ -576,7 +576,7 @@ stdin/stdoutは1行1JSONです。起動時に`ready`と期限を返します。C
 2. 仮想ケーブルの **render（再生）側ID** を、接続先のローカル設定「マイク転送先の仮想オーディオ再生デバイスID」へ入れ、「接続元からのマイク転送を許可」をONにして保存します。物理スピーカーのIDは指定しないでください。
 3. デスクトップを接続し直し、接続先アプリのマイクを、その仮想ケーブルの **capture（録音）側** に設定します。接続側でマイク転送を開始します。
 
-Windows Nodeの通常共有が対象です。対応する両端では複数窓でも1送信者のマイクを使用できます。WSL/Linux Node、仮想画面、UAC/ロック画面にはマイクを提供しません。両端が対応し、ブラウザのWebCodecsが利用できる場合、音声入力は48kHz/mono・20ms単位のOpus（目標32kbps）で送り、画面のマイク欄に方式を表示します。Bで48kHz/mono/16bit PCMへ戻して仮想デバイスへ渡します。旧版または非対応ブラウザでは従来のPCMを使用します。PCM本体は約0.77Mbps、base64/JSONを含めると約1.1Mbpsです。Opusの通信量にはJSON・暗号化などの追加分も含まれ、目標値と一致するとは限りません。未ACKは最大12枚（240ms分）、Bで待機するPCMは最新1枚だけ保持し、private pipeのPCMは100msで期限切れになります。Opusの圧縮待ちは最大2件、圧縮結果が200ms出なければ録音を止め、100msを超えた結果は送りません。実デバイス・実通話アプリでの確認は別途必要で、検証済みなのは生成音声と仮想sinkです。
+Windows Node、またはWindows PowerShell補助プログラムを起動するWSLのNodeによる通常共有が対象です。対応する両端では複数窓でも1送信者のマイクを使用できます。native Linux/macOSのデスクトップ、仮想画面、UAC/ロック画面にはマイクを提供しません。両端が対応し、ブラウザのWebCodecsが利用できる場合、音声入力は48kHz/mono・20ms単位のOpus（目標32kbps）で送り、画面のマイク欄に方式を表示します。Bで48kHz/mono/16bit PCMへ戻して仮想デバイスへ渡します。旧版または非対応ブラウザでは従来のPCMを使用します。PCM本体は約0.77Mbps、base64/JSONを含めると約1.1Mbpsです。Opusの通信量にはJSON・暗号化などの追加分も含まれ、目標値と一致するとは限りません。未ACKは最大12枚（240ms分）、Bで待機するPCMは最新1枚だけ保持し、private pipeのPCMは100msで期限切れになります。Opusの圧縮待ちは最大2件、圧縮結果が200ms出なければ録音を止め、100msを超えた結果は送りません。実デバイス・実通話アプリでの確認は別途必要で、検証済みなのは生成音声と仮想sinkです。
 
 参考実装として[FreeRDPの音声入力チャネル](https://github.com/FreeRDP/FreeRDP/blob/master/channels/audin/client/audin_main.c)と[RustDeskのaudio service](https://github.com/rustdesk/rustdesk/blob/master/src/server/audio_service.rs)の構成を確認し、コードは独自に実装しました。仕様の一次資料は[AnyDeskの接続先音声再生設定](https://support.anydesk.com/Audio)と[Microsoft RDPの音声入力転送仕様](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpeai/d04ffa42-5a0f-4f80-abb1-cc26f71c9452)です。RDPとのプロトコル互換や、他製品の機能すべてとの同等性を意味しません。
 
