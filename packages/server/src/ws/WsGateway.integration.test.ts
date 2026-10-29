@@ -739,7 +739,7 @@ describe("WsGateway flow control (integration, real ws + real PTY)", () => {
     const origins = new DefaultOriginPolicy(originOpts, { addresses: () => [], lanAddresses: () => [], hostnames: () => [] });
     const wsServer = new WsServerWs(httpServer, new OriginRejectionLog(new MemoryLogger(), origins), async () => ({ ok: true, sessionId: "s" }), new MemoryLogger());
     let calls = 0;
-    wsServer.onConnection((conn) => conn.onDrain(() => calls++));
+    wsServer.onConnection((conn) => {expect(conn.browserOrigin).toBe(`http://127.0.0.1:${originOpts.port}`);conn.onDrain(() => calls++);});
     const port = await listenOnFreePort(httpServer);
     originOpts.port = port;
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { origin: `http://127.0.0.1:${port}`, host: `127.0.0.1:${port}` } });

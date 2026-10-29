@@ -59,3 +59,12 @@ it("restricts all endpoint identity and trust management to the local settings c
  for(const[method,params]of[["desktop.endpoint.status",{}],["desktop.endpoint.initialize",{}],["desktop.endpoint.required",{required:true}],["desktop.endpoint.trust",peer],["desktop.endpoint.revoke",{fingerprint:peer.fingerprint,role:peer.role}]]as const){for(const context of[base,{...base,sameMachine:true},{...base,connection:{localSettings:false}}])expect(await surface.invoke(context as Parameters<typeof surface.invoke>[0],method,params)).toMatchObject({ok:false,error:{code:"unauthorized"}});expect((await surface.invoke({...base,connection:{localSettings:true}}as unknown as Parameters<typeof surface.invoke>[0],method,params)).ok).toBe(true);}
  for(const call of Object.values(desktopEndpoint))expect(call).toHaveBeenCalledTimes(1);
 });
+
+it("starts native helpers only for an admitted direct browser origin and scopes stop to its client",async()=>{
+ const start=vi.fn(async()=>({})),stop=vi.fn(async()=>{}),surface=new ControlSurface();registerDesktopMethods(surface,{desktopNativeHelpers:{start,stop}} as unknown as MethodDeps);
+ const base={clientId:"browser-owner",sink:{clientId:"browser-owner",bufferedAmount:0,sendOutput(){},sendSnapshot(){}}},viewerId=crypto.randomUUID();
+ for(const ctx of [base,{...base,sameMachine:true},{...base,connection:{localSettings:true}},{...base,connection:{browserOrigin:"https://app.example"},connectionAuthorized:()=>false}])expect(await surface.invoke(ctx as unknown as Parameters<typeof surface.invoke>[0],"desktop.native_helper.start",{viewerId})).toMatchObject({ok:false,error:{code:"unauthorized"}});
+ expect(start).not.toHaveBeenCalled();const ctx={...base,connection:{browserOrigin:"https://app.example"},connectionAuthorized:()=>true};expect((await surface.invoke(ctx as unknown as Parameters<typeof surface.invoke>[0],"desktop.native_helper.start",{viewerId})).ok).toBe(true);expect(start).toHaveBeenCalledWith("browser-owner",viewerId,"https://app.example",expect.any(Function));
+ expect(await surface.invoke(ctx as unknown as Parameters<typeof surface.invoke>[0],"desktop.native_helper.start",{viewerId,origin:"https://forged.example"})).toMatchObject({ok:false,error:{code:"invalid_params"}});expect(start).toHaveBeenCalledTimes(1);
+ expect((await surface.invoke(base,"desktop.native_helper.stop",{viewerId})).ok).toBe(true);expect(stop).toHaveBeenCalledWith("browser-owner",viewerId);
+});

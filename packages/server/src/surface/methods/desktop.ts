@@ -3,6 +3,15 @@ import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps): void {
+  const nativeHelpers=deps.desktopNativeHelpers;
+  if(nativeHelpers){
+    surface.register("desktop.native_helper.start",{schema:DesktopMethods["desktop.native_helper.start"],handler:(ctx,p)=>{
+      const origin=ctx.connection?.browserOrigin;if(!origin||ctx.connectionAuthorized?.()===false)throw new RpcError("unauthorized","ブラウザから接続してください");
+      return nativeHelpers.start(ctx.clientId,p.viewerId,origin,()=>ctx.connectionAuthorized?.()!==false);
+    }});
+    surface.register("desktop.native_helper.stop",{schema:DesktopMethods["desktop.native_helper.stop"],handler:async(ctx,p)=>{await nativeHelpers.stop(ctx.clientId,p.viewerId);return {};}});
+  }
+
   const endpoint=deps.desktopEndpoint;
   if(endpoint) {
     const owner=(ctx:{connection?:{localSettings?:boolean}})=>{if(ctx.connection?.localSettings!==true)throw new RpcError("unauthorized","暗号化接続の鍵と相手は、このPCのlocalhostの設定画面で管理してください。");};

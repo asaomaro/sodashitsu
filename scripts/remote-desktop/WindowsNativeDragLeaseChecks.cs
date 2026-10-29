@@ -222,7 +222,7 @@ internal static class WindowsNativeDragLeaseChecks
     private static void Packets()
     {
         string nonce = new String('a',64);
-        string begin = "{\"type\":\"begin\",\"nonce\":\"" + nonce + "\",\"seq\":0,\"owner\":\"11111111-1111-4111-8111-111111111111\",\"origin\":\"https://soda.example\",\"gesture\":\"" + Gesture + "\",\"generation\":\"33333333-3333-4333-8333-333333333333\",\"count\":1,\"bytes\":1}\n";
+        string begin = "{\"type\":\"begin\",\"nonce\":\"" + nonce + "\",\"seq\":0,\"owner\":\"11111111-1111-4111-8111-111111111111\",\"origin\":\"https://soda.example\",\"gesture\":\"" + Gesture + "\",\"generation\":\"33333333-3333-4333-8333-333333333333\",\"count\":1,\"bytes\":1,\"deadline\":750}\n";
         string entry = "{\"type\":\"entry\",\"nonce\":\"" + nonce + "\",\"seq\":1,\"index\":0,\"name\":\"a\",\"directory\":false,\"bytes\":1,\"sha256\":\"" + Sha(new byte[]{1}) + "\"}\n";
         string seal = "{\"type\":\"seal\",\"nonce\":\"" + nonce + "\",\"seq\":2}\n";
         using (System.IO.MemoryStream input = new System.IO.MemoryStream(Encoding.UTF8.GetBytes(begin + entry + seal)))

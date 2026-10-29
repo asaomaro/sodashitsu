@@ -159,7 +159,7 @@ export class WsServerWs implements WsServer {
     }
     const sameMachine = "socket" in req && req.socket ? isSameMachine(req.socket.remoteAddress, req.socket.localAddress) : false;
     this.wss.handleUpgrade(req, socket, head, (ws) => {
-      const conn = new WsConnectionImpl(ws, sameMachine, localSettingsRequest(req, sameMachine));
+      const conn = new WsConnectionImpl(ws, sameMachine, localSettingsRequest(req, sameMachine),req.headers.origin);
       for (const cb of this.listeners) cb(conn, authResult.sessionId);
     });
   }
@@ -187,6 +187,7 @@ class WsConnectionImpl implements WsConnection {
     private readonly ws: WebSocket,
     readonly sameMachine = false,
     readonly localSettings = false,
+    readonly browserOrigin?:string,
   ) {}
 
   get bufferedAmount(): number {
