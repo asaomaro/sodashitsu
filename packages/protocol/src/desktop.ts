@@ -146,6 +146,7 @@ export const RemoteDesktopViewerMessage = z.union([
   z.object({ type: z.literal("ack"), seq: z.number().int().positive() }).strict(),
   z.object({ type: z.literal("heartbeat") }).strict(),
   z.object({ type: z.literal("release") }).strict(),
+  z.object({ type: z.literal("native_pointer_cancel") }).strict(),
   z.object({ type: z.literal("keyframe") }).strict(),
   z.object({ type: z.literal("agent_grant"), enabled: z.boolean() }).strict(),
   z.object({ type: z.literal("stop") }).strict(),

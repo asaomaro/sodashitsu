@@ -1,4 +1,4 @@
-let nativeCadence=false,nativeAdaptive=false,nativeCodecs=false;
+let nativeCadence=false,nativeAdaptive=false,nativeCodecs=false,nativePointerProof=false;
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
 import { createServer } from "node:net";
 import { chmodSync, unlinkSync,writeSync } from "node:fs";
@@ -200,6 +200,11 @@ function run() {
   let resourceMode=false,resourceEpochs=new Map(),resourceReleased=new Set(["control","clipboard","microphone"]),resourceFailed=false;
   process.on("exit",()=>{if(resourceMode&&!resourceFailed){held.clear();for(const epoch of resourceEpochs.values())try{writeSync(1,JSON.stringify({type:"resource_fence_ack",id:epoch,terminal:true})+"\n");}catch{}}});
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  const heldPointerAcks=[];
+  function acknowledgeInput(seq,pointer){
+    if(inputAckPipe){if(pointer)process.stderr.write(`SODA_DESKTOP_POINTER_ACK ${seq} ${pointer.epoch} ${pointer.x} ${pointer.y} ${pointer.window} ${pointer.pid}\n`);process.stderr.write("SODA_DESKTOP_INPUT_ACK "+seq+"\n");}
+    else send({type:"input_ack",seq,...(pointer?{pointer}:{})});
+  }
   lines.on("close", () => process.exit(0));
   lines.on("line", (line) => {
     try {
@@ -212,6 +217,7 @@ function run() {
         resourceMode=m.resourceFences===true&&!process.argv.includes("--no-resource-fences");
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
+        nativePointerProof=m.nativePointerProof===true&&resourceMode&&!secure&&process.argv.includes("--pointer-witness-generated");
         const failureAt = process.argv.indexOf("--startup-failure");
         if (failureAt >= 0) {
           const code = process.argv[failureAt + 1], markerAt = process.argv.indexOf("--startup-marker");
@@ -251,6 +257,7 @@ function run() {
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
+          ...(nativePointerProof?{nativePointerProof:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
           ...(nativeFixture&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:["h264","hevc","av1"]}:{}),
           ...(nativeFixture&&nativeAdaptive?{nativeAdaptive:true}:{}),
@@ -281,7 +288,7 @@ function run() {
           // A parent's later transition may not overwrite the worker's fault.
           send({type:"unlock_failure",code:"source_transition"});
         }
-      } else if (m.type === "heartbeat") lastSeen = performance.now();
+      } else if (m.type === "heartbeat") {lastSeen = performance.now();for(const pending of heldPointerAcks.splice(0))acknowledgeInput(pending.seq,pending.pointer);}
       else if (m.type === "ack" && m.seq === pending) pending = 0;
       else if(m.type==="native_microphone"){if(m.enabled)startMicrophone(m);else if(microphone?.id===m.id)stopMicrophone();}
       else if(m.type==="native_audio"){if(m.enabled)startAudio(m);else if(native?.id===m.id)stopAudio();}
@@ -343,7 +350,9 @@ function run() {
         if(nativePlatform)nativeAcceptedInput=m.seq;
         if(process.argv.includes("--block-stdout-on-input")&&!blockedSeq) { blockedSeq=m.seq;outputBlocked=true;process.stdout.write('{"type":"input_ack","seq":'); }
         if (!process.argv.includes("--stall-input")) {
-          if(inputAckPipe)process.stderr.write("SODA_DESKTOP_INPUT_ACK "+m.seq+"\n");else send({ type: "input_ack", seq: m.seq });
+          const pointer=nativePointerProof&&m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0?{epoch:resourceEpochs.get("control"),x:-400,y:50,window:42,pid:7}:undefined;
+          if(pointer&&process.argv.includes("--hold-pointer-witness-generated")){if(heldPointerAcks.length>=64)heldPointerAcks.shift();heldPointerAcks.push({seq:m.seq,pointer});}
+          else acknowledgeInput(m.seq,pointer);
         }
       } else if (m.type === "stop") process.exit(0);
     } catch {

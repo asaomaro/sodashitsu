@@ -1,4 +1,5 @@
 import {dirname,join} from "node:path";
+import {DesktopHelperInputAck,type DesktopPointerWitness} from "./DesktopPointerWitness.js";
 import {createHash} from "node:crypto";
 import {DesktopInteractiveOwner,type DesktopInteractiveResource} from "./DesktopInteractiveOwner.js";
 import {DesktopResourceChannel} from "./DesktopResourceChannel.js";
@@ -96,6 +97,7 @@ type Share = {
   videoSocket?: WebSocket;
   videoReady?: boolean;
   inputAcks: DesktopInputAcks;
+  pointerWitness?:{seq:number;point:DesktopPointerWitness;source:DesktopResourceChannel;at:number};
   cursor?: DesktopCursorStream;
   native?: DesktopNativeVideo;
   deferNativeSnapshots?: boolean;
@@ -353,7 +355,10 @@ export class DesktopProvider {
       captureKey:sharedKey,
       ...(scope?{endpointActive:scope.active}:{}),
       shared: p.options.sharedDesktop === true,
-      inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); }),
+      inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); },(seq,point)=>{
+        const source=s.process?.resourceChannel,owner=this.resources.identity(s,"control");
+        if(!s.dead&&s.control&&seq===s.inputSeq&&source&&owner?.source===source&&owner.epoch===point.epoch)s.pointerWitness={seq,point,source,at:performance.now()};
+      }),
       imageExpected:!!p.imageTicket,
       chain: new DesktopFrameChain(),
       owner,
@@ -543,7 +548,10 @@ export class DesktopProvider {
             s.lastSeen = performance.now();
             this.write(s, m);
           } else if (m.type === "stop") this.stop(s);
+          else if(m.type==="native_pointer_cancel") {s.inputAcks.invalidatePointers();delete s.pointerWitness;}
           else if (m.type === "release") {
+            s.inputAcks.invalidatePointers();
+            delete s.pointerWitness;
             if (s.control&&this.ownsResource(s,"control")) this.write(s, m);
           } else if (m.type === "ack") {
             if (m.seq !== s.pending) {
@@ -555,6 +563,8 @@ export class DesktopProvider {
           } else if (m.type === "keyframe") {
             this.write(s, m);
           } else if (m.type === "control") {
+            s.inputAcks.invalidatePointers();
+            delete s.pointerWitness;
             const enabled = m.enabled && s.allowInput && s.ready && this.claimResource(s,"control");
             s.control = s.process?.requestControl ? s.process.requestControl(enabled) : enabled;
             this.write(s, { type: "control", enabled: s.control });
@@ -567,6 +577,7 @@ export class DesktopProvider {
             if (s.lockScreenCover && s.secureDesktop && s.control && this.ownsResource(s,"control") && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "input") {
+            s.inputAcks.invalidatePointers();delete s.pointerWitness;
             if(!supportsDesktopInput(s.inputCapabilities,m.input))return;
             if (isExtendedDesktopInput(m.input) && !s.extendedInput) return;
             if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !s.imeKeys) return;
@@ -580,7 +591,7 @@ export class DesktopProvider {
               (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000)
             ) {
               s.inputSeq = m.seq;
-              s.inputAcks.submitted(m.seq);
+              s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
               this.write(s, { ...m, expiresAt: Date.now() + 500, ...(nativeDraw && s.deferNativeSnapshots ? {deferNativeSnapshot:true} : {}) });
             }
           } else {
@@ -637,7 +648,7 @@ export class DesktopProvider {
           if(raw.type==="virtual_display_failure"&&options.virtualDisplay&&cfg.allowVirtualDisplay){this.send(s,DesktopVirtualFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){if(s.independent)this.stopMonitorGeneration();else{this.send(s,{type:"monitor_topology_changed"});this.stop(s);}return;}
           if (raw.type === "ready" && !s.ready) {
-            const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
+            const {deferNativeSnapshots, inputAckPipe,nativePointerProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
             if(cfg.nativePlatform?(ready.backend!==cfg.nativePlatform||!ready.inputCapabilities):ready.backend==="linux-portal"||ready.backend==="macos-sck")throw Error("Unexpected native backend proof");
             if(!cfg.nativePlatform&&ready.inputCapabilities)throw Error("Unrequested input capabilities");
@@ -655,6 +666,7 @@ export class DesktopProvider {
             }
             s.secureDesktop = ready.secureDesktop === true;
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
+            s.inputAcks.pointerEnabled=!s.secureDesktop&&!ready.virtualDisplay&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&s.process?.resourceChannel?.supported===true;
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.lockScreenCover = ready.lockScreenCover === true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
@@ -814,11 +826,8 @@ export class DesktopProvider {
             const result = DesktopClipboardResult.parse(raw);
             if (s.clipboardPending.delete(result.id) && s.clipboardGranted) this.send(s, result);
           } else if (raw.type === "input_ack" && s.ready) {
-            const ack = z
-              .object({ type: z.literal("input_ack"), seq: z.number().int().positive() })
-              .strict()
-              .parse(raw);
-            s.inputAcks.ack(ack.seq);
+            const ack = DesktopHelperInputAck.parse(raw);
+            s.inputAcks.ack(ack.seq,ack.pointer);
           } else {
             this.stop(s);
             return;
@@ -836,7 +845,7 @@ export class DesktopProvider {
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
-      ...(!cfg.nativePlatform?{resourceFences:true}:{}),
+      ...(!cfg.nativePlatform?{resourceFences:true,nativePointerProof:!!cfg.fileRoot&&!options.elevatedDesktop&&!options.virtualDisplay}:{}),
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
@@ -908,6 +917,8 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    s.inputAcks.invalidatePointers();
+    delete s.pointerWitness;
     if(s.resourcesManaged)this.resources.releaseAll(s);
     if (s.shared) { this.shared.delete(s); if (!this.shared.size) this.sharedKey = undefined; }
     delete s.heldImage; s.imageSocket?.terminate();

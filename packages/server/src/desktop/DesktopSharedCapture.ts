@@ -1,4 +1,5 @@
 import type {DesktopResourceChannel} from "./DesktopResourceChannel.js";
+import {DesktopHelperInputAck} from "./DesktopPointerWitness.js";
 import {
   parseDesktopCursor,
   DESKTOP_CURSOR_MAX_BYTES,
@@ -304,7 +305,7 @@ export class DesktopSharedCapture {
     if (g.clipboard?.receive(value)) return;
     if (g.native?.receive(value)) return;
     if (value.type === "ready" && !g.ready) {
-      const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, ...wire } = value;
+      const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof, ...wire } = value;
       const ready = DesktopReady.parse(wire);
       const protectedSource =
         ready.secureDesktop === true &&
@@ -352,6 +353,7 @@ export class DesktopSharedCapture {
         ...ready,
         dynamicQuality: false,
         inputAckPipe: false,
+        ...(nativePointerProof===true&&configuration.nativePointerProof===true&&!g.protectedSource&&ready.resourceFences===true?{nativePointerProof:true}:{}),
         ...(value.deferNativeSnapshots === true ? { deferNativeSnapshots: true } : {}),
       };
       if (ready.nativeVideo)
@@ -422,10 +424,11 @@ export class DesktopSharedCapture {
       this.write(g, { type: "ack", seq: info.seq });
       if (recover) this.imageKeyframe(g);
     } else if (value.type === "input_ack" && Number.isSafeInteger(value.seq)) {
-      const route = g.inputs.get(value.seq);
+      const ack=DesktopHelperInputAck.parse(value);
+      const route = g.inputs.get(ack.seq);
       if (route) {
-        g.inputs.delete(value.seq);
-        this.emit(route.member, { type: "input_ack", seq: route.seq });
+        g.inputs.delete(ack.seq);
+        this.emit(route.member, { type: "input_ack", seq: route.seq,...(ack.pointer&&g.ready?.nativePointerProof===true?{pointer:ack.pointer}:{}) });
       }
     } else {
       // A source/lock transition ends the entire generation before more data is accepted.

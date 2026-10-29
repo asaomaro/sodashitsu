@@ -17,7 +17,7 @@ import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join,dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it, vi } from "vitest";
@@ -171,6 +171,32 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
+it.each(["pipe","json","shared"])("keeps %s physical input witnesses on B and invalidates them for the next input",async mode=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,fileRoot:dirname(f.record),command:[...cfg.command,"--pointer-witness-generated",...(mode==="pipe"?["--input-ack-pipe"]:[])]});
+ const v=await f.viewer(mode==="shared"?"shared":false);v.send({...start,options:{...start.options,...(mode==="shared"?{sharedDesktop:true,features:true}:{})}});
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active;
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ expect(share.pointerWitness).toMatchObject({seq:1,point:{x:-400,y:50,window:42,pid:7,epoch:state.resources.identity(share,"control").epoch}});
+ expect(share.pointerWitness.source).toBe(share.process.resourceChannel);
+ expect(v.messages.find(m=>m.type==="input_ack"&&m.seq===1)).toEqual({type:"input_ack",seq:1});expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativePointerProof");
+ v.send({type:"input",seq:2,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.51,y:0.5,event:"move",button:0}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===2)).toBe(true);expect(share.pointerWitness).toBeUndefined();
+});
+it.each(["pipe","json","shared"].flatMap(mode=>["release","control","rejected-input"].map(interrupt=>({mode,interrupt}))))("does not revive a delayed $mode witness after $interrupt",async({mode,interrupt})=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,fileRoot:dirname(f.record),command:[...cfg.command,"--pointer-witness-generated","--hold-pointer-witness-generated",...(mode==="pipe"?["--input-ack-pipe"]:[])]});
+ const v=await f.viewer(mode==="shared"?"shared":false);v.send({...start,options:{...start.options,...(mode==="shared"?{sharedDesktop:true,features:true}:{})}});
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ const state=f.provider as any,share=mode==="shared"?[...state.shared][0]:state.active;
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+ await expect.poll(async()=>{try{return (await readFile(f.record,"utf8")).includes('"event":"down"');}catch{return false;}}).toBe(true);
+ if(interrupt==="release")v.send({type:"release"});else if(interrupt==="control")v.send({type:"control",enabled:true});else v.send({type:"input",seq:2,frameSeq:999999,input:{kind:"pointer",x:0.5,y:0.5,event:"up",button:0}});
+ v.send({type:"heartbeat"});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ expect(share.pointerWitness).toBeUndefined();expect(share.inputSeq).toBe(1);expect(v.ws.readyState).toBe(WebSocket.OPEN);
+});
 it("keeps image freshness for unmarked and agent input even when native video is fresh", async () => {
   const f=await fixture(), viewer=await f.viewer();viewer.send(start);
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);

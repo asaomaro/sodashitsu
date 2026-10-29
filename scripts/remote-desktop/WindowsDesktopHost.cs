@@ -23,6 +23,9 @@ public static class SodaDesktopHost {
     [DllImport("user32.dll", SetLastError=true)] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
     [DllImport("user32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool GetUserObjectInformation(IntPtr h, int index, StringBuilder data, uint size, out uint needed);
     [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window,uint flags);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window,out uint process);
     [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr window);
     [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr window,IntPtr dc);
     [DllImport("gdi32.dll",SetLastError=true)] static extern bool StretchBlt(IntPtr dst,int x,int y,int w,int h,IntPtr src,int sx,int sy,int sw,int sh,uint op);
@@ -70,6 +73,9 @@ public static class SodaDesktopHost {
         return (bool)ResourceCommand.Invoke(ResourceFences[resource],new object[]{id,(Action<string>)(value=>{ResourceReleased.Add(resource);if(terminal)Output(new{type="resource_fence_ack",id=value,terminal=true});else Output(new{type="resource_fence_ack",id=value});})});
     }
     static bool InputAckPipe=false;
+    static bool NativePointerProof=false;
+    static Dictionary<string,object> LastAppliedPointer;
+    static Func<Point,Tuple<long,int>> MemoryPointerTarget;
     static bool DeferNativeSnapshots=false;
     static long LastNativeInput=-1000;
     static long LastHeartbeat=0;
@@ -80,16 +86,34 @@ public static class SodaDesktopHost {
     static bool SourceMatches(string device,out SodaDesktopMonitorLayout.Item[] current){current=null;if(ActiveMonitors==null)return SodaDesktopDisplay.Matches(device,Bounds);bool same=false;try{current=MonitorDriver.Read();same=ActiveMonitors.MatchesItems(current);}catch{}if(!same&&Interlocked.CompareExchange(ref MonitorNotice,1,0)==0)Output(new{type="monitor_topology_changed"});return same;}
 
     static void Output(object value) { lock(OutputGate){if(MemoryOutput!=null){MemoryOutput(value);return;}Console.Out.WriteLine(OutputJson.Serialize(value)); Console.Out.Flush();} }
-    static void InputAck(long seq) {
-        if(InputAckPipe){Console.Error.WriteLine("\nSODA_DESKTOP_INPUT_ACK "+seq.ToString(System.Globalization.CultureInfo.InvariantCulture));Console.Error.Flush();}
+    static void InputAck(long seq,Dictionary<string,object> pointer=null) {
+        if(InputAckPipe){
+            var culture=System.Globalization.CultureInfo.InvariantCulture;
+            if(pointer!=null)Console.Error.WriteLine("\nSODA_DESKTOP_POINTER_ACK "+seq.ToString(culture)+" "+pointer["epoch"]+" "+Convert.ToString(pointer["x"],culture)+" "+Convert.ToString(pointer["y"],culture)+" "+Convert.ToString(pointer["window"],culture)+" "+Convert.ToString(pointer["pid"],culture));
+            Console.Error.WriteLine("\nSODA_DESKTOP_INPUT_ACK "+seq.ToString(culture));Console.Error.Flush();
+        }
+        else if(pointer!=null)Output(new {type="input_ack",seq,pointer});
         else Output(new {type="input_ack",seq});
     }
     static bool ApplyInput(Dictionary<string,object> msg,ref long inputSeq,Action applied=null) {
-        long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        if(!Control || id<=inputSeq || expires<utc || expires>utc+1500)return false;
-        inputSeq=id;if(!Apply(Obj(msg["input"])))return false;
+        long id=Convert.ToInt64(msg["seq"]),expires=Convert.ToInt64(msg["expiresAt"]);
+        Dictionary<string,object> witness;
+        lock(Gate){
+            long utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            if(!Control || id<=inputSeq || expires<utc || expires>utc+1500)return false;
+            inputSeq=id;if(!Apply(Obj(msg["input"])))return false;witness=LastAppliedPointer;
+        }
         if(DeferNativeSnapshots&&msg.ContainsKey("deferNativeSnapshot")&&msg["deferNativeSnapshot"] is bool&&(bool)msg["deferNativeSnapshot"])Interlocked.Exchange(ref LastNativeInput,Clock.ElapsedMilliseconds);
-        if(applied!=null)applied();InputAck(id);return true;
+        if(applied!=null)applied();InputAck(id,witness);return true;
+    }
+    static Dictionary<string,object> PointerWitness(double x,double y) {
+        if(!NativePointerProof||Secure||VirtualLease!=null||ResourceFence==null||!ResourceActive("control")||!ResourceEpochs.ContainsKey("control")||Keys.Count!=0||Buttons.Count!=1||!Buttons.Contains(0))return null;
+        Point pixel=new Point(Bounds.Left+(int)Math.Round(x*(Bounds.Width-1)),Bounds.Top+(int)Math.Round(y*(Bounds.Height-1)));
+        Tuple<long,int> target;
+        if(MemoryPointerTarget!=null)target=MemoryPointerTarget(pixel);
+        else {IntPtr window=GetAncestor(WindowFromPoint(pixel),2);uint pid;GetWindowThreadProcessId(window,out pid);target=window!=IntPtr.Zero&&pid>0&&pid<=Int32.MaxValue?Tuple.Create(window.ToInt64(),(int)pid):null;}
+        if(target==null||target.Item1==0||target.Item2<=0)return null;
+        return new Dictionary<string,object>{{"epoch",ResourceEpochs["control"]},{"x",pixel.X},{"y",pixel.Y},{"window",target.Item1},{"pid",target.Item2}};
     }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
     static int Num(Dictionary<string,object> value,string key) { return Convert.ToInt32(value[key]); }
@@ -192,6 +216,7 @@ public static class SodaDesktopHost {
     }
     static bool Apply(Dictionary<string,object> input) {
         lock(Gate) {
+            LastAppliedPointer=null;
             if(!Control || Stopping || Clock.ElapsedMilliseconds-Interlocked.Read(ref LastHeartbeat)>6000 || !AllowedDesktop()) { Release();return false; }
             SodaDesktopMonitorLayout.Item[] currentMonitors=null;
             if(CaptureDevice!=null&&!SourceMatches(CaptureDevice,out currentMonitors)){Stopping=true;Release();return false;}
@@ -216,7 +241,7 @@ public static class SodaDesktopHost {
                 Mouse(0x8000|0x4000|1,0,absolute.X,absolute.Y);
                 int button=Num(input,"button");if(button<0||button>4)throw new InvalidOperationException();
                 string action=(string)input["event"];
-                if(action=="down" && Buttons.Add(button)) Emit(ButtonInput(button,true));
+                if(action=="down" && Buttons.Add(button)) {Emit(ButtonInput(button,true));if(button==0)LastAppliedPointer=PointerWitness(x,y);}
                 else if(action=="up" && Buttons.Contains(button)){Emit(ButtonInput(button,false));Buttons.Remove(button);}
             } else throw new InvalidOperationException();
             return true;
@@ -247,6 +272,36 @@ public static class SodaDesktopHost {
         Console.WriteLine("desktop_resource_input_failed_key_button_unicode_never_ack_passed");
     }
     sealed class MemoryMonitors:SodaDesktopMonitorLayout.IDriver {public SodaDesktopMonitorLayout.Item[] Items;public int Reads;public SodaDesktopMonitorLayout.Item[] Read(){Reads++;return Items;}}
+    // Fresh generated process only: no real desktop, window lookup or input endpoint.
+    public static void VerifyNativePointerWitness(){
+        if(Control||ResourceFence!=null||MemoryInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        var oldDriver=MonitorDriver;var oldBounds=Bounds;bool oldSecure=Secure;var oldReleased=new HashSet<string>(ResourceReleased);
+        try{
+            foreach(string mode in new[]{"ok","disabled","secure","resource","modifier","target","failed"}){
+                var output=new List<object>();int looked=0;Point seen=new Point();
+                Keys.Clear();Buttons.Clear();ResourceEpochs.Clear();ResourceEpochs["control"]=Guid.NewGuid().ToString("D");ResourceReleased.Remove("control");
+                Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;Secure=mode=="secure";InputAckPipe=false;NativePointerProof=mode!="disabled";ResourceFence=mode=="resource"?null:new object();
+                Bounds=new Rectangle(-800,-100,800,600);MonitorDriver=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("generated",Bounds,true,100)}};
+                MemoryDesktop=()=>true;MemoryOutput=value=>output.Add(value);MemoryInput=value=>{if(mode=="failed"&&value.type==0&&(value.data.mouse.dwFlags&2)!=0)throw new InvalidOperationException("Generated failed down");};
+                MemoryPointerTarget=point=>{looked++;seen=point;return mode=="target"?Tuple.Create(0L,0):Tuple.Create(42L,7);};if(mode=="modifier")Keys.Add(17);
+                long accepted=0;var down=new Dictionary<string,object>{{"kind","pointer"},{"x",0.5},{"y",0.25},{"button",0},{"event","down"}};
+                var message=new Dictionary<string,object>{{"seq",1L},{"expiresAt",DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()+1000},{"input",down}};
+                bool failed=false;try{if(!ApplyInput(message,ref accepted))throw new InvalidOperationException("Generated down rejected");}catch(InvalidOperationException){failed=true;}
+                if(mode=="failed"){if(!failed||output.Count!=0||looked!=0)throw new InvalidOperationException("Failed native down produced witness");continue;}
+                if(failed||output.Count!=1)throw new InvalidOperationException("Generated native down not acknowledged");
+                var ack=Obj(Json.DeserializeObject(OutputJson.Serialize(output[0])));bool has=ack.ContainsKey("pointer");
+                if(has!=(mode=="ok"))throw new InvalidOperationException("Native pointer admission mismatch: "+mode);
+                if(mode=="ok"){
+                    var pointer=Obj(ack["pointer"]);
+                    if(seen!=new Point(-400,50)||Num(pointer,"x")!=-400||Num(pointer,"y")!=50||Convert.ToInt64(pointer["window"])!=42||Num(pointer,"pid")!=7||(string)pointer["epoch"]!=ResourceEpochs["control"])throw new InvalidOperationException("Native pointer coordinates or epoch mismatch");
+                    message["seq"]=2L;if(!ApplyInput(message,ref accepted)||Obj(Json.DeserializeObject(OutputJson.Serialize(output[1]))).ContainsKey("pointer"))throw new InvalidOperationException("Duplicate down forged physical witness");
+                    down["event"]="up";message["seq"]=3L;if(!ApplyInput(message,ref accepted)||Obj(Json.DeserializeObject(OutputJson.Serialize(output[2]))).ContainsKey("pointer"))throw new InvalidOperationException("Pointer up produced down witness");
+                    message["seq"]=4L;message["expiresAt"]=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()-10;int before=output.Count;if(ApplyInput(message,ref accepted)||output.Count!=before)throw new InvalidOperationException("Expired native input produced witness");
+                }else if(mode!="target"&&looked!=0)throw new InvalidOperationException("Unpermitted native window lookup: "+mode);
+            }
+        }finally{Keys.Clear();Buttons.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();foreach(string resource in oldReleased)ResourceReleased.Add(resource);ResourceFence=null;MemoryInput=null;MemoryOutput=null;MemoryDesktop=null;MemoryPointerTarget=null;LastAppliedPointer=null;NativePointerProof=false;InputAckPipe=false;Control=false;Stopping=false;Secure=oldSecure;MonitorDriver=oldDriver;Bounds=oldBounds;}
+        Console.WriteLine("desktop_native_pointer_generated_applied_down_epoch_coordinates_policy_and_failure_passed");
+    }
     // A fresh validation process only. Every desktop, topology, emit and output
     // endpoint is memory-backed before any production input code is called.
     public static void VerifyQueuedMonitorInput(){
@@ -484,6 +539,7 @@ public static class SodaDesktopHost {
             }
         }
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
+        NativePointerProof=!Secure&&VirtualLease==null&&ResourceFence!=null&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
         bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
@@ -509,6 +565,7 @@ public static class SodaDesktopHost {
             if(separateCursor)ready["cursor"]=true;
             if(VirtualLease!=null)ready["virtualDisplay"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
+            if(NativePointerProof)ready["nativePointerProof"]=true;
             if(ResourceFence!=null)ready["resourceFences"]=true;
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;

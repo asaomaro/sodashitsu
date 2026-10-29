@@ -490,10 +490,12 @@ export class DesktopRelay {
         } else if (m.type === "dismiss_lock_screen") {
           if (v.lockScreenCover && v.secureDesktop && v.control && v.ready && v.provider && !this.agents.occupied(v.agent))
             this.send(v.provider, m);
-        } else if (m.type === "input") {
-          if(!supportsDesktopInput(v.inputCapabilities,m.input))return;
-          if (isExtendedDesktopInput(m.input) && !v.extendedInput) return;
-          if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !v.imeKeys) return;
+        } else if(m.type==="native_pointer_cancel") {if(v.provider)this.send(v.provider,m);}
+        else if (m.type === "input") {
+          const cancelPointer=()=>{if(v.provider&&!this.send(v.provider,{type:"native_pointer_cancel"}))this.stop(v);};
+          if(!supportsDesktopInput(v.inputCapabilities,m.input)){cancelPointer();return;}
+          if (isExtendedDesktopInput(m.input) && !v.extendedInput) {cancelPointer();return;}
+          if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !v.imeKeys) {cancelPointer();return;}
           if (
             v.control &&
             !this.agents.occupied(v.agent) &&
@@ -511,7 +513,7 @@ export class DesktopRelay {
             v.viewerAcks.set(seq, m.seq);
             if (v.viewerAcks.size > 64) v.viewerAcks.delete(v.viewerAcks.keys().next().value!);
             if (!this.send(v.provider, { ...m, seq, ...(v.nativeInputFreshness && v.media?.native ? {nativeDraw:true} : {}) })) this.stop(v);
-          }
+          } else cancelPointer();
         } else if (m.type === "ack") {
           if (!v.provider || v.pending !== m.seq) {
             this.stop(v);
