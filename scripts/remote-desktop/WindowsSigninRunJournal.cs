@@ -13,14 +13,14 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
     readonly object gate=new object();readonly string directory,owner,package,barrier;
     readonly Role role;readonly Func<bool> scope;readonly Func<byte[],bool> policy;
     readonly List<SodaDesktopSigninPackageNative.Held> ancestors;readonly Func<string,byte[],bool> ancestorPolicy;
-    readonly Func<IDisposable> enter;IDisposable shared;bool ended,checking,busy;internal Action AfterStageClosed=null;
+    readonly Func<IDisposable> enter;readonly Func<string,FileStream> createFile;IDisposable shared;bool ended,checking,busy;internal Action AfterStageClosed=null;
     static readonly string[] Names={"initial","intent.pending","intent.claimed","started","observation","stopped","stop-observed"};
     static Exception Failure(){return new InvalidOperationException("Signin run journal is unavailable");}
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]
     static extern bool MoveFileExW(string from,string to,uint flags);
-    internal SodaDesktopSigninRunJournal(string directory,string owner,string package,string barrier,Role role,Func<bool> scope,Func<byte[],bool> policy,IEnumerable<string> parents,Func<string,byte[],bool> ancestorPolicy=null,Func<IDisposable> enter=null){
-        this.enter=enter??(()=>new EmptyLease());this.directory=directory;this.owner=SodaDesktopSigninVault.Owner(owner);this.package=package;this.barrier=barrier;this.role=role;this.scope=scope;this.policy=policy;this.ancestorPolicy=ancestorPolicy??((path,bytes)=>policy(bytes));
+    internal SodaDesktopSigninRunJournal(string directory,string owner,string package,string barrier,Role role,Func<bool> scope,Func<byte[],bool> policy,IEnumerable<string> parents,Func<string,byte[],bool> ancestorPolicy=null,Func<IDisposable> enter=null,Func<string,FileStream> createFile=null){
+        this.createFile=createFile??(path=>new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None));this.enter=enter??(()=>new EmptyLease());this.directory=directory;this.owner=SodaDesktopSigninVault.Owner(owner);this.package=package;this.barrier=barrier;this.role=role;this.scope=scope;this.policy=policy;this.ancestorPolicy=ancestorPolicy??((path,bytes)=>policy(bytes));
         ancestors=new List<SodaDesktopSigninPackageNative.Held>();
         try{if(String.IsNullOrEmpty(directory)||!Path.IsPathRooted(directory)||scope==null||policy==null||parents==null)throw Failure();
             foreach(string parent in parents){if(ancestors.Count>=64)throw Failure();ancestors.Add(SodaDesktopSigninPackageNative.OpenCore(parent,true,true,0,bytes=>this.ancestorPolicy(parent,bytes),null));}
@@ -83,7 +83,7 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
     void Publish(string name,SodaDesktopSigninRunRecord record){
         Match(record);byte[] bytes=record.Protect();string stage=name+".writing";
         try{
-            SodaDesktopSigninVault.FileFacts written;Current();using(var file=new FileStream(PathOf(stage),FileMode.CreateNew,FileAccess.Write,FileShare.None)){file.Write(bytes,0,bytes.Length);Current();file.Flush(true);written=SodaDesktopSigninVault.Facts(file.SafeFileHandle);}
+            SodaDesktopSigninVault.FileFacts written;Current();using(var file=createFile(PathOf(stage))){file.Write(bytes,0,bytes.Length);Current();file.Flush(true);written=SodaDesktopSigninVault.Facts(file.SafeFileHandle);}
             if(AfterStageClosed!=null)AfterStageClosed();
             // Private parent denies untrusted creation; re-open the new file with
             // no-follow, private ACL, single-link and identity checks before rename.
@@ -106,7 +106,7 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
         // recovery, including after all old files have gone; no automatic replay.
         byte[] envelope=intent.Protect(),marker=Encoding.ASCII.GetBytes(previous.Digest()+"\n"+intent.Digest()+"\n");var originals=new List<SodaDesktopSigninPackageNative.Held>();
         try{foreach(string name in s.Names){var expected=Expected(s,name);var file=SodaDesktopSigninPackageNative.OpenRenamableCore(PathOf(name),16384,policy);originals.Add(file);if(ReadOpened(file,expected.Kind,expected.RunId).Digest()!=expected.Digest())throw Failure();}
-            Current();using(var transition=new FileStream(PathOf("transition"),FileMode.CreateNew,FileAccess.Write,FileShare.None)){transition.Write(marker,0,marker.Length);transition.Write(envelope,0,envelope.Length);transition.Flush(true);}Current();
+            Current();using(var transition=createFile(PathOf("transition"))){transition.Write(marker,0,marker.Length);transition.Write(envelope,0,envelope.Length);transition.Flush(true);}Current();
             foreach(var file in originals){SodaDesktopSigninPackageNative.CheckCore(file,policy);Current();File.Delete(file.Path);}Current();Publish("intent.pending",intent);Current();File.Delete(PathOf("transition"));Current();
         }finally{SodaDesktopSigninPackageNative.Release(originals);Array.Clear(envelope,0,envelope.Length);Array.Clear(marker,0,marker.Length);}
     }finally{End();}}}

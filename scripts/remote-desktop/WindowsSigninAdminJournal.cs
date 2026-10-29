@@ -9,10 +9,11 @@ using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 public sealed class SodaDesktopSigninAdminJournal {
-    readonly string directory;readonly Func<bool> owned;bool ended,checking;
+    readonly string directory;readonly Func<bool> owned;readonly Func<string,FileStream> createFile;bool ended,checking;
     static Exception Failure(){return new InvalidOperationException("Signin administration journal is unavailable");}
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true,ExactSpelling=true)]static extern bool MoveFileExW(string source,string destination,uint flags);
-    public SodaDesktopSigninAdminJournal(string directory,Func<bool> owned){if(String.IsNullOrEmpty(directory)||!Path.IsPathRooted(directory)||owned==null)throw Failure();this.directory=directory;this.owned=owned;Current();}
+    public SodaDesktopSigninAdminJournal(string directory,Func<bool> owned):this(directory,owned,null){}
+    internal SodaDesktopSigninAdminJournal(string directory,Func<bool> owned,Func<string,FileStream> createFile){this.createFile=createFile??(path=>new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None));if(String.IsNullOrEmpty(directory)||!Path.IsPathRooted(directory)||owned==null)throw Failure();this.directory=directory;this.owned=owned;Current();}
     void Current(){if(ended||checking){ended=true;throw Failure();}checking=true;try{if(!owned()||ended){ended=true;throw Failure();}}catch{ended=true;throw;}finally{checking=false;}}
     string PathOf(string name){return Path.Combine(directory,name);}
     static string Digest(byte[] bytes){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-","").ToLowerInvariant();}
@@ -55,7 +56,7 @@ public sealed class SodaDesktopSigninAdminJournal {
     }
     void Atomic(string stage,string destination,byte[] bytes){
         if(bytes==null||bytes.Length<1||bytes.Length>16384)throw Failure();Current();byte[] copy=(byte[])bytes.Clone();
-        try{using(var file=new FileStream(PathOf(stage),FileMode.CreateNew,FileAccess.Write,FileShare.None)){file.Write(copy,0,copy.Length);Current();file.Flush(true);}
+        try{using(var file=createFile(PathOf(stage))){file.Write(copy,0,copy.Length);Current();file.Flush(true);}
         Current();if(!MoveFileExW(PathOf(stage),PathOf(destination),8))throw Failure();Current();}finally{Array.Clear(copy,0,copy.Length);}
     }
     public void Result(string claimSha256,byte[] publicResult){

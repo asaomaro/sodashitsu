@@ -18,6 +18,16 @@ public static class SodaDesktopSigninPackageNative {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("advapi32.dll",ExactSpelling=true)]static extern uint GetSecurityInfo(SafeFileHandle handle,int type,uint requested,out IntPtr owner,out IntPtr group,out IntPtr dacl,out IntPtr sacl,out IntPtr descriptor);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("advapi32.dll",ExactSpelling=true)]static extern uint GetSecurityDescriptorLength(IntPtr descriptor);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll",ExactSpelling=true)]static extern IntPtr LocalFree(IntPtr value);
+    [StructLayout(LayoutKind.Sequential)]struct FileSecurityAttributes {internal int Size;internal IntPtr Descriptor;internal int Inherit;}
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",EntryPoint="CreateFileW",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern SafeFileHandle CreateNewPrivateW(string path,uint access,uint share,ref FileSecurityAttributes security,uint creation,uint flags,IntPtr template);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern uint GetFileAttributesW(string path);
+    internal static bool Absent(string path){uint value=GetFileAttributesW(path);if(value!=UInt32.MaxValue)return false;int error=Marshal.GetLastWin32Error();if(error!=2&&error!=3)throw Failure();return true;}
+    internal static byte[] PrivateFileDescriptor(){var descriptor=new System.Security.AccessControl.RawSecurityDescriptor("O:BAG:BAD:P(A;;FA;;;SY)(A;;FA;;;BA)");byte[] bytes=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(bytes,0);return bytes;}
+    internal static FileStream CreatePrivateFile(string path){
+        byte[] bytes=PrivateFileDescriptor();var pinned=GCHandle.Alloc(bytes,GCHandleType.Pinned);SafeFileHandle handle=null;
+        try{var security=new FileSecurityAttributes{Size=Marshal.SizeOf(typeof(FileSecurityAttributes)),Descriptor=pinned.AddrOfPinnedObject(),Inherit=0};handle=CreateNewPrivateW(path,0xc0020000,0,ref security,1,0x00200080,IntPtr.Zero);if(handle==null||handle.IsInvalid)throw Failure();var stream=new FileStream(handle,FileAccess.ReadWrite);handle=null;return stream;}
+        finally{if(handle!=null)handle.Dispose();pinned.Free();}
+    }
     static Exception Failure(){return new InvalidOperationException("Signin package is unavailable");}
     public static void VerifyLayouts(){if(Marshal.SizeOf(typeof(Info))!=52||Marshal.OffsetOf(typeof(Info),"Links").ToInt32()!=40)throw Failure();}
     internal sealed class Snapshot {

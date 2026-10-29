@@ -25,14 +25,14 @@ public static class SodaDesktopSigninAdminController {
                 string barrier=exclusive.Fingerprint;Func<bool> stopped=()=>current()&&exclusive.Current()&&exclusive.Fingerprint==barrier&&scm.Query().State==1;
                 using(var run=SodaDesktopSigninRunStorage.OpenController(owner,package.ManifestSha256,barrier,SodaDesktopSigninRunJournal.Role.Reader,stopped)){
                     Require(run.State()=="initial"||run.State()=="complete");string directory=Path.Combine(Path.GetDirectoryName(SodaDesktopSigninVault.StoragePath(owner)),"admin");
-                    if(action=="prepare"){Require(operation!=null&&nonce==null&&cipherSha256==null&&resultSha256==null);return PrepareCore(directory,owner,operation,stopped,SodaDesktopSigninQuiescence.Private);}
-                    Require(operation==null);return ResultCore(directory,owner,nonce,cipherSha256,resultSha256,action=="acknowledge",stopped,SodaDesktopSigninQuiescence.Private);
+                    if(action=="prepare"){Require(operation!=null&&nonce==null&&cipherSha256==null&&resultSha256==null);return PrepareCore(directory,owner,operation,stopped,SodaDesktopSigninQuiescence.Private,createFile:SodaDesktopSigninPackageNative.CreatePrivateFile);}
+                    Require(operation==null);return ResultCore(directory,owner,nonce,cipherSha256,resultSha256,action=="acknowledge",stopped,SodaDesktopSigninQuiescence.Private,createFile:SodaDesktopSigninPackageNative.CreatePrivateFile);
                 }
             }
         }
     }
-    internal static IDictionary<string,object> PrepareCore(string directory,string owner,byte[] operation,Func<bool> current,Func<byte[],bool> policy,Action afterStageClosed=null){
-        byte[] normalized=null,plain=null,cipher=null;var clock=Stopwatch.StartNew();SodaDesktopSigninAdminDeadline deadline=null;
+    internal static IDictionary<string,object> PrepareCore(string directory,string owner,byte[] operation,Func<bool> current,Func<byte[],bool> policy,Action afterStageClosed=null,Func<string,FileStream> createFile=null){
+        createFile=createFile??(path=>new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None));byte[] normalized=null,plain=null,cipher=null;var clock=Stopwatch.StartNew();SodaDesktopSigninAdminDeadline deadline=null;
         try{
             Require(operation!=null&&current!=null&&current()&&policy!=null);owner=SodaDesktopSigninVault.Owner(owner);normalized=SodaDesktopSigninAdminEnrollment.Operation(operation);
             string nonce=Guid.NewGuid().ToString("D");long issued=Wall(),expires=checked(issued+120000);var op=Json().DeserializeObject(new UTF8Encoding(false,true).GetString(normalized)) as Dictionary<string,object>;Require(op!=null);
@@ -41,7 +41,7 @@ public static class SodaDesktopSigninAdminController {
             Func<bool> active=()=>deadline.Current();using(var parent=SodaDesktopSigninPackageNative.OpenCore(directory,true,true,0,policy,null)){
                 Action check=()=>{SodaDesktopSigninPackageNative.CheckCore(parent,policy);Require(active());};check();Require(Directory.GetFileSystemEntries(directory).Length==0);check();
                 using(var envelope=SodaDesktopSigninAdminEnvelope.Protect(plain,owner,nonce))cipher=envelope.Encode();string digest=Hash(cipher),stage=Path.Combine(directory,"admin.pending.writing"),target=Path.Combine(directory,"admin.pending");SodaDesktopSigninVault.FileFacts written;
-                check();using(var file=new FileStream(stage,FileMode.CreateNew,FileAccess.Write,FileShare.None)){file.Write(cipher,0,cipher.Length);check();file.Flush(true);written=SodaDesktopSigninVault.Facts(file.SafeFileHandle);Require(written.Regular);}
+                check();using(var file=createFile(stage)){file.Write(cipher,0,cipher.Length);check();file.Flush(true);written=SodaDesktopSigninVault.Facts(file.SafeFileHandle);Require(written.Regular);}
                 if(afterStageClosed!=null)afterStageClosed();using(var held=SodaDesktopSigninPackageNative.OpenRenamableCore(stage,65536,policy)){
                     Require(written.Same(SodaDesktopSigninVault.Facts(held.Handle)));SodaDesktopSigninPackageNative.CheckCore(held,policy);check();Require(MoveFileExW(stage,target,8));
                     using(var actual=SodaDesktopSigninPackageNative.OpenRenamableCore(target,65536,policy))Require(held.Before.Same(actual.Before,false,65536));check();
@@ -57,7 +57,7 @@ public static class SodaDesktopSigninAdminController {
         }catch{Dispose();throw;}}
         public void Dispose(){if(Bytes!=null)Array.Clear(Bytes,0,Bytes.Length);if(Held!=null)Held.Dispose();}
     }
-    internal static IDictionary<string,object> ResultCore(string directory,string owner,string nonce,string expectedCipher,string expectedResult,bool acknowledge,Func<bool> current,Func<byte[],bool> policy){
+    internal static IDictionary<string,object> ResultCore(string directory,string owner,string nonce,string expectedCipher,string expectedResult,bool acknowledge,Func<bool> current,Func<byte[],bool> policy,Func<string,FileStream> createFile=null){
         byte[] sanitized=null;try{
             Require(current!=null&&current()&&policy!=null&&nonce!=null&&expectedCipher!=null);using(var parent=SodaDesktopSigninPackageNative.OpenCore(directory,true,true,0,policy,null)){
                 Func<bool> active=()=>{SodaDesktopSigninPackageNative.CheckCore(parent,policy);return current();};Require(active());Require(Directory.GetFileSystemEntries(directory).Length==2);
@@ -65,7 +65,7 @@ public static class SodaDesktopSigninAdminController {
                     using(var envelope=SodaDesktopSigninAdminEnvelope.Decode(claimed.Bytes,owner))Require(envelope.Nonce==nonce);string cipher=Hash(claimed.Bytes),digest=Hash(result.Bytes);Require(cipher==expectedCipher);if(acknowledge)Require(expectedResult!=null&&digest==expectedResult);else Require(expectedResult==null);
                     sanitized=SodaDesktopSigninAdminResult.Decode(result.Bytes,owner,nonce,cipher);var publicResult=Json().DeserializeObject(new UTF8Encoding(false,true).GetString(sanitized)) as Dictionary<string,object>;Require(publicResult!=null);
                     Func<bool> owned=()=>{SodaDesktopSigninPackageNative.CheckCore(claimed.Held,policy);SodaDesktopSigninPackageNative.CheckCore(result.Held,policy);return active();};Require(owned());
-                    if(acknowledge){var journal=new SodaDesktopSigninAdminJournal(directory,active);journal.Acknowledge(cipher,digest);return new Dictionary<string,object>{{"state","acknowledged"},{"nonce",nonce},{"cipherSha256",cipher},{"resultSha256",digest}};}
+                    if(acknowledge){var journal=new SodaDesktopSigninAdminJournal(directory,active,createFile);journal.Acknowledge(cipher,digest);return new Dictionary<string,object>{{"state","acknowledged"},{"nonce",nonce},{"cipherSha256",cipher},{"resultSha256",digest}};}
                     return new Dictionary<string,object>{{"state","result"},{"nonce",nonce},{"cipherSha256",cipher},{"resultSha256",digest},{"result",publicResult}};
                 }
             }
