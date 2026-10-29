@@ -75,7 +75,7 @@ type Viewer = {
   foldersRequested?:boolean;folders?:boolean;
   folderCheckpointsRequested?:boolean;folderCheckpoints?:boolean;
   sharedMonitorsRequested?:boolean;sharedMonitors?:boolean;independentMonitorsRequested?:boolean;independentMonitors?:boolean;
-  fileCheckpointsRequested?:boolean;fileCheckpoints?:boolean;durableFileCheckpoints?:boolean;
+  fileCheckpointsRequested?:boolean;fileCheckpoints?:boolean;durableFileCheckpoints?:boolean;durableFolderCheckpoints?:boolean;
   fileRequested?:boolean;files?:boolean;fileLane?:ReturnType<DesktopVideoLanes["issue"]>;
   sharedRate?:boolean;sharedAudioRequested?:boolean;sharedAudio?:boolean;
   sharedMicrophoneRequested?:boolean;sharedMicrophone?:boolean;microphoneRequested?:boolean;microphone?:boolean;sharedProtectedRequested?:boolean;sharedProtectedAvailable?:boolean;sharedProtected?:boolean;sharedResolutionRequested?:boolean;sharedResolution?:boolean;microphoneOpusRequested?:boolean;microphoneOpus?:boolean;microphoneLane?:ReturnType<DesktopVideoLanes["issue"]>;
@@ -584,6 +584,7 @@ export class DesktopRelay {
         files:z.boolean().optional(),
         fileCheckpoints:z.boolean().optional(),
         durableFileCheckpoints:z.boolean().optional(),
+        durableFolderCheckpoints:z.boolean().optional(),
         folders:z.boolean().optional(),
         folderCheckpoints:z.boolean().optional(),
         richClipboard:z.boolean().optional(),
@@ -664,6 +665,7 @@ export class DesktopRelay {
     v.folderCheckpoints=v.folders&&v.folderCheckpointsRequested===true&&caps.folderCheckpoints===true;
     v.fileCheckpoints=v.files&&v.fileCheckpointsRequested===true&&caps.fileCheckpoints===true;
     v.durableFileCheckpoints=v.fileCheckpoints&&caps.durableFileCheckpoints===true;
+    v.durableFolderCheckpoints=v.folderCheckpoints&&caps.durableFolderCheckpoints===true;
     v.richClipboard=v.richRequested===true&&caps.richClipboard===true;
     v.sharedMicrophone=v.sharedMicrophoneRequested===true&&caps.sharedMicrophone===true&&options.sharedDesktop===true&&caps.sharedDesktop===true&&v.sharedRequested===true&&caps.features===true;
     v.microphone=v.microphoneRequested===true&&caps.microphone===true&&(!options.sharedDesktop||v.sharedMicrophone)&&!options.elevatedDesktop&&!options.virtualDisplay;
@@ -974,8 +976,8 @@ export class DesktopRelay {
             if(ready.nativeMaxFps!==60||!v.nativeVideo)delete v.nativeMaxFps;
             v.files=v.files===true&&ready.files===true&&!v.secureDesktop;
             v.richClipboard=v.richClipboard===true&&ready.richClipboard===true&&ready.allowClipboard===true&&!v.secureDesktop;
-            const { imeKeys, extendedInput, sharedProtected:helperSharedProtected, sharedProtectedAvailable:_helperSharedAvailable, protectedDesktop, virtualDisplay, monitorLayout, files, fileCheckpoints:_fileCheckpoints,durableFileCheckpoints:_durableFileCheckpoints,folders:_folders,folderCheckpoints:_folderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,microphoneOpus,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,inputCapabilities,imageLane:helperImageLane, ...legacyReady } = ready;
-            this.send(v.ws, { ...legacyReady, ...(v.sharedProtectedAvailable?{sharedProtectedAvailable:true}:{}),...(v.sharedProtected&&helperSharedProtected?{sharedProtected:true}:{}), ...(v.nativePlatform&&inputCapabilities?{inputCapabilities}:{}), ...(v.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}), ...(v.virtualDisplay&&virtualDisplay?{virtualDisplay:true}:{}), ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.microphone?{microphone:true,...(v.microphoneOpus&&ready.microphoneOpus?{microphoneOpus:true}:{})}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true,...(v.fileCheckpoints&&ready.fileCheckpoints?{fileCheckpoints:true,...(v.durableFileCheckpoints&&ready.durableFileCheckpoints?{durableFileCheckpoints:true}:{})}:{}),...(v.folders&&ready.folders?{folders:true}:{}),...(v.folderCheckpoints&&ready.folderCheckpoints?{folderCheckpoints:true}:{})}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
+            const { imeKeys, extendedInput, sharedProtected:helperSharedProtected, sharedProtectedAvailable:_helperSharedAvailable, protectedDesktop, virtualDisplay, monitorLayout, files, fileCheckpoints:_fileCheckpoints,durableFileCheckpoints:_durableFileCheckpoints,durableFolderCheckpoints:_durableFolderCheckpoints,folders:_folders,folderCheckpoints:_folderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,microphoneOpus,richClipboard,nativeVideoWindow,nativeMaxFps,nativeAdaptive,nativeCodecs,nativeCodecCandidates,cursor,inputCapabilities,imageLane:helperImageLane, ...legacyReady } = ready;
+            this.send(v.ws, { ...legacyReady, ...(v.sharedProtectedAvailable?{sharedProtectedAvailable:true}:{}),...(v.sharedProtected&&helperSharedProtected?{sharedProtected:true}:{}), ...(v.nativePlatform&&inputCapabilities?{inputCapabilities}:{}), ...(v.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}), ...(v.virtualDisplay&&virtualDisplay?{virtualDisplay:true}:{}), ...(v.imageLane?{imageLane:true}:{}), ...(v.nativeVideo?{nativeVideo:true}:{}),...(v.nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),...(v.nativeAdaptive?{nativeAdaptive:true}:{}),...(v.nativeDatagrams?{nativeDatagrams:true}:{}),...(v.nativeAudio?{nativeAudio:true}:{}),...(v.microphone?{microphone:true,...(v.microphoneOpus&&ready.microphoneOpus?{microphoneOpus:true}:{})}:{}),...(v.monitors&&monitorLayout&&!v.secureDesktop?{monitorLayout}:{}),...(v.files?{files:true,...(v.fileCheckpoints&&ready.fileCheckpoints?{fileCheckpoints:true,...(v.durableFileCheckpoints&&ready.durableFileCheckpoints?{durableFileCheckpoints:true}:{})}:{}),...(v.folders&&ready.folders?{folders:true}:{}),...(v.folderCheckpoints&&ready.folderCheckpoints?{folderCheckpoints:true,...(v.durableFolderCheckpoints&&ready.durableFolderCheckpoints?{durableFolderCheckpoints:true}:{})}:{})}:{}),...(v.richClipboard?{richClipboard:true}:{}),...(v.nativeVideoWindow===3?{nativeVideoWindow:3}:{}), ...(v.nativeMaxFps===60?{nativeMaxFps:60}:{}), ...(v.cursor?{cursor:true}:{}), ...(v.imeKeys && imeKeys ? { imeKeys: true } : {}), ...(v.extendedInput && extendedInput ? { extendedInput: true } : {}) });
           } else if (msg.type === "session_locked" && !v.secureDesktop && v.ready) {
             this.send(v.ws, { type: "session_locked" });
             this.stop(v);

@@ -14,12 +14,37 @@ import {
   type DesktopFolderRequest,
   type DesktopFileResult,
 } from "@sodashitsu/protocol";
-import { FileTransfer, FileTransferInterrupted } from "../work/FileTransfer.js";
+import {
+  FileTransfer,
+  FileTransferInterrupted,
+  type FileTransferSnapshot,
+  type FileTransferSourceSnapshot,
+} from "../work/FileTransfer.js";
+import { folderIdentity } from "../work/files.js";
+import {
+  DesktopFolderSnapshot,
+  directorySnapshot,
+  verifyDirectory,
+  folderPath,
+  fileSnapshot,
+  verifyFolderSource,
+  openFolderSource,
+  type FolderDirectorySnapshot,
+} from "./DesktopFolderSnapshot.js";
 import { directoryGuard, inside } from "../work/files.js";
 import { readRange } from "../agent/safeFile.js";
 import { canonicalFolder } from "./desktopFilePaths.js";
 type Result = NonNullable<DesktopFileResult["result"]>;
-type FileState = { bytes: number; offset: number; done: boolean; stream?: string | undefined };
+type FileState = {
+  bytes: number;
+  offset: number;
+  done: boolean;
+  stream?: string | undefined;
+  temporary?: FileTransferSnapshot | undefined;
+  sha256?: string | undefined;
+  committing?: boolean | undefined;
+  source?: FileTransferSourceSnapshot | undefined;
+};
 type Job = {
   id: string;
   upload: boolean;
@@ -37,11 +62,15 @@ type Job = {
   expires: number;
   timer: ReturnType<typeof setTimeout>;
   scratch?: string;
+  scratchCheck?: () => Promise<void>;
   archive?: string;
   fd?: FileHandle;
   sha256?: string;
   completed?: Result;
   snapshot?: () => Promise<void>;
+  sourcePath?: string;
+  sourceDirectories?: FolderDirectorySnapshot[];
+  sourceFiles?: FileTransferSourceSnapshot[];
 };
 /** A group owns its streams and empty directories, never completed/user files. */
 export class DesktopFolders {
@@ -53,8 +82,28 @@ export class DesktopFolders {
   constructor(
     private root: string,
     private resumable = false,
+    private scratchRoot?: string,
+    private beforePublish?: (snapshot: DesktopFolderSnapshot) => Promise<void>,
   ) {}
+  private expiryPaused = false;
+  private cleanups = new Set<Promise<void>>();
+  private scheduleCleanup(jobs: Job[]) {
+    const work = this.queue.then(async () => {
+      const results = await Promise.allSettled(jobs.map((j) => this.cleanup(j)));
+      for (const r of results) if (r.status === "rejected") throw r.reason;
+    });
+    this.cleanups.add(work);
+    void work.finally(() => this.cleanups.delete(work)).catch(() => {});
+  }
+  pauseExpiry() {
+    this.expiryPaused = true;
+    for (const j of this.jobs.values()) {
+      clearTimeout(j.timer);
+      j.transfer.pauseExpiry();
+    }
+  }
   async keepAlive() {
+    if (this.expiryPaused) return;
     for (const j of this.jobs.values()) {
       this.fence(j);
       for (const f of j.files.values())
@@ -99,9 +148,7 @@ export class DesktopFolders {
     if (this.cancelled.size >= 4096) {
       this.dead = true;
       for (const job of this.jobs.values()) job.cancelled = true;
-      void this.queue.then(async () => {
-        for (const job of [...this.jobs.values()]) await this.cleanup(job);
-      });
+      this.scheduleCleanup([...this.jobs.values()]);
       return true;
     }
     this.cancelled.add(id);
@@ -109,7 +156,7 @@ export class DesktopFolders {
     if (!j) return true;
     j.cancelled = true;
     clearTimeout(j.timer);
-    void this.queue.then(() => this.cleanup(j)).catch(() => {});
+    this.scheduleCleanup([j]);
     return true;
   }
   cancelAll() {
@@ -118,37 +165,313 @@ export class DesktopFolders {
   async clear() {
     this.cancelAll();
     await this.queue;
-    for (const j of [...this.jobs.values()]) await this.cleanup(j);
+    const results = await Promise.allSettled([
+      ...this.cleanups,
+      ...[...this.jobs.values()].map((j) => this.cleanup(j)),
+    ]);
+    for (const r of results) if (r.status === "rejected") throw r.reason;
   }
   async close() {
     this.dead = true;
     await this.clear();
   }
   private fence(j: Job) {
+    if (this.dead && this.resumable)
+      throw new FileTransferInterrupted("フォルダ転送を引き継ぎ中です");
     if (this.dead || this.jobs.get(j.id) !== j || j.cancelled || performance.now() >= j.expires)
       throw Error("フォルダ転送が終了しました");
   }
   private touch(j: Job) {
     j.expires = performance.now() + (this.resumable ? 900000 : 60000);
     clearTimeout(j.timer);
-    j.timer = setTimeout(() => this.cancel(j.id), this.resumable ? 900000 : 60000);
+    j.timer = setTimeout(
+      () => {
+        if (!this.expiryPaused) this.cancel(j.id);
+      },
+      this.resumable ? 900000 : 60000,
+    );
     j.timer.unref();
   }
   private async cleanup(j: Job, success = false) {
     if (this.jobs.get(j.id) !== j) return;
     this.jobs.delete(j.id);
     clearTimeout(j.timer);
-    await j.transfer.close();
-    await j.fd?.close().catch(() => {});
-    if (j.archive) await unlink(j.archive).catch(() => {});
-    if (j.scratch) await rmdir(j.scratch).catch(() => {});
+    const closed = await Promise.allSettled([
+      j.transfer.close(),
+      (async () => {
+        const archiveIdentity = await j.fd?.stat({ bigint: true }).catch(() => undefined);
+        await j.fd?.close();
+        if (j.archive && archiveIdentity && j.scratchCheck)
+          await j
+            .scratchCheck()
+            .then(async () => {
+              const named = await lstat(j.archive!, { bigint: true });
+              if (
+                named.isFile() &&
+                !named.isSymbolicLink() &&
+                named.dev === archiveIdentity.dev &&
+                named.ino === archiveIdentity.ino &&
+                named.birthtimeNs === archiveIdentity.birthtimeNs
+              )
+                await unlink(j.archive!);
+            })
+            .catch(() => {});
+        if (j.scratch && j.scratchCheck)
+          await j
+            .scratchCheck()
+            .then(() => rmdir(j.scratch!))
+            .catch(() => {});
+      })(),
+    ]);
     if (!success && !j.completed)
       for (const dir of [...j.created].reverse())
         await dir
           .check()
           .then(() => rmdir(dir.path))
           .catch(() => {});
+    for (const result of closed) if (result.status === "rejected") throw result.reason;
   }
+  async checkpoint(id: string): Promise<DesktopFolderSnapshot> {
+    await this.queue;
+    const j = this.jobs.get(id);
+    if (!j) throw Error("フォルダの再開記録が終了しました");
+    return this.checkpointNow(j);
+  }
+  private async checkpointNow(j: Job): Promise<DesktopFolderSnapshot> {
+    this.fence(j);
+    await j.snapshot?.();
+    const approvedIdentity = await folderIdentity(this.root);
+    if (j.upload) {
+      if (!j.root) throw Error("フォルダの準備が完了していません");
+      const directories: FolderDirectorySnapshot[] = [];
+      for (const d of j.created) {
+        await d.check();
+        directories.push(await directorySnapshot(j.root, d.path));
+      }
+      const files = [];
+      for (const [path, f] of j.files) {
+        if (f.stream) f.temporary = await j.transfer.checkpoint(j.owner, j.root, f.stream);
+        files.push({
+          path,
+          bytes: f.bytes,
+          offset: f.offset,
+          done: f.done,
+          temporary: f.temporary,
+          sha256: f.sha256,
+          committing: f.committing,
+          source: f.source,
+        });
+      }
+      return DesktopFolderSnapshot.parse({
+        version: 1,
+        id: j.id,
+        upload: true,
+        approvedIdentity,
+        destination: relative(this.root, j.root).split("\\").join("/"),
+        directories,
+        files,
+        bytes: j.bytes,
+        offset: j.offset,
+        complete: !!j.completed,
+      });
+    }
+    if (!this.scratchRoot || !j.scratch || !j.sourcePath || !j.sha256)
+      throw Error("ZIPの準備が完了していません");
+    await j.fd!.sync();
+    return DesktopFolderSnapshot.parse({
+      version: 1,
+      id: j.id,
+      upload: false,
+      approvedIdentity,
+      directories: [],
+      files: [],
+      bytes: j.bytes,
+      offset: j.offset,
+      complete: false,
+      download: {
+        source: j.sourcePath,
+        directories: j.sourceDirectories,
+        files: j.sourceFiles,
+        scratch: basename(j.scratch),
+        scratchIdentity: await folderIdentity(j.scratch),
+        archive: await fileSnapshot(j.scratch, "folder.zip"),
+        sha256: j.sha256,
+      },
+    });
+  }
+  suspend(): Promise<void> {
+    this.pauseExpiry();
+    this.dead = true;
+    return this.queue.then(async () => {
+      this.dead = true;
+      const results = await Promise.allSettled([
+        ...this.cleanups,
+        ...[...this.jobs.values()].map(async (j) => {
+          this.jobs.delete(j.id);
+          clearTimeout(j.timer);
+          const result = await Promise.allSettled([j.transfer.suspend(), j.fd?.close()]);
+          for (const r of result) if (r.status === "rejected") throw r.reason;
+        }),
+      ]);
+      const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failed.length)
+        throw new AggregateError(
+          failed.map((r) => r.reason),
+          "Folder descriptor shutdown failed",
+        );
+    });
+  }
+  restore(raw: DesktopFolderSnapshot, guard: () => Promise<void>, fence: () => void) {
+    const operation = this.queue.then(() => this.restoreNow(raw, guard, fence));
+    this.queue = operation.catch(() => {});
+    return operation;
+  }
+  private async restoreNow(
+    raw: DesktopFolderSnapshot,
+    guard: () => Promise<void>,
+    fence: () => void,
+  ) {
+    const s = DesktopFolderSnapshot.parse(raw);
+    await guard();
+    if (this.dead || this.jobs.size || (await folderIdentity(this.root)) !== s.approvedIdentity)
+      throw Error("共有フォルダの実体が変更されました");
+    const j: Job = {
+      id: s.id,
+      upload: s.upload,
+      created: [],
+      dirs: new Map(),
+      files: new Map(),
+      bytes: s.bytes,
+      offset: s.offset,
+      done: 0,
+      transfer: new FileTransfer(true),
+      owner: randomUUID(),
+      cancelled: false,
+      expires: performance.now() + 900000,
+      timer: undefined as any,
+    };
+    try {
+      if (s.upload) {
+        j.root = await folderPath(this.root, s.destination!);
+        for (const d of s.directories) {
+          const path = await verifyDirectory(j.root, d),
+            check = await directoryGuard(path);
+          j.created.push({ path, check });
+          j.dirs.set(d.path, check);
+        }
+        j.rootCheck = j.dirs.get("")!;
+        for (const f of s.files) {
+          await guard();
+          const file: FileState = { ...f };
+          if (f.done || f.committing) {
+            const published = await FileTransfer.published(
+              j.root,
+              f.temporary!,
+              f.sha256!,
+              guard,
+              fence,
+            );
+            if (published) {
+              if (f.source) {
+                const source = await verifyFolderSource(j.root, f.source, undefined, guard, fence);
+                await source.fd.close();
+              }
+              file.done = true;
+              file.committing = false;
+              file.source = await fileSnapshot(j.root, f.path);
+            } else if (f.done) throw Error("保存済みファイルが見つかりません");
+          }
+          if (!file.done && f.temporary) {
+            const restored = await j.transfer.restore(j.owner, j.root, f.temporary, guard, fence);
+            file.stream = restored.id;
+          }
+          if (file.done) {
+            j.done++;
+            const saved = file.source!;
+            const previous = j.snapshot;
+            j.snapshot = async () => {
+              await previous?.();
+              const source = await verifyFolderSource(j.root!, saved);
+              await source.fd.close();
+            };
+          }
+          j.files.set(f.path, file);
+        }
+        if (s.complete) j.completed = { done: true, destination: j.root };
+      } else {
+        const d = s.download!;
+        if (!this.scratchRoot) throw Error("ZIPの保存場所が利用できません");
+        const source = await folderPath(this.root, d.source);
+        j.sourcePath = d.source;
+        j.sourceDirectories = d.directories;
+        j.sourceFiles = d.files;
+        const verify = async (authority: () => Promise<void> = async () => {}) => {
+          for (const dir of d.directories) {
+            await authority();
+            await verifyDirectory(source, dir);
+          }
+          for (const saved of d.files) {
+            await authority();
+            const file = await verifyFolderSource(source, saved);
+            await file.fd.close();
+          }
+        };
+        await verify(guard);
+        const scratch = await folderPath(this.scratchRoot, d.scratch);
+        if ((await folderIdentity(scratch)) !== d.scratchIdentity)
+          throw Error("ZIPの保存先が変更されました");
+        const archive = await verifyFolderSource(scratch, d.archive, d.sha256, guard, fence);
+        j.fd = archive.fd;
+        j.scratch = scratch;
+        j.scratchCheck = await directoryGuard(scratch);
+        j.archive = join(scratch, "folder.zip");
+        j.sha256 = d.sha256;
+        j.snapshot = async () => {
+          await verify();
+          await archive.verify();
+        };
+      }
+      await guard();
+      fence();
+      if (this.dead || this.expiryPaused || this.jobs.size)
+        throw new FileTransferInterrupted("フォルダの復元が終了しました");
+      this.jobs.set(j.id, j);
+      this.touch(j);
+      return this.state(j, true);
+    } catch (error) {
+      await Promise.allSettled([j.transfer.suspend(), j.fd?.close()]);
+      throw error;
+    }
+  }
+  static async discard(root: string, raw: DesktopFolderSnapshot, scratchRoot?: string) {
+    const s = DesktopFolderSnapshot.parse(raw);
+    if ((await folderIdentity(root)) !== s.approvedIdentity) return;
+    if (s.upload) {
+      if (s.complete) return;
+      const destination = await folderPath(root, s.destination!);
+      for (const d of s.directories) await verifyDirectory(destination, d);
+      for (const f of s.files)
+        if (f.temporary) await FileTransfer.discard(destination, f.temporary).catch(() => {});
+      for (const d of [...s.directories].sort(
+        (a, b) => (b.path ? b.path.split("/").length : 0) - (a.path ? a.path.split("/").length : 0),
+      )) {
+        const path = await verifyDirectory(destination, d);
+        await rmdir(path).catch((error) => {
+          if (!["ENOTEMPTY", "EEXIST"].includes((error as NodeJS.ErrnoException).code ?? ""))
+            throw error;
+        });
+      }
+    } else if (scratchRoot) {
+      const d = s.download!,
+        scratch = await folderPath(scratchRoot, d.scratch);
+      if ((await folderIdentity(scratch)) !== d.scratchIdentity) return;
+      const file = await verifyFolderSource(scratch, d.archive);
+      await file.fd.close();
+      await unlink(join(scratch, "folder.zip"));
+      await rmdir(scratch);
+    }
+  }
+
   private async location(part: string) {
     if (isAbsolute(part) || /^[A-Za-z]:/.test(part) || part.split(/[\\/]/).includes(".."))
       throw Error("共有フォルダ内の相対パスを指定してください");
@@ -264,6 +587,9 @@ export class DesktopFolders {
       }
       if (p.action === "folder_download_start") {
         const source = await this.location(p.path);
+        job.sourcePath = p.path;
+        job.sourceDirectories = [];
+        job.sourceFiles = [];
         if (source === this.root) throw Error("共有フォルダ内の対象フォルダを選択してください");
         const name = DesktopFolderName.parse(basename(source));
         const entries: DesktopFolderManifest = [],
@@ -271,6 +597,7 @@ export class DesktopFolders {
         let bytes = 0;
         const walk = async (path: string, prefix: string) => {
           await guard();
+          job.sourceDirectories!.push(await directorySnapshot(source, path, true));
           const before = await lstat(path),
             check = await directoryGuard(path);
           checks.push(async () => {
@@ -322,7 +649,12 @@ export class DesktopFolders {
         DesktopFolderManifest.parse(entries);
         for (const check of checks) await check();
         await guard();
-        job.scratch = await realpath(await mkdtemp(join(tmpdir(), "soda-folder-")));
+        job.scratch = await realpath(
+          await mkdtemp(
+            join(this.scratchRoot ?? tmpdir(), this.scratchRoot ? ".folder-" : "soda-folder-"),
+          ),
+        );
+        job.scratchCheck = await directoryGuard(job.scratch);
         job.archive = join(job.scratch, "folder.zip");
         job.fd = await open(job.archive, "wx+", 0o600);
         const output: Uint8Array[] = [],
@@ -366,6 +698,8 @@ export class DesktopFolders {
             fence,
           );
           if (opened.bytes !== entry.bytes) throw Error("取得元が変更されました");
+          if (this.scratchRoot)
+            job.sourceFiles!.push(await job.transfer.sourceSnapshot(job.owner, source, opened.id!));
           const stream = new ZipPassThrough(name + "/" + entry.path);
           zip.add(stream);
           let offset = 0;
@@ -427,6 +761,12 @@ export class DesktopFolders {
           job.offset += r.offset! - file.offset;
           file.offset = r.offset!;
         } else {
+          if (this.beforePublish) {
+            file.sha256 = p.sha256;
+            file.committing = true;
+            await this.beforePublish(await this.checkpointNow(job));
+            await guard();
+          }
           await job.transfer.run(
             job.owner,
             job.root!,
@@ -454,6 +794,11 @@ export class DesktopFolders {
               )
                 throw Error("保存済みファイルが変更されました");
             };
+          }
+          if (this.scratchRoot) {
+            file.sha256 = p.sha256;
+            file.source = await fileSnapshot(job.root!, p.path);
+            file.committing = false;
           }
           file.done = true;
           file.stream = undefined;
