@@ -47,6 +47,13 @@ jobs:
       - name: Generated claim-bound enrollment (no installed storage or keys)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-admin-enrollment.ps1 -NegativeControls
+      - name: Generated closed run records and admission gate (no service/process authority)
+        shell: powershell
+        run: |
+          scripts/remote-desktop/validate-signin-run-record.ps1 -NegativeControls
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          scripts/remote-desktop/validate-signin-run-admission.ps1 -NegativeControls
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Generated immutable quiescence barrier (ordinary temporary files only)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-quiescence.ps1 -NegativeControls
