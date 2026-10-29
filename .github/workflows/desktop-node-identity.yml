@@ -64,3 +64,6 @@ jobs:
       - name: Generated native drag data/COM/framing kernel (no real desktop or input)
         shell: powershell
         run: scripts/remote-desktop/validate-native-drag-lease.ps1
+      - name: Generated Explorer selection admission (no real desktop)
+        shell: powershell
+        run: scripts/remote-desktop/validate-explorer-selection.ps1
