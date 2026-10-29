@@ -35,3 +35,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 signin_run_journal_generated_restart_roles_process_bindings_and_crash_boundaries_passed
 signin_run_journal_9_source_negative_controls_and_restore_passed
 ```
+
+## Delivery
+
+PR #284 merged main b97548d3f1bd6988012d61ea84fd6a62a232ffe9. Product adc40b84 passed protected Windows CI40797889045/job123198666605 and Node Windows CI40797889041/job123198666708. Two independent fix reviewers and final record review clear. Nine changed/new files reflected using all-file exact base-or-approved-result preflight and final byte recheck; unrelated dirty root changes preserved. Normal server handoff and dedicated service activation were not performed for this native-only storage addition.
