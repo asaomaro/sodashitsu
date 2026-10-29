@@ -54,3 +54,7 @@ jobs:
           node scripts/remote-desktop/validate-signin-package.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/remote-desktop/validate-signin-node-negative.mjs
+
+      - name: Generated server-process checkpoint crash boundaries (private disposable files only)
+        shell: powershell
+        run: node scripts/remote-desktop/validate-transfer-checkpoints.mjs

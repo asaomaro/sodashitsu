@@ -171,6 +171,7 @@ export const DesktopReady = z
     monitorLayout:DesktopMonitorLayout.optional(),
     files:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
+    durableFileCheckpoints:z.literal(true).optional(),
     folders:z.literal(true).optional(),
     folderCheckpoints:z.literal(true).optional(),
     richClipboard:z.literal(true).optional(),
@@ -331,6 +332,7 @@ export interface DesktopResults {
     sharedResolution?:boolean;
     files?: boolean;
     fileCheckpoints?:boolean;
+    durableFileCheckpoints?:boolean;
     folders?:boolean;
     folderCheckpoints?:boolean;
     richClipboard?: boolean;

@@ -916,6 +916,7 @@ export async function composeServer(
       await extensions.stop();
     },
     resumePollers: () => {
+      desktop.resumeSavedTransfers();
       scheduler.start();
       graphEngine.start();
       graphMaintainer.resume(); // 止まっている間のできごとを拾う
@@ -928,6 +929,7 @@ export async function composeServer(
     },
     flushSession: async () => {
       await desktopEndpoint.prepareHandoff();
+      await desktop.suspendSavedTransfers();
       await persist.flush();
       await graph.flush(); // 20260927-agent-graph（書きかけの graph.json を残して置き換わらない）
     },
@@ -938,7 +940,7 @@ export async function composeServer(
       desktopEndpoint.suspend();
       desktopEndpointRelay.closeShares();
       desktopRelay.closeShares();
-      desktop.dispose();
+      desktop.dispose(true);
       wsServer.setReady(false);
       wsServer.closeAll(1012, "server restarting");
       desktopCdp.disconnectAll();
@@ -1063,6 +1065,7 @@ export async function composeServer(
         // 0'. auth.json を読む（ロックを取った後。上記）。token は待ち受けに成功してから作る（D102）。
         await auth.initialize();
         await desktopEndpoint.activate();
+        desktop.enableSavedTransfers(join(options.stateDir,"desktop-transfers"),await desktopSettings.transferScope());
         // 0'（続き）. 共有の設定（20260927-cli-mode）。壊れていれば退避して空から始める（起動は止めない）。
         const loadedPrefs = await prefs.load();
         if (typeof loadedPrefs === "object") logger.warn("prefs.json was corrupt; starting with empty prefs", { backupPath: loadedPrefs.corrupt });
@@ -1287,7 +1290,8 @@ export async function composeServer(
         desktopEndpointRelay.dispose();
         desktopRelay.dispose();
         desktopCompanion.dispose();
-        desktop.dispose();
+        await desktop.suspendSavedTransfers().catch(() => logger.warn("desktop saved transfer shutdown was incomplete"));
+        desktop.dispose(true);
         await desktopEndpoint.close();
         await control.beginClosing();
         // マシンへの ssh を閉じる（リモートの `soda serve` と pane は動いたまま。AC5）。中継の接続には、ssh を閉じる前に手元の停止（1001）で閉じる
@@ -1373,7 +1377,8 @@ export async function composeServer(
         desktopEndpointRelay.dispose();
         desktopRelay.dispose();
         desktopCompanion.dispose();
-        desktop.dispose();
+        await desktop.suspendSavedTransfers().catch(() => logger.warn("desktop saved transfer shutdown was incomplete"));
+        desktop.dispose(true);
         await desktopEndpoint.close();
         await previewHelpers.dispose();
         previews.dispose();

@@ -169,8 +169,8 @@ it("an abort during the final fd stat is fenced before the OS publish call", asy
     original = fd.stat.bind(fd);
   let abort: Promise<unknown> | undefined,
     stats = 0;
-  vi.spyOn(fd, "stat").mockImplementation(async () => {
-    const result = await original();
+  vi.spyOn(fd, "stat").mockImplementation(async (...args: unknown[]) => {
+    const result = await original(...args);
     if (++stats === 2) abort = f.run({ action: "abort", id });
     return result;
   });
@@ -179,7 +179,8 @@ it("an abort during the final fd stat is fenced before the OS publish call", asy
     id,
     sha256: createHash("sha256").update(data).digest("hex"),
   });
-  expect(stats).toBe(2);
+  // Two publication checks, then the identity check before safe temporary cleanup.
+  expect(stats).toBe(3);
   expect(result.ok).toBe(false);
   await abort;
   expect(await readdir(f.root)).toEqual([]);
