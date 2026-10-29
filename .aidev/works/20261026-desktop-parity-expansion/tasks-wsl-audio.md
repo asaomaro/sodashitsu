@@ -6,9 +6,10 @@
 - [x] Taskcheck transport (independent): deadline and unread PCM findings corrected; delta review pending.
 - [x] Wire per-provider runtime into single/shared audio and microphone with existing ceilings/resource fences.
 - [x] Taskcheck integration, generated authority/revocation/close regressions and 11 actual-source negatives; exact restoration and 32 focused positive tests.
-- [ ] Browser audio/microphone regression, build/typecheck/full tests; Windows generated validations.
-- [ ] Independent whole/correction review, root three-way integration and checks.
-- [ ] Fixed HEAD CI, clean startup, commit/PR/main merge.
+- [x] Source browser17, build/typecheck/full12,761; root related328/build/types; Windows generated validations. Root browser final receipt: PR #308.
+- [x] Independent whole/correction/fixed24-path review, guarded root three-way integration and checks.
+- [x] Fixed product HEAD CI, clean startup, commit/PR #308.
+- [ ] Final documentation-head CI and main merge (delivery receipt: PR #308).
 
 Fragile taskcheck applies to transport and integration (lifetime/authority/private protocol). Documentation is checked in whole review. No Linux/macOS desktop device is available. WSL/Windows generated memory validation is not real endpoint, Explorer, native Linux/macOS or call-app verification.
 

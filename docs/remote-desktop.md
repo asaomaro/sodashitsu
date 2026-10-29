@@ -268,7 +268,7 @@ soda serve
 
 操作も許可する場合は、上のJSON配列の末尾へ`"-AllowInput"`を追加し、`SODA_DESKTOP_ALLOW_INPUT=1`を設定します。人がマウス・キーを操作する場合、Aのブラウザで［操作する］を選ぶまで入力は届きません。エージェントは後述の専用の明示許可と接続コードを使います。
 
-`.ps1`の実行はWindows側の実行ポリシーに従います。署名が必要な環境では組織の手順で署名する必要があります。実行ポリシーの変更・回避をこの機能で行いません。Windows側Node/.NET SDKの追加導入は、このhelperの実行要件には含めていませんが、対象Windows環境での実動作確認は残っています。
+通常の画面共有用`windows-helper.ps1`はWindows側の実行ポリシーに従います。署名が必要な環境では組織の手順で署名してください。Explorer選択・COPY・WSL音声の固定コードをコンパイルする専用PowerShellプロセスは、プロセス内だけ`ExecutionPolicy Bypass`で起動します。Windows全体の実行ポリシーや証明書trustは変更しません。Windows側Node/.NET SDKの追加導入は、このhelperの実行要件には含めていませんが、対象Windows環境での実動作確認は残っています。
 
 `-MonitorIndex`はその起動時のWindows `Screen.AllScreens`の添字です。初期検証はモニター1枚を前提にしてください。起動後に対象の画面/座標が変わった場合は共有を停止し、別モニターへ自動移行しません。
 

@@ -251,3 +251,16 @@ AssertionError: expected 4321 to be an instance of Error
 Initial source whole suite: 861 files/12,760 tests passed; one existing DesktopRelay physical-helper-budget assertion failed with one unhandled rejection because private launch had changed from synchronous throw to async rejection. Corrected by keeping synchronous launch and adding separate async prepareLaunch; the public WS request awaits preparation/launch and rechecks live scope before started. Correction independent review: no must/should. Corrected Provider + entire Relay targeted suite: 231 passed. Final whole checks rerun after this material change.
 
 Initial source browser: 16 passed, encrypted shared microphone failed (90s stop-button wait); targeted repeat failed at line152 because first microphone became unavailable after second viewer start. Actual change-before main90c5b41b in clean worktree passed the same isolated case (1 passed,9.5s). Initial source failures overlapped full-suite/clean-build load; no baseline defect or guaranteed timing cause is claimed. Corrected version is reverified without concurrent whole-suite/build load. No blanket timeout counts as negative proof.
+
+## Frozen corrected product receipts
+
+Product a7ac0b34b764a104bfd6b6a256a42b0dfa243555:
+
+- Source build, forced server/dependency emit and typecheck passed. Whole suite: 862 files / 12,761 tests passed, 382.69s, no unhandled errors. Initial failure above is resolved.
+- Root build, forced emit and typecheck passed. Related changed-scope tests: 10 files / 328 tests passed, 80.98s. Per repository guidance the complete source suite is not duplicated in root; root receives the source results plus integration checks and browser checks.
+- Source browser: all 17 selected audio/microphone/shared/takeover/agent cases passed in1.6m after whole/build processes finished. This includes encrypted shared Opus microphone. Initial failures under overlap remain recorded; the exact timing cause is not established. No production timeout or assertion was weakened.
+- Exact product CI: Windows identity/bridge run40960571902 passed; protected boundaries/upgrade/maintenance run40960571838 all passed.
+- Clean detached product worktree build and smoke passed; git status empty. No live A/B handoff performed.
+- Independent final fixed24 paths: commit/source/snapshot/root hashes match; docs normal three-way and Provider constructor normalization/replay preserve existing root allowLanHttp behavior. Whole and correction reviewers report no remaining must/should.
+
+Root browser17 and final documentation-head CI/merge receipts are recorded in PR #308. The final documentation change clarifies that fixed builders use process-scoped ExecutionPolicy Bypass, while normal capture helper launch follows Windows policy; system policy/trust are not changed. This describes the existing compiler launch behavior rather than changing it.
