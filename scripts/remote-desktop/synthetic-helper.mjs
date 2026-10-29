@@ -198,6 +198,11 @@ function run() {
     lastCursor=performance.now();send(info);
   };
   let resourceMode=false,resourceEpochs=new Map(),resourceReleased=new Set(["control","clipboard","microphone"]),resourceFailed=false;
+  const heldResourceFences=[];
+  function finishResourceFence(m){
+    if(m.epoch!==resourceEpochs.get(m.resource))throw Error("Generated delayed resource epoch");
+    if(m.resource==="control"){control=false;held.clear();}if(m.resource==="clipboard"){clipboardAllowed=false;clearRich();}if(m.resource==="microphone")stopMicrophone();resourceReleased.add(m.resource);if(lifecycle&&process.argv.includes("--resource-fence-release-marker"))appendFileSync(lifecycle,JSON.stringify({type:"resource_fence_done",resource:m.resource,id:m.id})+"\n");send({type:"resource_fence_ack",id:m.id});
+  }
   process.on("exit",()=>{if(resourceMode&&!resourceFailed){held.clear();for(const epoch of resourceEpochs.values())try{writeSync(1,JSON.stringify({type:"resource_fence_ack",id:epoch,terminal:true})+"\n");}catch{}}});
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   const heldPointerAcks=[];
@@ -309,7 +314,11 @@ function run() {
       else if(m.type==="resource_fence"){
         if(!resourceMode||m.epoch!==resourceEpochs.get(m.resource))throw Error("Generated resource fence");
         if(process.argv.includes("--fail-resource-cleanup")){resourceFailed=true;process.exit(1);}
-        if(!process.argv.includes("--stall-resource-fence")){if(m.resource==="control"){control=false;held.clear();}if(m.resource==="clipboard"){clipboardAllowed=false;clearRich();}if(m.resource==="microphone")stopMicrophone();resourceReleased.add(m.resource);send({type:"resource_fence_ack",id:m.id});}
+        if(!process.argv.includes("--stall-resource-fence")){
+          const markerAt=process.argv.indexOf("--resource-fence-release-marker");
+          if(markerAt>=0&&!existsSync(process.argv[markerAt+1])){if(heldResourceFences.length>=3)throw Error("Generated fence bound");heldResourceFences.push(m);if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"resource_fence_wait",resource:m.resource,id:m.id})+"\n");}
+          else finishResourceFence(m);
+        }
       }
       else if(m.type==="native_rate"&&native&&m.id===native.id){if(native.barrier)return;if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"native_rate",id:m.id,fps:m.fps,kbps:m.kbps})+"\n");}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
@@ -361,6 +370,7 @@ function run() {
   });
   let idleCounter=0,nextIdle=0;
   setInterval(() => {
+    const releaseAt=process.argv.indexOf("--resource-fence-release-marker");if(releaseAt>=0&&existsSync(process.argv[releaseAt+1]))for(const fence of heldResourceFences.splice(0))finishResourceFence(fence);
     if(protectedMode&&protectedEndMarker&&existsSync(protectedEndMarker)&&!protectedEnded){protectedEnded=true;control=false;held.clear();note("scope-ended");send({type:"protected_desktop_failure",code:"source_changed"});setTimeout(()=>process.exit(0),20);return;}
     if(protectedEnded)return;
     const topologyAt=process.argv.indexOf("--topology-marker");if(!topologyStopped&&monitorLayout&&topologyAt>=0&&existsSync(process.argv[topologyAt+1])){topologyStopped=true;send({type:"monitor_topology_changed"});setTimeout(()=>process.exit(0),50);}
