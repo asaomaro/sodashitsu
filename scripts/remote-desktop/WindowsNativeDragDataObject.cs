@@ -72,6 +72,10 @@ namespace Sodashitsu.NativeDrag
                 lock (gate) return cancelled || (returned && (!started || ended));
             }
         }
+        internal bool CopyCompleted
+        {
+            get { try { Validate(); lock(gate) return !cancelled && returned && (!started || ended); } catch { Dispose(); return false; } }
+        }
         internal void DropReturned(int result, uint effects)
         {
             IntPtr pin = IntPtr.Zero;

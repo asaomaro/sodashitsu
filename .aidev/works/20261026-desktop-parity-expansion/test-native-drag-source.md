@@ -152,3 +152,9 @@ Explorer selection generated checks failed
 `review_transfer` independently reviewed the whole internal source/adapter and corrections. The post-callback dead-state check and immediate ownership/zeroization of in-construction buffers were corrected and verified with actual-source negative controls. Final review: no additional must/should. Kernel root integration was independently verified by `review_pointer`.
 
 Frozen source whole build/typecheck passed; whole test:12586 tests /844 files passed,429.57s. Root whole build/typecheck passed; root whole tests and delivery are still pending at this commit. The final delivery/check receipt is appended to the PR body after completion. No actual Explorer drop, A/B deployment, native Linux portal or macOS desktop validation is claimed. User has WSL and no Linux/macOS desktop device available; WSL does not substitute for those desktop validations.
+
+## Delivery receipt
+
+PR#300 tested head `3a100fcd786671b28fdcb527768ab3c58fd065a4` merged to main `ee92e292eedf45e06c4b7343c247210e0b0c402d`. Source whole12586/844 PASS429.57s; final root whole12648/852 PASS384.53s. Root build/typecheck and clean detached build/smoke passed. Windows CI40900594085/40900594218: four jobs passed. Independent root integration confirmed ten exact-byte paths, no overlaps; final premerge recheck matched.
+
+The first root whole run failed the dist freshness guard because a docs status refresh also rewrote unchanged source bytes, changing their mtimes; it also had one existing backplane attachment wait failure. Product bytes stayed unchanged. Forced server rebuild restored dist freshness, and the final full root run passed all tests. Future reflections skip writing identical bytes. No active A/B deployment or process restart was performed.
