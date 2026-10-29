@@ -7,6 +7,6 @@
 - [x] Fail-closed maintenance marker for any file kind and errors; partial-state preservation (taskcheck).
 - [x] Two generated suites, eight decisive source controls, exact copied-byte restore and positive rerun; 13 related native groups passed serially.
 - [x] Independent source and correction reviews.
-- [ ] Final records review, exact-head Windows CI and guarded delivery.
+- [x] Final records review, exact-head Windows CI and guarded delivery: PR #289, main ebe9f361.
 
 Initial installation only. Upgrade and explicit abnormal-state recovery remain unfinished. Real SCM/ACL factory/SYSTEM installation is not tested or performed; no actual key/trust/provider/desktop/input/audio operation occurred.

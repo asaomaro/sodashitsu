@@ -114,3 +114,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 signin_installer_generated_fixed_targets_private_files_initial_disabled_manual_and_partial_refusal_passed
 signin_installer_4_source_negative_controls_and_restore_passed
 ```
+
+## Delivery
+
+PR #289 merged as ebe9f361. Exact source head98cdb66c: protected Windows CI40813475985/job123249111467 PASS4m23s; Node Windows CI40813475991/job123249110042 PASS1m42s. Root22-file preflight and raw-evidence append reflected exactly while preserving unrelated changes. No ordinary handoff or real service operation occurred.
