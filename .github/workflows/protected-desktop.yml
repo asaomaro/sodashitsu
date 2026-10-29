@@ -61,6 +61,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           scripts/remote-desktop/validate-signin-installer.ps1 -NegativeControls
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Initial-only disabled registration recovery (generated, no SCM changes)
+        shell: powershell
+        run: |
+          scripts/remote-desktop/recover-signin-initial.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('a' * 64)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          scripts/remote-desktop/validate-signin-initial-recovery.ps1 -NegativeControls
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Local admin preparation and bounded UTF8 input (generated only)
         shell: powershell
         run: |
