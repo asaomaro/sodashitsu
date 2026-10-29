@@ -434,7 +434,7 @@ export class DesktopProvider {
       };
       ws.once("close", fail);
       ws.once("open", () => {if(this.live(s))ws.send(JSON.stringify({ type: "provider", ticket: p.ticket }));});
-      ws.on("message", (bytes, binary) => {
+      ws.on("message", async (bytes, binary) => {
         if (!this.live(s)) return;
         if (binary) {
           this.stop(s);
@@ -504,7 +504,8 @@ export class DesktopProvider {
               const stop=()=>{s.richClipboard?.stop();delete s.richClipboard;socket.terminate();};
               socket.on("error",stop);socket.on("close",stop);socket.on("message",(raw,binary)=>{if(!this.live(s))return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>32768)throw Error("Clipboard lane format");if(!s.richClipboard)throw Error("Clipboard not ready");s.richClipboard.fromViewer(JSON.parse(bytes.toString()));}catch{stop();}});
             }
-            void this.launch(s, cfg, p.options).catch(()=>this.stop(s));
+            await this.prepareLaunch(s, cfg, p.options);
+            if(!this.live(s))throw new RpcError("unauthorized","Desktop request cancelled");
             settled = true;
             resolve({ started: true });
             return;
@@ -651,7 +652,7 @@ export class DesktopProvider {
       });
     });
   }
-  private async launch(
+  private async prepareLaunch(
     s: Share,
     cfg: DesktopProviderConfig,
     options: z.infer<typeof DesktopStartParams>["options"],
@@ -660,6 +661,9 @@ export class DesktopProvider {
     if(!cfg.nativePlatform&&desktopWslAudioCommand(cfg.command)&&((options.sharedDesktop||options.nativeAudio)&&(cfg.allowSystemAudio??cfg.allowMedia)&&cfg.allowNativeVideo||(options.sharedDesktop||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint)){
       const prepared=await pipes.prepare();if(!this.live(s)||this.audioPipes!==pipes)return;if(prepared)s.audioPipes=pipes;
     }
+    this.launch(s,cfg,options);
+  }
+  private launch(s:Share,cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>["options"]):void {
     const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,

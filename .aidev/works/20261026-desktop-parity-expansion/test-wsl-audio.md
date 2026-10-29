@@ -245,3 +245,9 @@ AssertionError: expected 4321 to be an instance of Error
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
 ```
+
+## Initial broad-check findings and correction
+
+Initial source whole suite: 861 files/12,760 tests passed; one existing DesktopRelay physical-helper-budget assertion failed with one unhandled rejection because private launch had changed from synchronous throw to async rejection. Corrected by keeping synchronous launch and adding separate async prepareLaunch; the public WS request awaits preparation/launch and rechecks live scope before started. Correction independent review: no must/should. Corrected Provider + entire Relay targeted suite: 231 passed. Final whole checks rerun after this material change.
+
+Initial source browser: 16 passed, encrypted shared microphone failed (90s stop-button wait); targeted repeat failed at line152 because first microphone became unavailable after second viewer start. Actual change-before main90c5b41b in clean worktree passed the same isolated case (1 passed,9.5s). Initial source failures overlapped full-suite/clean-build load; no baseline defect or guaranteed timing cause is claimed. Corrected version is reverified without concurrent whole-suite/build load. No blanket timeout counts as negative proof.
