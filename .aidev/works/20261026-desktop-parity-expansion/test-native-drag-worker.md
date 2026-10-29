@@ -15,7 +15,7 @@ native_drag_worker_generated_sync_async_failure_scope_gesture_sha_and_blocked_pr
 
 Pump tests include exact registration/index/offset/length/End, native lease SHA/read integration, failed enqueue,17th concurrent read refusal, packet erase, terminal cancellation/drain, idle/absolute/request deadlines and wrong scope.
 
-Slot uses generated owned child processes and new private fixtures. Explicit stdin gates separate mutex release from actual process exit. The next child reaches its retained-handle wait and cannot admit while the old process remains gated alive; it succeeds after exit. Corrupt DPAPI, hardlinked journal and an in-memory broad ACL are rejected. Only owned Process.Start handles are waited/killed during fixture failure cleanup.
+Slot uses generated owned child processes and new private fixtures. Explicit uniquely named event gates separate mutex release from actual process exit. The next child reaches its retained-handle wait and cannot admit while the old process remains gated alive; it succeeds after exit. Corrupt DPAPI, hardlinked journal and an in-memory broad ACL are rejected. Only owned Process.Start handles are waited/killed during fixture failure cleanup.
 
 Worker uses fake desktop/OLE/slot drivers: sync/async COPY, failed async EndOperation, cancellation, missing held button/desktop, bad SHA, button release/expiry during data construction, phase2 and last backend OS-check expiry all behave correctly. Real and fake dispatch share the same final admission code. Actual generated children with blocked native callback, blocked stdin and blocked stdout finish as process failure within their bounded budget; no real DoDragDrop or SendInput executes.
 
@@ -172,3 +172,13 @@ System.Exception: generated assertion: journal creation owner must be explicit c
 ```
 
 Total controls15, with5 affected Slot checks rerun; unchanged pump/worker controls remain the14-control baseline above. Root source reflection is revalidated before applying only changed bytes. No JS product code changed.
+
+## Second Windows CI fixture correction
+
+The explicit-owner correction passed initial slot acquisition on CI head24a629f0 (run40909287102). The subsequent failure was in the generated fixture's console-text gate:
+
+```text
+System.Exception: generated assertion: fixture process did not linger after mutex release
+```
+
+The fixture now uses its own uniquely named local events for release/exit, removing console input encoding/preamble dependence. No product process-exit check or deadline was weakened. All5 affected Slot actual-source controls were rerun with exact restores and Windows positives. Final CI rerun remains required. Production stdin continues to use the bounded byte/strict UTF-8 protocol, unrelated to these test gates.

@@ -16,7 +16,7 @@ internal static class NativeDragSlotChecks
     private static readonly List<Process> Owned=new List<Process>();
     private static Process Start(string directory,string name,string mode)
     {
-        ProcessStartInfo start=new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"child \""+directory+"\" \""+name+"\" "+mode){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true};
+        ProcessStartInfo start=new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"child \""+directory+"\" \""+name+"\" "+mode){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
         Process process=Process.Start(start);Owned.Add(process);return process;
     }
     private static int Child(string directory,string name,string mode)
@@ -27,9 +27,9 @@ internal static class NativeDragSlotChecks
             using(NativeDragSlot slot=NativeDragSlot.AcquireCore(directory,name,identity.User,delegate{Console.WriteLine("waiting_for_previous_exit");Console.Out.Flush();}))
             {
                 Console.WriteLine("slot_ready");Console.Out.Flush();
-                if(mode=="linger")Assert(Console.In.ReadLine()=="release","fixture release gate missing");
+                if(mode=="linger")using(EventWaitHandle release=EventWaitHandle.OpenExisting(name+".release"))Assert(release.WaitOne(5000),"fixture release gate missing");
             }
-            if(mode=="linger"){Console.WriteLine("mutex_released_process_alive");Console.Out.Flush();Assert(Console.In.ReadLine()=="exit","fixture exit gate missing");}
+            if(mode=="linger"){Console.WriteLine("mutex_released_process_alive");Console.Out.Flush();using(EventWaitHandle exit=EventWaitHandle.OpenExisting(name+".exit"))Assert(exit.WaitOne(5000),"fixture exit gate missing");}
             return 0;
         }
         catch(Exception error){Console.Error.WriteLine(error);Console.WriteLine("slot_refused");return 3;}
@@ -58,18 +58,20 @@ internal static class NativeDragSlotChecks
         try
         {
             Policy();string directory=Path.Combine(fixture,"state"),name="Local\\SodashitsuNativeSlotGenerated."+Guid.NewGuid().ToString("N");
-            Process first=Start(directory,name,"linger");
+            using(EventWaitHandle release=new EventWaitHandle(false,EventResetMode.ManualReset,name+".release"))
+            using(EventWaitHandle exit=new EventWaitHandle(false,EventResetMode.ManualReset,name+".exit"))
             {
+                Process first=Start(directory,name,"linger");
                 string firstLine=first.StandardOutput.ReadLine();if(firstLine!="slot_ready"){Finish(first);throw new Exception("generated assertion: first private fixture slot refused: "+first.StandardError.ReadToEnd());}
                 Process busy=Start(directory,name,"normal");Assert(Finish(busy)==3,"concurrent native slot accepted");
-                first.StandardInput.WriteLine("release");first.StandardInput.Flush();
+                release.Set();
                 Assert(first.StandardOutput.ReadLine()=="mutex_released_process_alive","fixture process did not linger after mutex release");
                 Process next=Start(directory,name,"normal");
                 {
                     Assert(next.StandardOutput.ReadLine()=="waiting_for_previous_exit","next admission did not inspect old process");
                     Task<string> ready=Task.Factory.StartNew(delegate{return next.StandardOutput.ReadLine();});
                     try {Assert(!first.HasExited&&!ready.Wait(150),"mutex release substituted for actual process exit");}
-                    finally {first.StandardInput.WriteLine("exit");first.StandardInput.Flush();}
+                    finally {exit.Set();}
                     Assert(ready.Wait(5000)&&ready.Result=="slot_ready"&&Finish(next)==0,"next slot did not recover after actual process exit");
                 }
                 Assert(Finish(first)==0,"fixture worker failed");
