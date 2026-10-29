@@ -27,8 +27,10 @@ public static class SodaDesktopSigninServicePolicy {
             return system&&admins;
         }catch{return false;}
     }
-    internal static void Validate(Facts f,string name,string executable){
-        if(f==null||f.Name!=name||String.IsNullOrEmpty(executable)||!Path.IsPathRooted(executable)||executable.IndexOf('"')>=0||executable.IndexOf('%')>=0||!String.Equals(f.Binary,"\""+executable+"\"",StringComparison.OrdinalIgnoreCase)||f.Account!="LocalSystem"||f.Type!=0x10||f.Start!=3||f.ErrorControl!=1||f.Group!=""||f.Dependencies!=""||f.RecoveryCommand!=""||f.RebootMessage!=""||f.ResetPeriod!=0||f.Delayed!=0||f.FailureOnCrash!=0||f.Triggers!=0||f.LaunchProtected!=0||f.Actions==null||f.Actions.Length>16||!Acl(f.Security))throw Failure();
+    internal static void Validate(Facts f,string name,string executable){ValidateStart(f,name,executable,3);}
+    internal static void ValidateDisabled(Facts f,string name,string executable){ValidateStart(f,name,executable,4);}
+    static void ValidateStart(Facts f,string name,string executable,uint start){
+        if(f==null||f.Name!=name||String.IsNullOrEmpty(executable)||!Path.IsPathRooted(executable)||executable.IndexOf('"')>=0||executable.IndexOf('%')>=0||!String.Equals(f.Binary,"\""+executable+"\"",StringComparison.OrdinalIgnoreCase)||f.Account!="LocalSystem"||f.Type!=0x10||f.Start!=start||f.ErrorControl!=1||f.Group!=""||f.Dependencies!=""||f.RecoveryCommand!=""||f.RebootMessage!=""||f.ResetPeriod!=0||f.Delayed!=0||f.FailureOnCrash!=0||f.Triggers!=0||f.LaunchProtected!=0||f.Actions==null||f.Actions.Length>16||!Acl(f.Security))throw Failure();
         foreach(uint action in f.Actions)if(action!=0)throw Failure();
     }
     [StructLayout(LayoutKind.Sequential)]internal struct Config {internal uint Type,Start,Error;internal IntPtr Binary,Group;internal uint Tag;internal IntPtr Dependencies,Account,Display;}
@@ -56,7 +58,9 @@ public static class SodaDesktopSigninServicePolicy {
     static uint Value(IntPtr service,int level){using(var buffer=Read(service,level))return unchecked((uint)Marshal.ReadInt32(buffer.Pointer));}
     /** Checks only existing configuration, never signals the service/process.
      * Callers still need protected package, owner mutex and quiescence proof. */
-    public static void Inspect(string owner){
+    public static void Inspect(string owner){InspectStart(owner,false);}
+    internal static void InspectDisabled(string owner){InspectStart(owner,true);}
+    static void InspectStart(string owner,bool disabled){
         owner=SodaDesktopSigninPackage.OwnerSid(owner);string name=Name(owner),executable=Executable(owner);IntPtr manager=IntPtr.Zero,service=IntPtr.Zero;
         try{
             manager=OpenSCManagerW(null,null,1);if(manager==IntPtr.Zero)throw Failure();service=OpenServiceW(manager,name,0x00020001);if(service==IntPtr.Zero)throw Failure();var facts=new Facts{Name=name};
@@ -64,7 +68,7 @@ public static class SodaDesktopSigninServicePolicy {
             using(var buffer=Read(service,2))Recovery(buffer,facts);
             facts.Delayed=Value(service,3);facts.FailureOnCrash=Value(service,4);facts.Triggers=Value(service,8);facts.LaunchProtected=Value(service,12);
             using(var buffer=Read(service,-1)){facts.Security=new byte[buffer.Size];Marshal.Copy(buffer.Pointer,facts.Security,0,buffer.Size);}
-            Validate(facts,name,executable);
+            ValidateStart(facts,name,executable,disabled?4u:3u);
         }finally{if(service!=IntPtr.Zero)CloseServiceHandle(service);if(manager!=IntPtr.Zero)CloseServiceHandle(manager);}
     }
 }

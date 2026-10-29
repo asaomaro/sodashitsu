@@ -61,3 +61,7 @@ signin_admin_controller_generated_prepare_public_result_ack_scope_and_bounded_pi
 signin_admin_controller_7_source_negative_controls_and_restore_passed
 signin_admin_public_powershell_utf8_pipe_validation_without_payload_output_passed
 ```
+
+## Delivery
+
+PR #288 merged as 85c9883f0ef1197226cc04e6b51406cd346c5100. Protected Windows CI 40810193427/job123238417714 passed. Node Windows CI 40810193685 first failed the unchanged validate-signin-stop.mjs 5-second watchdog (child code null); the same-head failed-job retry passed as job123240648243. The initial failure is not counted as a pass. Root reflection preserved unrelated edits; no ordinary handoff or real service action occurred.
