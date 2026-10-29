@@ -85,3 +85,32 @@ The generated package/host/worker/quiescence/controller/admin/journal regression
 ## Final independent review
 
 Both independent source/correction/records reviews found no remaining must. The documentation now says existing targets abort installation rather than ambiguously suggesting service stop. Final two validation reruns exited 0 and emitted their four-controls-plus-restored-positive completion markers. Real service installation remains unperformed. Exact-head CI and guarded delivery follow this source revision.
+
+## Intended source-control output
+
+The following are extracted raw log lines; diagnostic stack frames are omitted.
+
+```text
+signin_install_source_generated_reviewed_inventory_pins_copy_and_refusal_passed
+negative manifest
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Unreviewed manifest accepted" ---> System.InvalidOperationException: Unreviewed manifest accepted
+negative hash
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Changed release bytes accepted" ---> System.InvalidOperationException: Changed release bytes accepted
+negative scope
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Revoked copy continued publication" ---> System.InvalidOperationException: Revoked copy continued publication
+negative inventory
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Source inventory change retained lease" ---> System.InvalidOperationException: Source inventory change retained lease
+signin_install_source_generated_reviewed_inventory_pins_copy_and_refusal_passed
+signin_install_source_4_source_negative_controls_and_restore_passed
+signin_installer_generated_fixed_targets_private_files_initial_disabled_manual_and_partial_refusal_passed
+negative ready
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Unverified package registered service" ---> System.InvalidOperationException: Unverified package registered service
+negative enable-commit
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Uncommitted installation enabled service" ---> System.InvalidOperationException: Uncommitted installation enabled service
+negative marker
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Maintenance marker bypassed before enabling" ---> System.InvalidOperationException: Maintenance marker bypassed before enabling
+negative marker-directory
+System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Directory maintenance marker was ignored" ---> System.InvalidOperationException: Directory maintenance marker was ignored
+signin_installer_generated_fixed_targets_private_files_initial_disabled_manual_and_partial_refusal_passed
+signin_installer_4_source_negative_controls_and_restore_passed
+```
