@@ -15,3 +15,10 @@ N2 internal preparation (the public selection/chunk route remains incomplete):
 - [x] Thirty Node generated filesystem regressions and thirteen actual-source negative controls, exact restoration and positive reruns.
 - [ ] Disposable STA worker, finite IPC/process-exit evidence and existing file-grant/control integration.
 - [ ] Wire requests, browser/native helper, and actual Explorer drag validation.
+
+N3 native worker (browser/local gateway remains incomplete):
+- [x] Registered request/index/offset/chunk/end pump, finite request deadlines, cancellation and drain.
+- [x] Current-user/PC single-worker journal, private DPAPI state and retained previous-process exit check. Product Global/current-console path is compiled but not activated by tests.
+- [x] Fixed one-operation STA/OLE COPY worker, late-gesture final admission, asynchronous success/failure distinction and independent blocked-I/O/COM process watchdog; fake OLE tests only.
+- [ ] Browser-PC authenticated loopback gateway, local proof, managed/manual helper, B selection worker/wire and strict correlated remote input release.
+- [ ] Actual Explorer drop, target behavior and A/B deployment checks.

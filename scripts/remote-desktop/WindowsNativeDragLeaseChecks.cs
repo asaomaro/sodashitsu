@@ -198,8 +198,8 @@ internal static class WindowsNativeDragLeaseChecks
             Assert(formats.Next(2, page, got) == 1 && got[0] == 1, "format enumeration EOF");
             bool asyncMode; Assert(source.GetAsyncMode(out asyncMode) == 0 && !asyncMode, "default synchronous mode");
             Assert(source.SetAsyncMode(true) == 0 && source.StartOperation(null) == 0, "async start");
-            source.DropReturned(0x40100, 1); Assert(!source.ExtractionTerminal, "drop return is not async completion");
-            Assert(source.EndOperation(0, null, 1) == 0 && source.ExtractionTerminal, "async COPY completion");
+            source.DropReturned(0x40100, 1); Assert(!source.ExtractionTerminal && !source.CopyCompleted, "drop return is not async completion");
+            Assert(source.EndOperation(0, null, 1) == 0 && source.ExtractionTerminal && source.CopyCompleted, "async COPY completion");
             Assert(source.EndOperation(0, null, 1) < 0, "duplicate async completion");
         }
         now = 0;
@@ -208,7 +208,7 @@ internal static class WindowsNativeDragLeaseChecks
         {
             Assert(neverEnds.SetAsyncMode(true) == 0 && neverEnds.StartOperation(null) == 0, "never-ending target start"); neverEnds.DropReturned(0x40100, 1);
             for (now = 3000; now < DragLease.AbsoluteMs; now += 3000) Assert(lease.Beat(Scope(Gesture)), "active extraction heartbeat");
-            Assert(neverEnds.ExtractionTerminal, "target cannot hold absolute deadline indefinitely"); now = 0;
+            Assert(neverEnds.ExtractionTerminal && !neverEnds.CopyCompleted, "target cannot hold absolute deadline indefinitely"); now = 0;
             Assert(neverEnds.EndOperation(0, null, 1) < 0, "late completion cannot reactivate");
         }
         now = 0;
@@ -216,7 +216,7 @@ internal static class WindowsNativeDragLeaseChecks
         using (NativeDragDataObject move = new NativeDragDataObject(lease))
         {
             Assert(move.SetAsyncMode(true) == 0 && move.StartOperation(null) == 0, "invalid effect start");
-            Assert(move.EndOperation(0, null, 2) < 0 && move.ExtractionTerminal, "MOVE is refused");
+            Assert(move.EndOperation(0, null, 2) < 0 && move.ExtractionTerminal && !move.CopyCompleted, "MOVE is refused");
         }
     }
     private static void Packets()

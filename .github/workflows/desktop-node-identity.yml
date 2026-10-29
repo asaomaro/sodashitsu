@@ -67,3 +67,12 @@ jobs:
       - name: Generated Explorer selection admission (no real desktop)
         shell: powershell
         run: scripts/remote-desktop/validate-explorer-selection.ps1
+      - name: Generated native drag request registration and stream pump
+        shell: powershell
+        run: scripts/remote-desktop/validate-native-drag-pump.ps1
+      - name: Generated private native drag slot and retained process exit (owned fixtures only)
+        shell: powershell
+        run: scripts/remote-desktop/validate-native-drag-slot.ps1
+      - name: Generated STA worker lifecycle with fake desktop/OLE and blocked owned processes
+        shell: powershell
+        run: scripts/remote-desktop/validate-native-drag-worker.ps1
