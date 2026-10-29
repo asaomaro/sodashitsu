@@ -49,6 +49,7 @@ public static class SodaDesktopSigninPackageNative {
     // Internal test seams exercise the same native ownership path on generated
     // ordinary-user files. Verify always supplies the fixed CodeAcl policy.
     internal static Held OpenCore(string path,bool directory,bool package,long maximum,Func<byte[],bool> policy,Action<FileStream> afterOpen){return OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen);}
+    internal static Held OpenRenamableCore(string path,long maximum,Func<byte[],bool> policy){return OpenSharedCore(path,false,true,maximum,5,policy,null);}
     internal static Held OpenExclusiveCore(string path,Func<byte[],bool> policy,Action<FileStream> afterOpen){return OpenSharedCore(path,false,true,1,0,policy,afterOpen);}
     static Held OpenSharedCore(string path,bool directory,bool package,long maximum,uint share,Func<byte[],bool> policy,Action<FileStream> afterOpen){
         var handle=CreateFileW(path,directory?0x20080u:0x80020000u,share,IntPtr.Zero,3,(directory?0x02000000u:0x08000000u)|0x00200000u,IntPtr.Zero);

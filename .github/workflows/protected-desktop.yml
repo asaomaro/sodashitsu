@@ -54,6 +54,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           scripts/remote-desktop/validate-signin-run-admission.ps1 -NegativeControls
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Generated run journal lifecycle (ordinary temporary files only)
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-run-journal.ps1 -NegativeControls
       - name: Generated immutable quiescence barrier (ordinary temporary files only)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-quiescence.ps1 -NegativeControls
