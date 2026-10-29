@@ -76,3 +76,6 @@ jobs:
       - name: Generated STA worker lifecycle with fake desktop/OLE and blocked owned processes
         shell: powershell
         run: scripts/remote-desktop/validate-native-drag-worker.ps1
+      - name: Generated physical pointer witness input path (memory endpoints only)
+        shell: powershell
+        run: scripts/remote-desktop/validate-pointer-witness.ps1

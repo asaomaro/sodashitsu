@@ -35,6 +35,18 @@ function fixture() {
   return { pool, child, spawn, join };
 }
 
+it("routes a physical pointer witness only to its submitting viewer and rewrites the helper sequence",async()=>{
+ const f=fixture(),configuration={type:"configure",options:{width:320},nativePointerProof:true},a=f.join("source",configuration),b=f.join("source",configuration);
+ try {
+  f.child.send({...ready,resourceFences:true,nativePointerProof:true});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({nativePointerProof:true}));
+  expect(a.session.requestControl!(true)).toBe(true);a.send({type:"control",enabled:true});a.send({type:"input",seq:7,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+  const first={epoch:crypto.randomUUID(),x:-400,y:50,window:42,pid:7};f.child.send({type:"input_ack",seq:1,pointer:first});await vi.waitFor(()=>expect(a.messages.at(-1)).toEqual({type:"input_ack",seq:7,pointer:first}));expect(b.messages.filter(m=>m.type==="input_ack")).toEqual([]);
+  a.session.requestControl!(false);expect(b.session.requestControl!(true)).toBe(true);b.send({type:"control",enabled:true});b.send({type:"input",seq:7,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});
+  f.child.send({type:"input_ack",seq:1,pointer:first});expect(b.messages.filter(m=>m.type==="input_ack")).toEqual([]);
+  const second={...first,epoch:crypto.randomUUID(),window:43};f.child.send({type:"input_ack",seq:2,pointer:second});await vi.waitFor(()=>expect(b.messages.at(-1)).toEqual({type:"input_ack",seq:7,pointer:second}));expect(a.messages.filter(m=>m.type==="input_ack")).toHaveLength(1);
+ } finally {f.pool.dispose();}
+});
+
 it("captures once and lets a fast viewer continue while another waits for its own ACK", async () => {
   const f = fixture(), slow = f.join(), fast = f.join();
   f.child.send(ready);

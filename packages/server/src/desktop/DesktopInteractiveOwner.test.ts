@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import { DesktopInteractiveOwner } from "./DesktopInteractiveOwner.js";
 function fixture() {
   let now = 0;
+  let clockBroken = false;
   const sent: { source: object; id: string }[] = [],
     fault = vi.fn(),
     idle = vi.fn();
@@ -12,13 +13,20 @@ function fixture() {
     },
     fault,
     idle,
-    now: () => now,
+    now: () => {
+      if (clockBroken) throw Error("clock unavailable");
+      return now;
+    },
   });
   return {
     owner,
     sent,
     fault,
     idle,
+    breakClock: () => {
+      clockBroken = true;
+      owner.tick();
+    },
     advance: (n: number) => {
       now += n;
       owner.tick();
@@ -110,5 +118,107 @@ it("requires exact terminal ownership proof before a closed source can release i
   owner.sourceGone(source);
   expect(owner.faulted).toBe(false);
   expect(owner.acquire({}, {}, "clipboard")).toBe(true);
+  owner.dispose();
+});
+
+it("returns a cleanup receipt only for the exact helper, request and original epoch", async () => {
+  const f = fixture(),
+    member = {},
+    source = {};
+  expect(f.owner.acquire(member, source, "control")).toBe(true);
+  const identity = f.owner.identity(member, "control")!;
+  expect(identity.source).toBe(source);
+  expect(f.owner.identity({}, "control")).toBeUndefined();
+  let settled = false;
+  const receipt = f.owner.releaseConfirmed(member, "control").then((value) => {
+    settled = true;
+    return value;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  expect(f.owner.acquire({}, source, "control")).toBe(false);
+  expect(f.owner.acknowledge({}, f.sent[0]!.id)).toBe(false);
+  expect(f.owner.acknowledge(source, crypto.randomUUID())).toBe(false);
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  expect(f.owner.acknowledge(source, f.sent[0]!.id)).toBe(true);
+  expect(await receipt).toEqual({ id: f.sent[0]!.id, epoch: identity.epoch });
+  expect(f.owner.acknowledge(source, f.sent[0]!.id)).toBe(false);
+  expect(f.owner.acquire(member, source, "control")).toBe(true);
+  expect(f.owner.identity(member, "control")!.epoch).not.toBe(identity.epoch);
+  f.owner.dispose();
+});
+
+it.each(["timeout", "death", "clock", "throw", "dispose"])(
+  "rejects confirmed release on %s without reviving it",
+  async (mode) => {
+    const f = fixture(),
+      member = {},
+      source = {};
+    f.owner.acquire(member, source, "control");
+    let outcome: { kind: string; error?: unknown } = { kind: "pending" };
+    const receipt = f.owner.releaseConfirmed(member, "control").then(
+      () => {
+        outcome = { kind: "resolved" };
+      },
+      (error) => {
+        outcome = { kind: "rejected", error };
+      },
+    );
+    if (mode === "timeout") f.advance(5000);
+    if (mode === "death") f.owner.sourceGone(source);
+    if (mode === "clock") f.advance(-1);
+    if (mode === "throw") expect(() => f.breakClock()).not.toThrow();
+    if (mode === "dispose") f.owner.dispose();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(outcome).toMatchObject({ kind: "rejected", error: expect.any(Error) });
+    await receipt;
+    expect(f.owner.acknowledge(source, f.sent[0]!.id)).toBe(false);
+    f.owner.dispose();
+  },
+);
+
+it.each(["false", "throw", "dispose"])(
+  "does not accept a synchronous ACK followed by %s",
+  async (mode) => {
+    let owner: DesktopInteractiveOwner<object, object>;
+    const member = {},
+      source = {};
+    owner = new DesktopInteractiveOwner({
+      send: (physical, id) => {
+        expect(owner.acknowledge(physical, id)).toBe(true);
+        if (mode === "throw") throw Error("write failed");
+        if (mode === "dispose") owner.dispose();
+        return mode !== "false";
+      },
+      idle: () => {},
+      fault: () => {},
+    });
+    expect(owner.acquire(member, source, "control")).toBe(true);
+    await expect(owner.releaseConfirmed(member, "control")).rejects.toThrow();
+    owner.dispose();
+  },
+);
+
+it("accepts a synchronous ACK only after a successful send returns", async () => {
+  let owner: DesktopInteractiveOwner<object, object>;
+  const member = {},
+    source = {};
+  let id = "";
+  owner = new DesktopInteractiveOwner({
+    send: (physical, value) => {
+      id = value;
+      expect(owner.acknowledge(physical, value)).toBe(true);
+      expect(owner.acquire({}, source, "control")).toBe(false);
+      return true;
+    },
+    idle: () => {},
+    fault: () => {},
+  });
+  owner.acquire(member, source, "control");
+  const epoch = owner.identity(member, "control")!.epoch;
+  expect(await owner.releaseConfirmed(member, "control")).toEqual({ id, epoch });
+  expect(owner.acquire({}, source, "control")).toBe(true);
   owner.dispose();
 });
