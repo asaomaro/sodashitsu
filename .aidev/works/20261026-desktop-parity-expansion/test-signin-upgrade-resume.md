@@ -39,3 +39,8 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 signin_maintenance_recovery_generated_closed_resume_interruption_partial_preservation_and_clean_restore_passed
 signin_maintenance_recovery_7_source_negative_controls_and_restore_passed
 ```
+
+## Final delivery receipt (2026-10-29)
+
+PR #292 merged to main `49f45e7895399f13246e011d637f664766abe747`, product `350711e268afdfd0f826b6f0d0a6556459caed7c`.
+Exact final-head CI: protected boundaries run40817981177/job123263498408 PASS2m50s; maintenance recovery same run/job123263498131 PASS1m38s; upgrade same run/job123263498419 PASS6m26s; Windows Node run40817981153/job123263498134 PASS1m21s. Root16-path product reflection passed exact-byte preflight. No actual SCM/service/ACL/device deployment occurred.

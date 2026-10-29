@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import { loadViewerPreferences, normalizeViewerPreferences, saveViewerPreferences, loadSettings, normalizeSettings, presets, saveSettings } from "./settings.js";
+import { hasSettings, monitorSettingsKey, loadViewerPreferences, normalizeViewerPreferences, saveViewerPreferences, loadSettings, normalizeSettings, presets, saveSettings } from "./settings.js";
 beforeEach(() => localStorage.clear());
 it("keeps preferences per machine and accepts no permissions or credentials", () => {
   expect(loadSettings("a")).toEqual(presets.balanced);
@@ -33,3 +33,5 @@ it("remembers video quality and scale per machine without storing capture or per
  for(const bad of [{allowInput:true},{elevatedDesktop:true},{sharedDesktop:true},{nativeAudio:true}])expect(()=>normalizeSettings({...presets.low,...bad})).toThrow();
  localStorage.setItem("soda:desktop:viewer:v1:a",JSON.stringify({fps:31}));expect(loadViewerPreferences("a")).toEqual(defaults);
 });
+
+it("isolates monitor preferences from other monitors and the machine defaults",()=>{const left=monitorSettingsKey("a","left"),right=monitorSettingsKey("a","right");expect(hasSettings(left)).toBe(false);saveSettings("a",presets.quality);saveSettings(left,presets.low);expect(hasSettings(left)).toBe(true);expect(loadSettings(left)).toEqual(presets.low);expect(loadSettings(right)).toEqual(presets.balanced);expect(loadSettings("a")).toEqual(presets.quality);expect(monitorSettingsKey("a","x:y")).not.toBe(monitorSettingsKey("a:x","y"));});

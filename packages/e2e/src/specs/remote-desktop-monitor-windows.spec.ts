@@ -11,6 +11,9 @@ for (const mode of [
   "encrypted",
   "native",
   "topology",
+  "independent",
+  "independent-encrypted",
+  "independent-native",
 ] as const)
   test(`monitor-specific browser popup ${mode}`, async ({
     page,
@@ -39,9 +42,9 @@ for (const mode of [
         marker,
         "--input-ledger",
         input,
-        ...(mode === "native"
+        ...((mode === "native" || mode === "independent-native")
           ? [
-              "--monitors-cinema",
+              mode === "independent-native" ? "--monitors-wide" : "--monitors-cinema",
               "--native-60fps",
               "--native-fixture",
               fileURLToPath(
@@ -55,7 +58,7 @@ for (const mode of [
       ]),
       SODA_DESKTOP_ALLOW_INPUT: "1",
       SODA_DESKTOP_ALLOW_MONITORS: "1",
-      ...(mode === "native" ? { SODA_DESKTOP_ALLOW_MEDIA: "1" } : {}),
+      ...((mode === "native" || mode === "independent-native") ? { SODA_DESKTOP_ALLOW_MEDIA: "1" } : {}),
     };
     const saved = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
     Object.assign(process.env, env);
@@ -79,7 +82,7 @@ for (const mode of [
         token: invite.token,
       });
       const identity =
-        mode === "encrypted" ? await owner.request("desktop.endpoint.initialize", {}) : undefined;
+        (mode === "encrypted" || mode === "independent-encrypted") ? await owner.request("desktop.endpoint.initialize", {}) : undefined;
       if (identity) await owner.request("desktop.endpoint.required", { required: true });
       await page.goto(`${appServer.origin}/#token=${appServer.token}`);
       const header = page.locator(`[data-machine-id="${invite.machineId}"]`);
@@ -112,11 +115,49 @@ for (const mode of [
       }
       await expect(c1).toHaveAttribute("data-rendered-frames", /^[1-9]/);
       await first.getByLabel("複数viewerで同じ画面を共有", { exact: true }).check();
+      await expect(first.locator("[data-desktop-status]")).toHaveText("閲覧中");
       await expect(c1).toHaveAttribute("data-rendered-frames", /^[1-9]/);
       await first.getByLabel("モニター選択を共有（全ての窓で同じ選択が必要）",{exact:true}).check();
       await expect(first.getByLabel("表示モニター")).toHaveValue("right");
       await first.getByLabel("独立カーソルを共有（全ての窓で同じ選択が必要）",{exact:true}).check();
+      await expect(first.locator("[data-desktop-status]")).toHaveText("閲覧中");
       await expect(c1).toHaveAttribute("data-rendered-frames",/^[1-9]/);
+      if(mode==="independent"||mode==="independent-encrypted"||mode==="independent-native"){
+        await first.getByLabel("モニターごとに独立して配信",{exact:true}).check();
+        await expect(first.locator("[data-desktop-status]")).toHaveText("閲覧中");
+        await expect(c1).toHaveAttribute("data-rendered-frames",/^[1-9]/);
+        await first.getByLabel("この窓に表示するモニター",{exact:true}).selectOption("left");
+        const before=(await readFile(ledger,"utf8")).trim().split("\n").map(s=>JSON.parse(s)).filter(v=>v.type==="spawn").length;
+        const popup=context.waitForEvent("page");await first.getByRole("button",{name:"選択モニターを別窓で開く",exact:true}).click();second=await popup;await second.waitForLoadState();
+        const view=second.locator("[data-remote-desktop]"),c2=view.getByLabel("共有画面");
+        await expect(c2).toHaveAttribute("data-rendered-frames",/^[1-9]/);
+        // Browser pixels prove that each viewer receives its selected source, without cropping.
+        for(const [canvas,blue]of[[c1,false],[c2,true]]as const)await expect.poll(()=>canvas.evaluate((el,blue)=>{const c=el as HTMLCanvasElement,p=c.getContext("2d")!.getImageData(c.width/2,c.height/2,1,1).data;return blue?p[2]!>200&&p[0]!<30:p[0]!>200&&p[2]!<30;},blue)).toBe(true);
+        expect((await readFile(ledger,"utf8")).trim().split("\n").map(s=>JSON.parse(s)).filter(v=>v.type==="spawn")).toHaveLength(before+1);
+        await view.getByRole("button",{name:"情報・設定",exact:true}).click();
+        await expect(view.getByLabel("表示モニター")).toHaveValue("left");await expect(view.getByLabel("表示モニター")).toBeDisabled();
+        if(mode==="independent-native"){
+          for(const v of[first,view]){await v.locator("[data-desktop-media] summary").click();await v.getByRole("button",{name:"動画共有を依頼",exact:true}).click();await expect.poll(async()=>Number(await v.getByLabel("共有画面").getAttribute("data-video-frames"))).toBeGreaterThan(4);}
+          for(const v of[first,view]){await v.getByRole("button",{name:"動画・音声を停止",exact:true}).click();await expect(v.locator("[data-video-fps]")).toHaveCount(0);}
+        }
+        await view.locator("summary").filter({hasText:"画質・計測"}).click();
+        await view.getByLabel("送信幅の上限",{exact:true}).fill("320");await view.getByLabel("JPEG品質",{exact:true}).fill("40");
+        await view.getByRole("button",{name:"適用して再接続",exact:true}).click();
+        await expect.poll(()=>c2.evaluate(el=>(el as HTMLCanvasElement).width)).toBe(320);
+        await view.getByRole("button",{name:"操作する",exact:true}).click();await expect(view.locator("[data-desktop-status]")).toHaveText("操作中");
+        if(mode==="independent"){
+          const sent:any[]=[];const cdp=await context.newCDPSession(second);await cdp.send("Network.enable");cdp.on("Network.webSocketFrameSent",event=>{try{const m=JSON.parse(event.response.payloadData);if(m.type==="input")sent.push(m.input);}catch{}});
+          await view.getByRole("button",{name:"情報・設定",exact:true}).click();const b=(await c2.boundingBox())!;await second.mouse.click(b.x+b.width/2,b.y+b.height/2);await expect.poll(()=>sent.some(m=>m.kind==="pointer"&&m.event==="down")).toBe(true);const down=sent.find(m=>m.kind==="pointer"&&m.event==="down");expect(down.x).toBeCloseTo(0.5,2);expect(down.y).toBeCloseTo(0.5,2);
+        }
+        if(identity)await expect(view.locator("[data-endpoint-encrypted]")).toBeVisible();
+        await second.reload();const again=second.locator("[data-remote-desktop]");
+        await expect(again.getByLabel("共有画面")).toHaveAttribute("data-rendered-frames",/^[1-9]/);await expect.poll(()=>again.getByLabel("共有画面").evaluate(el=>(el as HTMLCanvasElement).width)).toBe(320);
+        await expect(again.locator("[data-desktop-status]")).toHaveText("閲覧中");await again.getByRole("button",{name:"情報・設定",exact:true}).click();await again.locator("summary").filter({hasText:"画質・計測"}).click();
+        await expect(again.getByLabel("JPEG品質",{exact:true})).toHaveValue("40");
+        await first.locator("summary").filter({hasText:"画質・計測"}).click();await expect(first.getByLabel("JPEG品質",{exact:true})).toHaveValue("65");
+        const prior=Number(await again.getByLabel("共有画面").getAttribute("data-rendered-frames"));await first.getByRole("button",{name:"共有停止",exact:true}).click();await expect.poll(async()=>Number(await again.getByLabel("共有画面").getAttribute("data-rendered-frames"))).toBeGreaterThan(prior);
+        return;
+      }
       await first.getByLabel("表示モニター").selectOption("all");
       const local=first.getByLabel("この窓に表示するモニター",{exact:true});
       await local.selectOption("left");

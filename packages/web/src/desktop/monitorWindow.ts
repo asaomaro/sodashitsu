@@ -4,20 +4,20 @@ import { normalizeSettings, type ConnectionSettings } from "./settings.js";
 /** Launch preferences only. Never a grant, ticket, credential, key or image. */
 export type MonitorWindowLaunch = {
   machineId: string; label: string; monitor: string; settings: ConnectionSettings;
-  cursor: boolean; clipboard: boolean; deltas: boolean;
+  cursor: boolean; clipboard: boolean; deltas: boolean; independent:boolean;
 };
 export function parseMonitorWindow(raw: unknown): MonitorWindowLaunch {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw Error("Invalid monitor window");
   const v = raw as Record<string, unknown>;
-  const keys = ["machineId", "label", "monitor", "settings", "cursor", "clipboard", "deltas"];
+  const keys = ["machineId", "label", "monitor", "settings", "cursor", "clipboard", "deltas", "independent"];
   if (Object.keys(v).length !== keys.length || Object.keys(v).some(k => !keys.includes(k)) ||
       typeof v.machineId !== "string" || !/^[a-zA-Z0-9-]{1,128}$/.test(v.machineId) ||
       typeof v.label !== "string" || v.label.length > 256 ||
       typeof v.monitor !== "string" || !v.monitor.length || v.monitor.length > 128 || v.monitor === "all" || v.monitor.includes("\0") ||
-      typeof v.cursor !== "boolean" || typeof v.clipboard !== "boolean" || typeof v.deltas !== "boolean") throw Error("Invalid monitor window");
+      typeof v.independent!=="boolean"||typeof v.cursor !== "boolean" || typeof v.clipboard !== "boolean" || typeof v.deltas !== "boolean") throw Error("Invalid monitor window");
   const settings = normalizeSettings(v.settings);
   if (v.cursor && !settings.image.showCursor || v.deltas && !settings.deltas) throw Error("Invalid monitor cohort");
-  return {machineId:v.machineId,label:v.label,monitor:v.monitor,settings,cursor:v.cursor,clipboard:v.clipboard,deltas:v.deltas};
+  return {machineId:v.machineId,label:v.label,monitor:v.monitor,settings,cursor:v.cursor,clipboard:v.clipboard,deltas:v.deltas,independent:v.independent};
 }
 export function monitorWindowUrl(raw: MonitorWindowLaunch, origin: string): URL {
   const url = new URL("/desktop-view", origin);

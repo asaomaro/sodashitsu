@@ -292,21 +292,25 @@ public static class SodaDesktopUnlock {
         var ready=new Dictionary<string,object>{{"type","ready"},{"title","Windows lock screen"},{"width",640},{"height",360},
             {"allowInput",allowed},{"backend","windows-gdi"},{"secureDesktop",true},{"lockScreenCover",true},
             {"image",options.ContainsKey("image")?options["image"]:new {colorMode="full",showCursor=true}}};
+        bool resourceMode=configure.ContainsKey("resourceFences")&&configure["resourceFences"] is bool&&(bool)configure["resourceFences"];string resourceEpoch=null;bool resourceReleased=true,cleanupKnown=true;if(resourceMode)ready["resourceFences"]=true;
         output.WriteLine(json.Serialize(ready));output.Flush();
         var lines=new BlockingCollection<string>(32);int closed=0;
         var reader=new Thread(()=>{try{string line;while((line=Line(input,65536))!=null){if(!lines.TryAdd(line))break;}}catch{}finally{Interlocked.Exchange(ref closed,1);}}){IsBackground=true};reader.Start();
         long last=Now;bool control=false,dismissed=false;
         // This stage never captures a screen or accepts text, pointer or arbitrary keys.
+        try{
         while(Volatile.Read(ref closed)==0&&Now-last<8000&&!dismissed&&guard()) {
             string line;int count=0;
             while(count++<32&&lines.TryTake(out line)) {
                 var message=(Dictionary<string,object>)json.DeserializeObject(line);string type=(string)message["type"];
                 if(type=="heartbeat")last=Now;
-                else if(type=="control")control=allowed&&(bool)message["enabled"];
+                else if(type=="resource_epoch"){Guid id;string value=message.ContainsKey("id")?message["id"]as string:null;Require(resourceMode&&resourceReleased&&message.Count==3&&(string)message["resource"]=="control"&&Guid.TryParseExact(value,"D",out id)&&id!=Guid.Empty&&id.ToString("D")==value);resourceEpoch=value;resourceReleased=false;}
+                else if(type=="resource_fence"){Guid id;string value=message.ContainsKey("id")?message["id"]as string:null;Require(resourceMode&&cleanupKnown&&message.Count==4&&(string)message["resource"]=="control"&&Guid.TryParseExact(value,"D",out id)&&id!=Guid.Empty&&id.ToString("D")==value);if((string)message["epoch"]==resourceEpoch){control=false;resourceReleased=true;output.WriteLine(json.Serialize(new{type="resource_fence_ack",id=value}));output.Flush();}}
+                else if(type=="control")control=allowed&&(!resourceMode||resourceEpoch!=null&&!resourceReleased)&&(bool)message["enabled"];
                 else if(type=="dismiss_lock_screen") {
                     Require(control&&!dismissed&&Now-last<5000);
                     if(!guard()){output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
-                    try{dismiss();dismissed=true;}
+                    try{cleanupKnown=false;dismiss();cleanupKnown=true;dismissed=true;}
                     catch{if(guard())throw;output.WriteLine("{\"type\":\"lock_screen_changed\"}");output.Flush();return;}
                 }else if(type=="stop")return;
                 else if(type!="release"&&type!="keyframe")throw new InvalidOperationException();
@@ -318,6 +322,7 @@ public static class SodaDesktopUnlock {
         if(state==0)output.WriteLine("{\"type\":\"lock_screen_changed\"}");
         else if(state==1)output.WriteLine("{\"type\":\"session_unlocked\"}");
         output.Flush();
+        }finally{control=false;if(resourceMode&&resourceEpoch!=null&&cleanupKnown){output.WriteLine(json.Serialize(new{type="resource_fence_ack",id=resourceEpoch,terminal=true}));output.Flush();}}
     }
     static void WorkerFailure(TextWriter writer,string code) {
         // Only fixed stage identifiers, never exception text, paths, images or input.

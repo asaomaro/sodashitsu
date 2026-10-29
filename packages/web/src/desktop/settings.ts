@@ -46,6 +46,9 @@ export function normalizeSettings(raw: unknown): ConnectionSettings {
   };
 }
 const key = (machineId: string) => `soda:desktop:connection:v1:${machineId}`;
+/** A separate nonsecret preference slot per independently captured monitor. */
+export function monitorSettingsKey(machineId:string,monitorId:string):string{return machineId+":monitor:"+JSON.stringify(monitorId);}
+export function hasSettings(machineId:string):boolean{try{const value=localStorage.getItem(key(machineId));if(!value)return false;normalizeSettings(JSON.parse(value));return true;}catch{return false;}}
 export function loadSettings(machineId: string): ConnectionSettings {
   try {
     const value = localStorage.getItem(key(machineId));
