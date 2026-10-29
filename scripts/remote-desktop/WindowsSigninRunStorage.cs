@@ -10,12 +10,19 @@ internal static class SodaDesktopSigninRunStorage {
         if(path.Length>512||path.Length<3||path[1]!=':'||path[2]!='\\')throw Failure();var drive=new DriveInfo(Path.GetPathRoot(path));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();return path;
     }
     internal static SodaDesktopSigninRunJournal OpenHost(string owner,string package,string barrier,Func<bool> current){
-        if(!SodaDesktopSigninVault.SystemPrimary()||current==null||!current())throw Failure();string slot=Slot(owner),runs=Path.Combine(slot,"runs");
+        return OpenFixed(owner,package,barrier,SodaDesktopSigninRunJournal.Role.Host,current,false);
+    }
+    internal static SodaDesktopSigninRunJournal OpenController(string owner,string package,string barrier,SodaDesktopSigninRunJournal.Role role,Func<bool> current){
+        if(role!=SodaDesktopSigninRunJournal.Role.Reader&&role!=SodaDesktopSigninRunJournal.Role.Controller&&role!=SodaDesktopSigninRunJournal.Role.Observer)throw Failure();return OpenFixed(owner,package,barrier,role,current,true);
+    }
+    static SodaDesktopSigninRunJournal OpenFixed(string owner,string package,string barrier,SodaDesktopSigninRunJournal.Role role,Func<bool> current,bool controller){
+        if(!SodaDesktopSigninPackageNative.Authority(controller)||current==null||!current())throw Failure();string slot=Slot(owner),runs=Path.Combine(slot,"runs");
         var parents=new List<string>();for(string item=slot;!String.IsNullOrEmpty(item);item=Path.GetDirectoryName(item)){if(parents.Count>=64)throw Failure();parents.Add(item);}parents.Reverse();
-        return new SodaDesktopSigninRunJournal(runs,owner,package,barrier,SodaDesktopSigninRunJournal.Role.Host,()=>SodaDesktopSigninVault.SystemPrimary()&&current(),SodaDesktopSigninQuiescence.Private,parents,(path,bytes)=>String.Equals(path,slot,StringComparison.OrdinalIgnoreCase)||String.Equals(path,runs,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false));
+        return new SodaDesktopSigninRunJournal(runs,owner,package,barrier,role,()=>SodaDesktopSigninPackageNative.Authority(controller)&&current(),SodaDesktopSigninQuiescence.Private,parents,(path,bytes)=>String.Equals(path,slot,StringComparison.OrdinalIgnoreCase)||String.Equals(path,runs,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false),()=>SodaDesktopSigninControllerMutex.AcquireJournal(owner,5000));
     }
     // No decryption: only the actual pending envelope's canonical owner/nonce
     // and cipher-envelope digest are needed to bind the selected startup branch.
+    internal static bool ControllerMode(string owner,SodaDesktopSigninRunRecord intent,Func<bool> current){if(!SodaDesktopSigninPackageNative.Authority(true))return false;return ModeCore(Path.Combine(Slot(owner),"admin"),owner,intent,current,SodaDesktopSigninQuiescence.Private);}
     internal static bool Mode(string owner,SodaDesktopSigninRunRecord intent,Func<bool> current){
         if(!SodaDesktopSigninVault.SystemPrimary())return false;
         return ModeCore(Path.Combine(Slot(owner),"admin"),owner,intent,current,SodaDesktopSigninQuiescence.Private);

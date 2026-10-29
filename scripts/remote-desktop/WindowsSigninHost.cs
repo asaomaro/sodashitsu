@@ -77,13 +77,18 @@ public static class SodaDesktopSigninHost {
             while(!stop.WaitOne(250)&&retained()&&child.Running()){}
             if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
             else if(!retained()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
-            run.Complete(child,retained);
+            run.Complete(child,retained);WaitAfterCompletion(run,stop,retained);
         }finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.
             if(child!=null&&!child.Stop())Environment.FailFast("Signin host could not stop its child");
             if(child!=null)child.Dispose();if(run!=null)run.Dispose();if(runtime!=null)runtime.Dispose();if(package!=null)package.Dispose();
         }
+    }
+    // Keep a clean normal Host alive until a controller can pin it and request
+    // stop; a short admin run instead exits under its retained start observer.
+    internal static void WaitAfterCompletion(SodaDesktopSigninRunSession run,WaitHandle stop,Func<bool> retained){
+        if(run==null||stop==null||retained==null)throw Failure();if(!run.Admin)while(!stop.WaitOne(250)&&retained()){}if(!retained())throw Failure();
     }
     sealed class Service:ServiceBase {
         readonly ManualResetEvent stop=new ManualResetEvent(false);Thread thread;

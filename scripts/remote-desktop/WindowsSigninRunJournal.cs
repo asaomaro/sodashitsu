@@ -9,18 +9,18 @@ using System.Security.Cryptography;
 using System.Text;
 
 internal sealed class SodaDesktopSigninRunJournal : IDisposable {
-    internal enum Role { Host, Controller, Observer, Installer }
+    internal enum Role { Host, Controller, Observer, Installer, Reader }
     readonly object gate=new object();readonly string directory,owner,package,barrier;
     readonly Role role;readonly Func<bool> scope;readonly Func<byte[],bool> policy;
     readonly List<SodaDesktopSigninPackageNative.Held> ancestors;readonly Func<string,byte[],bool> ancestorPolicy;
-    bool ended,checking,busy;internal Action AfterStageClosed=null;
+    readonly Func<IDisposable> enter;IDisposable shared;bool ended,checking,busy;internal Action AfterStageClosed=null;
     static readonly string[] Names={"initial","intent.pending","intent.claimed","started","observation","stopped","stop-observed"};
     static Exception Failure(){return new InvalidOperationException("Signin run journal is unavailable");}
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]
     static extern bool MoveFileExW(string from,string to,uint flags);
-    internal SodaDesktopSigninRunJournal(string directory,string owner,string package,string barrier,Role role,Func<bool> scope,Func<byte[],bool> policy,IEnumerable<string> parents,Func<string,byte[],bool> ancestorPolicy=null){
-        this.directory=directory;this.owner=SodaDesktopSigninVault.Owner(owner);this.package=package;this.barrier=barrier;this.role=role;this.scope=scope;this.policy=policy;this.ancestorPolicy=ancestorPolicy??((path,bytes)=>policy(bytes));
+    internal SodaDesktopSigninRunJournal(string directory,string owner,string package,string barrier,Role role,Func<bool> scope,Func<byte[],bool> policy,IEnumerable<string> parents,Func<string,byte[],bool> ancestorPolicy=null,Func<IDisposable> enter=null){
+        this.enter=enter??(()=>new EmptyLease());this.directory=directory;this.owner=SodaDesktopSigninVault.Owner(owner);this.package=package;this.barrier=barrier;this.role=role;this.scope=scope;this.policy=policy;this.ancestorPolicy=ancestorPolicy??((path,bytes)=>policy(bytes));
         ancestors=new List<SodaDesktopSigninPackageNative.Held>();
         try{if(String.IsNullOrEmpty(directory)||!Path.IsPathRooted(directory)||scope==null||policy==null||parents==null)throw Failure();
             foreach(string parent in parents){if(ancestors.Count>=64)throw Failure();ancestors.Add(SodaDesktopSigninPackageNative.OpenCore(parent,true,true,0,bytes=>this.ancestorPolicy(parent,bytes),null));}
@@ -32,7 +32,10 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
         try{if(!scope()||ended)throw Failure();foreach(var item in ancestors)SodaDesktopSigninPackageNative.CheckCore(item,bytes=>ancestorPolicy(item.Path,bytes));if(!scope()||ended)throw Failure();}
         catch{ended=true;throw;}finally{checking=false;}
     }
-    void Begin(Role required){Current();if(busy||role!=required){ended=true;throw Failure();}busy=true;}
+    sealed class EmptyLease:IDisposable {public void Dispose(){}}
+    void Begin(Role required){Current();if(busy||role!=required){ended=true;throw Failure();}try{shared=enter();if(shared==null)throw Failure();Current();busy=true;}catch{var acquired=shared;shared=null;if(acquired!=null)acquired.Dispose();throw;}}
+    void End(){var acquired=shared;shared=null;try{if(acquired!=null)acquired.Dispose();}finally{busy=false;}}
+
     string PathOf(string name){return Path.Combine(directory,name);}
     string[] Inventory(){Current();string[] files=Directory.GetFileSystemEntries(directory);if(files.Length>12)throw Failure();var names=new List<string>();foreach(string path in files){string name=Path.GetFileName(path);if(Array.IndexOf(Names,name)<0)throw Failure();names.Add(name);}names.Sort(StringComparer.Ordinal);Current();return names.ToArray();}
     static bool Has(string[] names,string name){return Array.IndexOf(names,name)>=0;}
@@ -48,7 +51,8 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
     sealed class Snapshot {
         internal string State;internal string[] Names;internal SodaDesktopSigninRunRecord Initial,Intent,Started,Ack,Stopped,Observed;
     }
-    Snapshot Inspect(){
+    Snapshot Inspect(){using(var lease=enter()){if(lease==null)throw Failure();return InspectLocked();}}
+    Snapshot InspectLocked(){
         var s=new Snapshot{Names=Inventory(),State="recovery"};
         if(s.Names.Length==1&&Has(s.Names,"initial")){s.Initial=Read("initial","initial");s.State="initial";return s;}
         if(s.Names.Length==1&&Has(s.Names,"intent.pending")){s.Intent=Read("intent.pending","intent");s.State="pending";return s;}
@@ -73,6 +77,8 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
         if(count!=s.Names.Length)s.State="recovery";Current();return s;
     }
     internal void VerifyCurrent(){lock(gate){if(busy)throw Failure();Current();}}
+    internal SodaDesktopSigninRunRecord StartedRecord(){lock(gate){if(busy)throw Failure();var s=Inspect();if(s.Started==null||s.State=="recovery")throw Failure();return s.Started;}}
+    internal SodaDesktopSigninRunRecord StopRecord(){lock(gate){if(busy)throw Failure();var s=Inspect();if(s.Stopped==null||s.State!="stopped"&&s.State!="complete")throw Failure();return s.Stopped;}}
     internal string State(){lock(gate){if(busy)throw Failure();return Inspect().State;}}
     void Publish(string name,SodaDesktopSigninRunRecord record){
         Match(record);byte[] bytes=record.Protect();string stage=name+".writing";
@@ -89,7 +95,7 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
     }
     // Installer only, with a separately established never-installed boundary.
     // Never exposed by the Host/controller factories or automatically invoked.
-    internal void Initialize(SodaDesktopSigninRunRecord initial){lock(gate){Begin(Role.Installer);try{if(initial==null||initial.Kind!="initial"||Inventory().Length!=0)throw Failure();Publish("initial",initial);}finally{busy=false;}}}
+    internal void Initialize(SodaDesktopSigninRunRecord initial){lock(gate){Begin(Role.Installer);try{if(initial==null||initial.Kind!="initial"||Inventory().Length!=0)throw Failure();Publish("initial",initial);}finally{End();}}}
     static SodaDesktopSigninRunRecord Expected(Snapshot s,string name){
         switch(name){case "initial":return s.Initial;case "intent.claimed":return s.Intent;case "started":return s.Started;case "observation":return s.Ack;case "stopped":return s.Stopped;case "stop-observed":return s.Observed;default:throw Failure();}
     }
@@ -103,7 +109,7 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
             Current();using(var transition=new FileStream(PathOf("transition"),FileMode.CreateNew,FileAccess.Write,FileShare.None)){transition.Write(marker,0,marker.Length);transition.Write(envelope,0,envelope.Length);transition.Flush(true);}Current();
             foreach(var file in originals){SodaDesktopSigninPackageNative.CheckCore(file,policy);Current();File.Delete(file.Path);}Current();Publish("intent.pending",intent);Current();File.Delete(PathOf("transition"));Current();
         }finally{SodaDesktopSigninPackageNative.Release(originals);Array.Clear(envelope,0,envelope.Length);Array.Clear(marker,0,marker.Length);}
-    }finally{busy=false;}}}
+    }finally{End();}}}
     internal SodaDesktopSigninRunRecord Claim(Func<SodaDesktopSigninRunRecord,bool> mode){lock(gate){Begin(Role.Host);try{
         var s=Inspect();if(s.State!="pending"||mode==null||!mode(s.Intent))throw Failure();Current();
         using(var pending=SodaDesktopSigninPackageNative.OpenRenamableCore(PathOf("intent.pending"),16384,policy)){
@@ -111,13 +117,13 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
             if(!MoveFileExW(PathOf("intent.pending"),PathOf("intent.claimed"),8))throw Failure();SodaDesktopSigninPackageNative.CheckCore(pending,policy);
             using(var claimed=SodaDesktopSigninPackageNative.OpenRenamableCore(PathOf("intent.claimed"),16384,policy))if(!pending.Before.Same(claimed.Before,false,16384))throw Failure();
         }Current();return s.Intent;
-    }finally{busy=false;}}}
-    internal void Started(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Host);try{var s=Inspect();if(s.State!="claimed"||value.Kind!="started"||!s.Intent.SameRun(value)||(string)value.Field("intentSha256")!=s.Intent.Digest()||(long)value.Field("startedAt")<(long)s.Intent.Field("issuedAt")||(long)value.Field("startedAt")>=(long)s.Intent.Field("expiresAt"))throw Failure();Publish("started",value);}finally{busy=false;}}}
+    }finally{End();}}}
+    internal void Started(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Host);try{var s=Inspect();if(s.State!="claimed"||value.Kind!="started"||!s.Intent.SameRun(value)||(string)value.Field("intentSha256")!=s.Intent.Digest()||(long)value.Field("startedAt")<(long)s.Intent.Field("issuedAt")||(long)value.Field("startedAt")>=(long)s.Intent.Field("expiresAt"))throw Failure();Publish("started",value);}finally{End();}}}
     // Narrow publication while Host holds its barrier reader. The controller
     // callback must retain the independently verified exact process handle.
-    internal void Observation(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Observer);try{var s=Inspect();if(s.State!="started"||value.Kind!="observation"||!s.Started.SameProcess(value)||(string)value.Field("startedSha256")!=s.Started.Digest())throw Failure();Publish("observation",value);}finally{busy=false;}}}
+    internal void Observation(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Observer);try{var s=Inspect();if(s.State!="started"||value.Kind!="observation"||!s.Started.SameProcess(value)||(string)value.Field("startedSha256")!=s.Started.Digest())throw Failure();Publish("observation",value);}finally{End();}}}
     internal SodaDesktopSigninRunRecord Observation(){lock(gate){if(busy)throw Failure();Current();if(role!=Role.Host)throw Failure();var s=Inspect();if(s.State!="observed")throw Failure();return s.Ack;}}
-    internal void Stopped(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Host);try{var s=Inspect();if(s.State!="observed"||value.Kind!="stopped"||!s.Started.SameProcess(value)||(string)value.Field("startedSha256")!=s.Started.Digest()||(long)value.Field("stoppedAt")<(long)s.Started.Field("startedAt"))throw Failure();Publish("stopped",value);}finally{busy=false;}}}
-    internal void ObservedStop(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Controller);try{var s=Inspect();if(s.State!="stopped"||value.Kind!="observed-stop"||!s.Stopped.SameProcess(value)||(string)value.Field("stoppedSha256")!=s.Stopped.Digest()||(long)value.Field("observedAt")<(long)s.Stopped.Field("stoppedAt"))throw Failure();Publish("stop-observed",value);}finally{busy=false;}}}
+    internal void Stopped(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Host);try{var s=Inspect();if(s.State!="observed"||value.Kind!="stopped"||!s.Started.SameProcess(value)||(string)value.Field("startedSha256")!=s.Started.Digest()||(long)value.Field("stoppedAt")<(long)s.Started.Field("startedAt"))throw Failure();Publish("stopped",value);}finally{End();}}}
+    internal void ObservedStop(SodaDesktopSigninRunRecord value){lock(gate){Begin(Role.Controller);try{var s=Inspect();if(s.State!="stopped"||value.Kind!="observed-stop"||!s.Stopped.SameProcess(value)||(string)value.Field("stoppedSha256")!=s.Stopped.Digest()||(long)value.Field("observedAt")<(long)s.Stopped.Field("stoppedAt"))throw Failure();Publish("stop-observed",value);}finally{End();}}}
     public void Dispose(){lock(gate){ended=true;SodaDesktopSigninPackageNative.Release(ancestors);}}
 }

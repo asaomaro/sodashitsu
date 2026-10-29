@@ -15,11 +15,14 @@ public static class SodaDesktopSigninQuiescence {
         readonly object gate=new object();List<SodaDesktopSigninPackageNative.Held> held;readonly Func<string,byte[],bool> policy;
         internal Lease(List<SodaDesktopSigninPackageNative.Held> held,Func<string,byte[],bool> policy){this.held=held;this.policy=policy;}
         public bool Current(){lock(gate){if(held==null)return false;try{foreach(var item in held)SodaDesktopSigninPackageNative.CheckCore(item,bytes=>policy(item.Path,bytes));return held!=null;}catch{return false;}}}
+        public string Fingerprint{get{lock(gate){if(!Current())throw Failure();return held[held.Count-1].Before.Fingerprint();}}}
         public void Dispose(){lock(gate){var items=held;held=null;if(items!=null)SodaDesktopSigninPackageNative.Release(items);}}
     }
     public sealed class Pin:IDisposable {
         readonly object gate=new object();List<SodaDesktopSigninPackageNative.Held> directories;SodaDesktopSigninPackageNative.Held file;readonly string path;readonly Func<string,byte[],bool> policy;bool used;
         internal Pin(string path,List<SodaDesktopSigninPackageNative.Held> directories,SodaDesktopSigninPackageNative.Held file,Func<string,byte[],bool> policy){this.path=path;this.directories=directories;this.file=file;this.policy=policy;}
+        public bool Current(){lock(gate){try{if(used||directories==null||file==null)return false;foreach(var item in directories)SodaDesktopSigninPackageNative.CheckCore(item,bytes=>policy(item.Path,bytes));SodaDesktopSigninPackageNative.CheckCore(file,bytes=>policy(path,bytes));return !used&&directories!=null&&file!=null;}catch{return false;}}}
+        public string Fingerprint{get{lock(gate){if(!Current())throw Failure();return file.Before.Fingerprint();}}}
         public Lease Exclusive(){return ExclusiveCore(null);}
         internal Lease ExclusiveCore(Action afterPinClosed){lock(gate){
             if(used||directories==null||file==null)throw Failure();used=true;SodaDesktopSigninPackageNative.Held exclusive=null;

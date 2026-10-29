@@ -22,8 +22,10 @@ public static class SodaDesktopSigninControllerMutex {
     }
     /** Explicit elevated installer/controller only. Existing namespace objects
      * are inspected and never repaired, adopted, or taken over after abandon. */
-    public static Lease Acquire(string owner,int timeoutMilliseconds){
-        if(timeoutMilliseconds<1||timeoutMilliseconds>30000)throw Failure();string name="Global\\SodaDesktopSigninAdmin-"+SodaDesktopSigninPackage.Slot(owner);Mutex mutex=null;bool owned=false,transferred=false;
+    public static Lease Acquire(string owner,int timeoutMilliseconds){return AcquireCore("Global\\SodaDesktopSigninAdmin-"+SodaDesktopSigninPackage.Slot(owner),timeoutMilliseconds);}
+    internal static Lease AcquireJournal(string owner,int timeoutMilliseconds){return AcquireCore("Global\\SodaDesktopSigninJournal-"+SodaDesktopSigninPackage.Slot(owner),timeoutMilliseconds);}
+    static Lease AcquireCore(string name,int timeoutMilliseconds){
+        if(timeoutMilliseconds<1||timeoutMilliseconds>30000)throw Failure();Mutex mutex=null;bool owned=false,transferred=false;
         try{
             bool created;mutex=new Mutex(false,name,out created,PrivateSecurity());if(!Policy(mutex.GetAccessControl().GetSecurityDescriptorBinaryForm()))throw Failure();
             try{owned=mutex.WaitOne(timeoutMilliseconds);}catch(AbandonedMutexException){owned=true;throw Failure();}

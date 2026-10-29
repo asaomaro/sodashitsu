@@ -87,23 +87,30 @@ public static class SodaDesktopSigninPackageNative {
     /** Retain this lease until the verified child has stopped. Disposing it is
      * not a substitute for stopping a child; this verifier never launches one. */
     public sealed class Lease : IDisposable {
-        readonly string root;readonly List<Held> held;readonly object gate=new object();bool closed;internal readonly string ManifestSha256;
-        internal Lease(string root,List<Held> held,string manifestSha256){this.root=root;this.held=held;ManifestSha256=manifestSha256;}
-        public bool Current(){lock(gate){try{return !closed&&SodaDesktopSigninVault.SystemPrimary()&&!closed;}catch{return false;}}}
+        readonly string root;readonly List<Held> held;readonly object gate=new object();bool closed;internal readonly string ManifestSha256;readonly bool controller;
+        internal Lease(string root,List<Held> held,string manifestSha256,bool controller){this.root=root;this.held=held;ManifestSha256=manifestSha256;this.controller=controller;}
+        public bool Current(){lock(gate){try{return !closed&&Authority(controller)&&!closed;}catch{return false;}}}
         string Get(string relative){if(!Current())throw Failure();return Full(root,relative);}
         public string Node {get{return Get("node.exe");}}
         public string Bootstrap {get{return Get("bootstrap.mjs");}}
         public void Dispose(){lock(gate){if(closed)return;closed=true;Release(held);}}
     }
-    public static Lease Verify(string owner){return VerifyImage(owner,"DesktopSigninService.exe");}
-    public static Lease VerifyWorker(string owner){return VerifyImage(owner,"DesktopSigninWorker.exe");}
-    static Lease VerifyImage(string owner,string image){
+    public static Lease Verify(string owner){return VerifyImage(owner,"DesktopSigninService.exe",false,null);}
+    public static Lease VerifyWorker(string owner){return VerifyImage(owner,"DesktopSigninWorker.exe",false,null);}
+    internal static bool Authority(bool controller){
+        if(!controller)return SodaDesktopSigninVault.SystemPrimary();
+        try{using(var identity=System.Security.Principal.WindowsIdentity.GetCurrent())return identity.ImpersonationLevel==System.Security.Principal.TokenImpersonationLevel.None&&(identity.IsSystem||new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator));}catch{return false;}
+    }
+    internal static Lease VerifyController(string owner,string expected){
+        if(expected==null||!System.Text.RegularExpressions.Regex.IsMatch(expected,"\\A[a-f0-9]{64}\\z"))throw Failure();return VerifyImage(owner,null,true,expected);
+    }
+    static Lease VerifyImage(string owner,string image,bool controller,string expected){
         var held=new List<Held>();bool transferred=false;
         try {
-            if(!SodaDesktopSigninVault.SystemPrimary()||!Environment.Is64BitProcess)throw Failure();
+            if(!Authority(controller)||!Environment.Is64BitProcess)throw Failure();
             VerifyLayouts();
             string program=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),root=Path.Combine(program,"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner));
-            using(var self=Process.GetCurrentProcess())if(!String.Equals(self.MainModule.FileName,Full(root,image),StringComparison.OrdinalIgnoreCase))throw Failure();
+            if(image!=null)using(var self=Process.GetCurrentProcess())if(!String.Equals(self.MainModule.FileName,Full(root,image),StringComparison.OrdinalIgnoreCase))throw Failure();
             if(root.Length>512||root.Length<3||root[1]!=':'||root[2]!='\\')throw Failure();
             var drive=new DriveInfo(Path.GetPathRoot(root));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();
             var allDirectories=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var packageDirectories=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var files=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -113,7 +120,7 @@ public static class SodaDesktopSigninPackageNative {
             foreach(string directory in ordered)held.Add(Hold(directory,true,Within(root,directory),0));
             Inventory(packageDirectories,files);
             var manifest=Hold(Full(root,"signin-package.json"),false,true,32768);held.Add(manifest);
-            byte[] manifestBytes=Read(manifest);string manifestSha256;SodaDesktopSigninPackage description;try{using(var sha=SHA256.Create())manifestSha256=BitConverter.ToString(sha.ComputeHash(manifestBytes)).Replace("-","").ToLowerInvariant();description=SodaDesktopSigninPackage.Decode(new UTF8Encoding(false,true).GetString(manifestBytes),owner);}finally{Array.Clear(manifestBytes,0,manifestBytes.Length);}Check(manifest);
+            byte[] manifestBytes=Read(manifest);string manifestSha256;SodaDesktopSigninPackage description;try{using(var sha=SHA256.Create())manifestSha256=BitConverter.ToString(sha.ComputeHash(manifestBytes)).Replace("-","").ToLowerInvariant();description=SodaDesktopSigninPackage.Decode(new UTF8Encoding(false,true).GetString(manifestBytes),owner);}finally{Array.Clear(manifestBytes,0,manifestBytes.Length);}Check(manifest);if(expected!=null&&manifestSha256!=expected)throw Failure();
             foreach(var entry in description.Entries()){
                 var file=Hold(Full(root,entry.Path),false,true,SodaDesktopSigninPackage.MaximumBytes(entry.Path));held.Add(file);
                 if(file.Before.Value.SizeLow!=entry.Bytes)throw Failure();
@@ -121,8 +128,8 @@ public static class SodaDesktopSigninPackageNative {
                 if(hash!=entry.Sha256)throw Failure();Check(file);
             }
             Inventory(packageDirectories,files);foreach(var file in held)Check(file);
-            if(!SodaDesktopSigninVault.SystemPrimary())throw Failure();
-            var lease=new Lease(root,held,manifestSha256);transferred=true;return lease;
+            if(!Authority(controller))throw Failure();
+            var lease=new Lease(root,held,manifestSha256,controller);transferred=true;return lease;
         }catch{throw Failure();}finally{if(!transferred)Release(held);}
     }
 }
