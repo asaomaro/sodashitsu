@@ -61,3 +61,6 @@ jobs:
       - name: Generated folder checkpoint process-restart boundaries (private disposable files only)
         shell: powershell
         run: node scripts/remote-desktop/validate-folder-checkpoints.mjs
+      - name: Generated native drag data/COM/framing kernel (no real desktop or input)
+        shell: powershell
+        run: scripts/remote-desktop/validate-native-drag-lease.ps1
