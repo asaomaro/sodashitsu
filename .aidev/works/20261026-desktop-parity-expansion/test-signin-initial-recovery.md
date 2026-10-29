@@ -31,3 +31,7 @@ signin_initial_recovery_5_source_negative_controls_and_restore_passed
 ## Final review
 
 Both independent design/source/correction/records reviews clear after invalid STOPPED PID correction. Final five source controls/restored positive exit0; final public ValidateOnly exit0. Exact-head CI and guarded delivery follow.
+
+## Delivery
+
+PR #290 merged as5c6f4ad8. Exact source bb24fd2099619b31dca54474ce29a1f2929345f3: protected Windows40814053520/job123250864386 PASS4m12s; Node Windows40814053631/job123250864536 PASS1m48s. Root11-file all-file preflight reflection preserved other edits. A first merge request used an incorrect expected hash and was rejected without mutation; the verified exact source hash then merged. No service/ordinary handoff occurred.
