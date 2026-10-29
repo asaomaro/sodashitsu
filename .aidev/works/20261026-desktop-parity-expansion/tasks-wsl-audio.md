@@ -3,7 +3,7 @@
 - [x] Fixed binary builder/preflight, protected disposable artifact, owned close lifetime.
 - [x] Binary stdio bridge with nonce/Windows PID, strict local kind/name, watchdog and bounded buffers.
 - [x] Actual WSL ↔ Windows generated memory pipe byte/PID/partial transfer validation.
-- [x] Taskcheck transport (independent): deadline and unread PCM findings corrected; delta review pending.
+- [x] Taskcheck transport (independent): deadline and unread PCM findings corrected; delta review completed, no remaining must/should.
 - [x] Wire per-provider runtime into single/shared audio and microphone with existing ceilings/resource fences.
 - [x] Taskcheck integration, generated authority/revocation/close regressions and 11 actual-source negatives; exact restoration and 32 focused positive tests.
 - [x] Source browser17, build/typecheck/full12,761; root related328/build/types; Windows generated validations. Root browser final receipt: PR #308.

@@ -263,4 +263,4 @@ Product a7ac0b34b764a104bfd6b6a256a42b0dfa243555:
 - Clean detached product worktree build and smoke passed; git status empty. No live A/B handoff performed.
 - Independent final fixed24 paths: commit/source/snapshot/root hashes match; docs normal three-way and Provider constructor normalization/replay preserve existing root allowLanHttp behavior. Whole and correction reviewers report no remaining must/should.
 
-Root browser17 and final documentation-head CI/merge receipts are recorded in PR #308. The final documentation change clarifies that fixed builders use process-scoped ExecutionPolicy Bypass, while normal capture helper launch follows Windows policy; system policy/trust are not changed. This describes the existing compiler launch behavior rather than changing it.
+Root browser17 and final documentation-head CI/merge receipts will be recorded in PR #308. The final documentation change clarifies that fixed builders use process-scoped ExecutionPolicy Bypass, while normal capture helper launch follows Windows policy; system policy/trust are not changed. This describes the existing compiler launch behavior rather than changing it.
