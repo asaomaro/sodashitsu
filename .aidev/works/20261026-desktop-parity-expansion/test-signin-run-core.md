@@ -51,3 +51,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 negative pre-ack
 System.Management.Automation.MethodInvocationException: "0" �̈������w�肵�� "Run" ���Ăяo�����ɗ�O���������܂���: "Run resumed before process observation ACK" ---> System.InvalidOperationException: Run resumed before process observation ACK
 ```
+
+## Delivery receipt
+
+PR #283 merged as b312ffd4. Product 1eef88e4 passed protected Windows CI40796770170/job123195021188 and Node Windows CI40796770164/job123195020854. Final two independent record/cross reviews clear. Ten files reflected into the dirty root only after all-file exact-base/absence preflight and final source/root byte recheck. No runtime/service/installer activation. Prior JS verification is reused as stated above; no new full-JS run.
