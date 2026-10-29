@@ -25,6 +25,7 @@ const props = defineProps<{
   canResumeFolders?: boolean;
   machineId?: string;
 }>();
+const emit=defineEmits<{"grant-change":[enabled:boolean]}>();
 const resumeStore = new DesktopFileResumeStore();
 const remember = ref(false),
   folderName = ref("");
@@ -101,6 +102,7 @@ async function grant() {
   selectionGeneration++;
   try {
     const next = !enabled.value;
+    if(!next)emit("grant-change",false);
     const response = owner.request({ action: "grant", enabled: next });
     if (!next) {
       enabled.value = false;
@@ -111,6 +113,7 @@ async function grant() {
     const result = await response;
     if (dead) return;
     enabled.value = result.enabled === true;
+    emit("grant-change",enabled.value);
     root.value = result.root ?? "";
     if (enabled.value) {
       await list();
@@ -986,6 +989,7 @@ const timer = setInterval(async () => {
   }
 }, 20000);
 onBeforeUnmount(() => {
+  emit("grant-change",false);
   dead = true;
   selectionGeneration++;
   resumeStore.releaseAll();

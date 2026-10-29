@@ -30,6 +30,7 @@ export class DesktopNativeHelpers {
    const force=setTimeout(()=>child.kill(),60000);force.unref();try{await entry.closed;}finally{clearTimeout(force);}
   })();entry.closing=stopping;this.closing.add(stopping);void stopping.then(()=>this.closing.delete(stopping),()=>this.closing.delete(stopping));return stopping;
  }
+ touch(owner:string,viewer:string,origin:string){const entry=this.entries.get(JSON.stringify([owner,viewer]));if(!entry||entry.stopped||!entry.initialized||entry.origin!==origin)throw new RpcError("not_found","補助プログラムの接続が終了しました");return {};}
  stop(owner:string,viewer:string):Promise<void>{const entry=this.entries.get(JSON.stringify([owner,viewer]));return entry?this.stopEntry(entry):Promise.resolve();}
  clientGone(owner:string){for(const entry of this.entries.values())if(entry.owner===owner)void this.stopEntry(entry);}
  async dispose(){this.dead=true;for(const entry of this.entries.values())void this.stopEntry(entry);await Promise.all(this.closing);}

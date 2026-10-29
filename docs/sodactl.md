@@ -1075,6 +1075,10 @@ sodactl work memory read decisions.md
 
 `work agent --terminal-here claude|codex [agent-args...]` は、別PCのエージェントの端末と質問フォームを起動元paneへ中継します。実行するPCでの起動承認と両側の更新が必要です。終了は `Ctrl+B q`。方向・権限・切断時の入力破棄と制限は [接続先での作業](remote-work.md#エージェントの端末を起動元paneで操作する) を参照してください。
 
+#### デスクトップの直接ドラッグ補助（ローカル）
+
+ブラウザPCのExplorerへの直接ドラッグ用補助プログラムは `sodactl desktop native-helper --origin <ブラウザのorigin>` で起動します。localhostの接続URLを1行表示し、終了まで待ちます。ブラウザ画面の手動接続欄へ入力してください。Ctrl+Cで停止します。ログイン・`--machine`・任意コマンドの指定は使いません。Windows/WSL、ファイル許可と上限、実機検証の範囲は [Explorerへの直接ドラッグ](remote-desktop.md#explorerへの直接ドラッグ) を参照してください。
+
 #### デスクトップのエージェント鍵（ローカル）
 
 `sodactl desktop identity [--initialize] [--identity-dir <絶対パス>]` はローカルの公開フィンガープリントと準備状態だけを返します。通常は読み取りだけで、`--initialize` の指定時だけ鍵を作ります。ログインや `--machine` は使いません。保存先・権限・暗号化エージェント接続の対応範囲は [リモートデスクトップ](remote-desktop.md#cliのエージェント鍵の準備) を参照してください。

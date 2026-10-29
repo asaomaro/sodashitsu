@@ -423,4 +423,6 @@ viewerが一意ならopenの--viewerは省略可能。view_openedは画面作成
 
 `sodactl desktop identity` はローカルのエージェント鍵の準備状態と公開フィンガープリントを返す。読み取りだけでは作成せず、`--initialize` を明示したときだけ作成する。`--identity-dir <絶対パス>` で保存先を指定できる。ログインや `--machine`、`SODA_DESKTOP_GRANT` は使わない。相手の登録や操作の許可・暗号化agent接続は、この鍵準備コマンドだけでは行わない。
 
+`sodactl desktop native-helper --origin <ブラウザのorigin>` はブラウザPCでExplorerへの直接ドラッグ補助を起動し、画面の手動接続欄へ入力するlocalhostのURLを表示する。ローカル専用でログイン・`--machine`・エージェント操作コードは使わない。Windowsまたは対話セッションへアクセスできるWSLと、共有窓での別のファイル許可が必要。Ctrl+Cで停止する。接続先で代行起動したり、このコマンドだけでファイル許可を取得したりしない。
+
 暗号化された共有窓のエージェント連携では `SODA_DESKTOP_GRANT` が `soda-e2e-agent-v1.` で始まる。`sodactl desktop session` / `sodactl desktop mcp` / `sodactl desktop model` に `--endpoint-fingerprint <共有元PCで別途確認した指紋>` が必要。コード内の値だけを信頼しない。CLIの鍵は明示的に初期化し、対象PCにrole agentで登録したものを使う。保存先を変えた場合は同じ `--identity-dir` を付ける。未知バージョンや失敗を通常RPCへ転送しない。対象の画面以外の操作・自動再許可・不確定な入力の再送はしない。
