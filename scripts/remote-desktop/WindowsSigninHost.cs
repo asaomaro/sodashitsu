@@ -47,7 +47,7 @@ public static class SodaDesktopSigninHost {
         return SodaDesktopSigninPackageNative.OpenCore(path,false,true,1,policy,stream=>{if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();});
     }
     internal sealed class RuntimeLease:IDisposable {
-        readonly List<SodaDesktopSigninPackageNative.Held> held;internal readonly string Path;
+        readonly List<SodaDesktopSigninPackageNative.Held> held;internal readonly string Path;readonly object gate=new object();bool disposed;
         RuntimeLease(string path,List<SodaDesktopSigninPackageNative.Held> held){Path=path;this.held=held;}
         internal static RuntimeLease Open(){
             string path=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin",SodaDesktopSigninPackage.Slot(Owner),"runtime");
@@ -61,22 +61,28 @@ public static class SodaDesktopSigninHost {
                 var result=new RuntimeLease(path,held);transferred=true;return result;
             }finally{if(!transferred)SodaDesktopSigninPackageNative.Release(held);}
         }
-        public void Dispose(){SodaDesktopSigninPackageNative.Release(held);}
+        internal bool Current(){lock(gate){try{if(disposed)return false;foreach(var item in held){bool secret=item.Path==Path||!item.Directory;SodaDesktopSigninPackageNative.CheckCore(item,bytes=>secret?PrivateRuntimeAcl(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false));}return !disposed;}catch{return false;}}}
+        internal string BarrierSha256{get{lock(gate){if(!Current())throw Failure();return held[held.Count-1].Before.Fingerprint();}}}
+        public void Dispose(){lock(gate){disposed=true;SodaDesktopSigninPackageNative.Release(held);}}
     }
     internal static void Run(WaitHandle stop){
-        SodaDesktopSigninPackageNative.Lease package=null;RuntimeLease runtime=null;SodaDesktopSigninProcess.Child child=null;
+        SodaDesktopSigninPackageNative.Lease package=null;RuntimeLease runtime=null;SodaDesktopSigninProcess.Child child=null;SodaDesktopSigninRunSession run=null;
         try {
             package=SodaDesktopSigninPackageNative.Verify(Owner);runtime=RuntimeLease.Open();
             if(stop.WaitOne(0)||!package.Current())return;
-            child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&package.Current());
-            while(!stop.WaitOne(250)&&package.Current()&&child.Running()){}
+            Func<bool> retained=()=>package.Current()&&runtime.Current();
+            var journal=SodaDesktopSigninRunStorage.OpenHost(Owner,package.ManifestSha256,runtime.BarrierSha256,retained);
+            run=SodaDesktopSigninRunSession.Open(journal,Owner,retained,stop);if(!run.Ready())throw Failure();
+            child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&retained(),()=>run.Resume(),()=>run.ConfirmResume());
+            while(!stop.WaitOne(250)&&retained()&&child.Running()){}
             if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
-            else if(!package.Current()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
+            else if(!retained()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
+            run.Complete(child,retained);
         }finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.
             if(child!=null&&!child.Stop())Environment.FailFast("Signin host could not stop its child");
-            if(child!=null)child.Dispose();if(runtime!=null)runtime.Dispose();if(package!=null)package.Dispose();
+            if(child!=null)child.Dispose();if(run!=null)run.Dispose();if(runtime!=null)runtime.Dispose();if(package!=null)package.Dispose();
         }
     }
     sealed class Service:ServiceBase {

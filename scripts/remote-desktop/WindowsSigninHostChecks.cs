@@ -68,10 +68,16 @@ public static class SodaDesktopSigninHostChecks {
         catch(InvalidOperationException ex){rejected=ex.Message=="Signin host is unavailable";}
         Check(rejected&&calls==3,"Post-create revocation accepted");
         Check(!File.Exists(marker),"Revoked suspended child executed");
+        int admissions=0;bool admissionRejected=false;
+        try{using(var child=SodaDesktopSigninProcess.Start(plan,()=>true,()=>{admissions++;return false;},()=>true)){child.Stop();}}catch(InvalidOperationException){admissionRejected=true;}
+        Check(admissionRejected&&admissions==1&&!File.Exists(marker),"Unconfirmed child admission resumed");
+        bool live=true,postAdmissionRejected=false;try{using(var child=SodaDesktopSigninProcess.Start(plan,()=>live,()=>{live=false;return true;},()=>true)){child.Stop();}}catch(InvalidOperationException){postAdmissionRejected=true;}
+        Check(postAdmissionRejected&&!File.Exists(marker),"Post-admission revocation resumed child");
         bool initial=false;try{using(var child=SodaDesktopSigninProcess.Start(plan,()=>false)){child.Stop();}}catch(InvalidOperationException){initial=true;}
         Check(initial&&!File.Exists(marker),"Initial revocation accepted");
         bool nonexistent=false;try{using(var child=SodaDesktopSigninProcess.Start(Fixture(Path.Combine(directory,"absent.exe"),directory,"--generated-child"),()=>true)){child.Stop();}}catch(InvalidOperationException){nonexistent=true;}
         Check(nonexistent,"Missing child accepted");
+        SodaDesktopSigninRunSessionChecks.NativeResume(exe,directory);
         // A fresh run after both failure paths proves no retained job/process state.
         using(var child=SodaDesktopSigninProcess.Start(plan,()=>true)){Wait(()=>File.Exists(marker),"Recovery child failed");Check(child.Stop()&&child.Active()==0,"Recovery cleanup failed");}
         Console.WriteLine("signin_host_generated_environment_job_descendants_and_revocation_passed");

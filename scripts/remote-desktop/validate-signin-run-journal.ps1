@@ -16,7 +16,7 @@ try{
    @('process','s.State!="started"||value.Kind!="observation"||!s.Started.SameProcess(value)||','s.State!="started"||value.Kind!="observation"||','Wrong observed process accepted'),
    @('receipt','s.State=="complete"?s.Observed:null','s.State=="stopped"?s.Stopped:s.State=="complete"?s.Observed:null','Host receipt alone admitted next generation'),
    @('scope','!scope()||ended','ended','Open-time revoked scope consumed intent'),
-   @('post-inspection','CheckCore(item,policy);if(!scope()||ended)','CheckCore(item,policy);if(ended)','Inspection-time revoked scope retained authority'),
+   @('post-inspection','CheckCore(item,bytes=>ancestorPolicy(item.Path,bytes));if(!scope()||ended)','CheckCore(item,bytes=>ancestorPolicy(item.Path,bytes));if(ended)','Inspection-time revoked scope retained authority'),
    @('stage-identity','!written.Same(SodaDesktopSigninVault.Facts(file.Handle))||','','Replaced staged file identity was published'),
    @('claim-content','if(ReadOpened(pending,"intent",s.Intent.RunId).Digest()!=s.Intent.Digest())throw Failure();','ReadOpened(pending,"intent");','Replaced pending intent consumed with old claim data')
   )
