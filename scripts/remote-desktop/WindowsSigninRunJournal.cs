@@ -79,6 +79,7 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
     internal void VerifyCurrent(){lock(gate){if(busy)throw Failure();Current();}}
     internal SodaDesktopSigninRunRecord StartedRecord(){lock(gate){if(busy)throw Failure();var s=Inspect();if(s.Started==null||s.State=="recovery")throw Failure();return s.Started;}}
     internal SodaDesktopSigninRunRecord StopRecord(){lock(gate){if(busy)throw Failure();var s=Inspect();if(s.Stopped==null||s.State!="stopped"&&s.State!="complete")throw Failure();return s.Stopped;}}
+    internal SodaDesktopSigninRunRecord CleanBoundary(){lock(gate){if(busy)throw Failure();var s=Inspect();if(s.State=="initial")return s.Initial;if(s.State=="complete")return s.Observed;throw Failure();}}
     internal string State(){lock(gate){if(busy)throw Failure();return Inspect().State;}}
     void Publish(string name,SodaDesktopSigninRunRecord record){
         Match(record);byte[] bytes=record.Protect();string stage=name+".writing";

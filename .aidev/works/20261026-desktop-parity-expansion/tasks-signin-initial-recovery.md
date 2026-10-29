@@ -5,6 +5,6 @@
 - [x] Exact disabled/stopped status before final evidence then only Manual setting; no repair/delete/start/stop/reset/replay (taskcheck).
 - [x] Generated ordinary temp files/native barrier/DPAPI/fake SCM, five copied-source controls/byte restore/restored positive.
 - [x] Review correction: STOPPED PID ignored, pure decoder positive nonzero PID and failure/run state negatives; source negative restoring wrong PID check.
-- [ ] Final correction/records review, exact-head Windows CI and guarded delivery.
+- [x] Final correction/records review, exact-head Windows CI and guarded delivery: PR #290, main5c6f4ad8.
 
 No actual service, native SCM mutation, fixed installed data or keys/trust/desktop/input operations. General crash recovery and upgrade remain subsequent work.

@@ -136,3 +136,14 @@ jobs:
       - name: Generated signed-out candidate checks (no native queries)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-candidate.ps1 -NegativeControls
+  upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Current-schema upgrade compilation only (no SCM/state access)
+        shell: powershell
+        run: scripts/remote-desktop/upgrade-signin-service.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -OldManifestSha256 ('a' * 64) -ManifestSha256 ('b' * 64) -SourceDirectory 'C:\generated-unused'
+      - name: Generated stopped package upgrade, interruption and source controls
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-upgrade.ps1 -NegativeControls
