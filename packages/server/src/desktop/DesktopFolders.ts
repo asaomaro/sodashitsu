@@ -277,7 +277,6 @@ export class DesktopFolders {
     }
     if (!this.scratchRoot || !j.scratch || !j.sourcePath || !j.sha256)
       throw Error("ZIPの準備が完了していません");
-    await j.fd!.sync();
     return DesktopFolderSnapshot.parse({
       version: 1,
       id: j.id,

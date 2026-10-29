@@ -19,7 +19,7 @@ Readonly taskcheck/cross/correction reviews by review_pointer and review_transfe
 
 ## Final verification and delivery
 
-Final source build/typecheck passed; whole source tests are running. All20 scoped paths passed exact-byte source/root preflight before any root write;4 existing overlaps were clean3-way merges preserving unrelated root changes. Root build/typecheck, final browser/process suites, external clean build/smoke and exact-head CI/PR/main delivery remain pending until recorded below. Logs: node_modules/.cache/durable-folders in the source/root worktrees. Remaining tasks after this phase are direct remote Explorer OLE drag, Linux/macOS parity, general unproven signin crash recovery, actual-device validation and deployment.
+The first frozen candidate build/typecheck and whole843files/12,555tests passed354.16s. Windows CI then passed5folder upload boundaries and caught EPERM on fsync during restored read-only ZIP attach. The redundant checkpoint sync was removed; ZIP construction still syncs its writable FD before ACK. A generated EPERM regression passes, and restoring the offending line fails an intended AssertionError before exact byte restoration and positive success. The prior root whole run was gracefully cancelled with exit130 to avoid counting old-code results. Corrected source/root whole suites are rerun. All20 scoped paths passed exact-byte source/root preflight before any root write;4 existing overlaps were clean3-way merges preserving unrelated root changes. Root build/typecheck, final browser/process suites, external clean build/smoke and exact-head CI/PR/main delivery remain pending until recorded below. Logs: node_modules/.cache/durable-folders in the source/root worktrees. Remaining tasks after this phase are direct remote Explorer OLE drag, Linux/macOS parity, general unproven signin crash recovery, actual-device validation and deployment.
 
 ## Raw intended-control excerpts
 
@@ -59,3 +59,12 @@ admission
  FAIL  |@sodashitsu/server| src/desktop/DesktopDurableFolders.test.ts > closes start admission across a loaded-ensure microtask before handoff drain
 AssertionError: expected 1 to be +0 // Object.is equality
 ```
+
+## Windows read-only ZIP correction control
+
+```text
+ FAIL  |@sodashitsu/server| src/desktop/DesktopFolderSnapshot.test.ts > checkpoints a restored read-only ZIP without attempting a Windows-invalid fsync
+AssertionError: promise rejected "Error: generated Windows read-only sync { code: '…' }" instead of resolving
+```
+
+This is the12th intended product-source negative. Independent correction review is clear.

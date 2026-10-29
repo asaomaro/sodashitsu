@@ -433,3 +433,30 @@ it("still closes the ZIP descriptor when closing its transfer fails", async () =
     await close().catch(() => {});
   }
 });
+
+it("checkpoints a restored read-only ZIP without attempting a Windows-invalid fsync", async () => {
+  const f = await fixture(),
+    one = f.create(),
+    id = randomUUID();
+  await mkdir(join(f.root, "source"));
+  await writeFile(join(f.root, "source", "data"), "original");
+  await f.run(one, { action: "folder_download_start", id, path: "source" });
+  const saved = await one.checkpoint(id);
+  await one.suspend();
+  const two = f.create();
+  await two.restore(
+    saved,
+    async () => {},
+    () => {},
+  );
+  const fd = (two as any).jobs.get(id).fd,
+    sync = vi
+      .spyOn(fd, "sync")
+      .mockRejectedValue(
+        Object.assign(Error("generated Windows read-only sync"), { code: "EPERM" }),
+      );
+  await expect(two.checkpoint(id)).resolves.toMatchObject({
+    download: { sha256: saved.download!.sha256 },
+  });
+  expect(sync).not.toHaveBeenCalled();
+});
