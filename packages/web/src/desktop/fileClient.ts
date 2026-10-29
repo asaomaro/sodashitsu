@@ -26,6 +26,7 @@ export class DesktopFileClient {
   }
   request(request: DesktopFileRequest["request"]): Promise<Result> {
     const control =
+      request.action === "native_abort" ||
       request.action === "abort" ||
       request.action === "checkpoint_abort" ||
       request.action === "folder_abort" ||
@@ -61,6 +62,7 @@ export class DesktopFileClient {
           if (task.control) this.fail();
           else this.pump();
         },
+        task.request.action.startsWith("native_") ? 5000 :
         ["folder_download_start", "folder_upload_start", "folder_resume_start", "folder_resume_attach"].includes(task.request.action)
           ? 120000
           : 30000,

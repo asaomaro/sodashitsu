@@ -1,3 +1,4 @@
+import {DesktopNativeSelection} from "./DesktopNativeSelection.js";
 import {dirname,join} from "node:path";
 import {DesktopHelperInputAck,type DesktopPointerWitness} from "./DesktopPointerWitness.js";
 import {createHash} from "node:crypto";
@@ -75,7 +76,7 @@ export interface DesktopProviderConfig {
   iceServers?: z.infer<typeof DesktopIceServers>;
   origins(): string[];
 }
-type EndpointScope={origin:string;epoch:number;active():boolean};
+type EndpointScope={origin:string;nativeOrigin:string;epoch:number;active():boolean};
 export interface DesktopProviderEndpointScope {
  active():boolean;
  start(owner:string,params:z.infer<typeof DesktopStartParams>):Promise<{started:true}>;
@@ -137,6 +138,7 @@ type Share = {
 export class DesktopProvider {
   private endpointOnly=false;
   private sourceEpoch=0;
+  private nativeSelection=new DesktopNativeSelection();
   private fileCheckpoints=new DesktopFileCheckpoints();
   private transferStore:DesktopTransferStore|undefined;
   private savedSettingsBinding:string|undefined;
@@ -165,11 +167,12 @@ export class DesktopProvider {
   }
   /** A private loopback backplane may reuse the existing permission/input/media
    * implementation without allowing a remote caller to choose a new origin. */
-  endpointScope(origin:string,active:()=>boolean):DesktopProviderEndpointScope {
+  endpointScope(origin:string,active:()=>boolean,nativeOrigin=origin):DesktopProviderEndpointScope {
     const url=new URL(origin);
     if(url.protocol!=="http:"||url.hostname!=="127.0.0.1"||!url.port||url.origin!==origin)throw new RpcError("unauthorized","Private desktop endpoint unavailable");
     const epoch=this.sourceEpoch,owners=new Set<string>();let closed=false;
-    const scope:EndpointScope={origin,epoch,active:()=>!closed&&epoch===this.sourceEpoch&&active()};
+    const nativeUrl=new URL(nativeOrigin);if(!["http:","https:"].includes(nativeUrl.protocol)||nativeUrl.origin!==nativeOrigin)throw new RpcError("unauthorized","Native desktop origin unavailable");
+    const scope:EndpointScope={origin,nativeOrigin,epoch,active:()=>!closed&&epoch===this.sourceEpoch&&active()};
     this.endpointScopes.add(scope);
     return {active:scope.active,start:async(owner,params)=>{
       if(!scope.active())throw new RpcError("unauthorized","Desktop endpoint expired");
@@ -436,7 +439,25 @@ export class DesktopProvider {
             if(p.fileTicket){
               if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
               const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
-              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined).then(async worker=>{if(!this.live(s)){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&!p.options.virtualDisplay?{
+                origin:scope?.nativeOrigin??url.origin.replace(/^ws/,"http"),
+                runtime:this.nativeSelection,paths:(paths,signal)=>this.nativeSelection.paths(paths,signal),
+                pointer:seq=>{
+                  const proof=s.pointerWitness,owner=this.resources.identity(s,"control");
+                  if(!proof||proof.seq!==seq||!owner||owner.source!==proof.source||owner.epoch!==proof.point.epoch)return;
+                  const valid=()=>this.live(s)&&s.control&&s.pointerWitness===proof&&this.resources.identity(s,"control")?.source===proof.source&&this.resources.identity(s,"control")?.epoch===proof.point.epoch&&performance.now()-proof.at<750;
+                  if(!valid())return;
+                  return {seq,point:proof.point,at:proof.at,valid,release:async()=>{
+                    if(!valid())throw Error("元のドラッグ操作が終了しました");
+                    s.inputAcks.invalidatePointers();delete s.pointerWitness;s.control=false;
+                    s.process?.requestControl?.(false);
+                    this.write(s,{type:"control",enabled:false});
+                    const receipt=await this.resources.releaseConfirmed(s,"control");
+                    if(!this.live(s)||s.process?.resourceChannel!==proof.source)throw Error("共有元が変更されました");
+                    return receipt;
+                  }};
+                },
+              }:undefined).then(async worker=>{if(!this.live(s)){await worker.close();return undefined;}return worker;}).catch(()=>undefined);
               socket.on("open",()=>socket.send(JSON.stringify({type:"video_provider",ticket:p.fileTicket})));
               const stop=()=>{void s.files?.then(worker=>worker?.close());socket.terminate();};let pending=0;
               socket.on("error",stop);socket.on("close",stop);socket.on("message",async(raw,binary)=>{if(!this.live(s))return;try{
@@ -667,6 +688,7 @@ export class DesktopProvider {
             s.secureDesktop = ready.secureDesktop === true;
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
             s.inputAcks.pointerEnabled=!s.secureDesktop&&!ready.virtualDisplay&&!cfg.nativePlatform&&!!cfg.fileRoot&&nativePointerProof===true&&s.process?.resourceChannel?.supported===true;
+            if(s.inputAcks.pointerEnabled&&options.files===true)void this.nativeSelection.prepare().catch(()=>{});
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
             s.lockScreenCover = ready.lockScreenCover === true;
             s.imeKeys = options.imeKeys === true && ready.imeKeys === true && !s.lockScreenCover;
@@ -959,6 +981,7 @@ export class DesktopProvider {
   dispose(preserveTransfers=false): void {
     if(preserveTransfers)this.freezeSavedTransfers();
     this.sourceEpoch++;
+    const nativeSelection=this.nativeSelection;this.nativeSelection=new DesktopNativeSelection();void nativeSelection.close().catch(()=>{});
     if(!preserveTransfers){this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});}
     this.unlockLease.stop();
     this.companion.dispose();

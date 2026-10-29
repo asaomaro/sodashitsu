@@ -1,3 +1,4 @@
+import {DesktopNativeFileRequest,DesktopNativeFileOffer} from "./desktopNativeFiles.js";
 import {DesktopFolderRequest,DesktopFolderCheckpointRequest,DesktopFolderPath} from "./desktopFolders.js";
 import { z } from "zod";
 import { WorkFileRequest } from "./work.js";
@@ -36,6 +37,7 @@ export const DesktopFileRequest = z
       z.object({ action: z.literal("grant"), enabled: z.boolean() }).strict(),
       z.object({ action: z.literal("list"), path }).strict(),
       WorkFileRequest,
+      DesktopNativeFileRequest,
       DesktopCheckpointRequest,
       DesktopFolderRequest,
       DesktopFolderCheckpointRequest,
@@ -51,6 +53,7 @@ export const DesktopFileResult = z
     message: z.string().max(500).optional(),
     result: z
       .object({
+        native:DesktopNativeFileOffer.optional(),
         id: z.string().uuid().optional(),
         checkpoint: checkpoint.optional(),
         folderFiles:z.array(z.object({path:DesktopFolderPath,offset,done:z.boolean()}).strict()).max(1000).optional(),

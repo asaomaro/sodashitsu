@@ -69,9 +69,9 @@ export class DesktopEndpointBackplane {
    plane.origin=`http://127.0.0.1:${(plane.server.address() as AddressInfo).port}`;return plane;
   }catch{await plane.close();throw failure();}
  }
- root(publicMachine:string,active:()=>boolean):DesktopEndpointRoot {
+ root(publicMachine:string,active:()=>boolean,nativeOrigin=this.origin):DesktopEndpointRoot {
   if(this.closed||this.roots.size>=8||!DesktopEndpointMachine.safeParse(publicMachine).success||!active())throw failure();
-  const scope=this.provider.endpointScope(this.origin,()=>!this.closed&&active());
+  const scope=this.provider.endpointScope(this.origin,()=>!this.closed&&active(),nativeOrigin);
   const root:RootState={session:randomUUID(),machine:randomUUID(),publicMachine,cookie:"SodaDesktopEndpoint="+randomBytes(32).toString("hex"),agentScope:randomBytes(32).toString("base64url"),scope,closed:false,parent:false,sockets:new Set(),channels:new Set(),close:()=>{
    if(root.closed)return;root.closed=true;
    // Stop native/UDP/helper ownership before revoking the plaintext sockets.

@@ -1,12 +1,12 @@
 import {afterEach,expect,it,vi} from "vitest";
-import {mkdtemp,readFile,rm} from "node:fs/promises";
+import {mkdtemp,readFile,rm,writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {randomUUID} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {WebSocket} from "ws";
 import type {LinkChannel} from "../machine/MachineLink.js";
-import {DESKTOP_IMAGE_LANE_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DesktopOptions,decodeDesktopFrame} from "@sodashitsu/protocol";
+import {DESKTOP_FILES_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL,DESKTOP_INPUT_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DesktopOptions,decodeDesktopFrame} from "@sodashitsu/protocol";
 import {DesktopProvider,type DesktopProviderConfig} from "./DesktopProvider.js";
 import {DesktopEndpointBackplane,type DesktopEndpointRoot} from "./DesktopEndpointBackplane.js";
 const cleanup:(()=>Promise<void>)[]=[];
@@ -27,7 +27,7 @@ async function fixture(allowInput=true) {
 it("rejects legacy and forged endpoint starts before opening a provider socket",async()=>{
  const f=await fixture(),params={url:"ws://127.0.0.1:9/desktop-share",ticket:"x".repeat(43),options:DesktopOptions.parse({})};
  await expect(f.provider.start("legacy",params)).rejects.toThrow("Authenticated");
- await expect(f.provider.start("forged",params,{origin:"http://127.0.0.1:9",epoch:f.provider.epoch,active:()=>true})).rejects.toThrow("Authenticated");expect(await f.log(f.lifecycle)).toEqual([]);
+ await expect(f.provider.start("forged",params,{origin:"http://127.0.0.1:9",nativeOrigin:"http://127.0.0.1:9",epoch:f.provider.epoch,active:()=>true})).rejects.toThrow("Authenticated");expect(await f.log(f.lifecycle)).toEqual([]);
 });
 it("runs the generated helper and raw input through the private permission backplane",async()=>{
  const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);expect(v.messages).toContainEqual(expect.objectContaining({type:"ready",backend:"synthetic"}));
@@ -139,4 +139,17 @@ it("preserves the input ceiling and reclaims the finite private owner capacity",
 it("does not register an agent owner if its active callback invalidates the provider during construction",async()=>{
  const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);const grant=v.root.grantAgent({fingerprint:"a".repeat(64),active:()=>true});
  expect(()=>f.plane.agent("a".repeat(64),grant.scope,()=>{f.provider.configure(f.config);return true;})).toThrow();expect((f.plane as unknown as{agentOwners:Map<unknown,unknown>}).agentOwners.size).toBe(0);
+});
+
+it("binds native file offers to the trusted outer origin across the private endpoint backplane",async()=>{
+ const f=await fixture(),rootPath=join(f.record,".."),path=join(rootPath,"selected.txt"),origin="https://outer.example";await writeFile(path,"endpoint native");f.provider.configure({...f.config,fileRoot:rootPath,command:[...f.config.command,"--pointer-witness-generated"]});
+ const runtime=(f.provider as any).nativeSelection;vi.spyOn(runtime,"prepare").mockResolvedValue(undefined);const capture=vi.spyOn(runtime,"capture").mockResolvedValue([path]);vi.spyOn(runtime,"paths").mockImplementation(async(paths:any)=>paths);
+ const root=f.plane.root(f.publicMachine,()=>true,origin),v=await f.viewer([DESKTOP_FILES_PROTOCOL,DESKTOP_INPUT_PROTOCOL],root);
+ v.send({type:"start",machineId:f.publicMachine,options:{width:320,fps:10,quality:65,files:true}});await expect.poll(()=>v.frames.length).toBeGreaterThan(0);await expect.poll(()=>v.messages.some(m=>m.type==="files_ticket")).toBe(true);
+ const messages:any[]=[],child=await root.open([DESKTOP_FILES_PROTOCOL],(bytes,binary)=>{expect(binary).toBe(false);messages.push(JSON.parse(new TextDecoder().decode(bytes)));},()=>{});child.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
+ const run=async(request:unknown)=>{const id=randomUUID();child.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>messages.some(m=>m.id===id)).toBe(true);return messages.find(m=>m.id===id);};
+ expect((await run({action:"grant",enabled:true})).ok).toBe(true);v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"pointer",x:0.5,y:0.5,event:"down",button:0}});await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ const forged=await run({action:"native_prepare",gesture:randomUUID(),origin:"https://forged.example",seq:1});expect(forged.ok).toBe(false);expect(capture).not.toHaveBeenCalled();
+ const gesture=randomUUID(),prepared=await run({action:"native_prepare",gesture,origin,seq:1});expect(prepared.ok).toBe(true);const offer=prepared.result.native;expect((await run({action:"native_activate",gesture,lease:offer.lease})).ok).toBe(true);
+ const read=await run({action:"native_read",gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:15});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("endpoint native");root.close();
 });

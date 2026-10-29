@@ -567,7 +567,7 @@ export class DesktopEndpointService {
             if (!childProtocol) {
               const plane = await this.getPlane();
               if (!active()) throw unavailable();
-              context.root = plane.root(context.machine, active);
+              context.root = plane.root(context.machine, active,context.origin.replace(/^ws/,"http"));
             }
             if (!context.root || !active()) throw unavailable();
             const local = await context.root.open(
