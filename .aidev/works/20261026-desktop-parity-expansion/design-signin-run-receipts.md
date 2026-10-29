@@ -47,3 +47,11 @@ Native Host/package assets and compile lists must be updated together. This rema
 ## Resume confirmation after blocking inspection
 
 The native launcher performs one-shot admission, then the existing blocking package/runtime freshness check, then one final confirmation immediately before ResumeThread. Final confirmation is not a new grant: it verifies the consumed admission's original wall/monotonic expiry, the observation's original10s deadline, backward-clock/close/reentry/stop state, and single confirmation. It performs no filesystem/ACL work. No blocking scope inspection follows confirmation. Receipt publication also requires this confirmed state. This bounds the inspection-to-resume gap; it does not claim atomic scheduling between the last clock sample and the OS call.
+
+## Controller integration and clean normal retention
+
+A separate private SYSTEM/Administrators journal mutex serializes the entire write transition and the entire reader snapshot. It is distinct from the long-lived owner controller mutex: Host never acquires the owner mutex. Owner→journal is the controller order; Host uses journal only. A live stage is not exposed to readers as an unknown recovery artifact, and no stage is automatically removed after a failed writer. Generated ordinary tests use an isolated current-user mutex namespace, not the real privileged namespace.
+
+Admin start keeps the exact observed process handle through natural completion and persists independently observed stop before returning. Its output says inspect-required for the administrative result; resource exit0 does not imply the operation succeeded. Normal clean Node completion instead retains the native Host/package/runtime until an explicit stop, so a later controller can pin the still-live Host before requesting its exit. Unexpected Host/process failure remains recovery.
+
+A clean SCM STOPPED report may be received before the retained process is signaled. The controller waits within its finite budget for both, then validates actual exit0 on the same handle. The generated test deliberately reports stopped while an ordinary Host is held by an exit gate; the controller must wait and cannot infer process exit from SCM status.

@@ -1,6 +1,6 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
-$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunAdmission.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninRunStorage.cs','WindowsSigninRunSession.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsSigninHostChecks.cs','WindowsSigninRunSessionChecks.cs')
+$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunAdmission.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninRunStorage.cs','WindowsSigninRunSession.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsSigninHostChecks.cs','WindowsSigninRunSessionChecks.cs')
 $owner='S-1-5-21-1-2-3-1001'
 $combined=($files|ForEach-Object {[IO.File]::ReadAllText((Join-Path $PSScriptRoot $_))}) -join "`n"
 $combined=$combined.Replace('__SIGNIN_OWNER_SID__',$owner)

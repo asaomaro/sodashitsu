@@ -40,8 +40,10 @@ internal static class SodaDesktopSigninProcessEvidence {
         }}
         // This method intentionally does not call Current (which requires a live
         // process), and never opens a new handle using the stored PID.
-        internal bool CleanExit(){lock(gate){
-            try{uint code;if(!Scope()||WaitForSingleObject(handle,0)!=0||!GetExitCodeProcess(handle,out code)||code!=0||GetProcessId(handle)!=Process.Pid||Creation(handle)!=Process.Created||!Scope())return false;return true;}catch{ended=true;return false;}
+        internal bool Exited(out uint code){return ExitCore(out code,false);}
+        internal bool CleanExit(){uint code;return ExitCore(out code,true);}
+        bool ExitCore(out uint code,bool clean){lock(gate){code=0;
+            try{if(!Scope()||WaitForSingleObject(handle,0)!=0||!GetExitCodeProcess(handle,out code)||clean&&code!=0||GetProcessId(handle)!=Process.Pid||Creation(handle)!=Process.Created||!Scope())return false;return true;}catch{ended=true;return false;}
         }}
         public void Dispose(){lock(gate){ended=true;if(handle!=null){handle.Dispose();handle=null;}}}
     }

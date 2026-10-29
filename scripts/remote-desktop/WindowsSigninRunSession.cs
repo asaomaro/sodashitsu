@@ -5,10 +5,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 internal sealed class SodaDesktopSigninRunSession:IDisposable {
-    readonly object gate=new object();readonly SodaDesktopSigninRunJournal journal;readonly SodaDesktopSigninRunAdmission admission;readonly SodaDesktopSigninRunObservation observation;
+    internal readonly bool Admin;readonly object gate=new object();readonly SodaDesktopSigninRunJournal journal;readonly SodaDesktopSigninRunAdmission admission;readonly SodaDesktopSigninRunObservation observation;
     readonly SodaDesktopSigninRunRecord started;readonly Func<long> wall;readonly Func<bool> current,immediate;bool ended,resumed,finalized,completed,completing;
     static Exception Failure(){return new InvalidOperationException("Signin run session is unavailable");}
-    SodaDesktopSigninRunSession(SodaDesktopSigninRunJournal journal,SodaDesktopSigninRunAdmission admission,SodaDesktopSigninRunObservation observation,SodaDesktopSigninRunRecord started,Func<long> wall,Func<bool> current,Func<bool> immediate){this.immediate=immediate;this.journal=journal;this.admission=admission;this.observation=observation;this.started=started;this.wall=wall;this.current=current;}
+    SodaDesktopSigninRunSession(SodaDesktopSigninRunJournal journal,SodaDesktopSigninRunAdmission admission,SodaDesktopSigninRunObservation observation,SodaDesktopSigninRunRecord started,Func<long> wall,Func<bool> current,Func<bool> immediate,bool admin){Admin=admin;this.immediate=immediate;this.journal=journal;this.admission=admission;this.observation=observation;this.started=started;this.wall=wall;this.current=current;}
     static IDictionary<string,object> Fields(SodaDesktopSigninRunRecord intent,string kind){return new Dictionary<string,object>{{"version",1},{"purpose","desktop-signin-run"},{"kind",kind},{"ownerSid",intent.Owner},{"runId",intent.RunId},{"packageSha256",intent.Field("packageSha256")},{"barrierSha256",intent.Field("barrierSha256")}};}
     internal static SodaDesktopSigninRunSession Open(SodaDesktopSigninRunJournal journal,string owner,Func<bool> current,WaitHandle stop){
         try{var clock=Stopwatch.StartNew();return OpenCore(journal,SodaDesktopSigninProcessEvidence.Self(),current,()=>stop.WaitOne(0),ms=>stop.WaitOne(ms),()=>DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),()=>clock.ElapsedMilliseconds,intent=>SodaDesktopSigninRunStorage.Mode(owner,intent,current),null);}catch{if(journal!=null)journal.Dispose();throw;}
@@ -26,7 +26,7 @@ internal sealed class SodaDesktopSigninRunSession:IDisposable {
                 long at=mono();if(at<last||at-began>=10000||!admission.Current(()=>!stopped()&&current())||wait(25))throw Failure();last=at;
             }
             if(!observation.Accept(journal.Observation(),()=>!stopped()&&current()))throw Failure();
-            var result=new SodaDesktopSigninRunSession(journal,admission,observation,started,wall,()=>!stopped()&&current(),()=>!stopped());transferred=true;return result;
+            var result=new SodaDesktopSigninRunSession(journal,admission,observation,started,wall,()=>!stopped()&&current(),()=>!stopped(),(string)intent.Field("mode")=="admin");transferred=true;return result;
         }finally{if(!transferred){if(observation!=null)observation.Close();if(admission!=null)admission.Close();if(journal!=null)journal.Dispose();}}
     }
     internal bool Ready(){lock(gate){return !ended&&!resumed&&observation.CanResume(current);}}
