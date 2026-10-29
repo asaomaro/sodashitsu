@@ -24,7 +24,20 @@ All27 scoped paths passed exact source/root byte preflight before any mutation. 
 
 ## Full verification and delivery
 
-Source final build/typecheck passed. Final whole tests running. Root final build/typecheck, final browser suites, clean external smoke, exact-head CI and PR/main receipt remain pending here until their logs are available. Earlier combined browser suite passed19cases before the final shutdown delta; its relevant restart cases are rerun after that delta. The first whole run found an old fd.stat test spy dropping the bigint option; the test now forwards options and includes the additional safe-cleanup identity stat. The shutdown-focused group passed36tests. Durable logs live under node_modules/.cache/durable-transfers in the source/root worktrees.
+Product commit: `eeb59f7ba504937325c28e0b30806e5791eb7411`, PR [#295](https://github.com/asaomaro/sodashitsu/pull/295).
+
+- Source build/typecheck passed; whole841files/12,528tests passed in419.64s.
+- Root build/typecheck passed; whole849files/12,590tests passed in445.04s.
+- Source browser19cases passed before the shutdown delta; final normal/encrypted restart upload/download4passed in51.0s. Root combined file/folder browser19passed in3.3m.
+- Generated actual-product child termination6boundaries passed after the final shutdown delta on Linux, and all6passed in the Windows CI using a real generated DPAPI-user metadata key.
+- Clean detached exact-product worktree `/workspaces/sodashitsu-desktop-durable-smoke`: frozen-lockfile install, build and smoke passed; git status output0bytes.
+- Independent source/taskcheck/correction/cross/merge reviews clear; final records review clear including the final result/merge-receipt delta.
+- Exact product head Windows CI4/4SUCCESS: [Node identity + restart boundaries](https://github.com/asaomaro/sodashitsu/actions/runs/40866480704) and [protected boundaries/upgrade/maintenance](https://github.com/asaomaro/sodashitsu/actions/runs/40866480669).
+- Main receipt: PR#295 merged at2026-10-29T11:52:13Z as `697421b286b51f2ee84c0d8a93361f439dca137b`; the merge tree equals the tested product commit.
+
+Whole suites were run serially between source and root with maxWorkers4. No whole suite was repeated by the independent reviewers. The first pre-final run caught an old fd.stat test spy that dropped bigint options; the corrected spy forwards arguments and counts the added identity check before safe temporary cleanup. The final shutdown corrections were independently re-reviewed, verified by two additional intended source negatives and included in the final build/typecheck/whole/process/browser checks.
+
+Current live A/B runtime was not restarted or deployed in this phase. This does not complete folder persistence, direct remote Explorer OLE drag, Linux/macOS feature parity or general unproven sign-in crash recovery. OS/kernel crash and power-loss guarantees remain excluded. Durable raw logs are under node_modules/.cache/durable-transfers in source/root, with the external clean logs at /tmp/soda-durable-clean-*.log.
 
 ## Raw intended-control excerpts
 
@@ -85,3 +98,15 @@ AssertionError: expected true to be false // Object.is equality
 ```
 
 Both source variants failed intended runtime assertions, exact bytes were restored, and corresponding positives passed. All six generated process boundaries passed again after the shutdown delta.
+
+## Windows process-boundary raw markers
+
+```text
+generated_transfer_process_boundary_data_ack_pass
+generated_transfer_process_boundary_before_link_pass
+generated_transfer_process_boundary_after_link_pass
+generated_transfer_process_boundary_after_unlink_pass
+generated_transfer_process_boundary_receipt_pass
+generated_transfer_process_boundary_download_pass
+generated_transfer_restart_new_grant_exact_prefix_publication_and_receipt_pass
+```
