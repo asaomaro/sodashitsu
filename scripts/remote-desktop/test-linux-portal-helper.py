@@ -49,7 +49,7 @@ class Guards(unittest.TestCase):
   helper.dead=True;self.assertFalse(helper.commit(g.revision,lambda:self.fail("Ended scope was published")))
  def test_chunked_record_keeps_ordinary_input_outside_the_complete_json(self):
   from unittest.mock import patch
-  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:None),None);guard,c,a=self.setup_guard();helper.guard=guard;line=b"x"*40000+b"\n";helper.output_queue.put((line,guard.revision,1,None,False));chunks=[];input_done=threading.Event();threads=[]
+  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:None),None);guard,c,a=self.setup_guard();helper.guard=guard;line=b"x"*40000+b"\n";helper.output_queue.put((line,guard.revision,1,None,False,None));chunks=[];input_done=threading.Event();threads=[]
   def input():
    helper.mutate_input(lambda:guard.input(self.command(1,{"kind":"key","code":"KeyA","down":True})));input_done.set()
   def write(fd,data):
@@ -64,9 +64,51 @@ class Guards(unittest.TestCase):
   with patch.object(module,"os",fakeos),patch.object(module.select,"select",lambda *args:([],[1],[])),patch.object(module.sys,"stdout",SimpleNamespace(fileno=lambda:1)):helper.writer()
   for thread in threads:thread.join(1)
   self.assertTrue(input_done.is_set());self.assertEqual(b"".join(chunks),line);self.assertEqual(guard.seq,1)
- def test_damage_only_producer_stops_explicitly_without_refreshing_old_pixels(self):
-  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),None);helper.guard,c,a=self.setup_guard();helper.ready=True;helper.pipeline=object();helper.last_sample=module.time.monotonic()-2.5;errors=[];helper.failure=lambda code:errors.append(code)
-  self.assertFalse(helper.pump());self.assertEqual(errors,["source_stalled"]);self.assertEqual(helper.seq,0);self.assertTrue(helper.output_queue.empty())
+ def idle_helper(self):
+  gst=SimpleNamespace(StateChangeReturn=SimpleNamespace(FAILURE=-1),State=SimpleNamespace(PLAYING=4))
+  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:None),gst);helper.guard,c,a=self.setup_guard();helper.ready=True;helper.session="generated";helper.scope=SimpleNamespace(alive=lambda:a[0]);helper.pipeline=SimpleNamespace(get_state=lambda timeout:(0,4,0));helper.sink=SimpleNamespace(emit=lambda *args:None);helper.last_sample=module.time.monotonic()-2.5;helper.seq=7
+  helper.failure_codes=[];helper.failure=lambda code:helper.failure_codes.append(code)
+  return helper,a
+ def test_damage_only_producer_preserves_image_time_sequence_and_input_floor(self):
+  helper,a=self.idle_helper();sample=helper.last_sample;self.assertTrue(helper.pump());self.assertEqual(helper.failure_codes,[]);self.assertEqual(helper.seq,7);self.assertEqual(helper.last_sample,sample);self.assertEqual(helper.guard.seq,0)
+  notice=module.json.loads(helper.output_queue.get_nowait()[0]);self.assertEqual(notice,{"type":"platform_idle","backend":"linux-portal","seq":7,"counter":1});self.assertTrue(helper.pump());self.assertTrue(helper.output_queue.empty())
+ def test_quiet_but_paused_pipeline_ends_instead_of_holding_a_live_input_session(self):
+  helper,a=self.idle_helper();helper.pipeline=SimpleNamespace(get_state=lambda timeout:(0,3,0));self.assertFalse(helper.pump());self.assertEqual(helper.failure_codes,["source_changed"]);self.assertTrue(helper.output_queue.empty())
+ def test_idle_admission_rechecks_ack_new_frame_revision_scope_and_pipeline(self):
+  for mode in ["ack","frame","revision","scope","paused","heartbeat"]:
+   helper,a=self.idle_helper();helper.publish_idle();record=helper.output_queue.get_nowait();publish=record[-1];self.assertTrue(publish())
+   if mode=="ack":helper.pending=7
+   elif mode=="frame":helper.seq=8
+   elif mode=="revision":helper.guard.revision+=1
+   elif mode=="scope":a[0]=False
+   elif mode=="paused":helper.pipeline=SimpleNamespace(get_state=lambda timeout:(0,3,0))
+   elif mode=="heartbeat":helper.last_heartbeat=module.time.monotonic()-8
+   self.assertFalse(publish(),mode)
+ def test_writer_drops_a_queued_idle_notice_invalidated_before_publication(self):
+  from unittest.mock import patch
+  for mode in ["ack","frame","revision","scope","paused","heartbeat"]:
+   helper,a=self.idle_helper();helper.publish_idle();record=helper.output_queue.get_nowait()
+   if mode=="ack":helper.pending=7
+   elif mode=="frame":helper.seq=8
+   elif mode=="revision":helper.guard.revision+=1
+   elif mode=="scope":a[0]=False
+   elif mode=="paused":helper.pipeline=SimpleNamespace(get_state=lambda timeout:(0,3,0))
+   elif mode=="heartbeat":helper.last_heartbeat=module.time.monotonic()-8
+   records=iter([record]);helper.output_queue=SimpleNamespace(get=lambda **kwargs:next(records));chunks=[]
+   fakeos=SimpleNamespace(set_blocking=lambda *args:None,write=lambda fd,data:chunks.append(data) or len(data),_exit=lambda _:self.fail("invalid queued notice was partially published"))
+   with patch.object(module,"os",fakeos),patch.object(module.select,"select",lambda *args:([],[1],[])),patch.object(module.sys,"stdout",SimpleNamespace(fileno=lambda:1)):
+    with self.assertRaises(StopIteration):helper.writer()
+   self.assertEqual(chunks,[],mode)
+ def test_writer_refuses_owner_expiry_during_the_native_pipeline_query(self):
+  from unittest.mock import patch
+  helper,a=self.idle_helper();helper.publish_idle();record=helper.output_queue.get_nowait();records=iter([record]);helper.output_queue=SimpleNamespace(get=lambda **kwargs:next(records));chunks=[];clock=[module.time.monotonic()]
+  def query(_timeout):clock[0]+=8;return (0,4,0)
+  helper.pipeline=SimpleNamespace(get_state=query)
+  fakeos=SimpleNamespace(set_blocking=lambda *args:None,write=lambda fd,data:chunks.append(data) or len(data),_exit=lambda _:self.fail("expired record was partially published"))
+  with patch.object(module.time,"monotonic",lambda:clock[0]),patch.object(module,"os",fakeos),patch.object(module.select,"select",lambda *args:([],[1],[])),patch.object(module.sys,"stdout",SimpleNamespace(fileno=lambda:1)):
+   start=clock[0];self.assertFalse(helper.idle_valid(helper.seq,helper.guard.revision));clock[0]=start
+   with self.assertRaises(StopIteration):helper.writer()
+  self.assertEqual(chunks,[])
  def test_pts_barrier_drops_pre_input_buffers(self):
   helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),SimpleNamespace(CLOCK_TIME_NONE=999999,Format=SimpleNamespace(TIME=1)));guard,c,a=self.setup_guard();helper.guard=guard;helper.ready=True;helper.native_size=(1920,1080);helper.barrier=15;helper.config={"fps":10};helper.pipeline=object()
   caps=lambda width,height:SimpleNamespace(get_structure=lambda _:SimpleNamespace(get_value=lambda key:{"width":width,"height":height}[key]))

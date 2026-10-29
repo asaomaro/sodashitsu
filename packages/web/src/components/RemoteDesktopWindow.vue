@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
+import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {DESKTOP_FILE_CHECKPOINTS_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopEndpointAgentPeers,DesktopEndpointAgentTicket,DesktopEndpointAgentError,parseDesktopAgentGrant} from "@sodashitsu/protocol";
 import {DesktopSigninRequired,desktopFeaturesProtocol} from "@sodashitsu/protocol";
@@ -85,6 +86,7 @@ function grantSignin(control:boolean){
   send({type:"signin_grant",id:offer.id,control});
 }
 const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<DesktopInputCapabilities>();
+const platformIdle=ref(false),platformIdleCounter=ref(0);let sourceIdle=new DesktopSourceIdle();
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
 const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
 const lockScreenCover = ref(false);
@@ -496,6 +498,7 @@ function stop(preserveCapabilities=false) {
   ws?.close(1000, "desktop stopped");
   ws = undefined;
   platformBackend.value=undefined;inputCapabilities.value=undefined;
+  platformIdle.value=false;sourceIdle=new DesktopSourceIdle();
   ready.value = connected.value = false;
   if (secureDesktop.value) {
     text.value = '';
@@ -638,6 +641,7 @@ function connect(automatic = false) {
           el.getContext("2d")!.drawImage(sourceCanvas, 0, 0);
         }
         info.value = frame.info;
+        sourceIdle.frame();platformIdle.value=false;
         lastDrawn = frame.info.seq;
         rendered.value++;
         cursorRenderer?.paint();
@@ -903,6 +907,8 @@ function connect(automatic = false) {
             );
             if (policy) send(policy);
           }
+        } else if(m.type==="platform_idle"){
+          const notice=sourceIdle.receive(m,{backend:platformBackend.value,ready:ready.value,pending:decoding?1:0,seq:lastDrawn});if(notice){platformIdle.value=true;platformIdleCounter.value=notice.counter;}
         } else if (m.type === "input_ack") {
           nativeTransfer.value?.ack(m.seq);
           const at = inputs.get(m.seq);
@@ -1159,6 +1165,7 @@ onBeforeUnmount(() => {
       >
         <div v-show="!toolbarCollapsed" class="viewer-toolbar-content">
         <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
+        <span v-if="platformIdle" data-native-idle :data-idle-counter="platformIdleCounter">新しい画像待ち（最終画像を表示）</span>
         <button
           :disabled="!ready || !allowed"
           @pointerdown.prevent
@@ -1213,7 +1220,7 @@ onBeforeUnmount(() => {
           ]
         }}
       </p>
-      <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止画面でも画像を送り続けるPortalが必要で、1.5秒無更新になると停止します。</template></p>
+      <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止中は最後の画像を表示し、人の操作を継続できます。エージェント操作には2秒以内に取得した実画像が必要です。</template></p>
       <template v-if="!signinSession">
       <label v-if="!platformBackend&&!signinSession"><input v-model="sharedScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>

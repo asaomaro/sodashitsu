@@ -1,4 +1,5 @@
 import {DesktopSharedMonitorsFailure} from "@sodashitsu/protocol";
+import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {desktopFeaturesFromProtocols} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_DELTAS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DesktopSharedClipboardFailure} from "@sodashitsu/protocol";
@@ -137,6 +138,7 @@ type Viewer = {
   viewerSeq: number;
   viewerAcks: Map<number, number>;
   frameAt: number;
+  sourceIdle:DesktopSourceIdle;
   lastSeen: number;
   messages: number;
   rateAt: number;
@@ -367,6 +369,7 @@ export class DesktopRelay {
       imeKeysRequested: ws.protocol === DESKTOP_IME_PROTOCOL || ws.protocol === DESKTOP_INPUT_PROTOCOL,
       extendedInputRequested: ws.protocol === DESKTOP_INPUT_PROTOCOL,
       frameAt: 0,
+      sourceIdle:new DesktopSourceIdle(),
       lastSeen: now,
       messages: 0,
       rateAt: now,
@@ -506,13 +509,13 @@ export class DesktopRelay {
             v.seq > 0 &&
             (v.nativeInputFreshness && v.media?.native
               ? v.media.drawnAt !== undefined && now - v.media.drawnAt < 2000
-              : now - v.frameAt < 5000)
+              : now - v.frameAt < 5000||v.sourceIdle.fresh({backend:v.nativePlatform,ready:v.ready,pending:v.pending,seq:v.seq}))
           ) {
             v.viewerSeq = m.seq;
             const seq = ++v.inputSeq;
             v.viewerAcks.set(seq, m.seq);
             if (v.viewerAcks.size > 64) v.viewerAcks.delete(v.viewerAcks.keys().next().value!);
-            if (!this.send(v.provider, { ...m, seq, ...(v.nativeInputFreshness && v.media?.native ? {nativeDraw:true} : {}) })) this.stop(v);
+            if (!this.send(v.provider, { ...m, seq, ...(v.nativeInputFreshness && v.media?.native ? {nativeDraw:true} : {}),...(v.sourceIdle.fresh({backend:v.nativePlatform,ready:v.ready,pending:v.pending,seq:v.seq})?{platformIdleInput:true}:{}) })) this.stop(v);
           } else cancelPointer();
         } else if (m.type === "ack") {
           if (!v.provider || v.pending !== m.seq) {
@@ -924,6 +927,7 @@ export class DesktopRelay {
           v.seq = info.seq;
           v.pending = info.seq;
           v.frameAt = now;
+          v.sourceIdle.frame();
           v.frames++;
           v.bytes += bytes.byteLength;
           if (!(imageLane?v.imageLane!.send(bytes):this.send(v.ws, new Uint8Array(bytes as Buffer)))) this.stop(v);
@@ -939,6 +943,7 @@ export class DesktopRelay {
           if(msg.type==="shared_clipboard_failure"&&v.sharedClipboard){DesktopSharedClipboardFailure.parse(msg);this.send(v.ws,{type:"error",message:"接続先の補助プログラムがクリップボード共有に対応していません。更新するか、全ての窓でクリップボード経路の共有を解除してください。"});this.stop(v);return;}
           if(msg.type==="shared_monitors_failure"&&v.sharedMonitors){DesktopSharedMonitorsFailure.parse(msg);this.send(v.ws,{type:"error",message:"接続先の補助プログラムがモニター共有に対応していません。更新するか、全ての窓でモニター選択の共有を解除してください。"});this.stop(v);return;}
           if(msg.type==="shared_cursor_failure"&&v.sharedCursor){DesktopSharedCursorFailure.parse(msg);this.send(v.ws,{type:"error",message:"接続先の補助プログラムが独立カーソル共有に対応していません。更新するか、全ての窓で独立カーソル共有を解除してください。"});this.stop(v);return;}
+          if(msg.type==="platform_idle"){const notice=v.sourceIdle.receive(msg,{backend:v.nativePlatform,ready:v.ready,pending:v.pending,seq:v.seq});if(notice)this.send(v.ws,notice);return;}
           if(msg.type==="platform_failure"&&v.nativePlatform){const failure=DesktopNativePlatformFailure.parse(msg);if(failure.backend!==v.nativePlatform)throw Error("Unexpected native failure");this.send(v.ws,{type:"error",message:desktopNativePlatformFailureMessage(failure.code)});this.stop(v);return;}
           if(v.elevatedDesktop&&["unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(msg.type)){this.send(v.ws,{type:"error",message:desktopProtectedFailureMessage("source_changed")});this.stop(v);return;}
           if(msg.type==="protected_desktop_failure"&&v.elevatedDesktop){const failure=DesktopProtectedFailure.parse(msg);this.send(v.ws,{type:"error",message:desktopProtectedFailureMessage(failure.code)});this.stop(v);return;}
@@ -1097,6 +1102,7 @@ export class DesktopRelay {
               const viewerSeq = v.viewerAcks.get(msg.seq);
               if (viewerSeq !== undefined) {
                 v.viewerAcks.delete(msg.seq);
+                if(v.nativePlatform)v.nativeInputFloor=Math.max(v.nativeInputFloor??0,msg.seq);
                 this.send(v.ws, { type: "input_ack", seq: viewerSeq });
               }
             }

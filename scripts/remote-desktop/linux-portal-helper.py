@@ -134,11 +134,11 @@ class PortalHelper:
     SC="org.freedesktop.portal.ScreenCast";RD="org.freedesktop.portal.RemoteDesktop"
     def __init__(self, Gio, GLib, Gst, scope_factory=None):
         self.output_gate=threading.RLock();self.Gio=Gio;self.GLib=GLib;self.Gst=Gst;self.loop=GLib.MainLoop();self.scope_factory=scope_factory or (lambda:LoginScope(Gio,GLib,gate=self.output_gate));self.scope=None;self.last_scope_check=0;self.connection=None;self.session=None;self.requests={};self.subscriptions=[]
-        self.dead=False;self.closed=False;self.ready=False;self.barrier=-1;self.next_emit=0;self.config=None;self.pipeline=None;self.fd=None;self.guard=None;self.pending=0;self.seq=0;self.last_pts=None;self.last_sample=None;self.last_heartbeat=time.monotonic();self.configured_at=None;self.commands=queue.Queue(maxsize=64);self.queued=None;self.output_queue=queue.Queue(maxsize=64)
-    def output(self,value,revision=None):
+        self.dead=False;self.closed=False;self.ready=False;self.barrier=-1;self.next_emit=0;self.config=None;self.pipeline=None;self.fd=None;self.guard=None;self.pending=0;self.seq=0;self.last_pts=None;self.last_sample=None;self.last_idle=0;self.idle_counter=0;self.last_heartbeat=time.monotonic();self.configured_at=None;self.commands=queue.Queue(maxsize=64);self.queued=None;self.output_queue=queue.Queue(maxsize=64)
+    def output(self,value,revision=None,publish=None):
         if self.dead:return
         line=(json.dumps(value,separators=(",",":"),ensure_ascii=True)+"\n").encode()
-        try:self.output_queue.put_nowait((line,revision,value.get("info",{}).get("seq"),None,False))
+        try:self.output_queue.put_nowait((line,revision,value.get("info",{}).get("seq"),None,False,publish))
         except queue.Full:raise NativeFailure("backend_failure")
     def commit(self,revision,action,failure=False):
         with self.output_gate:
@@ -149,7 +149,7 @@ class PortalHelper:
     def writer(self):
         fd=sys.stdout.fileno();os.set_blocking(fd,False)
         while not self.closed:
-            try:line,revision,seq,done,failure=self.output_queue.get(timeout=0.1)
+            try:line,revision,seq,done,failure,publish=self.output_queue.get(timeout=0.1)
             except queue.Empty:continue
             # Serialize the entire bounded JSON record with ordinary input.
             # Revisions cannot change between chunks. An OS scope invalidation
@@ -160,13 +160,15 @@ class PortalHelper:
                     if time.monotonic()>deadline:os._exit(1)
                     if not select.select([], [fd], [], 0.01)[1]:continue
                     try:
-                        if not self.commit(revision,lambda:None,failure):
+                        if not self.commit(revision,lambda:None,failure) or publish and not publish():
                             if offset:os._exit(1)
                             break
                         offset+=os.write(fd,line[offset:offset+16384])
                     except BlockingIOError:continue
                     except OSError:os._exit(1)
-            if not self.commit(revision,record,failure) and seq:self.GLib.idle_add(self.discard_pending,seq)
+            def admitted():
+                if publish is None or publish():record()
+            if not self.commit(revision,admitted,failure) and seq:self.GLib.idle_add(self.discard_pending,seq)
             if done:done.set()
     def discard_pending(self,seq):
         if self.pending==seq:self.pending=0
@@ -177,7 +179,7 @@ class PortalHelper:
         done=threading.Event()
         try:
             line=(json.dumps({"type":"platform_failure","backend":"linux-portal","code":code})+"\n").encode()
-            self.output_queue.put_nowait((line,None,None,done,True));done.wait(0.1)
+            self.output_queue.put_nowait((line,None,None,done,True,None));done.wait(0.1)
         except queue.Full:pass
         finally:self.close()
     def close(self):
@@ -296,6 +298,26 @@ class PortalHelper:
                 if accepted:self.output({"type":"input_ack","seq":message["seq"]})
         else:raise NativeFailure("unsupported")
     def pump(self):
+        # Sequence/ACK/quiet state and final output admission use the same lock.
+        with self.output_gate:return self.pump_locked()
+    def idle_valid(self,seq,revision):
+        try:
+            def current_scope():
+                if self.dead or not self.ready or not self.session or not self.scope or not self.scope.alive() or not self.guard or revision!=self.guard.revision or self.pending or seq<1 or seq!=self.seq or self.last_sample is None or not self.pipeline:return False
+                now=time.monotonic()
+                return now-self.last_sample>=0.5 and now-self.last_heartbeat<8
+            if not current_scope():return False
+            result,current,_pending=self.pipeline.get_state(0)
+            # A nonblocking native query can still cross an owner deadline.
+            return result!=self.Gst.StateChangeReturn.FAILURE and current==self.Gst.State.PLAYING and current_scope()
+        except Exception:return False
+    def publish_idle(self):
+        seq,revision=self.seq,self.guard.revision
+        if time.monotonic()-self.last_idle<0.5 or not self.idle_valid(seq,revision):return
+        if self.idle_counter>=9007199254740991:raise NativeFailure("backend_failure")
+        self.last_idle=time.monotonic();self.idle_counter+=1
+        self.output({"type":"platform_idle","backend":"linux-portal","seq":seq,"counter":self.idle_counter},revision,lambda:self.idle_valid(seq,revision))
+    def pump_locked(self):
         if self.dead:return False
         try:
             if self.scope and time.monotonic()-self.last_scope_check>0.25:
@@ -309,10 +331,6 @@ class PortalHelper:
             if time.monotonic()-self.last_heartbeat>8:raise NativeFailure("source_changed")
             if self.configured_at and not self.ready and time.monotonic()-self.configured_at>115:raise NativeFailure("permission_cancelled")
             if self.pipeline:
-                # Damage-only producers cannot prove a fresh post-input snapshot.
-                # End explicitly before the common input freshness deadline; never
-                # renew capture time/sequence by relabelling a retained buffer.
-                if self.last_sample is not None and time.monotonic()-self.last_sample>1.5:raise NativeFailure("source_stalled")
                 sample=self.sink.emit("try-pull-sample",0)
                 if sample:
                     buffer=sample.get_buffer();caps=sample.get_caps().get_structure(0);width=caps.get_value("width");height=caps.get_value("height");pts=buffer.pts
@@ -334,6 +352,12 @@ class PortalHelper:
                         encoded=base64.b64encode(data).decode();info={"seq":self.seq+1,"width":width,"height":height,"format":"image/jpeg","captureMs":0,"encodeMs":0,"timing":"unavailable","sourceInputSeq":self.guard.seq}
                         if not self.dead and revision==self.guard.revision:
                             self.seq+=1;self.pending=self.seq;self.next_emit=time.monotonic()+1/self.config["fps"];self.output({"type":"frame","info":info,"data":encoded},revision)
+                # Quiet is session/pipeline liveness only, never new pixels.
+                if self.ready:
+                    if self.last_sample is not None and time.monotonic()-self.last_sample>=0.5:
+                        result,state,_pending=self.pipeline.get_state(0)
+                        if result==self.Gst.StateChangeReturn.FAILURE or state!=self.Gst.State.PLAYING:raise NativeFailure("source_changed")
+                    self.publish_idle()
             return not self.dead
         except NativeFailure as error:self.failure(error.code)
         except Exception:self.failure("backend_failure")
