@@ -7,6 +7,6 @@
 - [x] Separate private owner-slot journal mutex protects every reader snapshot and writer operation, preserving incomplete-artifact recovery (taskcheck).
 - [x] Full ordinary generated Host/child/Job/DPAPI/journal with fake SCM, deterministic staged publication and stopped-before-exit gate, ten source controls.
 - [x] Existing nine native regression groups and independent source/fix review.
-- [ ] Final records review, Windows CI and guarded delivery.
+- [x] Final records review, Windows CI and guarded delivery.
 
 The concrete local controller source is connected; actual SCM/installed state/privileged Host Main/desktop/input/audio/keys/trust are not exercised. Installer and explicit recovery/admin-request preparation/result acknowledgment tooling remain unfinished. No automatic installation or activation.

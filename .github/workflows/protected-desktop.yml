@@ -54,6 +54,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           scripts/remote-desktop/validate-signin-run-admission.ps1 -NegativeControls
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Local admin preparation and bounded UTF8 input (generated only)
+        shell: powershell
+        run: |
+          scripts/remote-desktop/control-signin-admin.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001 -ManifestSha256 ('a' * 64)
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          scripts/remote-desktop/validate-signin-admin-controller.ps1 -NegativeControls
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Dedicated controller compilation only and ordinary generated lifecycle
         shell: powershell
         run: |
