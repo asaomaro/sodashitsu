@@ -359,6 +359,7 @@ function run() {
       process.exit(1);
     }
   });
+  let idleCounter=0,nextIdle=0;
   setInterval(() => {
     if(protectedMode&&protectedEndMarker&&existsSync(protectedEndMarker)&&!protectedEnded){protectedEnded=true;control=false;held.clear();note("scope-ended");send({type:"protected_desktop_failure",code:"source_changed"});setTimeout(()=>process.exit(0),20);return;}
     if(protectedEnded)return;
@@ -373,6 +374,12 @@ function run() {
       send({type:"native_frame",...(nativeCodecs?{codecName:native.codec,...(native.codecFallback?{codecFallback:native.codecFallback}:{})}:{}),...(nativeAdaptive?{generation:native.generation,captureMs:native.profile===0?55:5}:{}),...(process.argv.includes("--native-test-cost")?{captureMs:80}:{}),id:native.id,seq:native.seq,timestamp:native.lastTimestamp,key:packet.key,...(packet.codec?{codec:packet.codec}:{}),width:fixture.width,height:fixture.height,data:packet.data});
     }
     if(native&&process.argv.includes("--stall-images-during-native"))return;
+    const idleFrameAt=process.argv.indexOf("--native-idle-frame-marker"),advanceIdle=seq===1&&idleFrameAt>=0&&existsSync(process.argv[idleFrameAt+1]);
+    if(nativePlatform==="linux-portal"&&options&&seq>0&&process.argv.includes("--native-idle")&&!advanceIdle){
+      const markerAt=process.argv.indexOf("--native-idle-end-marker");
+      if(!pending&&performance.now()>=nextIdle&&(markerAt<0||!existsSync(process.argv[markerAt+1]))){nextIdle=performance.now()+500;send({type:"platform_idle",backend:nativePlatform,seq,counter:++idleCounter});}
+      return;
+    }
     if (!options || lockCover || pending || performance.now() < next) return;
     const deltaTest = process.argv.includes("--delta-test"),
       stable = deltaTest || process.argv.includes("--static");

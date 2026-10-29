@@ -1,4 +1,5 @@
 import {DesktopNativeSelection} from "./DesktopNativeSelection.js";
+import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {dirname,join} from "node:path";
 import {DesktopHelperInputAck,type DesktopPointerWitness} from "./DesktopPointerWitness.js";
 import {createHash} from "node:crypto";
@@ -130,6 +131,7 @@ type Share = {
   pending: number;
   inputSeq: number;
   frameAt: number;
+  sourceIdle:DesktopSourceIdle;
   started: number;
   timer: ReturnType<typeof setInterval>;
 };
@@ -384,6 +386,7 @@ export class DesktopProvider {
       pending: 0,
       inputSeq: 0,
       frameAt: 0,
+      sourceIdle:new DesktopSourceIdle(),
       started: performance.now(),
       timer: setInterval(() => {
         if(!this.live(s))return;s.native?.tick();
@@ -499,6 +502,8 @@ export class DesktopProvider {
           // messages and agent actions retain their existing strict schemas.
           const nativeDraw = rawMessage.type === "input" && rawMessage.nativeDraw === true;
           if (nativeDraw) delete rawMessage.nativeDraw;
+          const platformIdleInput=rawMessage.type==="input"&&rawMessage.platformIdleInput===true;
+          if(platformIdleInput)delete rawMessage.platformIdleInput;
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
           if(p.options.sharedDesktop&&(!p.options.sharedRate||!s.sharedRate)&&m.type==="media"&&m.settings)m.settings.adaptive=false;
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
@@ -609,7 +614,7 @@ export class DesktopProvider {
               m.seq > s.inputSeq &&
               performance.now() - s.lastSeen < 5000 &&
               s.seq > 0 &&
-              (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000)
+              (nativeDraw ? s.native?.hasFreshDraw() === true : performance.now() - s.frameAt < 2000||platformIdleInput&&s.sourceIdle.fresh({backend:cfg.nativePlatform,ready:s.ready,pending:s.pending,seq:s.seq}))
             ) {
               s.inputSeq = m.seq;
               s.inputAcks.submitted(m.seq,m.input.kind==="pointer"&&m.input.event==="down"&&m.input.button===0);
@@ -794,6 +799,8 @@ export class DesktopProvider {
                   });
                 },
               });
+          } else if(raw.type==="platform_idle"){
+            const notice=s.sourceIdle.receive(raw,{backend:cfg.nativePlatform,ready:s.ready,pending:s.pending,seq:s.seq});if(notice)this.send(s,notice);
           } else if(raw.type==="platform_failure"&&cfg.nativePlatform){const failure=DesktopNativePlatformFailure.parse(raw);if(failure.backend!==cfg.nativePlatform)throw Error("Wrong platform failure");this.send(s,failure);this.stop(s);
           } else if (raw.type === "session_locked" && cfg.allowUnlock && s.ready && !s.secureDesktop) {
             this.send(s, { type: "session_locked" });
@@ -834,6 +841,7 @@ export class DesktopProvider {
             s.seq = frame.info.seq;
             s.pending = s.seq;
             s.frameAt = performance.now();
+            s.sourceIdle.frame();
             if(s.imageExpected&&!s.imageFailed&&!s.imageReady)s.heldImage=packet;
             else if (!this.sendImage(s, packet)) return;
           } else if (raw.type==="cursor"&&s.ready&&!s.secureDesktop&&s.cursor) {

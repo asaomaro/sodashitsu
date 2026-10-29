@@ -1,10 +1,10 @@
 # Direct native Explorer drag
 
 - [x] Bounded native COPY-only IDataObject/IStream/async completion, framing and cancellation; generated Windows tests. Taskcheck required.
-- [ ] B Explorer hit/selection metadata + approved-root source identity/SHA leases + finite read channel. Taskcheck required.
-- [ ] Browser gesture state machine, remote input release ACK and late-gesture fence. Taskcheck required.
-- [ ] Browser-PC localhost proof, optional managed/manual native helper and CLI/UI; plain/sealed path integration. Taskcheck required.
-- [ ] Product-source negative controls, independent whole/correction review, frozen checks/browser/Windows CI and clean smoke.
+- [x] B Explorer hit/selection metadata + approved-root source identity/SHA leases + finite read channel. Taskcheck required.
+- [x] Browser gesture state machine, remote input release ACK and late-gesture fence. Taskcheck required.
+- [x] Browser-PC localhost proof, optional managed/manual native helper and CLI/UI; plain/sealed path integration. Taskcheck required.
+- [x] Product-source negative controls, independent whole/correction review, frozen checks/browser/Windows CI and clean smoke.
 - [ ] Guarded root integration, scoped PR/main and real-device validation; record remaining platform requirements truthfully.
 
 Folder restart PR#297, final records PR#298, and native kernel PR#299 are merged. Kernel tested head70687cac, main94744840; four Windows CI jobs and clean external build/smoke passed. Root reflection of ten paths independently verified exact bytes.
@@ -58,5 +58,7 @@ N7 browser/native handoff and local CLI:
 - [x] Trusted held-down/applied ACK/4px admission,750ms original window, exact release activation before RDP handoff, buffered fallback and reentrant/late cancellation. Pointer taskcheck and whole/delta review.
 - [x] Plain/encrypted generated file path with real browser Controller/FileClient/Bridge/Host/DesktopFiles and actual memory target child; separate built Vue permission/pointer/capture/focus/completion integration.
 - [x] Eight actual product-source negative controls, exact restoration and30 focused positive tests. Actual CLI unclaimed Gateway SIGINT cleanup/exit0.
-- [ ] Frozen full/root/browser/CI/clean smoke, guarded root reflection and scoped PR/main receipts.
+- [x] Frozen full/root/browser/CI/clean smoke, guarded root reflection and scoped PR/main receipts.
 - [ ] Actual Windows Explorer drop/cancel and A/B updated runtime validation. Linux/macOS desktop devices unavailable per user; WSL does not replace their real desktop validation.
+
+N7 PR#305 delivered: final b93bb96a792dd95e055eb4df0a6b4dbb558af8b8, main5047699f15efcc676af2eada89ab5c37d69f5555. Final source12710/855 PASS380.35s, root12772/863 PASS387.48s, whole suites serial/maxWorkers4; initial missing CLI skill documentation was corrected and both whole suites rerun green. Source/root build/forced server emit/typecheck and browser11 each passed. Clean frozen product build/smoke plus final documentation-head smoke passed. Exacthead Windows40944003393 and40944020936, protected/upgrade/maintenance40944015194 all passed. Independent23-path source/frozen/root/replayed snapshots match, preserving two three-way overlaps. No live A/B handoff or actual Explorer/OLE test. Final detailed receipts are in PR305.

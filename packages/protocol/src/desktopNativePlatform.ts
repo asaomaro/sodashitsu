@@ -27,6 +27,8 @@ export const DesktopNativeFailureCode = z.enum([
   "source_changed", "source_stalled", "backend_failure", "input_unavailable",
 ]);
 export type DesktopNativeFailureCode = z.infer<typeof DesktopNativeFailureCode>;
+/** Session/pipeline liveness, never a new image or post-input capture proof. */
+export const DesktopNativePlatformIdle=z.object({type:z.literal("platform_idle"),backend:z.literal("linux-portal"),seq:z.number().int().positive().max(Number.MAX_SAFE_INTEGER),counter:z.number().int().positive().max(Number.MAX_SAFE_INTEGER)}).strict();
 export const DesktopNativePlatformFailure = z.object({
   type: z.literal("platform_failure"), backend: DesktopNativePlatform, code: DesktopNativeFailureCode,
 }).strict();
