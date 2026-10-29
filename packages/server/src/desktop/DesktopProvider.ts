@@ -1,3 +1,4 @@
+import {DesktopAudioPipes,desktopWslAudioCommand} from "./DesktopAudioPipes.js";
 import {DesktopNativeSelection} from "./DesktopNativeSelection.js";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {dirname,join} from "node:path";
@@ -85,7 +86,7 @@ export interface DesktopProviderEndpointScope {
  close():void;
 }
 type Share = {
-  resourcesManaged:boolean;
+  audioPipes?:DesktopAudioPipes;resourcesManaged:boolean;
   independent?:boolean;
   capturePool?:DesktopSharedCapture;
   captureKey?:string;
@@ -222,6 +223,7 @@ export class DesktopProvider {
 
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
   readonly companion: DesktopCompanionHub;
+  private audioPipes=new DesktopAudioPipes();
   constructor(private config: DesktopProviderConfig | undefined) {
     this.companion = new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
   }
@@ -432,7 +434,7 @@ export class DesktopProvider {
       };
       ws.once("close", fail);
       ws.once("open", () => {if(this.live(s))ws.send(JSON.stringify({ type: "provider", ticket: p.ticket }));});
-      ws.on("message", (bytes, binary) => {
+      ws.on("message", async (bytes, binary) => {
         if (!this.live(s)) return;
         if (binary) {
           this.stop(s);
@@ -502,7 +504,8 @@ export class DesktopProvider {
               const stop=()=>{s.richClipboard?.stop();delete s.richClipboard;socket.terminate();};
               socket.on("error",stop);socket.on("close",stop);socket.on("message",(raw,binary)=>{if(!this.live(s))return;try{const bytes=Buffer.isBuffer(raw)?raw:Array.isArray(raw)?Buffer.concat(raw):Buffer.from(raw);if(binary||bytes.length>32768)throw Error("Clipboard lane format");if(!s.richClipboard)throw Error("Clipboard not ready");s.richClipboard.fromViewer(JSON.parse(bytes.toString()));}catch{stop();}});
             }
-            this.launch(s, cfg, p.options);
+            await this.prepareLaunch(s, cfg, p.options);
+            if(!this.live(s))throw new RpcError("unauthorized","Desktop request cancelled");
             settled = true;
             resolve({ started: true });
             return;
@@ -649,11 +652,18 @@ export class DesktopProvider {
       });
     });
   }
-  private launch(
+  private async prepareLaunch(
     s: Share,
     cfg: DesktopProviderConfig,
     options: z.infer<typeof DesktopStartParams>["options"],
-  ): void {
+  ): Promise<void> {
+    const pipes=this.audioPipes;
+    if(!cfg.nativePlatform&&desktopWslAudioCommand(cfg.command)&&((options.sharedDesktop||options.nativeAudio)&&(cfg.allowSystemAudio??cfg.allowMedia)&&cfg.allowNativeVideo||(options.sharedDesktop||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint)){
+      const prepared=await pipes.prepare();if(!this.live(s)||this.audioPipes!==pipes)return;if(prepared)s.audioPipes=pipes;
+    }
+    this.launch(s,cfg,options);
+  }
+  private launch(s:Share,cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>["options"]):void {
     const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
@@ -757,18 +767,18 @@ export class DesktopProvider {
               ...legacyReady
             } = ready;
             if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic")&&s.microphoneSocket)s.microphone=new DesktopMicrophone({allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
-            const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic");
+            const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes);
             const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
             s.sharedRate=options.sharedRate===true&&nativeCadence===true&&nativeEnabled;
-            s.native=new DesktopNativeVideo({enabled:nativeEnabled,sharedResolution:options.sharedResolution===true&&nativeAdaptive===true,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({...(s.audioPipes&&ready.backend!=="synthetic"?{audioBridge:(active:()=>boolean)=>s.audioPipes!.open("audio",active)}:{}),enabled:nativeEnabled,sharedResolution:options.sharedResolution===true&&nativeAdaptive===true,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(options.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}),
@@ -905,6 +915,7 @@ export class DesktopProvider {
       ...((poolMedia||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
       allowSystemAudio:(poolMedia||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
+      ...(s.audioPipes?{audioPipeBridge:true}:{}),
       nativeCodecs:(poolMedia||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
       nativeAdaptive:(poolMedia||options.nativeAdaptive===true)&&cfg.allowNativeVideo===true,
       nativeCadence:(poolMedia||options.nativeCadence===true)&&cfg.allowNativeVideo===true,
@@ -1010,6 +1021,7 @@ export class DesktopProvider {
   dispose(preserveTransfers=false): void {
     if(preserveTransfers)this.freezeSavedTransfers();
     this.sourceEpoch++;
+    const audioPipes=this.audioPipes;this.audioPipes=new DesktopAudioPipes();void audioPipes.close().catch(()=>{});
     const nativeSelection=this.nativeSelection;this.nativeSelection=new DesktopNativeSelection();void nativeSelection.close().catch(()=>{});
     if(!preserveTransfers){this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});}
     this.unlockLease.stop();

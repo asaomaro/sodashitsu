@@ -116,6 +116,7 @@ public static class SodaDesktopHost {
         return new Dictionary<string,object>{{"epoch",ResourceEpochs["control"]},{"x",pixel.X},{"y",pixel.Y},{"window",target.Item1},{"pid",target.Item2}};
     }
     static Dictionary<string,object> Obj(object value) { return (Dictionary<string,object>)value; }
+    static int PositiveBridgePid(Dictionary<string,object> msg) {object value;if(!msg.TryGetValue("clientPid",out value)||!(value is int))throw new InvalidOperationException("Audio bridge PID");int pid=(int)value;if(pid<=0)throw new InvalidOperationException("Audio bridge PID");return pid;}
     static int Num(Dictionary<string,object> value,string key) { return Convert.ToInt32(value[key]); }
     static bool Secure;
     static Func<int> SecureLockState;
@@ -522,7 +523,8 @@ public static class SodaDesktopHost {
         Type microphoneType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopMicrophone");
         string microphoneEndpoint=config.ContainsKey("microphoneEndpoint")?config["microphoneEndpoint"] as string:null;
         bool microphoneCeiling=!Secure&&microphoneType!=null&&config.ContainsKey("allowMicrophone")&&config["allowMicrophone"] is bool&&(bool)config["allowMicrophone"]&&!String.IsNullOrWhiteSpace(microphoneEndpoint)&&microphoneEndpoint.Length<=512;
-        int microphonePid=microphoneCeiling&&config.ContainsKey("microphoneClientPid")?Num(config,"microphoneClientPid"):0;if(microphonePid<=0)microphoneCeiling=false;
+        bool audioPipeBridge=!Secure&&config.ContainsKey("audioPipeBridge")&&config["audioPipeBridge"] is bool&&(bool)config["audioPipeBridge"];
+        int microphonePid=microphoneCeiling&&config.ContainsKey("microphoneClientPid")?Num(config,"microphoneClientPid"):0;if(microphonePid<=0&&!audioPipeBridge)microphoneCeiling=false;
         IDisposable richClipboardWorker=null;System.Reflection.MethodInfo richSubmit=null;Type richType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopRichClipboard");
         bool richCeiling=clipboardCeiling&&richType!=null&&config.ContainsKey("richClipboard")&&config["richClipboard"] is bool&&(bool)config["richClipboard"];
         SodaDesktopVideoRate videoRate=null;SodaDesktopVideoProfile videoProfile=null;
@@ -543,7 +545,7 @@ public static class SodaDesktopHost {
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
         bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
-        int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0)audioCeiling=false;
+        int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0&&!audioPipeBridge)audioCeiling=false;
         bool nativeCodecs=nativeCeiling&&config.ContainsKey("nativeCodecs")&&config["nativeCodecs"] is bool&&(bool)config["nativeCodecs"];
         var codecCandidates=new List<string>();
         if(nativeCodecs){try{var probe=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopCodecProbe");if(probe==null)nativeCodecs=false;else foreach(var candidate in (Array)probe.GetMethod("Read").Invoke(null,null)){var type=candidate.GetType();if(Convert.ToUInt32(type.GetField("count").GetValue(candidate))>0)codecCandidates.Add((string)type.GetField("codec").GetValue(candidate));}}catch{nativeCodecs=false;}}
@@ -636,7 +638,7 @@ public static class SodaDesktopHost {
                         else if(type=="native_microphone") {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Microphone id");
                             if((bool)msg["enabled"]){if(!ResourceActive("microphone")||!microphoneCeiling||microphone!=null)throw new InvalidOperationException("Microphone not permitted");
-                                microphone=(IDisposable)Activator.CreateInstance(microphoneType,new object[]{(string)msg["pipeName"],microphonePid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()&&SourceMatches(sourceDevice)),microphoneEndpoint});microphoneId=requested;
+                                microphone=(IDisposable)Activator.CreateInstance(microphoneType,new object[]{(string)msg["pipeName"],audioPipeBridge?PositiveBridgePid(msg):microphonePid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()&&SourceMatches(sourceDevice)),microphoneEndpoint});microphoneId=requested;
                             }else if(microphoneId==requested){StopAudio(ref microphone);microphoneId=null;}
                         }
                         else if(type=="native_audio") {
@@ -644,7 +646,7 @@ public static class SodaDesktopHost {
                             if((bool)msg["enabled"]){
                                 if(!audioCeiling)throw new InvalidOperationException("System audio not permitted");
                                 StopAudio(ref audio);audioId=null;
-                                if(video!=null&&videoId==requested)try{audio=(IDisposable)Activator.CreateInstance(audioType,new object[]{(string)msg["pipeName"],audioPid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()),(Func<long>)(()=>Clock.ElapsedMilliseconds*1000)});audioId=requested;}catch{audio=null;}
+                                if(video!=null&&videoId==requested)try{audio=(IDisposable)Activator.CreateInstance(audioType,new object[]{(string)msg["pipeName"],audioPipeBridge?PositiveBridgePid(msg):audioPid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()),(Func<long>)(()=>Clock.ElapsedMilliseconds*1000)});audioId=requested;}catch{audio=null;}
                             }else if(audioId==requested){StopAudio(ref audio);audioId=null;}
                         }
                         else if(type=="native_video") {

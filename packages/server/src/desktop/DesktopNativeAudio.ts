@@ -1,5 +1,7 @@
+import type {Duplex} from "node:stream";
+import type {DesktopAudioPipe} from "@sodashitsu/client-core/desktop/DesktopAudioPipe.node";
 import {randomUUID} from "node:crypto";
-import {createConnection,type Socket} from "node:net";
+import {createConnection} from "node:net";
 import {performance} from "node:perf_hooks";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
@@ -7,13 +9,13 @@ import {encodeDesktopAudio,DESKTOP_AUDIO_MAX_BYTES} from "@sodashitsu/protocol";
 import {DesktopPcmStream,type DesktopPcmFrame} from "./DesktopPcmStream.js";
 import type OpusScript from "opusscript";
 export interface DesktopNativeAudioHooks {
- id:string;synthetic:boolean;write(value:unknown):void;send(bytes:Uint8Array,receivedAt?:number):boolean;
+ bridge?:(active:()=>boolean)=>DesktopAudioPipe;id:string;synthetic:boolean;write(value:unknown):void;send(bytes:Uint8Array,receivedAt?:number):boolean;
  state(state:"starting"|"running"|"unavailable"|"stopped"):void;active():boolean;videoTimestamp():number;
 }
 export interface DesktopAudioLease {stop(notify?:boolean):void;}
 /** PCM stays in a private local pipe. Only bounded Opus packets reach the viewer. */
 export class DesktopNativeAudio {
- private dead=false;private requested=false;private ready=false;private socket:Socket|undefined;private encoder:OpusScript|undefined;
+ private dead=false;private requested=false;private ready=false;private socket:Duplex|undefined;private encoder:OpusScript|undefined;
  private headerTimer:ReturnType<typeof setTimeout>|undefined;
  private retry:ReturnType<typeof setTimeout>|undefined;private task:ReturnType<typeof setImmediate>|undefined;private deadline=0;
  private pending:(DesktopPcmFrame&{at:number})[]=[];
@@ -24,12 +26,17 @@ export class DesktopNativeAudio {
  }
  private async start(){
   const {default:OpusScript}=await import("opusscript");if(!this.alive())return;
-  if(process.platform!=="win32"&&!this.hooks.synthetic){this.fail();return;}
+  if(process.platform!=="win32"&&!this.hooks.synthetic&&!this.hooks.bridge){this.fail();return;}
   this.encoder=new OpusScript(48000,2,OpusScript.Application.AUDIO);this.encoder.encoderCTL(4002,128000);
   const name="SodaDesktopAudio-"+randomUUID().replaceAll("-","");
   const path=process.platform==="win32"?"\\\\.\\pipe\\"+name:join(tmpdir(),name+".sock");
-  this.requested=true;this.hooks.write({type:"native_audio",id:this.hooks.id,enabled:true,pipeName:name,...(process.platform!=="win32"?{pipePath:path}:{})});
-  this.deadline=performance.now()+2500;this.headerTimer=setTimeout(()=>{if(!this.ready)this.fail();},2500);this.connect(path);
+  if(this.hooks.bridge){
+   const bridge=this.socket=this.hooks.bridge(()=>this.alive());bridge.on("error",()=>{if(!this.dead)this.fail();});bridge.on("close",()=>{if(!this.dead)this.fail();});
+   const pid=await bridge.ready;if(!this.alive()||this.socket!==bridge){bridge.destroy();return;}
+   this.requested=true;this.hooks.write({type:"native_audio",id:this.hooks.id,enabled:true,pipeName:name,clientPid:pid});
+   if(!this.alive()){bridge.destroy();return;}bridge.on("data",bytes=>{if(!this.alive()||this.socket!==bridge)return;try{this.parser.push(bytes);}catch{this.fail();}});if(!bridge.connect(name))throw Error("Audio pipe connect");
+  }else{this.requested=true;this.hooks.write({type:"native_audio",id:this.hooks.id,enabled:true,pipeName:name,...(process.platform!=="win32"?{pipePath:path}:{})});this.connect(path);}
+  this.deadline=performance.now()+2500;this.headerTimer=setTimeout(()=>{if(!this.ready)this.fail();},2500);
  }
  private connect(path:string){
   if(!this.alive())return;const socket=this.socket=createConnection(path);
