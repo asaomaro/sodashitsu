@@ -1,3 +1,4 @@
+import {DesktopNativeHelpers} from "./desktop/DesktopNativeHelpers.js";
 import {openWorkAgentAsk} from "./work/WorkAgentAsk.js";
 import { ExecService } from "./exec/ExecService.js";
 import { WorkContext } from "./work/WorkContext.js";
@@ -728,6 +729,7 @@ export async function composeServer(
     if(action.type === "agent" && !session.getPane(action.paneId))throw new RpcError("not_found","対象ペインが見つかりません");
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
+  const desktopNativeHelpers=new DesktopNativeHelpers();
   const previewHelpers = new ManagedPreviewHelpers(async (machine, gone) => {
     if (machine !== "local") {
       const route = machines.route(machine);
@@ -772,6 +774,7 @@ export async function composeServer(
     workAgentRequests,
     workAgentLauncher,
     previewHelpers,
+    desktopNativeHelpers,
     desktop,
     desktopSettings,
     desktopEndpoint,
@@ -854,6 +857,7 @@ export async function composeServer(
       desktopEndpoint.clientGone(clientId);
       desktopRelay.clientGone(clientId);
       previewHelpers.clientGone(clientId);
+      desktopNativeHelpers.clientGone(clientId);
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
@@ -874,6 +878,7 @@ export async function composeServer(
       desktopEndpoint.clientGone(clientId);
       desktopRelay.clientGone(clientId);
       previewHelpers.clientGone(clientId);
+      desktopNativeHelpers.clientGone(clientId);
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
@@ -1381,6 +1386,7 @@ export async function composeServer(
         desktop.dispose(true);
         await desktopEndpoint.close();
         await previewHelpers.dispose();
+        await desktopNativeHelpers.dispose();
         previews.dispose();
         asks.dispose(); // 待っている質問を閉じる（受け口と `/ws` の接続を閉じた後。応答は誰にも届かない）
         // 独自トークンの期限のタイマーと購読（20260927-sidebar-row-tokens）。WebSocket を閉じた後に止める——閉じる前に止めると、

@@ -41,3 +41,12 @@ N5 B integration:
 - [x] Normal and private-endpoint trusted origin, sticky prequeue abort, process-wide snapshot quota held through drain, directory/emptydir offer schema.
 - [ ] Final source controls, frozen full/root/browser/Windows CI/clean smoke and independent whole/correction review.
 - [ ] Browser-PC authenticated helper gateway, browser gesture controller and actual Explorer target validation.
+
+N5 PR#303 delivered: testededcbf63f, main1315c5d2. Source12656/root12718 tests, source/root relatedbrowser16 each, cleanbuild/smoke, exacthead4Windows jobs passed;23-path finalfixedhead/root match verified independently.
+
+N6 helper gateway (UI/controller and CLI are split into the next phase):
+- [x] Dedicated localhost helper child, one-use local iframe/port/WS proof and authenticated direct-browser origin RPC; owner/launch/stop/drain bounds. Taskcheck transfer.
+- [x] Native host, original gesture native deadline, chunk progression, completion+actual-exit evidence, preflight and retained binary cleanup. Taskcheck pointer.
+- [x] Actual70000-byte C# pump↔Node memory-target validation, generated Windows checks, owned real child IPC, browser bridge DOM/frame tests.
+- [ ] Final product-source negatives, frozen full/root/browser/Windows CI/clean smoke and independent whole/correction review.
+- [ ] RDP gesture/controller, plain/sealed native file reads, optional manual CLI and actual Explorer drop validation.

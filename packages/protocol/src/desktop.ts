@@ -1,3 +1,4 @@
+import type {DesktopNativeHelperDescriptor} from "./desktopNativeHelper.js";
 export const DESKTOP_SHARED_MICROPHONE_PROTOCOL="soda-desktop-shared-microphone-v1";
 export const DESKTOP_SHARED_PROTECTED_PROTOCOL="soda-desktop-shared-protected-v1";
 export const DESKTOP_SHARED_RESOLUTION_PROTOCOL="soda-desktop-shared-resolution-v1";
@@ -283,6 +284,8 @@ export interface DesktopSettingsResult {
   canConfigure: boolean;
 }
 export const DesktopMethods = {
+  "desktop.native_helper.start":z.object({viewerId:z.uuid()}).strict(),
+  "desktop.native_helper.stop":z.object({viewerId:z.uuid()}).strict(),
   "desktop.settings.get": z.object({}).strict(),
   "desktop.settings.set": DesktopPermissions,
   "desktop.capabilities": z.object({}).strict(),
@@ -304,6 +307,8 @@ export const DesktopMethods = {
   "desktop.agent.release": z.object({ leaseId: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict(),
 };
 export interface DesktopResults {
+  "desktop.native_helper.start":DesktopNativeHelperDescriptor;
+  "desktop.native_helper.stop":{};
   "desktop.settings.get": DesktopSettingsResult;
   "desktop.settings.set": DesktopSettingsResult;
   "desktop.capabilities": {

@@ -84,3 +84,5 @@ export * from "./desktopAgentEndpoint.js";
 export {DesktopSigninRequired,DesktopSigninGrant} from "./desktopSignin.js";
 
 export * from "./desktopNativeFiles.js";
+
+export * from "./desktopNativeHelper.js";

@@ -47,7 +47,7 @@ internal static class NativeDragWorkerChecks
     {
         internal string Mode;internal int Drops;internal bool Initialized,Finished;private bool held=true;private int allowedCalls;private NativeDragDataObject data;private DragLease lease;
         internal Backend(string mode){Mode=mode;}
-        public bool Allowed(){allowedCalls++;if(allowedCalls==3&&Mode=="late-release")held=false;if(allowedCalls==3&&Mode=="late-expire"||allowedCalls==5&&Mode=="phase2-expire"||allowedCalls==6&&Mode=="backend-expire")Thread.Sleep(800);return Mode!="denied";}
+        public bool Allowed(){allowedCalls++;if(allowedCalls==3&&Mode=="host-expire")Thread.Sleep(200);if(allowedCalls==3&&Mode=="late-release")held=false;if(allowedCalls==3&&Mode=="late-expire"||allowedCalls==5&&Mode=="phase2-expire"||allowedCalls==6&&Mode=="backend-expire")Thread.Sleep(800);return Mode!="denied";}
         public bool LeftHeld(){return Mode!="released"&&held;}
         public void Initialize(){Initialized=true;}
         public void Finish(){Finished=true;}
@@ -72,23 +72,23 @@ internal static class NativeDragWorkerChecks
         }
         public void Pump(){Read();Assert(data.EndOperation(0,null,1)==0,"worker target async completion");}
     }
-    private static void Initial(Pipe input)
+    private static void Initial(Pipe input,int deadline=750)
     {
         byte[] data=new byte[70000];for(int i=0;i<data.Length;i++)data[i]=(byte)(i%251);string sha;using(SHA256 hash=SHA256.Create())sha=BitConverter.ToString(hash.ComputeHash(data)).Replace("-","").ToLowerInvariant();Array.Clear(data,0,data.Length);
         JavaScriptSerializer json=new JavaScriptSerializer();input.Feed(Output.Nonce+"\n");
-        input.Feed(json.Serialize(new{type="begin",nonce=Output.Nonce,seq=0,owner="11111111-1111-4111-8111-111111111111",origin="https://example.test",gesture="22222222-2222-4222-8222-222222222222",generation="33333333-3333-4333-8333-333333333333",count=1,bytes=70000})+"\n");
+        input.Feed(json.Serialize(new{type="begin",nonce=Output.Nonce,seq=0,owner="11111111-1111-4111-8111-111111111111",origin="https://example.test",gesture="22222222-2222-4222-8222-222222222222",generation="33333333-3333-4333-8333-333333333333",count=1,bytes=70000,deadline})+"\n");
         input.Feed(json.Serialize(new{type="entry",nonce=Output.Nonce,seq=1,index=0,name="generated.txt",directory=false,bytes=70000,sha256=sha})+"\n");input.Feed(json.Serialize(new{type="seal",nonce=Output.Nonce,seq=2})+"\n");
     }
     private static int Case(string mode,bool child)
     {
-        Pipe input=new Pipe();Output output=new Output(input){Corrupt=mode=="bad-sha",Block=mode=="blocked-output"};if(mode!="blocked-input")Initial(input);Backend backend=new Backend(mode);bool forced=false;
+        Pipe input=new Pipe();Output output=new Output(input){Corrupt=mode=="bad-sha",Block=mode=="blocked-output"};if(mode!="blocked-input")Initial(input,mode=="host-expire"?100:750);Backend backend=new Backend(mode);bool forced=false;
         try
         {
             int result=NativeDragWorker.Run(input,output,backend,delegate{return new EmptySlot();},child?(Action<int>)Environment.Exit:delegate(int code){forced=true;});
             bool success=mode=="sync"||mode=="async";
             Assert(result==(success?0:3),"worker result "+mode);Assert(!forced,"unexpected generated force exit");
             Assert(output.Types.Contains("finished")==success,"failed/cancelled worker emitted completion");
-            if(mode=="released"||mode=="denied"||mode=="late-release"||mode=="late-expire"||mode=="phase2-expire"||mode=="backend-expire")Assert(backend.Drops==0,"worker started without live gesture/desktop");
+            if(mode=="released"||mode=="denied"||mode=="late-release"||mode=="late-expire"||mode=="phase2-expire"||mode=="backend-expire"||mode=="host-expire")Assert(backend.Drops==0,"worker started without live gesture/desktop");
             if(mode!="denied")Assert(backend.Initialized&&backend.Finished,"worker COM backend not finalized");
             return child?result:0;
         }
@@ -99,7 +99,7 @@ internal static class NativeDragWorkerChecks
         if(args.Length==2&&args[0]=="child")return Case(args[1],true);
         try
         {
-            foreach(string mode in new string[]{"sync","async","failed-async","cancel","released","denied","bad-sha","late-release","late-expire","phase2-expire","backend-expire"})Case(mode,false);
+            foreach(string mode in new string[]{"sync","async","failed-async","cancel","released","denied","bad-sha","late-release","late-expire","phase2-expire","backend-expire","host-expire"})Case(mode,false);
             foreach(string mode in new string[]{"stuck","blocked-input","blocked-output"})
             {
                 ProcessStartInfo start=new ProcessStartInfo(Process.GetCurrentProcess().MainModule.FileName,"child "+mode){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};

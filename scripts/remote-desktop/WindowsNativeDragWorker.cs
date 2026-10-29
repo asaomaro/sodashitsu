@@ -83,18 +83,18 @@ namespace Sodashitsu.NativeDrag
     {
         private sealed class State
         {
-            internal int Abort,Done,Phase;internal long Begin,LastBeat;internal DragDataPump Pump;internal DragLease Lease;internal NativeDragDataObject Data;
+            internal int Abort,Done,Phase;internal long Begin,LastBeat,GestureDeadline;internal DragDataPump Pump;internal DragLease Lease;internal NativeDragDataObject Data;
         }
         private static void Signal(ManualResetEvent value) { try { value.Set(); } catch(ObjectDisposedException) { } }
         private static void FinalAdmission(State state,Stopwatch clock)
         {
-            if(Volatile.Read(ref state.Abort)!=0||clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750)throw new IOException("Native final gesture admission expired");
+            if(Volatile.Read(ref state.Abort)!=0||(clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750||clock.ElapsedMilliseconds>=Interlocked.Read(ref state.GestureDeadline)))throw new IOException("Native final gesture admission expired");
         }
         private static void Admit(State state,Stopwatch clock,IDragBackend backend)
         {
             if(Volatile.Read(ref state.Abort)!=0)throw new IOException("Native gesture cancelled");
             bool allowed=backend.Allowed(),held=backend.LeftHeld();
-            if(!allowed||!held||Volatile.Read(ref state.Abort)!=0||clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750)throw new IOException("Native gesture expired before OLE admission");
+            if(!allowed||!held||Volatile.Read(ref state.Abort)!=0||(clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750||clock.ElapsedMilliseconds>=Interlocked.Read(ref state.GestureDeadline)))throw new IOException("Native gesture expired before OLE admission");
         }
         private static string Nonce(Stream input)
         {
@@ -122,7 +122,7 @@ namespace Sodashitsu.NativeDrag
                     while(Volatile.Read(ref state.Done)==0)
                     {
                         long now=clock.ElapsedMilliseconds;int phase=Volatile.Read(ref state.Phase);
-                        bool expired=phase==0?now>=6000:phase==1?now-Interlocked.Read(ref state.Begin)>=750:now-Interlocked.Read(ref state.LastBeat)>=5000||now-Interlocked.Read(ref state.Begin)>=900000;
+                        bool expired=phase==0?now>=6000:phase==1?(now-Interlocked.Read(ref state.Begin)>=750||now>=Interlocked.Read(ref state.GestureDeadline)):now-Interlocked.Read(ref state.LastBeat)>=5000||now-Interlocked.Read(ref state.Begin)>=900000;
                         if(expired||state.Pump!=null&&!state.Pump.Alive)Interlocked.Exchange(ref state.Abort,1);
                         if(Volatile.Read(ref state.Abort)!=0)
                         {
@@ -153,7 +153,7 @@ namespace Sodashitsu.NativeDrag
                             while(Volatile.Read(ref state.Abort)==0)
                             {
                                 DragPacket packet=packets.Read();if(packet==null||packet.Type=="cancel")throw new IOException("Native input ended");
-                                if(packet.Type=="begin"){Interlocked.Exchange(ref state.Begin,clock.ElapsedMilliseconds);Volatile.Write(ref state.Phase,1);}
+                                if(packet.Type=="begin"){if(packets.GestureDeadline>clock.ElapsedMilliseconds+750)throw new IOException("Native gesture deadline exceeds admission window");Interlocked.Exchange(ref state.GestureDeadline,packets.GestureDeadline);Interlocked.Exchange(ref state.Begin,clock.ElapsedMilliseconds);Volatile.Write(ref state.Phase,1);}
                                 else if(packet.Type=="seal")
                                 {
                                     Signal(manifestReady);if(!pumpReady.WaitOne(5000)||Volatile.Read(ref state.Abort)!=0)throw new IOException("Native initialization expired");
@@ -170,8 +170,8 @@ namespace Sodashitsu.NativeDrag
                         }
                         catch{Interlocked.Exchange(ref state.Abort,1);Signal(manifestReady);Signal(pumpReady);}
                     }){IsBackground=true,Name="soda-native-drag-input"};reader.Start();
-                    emit(new{type="ready",nonce});manifestReady.WaitOne();
-                    if(Volatile.Read(ref state.Abort)!=0||clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750||!backend.Allowed()||!backend.LeftHeld())throw new IOException("Native gesture expired");
+                    emit(new{type="ready",nonce,now=clock.ElapsedMilliseconds});manifestReady.WaitOne();
+                    if(Volatile.Read(ref state.Abort)!=0||(clock.ElapsedMilliseconds-Interlocked.Read(ref state.Begin)>=750||clock.ElapsedMilliseconds>=Interlocked.Read(ref state.GestureDeadline))||!backend.Allowed()||!backend.LeftHeld())throw new IOException("Native gesture expired");
                     state.Pump=new DragDataPump(packets.Scope,packets.Manifest,delegate{return clock.ElapsedMilliseconds;},delegate(DragReadNeed need){emit(new{type="need",nonce,request=need.Request,index=need.Index,offset=need.Offset,length=need.Length});});
                     state.Lease=new DragLease(packets.Scope,packets.Manifest,state.Pump.Fetch,delegate{return Volatile.Read(ref state.Abort)==0&&state.Pump.Alive&&backend.Allowed();},delegate{return clock.ElapsedMilliseconds;});
                     state.Data=new NativeDragDataObject(state.Lease);Admit(state,clock,backend);Interlocked.Exchange(ref state.LastBeat,clock.ElapsedMilliseconds);Volatile.Write(ref state.Phase,2);Signal(pumpReady);
@@ -196,6 +196,7 @@ namespace Sodashitsu.NativeDrag
         }
         [STAThread] internal static int Main(string[] args)
         {
+            if(args.Length==1&&args[0]=="--preflight"){Console.WriteLine("soda-native-copy-preflight-v1");return 0;}
             if(args.Length!=0)return 3;
             return Run(Console.OpenStandardInput(),Console.Out,new NativeDragBackend(),NativeDragSlot.Acquire,Environment.Exit);
         }

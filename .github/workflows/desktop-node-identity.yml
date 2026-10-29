@@ -82,3 +82,6 @@ jobs:
       - name: Generated Explorer selection worker and owned blocked-input exit
         shell: powershell
         run: scripts/remote-desktop/validate-explorer-selection-worker.ps1
+      - name: Generated real CSharp pump and Node host (memory target, no OLE)
+        shell: powershell
+        run: scripts/remote-desktop/validate-native-host.ps1

@@ -29,6 +29,7 @@ namespace Sodashitsu.NativeDrag
         private int phase, declaredCount;
         private bool failed;
         private DragScope scope;
+        internal long GestureDeadline {get;private set;}
         internal DragPacketReader(Stream input, string nonce)
         {
             if (input == null || nonce == null || !Regex.IsMatch(nonce, @"\A[a-f0-9]{64}\z")) throw new ArgumentException("Invalid private drag channel");
@@ -89,9 +90,10 @@ namespace Sodashitsu.NativeDrag
                 if (type == "cancel") { Keys(value, "type", "nonce", "seq"); phase = 3; }
                 else if (phase == 0 && type == "begin")
                 {
-                    Keys(value, "type", "nonce", "seq", "owner", "origin", "gesture", "generation", "count", "bytes");
+                    Keys(value, "type", "nonce", "seq", "owner", "origin", "gesture", "generation", "count", "bytes", "deadline");
                     DragScope candidate = new DragScope(Text(value, "owner", 36), Text(value, "origin", 2048), Text(value, "gesture", 36), Text(value, "generation", 36));
                     int count = (int)Number(value, "count", DragLease.MaxEntries); if (count == 0) throw new IOException("Empty native drag manifest");
+                    GestureDeadline=Number(value,"deadline",900000);if(GestureDeadline==0)throw new IOException("Invalid native gesture deadline");
                     declaredBytes = Number(value, "bytes", DragLease.MaxBytes); declaredCount = count; scope = candidate; phase = 1;
                 }
                 else if (phase == 1 && type == "entry")

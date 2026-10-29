@@ -33,6 +33,7 @@ export interface MethodDeps {
   work?: import("../../work/WorkContext.js").WorkContext;
   workTransfers?: import("../../work/SessionTransfer.js").SessionTransfer;
   exec?: import("../../exec/ExecService.js").ExecService;
+  desktopNativeHelpers?:import("../../desktop/DesktopNativeHelpers.js").DesktopNativeHelpers;
   desktopRelay?: import("../../desktop/DesktopRelay.js").DesktopRelay;
   desktopSettings?: import("../../desktop/DesktopSettings.js").DesktopSettings;
   desktop?: import("../../desktop/DesktopProvider.js").DesktopProvider;

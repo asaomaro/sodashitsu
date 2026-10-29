@@ -50,6 +50,7 @@ namespace Sodashitsu.NativeDrag
         }
         [STAThread] public static int Main(string[] args)
         {
+            if(args.Length==1&&args[0]=="--preflight"){Console.WriteLine("soda-explorer-selection-preflight-v1");return 0;}
             // Independent process timer also cuts off a blocked UIA/COM call or pipe.
             using(Timer watchdog=new Timer(delegate {Environment.Exit(124);},null,6000,Timeout.Infinite))
             try

@@ -15,6 +15,8 @@ export interface WsConnection {
   readonly sameMachine?: boolean;
   /** Direct loopback Host/Origin only; never machine bridges or public reverse proxies. */
   readonly localSettings?: boolean;
+  /** Origin admitted by the direct authenticated browser upgrade; absent on bridges. */
+  readonly browserOrigin?:string|undefined;
 }
 
 /** upgrade を受け付ける口（architecture.md「WsServer」）。認可の判定は `WsServerWs` が担う（D9 の差し替え点）。 */
