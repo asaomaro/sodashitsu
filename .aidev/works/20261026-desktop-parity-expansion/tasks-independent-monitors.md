@@ -11,9 +11,9 @@ Scope: Windows normal desktop monitor-specific capture/encoder cohorts, explicit
 - [x] Focused271tests before final topology/fault additions; later2 tests passed. Browser old5, independent normal/encrypted2, independent native1 passed in separate focused runs.
 - [x] Final full source build/typecheck/tests:12,487/838 PASS423.60s.
 - [x] Final browser8cases after browser-ready sequencing correction:8/8 PASS1.2m.
-- [ ] Root exact-byte guarded reflection and root build/typecheck/tests.
+- [x] Root32-file guarded reflection including preserved local-desktop/LAN changes; build/typecheck and12549tests/846files PASS391.90s. Root browser8/8 PASS1.0m.
 - [x] Clean external frozen5774edcd install/build/smoke; final git status empty.
-- [ ] Final independent records review.
-- [ ] Commit/PR/main exact-head checks and delivery receipt.
+- [x] Final independent diff/corrections/root-merge/records review; source/browser/external logs independently checked.
+- [x] Product5774edcd, test-only29a94edf; PR#293 exact-head4CI PASS, merged main265cd983. Documentation-only final receipt follows.
 
 External only: real mixed-DPI monitors, OS desktop switching/locking, failed SendInput recovery, GPU/audio/microphone devices. No complete parity or hardware validation claim.
