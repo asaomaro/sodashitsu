@@ -1,6 +1,6 @@
 param([switch]$NegativeControls)
 $ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
-$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsSigninHostChecks.cs')
+$files=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunAdmission.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninRunStorage.cs','WindowsSigninRunSession.cs','WindowsSigninHost.cs','WindowsSigninProcess.cs','WindowsSigninHostChecks.cs','WindowsSigninRunSessionChecks.cs')
 $owner='S-1-5-21-1-2-3-1001'
 $combined=($files|ForEach-Object {[IO.File]::ReadAllText((Join-Path $PSScriptRoot $_))}) -join "`n"
 $combined=$combined.Replace('__SIGNIN_OWNER_SID__',$owner)
@@ -35,12 +35,15 @@ try {
             @('graceful-frame','Encoding.ASCII.GetBytes("signin_stop\n")','Encoding.ASCII.GetBytes("signin_st0p\n")','Cooperative child did not finish cleanly'),
             @('graceful-exit','code!=0||!QueryInformationJobObject(job,1,out data','code==259||!QueryInformationJobObject(job,1,out data','Graceful completion ignored nonzero child exit'),
             @('graceful-descendants','if(data.Active==0){if(timer.ElapsedMilliseconds>=milliseconds)return false;stopped=true;graceful=true;return true;}','if(data.Active<=2){if(timer.ElapsedMilliseconds>=milliseconds)return false;stopped=true;graceful=true;return true;}','Graceful completion ignored live descendant'),
-            @('quiescence-marker','if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();','if(stream.ReadByte()==-2)throw Failure();','Invalid quiescence marker accepted'),
+            @('quiescence-marker','stream=>{if(stream.ReadByte()!=83||stream.ReadByte()!=-1)throw Failure();}','stream=>{if(stream.ReadByte()==-2)throw Failure();}','Invalid quiescence marker accepted'),
             @('quiescence-write-share','OpenSharedCore(path,directory,package,maximum,1,policy,afterOpen)','OpenSharedCore(path,directory,package,maximum,3,policy,afterOpen)','Live quiescence lease allowed writes'),
             @('finite-exit-code','&&code==0;','&&code!=259;','Finite child exit code was ignored'),
-            @('private-runtime','if(ace.AccessMask!=0)return false;','','Foreign runtime read accepted'),
+            @('private-runtime','                if(ace.AccessMask!=0)return false;','','Foreign runtime read accepted'),
             @('parent-environment','EnvironmentBlock=block.Append(''\0'').ToString();','block.Append("SODA_SIGNIN_HOST_SECRET=generated-private-parent-marker\0");EnvironmentBlock=block.Append(''\0'').ToString();','Parent environment retained'),
-            @('post-create-revocation','Require(current());Require(ResumeThread(process.Thread)==1);','Require(true);Require(ResumeThread(process.Thread)==1);','Post-create revocation accepted'),
+            @('post-create-revocation','Require(current());if(admit!=null)','Require(true);if(admit!=null)','Post-create revocation accepted'),
+            @('admission','Require(admit());Require(current());Require(confirm());','admit();Require(current());Require(confirm());','Unconfirmed child admission resumed'),
+            @('post-admission','Require(admit());Require(current());Require(confirm());','Require(admit());Require(confirm());','Post-admission revocation resumed child'),
+            @('post-inspection-deadline','Require(confirm());','confirm();','Post-admission inspection expired before native resume'),
             @('handle-inheritance','Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x20002),handles,new IntPtr(3*IntPtr.Size),IntPtr.Zero,IntPtr.Zero));','Require(true);','Unexpected handle inherited'),
             @('job-membership','return owned;','return false;','Grandchild not owned by job'),
             @('job-accounting','return data.Active;','return data.Active+1;','Cooperative child did not finish cleanly')

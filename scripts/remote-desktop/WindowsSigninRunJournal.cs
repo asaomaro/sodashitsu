@@ -12,24 +12,24 @@ internal sealed class SodaDesktopSigninRunJournal : IDisposable {
     internal enum Role { Host, Controller, Observer, Installer }
     readonly object gate=new object();readonly string directory,owner,package,barrier;
     readonly Role role;readonly Func<bool> scope;readonly Func<byte[],bool> policy;
-    readonly List<SodaDesktopSigninPackageNative.Held> ancestors;
+    readonly List<SodaDesktopSigninPackageNative.Held> ancestors;readonly Func<string,byte[],bool> ancestorPolicy;
     bool ended,checking,busy;internal Action AfterStageClosed=null;
     static readonly string[] Names={"initial","intent.pending","intent.claimed","started","observation","stopped","stop-observed"};
     static Exception Failure(){return new InvalidOperationException("Signin run journal is unavailable");}
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]
     static extern bool MoveFileExW(string from,string to,uint flags);
-    internal SodaDesktopSigninRunJournal(string directory,string owner,string package,string barrier,Role role,Func<bool> scope,Func<byte[],bool> policy,IEnumerable<string> parents){
-        this.directory=directory;this.owner=SodaDesktopSigninVault.Owner(owner);this.package=package;this.barrier=barrier;this.role=role;this.scope=scope;this.policy=policy;
+    internal SodaDesktopSigninRunJournal(string directory,string owner,string package,string barrier,Role role,Func<bool> scope,Func<byte[],bool> policy,IEnumerable<string> parents,Func<string,byte[],bool> ancestorPolicy=null){
+        this.directory=directory;this.owner=SodaDesktopSigninVault.Owner(owner);this.package=package;this.barrier=barrier;this.role=role;this.scope=scope;this.policy=policy;this.ancestorPolicy=ancestorPolicy??((path,bytes)=>policy(bytes));
         ancestors=new List<SodaDesktopSigninPackageNative.Held>();
         try{if(String.IsNullOrEmpty(directory)||!Path.IsPathRooted(directory)||scope==null||policy==null||parents==null)throw Failure();
-            foreach(string parent in parents){if(ancestors.Count>=64)throw Failure();ancestors.Add(SodaDesktopSigninPackageNative.OpenCore(parent,true,true,0,policy,null));}
+            foreach(string parent in parents){if(ancestors.Count>=64)throw Failure();ancestors.Add(SodaDesktopSigninPackageNative.OpenCore(parent,true,true,0,bytes=>this.ancestorPolicy(parent,bytes),null));}
             ancestors.Add(SodaDesktopSigninPackageNative.OpenCore(directory,true,true,0,policy,null));Current();
         }catch{Dispose();throw;}
     }
     void Current(){
         if(ended||checking){ended=true;throw Failure();}checking=true;
-        try{if(!scope()||ended)throw Failure();foreach(var item in ancestors)SodaDesktopSigninPackageNative.CheckCore(item,policy);if(!scope()||ended)throw Failure();}
+        try{if(!scope()||ended)throw Failure();foreach(var item in ancestors)SodaDesktopSigninPackageNative.CheckCore(item,bytes=>ancestorPolicy(item.Path,bytes));if(!scope()||ended)throw Failure();}
         catch{ended=true;throw;}finally{checking=false;}
     }
     void Begin(Role required){Current();if(busy||role!=required){ended=true;throw Failure();}busy=true;}

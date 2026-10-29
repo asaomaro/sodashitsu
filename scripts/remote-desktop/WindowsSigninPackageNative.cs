@@ -24,6 +24,11 @@ public static class SodaDesktopSigninPackageNative {
         internal readonly Info Value;readonly uint type;
         internal Snapshot(Info value,uint type){Value=value;this.type=type;}
         internal bool Regular(bool directory,long maximum){return type==1&&(Value.Attributes&1024)==0&&((Value.Attributes&16)!=0)==directory&&(directory||Value.Links==1&&Value.SizeHigh==0&&Value.SizeLow>0&&Value.SizeLow<=maximum);}
+        internal string Fingerprint(){
+            if(!Regular(false,1))throw Failure();using(var memory=new MemoryStream())using(var writer=new BinaryWriter(memory)){
+                writer.Write(Value.Volume);writer.Write(Value.IndexHigh);writer.Write(Value.IndexLow);writer.Write(Value.CreatedHigh);writer.Write(Value.CreatedLow);writer.Write(Value.WriteHigh);writer.Write(Value.WriteLow);writer.Write(Value.Attributes);writer.Write(Value.SizeHigh);writer.Write(Value.SizeLow);writer.Flush();using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(memory.ToArray())).Replace("-","").ToLowerInvariant();
+            }
+        }
         internal bool Same(Snapshot other,bool directory,long maximum){
             return other!=null&&Regular(directory,maximum)&&other.Regular(directory,maximum)&&Value.Volume==other.Value.Volume&&Value.IndexHigh==other.Value.IndexHigh&&Value.IndexLow==other.Value.IndexLow&&Value.Attributes==other.Value.Attributes&&
                 (directory||Value.SizeLow==other.Value.SizeLow&&Value.WriteLow==other.Value.WriteLow&&Value.WriteHigh==other.Value.WriteHigh);
@@ -82,8 +87,8 @@ public static class SodaDesktopSigninPackageNative {
     /** Retain this lease until the verified child has stopped. Disposing it is
      * not a substitute for stopping a child; this verifier never launches one. */
     public sealed class Lease : IDisposable {
-        readonly string root;readonly List<Held> held;readonly object gate=new object();bool closed;
-        internal Lease(string root,List<Held> held){this.root=root;this.held=held;}
+        readonly string root;readonly List<Held> held;readonly object gate=new object();bool closed;internal readonly string ManifestSha256;
+        internal Lease(string root,List<Held> held,string manifestSha256){this.root=root;this.held=held;ManifestSha256=manifestSha256;}
         public bool Current(){lock(gate){try{return !closed&&SodaDesktopSigninVault.SystemPrimary()&&!closed;}catch{return false;}}}
         string Get(string relative){if(!Current())throw Failure();return Full(root,relative);}
         public string Node {get{return Get("node.exe");}}
@@ -108,7 +113,7 @@ public static class SodaDesktopSigninPackageNative {
             foreach(string directory in ordered)held.Add(Hold(directory,true,Within(root,directory),0));
             Inventory(packageDirectories,files);
             var manifest=Hold(Full(root,"signin-package.json"),false,true,32768);held.Add(manifest);
-            var description=SodaDesktopSigninPackage.Decode(new UTF8Encoding(false,true).GetString(Read(manifest)),owner);Check(manifest);
+            byte[] manifestBytes=Read(manifest);string manifestSha256;SodaDesktopSigninPackage description;try{using(var sha=SHA256.Create())manifestSha256=BitConverter.ToString(sha.ComputeHash(manifestBytes)).Replace("-","").ToLowerInvariant();description=SodaDesktopSigninPackage.Decode(new UTF8Encoding(false,true).GetString(manifestBytes),owner);}finally{Array.Clear(manifestBytes,0,manifestBytes.Length);}Check(manifest);
             foreach(var entry in description.Entries()){
                 var file=Hold(Full(root,entry.Path),false,true,SodaDesktopSigninPackage.MaximumBytes(entry.Path));held.Add(file);
                 if(file.Before.Value.SizeLow!=entry.Bytes)throw Failure();
@@ -117,7 +122,7 @@ public static class SodaDesktopSigninPackageNative {
             }
             Inventory(packageDirectories,files);foreach(var file in held)Check(file);
             if(!SodaDesktopSigninVault.SystemPrimary())throw Failure();
-            var lease=new Lease(root,held);transferred=true;return lease;
+            var lease=new Lease(root,held,manifestSha256);transferred=true;return lease;
         }catch{throw Failure();}finally{if(!transferred)Release(held);}
     }
 }

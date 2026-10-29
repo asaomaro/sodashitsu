@@ -15,6 +15,8 @@ try{
    @('owner','!permitted||ended||taken','ended||taken','Revoked child scope resumed'),
    @('process','!started.SameProcess(ack)||','','Observation binding mismatch accepted: pid'),
    @('binding','||(string)ack.Field("startedSha256")!=started.Digest()','','Observation binding mismatch accepted: startedSha256'),
+   @('confirm-wall','(long)Intent.Field("expiresAt")<=now','(long)Intent.Field("expiresAt")<now','Expired intent confirmed native resume'),
+   @('confirm-observation','if(closed||last>at||until<=at)','if(closed||last>at||until<at)','Expired observation confirmed native resume'),
    @('pre-ack','return accepted&&Valid(scope);','return Valid(scope);','Run resumed before process observation ACK')
   )
   $name='WindowsSigninRunAdmission.cs';$before=[Text.Encoding]::UTF8.GetString($original[$name]);foreach($variant in $variants){if(([regex]::Matches($before,[regex]::Escape($variant[1]))).Count -ne 1){throw ('Negative guard changed: '+$variant[0])}
@@ -22,7 +24,7 @@ try{
    finally{[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name]);if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root $name))) -cne [Convert]::ToBase64String($original[$name])){throw 'Source bytes not restored'}}
   }
   $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Restored run admission checks failed'}
-  'signin_run_admission_6_source_negative_controls_and_restore_passed'
+  'signin_run_admission_8_source_negative_controls_and_restore_passed'
  }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0

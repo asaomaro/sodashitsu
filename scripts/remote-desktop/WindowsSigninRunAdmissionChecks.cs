@@ -6,7 +6,7 @@ public static class SodaDesktopSigninRunAdmissionChecks {
     sealed class Fixture {
         internal long Wall=10000,Mono;internal bool Scope=true;
         internal readonly SodaDesktopSigninRunRecord Intent,Started,Ack;internal readonly SodaDesktopSigninRunAdmission Admission;internal readonly SodaDesktopSigninRunObservation Observation;
-        internal Fixture(){Intent=Make("intent",null);Admission=new SodaDesktopSigninRunAdmission(Intent,()=>Wall,()=>Mono);Started=Make("started",Intent.Digest());Ack=Make("observation",Started.Digest());Observation=new SodaDesktopSigninRunObservation(Admission,Started,()=>Mono);}
+        internal Fixture(long expires=310000){Intent=Changed(Make("intent",null),"expiresAt",expires);Admission=new SodaDesktopSigninRunAdmission(Intent,()=>Wall,()=>Mono);Started=Make("started",Intent.Digest());Ack=Make("observation",Started.Digest());Observation=new SodaDesktopSigninRunObservation(Admission,Started,()=>Mono);}
     }
     static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
     static SodaDesktopSigninRunRecord Make(string kind,string digest){var fields=new Dictionary<string,object>{{"version",1},{"purpose","desktop-signin-run"},{"kind",kind},{"ownerSid",Owner},{"runId",RunId},{"packageSha256",new string('a',64)},{"barrierSha256",new string('b',64)}};if(kind=="intent"){fields.Add("issuedAt",10000);fields.Add("expiresAt",310000);fields.Add("mode","normal");}else{fields.Add("pid",1234);fields.Add("createdFiletime","134000000000000000");if(kind=="started"){fields.Add("startedAt",10000);fields.Add("intentSha256",digest);}else fields.Add("startedSha256",digest);}return SodaDesktopSigninRunRecord.Build(fields,Owner);}
@@ -34,6 +34,12 @@ public static class SodaDesktopSigninRunAdmissionChecks {
         f=new Fixture();captured=f;bool once=false;Check(!f.Admission.Current(()=>{if(!once){once=true;captured.Admission.Current(()=>true);}return true;}),"Reentrant admission check restored authority");
         f=new Fixture();captured=f;Check(!f.Observation.Accept(f.Ack,()=>{captured.Observation.Close();return true;}),"Reentrant observation close restored authority");
         f=new Fixture();Check(f.Observation.Accept(f.Ack,()=>true),"First observation failed");Check(!f.Observation.Accept(f.Ack,()=>true)&&!f.Observation.CanResume(()=>true),"Repeated observation ACK retained authority");
+        f=new Fixture();Check(f.Observation.Accept(f.Ack,()=>true)&&f.Observation.TakeResume(()=>true)&&f.Observation.ConfirmResume(()=>true),"Fresh consumed observation did not confirm resume");Check(!f.Observation.ConfirmResume(()=>true),"Native resume confirmation was replayed");
+        f=new Fixture();Check(!f.Observation.ConfirmResume(()=>true),"Unconsumed observation confirmed resume");
+        f=new Fixture();Check(f.Observation.Accept(f.Ack,()=>true)&&f.Observation.TakeResume(()=>true),"Expired-confirm fixture failed");f.Mono=10000;Check(!f.Observation.ConfirmResume(()=>true),"Expired observation confirmed native resume");
+        f=new Fixture(10002);Check(f.Observation.Accept(f.Ack,()=>true)&&f.Observation.TakeResume(()=>true),"Wall-confirm fixture failed");f.Wall=10002;Check(!f.Observation.ConfirmResume(()=>true),"Expired intent confirmed native resume");
+        f=new Fixture();Check(f.Observation.Accept(f.Ack,()=>true)&&f.Observation.TakeResume(()=>true),"Immediate-confirm fixture failed");Check(!f.Observation.ConfirmResume(()=>false),"Stopped signal confirmed native resume");
+        f=new Fixture();Check(f.Observation.Accept(f.Ack,()=>true)&&f.Observation.TakeResume(()=>true),"Reentry-confirm fixture failed");captured=f;Check(!f.Observation.ConfirmResume(()=>{captured.Observation.Close();return true;}),"Reentrant confirmation restored resume authority");
         Console.WriteLine("signin_run_admission_generated_expiry_observation_and_single_resume_passed");
     }
 }

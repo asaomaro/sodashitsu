@@ -63,8 +63,8 @@ internal static class SodaDesktopSigninProcess {
         }}
         public void Dispose(){lock(gate){if(!Stop())throw SodaDesktopSigninHost.Failure();Close(ref stopWrite);Close(ref process);Close(ref job);}}
     }
-    internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current){
-        Layouts();Require(plan!=null&&current!=null&&current());
+    internal static Child Start(SodaDesktopSigninHost.Plan plan,Func<bool> current,Func<bool> admit=null,Func<bool> confirm=null){
+        Layouts();Require(plan!=null&&current!=null&&(admit==null)==(confirm==null)&&current());
         IntPtr stopWrite=IntPtr.Zero,job=IntPtr.Zero,list=IntPtr.Zero,handles=IntPtr.Zero,jobValue=IntPtr.Zero,environment=IntPtr.Zero;
         var inherited=new IntPtr[3];var process=new PI();bool initialized=false,transferred=false;
         try {
@@ -83,7 +83,7 @@ internal static class SodaDesktopSigninProcess {
             environment=Marshal.StringToHGlobalUni(plan.EnvironmentBlock);
             Require(current());
             Require(CreateProcessW(plan.Application,new StringBuilder("\""+plan.Application+"\" "+plan.Arguments),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x08000000|0x400|4,environment,plan.WorkingDirectory,ref startup,out process));
-            Require(current());Require(ResumeThread(process.Thread)==1);
+            Require(current());if(admit!=null){Require(admit());Require(current());Require(confirm());}Require(ResumeThread(process.Thread)==1);
             var result=new Child(process.Process,job,stopWrite);stopWrite=IntPtr.Zero;transferred=true;return result;
         }finally{
             if(!transferred&&process.Process!=IntPtr.Zero){
