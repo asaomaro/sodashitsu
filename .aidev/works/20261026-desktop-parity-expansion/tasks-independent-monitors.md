@@ -9,9 +9,11 @@ Scope: Windows normal desktop monitor-specific capture/encoder cohorts, explicit
 - [x] Independent popup launch and per-monitor preferences; reload never restores input permission. Taskcheck required.
 - [x] Readonly independent source review by review_pointer/review_transfer;2musts corrected and correction re-reviewed. Source negative controls catch both actual defects.
 - [x] Focused271tests before final topology/fault additions; later2 tests passed. Browser old5, independent normal/encrypted2, independent native1 passed in separate focused runs.
-- [ ] Final full source build/typecheck/tests and final browser8cases.
+- [x] Final full source build/typecheck/tests:12,487/838 PASS423.60s.
+- [x] Final browser8cases after browser-ready sequencing correction:8/8 PASS1.2m.
 - [ ] Root exact-byte guarded reflection and root build/typecheck/tests.
-- [ ] Clean external source build/smoke, final independent diff/records review.
+- [x] Clean external frozen5774edcd install/build/smoke; final git status empty.
+- [ ] Final independent records review.
 - [ ] Commit/PR/main exact-head checks and delivery receipt.
 
 External only: real mixed-DPI monitors, OS desktop switching/locking, failed SendInput recovery, GPU/audio/microphone devices. No complete parity or hardware validation claim.

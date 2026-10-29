@@ -70,3 +70,11 @@ desktop_resource_fence_generated_strict_release_worker_cleanup_terminal_failure_
 desktop_resource_input_failed_key_button_unicode_never_ack_passed
 desktop_resource_cleanup_5_source_negative_controls_and_restore_passed
 ```
+
+## Full source and clean startup results
+
+Frozen product5774edcd source `pnpm build`, `pnpm typecheck` passed. Whole suite838files/12,487tests passed423.60s, maxWorkers4. Separate detached5774edcd worktree install/build/`pnpm smoke` passed; final git status empty. Both browser terminal canvas/typed PTY round trip and guidance focus/close were observed. Packaged helper compiled from generated release folder.
+
+Combined browser run first reported7passes/1failure while the full suite was active: the new native case reached the next checkbox before the previous shared reconnect completed. The test now observes browser status `閲覧中` after each shared/cursor/independent change, rather than accepting an old positive canvas counter as readiness. Ordered combined rerun pending. This is test sequencing only; product files unchanged. Root full tests running after the source whole suite completed; never two whole suites concurrently.
+
+Ordered final browser run:8/8 PASS1.2m (plain/encrypted/native/topology, independent plain/encrypted/native, invalid URL). Source product unchanged from5774edcd. Final source taskcheck/cross/correction review clear; root integrated full tests/browser are pending before merge.

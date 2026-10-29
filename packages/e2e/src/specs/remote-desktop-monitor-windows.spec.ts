@@ -115,13 +115,16 @@ for (const mode of [
       }
       await expect(c1).toHaveAttribute("data-rendered-frames", /^[1-9]/);
       await first.getByLabel("複数viewerで同じ画面を共有", { exact: true }).check();
+      await expect(first.locator("[data-desktop-status]")).toHaveText("閲覧中");
       await expect(c1).toHaveAttribute("data-rendered-frames", /^[1-9]/);
       await first.getByLabel("モニター選択を共有（全ての窓で同じ選択が必要）",{exact:true}).check();
       await expect(first.getByLabel("表示モニター")).toHaveValue("right");
       await first.getByLabel("独立カーソルを共有（全ての窓で同じ選択が必要）",{exact:true}).check();
+      await expect(first.locator("[data-desktop-status]")).toHaveText("閲覧中");
       await expect(c1).toHaveAttribute("data-rendered-frames",/^[1-9]/);
       if(mode==="independent"||mode==="independent-encrypted"||mode==="independent-native"){
         await first.getByLabel("モニターごとに独立して配信",{exact:true}).check();
+        await expect(first.locator("[data-desktop-status]")).toHaveText("閲覧中");
         await expect(c1).toHaveAttribute("data-rendered-frames",/^[1-9]/);
         await first.getByLabel("この窓に表示するモニター",{exact:true}).selectOption("left");
         const before=(await readFile(ledger,"utf8")).trim().split("\n").map(s=>JSON.parse(s)).filter(v=>v.type==="spawn").length;
