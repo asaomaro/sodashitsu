@@ -95,3 +95,7 @@ System.Management.Automation.MethodInvocationException: "1" �̈�����
 signin_controller_actual_ordinary_host_child_job_ack_stop_observation_and_recovery_passed
 signin_controller_10_source_negative_controls_and_restore_passed
 ```
+
+## Delivery
+
+PR#287 merged main7488c838a0b4e31a3eb7f4407e02bd2115e3506b. Product8793a04e passed protected Windows CI40805183483/job123222312647 and Node Windows CI40805183602/job123222312640. Final records review clear. Root26files reflected with full-file base/result preflight and final byte recheck; the documentation append preserved existing root customizations. Only eight prior approved final record files differ from source head on main; product files match. No service/installer activation or ordinary server handoff.
