@@ -1,3 +1,4 @@
+import { DesktopFolderSnapshot } from "./DesktopFolderSnapshot.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, rm, readFile, writeFile, rename, chmod, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -106,4 +107,92 @@ it.skipIf(process.platform === "win32")(
     await expect(f.create().generation()).rejects.toThrow();
   },
 );
-it.each(["key","generation","record"])("explicitly rejects a zero-byte %s in an established namespace",async name=>{const f=await fixture(),a=f.create(),generation=await a.generation(),token="b".repeat(64);await a.put(token,generation,{offset:1},()=>true);await writeFile(join(f.options.directory,name==="record"?token+".json":name+".json"),"");await expect(f.create().list()).rejects.toThrow();});
+it.each(["key", "generation", "record"])(
+  "explicitly rejects a zero-byte %s in an established namespace",
+  async (name) => {
+    const f = await fixture(),
+      a = f.create(),
+      generation = await a.generation(),
+      token = "b".repeat(64);
+    await a.put(token, generation, { offset: 1 }, () => true);
+    await writeFile(
+      join(f.options.directory, name === "record" ? token + ".json" : name + ".json"),
+      "",
+    );
+    await expect(f.create().list()).rejects.toThrow();
+  },
+);
+
+it("allows bounded folder metadata without raising the default single-file limit", async () => {
+  const f = await fixture(),
+    token = "c".repeat(64),
+    value = { manifest: "x".repeat(90000) },
+    single = f.create();
+  const generation = await single.generation();
+  await expect(single.put(token, generation, value, () => true)).rejects.toThrow();
+  const folder = new DesktopTransferStore({ ...f.options, folderRecords: true });
+  await folder.put(token, generation, value, () => true);
+  const fresh = new DesktopTransferStore({ ...f.options, folderRecords: true });
+  expect((await fresh.list())[0]!.value).toEqual(value);
+  await expect(
+    folder.put(token, generation, { manifest: "x".repeat(2097152) }, () => true),
+  ).rejects.toThrow();
+});
+
+it("fits the maximum completed folder manifest within its bounded encrypted envelope", async () => {
+  const f = await fixture(),
+    files = Array.from({ length: 1000 }, (_, i) => {
+      const path = "f" + i.toString(36),
+        id = `00000000-0000-4000-8000-${i.toString().padStart(12, "0")}`,
+        identity = "1".repeat(40) + ":" + "2".repeat(40) + ":" + "3".repeat(40),
+        hash = "a".repeat(64);
+      return {
+        path,
+        bytes: 0,
+        offset: 0,
+        done: true,
+        committing: false,
+        sha256: hash,
+        temporary: {
+          version: 1 as const,
+          id,
+          path,
+          temporary: `.soda-transfer-${id}`,
+          rootIdentity: hash,
+          parentIdentity: hash,
+          fileIdentity: identity,
+          bytes: 0,
+          offset: 0,
+          prefixSha256: hash,
+        },
+        source: {
+          version: 1 as const,
+          path,
+          rootIdentity: hash,
+          parentIdentity: hash,
+          fileIdentity: identity,
+          bytes: 0,
+          mtimeNs: "9".repeat(32),
+          ctimeNs: "9".repeat(32),
+        },
+      };
+    });
+  const snapshot = DesktopFolderSnapshot.parse({
+    version: 1,
+    id: "00000000-0000-4000-8000-000000000000",
+    upload: true,
+    approvedIdentity: "a".repeat(64),
+    destination: "saved",
+    directories: [{ path: "", identity: "a".repeat(64) }],
+    files,
+    bytes: 0,
+    offset: 0,
+    complete: true,
+  });
+  expect(Buffer.byteLength(JSON.stringify(snapshot))).toBeGreaterThan(1048576);
+  const store = new DesktopTransferStore({ ...f.options, folderRecords: true }),
+    generation = await store.generation();
+  await store.put("d".repeat(64), generation, { snapshot }, () => true);
+  const fresh = new DesktopTransferStore({ ...f.options, folderRecords: true });
+  expect(((await fresh.list())[0]!.value as any).snapshot.files).toHaveLength(1000);
+});

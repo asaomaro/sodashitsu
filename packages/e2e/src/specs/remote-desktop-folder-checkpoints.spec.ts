@@ -15,6 +15,10 @@ for (const mode of [
   "other-window-upload",
   "storage-unavailable-upload",
   "full-store-upload",
+  "restart-upload",
+  "restart-download",
+  "restart-encrypted-upload",
+  "restart-encrypted-download",
 ] as const)
   test(`desktop folder checkpoint reload ${mode}`, async ({ page, context, appServer }) => {
     test.setTimeout(90000);
@@ -27,6 +31,7 @@ for (const mode of [
       ),
       "--static",
     ]);
+    const helperCommand=process.env.SODA_DESKTOP_COMMAND;
     const provider = await startAppServer().finally(() => {
       if (saved === undefined) delete process.env.SODA_DESKTOP_COMMAND;
       else process.env.SODA_DESKTOP_COMMAND = saved;
@@ -127,7 +132,7 @@ for (const mode of [
         machineId: invite.machineId,
         token: invite.token,
       });
-      const identity = mode.startsWith("encrypted")
+      const identity = mode.includes("encrypted")
         ? await owner.request("desktop.endpoint.initialize", {})
         : undefined;
       if (identity) await owner.request("desktop.endpoint.required", { required: true });
@@ -273,6 +278,12 @@ for (const mode of [
           await other.close();
         }
         return;
+      }
+      if(mode.startsWith("restart-")){
+        await expect(panel.locator("[data-file-resume-notice]")).toContainText("ファイル・フォルダーとも");
+        const previous=process.env.SODA_DESKTOP_COMMAND;process.env.SODA_DESKTOP_COMMAND=helperCommand;
+        try{await provider.restart();}finally{if(previous===undefined)delete process.env.SODA_DESKTOP_COMMAND;else process.env.SODA_DESKTOP_COMMAND=previous;}
+        await expect(header.locator('[data-state="online"]')).toBeVisible();
       }
       await page.reload();
       await openNativeTab(page, "desktop", page.locator(`[data-machine-id="${invite.machineId}"]`));

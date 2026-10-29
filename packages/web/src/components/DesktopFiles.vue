@@ -20,6 +20,7 @@ const props = defineProps<{
   client: DesktopFileClient;
   canResume?: boolean;
   durableResume?:boolean;
+  durableFolderResume?:boolean;
   canFolders?: boolean;
   canResumeFolders?: boolean;
   machineId?: string;
@@ -1006,7 +1007,7 @@ defineExpose({ addFiles, handleDrop });
       {{ enabled ? "ファイル転送を解除" : "ファイル転送を許可" }}
     </button>
     <p v-if="canResume || canResumeFolders" data-file-resume-notice>
-      再開用データを保存すると、切断・再読込後に許可し直して再開できます。ブラウザ合計100MiB・8件、最後の操作から15分まで。<template v-if="durableResume">単一ファイルは接続先サーバーの再起動・handoff後も新しく許可して再開できます。フォルダーの再開記録は接続先の再起動で失効します。</template><template v-else>接続先の再起動では失効します。</template>共有設定の変更では失効します。
+      再開用データを保存すると、切断・再読込後に許可し直して再開できます。ブラウザ合計100MiB・8件、最後の操作から15分まで。<template v-if="durableResume"><template v-if="durableFolderResume">ファイル・フォルダーとも</template><template v-else>単一ファイルは</template>接続先サーバーの再起動・handoff後も新しく許可して再開できます。<template v-if="!durableFolderResume">フォルダーの再開記録は接続先の再起動で失効します。</template></template><template v-else>接続先の再起動では失効します。</template>共有設定の変更では失効します。
     </p>
     <label v-if="canResume || canResumeFolders"
       ><input

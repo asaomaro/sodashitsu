@@ -58,3 +58,6 @@ jobs:
       - name: Generated server-process checkpoint crash boundaries (private disposable files only)
         shell: powershell
         run: node scripts/remote-desktop/validate-transfer-checkpoints.mjs
+      - name: Generated folder checkpoint process-restart boundaries (private disposable files only)
+        shell: powershell
+        run: node scripts/remote-desktop/validate-folder-checkpoints.mjs

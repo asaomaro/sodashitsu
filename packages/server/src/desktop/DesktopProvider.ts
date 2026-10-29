@@ -1,3 +1,4 @@
+import {dirname,join} from "node:path";
 import {createHash} from "node:crypto";
 import {DesktopInteractiveOwner,type DesktopInteractiveResource} from "./DesktopInteractiveOwner.js";
 import {DesktopResourceChannel} from "./DesktopResourceChannel.js";
@@ -143,19 +144,22 @@ export class DesktopProvider {
   private savedPolicyFault=false;
   failSavedTransferPolicy(){this.savedPolicyFault=true;this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);}
   private async stableTransferBarrier(){for(;;){const pending=this.transferBarrier;await pending;if(pending===this.transferBarrier)return;}}
-  enableSavedTransfers(directory:string,binding:string){if(this.transferStore||this.active||this.shared.size)throw Error("転送記録の初期化順が不正です");this.savedSettingsBinding=binding;this.transferStore=new DesktopTransferStore({directory,binding:this.savedBinding(binding)});this.fileCheckpoints=new DesktopFileCheckpoints(this.transferStore);}
-  async invalidateSavedTransfers(){this.savedPolicyHolds++;this.fileCheckpoints.freeze();this.transferBarrier=this.fileCheckpoints.invalidate();this.transferBarrier.catch(()=>{});try{await this.transferBarrier;}catch(error){this.failSavedTransferPolicy();throw error;}}
-  async bindSavedTransfers(binding?:string){if(binding)this.savedSettingsBinding=binding;try{for(;;){const pending=this.transferBarrier;await pending;if(pending!==this.transferBarrier)continue;const scope=this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined;if(scope)await this.fileCheckpoints.bind(scope);if(pending!==this.transferBarrier||scope!==(this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined))continue;break;}this.savedPolicyFault=false;}catch(error){this.savedPolicyFault=true;throw error;}finally{this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);this.resumeSavedTransfers();}}
-  async settleSavedTransfers(){await this.stableTransferBarrier();await this.fileCheckpoints.settled();}
-  async suspendSavedTransfers(){const draining=this.fileCheckpoints.suspend();const results=await Promise.allSettled([this.stableTransferBarrier(),draining]);for(const result of results)if(result.status==="rejected")throw result.reason;}
-  resumeSavedTransfers(){if(!this.savedPolicyHolds&&!this.savedPolicyFault)this.fileCheckpoints.resume();}
-  private readonly folderCheckpoints=new DesktopFolderCheckpoints();
+  enableSavedTransfers(directory:string,binding:string){if(this.transferStore||this.active||this.shared.size)throw Error("転送記録の初期化順が不正です");this.savedSettingsBinding=binding;this.transferStore=new DesktopTransferStore({directory,binding:this.savedBinding(binding)});this.fileCheckpoints=new DesktopFileCheckpoints(this.transferStore);this.folderCheckpoints=new DesktopFolderCheckpoints(new DesktopTransferStore({directory:join(dirname(directory),"desktop-folder-transfers"),binding:this.savedBinding(binding),folderRecords:true}));}
+  async invalidateSavedTransfers(){this.savedPolicyHolds++;this.freezeSavedTransfers();this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});try{await this.transferBarrier;}catch(error){this.failSavedTransferPolicy();throw error;}}
+  async bindSavedTransfers(binding?:string){if(binding)this.savedSettingsBinding=binding;try{for(;;){const pending=this.transferBarrier;await pending;if(pending!==this.transferBarrier)continue;const scope=this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined;if(scope)await this.savedTransferWork(registry=>registry.bind(scope));if(pending!==this.transferBarrier||scope!==(this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined))continue;break;}this.savedPolicyFault=false;}catch(error){this.savedPolicyFault=true;throw error;}finally{this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);this.resumeSavedTransfers();}}
+  async settleSavedTransfers(){await this.stableTransferBarrier();await this.savedTransferWork(registry=>registry.settled());}
+  async suspendSavedTransfers(){const draining=this.savedTransferWork(registry=>registry.suspend());const results=await Promise.allSettled([this.stableTransferBarrier(),draining]);for(const result of results)if(result.status==="rejected")throw result.reason;}
+  resumeSavedTransfers(){if(!this.savedPolicyHolds&&!this.savedPolicyFault)for(const registry of this.savedRegistries())registry.resume();}
+  private folderCheckpoints=new DesktopFolderCheckpoints();
+  private savedRegistries(){return [this.fileCheckpoints,this.folderCheckpoints] as const;}
+  private freezeSavedTransfers(){for(const registry of this.savedRegistries())registry.freeze();}
+  private async savedTransferWork(run:(registry:DesktopFileCheckpoints|DesktopFolderCheckpoints)=>Promise<unknown>){const results=await Promise.allSettled(this.savedRegistries().map(run));const failed=results.filter((r):r is PromiseRejectedResult=>r.status==="rejected");if(failed.length)throw new AggregateError(failed.map(r=>r.reason),"Saved transfer operation failed");}
   private readonly endpointScopes=new WeakSet<EndpointScope>();
   get epoch():number{return this.sourceEpoch;}
   /** Owner-process integration only. Never expose this switch as machine RPC. */
   requireEndpoint(required:boolean):void {
     if(this.endpointOnly===required)return;
-    const auto=this.transferStore!==undefined&&this.savedPolicyHolds===0;if(auto){this.savedPolicyHolds++;this.fileCheckpoints.freeze();}this.dispose();this.endpointOnly=required;if(auto)void this.bindSavedTransfers().catch(()=>{});this.resumeUnlockLease();
+    const auto=this.transferStore!==undefined&&this.savedPolicyHolds===0;if(auto){this.savedPolicyHolds++;this.freezeSavedTransfers();}this.dispose();this.endpointOnly=required;if(auto)void this.bindSavedTransfers().catch(()=>{});this.resumeUnlockLease();
   }
   /** A private loopback backplane may reuse the existing permission/input/media
    * implementation without allowing a remote caller to choose a new origin. */
@@ -238,6 +242,7 @@ export class DesktopProvider {
       files:!!this.config?.fileRoot,
       fileCheckpoints:!!this.config?.fileRoot,
       durableFileCheckpoints:!!this.config?.fileRoot&&!!this.transferStore,
+      durableFolderCheckpoints:!!this.config?.fileRoot&&!!this.transferStore,
       folderCheckpoints:!!this.config?.fileRoot,
       folders:!!this.config?.fileRoot,
       richClipboard:this.config?.allowClipboard===true,
@@ -681,7 +686,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              resourceFences:_resourceFences,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              resourceFences:_resourceFences,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -712,7 +717,7 @@ export class DesktopProvider {
               ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
-              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true}:{})}:{}),
+              ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true}:{}),
               ...(nativeEnabled&&options.nativeCodecs&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),
@@ -941,10 +946,9 @@ export class DesktopProvider {
   }
   // Also used when pausing clients for handoff; rollback can reuse this provider.
   dispose(preserveTransfers=false): void {
-    if(preserveTransfers)this.fileCheckpoints.freeze();
+    if(preserveTransfers)this.freezeSavedTransfers();
     this.sourceEpoch++;
-    if(!preserveTransfers){this.transferBarrier=this.fileCheckpoints.invalidate();this.transferBarrier.catch(()=>{});}
-    this.folderCheckpoints.clear();
+    if(!preserveTransfers){this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});}
     this.unlockLease.stop();
     this.companion.dispose();
     for (const pending of this.pendingStarts) pending.cancelled = true;

@@ -49,6 +49,7 @@ export class DesktopTransferStore {
       platform?: NodeJS.Platform;
       protector?: DesktopSecretProtector;
       checkWindowsPath?: (path: string, allowMissing?: boolean) => Promise<void>;
+      folderRecords?: boolean;
     },
   ) {
     this.directory = resolve(options.directory);
@@ -115,7 +116,8 @@ export class DesktopTransferStore {
       throw error;
     }
     this.stat(before);
-    if (before.size > 65536) throw unavailable();
+    const limit = this.options.folderRecords && /^[a-f0-9]{64}\.json$/.test(name) ? 3145728 : 65536;
+    if (before.size > limit) throw unavailable();
     const fd = await open(
       path,
       constants.O_RDONLY |
@@ -124,7 +126,7 @@ export class DesktopTransferStore {
     try {
       const st = await fd.stat();
       this.stat(st);
-      if (st.dev !== before.dev || st.ino !== before.ino || st.size > 65536) throw unavailable();
+      if (st.dev !== before.dev || st.ino !== before.ino || st.size > limit) throw unavailable();
       const data = await fd.readFile("utf8"),
         after = await fd.stat(),
         named = await lstat(path);
@@ -144,7 +146,7 @@ export class DesktopTransferStore {
   }
   private seal(name: string, value: unknown) {
     const plain = Buffer.from(JSON.stringify(value));
-    if (plain.length > 45000) throw unavailable();
+    if (plain.length > (this.options.folderRecords ? 2097152 : 45000)) throw unavailable();
     const nonce = randomBytes(12),
       cipher = createCipheriv("aes-256-gcm", this.key!, nonce);
     cipher.setAAD(Buffer.from("soda-desktop-transfer-v1:" + name));
@@ -162,7 +164,9 @@ export class DesktopTransferStore {
     }
   }
   private unseal(name: string, text: string) {
-    const e = Envelope.parse(JSON.parse(text)),
+    const e = (
+        this.options.folderRecords ? Envelope.extend({ data: z.string().max(2796204) }) : Envelope
+      ).parse(JSON.parse(text)),
       nonce = Buffer.from(e.nonce, "base64"),
       tag = Buffer.from(e.tag, "base64"),
       data = Buffer.from(e.data, "base64");

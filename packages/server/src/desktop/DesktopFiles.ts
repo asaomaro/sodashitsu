@@ -104,7 +104,7 @@ export class DesktopFiles {
           throw Error("共有が終了したかファイル転送を許可されていません");
         if (m.request.action === "grant") {
           if (!m.request.enabled) {
-            await this.checkpoints?.settled();
+            const barriers=await Promise.allSettled([this.checkpoints?.settled(),this.folderCheckpoints?.settled()]);for(const result of barriers)if(result.status==="rejected")throw result.reason;
             await this.transfer.close();
             await this.folders?.clear();
             for (const id of this.activeIds) this.forget(id);
@@ -118,7 +118,7 @@ export class DesktopFiles {
           this.granted = true;
           return reply({ enabled: true, root: this.root });
         }
-        if(m.request.action==="folder_resume_abort"){if(!folderResumeCancelled)throw Error("別の接続で利用中か再開に未対応です");return reply({});}
+        if(m.request.action==="folder_resume_abort"){if(!folderResumeCancelled)throw Error("別の接続で利用中か再開に未対応です");await this.folderCheckpoints!.confirmCancel(this.root,this.owner,m.request.checkpoint,this.valid);return reply({});}
         if(m.request.action==="folder_abort"){if(!folderCancelled)throw Error("フォルダ転送は利用できません");return reply({});}
         if (m.request.action === "checkpoint_abort") {
           if (!checkpointCancelled) throw Error("再開記録が失効したか別の接続で利用中です");
