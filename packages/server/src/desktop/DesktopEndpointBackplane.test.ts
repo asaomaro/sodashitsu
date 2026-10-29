@@ -27,7 +27,7 @@ async function fixture(allowInput=true) {
 it("rejects legacy and forged endpoint starts before opening a provider socket",async()=>{
  const f=await fixture(),params={url:"ws://127.0.0.1:9/desktop-share",ticket:"x".repeat(43),options:DesktopOptions.parse({})};
  await expect(f.provider.start("legacy",params)).rejects.toThrow("Authenticated");
- await expect(f.provider.start("forged",params,{origin:"http://127.0.0.1:9",epoch:f.provider.epoch,active:()=>true})).rejects.toThrow("Authenticated");expect(await f.log(f.lifecycle)).toEqual([]);
+ await expect(f.provider.start("forged",params,{origin:"http://127.0.0.1:9",nativeOrigin:"http://127.0.0.1:9",epoch:f.provider.epoch,active:()=>true})).rejects.toThrow("Authenticated");expect(await f.log(f.lifecycle)).toEqual([]);
 });
 it("runs the generated helper and raw input through the private permission backplane",async()=>{
  const f=await fixture(),v=await f.viewer([DESKTOP_INPUT_PROTOCOL]);v.start();await expect.poll(()=>v.frames.length).toBe(1);expect(v.messages).toContainEqual(expect.objectContaining({type:"ready",backend:"synthetic"}));
