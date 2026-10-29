@@ -111,6 +111,10 @@ namespace Sodashitsu.NativeDrag
             }
             finally{if(protectedBytes!=null)Array.Clear(protectedBytes,0,protectedBytes.Length);if(plain!=null)Array.Clear(plain,0,plain.Length);}
         }
+        internal static FileSecurity UserFilePolicy(SecurityIdentifier user)
+        {
+            FileSecurity security=new FileSecurity();security.SetOwner(user);security.SetAccessRuleProtection(true,false);security.AddAccessRule(new FileSystemAccessRule(user,FileSystemRights.FullControl,AccessControlType.Allow));return security;
+        }
         private void Record(string path,SecurityIdentifier user,bool fresh)
         {
             byte[] plain=null,encrypted=null;string stage=path+"."+Guid.NewGuid().ToString("N");
@@ -123,7 +127,7 @@ namespace Sodashitsu.NativeDrag
                     plain=Encoding.UTF8.GetBytes("native-drag-slot-v1\n"+user.Value+"\n"+current.Id.ToString(CultureInfo.InvariantCulture)+"\n"+created.ToString(CultureInfo.InvariantCulture));
                 }
                 encrypted=ProtectedData.Protect(plain,Entropy,DataProtectionScope.CurrentUser);
-                using(FileStream output=new FileStream(stage,FileMode.CreateNew,FileAccess.Write,FileShare.None)){output.Write(encrypted,0,encrypted.Length);output.Flush(true);}
+                using(FileStream output=new FileStream(stage,FileMode.CreateNew,FileSystemRights.FullControl,FileShare.None,4096,FileOptions.None,UserFilePolicy(user))){output.Write(encrypted,0,encrypted.Length);output.Flush(true);}
                 if(fresh)File.Move(stage,path);else File.Replace(stage,path,null);
                 using(SafeFileHandle pinned=Pin(path,false))Policy(File.GetAccessControl(path),user,false);
             }

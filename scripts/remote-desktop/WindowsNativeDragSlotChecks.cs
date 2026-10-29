@@ -32,7 +32,7 @@ internal static class NativeDragSlotChecks
             if(mode=="linger"){Console.WriteLine("mutex_released_process_alive");Console.Out.Flush();Assert(Console.In.ReadLine()=="exit","fixture exit gate missing");}
             return 0;
         }
-        catch{Console.WriteLine("slot_refused");return 3;}
+        catch(Exception error){Console.Error.WriteLine(error);Console.WriteLine("slot_refused");return 3;}
     }
     private static int Finish(Process process)
     {
@@ -42,6 +42,8 @@ internal static class NativeDragSlotChecks
     {
         using(WindowsIdentity identity=WindowsIdentity.GetCurrent())
         {
+            FileSecurity createdFile=NativeDragSlot.UserFilePolicy(identity.User);
+            Assert(identity.User.Equals(createdFile.GetOwner(typeof(SecurityIdentifier)))&&createdFile.AreAccessRulesProtected,"journal creation owner must be explicit current user");
             DirectorySecurity unsafePolicy=new DirectorySecurity();unsafePolicy.SetOwner(identity.User);unsafePolicy.SetAccessRuleProtection(true,false);unsafePolicy.AddAccessRule(new FileSystemAccessRule(identity.User,FileSystemRights.FullControl,InheritanceFlags.ContainerInherit|InheritanceFlags.ObjectInherit,PropagationFlags.None,AccessControlType.Allow));
             unsafePolicy.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.WorldSid,null),FileSystemRights.ReadData,AccessControlType.Allow));
             try{typeof(NativeDragSlot).GetMethod("Policy",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,new object[]{unsafePolicy,identity.User,true});}
@@ -58,7 +60,7 @@ internal static class NativeDragSlotChecks
             Policy();string directory=Path.Combine(fixture,"state"),name="Local\\SodashitsuNativeSlotGenerated."+Guid.NewGuid().ToString("N");
             Process first=Start(directory,name,"linger");
             {
-                Assert(first.StandardOutput.ReadLine()=="slot_ready","first private fixture slot refused");
+                string firstLine=first.StandardOutput.ReadLine();if(firstLine!="slot_ready"){Finish(first);throw new Exception("generated assertion: first private fixture slot refused: "+first.StandardError.ReadToEnd());}
                 Process busy=Start(directory,name,"normal");Assert(Finish(busy)==3,"concurrent native slot accepted");
                 first.StandardInput.WriteLine("release");first.StandardInput.Flush();
                 Assert(first.StandardOutput.ReadLine()=="mutex_released_process_alive","fixture process did not linger after mutex release");

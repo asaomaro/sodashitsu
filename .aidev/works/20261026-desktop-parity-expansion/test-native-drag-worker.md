@@ -154,3 +154,21 @@ Native drag worker generated checks failed
 Independent reviewers reviewed pump, slot and whole worker/corrections. Late-gesture checks were corrected both after data construction and after the very last backend OS check; the shared native dispatch gate is regression-tested. Failed async extraction has a separate completion-success flag. Slot timing sleeps were replaced with explicit old-child gates. Final whole record review and frozen CI/root delivery receipt follow.
 
 No JS product files changed from main ee92e292; source12586/root12648 test counts are the N2 baseline, not new N3 whole-suite runs. Linux/macOS device tests, actual Windows Explorer target behavior and A/B deployment are not claimed.
+
+## First Windows CI correction
+
+The first Windows CI (run40907941308, head78eec48b) failed before its first slot fixture was admitted:
+
+```text
+System.Exception: generated assertion: first private fixture slot refused
+```
+
+New journal files previously used the process's default owner, while the subsequent policy requires the current user explicitly. Journal stage creation now supplies current-user owner plus a protected user-only FileSecurity directly to CreateNew; it never changes an existing file/directory ACL. The generated policy test requires the owner to be explicit, and generated-only child diagnostics now preserve the failure cause. The CI correction remains subject to the exact new head's Windows rerun.
+
+Affected exit/ACL/hardlink/DPAPI source controls were rerun against the corrected Slot source: intended assertion failures, exact restoration and Windows positives passed. An additional actual-source control removes the explicit owner and fails:
+
+```text
+System.Exception: generated assertion: journal creation owner must be explicit current user
+```
+
+Total controls15, with5 affected Slot checks rerun; unchanged pump/worker controls remain the14-control baseline above. Root source reflection is revalidated before applying only changed bytes. No JS product code changed.
