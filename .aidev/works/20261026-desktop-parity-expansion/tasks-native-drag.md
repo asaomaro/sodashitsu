@@ -50,3 +50,13 @@ N6 helper gateway (UI/controller and CLI are split into the next phase):
 - [x] Actual70000-byte C# pump↔Node memory-target validation, generated Windows checks, owned real child IPC, browser bridge DOM/frame tests.
 - [ ] Final product-source negatives, frozen full/root/browser/Windows CI/clean smoke and independent whole/correction review.
 - [ ] RDP gesture/controller, plain/sealed native file reads, optional manual CLI and actual Explorer drop validation.
+
+N6 PR#304 delivered: tested b9fce3b6444016da8bb96a7ac3c79a653db509fa, main6a26e77a180eadb09aac0ef6f6bf498731a129d1. Source12689/root12751 tests, source/root browser20 each, clean external build/smoke and four exact-head Windows jobs passed. Independent frozen37-path root match. No A/B runtime deployment.
+
+N7 browser/native handoff and local CLI:
+- [x] Explicit file-grant UI, direct Root helper discovery/keepalive and manual local command; no selected-B helper substitution. Transfer taskcheck and whole/delta review.
+- [x] Trusted held-down/applied ACK/4px admission,750ms original window, exact release activation before RDP handoff, buffered fallback and reentrant/late cancellation. Pointer taskcheck and whole/delta review.
+- [x] Plain/encrypted generated file path with real browser Controller/FileClient/Bridge/Host/DesktopFiles and actual memory target child; separate built Vue permission/pointer/capture/focus/completion integration.
+- [x] Eight actual product-source negative controls, exact restoration and30 focused positive tests. Actual CLI unclaimed Gateway SIGINT cleanup/exit0.
+- [ ] Frozen full/root/browser/CI/clean smoke, guarded root reflection and scoped PR/main receipts.
+- [ ] Actual Windows Explorer drop/cancel and A/B updated runtime validation. Linux/macOS desktop devices unavailable per user; WSL does not replace their real desktop validation.

@@ -41,3 +41,7 @@ it("starts and closes the real owned discovery child without any browser claim o
 it("drains a real child revoked before its discovery readiness",async()=>{
  const helpers=new DesktopNativeHelpers();clean.push(()=>helpers.dispose());const pending=helpers.start("real-owner",randomUUID(),"https://browser.example");helpers.clientGone("real-owner");await expect(pending).rejects.toThrow("停止");await helpers.dispose();
 },10000);
+
+it("checks keepalive ownership without creating or renewing a helper",async()=>{
+ const f=fixture(),viewer=randomUUID(),pending=f.helpers.start("one",viewer,"https://app.example");expect(()=>f.helpers.touch("one",viewer,"https://app.example")).toThrow();f.ready();await pending;expect(f.helpers.touch("one",viewer,"https://app.example")).toEqual({});for(const args of [["two",viewer,"https://app.example"],["one",randomUUID(),"https://app.example"],["one",viewer,"https://other.example"]])expect(()=>f.helpers.touch(args[0]!,args[1]!,args[2]!)).toThrow();expect(f.children).toHaveLength(1);const closing=f.helpers.stop("one",viewer);expect(()=>f.helpers.touch("one",viewer,"https://app.example")).toThrow();f.children[0]!.emit("close",0,null);await closing;
+});

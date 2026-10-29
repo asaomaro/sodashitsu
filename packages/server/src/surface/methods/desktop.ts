@@ -9,6 +9,9 @@ export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps
       const origin=ctx.connection?.browserOrigin;if(!origin||ctx.connectionAuthorized?.()===false)throw new RpcError("unauthorized","ブラウザから接続してください");
       return nativeHelpers.start(ctx.clientId,p.viewerId,origin,()=>ctx.connectionAuthorized?.()!==false);
     }});
+    surface.register("desktop.native_helper.touch",{schema:DesktopMethods["desktop.native_helper.touch"],handler:(ctx,p)=>{
+      const origin=ctx.connection?.browserOrigin;if(!origin||ctx.connectionAuthorized?.()===false)throw new RpcError("unauthorized","ブラウザから接続してください");return nativeHelpers.touch(ctx.clientId,p.viewerId,origin);
+    }});
     surface.register("desktop.native_helper.stop",{schema:DesktopMethods["desktop.native_helper.stop"],handler:async(ctx,p)=>{await nativeHelpers.stop(ctx.clientId,p.viewerId);return {};}});
   }
 

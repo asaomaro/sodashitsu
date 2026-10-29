@@ -45,6 +45,7 @@ import {
 
 import {monitorPointer,monitorViewport,monitorWindowUrl,type MonitorWindowLaunch} from "../desktop/monitorWindow.js";
 import DesktopFiles from "./DesktopFiles.vue";
+import DesktopNativeTransfer from "./DesktopNativeTransfer.vue";
 import {DesktopFileClient} from "../desktop/fileClient.js";
 import {DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DesktopNativeProfilePending,DESKTOP_MONITORS_PROTOCOL,desktopMonitorAt,type DesktopMonitorLayout,DESKTOP_FILES_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopRichClipboardClient,readRichClipboard,writeRichClipboard} from "../desktop/richClipboard.js";
@@ -216,8 +217,9 @@ function changeSharedCursor(){releaseInputs();connect();const el=canvas.value;el
 function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){if(!props.monitorWindow)localMonitor.value="";if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
+const nativeTransfer=ref<InstanceType<typeof DesktopNativeTransfer>>(),fileGranted=ref(false);let nativePointerId:number|undefined;
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),durableFileCheckpoints=ref(false),durableFolderCheckpoints=ref(false),fileCheckpoints=ref(false),folderCheckpoints=ref(false),foldersCap=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
-function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=durableFolderCheckpoints.value=durableFileCheckpoints.value=fileCheckpoints.value=folderCheckpoints.value=foldersCap.value=false;}
+function resetFiles(){nativeTransfer.value?.stop();fileGranted.value=false;fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=durableFolderCheckpoints.value=durableFileCheckpoints.value=fileCheckpoints.value=folderCheckpoints.value=foldersCap.value=false;}
 function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data||!data.files.length&&!data.items.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}void filePanel.value.handleDrop(data);}
 const richClipboard=ref(false),richPipeReady=ref(false),richBusy=ref(false),richSyncMode=ref(false);
 let richClient:DesktopRichClipboardClient|undefined,richSocket:WebSocket|undefined,richSeq=0,lastRichLocal="",lastRichRemote="";
@@ -445,12 +447,14 @@ function send(value: unknown) {
     ws.send(JSON.stringify(value));
 }
 function releaseInputs() {
+  nativeTransfer.value?.interrupt();
   inputSender.clear();
   mouseButtons.reset(); modifiers.reset();
   send({type:"release"});
   cursorRenderer?.clearPrediction();
 }
 function relinquish() {
+  nativeTransfer.value?.interrupt();
   inputSender.clear();
   escapePress.reset(); mouseButtons.reset(); modifiers.reset();
   if (dismissPending) dismissInFlight.value = false;
@@ -900,6 +904,7 @@ function connect(automatic = false) {
             if (policy) send(policy);
           }
         } else if (m.type === "input_ack") {
+          nativeTransfer.value?.ack(m.seq);
           const at = inputs.get(m.seq);
           if (at !== undefined) {
             inputAckMs.value = performance.now() - at;
@@ -951,6 +956,7 @@ function restoreImage() {
 function input(value: unknown) {
   const parsed = RemoteDesktopInput.safeParse(value);
   if (!parsed.success || !canInput()) return;
+  if(!(parsed.data.kind==="pointer"&&parsed.data.event==="down"&&parsed.data.button===0))nativeTransfer.value?.interrupt();
   inputSender.submit(parsed.data);
 }
 function canInput() {
@@ -964,6 +970,7 @@ function sendInput(value: RemoteDesktopInput) {
   inputs.set(id, performance.now());
   if (inputs.size > 64) inputs.delete(inputs.keys().next().value!);
   send({ type: "input", seq: id, frameSeq: lastDrawn, input: value });
+  if(value.kind==="pointer"&&value.event==="down"&&value.button===0)nativeTransfer.value?.sent(id);
 }
 function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   escapePress.reset();
@@ -976,6 +983,10 @@ function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   const position = crop.value&&monitorLayout.value?monitorPointer(monitorLayout.value,localMonitor.value,x,y)!:{ x: Math.max(0, Math.min(1,x)), y: Math.max(0, Math.min(1,y)) };
   const onMonitor=!monitorLayout.value||!!desktopMonitorAt(monitorLayout.value,position.x,position.y);
   if(onMonitor)cursorRenderer?.local(position.x,position.y);
+  const nativePoint={...position,clientX:e.clientX,clientY:e.clientY};
+  if(nativeTransfer.value?.pointer(nativePoint,event,e.buttons))return;
+  if(event==="down"&&onMonitor&&e.button===0&&e.buttons===1&&e.pointerType==="mouse"&&e.isTrusted&&!e.ctrlKey&&!e.altKey&&!e.shiftKey&&!e.metaKey&&nativeTransfer.value?.begin(nativePoint))nativePointerId=e.pointerId;
+
   for (const change of mouseButtons.update(e.buttons)) {
     if(!onMonitor&&change.event==="down")continue;
     if (change.button > 2 && !extendedInput.value) {
@@ -986,7 +997,10 @@ function pointer(e: PointerEvent, event: "move" | "down" | "up") {
   }
   if (event === "move"&&onMonitor) input({kind:"pointer",...position,event:"move",button:0});
   if (event === "up" && canvas.value.hasPointerCapture(e.pointerId)) canvas.value.releasePointerCapture(e.pointerId);
+  if(event==="up")nativePointerId=undefined;
 }
+function nativeFallback(point:{x:number;y:number}|undefined){if(point&&(!monitorLayout.value||desktopMonitorAt(monitorLayout.value,point.x,point.y)))input({kind:"pointer",x:point.x,y:point.y,event:"move",button:0});}
+function nativeHandoff(){const el=canvas.value,id=nativePointerId;nativePointerId=undefined;if(el&&id!==undefined&&el.hasPointerCapture(id))el.releasePointerCapture(id);relinquish();}
 function submitText() {
   input({kind:"text",text:text.value});
   // Clearing the draft disables the focused submit button; keep focus in the viewer.
@@ -1329,7 +1343,8 @@ onBeforeUnmount(() => {
         <p v-if="independentScreen">各モニターを別々に取得・圧縮し、選択したモニターだけを受信します。モニターごとに画質を保存します。同じモニターの窓は同じ設定にしてください。共有方式の切替は、ほかの窓を閉じてから行ってください。</p><p v-else>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
       </div>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen||props.monitorWindow?.independent" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
-      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :durable-resume="durableFileCheckpoints" :durable-folder-resume="durableFolderCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" />
+      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :durable-resume="durableFileCheckpoints" :durable-folder-resume="durableFolderCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" @grant-change="fileGranted=$event" />
+      <DesktopNativeTransfer v-if="ready&&filesCap&&filesReady&&fileClient&&!secureDesktop&&!lockScreenCover&&!elevatedScreen&&!virtualScreen&&!platformBackend" ref="nativeTransfer" :files="fileClient" :granted="fileGranted" :input-enabled="control" @fallback="nativeFallback" @handoff="nativeHandoff" @release="relinquish" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
         <summary>マイク入力</summary>
         <p v-if="sharedScreen">複数窓での共有中は、1つの窓からだけマイクを送信できます。切り替える場合は、送信中の窓で停止してください。</p>

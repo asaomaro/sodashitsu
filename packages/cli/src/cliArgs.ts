@@ -58,6 +58,7 @@ export const USAGE_LINES: readonly string[] = [
   "sodactl work memory list|read|write [<name>] [--version <hash>] [--pane <id>] [--url <URL>] [--token <TOKEN>]",
   "sodactl work exec [--timeout <ms>] [--encoding utf-8|shift_jis|utf-16le] [--pane <id>] [--url <URL>] [--token <TOKEN>] -- <command>",
   "sodactl work handoff [--pane <id>] [--url <URL>] [--token <TOKEN>]",
+  "sodactl desktop native-helper --origin <browser-origin>",
   "sodactl desktop identity [--initialize] [--identity-dir <absolute-path>]",
   "sodactl desktop session [--endpoint-fingerprint <sha256>] [--identity-dir <absolute-path>] [--url <URL>] [--token <TOKEN>]",
   "sodactl desktop mcp [--endpoint-fingerprint <sha256>] [--identity-dir <absolute-path>] [--url <URL>] [--token <TOKEN>]",
@@ -322,6 +323,7 @@ export type Command =
   | { kind: "work-agent-control"; opts: GlobalOpts; action: "requests" | "accept"; machine?: string; requestId?: string }
   | { kind: "work-agent-internal"; action: "run" | "mcp"; file: string }
   | { kind: "work"; action: "bind" | "status" | "unbind" | "skills" | "skill" | "file" | "exec" | "memory" | "handoff"; opts: GlobalOpts; args: string[]; values: Record<string, string> }
+  | {kind:"desktop-native-helper";origin:string}
   | {kind:"desktop-identity";initialize:boolean;identityDir:string|undefined}
   | {kind:"desktop";action:"session"|"mcp"|"model";opts:GlobalOpts;task:string|undefined;model:string;maxSteps:number;autoAct:boolean;endpointFingerprint?:string;identityDir?:string}
   | { kind: "preview"; action: "register" | "list" | "viewers" | "helper" | "open" | "stop" | "remove"; opts: GlobalOpts; ref: string | undefined; pane: string | undefined; viewer: string | undefined; name: string | undefined; port: number | undefined; replace: boolean }
@@ -582,11 +584,17 @@ function parseCommand(argv: readonly string[], env: NodeJS.ProcessEnv): Command 
       return { kind: "work", action, opts: globalOptsFrom(values, env), args: positionals, values: Object.fromEntries(values) };
     }
     case "desktop": {
+      if(word1==="native-helper"){
+        const {positionals,values}=parseFlags(rest0,{values:["--origin"],bools:[]});rejectExtra(positionals,0,USAGE);const origin=values.get("--origin");
+        let valid=false;try{if(origin&&origin.length<=2048){const url=new URL(origin);valid=["http:","https:"].includes(url.protocol)&&url.origin===origin;}}catch{}
+        if(!valid)throw new CliUsageError("--origin requires the browser origin without a path",USAGE);
+        return {kind:"desktop-native-helper",origin:origin!};
+      }
       if(word1==="identity"){
         const {positionals,values,bools}=parseFlags(rest0,{values:["--identity-dir"],bools:["--initialize"]});rejectExtra(positionals,0,USAGE);
         return {kind:"desktop-identity",initialize:bools.has("--initialize"),identityDir:values.get("--identity-dir")};
       }
-      if(word1!=="session"&&word1!=="mcp"&&word1!=="model")throw new CliUsageError("expected desktop identity|session|mcp|model",USAGE);
+      if(word1!=="session"&&word1!=="mcp"&&word1!=="model")throw new CliUsageError("expected desktop native-helper|identity|session|mcp|model",USAGE);
       const {positionals,values,bools}=parseFlags(rest0,{values:["--url","--token","--task","--model","--max-steps","--endpoint-fingerprint","--identity-dir"],bools:["--auto-act"]});
       rejectExtra(positionals,0,USAGE);const task=values.get("--task"),maxSteps=Number(values.get("--max-steps")??10);
       if(!Number.isInteger(maxSteps)||maxSteps<1||maxSteps>20)throw new CliUsageError("max-steps must be 1..20",USAGE);

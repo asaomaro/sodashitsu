@@ -285,6 +285,7 @@ export interface DesktopSettingsResult {
 }
 export const DesktopMethods = {
   "desktop.native_helper.start":z.object({viewerId:z.uuid()}).strict(),
+  "desktop.native_helper.touch":z.object({viewerId:z.uuid()}).strict(),
   "desktop.native_helper.stop":z.object({viewerId:z.uuid()}).strict(),
   "desktop.settings.get": z.object({}).strict(),
   "desktop.settings.set": DesktopPermissions,
@@ -308,6 +309,7 @@ export const DesktopMethods = {
 };
 export interface DesktopResults {
   "desktop.native_helper.start":DesktopNativeHelperDescriptor;
+  "desktop.native_helper.touch":{};
   "desktop.native_helper.stop":{};
   "desktop.settings.get": DesktopSettingsResult;
   "desktop.settings.set": DesktopSettingsResult;
