@@ -216,8 +216,8 @@ function changeSharedCursor(){releaseInputs();connect();const el=canvas.value;el
 function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
 function changeMonitor(){if(!props.monitorWindow)localMonitor.value="";if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
-const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),fileCheckpoints=ref(false),folderCheckpoints=ref(false),foldersCap=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
-function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=fileCheckpoints.value=folderCheckpoints.value=foldersCap.value=false;}
+const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),durableFileCheckpoints=ref(false),fileCheckpoints=ref(false),folderCheckpoints=ref(false),foldersCap=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
+function resetFiles(){fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=durableFileCheckpoints.value=fileCheckpoints.value=folderCheckpoints.value=foldersCap.value=false;}
 function dropFiles(event:DragEvent){const data=event.dataTransfer;if(!data||!data.files.length&&!data.items.length)return;if(!filePanel.value){error.value="接続先でファイル共有フォルダを設定し、ファイル転送を許可してください";return;}void filePanel.value.handleDrop(data);}
 const richClipboard=ref(false),richPipeReady=ref(false),richBusy=ref(false),richSyncMode=ref(false);
 let richClient:DesktopRichClipboardClient|undefined,richSocket:WebSocket|undefined,richSeq=0,lastRichLocal="",lastRichRemote="";
@@ -757,7 +757,7 @@ function connect(automatic = false) {
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
           virtualActive.value=r.virtualDisplay===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
-          filesCap.value=r.files===true;fileCheckpoints.value=r.fileCheckpoints===true;foldersCap.value=r.folders===true;folderCheckpoints.value=r.folderCheckpoints===true;
+          filesCap.value=r.files===true;fileCheckpoints.value=r.fileCheckpoints===true;durableFileCheckpoints.value=r.durableFileCheckpoints===true;foldersCap.value=r.folders===true;folderCheckpoints.value=r.folderCheckpoints===true;
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
           displayModes.value = r.display?.modes ?? [];
@@ -1329,7 +1329,7 @@ onBeforeUnmount(() => {
         <p v-if="independentScreen">各モニターを別々に取得・圧縮し、選択したモニターだけを受信します。モニターごとに画質を保存します。同じモニターの窓は同じ設定にしてください。共有方式の切替は、ほかの窓を閉じてから行ってください。</p><p v-else>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
       </div>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen||props.monitorWindow?.independent" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
-      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" />
+      <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :durable-resume="durableFileCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
         <summary>マイク入力</summary>
         <p v-if="sharedScreen">複数窓での共有中は、1つの窓からだけマイクを送信できます。切り替える場合は、送信中の窓で停止してください。</p>

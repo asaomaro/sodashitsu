@@ -233,21 +233,30 @@ export class DesktopEndpointService {
     this.ensureOwner();
     z.boolean().parse(required);
     if (!this.snapshot.initialized) throw unavailable();
-    const epoch = this.lifetime,
-      operation = ++this.policyMutation;
-    this.policy++;
-    this.changingPolicy = true;
-    this.stopAll();
-    // Both enable and disable fail closed until the two durable guards agree.
-    this.required = true;
-    this.snapshot = { ...this.snapshot, required: true };
-    this.options.provider.requireEndpoint(true);
-    await this.store.setRequired(required);
-    if (operation === this.policyMutation) this.changingPolicy = false;
-    this.policy++;
+    const epoch=this.lifetime;
+    await this.options.provider.invalidateSavedTransfers();
+    let result:DesktopEndpointStatus;
+    try {
+      this.ensureLifetime(epoch);
+      const operation=++this.policyMutation;
+      this.policy++;
+      this.changingPolicy=true;
+      this.stopAll();
+      this.required=true;
+      this.snapshot={...this.snapshot,required:true};
+      this.options.provider.requireEndpoint(true);
+      await this.store.setRequired(required);
+      if(operation===this.policyMutation)this.changingPolicy=false;
+      this.policy++;
+      this.ensureLifetime(epoch);
+      result=await this.refresh();
+    }finally{await this.options.provider.bindSavedTransfers();}
     this.ensureLifetime(epoch);
-    return this.refresh();
+    await this.options.provider.settleSavedTransfers();
+    this.ensureLifetime(epoch);
+    return result;
   }
+
   async trust(peer: DesktopEndpointPeer): Promise<DesktopEndpointStatus> {
     this.ensureOwner();
     const epoch = this.lifetime;

@@ -77,5 +77,6 @@ it.each(["modify", "replace"])("detects a staging-file %s before publishing", as
   if (mode === "replace") await rm(stage);
   await writeFile(stage, "tampered");
   await expect(a.run({ action: "finish", id: id!, sha256: createHash("sha256").update(data).digest("hex") })).rejects.toThrow();
-  expect(await readdir(a.root)).toEqual([]);
+  if(mode==="replace"){expect(await readFile(stage,"utf8")).toBe("tampered");expect(await readdir(a.root)).toEqual([`.soda-transfer-${id}`]);}
+  else expect(await readdir(a.root)).toEqual([]);
 });

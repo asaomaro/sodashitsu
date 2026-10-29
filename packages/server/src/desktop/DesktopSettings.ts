@@ -2,7 +2,8 @@ import {nativePlatformFor,nativeDesktopCommand,nativeDesktopSetup} from "./Deskt
 import type {DesktopNativePlatform} from "@sodashitsu/protocol";
 import {DesktopFiles} from "./DesktopFiles.js";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import {createHash} from "node:crypto";
+import { lstat,readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { DesktopPermissions, RpcError, type DesktopSettingsResult } from "@sodashitsu/protocol";
@@ -103,6 +104,10 @@ export class DesktopSettings {
   get(canConfigure: boolean): DesktopSettingsResult {
     return {...(this.nativePlatform?{nativePlatform:this.nativePlatform,setupMessage:nativeDesktopSetup(this.nativePlatform)}:{}), permissions: { ...this.permissions }, supported: !!this.command, canConfigure };
   }
+  async transferScope():Promise<string>{
+    let file:unknown=null;try{const st=await lstat(this.options.file,{bigint:true});file=[st.dev.toString(),st.ino.toString(),st.mtimeNs.toString(),st.ctimeNs.toString(),await readFile(this.options.file,"utf8")];}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}
+    return createHash("sha256").update(JSON.stringify({permissions:this.permissions,command:this.command,file})).digest("hex");
+  }
   set(raw: DesktopPermissions): Promise<DesktopSettingsResult> {
     const permissions = DesktopPermissions.parse(raw);
     const work = this.queue.then(async () => {
@@ -118,9 +123,11 @@ export class DesktopSettings {
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
       if(permissions.allowMicrophone&&!permissions.microphoneEndpoint?.trim())throw new RpcError("invalid_params","マイク転送先の仮想オーディオ再生デバイスIDを指定してください。");
       if(permissions.fileRoot?.trim()){const probe=await DesktopFiles.open(permissions.fileRoot.trim(),()=>false);await probe.close();}
-      await writeFileAtomic(this.options.file, JSON.stringify(permissions) + "\n");
-      this.permissions = permissions;
-      this.apply();
+      await this.options.provider.invalidateSavedTransfers();
+      try{await writeFileAtomic(this.options.file, JSON.stringify(permissions) + "\n");
+        this.permissions = permissions;
+        this.apply();
+      }finally{let scope:string;try{scope=await this.transferScope();}catch(error){this.options.provider.failSavedTransferPolicy();throw error;}await this.options.provider.bindSavedTransfers(scope);}
       return this.get(true);
     });
     this.queue = work.catch(() => undefined);
