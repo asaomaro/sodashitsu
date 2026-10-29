@@ -10,6 +10,7 @@ internal sealed class SodaDesktopSigninUpgradeScm:IDisposable {
  internal void Inspect(bool off){Current();if(busy){ended=true;throw Failure();}busy=true;try{if(off)calls.InspectDisabled();else calls.InspectManual();if(!calls.Stopped())throw Failure();Current();}catch{ended=true;throw;}finally{busy=false;}}
  internal void Disable(Func<bool> evidence){Inspect(false);Current();if(busy||disabled)throw Failure();busy=true;try{if(!evidence())throw Failure();Current();calls.Disable();disabled=true;Current();}catch{ended=true;throw;}finally{busy=false;}Inspect(true);}
  internal void Manual(Func<bool> evidence){Inspect(true);Current();if(busy||!disabled)throw Failure();busy=true;try{if(!evidence())throw Failure();Current();calls.Manual();Current();}catch{ended=true;throw;}finally{busy=false;}Inspect(false);}
+ internal void RestoreManual(Func<bool> evidence){Inspect(true);if(evidence==null||!evidence())throw Failure();disabled=true;Manual(evidence);}
  public void Dispose(){ended=true;calls.Dispose();}
  internal static SodaDesktopSigninUpgradeScm Open(string owner,Func<bool> scope){if(!SodaDesktopSigninPackageNative.Authority(true))throw Failure();return new SodaDesktopSigninUpgradeScm(new Native(owner),scope);}
  [StructLayout(LayoutKind.Sequential)]struct Status{internal uint Type,State,Accepted,Exit,Specific,Checkpoint,Hint,Pid,Flags;}

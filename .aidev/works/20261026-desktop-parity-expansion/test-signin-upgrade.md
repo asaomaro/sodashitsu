@@ -37,3 +37,7 @@ System.Management.Automation.MethodInvocationException: "0" �̈�����
 signin_upgrade_generated_initial_complete_preserved_archives_barrier_and_no_reset_passed
 signin_upgrade_6_source_negative_controls_and_restore_passed
 ```
+
+## Delivery
+
+PR#291 merged as b424a643. Exact final source80aa645e: protected boundaries40815724042/job123256185770 PASS2m44s, independent full final-source upgrade six controls/job123256186015 PASS5m49s, Node Windows40815723964/job123256185756 PASS1m34s. Final metadata bindings are therefore covered by the exact-head six-control CI (the earlier local distinction remains documented). Root14-file preflight reflection exact, unrelated edits preserved. Product tree equals merged main except the eight previously approved historical final-record files. No service/ACL/SYSTEM/ordinary handoff occurred.

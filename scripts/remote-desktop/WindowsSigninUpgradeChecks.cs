@@ -6,12 +6,12 @@ public static class SodaDesktopSigninUpgradeChecks {
  const string Owner="S-1-5-21-1-2-3-1001";
  static void Check(bool value,string message){if(!value)throw new InvalidOperationException(message);}
  static void Refused(Action action,string message){bool failed=false;try{action();}catch(InvalidOperationException){failed=true;}catch(IOException){failed=true;}Check(failed,message);}
- sealed class Calls:SodaDesktopSigninUpgradeScm.Calls {
+ internal sealed class Calls:SodaDesktopSigninUpgradeScm.Calls {
   internal bool Disabled,StoppedValue=true;internal int Disables,Manuals;internal Action OnDisable=null,OnManual=null;
   public void InspectManual(){Check(!Disabled,"Generated manual policy missing");}public void InspectDisabled(){Check(Disabled,"Generated disabled policy missing");}public bool Stopped(){return StoppedValue;}
   public void Disable(){Disables++;Disabled=true;if(OnDisable!=null)OnDisable();}public void Manual(){Manuals++;Disabled=false;if(OnManual!=null)OnManual();}public void Dispose(){}
  }
- sealed class Fixture:IDisposable {
+ internal sealed class Fixture:IDisposable {
   internal readonly string Root,Source,OldHash,NewHash;internal readonly SodaDesktopSigninInstallFiles.Paths Paths;internal readonly Calls Calls=new Calls();internal bool Active=true;internal int CreatedInitial;
   internal Fixture(bool complete=false,bool observed=true){Root=Path.Combine(Path.GetTempPath(),"soda-upgrade-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Root);Paths=new SodaDesktopSigninInstallFiles.Paths(Path.Combine(Root,"program"),Path.Combine(Root,"data"),Owner,Guid.NewGuid().ToString("N"));OldHash=SodaDesktopSigninInstallSourceChecks.Make(Paths.Code);Source=Path.Combine(Root,"source");NewHash=SodaDesktopSigninInstallSourceChecks.Make(Source);foreach(string name in new[]{"runtime","admin","runs"})Directory.CreateDirectory(Path.Combine(Paths.Slot,name));File.WriteAllBytes(Path.Combine(Paths.Slot,"quiescence.lock"),new byte[]{83});File.WriteAllText(Path.Combine(Paths.Slot,"runtime","identity-keep"),"generated identity sentinel");File.WriteAllText(Path.Combine(Paths.Slot,"enrollment.dpapi"),"generated enrollment sentinel");
    using(var pin=Barrier())using(var exclusive=pin.Exclusive()){var initial=Make("initial",Guid.NewGuid().ToString("D"),exclusive.Fingerprint,null);using(var journal=Journal(SodaDesktopSigninRunJournal.Role.Installer,exclusive.Fingerprint))journal.Initialize(initial);
