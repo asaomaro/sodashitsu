@@ -1,3 +1,5 @@
+import {DesktopInteractiveOwner,type DesktopInteractiveResource} from "./DesktopInteractiveOwner.js";
+import {DesktopResourceChannel} from "./DesktopResourceChannel.js";
 import {DesktopFolderCheckpoints} from "./DesktopFolderCheckpoints.js";
 import {DesktopFileCheckpoints} from "./DesktopFileCheckpoints.js";
 import {DesktopNativePlatformFailure,desktopNativePlatformFailureMessage,supportsDesktopInput,type DesktopNativePlatform,type DesktopInputCapabilities} from "@sodashitsu/protocol";
@@ -77,6 +79,11 @@ export interface DesktopProviderEndpointScope {
  close():void;
 }
 type Share = {
+  resourcesManaged:boolean;
+  independent?:boolean;
+  capturePool?:DesktopSharedCapture;
+  captureKey?:string;
+  microphoneOwned?:boolean;
   endpointActive?:()=>boolean;
   inputCapabilities?:DesktopInputCapabilities;
   microphone?:DesktopMicrophone; microphoneSocket?:WebSocket;
@@ -152,9 +159,22 @@ export class DesktopProvider {
   }
   private readonly unlockLease = new DesktopUnlockLease();
   private active: Share | undefined;
+  private readonly physicalHelpers=new Set<DesktopHelper>();
+  private resourceReset=false;
+  private resources=this.createResources();
+  private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:()=>{},fault:()=>{if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);}});}
+  private resetResourcesIfDrained(){if(this.resourceReset&&!this.physicalHelpers.size){if(!this.resources.faulted){this.resources.dispose();this.resources=this.createResources();}this.resourceReset=false;}}
+  private claimResource(s:Share,kind:DesktopInteractiveResource):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.acquire(s,source,kind);}
+  private ownsResource(s:Share,kind:DesktopInteractiveResource):boolean{return !s.resourcesManaged||this.resources.owns(s,kind);}
   private readonly sharedCapture = new DesktopSharedCapture();
   private readonly shared = new Set<Share>();
   private sharedKey: string | undefined;
+  private captureMode:"normal"|"independent"|undefined;
+  private monitorTopology:string|undefined;
+  private readonly monitorSources=new Map<string,{key:string;pool:DesktopSharedCapture}>();
+  private pruneSources(){for(const[id,source]of this.monitorSources)if(!source.pool.running&&![...this.shared].some(s=>s.capturePool===source.pool))this.monitorSources.delete(id);if(!this.active&&!this.shared.size&&!this.physicalHelpers.size){this.captureMode=undefined;this.monitorTopology=undefined;}}
+  private stopMonitorGeneration(){for(const s of [...this.shared])if(s.independent){this.send(s,{type:"monitor_topology_changed"});this.stop(s);}}
+
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
   readonly companion: DesktopCompanionHub;
   constructor(private config: DesktopProviderConfig | undefined) {
@@ -180,6 +200,7 @@ export class DesktopProvider {
       sharedDesktop: !this.config?.nativePlatform,
       sharedDeltas:!this.config?.nativePlatform,
       sharedMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
+      independentMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
       sharedCursor:!this.config?.nativePlatform,
       sharedClipboard:!this.config?.nativePlatform&&this.config?.allowClipboard===true,
       sharedFiles: !this.config?.nativePlatform && !!this.config?.fileRoot,
@@ -218,6 +239,9 @@ export class DesktopProvider {
     };
   }
   async start(owner: string, raw: z.infer<typeof DesktopStartParams>,scope?:EndpointScope): Promise<{ started: true }> {
+    if(this.resources.faulted)throw new RpcError("server_busy","接続先の入力解放を確認できません。接続先で共有設定を確認して再起動してください。");
+    if(this.resourceReset&&this.physicalHelpers.size)throw new RpcError("server_busy","前の補助プログラムの終了を待っています。");
+    this.resetResourcesIfDrained();
     const p = DesktopStartParams.parse(raw),
       cfg = this.config;
     const epoch=this.sourceEpoch;
@@ -229,6 +253,8 @@ export class DesktopProvider {
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
+    if(p.options.independentMonitors&&(!p.options.sharedDesktop||!p.options.sharedMonitors||!p.options.monitors||!p.options.monitorDevice||!cfg.allowMonitors||cfg.nativePlatform||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.display))throw new RpcError("invalid_params","独立モニターには通常のモニター共有と明示したモニターIDが必要です");
+    this.pruneSources();const requestedMode=p.options.independentMonitors?"independent":"normal";const selectedPool=p.options.independentMonitors?this.monitorSources.get(p.options.monitorDevice!)?.pool:this.sharedCapture;
     if(p.options.sharedMonitors&&(!p.options.sharedDesktop||!p.options.monitors||!cfg.allowMonitors||p.options.elevatedDesktop||p.options.virtualDisplay))throw new RpcError("invalid_params","共有モニターには通常共有とモニター許可が必要です");
     if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || p.options.virtualDisplay || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || (p.options.richClipboard&&!p.options.sharedClipboard) || ((p.options.monitors||p.options.monitorDevice)&&!p.options.sharedMonitors) || (p.options.cursor&&!p.options.sharedCursor)))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
@@ -252,7 +278,8 @@ export class DesktopProvider {
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
       throw new RpcError("unauthorized", "Bでディスプレイ解像度の変更が許可されていません");
-    const finishing = this.active?.dead ? this.active.process : this.sharedCapture.retiring;
+    if(this.captureMode&&this.captureMode!==requestedMode&&(this.active&&!this.active.dead||this.shared.size))throw new RpcError("server_busy","共有方式を切り替える前に、ほかの共有窓を閉じてください");
+    const finishing = this.active?.dead ? this.active.process : selectedPool?.retiring??(this.captureMode&&this.captureMode!==requestedMode?[...this.physicalHelpers][0]:undefined);
     if (finishing) {
       const child = finishing,
         pending = { owner, cancelled: false };
@@ -273,9 +300,12 @@ export class DesktopProvider {
       }
     }
     if (this.config !== cfg||this.sourceEpoch!==epoch||scope&&!scope.active()) throw new RpcError("unauthorized", "Desktop permissions changed");
-    if (this.sharedCapture.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
+    if (selectedPool?.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
     const sharedKey = JSON.stringify(p.options.sharedDesktop ? {purpose:p.options.sharedProtected?"protected":"normal",options:sharedHelperOptions(p.options),...(p.options.sharedClipboard?{clipboard:true}:{})} : p.options);
-    if (this.active || (this.shared.size && (!p.options.sharedDesktop || this.sharedKey !== sharedKey)) || this.shared.size >= 8)
+    this.pruneSources();const monitorSource=p.options.independentMonitors?this.monitorSources.get(p.options.monitorDevice!):undefined;
+    if(this.captureMode&&this.captureMode!==requestedMode&&(this.active||this.shared.size||this.physicalHelpers.size))throw new RpcError("server_busy","前の共有方式の終了を確認してから切り替えてください");
+    if(p.options.independentMonitors&&(monitorSource&&monitorSource.key!==sharedKey||!monitorSource&&this.physicalHelpers.size>=8))throw new RpcError("server_busy","同じモニターの画質設定が異なるか、補助プログラムの上限です");
+    if (this.active || (this.shared.size && (!p.options.sharedDesktop || !p.options.independentMonitors&&this.sharedKey !== sharedKey)) || this.shared.size >= 8)
       throw new RpcError("server_busy", "Bのデスクトップは異なる設定で共有中か、viewer数の上限です。同じ複数viewer設定で接続してください。");
     const url = new URL(p.url);
     if (
@@ -295,6 +325,9 @@ export class DesktopProvider {
       followRedirects: false,
     });
     const s: Share = {
+      resourcesManaged:!cfg.nativePlatform,
+      independent:p.options.independentMonitors===true,
+      captureKey:sharedKey,
       ...(scope?{endpointActive:scope.active}:{}),
       shared: p.options.sharedDesktop === true,
       inputAcks: new DesktopInputAcks(seq => { if (!s.dead) this.send(s,{type:"input_ack",seq}); }),
@@ -331,7 +364,9 @@ export class DesktopProvider {
       }, 1000),
     };
     s.timer.unref();
-    if (s.shared) { this.shared.add(s); this.sharedKey = sharedKey; }
+    this.captureMode=requestedMode;
+    if(s.independent){let source=this.monitorSources.get(p.options.monitorDevice!);if(!source){source={key:sharedKey,pool:new DesktopSharedCapture()};this.monitorSources.set(p.options.monitorDevice!,source);}s.capturePool=source.pool;}
+    if (s.shared) { this.shared.add(s); if(!s.independent)this.sharedKey = sharedKey; }
     else this.active = s;
     ws.on("error", () => this.stop(s));
     ws.on("close", () => this.stop(s));
@@ -449,7 +484,7 @@ export class DesktopProvider {
             }
           } else if (m.type === "clipboard_grant") {
             s.clipboardGeneration++;
-            s.clipboardGranted = m.enabled && s.allowClipboard;
+            s.clipboardGranted = m.enabled && s.allowClipboard && this.claimResource(s,"clipboard");
             if(p.options.sharedClipboard)s.clipboardGranted=s.process?.requestClipboard?.(s.clipboardGranted,s.clipboardGeneration)===true;
             if(p.options.sharedClipboard&&m.enabled&&s.allowClipboard&&!s.clipboardGranted)this.send(s,{type:"clipboard_busy"});
             s.clipboardPending.clear();
@@ -460,10 +495,11 @@ export class DesktopProvider {
                 enabled: s.clipboardGranted,
                 generation: s.clipboardGeneration,
               });
+            if(!s.clipboardGranted&&s.resourcesManaged)this.resources.release(s,"clipboard");
             this.send(s, { type: "clipboard_state", enabled: s.clipboardGranted });
           } else if (m.type === "clipboard") {
             if (
-              !s.clipboardGranted ||
+              !s.clipboardGranted || !this.ownsResource(s,"clipboard") ||
               !s.ready ||
               m.id <= s.clipboardId ||
               s.clipboardPending.size ||
@@ -485,7 +521,7 @@ export class DesktopProvider {
             this.write(s, m);
           } else if (m.type === "stop") this.stop(s);
           else if (m.type === "release") {
-            if (s.control) this.write(s, m);
+            if (s.control&&this.ownsResource(s,"control")) this.write(s, m);
           } else if (m.type === "ack") {
             if (m.seq !== s.pending) {
               this.stop(s);
@@ -496,22 +532,23 @@ export class DesktopProvider {
           } else if (m.type === "keyframe") {
             this.write(s, m);
           } else if (m.type === "control") {
-            const enabled = m.enabled && s.allowInput && s.ready;
+            const enabled = m.enabled && s.allowInput && s.ready && this.claimResource(s,"control");
             s.control = s.process?.requestControl ? s.process.requestControl(enabled) : enabled;
             this.write(s, { type: "control", enabled: s.control });
+            if(!s.control&&s.resourcesManaged)this.resources.release(s,"control");
             this.send(s, { type: "control", enabled: s.control });
           } else if (m.type === "sas") {
-            if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && s.ready && performance.now() - s.lastSeen < 5000)
+            if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "dismiss_lock_screen") {
-            if (s.lockScreenCover && s.secureDesktop && s.control && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
+            if (s.lockScreenCover && s.secureDesktop && s.control && this.ownsResource(s,"control") && s.ready && cfg.allowInput && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
           } else if (m.type === "input") {
             if(!supportsDesktopInput(s.inputCapabilities,m.input))return;
             if (isExtendedDesktopInput(m.input) && !s.extendedInput) return;
             if (m.input.kind === "key" && (m.input.code === "ImeOn" || m.input.code === "ImeOff") && !s.imeKeys) return;
             if (
-              s.control &&
+              s.control && this.ownsResource(s,"control") &&
               m.frameSeq >= s.seq - 1 &&
               m.frameSeq <= s.seq &&
               m.seq > s.inputSeq &&
@@ -537,13 +574,16 @@ export class DesktopProvider {
     cfg: DesktopProviderConfig,
     options: z.infer<typeof DesktopStartParams>["options"],
   ): void {
-    const spawnHelper = () => spawn(cfg.command[0]!, cfg.command.slice(1), {
+    const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
       env:{...process.env,SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
       stdio: ["pipe", "pipe", "pipe"],
     });
-    const child = options.sharedDesktop ? this.sharedCapture.attach(this.sharedKey!, spawnHelper) : spawnHelper();
+      const child:DesktopHelper=cfg.nativePlatform?raw:new DesktopResourceChannel(raw,{ack:(source,id)=>{this.resources.acknowledge(source,id);},close:source=>{this.resources.sourceGone(source);}});
+      this.physicalHelpers.add(child);child.once("close",()=>{this.physicalHelpers.delete(child);this.resetResourcesIfDrained();queueMicrotask(()=>this.pruneSources());});return child;
+    };
+    const child = options.sharedDesktop ? (s.capturePool??this.sharedCapture).attach(s.captureKey!, spawnHelper) : spawnHelper();
     s.process = child;
     child.once("error", () => this.stop(s));
     child.once("close", () => {
@@ -572,7 +612,7 @@ export class DesktopProvider {
           if(options.elevatedDesktop&&["unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(raw.type)){this.send(s,{type:"protected_desktop_failure",code:raw.type==="unlock_failure"?"worker_unavailable":"source_changed"});this.stop(s);return;}
           if(raw.type==="protected_desktop_failure"&&options.elevatedDesktop&&cfg.allowElevated){this.send(s,DesktopProtectedFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="virtual_display_failure"&&options.virtualDisplay&&cfg.allowVirtualDisplay){this.send(s,DesktopVirtualFailure.parse(raw));this.stop(s);return;}
-          if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){this.send(s,{type:"monitor_topology_changed"});this.stop(s);return;}
+          if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){if(s.independent)this.stopMonitorGeneration();else{this.send(s,{type:"monitor_topology_changed"});this.stop(s);}return;}
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
@@ -585,6 +625,11 @@ export class DesktopProvider {
             if(options.sharedProtected&&ready.sharedProtected!==true){this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Shared protected worker proof missing");}
             if(ready.protectedDesktop&&(!options.elevatedDesktop||!cfg.allowElevated))throw Error("Unrequested protected worker");
             if(ready.protectedDesktop)s.protectedDesktop=ready.protectedDesktop;else delete s.protectedDesktop;
+            if(options.independentMonitors){
+              if(!ready.resourceFences||!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice||ready.secureDesktop||ready.virtualDisplay||ready.lockScreenCover)throw Error("Independent monitor helper proof missing");
+              const topology=JSON.stringify([...ready.monitorLayout.monitors].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0));
+              if(this.monitorTopology&&this.monitorTopology!==topology){this.stopMonitorGeneration();throw Error("Monitor generation changed");}this.monitorTopology=topology;
+            }
             s.secureDesktop = ready.secureDesktop === true;
             s.inputAcks.enabled = !s.secureDesktop && inputAckPipe === true;
             s.deferNativeSnapshots=options.nativeVideo===true&&cfg.allowNativeVideo===true&&!s.secureDesktop&&deferNativeSnapshots===true;
@@ -612,13 +657,13 @@ export class DesktopProvider {
             if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
             if(ready.monitorLayout&&(ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Monitor capture size mismatch");
             s.ready = true;
-            s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true;
+            s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true && (!s.resourcesManaged||s.process?.resourceChannel?.supported===true);
             s.dynamicQuality = ready.dynamicQuality === true;
-            s.allowInput = ready.allowInput && cfg.allowInput;
+            s.allowInput = ready.allowInput && cfg.allowInput && (!s.resourcesManaged||s.process?.resourceChannel?.supported===true);
             const {
               imeKeys,
               extendedInput,
-              sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              resourceFences:_resourceFences,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -629,8 +674,8 @@ export class DesktopProvider {
               display,
               ...legacyReady
             } = ready;
-            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if(options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic")&&s.microphoneSocket)s.microphone=new DesktopMicrophone({allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",...(options.sharedMicrophone?{claim:(id:string)=>s.process?.requestMicrophone?.(id,true)===true,release:(id:string)=>{s.process?.requestMicrophone?.(id,false);}}:{}),allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
+            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic")&&s.microphoneSocket)s.microphone=new DesktopMicrophone({allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
@@ -762,12 +807,13 @@ export class DesktopProvider {
       }
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop;
-    const {sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
+      ...(!cfg.nativePlatform?{resourceFences:true}:{}),
       allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
@@ -839,6 +885,7 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    if(s.resourcesManaged)this.resources.releaseAll(s);
     if (s.shared) { this.shared.delete(s); if (!this.shared.size) this.sharedKey = undefined; }
     delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
@@ -859,10 +906,11 @@ export class DesktopProvider {
     s.process?.stdin.end();
     const child = s.process;
     if (child) {
-      const t = setTimeout(() => child.kill(), 1500);
+      const t = setTimeout(() => child.kill(), child.resourceChannel?.fencing?6000:1500);
       t.unref();
       child.once("close", () => clearTimeout(t));
     }
+    this.pruneSources();
     s.ws.close(1000, "desktop stopped");
     const timer = setTimeout(() => s.ws.terminate(), 1000);
     timer.unref();
@@ -883,7 +931,8 @@ export class DesktopProvider {
     for (const pending of this.pendingStarts) pending.cancelled = true;
     if (this.active) this.stop(this.active);
     for (const s of [...this.shared]) this.stop(s);
-    this.sharedCapture.dispose();
+    this.sharedCapture.dispose();for(const source of this.monitorSources.values())source.pool.dispose();
+    this.resourceReset=true;this.resetResourcesIfDrained();
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {

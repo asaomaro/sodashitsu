@@ -106,6 +106,10 @@ jobs:
       - name: Generated scope boundaries and private read-only WinEvent delivery
         shell: powershell
         run: scripts/remote-desktop/validate-protected-scope.ps1 -ReadOnlyObserver
+      - name: Generated resource cleanup and input-failure fences (no OS input or devices)
+        shell: powershell
+        run: scripts/remote-desktop/validate-resource-fence.ps1 -NegativeControls
+
       - name: Existing helper entry-point compilation
         shell: powershell
         # Full legacy validator includes a limited-query denial test requiring

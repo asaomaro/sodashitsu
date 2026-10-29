@@ -57,7 +57,7 @@ import { DesktopMediaReceiver, ImageQualityController } from "../desktop/mediaRe
 import { chooseMaximumDisplayMode, sameDisplay, type DisplaySize } from "../desktop/display.js";
 import { renderDesktopUpdate } from "../desktop/render.js";
 import {
-  loadSettings,
+  loadSettings,hasSettings,monitorSettingsKey,
   saveSettings,
   loadViewerPreferences, saveViewerPreferences, normalizeViewerPreferences,
   normalizeSettings,
@@ -140,8 +140,9 @@ const status = ref("接続中"),
 const agentActive = ref(false),
   agentTicket = ref(""),
   agentExpires = ref(0);
-const savedSettings = props.monitorWindow?.settings ?? loadSettings(props.machineId);
-const savedViewerPreferences = loadViewerPreferences(props.machineId);
+const preferenceTarget=props.monitorWindow?.independent?monitorSettingsKey(props.machineId,props.monitorWindow.monitor):props.machineId;
+const savedSettings = props.monitorWindow?.independent&&hasSettings(preferenceTarget)?loadSettings(preferenceTarget):props.monitorWindow?.settings ?? loadSettings(preferenceTarget);
+const savedViewerPreferences = loadViewerPreferences(preferenceTarget);
 const preferredTransport = ref(savedViewerPreferences.transport);
 const deltas = ref(savedSettings.deltas),
   colorMode = ref(savedSettings.image.colorMode),
@@ -157,8 +158,10 @@ const info = ref<DesktopFrameInfo | null>(null),
   drawMs = ref(0),
   inputAckMs = ref(0),
   rendered = ref(0);
+const independentScreen=ref(props.monitorWindow?.independent===true),independentAvailable=ref(false);
 const localMonitor=ref(props.monitorWindow?.monitor??""),monitorWindowNotice=ref("");
-const crop=computed(()=>monitorViewport(monitorLayout.value,localMonitor.value));
+const crop=computed(()=>independentScreen.value?undefined:monitorViewport(monitorLayout.value,localMonitor.value));
+const canOpenMonitor=computed(()=>independentScreen.value?!!monitorLayout.value?.monitors.some(m=>m.id===localMonitor.value):!!crop.value);
 const canvasScale=computed(()=>{
   const size=info.value??{width:1,height:1},area=crop.value??{width:1,height:1};
   return fit.value?Math.min(screenSize.value.width/(size.width*area.width),screenSize.value.height/(size.height*area.height)):1;
@@ -173,8 +176,8 @@ const viewportSize=computed(()=>{
 });
 function changeLocalMonitor(){releaseInputs();}
 function openMonitorWindow(){
-  if(!ready.value||!sharedScreen.value||!sharedMonitorsScreen.value||elevatedScreen.value||virtualScreen.value||monitorLayout.value?.selected!=="all"||!crop.value||!activeSettings.value)return;
-  const url=monitorWindowUrl({machineId:props.machineId,label:props.label,monitor:localMonitor.value,settings:activeSettings.value,cursor:sharedCursorScreen.value&&showCursor.value,clipboard:sharedClipboardScreen.value,deltas:sharedDeltasScreen.value&&deltas.value},location.origin);
+  if(!ready.value||!sharedScreen.value||!sharedMonitorsScreen.value||elevatedScreen.value||virtualScreen.value||(!independentScreen.value&&monitorLayout.value?.selected!=="all")||!canOpenMonitor.value||!activeSettings.value)return;
+  const url=monitorWindowUrl({machineId:props.machineId,label:props.label,monitor:localMonitor.value,settings:activeSettings.value,cursor:sharedCursorScreen.value&&showCursor.value,clipboard:sharedClipboardScreen.value,deltas:sharedDeltasScreen.value&&deltas.value,independent:independentScreen.value},location.origin);
   window.open(url.href,"_blank","noopener,noreferrer,popup,width=1100,height=800");
   monitorWindowNotice.value="別窓で開きます。開かない場合は、このサイトのポップアップを許可してください。";
 }
@@ -200,11 +203,12 @@ const mediaState = ref("images"),
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>(),sharedMonitorDevice=ref<string>();
 const virtualScreen=ref(false),virtualActive=ref(false);
-if(props.monitorWindow){sharedScreen.value=true;sharedMonitorsScreen.value=true;sharedMonitorDevice.value="all";sharedCursorScreen.value=props.monitorWindow.cursor;sharedClipboardScreen.value=props.monitorWindow.clipboard;sharedDeltasScreen.value=props.monitorWindow.deltas;}
+if(props.monitorWindow){sharedScreen.value=true;sharedMonitorsScreen.value=true;sharedMonitorDevice.value=props.monitorWindow.independent?props.monitorWindow.monitor:"all";if(props.monitorWindow.independent)monitorDevice.value=props.monitorWindow.monitor;sharedCursorScreen.value=props.monitorWindow.cursor;sharedClipboardScreen.value=props.monitorWindow.clipboard;sharedDeltasScreen.value=props.monitorWindow.deltas;}
 
 function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedScreen(){sharedMonitorDevice.value=undefined;if(sharedScreen.value){if(!sharedProtectedAvailable.value)elevatedScreen.value=false;virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function joinSharedMonitor(){monitorDevice.value=sharedMonitorDevice.value?.trim()||undefined;changeMonitor();}
+function changeIndependent(){if(independentScreen.value&&!monitorDevice.value)monitorDevice.value="all";sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 function changeSharedMonitors(){monitorDevice.value=undefined;changeMonitor();}
 function changeSharedDeltas(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedClipboard(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
@@ -477,7 +481,7 @@ function stop(preserveCapabilities=false) {
   mediaAudio.value = false;
   sound.value = false;
   nativeStats.value=null;
-  if(!preserveCapabilities){sharedProtectedAvailable.value=false;sharedCursorAvailable.value=false;sharedClipboardAvailable.value=false;sharedDeltasAvailable.value=false;sharedMonitorsAvailable.value=false;}
+  if(!preserveCapabilities){sharedProtectedAvailable.value=false;sharedCursorAvailable.value=false;sharedClipboardAvailable.value=false;sharedDeltasAvailable.value=false;sharedMonitorsAvailable.value=false;independentAvailable.value=false;}
   virtualActive.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=nativeCadence.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
@@ -530,12 +534,12 @@ function requestedSettings(): ConnectionSettings {
 function persistImagePreferences() {
   let value: ConnectionSettings;
   try { value = requestedSettings(); } catch { return; }
-  if (!saveSettings(props.machineId, value)) settingNotice.value = "このブラウザに画質設定を保存できません。";
+  if (!saveSettings(preferenceTarget, value)) settingNotice.value = "このブラウザに画質設定を保存できません。";
 }
 function persistViewerPreferences() {
   let value;
   try { value = normalizeViewerPreferences({ transport: preferredTransport.value, bitrate: Number(mediaBitrate.value), codec: nativeCodec.value, fps: Number(nativeFps.value), udp: nativeUdp.value, fit: fit.value }); } catch { return; }
-  if (!saveViewerPreferences(props.machineId, value)) settingNotice.value = "このブラウザに動画・表示設定を保存できません。";
+  if (!saveViewerPreferences(preferenceTarget, value)) settingNotice.value = "このブラウザに動画・表示設定を保存できません。";
 }
 function chooseMediaTransport() { preferredTransport.value = mediaTransport.value; persistViewerPreferences(); }
 watch([width, fps, quality, deltas, adaptive, colorMode, showCursor], persistImagePreferences, { flush: "sync" });
@@ -566,7 +570,7 @@ function connect(automatic = false) {
     settingNotice.value = "設定値を確認してください（幅320～1920、fps 1～30、JPEG品質20～90）。";
     return;
   }
-  settingNotice.value = saveSettings(props.machineId, options)
+  settingNotice.value = saveSettings(preferenceTarget, options)
     ? ""
     : "このブラウザに設定を保存できませんでした。今回の接続には反映します。";
   activeSettings.value = options;
@@ -587,7 +591,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -598,7 +602,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(sharedScreen.value?{sharedDesktop:true,...(!elevatedScreen.value&&sharedMonitorsScreen.value?{sharedMonitors:true,...(sharedMonitorDevice.value?{monitorDevice:sharedMonitorDevice.value}:{})}:{}),...(elevatedScreen.value?{elevatedDesktop:true}:sharedCursorScreen.value&&showCursor.value?{sharedCursor:true}:{}),...(!elevatedScreen.value&&sharedClipboardScreen.value?{sharedClipboard:true}:{}),...(!elevatedScreen.value&&sharedDeltasScreen.value&&deltas.value?{sharedDeltas:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(sharedScreen.value?{sharedDesktop:true,...(!elevatedScreen.value&&sharedMonitorsScreen.value?{sharedMonitors:true,...(independentScreen.value?{independentMonitors:true}:{}),...(sharedMonitorDevice.value?{monitorDevice:sharedMonitorDevice.value}:{})}:{}),...(elevatedScreen.value?{elevatedDesktop:true}:sharedCursorScreen.value&&showCursor.value?{sharedCursor:true}:{}),...(!elevatedScreen.value&&sharedClipboardScreen.value?{sharedClipboard:true}:{}),...(!elevatedScreen.value&&sharedDeltasScreen.value&&deltas.value?{sharedDeltas:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -664,6 +668,7 @@ function connect(automatic = false) {
           if(typeof m.enabled!=="boolean")throw Error("Invalid protected sharing capability");
           sharedProtectedAvailable.value=m.enabled;return;
         }
+        if(m.type==="independent_monitors_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid independent monitor capability");independentAvailable.value=m.enabled;}
         if(m.type==="shared_monitors_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared monitors capability");sharedMonitorsAvailable.value=m.enabled;if(!m.enabled)sharedMonitorsScreen.value=false;}
         else if(m.type==="shared_deltas_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared deltas capability");sharedDeltasAvailable.value=m.enabled;if(!m.enabled)sharedDeltasScreen.value=false;}
         else if(m.type==="clipboard_busy"){clipboardNotice.value="他の窓がクリップボードを共有中です。その窓で解除してから許可してください。";}
@@ -729,8 +734,8 @@ function connect(automatic = false) {
           protectedMode.value=r.protectedDesktop;sharedProtectedAvailable.value=r.sharedProtectedAvailable===true;
           lockScreenCover.value = r.lockScreenCover === true;
           imeKeys.value = r.imeKeys === true;
-          if(localMonitor.value&&!monitorViewport(r.monitorLayout,localMonitor.value)){
-            error.value="選択したモニターを表示できません。全モニター共有を確認し、元の窓から開き直してください。";stop();return;
+          if(localMonitor.value&&(independentScreen.value?r.monitorLayout?.selected!==sharedMonitorDevice.value:!monitorViewport(r.monitorLayout,localMonitor.value))){
+            error.value="選択したモニターを表示できません。共有方式とモニターIDを確認し、元の窓から開き直してください。";stop();return;
           }
           extendedInput.value = r.extendedInput === true;
           if (secureDesktop.value) text.value = "";
@@ -1196,13 +1201,14 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止画面でも画像を送り続けるPortalが必要で、1.5秒無更新になると停止します。</template></p>
       <template v-if="!signinSession">
-      <label v-if="!platformBackend&&!signinSession"><input v-model="sharedScreen" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
-      <label v-if="sharedScreen&&!elevatedScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
-      <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button @click="joinSharedMonitor">このモニターで接続</button><small>共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。</small></div>
+      <label v-if="!platformBackend&&!signinSession"><input v-model="sharedScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
+      <label v-if="sharedScreen&&!elevatedScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
+      <label v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&independentAvailable" data-independent-monitors><input v-model="independentScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeIndependent" />モニターごとに独立して配信</label>
+      <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!props.monitorWindow?.independent" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button @click="joinSharedMonitor">このモニターで接続</button><small>{{independentScreen?"別のモニターIDでは独立した配信を開始します。同じIDでは同じ画質設定を選んでください。":"共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。"}}</small></div>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedDeltasAvailable" data-shared-deltas><input v-model="sharedDeltasScreen" :disabled="!deltas" type="checkbox" @change="changeSharedDeltas" />差分画像を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedClipboardAvailable" data-shared-clipboard><input v-model="sharedClipboardScreen" type="checkbox" @change="changeSharedClipboard" />クリップボード経路を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedCursorAvailable" data-shared-cursor><input v-model="sharedCursorScreen" :disabled="!showCursor" type="checkbox" @change="changeSharedCursor" />独立カーソルを共有（全ての窓で同じ選択が必要）</label>
-      <p v-if="sharedScreen" data-desktop-shared>{{ protectedMode ? "許可済みの管理者画面を画像で共有しています。" : nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}同じ画質設定で最大8窓まで接続できます。操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。<template v-if="!protectedMode">対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。</template><template v-if="sharedClipboardScreen&&!elevatedScreen">クリップボードは別に1窓だけへ許可でき、操作権とは独立です。他の窓の許可は奪えません。</template><template v-else>クリップボードは利用できません。</template>OSの解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
+      <p v-if="sharedScreen" data-desktop-shared>{{ protectedMode ? "許可済みの管理者画面を画像で共有しています。" : nativeVideo ? "通常画面の画像・GPU動画を共有できます。動画の経路・codec・ビットレート・fpsは同じ設定を選んでください。" : "通常画面の画像配信です。" }}<template v-if="independentScreen">モニターごとに画質を選び、全体で最大8窓まで接続できます。</template><template v-else>同じ画質設定で最大8窓まで接続できます。</template>操作は1窓だけに許可され、他の窓からは引き継げません。操作中の窓で解除してから、別の窓で「操作する」を押してください。<template v-if="!protectedMode">対応する接続先ではシステム音声も共有でき、動画の解像度も各窓の希望を集約して調整します。固定設定の窓がある間は、その解像度を維持します。</template><template v-if="sharedClipboardScreen&&!elevatedScreen">クリップボードは別に1窓だけへ許可でき、操作権とは独立です。他の窓の許可は奪えません。</template><template v-else>クリップボードは利用できません。</template>OSの解像度変更は利用できません。動画で遅れた窓は次のキーフレームから復帰します。</p>
       </template>
       <label v-if="!platformBackend&&!signinSession"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
@@ -1257,7 +1263,7 @@ onBeforeUnmount(() => {
             減色は細かな色の違いを失い、エージェントの画像認識にも影響します。差分PNGにも適用されます。
           </p>
           <p>
-            適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザでマシンごとに記憶します。
+            適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザで{{props.monitorWindow?.independent?"モニター":"マシン"}}ごとに記憶します。
           </p>
           <p v-if="settingNotice" role="status">{{ settingNotice }}</p>
           <button @click="connect()">適用して再接続</button>
@@ -1317,12 +1323,12 @@ onBeforeUnmount(() => {
           送信→描画ACK {{nativeStats.ackMs.toFixed(0)}} ms · 復号・描画 {{nativeStats.decodeMs.toFixed(1)}} ms · ACK待ち {{nativeStats.pending}} / {{nativeStats.window}}枚
         </p>
       </details>
-      <div v-if="ready&&sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&monitorLayout?.selected==='all'" data-monitor-windows>
-        <label>この窓に表示するモニター<select aria-label="この窓に表示するモニター" v-model="localMonitor" @change="changeLocalMonitor"><option value="">全体</option><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}</option></select></label>
-        <button :disabled="!crop" @click="openMonitorWindow">選択モニターを別窓で開く</button>
-        <p>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
+      <div v-if="ready&&monitorLayout&&sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&(independentScreen||monitorLayout.selected==='all')" data-monitor-windows>
+        <label>{{independentScreen?"別窓で開くモニター":"この窓に表示するモニター"}}<select aria-label="この窓に表示するモニター" v-model="localMonitor" @change="changeLocalMonitor"><option value="">全体</option><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}</option></select></label>
+        <button :disabled="!canOpenMonitor" @click="openMonitorWindow">選択モニターを別窓で開く</button>
+        <p v-if="independentScreen">各モニターを別々に取得・圧縮し、選択したモニターだけを受信します。モニターごとに画質を保存します。同じモニターの窓は同じ設定にしてください。共有方式の切替は、ほかの窓を閉じてから行ってください。</p><p v-else>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
       </div>
-      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
+      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen||props.monitorWindow?.independent" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
         <summary>マイク入力</summary>

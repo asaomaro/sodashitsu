@@ -13,3 +13,5 @@
 - [ ] Exact-head CI and guarded delivery.
 
 No old-version compatibility/migration. No actual service/SCM/private ACL factory/SYSTEM/installed paths/keys/trust/desktop/input operations. General runtime crash without clean proof and unknown/second-partial archive collisions remain refused; no reset/replay.
+
+- [x] Exact-head CI all4 checks passed; PR #292 merged to main49f45e78; root16-path reflection completed. See final delivery receipt in test-signin-upgrade-resume.md. Final record carried by the following independent-monitor change.

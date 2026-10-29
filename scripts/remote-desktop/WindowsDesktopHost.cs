@@ -49,6 +49,26 @@ public static class SodaDesktopHost {
     static readonly Stopwatch Clock=Stopwatch.StartNew();
     static volatile bool Stopping=false;
     static bool Control=false;
+    static object ResourceFence;
+    static System.Reflection.MethodInfo ResourceInput,ResourceCommand;
+    static Func<bool> ResourceScope;
+    static readonly Dictionary<string,string> ResourceEpochs=new Dictionary<string,string>();
+    static readonly Dictionary<string,object> ResourceFences=new Dictionary<string,object>();
+    static readonly HashSet<string> ResourceReleased=new HashSet<string>{"control","clipboard","microphone"};
+    static bool ResourceActive(string resource){return ResourceFence==null||ResourceEpochs.ContainsKey(resource)&&!ResourceReleased.Contains(resource);}
+    static bool ResourceNeutral(){lock(Gate){return Keys.Count==0&&Buttons.Count==0||ResourceScope!=null&&ResourceScope();}}
+    static void ReleaseHeldStrict(){lock(Gate){Control=false;bool failed=false;
+        foreach(ushort key in new List<ushort>(Keys)){try{if(ResourceScope==null||!ResourceScope())throw new InvalidOperationException();Key(key,false);Keys.Remove(key);}catch{failed=true;}}
+        foreach(int button in new List<int>(Buttons)){try{if(ResourceScope==null||!ResourceScope())throw new InvalidOperationException();Emit(ButtonInput(button,false));Buttons.Remove(button);}catch{failed=true;}}
+        if(failed||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Input cleanup incomplete");
+    }}
+    static string ResourceId(Dictionary<string,object> value,string key){string id=value.ContainsKey(key)?value[key]as string:null;Guid parsed;if(!Guid.TryParseExact(id,"D",out parsed)||parsed==Guid.Empty||parsed.ToString("D")!=id)throw new InvalidOperationException("Resource correlation");return id;}
+    static string ResourceKind(Dictionary<string,object> value){string resource=value.ContainsKey("resource")?value["resource"]as string:null;if(resource!="control"&&resource!="clipboard"&&resource!="microphone")throw new InvalidOperationException("Resource kind");return resource;}
+    static void ResourceBegin(Dictionary<string,object> value){string resource=ResourceKind(value);if(ResourceFence==null||value.Count!=3||!ResourceReleased.Contains(resource))throw new InvalidOperationException("Resource epoch unavailable");ResourceEpochs[resource]=ResourceId(value,"id");ResourceReleased.Remove(resource);}
+    static bool ResourceCleanup(string resource,string id,bool terminal){
+        if(ResourceFence==null||!ResourceEpochs.ContainsKey(resource))return false;
+        return (bool)ResourceCommand.Invoke(ResourceFences[resource],new object[]{id,(Action<string>)(value=>{ResourceReleased.Add(resource);if(terminal)Output(new{type="resource_fence_ack",id=value,terminal=true});else Output(new{type="resource_fence_ack",id=value});})});
+    }
     static bool InputAckPipe=false;
     static bool DeferNativeSnapshots=false;
     static long LastNativeInput=-1000;
@@ -128,7 +148,10 @@ public static class SodaDesktopHost {
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static void Emit(INPUT value) { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(MemoryInput!=null){MemoryInput(value);return;}if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
+    static void Emit(INPUT value) {
+        try { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(MemoryInput!=null){MemoryInput(value);return;}if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
+        catch { if(ResourceFence!=null){Stopping=true;foreach(var fence in ResourceFences.Values)fence.GetType().GetMethod("Close").Invoke(fence,null);}throw; }
+    }
     static INPUT KeyInput(ushort token,bool down) {
         ushort vk=(ushort)(token&255);
         bool extended=(token&0x100)!=0 || vk>=33&&vk<=46 || vk==111 || vk==144 || vk==163 || vk==165 || vk>=91&&vk<=93 || vk>=166&&vk<=183;
@@ -143,7 +166,7 @@ public static class SodaDesktopHost {
         return v;
     }
     static void ApplyKey(HashSet<ushort> held,ushort key,bool down,Action<ushort,bool> emit) {
-        if(down){held.Add(key);emit(key,true);}else if(held.Remove(key))emit(key,false);
+        if(down){held.Add(key);emit(key,true);}else if(held.Contains(key)){emit(key,false);held.Remove(key);}
     }
     static void Mouse(uint flags,uint data,int x,int y) { var v=new INPUT();v.type=0;v.data.mouse.dx=x;v.data.mouse.dy=y;v.data.mouse.dwFlags=flags;v.data.mouse.mouseData=data;Emit(v); }
     static ushort VirtualKey(string code) {
@@ -161,6 +184,7 @@ public static class SodaDesktopHost {
     static void Release() {
         lock(Gate) {
             Control=false;
+            if(ResourceFence!=null){try{if(!(bool)ResourceInput.Invoke(ResourceFence,null))Stopping=true;}catch{Stopping=true;}return;}
             if(Secure && !AllowedDesktop()){Keys.Clear();Buttons.Clear();return;}
             foreach(ushort key in Keys) { try { Key(key,false); } catch {} } Keys.Clear();
             foreach(int button in Buttons) { try { Emit(ButtonInput(button,false)); } catch {} } Buttons.Clear();
@@ -184,7 +208,7 @@ public static class SodaDesktopHost {
             } else if(kind=="pointer") {
                 double x=Convert.ToDouble(input["x"]),y=Convert.ToDouble(input["y"]);
                 if(Double.IsNaN(x)||Double.IsNaN(y)||x<0||x>1||y<0||y>1)throw new InvalidOperationException();
-                if(ActiveMonitors!=null&&!ActiveMonitors.Contains(x,y)){int released=Num(input,"button");if(released<0||released>4)throw new InvalidOperationException();if((string)input["event"]=="up"&&Buttons.Remove(released))Emit(ButtonInput(released,false));return true;}
+                if(ActiveMonitors!=null&&!ActiveMonitors.Contains(x,y)){int released=Num(input,"button");if(released<0||released>4)throw new InvalidOperationException();if((string)input["event"]=="up"&&Buttons.Contains(released)){Emit(ButtonInput(released,false));Buttons.Remove(released);}return true;}
                 // Read the same native pixel coordinate space used by capture.
                 // WinForms virtual bounds can be DPI-virtualized by the host.
                 var monitors=currentMonitors??MonitorDriver.Read();if(monitors.Length<1)throw new InvalidOperationException("Monitor not found");Rectangle all=monitors[0].Bounds;foreach(var monitor in monitors)all=Rectangle.Union(all,monitor.Bounds);
@@ -193,10 +217,34 @@ public static class SodaDesktopHost {
                 int button=Num(input,"button");if(button<0||button>4)throw new InvalidOperationException();
                 string action=(string)input["event"];
                 if(action=="down" && Buttons.Add(button)) Emit(ButtonInput(button,true));
-                else if(action=="up" && Buttons.Remove(button)) Emit(ButtonInput(button,false));
+                else if(action=="up" && Buttons.Contains(button)){Emit(ButtonInput(button,false));Buttons.Remove(button);}
             } else throw new InvalidOperationException();
             return true;
         }
+    }
+    // Generated input-failure checks: all input/desktop/monitor/output endpoints
+    // are memory-backed before calling the production Apply/Release paths.
+    public static void VerifyResourceInputFailures(){
+        if(ResourceFence!=null||Control||MemoryInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        Type type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");if(type==null)throw new InvalidOperationException("Missing resource fence");
+        var oldBounds=Bounds;var oldDriver=MonitorDriver;bool oldStopping=Stopping;long oldHeartbeat=LastHeartbeat;
+        try{foreach(string kind in new[]{"key","pointer","text"}){
+            Keys.Clear();Buttons.Clear();Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;MemoryDesktop=()=>true;MemoryOutput=value=>{throw new InvalidOperationException("Failed input produced cleanup ACK");};
+            MonitorDriver=new MemoryMonitors{Items=new[]{new SodaDesktopMonitorLayout.Item("a",new Rectangle(0,0,800,600),true,100)}};Bounds=new Rectangle(0,0,800,600);
+            ResourceScope=()=>true;ResourceInput=type.GetMethod("ReleaseInput");ResourceCommand=type.GetMethod("Fence");
+            ResourceFence=Activator.CreateInstance(type,new object[]{(Func<bool>)(()=>true),(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;ResourceEpochs["control"]=Guid.NewGuid().ToString("D");
+            MemoryInput=value=>{if(value.type==1&&(value.data.key.flags&2)!=0||value.type==0&&(value.data.mouse.dwFlags&4)!=0)throw new InvalidOperationException("Generated key/button up failure");};
+            bool failed=false;try{
+                if(kind=="key"){Apply(new Dictionary<string,object>{{"kind","key"},{"code","KeyA"},{"down",true}});Apply(new Dictionary<string,object>{{"kind","key"},{"code","KeyA"},{"down",false}});}
+                else if(kind=="pointer"){Apply(new Dictionary<string,object>{{"kind","pointer"},{"x",0.5},{"y",0.5},{"button",0},{"event","down"}});Apply(new Dictionary<string,object>{{"kind","pointer"},{"x",0.5},{"y",0.5},{"button",0},{"event","up"}});}
+                else Apply(new Dictionary<string,object>{{"kind","text"},{"text","a"}});
+            }catch(InvalidOperationException){failed=true;}
+            if(!failed||!Stopping)throw new InvalidOperationException("Input failure was not terminal: "+kind);
+            if(kind=="key"&&!Keys.Contains(65)||kind=="pointer"&&!Buttons.Contains(0))throw new InvalidOperationException("Failed release was forgotten: "+kind);
+            Release();if(ResourceCleanup("control",Guid.NewGuid().ToString("D"),false)||ResourceCleanup("control",ResourceEpochs["control"],true))throw new InvalidOperationException("Failed input acknowledged as clean: "+kind);
+            ResourceFence=null;ResourceFences.Clear();ResourceEpochs.Clear();
+        }}finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;MemoryDesktop=null;MemoryOutput=null;ResourceFence=null;ResourceFences.Clear();ResourceEpochs.Clear();ResourceScope=null;ResourceInput=null;ResourceCommand=null;MonitorDriver=oldDriver;Bounds=oldBounds;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;}
+        Console.WriteLine("desktop_resource_input_failed_key_button_unicode_never_ack_passed");
     }
     sealed class MemoryMonitors:SodaDesktopMonitorLayout.IDriver {public SodaDesktopMonitorLayout.Item[] Items;public int Reads;public SodaDesktopMonitorLayout.Item[] Read(){Reads++;return Items;}}
     // A fresh validation process only. Every desktop, topology, emit and output
@@ -427,6 +475,14 @@ public static class SodaDesktopHost {
         string videoCodec="h264",videoCodecFallback=null;
         Bitmap videoBitmap=null;Graphics videoResize=null;
         long videoSeq=0;double videoNext=0;int videoFps=maxFps,videoBitrate=2500;var videoWindow=new SodaDesktopVideoWindow(1);byte[] videoNv12=null;
+        if(config.ContainsKey("resourceFences")&&config["resourceFences"] is bool&&(bool)config["resourceFences"]){
+            Type resourceType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");
+            if(resourceType!=null){ResourceScope=()=>AllowedDesktop();ResourceInput=resourceType.GetMethod("ReleaseInput");ResourceCommand=resourceType.GetMethod("Fence");
+                ResourceFence=Activator.CreateInstance(resourceType,new object[]{(Func<bool>)ResourceNeutral,(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;
+                ResourceFences["clipboard"]=Activator.CreateInstance(resourceType,new object[]{(Func<bool>)(()=>true),(Action)(()=>{}),(Action)(()=>{clipboardAllowed=false;Interlocked.Increment(ref clipboardGeneration);StopAudio(ref richClipboardWorker);richSubmit=null;}),(Action)(()=>{})});
+                ResourceFences["microphone"]=Activator.CreateInstance(resourceType,new object[]{(Func<bool>)(()=>true),(Action)(()=>{}),(Action)(()=>{}),(Action)(()=>{StopAudio(ref microphone);microphoneId=null;})});
+            }
+        }
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
@@ -453,6 +509,7 @@ public static class SodaDesktopHost {
             if(separateCursor)ready["cursor"]=true;
             if(VirtualLease!=null)ready["virtualDisplay"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
+            if(ResourceFence!=null)ready["resourceFences"]=true;
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
             if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
@@ -517,9 +574,11 @@ public static class SodaDesktopHost {
                                 richSubmit.Invoke(richClipboardWorker,new object[]{msg});
                             }catch{string richId=msg.ContainsKey("id")?msg["id"]as string:null;Guid parsedRich;if(richId!=null&&Guid.TryParse(richId,out parsedRich))Output(new{type="clipboard_rich_result",id=richId,ok=false,stage="done"});}
                         }
+                        else if(type=="resource_epoch"){ResourceBegin(msg);}
+                        else if(type=="resource_fence"){if(ResourceFence==null||msg.Count!=4)throw new InvalidOperationException("Resource fence unavailable");string resource=ResourceKind(msg),id=ResourceId(msg,"id"),epoch=ResourceId(msg,"epoch");if(ResourceEpochs.ContainsKey(resource)&&epoch==ResourceEpochs[resource]){preparation.Invalidate(false);if(!ResourceCleanup(resource,id,false))Stopping=true;}}
                         else if(type=="native_microphone") {
                             string requested=(string)msg["id"];Guid parsed;if(!Guid.TryParse(requested,out parsed))throw new InvalidOperationException("Microphone id");
-                            if((bool)msg["enabled"]){if(!microphoneCeiling||microphone!=null)throw new InvalidOperationException("Microphone not permitted");
+                            if((bool)msg["enabled"]){if(!ResourceActive("microphone")||!microphoneCeiling||microphone!=null)throw new InvalidOperationException("Microphone not permitted");
                                 microphone=(IDisposable)Activator.CreateInstance(microphoneType,new object[]{(string)msg["pipeName"],microphonePid,(Func<bool>)(()=>!Stopping&&AllowedDesktop()&&SourceMatches(sourceDevice)),microphoneEndpoint});microphoneId=requested;
                             }else if(microphoneId==requested){StopAudio(ref microphone);microphoneId=null;}
                         }
@@ -564,7 +623,7 @@ public static class SodaDesktopHost {
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
                             fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);preparation.Invalidate(true);
-                        } else if(type=="clipboard_control") {clipboardAllowed=clipboardCeiling && (bool)msg["enabled"];clipboardGeneration=Convert.ToInt64(msg["generation"]);}
+                        } else if(type=="clipboard_control") {clipboardAllowed=ResourceActive("clipboard") && clipboardCeiling && (bool)msg["enabled"];clipboardGeneration=Convert.ToInt64(msg["generation"]);}
                         else if(type=="clipboard") {
                             long id=Convert.ToInt64(msg["id"]),expires=Convert.ToInt64(msg["expiresAt"]),utc=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                             bool ok=false;string text=null;
@@ -578,7 +637,7 @@ public static class SodaDesktopHost {
                             if(text!=null)Output(new {type="clipboard_result",id,ok,text});else Output(new {type="clipboard_result",id,ok});
                         }
                         else if(type=="release") { preparation.Invalidate(false);lock(Gate){bool keep=Control;Release();Control=keep;} }
-                        else if(type=="control") { preparation.Invalidate(false);Release();lock(Gate){Control=allow && (bool)msg["enabled"];} }
+                        else if(type=="control") { preparation.Invalidate(false);Release();lock(Gate){Control=ResourceActive("control") && allow && (bool)msg["enabled"];} }
                         else if(type=="ack") { if(Convert.ToInt64(msg["seq"])!=pending)throw new InvalidOperationException();pending=0; }
                         else if(type=="input") {
                             if(ApplyInput(msg,ref inputSeq))preparation.Invalidate(false);
@@ -701,7 +760,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose(); }
+        } finally { Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose();if(ResourceFence!=null)foreach(var epoch in new Dictionary<string,string>(ResourceEpochs))ResourceCleanup(epoch.Key,epoch.Value,true); }
     }
 }
 

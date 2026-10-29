@@ -59,6 +59,7 @@ export const DesktopOptions = z
     sharedDesktop:z.literal(true).optional(),
     sharedDeltas:z.literal(true).optional(),
     sharedMonitors:z.literal(true).optional(),
+    independentMonitors:z.literal(true).optional(),
     sharedCursor:z.literal(true).optional(),
     sharedClipboard:z.literal(true).optional(),
     sharedMicrophone:z.literal(true).optional(),
@@ -153,6 +154,7 @@ export const DesktopReady = z
   .object({
     type: z.literal("ready"),
     title: z.string().max(256),
+    resourceFences: z.literal(true).optional(),
     allowInput: z.boolean(),
     width: z.number().int().positive().max(32768),
     height: z.number().int().positive().max(32768),
@@ -316,6 +318,7 @@ export interface DesktopResults {
     sharedDesktop?:boolean;
     sharedDeltas?:boolean;
     sharedMonitors?:boolean;
+    independentMonitors?:boolean;
     sharedCursor?:boolean;
     sharedClipboard?:boolean;
     sharedFiles?:boolean;

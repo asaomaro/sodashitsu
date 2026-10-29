@@ -1,7 +1,7 @@
 let nativeCadence=false,nativeAdaptive=false,nativeCodecs=false;
 /** Synthetic desktop protocol source. Never captures a screen or sends OS input. */
 import { createServer } from "node:net";
-import { chmodSync, unlinkSync } from "node:fs";
+import { chmodSync, unlinkSync,writeSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { createInterface } from "node:readline";
@@ -197,6 +197,8 @@ function run() {
     }
     lastCursor=performance.now();send(info);
   };
+  let resourceMode=false,resourceEpochs=new Map(),resourceReleased=new Set(["control","clipboard","microphone"]),resourceFailed=false;
+  process.on("exit",()=>{if(resourceMode&&!resourceFailed){held.clear();for(const epoch of resourceEpochs.values())try{writeSync(1,JSON.stringify({type:"resource_fence_ack",id:epoch,terminal:true})+"\n");}catch{}}});
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   lines.on("close", () => process.exit(0));
   lines.on("line", (line) => {
@@ -207,6 +209,7 @@ function run() {
       if (m.type === "configure" && !options) {
         const expectedEnvAt=process.argv.indexOf("--expect-elevated-request");if(expectedEnvAt>=0&&process.env.SODA_DESKTOP_ELEVATED_REQUEST!==process.argv[expectedEnvAt+1])throw Error("Generated source request environment mismatch");
         if(configuredProtected&&(((m.options.elevatedDesktop===true||m.allowSharedProtected===true)&&m.allowElevated===true)||process.argv.includes("--protected-unconditional"))){protectedMode=configuredProtected;secure=true;}
+        resourceMode=m.resourceFences===true&&!process.argv.includes("--no-resource-fences");
         cursorEnabled=m.separateCursor===true&&process.argv.includes("--cursor")&&!secure&&m.options.image?.showCursor!==false;
         inputAckPipe=m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure;
         const failureAt = process.argv.indexOf("--startup-failure");
@@ -239,6 +242,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(resourceMode?{resourceFences:true}:{}),
           ...(protectedMode?{protectedDesktop:protectedMode,...(m.allowSharedProtected===true&&!process.argv.includes("--no-shared-protected")?{sharedProtected:true}:{})}:{}),
           ...(virtualSource?{virtualDisplay:true}:{}),
           ...(monitorLayout?{monitorLayout}:{}),
@@ -294,6 +298,12 @@ function run() {
       }
       else if(m.type==="native_profile_resume"&&native&&m.id===native.id){const b=native.barrier;if(!b||b.stage!=="prepared"||m.generation!==b.generation||m.baseSeq!==native.seq)throw Error("Native resume fence");native.generation=b.generation;native.profile=b.profile;native.index=0;native.fps=b.fps;b.stage="resumed";}
       else if(m.type==="native_keyframe"&&native&&m.id===native.id)native.index=0;
+      else if(m.type==="resource_epoch"){if(!resourceMode||!resourceReleased.has(m.resource))throw Error("Generated resource epoch");resourceEpochs.set(m.resource,m.id);resourceReleased.delete(m.resource);}
+      else if(m.type==="resource_fence"){
+        if(!resourceMode||m.epoch!==resourceEpochs.get(m.resource))throw Error("Generated resource fence");
+        if(process.argv.includes("--fail-resource-cleanup")){resourceFailed=true;process.exit(1);}
+        if(!process.argv.includes("--stall-resource-fence")){if(m.resource==="control"){control=false;held.clear();}if(m.resource==="clipboard"){clipboardAllowed=false;clearRich();}if(m.resource==="microphone")stopMicrophone();resourceReleased.add(m.resource);send({type:"resource_fence_ack",id:m.id});}
+      }
       else if(m.type==="native_rate"&&native&&m.id===native.id){if(native.barrier)return;if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"native_rate",id:m.id,fps:m.fps,kbps:m.kbps})+"\n");}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
@@ -311,7 +321,7 @@ function run() {
         for(const value of queuedOutput)send(value);queuedOutput=[];
       }
       else if (m.type === "control") {
-        control = m.enabled && allowInput;
+        control = (!resourceMode||resourceEpochs.has("control")&&!resourceReleased.has("control"))&&m.enabled && allowInput;
       } else if (m.type === "dismiss_lock_screen" && lockCover && control) {
         if (coverMarker) writeFileSync(coverMarker,"dismissed");
         send({type:"lock_screen_changed"});

@@ -1,3 +1,4 @@
+import type {DesktopResourceChannel} from "./DesktopResourceChannel.js";
 import {
   parseDesktopCursor,
   DESKTOP_CURSOR_MAX_BYTES,
@@ -21,6 +22,7 @@ import {
 
 /** The subset used by DesktopProvider, for both OS children and shared subscriptions. */
 export interface DesktopHelper extends EventEmitter {
+  resourceChannel?: DesktopResourceChannel;
   stdin: Writable;
   stdout: Readable;
   stderr: Readable;
@@ -72,6 +74,8 @@ export class DesktopSharedCapture {
         ended: boolean;
       }
     | undefined;
+
+  get running():boolean{return this.group!==undefined;}
 
   /** A new source must wait for the old OS helper, not just its virtual subscribers. */
   get retiring(): DesktopHelper | undefined {
@@ -132,6 +136,7 @@ export class DesktopSharedCapture {
     }
     const current = g;
     const member = Object.assign(new EventEmitter(), {
+      resourceChannel: current.child.resourceChannel,
       configured: false,
       pending: 0,
       closed: false,
@@ -518,7 +523,7 @@ export class DesktopSharedCapture {
     g.inputs.clear();
     g.child.stdin.end();
     if (g.child.exitCode === null && g.child.signalCode === null) {
-      const timer = setTimeout(() => g.child.kill(), 1500);
+      const timer = setTimeout(() => g.child.kill(), g.child.resourceChannel?.fencing?6000:1500);
       timer.unref();
       g.child.once("close", () => clearTimeout(timer));
     }
