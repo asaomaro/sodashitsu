@@ -19,7 +19,21 @@ Readonly taskcheck/cross/correction reviews by review_pointer and review_transfe
 
 ## Final verification and delivery
 
-The first frozen candidate build/typecheck and whole843files/12,555tests passed354.16s. Windows CI then passed5folder upload boundaries and caught EPERM on fsync during restored read-only ZIP attach. The redundant checkpoint sync was removed; ZIP construction still syncs its writable FD before ACK. A generated EPERM regression passes, and restoring the offending line fails an intended AssertionError before exact byte restoration and positive success. The prior root whole run was gracefully cancelled with exit130 to avoid counting old-code results. Corrected source/root whole suites are rerun. All20 scoped paths passed exact-byte source/root preflight before any root write;4 existing overlaps were clean3-way merges preserving unrelated root changes. Root build/typecheck, final browser/process suites, external clean build/smoke and exact-head CI/PR/main delivery remain pending until recorded below. Logs: node_modules/.cache/durable-folders in the source/root worktrees. Remaining tasks after this phase are direct remote Explorer OLE drag, Linux/macOS parity, general unproven signin crash recovery, actual-device validation and deployment.
+Product head: `5da798838e4c8f9b2583fbc4c9cd48657c6872c1`. PR [#297](https://github.com/asaomaro/sodashitsu/pull/297) merged2026-10-29T13:39:09Z as `c1e5c763d41f807171e793c5fd8d0f37c23b5435`; merge tree equals the tested head.
+
+- Corrected source build/typecheck passed;843files/12,556tests passed340.77s.
+- Corrected root build/typecheck passed;851files/12,618tests passed335.43s.
+- Final normal/encrypted folder restart browser4passed37.3s; root combined single-file/folder browser23passed2.8m.
+- Final built Linux child boundaries: single-file6 + folder6passed. Windows CI also passed all single-file6 + folder6 with generated DPAPI keys, without desktop/input/service activity.
+- Exact head CI4/4SUCCESS: [Node/DPAPI/process boundaries](https://github.com/asaomaro/sodashitsu/actions/runs/40881169344), [protected boundaries/upgrade/maintenance](https://github.com/asaomaro/sodashitsu/actions/runs/40881169374).
+- Clean detached exact head at `/workspaces/sodashitsu-desktop-durable-smoke`: install/build and final corrected build/smoke passed, status0bytes. Raw external logs `/tmp/soda-durable-folders-clean-final-*.log`.
+- All20 source/root paths byte-checked,4 existing overlaps independently replayed from saved base/root/source; all clean and current root matches. Existing local connection, LAN HTTP permission, failure messages and UI/docs changes remain.
+- Independent source/taskcheck/correction/cross/root review clear; final receipt-only record delta review clear.
+
+The initial pre-Windows-fix candidate whole12,555 passed354.16s. Real Windows CI caught EPERM on restored ZIP read-only fsync after5upload boundaries passed. ZIP construction keeps its writable sync; the redundant restore-checkpoint sync was removed. A direct generated EPERM regression and12th intended source negative verify this. The old root whole was gracefully cancelled130, then BOTH corrected whole suites rerun serially with maxWorkers4. No compile/import/timeouts counted as intended source-negative success; no reviewer repeated whole tests.
+
+This phase did not deploy/restart the live A/B servers. Remaining direct remote Explorer OLE drag, Linux/macOS parity, general unproven signin crash recovery and actual-device validation continue as separate bounded work. Logs are under node_modules/.cache/durable-folders in source/root.
+
 
 ## Raw intended-control excerpts
 
@@ -68,3 +82,15 @@ AssertionError: promise rejected "Error: generated Windows read-only sync { code
 ```
 
 This is the12th intended product-source negative. Independent correction review is clear.
+
+## Windows corrected process-boundary raw markers
+
+```text
+generated_folder_process_boundary_data_ack_pass
+generated_folder_process_boundary_before_link_pass
+generated_folder_process_boundary_after_link_pass
+generated_folder_process_boundary_after_unlink_pass
+generated_folder_process_boundary_receipt_pass
+generated_folder_process_boundary_download_pass
+generated_folder_restart_fresh_grant_exact_tree_zip_and_receipt_pass
+```
