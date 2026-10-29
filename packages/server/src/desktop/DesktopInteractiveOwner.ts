@@ -5,7 +5,8 @@ type Completion = {
   resolve(receipt: DesktopReleaseReceipt): void;
   reject(error: Error): void;
 };
-type PendingRelease<Source> = {
+type PendingRelease<Member,Source> = {
+  member: Member;
   source: Source;
   id: string;
   epoch: string;
@@ -22,7 +23,7 @@ export class DesktopInteractiveOwner<Member, Source> {
     DesktopInteractiveResource,
     { member: Member; source: Source; epoch: string }
   >();
-  private pending = new Map<DesktopInteractiveResource, PendingRelease<Source>>();
+  private pending = new Map<DesktopInteractiveResource, PendingRelease<Member,Source>>();
   private failed = false;
   private ended = false;
   private last = -Infinity;
@@ -92,6 +93,12 @@ export class DesktopInteractiveOwner<Member, Source> {
   release(member: Member, resource: DesktopInteractiveResource): void {
     this.beginRelease(member, resource);
   }
+  /** Same-member pending cleanup only; this is not release completion proof. */
+  releasing(member:Member,resource:DesktopInteractiveResource):{source:Source;id:string;epoch:string}|undefined{
+    if(!this.current())return;const pending=this.pending.get(resource);
+    if(pending?.member===member)return {source:pending.source,id:pending.id,epoch:pending.epoch};
+    return;
+  }
   /** Resolves only for the exact physical helper/epoch cleanup ACK. No write,
    * ordinary input ACK, source disappearance or timeout substitutes for it. */
   releaseConfirmed(
@@ -116,6 +123,7 @@ export class DesktopInteractiveOwner<Member, Source> {
       timer = setTimeout(() => this.tick(), 5000);
     timer.unref();
     const pending = {
+      member,
       source: owner.source,
       id,
       epoch: owner.epoch,
@@ -140,7 +148,7 @@ export class DesktopInteractiveOwner<Member, Source> {
       return false;
     }
   }
-  private completeRelease(resource: DesktopInteractiveResource, pending: PendingRelease<Source>) {
+  private completeRelease(resource: DesktopInteractiveResource, pending: PendingRelease<Member,Source>) {
     clearTimeout(pending.timer);
     this.pending.delete(resource);
     pending.completion?.resolve({ id: pending.id, epoch: pending.epoch });

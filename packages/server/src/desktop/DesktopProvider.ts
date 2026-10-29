@@ -132,6 +132,7 @@ type Share = {
   inputSeq: number;
   frameAt: number;
   sourceIdle:DesktopSourceIdle;
+  pendingControl?:{source:DesktopResourceChannel;id:string;epoch:string};
   started: number;
   timer: ReturnType<typeof setInterval>;
 };
@@ -189,7 +190,24 @@ export class DesktopProvider {
   private readonly physicalHelpers=new Set<DesktopHelper>();
   private resourceReset=false;
   private resources=this.createResources();
-  private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:()=>{},fault:()=>{if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);}});}
+  private createResources(){return new DesktopInteractiveOwner<Share,DesktopResourceChannel>({begin:(source,epoch,resource)=>source.begin(epoch,resource),clean:(source,epoch)=>source.clean(epoch),send:(source,id,resource)=>source.fence(id,resource),idle:source=>this.resumeControls(source),fault:()=>{if(this.active)this.stop(this.active);for(const s of [...this.shared])this.stop(s);}});}
+  private applyControl(s:Share,enabled:boolean){
+    s.control=s.process?.requestControl?s.process.requestControl(enabled):enabled;
+    this.write(s,{type:"control",enabled:s.control});
+    if(!s.control&&s.resourcesManaged)this.resources.release(s,"control");
+    this.send(s,{type:"control",enabled:s.control});
+  }
+  private resumeControls(source:DesktopResourceChannel){
+    for(const s of [this.active,...this.shared]){
+      const intent=s?.pendingControl;if(!s||!intent||intent.source!==source)continue;
+      if(!this.live(s)){delete s.pendingControl;continue;}
+      if(!s.ready||!s.allowInput||s.process?.resourceChannel!==source){delete s.pendingControl;this.send(s,{type:"control",enabled:false});continue;}
+      const pending=this.resources.releasing(s,"control");
+      if(pending?.id===intent.id&&pending.epoch===intent.epoch)continue;
+      delete s.pendingControl;
+      this.applyControl(s,!pending&&this.claimResource(s,"control"));
+    }
+  }
   private resetResourcesIfDrained(){if(this.resourceReset&&!this.physicalHelpers.size){if(!this.resources.faulted){this.resources.dispose();this.resources=this.createResources();}this.resourceReset=false;}}
   private claimResource(s:Share,kind:DesktopInteractiveResource):boolean{if(!s.resourcesManaged)return true;const source=s.process?.resourceChannel;return !!source?.supported&&this.resources.acquire(s,source,kind);}
   private ownsResource(s:Share,kind:DesktopInteractiveResource):boolean{return !s.resourcesManaged||this.resources.owns(s,kind);}
@@ -591,11 +609,13 @@ export class DesktopProvider {
           } else if (m.type === "control") {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;
+            if(s.pendingControl){delete s.pendingControl;this.send(s,{type:"control",enabled:false});if(!this.live(s))return;}
             const enabled = m.enabled && s.allowInput && s.ready && this.claimResource(s,"control");
-            s.control = s.process?.requestControl ? s.process.requestControl(enabled) : enabled;
-            this.write(s, { type: "control", enabled: s.control });
-            if(!s.control&&s.resourcesManaged)this.resources.release(s,"control");
-            this.send(s, { type: "control", enabled: s.control });
+            if(m.enabled&&!enabled&&s.allowInput&&s.ready&&s.resourcesManaged){
+              const pending=this.resources.releasing(s,"control");
+              if(pending&&s.process?.resourceChannel===pending.source){s.pendingControl=pending;s.control=false;return;}
+            }
+            this.applyControl(s,enabled);
           } else if (m.type === "sas") {
             if (s.secureDesktop && !s.protectedDesktop && !s.lockScreenCover && s.control && this.ownsResource(s,"control") && s.ready && performance.now() - s.lastSeen < 5000)
               this.write(s, m);
@@ -947,6 +967,7 @@ export class DesktopProvider {
   private stop(s: Share): void {
     if (s.dead) return;
     s.dead = true;
+    delete s.pendingControl;
     s.inputAcks.invalidatePointers();
     delete s.pointerWitness;
     if(s.resourcesManaged)this.resources.releaseAll(s);

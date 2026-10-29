@@ -19,3 +19,26 @@ it.each(["escape","takeover"])("hides encrypted agent controls until authenticat
  }finally{viewer.unmount();}
 });
 it("preserves the legacy agent controls on plaintext connections",async()=>{state.encrypted=false;const{viewer}=await fixture();try{expect(viewer.find('[data-agent-access]').exists()).toBe(true);expect(viewer.find('[aria-label="許可するエージェント"]').exists()).toBe(false);}finally{viewer.unmount();}});
+it.each([false,true])("cancels pending human control on focusout and rejects its late grant, backpressure=%s",async(blocked)=>{
+ const {viewer,socket}=await fixture();const outside=document.createElement("input");document.body.append(outside);
+ try{
+  await viewer.findAll("button").find(button=>button.text()==="操作する")!.trigger("click");expect(socket.send.mock.calls.map(([raw])=>JSON.parse(raw))).toContainEqual({type:"control",enabled:true});
+  if(blocked)socket.bufferedAmount=20000;
+  await viewer.get('[data-remote-desktop]').trigger("focusout",{relatedTarget:outside});await flushPromises();
+  if(blocked)expect(socket.close).toHaveBeenCalled();else expect(socket.send.mock.calls.map(([raw])=>JSON.parse(raw))).toContainEqual({type:"control",enabled:false});
+  socket.bufferedAmount=0;await socket.onmessage!({data:JSON.stringify({type:"control",enabled:true})});await flushPromises();expect(viewer.get('[data-desktop-status]').text()).toBe("閲覧中");expect(viewer.findAll("button").some(button=>button.text()==="操作する")).toBe(true);
+ }finally{viewer.unmount();outside.remove();}
+});
+it("accepts protocol grants before cancellation and after a fresh request, while rejecting cancelled grants",async()=>{
+ const {viewer,socket}=await fixture();const reply=(enabled:boolean)=>socket.onmessage!({data:JSON.stringify({type:"control",enabled})});
+ try{
+  await reply(true);await flushPromises();expect(viewer.get('[data-desktop-status]').text()).toBe("操作中");
+  await viewer.findAll("button").find(button=>button.text()==="閲覧に戻る")!.trigger("click");await reply(false);await reply(true);await flushPromises();expect(viewer.get('[data-desktop-status]').text()).toBe("閲覧中");
+  await viewer.findAll("button").find(button=>button.text()==="操作する")!.trigger("click");await reply(true);await flushPromises();expect(viewer.get('[data-desktop-status]').text()).toBe("操作中");
+ }finally{viewer.unmount();}
+});
+it("refuses a protocol grant after focusout even when its request bypassed UI tracking",async()=>{
+ const {viewer,socket}=await fixture(),outside=document.createElement("input");document.body.append(outside);
+ try{socket.send(JSON.stringify({type:"control",enabled:true}));await viewer.get('[data-remote-desktop]').trigger("focusout",{relatedTarget:outside});await socket.onmessage!({data:JSON.stringify({type:"control",enabled:true})});await flushPromises();expect(viewer.get('[data-desktop-status]').text()).toBe("閲覧中");expect(socket.send.mock.calls.map(([raw])=>JSON.parse(raw))).toContainEqual({type:"control",enabled:false});}
+ finally{viewer.unmount();outside.remove();}
+});

@@ -33,6 +33,10 @@ function fixture() {
     },
   };
 }
+it("exposes a releasing identity only to its original member without weakening confirmed release",async()=>{
+ const f=fixture(),member={},other={},source={};expect(f.owner.acquire(member,source,"control")).toBe(true);const epoch=f.owner.identity(member,"control")!.epoch;f.owner.release(member,"control");const pending=f.owner.releasing(member,"control");expect(pending).toEqual({source,id:f.sent[0]!.id,epoch});expect(f.owner.releasing(other,"control")).toBeUndefined();expect(f.owner.releasing(member,"clipboard")).toBeUndefined();await expect(f.owner.releaseConfirmed(member,"control")).rejects.toThrow("not owned");expect(f.owner.acquire(member,source,"control")).toBe(false);expect(f.owner.acknowledge(source,pending!.id)).toBe(true);expect(f.owner.releasing(member,"control")).toBeUndefined();expect(f.owner.acquire(member,source,"control")).toBe(true);f.owner.dispose();
+});
+it("cannot inspect or revive an expired releasing identity",()=>{const f=fixture(),member={},source={};f.owner.acquire(member,source,"control");f.owner.release(member,"control");f.advance(5000);expect(f.owner.releasing(member,"control")).toBeUndefined();expect(f.owner.faulted).toBe(true);expect(f.owner.acquire(member,source,"control")).toBe(false);f.owner.dispose();});
 it("serializes all resources until the same physical helper acknowledges cleanup", async () => {
   const f = fixture(),
     a = {},

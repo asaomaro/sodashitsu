@@ -87,6 +87,7 @@ function grantSignin(control:boolean){
 }
 const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<DesktopInputCapabilities>();
 const platformIdle=ref(false),platformIdleCounter=ref(0);let sourceIdle=new DesktopSourceIdle();
+let controlPending=false,controlCancelled=false;
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
 const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
 const lockScreenCover = ref(false);
@@ -445,8 +446,11 @@ function refreshAgentPeers(){if(!endpointAgentAvailable.value)return;windowEleme
 function send(value: unknown) {
   const message=value as {type?:unknown;enabled?:unknown}|null;
   if(endpointEncrypted.value&&message?.type==="control"&&message.enabled===true&&(endpointAgentBusy.value||agentExpires.value))revokeAgentAccess();
-  if (ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384)
-    ws.send(JSON.stringify(value));
+  const controlMessage=message?.type==="control"&&typeof message.enabled==="boolean";
+  if (ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 16384){
+    if(controlMessage){controlPending=message.enabled===true;controlCancelled=!controlPending;}
+    try{ws.send(JSON.stringify(value));}catch(error){if(!controlMessage)throw error;controlPending=false;controlCancelled=true;ws.close();}
+  }else if(controlMessage){controlPending=false;controlCancelled=true;ws?.close();}
 }
 function releaseInputs() {
   nativeTransfer.value?.interrupt();
@@ -456,6 +460,7 @@ function releaseInputs() {
   cursorRenderer?.clearPrediction();
 }
 function relinquish() {
+  controlCancelled=true;
   nativeTransfer.value?.interrupt();
   inputSender.clear();
   escapePress.reset(); mouseButtons.reset(); modifiers.reset();
@@ -465,7 +470,7 @@ function relinquish() {
     send({ type: "clipboard_grant", enabled: false });
     clearClipboard();
   }
-  if (control.value) send({ type: "control", enabled: false });
+  if (control.value||controlPending) send({ type: "control", enabled: false });
   control.value = false;
   cursorRenderer?.clearPrediction();
   inputs.clear();
@@ -587,6 +592,7 @@ function connect(automatic = false) {
   title.value = "";
   synthetic.value = false;
   rendered.value = lastDrawn = 0;
+  controlPending=controlCancelled=false;
   seq = 0;
   chain = new DesktopFrameChain();
   sourceCanvas = document.createElement("canvas");
@@ -879,9 +885,13 @@ function connect(automatic = false) {
           cursorRenderer?.clearPrediction();
           status.value = agentActive.value ? "エージェント操作中" : "閲覧中";
         } else if (m.type === "control") {
+          const requestedControl=controlPending||control.value||!controlCancelled;
+          if(m.enabled!==true&&(controlPending||control.value))controlCancelled=true;
+          controlPending=false;
           inputSender.clear();
           escapePress.reset(); mouseButtons.reset(); modifiers.reset();
-          control.value = m.enabled === true && allowed.value;
+          control.value = m.enabled === true && allowed.value&&requestedControl;
+          if(m.enabled===true&&!requestedControl)send({type:"control",enabled:false});
           if(control.value){endpointAgentBusy.value=false;agentActive.value=false;agentExpires.value=0;agentTicket.value="";}
           if(!control.value)cursorRenderer?.clearPrediction();
           status.value = agentActive.value
