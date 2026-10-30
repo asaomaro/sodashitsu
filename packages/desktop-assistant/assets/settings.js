@@ -4,6 +4,7 @@ const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin
 const status = document.getElementById("status");
 function display(preferences) {
  current = preferences;
+ for(const kind of ["claude","codex"]) for(const key of ["model","effort"]) document.getElementById(`${kind}-${key}`).value=preferences.agentProfiles?.[kind]?.[key]??"";
  for (const key of fields) {
   const element = document.getElementById(key);
   if (element.type === "checkbox") element.checked = preferences[key];
@@ -36,7 +37,7 @@ document.getElementById("form").addEventListener("submit", async event => {
  const button = event.submitter;
  button.disabled = true;
  try {
-  const next = { ...current };
+  const next = { ...current, agentProfiles: Object.fromEntries(["claude","codex"].map(kind=>[kind,Object.fromEntries(["model","effort"].map(key=>[key,document.getElementById(`${kind}-${key}`).value.trim()]))])) };
   for (const key of fields) {
    const element = document.getElementById(key);
    next[key] = element.type === "checkbox" ? element.checked : element.type === "number" ? Number(element.value) : element.value;

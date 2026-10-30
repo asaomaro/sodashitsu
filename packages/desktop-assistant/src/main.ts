@@ -338,6 +338,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     },
     chatRevision,
   );
+  assistantChat.configure(controller.preferences.agentProfiles);
   reminders = new Reminders(
     installationId,
     rpc,
@@ -388,6 +389,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     recording.cancel();
     bubble?.destroy();
   }
+  assistantChat?.configure(preferences.agentProfiles);
   transcription.configure(
     preferences.enabled && preferences.transcriptionEnabled,
     preferences.transcriptionOrigin,

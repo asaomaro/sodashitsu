@@ -77,6 +77,7 @@ it("does not launch an agent while discovering a new installation; start is an e
     deviceId: f.deviceId,
     kind: "codex",
     retry: false,
+    launchSettings: {model: "", effort: ""},
   });
   expect(() => f.chat.start({ revision: f.chat.snapshot().revision, kind: "claude" })).toThrow(
     "利用できません",
@@ -211,4 +212,13 @@ it("restarts at offset zero when a live actor clears its conversation", async ()
   const reads = f.request.mock.calls.filter((call) => call[0] === "agent.conversation");
   expect(reads.at(-1)?.[1]).toEqual({ paneId: f.ready.paneId, offset: 0 });
   expect(f.chat.snapshot().messages[0]?.id).toBe(sessionId);
+});
+
+it("uses main-owned profiles at explicit start without starting anything when settings change", async () => {
+ const f=fixture(); await connected(f);
+ f.request.mockClear();
+ f.chat.configure({codex:{model:"custom-model",effort:"high"}});
+ expect(f.request).not.toHaveBeenCalled();
+ await f.chat.start({revision:f.chat.snapshot().revision,kind:"codex"});
+ expect(f.request).toHaveBeenCalledWith("assistant.ensure",expect.objectContaining({launchSettings:{model:"custom-model",effort:"high"}}));
 });

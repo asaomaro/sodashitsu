@@ -1,3 +1,4 @@
+import { assistantLaunchArgs } from "@sodashitsu/protocol";
 import { mkdir, lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -38,7 +39,7 @@ export interface AssistantSessionDeps {
 export class AssistantSessions {
   private pending = new Map<
     string,
-    { kind: string; promise: Promise<AssistantSessionInfo>; adoptInstanceId?: string }
+    { kind: string; settings?: string; promise: Promise<AssistantSessionInfo>; adoptInstanceId?: string }
   >();
   private generation = 0;
   private starting = new Set<string>();
@@ -69,10 +70,11 @@ export class AssistantSessions {
 
   ensure(input: unknown): Promise<AssistantSessionInfo> {
     const request = AssistantSessionEnsureParams.parse(input);
+    assistantLaunchArgs(request.kind, request.launchSettings ?? {});
     if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの起動を停止しています");
     const current = this.pending.get(request.deviceId);
     if (current) {
-      if (current.kind !== request.kind)
+      if (current.kind !== request.kind || current.settings !== JSON.stringify(request.launchSettings ?? {model: "", effort: ""}))
         throw new RpcError("agent_pane_busy", "別のエージェントで起動中です");
       return current.promise;
     }
@@ -82,7 +84,7 @@ export class AssistantSessions {
       if (this.pending.get(request.deviceId)?.promise === promise)
         this.pending.delete(request.deviceId);
     });
-    this.pending.set(request.deviceId, { kind: request.kind, promise });
+    this.pending.set(request.deviceId, { kind: request.kind, settings: JSON.stringify(request.launchSettings ?? {model: "", effort: ""}), promise });
     return promise;
   }
 
@@ -119,6 +121,7 @@ export class AssistantSessions {
           : undefined;
       const next = this.deps.session.updateAssistantBinding(workspace.id, binding, {
         launchRequested: true,
+        launchSettings: undefined,
         lastInstanceId: actor.instanceId,
         sessionId,
       });
@@ -142,6 +145,7 @@ export class AssistantSessions {
         if (this.deps.session.getWorkspace(workspace.id)?.assistant === next)
           this.deps.session.updateAssistantBinding(workspace.id, next, {
             launchRequested: binding.launchRequested,
+            launchSettings: binding.launchSettings,
             lastInstanceId: binding.lastInstanceId,
             sessionId: binding.sessionId,
           });
@@ -284,6 +288,7 @@ export class AssistantSessions {
       tabId: pane?.tabId ?? null,
       paneId: binding.paneId,
       kind: binding.kind,
+      ...(binding.launchSettings ? {launchSettings: binding.launchSettings} : {}),
       state,
       agent: agent ? structuredClone(agent) : null,
       observedAgent:
@@ -414,11 +419,12 @@ export class AssistantSessions {
     try {
       binding = this.deps.session.updateAssistantBinding(workspace.id, binding, {
         launchRequested: true,
+        launchSettings: request.launchSettings ?? { model: "", effort: "" },
       });
       await this.deps.flush();
       guard();
       await this.deps.starter.start(
-        { paneId: binding.paneId, name: binding.name, kind: binding.kind, args: [] },
+        { paneId: binding.paneId, name: binding.name, kind: binding.kind, args: assistantLaunchArgs(binding.kind, binding.launchSettings ?? {}) },
         guard,
         { skipInterrupt: true, beforeWrite: guard },
       );

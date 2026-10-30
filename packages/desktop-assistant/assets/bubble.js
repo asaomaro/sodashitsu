@@ -61,6 +61,10 @@
    const canSend = state.connected && !state.busy && info?.state === "ready" && target?.state === "idle";
    message.disabled = send.disabled = !canSend;
    message.placeholder = canSend ? "船長へのメッセージ" : "専用セッションの接続を確認してください";
+   const launch=info?.launchSettings, desired=state.launchProfiles?.[info?.kind];
+   const requested=launch ? `起動時指定：モデル ${launch.model||"既定値"} / effort ${launch.effort||"既定値"}` : "起動時のモデル・effort指定は不明です";
+   const differs=launch&&desired&&(launch.model!==desired.model||launch.effort!==desired.effort);
+   document.getElementById("launch-settings").textContent=info ? `${requested}${differs?"。保存済み設定と異なります。停止後、新しく開始すると反映します。":""}（CLI内での変更は追跡しません）` : "モデル・effortは設定画面で指定できます。";
    const before = kinds.value;
    const options = state.kinds.filter(kind => kind.available);
    const signature = JSON.stringify(options);

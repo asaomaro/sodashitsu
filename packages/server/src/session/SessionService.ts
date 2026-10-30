@@ -519,7 +519,7 @@ export class SessionService {
   }
 
   /** Internal service only. Preserve identity across async persistence and foreground inspection. */
-  updateAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding, patch: Partial<Pick<AssistantWorkspaceBinding,"launchRequested"|"lastInstanceId"|"sessionId">>): AssistantWorkspaceBinding {
+  updateAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding, patch: Partial<Pick<AssistantWorkspaceBinding,"launchRequested"|"lastInstanceId"|"sessionId"|"launchSettings">>): AssistantWorkspaceBinding {
     const workspace = this.model.getWorkspace(workspaceId);
     if (!workspace || workspace.assistant !== expected) throw new RpcError("not_found", "専用セッションが変更されました");
     const next = AssistantWorkspaceBinding.parse({ ...expected, ...patch });

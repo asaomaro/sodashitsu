@@ -56,10 +56,37 @@ const TranscriptionOrigin = z
       return z.NEVER;
     }
   });
+/** Session-only overrides. Empty fields delegate to the agent's own defaults. */
+export const AssistantLaunchSettings = z.object({
+  model: z.string().max(200).regex(/^(?:[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,199})?$/).default(""),
+  effort: z.enum(["", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]).default(""),
+}).strict();
+export type AssistantLaunchSettings = z.infer<typeof AssistantLaunchSettings>;
+export function assistantLaunchArgs(kind: string, input: unknown): string[] {
+  const settings = AssistantLaunchSettings.parse(input);
+  const levels = kind === "claude" ? ["low", "medium", "high", "xhigh", "max"]
+    : kind === "codex" ? ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] : [];
+  if ((settings.model || settings.effort) && kind !== "claude" && kind !== "codex")
+    throw Error("このエージェントのモデル・effort指定には未対応です");
+  if (settings.effort && !levels.includes(settings.effort)) throw Error("このエージェントでは指定できないeffortです");
+  return [ ...(settings.model ? ["--model", settings.model] : []),
+    ...(settings.effort ? kind === "claude" ? ["--effort", settings.effort]
+      : ["-c", `model_reasoning_effort=${JSON.stringify(settings.effort)}`] : []) ];
+}
+export const AssistantAgentProfiles = z.object({
+  claude: AssistantLaunchSettings.default({ model: "", effort: "" }),
+  codex: AssistantLaunchSettings.default({ model: "", effort: "" }),
+}).strict().superRefine((profiles, ctx) => {
+  for (const kind of ["claude", "codex"] as const) {
+    try { assistantLaunchArgs(kind, profiles[kind]); }
+    catch { ctx.addIssue({code: "custom", path: [kind, "effort"], message: "指定できないeffortです"}); }
+  }
+});
 export const DesktopAssistantPreferences = z
   .object({
     version: z.literal(1).default(1),
     enabled: z.boolean().default(false),
+    agentProfiles: AssistantAgentProfiles.default({ claude: {model: "", effort: ""}, codex: {model: "", effort: ""} }),
     mode: z.enum(["character", "tray"]).default("character"),
     characterId: AssistantCharacterId.default("captain-female"),
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
@@ -141,6 +168,7 @@ export const AssistantWorkspaceBinding = z
     kind: AssistantAgentKind,
     name: z.string().regex(/^asst-[0-9a-z]{1,25}$/),
     launchRequested: z.boolean(),
+    launchSettings: AssistantLaunchSettings.optional(),
     lastInstanceId: z.uuid().optional(),
     sessionId: z
       .string()
@@ -157,6 +185,7 @@ export const AssistantSessionGetParams = z.object({ deviceId: AssistantDeviceId 
 export const AssistantSessionEnsureParams = AssistantSessionGetParams.extend({
   kind: AssistantAgentKind,
   retry: z.boolean().default(false),
+  launchSettings: AssistantLaunchSettings.optional(),
 }).strict();
 export const AssistantSessionPromptParams = AssistantSessionGetParams.extend({
   instanceId: z.uuid(),
@@ -175,6 +204,8 @@ export interface AssistantSessionInfo {
   tabId: string | null;
   paneId: string;
   kind: string;
+  /** Requested at launch; not a measurement of later changes in the agent CLI. */
+  launchSettings?: AssistantLaunchSettings | undefined;
   state: "shell" | "starting" | "ready" | "stopped" | "conflict";
   agent: AgentInfo | null;
   /** Visible candidate for an explicit user choice; it never grants permission to send input. */
