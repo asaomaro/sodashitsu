@@ -14,3 +14,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [ ] G. Speech bubbles for verbal notices, dedicated chat and exact-source replies, including tray mode and optional expanded terminal/forms (taskcheck).
 - [ ] H. Explicit microphone/file transcription, visible recording/cancel/result review, provider routing and audio bounds (taskcheck).
 - [ ] I. Read-aloud, selected-text summary/translation, local notes and existing-scheduler reminders (state/safety taskcheck).
+
+- [x] B1. Read-only authenticated source notifications, verbal inactive bubbles, mute, shared-resolved/dedup/expiry, named-session cookie scope, monotonic handshake/heartbeat and revision handling (taskcheck + independent whole/correction).

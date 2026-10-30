@@ -13,7 +13,9 @@
     "verify:ui": "node scripts/verify-ui.mjs"
   },
   "dependencies": {
-    "@sodashitsu/protocol": "workspace:*"
+    "@sodashitsu/protocol": "workspace:*",
+    "ws": "^8.21.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -21,7 +23,8 @@
     "electron-builder": "26.18.0",
     "typescript": "^5.7.3",
     "vitest": "^5.0.1",
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.63.0",
+    "@types/ws": "^8.5.13"
   },
   "build": {
     "appId": "jp.sodashitsu.desktop-assistant",

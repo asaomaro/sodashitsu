@@ -36,6 +36,7 @@ export function authorizeLocalSender(
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;
   if (action === "hide") return sender.role === "bubble";
+  if (action === "inbox") return sender.role === "bubble";
   return action === "save" && sender.role === "settings";
 }
 

@@ -12,7 +12,9 @@ import {
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { DesktopAssistantPreferences } from "@sodashitsu/protocol";
+import { DesktopAssistantPreferences, type AssistantNotice } from "@sodashitsu/protocol";
+import { NoticeConnection } from "./noticeConnection.js";
+import { sodaCookieHeader, isSodaSessionCookie } from "./cookieHeader.js";
 import { AssistantController, type NativeAdapter } from "./controller.js";
 import { PreferencesFile } from "./preferences.js";
 import {
@@ -47,6 +49,11 @@ let settings: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let bubble: BrowserWindow | null = null;
 let bubbleCharacterId: string | null = null;
+let backend: NoticeConnection | null = null;
+let backendOrigin: string | null = null;
+let notices: readonly AssistantNotice[] = [];
+let inboxRevision = 0;
+let noticeStatus: "connecting" | "connected" | "login" | "offline" | "disabled" = "disabled";
 let controller: AssistantController;
 let quitting = false;
 let settingsRequested = false;
@@ -85,11 +92,13 @@ function localWindow(role: LocalRole): BrowserWindow {
 }
 
 /** Explicit user action focuses chat; a future notice presentation uses showInactive. */
-function openBubble(): void {
+function openBubble(focus = true): void {
   if (!controller.preferences.enabled) return;
   if (bubble && !bubble.isDestroyed()) {
-    bubble.show();
-    bubble.focus();
+    if (focus) {
+      bubble.show();
+      bubble.focus();
+    } else bubble.showInactive();
     return;
   }
   const win = localWindow("bubble");
@@ -106,13 +115,56 @@ function openBubble(): void {
   });
   win.once("ready-to-show", () => {
     if (!win.isDestroyed()) {
-      win.show();
-      win.focus();
+      if (focus) {
+        win.show();
+        win.focus();
+      } else win.showInactive();
     }
   });
   win.on("closed", () => {
     if (bubble === win) bubble = null;
   });
+}
+
+function inbox() {
+  return { notices, status: noticeStatus, revision: inboxRevision };
+}
+function publishInbox(): void {
+  ++inboxRevision;
+  if (bubble && !bubble.isDestroyed()) bubble.webContents.send("assistant:inbox-changed", inbox());
+}
+function updateBackend(preferences: DesktopAssistantPreferences): void {
+  if (!preferences.enabled || backendOrigin !== preferences.serverOrigin) {
+    backend?.stop();
+    backend = null;
+    backendOrigin = null;
+    notices = [];
+    noticeStatus = "disabled";
+  }
+  if (!preferences.enabled || backend) return;
+  const origin = preferences.serverOrigin;
+  const connection = new NoticeConnection(origin, {
+    cookie: async () => {
+      const cookies = await session
+        .fromPartition("persist:assistant-server")
+        .cookies.get({ url: `${origin}/ws` });
+      return sodaCookieHeader(cookies);
+    },
+    changed(next, added) {
+      if (backend !== connection || !controller.preferences.enabled) return;
+      notices = next;
+      if (added && !controller.preferences.mute) openBubble(false);
+      publishInbox();
+    },
+    status(status) {
+      if (backend !== connection) return;
+      noticeStatus = status;
+      publishInbox();
+    },
+  });
+  backend = connection;
+  backendOrigin = origin;
+  connection.start();
 }
 
 function openSettings(): void {
@@ -190,6 +242,7 @@ const adapter: NativeAdapter = {
     character = null;
   },
   tray(preferences) {
+    updateBackend(preferences);
     if (bubble && bubbleCharacterId !== preferences.characterId) {
       bubble.destroy();
       bubble = null;
@@ -205,7 +258,7 @@ const adapter: NativeAdapter = {
     }
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: "船長と話す", enabled: preferences.enabled, click: openBubble },
+        { label: "船長と話す", enabled: preferences.enabled, click: () => openBubble() },
         {
           label: "操舵室を開く",
           enabled: preferences.enabled,
@@ -239,7 +292,7 @@ const adapter: NativeAdapter = {
 };
 
 function registerIpc(): void {
-  for (const action of ["read", "save", "open", "settings", "chat", "hide"]) {
+  for (const action of ["read", "save", "open", "settings", "chat", "hide", "inbox"]) {
     ipcMain.handle(`assistant:${action}`, async (event, input: unknown) => {
       const owner = localWindows.get(event.sender.id);
       const current =
@@ -258,6 +311,7 @@ function registerIpc(): void {
       )
         throw new Error("許可されていない操作です");
       if (action === "read") return controller.preferences;
+      if (action === "inbox") return inbox();
       if (action === "save") return controller.update(input);
       if (action === "chat") {
         openBubble();
@@ -287,6 +341,8 @@ else {
   });
   app.on("before-quit", () => {
     quitting = true;
+    backend?.stop();
+    backend = null;
   });
   app.on("activate", () => {
     if (!quitting && controller) openSettings();
@@ -329,6 +385,9 @@ else {
         preferences = DesktopAssistantPreferences.parse({});
       }
       controller = new AssistantController(preferences, adapter, (next) => file.write(next));
+      session.fromPartition("persist:assistant-server").cookies.on("changed", (_event, cookie) => {
+        if (isSodaSessionCookie(cookie.name)) backend?.reconnect();
+      });
       registerIpc();
       controller.initialize();
       screen.on("display-added", () => controller.refreshDisplays());

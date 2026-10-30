@@ -17,3 +17,11 @@ Primary references read2026-10-30:
 - https://learn.microsoft.com/en-us/windows/apps/develop/media-authoring-processing/screen-capture
 
 Version metadata verified from npm: electron45.1.0, electron-builder26.18.0. Framework choice is for shared Web/TypeScript behavior; no third-party implementation code is copied.
+
+## B1 authenticated notices
+
+A separate native-main read-only WebSocket connects using Electron URL-filtered Soda cookies (default/named sessions). It requests client.hello and notification.state only; no terminal subscribe/input/agent starts. The projection validates and retains at most4096 panes/tabs/workspaces,32 notices and512 shared resolutions. Per-pane current agent markers avoid replay storms with more than512 live agents. Current event key/instance/parent/state must still match. Completed work is announced only while idle, not after a subsequent working state. Shared resolutions precede initial delivery.
+
+All callbacks have generation fences; absolute monotonic handshake budget10s and ping20s/pong10s bound silent links, including timer-late callbacks. TLS uses existing Node/default/system CAs, verification enabled and no redirects. Cookies never cross renderer IPC. Inbox updates have monotonic revisions so a delayed initial RPC cannot overwrite a newer push. Notifications open the bubble inactive; explicit user chat focuses it. Muted notifications remain in the bounded inbox without opening a window.
+
+Primary TLS API reference: https://nodejs.org/api/tls.html#tlsgetcacertificatestype . Windows OS trust behavior still requires native-device verification; generated TLS tests use an internal in-memory trust adapter and existing test-only PEM fixtures, never install OS trust.

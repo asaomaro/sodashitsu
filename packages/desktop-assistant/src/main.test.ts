@@ -5,6 +5,16 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  connections: [] as Array<{
+    options: {
+      cookie: () => Promise<string | null>;
+      changed: (notices: unknown[], added: boolean) => void;
+      status: (status: string) => void;
+    };
+    start: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
+    reconnect: ReturnType<typeof vi.fn>;
+  }>,
   protocols: new Map<string, (request: Request) => Promise<Response>>(),
   handlers: new Map<string, (event: unknown, input?: unknown) => Promise<unknown>>(),
   partitions: new Map<
@@ -16,6 +26,7 @@ const fixture = vi.hoisted(() => ({
       setPermissionRequestHandler: ReturnType<typeof vi.fn>;
       setPermissionCheckHandler: ReturnType<typeof vi.fn>;
       on: ReturnType<typeof vi.fn>;
+      cookies: EventEmitter & { get: ReturnType<typeof vi.fn> };
     }
   >(),
   windows: [] as Array<MockWindow>,
@@ -30,6 +41,7 @@ class MockWindow extends EventEmitter {
     id: fixture.windows.length + 1,
     mainFrame: { url: "" },
     setWindowOpenHandler: vi.fn(),
+    send: vi.fn(),
   });
   constructor(readonly options: Record<string, unknown>) {
     super();
@@ -86,6 +98,9 @@ vi.mock("electron", () => ({
           setPermissionRequestHandler: vi.fn(),
           setPermissionCheckHandler: vi.fn(),
           on: vi.fn(),
+          cookies: Object.assign(new EventEmitter(), {
+            get: vi.fn(async () => [{ name: "soda_session_work", value: "generated", path: "/" }]),
+          }),
         });
       return fixture.partitions.get(name);
     },
@@ -93,6 +108,24 @@ vi.mock("electron", () => ({
   Tray: class extends EventEmitter {
     setToolTip() {}
     setContextMenu() {}
+  },
+}));
+
+vi.mock("./noticeConnection.js", () => ({
+  NoticeConnection: class {
+    start = vi.fn();
+    stop = vi.fn();
+    reconnect = vi.fn();
+    constructor(
+      _origin: string,
+      readonly options: {
+        cookie: () => Promise<string | null>;
+        changed: (notices: unknown[], added: boolean) => void;
+        status: (status: string) => void;
+      },
+    ) {
+      fixture.connections.push(this);
+    }
   },
 }));
 
@@ -207,4 +240,48 @@ it("uses a focusable local bubble for user chat and closes it when disabled", as
   expect(updatedBubble).not.toBe(bubble);
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   expect(updatedBubble.isDestroyed()).toBe(true);
+});
+
+it("delivers a verbal notice through an inactive bubble and obeys mute", async () => {
+  const settings = fixture.windows[0]!;
+  const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  const connection = fixture.connections.at(-1)!;
+  const notice = { id: "generated", message: "作業が完了しました。" };
+  connection.options.changed([notice], true);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.showInactive).toHaveBeenCalledOnce());
+  expect(bubble.focus).not.toHaveBeenCalled();
+  expect(bubble.webContents.send).toHaveBeenLastCalledWith(
+    "assistant:inbox-changed",
+    expect.objectContaining({ notices: [notice] }),
+  );
+  const bubbleEvent = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  expect(await fixture.handlers.get("assistant:inbox")!(bubbleEvent)).toMatchObject({
+    notices: [notice],
+  });
+  await expect(fixture.handlers.get("assistant:inbox")!(event)).rejects.toThrow("許可");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+  expect(connection.stop).toHaveBeenCalledOnce();
+  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray", mute: true });
+  const count = fixture.windows.length;
+  fixture.connections.at(-1)!.options.changed([notice], true);
+  expect(fixture.windows.length).toBe(count);
+  connection.options.changed([notice], true); // A retired connection cannot open the new generation's UI.
+  expect(fixture.windows.length).toBe(count);
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("uses the scoped named-session cookie only inside main and reconnects on its change", async () => {
+  const settings = fixture.windows[0]!;
+  const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  const connection = fixture.connections.at(-1)!;
+  expect(await connection.options.cookie()).toBe("soda_session_work=generated");
+  const cookies = fixture.partitions.get("persist:assistant-server")!.cookies;
+  expect(cookies.get).toHaveBeenLastCalledWith({ url: "http://127.0.0.1:7780/ws" });
+  cookies.emit("changed", {}, { name: "soda_session_work" });
+  expect(connection.reconnect).toHaveBeenCalledOnce();
+  expect(await fixture.handlers.get("assistant:read")!(event)).not.toHaveProperty("cookie");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });

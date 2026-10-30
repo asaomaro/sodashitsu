@@ -7,3 +7,9 @@ review_transfer independently reviewed the whole stage-A diff and found no must.
 Scope: native shell/settings/three built-in captain assets/initial disconnected bubble. Authenticated notices, dedicated session, actual chat, OCR/plugins/transcription and standard assistant tools remain explicit subsequent tasks.
 
 Final CI/metadata delta review by review_transfer: no additional must/should. Windows workflow remains generated-test/packaging-only; productName stabilizes the native application identity.
+
+## B1 readonly verbal notices
+
+review_pointer taskcheck found and verified fixes for (1) stale completion while working, (2) old completion/blocked event keys surviving a newer resolved event, and (3) named-session cookies not selected. Added monotonic inbox revisions, shared deferred handling, bounded per-pane dedup, strict TLS, generation/deadline/heartbeat ownership; taskcheck found no additional must.
+
+review_transfer independent whole review found timer-only handshake expiry. Fixed absolute monotonic time checks before/after cookie, CA/socket creation, hello/shared callbacks and connected publication. Late pong handling uses the same absolute-budget principle. Correction review: no additional must/should. Final deferred-state delta review: no additional must/should. No reviewer launched actual desktop/OS/real Soda/agents or repeated tests.
