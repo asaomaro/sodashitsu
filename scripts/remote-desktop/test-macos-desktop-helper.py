@@ -30,15 +30,20 @@ rich_cases = [
     ("rich-after-clear", 'valid(cleared)', 'true', "rich clipboard clear cannot extend write deadline"),
     ("rich-input", '!write || clipboard.canWrite()', 'true', "rich clipboard write requires input ceiling"),
 ]
-for name, before, after, expected in cases+rich_cases:
-    is_rich=name.startswith("rich-")
-    text = rich_source if is_rich else original.decode()
+native_cases=[
+    ("native-ack-deadline", ' && (stream.pending.first==nil || (time>=stream.pending[0].at && time<=stream.pending[0].at+2000))', '', "native video late ack cannot erase deadline"),
+    ("native-inflight", 'guard inflight==nil,!retiring,stream.pending.count<stream.window', 'guard !retiring,stream.pending.count<stream.window', "native video single physical encoding job"),
+    ("native-ledger", '!seen.contains(id)', 'true', "native video UUID cannot replay after ledger window or case change"),
+]
+for name, before, after, expected in cases+rich_cases+native_cases:
+    is_rich=name.startswith("rich-");is_video=name.startswith("native-")
+    text = video_source if is_video else rich_source if is_rich else original.decode()
     occurrences = text.count(before)
     assert occurrences == (2 if name in ("text-source","rich-after-clear") else 1), (name, occurrences)
     try:
         with tempfile.TemporaryDirectory(prefix="soda-macos-negative-") as temporary:
             candidate = Path(temporary) / source.name
-            candidate.write_text(text.replace(before, after)+"\n"+video_source+"\n"+original.decode() if is_rich else rich_source+"\n"+video_source+"\n"+text.replace(before, after))
+            candidate.write_text((text.replace(before,after) if is_rich else rich_source)+"\n"+(text.replace(before,after) if is_video else video_source)+"\n"+(text.replace(before,after) if not is_rich and not is_video else original.decode()))
             binary = Path(temporary) / "generated-helper"
             build = subprocess.run(
                 ["xcrun", "swiftc", "-swift-version", "5", "-O", str(candidate), "-o", str(binary)],

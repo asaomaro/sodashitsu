@@ -132,7 +132,7 @@ func generatedNativeVideoTests() throws -> Int {
     let controller=NativeVideoController(gate:NSRecursiveLock(),active:{alive},now:{now},emit:{output.append(($0,$1))},factory:{_,_ in let encoder=GeneratedNativeEncoder();encoders.append(encoder);return encoder})
     func start(_ id:String=UUID().uuidString.lowercased()) throws {try controller.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500,"window":3])}
     controller.offer(image,captured:now);try check(encoders.isEmpty,"native video disabled never creates encoder")
-    let first=UUID().uuidString.lowercased();try start(first);controller.offer(image,captured:now);controller.offer(image,captured:now)
+    let first=UUID().uuidString.lowercased();try start(first);controller.offer(image,captured:now);now=34;controller.offer(image,captured:now)
     try check(encoders.count==1 && encoders[0].completions.count==1,"native video single physical encoding job")
     encoders[0].completions[0](.success(packet));try check(spin({controller.inflight==nil}),"native video completion admitted")
     let frame=output.first(where:{$0.0["type"] as? String=="native_frame"})!

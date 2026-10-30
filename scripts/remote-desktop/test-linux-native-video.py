@@ -288,14 +288,18 @@ class Flow(unittest.TestCase):
             util_set_object_arg=lambda *args:None,
             State=SimpleNamespace(PLAYING="playing",NULL="null"),SECOND=1000000000,
             StateChangeReturn=SimpleNamespace(FAILURE=0))
+        fault={"software":False}
         def generated_encode(encoder,*args):
-            if encoder.factory=="nvh264enc":raise video.VideoFailure("generated hardware unavailable")
+            if encoder.factory=="nvh264enc" or encoder.factory=="openh264enc" and fault["software"]:raise video.VideoFailure("generated hardware unavailable")
             return key
         with patch.object(video.GstH264Encoder,"_encode",generated_encode):
-            encoder=video.GstH264Encoder(Gst,None,64,64,30,2500,candidates=("nvh264enc","openh264enc"))
+            encoder=video.GstH264Encoder(Gst,None,64,64,30,2500,candidates=("nvh264enc","openh264enc","x264enc"))
             try:
                 self.assertEqual(encoder.encode(bytearray(64*64*3),True,lambda:True),key)
                 self.assertEqual(encoder.factory,"openh264enc");self.assertEqual(len(made),2)
+                fault["software"]=True
+                with self.assertRaises(video.VideoFailure):encoder.encode(bytearray(64*64*3),False,lambda:True)
+                self.assertEqual(len(made),2)
             finally:encoder.close()
 
     def test_strict_request_does_not_accept_boolean_integer_or_unknown_codec(self):
