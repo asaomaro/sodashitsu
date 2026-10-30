@@ -149,6 +149,7 @@ func generatedNativeAudioTests() throws -> Int {
     try check(frames[0].record[16]==1 && frames[0].record[3855]==2 && f.pending.isEmpty,"owned frame payload")
     do { _=try f.push(Data(repeating:0,count:19200),captured:11,now:11);throw NativePCMError("generated future accepted") } catch let e as NativePCMError { try check(e.code=="pcm_bound","future buffer rejected") }
     do { _=try nativeFloatPCM([Data(count:8)],frames:1,planar:true);throw NativePCMError("generated planes accepted") } catch let e as NativePCMError { try check(e.code=="pcm_format","plane mismatch rejected") }
+    checks += try generatedNativeAudioPipeTests()
     return checks
 }
 
@@ -162,8 +163,9 @@ final class NativePCMParentPipe {
     private var socketIdentity:(dev_t,ino_t)?
     private let path:String,parent:pid_t
     private let generatedOwner:Bool
-    init(path:String,name:String,clientPID:pid_t,owner:pid_t?=nil) throws {
-        self.path=path;parent=owner ?? getppid();generatedOwner=owner != nil
+    private let now:()->Double
+    init(path:String,name:String,clientPID:pid_t,owner:pid_t?=nil,clock:@escaping()->Double={ProcessInfo.processInfo.systemUptime}) throws {
+        self.path=path;parent=owner ?? getppid();generatedOwner=owner != nil;now=clock
         let root=(path as NSString).deletingLastPathComponent,base=(root as NSString).lastPathComponent
         func exact(_ value:String,_ pattern:String) -> Bool {
             value.range(of:pattern,options:.regularExpression)==value.startIndex..<value.endIndex
@@ -206,7 +208,7 @@ final class NativePCMParentPipe {
     private func admissible(_ active:()->Bool,_ deadline:Double) throws {
         guard active() else {throw NativePCMError("pipe_expired")}
         try checkParent()
-        guard ProcessInfo.processInfo.systemUptime<deadline else {throw NativePCMError("pipe_expired")}
+        guard now()<deadline else {throw NativePCMError("pipe_expired")}
     }
     func accept(active:()->Bool,deadline:Double) throws {
         while true {
@@ -268,4 +270,69 @@ final class NativePCMParentPipe {
             Darwin.close(directory);directory = -1
         }
     }
+}
+
+
+func generatedNativeAudioPipeTests() throws -> Int {
+    var checks=0
+    func check(_ valid:Bool,_ message:String) throws {guard valid else {throw NativePCMError("generated: "+message)};checks+=1}
+    var template=Array("/tmp/soda-native-pcm-XXXXXX".utf8CString)
+    let root=try template.withUnsafeMutableBufferPointer { pointer -> String in
+        guard let path=mkdtemp(pointer.baseAddress!) else {throw NativePCMError("generated directory")}
+        return String(cString:path)
+    }
+    defer {try? FileManager.default.removeItem(atPath:root)}
+    let path=root+"/pcm.sock",name="SodaDesktopAudio-"+String(repeating:"a",count:32)
+    func connect() throws -> Int32 {
+        let client=Darwin.socket(AF_UNIX,SOCK_STREAM,0)
+        guard client>=0 else {throw NativePCMError("generated client")}
+        var address=sockaddr_un();address.sun_family=sa_family_t(AF_UNIX);address.sun_len=UInt8(MemoryLayout<sockaddr_un>.size)
+        let bytes=Array(path.utf8)+[UInt8(0)]
+        withUnsafeMutableBytes(of:&address.sun_path) {$0.copyBytes(from:bytes)}
+        let result=withUnsafePointer(to:&address) { pointer in pointer.withMemoryRebound(to:sockaddr.self,capacity:1) {Darwin.connect(client,$0,socklen_t(MemoryLayout<sockaddr_un>.size))} }
+        guard result==0 else {Darwin.close(client);throw NativePCMError("generated connect")}
+        return client
+    }
+    do {
+        let pipe=try NativePCMParentPipe(path:path,name:name,clientPID:getpid(),owner:getpid())
+        defer {pipe.close()}
+        let client=try connect();defer {Darwin.close(client)}
+        try pipe.accept(active:{true},deadline:ProcessInfo.processInfo.systemUptime+2)
+        try check(try pipe.alive(),"parent peer authenticated")
+        try pipe.send(nativePCMHello,active:{true},deadline:ProcessInfo.processInfo.systemUptime+2)
+        var received=Data(count:16)
+        let length=received.withUnsafeMutableBytes {Darwin.recv(client,$0.baseAddress!,16,MSG_WAITALL)}
+        try check(length==16 && received==nativePCMHello,"actual private pipe hello")
+        var value=stat();try check(lstat(path,&value)==0 && value.st_mode & 0o777==0o600,"private socket mode")
+        _=Darwin.shutdown(client,SHUT_RDWR)
+        try check(try !pipe.alive(),"receiver EOF revokes admission")
+        pipe.close();try check(!FileManager.default.fileExists(atPath:path) && FileManager.default.fileExists(atPath:root),"socket-only retirement")
+    }
+    for cause in ["active","parent","deadline"] {
+        var clock:Double=0,calls=0
+        let pipe=try NativePCMParentPipe(path:path,name:name,clientPID:getpid(),owner:getpid(),clock:{clock})
+        defer {pipe.close();_=chmod(root,0o700)}
+        let client=try connect();defer {Darwin.close(client)}
+        try pipe.accept(active:{true},deadline:100)
+        let active:()->Bool={
+            calls+=1
+            if calls==2 {
+                if cause=="active" {return false}
+                if cause=="parent" {_=chmod(root,0o755)}
+                if cause=="deadline" {clock=100}
+            }
+            return true
+        }
+        var rejected=false
+        do {try pipe.send(nativePCMHello,active:active,deadline:100)}catch is NativePCMError {rejected=true}
+        try check(rejected && calls==2,"send rechecks "+cause+" after poll")
+        var byte:UInt8=0
+        try check(Darwin.recv(client,&byte,1,0)==0,"expired send closes without a partial hello")
+        _=chmod(root,0o700)
+    }
+    try Data("retain".utf8).write(to:URL(fileURLWithPath:path))
+    do {_=try NativePCMParentPipe(path:path,name:name,clientPID:getpid(),owner:getpid());throw NativePCMError("generated existing accepted")}
+    catch let e as NativePCMError {try check(e.code=="pipe_bind","preexisting path rejected")}
+    try check(try Data(contentsOf:URL(fileURLWithPath:path))==Data("retain".utf8),"preexisting file retained")
+    return checks
 }
