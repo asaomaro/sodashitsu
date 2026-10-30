@@ -167,6 +167,119 @@ class RegionProofs:
     def clear(self):
         with self.lock:self.specs=[];self.frames.clear();self.generation+=1
 
+class RichClipboardProtocol:
+    """One bounded transaction on the parent's explicit clipboard grant. No OS calls here."""
+    BUNDLE=4*1024*1024;TEXT=512*1024;PNG=2*1024*1024;CHUNK=16*1024
+    def __init__(self,parent):
+        self.parent=parent;self.current=None;self.retired=[];self.cancelled=[];self.publications=[]
+    @staticmethod
+    def uuid(value):
+        try:return isinstance(value,str) and len(value)==36 and str(uuid.UUID(value))==value.lower()
+        except Exception:return False
+    @staticmethod
+    def binary(value,limit):
+        if not isinstance(value,str) or len(value)>((limit+2)//3)*4:raise NativeFailure("backend_failure")
+        data=base64.b64decode(value,validate=True)
+        if len(data)>limit or base64.b64encode(data).decode("ascii")!=value:raise NativeFailure("backend_failure")
+        return data
+    @classmethod
+    def bundle(cls,value):
+        if not isinstance(value,dict) or not value or any(k not in ("text","html","rtf","png") for k in value):raise NativeFailure("unsupported")
+        for key,item in value.items():
+            if key in ("text","html"):
+                if not isinstance(item,str) or "\0" in item or len(item.encode("utf-8"))>cls.TEXT:raise NativeFailure("backend_failure")
+            elif key=="rtf":
+                data=cls.binary(item,cls.TEXT)
+                if not data.startswith(b"{\\rtf") or not data.rstrip(b"\t\r\n ").endswith(b"}"):raise NativeFailure("backend_failure")
+            else:
+                data=cls.binary(item,cls.PNG)
+                if len(data)<33 or data[:8]!=b"\x89PNG\r\n\x1a\n" or data[8:16]!=b"\0\0\0\rIHDR":raise NativeFailure("backend_failure")
+                width=int.from_bytes(data[16:20],"big");height=int.from_bytes(data[20:24],"big")
+                if not 1<=width<=4096 or not 1<=height<=4096 or width*height>8000000:raise NativeFailure("backend_failure")
+        return value
+    def finish(self,cancel=False):
+        c=self.current;self.current=None
+        if c:
+            c["cancelled"]=c["cancelled"] or cancel
+            if c["data"] is not None:c["data"][:]=b"\0"*len(c["data"]);c["data"]=None
+            self.retired=(self.retired+[c["id"]])[-32:]
+    def expire(self):
+        with self.parent.helper.output_gate:
+            c=self.current
+            if c and (self.parent.mono()-c["last"]>5000 or self.parent.mono()-c["started"]>60000 or not self.parent.scope() or c["generation"]!=self.parent.generation):self.finish(True)
+    def live(self,c,ticket,write=False):
+        p=self.parent;allowed=p.can_write(ticket) if write else p.authorized(ticket);now=p.mono()
+        return allowed and self.current is c and not c["cancelled"] and c["generation"]==ticket[0]==p.generation and p.enabled and not p.closed and ticket[2]<=now<=ticket[3] and c["started"]<=now<=c["started"]+60000 and c["last"]<=now<=c["last"]+5000 and c["version"]==p.owner_version
+    def witness(self,c,ticket):
+        if not any(item is c for item in self.publications):
+            self.publications.append(c)
+            if len(self.publications)>32:self.publications.pop(0)["cancelled"]=True
+        def publish():
+            p=self.parent;allowed=p.authorized(ticket);now=p.mono()
+            return allowed and not c["cancelled"] and c["id"] not in self.cancelled and c["generation"]==ticket[0]==p.generation and p.enabled and not p.closed and ticket[2]<=now<=ticket[3] and c["started"]<=now<=c["started"]+60000 and c["last"]<=now<=c["last"]+5000 and (not c["read"] or c["version"]==p.owner_version)
+        return publish
+    def cancel(self,value,ticket):
+        identifier=value.get("id")
+        with self.parent.helper.output_gate:
+            if value.get("type")!="clipboard_rich" or value.get("operation")!="cancel" or set(value)!={"type","id","operation","generation","expiresAt"} or not self.uuid(identifier) or not self.parent.authorized(ticket):raise NativeFailure("permission_denied")
+            for c in self.publications:
+                if c["id"]==identifier:c["cancelled"]=True
+            self.cancelled=(self.cancelled+[identifier])[-32:]
+            if self.current and self.current["id"]==identifier:self.finish(True)
+        return {"type":"clipboard_rich_result","id":identifier,"ok":True,"stage":"cancelled"},None
+    def request(self,value,ticket):
+        p=self.parent;identifier=value.get("id");operation=value.get("operation")
+        base={"type","id","operation","generation","expiresAt"}
+        suffix={"read":set(),"begin":{"size"},"pull":{"offset"},"push":{"offset","data"},"commit":set()}
+        if value.get("type")!="clipboard_rich" or operation not in suffix or set(value)!=base|suffix[operation] or not self.uuid(identifier):raise NativeFailure("backend_failure")
+        with p.helper.output_gate:
+            self.expire()
+            if identifier in self.cancelled or not p.authorized(ticket):raise NativeFailure("permission_denied")
+            if operation in ("read","begin"):
+                if self.current or identifier in self.retired:raise NativeFailure("backend_failure")
+                size=value.get("size",0)
+                if operation=="begin" and (not integer(size,1,self.BUNDLE) or not p.can_write(ticket)):raise NativeFailure("permission_denied")
+                c={"id":identifier,"generation":ticket[0],"read":operation=="read","version":p.owner_version,"started":p.mono(),"last":p.mono(),"data":None,"offset":0,"cancelled":False}
+                self.current=c
+            else:c=self.current
+            if not c or c["id"]!=identifier or not self.live(c,ticket):raise NativeFailure("source_changed")
+            c["last"]=p.mono()
+        if operation=="read":
+            value=self.bundle(p.read_rich(ticket))
+            data=bytearray(json.dumps(value,ensure_ascii=False,separators=(",",":")).encode("utf-8"))
+            with p.helper.output_gate:
+                if not 1<=len(data)<=self.BUNDLE or not self.live(c,ticket):data[:]=b"\0"*len(data);raise NativeFailure("source_changed")
+                c["data"]=data
+        with p.helper.output_gate:
+            if not self.live(c,ticket):raise NativeFailure("source_changed")
+            reply={"type":"clipboard_rich_result","id":identifier,"ok":True}
+            witness=self.witness(c,ticket)
+            if operation in ("read","begin"):
+                if operation=="begin":c["data"]=bytearray(size)
+                return {**reply,"stage":"begin","size":len(c["data"])},witness
+            data=c["data"]
+            if data is None:raise NativeFailure("backend_failure")
+            if operation in ("pull","push"):
+                offset=value.get("offset")
+                if not integer(offset,0,self.BUNDLE) or offset!=c["offset"]:raise NativeFailure("backend_failure")
+                if operation=="pull":
+                    if not c["read"] or offset>=len(data):raise NativeFailure("backend_failure")
+                    chunk=base64.b64encode(data[offset:offset+self.CHUNK]).decode("ascii");c["offset"]+=min(self.CHUNK,len(data)-offset)
+                    result={**reply,"stage":"chunk","offset":c["offset"],"data":chunk}
+                    if c["offset"]==len(data):self.finish()
+                    return result,witness
+                chunk=self.binary(value.get("data"),self.CHUNK)
+                if c["read"] or not chunk or offset+len(chunk)>len(data):raise NativeFailure("backend_failure")
+                data[offset:offset+len(chunk)]=chunk;c["offset"]+=len(chunk)
+                return {**reply,"stage":"chunk","offset":c["offset"]},witness
+            if c["read"] or c["offset"]!=len(data) or not self.live(c,ticket,True):raise NativeFailure("permission_denied")
+            bundle=self.bundle(json.loads(bytes(data).decode("utf-8")))
+            if not self.live(c,ticket):raise NativeFailure("source_changed")
+            p.write_rich(bundle,ticket,c["version"],lambda:self.live(c,ticket,True))
+            if not p.authorized(ticket) or c["cancelled"]:raise NativeFailure("source_changed")
+            self.finish()
+            return {**reply,"stage":"done"},witness
+
 class PortalTextClipboard:
     """One portal session, bounded UTF8 pipe transfers, no clipboard access in probe/tests."""
     INTERFACE="org.freedesktop.portal.Clipboard"
@@ -174,7 +287,7 @@ class PortalTextClipboard:
     def __init__(self,helper,clock=None,mono=None):
         self.helper=helper;self.session=helper.session;self.clock=clock or (lambda:time.time()*1000);self.mono=mono or (lambda:time.monotonic()*1000)
         self.os_enabled=False;self.enabled=False;self.generation=0;self.last_id=0;self.busy=False;self.closed=False
-        self.types=None;self.owned=None;self.owner=False;self.owner_version=0;self.transfers=threading.BoundedSemaphore(4)
+        self.types=None;self.owned=None;self.owned_formats={};self.owner=False;self.owner_version=0;self.transfers=threading.BoundedSemaphore(4);self.rich=RichClipboardProtocol(self)
     def scope(self):
         h=self.helper
         return not self.closed and self.os_enabled and not h.dead and h.ready and h.session==self.session and h.scope is not None and h.scope.alive() and time.monotonic()-h.last_heartbeat<8
@@ -190,7 +303,7 @@ class PortalTextClipboard:
         if not integer(generation,1,9007199254740991) or not isinstance(enabled,bool):raise NativeFailure("backend_failure")
         with self.helper.output_gate:
             if generation<=self.generation:return
-            self.generation=generation;self.enabled=False
+            self.generation=generation;self.enabled=False;self.rich.finish(True)
             alive=enabled and self.scope()
             if self.generation==generation:self.enabled=alive
     def call(self,method,signature,args,fd=False):
@@ -208,10 +321,12 @@ class PortalTextClipboard:
         with self.helper.output_gate:
             if self.closed or self.helper.dead or self.helper.session!=self.session:return
             self.types=tuple(types);self.owner=owner;self.owner_version+=1
+            self.rich.finish(True)
             if not owner:self.forget_owned()
     def forget_owned(self):
         if self.owned is not None:self.owned[:]=b"\0"*len(self.owned)
-        self.owned=None
+        for data in self.owned_formats.values():data[:]=b"\0"*len(data)
+        self.owned=None;self.owned_formats={}
     def read(self,ticket):
         with self.helper.output_gate:
             if not self.authorized(ticket):raise NativeFailure("permission_denied")
@@ -250,6 +365,94 @@ class PortalTextClipboard:
             except Exception:
                 if self.owner_version==version:self.forget_owned();self.owner=False
                 raise
+    def can_write(self,ticket):
+        h=self.helper
+        allowed=self.authorized(ticket)
+        return bool(allowed and h.config["input"] and h.guard and h.guard.devices)
+    def rich_bytes(self,mime,limit,ticket):
+        with self.helper.output_gate:
+            if not self.authorized(ticket):raise NativeFailure("permission_denied")
+            version=self.owner_version
+            if self.owner:
+                owned=self.owned_formats.get(mime)
+                if owned is None and mime in self.MIMES:owned=self.owned
+                if owned is not None:
+                    if len(owned)>limit:raise NativeFailure("backend_failure")
+                    return bytes(owned)
+        fd=self.call("SelectionRead","s",(mime,),fd=True);data=bytearray()
+        try:
+            os.set_blocking(fd,False)
+            while self.authorized(ticket):
+                remaining=(ticket[3]-self.mono())/1000
+                if remaining<=0:break
+                if not select.select([fd],[],[],min(.025,remaining))[0]:continue
+                if not self.authorized(ticket):break
+                chunk=os.read(fd,min(65536,limit+1-len(data)))
+                if not chunk:
+                    with self.helper.output_gate:
+                        if self.owner_version!=version or not self.authorized(ticket):raise NativeFailure("source_changed")
+                    return bytes(data)
+                data.extend(chunk)
+                if len(data)>limit:raise NativeFailure("backend_failure")
+            raise NativeFailure("source_changed")
+        finally:os.close(fd);data[:]=b"\0"*len(data)
+    def read_rich(self,ticket):
+        with self.helper.output_gate:
+            if not self.authorized(ticket):raise NativeFailure("permission_denied")
+            available=self.types;version=self.owner_version
+        fields=[("text",self.MIMES,RichClipboardProtocol.TEXT),("html",("text/html",),RichClipboardProtocol.TEXT),("rtf",("application/rtf","text/rtf"),RichClipboardProtocol.TEXT),("png",("image/png",),RichClipboardProtocol.PNG)]
+        bundle={}
+        for key,mimes,limit in fields:
+            mime=next((m for m in mimes if (available is None and key=="text") or (available is not None and m in available)),None)
+            if mime is None:continue
+            data=self.rich_bytes(mime,limit,ticket)
+            bundle[key]=data.decode("utf-8") if key in ("text","html") else base64.b64encode(data).decode("ascii")
+            with self.helper.output_gate:
+                if self.owner_version!=version or not self.authorized(ticket):raise NativeFailure("source_changed")
+        return RichClipboardProtocol.bundle(bundle)
+    def write_rich(self,bundle,ticket,expected,valid):
+        formats={};committed=False
+        try:
+            for key,value in bundle.items():
+                mimes=self.MIMES if key=="text" else {"html":("text/html",),"rtf":("application/rtf","text/rtf"),"png":("image/png",)}[key]
+                data=bytearray(value.encode("utf-8") if key in ("text","html") else RichClipboardProtocol.binary(value,RichClipboardProtocol.PNG if key=="png" else RichClipboardProtocol.TEXT))
+                for mime in mimes:formats[mime]=data
+            with self.helper.output_gate:
+                if not valid() or self.owner_version!=expected:raise NativeFailure("source_changed")
+                self.call("SetSelection","a{sv}",({"mime_types":self.helper.GLib.Variant("as",list(formats))},))
+                if self.owner_version!=expected:raise NativeFailure("source_changed")
+                self.forget_owned();self.owned_formats=formats;self.owned=formats.get(self.MIMES[0]);self.owner=True;self.types=tuple(formats);self.owner_version+=1;committed=True
+                if not self.authorized(ticket):raise NativeFailure("source_changed")
+        finally:
+            if not committed:
+                for data in formats.values():data[:]=b"\0"*len(data)
+    def submit_rich(self,value):
+        started=self.mono();utc=self.clock();identifier=value.get("id");owner=value.get("generation");expires=value.get("expiresAt")
+        if not RichClipboardProtocol.uuid(identifier):raise NativeFailure("backend_failure")
+        failure={"type":"clipboard_rich_result","id":identifier,"ok":False,"stage":"done"}
+        ticket=(owner,expires,started,started+(expires-utc)) if finite(expires,utc,utc+1500) and integer(owner,1,9007199254740991) else None
+        with self.helper.output_gate:
+            if ticket is None or not self.helper.config.get("rich") or not self.authorized(ticket):self.helper.output(failure);return
+            if value.get("operation")=="cancel":
+                try:result,_=self.rich.cancel(value,ticket);self.helper.output(result)
+                except Exception:self.helper.output(failure)
+                return
+            if self.busy:self.helper.output(failure);return
+            self.busy=True
+        def worker():
+            result=failure;publish=None
+            try:result,publish=self.rich.request(value,ticket)
+            except Exception:
+                with self.helper.output_gate:
+                    if self.rich.current and self.rich.current["id"]==identifier:self.rich.finish(True)
+            finally:
+                with self.helper.output_gate:
+                    self.busy=False
+                    if publish and not publish():result=failure;publish=None
+                    self.helper.output(result,publish=publish)
+        try:threading.Thread(target=worker,daemon=True).start()
+        except Exception:
+            with self.helper.output_gate:self.busy=False;self.rich.finish(True);self.helper.output(failure)
     def submit(self,value):
         started=self.mono();utc=self.clock();identifier=value.get("id");owner=value.get("generation");expires=value.get("expiresAt");operation=value.get("operation")
         if not integer(identifier,1,9007199254740991):raise NativeFailure("backend_failure")
@@ -280,9 +483,11 @@ class PortalTextClipboard:
         session,mime,serial=parameters.unpack()
         if session!=self.session or not integer(serial,0,0xffffffff):return
         with self.helper.output_gate:
-            if mime not in self.MIMES or self.owned is None or not self.owner or not self.scope() or not self.transfers.acquire(False):
+            owned=self.owned_formats.get(mime)
+            if owned is None and mime in self.MIMES:owned=self.owned
+            if owned is None or not self.owner or not self.scope() or not self.transfers.acquire(False):
                 self.done(serial,False);return
-            data=bytearray(self.owned);version=self.owner_version
+            data=bytearray(owned);version=self.owner_version
         def valid():
             with self.helper.output_gate:return self.scope() and self.owner and self.owner_version==version
         def worker():
@@ -307,7 +512,7 @@ class PortalTextClipboard:
             h=self.helper
             h.connection.call(h.NAME,h.PATH,self.INTERFACE,"SelectionWriteDone",h.GLib.Variant("(oub)",(self.session,serial,success)),None,h.Gio.DBusCallFlags.NONE,100,None,None,None)
     def close(self):
-        with self.helper.output_gate:self.closed=True;self.enabled=False;self.os_enabled=False;self.generation+=1;self.forget_owned()
+        with self.helper.output_gate:self.closed=True;self.enabled=False;self.os_enabled=False;self.generation+=1;self.rich.finish(True);self.forget_owned()
 
 class PortalHelper:
     NAME="org.freedesktop.portal.Desktop";PATH="/org/freedesktop/portal/desktop"
@@ -409,7 +614,7 @@ class PortalHelper:
         if not integer(width,320,1920) or not integer(fps,1,30) or not integer(quality,20,90):raise NativeFailure("unsupported")
         image=options.get("image",{"colorMode":"full","showCursor":True})
         if not isinstance(image,dict) or image.get("colorMode")!="full" or not isinstance(image.get("showCursor"),bool):raise NativeFailure("unsupported")
-        self.config={"width":width,"fps":fps,"quality":quality,"cursor":image["showCursor"],"input":message.get("allowInput") is True,"clipboard":message.get("allowClipboard") is True and "--allow-clipboard" in sys.argv};self.configured_at=time.monotonic()
+        self.config={"width":width,"fps":fps,"quality":quality,"cursor":image["showCursor"],"input":message.get("allowInput") is True,"clipboard":message.get("allowClipboard") is True and "--allow-clipboard" in sys.argv,"rich":options.get("richClipboard") is True};self.configured_at=time.monotonic()
         self.scope=self.scope_factory()
         self.Gst.init(None)
         for name in ["pipewiresrc","videoconvert","videoscale","jpegenc","appsink"]:
@@ -513,6 +718,9 @@ class PortalHelper:
                 else:self.mutate_input(self.guard.release)
         elif kind=="clipboard_control":
             if self.clipboard:self.clipboard.control(message)
+        elif kind=="clipboard_rich":
+            if self.clipboard:self.clipboard.submit_rich(message)
+            else:self.output({"type":"clipboard_rich_result","id":message["id"],"ok":False,"stage":"done"})
         elif kind=="clipboard":
             if self.clipboard:self.clipboard.submit(message)
             else:self.output({"type":"clipboard_result","id":message["id"],"ok":False})
@@ -554,6 +762,7 @@ class PortalHelper:
                 self.command(command)
             if time.monotonic()-self.last_heartbeat>8:raise NativeFailure("source_changed")
             if self.configured_at and not self.ready and time.monotonic()-self.configured_at>115:raise NativeFailure("permission_cancelled")
+            if self.clipboard:self.clipboard.rich.expire()
             if self.pipeline:
                 sample=self.sink.emit("try-pull-sample",0)
                 if sample:
@@ -569,7 +778,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"agentRegions":True} if self.video else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
