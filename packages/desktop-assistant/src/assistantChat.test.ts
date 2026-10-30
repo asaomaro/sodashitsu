@@ -224,6 +224,42 @@ it("uses main-owned profiles at explicit start without starting anything when se
  expect(f.request).toHaveBeenCalledWith("assistant.ensure",expect.objectContaining({launchSettings:{model:"custom-model",effort:"high"}}));
 });
 const generatedImage=()=>Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=","base64");
+async function audioFixture() {
+ const f=fixture();f.info(f.ready);await connected(f);const fallback=f.request.getMockImplementation()!,uploadId=randomUUID();
+ f.request.mockImplementation(async(method,input)=>{
+  if(method==="assistant.audio_begin")return{uploadId};
+  if(method==="assistant.audio_commit")return{sent:true,turnId:"generated-audio-turn"};
+  if(method==="assistant.audio_chunk"||method==="assistant.audio_cancel")return{};
+  return fallback(method,input);
+ });return{...f,uploadId};
+}
+it("pins reviewed audio to the main-owned Codex actor and transfers bytes without a renderer path",async()=>{
+ const f=await audioFixture();await f.chat.audio(new Uint8Array([1,2,3]),"audio/webm;codecs=opus",new AbortController().signal);
+ expect(f.request).toHaveBeenCalledWith("assistant.audio_begin",{deviceId:f.deviceId,instanceId:f.ready.agent!.instanceId,mime:"audio/webm",size:3,ttlMs:expect.any(Number)});
+ expect(f.request).toHaveBeenCalledWith("assistant.audio_chunk",{uploadId:f.uploadId,offset:0,data:"AQID"});
+ expect(f.request.mock.calls.filter(c=>c[0]==="assistant.audio_commit")).toHaveLength(1);
+ expect(f.request.mock.calls.some(c=>c[0]==="assistant.prompt")).toBe(false);
+});
+it("cancels physical audio when a pending begin is aborted and never commits it",async()=>{
+ const f=await audioFixture(),controller=new AbortController(),fallback=f.request.getMockImplementation()!;
+ f.request.mockImplementation(async(method,input)=>{if(method==="assistant.audio_begin"){controller.abort();return{uploadId:f.uploadId};}return fallback(method,input);});
+ await expect(f.chat.audio(new Uint8Array([1]),"audio/wav",controller.signal)).rejects.toThrow();
+ expect(f.request).toHaveBeenCalledWith("assistant.audio_cancel",{uploadId:f.uploadId});
+ expect(f.request.mock.calls.some(c=>c[0]==="assistant.audio_commit")).toBe(false);
+});
+it("refuses audio for a different or working agent without trying another provider",async()=>{
+ const f=await audioFixture();f.info({...f.ready,kind:"claude",agent:{...f.ready.agent!,kind:"claude"}});await f.chat.refresh();
+ f.request.mockClear();expect(()=>f.chat.audio(new Uint8Array([1]),"audio/wav",new AbortController().signal)).toThrow("Codex");
+ expect(f.request).not.toHaveBeenCalled();
+});
+it("binds the destination before the audio picker/read and keeps the original remaining deadline",async()=>{
+ const f=await audioFixture(),send=f.chat.prepareAudio();
+ await expect(send({bytes:new Uint8Array([1]),mime:"audio/wav"},new AbortController().signal,performance.now()-1)).rejects.toThrow();
+ expect(f.request.mock.calls.some(c=>c[0]==="assistant.audio_begin")).toBe(false);
+ f.info({...f.ready,agent:{...f.ready.agent!,instanceId:randomUUID()}});await f.chat.refresh();
+ expect(()=>send({bytes:new Uint8Array([1]),mime:"audio/wav"},new AbortController().signal,performance.now()+10000)).toThrow("送信先");
+ expect(f.request.mock.calls.some(c=>c[0]==="assistant.audio_begin")).toBe(false);
+});
 async function imageFixture() {
  const f=fixture();f.info(f.ready);await connected(f);
  const fallback=f.request.getMockImplementation()!;

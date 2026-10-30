@@ -382,6 +382,15 @@ it("round-trips ownership and verified conversation identity without starting an
   }
 });
 
+it("requires a verified current conversation and idle actor for direct Codex audio",async()=>{
+ const f=await fixture(),{device,info,agent}=await f.ready();
+ expect(()=>f.manager.audioTarget(device,agent.instanceId)).toThrow();
+ const sessionId=randomUUID();f.session.reportAgentSession(info.paneId,"codex",sessionId);
+ expect(f.manager.audioTarget(device,agent.instanceId)).toMatchObject({threadId:sessionId,paneId:info.paneId,instanceId:agent.instanceId});
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});expect(()=>f.manager.audioTarget(device,agent.instanceId)).toThrow();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,instanceId:randomUUID()}});expect(()=>f.manager.audioTarget(device,agent.instanceId)).toThrow();
+});
+
 it("pins assistant prompts and keys through the existing final queued-input guard", async () => {
   const f = await fixture();
   const { device, info, agent } = await f.ready();

@@ -282,6 +282,16 @@ export class AssistantSessions {
     return workspaces[0];
   }
 
+  /** Audio uses a daemon API, so a requested/resumed marker alone is insufficient. */
+  audioTarget(deviceId:string,instanceId:string):{paneId:string;instanceId:string;threadId:string;projectDir:string;agent:AgentInfo} {
+    const target=this.target(deviceId,instanceId),pane=this.deps.session.getPane(target.paneId),reference=pane?.agentSession;
+    if(target.agent.kind!=="codex" || target.agent.state!=="idle" || reference?.kind!=="codex" ||
+      !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(reference.sessionId) ||
+      !this.deps.session.hasVerifiedAgentSession(target.paneId,instanceId,reference.sessionId))
+      throw new RpcError("agent_pane_busy","音声入力は、会話IDを確認済みで待機中のCodex専用セッションを選んでください");
+    return{paneId:target.paneId,instanceId,threadId:reference.sessionId,projectDir:target.projectDir,agent:target.agent};
+  }
+
   private scoped(workspace: Workspace, binding: AssistantWorkspaceBinding): boolean {
     const session = this.deps.session;
     const pane = session.getPane(binding.paneId);

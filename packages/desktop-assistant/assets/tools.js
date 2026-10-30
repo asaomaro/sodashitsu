@@ -38,12 +38,14 @@
     element("delete-note").disabled = saving || !currentNote;
     if (state.notesError) status.textContent = state.notesError;
     const job = state.transcription;
+    const agent = state.transcriptionProvider === "agent";
+    element("transcribe-file").textContent = agent ? "音声ファイルを専用Codexへ送る" : "音声ファイルを文字起こし";
     if (Number.isSafeInteger(job.revision) && job.revision > transcriptRevision) {
       transcriptRevision = job.revision; result.value = job.text;
     }
     element("transcription-route").textContent = state.transcriptionEnabled
-      ? `文字起こし先：このPCのWhisper（${state.transcriptionOrigin}）。25MB以内・処理5分まで。`
-      : "音声ファイルの文字起こしは設定から有効にしてください。ローカルのWhisperサーバとモデルが必要です。";
+      ? agent ? "送信先：専用Codexとその提供元。確認した音声を明示操作で送信します。25MiB以内。接続先に通常5分間保存し、サーバ終了後の残りは次回送信時に期限切れを削除します。結果は会話に返ります。受理済みの処理は専用端末で停止してください。" : `文字起こし先：このPCのWhisper（${state.transcriptionOrigin}）。25MB以内・処理5分まで。`
+      : "音声入力は設定から有効にし、専用エージェントまたはローカルWhisperを選んでください。";
     element("transcription-status").textContent = `${job.name ? `${job.name}：` : ""}${job.message}`;
     const active = ["selecting", "transcribing", "stopping"].includes(job.status);
     element("transcribe-file").disabled = active || !state.transcriptionEnabled;

@@ -32,6 +32,23 @@ function fixture() {
     },
   };
 }
+it("sends reviewed audio to the configured agent without calling Whisper or importing fake transcript text",async()=>{
+ const sendAudio=vi.fn(async()=>{}),fetch=vi.fn(),audio={name:"reviewed.wav",mime:"audio/wav",bytes:new Uint8Array([1,2,3])};
+ const service=new Transcription({pick:async()=>"/generated/reviewed.wav",read:async()=>audio,changed:()=>{},fetch,sendAudio});
+ service.configure(true,"http://127.0.0.1:8080","agent");expect(sendAudio).not.toHaveBeenCalled();
+ await service.file();expect(sendAudio).toHaveBeenCalledWith(audio,expect.any(AbortSignal),expect.any(Number));expect(fetch).not.toHaveBeenCalled();
+ expect(service.snapshot()).toMatchObject({status:"done",text:""});expect(service.snapshot().message).toContain("専用Codex");
+});
+it("never falls back to another provider when agent audio fails",async()=>{
+ const fetch=vi.fn();const service=new Transcription({pick:async()=>"/generated.wav",read:async()=>({name:"a.wav",mime:"audio/wav",bytes:new Uint8Array([1])}),changed:()=>{},fetch,sendAudio:async()=>{throw Error("generated unsupported model");}});
+ service.configure(true,"http://127.0.0.1:8080","agent");await service.file();
+ expect(service.snapshot()).toMatchObject({status:"error",text:""});expect(service.snapshot().message).toContain("unsupported");expect(fetch).not.toHaveBeenCalled();
+});
+it("does not reset the original audio budget when a read exhausts it without running the timer",async()=>{
+ let now=0;const sendAudio=vi.fn(async()=>{}),service=new Transcription({pick:async()=>"/generated.wav",read:async()=>{now=300001;return{name:"a.wav",mime:"audio/wav",bytes:new Uint8Array([1])};},changed:()=>{},now:()=>now,sendAudio});
+ service.configure(true,"http://127.0.0.1:8080","agent");await service.file();
+ expect(sendAudio).not.toHaveBeenCalled();expect(service.snapshot().status).toBe("error");expect(service.snapshot().message).toContain("期限");
+});
 it("requires explicit local configuration and refuses remote origins, credentials and paths", async () => {
   const pick = vi.fn();
   const service = new Transcription({ pick, changed() {} });

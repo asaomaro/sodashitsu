@@ -3,6 +3,9 @@ import { pngSize } from "./png.js";
 import { z } from "zod";
 import {
   IMAGE_CHUNK_BYTES,
+  ASSISTANT_AUDIO_CHUNK_BYTES,
+  ASSISTANT_AUDIO_MAX_BYTES,
+  AssistantAudioMime,
   AssistantAgentKind,
   AssistantLaunchSettings,
   AssistantAgentProfiles,
@@ -306,6 +309,44 @@ export class AssistantChat {
         deviceId: this.deviceId,
         instanceId: request.instanceId,
       });
+    });
+  }
+
+  /** Reviewed main-owned audio only. The renderer cannot choose a server path or thread. */
+  prepareAudio(): (audio:{bytes:Uint8Array;mime:string},signal:AbortSignal,expires:number)=>Promise<void> {
+    const generation=this.generation,paneId=this.state.session?.paneId,instanceId=this.state.session?.agent?.instanceId;
+    if(!this.state.connected || this.state.session?.kind!=="codex" || this.state.session.state!=="ready" || this.state.session.agent?.state!=="idle")throw Error("待機中のCodex専用セッションを選んでください");
+    return(audio,signal,expires)=>{
+      if(generation!==this.generation || !this.state.connected || this.state.session?.paneId!==paneId || this.state.session?.agent?.instanceId!==instanceId)throw Error("音声を選んでいる間に送信先が変更されました");
+      return this.audio(audio.bytes,audio.mime,signal,expires);
+    };
+  }
+  audio(bytes:Uint8Array,mime:string,signal:AbortSignal,originalExpires=performance.now()+300000):Promise<void> {
+    const type=AssistantAudioMime.parse(mime.split(";")[0]);
+    if(!bytes.length || bytes.length>ASSISTANT_AUDIO_MAX_BYTES)throw Error("音声は25MiB以内にしてください");
+    const session=this.state.session,actor=session?.agent;
+    if(!this.state.connected || session?.state!=="ready" || session.kind!=="codex" || !actor || actor.state!=="idle")throw Error("音声入力対応モデルを使う、待機中のCodex専用セッションを選んでください");
+    const generation=this.generation,expires=Math.min(originalExpires,performance.now()+300000),audio=new Uint8Array(bytes);
+    const live=()=>{
+      signal.throwIfAborted();
+      if(performance.now()>=expires || !this.state.connected || generation!==this.generation || this.state.session?.paneId!==session.paneId || this.state.session.agent?.instanceId!==actor.instanceId || this.state.session.agent.state!=="idle")throw Error("音声の送信先が変更されたか期限が切れました");
+    };
+    return this.act(async()=>{
+      let uploadId:string|null=null,cancellation:Promise<unknown>|null=null,accepted=false;
+      const cancel=()=>{
+        if(uploadId && !cancellation && this.state.connected && generation===this.generation)cancellation=this.rpc.request("assistant.audio_cancel",{uploadId}).catch(()=>{});
+      };
+      signal.addEventListener("abort",cancel,{once:true});const timer=setTimeout(cancel,Math.max(1,expires-performance.now()));
+      try {
+        live();const result=await this.rpc.request("assistant.audio_begin",{deviceId:this.deviceId,instanceId:actor.instanceId,mime:type,size:audio.length,ttlMs:Math.max(1,Math.floor(expires-performance.now()))});
+        uploadId=z.uuid().parse(result.uploadId);
+        for(let offset=0;offset<audio.length;offset+=ASSISTANT_AUDIO_CHUNK_BYTES){live();await this.rpc.request("assistant.audio_chunk",{uploadId,offset,data:Buffer.from(audio.subarray(offset,offset+ASSISTANT_AUDIO_CHUNK_BYTES)).toString("base64")});}
+        live();const receipt=z.object({sent:z.literal(true),turnId:z.string().min(1).max(128)}).parse(await this.rpc.request("assistant.audio_commit",{uploadId}));
+        accepted=receipt.sent;
+      } finally {
+        clearTimeout(timer);signal.removeEventListener("abort",cancel);audio.fill(0);
+        if(!accepted)cancel();await cancellation;
+      }
     });
   }
   send(input: unknown): Promise<void> {

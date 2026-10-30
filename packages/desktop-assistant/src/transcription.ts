@@ -92,6 +92,8 @@ interface Options {
   read?: typeof readAudioFile;
   fetch?: typeof fetch;
   now?: () => number;
+  sendAudio?:(audio:AudioFile,signal:AbortSignal,expires:number)=>Promise<void>;
+  prepareAgent?:()=>((audio:AudioFile,signal:AbortSignal,expires:number)=>Promise<void>);
 }
 /** One explicit local job. Never automatically records, uploads, launches a model or retries. */
 export class Transcription {
@@ -104,6 +106,7 @@ export class Transcription {
   };
   private origin = "http://127.0.0.1:8080";
   private enabled = false;
+  private provider:"agent"|"local"="local";
   private generation = 0;
   private active: AbortController | null = null;
   private inFlight = false;
@@ -112,11 +115,12 @@ export class Transcription {
   snapshot(): TranscriptionState {
     return { ...this.state };
   }
-  configure(enabled: boolean, origin: string): void {
+  configure(enabled: boolean, origin: string,provider:"agent"|"local"="local"): void {
     const next = localTranscriptionOrigin(origin);
-    if (!enabled || this.origin !== next) this.cancel();
+    if (!enabled || this.origin !== next || this.provider!==provider) this.cancel();
     this.enabled = enabled;
     this.origin = next;
+    this.provider=provider;
   }
   cancel(expectedKey?: string): boolean {
     if (expectedKey !== undefined && this.currentKey !== expectedKey) return false;
@@ -161,12 +165,13 @@ export class Transcription {
     key: string | null = null,
   ): Promise<void> {
     if (!this.enabled)
-      throw Error("設定でローカル文字起こしを有効にし、Whisperサーバを起動してください。");
+      throw Error("設定で音声入力を有効にし、処理先を選んでください。");
     if (this.inFlight) throw Error("前の文字起こしを停止してから選んでください。");
     this.inFlight = true;
     this.currentKey = key;
     const generation = ++this.generation;
     const origin = this.origin;
+    const agent=this.provider==="agent";
     const controller = new AbortController();
     this.active = controller;
     const live = () => {
@@ -179,11 +184,12 @@ export class Transcription {
       status: "selecting",
       name: "",
       text: "",
-      message: key ? "録音データを確認しています。送信先はこのPCのWhisperです。" : "音声ファイルを選んでください。送信先はこのPCのWhisperです。",
+      message:agent?"確認した音声を専用Codexとその提供元へ送ります。音声ファイルを選んでください。":key ? "録音データを確認しています。送信先はこのPCのWhisperです。" : "音声ファイルを選んでください。送信先はこのPCのWhisperです。",
     };
     this.publish();
     let timer: ReturnType<typeof setTimeout> | null = null;
     try {
+      const sendAudio=agent?(this.options.prepareAgent?.()??this.options.sendAudio):null;
       const read = await select();
       if (!live()) return;
       if (!read) {
@@ -201,10 +207,17 @@ export class Transcription {
         ...this.state,
         status: "transcribing",
         name: audio.name,
-        message: "このPCのWhisperで文字起こししています。エージェントにはまだ送っていません。",
+        message:agent?"確認した音声を専用Codexへ送っています。結果は会話に返ります。":"このPCのWhisperで文字起こししています。エージェントにはまだ送っていません。",
       };
       this.publish();
       if (!live()) return;
+      if(agent) {
+        if(!sendAudio)throw Error("この版は専用エージェントへの音声送信に対応していません");
+        if(now()>=expires)throw Error("音声の送信期限が切れました");
+        await sendAudio(audio,controller.signal,expires);
+        if(!live())return;
+        this.state={...this.state,status:"done",text:"",message:"専用Codexへ音声を送りました。結果は吹き出しの会話・専用端末で確認してください。送信済みの処理は専用端末で停止します。"};this.publish();return;
+      }
       const form = new FormData();
       form.set(
         "file",

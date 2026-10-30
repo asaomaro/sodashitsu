@@ -1,11 +1,12 @@
 import { EventEmitter } from "node:events";
-import { createHash } from "node:crypto";
+import { createHash,randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  audioRead:null as null|((path:string,signal?:AbortSignal)=>Promise<import("./transcription.js").AudioFile>),
   displayRequests: new Map<string, (request: any, callback: (value: any) => void) => void>(),
   permissionChecks: new Map<string, (...args: any[]) => boolean>(),
   permissionRequests: new Map<string, (...args: any[]) => void>(),
@@ -192,6 +193,7 @@ vi.mock("./transcription.js", async (importOriginal) => {
       constructor(options: ConstructorParameters<typeof actual.Transcription>[0]) {
         super({
           ...options,
+          read:(path,signal)=>fixture.audioRead?fixture.audioRead(path,signal):actual.readAudioFile(path,signal),
           fetch: async () => Response.json({ text: "generated recording transcription" }),
         });
       }
@@ -217,6 +219,8 @@ vi.mock("./assistantRpc.js", () => ({
     }
   },
 }));
+
+
 
 vi.mock("./noticeConnection.js", () => ({
   NoticeConnection: class {
@@ -453,6 +457,7 @@ it("keeps notes and clipboard behind the current bubble role and uses the native
     quietFullscreen: false,
     mode: "tray",
     transcriptionEnabled: true,
+    transcriptionProvider: "local",
   });
   await fixture.handlers.get("assistant:chat")!(event);
   const bubble = fixture.windows.at(-1)!;
@@ -496,6 +501,7 @@ it("leases microphone permission only to the visible bubble and consumes the sto
     quietFullscreen: false,
     mode: "tray",
     transcriptionEnabled: true,
+    transcriptionProvider: "local",
   });
   await fixture.handlers.get("assistant:chat")!(event);
   const bubble = fixture.windows.at(-1)!;
@@ -1135,4 +1141,28 @@ it("defers a changed server connection until resume even if a settings save comp
   expect(fixture.controls.length).toBe(controls + 1);
   expect(fixture.connections.length).toBe(connections + 1);
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it.each(["hide","minimize","navigation"])("cancels a file audio read before model submission on %s",async(lifecycle)=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(done=>{release=done;}),started=new Promise<void>(done=>{entered=done;});
+ try {
+  await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:false,mode:"tray",transcriptionEnabled:true,transcriptionProvider:"agent"});
+  const control=fixture.controls.at(-1)!,actor={instanceId:randomUUID(),kind:"codex",label:"generated",state:"idle",completionSeq:0,serverSeenSeq:0,verified:true,since:1};
+  const scope={workspaceId:randomUUID(),tabId:randomUUID(),paneId:randomUUID()};
+  control.request.mockImplementation(async(method:string,p:Record<string,unknown>)=>{
+   if(method==="assistant.get")return{deviceId:p.deviceId,...scope,kind:"codex",state:"ready",agent:actor,observedAgent:actor};
+   if(method==="agent.kinds")return{kinds:[{kind:"codex",label:"generated",available:true}]};
+   if(method==="agent.conversation")throw Error("no generated transcript");
+   return{};
+  });
+  control.options.status(true);await fixture.handlers.get("assistant:chat")!(event);
+  const bubble=fixture.windows.at(-1)!,local={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
+  await vi.waitFor(async()=>expect(await fixture.handlers.get("assistant:conversation")!(local)).toMatchObject({session:{state:"ready"}}));
+  fixture.audioRead=async()=>{entered();await gate;return{name:"generated.wav",mime:"audio/wav",bytes:new Uint8Array([1])};};
+  const {dialog}=await import("electron");vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({canceled:false,filePaths:["/generated/audio.wav"]});
+  const job=fixture.handlers.get("assistant:transcribe-file")!(local);await started;
+  if(lifecycle==="hide")bubble.hide();else if(lifecycle==="minimize")bubble.emit("minimize");else bubble.webContents.emit("did-start-navigation",{},"soda-assistant://app/bubble.html",false,true);
+  release();await job;expect(control.request.mock.calls.some(call=>call[0]==="assistant.audio_begin")).toBe(false);
+ }finally{release?.();fixture.audioRead=null;await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
 });

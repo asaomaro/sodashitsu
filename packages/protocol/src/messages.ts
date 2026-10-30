@@ -1,4 +1,5 @@
 import { ExecMethods, type ExecResults } from "./exec.js";
+import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams } from "./desktopAssistant.js";
 import { AssistantImageCancelParams, AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
@@ -1600,6 +1601,10 @@ export const METHOD_SCHEMAS = {
   "assistant.ensure": AssistantSessionEnsureParams,
   "assistant.adopt": AssistantSessionAdoptParams,
   "assistant.cancel_image": AssistantImageCancelParams,
+  "assistant.audio_begin":AssistantAudioBeginParams,
+  "assistant.audio_chunk":AssistantAudioChunkParams,
+  "assistant.audio_commit":AssistantAudioIdParams,
+  "assistant.audio_cancel":AssistantAudioIdParams,
   "assistant.prompt": AssistantSessionPromptParams,
   "assistant.send_keys": AssistantSessionKeysParams,
   "agent.fork": AgentForkParams,
@@ -1787,6 +1792,10 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "assistant.ensure": AssistantSessionInfo;
   "assistant.adopt": AssistantSessionInfo;
   "assistant.cancel_image": Record<string, never>;
+  "assistant.audio_begin":{uploadId:string};
+  "assistant.audio_chunk":Record<string,never>;
+  "assistant.audio_commit":{sent:true;turnId:string};
+  "assistant.audio_cancel":Record<string,never>;
   "assistant.prompt": AgentPromptResult;
   "assistant.send_keys": Record<string, never>;
   "agent.fork": AgentForkResult;

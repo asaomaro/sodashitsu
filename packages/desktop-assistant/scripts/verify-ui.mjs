@@ -65,6 +65,7 @@ try {
       ocrProvider: "agent",
       ocrEnabled: false, ocrExecutable: "", ocrLanguage: "jpn+eng",
       transcriptionEnabled: false,
+      transcriptionProvider: "local",
       transcriptionOrigin: "http://127.0.0.1:8080",
       reducedMotion: false,
       position: null,
@@ -72,7 +73,7 @@ try {
     window.ocrRevision=1; window.currentOcr={};
     window.savedNotes = [];
     window.toolsRevision = 1;
-    window.currentTools = {revision:1,transcriptionEnabled:true,transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
+    window.currentTools = {revision:1,transcriptionEnabled:true,transcriptionProvider:"local",transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
     Object.defineProperty(window,"speechSynthesis",{configurable:true,value:{getVoices:()=>[{lang:"ja-JP",localService:false},{lang:"ja-JP",localService:true}],cancel:()=>window.calls.push(["stop-reading"]),speak:utterance=>window.calls.push(["speak",utterance.text,utterance.voice.localService])}});
     window.SpeechSynthesisUtterance = class {constructor(text){this.text=text;}};
     window.recordGrants=[];window.recordSequence=0;
@@ -321,6 +322,13 @@ try {
   await page.locator("#use-transcription").press("Enter");
   await expect(page.locator("#tool-text")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
   await expect(page.locator("#standard-tools img:not(#ocr-preview)")).toHaveCount(0);
+  const beforeAgentAudio=await page.evaluate(()=>window.calls.length);
+  await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"agent"};window.toolsCallback(window.currentTools);});
+  await expect(page.locator("#transcription-route")).toContainText("専用Codexとその提供元");
+  await expect(page.locator("#transcribe-file")).toHaveText("音声ファイルを専用Codexへ送る");
+  await expect(page.locator("#record-transcribe")).toHaveText("録音を専用Codexへ送る");
+  assert.equal(await page.evaluate(()=>window.calls.length),beforeAgentAudio);
+  await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionProvider:"local"};window.toolsCallback(window.currentTools);});
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="get-user-media").length),0);
   await page.locator("#record-start").press("Enter");
