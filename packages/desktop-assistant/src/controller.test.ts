@@ -175,3 +175,26 @@ describe("native IPC authority", () => {
     expect(sameServerNavigation("file:///etc/passwd", "https://example.test")).toBe(false);
   });
 });
+
+it("retires independent login startup through the native transition before enabling managed mode", async () => {
+ const {native}=fixture();const save=vi.fn(async()=>{});
+ const controller=new AssistantController({enabled:false,launchAtLogin:true,serverOrigin:"https://old.invalid"},native,save);
+ await controller.initializeManaged("http://127.0.0.1:7781");
+ expect(native.startup).toHaveBeenCalledExactlyOnceWith(false);
+ expect(save).toHaveBeenCalledWith(expect.objectContaining({enabled:true,launchAtLogin:false,serverOrigin:"http://127.0.0.1:7781"}));
+ expect(controller.preferences.launchAtLogin).toBe(false);expect(native.tray).toHaveBeenCalledOnce();
+});
+it("restores login startup and avoids rendering managed UI when saving the transition fails", async () => {
+ const {native}=fixture();const save=vi.fn(async()=>{throw Error("generated disk failure");});
+ const controller=new AssistantController({enabled:false,launchAtLogin:true},native,save);
+ await expect(controller.initializeManaged("http://127.0.0.1:7781")).rejects.toThrow("generated disk failure");
+ expect(native.startup).toHaveBeenNthCalledWith(1,false);expect(native.startup).toHaveBeenNthCalledWith(2,true);
+ expect(controller.preferences.enabled).toBe(false);expect(controller.preferences.launchAtLogin).toBe(true);
+ expect(native.tray).not.toHaveBeenCalled();expect(native.character).not.toHaveBeenCalled();
+});
+it("does not persist or render if retiring the OS login entry fails", async () => {
+ const {native}=fixture();vi.mocked(native.startup).mockImplementation(()=>{throw Error("generated startup failure");});
+ const save=vi.fn(async()=>{}),controller=new AssistantController({launchAtLogin:true},native,save);
+ await expect(controller.initializeManaged("http://127.0.0.1:7781")).rejects.toThrow("generated startup failure");
+ expect(save).not.toHaveBeenCalled();expect(native.tray).not.toHaveBeenCalled();
+});

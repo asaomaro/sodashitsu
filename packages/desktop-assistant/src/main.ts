@@ -1348,6 +1348,7 @@ else {
       });
       const file = new PreferencesFile(join(app.getPath("userData"), "assistant.json"));
       let preferences: DesktopAssistantPreferences;
+      let preferencesFailed = false;
       try {
         preferences = await file.read();
       } catch (error) {
@@ -1355,9 +1356,10 @@ else {
           "アシスタント設定を読み込めません。元のファイルを保存したまま無効で開始します。",
           error,
         );
+        preferencesFailed = true;
         preferences = DesktopAssistantPreferences.parse({});
       }
-      if (managed) preferences = DesktopAssistantPreferences.parse({...preferences, enabled: true, serverOrigin: managed.serverOrigin, launchAtLogin: false});
+      if (managed && preferencesFailed) { app.exit(1); return; }
       controller = new AssistantController(preferences, adapter, (next) => file.write(next));
       session.fromPartition("persist:assistant-server").cookies.on("changed", (_event, cookie) => {
         if (isSodaSessionCookie(cookie.name)) {
@@ -1366,7 +1368,8 @@ else {
         }
       });
       registerIpc();
-      controller.initialize();
+      if (managed) await controller.initializeManaged(managed.serverOrigin);
+      else controller.initialize();
       powerMonitor.on("suspend", () => {
         suspended = true;
         ++automaticNoticeEpoch;
@@ -1414,10 +1417,10 @@ else {
       screen.on("display-removed", () => controller.refreshDisplays());
       screen.on("display-metrics-changed", () => controller.refreshDisplays());
       // Disabled by default: first launch presents settings instead of launching a model/session.
-      if (!preferences.enabled || settingsRequested) openSettings();
+      if (!controller.preferences.enabled || settingsRequested) openSettings();
     })
     .catch((error) => {
       console.error(error);
-      app.quit();
+      if (managed) app.exit(1); else app.quit();
     });
 }

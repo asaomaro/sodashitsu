@@ -195,3 +195,5 @@ AssertionError: expected { ok: true, …(1) } to match object { ok: false }
 
 
 ```
+
+最終build/typecheck通過。初回全体はlocal OCR fixtureが新agent既定値を使う1件の期待値不一致（他13039件pass）。local providerを明示し対象18件と全体を再実行、899file13040test pass（362.49秒）。PR #332の同一head CI4件成功、merge adaa01a71e460cc4614f7dbb5b05c4d007114b18、GitHub/local tree 166df24c35caa3e55e48b6066de3f7c244df2f75一致。
