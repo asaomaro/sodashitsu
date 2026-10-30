@@ -30,6 +30,7 @@ import { NotesFile, NoteSave } from "./notes.js";
 import { Transcription, AUDIO_LIMIT } from "./transcription.js";
 import { randomUUID } from "node:crypto";
 import { readPluginBundle } from "@sodashitsu/client-core/node/pluginPackage";
+import { RemoteNotices } from "./remoteNotices.js";
 import { Characters, characterPack, type CharacterPack } from "./characters.js";
 import { CaptureLease } from "./captureLease.js";
 import { Reminders } from "./reminders.js";
@@ -109,6 +110,9 @@ let toolsRevision = 0;
 let backend: NoticeConnection | null = null;
 let backendOrigin: string | null = null;
 let notices: readonly AssistantNotice[] = [];
+let localNotices: readonly AssistantNotice[] = [];
+let remoteRows: readonly AssistantNotice[] = [];
+let remoteNotices: RemoteNotices | null = null;
 let inboxRevision = 0;
 let noticeStatus: "connecting" | "connected" | "login" | "offline" | "disabled" = "disabled";
 let controller: AssistantController;
@@ -240,6 +244,10 @@ async function publishTools(): Promise<void> {
   if (bubble && !bubble.isDestroyed()) bubble.webContents.send("assistant:tools-changed", state);
 }
 
+function combineNotices() {
+  notices = [...localNotices, ...remoteRows].sort((a, b) => b.at - a.at).slice(0, 32);
+  publishInbox();
+}
 function inbox() {
   return { notices, status: noticeStatus, revision: inboxRevision };
 }
@@ -266,6 +274,8 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     assistantChat?.stop();
     reminders?.stop();
     reminders = null;
+    remoteNotices?.stop();
+    remoteNotices = null;
     control = null;
     assistantChat = null;
     controlOrigin = null;
@@ -283,10 +293,14 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
       if (control === rpc) {
         assistantChat?.connection(connected);
         reminders?.connection(connected);
+        remoteNotices?.connection(connected);
       }
     },
     changed: () => {
-      if (control === rpc) void assistantChat?.refresh();
+      if (control === rpc) {
+        void assistantChat?.refresh();
+        void remoteNotices?.refresh();
+      }
     },
   });
   assistantChat = new AssistantChat(
@@ -310,6 +324,22 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     },
     reminderRevision,
   );
+  const remote = new RemoteNotices(origin, rpc, {
+    cookie: async () =>
+      sodaCookieHeader(
+        await session
+          .fromPartition("persist:assistant-server")
+          .cookies.get({ url: `${origin}/ws` }),
+      ),
+    changed: (next, added) => {
+      if (remoteNotices !== remote) return;
+      remoteRows = next;
+      if (added && !controller.preferences.mute) openBubble(false);
+      combineNotices();
+    },
+  });
+  remoteNotices = remote;
+  remote.configure(preferences.remoteNotifications);
   control = rpc;
   controlOrigin = origin;
   rpc.start();
@@ -335,11 +365,14 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     preferences.transcriptionOrigin,
   );
   updateChat(preferences);
+  remoteNotices?.configure(preferences.remoteNotifications);
   if (!preferences.enabled || backendOrigin !== preferences.serverOrigin) {
     backend?.stop();
     backend = null;
     backendOrigin = null;
     notices = [];
+    localNotices = [];
+    remoteRows = [];
     noticeStatus = "disabled";
   }
   if (!preferences.enabled || backend) return;
@@ -353,7 +386,8 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     },
     changed(next, added) {
       if (backend !== connection || !controller.preferences.enabled) return;
-      notices = next;
+      localNotices = next;
+      combineNotices();
       if (added && !controller.preferences.mute) openBubble(false);
       publishInbox();
     },
@@ -394,7 +428,7 @@ function loadPanel(win: BrowserWindow, url: string): void {
 }
 function openPanel(
   origin: string,
-  target?: { paneId: string; workspaceId: string; instanceId: string },
+  target?: { paneId: string; workspaceId: string; instanceId: string; machineId?: string },
 ): void {
   const url = new URL(origin);
   if (target)
@@ -402,6 +436,7 @@ function openPanel(
       assistantPane: target.paneId,
       assistantWorkspace: target.workspaceId,
       assistantInstance: target.instanceId,
+      assistantMachine: target.machineId ?? "local",
     }).toString();
   if (panel && !panel.isDestroyed()) {
     if (target || panelTargeted) loadPanel(panel, url.href);
@@ -858,7 +893,11 @@ function registerIpc(): void {
           .strict()
           .parse(input);
         const notice = notices.find((notice) => notice.id === request.noticeId);
-        const rpc = control;
+        const hub = control;
+        const rpc =
+          notice?.source.machineId === "local"
+            ? hub
+            : remoteNotices?.rpcFor(notice?.source.machineId ?? "");
         if (
           !notice ||
           !rpc ||
@@ -866,11 +905,13 @@ function registerIpc(): void {
           notice.source.serverOrigin !== controller.preferences.serverOrigin
         )
           throw Error("通知の対象が変更されました。");
-        const params = { source: notice.source, key: notice.key };
+        const params = { source: { ...notice.source, machineId: "local" }, key: notice.key };
         if (action === "source-open") {
           const target = await rpc.request("assistant.source", params);
           if (
-            control !== rpc ||
+            control !== hub ||
+            (notice.source.machineId !== "local" &&
+              remoteNotices?.rpcFor(notice.source.machineId) !== rpc) ||
             epoch !== bubbleEpoch ||
             bubble !== owner.window ||
             owner.window.isDestroyed() ||
@@ -882,6 +923,7 @@ function registerIpc(): void {
             paneId: target.paneId,
             workspaceId: target.workspaceId,
             instanceId: target.agent.instanceId,
+            machineId: notice.source.machineId,
           });
           return;
         }
@@ -1063,6 +1105,7 @@ else {
     control?.stop();
     assistantChat?.stop();
     reminders?.stop();
+    remoteNotices?.stop();
     transcription?.cancel();
     recording?.cancel();
     ocr?.discard();

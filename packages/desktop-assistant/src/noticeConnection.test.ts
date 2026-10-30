@@ -330,3 +330,32 @@ it("rejects a late pong even before its watchdog timer runs", async () => {
   expect(f.socket.terminate).toHaveBeenCalledOnce();
   f.connection.stop();
 });
+it("uses only the authenticated hub machine proxy for a registered remote feed", async () => {
+  const socket = new FakeSocket(),
+    create = vi.fn(() => socket),
+    machineId = "a".repeat(32);
+  const connection = new NoticeConnection("https://hub.test", {
+    machineId,
+    cookie: async () => "soda_session=generated",
+    socket: create,
+    status: vi.fn(),
+    changed: vi.fn(),
+  });
+  owned.push(connection);
+  connection.start();
+  await vi.waitFor(() => expect(create).toHaveBeenCalled());
+  expect(create).toHaveBeenCalledWith(
+    `wss://hub.test/ws?machine=${machineId}`,
+    "soda_session=generated",
+    "https://hub.test",
+  );
+  expect(
+    () =>
+      new NoticeConnection("https://hub.test", {
+        machineId: "../../other",
+        cookie: async () => null,
+        status: vi.fn(),
+        changed: vi.fn(),
+      }),
+  ).toThrow("machine");
+});

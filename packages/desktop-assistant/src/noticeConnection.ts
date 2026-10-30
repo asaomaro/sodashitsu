@@ -13,6 +13,7 @@ interface Socket {
   terminate(): unknown;
 }
 export interface NoticeConnectionOptions {
+  machineId?: string;
   cookie: (origin: string) => Promise<string | null>;
   changed: (notices: readonly AssistantNotice[], added: boolean) => void;
   status: (status: "connecting" | "connected" | "login" | "offline") => void;
@@ -41,7 +42,9 @@ export class NoticeConnection {
     private readonly options: NoticeConnectionOptions,
   ) {
     this.origin = desktopAssistantOrigin(origin);
-    this.feed = new NoticeFeed(origin, options.changed);
+    if (options.machineId && !/^[a-f0-9]{32}$/.test(options.machineId))
+      throw Error("Invalid machine id");
+    this.feed = new NoticeFeed(origin, options.changed, Date.now, options.machineId ?? "local");
   }
   start(): void {
     if (!this.stopped) return;
@@ -121,6 +124,7 @@ export class NoticeConnection {
       if (cookie.length > 8192 || /[\r\n]/.test(cookie))
         throw Error("Invalid authentication cookie");
       const url = new URL("/ws", this.origin);
+      if (this.options.machineId) url.searchParams.set("machine", this.options.machineId);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       socket = (
         this.options.socket ??

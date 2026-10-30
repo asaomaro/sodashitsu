@@ -1,6 +1,8 @@
 import { assistantPanelTarget, assistantPanelPane } from "./assistantPanelLink.js";
 import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 export interface PanelPorts {
+  machine?(): string;
+  switchMachine?(id: string): unknown;
   model(): {
     panes: ReadonlyMap<string, Pane>;
     tabs: ReadonlyMap<string, Tab>;
@@ -17,6 +19,7 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     project: string | null | undefined,
     cwd: string | undefined;
   let dialog: HTMLDialogElement | null = null;
+  let switching = false;
   const root = document.getElementById("app");
   if (root) root.inert = true;
   const block = (message: string) => {
@@ -52,6 +55,10 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
       throw Error(
         "通知の端末へ接続しています。ログインが必要な場合は通常の操舵室を開いてください。",
       );
+    if (target.assistantMachine !== (ports.machine?.() ?? "local"))
+      throw Error(
+        "対象のマシンへ接続しています。利用できない場合は通常の操舵室で接続状態を確認してください。",
+      );
     const model = ports.model();
     const value = assistantPanelPane(target, model.panes, model.tabs),
       workspace = model.workspaces.get(value.tab.workspaceId);
@@ -61,6 +68,19 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     return { ...value, workspace };
   };
   const update = () => {
+    if (
+      target &&
+      ports.connected() &&
+      target.assistantMachine !== (ports.machine?.() ?? "local") &&
+      !switching
+    ) {
+      switching = true;
+      Promise.resolve(ports.switchMachine?.(target.assistantMachine))
+        .catch(() => {})
+        .finally(() => {
+          switching = false;
+        });
+    }
     try {
       const { pane, tab, workspace } = check();
       if (!applied) {

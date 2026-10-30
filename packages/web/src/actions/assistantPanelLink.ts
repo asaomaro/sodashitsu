@@ -4,7 +4,11 @@ import type { Pane, Tab } from "@sodashitsu/protocol";
 export function assistantPanelTarget(hash: string) {
   if (!hash.startsWith("#assistantPane=")) return null;
   const params = new URLSearchParams(hash.slice(1));
-  if ([...params.keys()].length !== 3) throw Error("アシスタントの表示先を確認できません。");
+  if (
+    ![3, 4].includes([...params.keys()].length) ||
+    new Set(params.keys()).size !== [...params.keys()].length
+  )
+    throw Error("アシスタントの表示先を確認できません。");
   return AssistantPanelTarget.parse(Object.fromEntries(params));
 }
 export function assistantPanelPane(

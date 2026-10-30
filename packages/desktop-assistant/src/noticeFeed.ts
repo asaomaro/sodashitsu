@@ -54,6 +54,7 @@ export class NoticeFeed {
     origin: string,
     private readonly changed: (notices: readonly AssistantNotice[], added: boolean) => void,
     private readonly now = Date.now,
+    private readonly machineId = "local",
   ) {
     this.origin = desktopAssistantOrigin(origin);
   }
@@ -198,7 +199,7 @@ export class NoticeFeed {
       kind: attention ? "attention" : "done",
       source: {
         serverOrigin: this.origin,
-        machineId: "local",
+        machineId: this.machineId,
         workspaceId: workspace.id,
         paneId: pane.id,
         agentInstanceId: agent.instanceId,

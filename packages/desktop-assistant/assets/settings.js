@@ -1,6 +1,6 @@
 "use strict";
 let current;
-const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "launchAtLogin", "reducedMotion", "mute", "transcriptionEnabled", "transcriptionOrigin", "ocrEnabled", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions"];
+const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "launchAtLogin", "reducedMotion", "mute", "transcriptionEnabled", "transcriptionOrigin", "ocrEnabled", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications"];
 const status = document.getElementById("status");
 function display(preferences) {
  current = preferences;

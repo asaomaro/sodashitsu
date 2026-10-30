@@ -39,13 +39,17 @@ export interface MachineWiringDeps {
    * `!isMobileViewport()`（Ref を否定して常に偽）と書いて機能が一度も働かなかった誤りを、型で止める（T13 の点検）。
    */
   mobileViewport: Ref<boolean>;
+  /** A validated assistant target remains usable in a narrow expanded window. */
+  pinnedMachine?: string | undefined;
   /**
    * ローカルの軽い接続（＝ほかのマシンを選んでいる間だけ張る）に届いた連携のグラフのイベント（20260927-agent-graph。グラフは手元の `soda serve` のもの）。省略可。
    */
   onLocalGraphEvent?: (e: GraphChangedEvent | GraphFiredEvent) => void;
   /** ローカルの軽い接続の hello が通った（グラフを取り直す）。省略可。 */
   onLocalOpened?: () => void;
-  onLocalPairing?: (e: Extract<import("@sodashitsu/protocol").ServerEvent,{event:"machine.pairing"}>)=>void;
+  onLocalPairing?: (
+    e: Extract<import("@sodashitsu/protocol").ServerEvent, { event: "machine.pairing" }>,
+  ) => void;
   /** 連携のグラフが見えているか（リアクティブ。デスクトップのグラフの画面か、1 列の重ねるダイアログ。1 列の画面でも見えている間はマシンの一覧と軽い接続を保つ）。省略なら常に閉じている。 */
   graphOpen?: Ref<boolean>;
 }
@@ -57,7 +61,11 @@ export class MachineWiring {
 
   /** マシンの機能を使うか（1 列の画面では使わない。グラフ画面を開いている間は使う）。 */
   isEnabled(): boolean {
-    return !this.deps.mobileViewport.value || this.deps.graphOpen?.value === true;
+    return (
+      !!this.deps.pinnedMachine ||
+      !this.deps.mobileViewport.value ||
+      this.deps.graphOpen?.value === true
+    );
   }
 
   /** 手元の `soda serve` のマシンの一覧を当てる。選んでいるマシンが消えたらローカルへ戻る。 */
@@ -85,6 +93,7 @@ export class MachineWiring {
 
   /** 1 列の画面になった・戻った。 */
   onMobileChanged(mobile: boolean): void {
+    if (this.deps.pinnedMachine) return;
     const m = this.deps.machines;
     if (mobile) {
       if (m.selectedId !== LOCAL_MACHINE_ID)
@@ -100,6 +109,7 @@ export class MachineWiring {
 
   /** 連携のグラフ画面を開いた・閉じた。1 列の画面でだけ、開いたら一覧を読み、閉じたら一覧を空にして軽い接続を閉じる。 */
   onGraphOpenChanged(open: boolean): void {
+    if (this.deps.pinnedMachine) return;
     if (!this.deps.mobileViewport.value) return;
     if (open) {
       this.onMainOpened();
@@ -132,7 +142,10 @@ export class MachineWiring {
         wsUrl: wsUrlFor(this.deps.baseWsUrl, id),
         onSnapshot: (s) => m.applySummarySnapshot(id, s),
         onEvent: (e) => {
-          if (e.event === "machine.pairing") { if(id===LOCAL_MACHINE_ID)this.deps.onLocalPairing?.(e); return; }
+          if (e.event === "machine.pairing") {
+            if (id === LOCAL_MACHINE_ID) this.deps.onLocalPairing?.(e);
+            return;
+          }
           if (e.event === "machine.changed") {
             // ローカルの軽い接続の一覧だけを、ほかのマシンを選んでいる間に使う（リモートの登録簿は混ぜない）。
             if (id === LOCAL_MACHINE_ID && m.selectedId !== LOCAL_MACHINE_ID)

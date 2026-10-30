@@ -34,3 +34,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] D4. Explicit screen/window one-frame capture into OCR preview with video-only one-use30s source lease,104 native tests,3 negatives, generated Canvas/media-boundary UI and independent reviews. Actual OS capture remains device verification.
 
 - [x] E. Inert character bundle previews/import/removal and separate display/view/action permissions; approved assistant views/registered operations, exact actor/run binding and existing isolation;145 related tests,4 negatives, generated UI and independent taskcheck/whole/corrections.
+
+- [x] B/G registered-machine notices/replies/expansion: authenticated hub routes, online8 cap, disabled/offline fail-closed, exact machine at input, narrow panel support;117 related tests plus33 focused,3 negatives and independent reviews.

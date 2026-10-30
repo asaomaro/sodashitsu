@@ -51,3 +51,37 @@ it("blocks before connection, re-reads replaced maps and synchronously fences st
   expect((document.getElementById("app") as HTMLElement).inert).toBe(true);
   update.dispose();
 });
+it("never accepts matching pane UUIDs on the wrong machine", async () => {
+  document.body.innerHTML = '<div id="app"><input id="terminal"></div>';
+  vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.open = true;
+  });
+  vi.spyOn(HTMLDialogElement.prototype, "close").mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
+    this.open = false;
+  });
+  let machine = "local";
+  const remote = "a".repeat(32),
+    focus = vi.fn(),
+    switchMachine = vi.fn(),
+    model = {
+      panes: new Map([[p, { id: p, tabId: "t", agent: { instanceId: a } } as Pane]]),
+      tabs: new Map([["t", { id: "t", workspaceId: w } as Tab]]),
+      workspaces: new Map([[w, { id: w, cwd: "/same", projectDir: "/same" } as Workspace]]),
+    };
+  const update = assistantPanelGuard(
+    { model: () => model, connected: () => true, machine: () => machine, switchMachine, focus },
+    `#assistantPane=${p}&assistantWorkspace=${w}&assistantInstance=${a}&assistantMachine=${remote}`,
+  );
+  update();
+  expect(focus).not.toHaveBeenCalled();
+  expect((document.getElementById("app") as HTMLElement).inert).toBe(true);
+  expect(switchMachine).toHaveBeenCalledWith(remote);
+  machine = remote;
+  update();
+  expect(focus).toHaveBeenCalledTimes(1);
+  update.dispose();
+});

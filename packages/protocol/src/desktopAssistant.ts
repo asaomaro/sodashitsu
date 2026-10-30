@@ -65,6 +65,7 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    remoteNotifications: z.boolean().default(true),
     allowPluginCharacters: z.boolean().default(false),
     allowPluginViews: z.boolean().default(false),
     allowPluginActions: z.boolean().default(false),
@@ -197,7 +198,15 @@ export interface AssistantSourceInfo {
 }
 
 export const AssistantPanelTarget = z
-  .object({ assistantPane: z.uuid(), assistantWorkspace: z.uuid(), assistantInstance: z.uuid() })
+  .object({
+    assistantPane: z.uuid(),
+    assistantWorkspace: z.uuid(),
+    assistantInstance: z.uuid(),
+    assistantMachine: z
+      .string()
+      .regex(/^(?:local|[a-f0-9]{32})$/)
+      .default("local"),
+  })
   .strict();
 
 export const AssistantReminderSaveParams = AssistantSessionGetParams.extend({

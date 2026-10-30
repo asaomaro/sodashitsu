@@ -255,3 +255,16 @@ describe("MachineWiring（T13）", () => {
     expect(mobile.value).toBe(true);
   });
 });
+it("keeps a pinned assistant target connected in a narrow panel", async () => {
+  const f = setup({ enabled: false, mainList: [online(B)], extra: { pinnedMachine: B } });
+  f.wiring.onMainOpened();
+  await Promise.resolve();
+  await Promise.resolve();
+  f.machines.select(B);
+  f.wiring.onMobileChanged(true);
+  f.wiring.onGraphOpenChanged(false);
+  expect(f.wiring.isEnabled()).toBe(true);
+  expect(f.machines.selectedId).toBe(B);
+  expect(f.machines.machines.map((machine) => machine.id)).toContain(B);
+  expect(f.switchTo).not.toHaveBeenCalledWith("local", undefined, { force: true });
+});
