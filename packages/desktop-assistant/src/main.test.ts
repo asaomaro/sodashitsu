@@ -1004,6 +1004,13 @@ it("routes a remote notice reply through its registered machine and revokes it w
   expect(hub.request.mock.calls.some((call) => call[0] === "assistant.reply_key")).toBe(false);
   await fixture.handlers.get("assistant:source-open")!(local, { noticeId: notice.id });
   expect(fixture.windows.at(-1)!.url).toContain(`assistantMachine=${machineId}`);
+  const firstUrl = new URL(fixture.windows.at(-1)!.url);
+  const askId = "a".repeat(32);
+  connection.options.changed([{...notice,kind:"question",key:`ask:${askId}`}],false);
+  await fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id});
+  const secondUrl = new URL(fixture.windows.at(-1)!.url);
+  expect(secondUrl.search).not.toBe(firstUrl.search);
+  expect(new URLSearchParams(secondUrl.hash.slice(1)).get("assistantAsk")).toBe(askId);
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
     quietFullscreen: false,

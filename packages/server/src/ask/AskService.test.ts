@@ -40,6 +40,7 @@ function setup(
     media?: AskServiceOptions["media"];
     localOnly?: boolean | (()=>boolean);
     remote?: string[];
+    assistantPanes?: string[];
   } = {},
 ) {
   const bus = new EventBus();
@@ -52,6 +53,7 @@ function setup(
   let n = 0;
   const asks = new AskService({
     paneExists: (id) => panes.has(id),
+    assistantPane: (id) => (o.assistantPanes ?? []).includes(id),
     isBrowserKind: (id) => browsers.has(id),
     bus,
     timers,
@@ -937,4 +939,20 @@ it("applies network media limits when an Origin is added after startup",()=>{
   expect(s.asks.features().limits).toHaveProperty("unlimited",true);
   local=false;
   expect(s.asks.features().limits).not.toHaveProperty("unlimited");
+});
+
+it("keeps an assistant-only browser form pending and validates the exact live target", async()=>{
+ const {asks}=setup({browsers:["assistant"],assistantPanes:["p1"]});
+ asks.subscribe("assistant", "assistant");const result=asks.open("agent",{paneId:"p1",spec:SPEC,timeoutMs:1000});
+ await settle();const pending=asks.subscribe("assistant", "assistant")[0]!;
+ expect(pending).toBeDefined();expect(asks.isPending("p1",pending.askId)).toBe(true);
+ expect(asks.isPending("p2",pending.askId)).toBe(false);
+ asks.dispose();expect(asks.isPending("p1",pending.askId)).toBe(false);await result;
+});
+
+it("does not leave a shell form waiting with an assistant-only subscriber",async()=>{
+ const {asks}=setup({browsers:["assistant"],assistantPanes:["p1"]});asks.subscribe("assistant","assistant");
+ const result=track(asks.open("shell",{paneId:"p2",spec:SPEC,timeoutMs:1000}));
+ try{await settle();expect(result.result()).toMatchObject({status:"unavailable"});expect(asks.pendingCount).toBe(0);}
+ finally{asks.dispose();await result.done;}
 });

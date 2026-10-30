@@ -5,7 +5,7 @@ export function assistantPanelTarget(hash: string) {
   if (!hash.startsWith("#assistantPane=")) return null;
   const params = new URLSearchParams(hash.slice(1));
   if (
-    ![3, 4].includes([...params.keys()].length) ||
+    ![3, 4, 5].includes([...params.keys()].length) ||
     new Set(params.keys()).size !== [...params.keys()].length
   )
     throw Error("アシスタントの表示先を確認できません。");

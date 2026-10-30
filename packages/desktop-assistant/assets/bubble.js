@@ -29,7 +29,8 @@
      const report=error=>{document.getElementById("status").textContent=error.message;};
      submit.addEventListener("click",async()=>{if(!reply.value.trim())return;submit.disabled=true;try{await window.assistant.replySource({noticeId:notice.id,text:reply.value});reply.value="";}catch(error){report(error);}finally{submit.disabled=false;}});
      const destination=document.createElement("small");destination.textContent=notice.title || "通知元";
-     entry.append(document.createElement("br"),destination,open,reply,submit);
+     entry.append(document.createElement("br"),destination,open);
+     if(notice.kind!=="question")entry.append(reply,submit);
      if(notice.kind==="attention") for(const [keyName,label]of [["Enter","Enterで確認"],["Escape","Escで戻る"],["y","yを送信"],["n","nを送信"]]){
        const key=document.createElement("button");key.type="button";key.textContent=label;key.onclick=async()=>{key.disabled=true;try{await window.assistant.sourceKey({noticeId:notice.id,keyName});}catch(error){report(error);}finally{key.disabled=false;}};entry.append(key);
      }

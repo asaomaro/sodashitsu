@@ -5,6 +5,9 @@ on:
       - 'packages/desktop-assistant/**'
       - 'packages/protocol/**'
       - 'packages/server/src/assistant/**'
+      - 'packages/server/src/ask/**'
+      - 'packages/web/src/store/ask*'
+      - 'packages/web/src/actions/assistantPanel*'
       - 'packages/server/src/session/**'
       - 'packages/server/src/persist/SessionFile.ts'
       - 'packages/server/src/surface/methods/assistant.ts'
@@ -68,4 +71,4 @@ jobs:
       - run: pnpm --filter @sodashitsu/web build
       - run: pnpm --filter @sodashitsu/web typecheck
       - name: Ownership and queued input with memory terminals (no actual agent or PTY)
-        run: pnpm exec vitest run --maxWorkers=2 --project @sodashitsu/server --project @sodashitsu/protocol --project @sodashitsu/client-core --project @sodashitsu/web src/assistant desktopAssistant src/schedule/Scheduler.test.ts src/node/pluginPackage.test.ts src/actions/assistantPanel src/actions/MachineWiring.test.ts
+        run: pnpm exec vitest run --maxWorkers=2 --project @sodashitsu/server --project @sodashitsu/protocol --project @sodashitsu/client-core --project @sodashitsu/web src/assistant desktopAssistant src/schedule/Scheduler.test.ts src/node/pluginPackage.test.ts src/actions/assistantPanel src/actions/MachineWiring.test.ts src/store/ask.test.ts src/ask/AskService.test.ts

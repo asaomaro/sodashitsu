@@ -24,7 +24,7 @@ export interface NoticeConnectionOptions {
   now?: () => number;
 }
 
-/** One read-only authenticated socket. It sends hello/state only, never input or agent prompts. */
+/** One read-only authenticated socket. It sends hello/state/form subscription only, never input or agent prompts. */
 export class NoticeConnection {
   readonly feed: NoticeFeed;
   private generation = 0;
@@ -161,7 +161,7 @@ export class NoticeConnection {
       }
       this.socket = socket;
       if (!handshake()) return;
-      let stage: "hello" | "shared" | "ready" = "hello";
+      let stage: "hello" | "shared" | "asks" | "ready" = "hello";
       socket.on("open", () => {
         if (!handshake()) return;
         try {
@@ -169,7 +169,7 @@ export class NoticeConnection {
             JSON.stringify({
               id: "assistant-hello",
               method: "client.hello",
-              params: { protocol: 1, kind: "external" },
+              params: { protocol: 1, kind: "desktop" },
             }),
           );
         } catch {
@@ -209,6 +209,18 @@ export class NoticeConnection {
           } else if (stage === "shared" && message.id === "assistant-shared") {
             if (message.error) throw Error("Notice state rejected");
             this.feed.shared(message.result);
+            if (!handshake()) return;
+            stage = "asks";
+            socket!.send(
+              JSON.stringify({
+                id: "assistant-asks",
+                method: "ask.subscribe",
+                params: { renderer: "assistant" },
+              }),
+            );
+          } else if (stage === "asks" && message.id === "assistant-asks") {
+            if (message.error) throw Error("Form subscription rejected");
+            this.feed.questions(message.result);
             if (!handshake()) return;
             stage = "ready";
             if (this.deadline) clearTimeout(this.deadline);

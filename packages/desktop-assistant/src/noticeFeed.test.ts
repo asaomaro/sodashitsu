@@ -178,3 +178,43 @@ it("keeps a shared deferred notice in the inbox without automatically reopening 
   f.feed.shared({ notices: [{ paneId: f.ids.pane, key, status: "resolved" }] });
   expect(f.feed.notices).toEqual([]);
 });
+
+it("announces exact forms while working, removes closed forms and avoids reconnect announcements", () => {
+  const f = fixture(),
+    askId = randomUUID();
+  f.feed.snapshot(f.snapshot);
+  f.feed.shared({ notices: [] });
+  f.feed.event({ event: "ask.opened", data: { askId, paneId: f.ids.pane } });
+  expect(f.feed.notices[0]).toMatchObject({
+    kind: "question",
+    key: `ask:${askId}`,
+    source: { paneId: f.ids.pane },
+  });
+  expect(f.changed).toHaveBeenLastCalledWith(f.feed.notices, true);
+  f.feed.snapshot(f.snapshot);
+  f.feed.shared({ notices: [] });
+  f.feed.questions({ asks: [{ askId, paneId: f.ids.pane }] });
+  expect(f.changed).toHaveBeenLastCalledWith(f.feed.notices, false);
+  f.feed.event({ event: "ask.closed", data: { askId, paneId: f.ids.pane } });
+  f.feed.questions({ asks: [{ askId, paneId: f.ids.pane }] });
+  expect(f.feed.notices).toEqual([]);
+});
+
+it("preserves a pushed new form against an older subscribe snapshot", () => {
+  const f = fixture(),
+    askId = "a".repeat(32);
+  f.feed.snapshot(f.snapshot);
+  f.feed.shared({ notices: [] });
+  f.feed.event({ event: "ask.opened", data: { askId, paneId: f.ids.pane } });
+  f.feed.questions({ asks: [] });
+  expect(f.feed.notices).toEqual([
+    expect.objectContaining({ key: `ask:${askId}`, kind: "question" }),
+  ]);
+});
+
+it("does not rebind a pending form to a replacement agent",()=>{
+ const f=fixture(),askId="a".repeat(32);f.feed.snapshot(f.snapshot);f.feed.shared({notices:[]});
+ f.feed.event({event:"ask.opened",data:{askId,paneId:f.ids.pane}});
+ f.feed.event({event:"pane.agent_status_changed",data:{paneId:f.ids.pane,agent:{...f.agent,instanceId:randomUUID()}}});
+ expect(f.feed.notices).toEqual([]);
+});

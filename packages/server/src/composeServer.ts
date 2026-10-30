@@ -496,6 +496,7 @@ export async function composeServer(
   const paneExists = (paneId: string): boolean => session.getPane(paneId) !== undefined;
   const asks = new AskService({
     paneExists,
+    assistantPane: (paneId) => session.getPane(paneId)?.agent != null,
     isBrowserKind: (clientId) => {
       const kind = clients.get(clientId)?.kind;
       return kind === "desktop" || kind === "mobile";

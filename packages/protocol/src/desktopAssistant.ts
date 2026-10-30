@@ -114,7 +114,7 @@ export const AssistantNotice = z
   .object({
     id: z.uuid(),
     key: z.string().min(1).max(200),
-    kind: z.enum(["attention", "done", "failed"]),
+    kind: z.enum(["attention", "done", "failed", "question"]),
     source: AssistantSource,
     title: z.string().min(1).max(160),
     message: z.string().max(1000),
@@ -201,6 +201,7 @@ export interface AssistantSourceInfo {
 export const AssistantPanelTarget = z
   .object({
     assistantPane: z.uuid(),
+    assistantAsk: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
     assistantWorkspace: z.uuid(),
     assistantInstance: z.uuid(),
     assistantMachine: z

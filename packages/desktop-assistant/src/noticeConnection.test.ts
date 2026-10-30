@@ -75,11 +75,13 @@ it("authenticates the configured origin and sends only readonly hello/state", as
   f.socket.message({ id: "assistant-hello", result: { snapshot: f.snapshot } });
   expect(f.changed).not.toHaveBeenCalled();
   f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
   expect(f.status).toHaveBeenLastCalledWith("connected");
   expect(f.connection.feed.notices).toHaveLength(1);
   expect(f.socket.sent.map((value) => JSON.parse(value).method)).toEqual([
     "client.hello",
     "notification.state",
+    "ask.subscribe",
   ]);
   f.connection.stop();
 });
@@ -135,6 +137,7 @@ it("detects a silent peer and cancels heartbeat ownership on stop", async () => 
   f.socket.emit("open");
   f.socket.message({ id: "assistant-hello", result: { snapshot: f.snapshot } });
   f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
   f.socket.ping.mockImplementation(() => false);
   await vi.advanceTimersByTimeAsync(20_000);
   expect(f.socket.ping).toHaveBeenCalledOnce();
@@ -163,7 +166,12 @@ it("receives verbal notices over a real generated localhost websocket without se
       socket.send(
         JSON.stringify({
           id: rpc.id,
-          result: rpc.method === "client.hello" ? { snapshot: f.snapshot } : { notices: [] },
+          result:
+            rpc.method === "client.hello"
+              ? { snapshot: f.snapshot }
+              : rpc.method === "ask.subscribe"
+                ? { asks: [] }
+                : { notices: [] },
         }),
       );
     });
@@ -180,7 +188,7 @@ it("receives verbal notices over a real generated localhost websocket without se
     await vi.waitFor(() => expect(status).toHaveBeenLastCalledWith("connected"));
     expect(connection.feed.notices[0]!.message).toContain("確認の依頼です");
     expect(headers).toEqual([{ cookie: "soda_session_work=generated", origin }]);
-    expect(requests).toEqual(["client.hello", "notification.state"]);
+    expect(requests).toEqual(["client.hello", "notification.state", "ask.subscribe"]);
     const pane = f.snapshot.panes[0]!;
     for (const socket of server.clients)
       socket.send(
@@ -192,7 +200,7 @@ it("receives verbal notices over a real generated localhost websocket without se
     await vi.waitFor(() =>
       expect(connection.feed.notices[0]!.message).toContain("作業が完了しました"),
     );
-    expect(requests).toEqual(["client.hello", "notification.state"]);
+    expect(requests).toEqual(["client.hello", "notification.state", "ask.subscribe"]);
   } finally {
     connection.stop();
     for (const socket of server.clients) socket.terminate();
@@ -216,7 +224,12 @@ it("validates TLS before sending cookies, using an internal generated trust adap
       socket.send(
         JSON.stringify({
           id: rpc.id,
-          result: rpc.method === "client.hello" ? { snapshot: f.snapshot } : { notices: [] },
+          result:
+            rpc.method === "client.hello"
+              ? { snapshot: f.snapshot }
+              : rpc.method === "ask.subscribe"
+                ? { asks: [] }
+                : { notices: [] },
         }),
       );
     });
@@ -292,6 +305,7 @@ it("rejects an expired shared reply or a callback crossing the original monotoni
       });
     } else ticks = 10_000;
     f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
     expect(f.status).toHaveBeenLastCalledWith("offline");
     expect(f.status).not.toHaveBeenCalledWith("connected");
     expect(f.socket.terminate).toHaveBeenCalledOnce();
@@ -321,6 +335,7 @@ it("rejects a late pong even before its watchdog timer runs", async () => {
   f.socket.emit("open");
   f.socket.message({ id: "assistant-hello", result: { snapshot: f.snapshot } });
   f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
   ticks = 20_000;
   await vi.advanceTimersByTimeAsync(20_000);
   expect(f.socket.ping).toHaveBeenCalledOnce();
@@ -358,4 +373,45 @@ it("uses only the authenticated hub machine proxy for a registered remote feed",
         changed: vi.fn(),
       }),
   ).toThrow("machine");
+});
+
+it("subscribes as a form-capable browser without fetching media or writing input", async () => {
+  const f = fixture();
+  f.snapshot.panes[0]!.agent.state = "working";
+  f.connection.start();
+  await vi.waitFor(() => expect(f.create).toHaveBeenCalledOnce());
+  f.socket.emit("open");
+  expect(JSON.parse(f.socket.sent[0]!).params.kind).toBe("desktop");
+  f.socket.message({ id: "assistant-hello", result: { snapshot: f.snapshot } });
+  f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  expect(f.socket.sent.map((s) => JSON.parse(s).method)).toContain("ask.subscribe");
+  const askId = "a".repeat(32),
+    paneId = f.snapshot.panes[0]!.id;
+  f.socket.message({
+    id: "assistant-asks",
+    result: {
+      asks: [
+        { askId, paneId, spec: { title: "untrusted" }, media: [{ url: "https://untrusted.test" }] },
+      ],
+    },
+  });
+  expect(f.connection.feed.notices).toEqual([
+    expect.objectContaining({ kind: "question", key: `ask:${askId}` }),
+  ]);
+  f.socket.message({ event: "ask.closed", data: { askId, paneId } });
+  expect(f.connection.feed.notices).toEqual([]);
+  expect(f.socket.sent.map((s) => JSON.parse(s).method)).toEqual([
+    "client.hello",
+    "notification.state",
+    "ask.subscribe",
+  ]);
+});
+
+it("does not report connected until the form subscription completes within the original deadline",async()=>{
+ vi.useFakeTimers();const f=fixture();f.connection.start();await vi.waitFor(()=>expect(f.create).toHaveBeenCalledOnce());
+ f.socket.emit("open");f.socket.message({id:"assistant-hello",result:{snapshot:f.snapshot}});
+ f.socket.message({id:"assistant-shared",result:{notices:[]}});
+ expect(f.status).not.toHaveBeenCalledWith("connected");
+ await vi.advanceTimersByTimeAsync(10000);expect(f.status).toHaveBeenLastCalledWith("offline");
+ f.socket.message({id:"assistant-asks",result:{asks:[]}});expect(f.status).not.toHaveBeenCalledWith("connected");
 });

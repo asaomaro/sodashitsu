@@ -45,6 +45,8 @@ const realTimers: AskServiceTimers = {
 
 export interface AskServiceOptions {
   paneExists(paneId: string): boolean;
+  /** Native assistant can expand forms only for a detected agent pane. */
+  assistantPane?(paneId: string): boolean;
   /** その接続が画面（desktop / mobile）か。 */
   isBrowserKind(clientId: string): boolean;
   /** `pane.closed` の購読と `ask.opened` / `ask.closed` の配布。 */
@@ -100,6 +102,7 @@ export class AskService {
   private readonly byId = new Map<string, Entry>();
   /** 質問を出せる画面（`ask.subscribe` 済みで、まだ接続が生きているもの）。 */
   private readonly subscribers = new Set<string>();
+  private readonly assistantSubscribers = new Set<string>();
   private readonly terminalSubscribers = new Set<string>();
   private readonly timers: AskServiceTimers;
   private readonly random: () => string;
@@ -131,6 +134,7 @@ export class AskService {
 
   /** 従来の上限を超えた質問は、ほかのマシン越しの画面には見せない（ローカル起動の画面だけ）。 */
   private visible(entry: Entry, clientId: string): boolean {
+    if(this.assistantSubscribers.has(clientId) && this.opts.assistantPane?.(entry.paneId) !== true) return false;
     if (
       this.terminalSubscribers.has(clientId) &&
       (hasMediaRefs(entry.spec) || entry.mediaInfo.length > 0 || entry.view?.length)
@@ -149,6 +153,12 @@ export class AskService {
     return { features: [...ASK_FEATURES], limits: askLimits(this.unlimitedNow()) };
   }
 
+  /** Read-only assistant target validation. Never grants permission to answer. */
+  isPending(paneId: string, askId: string): boolean {
+    const entry = this.byId.get(askId);
+    return entry?.ready === true && entry.paneId === paneId;
+  }
+
   /** 待っている質問の数（テスト・診断用）。 */
   get pendingCount(): number {
     return this.byId.size;
@@ -160,10 +170,12 @@ export class AskService {
   }
 
   /** この接続を質問を出せる画面として登録し、いま待っている質問を受けた順に返す。何度呼んでもよい。 */
-  subscribe(clientId: string, renderer?: "terminal"): AskPending[] {
+  subscribe(clientId: string, renderer?: "terminal" | "assistant"): AskPending[] {
     if (!this.opts.isBrowserKind(clientId))
       throw new RpcError("invalid_params", "only a browser can show a form");
     this.subscribers.add(clientId);
+    if(renderer === "assistant") this.assistantSubscribers.add(clientId);
+    else this.assistantSubscribers.delete(clientId);
     if (renderer === "terminal") this.terminalSubscribers.add(clientId);
     else this.terminalSubscribers.delete(clientId);
     return [...this.byId.values()].filter((e) => e.ready && this.visible(e, clientId)).map(pending);
@@ -199,7 +211,7 @@ export class AskService {
       });
     if (this.disposed)
       return Promise.resolve({ status: "unavailable", reason: "the server is shutting down" });
-    if (this.liveSubscribers(checked.spec) === 0)
+    if (this.liveSubscribers(checked.spec, p.paneId) === 0)
       return Promise.resolve({
         status: "unavailable",
         reason: "no browser is connected to show the form",
@@ -251,7 +263,7 @@ export class AskService {
       this.fail(entry, new RpcError("ask_busy", "too much media is waiting for an answer"));
       return;
     }
-    if (this.liveSubscribers(entry.spec) === 0) {
+    if (this.liveSubscribers(entry.spec, entry.paneId) === 0) {
       this.close(entry, {
         status: "unavailable",
         reason: "no browser is connected to show the form",
@@ -367,6 +379,7 @@ export class AskService {
   onClientGone(clientId: string): void {
     this.subscribers.delete(clientId);
     this.terminalSubscribers.delete(clientId);
+    this.assistantSubscribers.delete(clientId);
     for (const entry of [...this.byId.values()])
       if (entry.ownerClientId === clientId) this.close(entry, { status: "cancelled" });
   }
@@ -394,11 +407,12 @@ export class AskService {
     return this.subscribers.has(clientId) && this.opts.isBrowserKind(clientId);
   }
 
-  private liveSubscribers(spec?: import("@sodashitsu/protocol").AskSpec): number {
+  private liveSubscribers(spec?: import("@sodashitsu/protocol").AskSpec, paneId?: string): number {
     let n = 0;
     for (const id of this.subscribers)
       if (
         this.opts.isBrowserKind(id) &&
+        !(this.assistantSubscribers.has(id) && (!paneId || this.opts.assistantPane?.(paneId) !== true)) &&
         !(spec && hasMediaRefs(spec) && this.terminalSubscribers.has(id))
       )
         n++;

@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useAskStore } from "./ask.js";
 import { useViewStore } from "./view.js";
 
-const ask = (askId: string, paneId = "p1"): AskPending => ({ askId, paneId, spec: { title: "T", submit: "決定", note: true, questions: [] } });
+const ask = (askId: string, paneId = "p1"): AskPending => ({
+  askId,
+  paneId,
+  spec: { title: "T", submit: "決定", note: true, questions: [] },
+});
 
 describe("ask store", () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -69,4 +73,32 @@ describe("view.modalOpen と質問のフォーム", () => {
     v.resetForMachineSwitch();
     expect(v.askOpen).toBe(true);
   });
+});
+
+it("assistant form links show exactly the requested form, with no fallback after closure", () => {
+  const ids = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+    "a".repeat(32),
+  ];
+  const old = location.hash;
+  try {
+    location.hash = new URLSearchParams({
+      assistantPane: ids[0]!,
+      assistantWorkspace: ids[1]!,
+      assistantInstance: ids[2]!,
+      assistantAsk: ids[3]!,
+    }).toString();
+    setActivePinia(createPinia());
+    const s = useAskStore();
+    s.replaceAll([ask("other", ids[0]), ask(ids[3]!, ids[0])]);
+    expect(s.current?.askId).toBe(ids[3]);
+    s.remove(ids[3]!);
+    expect(s.current).toBeNull();
+    s.add(ask(ids[3]!, "wrong-pane"));
+    expect(s.current).toBeNull();
+  } finally {
+    location.hash = old;
+  }
 });

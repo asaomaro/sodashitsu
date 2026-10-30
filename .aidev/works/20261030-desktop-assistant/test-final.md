@@ -2,11 +2,11 @@
 
 Windows-native assistant / existing Soda and agents in WSL are the initial operating scope. All requested development phases are implemented. Real-device validation is explicitly separate; unsigned development zip delivery is the distribution scope.
 
-- Final source full build: PASS (`/tmp/soda-assistant-completion-build.log`).
-- Final source full typecheck: PASS (`/tmp/soda-assistant-completion-types.log`).
-- Final source full runtime:890 files /12,922 tests PASS,350.54s (`pnpm exec vitest run --maxWorkers=4`, `/tmp/soda-assistant-completion-all-tests.log`). Initial `pnpm test --maxWorkers` was rejected by pnpm before any tests; corrected to the explicit Vitest invocation. Existing happy-dom/resource logs appear without test failures.
-- Generated400x640 keyboard/DOM UI: PASS (`/tmp/soda-assistant-completion-ui.log`), including position save/restore, verbal notices, scoped replies, OCR/media boundaries, reminder, plugin operation/result and editor serialization.
-- Unsigned Windows zip: PASS (`/tmp/soda-assistant-completion-pack.log`); main/preload/fullscreen/geometry/remote/characters/capture/reminder/OCR and UI archive bytes equal built source. No native app was installed/launched.
+- Final source full build: PASS (`/tmp/soda-assistant-ask-build.log`).
+- Final source full typecheck: PASS (`/tmp/soda-assistant-ask-types.log`).
+- Final source full runtime including ask integration:890 files /12,931 tests PASS,354.46s (`pnpm exec vitest run --maxWorkers=4`, `/tmp/soda-assistant-ask-all-tests.log`). Existing happy-dom/resource logs appear without test failures. Earlier F checkpoint passed12,922 tests. The post-run review suggestion only retains renderer:assistant in one positive test (44 AskService tests pass) and moves a comment; no production behavior changed after this full run.
+- Generated400x640 keyboard/DOM UI: PASS (`/tmp/soda-assistant-ask-ui.log`), including position save/restore, verbal notices, scoped replies, OCR/media boundaries, reminder, plugin operation/result and editor serialization.
+- Unsigned Windows zip: PASS (`/tmp/soda-assistant-ask-pack.log`); main/preload/fullscreen/geometry/remote/characters/capture/reminder/OCR and UI archive bytes equal built source (15 native/UI plus2 protocol files). No native app was installed/launched.
 - Windows CI additionally compiles only Win32 probe declarations; it never calls Check/foreground APIs. Exact-head CI, clean external smoke and merge receipts are recorded in the final delivery PR.
 
 ## F behavior and review
@@ -186,3 +186,9 @@ AssertionError: expected 2 to be 1 // Object.is equality
    Start at  16:34:56
    Duration  911ms (tests 90%, transform 8%, import 2%)
 ```
+
+## Ask integration and clean smoke boundary
+
+The final native-only question/form integration, independent taskcheck/correction/whole delta review and six meaningful negative controls are recorded in test-ask-integration.md. Form notifications now work with no ordinary Soda window for detected agent panes, including while working. Existing Web UI answers only the linked form, never a queue fallback; terminal reply/key routes reject form keys.
+
+Clean external worktree `/workspaces/sodashitsu-assistant-final-smoke` at9c5db03a installed dependencies with frozen lockfile and verified/copies2710 built runtime files. `pnpm smoke` passed manifest/login/HTTP/WebSocket/hello/pane input and custom popup roundtrips, then failed the browser `.xterm-helper-textarea` visibility wait (15s). This exact environment/baseline limitation was already confirmed against source/main-equivalent baseline during A; it is not reported as a green smoke or newly attributed to assistant. The final ask delta has full build/types/runtime/generated UI evidence above. The unchanged failing browser smoke was not repeatedly rerun (AGENTS limit). Raw final smoke output: `/tmp/soda-assistant-final-smoke.log`. Actual native/agent/media verification remains unperformed.

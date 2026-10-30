@@ -456,15 +456,18 @@ function loadPanel(win: BrowserWindow, url: string): void {
 }
 function openPanel(
   origin: string,
-  target?: { paneId: string; workspaceId: string; instanceId: string; machineId?: string },
+  target?: { paneId: string; workspaceId: string; instanceId: string; machineId?: string; askId?: string },
 ): void {
   const url = new URL(origin);
+  // A fresh query forces a new document even when only the guarded pane/form hash changes.
+  if (target) url.searchParams.set("assistantNavigation", randomUUID());
   if (target)
     url.hash = new URLSearchParams({
       assistantPane: target.paneId,
       assistantWorkspace: target.workspaceId,
       assistantInstance: target.instanceId,
       assistantMachine: target.machineId ?? "local",
+      ...(target.askId ? {assistantAsk: target.askId} : {}),
     }).toString();
   if (panel && !panel.isDestroyed()) {
     if (target || panelTargeted) loadPanel(panel, url.href);
@@ -964,6 +967,7 @@ function registerIpc(): void {
             workspaceId: target.workspaceId,
             instanceId: target.agent.instanceId,
             machineId: notice.source.machineId,
+            ...(notice.kind === "question" ? {askId: notice.key.slice(4)} : {}),
           });
           return;
         }
