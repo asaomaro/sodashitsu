@@ -72,3 +72,35 @@ it("rejects an installed nested directory symlink on enable and identical reinst
   await expect(changePlugin(state, "enable", "demo")).rejects.toThrow("symlink");
   await expect(changePlugin(state, "install", bundle)).rejects.toThrow("symlink");
 });
+it("packages declared assistant PNG assets without executing the entry and rejects unlisted paths", async () => {
+  const dir = await fixture();
+  await writeFile(
+    join(dir, "entry.mjs"),
+    'throw Error("must never execute during pack inspection")',
+  );
+  await writeFile(
+    join(dir, "robot.png"),
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  );
+  const manifest = {
+    schemaVersion: 1,
+    id: "captains",
+    name: "Captains",
+    version: "1.0.0",
+    description: "",
+    entry: "entry.mjs",
+    files: ["entry.mjs", "robot.png"],
+    allow: [],
+    assistantCharacters: [{ id: "robot", name: "Robot", file: "robot.png" }],
+  };
+  await writeFile(join(dir, "soda-plugin.json"), JSON.stringify(manifest));
+  expect((await readPluginSource(dir)).manifest.assistantCharacters).toEqual(
+    manifest.assistantCharacters,
+  );
+  manifest.assistantCharacters[0]!.file = "missing.png";
+  await writeFile(join(dir, "soda-plugin.json"), JSON.stringify(manifest));
+  await expect(readPluginSource(dir)).rejects.toThrow("included");
+});

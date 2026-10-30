@@ -85,6 +85,8 @@ export const EXTENSION_APPROVE_DELAY_MS = 1_000;
 
 export type ExtensionScope = "user" | "project";
 export interface ExtensionViewDefinition {
+  /** Advertise this pane view to the desktop assistant. Existing approval still applies. */
+  assistant?: boolean | undefined;
   id: string;
   title: string;
   terminal?: { format: "text" | "markdown" | "html" } | undefined;
@@ -118,6 +120,7 @@ export const ExtensionViewsSchema = z
   .array(
     z.strictObject({
       id: z.string().regex(COMMAND_ID_RE),
+      assistant: z.boolean().optional(),
       title: ViewTitle,
       placements: z
         .array(ViewPlacementSchema)
@@ -431,4 +434,16 @@ export function viewSupportsTarget(
 }
 
 /** 配置された未登録パッケージの候補。検出だけでは実行しない。 */
-export interface PluginCandidate {key:string;digest:string;path:string;scope:'user'|'project';root:string;id:string;version:string;name:string;description:string;allow:string[];files:number;}
+export interface PluginCandidate {
+  key: string;
+  digest: string;
+  path: string;
+  scope: "user" | "project";
+  root: string;
+  id: string;
+  version: string;
+  name: string;
+  description: string;
+  allow: string[];
+  files: number;
+}

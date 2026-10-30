@@ -1,10 +1,9 @@
 "use strict";
 (async () => {
  const preferences = await window.assistant.read();
- const names = { "captain-male": "船長", "captain-female": "船長", "captain-robot": "ロボット船長" };
- const character = Object.hasOwn(names, preferences.characterId) ? preferences.characterId : "captain-female";
- document.getElementById("portrait").src = `${character}.svg`;
- document.getElementById("captain-name").textContent = names[character];
+ const portrait=await window.assistant.characterInfo();
+ document.getElementById("portrait").src=portrait.uri;
+ document.getElementById("captain-name").textContent=portrait.name;
  document.getElementById("expand-session").addEventListener("click",()=>window.assistant.openSession().catch(error=>{document.getElementById("status").textContent=error.message;}));
  document.getElementById("open").addEventListener("click", () => window.assistant.open());
  document.getElementById("settings").addEventListener("click", () => window.assistant.settings());

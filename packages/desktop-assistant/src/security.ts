@@ -35,6 +35,16 @@ export function authorizeLocalSender(
     return false;
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;
+  if (action === "character-info") return true;
+  if (
+    [
+      "character-list",
+      "character-pack-preview",
+      "character-pack-import",
+      "character-pack-remove",
+    ].includes(action)
+  )
+    return sender.role === "settings";
   if (action === "hide") return sender.role === "bubble";
   if (
     [
@@ -43,6 +53,9 @@ export function authorizeLocalSender(
       "start-session",
       "adopt-session",
       "send-message",
+      "apps",
+      "app-open",
+      "app-call",
       "screenshot-sources",
       "screenshot-approve",
       "screenshot-submit",

@@ -32,3 +32,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] I. Model-free reminders using existing durable Scheduler, execution-device-pinned history/ACK, queued removal scope and native verbal delivery;37 related tests,3 negatives, generated UI and independent taskcheck/whole/corrections.
 
 - [x] D4. Explicit screen/window one-frame capture into OCR preview with video-only one-use30s source lease,104 native tests,3 negatives, generated Canvas/media-boundary UI and independent reviews. Actual OS capture remains device verification.
+
+- [x] E. Inert character bundle previews/import/removal and separate display/view/action permissions; approved assistant views/registered operations, exact actor/run binding and existing isolation;145 related tests,4 negatives, generated UI and independent taskcheck/whole/corrections.

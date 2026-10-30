@@ -17,12 +17,20 @@ import {
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { DesktopAssistantPreferences, type AssistantNotice } from "@sodashitsu/protocol";
+import {
+  AssistantAppOpenParams,
+  AssistantAppCallParams,
+  DesktopAssistantPreferences,
+  type AssistantNotice,
+} from "@sodashitsu/protocol";
 import { AssistantRpc } from "./assistantRpc.js";
 import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
 import { NotesFile, NoteSave } from "./notes.js";
 import { Transcription, AUDIO_LIMIT } from "./transcription.js";
+import { randomUUID } from "node:crypto";
+import { readPluginBundle } from "@sodashitsu/client-core/node/pluginPackage";
+import { Characters, characterPack, type CharacterPack } from "./characters.js";
 import { CaptureLease } from "./captureLease.js";
 import { Reminders } from "./reminders.js";
 import { Ocr } from "./ocr.js";
@@ -58,6 +66,7 @@ const allowedAssets = new Map([
   ["/ocr.js", "text/javascript"],
   ["/reminders.js", "text/javascript"],
   ["/capture.js", "text/javascript"],
+  ["/apps.js", "text/javascript"],
   ["/style.css", "text/css"],
   ["/captain-male.svg", "image/svg+xml"],
   ["/captain-female.svg", "image/svg+xml"],
@@ -70,7 +79,7 @@ let character: BrowserWindow | null = null;
 let settings: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let bubble: BrowserWindow | null = null;
-let bubbleCharacterId: string | null = null;
+let bubblePortraitKey: string | null = null;
 let bubbleEpoch = 0;
 let panelTargeted = false;
 let panelNavigation = 0;
@@ -84,6 +93,15 @@ let transcription: Transcription;
 let recording: RecordingLease;
 let ocr: Ocr;
 let capture: CaptureLease<DesktopCapturerSource>;
+let characters: Characters;
+let charactersError = "";
+let characterPicking = false;
+let pendingCharacterPack: {
+  owner: number;
+  token: string;
+  expires: number;
+  pack: CharacterPack;
+} | null = null;
 let reminders: Reminders | null = null;
 let reminderRevision = 0;
 let recordingOrigin: string | null = null;
@@ -121,7 +139,10 @@ function localWindow(role: LocalRole): BrowserWindow {
   });
   const id = win.webContents.id;
   localWindows.set(id, { window: win, role });
-  win.on("closed", () => localWindows.delete(id));
+  win.on("closed", () => {
+    localWindows.delete(id);
+    if (pendingCharacterPack?.owner === id) pendingCharacterPack = null;
+  });
   const discardOnHide = () => {
     if (role === "bubble") {
       ++bubbleEpoch;
@@ -160,7 +181,10 @@ function openBubble(focus = true): void {
   const win = localWindow("bubble");
   const contentsId = win.webContents.id;
   bubble = win;
-  bubbleCharacterId = controller.preferences.characterId;
+  bubblePortraitKey = JSON.stringify([
+    controller.preferences.characterId,
+    controller.preferences.allowPluginCharacters,
+  ]);
   const area = screen.getPrimaryDisplay().workArea;
   const width = Math.min(400, area.width);
   const height = Math.min(640, area.height);
@@ -439,10 +463,14 @@ const adapter: NativeAdapter = {
   },
   tray(preferences) {
     updateBackend(preferences);
-    if (bubble && bubbleCharacterId !== preferences.characterId) {
+    if (
+      bubble &&
+      bubblePortraitKey !==
+        JSON.stringify([preferences.characterId, preferences.allowPluginCharacters])
+    ) {
       bubble.destroy();
       bubble = null;
-      bubbleCharacterId = null;
+      bubblePortraitKey = null;
     }
     if (!tray) {
       tray = new Tray(nativeImage.createFromPath(join(assets, "tray.png")));
@@ -559,6 +587,14 @@ function registerIpc(): void {
     "start-session",
     "adopt-session",
     "send-message",
+    "apps",
+    "app-open",
+    "app-call",
+    "character-info",
+    "character-list",
+    "character-pack-preview",
+    "character-pack-import",
+    "character-pack-remove",
     "screenshot-sources",
     "screenshot-approve",
     "screenshot-submit",
@@ -609,6 +645,133 @@ function registerIpc(): void {
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
+      if (action === "apps" || action === "app-open" || action === "app-call") {
+        const rpc = control,
+          info = chatState().session,
+          epoch = bubbleEpoch;
+        if (!rpc || !info?.agent || info.state !== "ready" || !owner.window.isVisible())
+          throw Error("専用セッションに接続してから利用してください。");
+        if (action === "apps")
+          return {
+            ...(await rpc.request("assistant.apps", {
+              deviceId: installationId,
+              instanceId: info.agent.instanceId,
+            })),
+            allowViews: controller.preferences.allowPluginViews,
+            allowActions: controller.preferences.allowPluginActions,
+          };
+        if (action === "app-open") {
+          if (!controller.preferences.allowPluginViews)
+            throw Error("設定でプラグインUIを許可してください。");
+          const request = AssistantAppOpenParams.omit({ deviceId: true }).strict().parse(input);
+          if (request.instanceId !== info.agent.instanceId)
+            throw Error("専用セッションが変更されました。");
+          await rpc.request("assistant.app_open", { deviceId: installationId, ...request });
+          if (
+            !controller.preferences.allowPluginViews ||
+            control !== rpc ||
+            epoch !== bubbleEpoch ||
+            bubble !== owner.window ||
+            owner.window.isDestroyed() ||
+            !owner.window.isVisible() ||
+            chatState().session?.agent?.instanceId !== request.instanceId
+          )
+            throw Error("表示先が変更されました。");
+          openPanel(controller.preferences.serverOrigin, {
+            paneId: info.paneId,
+            workspaceId: info.workspaceId,
+            instanceId: request.instanceId,
+          });
+          return;
+        }
+        if (!controller.preferences.allowPluginActions)
+          throw Error("設定でプラグイン操作を許可してください。");
+        const request = AssistantAppCallParams.omit({ deviceId: true }).strict().parse(input);
+        if (request.instanceId !== info.agent.instanceId)
+          throw Error("専用セッションが変更されました。");
+        const result = await rpc.request("assistant.app_call", {
+          deviceId: installationId,
+          ...request,
+        });
+        if (control !== rpc || chatState().session?.agent?.instanceId !== request.instanceId)
+          throw Error("返答の対象が変更されました。");
+        return result;
+      }
+      if (action === "character-info") {
+        const selected = controller.preferences.characterId;
+        const custom = controller.preferences.allowPluginCharacters
+          ? characters.portrait(selected)
+          : null;
+        if (custom) return { name: custom.name, uri: custom.uri };
+        const builtin = ["captain-male", "captain-female", "captain-robot"].includes(selected)
+          ? selected
+          : "captain-female";
+        return {
+          name: builtin === "captain-robot" ? "ロボット船長" : "船長",
+          uri: `${LOCAL_ORIGIN}/${builtin}.svg`,
+        };
+      }
+      if (action === "character-list")
+        return { characters: characters.list(), error: charactersError };
+      if (action === "character-pack-preview") {
+        if (characterPicking) throw Error("素材の選択が終わるまでお待ちください。");
+        characterPicking = true;
+        pendingCharacterPack = null;
+        try {
+          const selection = await dialog.showOpenDialog(owner.window, {
+            title: "キャラクター素材を含むプラグインを選択（プログラムは実行しません）",
+            properties: ["openFile"],
+            filters: [{ name: "Sodashitsuプラグイン", extensions: ["sodaplugin"] }],
+          });
+          if (selection.canceled || !selection.filePaths[0]) return null;
+          const pack = characterPack(await readPluginBundle(selection.filePaths[0]));
+          if (owner.window !== settings || owner.window.isDestroyed() || !owner.window.isVisible())
+            return null;
+          pendingCharacterPack = {
+            owner: event.sender.id,
+            token: randomUUID(),
+            expires: performance.now() + 300000,
+            pack,
+          };
+          return {
+            token: pendingCharacterPack.token,
+            name: pack.name,
+            characters: pack.characters.map((character) => ({
+              name: character.name,
+              uri: `data:image/png;base64,${character.png}`,
+            })),
+          };
+        } finally {
+          characterPicking = false;
+        }
+      }
+      if (action === "character-pack-import") {
+        const { token } = z.object({ token: z.uuid() }).strict().parse(input),
+          pending = pendingCharacterPack;
+        if (
+          !pending ||
+          pending.token !== token ||
+          pending.owner !== event.sender.id ||
+          performance.now() >= pending.expires
+        )
+          throw Error("素材の確認期限が切れました。選び直してください。");
+        pendingCharacterPack = null;
+        const list = await characters.install(pending.pack);
+        bubble?.destroy();
+        controller.refreshDisplays();
+        return list;
+      }
+      if (action === "character-pack-remove") {
+        const { id } = z
+          .object({ id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/) })
+          .strict()
+          .parse(input);
+        if (controller.preferences.characterId.startsWith(`plugin:${id}/`))
+          throw Error("標準キャラクターに切り替えて保存してから削除してください。");
+        const list = await characters.remove(id);
+        controller.refreshDisplays();
+        return list;
+      }
       if (action.startsWith("screenshot-")) {
         if (
           !controller.preferences.enabled ||
@@ -973,6 +1136,12 @@ else {
           }
         });
         isolated.on("will-download", (event) => event.preventDefault());
+      }
+      characters = new Characters(join(app.getPath("userData"), "assistant-characters.json"));
+      try {
+        await characters.load();
+      } catch (error) {
+        charactersError = error instanceof Error ? error.message : "素材を読み込めません。";
       }
       installationId = await deviceIdentity(join(app.getPath("userData"), "assistant-device-id"));
       notesFile = new NotesFile(join(app.getPath("userData"), "assistant-notes.json"));

@@ -29,6 +29,16 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:recording-cancelled", receive);
       return () => ipcRenderer.removeListener("assistant:recording-cancelled", receive);
     },
+    apps: () => ipcRenderer.invoke("assistant:apps"),
+    openApp: (input: unknown) => ipcRenderer.invoke("assistant:app-open", input),
+    callApp: (input: unknown) => ipcRenderer.invoke("assistant:app-call", input),
+    characterInfo: () => ipcRenderer.invoke("assistant:character-info"),
+    characters: () => ipcRenderer.invoke("assistant:character-list"),
+    previewCharacterPack: () => ipcRenderer.invoke("assistant:character-pack-preview"),
+    importCharacterPack: (input: unknown) =>
+      ipcRenderer.invoke("assistant:character-pack-import", input),
+    removeCharacterPack: (input: unknown) =>
+      ipcRenderer.invoke("assistant:character-pack-remove", input),
     screenshotSources: () => ipcRenderer.invoke("assistant:screenshot-sources"),
     approveScreenshot: (input: unknown) =>
       ipcRenderer.invoke("assistant:screenshot-approve", input),

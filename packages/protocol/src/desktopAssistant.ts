@@ -65,6 +65,9 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    allowPluginCharacters: z.boolean().default(false),
+    allowPluginViews: z.boolean().default(false),
+    allowPluginActions: z.boolean().default(false),
     ocrEnabled: z.boolean().default(false),
     ocrExecutable: z
       .string()
@@ -208,4 +211,51 @@ export const AssistantReminderIdParams = AssistantSessionGetParams.extend({
 export interface AssistantRemindersInfo {
   jobs: import("./schedule.js").ScheduledJob[];
   runs: import("./schedule.js").ScheduledRun[];
+}
+
+export const AssistantCharacterDefinitions = z
+  .array(
+    z
+      .object({
+        id: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+        name: z.string().min(1).max(80),
+        file: z
+          .string()
+          .max(200)
+          .regex(/^[A-Za-z0-9_./-]+\.png$/)
+          .refine((path) =>
+            path.split("/").every((part) => part !== "" && part !== "." && part !== ".."),
+          ),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(8)
+  .refine(
+    (characters) => new Set(characters.map((character) => character.id)).size === characters.length,
+  );
+
+export const AssistantAppParams = AssistantSessionAdoptParams.extend({
+  extensionKey: z.string().min(1).max(4096),
+  runId: z.uuid(),
+}).strict();
+export const AssistantAppOpenParams = AssistantAppParams.extend({
+  viewId: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+}).strict();
+export const AssistantAppCallParams = AssistantAppParams.extend({
+  operation: z.string().min(1).max(64),
+  params: z
+    .record(z.string(), z.unknown())
+    .refine((value) => new TextEncoder().encode(JSON.stringify(value)).length <= 65536),
+}).strict();
+export interface AssistantAppsInfo {
+  instanceId: string;
+  views: Array<{ extensionKey: string; runId: string; id: string; title: string }>;
+  operations: Array<{
+    extensionKey: string;
+    runId: string;
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
 }

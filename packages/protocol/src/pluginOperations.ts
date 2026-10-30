@@ -4,6 +4,7 @@ import { COMMAND_ID_RE } from "./commands.js";
 /** Plugins advertise semantic operations; their handler validates params against inputSchema. */
 export const PluginOperationSchema = z.strictObject({
   name: z.string().regex(COMMAND_ID_RE),
+  assistant: z.boolean().optional(),
   description: z.string().min(1).max(500),
   inputSchema: z.record(z.string(), z.unknown()).refine((v) => BufferlessBytes(v) <= 16_384),
 });

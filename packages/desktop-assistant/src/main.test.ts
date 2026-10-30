@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
@@ -648,13 +649,11 @@ it("handles failed retarget navigation and can return explicitly to ordinary Sod
   fixture.connections.at(-1)!.options.changed([notice], true);
   const bubble = fixture.windows.at(-1)!;
   await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
-  fixture.controls
-    .at(-1)!
-    .request.mockImplementation(async () => ({
-      paneId: notice.source.paneId,
-      workspaceId: notice.source.workspaceId,
-      agent: { instanceId: notice.source.agentInstanceId },
-    }));
+  fixture.controls.at(-1)!.request.mockImplementation(async () => ({
+    paneId: notice.source.paneId,
+    workspaceId: notice.source.workspaceId,
+    agent: { instanceId: notice.source.agentInstanceId },
+  }));
   vi.spyOn(panel, "loadURL").mockRejectedValueOnce(Error("generated connection failure"));
   await fixture.handlers.get("assistant:source-open")!(
     { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame },
@@ -732,4 +731,161 @@ it("grants one selected display without audio and consumes its PNG only once", a
     fixture.handlers.get("assistant:screenshot-submit")!(local, { token: list.token, bytes }),
   ).rejects.toThrow("失効");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+it("keeps plugin actions behind explicit capability and revokes pending view opens", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    allowPluginViews: true,
+  });
+  const actor = "00000000-0000-4000-8000-000000000003",
+    runId = "00000000-0000-4000-8000-000000000004",
+    rpc = fixture.controls.at(-1)!;
+  let finish!: (value: any) => void;
+  rpc.request.mockImplementation(async (method: string, params: any) => {
+    if (method === "assistant.get")
+      return {
+        deviceId: params.deviceId,
+        workspaceId: "00000000-0000-4000-8000-000000000002",
+        tabId: "00000000-0000-4000-8000-000000000005",
+        paneId: "00000000-0000-4000-8000-000000000001",
+        kind: "codex",
+        state: "ready",
+        observedAgent: null,
+        agent: {
+          instanceId: actor,
+          kind: "codex",
+          label: "Assistant",
+          state: "idle",
+          completionSeq: 0,
+          serverSeenSeq: 0,
+          verified: true,
+          since: 1,
+        },
+      };
+    if (method === "agent.kinds")
+      return { kinds: [{ kind: "codex", label: "Codex", available: true }] };
+    if (method === "agent.conversation")
+      return {
+        kind: "codex",
+        sessionId: "generated",
+        messages: [],
+        nextOffset: null,
+        partial: false,
+        endOffset: 0,
+      };
+    if (method === "assistant.reminders") return { jobs: [], runs: [] };
+    if (method === "assistant.app_open")
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    return { result: "generated" };
+  });
+  rpc.options.status(true);
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  await vi.waitFor(async () =>
+    expect(await fixture.handlers.get("assistant:conversation")!(local)).toMatchObject({
+      session: { state: "ready" },
+    }),
+  );
+  await expect(
+    fixture.handlers.get("assistant:app-call")!(local, {
+      instanceId: actor,
+      extensionKey: "demo",
+      runId,
+      operation: "search",
+      params: {},
+    }),
+  ).rejects.toThrow("許可");
+  expect(rpc.request.mock.calls.some((call) => call[0] === "assistant.app_call")).toBe(false);
+  const opened = fixture.handlers.get("assistant:app-open")!(local, {
+    instanceId: actor,
+    extensionKey: "demo",
+    runId,
+    viewId: "assistant",
+  });
+  const rejected = expect(opened).rejects.toThrow("変更");
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    allowPluginViews: false,
+  });
+  const count = fixture.windows.length;
+  finish({});
+  await rejected;
+  expect(fixture.windows.length).toBe(count);
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("imports only previewed PNG assets and falls back immediately when character permission is revoked", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  const png =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=",
+    entry = Buffer.from('throw Error("entry must never execute")');
+  const files = [
+    {
+      path: "entry.mjs",
+      data: entry.toString("base64"),
+      sha256: createHash("sha256").update(entry).digest("hex"),
+    },
+    {
+      path: "robot.png",
+      data: png,
+      sha256: createHash("sha256").update(Buffer.from(png, "base64")).digest("hex"),
+    },
+  ];
+  const bundle = {
+    format: "sodashitsu-plugin",
+    version: 1,
+    manifest: {
+      schemaVersion: 1,
+      id: "custom",
+      name: "Custom",
+      version: "1.0.0",
+      description: "",
+      entry: "entry.mjs",
+      files: files.map((file) => file.path),
+      allow: [],
+      assistantCharacters: [{ id: "robot", name: "追加の船長", file: "robot.png" }],
+    },
+    files,
+  };
+  const path = join(fixture.directory, "custom.sodaplugin");
+  await writeFile(path, JSON.stringify(bundle));
+  const { dialog } = await import("electron");
+  vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({ canceled: false, filePaths: [path] });
+  const preview = (await fixture.handlers.get("assistant:character-pack-preview")!(event)) as any;
+  expect(preview.characters[0].uri).toBe(`data:image/png;base64,${png}`);
+  await fixture.handlers.get("assistant:character-pack-import")!(event, { token: preview.token });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    characterId: "plugin:custom/robot",
+    allowPluginCharacters: true,
+  });
+  expect(await fixture.handlers.get("assistant:character-info")!(event)).toEqual({
+    name: "追加の船長",
+    uri: `data:image/png;base64,${png}`,
+  });
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    characterId: "plugin:custom/robot",
+    allowPluginCharacters: false,
+  });
+  expect(bubble.isDestroyed()).toBe(true);
+  expect(await fixture.handlers.get("assistant:character-info")!(event)).toMatchObject({
+    uri: "soda-assistant://app/captain-female.svg",
+  });
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+  await fixture.handlers.get("assistant:character-pack-remove")!(event, { id: "custom" });
 });

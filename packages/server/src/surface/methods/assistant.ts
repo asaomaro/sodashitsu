@@ -12,11 +12,13 @@ import {
   RpcError,
   type AgentInfo,
 } from "@sodashitsu/protocol";
+import { registerAssistantApps } from "../../assistant/AssistantApps.js";
 import { sourceTarget } from "../../assistant/SourceTarget.js";
 import type { ControlSurface, MethodContext } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerAssistantMethods(surface: ControlSurface, deps: MethodDeps): void {
+  registerAssistantApps(surface, deps);
   const scheduler = () => {
     if (!deps.scheduler) throw new RpcError("not_found", "予約を利用できません");
     return deps.scheduler;
@@ -24,8 +26,8 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
   const reminders = (deviceId: string) => {
     const all = scheduler().list();
     const jobs = all.jobs.filter(
-        (job) => job.action.type === "reminder" && job.action.deviceId === deviceId,
-      );
+      (job) => job.action.type === "reminder" && job.action.deviceId === deviceId,
+    );
     return {
       jobs,
       runs: all.runs.filter(
@@ -60,7 +62,7 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
     handler: async (_ctx, p) => {
       if (!reminders(p.deviceId).jobs.some((job) => job.id === p.id))
         throw new RpcError("not_found", "リマインダーの対象が見つかりません");
-      await scheduler().removeReminder(p.id,p.deviceId);
+      await scheduler().removeReminder(p.id, p.deviceId);
       return {};
     },
   });
