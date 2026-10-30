@@ -587,6 +587,7 @@ it("uses the explicit PNG clipboard action and retires OCR on hide and navigatio
     mode: "tray",
     ocrEnabled: true,
     ocrExecutable: "/usr/bin/tesseract",
+    ocrProvider: "local",
   });
   await fixture.handlers.get("assistant:chat")!(event);
   const bubble = fixture.windows.at(-1)!;
