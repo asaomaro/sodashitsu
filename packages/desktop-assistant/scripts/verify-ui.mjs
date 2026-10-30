@@ -55,6 +55,15 @@ try {
       position: null,
     };
     window.assistant = {
+      inbox: async () => ({
+        status: "connected",
+        revision: 1,
+        notices: [{ message: "「操舵室 / worker」の作業が完了しました。" }],
+      }),
+      onInbox: (callback) => {
+        window.noticeCallback = callback;
+        return () => {};
+      },
       read: async () => window.preferences,
       save: async (preferences) => {
         window.calls.push(["save", preferences]);
@@ -104,6 +113,20 @@ try {
   await page.goto(`${origin}/bubble.html`);
   await expect(page.getByRole("log")).toContainText("こんにちは。操舵室の船長です。");
   await expect(page.locator("#destination")).toHaveText("専用アシスタント");
+  await expect(page.getByRole("log")).toContainText("作業が完了しました。");
+  await page.evaluate(() =>
+    window.noticeCallback({
+      status: "connected",
+      revision: 2,
+      notices: [{ message: "<img src=x onerror=alert(1)>確認してください。" }],
+    }),
+  );
+  await expect(page.locator(".notice")).toHaveText(
+    "<img src=x onerror=alert(1)>確認してください。",
+  );
+  await expect(page.locator(".notice img")).toHaveCount(0);
+  await page.evaluate(() => window.noticeCallback({ status: "offline", revision: 1, notices: [] }));
+  await expect(page.locator(".notice")).toContainText("確認してください。");
   await expect(page.locator("#send")).toBeDisabled(); // No false successful chat before backend connection.
   await page.getByRole("button", { name: "吹き出しを閉じる" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
