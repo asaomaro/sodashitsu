@@ -104,6 +104,7 @@ export class ScheduleView {
       : [...this.model.workspaces.values()].map((w) => ({ id: w.id, name: w.label }));
   }
   private edit(job?: ScheduledJob) {
+    if(job?.action.type==="reminder"){this.error="リマインダーはアシスタントで削除・再登録してください";return;}
     this.id = job?.id;
     this.agent =
       job?.action.type === "agent" ||

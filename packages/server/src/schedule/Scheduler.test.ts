@@ -150,3 +150,58 @@ it("retains history after removal, rejects invalid targets and disabled jobs do 
   instances.push(invalid);
   await expect(invalid.save(undefined, draft())).rejects.toThrow("missing target");
 });
+it("persists model-free reminder completion and scoped acknowledgement across restart", async () => {
+  const deviceId = "00000000-0000-4000-8000-000000000001";
+  const s = await make(async (job) => ({
+    status: "succeeded",
+    exitCode: null,
+    output: job.action.type === "reminder" ? job.action.text : "unexpected",
+  }));
+  const job = await s.save(undefined, {
+    ...draft(),
+    action: { type: "reminder", deviceId, text: "お薬の時間です" },
+  });
+  await s.tick();
+  await vi.waitFor(() => expect(s.list().runs[0]?.status).toBe("succeeded"));
+  const run = s.list().runs[0]!;
+  expect(run).toMatchObject({
+    jobId: job.id,
+    actionType: "reminder",
+    input: "お薬の時間です",
+    output: "お薬の時間です",
+  });
+  await expect(
+    s.acknowledgeReminder(run.id, "00000000-0000-4000-8000-000000000002"),
+  ).rejects.toThrow("対象");
+  expect(s.list().runs[0]?.acknowledgedAt).toBeUndefined();
+  await s.acknowledgeReminder(run.id, deviceId);
+  expect(s.list().runs[0]?.acknowledgedAt).toBeTruthy();
+  await s.close();
+  const restored = new Scheduler(
+    dir,
+    async () => ok,
+    () => {},
+  );
+  instances.push(restored);
+  await restored.load();
+  expect(restored.list().runs[0]?.acknowledgedAt).toBeTruthy();
+  await restored.tick();
+  expect(restored.list().runs).toHaveLength(1);
+});
+
+it("rechecks reminder device inside the queued removal transaction",async()=>{
+ const deviceA="00000000-0000-4000-8000-000000000001",deviceB="00000000-0000-4000-8000-000000000002",s=await make();
+ const input={...draft(Date.now()+60000),action:{type:"reminder"as const,deviceId:deviceA,text:"A"}},job=await s.save(undefined,input);
+ let release!:()=>void;
+ const original=(s as any).persist.bind(s);let blocked=true;
+ vi.spyOn(s as any,"persist").mockImplementation(async()=>{if(blocked){blocked=false;await new Promise<void>(resolve=>{release=resolve;});}await original();});
+ const changed=s.save(job.id,{...input,action:{type:"reminder",deviceId:deviceB,text:"B"}});
+ await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+ const removal=s.removeReminder(job.id,deviceA);const rejected=expect(removal).rejects.toThrow("対象");release();await changed;await rejected;expect(s.list().jobs[0]?.action).toMatchObject({deviceId:deviceB});
+});
+it("pins past reminder runs to the execution device despite later job reassignment",async()=>{
+ const deviceA="00000000-0000-4000-8000-000000000001",deviceB="00000000-0000-4000-8000-000000000002",s=await make();
+ const input={...draft(),action:{type:"reminder"as const,deviceId:deviceA,text:"A private reminder"}},job=await s.save(undefined,input);await s.tick();await vi.waitFor(()=>expect(s.list().runs[0]?.status).toBe("succeeded"));
+ const run=s.list().runs[0]!;await s.save(job.id,{...input,action:{type:"reminder",deviceId:deviceB,text:"B"}});expect(s.list().runs[0]?.reminderDeviceId).toBe(deviceA);
+ await expect(s.acknowledgeReminder(run.id,deviceB)).rejects.toThrow("対象");await s.acknowledgeReminder(run.id,deviceA);
+});

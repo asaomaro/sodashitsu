@@ -56,6 +56,7 @@ function localDate(value: string) {
 }
 function edit(job?: ScheduledJob) {
   if (busy.value) return;
+  if(job?.action.type==="reminder"){error.value="リマインダーはデスクトップアシスタントで削除・再登録してください。";return;}
   id.value = job?.id;
   label.value = job?.label ?? "";
   enabled.value = job?.enabled ?? true;
@@ -201,7 +202,7 @@ onBeforeUnmount(() => {
       >
         <h2>{{ job.label }}</h2>
         <p>
-          {{ job.action.type === "agent" ? "エージェントへの指示" : "コマンド実行" }} ·
+          {{ job.action.type === "agent" ? "エージェントへの指示" : job.action.type === "reminder" ? "リマインダー" : "コマンド実行" }} ·
           {{ job.trigger.type === "once" ? "一回" : `${job.trigger.everyMinutes}分ごと` }} · 次回
           {{ when(job.nextRunAt) }}
         </p>

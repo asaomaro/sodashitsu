@@ -10,10 +10,14 @@ afterEach(() => {
 });
 it("blocks before connection, re-reads replaced maps and synchronously fences stale input", () => {
   document.body.innerHTML = '<div id="app"><input id="terminal"></div>';
-  vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function () {
+  vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
     this.open = true;
   });
-  vi.spyOn(HTMLDialogElement.prototype, "close").mockImplementation(function () {
+  vi.spyOn(HTMLDialogElement.prototype, "close").mockImplementation(function (
+    this: HTMLDialogElement,
+  ) {
     this.open = false;
   });
   let connected = false,

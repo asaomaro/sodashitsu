@@ -196,3 +196,16 @@ export interface AssistantSourceInfo {
 export const AssistantPanelTarget = z
   .object({ assistantPane: z.uuid(), assistantWorkspace: z.uuid(), assistantInstance: z.uuid() })
   .strict();
+
+export const AssistantReminderSaveParams = AssistantSessionGetParams.extend({
+  label: z.string().trim().min(1).max(100),
+  text: z.string().trim().min(1).max(1000),
+  at: z.string().datetime({ offset: true }),
+}).strict();
+export const AssistantReminderIdParams = AssistantSessionGetParams.extend({
+  id: z.uuid(),
+}).strict();
+export interface AssistantRemindersInfo {
+  jobs: import("./schedule.js").ScheduledJob[];
+  runs: import("./schedule.js").ScheduledRun[];
+}

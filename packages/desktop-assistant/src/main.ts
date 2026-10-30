@@ -21,6 +21,7 @@ import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
 import { NotesFile, NoteSave } from "./notes.js";
 import { Transcription, AUDIO_LIMIT } from "./transcription.js";
+import { Reminders } from "./reminders.js";
 import { Ocr } from "./ocr.js";
 import { OcrRunner } from "./ocrRunner.js";
 import { readPng, pngSize, PNG_LIMIT } from "./png.js";
@@ -52,6 +53,7 @@ const allowedAssets = new Map([
   ["/tools.js", "text/javascript"],
   ["/recording.js", "text/javascript"],
   ["/ocr.js", "text/javascript"],
+  ["/reminders.js", "text/javascript"],
   ["/style.css", "text/css"],
   ["/captain-male.svg", "image/svg+xml"],
   ["/captain-female.svg", "image/svg+xml"],
@@ -67,7 +69,7 @@ let bubble: BrowserWindow | null = null;
 let bubbleCharacterId: string | null = null;
 let bubbleEpoch = 0;
 let panelTargeted = false;
-let panelNavigation=0;
+let panelNavigation = 0;
 let control: AssistantRpc | null = null;
 let assistantChat: AssistantChat | null = null;
 let controlOrigin: string | null = null;
@@ -77,6 +79,8 @@ let notesFile: NotesFile;
 let transcription: Transcription;
 let recording: RecordingLease;
 let ocr: Ocr;
+let reminders: Reminders | null = null;
+let reminderRevision = 0;
 let recordingOrigin: string | null = null;
 let toolsRevision = 0;
 let backend: NoticeConnection | null = null;
@@ -229,6 +233,8 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
   if (!preferences.enabled || controlOrigin !== preferences.serverOrigin) {
     control?.stop();
     assistantChat?.stop();
+    reminders?.stop();
+    reminders = null;
     control = null;
     assistantChat = null;
     controlOrigin = null;
@@ -243,7 +249,10 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
           .cookies.get({ url: `${origin}/ws` }),
       ),
     status: (connected) => {
-      if (control === rpc) assistantChat?.connection(connected);
+      if (control === rpc) {
+        assistantChat?.connection(connected);
+        reminders?.connection(connected);
+      }
     },
     changed: () => {
       if (control === rpc) void assistantChat?.refresh();
@@ -258,6 +267,17 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
         bubble.webContents.send("assistant:conversation-changed", state);
     },
     chatRevision,
+  );
+  reminders = new Reminders(
+    installationId,
+    rpc,
+    (state, added) => {
+      reminderRevision = state.revision;
+      if (added && !controller.preferences.mute) openBubble(false);
+      if (bubble && !bubble.isDestroyed())
+        bubble.webContents.send("assistant:reminders-changed", state);
+    },
+    reminderRevision,
   );
   control = rpc;
   controlOrigin = origin;
@@ -329,12 +349,16 @@ function openSettings(): void {
   });
 }
 
-function loadPanel(win:BrowserWindow,url:string):void {
- const navigation=++panelNavigation;
- void win.loadURL(url).catch(()=>{
-  if(win!==panel||win.isDestroyed()||navigation!==panelNavigation)return;
-  void win.loadURL(`data:text/plain;charset=utf-8,${encodeURIComponent("操舵室に接続できません。サーバと接続先を確認し、吹き出しから開き直してください。")}`).catch(()=>{});
- });
+function loadPanel(win: BrowserWindow, url: string): void {
+  const navigation = ++panelNavigation;
+  void win.loadURL(url).catch(() => {
+    if (win !== panel || win.isDestroyed() || navigation !== panelNavigation) return;
+    void win
+      .loadURL(
+        `data:text/plain;charset=utf-8,${encodeURIComponent("操舵室に接続できません。サーバと接続先を確認し、吹き出しから開き直してください。")}`,
+      )
+      .catch(() => {});
+  });
 }
 function openPanel(
   origin: string,
@@ -348,7 +372,7 @@ function openPanel(
       assistantInstance: target.instanceId,
     }).toString();
   if (panel && !panel.isDestroyed()) {
-    if (target || panelTargeted) loadPanel(panel,url.href);
+    if (target || panelTargeted) loadPanel(panel, url.href);
     panelTargeted = !!target;
     panel.show();
     panel.focus();
@@ -380,7 +404,7 @@ function openPanel(
   win.on("closed", () => {
     if (panel === win) panel = null;
   });
-  loadPanel(win,url.href);
+  loadPanel(win, url.href);
 }
 
 const adapter: NativeAdapter = {
@@ -494,6 +518,10 @@ function registerIpc(): void {
     "start-session",
     "adopt-session",
     "send-message",
+    "reminders",
+    "reminder-save",
+    "reminder-remove",
+    "reminder-ack",
     "source-open",
     "source-reply",
     "source-key",
@@ -536,6 +564,33 @@ function registerIpc(): void {
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
+      if (action === "reminders")
+        return (
+          reminders?.snapshot() ?? {
+            revision: reminderRevision,
+            connected: false,
+            jobs: [],
+            runs: [],
+            message: "接続してから予約してください。",
+          }
+        );
+      if (action.startsWith("reminder-")) {
+        if (!controller.preferences.enabled || !owner.window.isVisible() || !reminders)
+          throw Error("吹き出しを開いて操作してください。");
+        if (action === "reminder-save")
+          return reminders.save(
+            z
+              .object({
+                label: z.string().trim().min(1).max(100),
+                text: z.string().trim().min(1).max(1000),
+                at: z.string().datetime({ offset: true }),
+              })
+              .strict()
+              .parse(input),
+          );
+        const { id } = z.object({ id: z.uuid() }).strict().parse(input);
+        return action === "reminder-ack" ? reminders.acknowledge(id) : reminders.remove(id);
+      }
       if (action === "session-open") {
         if (!owner.window.isVisible()) throw Error("吹き出しを開いて操作してください。");
         const state = chatState();
@@ -764,6 +819,7 @@ else {
     backend = null;
     control?.stop();
     assistantChat?.stop();
+    reminders?.stop();
     transcription?.cancel();
     recording?.cancel();
     ocr?.discard();

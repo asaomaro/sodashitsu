@@ -709,4 +709,3 @@ await loadTerminalFonts(() => registry.refreshFonts());
 app.mount("#app");
 
 conn.connect();
-
