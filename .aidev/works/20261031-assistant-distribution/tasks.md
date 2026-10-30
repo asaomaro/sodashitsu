@@ -3,9 +3,10 @@
 - [x] ZIP/フォルダー配置、排他・atomic参照・前版rollback
 - [x] CLIと有効時の終了確認付き切替、無効時の非起動
 - [x] 関連テストと利用文書
-- [ ] 関連テスト最終確認・build/typecheck/全体テスト
-- [ ] 独立レビュー（保存/プロセス状態/ZIP境界を対象）と指摘対応
-- [ ] PR・main反映
+- [x] 関連テスト最終確認・build/typecheck/全体テスト（900ファイル13,054件）
+- [x] 独立レビュー（保存/プロセス状態/ZIP境界を対象）と指摘対応
+- [x] PR #334作成、feature headのWindows/server CI成功
+- [ ] main反映（最終docs headのCI後。結果はPR #334のmerge記録を参照）
 
 ## 次段階の残件
 

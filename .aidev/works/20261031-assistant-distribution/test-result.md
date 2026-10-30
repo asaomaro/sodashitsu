@@ -1,6 +1,8 @@
 # 検証
 
-最終全体テスト実行中。関連3ファイル52件pass。build成功、typecheck最終実行中。Windows実GUI・実配布の起動は未実施。
+最終source固定後: build/typecheck成功。全体900ファイル13,054件pass（353.10秒）。関連3ファイル52件pass。生成CLIからinstall/update/rollback/statusを実行し、無効設定の維持と前版への切替を確認（配布内容は実行しない）。feature commit 195a5f44のgenerated-windows/generated-server CIとも成功。Windows実GUI・実配布の起動は未実施。
+
+pnpm smokeはbranch/mainともWeb UIの.xterm-helper-textarea待ち15秒で同じTimeoutError。サーバ起動、login、WebSocket、workspace/pane、echo/custom-command往復までは両方成功。mainは未変更の2c34d081 worktreeで比較し、退行ではないと記録。再試行を増やさない。生ログ: /tmp/soda-assistant-packages-smoke.log と /tmp/soda-assistant-packages-main-smoke.log。
 
 初回の全体実行中にZIP検証と回帰を追加したため、初回はsource/distの混在と新回帰の失敗があり、最終証拠に採用しない。sourceを固定しbuildした後に全体を再実行する。
 
