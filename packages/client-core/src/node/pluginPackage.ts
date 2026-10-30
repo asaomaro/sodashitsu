@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import {
   hasForbiddenChars,
   EXTENSION_ALLOW_VALUES,
+  AssistantCharacterDefinitions,
   ExtensionViewsSchema,
   ExtensionTabViewSchema,
   type ExtensionViewDefinition,
@@ -28,6 +29,7 @@ export interface PluginManifest {
     requiresProject?: boolean | undefined;
   };
   views?: ExtensionViewDefinition[];
+  assistantCharacters?: import("zod").infer<typeof AssistantCharacterDefinitions>;
 }
 export interface PluginBundle {
   format: "sodashitsu-plugin";
@@ -83,7 +85,14 @@ function manifestOf(value: unknown): PluginManifest {
   const tabView =
     value.tabView === undefined ? undefined : ExtensionTabViewSchema.parse(value.tabView);
   const views = value.views === undefined ? undefined : ExtensionViewsSchema.parse(value.views);
+  const assistantCharacters =
+    value.assistantCharacters === undefined
+      ? undefined
+      : AssistantCharacterDefinitions.parse(value.assistantCharacters);
+  if (assistantCharacters?.some((character) => !(value.files as string[]).includes(character.file)))
+    throw Error("character asset must be included in files");
   return {
+    ...(assistantCharacters ? { assistantCharacters } : {}),
     ...(tabView ? { tabView } : {}),
     ...(views ? { views } : {}),
     schemaVersion: 1,

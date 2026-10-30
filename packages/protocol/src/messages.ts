@@ -1,5 +1,5 @@
 import { ExecMethods, type ExecResults } from "./exec.js";
-import { AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
+import { AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
 import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
@@ -1586,6 +1586,9 @@ export const METHOD_SCHEMAS = {
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
+  "assistant.apps": AssistantSessionAdoptParams,
+  "assistant.app_open": AssistantAppOpenParams,
+  "assistant.app_call": AssistantAppCallParams,
   "assistant.reminders": AssistantSessionGetParams,
   "assistant.reminder_save": AssistantReminderSaveParams,
   "assistant.reminder_remove": AssistantReminderIdParams,
@@ -1769,6 +1772,9 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
+  "assistant.apps": AssistantAppsInfo;
+  "assistant.app_open": {};
+  "assistant.app_call": {result:unknown};
   "assistant.reminders": AssistantRemindersInfo;
   "assistant.reminder_save": import("./schedule.js").ScheduledJob;
   "assistant.reminder_remove": {};

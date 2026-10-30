@@ -15,7 +15,8 @@
   "dependencies": {
     "@sodashitsu/protocol": "workspace:*",
     "ws": "^8.21.3",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@sodashitsu/client-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

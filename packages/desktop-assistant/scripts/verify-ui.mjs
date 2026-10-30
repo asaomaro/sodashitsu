@@ -19,6 +19,7 @@ const files = new Set([
   "ocr.js",
   "reminders.js",
   "capture.js",
+  "apps.js",
   "style.css",
   "captain-male.svg",
   "captain-female.svg",
@@ -58,6 +59,7 @@ try {
       serverOrigin: "http://127.0.0.1:7780",
       launchAtLogin: false,
       mute: false,
+      allowPluginCharacters:false,allowPluginViews:false,allowPluginActions:false,
       ocrEnabled: false, ocrExecutable: "", ocrLanguage: "jpn+eng",
       transcriptionEnabled: false,
       transcriptionOrigin: "http://127.0.0.1:8080",
@@ -86,6 +88,12 @@ try {
     window.toolWatchers=new Set();
     window.toolsCallback=state=>{for(const callback of window.toolWatchers)callback(state);};
     window.assistant = {
+      apps:async()=>({instanceId:"00000000-0000-4000-8000-000000000003",allowViews:true,allowActions:true,views:[{extensionKey:"demo",runId:"00000000-0000-4000-8000-000000000004",id:"assistant",title:"プラグインUI"}],operations:[{extensionKey:"demo",runId:"00000000-0000-4000-8000-000000000004",name:"search",description:"明示した検索",inputSchema:{type:"object"}}]}),
+      openApp:async input=>window.calls.push(["open-app",input]),
+      callApp:async input=>{window.calls.push(["call-app",input]);return{result:"<img src=x>プラグインの結果"};},
+      characterInfo:async()=>({name:window.preferences.characterId==="captain-robot"?"ロボット船長":"船長",uri:`${window.preferences.characterId}.svg`}),
+      characters:async()=>({characters:[],error:""}),
+      previewCharacterPack:async()=>null,
       screenshotSources:async()=>({token:"00000000-0000-4000-8000-000000000088",sources:[{id:"screen:generated",name:"生成した画面"}]}),
       approveScreenshot:async input=>window.calls.push(["approve-screenshot",input]),
       submitScreenshot:async input=>{
@@ -386,6 +394,13 @@ try {
   await expect(page.locator(".reminder-message img")).toHaveCount(0);
   await page.getByRole("button",{name:"確認しました",exact:true}).press("Enter");
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["ack-reminder",{id:"00000000-0000-4000-8000-000000000099"}]);
+  await page.evaluate(()=>{document.getElementById("apps-refresh").closest("details").open=true;});
+  await page.locator("#apps-refresh").press("Enter");await expect(page.locator("#app-call")).toBeEnabled();
+  await page.getByRole("button",{name:"プラグインUI",exact:true}).press("Enter");assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"open-app");
+  await page.locator("#app-params").fill('{"query":"明示した検索"}');await page.locator("#app-call").press("Enter");
+  await expect(page.locator("#app-result")).toHaveValue("<img src=x>プラグインの結果");await expect(page.locator("#app-views img")).toHaveCount(0);
+  await page.locator("#app-use").press("Enter");await expect(page.locator("#tool-text")).toHaveValue("<img src=x>プラグインの結果");
+  await page.evaluate(()=>{window.assistant.apps=async()=>{throw Error("一覧が変わりました");};});await page.locator("#apps-refresh").press("Enter");await expect(page.locator("#app-views button")).toHaveCount(0);await expect(page.locator("#app-call")).toBeDisabled();
   const reply=page.locator(".notice textarea");await reply.fill("通知元への返答");
   await page.evaluate(()=>window.noticeCallback({status:"connected",revision:99,notices:[{id:"00000000-0000-4000-8000-000000000092",message:"<img src=x onerror=alert(1)>確認してください。"}]}));
   await expect(reply).toHaveValue("通知元への返答");
