@@ -81,3 +81,12 @@ it("ignores a stale save response after closing and reopening settings", async (
   expect((wrapper.findAll("input")[0]!.element as HTMLInputElement).checked).toBe(false);
   expect(wrapper.text()).not.toContain("保存しました"); wrapper.unmount();
 });
+
+it.each(["linux-portal","macos-sck"])("saves native %s clipboard permission without exposing Windows-only permissions",async nativePlatform=>{
+ const request=vi.fn(async(method,p)=>({nativePlatform,permissions:method.endsWith("set")?p:permissions,supported:true,canConfigure:true}));
+ const wrapper=mount(DesktopSettings,{global:{provide:{[ConnectionKey as symbol]:{request}}}});await flushPromises();
+ const label=wrapper.findAll("label").find(item=>item.text()==="クリップボードを許可")!;
+ expect(label).toBeDefined();expect(wrapper.text()).not.toContain("UAC画面の共有を許可");
+ await label.get("input").setValue(true);await wrapper.get("button").trigger("click");await flushPromises();
+ expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowClipboard:true});wrapper.unmount();
+});

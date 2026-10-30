@@ -69,7 +69,7 @@ export class DesktopSettings {
     permissions: DesktopPermissions,
   ) {
     this.platform=options.nativePlatform??options.legacy?.nativePlatform??(!options.legacy&&!options.command?nativePlatformFor():undefined);
-    if(this.nativePlatform)permissions={...permissions,allowClipboard:false,allowDisplayResize:false,allowUnlock:false,allowMonitors:false,allowVirtualDisplay:false,allowElevated:false,allowSystemAudio:false,allowMicrophone:false};
+    if(this.nativePlatform)permissions={...permissions,allowDisplayResize:false,allowUnlock:false,allowMonitors:false,allowVirtualDisplay:false,allowElevated:false,allowSystemAudio:false,allowMicrophone:false};
     this.permissions = permissions;
     this.apply();
   }
@@ -111,7 +111,7 @@ export class DesktopSettings {
   set(raw: DesktopPermissions): Promise<DesktopSettingsResult> {
     const permissions = DesktopPermissions.parse(raw);
     const work = this.queue.then(async () => {
-      if(this.nativePlatform&&(permissions.allowClipboard||permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowMonitors||permissions.allowVirtualDisplay||permissions.allowElevated||permissions.allowSystemAudio||permissions.allowMicrophone))throw new RpcError("invalid_params","このnative backendでは画面共有と対応する入力だけを許可できます。");
+      if(this.nativePlatform&&(permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowMonitors||permissions.allowVirtualDisplay||permissions.allowElevated||permissions.allowSystemAudio||permissions.allowMicrophone))throw new RpcError("invalid_params","このnative backendでは画面共有・対応する入力・クリップボードを許可できます。");
       if (permissions.enabled && !this.command)
         throw new RpcError(
           "invalid_params",
@@ -149,6 +149,7 @@ export class DesktopSettings {
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
         if (p.allowUnlock) command.push("-AllowUnlock");
       }
+      if(!legacy&&this.nativePlatform&&p.allowClipboard)command.push("--allow-clipboard");
       if(!legacy&&this.nativePlatform==="macos-sck"&&p.allowInput)command.push("--allow-input");
       config = {
         ...legacy,

@@ -11,8 +11,7 @@ test(`fresh ${backend} browser explicitly enables native shared desktop`,async({
  const provider=await startAppServer().finally(()=>{for(const[key,value]of Object.entries(saved)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
  await page.addInitScript(()=>{
   const state={writes:0,text:"",html:""};(window as any).__nativeClip=state;
-  document.hasFocus=()=>true;
-  Object.defineProperty(navigator,"clipboard",{value:{write:async(items:ClipboardItem[])=>{
+  Object.defineProperty(navigator,"clipboard",{value:{read:async()=>[],write:async(items:ClipboardItem[])=>{
    for(const item of items)for(const type of item.types){const blob=await item.getType(type);if(type==="text/plain")state.text=await blob.text();if(type==="text/html")state.html=await blob.text();}
    state.writes++;
   }}});

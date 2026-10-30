@@ -80,6 +80,7 @@ async function save() {
       <label
         ><input v-model="draft.allowInput" type="checkbox" />マウス・キーボードの操作を許可</label
       >
+      <label><input v-model="draft.allowClipboard" type="checkbox" />クリップボードを許可</label>
       <template v-if="!state?.nativePlatform">
       <label><input v-model="draft.allowElevated" type="checkbox" />管理者権限のアプリ・UAC画面の共有を許可</label>
       <p v-if="draft.allowElevated">接続先Windowsで専用保護サービスの導入・更新が必要です。接続時にも管理者画面を選び、操作は接続ごとに許可します。</p>
@@ -91,7 +92,6 @@ async function save() {
       <p>仮想オーディオケーブルを別途導入し、その再生側のIDを指定してください。アプリでは対応する録音側をマイクとして選びます。</p>
       <label><input v-model="draft.allowSystemAudio" type="checkbox" />システム音声の送信を許可</label>
       <p>共有するPCの通常デスクトップの音を送ります。接続側でも音声共有と再生を開始してください。</p>
-      <label><input v-model="draft.allowClipboard" type="checkbox" />クリップボードを許可</label>
       <label><input v-model="draft.allowUnlock" type="checkbox" />Sodashitsu起動中のロック解除を許可</label>
       <p v-if="draft.allowUnlock">接続先Windowsで、専用補助サービスの初回導入が必要です。解除操作にはマウス・キーボードの許可も必要です。</p>
       <label

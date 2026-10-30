@@ -4,6 +4,9 @@ on:
     paths:
       - 'packages/server/src/desktop/DesktopSharedCapture*'
       - 'packages/server/src/desktop/DesktopProvider*'
+      - 'packages/server/src/desktop/DesktopSettings*'
+      - 'packages/web/src/components/DesktopSettings*'
+      - 'packages/tui/src/settings/desktopSettings*'
       - 'packages/server/src/desktop/DesktopRelay*'
       - 'packages/server/src/desktop/DesktopNativeRichClipboard*'
       - 'packages/web/src/components/RemoteDesktopWindow.vue'
@@ -30,7 +33,7 @@ jobs:
       - run: pnpm --filter @sodashitsu/server build
       - run: pnpm --filter @sodashitsu/web build
       - name: Memory source, owned Node helpers and per-viewer grants
-        run: pnpm exec vitest run packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopRelay.test.ts packages/server/src/desktop/DesktopNativeRichClipboard.test.ts packages/web/src/components/RemoteDesktopNativeSharing.test.ts --maxWorkers=2
+        run: pnpm exec vitest run packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopRelay.test.ts packages/server/src/desktop/DesktopNativeRichClipboard.test.ts packages/web/src/components/RemoteDesktopNativeSharing.test.ts packages/server/src/desktop/DesktopSettings.test.ts packages/web/src/components/DesktopSettings.test.ts packages/tui/src/settings/desktopSettings.test.ts --maxWorkers=2
       - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
       - name: Fresh browser shared desktop controls (generated sources only)
         run: pnpm --filter @sodashitsu/e2e exec playwright test 'remote-desktop-native-sharing.spec.ts'

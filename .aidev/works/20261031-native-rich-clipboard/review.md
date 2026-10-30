@@ -1,0 +1,7 @@
+# 独立レビュー
+
+review_pointer: macOSの公開取消がbounded cache evictionで復活するmust、clear後の期限検査mustを指摘。IDごとのtransaction objectを最大32追跡し、cancel/evictionで不可逆失効。別IDの取消は影響しない回帰を両OSに追加。clearの返却changeCountを用いて元の許可/期限を再検査。delta点検済み、追加指摘なし。
+
+review_transfer: Linux pullの返却offsetが開始位置だったmustを指摘。次位置へ修正し、実Python kernelと実TS consumer間テスト＋guard復元負例で確認。差分全体ではmacOSのOS許可照合中にclipboard変更を見逃すmustを指摘。allowed→fresh sequence→最終時計/純状態の順とし、clear/write直前にも同じ検査を行う。activeHookによるread/write回帰追加。最終全体の再点検で追加must/shouldなし。SDK/実機はレビューでは実行していない。
+
+review_transfer追加delta: CI E2Eで見つかったDesktopSettingsのnative clipboard許可・保存復元・helper引数とWeb/TUI操作欄、read/write能力判定stubを点検。追加must/shouldなし。
