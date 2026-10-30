@@ -41,6 +41,8 @@ jobs:
         run: node packages/desktop-assistant/scripts/verify-foreground.mjs
       - name: Generated adapters only (no desktop, agent, microphone or login registration)
         run: pnpm exec vitest run --project @sodashitsu/desktop-assistant --maxWorkers=2
+      - name: Generated Windows package install and rollback (never execute package contents)
+        run: pnpm exec vitest run --project @sodashitsu/server src/assistant/AssistantPackage.test.ts
       - run: pnpm --filter @sodashitsu/desktop-assistant exec playwright install chromium
       - name: Generated headless keyboard UI
         run: pnpm --filter @sodashitsu/desktop-assistant verify:ui

@@ -151,7 +151,28 @@ pnpm --filter @sodashitsu/desktop-assistant verify:ui
 
 Windows用の開発zipを固定したフォルダーへ展開し、`Sodashitsu Assistant.exe` を起動します。Windows側にNode.jsがなくてもzip版は動きます。初回は設定で有効にし、「操舵室を開く」からログインして、使うエージェントを選び専用セッションを開始してください。起動済みのSoda本体/WSLへ接続するアプリであり、Sodaサーバ自体のインストール・起動は別です。
 
-更新時は通知領域のメニューから終了し、同じフォルダーへ新しいzipの内容を展開します。ログイン時起動を有効にした後は実行ファイルの置き場所を固定してください。設定・端末UUID・メモ・素材はElectronのuserDataに保存され、zipの展開フォルダーとは別です。Soda側の更新には接続元・接続先の `git pull` / `pnpm build` / `soda handoff` を使い、ネイティブアシスタントも更新後に起動し直してください。
+単独起動の配布版を手動更新する場合は、通知領域のメニューから終了し、同じフォルダーへ新しいzipの内容を展開します。ログイン時起動を有効にした後は実行ファイルの置き場所を固定してください。設定・端末UUID・メモ・素材はElectronのuserDataに保存され、zipの展開フォルダーとは別です。Soda側の更新には接続元・接続先の `git pull` / `pnpm build` / `soda handoff` を使います。
+
+### sodaから配布版を配置・更新・切り戻す
+
+Windows配布版のZIPまたは展開済みフォルダーを、サーバを動かす側の `soda assistant install` で登録できます。新しいZIPを同じコマンドで指定すると更新になります。ダウンロードや管理者権限は必要とせず、選んだ配布物だけをコピーします。配布元を信頼できることは利用者が確認してください。保存するSHA-256はコピー内容を識別する記録で、発行元の署名検証ではありません。
+
+```sh
+# WSLからWindows側へ配置する例。--destinationはWindowsのドライブ上を指定します。
+soda assistant install --from '/mnt/c/Downloads/Sodashitsu Assistant.zip' --destination '/mnt/c/Apps/Sodashitsu Assistant'
+soda assistant enable
+soda assistant status
+# 前回の配置へ切り戻す（繰り返すと直前の版との切替）
+soda assistant rollback
+```
+
+WindowsのNodeで動かすsodaでは `C:\\Downloads\\...zip` / `C:\\Apps\\...` を指定します。`--session NAME`・`--state-dir DIR` は起動管理と同じサーバを選びます。WSLのLinuxファイルシステムへWindows実行ファイルを配置する用途ではありません。ZIP内のルートに `Sodashitsu Assistant.exe` と `resources/app.asar` が必要です。CIのアーティファクトを包む外側のZIPは先に展開し、その中のアプリ配布ZIPを指定します。
+
+版ごとのUUIDフォルダーへコピーした後に `assistant-package.json` を置き換えます。実行中のファイルを上書きせず、失敗時は既存の参照を維持します。ZIPは512MiB以内、展開後は1GiB・10,000項目以内で、パスの逸脱や重複を拒否し、リンクを作りません。展開済みフォルダー内のリンクも拒否します。配置操作は同じstate-dir内で排他します。中断後に `assistant-package.lock` が残った場合は、操作していたCLIが終了していることを確認してからそのファイルを削除します。
+
+新しいsodaサーバで管理起動している場合、有効なら旧アプリの終了を確認してから新しい配置で起動します。終了を確認できなければ新アプリを起動しません。終了待ちの間に無効化・次の更新・handoffがあった場合は古い起動要求を破棄します。切り戻しでは前版全体の内容が保存済みSHA-256と一致することを確認し、変更や欠落があれば現在の参照を維持します。無効ならコピーと登録だけで、アプリ・専用エージェント・音声エンジンを起動しません。設定・端末UUIDは従来と同じuserDataを使います。旧版のサーバからは先にbuild/handoffしてください。サーバ停止中に登録した場合は、次のサーバ起動時に有効設定に従います。
+
+`SODA_ASSISTANT_COMMAND` を明示している場合はそのコマンドが優先され、配置・切り戻しでは変更しません。`status` の `commandOverride` で確認でき、配置管理へ移行するときはサーバ起動環境からこの変数を外してhandoffします。単独起動しているアプリは自動終了しないため、先に手動で終了してください。通常の失敗では未登録の配置先を回収しますが、CLIを強制終了した場合の残骸と、過去に登録した版は自動削除しません。容量整理は、実行中でも現在・前版の参照先でもないUUIDフォルダーを確認して行います。自動ダウンロード・自動更新チェック・署名/SmartScreenの信頼登録は含みません。
 
 ### 専用エージェントのモデルとeffort
 
