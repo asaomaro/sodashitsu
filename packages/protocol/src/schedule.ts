@@ -10,6 +10,11 @@ export const ScheduleTrigger = z.discriminatedUnion("type", [
 ]);
 export const ScheduleAction = z.discriminatedUnion("type", [
   z.object({
+    type: z.literal("reminder"),
+    deviceId: z.uuid(),
+    text: z.string().trim().min(1).max(1000),
+  }),
+  z.object({
     type: z.literal("agent"),
     paneId: z.string().min(1),
     text: z.string().trim().min(1).max(16384),
@@ -39,7 +44,9 @@ export const ScheduledRun = z.object({
   jobId: z.string().uuid(),
   label: z.string(),
   input: z.string(),
-  actionType: z.enum(["agent", "command"]),
+  actionType: z.enum(["agent", "command", "reminder"]),
+  acknowledgedAt: timestamp.optional(),
+  reminderDeviceId:z.uuid().optional(),
   startedAt: timestamp,
   finishedAt: timestamp.nullable(),
   status: z.enum(["running", "sent", "succeeded", "failed", "interrupted"]),

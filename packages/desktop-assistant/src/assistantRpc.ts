@@ -8,6 +8,10 @@ import { getCACertificates } from "node:tls";
 import WebSocket from "ws";
 
 export type AssistantMethod =
+  | "assistant.reminders"
+  | "assistant.reminder_save"
+  | "assistant.reminder_remove"
+  | "assistant.reminder_ack"
   | "assistant.source"
   | "assistant.reply"
   | "assistant.reply_key"

@@ -17,6 +17,7 @@ const files = new Set([
   "tools.js",
   "recording.js",
   "ocr.js",
+  "reminders.js",
   "style.css",
   "captain-male.svg",
   "captain-female.svg",
@@ -80,6 +81,11 @@ try {
     window.toolWatchers=new Set();
     window.toolsCallback=state=>{for(const callback of window.toolWatchers)callback(state);};
     window.assistant = {
+      reminders:async()=>({revision:1,connected:true,jobs:[],runs:[],message:"リマインダーを予約できます。"}),
+      onReminders:callback=>{window.remindersCallback=callback;return()=>{};},
+      saveReminder:async input=>window.calls.push(["save-reminder",input]),
+      removeReminder:async input=>window.calls.push(["remove-reminder",input]),
+      acknowledgeReminder:async input=>window.calls.push(["ack-reminder",input]),
       openSource: async input=>window.calls.push(["open-source",input]),
       replySource: async input=>window.calls.push(["reply-source",input]),
       sourceKey: async input=>window.calls.push(["source-key",input]),
@@ -349,6 +355,16 @@ try {
   await page.locator("#ocr-discard").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-result")).toHaveValue("");
   await expect(page.locator("#ocr-preview")).not.toHaveAttribute("src");
+  await page.evaluate(()=>{
+    document.getElementById("reminder-label").value="打ち合わせ";document.getElementById("reminder-text").value="打ち合わせの時間です";document.getElementById("reminder-date").value="2026-11-01T12:00";document.getElementById("reminder-save").click();
+  });
+  await expect(page.locator("#reminder-status")).toHaveText("予約しました。");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="save-reminder").length),1);
+  await page.evaluate(()=>window.remindersCallback({revision:2,connected:true,message:"予約しました",jobs:[],runs:[{id:"00000000-0000-4000-8000-000000000099",input:"<img src=x>打ち合わせの時間です"}]}));
+  await expect(page.locator(".reminder-message")).toContainText("お知らせです。<img src=x>打ち合わせの時間です");
+  await expect(page.locator(".reminder-message img")).toHaveCount(0);
+  await page.getByRole("button",{name:"確認しました",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["ack-reminder",{id:"00000000-0000-4000-8000-000000000099"}]);
   const reply=page.locator(".notice textarea");await reply.fill("通知元への返答");
   await page.evaluate(()=>window.noticeCallback({status:"connected",revision:99,notices:[{id:"00000000-0000-4000-8000-000000000092",message:"<img src=x onerror=alert(1)>確認してください。"}]}));
   await expect(reply).toHaveValue("通知元への返答");

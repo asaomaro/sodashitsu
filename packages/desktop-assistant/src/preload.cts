@@ -29,6 +29,15 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:recording-cancelled", receive);
       return () => ipcRenderer.removeListener("assistant:recording-cancelled", receive);
     },
+    reminders: () => ipcRenderer.invoke("assistant:reminders"),
+    saveReminder: (input: unknown) => ipcRenderer.invoke("assistant:reminder-save", input),
+    removeReminder: (input: unknown) => ipcRenderer.invoke("assistant:reminder-remove", input),
+    acknowledgeReminder: (input: unknown) => ipcRenderer.invoke("assistant:reminder-ack", input),
+    onReminders: (callback: (state: unknown) => void) => {
+      const receive = (_event: unknown, state: unknown) => callback(state);
+      ipcRenderer.on("assistant:reminders-changed", receive);
+      return () => ipcRenderer.removeListener("assistant:reminders-changed", receive);
+    },
     openSource: (input: unknown) => ipcRenderer.invoke("assistant:source-open", input),
     replySource: (input: unknown) => ipcRenderer.invoke("assistant:source-reply", input),
     sourceKey: (input: unknown) => ipcRenderer.invoke("assistant:source-key", input),

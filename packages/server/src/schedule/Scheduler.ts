@@ -123,9 +123,19 @@ export class Scheduler {
       return structuredClone(job);
     });
   }
-  async remove(id: string) {
+  async acknowledgeReminder(id: string, deviceId: string) {
     return this.mutate(() => {
-      if (!this.jobs.some((j) => j.id === id))
+      const run=this.runs.find(run=>run.id===id);
+      if(!run||run.status!=="succeeded"||run.actionType!=="reminder"||run.reminderDeviceId!==deviceId)throw new RpcError("not_found","リマインダーの対象が見つかりません");
+      run.acknowledgedAt = this.iso();
+    });
+  }
+  removeReminder(id:string,deviceId:string){return this.remove(id,deviceId);}
+  async remove(id: string, reminderDevice?:string) {
+    return this.mutate(() => {
+      const target=this.jobs.find(job=>job.id===id);
+      if(reminderDevice!==undefined&&(target?.action.type!=="reminder"||target.action.deviceId!==reminderDevice))throw new RpcError("not_found","リマインダーの対象が見つかりません");
+      if (!target)
         throw new RpcError("not_found", "予約が見つかりません");
       this.jobs = this.jobs.filter((j) => j.id !== id);
     });
@@ -176,8 +186,9 @@ export class Scheduler {
         id: randomUUID(),
         jobId: id,
         label: job.label,
-        input: job.action.type === "agent" ? job.action.text : job.action.command,
+        input: job.action.type === "command" ? job.action.command : job.action.text,
         actionType: job.action.type,
+        ...(job.action.type==="reminder"?{reminderDeviceId:job.action.deviceId}:{}),
         startedAt: this.iso(),
         finishedAt: null,
         status: "running",

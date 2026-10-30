@@ -1,4 +1,6 @@
 import {
+  AssistantReminderSaveParams,
+  AssistantReminderIdParams,
   AssistantSourceParams,
   AssistantReplyParams,
   AssistantReplyKeysParams,
@@ -15,6 +17,60 @@ import type { ControlSurface, MethodContext } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerAssistantMethods(surface: ControlSurface, deps: MethodDeps): void {
+  const scheduler = () => {
+    if (!deps.scheduler) throw new RpcError("not_found", "予約を利用できません");
+    return deps.scheduler;
+  };
+  const reminders = (deviceId: string) => {
+    const all = scheduler().list();
+    const jobs = all.jobs.filter(
+        (job) => job.action.type === "reminder" && job.action.deviceId === deviceId,
+      );
+    return {
+      jobs,
+      runs: all.runs.filter(
+        (run) =>
+          run.reminderDeviceId === deviceId &&
+          run.actionType === "reminder" &&
+          run.status === "succeeded" &&
+          !run.acknowledgedAt,
+      ),
+    };
+  };
+  surface.register("assistant.reminders", {
+    schema: AssistantSessionGetParams,
+    handler: (_ctx, p) => reminders(p.deviceId),
+  });
+  surface.register("assistant.reminder_save", {
+    schema: AssistantReminderSaveParams,
+    handler: (_ctx, p) => {
+      if (Date.parse(p.at) <= Date.now() || Date.parse(p.at) > Date.now() + 366 * 86400000)
+        throw new RpcError("invalid_params", "1年以内の未来の日時を選んでください");
+      return scheduler().save(undefined, {
+        label: p.label,
+        enabled: true,
+        trigger: { type: "once", at: p.at },
+        action: { type: "reminder", deviceId: p.deviceId, text: p.text },
+        timeoutSeconds: 30,
+      });
+    },
+  });
+  surface.register("assistant.reminder_remove", {
+    schema: AssistantReminderIdParams,
+    handler: async (_ctx, p) => {
+      if (!reminders(p.deviceId).jobs.some((job) => job.id === p.id))
+        throw new RpcError("not_found", "リマインダーの対象が見つかりません");
+      await scheduler().removeReminder(p.id,p.deviceId);
+      return {};
+    },
+  });
+  surface.register("assistant.reminder_ack", {
+    schema: AssistantReminderIdParams,
+    handler: async (_ctx, p) => {
+      await scheduler().acknowledgeReminder(p.id, p.deviceId);
+      return {};
+    },
+  });
   const consumed = new Set<string>();
   surface.register("assistant.source", {
     schema: AssistantSourceParams,

@@ -718,6 +718,7 @@ export async function composeServer(
 
   const scheduler = new Scheduler(options.stateDir,async(job,signal)=>{
     if(signal.aborted)throw new Error("予約の実行が中断されました");
+    if(job.action.type === "reminder")return{status:"succeeded",exitCode:null,output:job.action.text};
     if(job.action.type === "agent") {
       const response=await surface.invoke({clientId:"scheduler",signal,sink:{} as import("./terminal/OutputFanout.js").ClientSink},"agent.prompt",{paneId:job.action.paneId,text:job.action.text});
       if(!response.ok)throw new Error(response.error.code+": "+response.error.message);
