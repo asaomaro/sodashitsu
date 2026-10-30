@@ -233,3 +233,63 @@ Tests  12975 passed (12975)
 Start at  20:18:55
 Duration  341.55s (tests 82%, import 10%, environment 4%, transform 4%)
 ```
+
+## Startup smoke baseline comparison
+
+`pnpm smoke`: branch and unchanged main-equivalent worktree (`7bb8712e`, merge tree1236a478) each ran once. Both pass login/WebSocket/client hello/workspace/pane echo/custom popup, then fail the same browser `.xterm-helper-textarea` visibility precondition at15s. No smoke browser success is claimed, no repeated attempts. Files: `/tmp/soda-region-smoke.log`, `/tmp/soda-region-main-smoke.log`.
+
+```text
+thub-copilot-extra.toml","added":1}
+{"ts":"2026-10-30T11:25:14.004Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-30T11:25:14.004Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-30T11:25:14.020Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-smoke-Eaoy5G/commands.json","count":1}
+smoke: agent manifests ok (23/23)
+smoke: login ok
+smoke: websocket connected
+smoke: client.hello ok
+smoke: workspace.create ok (pane 97223fc7-68b2-41d7-976a-416922870beb)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-10-30T11:25:14.836Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"584e037d-c04f-4874-808b-d1e14a0d00ed","paneId":"97223fc7-68b2-41d7-976a-416922870beb"}
+smoke: custom command popup round trip ok
+smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for locator('.xterm-helper-textarea') to be visible[22m
+
+    at checkWebUiRendersAndAcceptsInput (/workspaces/sodashitsu-desktop-agent-region/packages/server/src/smoke.ts:120:16)
+    at async main (/workspaces/sodashitsu-desktop-agent-region/packages/server/src/smoke.ts:309:5) {
+  log: [ "  - waiting for locator('.xterm-helper-textarea') to be visible" ],
+  name: 'TimeoutError'
+}
+ ELIFECYCLE  Command failed with exit code 1.
+
+```
+
+Main baseline:
+
+```text
+ot-extra.toml","added":1}
+{"ts":"2026-10-30T11:25:59.293Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-10-30T11:25:59.293Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-10-30T11:25:59.302Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-smoke-4UgDVH/commands.json","count":1}
+smoke: agent manifests ok (23/23)
+smoke: login ok
+smoke: websocket connected
+smoke: client.hello ok
+smoke: workspace.create ok (pane 21da0c90-6ea1-4b64-8cef-0083b7955b4c)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-10-30T11:26:00.120Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"f3b57a7c-41fa-4f2f-8fc4-4859532e66c0","paneId":"21da0c90-6ea1-4b64-8cef-0083b7955b4c"}
+smoke: custom command popup round trip ok
+smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for locator('.xterm-helper-textarea') to be visible[22m
+
+    at checkWebUiRendersAndAcceptsInput (/workspaces/sodashitsu-desktop-plugin-operations/packages/server/src/smoke.ts:120:16)
+    at async main (/workspaces/sodashitsu-desktop-plugin-operations/packages/server/src/smoke.ts:309:5) {
+  log: [ "  - waiting for locator('.xterm-helper-textarea') to be visible" ],
+  name: 'TimeoutError'
+}
+ ELIFECYCLE  Command failed with exit code 1.
+
+```
