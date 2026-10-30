@@ -59,6 +59,7 @@ try {
       serverOrigin: "http://127.0.0.1:7780",
       launchAtLogin: false,
       mute: false,
+      quietFullscreen:true,
       remoteNotifications:true,
       allowPluginCharacters:false,allowPluginViews:false,allowPluginActions:false,
       ocrEnabled: false, ocrExecutable: "", ocrLanguage: "jpn+eng",
@@ -93,6 +94,7 @@ try {
       openApp:async input=>window.calls.push(["open-app",input]),
       callApp:async input=>{window.calls.push(["call-app",input]);return{result:"<img src=x>プラグインの結果"};},
       characterInfo:async()=>({name:window.preferences.characterId==="captain-robot"?"ロボット船長":"船長",uri:`${window.preferences.characterId}.svg`}),
+      displays:async()=>[{id:"1",label:"生成したディスプレイ",workArea:{x:0,y:0,width:1920,height:1080}}],
       characters:async()=>({characters:[],error:""}),
       previewCharacterPack:async()=>null,
       screenshotSources:async()=>({token:"00000000-0000-4000-8000-000000000088",sources:[{id:"screen:generated",name:"生成した画面"}]}),
@@ -190,9 +192,11 @@ try {
     await expect(page.getByRole("status")).toHaveText("保存しました。");
     assert.equal(await page.evaluate(() => window.preferences.characterId), character);
   }
+  await page.locator("#displayId").selectOption("1");await page.locator("#positionX").fill("100");await page.locator("#positionY").fill("200");
   await page.locator("#mode").selectOption("tray");
   await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
   await expect(page.getByRole("status")).toHaveText("保存しました。");
+  assert.deepEqual(await page.evaluate(()=>window.preferences.position),{displayId:"1",x:100,y:200});
   assert.equal(await page.evaluate(() => window.preferences.characterId), "captain-robot");
   assert.equal(await page.evaluate(() => window.preferences.mode), "tray");
   await page.getByRole("button", { name: "操舵室を開く" }).press("Enter");

@@ -65,6 +65,7 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    quietFullscreen: z.boolean().default(true),
     remoteNotifications: z.boolean().default(true),
     allowPluginCharacters: z.boolean().default(false),
     allowPluginViews: z.boolean().default(false),

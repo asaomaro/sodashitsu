@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld(
     apps: () => ipcRenderer.invoke("assistant:apps"),
     openApp: (input: unknown) => ipcRenderer.invoke("assistant:app-open", input),
     callApp: (input: unknown) => ipcRenderer.invoke("assistant:app-call", input),
+    displays: () => ipcRenderer.invoke("assistant:display-list"),
     characterInfo: () => ipcRenderer.invoke("assistant:character-info"),
     characters: () => ipcRenderer.invoke("assistant:character-list"),
     previewCharacterPack: () => ipcRenderer.invoke("assistant:character-pack-preview"),

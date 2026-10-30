@@ -39,3 +39,32 @@ export function characterBounds(
     height: size,
   };
 }
+
+/** Keep a bubble adjacent to its captain and within the selected work area, including negative DIP. */
+export function bubbleBounds(
+  preferences: DesktopAssistantPreferences,
+  displays: readonly DisplayArea[],
+): Rect {
+  const display =
+    displays.find((display) => display.id === preferences.position?.displayId) ?? displays[0];
+  if (!display) throw Error("表示できるディスプレイがありません");
+  const area = display.workArea,
+    character = characterBounds(preferences, displays),
+    width = Math.min(400, area.width),
+    height = Math.min(640, area.height);
+  return {
+    width,
+    height,
+    x: Math.round(
+      Math.max(
+        area.x,
+        Math.min(character.x + character.width - width, area.x + area.width - width),
+      ),
+    ),
+    y: Math.round(
+      preferences.mode === "tray"
+        ? area.y + area.height - height
+        : Math.max(area.y, Math.min(character.y - height - 12, area.y + area.height - height)),
+    ),
+  };
+}

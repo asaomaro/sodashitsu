@@ -38,6 +38,7 @@ export function authorizeLocalSender(
   if (action === "character-info") return true;
   if (
     [
+      "display-list",
       "character-list",
       "character-pack-preview",
       "character-pack-import",

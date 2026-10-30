@@ -42,6 +42,7 @@ const fixture = vi.hoisted(() => ({
   >(),
   windows: [] as Array<MockWindow>,
   directory: "",
+  fullscreenQuery: vi.fn(async () => false),
   quit: vi.fn(),
   startup: vi.fn(),
 }));
@@ -102,6 +103,7 @@ vi.mock("electron", () => ({
       { id: "screen:generated", name: "Generated screen", display_id: "1" },
     ]),
   },
+  powerMonitor: Object.assign(new EventEmitter(), { getSystemIdleState: vi.fn(() => "active") }),
   clipboard: {
     read: vi.fn(async () => [
       {
@@ -163,6 +165,16 @@ vi.mock("electron", () => ({
   Tray: class extends EventEmitter {
     setToolTip() {}
     setContextMenu() {}
+  },
+}));
+
+vi.mock("./fullscreen.js", () => ({
+  FullscreenPolicy: class {
+    quiet() {
+      return fixture.fullscreenQuery();
+    }
+    invalidate = vi.fn();
+    stop = vi.fn();
   },
 }));
 
@@ -262,6 +274,7 @@ it("enables robot captain without focus stealing, fences IPC and opens a native-
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   const saved = await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     characterId: "captain-robot",
   });
   expect(saved).toMatchObject({ characterId: "captain-robot", enabled: true });
@@ -303,7 +316,11 @@ it("enables robot captain without focus stealing, fences IPC and opens a native-
   const preventDefault = vi.fn();
   panel.webContents.emit("will-navigate", { preventDefault }, "https://evil.test");
   expect(preventDefault).toHaveBeenCalledOnce();
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+  });
   expect(character.isDestroyed()).toBe(true);
   await expect(fixture.handlers.get("assistant:read")!(characterEvent)).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
@@ -315,6 +332,7 @@ it("uses a focusable local bubble for user chat and closes it when disabled", as
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     characterId: "captain-robot",
   });
@@ -328,6 +346,7 @@ it("uses a focusable local bubble for user chat and closes it when disabled", as
   expect(bubble.hide).toHaveBeenCalledOnce();
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     characterId: "captain-female",
   });
@@ -342,7 +361,11 @@ it("uses a focusable local bubble for user chat and closes it when disabled", as
 it("delivers a verbal notice through an inactive bubble and obeys mute", async () => {
   const settings = fixture.windows[0]!;
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+  });
   const connection = fixture.connections.at(-1)!;
   const notice = { id: "generated", message: "作業が完了しました。" };
   connection.options.changed([notice], true);
@@ -360,7 +383,12 @@ it("delivers a verbal notice through an inactive bubble and obeys mute", async (
   await expect(fixture.handlers.get("assistant:inbox")!(event)).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   expect(connection.stop).toHaveBeenCalledOnce();
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray", mute: true });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+    mute: true,
+  });
   const count = fixture.windows.length;
   fixture.connections.at(-1)!.options.changed([notice], true);
   expect(fixture.windows.length).toBe(count);
@@ -372,7 +400,11 @@ it("delivers a verbal notice through an inactive bubble and obeys mute", async (
 it("uses the scoped named-session cookie only inside main and reconnects on its change", async () => {
   const settings = fixture.windows[0]!;
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+  });
   const connection = fixture.connections.at(-1)!;
   expect(await connection.options.cookie()).toBe("soda_session_work=generated");
   const cookies = fixture.partitions.get("persist:assistant-server")!.cookies;
@@ -388,7 +420,11 @@ it("keeps the newly enabled control connection running and reaches scoped sessio
     (window) => !window.destroyed && window.url.endsWith("settings.html"),
   )!;
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+  });
   const control = fixture.controls.at(-1)!;
   expect(control.start).toHaveBeenCalledOnce();
   expect(control.stop).not.toHaveBeenCalled();
@@ -414,6 +450,7 @@ it("keeps notes and clipboard behind the current bubble role and uses the native
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     transcriptionEnabled: true,
   });
@@ -456,6 +493,7 @@ it("leases microphone permission only to the visible bubble and consumes the sto
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     transcriptionEnabled: true,
   });
@@ -545,6 +583,7 @@ it("uses the explicit PNG clipboard action and retires OCR on hide and navigatio
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     ocrEnabled: true,
     ocrExecutable: "/usr/bin/tesseract",
@@ -579,7 +618,11 @@ it("uses the explicit PNG clipboard action and retires OCR on hide and navigatio
 it("does not open a source panel after its original bubble is hidden", async () => {
   const settings = fixture.windows[0]!,
     event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+  });
   const notice = {
     id: "00000000-0000-4000-8000-000000000091",
     key: "done:test:1",
@@ -626,7 +669,11 @@ it("does not open a source panel after its original bubble is hidden", async () 
 it("handles failed retarget navigation and can return explicitly to ordinary Soda", async () => {
   const settings = fixture.windows[0]!,
     event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
-  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    quietFullscreen: false,
+    mode: "tray",
+  });
   await fixture.handlers.get("assistant:open")!(event);
   const panel = fixture.windows.find(
     (window) => !window.destroyed && window.url === "http://127.0.0.1:7780/",
@@ -669,6 +716,7 @@ it("grants one selected display without audio and consumes its PNG only once", a
     event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     ocrEnabled: true,
   });
@@ -737,6 +785,7 @@ it("keeps plugin actions behind explicit capability and revokes pending view ope
     event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     allowPluginViews: true,
   });
@@ -813,6 +862,7 @@ it("keeps plugin actions behind explicit capability and revokes pending view ope
   await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     allowPluginViews: false,
   });
@@ -866,6 +916,7 @@ it("imports only previewed PNG assets and falls back immediately when character 
   await fixture.handlers.get("assistant:character-pack-import")!(event, { token: preview.token });
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     characterId: "plugin:custom/robot",
     allowPluginCharacters: true,
@@ -878,6 +929,7 @@ it("imports only previewed PNG assets and falls back immediately when character 
   const bubble = fixture.windows.at(-1)!;
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     characterId: "plugin:custom/robot",
     allowPluginCharacters: false,
@@ -894,6 +946,7 @@ it("routes a remote notice reply through its registered machine and revokes it w
     event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     remoteNotifications: true,
   });
@@ -953,6 +1006,7 @@ it("routes a remote notice reply through its registered machine and revokes it w
   expect(fixture.windows.at(-1)!.url).toContain(`assistantMachine=${machineId}`);
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
+    quietFullscreen: false,
     mode: "tray",
     remoteNotifications: false,
   });
@@ -960,5 +1014,117 @@ it("routes a remote notice reply through its registered machine and revokes it w
     fixture.handlers.get("assistant:source-key")!(local, { noticeId: notice.id, keyName: "y" }),
   ).rejects.toThrow("対象");
   expect(remote.stop).toHaveBeenCalled();
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+it("keeps quiet notices in the inbox, cancels late popups and reconnects after sleep", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    quietFullscreen: true,
+  });
+  const connection = fixture.connections.at(-1)!,
+    control = fixture.controls.at(-1)!;
+  let finish!: (value: boolean) => void;
+  fixture.fullscreenQuery.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const before = fixture.windows.length;
+  connection.options.changed([{ id: "quiet", message: "確認してください", at: 1 }], true);
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    quietFullscreen: true,
+    mute: true,
+  });
+  finish(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(fixture.windows.length).toBe(before);
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    quietFullscreen: true,
+  });
+  fixture.fullscreenQuery.mockResolvedValueOnce(true);
+  connection.options.changed([{ id: "quiet2", message: "お知らせです", at: 2 }], true);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(fixture.windows.length).toBe(before);
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  expect(await fixture.handlers.get("assistant:inbox")!(local)).toMatchObject({
+    notices: [{ id: "quiet2" }],
+  });
+  const { powerMonitor } = await import("electron");
+  powerMonitor.emit("suspend");
+  expect(bubble.isVisible()).toBe(false);
+  expect(control.stop).toHaveBeenCalled();
+  expect(connection.stop).toHaveBeenCalled();
+  powerMonitor.emit("resume");
+  expect((control as any).reconnect).toHaveBeenCalled();
+  expect(connection.reconnect).toHaveBeenCalled();
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("does not show a delayed popup after the desktop becomes locked", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    quietFullscreen: true,
+  });
+  let finish!: (value: boolean) => void;
+  fixture.fullscreenQuery.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const count = fixture.windows.length;
+  fixture.connections
+    .at(-1)!
+    .options.changed([{ id: "locked", message: "確認してください", at: 1 }], true);
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  const { powerMonitor } = await import("electron");
+  vi.mocked(powerMonitor.getSystemIdleState).mockReturnValue("locked");
+  finish(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(fixture.windows.length).toBe(count);
+  vi.mocked(powerMonitor.getSystemIdleState).mockReturnValue("active");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+it("defers a changed server connection until resume even if a settings save completes during suspend", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    quietFullscreen: false,
+  });
+  const { powerMonitor } = await import("electron");
+  powerMonitor.emit("suspend");
+  const controls = fixture.controls.length,
+    connections = fixture.connections.length;
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    quietFullscreen: false,
+    serverOrigin: "http://localhost:7789",
+  });
+  expect(fixture.controls.length).toBe(controls);
+  expect(fixture.connections.length).toBe(connections);
+  powerMonitor.emit("resume");
+  expect(fixture.controls.length).toBe(controls + 1);
+  expect(fixture.connections.length).toBe(connections + 1);
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });
