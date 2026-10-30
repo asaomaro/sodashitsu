@@ -1,0 +1,36 @@
+name: Desktop microphone recovery (generated audio)
+on:
+  pull_request:
+    paths:
+      - 'packages/web/src/desktop/microphoneClient*'
+      - 'packages/web/src/desktop/microphoneWorklet*'
+      - 'packages/e2e/src/specs/remote-desktop-microphone-recovery.spec.ts'
+      - '.github/workflows/desktop-microphone-recovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-microphone-recovery-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  generated-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/server build
+      - run: pnpm --filter @sodashitsu/web build
+      - run: pnpm --filter @sodashitsu/web typecheck
+      - name: Fixed-codec recovery and original ACK deadline
+        run: pnpm exec vitest run packages/web/src/desktop/microphoneClient.test.ts --maxWorkers=2
+      - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
+      - name: Generated oscillator and memory sink only (no devices or agents)
+        run: pnpm --filter @sodashitsu/e2e exec playwright test 'remote-desktop-microphone-recovery.spec.ts'
