@@ -783,6 +783,7 @@ func generatedTests() throws -> Int {
     try check(jpeg.count<2*1024*1024,"generated JPEG bound")
     count += try generatedRichClipboardTests()
     count += try generatedNativeVideoTests()
+    count += try generatedNativeAudioTests()
     return count
 }
 
