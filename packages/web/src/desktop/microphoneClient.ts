@@ -3,6 +3,7 @@ import workletUrl from "./microphoneWorklet.js?url&no-inline";
 export type MicrophoneState="stopped"|"preparing"|"starting"|"running"|"unavailable";
 /** The only getUserMedia call is inside an explicit start action. */
 export class DesktopMicrophoneClient {
+  private encoderConfig:AudioEncoderConfig|undefined;private encoderRecoveries=0;
   private encoder:AudioEncoder|undefined;private encoding=new Map<number,{seq:number;at:number}>();
   private epoch=0;private id:string|undefined;private stream:MediaStream|undefined;
   private context:AudioContext|undefined;private source:MediaStreamAudioSourceNode|undefined;private node:AudioWorkletNode|undefined;
@@ -24,12 +25,13 @@ export class DesktopMicrophoneClient {
       await context.audioWorklet.addModule(workletUrl);if(epoch!==this.epoch)return;
       const node=this.node=new AudioWorkletNode(context,"soda-microphone",{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1],channelCount:1,channelCountMode:"explicit",channelInterpretation:"speakers"});
       node.port.onmessage=event=>{const bytes=event.data?.pcm;node.port.postMessage("ready");const pcm=bytes instanceof ArrayBuffer?new Uint8Array(bytes):undefined;if(epoch!==this.epoch||!this.running||this.pending.size>=12||typeof event.data?.at!=="number"||context.currentTime-event.data.at>0.1||event.data.at>context.currentTime+0.01){pcm?.fill(0);return;}
+        if(this.ackExpired()){pcm?.fill(0);this.fail();return;}
         if(!(bytes instanceof ArrayBuffer)||bytes.byteLength!==DESKTOP_MICROPHONE_BYTES||this.seq>=0xffffffff){this.fail();return;}
         const seq=++this.seq,encoder=this.encoder;
         if(encoder){if(encoder.encodeQueueSize>=2||this.encoding.size+this.pending.size>=12){pcm!.fill(0);return;}const timestamp=seq*20000;this.encoding.set(timestamp,{seq,at:performance.now()});this.armDeadline();let audio:AudioData|undefined;try{audio=new AudioData({format:"s16",sampleRate:48000,numberOfFrames:960,numberOfChannels:1,timestamp,data:pcm!});encoder.encode(audio);}catch{this.fail();}finally{audio?.close();pcm!.fill(0);}}
         else{this.transmit(seq,pcm!,"microphone_frame");}
       };
-      if(opus){const encoder=this.encoder=new AudioEncoder({error:()=>{if(epoch===this.epoch)this.fail();},output:chunk=>{if(epoch!==this.epoch||this.encoder!==encoder)return;const frame=this.encoding.get(chunk.timestamp);this.encoding.delete(chunk.timestamp);this.armDeadline();if(!frame||!this.running||performance.now()-frame.at>100)return;if(chunk.byteLength<1||chunk.byteLength>1275||chunk.duration!==20000){this.fail();return;}const bytes=new Uint8Array(chunk.byteLength);chunk.copyTo(bytes);this.transmit(frame.seq,bytes,"microphone_opus");}});encoder.configure(config);}
+      if(opus){this.encoderConfig=config;this.configureEncoder(epoch);}
       this.options.codec?.(opus?"opus":"pcm");
       this.source=context.createMediaStreamSource(stream);this.source.connect(node);node.connect(context.destination);
       await context.resume();if(epoch!==this.epoch)return;
@@ -40,15 +42,42 @@ export class DesktopMicrophoneClient {
   }
   receive(raw:unknown) {
     const m=DesktopMicrophoneResult.parse(raw);if(m.id!==this.id)return;
-    if(m.type==="microphone_ack"){if(!this.pending.has(m.seq))return;for(const seq of this.pending.keys())if(seq<=m.seq)this.pending.delete(seq);this.armDeadline();return;}
+    if(m.type==="microphone_ack"){if(this.ackExpired()){this.fail();return;}if(!this.pending.has(m.seq))return;for(const seq of this.pending.keys())if(seq<=m.seq)this.pending.delete(seq);this.armDeadline();return;}
     if(m.state==="running"){clearTimeout(this.timer);this.timer=undefined;this.running=true;this.state("running");}
     else if(m.state==="unavailable"||m.state==="stopped"){this.stop();this.state(m.state);}
   }
-  private transmit(seq:number,bytes:Uint8Array,type:"microphone_frame"|"microphone_opus") {let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);bytes.fill(0);this.pending.set(seq,performance.now());if(!this.send({type,id:this.id,seq,data:btoa(binary)})){this.fail();return;}this.armDeadline();}
-  private armDeadline(){clearTimeout(this.timer);this.timer=undefined;const pending=this.pending.values().next().value,encoding=this.encoding.values().next().value;const due=Math.min(pending===undefined?Infinity:pending+500,encoding===undefined?Infinity:encoding.at+200);if(Number.isFinite(due))this.timer=setTimeout(()=>this.fail(),Math.max(1,due-performance.now()));}
+  private transmit(seq:number,bytes:Uint8Array,type:"microphone_frame"|"microphone_opus") {if(this.ackExpired()){bytes.fill(0);this.fail();return;}let binary="";for(const byte of bytes)binary+=String.fromCharCode(byte);bytes.fill(0);this.pending.set(seq,performance.now());if(!this.send({type,id:this.id,seq,data:btoa(binary)})){this.fail();return;}this.armDeadline();}
+  private configureEncoder(epoch:number){
+    let encoder:AudioEncoder|undefined;
+    encoder=new AudioEncoder({error:()=>{if(epoch===this.epoch&&this.encoder===encoder)this.fail();},output:chunk=>{
+      if(epoch!==this.epoch||this.encoder!==encoder)return;
+      if(this.ackExpired()){this.fail();return;}
+      const frame=this.encoding.get(chunk.timestamp);this.encoding.delete(chunk.timestamp);this.armDeadline();
+      if(!frame||!this.running||performance.now()-frame.at>100)return;
+      if(chunk.byteLength<1||chunk.byteLength>1275||chunk.duration!==20000){this.fail();return;}
+      const bytes=new Uint8Array(chunk.byteLength);chunk.copyTo(bytes);this.transmit(frame.seq,bytes,"microphone_opus");
+    }});
+    if(epoch!==this.epoch){encoder.close();return;}
+    if(this.ackExpired()){encoder.close();this.fail();return;}
+    this.encoder=encoder;encoder.configure(this.encoderConfig!);
+    if(epoch===this.epoch&&this.encoder===encoder&&this.ackExpired())this.fail();
+  }
+  private ackExpired(){const pending=this.pending.values().next().value;return pending!==undefined&&performance.now()>=pending+500;}
+  private deadline(){
+    this.timer=undefined;const now=performance.now(),pending=this.pending.values().next().value,encoding=this.encoding.values().next().value;
+    // A local retry must never move an earlier network ACK deadline.
+    if(pending!==undefined&&now>=pending+500){this.fail();return;}
+    if(encoding&&now>=encoding.at+200){
+      if(!this.running||!this.requested||!this.id||!this.encoderConfig||!this.encoder||this.encoderRecoveries>=2){this.fail();return;}
+      const epoch=this.epoch,config=this.encoderConfig,retired=this.encoder;this.encoder=undefined;this.encoding.clear();this.encoderRecoveries++;
+      try{if(retired.state!=="closed")retired.close();if(epoch!==this.epoch||!this.running||!this.requested||!this.id||this.encoderConfig!==config)return;if(this.ackExpired()){this.fail();return;}this.configureEncoder(epoch);}catch{this.fail();return;}
+    }
+    this.armDeadline();
+  }
+  private armDeadline(){clearTimeout(this.timer);this.timer=undefined;const pending=this.pending.values().next().value,encoding=this.encoding.values().next().value;const due=Math.min(pending===undefined?Infinity:pending+500,encoding===undefined?Infinity:encoding.at+200);if(Number.isFinite(due))this.timer=setTimeout(()=>this.deadline(),Math.max(1,due-performance.now()));}
   private fail(){this.stop();this.state("unavailable");}
   stop() {
-    ++this.epoch;this.running=false;clearTimeout(this.timer);this.timer=undefined;this.pending.clear();this.encoding.clear();const encoder=this.encoder;this.encoder=undefined;if(encoder&&encoder.state!=="closed")encoder.close();
+    ++this.epoch;this.running=false;clearTimeout(this.timer);this.timer=undefined;this.pending.clear();this.encoding.clear();this.encoderConfig=undefined;this.encoderRecoveries=0;const encoder=this.encoder;this.encoder=undefined;if(encoder&&encoder.state!=="closed")encoder.close();
     const id=this.id,requested=this.requested;this.id=undefined;this.requested=false;
     this.node?.port.postMessage("stop");this.node?.disconnect();this.node=undefined;this.source?.disconnect();this.source=undefined;
     for(const track of this.stream?.getTracks()??[])track.stop();this.stream=undefined;
