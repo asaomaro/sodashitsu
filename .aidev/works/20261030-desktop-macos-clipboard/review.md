@@ -1,0 +1,5 @@
+# Independent taskcheck/cross/delta review
+
+Both reviewers found the same must: native active/canWrite query time could renew/omit monotonic request budget, permitting an OS write after deadline. Replaced loose deadline arguments with immutable TextClipboardTicket, created before all callbacks, carried by TextClipboardReply through sink pre/post checks and final source writer. active executes before final owner/enabled/clock recheck; inactive latches only its matching generation disabled. Control does not overwrite a reentrant newer generation.
+
+Generated tests assert no extra sink read/write when first source query or canWrite advances monotonic past original budget, queued publication query expiry, wall rollback, and source revocation within query. Both reviewers confirmed correction, no remaining must/should. SDK compile/compiled source negatives still pending macOS CI; no success claim yet. AppKit API calls themselves are synchronous and not preemptible; permission/prompt/runtime behavior remains a real-device check.

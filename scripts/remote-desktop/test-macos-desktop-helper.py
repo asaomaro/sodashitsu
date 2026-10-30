@@ -8,6 +8,12 @@ import tempfile
 source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
 cases = [
+    ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),
+    ("clipboard-write-ceiling", "canWrite(),authorized(ticket)", "true,authorized(ticket)", "clipboard write requires input ceiling"),
+    ("clipboard-write-size", "text.utf16.count<=8192,canWrite()", "true,canWrite()", "clipboard UTF16 size bound"),
+    ("clipboard-read-size", "guard text.utf16.count<=8192,authorized(ticket)", "guard authorized(ticket)", "clipboard oversized read discarded"),
+    ("clipboard-monotonic", "&& now<=ticket.deadline", "", "clipboard monotonic deadline survives wall clock rollback"),
+    ("clipboard-write-query", "canWrite(),authorized(ticket)", "canWrite(),authorized(TextClipboardTicket(owner:ticket.owner,expires:ticket.expires,started:ticket.started,deadline:Double.greatestFiniteMagnitude))", "clipboard native write query cannot extend deadline"),
     ("region-revision", "input.revision &+= 1", "input.revision &+= 0", "regional config invalidates in-flight capture"),
     ("region-crop", "image.cropping(to:CGRect(x:r.x,y:r.y,width:r.width,height:r.height))", "image.cropping(to:CGRect(x:0,y:0,width:r.width,height:r.height))", "regional background remains stable"),
     ("region-nonce", r'\(r.id):\(image.width)', r'\(image.width)', "regional nonce binding"),
