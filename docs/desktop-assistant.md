@@ -27,7 +27,7 @@ pnpm --filter @sodashitsu/desktop-assistant build
 pnpm --filter @sodashitsu/desktop-assistant start
 ```
 
-`--ignore-scripts` で導入した場合、Electron本体のダウンロードが行われていないため、そのままでは起動できません。`pnpm build` や `soda handoff` は、このアプリをデスクトップに起動する操作ではありません。
+`--ignore-scripts` で導入した場合、Electron本体のダウンロードが行われていないため、そのままでは起動できません。`pnpm build`だけではデスクトップに起動しません。単独起動のほか、以下のsodaによる起動管理を使えます。
 
 Windows用zipのビルドは `pnpm --filter @sodashitsu/desktop-assistant pack:win` です。現段階は署名なしの開発配布設定です。CIの `sodashitsu-assistant-windows-x64` アーティファクトからzipを取得できます。Windows実機での起動確認は未実施です。設定はElectronのアプリ別userData内の `assistant.json`、ログイン状態は別のElectron sessionに保存します。アプリを無効にするとキャラクター・吹き出し・操舵室窓を閉じ、設定と終了のため通知領域アイコンは残します。
 
@@ -153,3 +153,28 @@ Windows用の開発zipを固定したフォルダーへ展開し、`Sodashitsu A
 設定は、この端末のアシスタント専用セッションを明示的に開始するときだけ起動引数へ渡します。通常のエージェントやプロジェクトの設定ファイルは変更せず、設定を保存しただけではエージェントを起動しません。起動済みのセッションは自動で再起動・変更しません。端末の窓から自分で終了した後、吹き出しの「旧端末を残して新しく開始」で新しい設定を反映してください。再接続だけでは再起動しません。
 
 吹き出しには「起動時指定」のモデルとeffortを表示します。保存済み設定との差がある場合は再作成が必要と表示します。これは実際にモデルが採用した値の観測ではなく、CLI内の `/model` 等での変更・既定値の解決は追跡しません。既存・引き取りセッションの指定値が分からない場合は不明と表示します。実エージェント・Windows GUIでの検証は別途必要です。
+
+### sodaによる起動・停止の管理
+
+Windows用zipの配置後、WSLのsodaを起動する環境で起動コマンドをJSON配列として登録できます。シェルとして解釈しません。たとえば次の指定です。
+
+```sh
+export SODA_ASSISTANT_COMMAND='["/mnt/c/Apps/Sodashitsu Assistant/Sodashitsu Assistant.exe"]'
+soda assistant enable
+soda
+```
+
+既にsodaが動いている場合、そのサーバは新しい環境変数を取り込みません。まずそのサーバを終了し、この環境から起動し直してください。初回設定後の `soda handoff` は設定を引き継ぎます。接続先は既定でそのサーバのloopback URLと実ポートです。HTTPSの証明書に合うホスト名等が必要な場合は `SODA_ASSISTANT_ORIGIN` にオリジンを指定します。認証情報は起動情報に含めず、アプリ側で従来どおりログインします。
+
+```sh
+soda assistant disable
+soda assistant status
+# 名前付きサーバの場合
+soda assistant enable --session work
+```
+
+有効/無効はサーバのstate-dirの `assistant-launch.json` に保存します。`status` は起動許可の保存値であり、実アプリの動作確認結果ではありません。初期状態は無効で、コマンドを設定しただけでは実行ファイルの調査や子プロセスの起動をしません。保存値がない場合だけ `SODA_ASSISTANT_ENABLED=1` を初期の有効値として使えます。稼働中のサーバは設定ファイルの変更を監視し、enable/disableを反映します。監視はサーバ内で行い、別の監視プロセスは起動しません。
+
+管理起動したアプリは、sodaが閉じる・引き継ぎのために停止する・親とのpipeを失うと終了します。アプリの設定で無効化するとsoda側の無効設定も保存して終了し、通知領域アイコンだけを残して常駐しません。Windowsログイン時の単独起動とは併用しないでください。既に別のアシスタントが起動していれば、それを奪わず、終了後に `soda assistant enable` で再試行するようサーバログで案内します。自動再起動ループはありません。sodaの引き継ぎ失敗時は元のサーバが起動管理を再開します。
+
+この統合が管理するのはネイティブ表示アプリです。専用エージェント端末で進行している仕事を強制終了する機能や、Tesseract/Whisperの自動導入・常駐起動は含みません。無効時の専用エージェントの安全な停止は別の残件です。Windows実GUI・WSLをまたぐ親終了の実機検証は未実施で、生成Node子プロセスとメモリpipeのライフサイクル試験を行っています。

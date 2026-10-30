@@ -1,0 +1,5 @@
+# アシスタントの起動管理
+
+サーバの設定ファイルは既定無効、明示enable時だけlocal envの固定JSON argvをshell:falseで起動。originだけをstdin bootstrapで渡し、Electron側はbounded record + immutable monotonic 5s deadlineを検証。pipe EOFでquit。無効化でappを終了し、自己無効化は親の永続設定へ伝える。server停止/handoffは受理済み自己無効化保存とapp終了を両方drainする。終了失敗時も保存drain後に失敗を伝播する。handoff rollbackのみ起動管理再開。単独起動済みappは奪わずexit75を診断、再試行ループなし。
+
+Windows配布物の自動導入、専用agent端末の安全な停止、agentへの画像/音声直接依頼は後続。OS GUI/レジストリ/service/実agent起動を試験しない。

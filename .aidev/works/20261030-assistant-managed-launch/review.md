@@ -1,0 +1,3 @@
+# 独立レビュー
+
+review_pointer / review_transfer が別コンテキストで全差分をread-only点検。shebangの位置、自己無効化保存をhandoff前にdrainする経路、終了失敗時も保存drainが必要な経路を指摘。全修正の再レビューでmust/shouldなし。monotonic bootstrap deadlineと既存app拒否の診断shouldも対応。実OS/agent起動なし。

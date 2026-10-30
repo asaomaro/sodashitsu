@@ -3,9 +3,10 @@ import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js
 import { parseMachineArgs, type MachineCommand } from "./machine/machineArgs.js";
 
 export interface ParsedArgs {
-  command: "tui" | "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help";
+  command: "tui" | "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help" | "assistant";
   /** `soda machine …`（20260927-multi-host-machines）。 */
   machine?: MachineCommand;
+  assistantAction?: "enable" | "disable" | "status";
   serve: RawServeArgs;
   stateDir?: string | undefined;
   /** `--session`（serve・token reset・handoff。20260926-named-session・20260926-live-handoff）。serve では `serve.session` にも入る。 */
@@ -63,6 +64,13 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   if (command === "machine") {
     const parsed = parseMachineArgs(rest);
     return { command: "machine", serve, stateDir: parsed.stateDir, machine: parsed };
+  }
+  if (command === "assistant") {
+    const [action, ...options] = rest;
+    if (action !== "enable" && action !== "disable" && action !== "status") throw new ConfigError("soda assistant enable|disable|status", USAGE);
+    const parsed = parseArgs(["serve", ...options]);
+    if (options.some((value,index) => index % 2 === 0 && value !== "--state-dir" && value !== "--session")) throw new ConfigError("assistantでは--state-dirと--sessionだけ指定できます", USAGE);
+    return {...parsed, command: "assistant", assistantAction: action};
   }
   if (command === "bridge") return parseBridgeArgs(rest, serve);
   if (command !== "serve" && command !== "token" && command !== "session" && command !== "handoff") throw new ConfigError(`unknown command: ${command}`, USAGE);

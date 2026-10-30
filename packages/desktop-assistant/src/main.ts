@@ -1,3 +1,4 @@
+import { managedLaunch } from "./managedLaunch.js";
 import { FullscreenPolicy } from "./fullscreen.js";
 import { bubbleBounds } from "./geometry.js";
 import {
@@ -1116,7 +1117,15 @@ function registerIpc(): void {
         if (action === "adopt-session") return assistantChat.adopt(input);
         return assistantChat.send(input);
       }
-      if (action === "save") return controller.update(input);
+      if (action === "save") {
+        if (managed && DesktopAssistantPreferences.parse(input).launchAtLogin) throw Error("sodaによる起動管理中は、Windowsログイン時の単独起動を併用できません");
+        const saved = await controller.update(input);
+        if (!saved.enabled) {
+          if (managed) process.stdout.write('{"type":"disabled"}\n');
+          setImmediate(() => app.quit());
+        }
+        return saved;
+      }
       if (action === "chat") {
         openBubble();
         return;
@@ -1135,9 +1144,14 @@ function registerIpc(): void {
   }
 }
 
-if (!app.requestSingleInstanceLock()) app.quit();
+const managed = process.argv.includes("--soda-managed")
+  ? await managedLaunch(process.stdin, () => app.quit()).catch(() => { app.exit(1); return undefined; }) : undefined;
+if (!app.requestSingleInstanceLock()) {
+  if (managed) app.exit(75); else app.quit();
+}
 else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, argv) => {
+    if (argv.includes("--soda-managed")) return;
     if (controller) openSettings();
     else settingsRequested = true;
   });
@@ -1337,6 +1351,7 @@ else {
         );
         preferences = DesktopAssistantPreferences.parse({});
       }
+      if (managed) preferences = DesktopAssistantPreferences.parse({...preferences, enabled: true, serverOrigin: managed.serverOrigin, launchAtLogin: false});
       controller = new AssistantController(preferences, adapter, (next) => file.write(next));
       session.fromPartition("persist:assistant-server").cookies.on("changed", (_event, cookie) => {
         if (isSodaSessionCookie(cookie.name)) {

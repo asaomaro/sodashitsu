@@ -232,3 +232,10 @@ it("accepts separate opt-in desktop permissions only for serve", () => {
   expect(() => parseArgs(["handoff", "--desktop"])).toThrow();
   expect(() => parseArgs(["token", "reset", "--desktop"])).toThrow();
 });
+
+it("accepts assistant state commands with session scope and rejects serve options", () => {
+ expect(parseArgs(["assistant","enable","--session","work"]).assistantAction).toBe("enable");
+ expect(parseArgs(["assistant","disable","--state-dir","/tmp/generated"]).serve.stateDir).toBe("/tmp/generated");
+ expect(()=>parseArgs(["assistant","enable","--host","127.0.0.1"])).toThrow();
+ expect(()=>parseArgs(["assistant","unknown"])).toThrow();
+});
