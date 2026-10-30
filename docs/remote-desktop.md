@@ -716,7 +716,7 @@ LinuxのPortal共有は部分実装です。通常インストールでは有効
 
 画面が変わったときだけ画像を送るPortalでは、最後の画像を表示して「新しい画像待ち」と表示します。OSの利用者・セッション・共有許可とパイプラインが有効で、表示済み画像への確認が済んでいる間、人の操作を継続できます。接続維持の通知が届かなくなると操作を拒否します。保持画像の再送を新しい取得や入力後の確認画像とは扱わず、エージェント操作には2秒以内の実画像と既存の入力後取得の確認が必要です。ロック・非アクティブ化・利用者/セッション/画像サイズの変更・Portal終了では共有を終了し、再接続と再許可を必要とします。実験版の明示的な有効化は引き続き必要です。生成テストで通信と権限の境界を検証しており、実際のLinuxデスクトップでの動作は未確認です。
 
-Linux版のGPU動画・音声・マイク・画像/HTML/RTFクリップボード・解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
+Linux版の音声・マイク・解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。H.264動画とtext/PNG/HTML/RTFのクリップボードは、対応するhelperと明示許可を使います。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
 
 生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
 
@@ -962,3 +962,16 @@ Linux Portalが静止中に画像を出さない場合、新しく参加した�
 Linuxは同じRemoteDesktop PortalセッションのClipboard APIでMIMEごとに読み書きし、コマンド実行によるクリップボード取得は行いません。macOSはNSPasteboardItemを使い、複数項目のクリップボードは転送しません。両者とも転送中にローカルの内容が変わった場合は中止し、元の要求期限、取消、公開直前の許可を検査します。
 
 転送は一度に1件、16KiBずつ、全体4MiB、テキスト／HTML／RTFは各512KiB、PNGは2MiB・一辺4096・800万画素までです。転送全体60秒、無通信5秒で破棄します。サーバ・補助プログラムの生成テストとmacOSのCIコンパイルで検証し、実際のPortal／NSPasteboardを使う端末間の確認は別途必要です。nativeの動画・音声・マイク・解像度・複数モニター対応の完了を意味しません。
+
+
+### Linux／macOS nativeのH.264動画
+
+同じ共有画面をH.264へ圧縮してブラウザで描画します。設定で画面共有を許可した後、接続ビューの［動画・音声］から明示的に依頼してください。同梱helperでは画面共有の許可を上限に動画を交渉します。独自コマンドを使う場合は`SODA_DESKTOP_ALLOW_MEDIA=1`も必要です。対応する両端とhelperなら複数viewerで画像と動画を共有できます。画像・エージェントの確認用snapshotと動画の描画ACKは独立です。
+
+Linuxは同じPortal/PipeWireのBGR画素から、要求時だけGStreamerのH.264 encoderを起動します。`linux-portal-helper.py`と`linux-native-video.py`を同じ版で配置してください。`h264parse`と利用可能な`nvh264enc`、`vah264enc`、`openh264enc`、`x264enc`のいずれかが必要です。ローカルにあるGPU候補を先に試し、最初の映像を公開する前で、終了確認と元の取得期限が守れる場合だけ次のCPU候補を試します。依存やモデルを自動取得せず、利用できない場合は画像配信へ戻ります。
+
+macOSは同じScreenCaptureKitの取得画像をVideoToolboxへ渡します。`build-macos-desktop.sh`で関連Swiftソースをまとめてビルドしてください。利用可能なGPUを許可し、OSが選択したencoderを使用します。無効時や画像閲覧だけの間は動画encoderを作りません。共有設定や接続の許可を動画へ暗黙に引き継ぐのではなく、同じ許可範囲内の表示経路として使います。
+
+圧縮処理は1枚、未描画ACKは最大3枚に制限します。取得から1秒を越えた映像や、2秒を越えたACK待ちを通さず、予測frameの途中を失った場合は動画を停止して画像へ戻します。取消後も古いencoderの終了確認まで枠を保持します。切替直後に利用できない場合は、少し待って動画を依頼し直してください。同じ共有で最大1024回の動画IDを記録し、再利用を拒否します。上限では共有へ接続し直してください。
+
+この段階ではnativeの動画はH.264の固定設定です。UDP・追加codec・動画の自動解像度調整・音声・マイク・実画面の解像度変更・複数monitorは別機能です。生成画像による圧縮/復号・通信・描画の検証と、実端末のPortal/ScreenCaptureKitの動作確認を区別しています。

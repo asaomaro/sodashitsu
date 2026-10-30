@@ -188,7 +188,7 @@ class Flow(unittest.TestCase):
         entered, finish, closing, retired = [threading.Event() for _ in range(4)]
         class Encoder:
             def __init__(self, *args):
-                pass
+                self.input_width,self.input_height=args[2:4]
             def encode(self, *args):
                 entered.set()
                 if not finish.wait(2): raise AssertionError("generated encoder did not finish")
@@ -260,11 +260,70 @@ class Flow(unittest.TestCase):
             self.assertIs(self.flow.inflight,reservation)
             self.start();self.assertIsNone(self.flow.reserve())
 
+    def test_uuid_ledger_survives_many_stops_and_canonicalizes_case(self):
+        first=self.start();self.flow.stop(False)
+        for _ in range(33):self.start();self.flow.stop(False)
+        for spelling in (first,first.upper()):
+            with self.assertRaises(video.VideoFailure):
+                self.flow.start({"type":"native_video","id":spelling,"enabled":True,"fps":30,"bitrateKbps":2500})
+        while len(self.flow.seen)<1024:self.start();self.flow.stop(False)
+        with self.assertRaises(video.VideoFailure):self.start()
+        self.assertEqual(len(self.flow.seen),1024)
+
+    def test_first_hardware_frame_failure_retires_before_software_retry(self):
+        made=[]
+        class Element:
+            def set_property(self,*args): pass
+            def find_property(self,*args): return True
+        class Pipeline:
+            def __init__(self):self.state="null"
+            def get_by_name(self,name):return Element()
+            def set_state(self,state):self.state=state;return 1
+            def get_state(self,timeout):return (1,self.state,None)
+        def make(description):
+            if made:self.assertEqual(made[-1].state,"null")
+            pipeline=Pipeline();made.append(pipeline);return pipeline
+        Gst=SimpleNamespace(ElementFactory=SimpleNamespace(find=lambda name:True),
+            Caps=SimpleNamespace(from_string=lambda value:value),parse_launch=make,
+            util_set_object_arg=lambda *args:None,
+            State=SimpleNamespace(PLAYING="playing",NULL="null"),SECOND=1000000000,
+            StateChangeReturn=SimpleNamespace(FAILURE=0))
+        def generated_encode(encoder,*args):
+            if encoder.factory=="nvh264enc":raise video.VideoFailure("generated hardware unavailable")
+            return key
+        with patch.object(video.GstH264Encoder,"_encode",generated_encode):
+            encoder=video.GstH264Encoder(Gst,None,64,64,30,2500,candidates=("nvh264enc","openh264enc"))
+            try:
+                self.assertEqual(encoder.encode(bytearray(64*64*3),True,lambda:True),key)
+                self.assertEqual(encoder.factory,"openh264enc");self.assertEqual(len(made),2)
+            finally:encoder.close()
+
     def test_strict_request_does_not_accept_boolean_integer_or_unknown_codec(self):
         for fields in [{"fps": True}, {"window": 2}, {"codec": "h265"}, {"bitrateKbps": 127}, {"command": "denied"}]:
             with self.assertRaises(video.VideoFailure):
                 self.flow.start({"type": "native_video", "id": str(uuid.uuid4()), "enabled": True,
                                  "fps": 30, "bitrateKbps": 2500, **fields})
+
+
+class HelperWiring(unittest.TestCase):
+    def test_helper_never_reuses_unretired_worker_and_ignores_old_disable(self):
+        spec=importlib.util.spec_from_file_location("owned_helper",root/"linux-portal-helper.py")
+        helper_module=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper_module)
+        helper=helper_module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),None)
+        helper.ready=True;helper.session="/generated/session";helper.native_available=True;helper.scope=SimpleNamespace(alive=lambda:True)
+        workers=[]
+        class Worker:
+            def __init__(self,*args):
+                self.stopped=threading.Event();self.closed=threading.Event();workers.append(self)
+            def stop(self): self.stopped.set()
+        def request(identifier):return {"type":"native_video","id":identifier,"enabled":True,"fps":30,"bitrateKbps":2500,"window":3}
+        with patch.object(helper_module._native_video,"H264Worker",Worker):
+            old=str(uuid.uuid4());helper.command(request(old));self.assertEqual(len(workers),1)
+            helper.command({"type":"native_video","id":old,"enabled":False});self.assertTrue(workers[0].stopped.is_set())
+            helper.command(request(str(uuid.uuid4())));self.assertEqual(len(workers),1);self.assertIsNone(helper.native.current)
+            workers[0].closed.set();newer=str(uuid.uuid4());helper.command(request(newer));self.assertEqual(len(workers),2)
+            helper.command({"type":"native_video","id":old,"enabled":False})
+            self.assertEqual(helper.native.current["id"],newer);self.assertFalse(workers[1].stopped.is_set())
 
 
 class GeneratedCodec(unittest.TestCase):

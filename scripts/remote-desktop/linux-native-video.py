@@ -79,7 +79,7 @@ class NativeVideoFlow:
         self.emit = emit
         self.maximum_fps = maximum_fps
         self.current = None
-        self.retired = []
+        self.seen = set()
         self.revision = 0
         self.inflight = None
 
@@ -91,7 +91,6 @@ class NativeVideoFlow:
             return
         stream["dead"] = True
         stream["pending"].clear()
-        self.retired = (self.retired + [stream["id"]])[-32:]
         if notify:
             self.emit({"type": "native_video_stopped", "id": stream["id"]}, None)
 
@@ -100,6 +99,7 @@ class NativeVideoFlow:
         if (set(value) - allowed or value.get("type") != "native_video"
                 or not identifier(value.get("id")) or not isinstance(value.get("enabled"), bool)):
             raise VideoFailure("request")
+        value = {**value, "id": value["id"].lower()}
         if not value["enabled"]:
             if self.current and self.current["id"] == value["id"]:
                 self.stop(False)
@@ -107,7 +107,7 @@ class NativeVideoFlow:
         fps, kbps, window = value.get("fps"), value.get("bitrateKbps"), value.get("window", 1)
         if (not integer(fps, 1, self.maximum_fps) or not integer(kbps, 128, 50000)
                 or not integer(window, 1, 3) or window not in (1, 3)
-                or value.get("codec", "h264") != "h264" or value["id"] in self.retired
+                or value.get("codec", "h264") != "h264" or value["id"] in self.seen or len(self.seen) >= 1024
                 or self.current is not None and value["id"] == self.current["id"]):
             raise VideoFailure("settings")
         self.stop()
@@ -122,6 +122,7 @@ class NativeVideoFlow:
                   "seq": 0, "timestamp": -1, "pending": [], "encoding": None,
                   "next": self.clock(), "key": True, "dead": False, "codec": None,
                   "size": None}
+        self.seen.add(value["id"])
         self.current = stream
         self.revision += 1
         return stream
@@ -214,7 +215,7 @@ class NativeVideoFlow:
 
     def acknowledge(self, value):
         stream = self.current
-        if stream is None or value.get("id") != stream["id"]:
+        if stream is None or str(value.get("id")).lower() != stream["id"]:
             return
         if not self.live(stream):
             if self.current is stream:
@@ -226,7 +227,7 @@ class NativeVideoFlow:
         stream["pending"].pop(0)
 
     def keyframe(self, value):
-        if self.current and value.get("id") == self.current["id"]:
+        if self.current and str(value.get("id")).lower() == self.current["id"]:
             self.current["key"] = True
 
 
@@ -259,11 +260,15 @@ class GstH264Encoder:
     def __init__(self, Gst, Video, width, height, fps, kbps, candidates=None):
         self.Gst, self.Video = Gst, Video
         self.pipeline = None
+        self.input_width, self.input_height = width, height
         self.width, self.height = width - width % 2, height - height % 2
+        self.kbps = kbps
+        self.has_output = False
+        choices = tuple(candidates or self.CANDIDATES)
         self.fps = fps
         self.timestamp = 0
         self.factory = None
-        for name in candidates or self.CANDIDATES:
+        for candidate_index, name in enumerate(choices):
             if Gst.ElementFactory.find(name) is None:
                 continue
             pipeline = None
@@ -285,11 +290,14 @@ class GstH264Encoder:
                     Gst.util_set_object_arg(encoder, "tune", "zerolatency")
                     Gst.util_set_object_arg(encoder, "speed-preset", "ultrafast")
                 else:
-                    properties["gop-size"] = fps
+                    properties["key-int-max" if name == "vah264enc" else "gop-size"] = fps
                     if name == "openh264enc":
                         properties.update({"enable-frame-skip": False, "multi-thread": 2})
                         Gst.util_set_object_arg(encoder, "rate-control", "bitrate")
                         Gst.util_set_object_arg(encoder, "complexity", "low")
+                    elif name == "vah264enc":
+                        properties["b-frames"] = 0
+                        Gst.util_set_object_arg(encoder, "rate-control", "cbr")
                     elif name == "nvh264enc":
                         properties.update({"bframes": 0, "zerolatency": True, "rc-lookahead": 0})
                 for key, value in properties.items():
@@ -301,6 +309,7 @@ class GstH264Encoder:
                 self.pipeline, self.source, self.encoder = pipeline, source, encoder
                 self.sink = pipeline.get_by_name("output")
                 self.factory = name
+                self.remaining = choices[candidate_index + 1:]
                 break
             except Exception:
                 if pipeline is not None:
@@ -309,6 +318,26 @@ class GstH264Encoder:
             raise VideoFailure("encoder_unavailable")
 
     def encode(self, raw, force_key, valid):
+        try:
+            data = self._encode(raw, force_key, valid)
+            self.has_output = True
+            return data
+        except EncoderRetirementFailure:
+            raise
+        except Exception:
+            if self.has_output or not self.remaining or not valid():
+                raise
+            # Before the first AU only: fully retire the failed candidate, then
+            # try a lower-priority local encoder within the original capture budget.
+            self.close()
+            if not valid():
+                raise VideoFailure("cancelled")
+            replacement = GstH264Encoder(self.Gst, self.Video, self.input_width, self.input_height,
+                                         self.fps, self.kbps, candidates=self.remaining)
+            self.__dict__.update(replacement.__dict__)
+            return self.encode(raw, force_key, valid)
+
+    def _encode(self, raw, force_key, valid):
         Gst = self.Gst
         if not valid():
             raise VideoFailure("cancelled")
@@ -385,6 +414,8 @@ class H264Worker:
                         raise VideoFailure("cancelled")
                     if encoder is None:
                         encoder = GstH264Encoder(self.Gst, self.Video, width, height, stream["fps"], stream["kbps"])
+                    if (width, height) != (encoder.input_width, encoder.input_height):
+                        raise VideoFailure("source_changed")
                     started = time.monotonic()
                     data = encoder.encode(raw, token[1], valid)
                     with self.gate:

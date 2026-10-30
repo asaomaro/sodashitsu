@@ -155,7 +155,7 @@ export class DesktopSettings {
         ...legacy,
         command,
         ...(this.nativePlatform?{nativePlatform:this.nativePlatform}:{}),
-        allowNativeVideo: !this.nativePlatform&&(!legacy || legacy.allowMedia===true),
+        allowNativeVideo: !legacy || legacy.allowNativeVideo===true || legacy.allowMedia===true,
         ...(p.fileRoot?.trim()?{fileRoot:p.fileRoot.trim()}:{}),
         allowMonitors:p.allowMonitors===true,
         allowVirtualDisplay:p.allowVirtualDisplay===true,

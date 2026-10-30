@@ -14,3 +14,5 @@
 動画は人向けの表示経路であり、agent snapshot/入力revisionの証明には使わない。通常のキー操作ごとに動画を破棄することはせず、画像/region proof側の既存input revision fenceを維持する。
 
 物理終了を確認できないGStreamer pipelineは、そのworkerに保持してslotを解放しない。候補encoderの初期化失敗時もNULL確認なしで別候補へ進めない。同UUIDの再startは禁止する。global inflight jobは取消/stream交替で解放せず、物理complete/retireでのみ解放。画像のvideorateと動画の独立creditでJPEG再圧縮頻度を制御する。
+
+UUIDはcanonical化し、source lifetimeのseen ledgerを最大1024までevictせず保持し、再利用と上限越えを拒否する。Mac generatedは非対称4色を実software VT encode/decodeし上下左右/色順を確認する。Linuxの初回未公開AUのencode失敗だけ、旧candidateのNULL確認→次candidateを元capture期限内で試せる。公開後はcodecを替えず画像へ戻る。

@@ -782,6 +782,7 @@ func generatedTests() throws -> Int {
     try check(decoded.pixelsWide==8 && decoded.pixelsHigh==8,"generated JPEG dimensions")
     try check(jpeg.count<2*1024*1024,"generated JPEG bound")
     count += try generatedRichClipboardTests()
+    count += try generatedNativeVideoTests()
     return count
 }
 
