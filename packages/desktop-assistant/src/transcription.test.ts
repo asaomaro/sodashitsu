@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
@@ -333,4 +334,49 @@ it("does not follow an inference redirect even to another generated local endpoi
       );
     }
   }
+});
+
+it("transcribes explicitly submitted recordings without opening the file picker", async () => {
+  const f = fixture(),
+    key = randomUUID();
+  await f.service.recorded(
+    { name: "recording.webm", mime: "audio/webm;codecs=opus", bytes: new Uint8Array([1, 2, 3]) },
+    key,
+  );
+  expect(f.pick).not.toHaveBeenCalled();
+  expect(f.read).not.toHaveBeenCalled();
+  expect(f.service.snapshot()).toMatchObject({ status: "done", text: "こんにちは、船長" });
+  expect(f.service.cancel(key)).toBe(false);
+});
+
+it("cannot let an old recording cancel a later recording or file job", async () => {
+  const f = fixture(),
+    old = randomUUID(),
+    next = randomUUID();
+  let respond!: (value: Response) => void;
+  f.fetch.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        respond = resolve;
+      }),
+  );
+  const pending = f.service.recorded(
+    { name: "recording.webm", mime: "audio/webm", bytes: new Uint8Array([1]) },
+    old,
+  );
+  await vi.waitFor(() => expect(respond).toBeTypeOf("function"));
+  try {
+    expect(f.service.cancel(next)).toBe(false);
+    expect(f.service.snapshot().status).toBe("transcribing");
+    expect(f.service.cancel(old)).toBe(true);
+  } finally {
+    respond(Response.json({ text: "old" }));
+    await pending;
+  }
+  await f.service.recorded(
+    { name: "recording.webm", mime: "audio/webm", bytes: new Uint8Array([1]) },
+    next,
+  );
+  expect(f.service.cancel(old)).toBe(false);
+  expect(f.service.snapshot()).toMatchObject({ status: "done", text: "こんにちは、船長" });
 });

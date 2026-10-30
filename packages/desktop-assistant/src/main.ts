@@ -10,6 +10,7 @@ import {
   screen,
   session,
   Tray,
+  type WebContents,
 } from "electron";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -19,7 +20,8 @@ import { AssistantRpc } from "./assistantRpc.js";
 import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
 import { NotesFile, NoteSave } from "./notes.js";
-import { Transcription } from "./transcription.js";
+import { Transcription, AUDIO_LIMIT } from "./transcription.js";
+import { RecordingLease } from "./recordingLease.js";
 import { z } from "zod";
 import { NoticeConnection } from "./noticeConnection.js";
 import { sodaCookieHeader, isSodaSessionCookie } from "./cookieHeader.js";
@@ -45,13 +47,14 @@ const allowedAssets = new Map([
   ["/settings.js", "text/javascript"],
   ["/bubble.js", "text/javascript"],
   ["/tools.js", "text/javascript"],
+  ["/recording.js", "text/javascript"],
   ["/style.css", "text/css"],
   ["/captain-male.svg", "image/svg+xml"],
   ["/captain-female.svg", "image/svg+xml"],
   ["/captain-robot.svg", "image/svg+xml"],
 ]);
 const csp =
-  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src blob:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 let tray: Tray | null = null;
 let character: BrowserWindow | null = null;
 let settings: BrowserWindow | null = null;
@@ -65,6 +68,8 @@ let installationId: string;
 let chatRevision = 0;
 let notesFile: NotesFile;
 let transcription: Transcription;
+let recording: RecordingLease;
+let recordingOrigin: string | null = null;
 let toolsRevision = 0;
 let backend: NoticeConnection | null = null;
 let backendOrigin: string | null = null;
@@ -79,7 +84,7 @@ const localWindows = new Map<number, { window: BrowserWindow; role: LocalRole }>
 function localWindow(role: LocalRole): BrowserWindow {
   const win = new BrowserWindow({
     width: role === "settings" ? 520 : role === "bubble" ? 400 : 192,
-    height: role === "settings" ? 670 : role === "bubble" ? 500 : 192,
+    height: role === "settings" ? 670 : role === "bubble" ? 640 : 192,
     show: false,
     title: "操舵室アシスタント",
     frame: role === "settings",
@@ -100,6 +105,17 @@ function localWindow(role: LocalRole): BrowserWindow {
   const id = win.webContents.id;
   localWindows.set(id, { window: win, role });
   win.on("closed", () => localWindows.delete(id));
+  const discardOnHide = () => {
+    if (role === "bubble" && recording?.has(id)) {
+      recording.cancel(id);
+      if (!win.isDestroyed()) win.destroy(); // End capture even if the hidden renderer cannot respond.
+    }
+  };
+  win.on("hide", discardOnHide);
+  win.on("minimize", discardOnHide);
+  win.webContents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => {
+    if (mainFrame) discardOnHide();
+  });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   void win.loadURL(`${LOCAL_ORIGIN}/${role}.html`).catch(() => {
@@ -119,11 +135,12 @@ function openBubble(focus = true): void {
     return;
   }
   const win = localWindow("bubble");
+  const contentsId = win.webContents.id;
   bubble = win;
   bubbleCharacterId = controller.preferences.characterId;
   const area = screen.getPrimaryDisplay().workArea;
   const width = Math.min(400, area.width);
-  const height = Math.min(500, area.height);
+  const height = Math.min(640, area.height);
   win.setBounds({
     x: area.x + area.width - width,
     y: area.y + area.height - height - Math.min(192, Math.max(0, area.height - height)),
@@ -140,6 +157,7 @@ function openBubble(focus = true): void {
   });
   win.on("closed", () => {
     if (bubble === win) {
+      recording?.cancel(contentsId);
       transcription?.cancel();
       bubble = null;
     }
@@ -231,6 +249,15 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
   rpc.start();
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
+  if (
+    recording?.has() &&
+    (!preferences.enabled ||
+      !preferences.transcriptionEnabled ||
+      recordingOrigin !== preferences.transcriptionOrigin)
+  ) {
+    recording.cancel();
+    bubble?.destroy();
+  }
   transcription.configure(
     preferences.enabled && preferences.transcriptionEnabled,
     preferences.transcriptionOrigin,
@@ -393,6 +420,32 @@ const adapter: NativeAdapter = {
   },
 };
 
+function microphonePermission(
+  contents: WebContents | null,
+  permission: string,
+  details: {
+    isMainFrame: boolean;
+    requestingUrl?: string;
+    mediaType?: string;
+    mediaTypes?: readonly string[];
+  },
+): boolean {
+  const owner = contents && localWindows.get(contents.id);
+  if (
+    !contents ||
+    !owner ||
+    owner.role !== "bubble" ||
+    owner.window.isDestroyed() ||
+    contents !== owner.window.webContents ||
+    !owner.window.isVisible() ||
+    contents.mainFrame.url !== details.requestingUrl ||
+    !controller?.preferences.enabled ||
+    !controller.preferences.transcriptionEnabled
+  )
+    return false;
+  return recording?.permits(contents.id, permission, details) ?? false;
+}
+
 function registerIpc(): void {
   for (const action of [
     "read",
@@ -413,6 +466,10 @@ function registerIpc(): void {
     "transcribe-cancel",
     "clipboard-read",
     "clipboard-write",
+    "record-start",
+    "record-stop",
+    "record-discard",
+    "record-transcribe",
   ]) {
     ipcMain.handle(`assistant:${action}`, async (event, input: unknown) => {
       const owner = localWindows.get(event.sender.id);
@@ -435,6 +492,73 @@ function registerIpc(): void {
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
       if (action === "tools") return toolsState();
+      if (["record-start", "record-stop", "record-discard", "record-transcribe"].includes(action)) {
+        if (
+          !controller.preferences.enabled ||
+          !controller.preferences.transcriptionEnabled ||
+          !owner.window.isVisible()
+        )
+          throw Error("表示中の吹き出しで、ローカル文字起こしを有効にしてから録音してください。");
+        const id = event.sender.id;
+        if (action === "record-start") {
+          if (transcription.isBusy()) throw Error("前の文字起こしが完了するまでお待ちください。");
+          const token = recording.begin(id);
+          if (owner.window.isDestroyed()) {
+            recording.cancel(id);
+            throw Error("吹き出しが閉じられました。");
+          }
+          recordingOrigin = controller.preferences.transcriptionOrigin;
+          return { token, maxBytes: AUDIO_LIMIT, maxDurationMs: 300_000 };
+        }
+        if (action === "record-discard") {
+          const { token } = z.object({ token: z.uuid() }).strict().parse(input);
+          if (recording.has(id)) recording.discard(id, token);
+          else if (!transcription.cancel(token)) throw Error("録音の対象が変わりました。");
+          owner.window.webContents.send("assistant:recording-cancelled", {
+            token,
+            reason: "録音を破棄しました。",
+          });
+          return;
+        }
+        if (action === "record-stop") {
+          const { token } = z.object({ token: z.uuid() }).strict().parse(input);
+          return recording.stopped(id, token);
+        }
+        const request = z
+          .object({
+            token: z.uuid(),
+            mime: z.enum([
+              "audio/webm",
+              "audio/webm;codecs=opus",
+              "audio/ogg",
+              "audio/ogg;codecs=opus",
+              "audio/mp4",
+              "audio/wav",
+            ]),
+            bytes: z
+              .instanceof(ArrayBuffer)
+              .refine((value) => value.byteLength > 0 && value.byteLength <= AUDIO_LIMIT),
+          })
+          .strict()
+          .parse(input);
+        if (transcription.isBusy()) throw Error("前の文字起こしが完了するまでお待ちください。");
+        recording.consume(id, request.token);
+        const suffix = request.mime.startsWith("audio/ogg")
+          ? "ogg"
+          : request.mime.startsWith("audio/mp4")
+            ? "m4a"
+            : request.mime.startsWith("audio/wav")
+              ? "wav"
+              : "webm";
+        return transcription.recorded(
+          {
+            name: `recording.${suffix}`,
+            mime: request.mime,
+            bytes: new Uint8Array(request.bytes),
+          },
+          request.token,
+        );
+      }
       if (
         [
           "note-save",
@@ -457,7 +581,11 @@ function registerIpc(): void {
           await publishTools();
           return;
         }
-        if (action === "transcribe-file") return transcription.file();
+        if (action === "transcribe-file") {
+          if (recording.has())
+            throw Error("録音を文字起こしするか破棄してから、ファイルを選んでください。");
+          return transcription.file();
+        }
         if (action === "transcribe-cancel") return transcription.cancel();
         if (action === "clipboard-read") {
           const text = await clipboard.readText();
@@ -513,6 +641,7 @@ else {
     control?.stop();
     assistantChat?.stop();
     transcription?.cancel();
+    recording?.cancel();
   });
   app.on("activate", () => {
     if (!quitting && controller) openSettings();
@@ -539,8 +668,16 @@ else {
         });
       for (const partition of ["assistant-local", "persist:assistant-server"]) {
         const isolated = session.fromPartition(partition);
-        isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-        isolated.setPermissionCheckHandler(() => false);
+        isolated.setPermissionRequestHandler((contents, permission, callback, details) => {
+          callback(
+            partition === "assistant-local" && microphonePermission(contents, permission, details),
+          );
+        });
+        isolated.setPermissionCheckHandler((contents, permission, _origin, details) => {
+          return (
+            partition === "assistant-local" && microphonePermission(contents, permission, details)
+          );
+        });
         isolated.on("will-download", (event) => event.preventDefault());
       }
       installationId = await deviceIdentity(join(app.getPath("userData"), "assistant-device-id"));
@@ -564,6 +701,16 @@ else {
         changed: () => {
           void publishTools();
         },
+      });
+      recording = new RecordingLease((id, phase, token) => {
+        recordingOrigin = null;
+        const owner = localWindows.get(id)?.window;
+        if (!owner || owner.isDestroyed()) return;
+        owner.webContents.send("assistant:recording-cancelled", {
+          token,
+          reason: "録音の期限を超えたため破棄しました。",
+        });
+        if (phase === "capturing") owner.destroy();
       });
       const file = new PreferencesFile(join(app.getPath("userData"), "assistant.json"));
       let preferences: DesktopAssistantPreferences;

@@ -107,6 +107,7 @@ export class Transcription {
   private generation = 0;
   private active: AbortController | null = null;
   private inFlight = false;
+  private currentKey: string | null = null;
   constructor(private readonly options: Options) {}
   snapshot(): TranscriptionState {
     return { ...this.state };
@@ -117,7 +118,9 @@ export class Transcription {
     this.enabled = enabled;
     this.origin = next;
   }
-  cancel(): void {
+  cancel(expectedKey?: string): boolean {
+    if (expectedKey !== undefined && this.currentKey !== expectedKey) return false;
+    this.currentKey = null;
     ++this.generation;
     this.active?.abort();
     this.active = null;
@@ -131,12 +134,37 @@ export class Transcription {
         : "文字起こしの送受信を中止しました。",
     };
     this.publish();
+    return true;
   }
-  async file(): Promise<void> {
+  isBusy(): boolean {
+    return this.inFlight;
+  }
+  file(): Promise<void> {
+    return this.process(async () => {
+      const path = await this.options.pick();
+      return path
+        ? (signal: AbortSignal) => (this.options.read ?? readAudioFile)(path, signal)
+        : null;
+    });
+  }
+  recorded(audio: AudioFile, key: string): Promise<void> {
+    if (
+      !Object.values(types).includes(audio.mime.split(";")[0]!) ||
+      !audio.bytes.byteLength ||
+      audio.bytes.byteLength > AUDIO_LIMIT
+    )
+      throw Error("録音データの形式・容量を確認してください。");
+    return this.process(async () => async () => audio, key);
+  }
+  private async process(
+    select: () => Promise<((signal: AbortSignal) => Promise<AudioFile>) | null>,
+    key: string | null = null,
+  ): Promise<void> {
     if (!this.enabled)
       throw Error("設定でローカル文字起こしを有効にし、Whisperサーバを起動してください。");
     if (this.inFlight) throw Error("前の文字起こしを停止してから選んでください。");
     this.inFlight = true;
+    this.currentKey = key;
     const generation = ++this.generation;
     const origin = this.origin;
     const controller = new AbortController();
@@ -151,21 +179,21 @@ export class Transcription {
       status: "selecting",
       name: "",
       text: "",
-      message: "音声ファイルを選んでください。送信先はこのPCのWhisperです。",
+      message: key ? "録音データを確認しています。送信先はこのPCのWhisperです。" : "音声ファイルを選んでください。送信先はこのPCのWhisperです。",
     };
     this.publish();
     let timer: ReturnType<typeof setTimeout> | null = null;
     try {
-      const path = await this.options.pick();
+      const read = await select();
       if (!live()) return;
-      if (!path) {
+      if (!read) {
         this.cancel();
         return;
       }
       const now = () => this.options.now?.() ?? performance.now();
       const expires = now() + 300_000;
       timer = setTimeout(() => controller.abort(), 300_000);
-      const audio = await (this.options.read ?? readAudioFile)(path, controller.signal);
+      const audio = await read(controller.signal);
       if (!live()) return;
       if (!audio.bytes.byteLength || audio.bytes.byteLength > AUDIO_LIMIT)
         throw Error("音声データは25MB以内にしてください。");
@@ -251,6 +279,7 @@ export class Transcription {
       if (timer) clearTimeout(timer);
       if (this.active === controller) this.active = null;
       this.inFlight = false;
+      this.currentKey = null;
       if (this.state.status === "stopping") {
         this.state = {
           ...this.state,

@@ -22,3 +22,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] B3a. Native scoped dedicated-session start/adopt/send and Claude/Codex conversation bubbles;56 generated tests,10 negatives, keyboard UI, unsigned Windows packaging and independent taskcheck/whole/correction. Exact-notice replies and targeted terminal/ask-form expansion remain B3b/C.
 
 - [x] D1. Local notes, explicit clipboard, visible summary/translation drafts, local-only read-aloud and local Whisper audio-file transcription with owned picker/bounds/cancel/retirement;576 related tests,15 valid negatives, generated browser and Windows package, independent reviews. Microphone capture, OCR and reminder integration remain subsequent work.
+
+- [x] D2. Explicit mic capture, visible indicator/stop, review/listen-on-demand, local inference and scoped cancellation;79 generated tests,12 negatives,400x640 keyboard/DOM UI, unsigned Windows package and independent reviews. Actual capture/listen/recognition still requires a real device.

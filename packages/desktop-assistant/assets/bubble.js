@@ -39,6 +39,7 @@
    const follow = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
    const info = state.session;
    const target = info?.agent;
+   document.getElementById("session-controls").hidden = !!info && ["ready", "starting"].includes(info.state);
    document.getElementById("destination").textContent = info ? `専用アシスタント・${info.kind}・${info.paneId.slice(0,8)}` : "専用アシスタント";
    document.getElementById("connection").hidden = true;
    sessionStatus.textContent = state.hint;
