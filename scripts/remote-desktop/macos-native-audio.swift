@@ -1,6 +1,7 @@
 import Foundation
 import CoreMedia
 import AudioToolbox
+import Darwin
 
 // Pure conversion/framing helpers. No capture, permission or playback on import.
 struct NativePCMError: Error { let code: String; init(_ code:String) { self.code=code } }
@@ -44,15 +45,16 @@ func nativeSamplePCM(_ sample:CMSampleBuffer) throws -> Data {
     defer { storage.deallocate() }
     let list=storage.assumingMemoryBound(to:AudioBufferList.self)
     var block:CMBlockBuffer?
-    guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample,bufferListSizeNeededOut:nil,
+    let status=CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample,bufferListSizeNeededOut:nil,
         bufferListOut:list,bufferListSize:bytes,blockBufferAllocator:kCFAllocatorDefault,
-        blockBufferMemoryAllocator:kCFAllocatorDefault,flags:0,blockBufferOut:&block)==noErr else { throw NativePCMError("pcm_buffers") }
+        blockBufferMemoryAllocator:kCFAllocatorDefault,flags:0,blockBufferOut:&block)
+    guard status==noErr else { throw NativePCMError("pcm_buffers_api_\(status)") }
     return try withExtendedLifetime(block) {
-        guard list.pointee.mNumberBuffers==(planar ? 2:1) else { throw NativePCMError("pcm_buffers") }
+        guard list.pointee.mNumberBuffers==(planar ? 2:1) else { throw NativePCMError("pcm_buffers_count_\(list.pointee.mNumberBuffers)") }
         let buffers=UnsafeMutableAudioBufferListPointer(list)
         var planes=[Data]()
         for buffer in buffers {
-            guard buffer.mNumberChannels==(planar ? 1:2),Int(buffer.mDataByteSize)==frames*(planar ? 4:8),let address=buffer.mData else { throw NativePCMError("pcm_buffers") }
+            guard buffer.mNumberChannels==(planar ? 1:2),Int(buffer.mDataByteSize)==frames*(planar ? 4:8),let address=buffer.mData else { throw NativePCMError("pcm_buffers_layout_\(buffer.mNumberChannels)_\(buffer.mDataByteSize)_\(frames)") }
             planes.append(Data(bytes:address,count:Int(buffer.mDataByteSize)))
         }
         return try nativeFloatPCM(planes,frames:frames,planar:planar)
@@ -135,7 +137,7 @@ func generatedNativeAudioTests() throws -> Int {
         catch let e as NativePCMError { try check(e.code=="pcm_format","CMSampleBuffer format rejected") }
     }
     do { let short=try sample(Data(count:20),planar:false);_=try nativeSamplePCM(short);throw NativePCMError("generated short buffer accepted") }
-    catch let e as NativePCMError { try check(e.code=="generated_sample" || e.code=="pcm_buffers","CMSampleBuffer short buffer rejected") }
+    catch let e as NativePCMError { try check(e.code=="generated_sample" || e.code.hasPrefix("pcm_buffers"),"CMSampleBuffer short buffer rejected") }
     let f=NativePCMFramer()
     try check(try f.push(Data(repeating:1,count:1920),captured:10,now:10.01).isEmpty,"bounded partial")
     let frames=try f.push(Data(repeating:2,count:1920),captured:10.01,now:10.02)
@@ -144,4 +146,120 @@ func generatedNativeAudioTests() throws -> Int {
     do { _=try f.push(Data(repeating:0,count:19200),captured:11,now:11);throw NativePCMError("generated future accepted") } catch let e as NativePCMError { try check(e.code=="pcm_bound","future buffer rejected") }
     do { _=try nativeFloatPCM([Data(count:8)],frames:1,planar:true);throw NativePCMError("generated planes accepted") } catch let e as NativePCMError { try check(e.code=="pcm_format","plane mismatch rejected") }
     return checks
+}
+
+// The launching Node process creates the 0700 directory. This helper creates
+// only its own socket and never overwrites or recursively removes a path.
+final class NativePCMParentPipe {
+    private var directory:Int32 = -1,listener:Int32 = -1,peer:Int32 = -1
+    private var parentIdentity:(dev_t,ino_t)?
+    private var socketIdentity:(dev_t,ino_t)?
+    private let path:String,parent:pid_t
+    private let generatedOwner:Bool
+    init(path:String,name:String,clientPID:pid_t,owner:pid_t?=nil) throws {
+        self.path=path;parent=owner ?? getppid();generatedOwner=owner != nil
+        let root=(path as NSString).deletingLastPathComponent,base=(root as NSString).lastPathComponent
+        func exact(_ value:String,_ pattern:String) -> Bool {
+            value.range(of:pattern,options:.regularExpression)==value.startIndex..<value.endIndex
+        }
+        guard path.hasPrefix("/"),!path.utf8.contains(0),path.utf8.count<=100,
+              (path as NSString).standardizingPath==path,(path as NSString).lastPathComponent=="pcm.sock",
+              exact(base,"^soda-native-pcm-[A-Za-z0-9]{6}$"),exact(name,"^SodaDesktopAudio-[a-f0-9]{32}$"),
+              clientPID==parent,parent>1,geteuid()==getuid() else { throw NativePCMError("pipe_scope") }
+        do {
+            directory=Darwin.open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC)
+            var value=stat()
+            guard directory>=0,fstat(directory,&value)==0,value.st_uid==getuid(),value.st_mode & 0o777==0o700 else { throw NativePCMError("pipe_scope") }
+            parentIdentity=(value.st_dev,value.st_ino)
+            try checkParent()
+            listener=Darwin.socket(AF_UNIX,SOCK_STREAM,0)
+            guard listener>=0,fcntl(listener,F_SETFL,O_NONBLOCK)>=0 else { throw NativePCMError("pipe_socket") }
+            var address=sockaddr_un();address.sun_family=sa_family_t(AF_UNIX);address.sun_len=UInt8(MemoryLayout<sockaddr_un>.size)
+            let raw=Array(path.utf8)+[UInt8(0)]
+            withUnsafeMutableBytes(of:&address.sun_path) { target in target.copyBytes(from:raw) }
+            let result=withUnsafePointer(to:&address) { pointer in
+                pointer.withMemoryRebound(to:sockaddr.self,capacity:1) {Darwin.bind(listener,$0,socklen_t(MemoryLayout<sockaddr_un>.size))}
+            }
+            guard result==0,fstatat(directory,"pcm.sock",&value,AT_SYMLINK_NOFOLLOW)==0,
+                  value.st_mode & S_IFMT==S_IFSOCK else { throw NativePCMError("pipe_bind") }
+            socketIdentity=(value.st_dev,value.st_ino)
+            guard fchmodat(directory,"pcm.sock",0o600,AT_SYMLINK_NOFOLLOW)==0 else { throw NativePCMError("pipe_mode") }
+            try checkParent()
+            guard Darwin.listen(listener,1)==0 else { throw NativePCMError("pipe_listen") }
+        } catch { close();throw error }
+    }
+    deinit { close() }
+    private func checkParent() throws {
+        let ownerAlive=generatedOwner ? parent==getpid():parent==getppid()
+        var value=stat()
+        guard ownerAlive,let identity=parentIdentity,
+              lstat((path as NSString).deletingLastPathComponent,&value)==0,
+              value.st_mode & S_IFMT==S_IFDIR,value.st_dev==identity.0,value.st_ino==identity.1,
+              value.st_uid==getuid(),value.st_mode & 0o777==0o700 else { throw NativePCMError("pipe_scope") }
+    }
+    private func admissible(_ active:()->Bool,_ deadline:Double) throws {
+        guard active() else {throw NativePCMError("pipe_expired")}
+        try checkParent()
+        guard ProcessInfo.processInfo.systemUptime<deadline else {throw NativePCMError("pipe_expired")}
+    }
+    func accept(active:()->Bool,deadline:Double) throws {
+        while true {
+            try admissible(active,deadline)
+            var available=pollfd(fd:listener,events:Int16(POLLIN),revents:0)
+            let result=Darwin.poll(&available,1,20)
+            if result<0 {if errno==EINTR {continue};throw NativePCMError("pipe_poll")}
+            if result==0 {continue}
+            try admissible(active,deadline)
+            let connected=Darwin.accept(listener,nil,nil)
+            if connected<0 {if errno==EAGAIN || errno==EINTR {continue};throw NativePCMError("pipe_accept")}
+            peer=connected
+            var uid:uid_t=0,gid:gid_t=0,pid:pid_t=0,size=socklen_t(MemoryLayout<pid_t>.size),one:Int32=1
+            guard getpeereid(peer,&uid,&gid)==0,uid==getuid(),
+                  getsockopt(peer,SOL_LOCAL,LOCAL_PEERPID,&pid,&size)==0,pid==parent,
+                  size==socklen_t(MemoryLayout<pid_t>.size),fcntl(peer,F_SETFL,O_NONBLOCK)>=0,
+                  fcntl(peer,F_SETFD,FD_CLOEXEC)>=0,
+                  setsockopt(peer,SOL_SOCKET,SO_NOSIGPIPE,&one,socklen_t(MemoryLayout<Int32>.size))==0 else { closePeer();throw NativePCMError("pipe_peer") }
+            try admissible(active,deadline)
+            Darwin.close(listener);listener = -1
+            return
+        }
+    }
+    func alive() throws -> Bool {
+        guard peer>=0 else {return false}
+        try checkParent()
+        var incoming=pollfd(fd:peer,events:Int16(POLLIN),revents:0)
+        return Darwin.poll(&incoming,1,0)==0 // EOF, error or reverse data revokes capture.
+    }
+    func send(_ data:Data,active:()->Bool,deadline:Double) throws {
+        do {
+            guard peer>=0,data.count==16 || data.count==3856 else {throw NativePCMError("pipe_record")}
+            try data.withUnsafeBytes { bytes in
+                var offset=0
+                while offset<bytes.count {
+                    try admissible(active,deadline)
+                    var available=pollfd(fd:peer,events:Int16(POLLOUT),revents:0)
+                    let result=Darwin.poll(&available,1,20)
+                    if result<0 {if errno==EINTR {continue};throw NativePCMError("pipe_poll")}
+                    if result==0 {continue}
+                    try admissible(active,deadline)
+                    let count=Darwin.send(peer,bytes.baseAddress!.advanced(by:offset),bytes.count-offset,0)
+                    if count<0 {if errno==EAGAIN || errno==EINTR {continue};throw NativePCMError("pipe_write")}
+                    guard count>0 else {throw NativePCMError("pipe_closed")}
+                    offset+=count
+                }
+            }
+        } catch {closePeer();throw error}
+    }
+    private func closePeer() {if peer>=0 {Darwin.close(peer);peer = -1}}
+    func close() {
+        closePeer();if listener>=0 {Darwin.close(listener);listener = -1}
+        if directory>=0 {
+            var value=stat()
+            if let identity=socketIdentity,fstatat(directory,"pcm.sock",&value,AT_SYMLINK_NOFOLLOW)==0,
+               value.st_dev==identity.0,value.st_ino==identity.1,value.st_mode & S_IFMT==S_IFSOCK {
+                _=unlinkat(directory,"pcm.sock",0)
+            }
+            Darwin.close(directory);directory = -1
+        }
+    }
 }
