@@ -1,3 +1,4 @@
+import {DesktopRegionSpec} from "@sodashitsu/protocol";
 import {DesktopSharedMonitorsFailure} from "@sodashitsu/protocol";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {desktopFeaturesFromProtocols} from "@sodashitsu/protocol";
@@ -65,6 +66,8 @@ import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
 class DesktopSetupRequired extends Error {}
 
 type Viewer = {
+  agentRegions?:boolean;
+  regionSpec?:import("@sodashitsu/protocol").DesktopRegionSpec;
   nativePlatformRequested?:boolean;nativePlatform?:import("@sodashitsu/protocol").DesktopNativePlatform;inputCapabilities?:DesktopInputCapabilities;nativeInputFloor?:number;
   sharedDatagramsRequested?:boolean;sharedDatagrams?:boolean;sharedNativeRequested?:boolean;sharedNative?:boolean;sharedRequested?: boolean; sharedDesktop?: boolean; controlRequests?: boolean[];
   elevatedRequested?:boolean;elevatedDesktop?:boolean;protectedDesktop?: "elevated-default"|"elevated-uac";
@@ -106,6 +109,7 @@ type Viewer = {
   media?: { id: string; generation: number; seq: number; native?:boolean; datagrams?:boolean; audioRequested?:boolean;audioSeq?:number;audioGeneration?:number;nextNativeAt?:number;barrier?:{generation:number;at:number;baseSeq?:number}; pending?:number[]; window?:1|3;lastAck?:number;sentAt?:Map<number,number>;freshAt?:Map<number,number>;drawnAt?:number };
   nativeInputFreshness?: boolean;
   snapshot?: {
+    regionId?:string;
     promise: Promise<void>;
     resolve(): void;
     reject(e: Error): void;
@@ -288,6 +292,18 @@ export class DesktopRelay {
       agent: {
         frame: () => this.agentFrame(v),
         capture: (after) => this.capture(v, after),
+        region:{
+          capture:async(spec,after)=>{
+            if(!v.agentRegions||v.secureDesktop||!v.provider||!this.viewers.has(v))throw new RpcError("not_found","This source does not support region verification");
+            const rect=DesktopRegionSpec.parse(spec),size=v.chain.last;
+            if(!size||rect.x+rect.width>size.width||rect.y+rect.height>size.height)throw new RpcError("invalid_params","Region lies outside the transferred image");
+            const changed=v.regionSpec?.id!==rect.id;v.regionSpec=rect;
+            if(changed&&!this.send(v.provider,{type:"keyframe",region:rect}))throw new RpcError("server_busy","Region capture is unavailable");
+            await this.capture(v,after,rect.id);
+          },
+          frame:()=>v.chain.last&&this.viewers.has(v)&&v.ready&&!v.secureDesktop?{info:v.chain.last,at:v.frameAt}:undefined,
+          clear:id=>{if(v.regionSpec?.id!==id)return;delete v.regionSpec;if(v.snapshot?.regionId===id){const pending=v.snapshot;delete v.snapshot;clearTimeout(pending.timer);pending.reject(new RpcError("unauthorized","Region capture cancelled"));}if(v.provider&&this.viewers.has(v))this.send(v.provider,{type:"keyframe",region:null});},
+        },
         releaseInputs: () => {
           if (v.provider) this.send(v.provider, { type: "release" });
         },
@@ -917,7 +933,7 @@ export class DesktopRelay {
           v.chain.accept(info);
           if (!info.update && !v.secureDesktop) {
             v.latest = { info, image: image.slice(), at: now };
-            if (v.snapshot&&(!v.nativePlatform||(info.sourceInputSeq??0)>=(v.nativeInputFloor??0))) {
+            if (v.snapshot&&(!v.snapshot.regionId||info.regions?.some(r=>r.id===v.snapshot!.regionId))&&(!v.nativePlatform||(info.sourceInputSeq??0)>=(v.nativeInputFloor??0))) {
               const pending = v.snapshot;
               delete v.snapshot;
               clearTimeout(pending.timer);
@@ -958,6 +974,7 @@ export class DesktopRelay {
             if(ready.protectedDesktop&&!v.elevatedDesktop)throw Error("Unrequested protected worker");
             if(ready.protectedDesktop)v.protectedDesktop=ready.protectedDesktop;else delete v.protectedDesktop;
             if(v.virtualDisplay&&(ready.virtualDisplay!==true||ready.secureDesktop||ready.lockScreenCover))throw Error("Virtual display not selected");
+            v.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
             v.ready = true;
             v.allowInput = ready.allowInput;
             v.secureDesktop = ready.secureDesktop === true;
@@ -1124,13 +1141,14 @@ export class DesktopRelay {
     if(v.nativePlatform&&(full.info.sourceInputSeq??0)<(v.nativeInputFloor??0))return;
     return { info: { ...full.info, seq: current.seq }, image: full.image, at: v.frameAt };
   }
-  private async capture(v: Viewer, after?: number): Promise<void> {
+  private async capture(v: Viewer, after?: number, regionId?:string): Promise<void> {
     if (v.secureDesktop) throw new RpcError("unauthorized", "Lock screen is human-only");
     const current = this.agentFrame(v);
     if (
       current &&
       performance.now() - current.at < 2000 &&
-      (after === undefined || current.info.seq > after)
+      (after === undefined || current.info.seq > after) &&
+      (regionId===undefined||current.info.regions?.some(r=>r.id===regionId))
     )
       return;
     if (!this.viewers.has(v) || !v.provider)
@@ -1146,11 +1164,12 @@ export class DesktopRelay {
         delete v.snapshot;
         reject(new RpcError("server_busy", "Fresh full frame unavailable"));
       }, 2500);
-      v.snapshot = { promise, resolve, reject, timer };
+      v.snapshot = { promise, resolve, reject, timer,...(regionId?{regionId}:{}) };
       waiting = promise;
       // Legacy sources already send full images. Delta sources send a fresh full JPEG on demand.
-      if (v.chain.last?.contentId && !this.send(v.provider, { type: "keyframe" })) this.stop(v);
+      if ((v.chain.last?.contentId||regionId) && !this.send(v.provider, { type: "keyframe" })) this.stop(v);
     }
+    if(regionId&&v.snapshot)v.snapshot.regionId=regionId;
     await waiting;
   }
   private stop(v: Viewer): void {

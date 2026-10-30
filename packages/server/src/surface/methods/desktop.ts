@@ -38,7 +38,7 @@ export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps
           agents.release(ctx.clientId, p.leaseId);
           throw new RpcError("server_busy", "Agent output is congested; lease revoked");
         }
-        await agents.refresh(ctx.clientId, p.leaseId, p.afterFrameSeq);
+        await agents.refresh(ctx.clientId, p.leaseId, p.afterFrameSeq,p.region);
         if (ctx.sink.bufferedAmount > 256 * 1024) {
           agents.release(ctx.clientId, p.leaseId);
           throw new RpcError("server_busy", "Agent output is congested; lease revoked");

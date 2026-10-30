@@ -1,3 +1,5 @@
+import {randomUUID} from "node:crypto";
+import {DesktopRegionSpec,type DesktopRegionSpec as RegionSpec} from "@sodashitsu/protocol";
 import type {DesktopResourceChannel} from "./DesktopResourceChannel.js";
 import {DesktopHelperInputAck} from "./DesktopPointerWitness.js";
 import {
@@ -37,6 +39,7 @@ export interface DesktopHelper extends EventEmitter {
 }
 
 type Subscription = DesktopHelper & {
+  region?:{requested:RegionSpec;physical:RegionSpec};
   cursorShape: number;
   images: DesktopFrameChain;
   configured: boolean;
@@ -70,6 +73,8 @@ export class DesktopSharedCapture {
         images: DesktopFrameChain;
         deltas: boolean;
         keyframeAt: number;
+        regionDirty?:boolean;
+        regionTimer?:ReturnType<typeof setTimeout>;
         inputSeq: number;
         inputs: Map<number, { member: Subscription; seq: number }>;
         ended: boolean;
@@ -280,7 +285,16 @@ export class DesktopSharedCapture {
       if (!s.pending || value.seq !== s.pending) throw Error("Wrong subscriber ACK");
       s.pending = 0;
       if (g.deltas && s.images.last?.seq !== g.images.last?.seq) this.imageKeyframe(g);
-    } else if (value.type === "keyframe") this.imageKeyframe(g);
+    } else if (value.type === "keyframe") {
+      if(value.region!==undefined){
+        const size=g.images.last;
+        if(g.ready?.agentRegions!==true||g.protectedSource||!size)throw Error("Region verification unavailable");
+        if(value.region===null)delete s.region;
+        else{const spec=DesktopRegionSpec.parse(value.region);if(spec.x+spec.width>size.width||spec.y+spec.height>size.height)throw Error("Region outside capture");s.region={requested:spec,physical:{...spec,id:randomUUID()}};}
+        g.regionDirty=true;
+      }
+      this.imageKeyframe(g);
+    }
     else if (value.type === "heartbeat") this.write(g, value);
     else if (value.type === "control") {
       if (g.control === s && value.enabled === true) this.write(g, value);
@@ -417,9 +431,13 @@ export class DesktopSharedCapture {
           recover = true;
           continue;
         }
-        s.images.accept(info);
+        const {regions,...plain}=info;
+        const proof=s.region&&regions?.find(p=>p.id===s.region!.physical.id);
+        if(proof&&s.region&&(proof.x!==s.region.physical.x||proof.y!==s.region.physical.y||proof.width!==s.region.physical.width||proof.height!==s.region.physical.height))throw Error("Region proof bounds changed");
+        const delivered={...plain,...(proof&&s.region?{regions:[{...proof,id:s.region.requested.id}]}:{})};
+        s.images.accept(delivered);
         s.pending = info.seq;
-        this.emit(s, value);
+        this.emit(s, {...value,info:delivered});
       }
       this.write(g, { type: "ack", seq: info.seq });
       if (recover) this.imageKeyframe(g);
@@ -471,9 +489,13 @@ export class DesktopSharedCapture {
   }
   private imageKeyframe(g: NonNullable<DesktopSharedCapture["group"]>): void {
     const now = performance.now();
-    if (now - g.keyframeAt < 100) return;
+    if (now - g.keyframeAt < 100) {
+      if(g.regionDirty&&!g.regionTimer){g.regionTimer=setTimeout(()=>{delete g.regionTimer;if(!g.ended)this.imageKeyframe(g);},Math.max(1,Math.ceil(100-(now-g.keyframeAt))));g.regionTimer.unref();}
+      return;
+    }
     g.keyframeAt = now;
-    this.write(g, { type: "keyframe" });
+    if(g.regionDirty){g.regionDirty=false;clearTimeout(g.regionTimer);delete g.regionTimer;this.write(g,{type:"keyframe",regions:[...g.members].flatMap(member=>member.region?[member.region.physical]:[])});}
+    else this.write(g, { type: "keyframe" });
   }
   private emit(s: Subscription, value: unknown): void {
     if (s.closed) return;
@@ -503,6 +525,7 @@ export class DesktopSharedCapture {
     g.audio?.detach(s);
     g.native?.detach(s);
     g.members.delete(s);
+    if(s.region){delete s.region;g.regionDirty=true;if(g.members.size)this.imageKeyframe(g);}
     if (g.control === s) {
       delete g.control;
       this.write(g, { type: "control", enabled: false });
@@ -517,6 +540,7 @@ export class DesktopSharedCapture {
   private end(g: NonNullable<DesktopSharedCapture["group"]>): void {
     if (g.ended) return;
     g.ended = true;
+    clearTimeout(g.regionTimer);delete g.regionTimer;
     g.audio?.dispose();
     delete g.audio;
     g.native?.dispose();

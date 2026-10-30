@@ -48,7 +48,7 @@ export class DesktopEndpointAgentRpc {
       if(message.method==="desktop.agent.attach"){
        const p=DesktopMethods["desktop.agent.attach"].parse(params);result=this.agents.attachRecipient(this.owner,p.ticket,this.recipient,()=>this.isActive(),this.options.scope);this.attached=true;
       }else if(message.method==="desktop.agent.observe"){
-       const p=DesktopMethods["desktop.agent.observe"].parse(params);await this.agents.refresh(this.owner,p.leaseId,p.afterFrameSeq);this.ensure();result=this.agents.observe(this.owner,p.leaseId,p.afterFrameSeq);
+       const p=DesktopMethods["desktop.agent.observe"].parse(params);await this.agents.refresh(this.owner,p.leaseId,p.afterFrameSeq,p.region);this.ensure();result=this.agents.observe(this.owner,p.leaseId,p.afterFrameSeq);
       }else if(message.method==="desktop.agent.act"){
        const p=DesktopMethods["desktop.agent.act"].parse(params);result=await this.agents.act(this.owner,p.leaseId,p.observationId,p.inputs);
       }else{

@@ -201,7 +201,7 @@ export class ExtensionDesktopAgents {
             result = attached;
           } else if (method === "desktop.agent.observe") {
             const value = DesktopMethods["desktop.agent.observe"].parse(p);
-            await this.agents.refresh(bound.owner, value.leaseId, value.afterFrameSeq);
+            await this.agents.refresh(bound.owner, value.leaseId, value.afterFrameSeq,value.region);
             if (!this.live(bound)) throw failure();
             // Base64 plus envelope must fit the existing four-MiB extension line budget.
             result = this.agents.observe(

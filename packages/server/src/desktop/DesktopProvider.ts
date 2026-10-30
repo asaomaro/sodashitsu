@@ -1,3 +1,4 @@
+import {DesktopRegionSpec} from "@sodashitsu/protocol";
 import {DesktopAudioPipes,desktopWslAudioCommand} from "./DesktopAudioPipes.js";
 import {DesktopNativeSelection} from "./DesktopNativeSelection.js";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
@@ -86,6 +87,7 @@ export interface DesktopProviderEndpointScope {
  close():void;
 }
 type Share = {
+  agentRegions?:boolean;
   audioPipes?:DesktopAudioPipes;resourcesManaged:boolean;
   independent?:boolean;
   capturePool?:DesktopSharedCapture;
@@ -608,7 +610,11 @@ export class DesktopProvider {
             s.pending = 0;
             this.write(s, m);
           } else if (m.type === "keyframe") {
-            this.write(s, m);
+            if(m.region!==undefined){
+              const size=s.chain.last;
+              if(!s.agentRegions||!size||m.region&&(m.region.x+m.region.width>size.width||m.region.y+m.region.height>size.height))throw new Error("Invalid agent region");
+            }
+            this.write(s, s.shared?m:m.region===undefined?m:{type:"keyframe",regions:m.region?[DesktopRegionSpec.parse(m.region)]:[]});
           } else if (m.type === "control") {
             s.inputAcks.invalidatePointers();
             delete s.pointerWitness;
@@ -706,6 +712,7 @@ export class DesktopProvider {
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe,nativePointerProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
+            s.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
             if(cfg.nativePlatform?(ready.backend!==cfg.nativePlatform||!ready.inputCapabilities):ready.backend==="linux-portal"||ready.backend==="macos-sck")throw Error("Unexpected native backend proof");
             if(!cfg.nativePlatform&&ready.inputCapabilities)throw Error("Unrequested input capabilities");
             if(ready.inputCapabilities)s.inputCapabilities=ready.inputCapabilities;

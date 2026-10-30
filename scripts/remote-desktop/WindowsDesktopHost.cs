@@ -560,11 +560,13 @@ public static class SodaDesktopHost {
             var backends=config["captureBackends"] as object[];
             if((ActiveMonitors==null||ActiveMonitors.Selected!="all"||ActiveMonitors.Items.Length==1)&&backends!=null && Array.IndexOf(backends,"dxgi")>=0)dxgi=SodaDesktopDxgi.TryCreate(sourceDevice,Bounds,w,h);
         }
+        var agentRegions=new SodaDesktopAgentRegions(w,h);
         try {
             var ready=new Dictionary<string,object>{{"type","ready"},{"title",Environment.MachineName+" / "+Environment.UserName+" / "+sourceTitle},{"allowInput",allow},{"width",Bounds.Width},{"height",Bounds.Height},{"backend",dxgi!=null?"windows-dxgi":"windows-gdi"},{"image",new {colorMode,showCursor}},{"allowClipboard",clipboardCeiling},{"dynamicQuality",true}};
             if(options.ContainsKey("imeKeys") && options["imeKeys"] is bool && (bool)options["imeKeys"])ready["imeKeys"]=true;
             if(options.ContainsKey("extendedInput") && options["extendedInput"] is bool && (bool)options["extendedInput"])ready["extendedInput"]=true;
             if(separateCursor)ready["cursor"]=true;
+            if(!Secure)ready["agentRegions"]=true;
             if(VirtualLease!=null)ready["virtualDisplay"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
             if(NativePointerProof)ready["nativePointerProof"]=true;
@@ -678,7 +680,7 @@ public static class SodaDesktopHost {
                         else if(type=="native_video_ack") {
                             if(video!=null && (string)msg["id"]==videoId) {videoWindow.Ack(Convert.ToInt64(msg["seq"]));}
                         }
-                        else if(type=="keyframe"){forceFull=true;preparation.Invalidate(true);}
+                        else if(type=="keyframe"){if(msg.ContainsKey("regions")){if(Secure)throw new InvalidOperationException("Region verification unavailable");agentRegions.Configure(msg["regions"]);if(agentRegions.Active&&current==null)current=new byte[w*h*3];}forceFull=true;preparation.Invalidate(true);}
                         else if(type=="policy") {
                             int rate=Num(msg,"fps"),q=Num(msg,"quality");if(rate<1||rate>maxFps||q<20||q>maxQuality)throw new InvalidOperationException("Policy limit");
                             fps=rate;quality=q;args.Param[0].Dispose();args.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,(long)q);preparation.Invalidate(true);
@@ -773,7 +775,7 @@ public static class SodaDesktopHost {
                         var rects=new List<Rectangle>();
                         bool changed=true;string capturedId=contentId;
                         var prepared=new PreparedFrame {started=frameStarted,scopeTicket=scopeTicket};
-                        if(deltas || colorMode!="full")ReadPixels(scaled,current,colorMode);
+                        if(deltas || colorMode!="full" || agentRegions.Active)ReadPixels(scaled,current,colorMode);
                         if(deltas){rects=DirtyTiles(current,previous,w,h,initialized);changed=rects.Count>0;if(changed)capturedId=BitConverter.ToString(sha.ComputeHash(current)).Replace("-","").ToLowerInvariant();}
                         double capture=t.Elapsed.TotalMilliseconds;t.Restart();
                         bool full=!deltas || forceFull || frameStarted-lastFull>=30000;
@@ -795,6 +797,7 @@ public static class SodaDesktopHost {
                             double encode=t.Elapsed.TotalMilliseconds;
                             if(!AdmitPrepared(prepared))break;
                             var info=new Dictionary<string,object>{{"seq",sequence+1},{"width",w},{"height",h},{"format",format},{"captureMs",capture},{"encodeMs",encode}};
+                            if(agentRegions.Active)info["regions"]=agentRegions.Proofs(current);
                             if(deltas)info["contentId"]=capturedId;
                             if(update!=null)info["update"]=update;
                             using(var process=Process.GetCurrentProcess()){info["sourceCpuMs"]=process.TotalProcessorTime.TotalMilliseconds;info["sourceMemoryBytes"]=process.WorkingSet64;}
@@ -819,7 +822,7 @@ public static class SodaDesktopHost {
                 }
                 }
             }
-        } finally { Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose();if(ResourceFence!=null)foreach(var epoch in new Dictionary<string,string>(ResourceEpochs))ResourceCleanup(epoch.Key,epoch.Value,true); }
+        } finally { agentRegions.Clear();Stopping=true;Release();StopAudio(ref microphone);StopAudio(ref richClipboardWorker);StopAudio(ref audio);if(cursorPump!=null&&!cursorPump.Stop(1000))Environment.Exit(1);if(video!=null)video.Dispose();if(videoResize!=null)videoResize.Dispose();if(videoBitmap!=null)videoBitmap.Dispose();if(dxgi!=null)dxgi.Dispose();if(form!=null)form.Dispose();watchdog.Dispose();if(ResourceFence!=null)foreach(var epoch in new Dictionary<string,string>(ResourceEpochs))ResourceCleanup(epoch.Key,epoch.Value,true); }
     }
 }
 
@@ -2041,4 +2044,38 @@ public sealed class SodaDesktopVideoBitstream {
         if(key&&!present){if(av1Header==null)throw new FormatException("AV1 random-access header missing");int insert=units.Count>0&&units[0].Type==2?1:0;units.Insert(insert,new Obu{Type=1,Raw=av1Header});}
         using(var output=new MemoryStream()){foreach(var obu in units)output.Write(obu.Raw,0,obu.Raw.Length);if(output.Length>512*1024-9)throw new FormatException("AV1 access unit limit");return new Unit{Data=output.ToArray(),Codec=codec,Key=key};}
     }
+}
+
+
+// Memory-only BGR fingerprints for the exact scaled pixels sent by this helper.
+public sealed class SodaDesktopAgentRegions {
+    sealed class Region { public string Id;public int X,Y,Width,Height,Prefix;public byte[] Work; }
+    readonly int width,height;List<Region> regions=new List<Region>();
+    public SodaDesktopAgentRegions(int width,int height){if(width<1||height<1||(long)width*height>8000000)throw new InvalidOperationException("Region image bounds");this.width=width;this.height=height;}
+    public bool Active {get{return regions.Count>0;}}
+    static int Integer(Dictionary<string,object> value,string key){object number;if(!value.TryGetValue(key,out number)||!(number is int))throw new InvalidOperationException("Region coordinate");return (int)number;}
+    public void Configure(object value){
+        var items=value as object[];if(items==null||items.Length>8)throw new InvalidOperationException("Region count");
+        var next=new List<Region>();var ids=new HashSet<string>();
+        foreach(object item in items){
+            var v=item as Dictionary<string,object>;object rawId;Guid parsed;
+            if(v==null||v.Count!=5||!v.TryGetValue("id",out rawId)||!(rawId is string)||!Guid.TryParseExact((string)rawId,"D",out parsed)||!ids.Add((string)rawId))throw new InvalidOperationException("Region id");
+            var r=new Region {Id=(string)rawId,X=Integer(v,"x"),Y=Integer(v,"y"),Width=Integer(v,"width"),Height=Integer(v,"height")};
+            if(r.X<0||r.Y<0||r.Width<1||r.Height<1||(long)r.Width*r.Height>1048576||(long)r.X+r.Width>width||(long)r.Y+r.Height>height)throw new InvalidOperationException("Region bounds");
+            next.Add(r);
+        }
+        foreach(var r in next){var prefix=Encoding.ASCII.GetBytes(string.Format(System.Globalization.CultureInfo.InvariantCulture,"{0}:{1}:{2}:{3}:{4}:{5}:{6}:",r.Id,width,height,r.X,r.Y,r.Width,r.Height));r.Prefix=prefix.Length;r.Work=new byte[checked(prefix.Length+r.Width*r.Height*3)];Buffer.BlockCopy(prefix,0,r.Work,0,prefix.Length);}
+        Clear();regions=next;
+    }
+    public object[] Proofs(byte[] pixels){
+        if(pixels==null||pixels.Length!=checked(width*height*3))throw new InvalidOperationException("Region pixel buffer");
+        var result=new List<object>();
+        using(var hash=SHA256.Create())foreach(var r in regions){
+            for(int y=0;y<r.Height;y++)Buffer.BlockCopy(pixels,checked(((r.Y+y)*width+r.X)*3),r.Work,r.Prefix+y*r.Width*3,r.Width*3);
+            string digest=BitConverter.ToString(hash.ComputeHash(r.Work)).Replace("-","").ToLowerInvariant();
+            result.Add(new Dictionary<string,object>{{"id",r.Id},{"x",r.X},{"y",r.Y},{"width",r.Width},{"height",r.Height},{"digest",digest}});
+        }
+        return result.ToArray();
+    }
+    public void Clear(){foreach(var r in regions)if(r.Work!=null)Array.Clear(r.Work,0,r.Work.Length);regions.Clear();}
 }

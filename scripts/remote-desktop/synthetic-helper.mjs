@@ -96,7 +96,7 @@ function run() {
   const platformAt=process.argv.indexOf("--native-platform"),nativePlatform=platformAt>=0?process.argv[platformAt+1]:undefined;if(nativePlatform&&!["linux-portal","macos-sck"].includes(nativePlatform))throw Error("Fixture platform");
   const lifecycleAt=process.argv.indexOf("--lifecycle-ledger"),lifecycle=lifecycleAt>=0?process.argv[lifecycleAt+1]:undefined;
   if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"spawn",pid:process.pid})+"\n");
-  let configureDelayed=false;
+  let configureDelayed=false,regions=[];
   let options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
     cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
@@ -253,6 +253,7 @@ function run() {
         if (record && process.argv.includes("--dxgi")) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
           type: "ready",
+          ...(process.argv.includes("--agent-regions")&&!secure?{agentRegions:true}:{}),
           ...(resourceMode?{resourceFences:true}:{}),
           ...(protectedMode?{protectedDesktop:protectedMode,...(m.allowSharedProtected===true&&!process.argv.includes("--no-shared-protected")?{sharedProtected:true}:{})}:{}),
           ...(virtualSource?{virtualDisplay:true}:{}),
@@ -323,7 +324,7 @@ function run() {
       else if(m.type==="native_rate"&&native&&m.id===native.id){if(native.barrier)return;if(!nativeCadence||!process.argv.includes("--native-cadence")||m.fps<1||m.fps>native.maxFps||m.kbps<128||m.kbps>native.maxBitrate)throw Error("Native rate ceiling");native.fps=m.fps;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"native_rate",id:m.id,fps:m.fps,kbps:m.kbps})+"\n");}
       else if(m.type==="native_bitrate"&&native&&m.id===native.id){}
       else if(m.type==="native_video_ack"&&native&&m.id===native.id&&m.seq===native.pending[0])native.pending.shift();
-      else if (m.type === "keyframe") {forceFull = true;next=0;}
+      else if (m.type === "keyframe") {if(m.regions!==undefined){if(!process.argv.includes("--agent-regions"))throw Error("Regions unsupported");regions=m.regions;}forceFull = true;next=0;}
       else if(m.type==="policy" && options){options={...options,fps:m.fps,quality:m.quality};next=0;}
       else if(m.type==="clipboard_rich"){rich(m);}
       else if(m.type==="clipboard_control"){clearRich();clipboardAllowed=m.enabled && process.argv.includes("--allow-clipboard");clipboardGeneration=m.generation;}
@@ -470,6 +471,10 @@ function run() {
         .update("static-" + version)
         .digest("hex");
     if(nativePlatform){frame.info.timing="unavailable";frame.info.sourceInputSeq=nativeAcceptedInput;}
+    if(regions.length){
+      // Generated solid-color source: digest covers the same ROI, dimensions and generation.
+      frame.info.regions=regions.map(r=>({...r,digest:createHash("sha256").update(JSON.stringify([r,options.width,heightOf(options),stable?1:seq,version])).digest("hex")}));
+    }
     frame.info.seq = seq;
     forceFull = false;
     sentVersion = version;

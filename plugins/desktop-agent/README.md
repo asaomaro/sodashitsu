@@ -13,3 +13,6 @@
 コード・lease・画像をログやGitへ保存しないでください。画像も含むplugin.callの結果は256KiBまでです。大きければ明示的に拒否し、共有窓で幅/品質を下げて改めて取得します。画像の自動保存、モデル送信、権限再取得、不確定な操作の再送は行いません。
 
 このホストAPIは通常接続用です。`soda-e2e-agent-v1.`で始まる暗号化コードは受理せず、暗号化から通常経路へ切り替えません。暗号化されたエージェントには既存の`sodactl desktop session/mcp/model --endpoint-fingerprint ...`を使います。拡張プロセスの停止と別途起動したCLIの寿命を結び付けることは、CLIを組み込むプラグイン側の責任です。
+
+
+`desktop.agent.observe` の `region: {x,y,width,height}` は転送画像の画素座標です。対応Windows sourceでは最大1,048,576画素を変更確認し、画像全体と `verification.pointerOnly: true` を返します。以降のactは領域内のpointerだけを許可します。キー・文字列・ホイールはregionを省略して観察し直してください。未対応sourceは失敗し、暗黙の全画面fallbackはしません。領域外の背景が変わっても、領域内・寸法・許可・新鮮さが保たれれば操作を継続できます。

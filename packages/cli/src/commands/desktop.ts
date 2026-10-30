@@ -96,9 +96,10 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
           if (m.method === "observe") {
             const p = DesktopMethods["desktop.agent.observe"].parse({
                 leaseId: "x".repeat(43),
+                ...(m.region === undefined ? {} : { region: m.region }),
                 ...(m.afterFrameSeq === undefined ? {} : { afterFrameSeq: m.afterFrameSeq }),
               }),
-              result = await session.observe(p.afterFrameSeq);
+              result = await session.observe(p.afterFrameSeq,p.region);
             if (m.path !== undefined) {
               if (typeof m.path !== "string" || !m.path) throw Error("path must be a filename");
               await writeFile(m.path, Buffer.from(result.imageBase64, "base64"), {
