@@ -178,3 +178,11 @@ it.each(["linux-portal","macos-sck"] as const)("persists native %s clipboard per
  expect(configure.mock.calls.at(-1)![0]?.allowClipboard).toBe(true);
  await restored.set({...off,enabled:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowClipboard:false,command:["synthetic-helper"]});
 });
+
+it("persists the Linux system-audio ceiling and revokes its helper flag independently from input",async()=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"linux-portal"});
+ await settings.set({...off,enabled:true,allowSystemAudio:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowInput:false,allowSystemAudio:true,command:["synthetic-helper","--allow-system-audio"]});
+ expect((await DesktopSettings.open({...options,nativePlatform:"linux-portal"})).get(true).permissions.allowSystemAudio).toBe(true);
+ await settings.set({...off,enabled:true,allowSystemAudio:false});expect(configure.mock.calls.at(-1)![0]?.command).toEqual(["synthetic-helper"]);expect(configure.mock.calls.at(-1)![0]?.allowSystemAudio).toBe(false);
+ const mac=await DesktopSettings.open({...options,nativePlatform:"macos-sck"});await expect(mac.set({...off,enabled:true,allowSystemAudio:true})).rejects.toThrow("native backend");
+});

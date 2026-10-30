@@ -975,3 +975,14 @@ macOSは同じScreenCaptureKitの取得画像をVideoToolboxへ渡します。`b
 圧縮処理は1枚、未描画ACKは最大3枚に制限します。取得から1秒を越えた映像や、2秒を越えたACK待ちを通さず、予測frameの途中を失った場合は動画を停止して画像へ戻します。取消後も古いencoderの終了確認まで枠を保持します。切替直後に利用できない場合は、少し待って動画を依頼し直してください。同じ共有で最大1024回の動画IDを記録し、再利用を拒否します。上限では共有へ接続し直してください。
 
 この段階ではnativeの動画はH.264の固定設定です。UDP・追加codec・動画の自動解像度調整・音声・マイク・実画面の解像度変更・複数monitorは別機能です。生成画像による圧縮/復号・通信・描画の検証と、実端末のPortal/ScreenCaptureKitの動作確認を区別しています。
+
+
+### Linux nativeのシステム音声
+
+Linux実験版では、設定の「システム音声の送信を許可」を有効にした上で、接続窓でも音声を要求できます。動画開始後も最初はミュートで、「音声を再生」を押すと再生します。共有viewerは取得・Opus圧縮を共用し、各窓の要求と停止は別々に扱います。音声非対応の窓が先に参加しても、後から参加する音声対応の窓を切断しません。
+
+`linux-portal-helper.py`・`linux-native-video.py`・`linux-native-audio.py`を同じ版で配置してください。設定から起動する同梱helperには、保存した許可に応じて `--allow-system-audio` を渡します。独自の起動設定ではこのフラグも必要です。録音用の既定sourceではなく、現在のユーザーのローカルPulseAudio／PipeWire Pulse互換サーバの既定出力monitorを使用します。GStreamerの `pulsesrc`・`audioconvert`・`audioresample`・`appsink`が必要です。リモートの `PULSE_SERVER` やマイクへ自動で切り替えず、依存・サーバがない場合は動画のみ継続します。WSLのWindows共有経路とは別です。
+
+共有に使うPortal・ログインセッション・動画のIDに結び付け、録音処理は音声要求時だけ開始します。停止時は取得処理の終了を確認してから専用socketを閉じます。受信側の切断は無音時にも検査します。PCMは親サーバだけが接続できるローカルsocketから既存Opus圧縮へ渡し、PCMをネットワーク配信しません。生成tone・private peer・Opus受信の自動検証と、実際のLinux出力音声・端末間再生の実機確認は別です。
+
+macOSのシステム音声、両native backendのマイク転送は後続の別段階で対応します。

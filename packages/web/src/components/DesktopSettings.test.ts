@@ -90,3 +90,10 @@ it.each(["linux-portal","macos-sck"])("saves native %s clipboard permission with
  await label.get("input").setValue(true);await wrapper.get("button").trigger("click");await flushPromises();
  expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowClipboard:true});wrapper.unmount();
 });
+
+it.each(["linux-portal","macos-sck"])("shows and saves only implemented native %s system audio",async nativePlatform=>{
+ const request=vi.fn(async(method,p)=>({nativePlatform,permissions:method.endsWith("set")?p:permissions,supported:true,canConfigure:true}));
+ const wrapper=mount(DesktopSettings,{global:{provide:{[ConnectionKey as symbol]:{request}}}});await flushPromises();
+ try{const label=wrapper.findAll("label").find(item=>item.text()==="システム音声の送信を許可");if(nativePlatform==="macos-sck"){expect(label).toBeUndefined();return;}
+ expect(label).toBeDefined();await label!.get("input").setValue(true);await wrapper.get("button").trigger("click");await flushPromises();expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowSystemAudio:true});}finally{wrapper.unmount();}
+});

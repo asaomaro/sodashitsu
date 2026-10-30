@@ -18,6 +18,10 @@ from pathlib import Path
 _native_spec=importlib.util.spec_from_file_location("soda_owned_native_video",Path(__file__).with_name("linux-native-video.py"))
 _native_video=importlib.util.module_from_spec(_native_spec)
 _native_spec.loader.exec_module(_native_video)
+_audio_spec=importlib.util.spec_from_file_location("soda_owned_native_audio",Path(__file__).with_name("linux-native-audio.py"))
+_native_audio=importlib.util.module_from_spec(_audio_spec)
+_audio_spec.loader.exec_module(_native_audio)
+
 
 KEYS = dict(zip(["Escape", *[f"Digit{i}" for i in range(1, 10)], "Digit0", "Minus", "Equal", "Backspace", "Tab"], range(1, 16)))
 KEYS.update(dict(zip([f"Key{c}" for c in "QWERTYUIOP"], range(16, 26))))
@@ -525,6 +529,7 @@ class PortalHelper:
     SC="org.freedesktop.portal.ScreenCast";RD="org.freedesktop.portal.RemoteDesktop"
     def __init__(self, Gio, GLib, Gst, scope_factory=None, video=None):
         self.clipboard=None
+        self.audio_actor=None;self.audio_available=False
         self.native_worker=None;self.native_raw=None;self.native_available=False
         self.native=_native_video.NativeVideoFlow(self.native_live,lambda:time.monotonic()*1000,lambda value,valid:self.output(value,publish=valid),maximum_fps=60)
         self.regions=RegionProofs();self.video=video;self.transfer_size=None
@@ -583,6 +588,7 @@ class PortalHelper:
             self.dead=True;self.closed=True;self.queued=None;self.native.stop(False)
             if self.native_raw:self.native_raw[1][:]=b"\0"*len(self.native_raw[1]);self.native_raw=None
             if self.native_worker:self.native_worker.stop()
+            if self.audio_actor:self.audio_actor.stop()
         self.regions.clear()
         if self.clipboard:self.clipboard.close()
         if self.guard:self.guard.control=False;self.guard.held_keys.clear();self.guard.held_buttons.clear()
@@ -629,6 +635,12 @@ class PortalHelper:
         self.scope=self.scope_factory()
         self.Gst.init(None)
         self.native_available=message.get("allowNativeVideo") is True and self.video is not None and _native_video.GstH264Encoder.available(self.Gst)
+        if self.native_available and message.get("allowSystemAudio") is True and "--allow-system-audio" in sys.argv:
+            try:
+                _native_audio.pulse_monitor_server()
+                self.audio_available=_native_audio.PulseMonitor.available(self.Gst)
+            except _native_audio.AudioFailure:self.audio_available=False
+
         for name in ["pipewiresrc","videoconvert","videoscale","jpegenc","appsink","identity","videorate"]:
             if self.Gst.ElementFactory.find(name) is None:raise NativeFailure("dependencies")
         self.connection=self.Gio.bus_get_sync(self.Gio.BusType.SESSION,None)
@@ -704,8 +716,26 @@ class PortalHelper:
         except Exception:self.native.stop()
         finally:self.output_gate.release()
         return self.Gst.PadProbeReturn.OK
+    def audio_live(self,identifier):
+        with self.output_gate:
+            if not self.audio_available or not self.native_live():return False
+            stream=self.native.current
+            return bool(stream is not None and stream["id"]==identifier)
+    def audio_command(self,value):
+        actor=self.audio_actor
+        if value.get("enabled") is False:
+            if set(value)=={"type","id","enabled"} and actor is not None and actor.id==value.get("id"):actor.stop()
+            return
+        if actor is not None:
+            if not actor.closed.is_set():return
+            self.audio_actor=None
+        identifier=value.get("id")
+        if not self.audio_live(identifier):return
+        try:self.audio_actor=_native_audio.SystemAudioActor(self.Gst,value,lambda:self.audio_live(identifier))
+        except _native_audio.AudioFailure:pass
     def pump_native(self):
         self.native.tick()
+        if self.audio_actor and not self.audio_live(self.audio_actor.id):self.audio_actor.stop()
         if self.native_worker and self.native_worker.closed.is_set():
             if self.native.current:self.native.stop()
             self.native_worker=None
@@ -719,6 +749,7 @@ class PortalHelper:
             else:raw[:]=b"\0"*len(raw)
     def native_command(self,value):
         kind=value.get("type")
+        if kind=="native_audio":self.audio_command(value);return
         try:
             if kind=="native_video":
                 if value.get("enabled") is True and self.native_worker is not None:
@@ -849,7 +880,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60} if self.native_available else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
@@ -886,7 +917,7 @@ class PortalHelper:
 def main():
     try:
         arguments=sys.argv[1:]
-        if len(arguments)!=len(set(arguments)) or any(arg not in ("--probe","--allow-clipboard") for arg in arguments):raise NativeFailure("unsupported")
+        if len(arguments)!=len(set(arguments)) or any(arg not in ("--probe","--allow-clipboard","--allow-system-audio") for arg in arguments):raise NativeFailure("unsupported")
         import gi
         gi.require_version("Gio","2.0");gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
         from gi.repository import Gio,GLib,Gst,GstVideo

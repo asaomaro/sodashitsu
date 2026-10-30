@@ -8,11 +8,17 @@ for(const shared of [false,true])
 test(`${backend} generated H264 shared=${shared} reaches browser pixels and stops independently`,async({page,appServer})=>{
  test.setTimeout(45000);
  const env={
-  SODA_DESKTOP_COMMAND:JSON.stringify([process.execPath,fileURLToPath(new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs",import.meta.url)),"--static","--allow-input","--native-60fps","--native-platform",backend,"--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))]),
+  SODA_DESKTOP_COMMAND:JSON.stringify([process.execPath,fileURLToPath(new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs",import.meta.url)),"--static","--allow-input","--native-60fps",...(backend==="linux-portal"?["--native-audio"]:[]),"--native-platform",backend,"--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))]),
   SODA_DESKTOP_NATIVE_PLATFORM:backend,SODA_DESKTOP_ALLOW_INPUT:"1",SODA_DESKTOP_ALLOW_MEDIA:"1",
  };
  const saved=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));Object.assign(process.env,env);
  const provider=await startAppServer().finally(()=>{for(const[key,value]of Object.entries(saved)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
+ if(backend==="linux-portal")await page.addInitScript(()=>{
+  const w=window as any,Context=AudioContext,Decoder=AudioDecoder;w.__nativeTone={outputs:0,energy:0};
+  // Generated source only; terminate the graph at a virtual stream, never speakers.
+  window.AudioContext=class extends Context {private silent:MediaStreamAudioDestinationNode|undefined;override get destination(){return(this.silent??=this.createMediaStreamDestination()) as unknown as AudioDestinationNode;}};
+  window.AudioDecoder=class extends Decoder {constructor(init:AudioDecoderInit){super({...init,output:data=>{const pcm=new Float32Array(data.numberOfFrames);data.copyTo(pcm,{planeIndex:0,format:"f32-planar"});w.__nativeTone.outputs++;w.__nativeTone.energy=Math.max(w.__nativeTone.energy,Math.sqrt(pcm.reduce((n,v)=>n+v*v,0)/pcm.length));init.output(data);}});}};
+ });
  const sent:any[]=[];page.on("websocket",socket=>{if(socket.url().endsWith("/desktop-share"))socket.on("framesent",({payload})=>{if(typeof payload==="string")sent.push(JSON.parse(payload));});});
  try{
   const owner=await provider.openClient(),viewer=await appServer.openClient(),invite=await viewer.request("machine.invite",{label:`Generated H264 ${backend}`});
@@ -23,8 +29,17 @@ test(`${backend} generated H264 shared=${shared} reaches browser pixels and stop
   if(shared){await view.locator("[data-shared-desktop-option] input").check();await expect(view.locator("[data-desktop-shared]")).toBeVisible();await expect(canvas).toHaveAttribute("data-rendered-frames",/^[1-9]/);}
   await view.locator("[data-desktop-media] summary").click();await view.getByLabel("動画の経路").selectOption("native");
   await expect(view.locator("[data-desktop-media]")).toContainText("GPUまたはCPU");
+  if(backend==="linux-portal"){
+   await expect(view.getByLabel("動画の経路").locator("option[value=native]")).toContainText("システム音声対応");
+   await expect(view.getByLabel("システム音声を要求",{exact:true})).toBeEnabled();await view.getByLabel("システム音声を要求",{exact:true}).check();
+  }
   await view.getByRole("button",{name:"動画共有を依頼",exact:true}).click();
   await expect(view.locator("[data-media-state]")).toHaveText("H.264");
+  if(backend==="linux-portal"){
+   await expect(view.locator("[data-native-audio]")).toContainText("ミュート");expect(await page.evaluate(()=>(window as any).__nativeTone.outputs)).toBe(0);
+   await view.getByRole("button",{name:"音声を再生",exact:true}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__nativeTone.outputs)).toBeGreaterThan(5);expect(await page.evaluate(()=>(window as any).__nativeTone.energy)).toBeGreaterThan(0.01);
+  }
+
   await expect.poll(async()=>Number(await canvas.getAttribute("data-video-frames"))).toBeGreaterThanOrEqual(8);
   // The browser decoded only generated test pixels; no OS capture or input occurred.
   const pixel=await canvas.evaluate(el=>Array.from((el as HTMLCanvasElement).getContext("2d")!.getImageData(80,60,1,1).data));

@@ -19,7 +19,7 @@ export class DesktopSharedAudio<T extends object> {
     if(!this.source)this.state="starting";
     hooks.state(this.state);
     if(!this.source) {
-      const sourceHooks:DesktopNativeAudioHooks={...(hooks.bridge?{bridge:hooks.bridge}:{}),id:this.hooks.id,synthetic:this.hooks.synthetic,
+      const sourceHooks:DesktopNativeAudioHooks={...(hooks.nativePcm?{nativePcm:hooks.nativePcm}:{}),...(hooks.bridge?{bridge:hooks.bridge}:{}),id:this.hooks.id,synthetic:this.hooks.synthetic,
         active:()=>!this.dead&&this.hooks.active()&&this.consumers.size>0,
         videoTimestamp:()=>this.hooks.timestamp(),write:value=>this.hooks.write(value),
         state:state=>{

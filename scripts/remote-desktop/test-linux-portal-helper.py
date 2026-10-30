@@ -5,6 +5,35 @@ import unittest
 import threading
 from types import SimpleNamespace
 spec=importlib.util.spec_from_file_location("portal_helper",pathlib.Path(__file__).with_name("linux-portal-helper.py"));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+class NativeAudioRouting(unittest.TestCase):
+ def helper(self):
+  from unittest.mock import Mock
+  h=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),None)
+  h.audio_available=True;h.native.current={"id":"22222222-2222-4222-8222-222222222222"};h.native_live=Mock(return_value=True)
+  return h
+ def command(self,h):
+  return {"type":"native_audio","enabled":True,"id":h.native.current["id"],"pipeName":"SodaDesktopAudio-"+"a"*32,"pipePath":"/generated-only.sock","clientPid":123}
+ def test_only_explicit_current_video_with_audio_ceiling_creates_an_actor(self):
+  from unittest.mock import Mock,patch
+  h=self.helper();factory=Mock();command=self.command(h)
+  with patch.object(module._native_audio,"SystemAudioActor",factory):
+   h.audio_available=False;h.native_command(command);factory.assert_not_called()
+   h.audio_available=True;h.native_command({**command,"id":"33333333-3333-4333-8333-333333333333"});factory.assert_not_called()
+   h.native_command(command);factory.assert_called_once();active=factory.call_args.args[2]
+   self.assertTrue(active());h.native.current=None;self.assertFalse(active())
+ def test_replacement_waits_for_physical_retirement_and_old_disable_is_ignored(self):
+  from unittest.mock import Mock,patch
+  h=self.helper();old=SimpleNamespace(id="33333333-3333-4333-8333-333333333333",closed=threading.Event(),stop=Mock());h.audio_actor=old;factory=Mock();command=self.command(h)
+  with patch.object(module._native_audio,"SystemAudioActor",factory):
+   h.native_command(command);factory.assert_not_called();self.assertIs(h.audio_actor,old)
+   old.closed.set();new=SimpleNamespace(id=command["id"],closed=threading.Event(),stop=Mock());factory.return_value=new;h.native_command(command);self.assertIs(h.audio_actor,new)
+   h.native_command({"type":"native_audio","enabled":False,"id":old.id});new.stop.assert_not_called()
+   h.native_command({"type":"native_audio","enabled":False,"id":new.id});new.stop.assert_called_once()
+ def test_source_or_video_retirement_stops_audio_without_waiting_under_gate(self):
+  from unittest.mock import Mock
+  h=self.helper();actor=SimpleNamespace(id=h.native.current["id"],stop=Mock());h.audio_actor=actor;h.native=SimpleNamespace(current=None,tick=lambda:None)
+  h.pump_native();actor.stop.assert_called_once()
+
 class Guards(unittest.TestCase):
  def setup_guard(self,devices=3):
   calls=[];alive=[True];guard=module.InputGuard(lambda method,signature,args:calls.append((method,args)),lambda:alive[0],(1000,600),55,devices,lambda:1000);guard.control=True
