@@ -291,6 +291,8 @@ func generatedNativeAudioPipeTests() throws -> Int {
         withUnsafeMutableBytes(of:&address.sun_path) {$0.copyBytes(from:bytes)}
         let result=withUnsafePointer(to:&address) { pointer in pointer.withMemoryRebound(to:sockaddr.self,capacity:1) {Darwin.connect(client,$0,socklen_t(MemoryLayout<sockaddr_un>.size))} }
         guard result==0 else {Darwin.close(client);throw NativePCMError("generated connect")}
+        var timeout=timeval(tv_sec:2,tv_usec:0)
+        guard setsockopt(client,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout<timeval>.size))==0 else {Darwin.close(client);throw NativePCMError("generated receive deadline")}
         return client
     }
     do {

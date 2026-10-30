@@ -9,7 +9,7 @@ source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
 rich_source=source.with_name("macos-rich-clipboard.swift").read_text()
 video_source=source.with_name("macos-native-video.swift").read_text()
-audio_source=source.with_name("macos-native-audio.swift").read_text()
+audio_source=source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()
 cases = [
     ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),
     ("clipboard-write-ceiling", "canWrite(),authorized(ticket)", "true,authorized(ticket)", "clipboard write requires input ceiling"),
@@ -63,4 +63,4 @@ for name, before, after, expected in cases+rich_cases+native_cases:
         assert source.with_name("macos-native-video.swift").read_text()==video_source,"video source changed"
 print("generated_negative_controls_pass")
 
-assert source.with_name("macos-native-audio.swift").read_text()==audio_source,"audio source changed"
+assert source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()==audio_source,"audio source changed"

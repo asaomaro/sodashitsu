@@ -784,6 +784,7 @@ func generatedTests() throws -> Int {
     count += try generatedRichClipboardTests()
     count += try generatedNativeVideoTests()
     count += try generatedNativeAudioTests()
+    count += try generatedSystemAudioTests()
     return count
 }
 
