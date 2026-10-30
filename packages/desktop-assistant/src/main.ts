@@ -65,6 +65,9 @@ let settings: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let bubble: BrowserWindow | null = null;
 let bubbleCharacterId: string | null = null;
+let bubbleEpoch = 0;
+let panelTargeted = false;
+let panelNavigation=0;
 let control: AssistantRpc | null = null;
 let assistantChat: AssistantChat | null = null;
 let controlOrigin: string | null = null;
@@ -111,7 +114,10 @@ function localWindow(role: LocalRole): BrowserWindow {
   localWindows.set(id, { window: win, role });
   win.on("closed", () => localWindows.delete(id));
   const discardOnHide = () => {
-    if (role === "bubble") ocr?.discard(id);
+    if (role === "bubble") {
+      ++bubbleEpoch;
+      ocr?.discard(id);
+    }
     if (role === "bubble" && recording?.has(id)) {
       recording.cancel(id);
       if (!win.isDestroyed()) win.destroy(); // End capture even if the hidden renderer cannot respond.
@@ -140,6 +146,7 @@ function openBubble(focus = true): void {
     } else bubble.showInactive();
     return;
   }
+  ++bubbleEpoch;
   const win = localWindow("bubble");
   const contentsId = win.webContents.id;
   bubble = win;
@@ -163,6 +170,7 @@ function openBubble(focus = true): void {
   });
   win.on("closed", () => {
     if (bubble === win) {
+      ++bubbleEpoch;
       recording?.cancel(contentsId);
       transcription?.cancel();
       ocr?.discard(contentsId);
@@ -321,8 +329,27 @@ function openSettings(): void {
   });
 }
 
-function openPanel(origin: string): void {
+function loadPanel(win:BrowserWindow,url:string):void {
+ const navigation=++panelNavigation;
+ void win.loadURL(url).catch(()=>{
+  if(win!==panel||win.isDestroyed()||navigation!==panelNavigation)return;
+  void win.loadURL(`data:text/plain;charset=utf-8,${encodeURIComponent("操舵室に接続できません。サーバと接続先を確認し、吹き出しから開き直してください。")}`).catch(()=>{});
+ });
+}
+function openPanel(
+  origin: string,
+  target?: { paneId: string; workspaceId: string; instanceId: string },
+): void {
+  const url = new URL(origin);
+  if (target)
+    url.hash = new URLSearchParams({
+      assistantPane: target.paneId,
+      assistantWorkspace: target.workspaceId,
+      assistantInstance: target.instanceId,
+    }).toString();
   if (panel && !panel.isDestroyed()) {
+    if (target || panelTargeted) loadPanel(panel,url.href);
+    panelTargeted = !!target;
     panel.show();
     panel.focus();
     return;
@@ -342,6 +369,7 @@ function openPanel(origin: string): void {
     },
   });
   panel = win;
+  panelTargeted = !!target;
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
     if (!sameServerNavigation(url, origin)) event.preventDefault();
@@ -352,12 +380,7 @@ function openPanel(origin: string): void {
   win.on("closed", () => {
     if (panel === win) panel = null;
   });
-  void win.loadURL(origin).catch(() => {
-    if (!win.isDestroyed())
-      void win.loadURL(
-        `data:text/plain;charset=utf-8,${encodeURIComponent("操舵室に接続できません。サーバの起動と、アシスタント設定の接続先を確認してください。")}`,
-      );
-  });
+  loadPanel(win,url.href);
 }
 
 const adapter: NativeAdapter = {
@@ -471,6 +494,10 @@ function registerIpc(): void {
     "start-session",
     "adopt-session",
     "send-message",
+    "source-open",
+    "source-reply",
+    "source-key",
+    "session-open",
     "ocr-state",
     "ocr-file",
     "ocr-clipboard",
@@ -509,6 +536,64 @@ function registerIpc(): void {
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
+      if (action === "session-open") {
+        if (!owner.window.isVisible()) throw Error("吹き出しを開いて操作してください。");
+        const state = chatState();
+        const info = state.session;
+        if (!info?.agent || !state.connected) throw Error("専用セッションを確認してください。");
+        openPanel(controller.preferences.serverOrigin, {
+          paneId: info.paneId,
+          workspaceId: info.workspaceId,
+          instanceId: info.agent.instanceId,
+        });
+        return;
+      }
+      if (action.startsWith("source-")) {
+        if (!owner.window.isVisible()) throw Error("吹き出しを開いて操作してください。");
+        const epoch = bubbleEpoch;
+        const request = z
+          .object({
+            noticeId: z.uuid(),
+            text: z.string().trim().min(1).max(8192).optional(),
+            keyName: z.enum(["Enter", "Escape", "y", "n"]).optional(),
+          })
+          .strict()
+          .parse(input);
+        const notice = notices.find((notice) => notice.id === request.noticeId);
+        const rpc = control;
+        if (
+          !notice ||
+          !rpc ||
+          !controller.preferences.enabled ||
+          notice.source.serverOrigin !== controller.preferences.serverOrigin
+        )
+          throw Error("通知の対象が変更されました。");
+        const params = { source: notice.source, key: notice.key };
+        if (action === "source-open") {
+          const target = await rpc.request("assistant.source", params);
+          if (
+            control !== rpc ||
+            epoch !== bubbleEpoch ||
+            bubble !== owner.window ||
+            owner.window.isDestroyed() ||
+            !owner.window.isVisible() ||
+            !notices.some((item) => item.id === notice.id)
+          )
+            throw Error("通知の対象が変更されました。");
+          openPanel(notice.source.serverOrigin, {
+            paneId: target.paneId,
+            workspaceId: target.workspaceId,
+            instanceId: target.agent.instanceId,
+          });
+          return;
+        }
+        if (action === "source-reply") {
+          if (!request.text) throw Error("返答を入力してください。");
+          return rpc.request("assistant.reply", { ...params, text: request.text });
+        }
+        if (!request.keyName) throw Error("確認キーを指定してください。");
+        return rpc.request("assistant.reply_key", { ...params, keyName: request.keyName });
+      }
       if (action.startsWith("ocr-")) {
         if (action === "ocr-state") return ocr.snapshot();
         if (!controller.preferences.enabled || !owner.window.isVisible())

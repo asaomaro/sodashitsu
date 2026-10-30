@@ -1,3 +1,4 @@
+import {assistantPanelGuard}from"./actions/assistantPanelGuard.js";
 import { useViewerTabsStore } from "./store/viewerTabs.js";
 import { LocalClientFactoryKey } from "./injection.js";
 import { loadStatuslineSettings, TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
@@ -12,7 +13,7 @@ import "./styles/uiStyle.css";
 import "./styles/terminalFonts.css";
 import { loadTerminalFonts } from "./term/terminalFonts.js";
 import { createPinia } from "pinia";
-import { createApp, nextTick, toRef, watch } from "vue";
+import { createApp, nextTick, toRef, watch, watchEffect } from "vue";
 import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { installKeepFocusRelease } from "./display/displayOps.js";
@@ -104,6 +105,8 @@ let lastScriptNoticeAt = -Infinity;
 // 保存した SSH のマシン（20260927-multi-host-machines）。モバイルの 1 列の画面では使わない（手元のマシンだけ。今までどおり）。
 // 1 列かは窓の幅で変わる（`App.vue` と同じ media query）ので、変化を購読する。
 const machines = useMachinesStore(pinia);
+const updateAssistantPanel=assistantPanelGuard({model:()=>({panes:session.panes,tabs:session.tabs,workspaces:session.workspaces}),connected:()=>view.connectionState==="open",focus:(pane,tab)=>{view.setScreen("base");view.setView(tab.workspaceId,tab.id);view.focusPane(pane.id);}});
+watchEffect(updateAssistantPanel,{flush:"sync"});
 const mobileViewport = trackMediaQuery(mobileViewportQuery());
 // 初回の案内を出すかは、接続より前（同じ読み込みの中で痕跡が書かれる前）に 1 回だけ決める（20260926-settings-onboarding の D4）。
 useOnboardingStore(pinia);
@@ -144,7 +147,7 @@ const storeAdapter = new StoreAdapter({
   onAgentChanged: (paneId, prev, next) => notificationsBox.current?.onAgentChanged(paneId, prev, next),
   // 窓の pane の直結を、別のクライアントが奪った（20261008-graph-first の X7）。窓は W2 の表示に替わる。
   onPaneAttachChanged: (paneId, clientId) => graphTerminalBox.current?.onAttachChanged(paneId, clientId),
-  onSnapshotApplied: (panes, first) => notificationsBox.current?.onSnapshotApplied(panes, first),
+  onSnapshotApplied: (panes, first) => {notificationsBox.current?.onSnapshotApplied(panes, first); queueMicrotask(updateAssistantPanel);},
   onPaneClosed: (paneId) => notificationsBox.current?.onPaneClosed(paneId),
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
   // 利用状況の差分（20261010-agent-usage PR3）。ダッシュボードが見えている間（`agent.usage_watch` で頼んだ間）だけ届く。
@@ -706,3 +709,4 @@ await loadTerminalFonts(() => registry.refreshFonts());
 app.mount("#app");
 
 conn.connect();
+

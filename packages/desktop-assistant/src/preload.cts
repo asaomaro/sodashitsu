@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:recording-cancelled", receive);
       return () => ipcRenderer.removeListener("assistant:recording-cancelled", receive);
     },
+    openSource: (input: unknown) => ipcRenderer.invoke("assistant:source-open", input),
+    replySource: (input: unknown) => ipcRenderer.invoke("assistant:source-reply", input),
+    sourceKey: (input: unknown) => ipcRenderer.invoke("assistant:source-key", input),
+    openSession: () => ipcRenderer.invoke("assistant:session-open"),
     ocrState: () => ipcRenderer.invoke("assistant:ocr-state"),
     ocrFile: () => ipcRenderer.invoke("assistant:ocr-file"),
     ocrClipboard: () => ipcRenderer.invoke("assistant:ocr-clipboard"),

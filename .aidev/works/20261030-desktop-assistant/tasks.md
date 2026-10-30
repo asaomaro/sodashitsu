@@ -26,3 +26,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] D2. Explicit mic capture, visible indicator/stop, review/listen-on-demand, local inference and scoped cancellation;79 generated tests,12 negatives,400x640 keyboard/DOM UI, unsigned Windows package and independent reviews. Actual capture/listen/recognition still requires a real device.
 
 - [x] D3. Explicit PNG/OS-copied clipboard image preview, bounded pixel crop and local Tesseract OCR;601 related tests,8 valid negatives, generated keyboard UI, Windows package and independent reviews. Direct screen/window capture and real recognition accuracy remain unverified/pending.
+
+- [x] B3b/C. Exact-notice replies/confirmation keys and scoped existing terminal/ask-form/display expansion, initial and per-input binding fences, native hide/navigation guards;124 related tests,4 valid negatives, generated bubble UI and independent taskcheck/whole/correction. Full final integration verification follows remaining phases.

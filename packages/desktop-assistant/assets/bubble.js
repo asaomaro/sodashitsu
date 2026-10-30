@@ -5,21 +5,36 @@
  const character = Object.hasOwn(names, preferences.characterId) ? preferences.characterId : "captain-female";
  document.getElementById("portrait").src = `${character}.svg`;
  document.getElementById("captain-name").textContent = names[character];
+ document.getElementById("expand-session").addEventListener("click",()=>window.assistant.openSession().catch(error=>{document.getElementById("status").textContent=error.message;}));
  document.getElementById("open").addEventListener("click", () => window.assistant.open());
  document.getElementById("settings").addEventListener("click", () => window.assistant.settings());
  document.getElementById("hide").addEventListener("click", () => window.assistant.hide());
  const log = document.getElementById("conversation");
  const stateText = { connected: "通知を受信しています。", connecting: "操舵室へ接続しています。", login: "操舵室にログインすると、作業の知らせをお届けします。", offline: "操舵室との接続が切れました。再接続を待っています。", disabled: "アシスタントは無効です。" };
+ const noticeRows=new Map();
  let revision = -1;
  const update = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
    revision = state.revision;
    document.getElementById("status").textContent = stateText[state.status] || "接続状態を確認しています。";
-   log.querySelectorAll(".notice").forEach(element => element.remove());
+   const present=new Set(state.notices.map(notice=>notice.id));
+   for(const [id,row] of noticeRows)if(!present.has(id)){row.remove();noticeRows.delete(id);}
    for (const notice of state.notices) {
+     if(noticeRows.has(notice.id))continue;
      const entry = document.createElement("p"); entry.className = "spoken notice";
-     entry.textContent = notice.message;
-     log.append(entry);
+     const words=document.createElement("span");words.className="notice-text";words.textContent=notice.message;entry.append(words);
+     const open=document.createElement("button");open.type="button";open.textContent="この端末・質問フォームを開く";
+     open.addEventListener("click",()=>window.assistant.openSource({noticeId:notice.id}).catch(error=>{document.getElementById("status").textContent=error.message;}));
+     const reply=document.createElement("textarea");reply.rows=2;reply.maxLength=8192;reply.setAttribute("aria-label",`${notice.title || "通知元"}への返答`);
+     const submit=document.createElement("button");submit.type="button";submit.textContent="この通知元へ返答";
+     const report=error=>{document.getElementById("status").textContent=error.message;};
+     submit.addEventListener("click",async()=>{if(!reply.value.trim())return;submit.disabled=true;try{await window.assistant.replySource({noticeId:notice.id,text:reply.value});reply.value="";}catch(error){report(error);}finally{submit.disabled=false;}});
+     const destination=document.createElement("small");destination.textContent=notice.title || "通知元";
+     entry.append(document.createElement("br"),destination,open,reply,submit);
+     if(notice.kind==="attention") for(const [keyName,label]of [["Enter","Enterで確認"],["Escape","Escで戻る"],["y","yを送信"],["n","nを送信"]]){
+       const key=document.createElement("button");key.type="button";key.textContent=label;key.onclick=async()=>{key.disabled=true;try{await window.assistant.sourceKey({noticeId:notice.id,keyName});}catch(error){report(error);}finally{key.disabled=false;}};entry.append(key);
+     }
+     noticeRows.set(notice.id,entry);log.append(entry);
    }
    log.scrollTop = log.scrollHeight;
  };
