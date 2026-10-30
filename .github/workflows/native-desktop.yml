@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Generated media dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
       - name: Import-only probe (no portal, capture or input)
         run: /usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe
       - name: Fake D-Bus / input, generated JPEG and publication races

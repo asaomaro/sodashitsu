@@ -301,7 +301,7 @@ export class DesktopRelay {
             if(changed&&!this.send(v.provider,{type:"keyframe",region:rect}))throw new RpcError("server_busy","Region capture is unavailable");
             await this.capture(v,after,rect.id);
           },
-          frame:()=>v.chain.last&&this.viewers.has(v)&&v.ready&&!v.secureDesktop?{info:v.chain.last,at:v.frameAt}:undefined,
+          frame:()=>v.chain.last&&this.viewers.has(v)&&v.ready&&!v.secureDesktop&&(!v.nativePlatform||(v.chain.last.sourceInputSeq??0)>=(v.nativeInputFloor??0))?{info:v.chain.last,at:v.frameAt}:undefined,
           clear:id=>{if(v.regionSpec?.id!==id)return;delete v.regionSpec;if(v.snapshot?.regionId===id){const pending=v.snapshot;delete v.snapshot;clearTimeout(pending.timer);pending.reject(new RpcError("unauthorized","Region capture cancelled"));}if(v.provider&&this.viewers.has(v))this.send(v.provider,{type:"keyframe",region:null});},
         },
         releaseInputs: () => {

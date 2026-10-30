@@ -1581,3 +1581,36 @@ it("cancels revoked regional snapshots and ignores an old nonce while a new gran
   expect(f.relay.agents.observe("new",lease).verification?.kind).toBe("region");f.relay.agents.release("new",lease);
  }finally{intercept.mockRestore();stopOld.mockRestore();}
 });
+
+it.each(["linux-portal","macos-sck"] as const)("uses source regional proof and post-input frame fences for %s",async platform=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,nativePlatform:platform,command:[...cfg.command,"--native-platform",platform,"--static","--agent-regions"]});
+ const viewer=await f.viewer("native-platform");viewer.ws.on("message",(bytes,binary)=>{if(binary)viewer.send({type:"ack",seq:decodeDesktopFrame(new Uint8Array(bytes as Buffer)).info.seq});});
+ viewer.send({...start,options:{...start.options,features:true}});await vi.waitFor(()=>expect(viewer.frames.length).toBeGreaterThan(0));
+ viewer.send({type:"agent_grant",enabled:true});await vi.waitFor(()=>expect(viewer.messages.some(m=>m.type==="agent_ticket")).toBe(true));
+ const lease=f.relay.agents.attach("native-regional",viewer.messages.find(m=>m.type==="agent_ticket")!.ticket as string).leaseId;
+ await f.relay.agents.refresh("native-regional",lease,undefined,{x:0,y:0,width:32,height:32});const observed=f.relay.agents.observe("native-regional",lease);
+ expect(observed.verification?.pointerOnly).toBe(true);
+ const acted=await f.relay.agents.act("native-regional",lease,observed.observationId,[{kind:"pointer",x:0,y:0,event:"move",button:0}]);
+ await new Promise(resolve=>setTimeout(resolve,210));await f.relay.agents.refresh("native-regional",lease,acted.afterFrameSeq,{x:0,y:0,width:32,height:32});
+ expect(f.relay.agents.observe("native-regional",lease,acted.afterFrameSeq).frameSeq).toBeGreaterThan(acted.afterFrameSeq);
+ f.relay.agents.release("native-regional",lease);
+});
+
+it("rejects native regional actions against an image from before an acknowledged input",async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,nativePlatform:"linux-portal",command:[...cfg.command,"--native-platform","linux-portal","--static","--agent-regions"]});
+ const viewer=await f.viewer("native-platform");let ack=true;
+ viewer.ws.on("message",(bytes,binary)=>{if(binary&&ack)viewer.send({type:"ack",seq:decodeDesktopFrame(new Uint8Array(bytes as Buffer)).info.seq});});
+ viewer.send({...start,options:{...start.options,features:true}});await vi.waitFor(()=>expect(viewer.frames.length).toBeGreaterThan(0));
+ const v=[...(f.relay as any).viewers][0],target=v.agent;
+ const lease=f.relay.agents.attach("native-floor",f.relay.agents.grant(target).ticket).leaseId;
+ await f.relay.agents.refresh("native-floor",lease,undefined,{x:0,y:0,width:32,height:32});
+ ack=false;await vi.waitFor(()=>expect(v.pending).toBeGreaterThan(0));
+ const observed=f.relay.agents.observe("native-floor",lease);expect(target.region.frame()).toBeDefined();
+ // Keep the current source image pending. Only generated input/ACK may advance.
+ await target.input({kind:"key",code:"ControlLeft",down:true});
+ expect(target.frame()).toBeUndefined();expect(target.region.frame()).toBeUndefined();
+ await expect(f.relay.agents.act("native-floor",lease,observed.observationId,[{kind:"pointer",x:0,y:0,event:"move",button:0}])).rejects.toThrow(/changed/);
+ f.relay.agents.release("native-floor",lease);viewer.send({type:"stop"});
+});

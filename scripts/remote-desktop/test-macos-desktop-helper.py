@@ -8,6 +8,9 @@ import tempfile
 source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
 cases = [
+    ("region-revision", "input.revision &+= 1", "input.revision &+= 0", "regional config invalidates in-flight capture"),
+    ("region-crop", "image.cropping(to:CGRect(x:r.x,y:r.y,width:r.width,height:r.height))", "image.cropping(to:CGRect(x:0,y:0,width:r.width,height:r.height))", "regional background remains stable"),
+    ("region-nonce", r'\(r.id):\(image.width)', r'\(image.width)', "regional nonce binding"),
     ("queued-source", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:true)", "queued source revocation never writes"),
     ("text-source", "guard active(),now()<=expires else", "guard now()<=expires else", "text continued after source revocation"),
     ("release-source", 'if releaseAllowed() { try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers)) }', 'try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers))', "source revocation clears trackers without injection"),

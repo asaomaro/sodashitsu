@@ -207,4 +207,62 @@ class LoginScopeTests(unittest.TestCase):
   message=SimpleNamespace(get_message_type=lambda:Gio.DBusMessageType.SIGNAL,get_sender=lambda:":1.77",get_path=lambda:scope.path,get_interface=lambda:"org.freedesktop.DBus.Properties",get_member=lambda:"PropertiesChanged",get_body=lambda:GLib.Variant("(sa{sv}as)",("org.freedesktop.login1.Session",{"LockedHint":GLib.Variant("b",True)},[])))
   self.assertIs(filters[0](scope.connection,message,True,None),message);self.assertFalse(scope.alive());self.assertFalse(state["locked"]);scope.close();self.assertFalse(filters)
   scope=module.LoginScope(Gio,GLib,Connection(),42);self.assertTrue(scope.alive());state["uid"]=43;self.assertFalse(scope.alive());state["uid"]=42;self.assertFalse(scope.alive())
+class Regions(unittest.TestCase):
+ def spec(self,**change):return {"id":"12345678-1234-4234-8234-123456789012","x":1,"y":0,"width":2,"height":1,**change}
+ def test_raw_stride_and_offset_bind_only_requested_pixels(self):
+  r=module.RegionProofs();r.configure([self.spec()],4,3);pixels=bytearray(4+16*3)
+  r.capture(1,pixels,4,3,16,4);a=r.take(1,4,3)[0]["digest"];self.assertEqual(len(a),64)
+  pixels[4+16]=99;r.capture(2,pixels,4,3,16,4);self.assertEqual(a,r.take(2,4,3)[0]["digest"])
+  pixels[4+3]=99;r.capture(3,pixels,4,3,16,4);self.assertNotEqual(a,r.take(3,4,3)[0]["digest"])
+ def test_source_pts_size_nonce_clear_and_bounded_cache(self):
+  r=module.RegionProofs();r.configure([self.spec()],4,3);p=bytes(48);r.capture(1,p,4,3,16);first=r.take(1,4,3)[0]["digest"]
+  self.assertIsNone(r.take(1,4,3));r.capture(2,p,4,3,16);self.assertIsNone(r.take(2,3,3))
+  r.configure([self.spec(id="22345678-1234-4234-8234-123456789012")],4,3);r.capture(3,p,4,3,16);self.assertNotEqual(first,r.take(3,4,3)[0]["digest"])
+  for pts in range(20):r.capture(pts,p,4,3,16)
+  self.assertEqual(len(r.frames),8);self.assertIsNone(r.take(11,4,3));self.assertIsNotNone(r.take(19,4,3));r.clear();self.assertEqual(r.frames,{});self.assertEqual(r.specs,[])
+ def test_invalid_configuration_is_atomic_and_pixel_bounds_fail_closed(self):
+  r=module.RegionProofs();r.configure([self.spec()],4,3);p=bytes(48);r.capture(1,p,4,3,16)
+  for bad in [[self.spec(x=3)],[self.spec(id="bad")],[self.spec(),self.spec()],[self.spec(x=True)],[self.spec(width=2048,height=1024)],None]:
+   with self.assertRaises(module.NativeFailure):r.configure(bad,4,3)
+   self.assertEqual(r.specs,[self.spec()])
+  self.assertIsNotNone(r.take(1,4,3))
+  for stride,offset,data in [(11,0,p),(16,5,p),(16,0,p[:8])]:
+   with self.assertRaises(module.NativeFailure):r.capture(2,data,4,3,stride,offset)
+ def test_reconfiguration_discards_old_pts_and_invalidates_queued_publication(self):
+  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),None,video=object())
+  helper.transfer_size=(4,3);helper.guard=module.InputGuard(lambda *args:None,lambda:True,(4,3),1,3)
+  helper.regions.configure([self.spec()],4,3);helper.regions.capture(1,bytes(48),4,3,16);helper.queued=(b"old",);revision=helper.guard.revision
+  helper.command({"type":"keyframe","regions":[self.spec(id="22345678-1234-4234-8234-123456789012")]})
+  self.assertGreater(helper.guard.revision,revision);self.assertIsNone(helper.queued);self.assertIsNone(helper.regions.take(1,4,3));self.assertEqual(helper.guard.seq,0)
+  helper.command({"type":"keyframe","regions":[]});self.assertFalse(helper.regions.specs)
+ def test_real_video_meta_stride_offset_and_mismatch_through_probe(self):
+  try:
+   import gi;gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0");from gi.repository import Gst,GstVideo
+  except (ImportError,ValueError):self.skipTest("GStreamer video GI not installed")
+  Gst.init(None);failures=[]
+  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:failures.append(args)),Gst,video=GstVideo)
+  helper.regions.configure([self.spec()],4,3);caps=Gst.Caps.from_string("video/x-raw,format=BGR,width=4,height=3,framerate=1/1")
+  pad=SimpleNamespace(get_current_caps=lambda:caps);pixels=bytes(range(52))
+  def buffer(meta_width):
+   raw=Gst.Buffer.new_allocate(None,len(pixels),None);raw.fill(0,pixels);raw.pts=100
+   GstVideo.buffer_add_video_meta_full(raw,GstVideo.VideoFrameFlags.NONE,GstVideo.VideoFormat.BGR,meta_width,3,1,[4,0,0,0],[16,0,0,0]);return raw
+  raw=buffer(4);self.assertEqual(helper.region_probe(pad,SimpleNamespace(get_buffer=lambda:raw)),Gst.PadProbeReturn.OK)
+  expected=module.RegionProofs();expected.configure([self.spec()],4,3);expected.capture(100,pixels,4,3,16,4)
+  self.assertEqual(helper.regions.take(100,4,3),expected.take(100,4,3));self.assertFalse(failures)
+  wrong=buffer(5);self.assertEqual(helper.region_probe(pad,SimpleNamespace(get_buffer=lambda:wrong)),Gst.PadProbeReturn.DROP);self.assertEqual(len(failures),1)
+ def test_generated_encoder_pad_pairs_raw_proofs_with_matching_jpeg_pts(self):
+  try:
+   import gi;gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0");from gi.repository import Gst,GstVideo
+  except (ImportError,ValueError):self.skipTest("GStreamer video GI not installed")
+  Gst.init(None)
+  helper=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None,idle_add=lambda *args:self.fail("probe failed")),Gst,video=GstVideo)
+  helper.regions.configure([self.spec()],4,3)
+  pipeline=Gst.parse_launch("videotestsrc pattern=red num-buffers=1 ! video/x-raw,format=BGR,width=4,height=3 ! jpegenc name=encoder ! appsink name=sink sync=false")
+  pipeline.get_by_name("encoder").get_static_pad("sink").add_probe(Gst.PadProbeType.BUFFER,helper.region_probe)
+  try:
+   pipeline.set_state(Gst.State.PLAYING);sample=pipeline.get_by_name("sink").emit("try-pull-sample",3*Gst.SECOND);self.assertIsNotNone(sample)
+   pts=sample.get_buffer().pts;proof=helper.regions.take(pts,4,3);self.assertEqual(proof[0]["id"],self.spec()["id"])
+   expected=module.RegionProofs();expected.configure([self.spec()],4,3);expected.capture(pts,bytes([0,0,255]*4*3),4,3,12)
+   self.assertEqual(proof,expected.take(pts,4,3));self.assertIsNone(helper.regions.take(pts+1,4,3))
+  finally:pipeline.set_state(Gst.State.NULL)
 if __name__=="__main__":unittest.main()

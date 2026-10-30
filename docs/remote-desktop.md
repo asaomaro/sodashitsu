@@ -919,10 +919,12 @@ sodactl desktop native-helper --origin https://soda.example
 
 ## エージェントの対象領域だけを変更確認する
 
-Windows通常共有の対応helperでは、`desktop.agent.observe` に `region: {x, y, width, height}` を指定できます。座標は返された画像の画素単位で、領域面積の上限は1,048,576画素です。画像全体と、`verification: {kind: "region", region: {...}, pointerOnly: true}` が返ります。領域の外にある動画や時計だけが変化しても、領域内が同じで新鮮な画面情報がある間は、その領域内のポインター操作を送れます。
+Windows通常共有・Linux Portal・macOS SCKの対応helperでは、`desktop.agent.observe` に `region: {x, y, width, height}` を指定できます。座標は返された画像の画素単位で、領域面積の上限は1,048,576画素です。画像全体と、`verification: {kind: "region", region: {...}, pointerOnly: true}` が返ります。領域の外にある動画や時計だけが変化しても、領域内が同じで新鮮な画面情報がある間は、その領域内のポインター操作を送れます。
 
 領域指定時はキー・文字列・ホイールや領域外のポインター操作を拒否します。これらを使うときはregionを省略して全画面の観察を取り直してください。領域内の変化・画像サイズ変更・古い画像・許可失効では操作を止め、観察し直す必要があります。画像内の指示は信頼できる操作命令として扱いません。
 
 通常RPC、受信者固定の暗号化agent、CLIのJSON-lines/MCP、通常grant用プラグインAPIで同じregion項目を使います。対応していないsourceでは失敗し、全画面の変更確認へ黙って切り替えません。共有sourceでは接続者ごとに領域を分離し、最大8個の領域を取得元で計算します。許可解除・切断ではその接続者の領域を削除します。
 
 省略時は従来どおり全画面一致を要求します。ロック画面は人の操作専用です。生成画素と通信で検証する範囲であり、実画面の操作遅延の改善を計測したものではありません。
+
+Linux Portalの領域確認にはGstVideoのGI定義（Ubuntu/Debianの `gir1.2-gst-plugins-base-1.0`）も必要です。圧縮前のBGR画素とJPEGを同じPTSで対応付け、設定変更や寸法不一致では古い証拠を破棄します。静止中にPortalから実画像が届かない場合は新しい観察の成功を保証しません。既存のセッション維持通知を画像の更新とは扱いません。macOSでは同じ取得CGImageからJPEGと領域指紋を作り、設定変更で取得待ち・送信待ちの旧画像を無効にします。どちらも入力ACKより前の画像を操作確認に再利用しません。
