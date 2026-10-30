@@ -1,3 +1,4 @@
+import type {NativePcmCapability} from "./DesktopNativePcmPath.js";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {DesktopNativePlatformFailure} from "@sodashitsu/protocol";
 import {randomUUID} from "node:crypto";
@@ -28,6 +29,7 @@ import {
 /** The subset used by DesktopProvider, for both OS children and shared subscriptions. */
 export interface DesktopHelper extends EventEmitter {
   resourceChannel?: DesktopResourceChannel;
+  nativePcm?: NativePcmCapability;
   stdin: Writable;
   stdout: Readable;
   stderr: Readable;
@@ -151,6 +153,7 @@ export class DesktopSharedCapture {
     const current = g;
     const member = Object.assign(new EventEmitter(), {
       resourceChannel: current.child.resourceChannel,
+      nativePcm: current.child.nativePcm,
       nativeCapturedInput:0,
       nativeInputs:[],
       configured: false,

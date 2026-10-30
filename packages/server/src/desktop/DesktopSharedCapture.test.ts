@@ -1,3 +1,6 @@
+import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
+import {createServer as createUnixServer} from "node:net";
+import {chmod} from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { expect, it, vi } from "vitest";
@@ -8,6 +11,7 @@ import { WebSocketServer } from "ws";
 import type { AddressInfo } from "node:net";
 
 class Helper extends EventEmitter implements DesktopHelper {
+  nativePcm?:NonNullable<DesktopHelper["nativePcm"]>;
   commands: any[] = [];
   stdout = new PassThrough();
   stderr = new PassThrough();
@@ -397,4 +401,19 @@ it.each(["linux-portal","macos-sck"])("preserves typed %s startup permission fai
   f.child.send({type:"platform_failure",backend,code:"permission_cancelled"});await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));
   expect(b.session.exitCode).toBe(0);expect(a.messages).toEqual([{type:"platform_failure",backend,code:"permission_cancelled"}]);expect(b.messages).toEqual(a.messages);
  }finally{f.pool.dispose();}
+});
+
+it.skipIf(process.platform==="win32")("keeps the physical PCM owner and nonempty quota across shared subscriber closes",async()=>{
+ const f=fixture(),paths=new DesktopNativePcmPaths({retryMs:5});let exited=false;
+ const closed=new Promise<void>(resolve=>f.child.once("close",()=>{exited=true;resolve();}));f.child.nativePcm={paths,owner:{closed,exited:()=>exited}};
+ const physicalClose=f.child.close.bind(f.child),hold=vi.spyOn(f.child,"close").mockImplementation(()=>{}),a=f.join(),b=f.join();
+ expect(a.session.nativePcm).toBe(f.child.nativePcm);
+ const lease=await a.session.nativePcm!.paths.create(a.session.nativePcm!.owner,"SodaDesktopAudio-"+"b".repeat(32)),server=createUnixServer();
+ try{
+  await new Promise<void>(resolve=>server.listen(lease.path,resolve));await chmod(lease.path,0o600);await lease.verify();
+  expect(b.session.nativePcm).toBe(f.child.nativePcm);a.session.stdin.end();await new Promise<void>(resolve=>setImmediate(resolve));
+  expect(a.session.exitCode).toBe(0);expect(exited).toBe(false);expect(b.session.nativePcm!.owner.exited()).toBe(false);expect(paths.pending).toBe(1);
+  b.session.stdin.end();await new Promise<void>(resolve=>setImmediate(resolve));await lease.retire();expect(exited).toBe(false);expect(paths.pending).toBe(1);
+  physicalClose();await expect.poll(()=>paths.pending).toBe(0);expect(exited).toBe(true);
+ }finally{hold.mockRestore();physicalClose();await new Promise<void>(resolve=>server.close(()=>resolve()));await lease.retire();f.pool.dispose();}
 });

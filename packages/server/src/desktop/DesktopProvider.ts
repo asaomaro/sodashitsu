@@ -1,3 +1,4 @@
+import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
 import {DesktopRegionSpec} from "@sodashitsu/protocol";
 import {DesktopAudioPipes,desktopWslAudioCommand} from "./DesktopAudioPipes.js";
 import {DesktopNativeSelection} from "./DesktopNativeSelection.js";
@@ -226,6 +227,7 @@ export class DesktopProvider {
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
   readonly companion: DesktopCompanionHub;
   private audioPipes=new DesktopAudioPipes();
+  private nativePcmPaths=new DesktopNativePcmPaths();
   constructor(private config: DesktopProviderConfig | undefined) {
     this.companion = new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
   }
@@ -256,7 +258,7 @@ export class DesktopProvider {
       sharedFiles: !!this.config?.fileRoot,
       sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
-      sharedAudio:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
+      sharedAudio:(!this.config?.nativePlatform||this.config.nativePlatform==="linux-portal")&&this.config?.allowNativeVideo===true,
       sharedNative: this.config?.allowNativeVideo === true,
       sharedDatagrams: this.config?.allowNativeVideo === true,
       available: !!this.config,
@@ -279,7 +281,7 @@ export class DesktopProvider {
       videoLane: true,
       microphone:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
       microphoneOpus:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      nativeVideo: !this.config?.nativePlatform||this.config?.allowNativeVideo===true,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:!this.config?.nativePlatform,
+      nativeVideo: !this.config?.nativePlatform||this.config?.allowNativeVideo===true,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:!this.config?.nativePlatform||this.config.nativePlatform==="linux-portal",
       nativeInputFreshness: !this.config?.nativePlatform,
       nativeCodecs: !this.config?.nativePlatform,
       ...(!this.config?.nativePlatform?{nativeAdaptive:true as const,nativeCadence:true as const}:{}),
@@ -301,7 +303,7 @@ export class DesktopProvider {
     if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
-    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.sharedResolution||p.options.sharedRate||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
+    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.sharedResolution||p.options.sharedRate||p.options.nativeAudio&&cfg.nativePlatform!=="linux-portal"||p.options.microphone||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
@@ -677,6 +679,10 @@ export class DesktopProvider {
       stdio: ["pipe", "pipe", "pipe"],
     });
       const child:DesktopHelper=cfg.nativePlatform?raw:new DesktopResourceChannel(raw,{ack:(source,id)=>{this.resources.acknowledge(source,id);},close:source=>{this.resources.sourceGone(source);}});
+      if(cfg.nativePlatform){
+        let exited=false;const closed=new Promise<void>(resolve=>raw.once("close",()=>{exited=true;resolve();}));
+        child.nativePcm={paths:this.nativePcmPaths,owner:{closed,exited:()=>exited||raw.exitCode!==null||raw.signalCode!==null}};
+      }
       this.physicalHelpers.add(child);child.once("close",()=>{this.physicalHelpers.delete(child);this.resetResourcesIfDrained();queueMicrotask(()=>this.pruneSources());});return child;
     };
     const child = options.sharedDesktop ? (s.capturePool??this.sharedCapture).attach(s.captureKey!, spawnHelper) : spawnHelper();
@@ -781,11 +787,11 @@ export class DesktopProvider {
             if(options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
-            const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes);
+            const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||cfg.nativePlatform==="linux-portal"&&!!s.process?.nativePcm);
             const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
             s.sharedRate=options.sharedRate===true&&nativeCadence===true&&nativeEnabled;
-            s.native=new DesktopNativeVideo({...(s.audioPipes&&ready.backend!=="synthetic"?{audioBridge:(active:()=>boolean)=>s.audioPipes!.open("audio",active)}:{}),enabled:nativeEnabled,sharedResolution:options.sharedResolution===true&&nativeAdaptive===true,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
+            s.native=new DesktopNativeVideo({...(s.process?.nativePcm?{nativePcm:s.process.nativePcm}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{audioBridge:(active:()=>boolean)=>s.audioPipes!.open("audio",active)}:{}),enabled:nativeEnabled,sharedResolution:options.sharedResolution===true&&nativeAdaptive===true,codecs:options.nativeCodecs===true&&nativeCodecs===true,adaptive:options.nativeAdaptive===true&&nativeAdaptive===true,cadence:options.nativeCadence===true&&nativeCadence===true,sharedRate:options.sharedRate===true&&nativeCadence===true,datagrams:udpEnabled,audioEnabled,...(s.shared&&s.process?.createAudio?{audioFactory:hooks=>s.process!.createAudio!(hooks)}:{}),synthetic:ready.backend==="synthetic",iceServers:cfg.iceServers??[],window:nativeWindow,width:options.display?.width??options.width,sourceWidth:ready.width,sourceHeight:ready.height,...(options.display?{exact:options.display}:{}),fps:options.fps,...(nativeRate?{maxFps:nativeRate}:{}),send:value=>this.sendVideo(s,value),write:value=>this.write(s,value),buffered:()=>s.videoReady?s.videoSocket!.bufferedAmount:s.ws.bufferedAmount,policy:video=>{s.video=video;this.write(s,{type:"policy",fps:video?1:options.fps,quality:s.quality});}});
             this.send(s, {
               ...legacyReady,
               ...(options.elevatedDesktop&&protectedDesktop?{protectedDesktop}:{}),
@@ -906,6 +912,8 @@ export class DesktopProvider {
       }
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop&&!cfg.nativePlatform;
+    const poolVideo=options.sharedDesktop===true&&!options.elevatedDesktop;
+    const poolAudio=poolVideo&&(!cfg.nativePlatform||cfg.nativePlatform==="linux-portal");
     const {independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
@@ -921,7 +929,7 @@ export class DesktopProvider {
       richClipboard:(options.sharedClipboard||options.richClipboard===true)&&cfg.allowClipboard===true,
       allowMicrophone:(poolMedia||options.microphone===true)&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint,
       ...((poolMedia||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
-      allowSystemAudio:(poolMedia||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
+      allowSystemAudio:(poolAudio||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
       ...(s.audioPipes?{audioPipeBridge:true}:{}),
       nativeCodecs:(poolMedia||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
@@ -929,10 +937,10 @@ export class DesktopProvider {
       nativeCadence:(poolMedia||options.nativeCadence===true)&&cfg.allowNativeVideo===true,
       nativeDatagrams:(poolMedia||options.nativeDatagrams===true)&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
-      ...((poolMedia||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
-      allowNativeVideo: (poolMedia||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
-      deferNativeSnapshots: (poolMedia||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
-      ...((poolMedia||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
+      ...((poolVideo||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
+      allowNativeVideo: (poolVideo||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
+      deferNativeSnapshots: (poolVideo||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
+      ...((poolVideo||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
       allowClipboard: (!options.sharedDesktop||options.sharedClipboard===true) && cfg.allowClipboard === true,
       allowDisplayResize: !options.sharedDesktop && cfg.allowDisplayResize === true,

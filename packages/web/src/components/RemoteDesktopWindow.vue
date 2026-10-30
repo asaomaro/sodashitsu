@@ -1312,7 +1312,7 @@ onBeforeUnmount(() => {
         <label><input v-model="requestAudio" type="checkbox" :disabled="mediaTransport==='native'&&!nativeAudio" />システム音声を要求</label>
         <label
           >経路<select v-model="mediaTransport" aria-label="動画の経路" @change="chooseMediaTransport">
-            <option v-if="nativeVideo" value="native">{{ platformBackend ? "H.264動画（音声なし）" : nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
+            <option v-if="nativeVideo" value="native">{{ platformBackend ? (nativeAudio ? "H.264動画（システム音声対応）" : "H.264動画（音声なし）") : nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
             <option v-if="allowMedia" value="auto">WebRTC（接続できなければ中継）</option>
             <option v-if="allowMedia" value="relay">圧縮動画を中継</option>
           </select></label
