@@ -8,6 +8,9 @@ import { getCACertificates } from "node:tls";
 import WebSocket from "ws";
 
 export type AssistantMethod =
+  | "assistant.source"
+  | "assistant.reply"
+  | "assistant.reply_key"
   | "assistant.get"
   | "assistant.ensure"
   | "assistant.adopt"

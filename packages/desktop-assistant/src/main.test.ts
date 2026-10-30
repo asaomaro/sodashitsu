@@ -274,7 +274,7 @@ it("enables robot captain without focus stealing, fences IPC and opens a native-
   ).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:open")!(characterEvent);
   const panel = fixture.windows[2]!;
-  expect(panel.url).toBe("http://127.0.0.1:7780");
+  expect(panel.url).toBe("http://127.0.0.1:7780/");
   expect(panel.options).toMatchObject({
     webPreferences: {
       partition: "persist:assistant-server",
@@ -563,4 +563,65 @@ it("uses the explicit PNG clipboard action and retires OCR on hide and navigatio
     fixture.handlers.get("assistant:ocr-run")!(local, { imageId: next.state.imageId }),
   ).rejects.toThrow("対象");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("does not open a source panel after its original bubble is hidden", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  const notice = {
+    id: "00000000-0000-4000-8000-000000000091",
+    key: "done:test:1",
+    source: {
+      serverOrigin: "http://127.0.0.1:7780",
+      machineId: "local",
+      paneId: "00000000-0000-4000-8000-000000000001",
+      workspaceId: "00000000-0000-4000-8000-000000000002",
+      agentInstanceId: "00000000-0000-4000-8000-000000000003",
+    },
+    kind: "done",
+    title: "worker",
+    message: "完了しました",
+    at: 1,
+  };
+  fixture.connections.at(-1)!.options.changed([notice], true);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  let finish!: (value: unknown) => void;
+  fixture.controls.at(-1)!.request.mockImplementation((method: string) =>
+    method === "assistant.source"
+      ? new Promise((resolve) => {
+          finish = resolve;
+        })
+      : Promise.resolve(null),
+  );
+  const opened = fixture.handlers.get("assistant:source-open")!(
+    { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame },
+    { noticeId: notice.id },
+  );
+  const rejected = expect(opened).rejects.toThrow("対象");
+  bubble.hide();
+  const count = fixture.windows.length;
+  finish({
+    paneId: notice.source.paneId,
+    workspaceId: notice.source.workspaceId,
+    agent: { instanceId: notice.source.agentInstanceId },
+  });
+  await rejected;
+  expect(fixture.windows.length).toBe(count);
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("handles failed retarget navigation and can return explicitly to ordinary Soda",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray"});
+ await fixture.handlers.get("assistant:open")!(event);const panel=fixture.windows.find(window=>!window.destroyed&&window.url==="http://127.0.0.1:7780/")!;
+ const notice={id:"00000000-0000-4000-8000-000000000091",key:"done:test:1",source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:"00000000-0000-4000-8000-000000000001",workspaceId:"00000000-0000-4000-8000-000000000002",agentInstanceId:"00000000-0000-4000-8000-000000000003"},kind:"done",title:"worker",message:"完了しました",at:1};
+ fixture.connections.at(-1)!.options.changed([notice],true);const bubble=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(bubble.isVisible()).toBe(true));
+ fixture.controls.at(-1)!.request.mockImplementation(async()=>({paneId:notice.source.paneId,workspaceId:notice.source.workspaceId,agent:{instanceId:notice.source.agentInstanceId}}));
+ vi.spyOn(panel,"loadURL").mockRejectedValueOnce(Error("generated connection failure"));
+ await fixture.handlers.get("assistant:source-open")!({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame},{noticeId:notice.id});
+ await vi.waitFor(()=>expect(panel.url).toMatch(/^data:text\/plain/));
+ await fixture.handlers.get("assistant:open")!(event);expect(panel.url).toBe("http://127.0.0.1:7780/");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });

@@ -175,3 +175,24 @@ export interface AssistantSessionInfo {
   /** Visible candidate for an explicit user choice; it never grants permission to send input. */
   observedAgent: AgentInfo | null;
 }
+
+export const AssistantSourceParams = z
+  .object({ source: AssistantSource, key: z.string().min(1).max(200) })
+  .strict();
+export const AssistantReplyParams = AssistantSourceParams.extend({
+  text: z.string().trim().min(1).max(8192),
+}).strict();
+export const AssistantReplyKeysParams = AssistantSourceParams.extend({
+  keyName: z.enum(["Enter", "Escape", "y", "n"]),
+}).strict();
+export interface AssistantSourceInfo {
+  paneId: string;
+  tabId: string;
+  workspaceId: string;
+  title: string;
+  agent: AgentInfo;
+}
+
+export const AssistantPanelTarget = z
+  .object({ assistantPane: z.uuid(), assistantWorkspace: z.uuid(), assistantInstance: z.uuid() })
+  .strict();

@@ -80,6 +80,10 @@ try {
     window.toolWatchers=new Set();
     window.toolsCallback=state=>{for(const callback of window.toolWatchers)callback(state);};
     window.assistant = {
+      openSource: async input=>window.calls.push(["open-source",input]),
+      replySource: async input=>window.calls.push(["reply-source",input]),
+      sourceKey: async input=>window.calls.push(["source-key",input]),
+      openSession: async()=>window.calls.push(["open-session"]),
       conversation: async () => ({ revision: 1, connected: false, busy: false, session: null, kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。" }),
       onConversation: callback => { window.chatCallback = callback; return () => {}; },
       startSession: async input => window.calls.push(["start-session",input]),
@@ -124,7 +128,7 @@ try {
       inbox: async () => ({
         status: "connected",
         revision: 1,
-        notices: [{ message: "「操舵室 / worker」の作業が完了しました。" }],
+        notices: [{ id:"00000000-0000-4000-8000-000000000091", message: "「操舵室 / worker」の作業が完了しました。" }],
       }),
       onInbox: (callback) => {
         window.noticeCallback = callback;
@@ -184,10 +188,10 @@ try {
     window.noticeCallback({
       status: "connected",
       revision: 2,
-      notices: [{ message: "<img src=x onerror=alert(1)>確認してください。" }],
+      notices: [{ id:"00000000-0000-4000-8000-000000000092", message: "<img src=x onerror=alert(1)>確認してください。" }],
     }),
   );
-  await expect(page.locator(".notice")).toHaveText(
+  await expect(page.locator(".notice-text")).toHaveText(
     "<img src=x onerror=alert(1)>確認してください。",
   );
   await expect(page.locator(".notice img")).toHaveCount(0);
@@ -345,6 +349,13 @@ try {
   await page.locator("#ocr-discard").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-result")).toHaveValue("");
   await expect(page.locator("#ocr-preview")).not.toHaveAttribute("src");
+  const reply=page.locator(".notice textarea");await reply.fill("通知元への返答");
+  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:99,notices:[{id:"00000000-0000-4000-8000-000000000092",message:"<img src=x onerror=alert(1)>確認してください。"}]}));
+  await expect(reply).toHaveValue("通知元への返答");
+  await page.getByRole("button",{name:"この通知元へ返答",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["reply-source",{noticeId:"00000000-0000-4000-8000-000000000092",text:"通知元への返答"}]);
+  await page.getByRole("button",{name:"この端末・質問フォームを開く",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["open-source",{noticeId:"00000000-0000-4000-8000-000000000092"}]);
   assert.deepEqual(errors, []);
   await context.close();
   console.log(

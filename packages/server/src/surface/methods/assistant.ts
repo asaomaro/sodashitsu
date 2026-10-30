@@ -1,4 +1,7 @@
 import {
+  AssistantSourceParams,
+  AssistantReplyParams,
+  AssistantReplyKeysParams,
   AssistantSessionGetParams,
   AssistantSessionEnsureParams,
   AssistantSessionPromptParams,
@@ -7,10 +10,67 @@ import {
   RpcError,
   type AgentInfo,
 } from "@sodashitsu/protocol";
+import { sourceTarget } from "../../assistant/SourceTarget.js";
 import type { ControlSurface, MethodContext } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerAssistantMethods(surface: ControlSurface, deps: MethodDeps): void {
+  const consumed = new Set<string>();
+  surface.register("assistant.source", {
+    schema: AssistantSourceParams,
+    handler: (_ctx, p) => {
+      const t = sourceTarget(deps, p.source, p.key);
+      return {
+        paneId: t.pane.id,
+        tabId: t.tab.id,
+        workspaceId: t.workspace.id,
+        title: t.pane.label ?? t.pane.title,
+        agent: t.agent,
+      };
+    },
+  });
+  const reply = async (
+    ctx: MethodContext,
+    p: {
+      source: import("@sodashitsu/protocol").AssistantSource;
+      key: string;
+      text?: string;
+      keyName?: string;
+    },
+  ) => {
+    const target = sourceTarget(deps, p.source, p.key);
+    if (consumed.has(p.key))
+      throw new RpcError("not_found", "この通知には既に返答を送信しました。端末で確認してください");
+    if (p.text && target.agent.state !== "idle")
+      throw new RpcError("agent_pane_busy", "質問フォームか確認キーで返答してください");
+    consumed.add(p.key);
+    while (consumed.size > 512) consumed.delete(consumed.values().next().value!);
+    const guard = (agent: AgentInfo) => {
+      if (ctx.connectionAuthorized && !ctx.connectionAuthorized())
+        throw new RpcError("not_found", "接続が終了しました");
+      ctx.agentPromptGuard?.(agent);
+      target.guard();
+      if (p.text && agent.state !== "idle")
+        throw new RpcError("agent_pane_busy", "送信先が入力待ちではありません");
+    };
+    // Never replay uncertain writes: a failed send remains consumed until a new notification event.
+    const result = await surface.invoke(
+      { ...ctx, agentPromptGuard: guard },
+      p.text ? "agent.prompt" : "agent.send_keys",
+      {
+        paneId: target.pane.id,
+        instanceId: target.agent.instanceId,
+        ...(p.text ? { text: p.text } : { keys: [p.keyName!] }),
+      },
+    );
+    if (!result.ok) throw new RpcError(result.error.code, result.error.message);
+    await deps.notifications
+      ?.update({ paneId: target.pane.id, key: p.key, status: "resolved" }, ctx.clientId)
+      .catch(() => {});
+    return { sent: true as const };
+  };
+  surface.register("assistant.reply", { schema: AssistantReplyParams, handler: reply });
+  surface.register("assistant.reply_key", { schema: AssistantReplyKeysParams, handler: reply });
   const sessions = deps.assistantSessions;
   if (!sessions) return;
   const forward = async (
