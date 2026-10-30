@@ -153,3 +153,11 @@ Ran 1 test in 0.015s
 FAILED (failures=1)
 
 ```
+
+## Final validation and delivery
+
+- Linux28 generated tests PASS, including actual jpegenc-pad and VideoMeta offset/stride path.4source negatives above failed expected assertions, bytes restored. Dev GI package extracted only under /tmp; no system install.
+- Full build/typecheck PASS.894 files/12,978 tests PASS,342.76s. Includes real loopback native post-input floor regression and prior Windows regional sources.
+- Exact head754b72a435ba691f5aa1c337111d3b7bca58d8c4: all8 CI checks PASS. Native workflow41048993787 Linux job124040080301 and Mac job124040080015. Mac actual SDK compile, generated self-test and6compiled source negatives PASS (never enters capture/input mode).
+- Independent reviews/delta completed; no remaining must/should. PR325 merged main f3ee8d9669abe1299f65d8876e5f45a2c23e7e4a; merged tree fbdf2132f21c2265ad3c104191e5ce98ce21e9f1 equals tested tree. PR body contains immutable head/CI/merge receipt.
+- No real OS display/input/device/service/driver/model/agent/handoff validation claimed.

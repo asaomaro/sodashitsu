@@ -337,3 +337,64 @@ it("isolates regional proof IDs across members, coalesces configuration, and rem
   b.send({type:"keyframe",region:null});await vi.waitFor(()=>expect(f.child.commands.filter(m=>m.type==="keyframe").at(-1)?.regions).toEqual([]));
  }finally{f.pool.dispose();}
 });
+
+it("maps native capture input evidence to each viewer across exclusive handover",async()=>{
+ const f=fixture(),a=f.join(),b=f.join();
+ const native=(seq:number,floor:number)=>({...frame(seq),info:{...frame(seq).info,timing:"unavailable",sourceInputSeq:floor}});
+ try{
+  f.child.send({...ready,backend:"linux-portal",inputCapabilities:{keys:["KeyA"],text:false,pointerButtons:[0],wheel:true}});
+  f.child.send(native(1,0));await vi.waitFor(()=>expect(b.messages).toHaveLength(2));a.send({type:"ack",seq:1});b.send({type:"ack",seq:1});
+  expect(a.session.requestControl!(true)).toBe(true);a.send({type:"control",enabled:true});
+  a.send({type:"input",seq:7,input:{kind:"key",code:"KeyA",down:true}});f.child.send({type:"input_ack",seq:1});
+  await vi.waitFor(()=>expect(a.messages.at(-1)).toEqual({type:"input_ack",seq:7}));
+  f.child.send(native(2,1));await vi.waitFor(()=>expect(b.messages.at(-1)?.info?.seq).toBe(2));
+  expect(a.messages.at(-1).info.sourceInputSeq).toBe(7);expect(b.messages.at(-1).info.sourceInputSeq).toBe(0);
+  a.send({type:"ack",seq:2});b.send({type:"ack",seq:2});a.session.requestControl!(false);expect(b.session.requestControl!(true)).toBe(true);b.send({type:"control",enabled:true});
+  b.send({type:"input",seq:3,input:{kind:"key",code:"KeyA",down:false}});f.child.send({type:"input_ack",seq:2});f.child.send(native(3,2));
+  await vi.waitFor(()=>expect(b.messages.at(-1)?.info?.seq).toBe(3));
+  expect(a.messages.at(-1).info.sourceInputSeq).toBe(7);expect(b.messages.at(-1).info.sourceInputSeq).toBe(3);
+ }finally{f.pool.dispose();}
+});
+it("routes native idle only to viewers who acknowledged that exact image and forwards source invalidation",async()=>{
+ const f=fixture(),a=f.join(),b=f.join();
+ try{
+  f.child.send({...ready,backend:"linux-portal"});f.child.send({...frame(1),info:{...frame(1).info,timing:"unavailable",sourceInputSeq:0}});
+  await vi.waitFor(()=>expect(b.messages).toHaveLength(2));b.send({type:"ack",seq:1});
+  f.child.send({type:"platform_idle",backend:"linux-portal",seq:1,counter:1});
+  await vi.waitFor(()=>expect(b.messages.at(-1)?.type).toBe("platform_idle"));expect(a.messages.some(m=>m.type==="platform_idle")).toBe(false);
+  f.child.send({type:"platform_failure",backend:"linux-portal",code:"source_changed"});
+  await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(b.session.exitCode).toBe(0);
+  expect(a.messages.at(-1)).toEqual({type:"platform_failure",backend:"linux-portal",code:"source_changed"});
+ }finally{f.pool.dispose();}
+});
+it.each(["future","decreasing"])("rejects %s shared native source input evidence",async failure=>{
+ const f=fixture(),a=f.join();
+ try{
+  f.child.send({...ready,backend:"macos-sck"});f.child.send({...frame(1),info:{...frame(1).info,timing:"measured",sourceInputSeq:0}});
+  await vi.waitFor(()=>expect(a.messages).toHaveLength(2));a.send({type:"ack",seq:1});
+  if(failure==="decreasing"){
+   a.session.requestControl!(true);a.send({type:"control",enabled:true});a.send({type:"input",seq:3,input:{kind:"key",code:"KeyA",down:true}});
+   f.child.send({...frame(2),info:{...frame(2).info,timing:"measured",sourceInputSeq:1}});await vi.waitFor(()=>expect(a.messages.at(-1)?.info?.seq).toBe(2));a.send({type:"ack",seq:2});
+  }
+  f.child.send({...frame(3),info:{...frame(3).info,timing:"measured",sourceInputSeq:failure==="future"?1:0}});
+  await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));
+ }finally{f.pool.dispose();}
+});
+
+it("preserves a blocked member's captured local input floor after its skipped frame",async()=>{
+ const f=fixture(),a=f.join(),b=f.join(),native=(seq:number,floor:number)=>({...frame(seq),info:{...frame(seq).info,timing:"unavailable",sourceInputSeq:floor}});
+ try{
+  f.child.send({...ready,backend:"linux-portal"});f.child.send(native(1,0));await vi.waitFor(()=>expect(b.messages).toHaveLength(2));b.send({type:"ack",seq:1});
+  a.session.requestControl!(true);a.send({type:"control",enabled:true});a.send({type:"input",seq:7,input:{kind:"key",code:"KeyA",down:true}});
+  f.child.send(native(2,1));await vi.waitFor(()=>expect(b.messages.at(-1)?.info?.seq).toBe(2));expect(a.messages).toHaveLength(2);
+  a.send({type:"ack",seq:1});b.send({type:"ack",seq:2});f.child.send(native(3,1));await vi.waitFor(()=>expect(a.messages.at(-1)?.info?.seq).toBe(3));
+  expect(a.messages.at(-1).info.sourceInputSeq).toBe(7);expect(b.messages.at(-1).info.sourceInputSeq).toBe(0);
+ }finally{f.pool.dispose();}
+});
+it.each(["linux-portal","macos-sck"])("preserves typed %s startup permission failure for every configured member",async backend=>{
+ const f=fixture(),config={type:"configure",nativePlatform:backend,options:{width:320}},a=f.join("source",config),b=f.join("source",config);
+ try{
+  f.child.send({type:"platform_failure",backend,code:"permission_cancelled"});await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));
+  expect(b.session.exitCode).toBe(0);expect(a.messages).toEqual([{type:"platform_failure",backend,code:"permission_cancelled"}]);expect(b.messages).toEqual(a.messages);
+ }finally{f.pool.dispose();}
+});

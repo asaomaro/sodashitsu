@@ -716,7 +716,7 @@ LinuxのPortal共有は部分実装です。通常インストールでは有効
 
 画面が変わったときだけ画像を送るPortalでは、最後の画像を表示して「新しい画像待ち」と表示します。OSの利用者・セッション・共有許可とパイプラインが有効で、表示済み画像への確認が済んでいる間、人の操作を継続できます。接続維持の通知が届かなくなると操作を拒否します。保持画像の再送を新しい取得や入力後の確認画像とは扱わず、エージェント操作には2秒以内の実画像と既存の入力後取得の確認が必要です。ロック・非アクティブ化・利用者/セッション/画像サイズの変更・Portal終了では共有を終了し、再接続と再許可を必要とします。実験版の明示的な有効化は引き続き必要です。生成テストで通信と権限の境界を検証しており、実際のLinuxデスクトップでの動作は未確認です。
 
-Linux版のGPU動画・音声・マイク・OSクリップボード・解像度変更・複数monitor/viewer・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
+Linux版のGPU動画・音声・マイク・OSクリップボード・解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
 
 生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
 
@@ -785,7 +785,7 @@ Mac上で `bash scripts/remote-desktop/build-macos-desktop.sh` を実行し、`S
 
 接続先のローカル設定で共有を許可し、macOSの「プライバシーとセキュリティ」で画面収録を許可してください。明示的にOSの許可要求を出す場合は、Mac現地で `scripts/remote-desktop/macos-desktop-helper --request-screen-permission` を実行します。許可後は共有を接続し直してください。操作は別にローカル設定で許可し、macOSのアクセシビリティ/PostEvent許可も必要です。未許可なら閲覧のみで開始し、自動で操作可能には変わりません。カスタム起動コマンドの場合は、現地で `--allow-input` も指定してください。
 
-既定のメイン画面を、毎回新しく取得したJPEG画像で配信します。現地でカスタムコマンドへ `--display-id <CGDisplayID>` を追加すれば対象を固定できます。GPU動画・音声・マイク・OS clipboard・解像度変更・複数viewer・保護画面・signinは扱いません。対応キー・5button・ホイール・文字列だけを能力表で通知します。CapsLockやメディアキーなど、載っていない操作は対応していません。Ctrl+Spaceはキーと修飾をそのまま送ります。
+既定のメイン画面を、毎回新しく取得したJPEG画像で配信します。現地でカスタムコマンドへ `--display-id <CGDisplayID>` を追加すれば対象を固定できます。GPU動画・音声・マイク・OS clipboard・解像度変更・保護画面・signinは扱いません。対応キー・5button・ホイール・文字列だけを能力表で通知します。CapsLockやメディアキーなど、載っていない操作は対応していません。Ctrl+Spaceはキーと修飾をそのまま送ります。
 
 通常ログイン中の同じ利用者・console session・画面を対象とし、権限・画面・sessionの変更、sleep、loginwindow前面、取得停止で終了します。ロックやサインアウトを越える無人接続を提供するものではありません。実機での権限遷移・静止時・DPI・キー配列・アプリ別の文字入力は未検証です。Mac CIで確認するのはSDK compile、OSの画面を使わない生成JPEGとFakeSinkの検査です。FPSや遅延が一般的な専用アプリと同等だと確認したものではありません。
 
@@ -928,3 +928,12 @@ Windows通常共有・Linux Portal・macOS SCKの対応helperでは、`desktop.a
 省略時は従来どおり全画面一致を要求します。ロック画面は人の操作専用です。生成画素と通信で検証する範囲であり、実画面の操作遅延の改善を計測したものではありません。
 
 Linux Portalの領域確認にはGstVideoのGI定義（Ubuntu/Debianの `gir1.2-gst-plugins-base-1.0`）も必要です。圧縮前のBGR画素とJPEGを同じPTSで対応付け、設定変更や寸法不一致では古い証拠を破棄します。静止中にPortalから実画像が届かない場合は新しい観察の成功を保証しません。既存のセッション維持通知を画像の更新とは扱いません。macOSでは同じ取得CGImageからJPEGと領域指紋を作り、設定変更で取得待ち・送信待ちの旧画像を無効にします。どちらも入力ACKより前の画像を操作確認に再利用しません。
+
+
+## Linux／macOSの複数viewer共有
+
+通常のnative接続で「情報・設定」を開き、「複数viewerで同じ画面を共有」を有効にすると、同じ画質設定の最大8窓で1つの取得helperとOSの共有許可を利用します。接続者ごとに画像の描画確認を待ち、遅い窓が他の窓を止めないようにします。操作は1窓だけです。操作中の窓で解除してから、別の窓で「操作する」を押してください。画面・利用者・OS許可・sourceの終了では全窓を閉じ、再接続と再許可が必要です。
+
+ファイルは接続先で設定したサーバー側フォルダを利用し、各窓で個別に許可します。他の窓の許可は引き継ぎません。OSのファイルドラッグ・clipboard・動画・音声・マイク・解像度・モニター切替をこの共有選択だけで有効にはしません。
+
+Linux Portalが静止中に画像を出さない場合、新しく参加した窓は次の実画像を待ちます。保持画像を新規取得として再送しません。静止通知はその画像を描画確認した窓だけに配り、人の操作継続に使います。エージェントの取得時刻や入力後の画像確認を更新した扱いにはしません。OSの実許可画面や複数端末での運用は未検証です。

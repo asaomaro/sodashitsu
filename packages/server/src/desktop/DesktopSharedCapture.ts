@@ -1,3 +1,5 @@
+import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
+import {DesktopNativePlatformFailure} from "@sodashitsu/protocol";
 import {randomUUID} from "node:crypto";
 import {DesktopRegionSpec,type DesktopRegionSpec as RegionSpec} from "@sodashitsu/protocol";
 import type {DesktopResourceChannel} from "./DesktopResourceChannel.js";
@@ -39,6 +41,8 @@ export interface DesktopHelper extends EventEmitter {
 }
 
 type Subscription = DesktopHelper & {
+  nativeCapturedInput:number;
+  nativeInputs:Array<{physical:number;local:number}>;
   region?:{requested:RegionSpec;physical:RegionSpec};
   cursorShape: number;
   images: DesktopFrameChain;
@@ -75,6 +79,8 @@ export class DesktopSharedCapture {
         keyframeAt: number;
         regionDirty?:boolean;
         regionTimer?:ReturnType<typeof setTimeout>;
+        sourceIdle:DesktopSourceIdle;
+        nativeInputSeq:number;
         inputSeq: number;
         inputs: Map<number, { member: Subscription; seq: number }>;
         ended: boolean;
@@ -102,6 +108,8 @@ export class DesktopSharedCapture {
         images: new DesktopFrameChain(),
         deltas: false,
         keyframeAt: -Infinity,
+        sourceIdle:new DesktopSourceIdle(),
+        nativeInputSeq:0,
         inputSeq: 0,
         inputs: new Map(),
         cursorSeq: 0,
@@ -143,6 +151,8 @@ export class DesktopSharedCapture {
     const current = g;
     const member = Object.assign(new EventEmitter(), {
       resourceChannel: current.child.resourceChannel,
+      nativeCapturedInput:0,
+      nativeInputs:[],
       configured: false,
       pending: 0,
       closed: false,
@@ -311,6 +321,10 @@ export class DesktopSharedCapture {
       }
       const seq = ++g.inputSeq;
       g.inputs.set(seq, { member: s, seq: value.seq });
+      if(g.ready?.backend==="linux-portal"||g.ready?.backend==="macos-sck"){
+        if(s.nativeInputs.length>=64)s.nativeInputs.shift();
+        s.nativeInputs.push({physical:seq,local:value.seq});
+      }
       this.write(g, { ...value, seq });
     } else throw Error("Unsupported shared capture command");
   }
@@ -409,8 +423,25 @@ export class DesktopSharedCapture {
       g.cursorPose = pose;
       if (shape) g.cursorShape = { id: pose.shapeId, shape, data: bytes.toString("base64") };
       for (const member of g.members) if (member.configured) this.cursor(g, member);
+    } else if(value.type==="platform_idle"&&g.ready){
+      const backend=g.ready.backend==="linux-portal"?"linux-portal":undefined;
+      const notice=g.sourceIdle.receive(value,{backend,ready:true,pending:0,seq:g.frameSeq});
+      if(notice)for(const member of g.members)if(member.configured&&!member.closed&&!member.pending&&member.images.last?.seq===notice.seq)this.emit(member,notice);
+    } else if(value.type==="platform_failure"){
+      const failure=DesktopNativePlatformFailure.parse(value),expected=g.ready?.backend??(g.configuration?JSON.parse(g.configuration).nativePlatform:undefined);
+      if(failure.backend!==expected)throw Error("Wrong shared native failure scope");
+      for(const member of [...g.members])if(member.configured)this.emit(member,failure);
+      this.end(g);
     } else if (value.type === "frame" && g.ready) {
       const info = DesktopFrameInfo.parse(value.info);
+      const native=g.ready.backend==="linux-portal"||g.ready.backend==="macos-sck";
+      if(native){
+        if(!info.timing||info.sourceInputSeq===undefined||info.sourceInputSeq<g.nativeInputSeq||info.sourceInputSeq>g.inputSeq)throw Error("Invalid shared native input evidence");
+        g.nativeInputSeq=info.sourceInputSeq;
+        for(const member of g.members){
+          while(member.nativeInputs.length&&member.nativeInputs[0]!.physical<=info.sourceInputSeq){const input=member.nativeInputs.shift()!;member.nativeCapturedInput=Math.max(member.nativeCapturedInput,input.local);}
+        }
+      }else if(info.timing!==undefined||info.sourceInputSeq!==undefined)throw Error("Unrequested shared native frame");
       if (
         (info.update && !g.deltas) ||
         info.seq <= g.frameSeq ||
@@ -422,6 +453,7 @@ export class DesktopSharedCapture {
       decodeDesktopFrame(encodeDesktopFrame(info, Buffer.from(value.data, "base64")));
       g.images.accept(info);
       g.frameSeq = info.seq;
+      g.sourceIdle.frame();
       let recover = false;
       // Bounded acceptance at the source replaces the slowest subscriber's ACK.
       // Every subscriber still ACKs exactly its own delivered frame.
@@ -434,7 +466,7 @@ export class DesktopSharedCapture {
         const {regions,...plain}=info;
         const proof=s.region&&regions?.find(p=>p.id===s.region!.physical.id);
         if(proof&&s.region&&(proof.x!==s.region.physical.x||proof.y!==s.region.physical.y||proof.width!==s.region.physical.width||proof.height!==s.region.physical.height))throw Error("Region proof bounds changed");
-        const delivered={...plain,...(proof&&s.region?{regions:[{...proof,id:s.region.requested.id}]}:{})};
+        const delivered={...plain,...(native?{sourceInputSeq:s.nativeCapturedInput}:{}),...(proof&&s.region?{regions:[{...proof,id:s.region.requested.id}]}:{})};
         s.images.accept(delivered);
         s.pending = info.seq;
         this.emit(s, {...value,info:delivered});
