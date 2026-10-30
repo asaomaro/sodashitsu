@@ -716,7 +716,7 @@ LinuxのPortal共有は部分実装です。通常インストールでは有効
 
 画面が変わったときだけ画像を送るPortalでは、最後の画像を表示して「新しい画像待ち」と表示します。OSの利用者・セッション・共有許可とパイプラインが有効で、表示済み画像への確認が済んでいる間、人の操作を継続できます。接続維持の通知が届かなくなると操作を拒否します。保持画像の再送を新しい取得や入力後の確認画像とは扱わず、エージェント操作には2秒以内の実画像と既存の入力後取得の確認が必要です。ロック・非アクティブ化・利用者/セッション/画像サイズの変更・Portal終了では共有を終了し、再接続と再許可を必要とします。実験版の明示的な有効化は引き続き必要です。生成テストで通信と権限の境界を検証しており、実際のLinuxデスクトップでの動作は未確認です。
 
-Linux版のGPU動画・音声・マイク・OSクリップボード・解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
+Linux版のGPU動画・音声・マイク・画像/HTML/RTFクリップボード・解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
 
 生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
 
@@ -944,3 +944,12 @@ Linux Portalが静止中に画像を出さない場合、新しく参加した�
 接続先でクリップボード共有を許可し、補助プログラムのカスタムコマンドへ `--allow-clipboard` を付けて起動してください。共有窓で「クリップボード共有を許可」を選ぶと、通常画面のテキスト（UTF16で8192文字相当まで）を読み書きできます。送信には接続先での入力許可と実際の入力権限も必要です。OS clipboard全体を扱い、ロック・利用者/画面/OS権限の変更・共有終了後には取得しません。PNG・HTML・RTFはこの経路では扱わず、未対応機能へ自動で切り替えません。
 
 複数viewerでは、全窓で「クリップボード経路を共有」を有効にした同じ構成へ接続し、1窓だけがclipboardを許可します。入力の操作権とは独立しており、別の窓のclipboard許可は奪えません。許可の解除・世代変更・期限切れ・取得中の失効では文字列を返しません。AppKitへの呼出しは同期処理のため、OS API内部の待機を強制中断するものではありません。OSの実許可画面、pasteboardの状態、他アプリとの併用は実機確認待ちです。
+
+
+## Linux Portalのテキストクリップボード
+
+接続先でclipboardを許可し、helperコマンドに `--allow-clipboard` を追加します。RemoteDesktop Portal v2とClipboard Portal v1が必要で、既存の共有セッションでOSにもclipboardを許可してください。実際のOS許可が得られた場合だけ、共有窓の「クリップボード共有を許可」でテキストを交換できます。clipboardだけを追加する場合にキーボード・ポインターのデバイスを要求しません。書き込みには入力の許可も必要です。
+
+通常・複数viewerとも、UTF16で8192単位までのテキストが対象です。複数viewerのclipboard許可は1窓へ排他で渡し、他の窓の許可は奪いません。未対応APIやOSによる許可拒否を、成功や別セッションでの取得に置き換えません。読み取り中の失効・期限超過では文字列を返さず、解除後の古い応答も渡しません。
+
+すでに送信したコピーは、同じPortalセッションでローカルのアプリへ貼り付けられます。共有終了時には保持データを破棄し、終了後もclipboardが残る保証はありません。PNG/HTML/RTF・ファイル転送MIMEはこの経路では扱いません。実際のPortalバックエンド・OS許可・各アプリとのclipboard相互運用は実機確認待ちです。

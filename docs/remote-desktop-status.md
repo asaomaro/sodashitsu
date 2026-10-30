@@ -13,11 +13,11 @@
 | 保護画面/仮想画面 | 通常共有とは別の許可・scopeで実装。併用できない機能がある |
 | 専用signinサービス | runtime、鍵・登録管理、初回導入、更新、記録に一致する限定復旧を実装。一般の異常終了の自動修復は提供しない |
 | agentの領域確認 | Windows通常共有・Linux Portal・macOS SCKで明示regionと領域内pointer限定の変更確認を実装。LinuxはGstVideo GIが必要で、新しい実画素を待つ。省略時は全画面一致 |
-| Linux/macOS native | 画像・入力・領域確認・最大8viewer共有と個別file許可、macOS text clipboardを扱う実験版。Windowsと同等の機能範囲ではない |
+| Linux/macOS native | 画像・入力・領域確認・最大8viewer共有と個別file許可、Linux/macOS text clipboardを扱う実験版。Windowsと同等の機能範囲ではない |
 
 ## 開発・機能拡張として残るもの
 
-- Linux/macOS nativeの動画・音声・マイク・解像度・複数monitor、Linux OS clipboardとmacOSの画像/HTML/RTF clipboard等の対応拡大。Windows固有のUAC/ドライバー機能とはOSの仕組みが異なる。
+- Linux/macOS nativeの動画・音声・マイク・解像度・複数monitor、Linux/macOSの画像/HTML/RTF clipboard等の対応拡大。Windows固有のUAC/ドライバー機能とはOSの仕組みが異なる。
 - 保護画面・仮想画面・複数viewerと、通常画面の動画/音声/転送等を併用できる範囲の拡大。許可の共用や暗黙の経路変更で済ませない。
 - 暗号化CLIを組み込むプラグインは、そのCLIと独立した鍵・許可・停止処理を自分で管理する。今回の通常grant用ホストAPIを暗号化用と扱わない。
 

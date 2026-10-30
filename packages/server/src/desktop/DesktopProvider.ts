@@ -252,7 +252,7 @@ export class DesktopProvider {
       sharedMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
       independentMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
       sharedCursor:!this.config?.nativePlatform,
-      sharedClipboard:(!this.config?.nativePlatform||this.config.nativePlatform==="macos-sck")&&this.config?.allowClipboard===true,
+      sharedClipboard:this.config?.allowClipboard===true,
       sharedFiles: !!this.config?.fileRoot,
       sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,

@@ -167,10 +167,153 @@ class RegionProofs:
     def clear(self):
         with self.lock:self.specs=[];self.frames.clear();self.generation+=1
 
+class PortalTextClipboard:
+    """One portal session, bounded UTF8 pipe transfers, no clipboard access in probe/tests."""
+    INTERFACE="org.freedesktop.portal.Clipboard"
+    MIMES=("text/plain;charset=utf-8","text/plain")
+    def __init__(self,helper,clock=None,mono=None):
+        self.helper=helper;self.session=helper.session;self.clock=clock or (lambda:time.time()*1000);self.mono=mono or (lambda:time.monotonic()*1000)
+        self.os_enabled=False;self.enabled=False;self.generation=0;self.last_id=0;self.busy=False;self.closed=False
+        self.types=None;self.owned=None;self.owner=False;self.owner_version=0;self.transfers=threading.BoundedSemaphore(4)
+    def scope(self):
+        h=self.helper
+        return not self.closed and self.os_enabled and not h.dead and h.ready and h.session==self.session and h.scope is not None and h.scope.alive() and time.monotonic()-h.last_heartbeat<8
+    def authorized(self,ticket):
+        owner,expires,started,deadline=ticket
+        with self.helper.output_gate:
+            if not self.enabled or owner!=self.generation:return False
+            alive=self.scope();utc=self.clock();now=self.mono()
+            if not alive and owner==self.generation:self.enabled=False
+            return alive and self.enabled and owner==self.generation and utc<=expires and started<=now<=deadline
+    def control(self,value):
+        generation=value.get("generation");enabled=value.get("enabled")
+        if not integer(generation,1,9007199254740991) or not isinstance(enabled,bool):raise NativeFailure("backend_failure")
+        with self.helper.output_gate:
+            if generation<=self.generation:return
+            self.generation=generation;self.enabled=False
+            alive=enabled and self.scope()
+            if self.generation==generation:self.enabled=alive
+    def call(self,method,signature,args,fd=False):
+        h=self.helper;variant=h.GLib.Variant("(o"+signature+")",(self.session,*args))
+        if not fd:return h.connection.call_sync(h.NAME,h.PATH,self.INTERFACE,method,variant,None,h.Gio.DBusCallFlags.NONE,100,None)
+        reply,fds=h.connection.call_with_unix_fd_list_sync(h.NAME,h.PATH,self.INTERFACE,method,variant,h.GLib.VariantType.new("(h)"),h.Gio.DBusCallFlags.NONE,100,None,None)
+        index=reply.unpack()[0]
+        if not integer(index,0,fds.get_length()-1):raise NativeFailure("backend_failure")
+        return fds.get(index)
+    def owner_changed(self,_connection,_sender,_path,_interface,_signal,parameters):
+        session,options=parameters.unpack()
+        if session!=self.session:return
+        types=options.get("mime_types");owner=options.get("session_is_owner")
+        if not isinstance(types,(tuple,list)) or len(types)>64 or any(not isinstance(t,str) or len(t)>128 for t in types) or not isinstance(owner,bool):return
+        with self.helper.output_gate:
+            if self.closed or self.helper.dead or self.helper.session!=self.session:return
+            self.types=tuple(types);self.owner=owner;self.owner_version+=1
+            if not owner:self.forget_owned()
+    def forget_owned(self):
+        if self.owned is not None:self.owned[:]=b"\0"*len(self.owned)
+        self.owned=None
+    def read(self,ticket):
+        with self.helper.output_gate:
+            if not self.authorized(ticket):raise NativeFailure("permission_denied")
+            if self.owner and self.owned is not None:return self.owned.decode("utf-8")
+            available=self.types;version=self.owner_version
+            mime=next((t for t in self.MIMES if available is None or t in available),None)
+            if mime is None:return ""
+        fd=self.call("SelectionRead","s",(mime,),fd=True);data=bytearray()
+        try:
+            os.set_blocking(fd,False)
+            while self.authorized(ticket):
+                remaining=(ticket[3]-self.mono())/1000
+                if remaining<=0:break
+                if not select.select([fd],[],[],min(.025,remaining))[0]:continue
+                if not self.authorized(ticket):break
+                chunk=os.read(fd,min(4096,32769-len(data)))
+                if not chunk:
+                    text=data.decode("utf-8")
+                    with self.helper.output_gate:
+                        if self.owner_version!=version or not self.authorized(ticket) or len(text.encode("utf-16-le"))>16384:raise NativeFailure("source_changed")
+                    return text
+                data.extend(chunk)
+                if len(data)>32768:raise NativeFailure("backend_failure")
+            raise NativeFailure("source_changed")
+        finally:
+            os.close(fd);data[:]=b"\0"*len(data)
+    def write(self,text,ticket):
+        h=self.helper
+        with h.output_gate:
+            if not h.config["input"] or not h.guard or not h.guard.devices or not self.authorized(ticket):raise NativeFailure("permission_denied")
+            self.forget_owned();self.owned=bytearray(text.encode("utf-8"));self.owner=True;self.owner_version+=1
+            version=self.owner_version
+            try:
+                self.call("SetSelection","a{sv}",({"mime_types":h.GLib.Variant("as",list(self.MIMES))},))
+                if not self.authorized(ticket):raise NativeFailure("source_changed")
+            except Exception:
+                if self.owner_version==version:self.forget_owned();self.owner=False
+                raise
+    def submit(self,value):
+        started=self.mono();utc=self.clock();identifier=value.get("id");owner=value.get("generation");expires=value.get("expiresAt");operation=value.get("operation")
+        if not integer(identifier,1,9007199254740991):raise NativeFailure("backend_failure")
+        failure={"type":"clipboard_result","id":identifier,"ok":False}
+        ticket=(owner,expires,started,started+(expires-utc)) if finite(expires,utc,utc+1500) and integer(owner,1,9007199254740991) else None
+        with self.helper.output_gate:
+            if ticket is None or self.busy or identifier<=self.last_id or not self.authorized(ticket):self.helper.output(failure);return
+            self.last_id=identifier;self.busy=True
+        def worker():
+            result=failure
+            try:
+                if operation=="read":
+                    text=self.read(ticket)
+                    if self.authorized(ticket) and len(text.encode("utf-16-le"))<=16384:result={"type":"clipboard_result","id":identifier,"ok":True,"text":text}
+                elif operation=="write":
+                    text=value.get("text")
+                    if isinstance(text,str) and len(text.encode("utf-16-le"))<=16384:self.write(text,ticket);result={"type":"clipboard_result","id":identifier,"ok":True}
+            except Exception:pass
+            finally:
+                with self.helper.output_gate:
+                    self.busy=False
+                    if "text" in result and not self.authorized(ticket):result=failure
+                    self.helper.output(result,publish=lambda:"text" not in result or self.authorized(ticket))
+        try:threading.Thread(target=worker,daemon=True).start()
+        except Exception:
+            with self.helper.output_gate:self.busy=False;self.helper.output(failure)
+    def transfer(self,_connection,_sender,_path,_interface,_signal,parameters):
+        session,mime,serial=parameters.unpack()
+        if session!=self.session or not integer(serial,0,0xffffffff):return
+        with self.helper.output_gate:
+            if mime not in self.MIMES or self.owned is None or not self.owner or not self.scope() or not self.transfers.acquire(False):
+                self.done(serial,False);return
+            data=bytearray(self.owned);version=self.owner_version
+        def valid():
+            with self.helper.output_gate:return self.scope() and self.owner and self.owner_version==version
+        def worker():
+            fd=None;success=False;deadline=self.mono()+1000
+            try:
+                if not valid():return
+                fd=self.call("SelectionWrite","u",(serial,),fd=True);os.set_blocking(fd,False);offset=0
+                while offset<len(data) and valid() and self.mono()<deadline:
+                    if not select.select([],[fd],[],min(.025,max(0,(deadline-self.mono())/1000)))[1]:continue
+                    if not valid() or self.mono()>=deadline:break
+                    offset+=os.write(fd,data[offset:offset+4096])
+                success=offset==len(data) and valid() and self.mono()<=deadline
+            except Exception:pass
+            finally:
+                if fd is not None:os.close(fd)
+                data[:]=b"\0"*len(data);self.transfers.release();self.done(serial,success)
+        try:threading.Thread(target=worker,daemon=True).start()
+        except Exception:data[:]=b"\0"*len(data);self.transfers.release();self.done(serial,False)
+    def done(self,serial,success):
+        with self.helper.output_gate:
+            if self.closed or self.helper.dead or self.helper.session!=self.session or not self.os_enabled:return
+            h=self.helper
+            h.connection.call(h.NAME,h.PATH,self.INTERFACE,"SelectionWriteDone",h.GLib.Variant("(oub)",(self.session,serial,success)),None,h.Gio.DBusCallFlags.NONE,100,None,None,None)
+    def close(self):
+        with self.helper.output_gate:self.closed=True;self.enabled=False;self.os_enabled=False;self.generation+=1;self.forget_owned()
+
 class PortalHelper:
     NAME="org.freedesktop.portal.Desktop";PATH="/org/freedesktop/portal/desktop"
     SC="org.freedesktop.portal.ScreenCast";RD="org.freedesktop.portal.RemoteDesktop"
     def __init__(self, Gio, GLib, Gst, scope_factory=None, video=None):
+        self.clipboard=None
         self.regions=RegionProofs();self.video=video;self.transfer_size=None
         self.output_gate=threading.RLock();self.Gio=Gio;self.GLib=GLib;self.Gst=Gst;self.loop=GLib.MainLoop();self.scope_factory=scope_factory or (lambda:LoginScope(Gio,GLib,gate=self.output_gate));self.scope=None;self.last_scope_check=0;self.connection=None;self.session=None;self.requests={};self.subscriptions=[]
         self.dead=False;self.closed=False;self.ready=False;self.barrier=-1;self.next_emit=0;self.config=None;self.pipeline=None;self.fd=None;self.guard=None;self.pending=0;self.seq=0;self.last_pts=None;self.last_sample=None;self.last_idle=0;self.idle_counter=0;self.last_heartbeat=time.monotonic();self.configured_at=None;self.commands=queue.Queue(maxsize=64);self.queued=None;self.output_queue=queue.Queue(maxsize=64)
@@ -225,6 +368,7 @@ class PortalHelper:
         if self.closed:return
         with self.output_gate:self.dead=True;self.closed=True;self.queued=None
         self.regions.clear()
+        if self.clipboard:self.clipboard.close()
         if self.guard:self.guard.control=False;self.guard.held_keys.clear();self.guard.held_buttons.clear()
         if self.scope and hasattr(self.scope,"close"):self.scope.close()
         if self.connection:
@@ -265,7 +409,7 @@ class PortalHelper:
         if not integer(width,320,1920) or not integer(fps,1,30) or not integer(quality,20,90):raise NativeFailure("unsupported")
         image=options.get("image",{"colorMode":"full","showCursor":True})
         if not isinstance(image,dict) or image.get("colorMode")!="full" or not isinstance(image.get("showCursor"),bool):raise NativeFailure("unsupported")
-        self.config={"width":width,"fps":fps,"quality":quality,"cursor":image["showCursor"],"input":message.get("allowInput") is True};self.configured_at=time.monotonic()
+        self.config={"width":width,"fps":fps,"quality":quality,"cursor":image["showCursor"],"input":message.get("allowInput") is True,"clipboard":message.get("allowClipboard") is True and "--allow-clipboard" in sys.argv};self.configured_at=time.monotonic()
         self.scope=self.scope_factory()
         self.Gst.init(None)
         for name in ["pipewiresrc","videoconvert","videoscale","jpegenc","appsink"]:
@@ -273,7 +417,7 @@ class PortalHelper:
         self.connection=self.Gio.bus_get_sync(self.Gio.BusType.SESSION,None)
         props=self.connection.call_sync(self.NAME,self.PATH,"org.freedesktop.DBus.Properties","GetAll",self.GLib.Variant("(s)",(self.SC,)),None,self.Gio.DBusCallFlags.NONE,3000,None).unpack()[0]
         if props.get("version",0)<6:raise NativeFailure("unsupported")
-        self.interface=self.RD if self.config["input"] else self.SC
+        self.interface=self.RD if self.config["input"] or self.config["clipboard"] else self.SC
         token="soda"+uuid.uuid4().hex;sender=self.connection.get_unique_name()[1:].replace(".","_");self.expected_session=f"{self.PATH}/session/{sender}/{token}"
         self.request(self.interface,"CreateSession","",(),{"session_handle_token":self.GLib.Variant("s",token)},self.created)
     def created(self,results):
@@ -281,11 +425,23 @@ class PortalHelper:
         if session!=self.expected_session:raise NativeFailure("permission_denied")
         self.session=session
         self.subscriptions.append(self.connection.signal_subscribe(self.NAME,"org.freedesktop.portal.Session","Closed",session,None,self.Gio.DBusSignalFlags.NONE,lambda *_:self.failure("source_changed")))
-        if self.config["input"]:self.request(self.RD,"SelectDevices","o",(session,),{"types":self.GLib.Variant("u",3),"persist_mode":self.GLib.Variant("u",0)},lambda _:self.select_sources())
+        if self.config["clipboard"]:
+            try:
+                props=self.connection.call_sync(self.NAME,self.PATH,"org.freedesktop.DBus.Properties","GetAll",self.GLib.Variant("(s)",(PortalTextClipboard.INTERFACE,)),None,self.Gio.DBusCallFlags.NONE,100,None).unpack()[0]
+                remote=self.connection.call_sync(self.NAME,self.PATH,"org.freedesktop.DBus.Properties","GetAll",self.GLib.Variant("(s)",(self.RD,)),None,self.Gio.DBusCallFlags.NONE,100,None).unpack()[0]
+                if props.get("version",0)>=1 and remote.get("version",0)>=2:
+                    self.connection.call_sync(self.NAME,self.PATH,PortalTextClipboard.INTERFACE,"RequestClipboard",self.GLib.Variant("(oa{sv})",(session,{})),None,self.Gio.DBusCallFlags.NONE,100,None)
+                    self.clipboard=PortalTextClipboard(self)
+                    for member,callback in [("SelectionOwnerChanged",self.clipboard.owner_changed),("SelectionTransfer",self.clipboard.transfer)]:self.subscriptions.append(self.connection.signal_subscribe(self.NAME,PortalTextClipboard.INTERFACE,member,self.PATH,None,self.Gio.DBusSignalFlags.NONE,callback))
+            except Exception:self.clipboard=None
+        if self.interface==self.RD:self.request(self.RD,"SelectDevices","o",(session,),{"types":self.GLib.Variant("u",3 if self.config["input"] else 0),"persist_mode":self.GLib.Variant("u",0)},lambda _:self.select_sources())
         else:self.select_sources()
     def select_sources(self):
-        self.request(self.SC,"SelectSources","o",(self.session,),{"types":self.GLib.Variant("u",1),"multiple":self.GLib.Variant("b",False),"cursor_mode":self.GLib.Variant("u",2 if self.config["cursor"] else 1),"persist_mode":self.GLib.Variant("u",0)},lambda _:self.request(self.interface,"Start","os",(self.session,""),{},self.started))
+        options={"types":self.GLib.Variant("u",1),"multiple":self.GLib.Variant("b",False),"cursor_mode":self.GLib.Variant("u",2 if self.config["cursor"] else 1)}
+        if self.interface==self.SC:options["persist_mode"]=self.GLib.Variant("u",0)
+        self.request(self.SC,"SelectSources","o",(self.session,),options,lambda _:self.request(self.interface,"Start","os",(self.session,""),{},self.started))
     def started(self,results):
+        if self.clipboard:self.clipboard.os_enabled=results.get("clipboard_enabled") is True
         streams=results.get("streams",[])
         if len(streams)!=1:raise NativeFailure("unsupported")
         self.node,properties=streams[0];serial=properties.get("pipewire-serial");dimensions=properties.get("size")
@@ -355,6 +511,11 @@ class PortalHelper:
             if self.guard:
                 if kind=="control" and message.get("enabled") is True:self.guard.control=bool(self.config["input"] and self.guard.devices)
                 else:self.mutate_input(self.guard.release)
+        elif kind=="clipboard_control":
+            if self.clipboard:self.clipboard.control(message)
+        elif kind=="clipboard":
+            if self.clipboard:self.clipboard.submit(message)
+            else:self.output({"type":"clipboard_result","id":message["id"],"ok":False})
         elif kind=="input":
             if self.guard:
                 accepted=self.mutate_input(lambda:self.guard.input(message))
@@ -408,7 +569,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"agentRegions":True} if self.video else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"agentRegions":True} if self.video else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
@@ -444,12 +605,13 @@ class PortalHelper:
 
 def main():
     try:
+        arguments=sys.argv[1:]
+        if len(arguments)!=len(set(arguments)) or any(arg not in ("--probe","--allow-clipboard") for arg in arguments):raise NativeFailure("unsupported")
         import gi
         gi.require_version("Gio","2.0");gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
         from gi.repository import Gio,GLib,Gst,GstVideo
-        if sys.argv[1:]==["--probe"]:
+        if "--probe" in sys.argv[1:]:
             print(json.dumps({"backend":"linux-portal","dependencies":True}));return
-        if sys.argv[1:]:raise NativeFailure("unsupported")
         PortalHelper(Gio,GLib,Gst,video=GstVideo).run()
     except Exception as error:
         code=error.code if isinstance(error,NativeFailure) else "dependencies"
