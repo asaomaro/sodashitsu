@@ -1,3 +1,4 @@
+import { AssistantLaunchController } from "./assistant/AssistantLaunchController.js";
 import {DesktopNativeHelpers} from "./desktop/DesktopNativeHelpers.js";
 import {openWorkAgentAsk} from "./work/WorkAgentAsk.js";
 import { ExecService } from "./exec/ExecService.js";
@@ -735,6 +736,8 @@ export async function composeServer(
     if(action.type === "agent" && !session.getPane(action.paneId))throw new RpcError("not_found","対象ペインが見つかりません");
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
+  const managedAssistant = new AssistantLaunchController(options.stateDir, process.env,
+    () => `${options.cert && options.key ? "https" : "http"}://127.0.0.1:${boundPortValue ?? options.port}`, message => logger.warn(message));
   const desktopNativeHelpers=new DesktopNativeHelpers();
   const previewHelpers = new ManagedPreviewHelpers(async (machine, gone) => {
     if (machine !== "local") {
@@ -914,6 +917,7 @@ export async function composeServer(
     scrollbackEditors: () => session.handoffScrollbackEditors(),
     boundPort: () => boundPortValue,
     pausePollers: async () => {
+      await managedAssistant.stop();
       await assistantSessions.suspend();
       await scheduler.close();
       graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
@@ -929,6 +933,7 @@ export async function composeServer(
       await extensions.stop();
     },
     resumePollers: () => {
+      managedAssistant.start();
       assistantSessions.resume();
       desktop.resumeSavedTransfers();
       scheduler.start();
@@ -1249,6 +1254,7 @@ export async function composeServer(
         void machines.start();
         // 7. 拡張を起動する（20261007-ext-host）。ロックの後・復元の後。待たない（設定を読む処理が遅くても、`listen()` を止めない）。投げない。
         void extensions.start();
+        managedAssistant.start();
       } catch (err) {
         // 失敗した起動はロックを放す（`main` は close() を呼ばずに終わる）。放す前に、復元を済ませていない状態の保存の
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
@@ -1289,6 +1295,7 @@ export async function composeServer(
     },
 
     async close(): Promise<void> {
+      await managedAssistant.stop().catch(() => logger.warn("アシスタントの停止を確認できません"));
       await scheduler.close();
       builtinViews.close();
       summarySub.dispose();

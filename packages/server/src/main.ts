@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { readAssistantEnabled, writeAssistantEnabled } from "./assistant/AssistantLaunchController.js";
+import { resolveServeOptions } from "./config.js";
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
 import { WorkerPtyBackend } from "./pty/WorkerPtyBackend.js";
 import { HANDOFF_NONCE_ENV } from "./handoff/HandoffManifest.js";
@@ -35,6 +37,7 @@ function printHelp(): void {
       "soda session delete NAME [--state-dir DIR] [--json]",
       "soda session stop NAME [--state-dir DIR] [--json]",
       "soda handoff [--state-dir DIR] [--session NAME]",
+      "soda assistant enable|disable|status [--state-dir DIR] [--session NAME]",
       ...MACHINE_USAGE.split("\n"),
       "soda bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
     ].join("\n"),
@@ -201,6 +204,10 @@ async function main(): Promise<void> {
         { stateDir: parsed.stateDir ?? defaultStateDir(), session: parsed.session },
         { stdin: process.stdin, stdout: process.stdout, err: (line) => console.error(line) },
       );
+    } else if (parsed.command === "assistant") {
+      const dir = resolveServeOptions(parsed.serve).stateDir;
+      if (parsed.assistantAction !== "status") await writeAssistantEnabled(dir, parsed.assistantAction === "enable");
+      console.log(JSON.stringify({enabled: await readAssistantEnabled(dir, process.env.SODA_ASSISTANT_ENABLED === "1")}));
     } else if (parsed.command === "machine") {
       process.exitCode = await runMachineCommand(parsed.machine!, parsed.stateDir ?? defaultStateDir(), consoleIo);
     } else if (parsed.command === "session-delete") {
