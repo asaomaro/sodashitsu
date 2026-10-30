@@ -5,8 +5,12 @@ Linux側の設定・helper・共有・ブラウザへの配線を実装。macOS 
 - 関連6ファイル345件成功（初期配線時）。生成Linux Opus/private path＋image/audio viewer両加入順4件成功。
 - Node受信/共有/PCM path/video初期88件とserver build成功。
 - /usr/bin/python3の生成PCM/private peer/GStreamer audiotestsrc/停止22件成功（skipなし）。Portalの新規routing3件成功。
-- 全体build/typecheck/testは実行中。最終E2Eはhosted CIで実施する（ローカルDOM待ち/GstVideo不足は既存mainでも同じ、再調査しない）。
-- 独立最終レビューはPythonとNode/Vue/TUI/E2Eに分けて全製品差分を点検し、mustを修正後のdeltaも確認。負例証拠更新のshouldを反映中。
+- 最終build/typecheck成功。c96f639dの製品ソースで全体904ファイル13,125件成功、358.00秒（/tmp/soda-native-audio-all-final.log）。
+- Hosted generated-sharing: 関連349件・ブラウザ6件成功。Linux2ケースで実AudioDecoderの出力energyと初期mute/明示再生を確認し、音声graphは仮想MediaStream出力へ接続。
+- Hosted Linux: Portal56件、H264 21件、audio22件が全成功（skipなし）。
+- CIは9項目中8項目成功、Mac既存SDK/負例ジョブを含む最終結果はPR #338のchecks/merge記録を参照。
+- ローカルDOM待ち/GstVideo不足は既存mainでも同じのため再調査しない。
+- 独立最終レビューはPythonとNode/Vue/TUI/E2Eに分けて全製品差分を点検し、mustを修正後のdeltaも確認。負例証拠更新のshouldも修正・再レビュー完了、追加must/shouldなし。
 
 ## 負例（生の出力）
 
@@ -351,4 +355,4 @@ Node負例は実行終了後に元のファイルとbyte一致で復元確認。
 
 ## 全体試験の初回と再実行
 
-初回はbuild/typecheck/testを同時に開始したため、CLI build完了前の4試験が未生成のdist/main.jsに当たり失敗した（13,121成功/4失敗、362.56秒）。この結果を全成功と扱わない。型検査もテスト用Helperのoptional indexed typeにundefinedが含まれる1宣言で失敗し、NonNullableへ修正した。build完了後、凍結したソースでtypecheckと全体試験を再実行中。実行順序の問題として記録し、製品変更や失敗の抑制で回避しない。
+初回はbuild/typecheck/testを同時に開始したため、CLI build完了前の4試験が未生成のdist/main.jsに当たり失敗した（13,121成功/4失敗、362.56秒）。この結果を全成功と扱わない。型検査もテスト用Helperのoptional indexed typeにundefinedが含まれる1宣言で失敗し、NonNullableへ修正した。build完了後、凍結したソースでtypecheckと全体試験を再実行し、13,125件すべて成功した。実行順序の問題として記録し、製品変更や失敗の抑制で回避しない。
