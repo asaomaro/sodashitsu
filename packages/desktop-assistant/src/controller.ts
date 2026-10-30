@@ -29,6 +29,10 @@ export class AssistantController {
   initialize(): void {
     this.render();
   }
+  /** Keep the previous OS startup state until the serialized save/rollback completes. */
+  async initializeManaged(serverOrigin: string): Promise<void> {
+    await this.update({...this.preferences, enabled:true, serverOrigin, launchAtLogin:false});
+  }
   update(input: unknown): Promise<DesktopAssistantPreferences> {
     const next = DesktopAssistantPreferences.parse(input);
     const operation = this.queue.then(async () => {

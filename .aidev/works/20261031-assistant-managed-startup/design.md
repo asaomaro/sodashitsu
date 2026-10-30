@@ -1,0 +1,5 @@
+# managed起動への移行とOSログイン起動
+
+以前は元preferences.launchAtLoginをメモリ上でfalseにしてからcontrollerを作ったため、OS側の単独ログイン起動が解除されなかった。元preferencesを保持してcontrollerを作り、IPC登録後にinitializeManaged→既存serialized updateへ渡す。OS startup(false)→保存→成功時render。保存失敗はOS startupを元へ戻す。OS変更失敗は保存せず終了。
+
+managed起動でpreferences読取失敗なら元fileを保持してexit1、単独起動は従来の無効fallback。初期化末尾は最新controller.preferencesを参照。実OSの設定変更は生成試験では行わない。

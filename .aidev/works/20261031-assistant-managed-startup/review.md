@@ -1,0 +1,3 @@
+# 独立レビュー
+
+review_pointer / review_transferがsource差分をread-only点検。元launchAtLoginを保存してserialized updateを経由すること、保存成功前にUIを描画しないこと、保存失敗rollback、managed読取失敗で元file保護・非0終了、単独起動fallbackの維持を確認。追加must/shouldなし。実OS登録の変更なし。
