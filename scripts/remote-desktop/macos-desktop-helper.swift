@@ -393,6 +393,8 @@ final class DesktopSource {
     var input: InputGuard?
     var clipboard: TextClipboardGuard?
     var richClipboard: RichClipboardGuard?
+    var nativeVideo: NativeVideoController?
+    var videoCeiling=false,lastJPEG:Double=0
     var richRequested=false
     var clipboardCeiling=false
     var display: SCDisplay?
@@ -445,6 +447,7 @@ final class DesktopSource {
             guard let self=self,!self.dead else { return }
             self.locked {
                 self.richClipboard?.expire()
+                self.nativeVideo?.tick()
                 if milliseconds()-self.lastHeartbeat>8000 { self.stop("source_changed") }
                 else if self.ready && !self.sourceActive() { self.stop("source_changed") }
                 else if self.ready && milliseconds()-self.lastCapture>1500 { self.stop("source_stalled") }
@@ -490,7 +493,7 @@ final class DesktopSource {
         if kind=="configure" {
             guard !configured,let options=value["options"] as? [String:Any],
                   let width=integer(options["width"],320,1920),let fps=integer(options["fps"],1,30),let quality=integer(options["quality"],20,90) else { throw NativeError("backend_failure") }
-            for key in ["allowNativeVideo","allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","allowSystemAudio","separateCursor"] {
+            for key in ["allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","allowSystemAudio","separateCursor"] {
                 if boolean(value[key])==true { throw NativeError("unsupported") }
             }
             if boolean(options["deltas"])==true || boolean(options["adaptive"])==true { throw NativeError("unsupported") }
@@ -501,6 +504,11 @@ final class DesktopSource {
             inputCeiling=boolean(value["allowInput"])==true && CommandLine.arguments.contains("--allow-input") && AXIsProcessTrusted() && CGPreflightPostEventAccess()
             clipboardCeiling=boolean(value["allowClipboard"])==true && CommandLine.arguments.contains("--allow-clipboard")
             richRequested=boolean(options["richClipboard"])==true
+            videoCeiling=boolean(value["allowNativeVideo"])==true
+            if videoCeiling { nativeVideo=NativeVideoController(gate:gate,active:{ [weak self] in
+                guard let self=self else {return false};let granted=self.ready && self.videoCeiling && self.sourceActive()
+                return granted && !self.dead && self.ready && milliseconds()-self.lastHeartbeat<8000
+            },emit:{ [weak self] value,valid in guard let self=self else {return};try self.output.send(value,valid:valid ?? {true}) }) }
             configured=true;configuredAt=milliseconds()
             captureTask=Task { @MainActor in await self.capture() }
             return
@@ -522,6 +530,8 @@ final class DesktopSource {
             else { input.control=keep && sourceActive() }
         case "input":
             if let seq=try input?.input(value) { try output.send(["type":"input_ack","seq":seq]) }
+        case "native_video","native_video_ack","native_keyframe":
+            guard let nativeVideo=nativeVideo else {throw NativeError("unsupported")};try nativeVideo.command(value)
         case "clipboard_control":
             guard let clipboard=clipboard else { throw NativeError("unsupported") };let old=clipboard.generation;try clipboard.control(value);if clipboard.generation != old { richClipboard?.clear() }
         case "clipboard_rich":
@@ -569,7 +579,8 @@ final class DesktopSource {
                 guard !dead else { return }
                 lastCapture=milliseconds()
                 guard image.width==width,image.height==height else { throw NativeError("source_changed") }
-                if pending==0 && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) {
+                nativeVideo?.offer(image,captured:ticket.started)
+                if pending==0 && milliseconds()-lastJPEG>=1000/Double(fps) && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) {
                     let captureMs=milliseconds()-ticket.started,encodedAt=milliseconds()
                     guard let jpeg=NSBitmapImageRep(cgImage:image).representation(using:.jpeg,properties:[.compressionFactor:Double(quality)/100]),jpeg.count<=2*1024*1024 else { throw NativeError("backend_failure") }
                     let regionProofs=try regions.proofs(image)
@@ -580,10 +591,11 @@ final class DesktopSource {
                             ready=true
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
                             if richClipboard != nil { hello["richClipboard"]=true }
+                            if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60}
                             try output.send(hello)
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
-                        sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
+                        lastJPEG=milliseconds();sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
                         var info: [String:Any]=["seq":seq,"width":width,"height":height,"format":"image/jpeg","captureMs":captureMs,"encodeMs":encodeMs,"timing":"measured","sourceInputSeq":ticket.inputSeq]
                         if !regionProofs.isEmpty { info["regions"]=regionProofs }
                         try output.send(["type":"frame","info":info,"data":jpeg.base64EncodedString()],valid:{ [weak self] in
@@ -591,14 +603,14 @@ final class DesktopSource {
                         },discarded:{ [weak self] in DispatchQueue.main.async { if self?.pending==seq { self?.pending=0 } } })
                     }
                 }
-                let delay=max(1.0,1000.0/Double(fps)-(milliseconds()-ticket.started))
+                let delay=max(1.0,1000.0/Double(max(fps,nativeVideo?.captureFPS ?? 0))-(milliseconds()-ticket.started))
                 try await Task.sleep(nanoseconds:UInt64(delay*1_000_000))
             }
         } catch { if !dead { stop((error as? NativeError)?.code ?? "backend_failure") } }
     }
     func stop(_ code: String?) {
         locked {
-            if dead || stopping { return };stopping=true;input?.release();clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
+            if dead || stopping { return };stopping=true;nativeVideo?.stop(notify:false);input?.release();clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
             output.finish { Darwin.exit(code==nil ? 0 : 1) }
@@ -770,6 +782,7 @@ func generatedTests() throws -> Int {
     try check(decoded.pixelsWide==8 && decoded.pixelsHigh==8,"generated JPEG dimensions")
     try check(jpeg.count<2*1024*1024,"generated JPEG bound")
     count += try generatedRichClipboardTests()
+    count += try generatedNativeVideoTests()
     return count
 }
 

@@ -279,7 +279,7 @@ export class DesktopProvider {
       videoLane: true,
       microphone:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
       microphoneOpus:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      nativeVideo: !this.config?.nativePlatform,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:!this.config?.nativePlatform,
+      nativeVideo: !this.config?.nativePlatform||this.config?.allowNativeVideo===true,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:!this.config?.nativePlatform,
       nativeInputFreshness: !this.config?.nativePlatform,
       nativeCodecs: !this.config?.nativePlatform,
       ...(!this.config?.nativePlatform?{nativeAdaptive:true as const,nativeCadence:true as const}:{}),
@@ -301,7 +301,7 @@ export class DesktopProvider {
     if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
-    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像・対応する入力・許可したクリップボードを扱います。");
+    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.sharedResolution||p.options.sharedRate||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");

@@ -1304,7 +1304,7 @@ onBeforeUnmount(() => {
         <summary>動画・音声</summary>
         <label v-if="sharedScreen&&nativeCadence"><input v-model="adaptive" aria-label="共有動画のFPS・帯域を自動調整" type="checkbox" />動画のFPS・帯域<template v-if="nativeAdaptive">・解像度</template>を自動調整</label>
         <p v-if="sharedScreen&&nativeCadence" data-shared-rate>全viewerの希望を満たすFPS・帯域<template v-if="nativeAdaptive">・解像度</template>で圧縮します。1窓だけ遅い場合は、その窓だけ次のキーフレームから復帰します。画像の自動調整は行いません。<template v-if="nativeAdaptive">固定設定の窓がある間は元の動画解像度を維持します。</template><template v-else>この接続では動画の解像度変更を行いません。</template></p>
-        <p v-if="mediaTransport==='native'">接続先のGPUで{{nativeCodecs?"選択した形式":"H.264"}}へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>
+        <p v-if="mediaTransport==='native'">{{platformBackend?"接続先のGPUまたはCPU":"接続先のGPU"}}で{{nativeCodecs?"選択した形式":"H.264"}}へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>
         <p v-else>
           BのWindowsブラウザで /desktop-host
           を開き、対象と同じモニターを選んで共有を許可してください。
@@ -1312,7 +1312,7 @@ onBeforeUnmount(() => {
         <label><input v-model="requestAudio" type="checkbox" :disabled="mediaTransport==='native'&&!nativeAudio" />システム音声を要求</label>
         <label
           >経路<select v-model="mediaTransport" aria-label="動画の経路" @change="chooseMediaTransport">
-            <option v-if="nativeVideo" value="native">{{ nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
+            <option v-if="nativeVideo" value="native">{{ platformBackend ? "H.264動画（音声なし）" : nativeAudio ? "GPU動画（システム音声対応）" : "GPU動画（音声なし）" }}</option>
             <option v-if="allowMedia" value="auto">WebRTC（接続できなければ中継）</option>
             <option v-if="allowMedia" value="relay">圧縮動画を中継</option>
           </select></label
@@ -1344,7 +1344,7 @@ onBeforeUnmount(() => {
               negotiating: "動画を接続中",
               rtc: "WebRTC動画",
               relay: "圧縮動画の中継",
-              native: "GPU "+codecLabel(nativeActualCodec),
+              native: (platformBackend?"":"GPU ")+codecLabel(nativeActualCodec),
             }[mediaState] ?? mediaState
           }}
         </p>

@@ -12,6 +12,12 @@ import sys
 import threading
 import time
 import uuid
+import importlib.util
+from pathlib import Path
+
+_native_spec=importlib.util.spec_from_file_location("soda_owned_native_video",Path(__file__).with_name("linux-native-video.py"))
+_native_video=importlib.util.module_from_spec(_native_spec)
+_native_spec.loader.exec_module(_native_video)
 
 KEYS = dict(zip(["Escape", *[f"Digit{i}" for i in range(1, 10)], "Digit0", "Minus", "Equal", "Backspace", "Tab"], range(1, 16)))
 KEYS.update(dict(zip([f"Key{c}" for c in "QWERTYUIOP"], range(16, 26))))
@@ -519,6 +525,8 @@ class PortalHelper:
     SC="org.freedesktop.portal.ScreenCast";RD="org.freedesktop.portal.RemoteDesktop"
     def __init__(self, Gio, GLib, Gst, scope_factory=None, video=None):
         self.clipboard=None
+        self.native_worker=None;self.native_raw=None;self.native_available=False
+        self.native=_native_video.NativeVideoFlow(self.native_live,lambda:time.monotonic()*1000,lambda value,valid:self.output(value,publish=valid),maximum_fps=60)
         self.regions=RegionProofs();self.video=video;self.transfer_size=None
         self.output_gate=threading.RLock();self.Gio=Gio;self.GLib=GLib;self.Gst=Gst;self.loop=GLib.MainLoop();self.scope_factory=scope_factory or (lambda:LoginScope(Gio,GLib,gate=self.output_gate));self.scope=None;self.last_scope_check=0;self.connection=None;self.session=None;self.requests={};self.subscriptions=[]
         self.dead=False;self.closed=False;self.ready=False;self.barrier=-1;self.next_emit=0;self.config=None;self.pipeline=None;self.fd=None;self.guard=None;self.pending=0;self.seq=0;self.last_pts=None;self.last_sample=None;self.last_idle=0;self.idle_counter=0;self.last_heartbeat=time.monotonic();self.configured_at=None;self.commands=queue.Queue(maxsize=64);self.queued=None;self.output_queue=queue.Queue(maxsize=64)
@@ -571,7 +579,10 @@ class PortalHelper:
         finally:self.close()
     def close(self):
         if self.closed:return
-        with self.output_gate:self.dead=True;self.closed=True;self.queued=None
+        with self.output_gate:
+            self.dead=True;self.closed=True;self.queued=None;self.native.stop(False)
+            if self.native_raw:self.native_raw[1][:]=b"\0"*len(self.native_raw[1]);self.native_raw=None
+            if self.native_worker:self.native_worker.stop()
         self.regions.clear()
         if self.clipboard:self.clipboard.close()
         if self.guard:self.guard.control=False;self.guard.held_keys.clear();self.guard.held_buttons.clear()
@@ -617,7 +628,8 @@ class PortalHelper:
         self.config={"width":width,"fps":fps,"quality":quality,"cursor":image["showCursor"],"input":message.get("allowInput") is True,"clipboard":message.get("allowClipboard") is True and "--allow-clipboard" in sys.argv,"rich":options.get("richClipboard") is True};self.configured_at=time.monotonic()
         self.scope=self.scope_factory()
         self.Gst.init(None)
-        for name in ["pipewiresrc","videoconvert","videoscale","jpegenc","appsink"]:
+        self.native_available=message.get("allowNativeVideo") is True and self.video is not None and _native_video.GstH264Encoder.available(self.Gst)
+        for name in ["pipewiresrc","videoconvert","videoscale","jpegenc","appsink","identity","videorate"]:
             if self.Gst.ElementFactory.find(name) is None:raise NativeFailure("dependencies")
         self.connection=self.Gio.bus_get_sync(self.Gio.BusType.SESSION,None)
         props=self.connection.call_sync(self.NAME,self.PATH,"org.freedesktop.DBus.Properties","GetAll",self.GLib.Variant("(s)",(self.SC,)),None,self.Gio.DBusCallFlags.NONE,3000,None).unpack()[0]
@@ -660,7 +672,8 @@ class PortalHelper:
         index=reply.unpack()[0]
         if index<0 or index>=fds.get_length():raise NativeFailure("backend_failure")
         self.fd=fds.get(index)
-        self.pipeline=self.Gst.parse_launch(f"pipewiresrc name=source ! videoconvert ! videoscale ! video/x-raw,format=BGR,width=(int)[1,{self.config['width']}],height=(int)[1,2400],pixel-aspect-ratio=(fraction)1/1 ! jpegenc name=encoder quality={self.config['quality']} ! appsink name=sink max-buffers=1 drop=true sync=false")
+        self.pipeline=self.Gst.parse_launch(f"pipewiresrc name=source ! videoconvert ! videoscale ! video/x-raw,format=BGR,width=(int)[1,{self.config['width']}],height=(int)[1,2400],pixel-aspect-ratio=(fraction)1/1 ! identity name=native_raw ! videorate name=image_rate drop-only=true max-rate={self.config['fps']} ! jpegenc name=encoder quality={self.config['quality']} ! appsink name=sink max-buffers=1 drop=true sync=false")
+        if self.native_available:self.pipeline.get_by_name("native_raw").get_static_pad("src").add_probe(self.Gst.PadProbeType.BUFFER,self.native_probe)
         if self.video:self.pipeline.get_by_name("encoder").get_static_pad("sink").add_probe(self.Gst.PadProbeType.BUFFER,self.region_probe)
         self.source=self.pipeline.get_by_name("source");self.sink=self.pipeline.get_by_name("sink")
         for name in ["target-object","dont-reconnect","on-disconnect","resend-last","keepalive-time"]:
@@ -669,6 +682,58 @@ class PortalHelper:
         if self.source.get_property("on-disconnect").value_nick!="error":raise NativeFailure("unsupported")
         self.pipeline.get_bus().add_signal_watch();self.pipeline.get_bus().connect("message",self.bus_message)
         if self.pipeline.set_state(self.Gst.State.PLAYING)==self.Gst.StateChangeReturn.FAILURE:raise NativeFailure("backend_failure")
+    def native_live(self):
+        session=self.session
+        allowed=not self.dead and self.ready and self.native_available and self.scope is not None and self.scope.alive()
+        return bool(allowed and not self.dead and self.ready and self.session==session and session is not None and time.monotonic()-self.last_heartbeat<8)
+    def native_probe(self,pad,probe):
+        if not self.output_gate.acquire(blocking=False):return self.Gst.PadProbeReturn.OK
+        try:
+            stream=self.native.current
+            if self.dead or stream is None or self.native_raw is not None or self.native_worker is None or self.native_worker.stopped.is_set() or stream["encoding"] is not None or len(stream["pending"])>=stream["window"] or time.monotonic()*1000<stream["next"]:return self.Gst.PadProbeReturn.OK
+            captured=time.monotonic()*1000;buffer=probe.get_buffer();info=self.video.VideoInfo.new_from_caps(pad.get_current_caps())
+            if info.finfo.name!="BGR" or buffer.pts==self.Gst.CLOCK_TIME_NONE:raise _native_video.VideoFailure("raw_format")
+            meta=self.video.buffer_get_video_meta(buffer)
+            if meta and (meta.width!=info.width or meta.height!=info.height or meta.format!=info.finfo.format):raise _native_video.VideoFailure("raw_meta")
+            stride,offset=(meta.stride[0],meta.offset[0]) if meta else (info.stride[0],info.offset[0])
+            mapped,data=buffer.map(self.Gst.MapFlags.READ)
+            if not mapped:raise _native_video.VideoFailure("raw_map")
+            try:owned=_native_video.copy_bgr(memoryview(data.data),info.width,info.height,stride,offset)
+            finally:buffer.unmap(data)
+            self.native_raw=(stream,owned,info.width,info.height,captured)
+        except Exception:self.native.stop()
+        finally:self.output_gate.release()
+        return self.Gst.PadProbeReturn.OK
+    def pump_native(self):
+        self.native.tick()
+        if self.native_worker and self.native_worker.closed.is_set():
+            if self.native.current:self.native.stop()
+            self.native_worker=None
+        if self.native.current is None:
+            if self.native_worker:self.native_worker.stop()
+            if self.native_raw:self.native_raw[1][:]=b"\0"*len(self.native_raw[1]);self.native_raw=None
+        elif self.native_raw:
+            stream,raw,width,height,captured=self.native_raw;self.native_raw=None
+            reservation=self.native.reserve(captured) if self.native.current is stream else None
+            if reservation is not None and self.native_worker:self.native_worker.submit(reservation,raw,width,height)
+            else:raw[:]=b"\0"*len(raw)
+    def native_command(self,value):
+        kind=value.get("type")
+        try:
+            if kind=="native_video":
+                if value.get("enabled") is True and self.native_worker is not None:
+                    if not self.native_worker.closed.is_set():
+                        self.native.start(value);self.native.stop();self.native_worker.stop();return
+                    self.native_worker=None
+                stream=self.native.start(value)
+                if stream is not None:self.native_worker=_native_video.H264Worker(self.Gst,self.video,self.native,self.output_gate)
+                elif self.native.current is None and self.native_worker:self.native_worker.stop()
+            elif kind=="native_video_ack":self.native.acknowledge(value)
+            elif kind=="native_keyframe":self.native.keyframe(value)
+            else:raise _native_video.VideoFailure("unsupported_control")
+        except Exception:
+            self.native.stop()
+            if self.native_worker:self.native_worker.stop()
     def region_probe(self,pad,probe):
         try:
             with self.regions.lock:
@@ -700,6 +765,11 @@ class PortalHelper:
     def command(self,message):
         kind=message.get("type")
         if kind=="configure":self.configure(message)
+        elif kind.startswith("native_"):self.native_command(message)
+        elif kind=="policy":
+            fps=message.get("fps");quality=message.get("quality")
+            if not integer(fps,1,self.config["fps"]) or not integer(quality,20,self.config["quality"]):raise NativeFailure("unsupported")
+            self.image_fps=fps;self.pipeline.get_by_name("image_rate").set_property("max-rate",fps);self.pipeline.get_by_name("encoder").set_property("quality",quality)
         elif kind=="heartbeat":self.last_heartbeat=time.monotonic()
         elif kind=="stop":self.close()
         elif kind=="ack":
@@ -763,6 +833,7 @@ class PortalHelper:
             if time.monotonic()-self.last_heartbeat>8:raise NativeFailure("source_changed")
             if self.configured_at and not self.ready and time.monotonic()-self.configured_at>115:raise NativeFailure("permission_cancelled")
             if self.clipboard:self.clipboard.rich.expire()
+            self.pump_native()
             if self.pipeline:
                 sample=self.sink.emit("try-pull-sample",0)
                 if sample:
@@ -778,14 +849,14 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60} if self.native_available else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
                         encoded=base64.b64encode(data).decode();info={"seq":self.seq+1,"width":width,"height":height,"format":"image/jpeg","captureMs":0,"encodeMs":0,"timing":"unavailable","sourceInputSeq":self.guard.seq}
                         if proofs:info["regions"]=proofs
                         if not self.dead and revision==self.guard.revision:
-                            self.seq+=1;self.pending=self.seq;self.next_emit=time.monotonic()+1/self.config["fps"];self.output({"type":"frame","info":info,"data":encoded},revision)
+                            self.seq+=1;self.pending=self.seq;self.next_emit=time.monotonic()+1/getattr(self,"image_fps",self.config["fps"]);self.output({"type":"frame","info":info,"data":encoded},revision)
                 # Quiet is session/pipeline liveness only, never new pixels.
                 if self.ready:
                     if self.last_sample is not None and time.monotonic()-self.last_sample>=0.5:

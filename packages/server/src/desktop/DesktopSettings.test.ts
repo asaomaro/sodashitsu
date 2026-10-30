@@ -158,7 +158,7 @@ it("saves system audio separately from screen companion permissions and requires
 
 it("keeps native OS permission guidance separate from local input permission and rejects Windows-only roles",async()=>{
  const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"linux-portal"});expect(settings.get(true)).toMatchObject({nativePlatform:"linux-portal",setupMessage:expect.stringContaining("Portal"),permissions:{enabled:false,allowInput:false}});
- await settings.set({...off,enabled:true,allowInput:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"linux-portal",allowInput:true,allowNativeVideo:false});expect(configure.mock.calls.at(-1)![0]?.command).not.toContain("-AllowInput");
+ await settings.set({...off,enabled:true,allowInput:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"linux-portal",allowInput:true,allowNativeVideo:true});expect(configure.mock.calls.at(-1)![0]?.command).not.toContain("-AllowInput");
  await expect(settings.set({...off,enabled:true,allowElevated:true})).rejects.toThrow("native backend");await settings.set({...off,enabled:true,allowClipboard:true});expect(configure.mock.calls.at(-1)![0]?.allowClipboard).toBe(true);
 });
 it("passes the saved local input ceiling to the bundled macOS helper without changing custom commands",async()=>{
