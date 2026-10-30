@@ -51,3 +51,10 @@ it("rejects unknown native settings, credentials and insecure remote origins", (
   expect(desktopAssistantOrigin("http://[::1]:7780/")).toBe("http://[::1]:7780");
   expect(desktopAssistantOrigin("https://example.test/")).toBe("https://example.test");
 });
+
+it("restores model/effort profiles from the actual preferences file", async () => {
+ const {path}=await fixture();
+ const profiles={claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"}};
+ await new PreferencesFile(path).write({agentProfiles:profiles});
+ expect((await new PreferencesFile(path).read()).agentProfiles).toEqual(profiles);
+});

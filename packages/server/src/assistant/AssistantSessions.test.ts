@@ -327,6 +327,8 @@ it("round-trips ownership and verified conversation identity without starting an
       },
     ],
   };
+  const launchSettings = { model: "custom-model", effort: "high" as const };
+  data.workspaces[0]!.assistant!.launchSettings = launchSettings;
   const file = new FsSessionFile(f.stateDir);
   await file.save(data);
   const loaded = await file.load();
@@ -336,6 +338,7 @@ it("round-trips ownership and verified conversation identity without starting an
     const model = new SessionModel();
     const g = await fixture({ model, stateDir: f.stateDir });
     await g.session.restore(loaded.data);
+    expect(g.manager.get(device)?.launchSettings).toEqual(launchSettings);
     expect(g.session.wasRestoredPane(info.paneId)).toBe(true);
     const resumed = { ...agent, instanceId: randomUUID() };
     delete resumed.name;
@@ -618,4 +621,48 @@ it("never adopts a same-name replacement before the first launch detection is cl
     expect(f.start).toHaveBeenCalledOnce();
     expect(f.hosts.get(info.paneId)!.writes).toEqual([]);
   }
+});
+
+it("records session-only model and effort, restores them, and never rewrites an existing session", async () => {
+ const f=await fixture(); const deviceId=randomUUID();
+ const launchSettings={model:"sonnet",effort:"high"};
+ const info=await f.manager.ensure({deviceId,kind:"claude",launchSettings});
+ expect(f.start.mock.calls[0]![0].args).toEqual(["--model","sonnet","--effort","high"]);
+ expect(info.launchSettings).toEqual(launchSettings);
+ const again=await f.manager.ensure({deviceId,kind:"claude",launchSettings:{model:"opus",effort:"low"}});
+ expect(again.launchSettings).toEqual(launchSettings);
+ expect(f.start).toHaveBeenCalledTimes(1);
+ const restored=await fixture({model:f.model,stateDir:f.stateDir});
+ expect(restored.manager.get(deviceId)?.launchSettings).toEqual(launchSettings);
+ expect(restored.start).not.toHaveBeenCalled();
+});
+it("rejects unsupported launch settings before allocating a workspace", async () => {
+ const f=await fixture();
+ expect(() => f.manager.ensure({deviceId:randomUUID(),kind:"gemini",launchSettings:{model:"x"}})).toThrow();
+ expect(f.model.listWorkspaces()).toHaveLength(0);
+ expect(f.start).not.toHaveBeenCalled();
+});
+
+it("restores known launch settings when explicit adoption cannot be persisted", async () => {
+ const f=await fixture(); const {device,info,agent}=await f.ready();
+ const workspace=f.session.getWorkspace(info.workspaceId)!;
+ const launchSettings={model:"custom-model",effort:"high" as const};
+ f.session.updateAssistantBinding(workspace.id,workspace.assistant!,{launchSettings});
+ const actor={...agent,instanceId:randomUUID()};
+ f.session.updatePaneRuntime(info.paneId,{agent:actor});
+ f.flush.mockRejectedValueOnce(Error("generated disk failure"));
+ await expect(f.manager.adopt({deviceId:device,instanceId:actor.instanceId})).rejects.toThrow("generated disk failure");
+ expect(f.manager.get(device)?.launchSettings).toEqual(launchSettings);
+});
+
+it("coalesces equal profiles but rejects a different concurrent launch profile", async () => {
+ const f=await fixture(); const deviceId=randomUUID();
+ let release!:()=>void;
+ f.available.mockImplementationOnce(()=>new Promise<boolean>(resolve=>{release=()=>resolve(true);}));
+ const first=f.manager.ensure({deviceId,kind:"claude",launchSettings:{model:"sonnet",effort:"high"}});
+ expect(f.manager.ensure({deviceId,kind:"claude",launchSettings:{model:"sonnet",effort:"high"}})).toBe(first);
+ expect(()=>f.manager.ensure({deviceId,kind:"claude",launchSettings:{model:"opus",effort:"high"}})).toThrow("起動中");
+ await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+ release(); await first;
+ expect(f.start).toHaveBeenCalledTimes(1);
 });

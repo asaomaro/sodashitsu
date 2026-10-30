@@ -184,6 +184,15 @@ try {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await page.goto(`${origin}/settings.html`);
   await expect(page.getByRole("button", { name: "操舵室を開く" })).toBeDisabled();
+  await page.locator("#claude-model").fill("sonnet");
+  await page.locator("#claude-effort").selectOption("high");
+  await page.locator("#codex-model").fill("custom-model");
+  await page.locator("#codex-effort").selectOption("low");
+  await page.getByRole("button", {name:"保存",exact:true}).press("Enter");
+  await expect(page.getByRole("status")).toHaveText("保存しました。");
+  assert.deepEqual(await page.evaluate(()=>window.preferences.agentProfiles), {claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"}});
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="start-session").length),0);
+  await expect(page.locator("#claude-model")).toHaveValue("sonnet");
   await page.locator("#enabled").press("Space");
   await expect(page.locator("#enabled")).toBeChecked();
   for (const character of ["captain-male", "captain-female", "captain-robot"]) {
@@ -240,10 +249,13 @@ try {
   const actorId = "00000000-0000-4000-8000-000000000001";
   await page.evaluate(actorId => window.chatCallback({
     revision: 3, connected: true, busy: false,
-    session: {paneId:"00000000-0000-4000-8000-000000000002",kind:"codex",state:"ready",agent:{instanceId:actorId,state:"idle"}},
+    session: {paneId:"00000000-0000-4000-8000-000000000002",kind:"codex",state:"ready",launchSettings:{model:"custom-model",effort:"high"},agent:{instanceId:actorId,state:"idle"}},
+    launchProfiles:{codex:{model:"new-model",effort:"low"}},
     kinds: [{kind:"codex",label:"Codex",available:true}],
     messages: [{role:"assistant",text:"<img src=x onerror=alert(1)>こんにちは。"}], hint:"船長へのメッセージを送れます。"
   }), actorId);
+  await expect(page.locator("#launch-settings")).toContainText("起動時指定：モデル custom-model / effort high");
+  await expect(page.locator("#launch-settings")).toContainText("保存済み設定と異なります");
   await expect(page.locator("#send")).toBeEnabled();
   await expect(page.locator(".chat-message")).toHaveText("<img src=x onerror=alert(1)>こんにちは。");
   await expect(page.locator(".chat-message img")).toHaveCount(0);

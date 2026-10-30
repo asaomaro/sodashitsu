@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   AssistantAgentKind,
+  AssistantLaunchSettings,
+  AssistantAgentProfiles,
   type AssistantSessionInfo,
   type ConversationMessage,
   type ConversationPage,
@@ -26,6 +28,7 @@ const Info = z.object({
   tabId: z.uuid().nullable(),
   paneId: z.uuid(),
   kind: AssistantAgentKind,
+  launchSettings: AssistantLaunchSettings.optional(),
   state: z.enum(["shell", "starting", "ready", "stopped", "conflict"]),
   agent: Actor.nullable(),
   observedAgent: Actor.nullable(),
@@ -86,10 +89,16 @@ export interface AssistantChatState {
   kinds: { kind: string; label: string; available: boolean }[];
   messages: ConversationMessage[];
   hint: string;
+  launchProfiles?: ReturnType<typeof AssistantAgentProfiles.parse>;
 }
 
 /** Main owns the installation/target. Renderer supplies a revision and intended actor, never a pane. */
 export class AssistantChat {
+  private profiles = AssistantAgentProfiles.parse({});
+  configure(profiles: unknown): void {
+    this.profiles = AssistantAgentProfiles.parse(profiles);
+    this.publish();
+  }
   private generation = 0;
   private reading = false;
   private refreshAgain = false;
@@ -114,7 +123,7 @@ export class AssistantChat {
     this.state.revision = revision;
   }
   snapshot(): AssistantChatState {
-    return structuredClone(this.state);
+    return structuredClone({ ...this.state, launchProfiles: this.profiles });
   }
   connection(connected: boolean): void {
     ++this.generation;
@@ -146,7 +155,7 @@ export class AssistantChat {
     try {
       const raw = await this.rpc.request("assistant.get", { deviceId: this.deviceId });
       if (!live()) return;
-      let info = raw === null ? null : Info.parse(raw);
+      let info = raw === null ? null : Info.parse(raw) as AssistantSessionInfo;
       if (info?.deviceId !== undefined && info.deviceId !== this.deviceId)
         throw Error("端末の識別情報が一致しません。");
       if (info?.state === "starting" && info.observedAgent && !this.state.busy) {
@@ -157,7 +166,7 @@ export class AssistantChat {
           retry: false,
         });
         if (!live()) return;
-        info = Info.parse(next);
+        info = Info.parse(next) as AssistantSessionInfo;
       }
       this.apply(info);
       if (!this.state.kinds.length) {
@@ -225,6 +234,7 @@ export class AssistantChat {
         deviceId: this.deviceId,
         kind: request.kind,
         retry: request.retry,
+        ...((request.kind === "claude" || request.kind === "codex") ? { launchSettings: this.profiles[request.kind] } : {}),
       });
     });
   }
