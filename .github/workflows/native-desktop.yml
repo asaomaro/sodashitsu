@@ -1,7 +1,7 @@
 name: Native desktop generated checks
 on:
   pull_request:
-    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', '.github/workflows/native-desktop.yml']
+    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', '.github/workflows/native-desktop.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
 
   macos-generated:
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Compile and ad-hoc sign (no permission prompt)

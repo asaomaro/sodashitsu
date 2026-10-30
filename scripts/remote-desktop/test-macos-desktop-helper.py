@@ -8,6 +8,7 @@ import tempfile
 source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
 rich_source=source.with_name("macos-rich-clipboard.swift").read_text()
+video_source=source.with_name("macos-native-video.swift").read_text()
 cases = [
     ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),
     ("clipboard-write-ceiling", "canWrite(),authorized(ticket)", "true,authorized(ticket)", "clipboard write requires input ceiling"),
@@ -37,7 +38,7 @@ for name, before, after, expected in cases+rich_cases:
     try:
         with tempfile.TemporaryDirectory(prefix="soda-macos-negative-") as temporary:
             candidate = Path(temporary) / source.name
-            candidate.write_text(text.replace(before, after)+"\n"+original.decode() if is_rich else rich_source+"\n"+text.replace(before, after))
+            candidate.write_text(text.replace(before, after)+"\n"+video_source+"\n"+original.decode() if is_rich else rich_source+"\n"+video_source+"\n"+text.replace(before, after))
             binary = Path(temporary) / "generated-helper"
             build = subprocess.run(
                 ["xcrun", "swiftc", "-swift-version", "5", "-O", str(candidate), "-o", str(binary)],
@@ -53,4 +54,5 @@ for name, before, after, expected in cases+rich_cases:
     finally:
         assert source.read_bytes() == original, "original source changed"
         assert source.with_name("macos-rich-clipboard.swift").read_text()==rich_source,"rich source changed"
+        assert source.with_name("macos-native-video.swift").read_text()==video_source,"video source changed"
 print("generated_negative_controls_pass")
