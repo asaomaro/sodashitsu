@@ -1,6 +1,8 @@
 # 検証
 
-関連8ファイル125件pass（protocol境界1件追加後は再確認）。生成UI pass。最終build/typecheck/全体テストは実行待ち。実モデルの音声認識とWindows実機は未実施。
+最終build/typecheck成功。全体902ファイル13,091件pass（354.10秒）。関連8ファイル125件pass後の追加protocol境界1件も全体実行で確認。生成UIは最終assetsでpass。feature head edeca9ffの4 CI（generated-windows/generated-server/windows-pixels/generated-runtime）成功。最終docs headのCI/merge状態はPR #335参照。実モデルの音声認識とWindows実機は未実施。
+
+Web terminal smokeは前段のbranch/main比較で同じtextarea待ちTimeoutErrorを記録済み。この差分でWeb端末は変更せず、関係するnative mainの生成IPCとheadless DOMを検証した。
 
 Codex実インストール0.165.0から `codex app-server generate-json-schema --experimental` のみ実行。既存daemonへは接続せず、TurnStartParams UserInputにaudio/localAudio、thread/read/loaded/listの型を確認。公式CLI reference/app-serverとClaude Code voice dictationも閲覧した。
 
