@@ -1,6 +1,8 @@
 import type {ArtifactFiles} from '../http/ArtifactFiles.js';
 import {z} from 'zod';
 import {viewInformation} from "./viewInformation.js";
+import {ExtensionDesktopAgents, EXTENSION_DESKTOP_METHODS} from "./ExtensionDesktopAgents.js";
+import type {DesktopAgentAccess} from "../desktop/DesktopAgentAccess.js";
 import {PluginOperations} from "./PluginOperations.js";
 import { TaskAgentLauncher, TaskStartSchema, TaskStatusSchema, TaskPromptSchema, TaskKindsSchema, type TaskAgentDeps } from "./TaskAgentLauncher.js";
 import { randomUUID } from "node:crypto";
@@ -70,6 +72,7 @@ export interface ExtensionHostOptions {
   displays: DisplayService;
   tasks?: TaskAgentDeps;
   artifacts?: ArtifactFiles;
+  desktopAgents?: DesktopAgentAccess;
   bus: EventBus;
   isScreenKind(clientId: string): boolean;
   baseEnv: NodeJS.ProcessEnv;
@@ -241,12 +244,18 @@ export class ExtensionHost {
   private lastEmitted: string | null = null;
   private readonly panesDebounce: Debouncer;
 
+  private readonly desktopAgents?: ExtensionDesktopAgents;
+
   readonly pluginOperations = new PluginOperations(key => {
     const r=this.runs.get(key);if(!r)return undefined;
     return {runId:r.runId,panes:this.panesFor(r.ext),send:(line:ExtLine)=>{r.proc.send(line);return this.runs.get(key)?.runId===r.runId;}};
   });
 
   constructor(private readonly opts: ExtensionHostOptions) {
+    if(opts.desktopAgents) this.desktopAgents = new ExtensionDesktopAgents(opts.desktopAgents, key => {
+      const run = this.runs.get(key);
+      return run ? {ext:run.ext,panes:this.panesFor(run.ext),send:(line:ExtLine)=>run.proc.send(line)} : undefined;
+    });
     this.clock = opts.clock ?? realClock;
     this.newId = opts.newId ?? randomUUID;
     this.platform = opts.deps?.platform ?? process.platform;
@@ -272,6 +281,7 @@ export class ExtensionHost {
       panes: (ext) => this.panesFor(ext),
       inScope: (ext, paneId) => this.inScopeFn(ext, paneId),
       logger: opts.logger,
+      desktopMethods:this.desktopAgents ? EXTENSION_DESKTOP_METHODS : [],
       artifactMethods:opts.artifacts?["artifact.open","artifact.close"]:[],
       ...(this.taskLauncher ? {taskMethods:["task.kinds","task.start",...(opts.tasks?.operator ? ["task.status","task.prompt"] : [])]} : {}),
     });
@@ -386,9 +396,10 @@ export class ExtensionHost {
       this.disposed = false;
       if (this.busSub === null) {
         this.busSub = this.opts.bus.subscribe((e) => {
-          // 例外は pane の処理へ伝わる。必ず包み、中ではタイマーを掛けるだけ。
+          // 画面操作のleaseは同期失効し、通常の再集計はタイマーへ送る。例外をpaneへ伝えない。
           try {
             if (this.stopped) return;
+            this.desktopAgents?.review();
             if (PANE_EVENTS.has(e.event)) this.panesDebounce.poke();
             if (WORKSPACE_EVENTS.has(e.event) && (e.event !== "workspace.updated" || this.workspaceFolders.get(e.data.workspace.id) !== workspaceFolderKey(e.data.workspace))) {
               // 消えた workspace の pane はもう無いので、根の覚えはその場で消してよい。差を埋めるのは、まとめてから。
@@ -1028,6 +1039,7 @@ export class ExtensionHost {
           // finishRun の後に、遅れて処理された 1 行が、だれも消さない面を作らない。
           const r = this.runs.get(key);
           if (!r || r.runId !== runId) return;
+          if(this.desktopAgents?.handle(key,runId,req))return;
           if(this.pluginOperations.handle(key,runId,req))return;
           if(this.opts.artifacts&&(req.method==='artifact.open'||req.method==='artifact.close')){
             const operation=async()=>{
@@ -1171,6 +1183,7 @@ export class ExtensionHost {
   private finishRun(key: string, runId: string, reason: ExtExit["reason"]): void {
     const run = this.runs.get(key);
     if (!run || run.runId !== runId) return;
+    this.desktopAgents?.stopped(key,runId);
     this.pluginOperations.stopped(key,runId);
     this.opts.artifacts?.revokeOwner(run.tag);
     this.runs.delete(key);
@@ -1283,6 +1296,7 @@ export class ExtensionHost {
   /** 面を持つ pane の見直し（bus のイベントに頼らない）: 範囲の外の pane の面を消して、拡張へ `out_of_scope` を書く。 */
   private reviewScope(): void {
     if (this.stopped) return;
+    this.desktopAgents?.review();
     for (const run of this.runs.values()) {
       for (const paneId of this.opts.displays.ownedPanes(run.tag)) {
         if (!this.inScopeFn(run.ext, paneId)) this.closeOutOfScope(run, paneId);

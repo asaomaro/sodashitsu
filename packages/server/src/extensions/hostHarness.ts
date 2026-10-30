@@ -86,6 +86,7 @@ export interface HostHarness {
 export async function makeHost(
   o: {
     tasks?: ExtensionHostOptions["tasks"];
+    desktopAgents?: ExtensionHostOptions["desktopAgents"];
     artifacts?: ExtensionHostOptions["artifacts"];
     tabPlugins?: Record<string,{extensionKey:string;display:string}>;
     timings?: NonNullable<NonNullable<ExtensionHostOptions["deps"]>["timings"]>;
@@ -148,6 +149,7 @@ export async function makeHost(
     session,
     displays,
     ...(o.tasks ? {tasks:o.tasks} : {}),
+    ...(o.desktopAgents ? {desktopAgents:o.desktopAgents} : {}),
     ...(o.artifacts ? {artifacts:o.artifacts} : {}),
     bus,
     isScreenKind: o.isScreenKind ?? ((id) => id !== "external"),

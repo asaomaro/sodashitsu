@@ -22,7 +22,7 @@ export const EXTENSIONS_PER_FILE_MAX = 16;
 export const EXTENSION_PROJECT_ROOTS_MAX = 32;
 /** 同時に動かす合計。 */
 export const EXTENSIONS_RUNNING_MAX = 32;
-export const EXTENSION_ALLOW_VALUES = ["script-html", "agent-start"] as const;
+export const EXTENSION_ALLOW_VALUES = ["script-html", "agent-start", "desktop-agent"] as const;
 export const EXTENSION_UNRESPONSIVE_VALUES = ["pass", "block"] as const;
 /** 拡張 → サーバの 1 行（受け口の 1 行と同じ）。 */
 export const EXTENSION_LINE_MAX_BYTES = 4 * 1024 * 1024;
