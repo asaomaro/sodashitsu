@@ -140,7 +140,7 @@ func generatedNativeVideoTests() throws -> Int {
     var rejected=false;do {try start(first)} catch {rejected=true}
     try check(rejected && controller.current?.seq==1,"native video same id cannot reset sequence")
     now=34;controller.offer(image,captured:now);try check(encoders[0].completions.count==2,"native video independent capture after encode completes")
-    now=2001;try controller.command(["type":"native_video_ack","id":first,"seq":1])
+    now+=2001;try controller.command(["type":"native_video_ack","id":first,"seq":1])
     try check(controller.current==nil && frame.1?()==false,"native video late ack cannot erase deadline")
     try start();try check(controller.current==nil && encoders.count==1,"native video retirement holds physical encoder slot")
     encoders[0].completions[1](.success(packet));try check(spin({controller.inflight==nil}),"native video stale completion drains job")
