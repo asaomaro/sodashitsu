@@ -1,0 +1,40 @@
+name: Desktop plugin operations (memory only)
+on:
+  pull_request:
+    paths:
+      - 'packages/server/src/extensions/ExtensionDesktopAgents*'
+      - 'packages/server/src/extensions/ExtensionHost*'
+      - 'packages/server/src/extensions/DesktopAgentPlugin*'
+      - 'packages/server/src/extensions/ExtensionApi*'
+      - 'packages/server/src/desktop/DesktopAgentAccess*'
+      - 'packages/protocol/src/extension*'
+      - 'plugins/desktop-agent/**'
+      - '.github/workflows/desktop-plugin-operations.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-plugin-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  generated-plugin:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/server build
+      - run: pnpm --filter @sodashitsu/server typecheck
+      - name: Owned Node child and memory target only (no desktop, devices or agents)
+        run: pnpm exec vitest run src/extensions/ExtensionDesktopAgents.test.ts src/extensions/ExtensionHost.desktop.test.ts src/extensions/DesktopAgentPlugin.test.ts src/extensions/ExtensionApi.test.ts src/desktop/DesktopAgentAccess.test.ts src/desktop/DesktopAgentRecipient.test.ts src/extension.test.ts src/node/pluginPackage.test.ts --maxWorkers=2

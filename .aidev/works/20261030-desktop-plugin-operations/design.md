@@ -1,0 +1,11 @@
+# Scoped desktop operations for plugins
+
+Continue the authorized non-device remote-desktop development. Base f586aa89 includes microphone recovery. This small slice adds ordinary human-granted desktop operations to existing plugin app.call, not machine-wide authority or automatic capture. Existing desktop CLI is the explicitly separate encrypted-recipient path. Native Linux/macOS and protected/virtual feature combinations remain separate work.
+
+Register desktop-agent as an explicit extension allow capability. Existing project approval digest includes allow, so changed project registrations need their normal approval. Advertise only four methods when the runtime is supplied and capability allowed. Scope each lease to one live extension run and its own app/view pane, tab/workspace and project/cwd. Store a private UUID owner and recheck through the existing core ownerActive before/after each input. Revocation, restart, expiry and synchronous pane/scope events permanently close authority. A removed/re-added view cannot revive it.
+
+Bound16 leases,16 physical operations,20s absolute request and original120s human-grant lifetime. Retain physical operation slots until underlying calls retire, even after timeout. No retries or renewal. Observe preserves existing five-per-second/freshness/image-identity checks; cap raw image bytes before base64 to fit the existing4MiB NDJSON line. Existing256KiB plugin.call result cap remains; the sample refuses larger output without saving or partially succeeding. Ordinary host attach cannot consume an encrypted recipient grant.
+
+Ship a packable Node plugin example with real app.register and fixed method mapping to the validated app.call target. No arbitrary method, local settings, grant creation, model calls or native endpoints. Use a memory image/input target and an owned generated child for validation, not any real screen, keyboard, clipboard, microphone, service, agent or model.
+
+Fragile-state taskcheck: capability/protocol, scope and queued action lifetime, child/app routing and bounds. Independent whole review and meaningful source negative controls required. Documentation also corrects obsolete future-work statements contradicted by later implementations, and provides a current status separate from historical per-phase checkboxes and device/distribution work.

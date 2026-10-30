@@ -46,3 +46,20 @@ sodactl plugin call commit-graph refresh --pane <ペインID>
 シェルを使えるエージェントは `sodactl skill` と操作一覧でアプリを操作できます。アプリ専用skillには公開操作名、入力例、ワークフロー上の判断を載せ、利用者の依頼の範囲で呼び出します。
 
 MCP専用クライアント向けには、`plugin.operations`／`plugin.call` を呼ぶ薄いMCPアダプターを別パッケージとして作れます。`sodactl`自体にMCPサーバーを内蔵することは必須ではありません。この変更ではMCPサーバーは提供しません。認証済みの `/ws` を操作口とし、ログイン不要の `pane.sock` には公開していません。
+
+## デスクトップ操作を公開するプラグイン
+
+`plugins/desktop-agent`に配布可能な例があります。導入後に有効化し、アプリタブを追加して、そのpaneを指定します。`allow: ["desktop-agent"]`とPJ拡張の承認、および共有窓で人が発行した通常の操作コードが必要です。
+
+```sh
+sodactl plugin operations desktop-agent --pane <アプリpane>
+sodactl plugin call desktop-agent observe --pane <アプリpane> --params '{"leaseId":"<attachで返るlease>"}'
+```
+
+`attach {ticket}`→`observe {leaseId,afterFrameSeq?}`→`act {leaseId,observationId,inputs}`→`release {leaseId}`の順で使います。`act`の結果にある`afterFrameSeq`より新しい画像を次に観測してください。入力の形は[デスクトップAPI](remote-desktop.md#エージェントapi実験版)と同じです。コード・leaseは秘密として扱い、コマンド履歴やログへ保存しないでください。
+
+拡張側では`app.call`の検査済みtargetのpaneIdを各`desktop.agent.*`要求へ足します。操作名・引数・対象を任意のmethodへ転送せず、4メソッドに限定してください。サーバも専用許可、自分のアプリ/追加ビュー、起動回とPJ、元のgrantを毎回検査します。
+
+画像を含むoperation結果は既存どおり256KiBまでです。サンプルは超過を明示的に拒否し、自動保存や画像の一部だけを成功として返しません。共有窓で幅/品質を下げて改めてobserveしてください。拡張のNDJSON側にも4MiBの行上限があり、その前に画像サイズを検査します。
+
+暗号化コードをこの通常用ホストAPIに渡すと拒否します。暗号化接続を扱う独自プラグインは、既存の`sodactl desktop session/mcp/model --endpoint-fingerprint ...`を使い、そのプロセスと鍵・許可の寿命を管理してください。通常経路への自動切替はしません。

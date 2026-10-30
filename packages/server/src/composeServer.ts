@@ -531,6 +531,7 @@ export async function composeServer(
   // 起動は `listen()` の最後（ロックの後。待たない）、止めるのは `close()`・引き継ぎの前。`pane.sock` には何も載せない。
   const extensions = new ExtensionHost({
     artifacts,
+    desktopAgents: desktopRelay.agents,
     tasks:{session,starter:agentStarter,kinds:createAgentKindsLister(),operator:workAgentRequests},
     stateDir: options.stateDir,
     sessionRoot: options.sessionRoot,

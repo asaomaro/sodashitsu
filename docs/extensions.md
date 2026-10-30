@@ -292,3 +292,11 @@ HTTPはGET/HEADのみ、通常の認証cookieではなくランダム256bitの�
 # 接続先のプラグインから操作元のエージェントを使う
 
 `agent-start` を許可したプラグインは、`task.start {paneId,kind,taskFile,execution:"operator"}` で操作元への起動要求を作れます。従来の起動は `execution` の省略または `"server"` です。`task.kinds {execution:"operator"}`、`task.status {paneId,requestId}`、`task.prompt {paneId,requestId,taskFile}` とMCPによるアプリ操作は、[作成ガイド](plugin-agents.md)を参照してください。操作元での明示起動、依頼元のプロセス世代・アプリ・PJへの固定、接続終了時の扱いがあります。
+
+## デスクトップ操作の許可
+
+`desktop-agent`を`allow`に明示した稼働中の拡張だけに、既存の4メソッド`desktop.agent.attach/observe/act/release`を告知します。PJ設定では変更した登録内容に対する承認が必要です。この許可だけで画面や入力を取得することはできず、通常の共有窓で人が発行した一度限りのコードも必要です。
+
+要求には拡張自身のアプリ/追加ビューの`paneId`と、既存APIの引数を指定します。起動回・pane・タブ・workspace・projectDir/cwdが変わると失効します。任意の端末へのキー送信、共有開始、設定変更、許可コード発行は提供しません。通常接続用であり、受信者に固定した暗号化コードを受理しません。プラグイン自体は画面画像とleaseを受け取るため、信頼するコードにだけ許可してください。
+
+公開operationの実装例・上限・暗号化CLIとの違いは[プラグインCLI](plugin-cli.md#デスクトップ操作を公開するプラグイン)を参照してください。

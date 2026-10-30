@@ -60,7 +60,7 @@ export class DesktopAgentAccess {
   }
   private bindingActive(recipient:DesktopAgentRecipient):boolean {try{return recipient.active()===true;}catch{return false;}}
   private validBinding(g:Grant):boolean {return (!g.recipient||this.bindingActive(g.recipient))&&(!g.ownerActive||this.bindingActive({fingerprint:"",active:g.ownerActive}));}
-  attach(owner: string, ticket: string) {return this.claim(owner,ticket);}
+  attach(owner: string, ticket: string, ownerActive?:()=>boolean) {return this.claim(owner,ticket,undefined,ownerActive);}
   /** Only the authenticated provider endpoint path may supply this fingerprint. */
   attachRecipient(owner:string,ticket:string,fingerprint:string,ownerActive?:()=>boolean,scope?:string) {
     if(!/^[a-f0-9]{64}$/.test(fingerprint)||scope!==undefined&&!/^[A-Za-z0-9_-]{43}$/.test(scope))throw new RpcError("unauthorized","Agent recipient is unavailable");
@@ -104,7 +104,7 @@ export class DesktopAgentAccess {
       g.preparing = false;
     }
   }
-  observe(owner: string, lease: string, afterFrameSeq?: number) {
+  observe(owner: string, lease: string, afterFrameSeq?: number, maxImageBytes?:number) {
     const g = this.require(owner, lease);
     if (g.busy || g.preparing) throw new RpcError("server_busy", "Action is in progress");
     const frame = g.target.frame();
@@ -114,6 +114,8 @@ export class DesktopAgentAccess {
       throw new RpcError("server_busy", "Wait for a frame after the action");
     if (g.lastObserve !== undefined && performance.now() - g.lastObserve < 200)
       throw new RpcError("server_busy", "Observe is limited to five images per second");
+    if(maxImageBytes !== undefined && frame.image.byteLength > maxImageBytes)
+      throw new RpcError("server_busy", "Desktop image exceeds this transport limit; reduce image width or quality");
     this.require(owner,lease);
     g.lastObserve = performance.now();
     const id = secret();

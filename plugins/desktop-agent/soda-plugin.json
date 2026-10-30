@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "desktop-agent",
+  "version": "0.1.0",
+  "name": "Desktop Agent",
+  "description": "人が許可したデスクトップの画面取得・入力・解放をプラグイン操作として公開",
+  "entry": "extension.mjs",
+  "files": ["extension.mjs", "README.md", "LICENSE"],
+  "allow": ["desktop-agent"],
+  "tabView": {"title": "デスクトップ操作", "display": "desktop-agent"}
+}
