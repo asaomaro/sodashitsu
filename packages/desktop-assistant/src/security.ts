@@ -36,7 +36,22 @@ export function authorizeLocalSender(
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;
   if (action === "hide") return sender.role === "bubble";
-  if (["inbox", "conversation", "start-session", "adopt-session", "send-message"].includes(action))
+  if (
+    [
+      "inbox",
+      "conversation",
+      "start-session",
+      "adopt-session",
+      "send-message",
+      "tools",
+      "note-save",
+      "note-delete",
+      "transcribe-file",
+      "transcribe-cancel",
+      "clipboard-read",
+      "clipboard-write",
+    ].includes(action)
+  )
     return sender.role === "bubble";
   return action === "save" && sender.role === "settings";
 }

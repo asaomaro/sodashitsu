@@ -58,4 +58,4 @@ jobs:
       - run: pnpm --filter @sodashitsu/server build
       - run: pnpm --filter @sodashitsu/server typecheck
       - name: Ownership and queued input with memory terminals (no actual agent or PTY)
-        run: pnpm exec vitest run --maxWorkers=2 --project @sodashitsu/server --project @sodashitsu/protocol src/assistant/AssistantSessions.test.ts desktopAssistantSession.test.ts
+        run: pnpm exec vitest run --maxWorkers=2 --project @sodashitsu/server --project @sodashitsu/protocol src/assistant/AssistantSessions.test.ts desktopAssistant
