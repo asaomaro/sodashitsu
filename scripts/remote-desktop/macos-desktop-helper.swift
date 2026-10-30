@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import AppKit
 import ScreenCaptureKit
 import ApplicationServices
@@ -272,9 +273,48 @@ final class BoundedWriter {
 }
 
 @available(macOS 14.0, *)
+struct AgentRegionSpec {
+    let id: String
+    let x,y,width,height: Int
+    var json: [String:Any] { ["id":id,"x":x,"y":y,"width":width,"height":height] }
+}
+final class AgentRegionProofs {
+    private(set) var specs: [AgentRegionSpec]=[]
+    func configure(_ raw: Any,width: Int,height: Int) throws {
+        guard let values=raw as? [[String:Any]],values.count<=8 else { throw NativeError("unsupported") }
+        var next: [AgentRegionSpec]=[],ids=Set<String>()
+        for value in values {
+            guard Set(value.keys)==Set(["id","x","y","width","height"]),let id=value["id"] as? String,
+                  UUID(uuidString:id)?.uuidString.lowercased()==id,!ids.contains(id),
+                  let x=integer(value["x"],0,4095),let y=integer(value["y"],0,2399),
+                  let w=integer(value["width"],1,4096),let h=integer(value["height"],1,2400),
+                  w*h<=1_048_576,x+w<=Int64(width),y+h<=Int64(height) else { throw NativeError("unsupported") }
+            ids.insert(id);next.append(AgentRegionSpec(id:id,x:Int(x),y:Int(y),width:Int(w),height:Int(h)))
+        }
+        specs=next
+    }
+    func proofs(_ image: CGImage) throws -> [[String:Any]] {
+        var result: [[String:Any]]=[]
+        for r in specs {
+            guard r.x+r.width<=image.width,r.y+r.height<=image.height,
+                  let cropped=image.cropping(to:CGRect(x:r.x,y:r.y,width:r.width,height:r.height)) else { throw NativeError("source_changed") }
+            var pixels=[UInt8](repeating:0,count:r.width*r.height*4)
+            try pixels.withUnsafeMutableBytes { (memory: UnsafeMutableRawBufferPointer) in
+                guard let context=CGContext(data:memory.baseAddress,width:r.width,height:r.height,bitsPerComponent:8,bytesPerRow:r.width*4,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue|CGBitmapInfo.byteOrder32Big.rawValue) else { throw NativeError("backend_failure") }
+                context.draw(cropped,in:CGRect(x:0,y:0,width:r.width,height:r.height))
+            }
+            var hash=SHA256();hash.update(data:Data("\(r.id):\(image.width):\(image.height):\(r.x):\(r.y):\(r.width):\(r.height):".utf8));hash.update(data:Data(pixels))
+            result.append(r.json.merging(["digest":hash.finalize().map { String(format:"%02x",$0) }.joined()]) { _,new in new })
+        }
+        return result
+    }
+    func clear() { specs.removeAll() }
+}
+
 final class DesktopSource {
     private let factsOverride: (() -> Bool)?
     init(facts: (() -> Bool)?=nil) { factsOverride=facts }
+    let regions=AgentRegionProofs()
     let gate=NSRecursiveLock()
     var dead=false,ready=false,stopping=false
     var input: InputGuard?
@@ -389,7 +429,11 @@ final class DesktopSource {
         switch kind {
         case "ack":
             guard pending != 0,integer(value["seq"],1,Int64(safeInteger))==pending else { throw NativeError("backend_failure") };pending=0
-        case "keyframe":break
+        case "keyframe":
+            if let requested=value["regions"] {
+                guard ready,let input=input else { throw NativeError("unsupported") }
+                try regions.configure(requested,width:width,height:height);input.revision &+= 1
+            }
         case "control","release":
             guard let input=input else { return }
             let keep=input.control
@@ -436,16 +480,19 @@ final class DesktopSource {
                 if pending==0 && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) {
                     let captureMs=milliseconds()-ticket.started,encodedAt=milliseconds()
                     guard let jpeg=NSBitmapImageRep(cgImage:image).representation(using:.jpeg,properties:[.compressionFactor:Double(quality)/100]),jpeg.count<=2*1024*1024 else { throw NativeError("backend_failure") }
+                    let regionProofs=try regions.proofs(image)
                     let encodeMs=milliseconds()-encodedAt
                     try locked {
                         guard canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) else { return }
                         if !ready {
                             ready=true
-                            try output.send(["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"image":["colorMode":"full","showCursor":showCursor]])
+                            try output.send(["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]])
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
                         sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
-                        try output.send(["type":"frame","info":["seq":seq,"width":width,"height":height,"format":"image/jpeg","captureMs":captureMs,"encodeMs":encodeMs,"timing":"measured","sourceInputSeq":ticket.inputSeq],"data":jpeg.base64EncodedString()],valid:{ [weak self] in
+                        var info: [String:Any]=["seq":seq,"width":width,"height":height,"format":"image/jpeg","captureMs":captureMs,"encodeMs":encodeMs,"timing":"measured","sourceInputSeq":ticket.inputSeq]
+                        if !regionProofs.isEmpty { info["regions"]=regionProofs }
+                        try output.send(["type":"frame","info":info,"data":jpeg.base64EncodedString()],valid:{ [weak self] in
                             self?.publishable(ticket)==true
                         },discarded:{ [weak self] in DispatchQueue.main.async { if self?.pending==seq { self?.pending=0 } } })
                     }
@@ -457,7 +504,7 @@ final class DesktopSource {
     }
     func stop(_ code: String?) {
         locked {
-            if dead || stopping { return };stopping=true;input?.release();dead=true;captureTask?.cancel();timer?.invalidate()
+            if dead || stopping { return };stopping=true;input?.release();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
             output.finish { Darwin.exit(code==nil ? 0 : 1) }
@@ -477,6 +524,28 @@ func generatedTests() throws -> Int {
         guard condition() else { throw GeneratedFailure(detail:detail) };count+=1
     }
     try check(integer(true,0,5)==nil,"reject boolean integer")
+    let regional=AgentRegionProofs(),regionId=UUID().uuidString.lowercased()
+    let spec: [String:Any]=["id":regionId,"x":1,"y":0,"width":2,"height":1]
+    try regional.configure([spec],width:4,height:4)
+    func generatedImage(_ changed: Int?) throws -> CGImage {
+        var pixels=[UInt8](repeating:0,count:64)
+        for i in stride(from:3,to:64,by:4) { pixels[i]=255 }
+        if let offset=changed { pixels[offset]=255 }
+        let data=Data(pixels) as CFData
+        guard let provider=CGDataProvider(data:data),let image=CGImage(width:4,height:4,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:16,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedLast.rawValue|CGBitmapInfo.byteOrder32Big.rawValue),provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent) else { throw GeneratedFailure(detail:"generated ROI image") }
+        return image
+    }
+    let image=try generatedImage(nil),first=try regional.proofs(image)[0]["digest"] as! String
+    try check(first.count==64,"regional SHA256")
+    let outside=try regional.proofs(generatedImage(0))[0]["digest"] as! String
+    let inside=try regional.proofs(generatedImage(1*4))[0]["digest"] as! String
+    try check(first==outside,"regional background remains stable");try check(first != inside,"regional pixel change")
+    try regional.configure([spec.merging(["id":UUID().uuidString.lowercased()]) { _,new in new }],width:4,height:4)
+    let nonce=try regional.proofs(image)[0]["digest"] as! String;try check(first != nonce,"regional nonce binding")
+    var invalidRejected=false
+    do { try regional.configure([spec.merging(["x":3]) { _,new in new }],width:4,height:4) } catch { invalidRejected=true }
+    try check(invalidRejected && regional.specs.count==1,"regional invalid configuration is atomic")
+    regional.clear();try check(regional.specs.isEmpty,"regional cleanup")
     try check(integer(1.5,0,5)==nil,"reject fractional integer")
     try check(boolean(1)==nil,"reject numeric boolean")
     try check(normalized(Double.nan)==nil,"reject nonfinite coordinates")
@@ -528,7 +597,19 @@ func generatedTests() throws -> Int {
         var currentFacts=true
         let source=DesktopSource(facts:{currentFacts})
         source.input=InputGuard(sink:GeneratedSink(),allowed:false,active:{false})
-        let ticket=FrameTicket(revision:0,started:milliseconds(),inputSeq:0)
+        source.configured=true;source.ready=true;source.width=4;source.height=4
+        let regionTicket=FrameTicket(revision:source.input!.revision,started:milliseconds(),inputSeq:0)
+        try check(source.publishable(regionTicket),"regional capture begins with valid ticket")
+        try source.command(["type":"keyframe","regions":[spec]])
+        try check(!source.publishable(regionTicket),"regional config invalidates in-flight capture")
+        var regionWrites=0
+        let regionBefore=writeRecord(Data([1,2,3]),valid:{source.publishable(regionTicket)},clock:milliseconds,attempt:{_ in regionWrites+=1;return .wrote(3)},wait:{})
+        try check(regionBefore == .discarded && regionWrites==0,"regional config invalidates queued publication")
+        let newTicket=FrameTicket(revision:source.input!.revision,started:milliseconds(),inputSeq:0)
+        try check(source.publishable(newTicket),"regional config permits a new capture")
+        try source.command(["type":"keyframe","regions":[]])
+        try check(!source.publishable(newTicket) && source.regions.specs.isEmpty,"regional clear invalidates capture and authority")
+        let ticket=FrameTicket(revision:source.input!.revision,started:milliseconds(),inputSeq:0)
         currentFacts=false;var writes=0
         let before=writeRecord(Data([1,2,3]),valid:{source.publishable(ticket)},clock:milliseconds,attempt:{_ in writes+=1;return .wrote(3)},wait:{})
         try check(before == .discarded && writes==0,"queued source revocation never writes")

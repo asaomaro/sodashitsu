@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """One explicit portal session. Probe/import/tests never open a display or inject input."""
 import base64
+import hashlib
 import json
 import math
 import os
@@ -129,10 +130,48 @@ class LoginScope:
         except Exception:self.valid=False
         return self.valid and not self.invalidated.is_set()
 
+class RegionProofs:
+    """Bounded raw BGR evidence, paired to JPEG by source PTS, never retained pixels."""
+    def __init__(self):
+        self.lock=threading.RLock();self.specs=[];self.frames={};self.generation=0
+    def configure(self,items,width,height):
+        if not isinstance(items,list) or len(items)>8:raise NativeFailure("unsupported")
+        next_specs=[];ids=set()
+        for spec in items:
+            if not isinstance(spec,dict) or set(spec)!={"id","x","y","width","height"}:raise NativeFailure("unsupported")
+            identifier=spec["id"]
+            try:canonical=str(uuid.UUID(identifier)) if isinstance(identifier,str) else None
+            except (ValueError,AttributeError):raise NativeFailure("unsupported")
+            if canonical!=identifier or identifier in ids:raise NativeFailure("unsupported")
+            x,y,w,h=[spec[key] for key in ["x","y","width","height"]]
+            if not integer(x,0,4095) or not integer(y,0,2399) or not integer(w,1,4096) or not integer(h,1,2400) or w*h>1048576 or x+w>width or y+h>height:raise NativeFailure("unsupported")
+            ids.add(identifier);next_specs.append(dict(spec))
+        with self.lock:self.specs=next_specs;self.frames.clear();self.generation+=1
+    def capture(self,pts,pixels,width,height,stride,offset=0):
+        with self.lock:
+            if not self.specs:return
+            if not integer(width,1,4096) or not integer(height,1,2400) or width*height>8000000 or not integer(stride,width*3,32768) or not integer(offset,0,len(pixels)) or offset+(height-1)*stride+width*3>len(pixels):raise NativeFailure("backend_failure")
+            result=[]
+            for r in self.specs:
+                if r["x"]+r["width"]>width or r["y"]+r["height"]>height:raise NativeFailure("source_changed")
+                prefix=f"{r['id']}:{width}:{height}:{r['x']}:{r['y']}:{r['width']}:{r['height']}:".encode("ascii");digest=hashlib.sha256(prefix)
+                for y in range(r["y"],r["y"]+r["height"]):
+                    start=offset+y*stride+r["x"]*3;digest.update(pixels[start:start+r["width"]*3])
+                result.append({**r,"digest":digest.hexdigest()})
+            self.frames[pts]=(width,height,self.generation,result)
+            while len(self.frames)>8:del self.frames[next(iter(self.frames))]
+    def take(self,pts,width,height):
+        with self.lock:
+            value=self.frames.pop(pts,None)
+            return value[3] if value and value[:3]==(width,height,self.generation) else None
+    def clear(self):
+        with self.lock:self.specs=[];self.frames.clear();self.generation+=1
+
 class PortalHelper:
     NAME="org.freedesktop.portal.Desktop";PATH="/org/freedesktop/portal/desktop"
     SC="org.freedesktop.portal.ScreenCast";RD="org.freedesktop.portal.RemoteDesktop"
-    def __init__(self, Gio, GLib, Gst, scope_factory=None):
+    def __init__(self, Gio, GLib, Gst, scope_factory=None, video=None):
+        self.regions=RegionProofs();self.video=video;self.transfer_size=None
         self.output_gate=threading.RLock();self.Gio=Gio;self.GLib=GLib;self.Gst=Gst;self.loop=GLib.MainLoop();self.scope_factory=scope_factory or (lambda:LoginScope(Gio,GLib,gate=self.output_gate));self.scope=None;self.last_scope_check=0;self.connection=None;self.session=None;self.requests={};self.subscriptions=[]
         self.dead=False;self.closed=False;self.ready=False;self.barrier=-1;self.next_emit=0;self.config=None;self.pipeline=None;self.fd=None;self.guard=None;self.pending=0;self.seq=0;self.last_pts=None;self.last_sample=None;self.last_idle=0;self.idle_counter=0;self.last_heartbeat=time.monotonic();self.configured_at=None;self.commands=queue.Queue(maxsize=64);self.queued=None;self.output_queue=queue.Queue(maxsize=64)
     def output(self,value,revision=None,publish=None):
@@ -185,6 +224,7 @@ class PortalHelper:
     def close(self):
         if self.closed:return
         with self.output_gate:self.dead=True;self.closed=True;self.queued=None
+        self.regions.clear()
         if self.guard:self.guard.control=False;self.guard.held_keys.clear();self.guard.held_buttons.clear()
         if self.scope and hasattr(self.scope,"close"):self.scope.close()
         if self.connection:
@@ -259,7 +299,8 @@ class PortalHelper:
         index=reply.unpack()[0]
         if index<0 or index>=fds.get_length():raise NativeFailure("backend_failure")
         self.fd=fds.get(index)
-        self.pipeline=self.Gst.parse_launch(f"pipewiresrc name=source ! videoconvert ! videoscale ! video/x-raw,width=(int)[1,{self.config['width']}],height=(int)[1,2400],pixel-aspect-ratio=(fraction)1/1 ! jpegenc quality={self.config['quality']} ! appsink name=sink max-buffers=1 drop=true sync=false")
+        self.pipeline=self.Gst.parse_launch(f"pipewiresrc name=source ! videoconvert ! videoscale ! video/x-raw,format=BGR,width=(int)[1,{self.config['width']}],height=(int)[1,2400],pixel-aspect-ratio=(fraction)1/1 ! jpegenc name=encoder quality={self.config['quality']} ! appsink name=sink max-buffers=1 drop=true sync=false")
+        if self.video:self.pipeline.get_by_name("encoder").get_static_pad("sink").add_probe(self.Gst.PadProbeType.BUFFER,self.region_probe)
         self.source=self.pipeline.get_by_name("source");self.sink=self.pipeline.get_by_name("sink")
         for name in ["target-object","dont-reconnect","on-disconnect","resend-last","keepalive-time"]:
             if self.source.find_property(name) is None:raise NativeFailure("unsupported")
@@ -267,6 +308,22 @@ class PortalHelper:
         if self.source.get_property("on-disconnect").value_nick!="error":raise NativeFailure("unsupported")
         self.pipeline.get_bus().add_signal_watch();self.pipeline.get_bus().connect("message",self.bus_message)
         if self.pipeline.set_state(self.Gst.State.PLAYING)==self.Gst.StateChangeReturn.FAILURE:raise NativeFailure("backend_failure")
+    def region_probe(self,pad,probe):
+        try:
+            with self.regions.lock:
+                if self.dead or not self.regions.specs:return self.Gst.PadProbeReturn.OK
+                buffer=probe.get_buffer();caps=pad.get_current_caps();info=self.video.VideoInfo.new_from_caps(caps)
+                if info.finfo.name!="BGR" or buffer.pts==self.Gst.CLOCK_TIME_NONE:raise NativeFailure("backend_failure")
+                meta=self.video.buffer_get_video_meta(buffer)
+                stride,offset=(meta.stride[0],meta.offset[0]) if meta else (info.stride[0],info.offset[0])
+                if meta and (meta.width!=info.width or meta.height!=info.height or meta.format!=info.finfo.format):raise NativeFailure("backend_failure")
+                mapped,data=buffer.map(self.Gst.MapFlags.READ)
+                if not mapped:raise NativeFailure("backend_failure")
+                try:self.regions.capture(buffer.pts,memoryview(data.data),info.width,info.height,stride,offset)
+                finally:buffer.unmap(data)
+            return self.Gst.PadProbeReturn.OK
+        except Exception:
+            self.GLib.idle_add(self.failure,"backend_failure");return self.Gst.PadProbeReturn.DROP
     def notify(self,method,signature,args):
         if self.dead or not self.session:raise NativeFailure("source_changed")
         self.connection.call_sync(self.NAME,self.PATH,self.RD,method,self.GLib.Variant("(oa{sv}"+signature+")",(self.session,{},*args)),None,self.Gio.DBusCallFlags.NONE,100,None)
@@ -287,7 +344,13 @@ class PortalHelper:
         elif kind=="ack":
             if message.get("seq")!=self.pending:raise NativeFailure("backend_failure")
             self.pending=0
-        elif kind=="keyframe":pass
+        elif kind=="keyframe":
+            if "regions" in message:
+                if not self.video or not self.transfer_size:raise NativeFailure("unsupported")
+                self.regions.configure(message["regions"],*self.transfer_size)
+                if self.guard:
+                    def invalidate():self.guard.revision+=1
+                    self.mutate_input(invalidate)
         elif kind in ["control","release"]:
             if self.guard:
                 if kind=="control" and message.get("enabled") is True:self.guard.control=bool(self.config["input"] and self.guard.devices)
@@ -336,20 +399,21 @@ class PortalHelper:
                     buffer=sample.get_buffer();caps=sample.get_caps().get_structure(0);width=caps.get_value("width");height=caps.get_value("height");pts=buffer.pts
                     if not integer(width,1,1920) or not integer(height,1,2400) or width*height>8000000 or buffer.get_size()>2097152 or pts==self.Gst.CLOCK_TIME_NONE:raise NativeFailure("backend_failure")
                     if self.last_pts is not None and pts<=self.last_pts:raise NativeFailure("source_changed")
-                    self.last_pts=pts;self.last_sample=time.monotonic()
+                    self.last_pts=pts;self.last_sample=time.monotonic();self.transfer_size=(width,height)
                     native=self.source.get_static_pad("src").get_current_caps().get_structure(0);native_size=(native.get_value("width"),native.get_value("height"))
                     if self.ready and native_size!=self.native_size:raise NativeFailure("source_changed")
                     running=sample.get_segment().to_running_time(self.Gst.Format.TIME,pts)
                     if running==self.Gst.CLOCK_TIME_NONE or running<=self.barrier:return True
                     data=buffer.extract_dup(0,buffer.get_size())
-                    self.queued=(data,width,height,self.guard.revision,time.monotonic())
+                    self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"inputCapabilities":self.guard.capabilities(),"extendedInput":True})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"agentRegions":True} if self.video else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
-                    data,width,height,revision,received=self.queued;self.queued=None
+                    data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
                         encoded=base64.b64encode(data).decode();info={"seq":self.seq+1,"width":width,"height":height,"format":"image/jpeg","captureMs":0,"encodeMs":0,"timing":"unavailable","sourceInputSeq":self.guard.seq}
+                        if proofs:info["regions"]=proofs
                         if not self.dead and revision==self.guard.revision:
                             self.seq+=1;self.pending=self.seq;self.next_emit=time.monotonic()+1/self.config["fps"];self.output({"type":"frame","info":info,"data":encoded},revision)
                 # Quiet is session/pipeline liveness only, never new pixels.
@@ -381,12 +445,12 @@ class PortalHelper:
 def main():
     try:
         import gi
-        gi.require_version("Gio","2.0");gi.require_version("Gst","1.0")
-        from gi.repository import Gio,GLib,Gst
+        gi.require_version("Gio","2.0");gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
+        from gi.repository import Gio,GLib,Gst,GstVideo
         if sys.argv[1:]==["--probe"]:
             print(json.dumps({"backend":"linux-portal","dependencies":True}));return
         if sys.argv[1:]:raise NativeFailure("unsupported")
-        PortalHelper(Gio,GLib,Gst).run()
+        PortalHelper(Gio,GLib,Gst,video=GstVideo).run()
     except Exception as error:
         code=error.code if isinstance(error,NativeFailure) else "dependencies"
         print(json.dumps({"type":"platform_failure","backend":"linux-portal","code":code}),flush=True)
