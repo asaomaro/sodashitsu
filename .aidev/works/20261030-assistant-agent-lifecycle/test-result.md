@@ -363,3 +363,5 @@ undefined
 
 
 ```
+
+最終build/typecheck通過。全体初回は新activate既定値に旧fixture期待値が追従しておらず1件失敗（他13026件pass）。fixture更新後の対象試験と全体を再実行し、899ファイル13027件pass（383.60秒）。PR #331同一headのCI4件成功、main merge 3cc8c76d7520e4f664ac234953c07e65e56e1aef、GitHub/local tree 8cbbc731fd057000c0ecc3840cd45a9c5b69aa70一致。

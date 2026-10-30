@@ -17,6 +17,7 @@
   if (next.status === "done") result.value = next.text;
   if (!next.imageId) result.value = "";
   status.textContent = next.message;
+  element("ocr-run").textContent = next.provider === "agent" ? "画像をエージェントに送って読む" : "文字を認識";
   controls();
  }
  function controls() {

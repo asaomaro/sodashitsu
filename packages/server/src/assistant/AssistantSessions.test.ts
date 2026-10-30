@@ -772,3 +772,47 @@ it("starts a fresh drain for a notification at the prior drain's completion boun
  queueMicrotask(()=>{const ws=f.session.getWorkspace(info.workspaceId)!;f.session.updateAssistantBinding(ws.id,ws.assistant!,{stopWhenIdle:true});next=f.manager.drainIdleStops();});
  await first;await next;expect(f.session.getPane(info.paneId)).toBeUndefined();
 });
+
+it.each(["cancel","expires","working"])("fences a queued image instruction after %s", async reason => {
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ const surface=new ControlSurface(new MemoryLogger());
+ const deps={session:f.session,terminals:f.terminals,sizeAuthority:{noteInteraction(){}},assistantSessions:f.manager} as unknown as MethodDeps;
+ registerAgentMethods(surface,deps);registerAssistantMethods(surface,deps);
+ const ctx={clientId:randomUUID(),sink:{} as never,connectionAuthorized:()=>true};
+ const requestId=randomUUID();const host=f.hosts.get(info.paneId)!;let release!:()=>void;
+ host.beforeModal=()=>new Promise<void>(resolve=>{release=resolve;});
+ const now=vi.spyOn(performance,"now").mockReturnValue(100);
+ try {
+  const pending=surface.invoke(ctx,"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"approved image",imageRequestId:requestId,ttlMs:1000});
+  await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+  if(reason==="cancel")expect(await surface.invoke(ctx,"assistant.cancel_image",{requestId})).toMatchObject({ok:true});
+  if(reason==="expires")now.mockReturnValue(1101);
+  if(reason==="working")f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});
+  release();expect(await pending).toMatchObject({ok:false});expect(host.writes).toEqual([]);
+ } finally {now.mockRestore();release?.();}
+});
+it("does not let a different connection cancel an approved image instruction", async () => {
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ const surface=new ControlSurface(new MemoryLogger());const deps={session:f.session,terminals:f.terminals,sizeAuthority:{noteInteraction(){}},assistantSessions:f.manager} as unknown as MethodDeps;
+ registerAgentMethods(surface,deps);registerAssistantMethods(surface,deps);
+ const ctx={clientId:randomUUID(),sink:{} as never},requestId=randomUUID(),host=f.hosts.get(info.paneId)!;let release!:()=>void;
+ host.beforeModal=()=>new Promise<void>(resolve=>{release=resolve;});
+ const pending=surface.invoke(ctx,"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"approved image",imageRequestId:requestId,ttlMs:1000});
+ await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+ await surface.invoke({...ctx,clientId:randomUUID()},"assistant.cancel_image",{requestId});release();
+ expect(await pending).toMatchObject({ok:true});expect(host.writes).toEqual(["approved image","\r"]);
+});
+it("checks image expiry again after final target metadata inspection", async () => {
+ const f=await fixture();const {device,info,agent}=await f.ready();const surface=new ControlSurface(new MemoryLogger());
+ const deps={session:f.session,terminals:f.terminals,sizeAuthority:{noteInteraction(){}},assistantSessions:f.manager} as unknown as MethodDeps;
+ registerAgentMethods(surface,deps);registerAssistantMethods(surface,deps);
+ const host=f.hosts.get(info.paneId)!;let release!:()=>void;host.beforeModal=()=>new Promise<void>(resolve=>{release=resolve;});
+ const now=vi.spyOn(performance,"now").mockReturnValue(100);
+ try {
+  const pending=surface.invoke({clientId:randomUUID(),sink:{} as never},"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"approved image",imageRequestId:randomUUID(),ttlMs:1000});
+  await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+  const original=f.manager.target.bind(f.manager);
+  vi.spyOn(f.manager,"target").mockImplementation((...args)=>{const result=original(...args);now.mockReturnValue(1101);return result;});
+  release();expect(await pending).toMatchObject({ok:false});expect(host.writes).toEqual([]);
+ } finally {now.mockRestore();release?.();}
+});

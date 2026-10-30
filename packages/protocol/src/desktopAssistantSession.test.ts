@@ -72,3 +72,10 @@ it("registers the assistant request schemas in the shared method catalog", () =>
   expect(METHOD_SCHEMAS["assistant.send_keys"]).toBe(AssistantSessionKeysParams);
   expect(METHOD_SCHEMAS["assistant.adopt"]).toBe(AssistantSessionAdoptParams);
 });
+
+it("bounds image prompt leases and requires a paired request identity and TTL", () => {
+ const base={deviceId:crypto.randomUUID(),instanceId:crypto.randomUUID(),text:"approved image"};
+ expect(AssistantSessionPromptParams.parse({...base,imageRequestId:crypto.randomUUID(),ttlMs:60000}).ttlMs).toBe(60000);
+ for(const extra of [{imageRequestId:crypto.randomUUID()},{ttlMs:1000},{imageRequestId:crypto.randomUUID(),ttlMs:60001},{imageRequestId:"bad",ttlMs:1000}])
+  expect(()=>AssistantSessionPromptParams.parse({...base,...extra})).toThrow();
+});

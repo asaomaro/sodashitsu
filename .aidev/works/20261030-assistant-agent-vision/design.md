@@ -1,0 +1,7 @@
+# 専用エージェントによる画像の読み取り
+
+ocrProviderはagent標準、local Tesseractは任意。画像機能はopt-in、preview/cropでは送信せず明示runだけ。native mainが画像bytes・専用session/actorを所有し、既存pane.image begin/chunk/commit→assistant.promptで画像ファイルを読む固定指示を渡す。現在Claude Code/Codexのみ。接続・対象変更・abort・元60s期限で拒否、失敗時に別サービスへfallbackしない。
+
+画像promptにrequestUUIDと元期限の残量を添え、serverが固定monotonic leaseを受付直後から最終write guardまで検査。cancelは同じclientのみ、物理queued仕事がsettleするまでglobal16/client2の枠を保持。target/scope検査後にもlease/idleを再検査。native cancel用に1RPC枠予約。既に書いた指示は取消できず専用端末で止める。
+
+local previewは5分。送信画像は既存server ImageStoreの通常24h期限/定期削除・容量上限で保持し、AI提供元にも渡る。UIとdocsで区別。モデルが画像を読める保証/実認識品質・実OS撮影・agent実行は生成テストの対象外。音声ファイルのモデル直接送信はCLI対応差のため未対応で、任意Whisperへ暗黙転送しない。

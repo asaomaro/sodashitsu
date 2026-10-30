@@ -97,6 +97,7 @@ export const DesktopAssistantPreferences = z
     allowPluginCharacters: z.boolean().default(false),
     allowPluginViews: z.boolean().default(false),
     allowPluginActions: z.boolean().default(false),
+    ocrProvider: z.enum(["agent", "local"]).default("agent"),
     ocrEnabled: z.boolean().default(false),
     ocrExecutable: z
       .string()
@@ -192,7 +193,10 @@ export const AssistantSessionEnsureParams = AssistantSessionGetParams.extend({
 export const AssistantSessionPromptParams = AssistantSessionGetParams.extend({
   instanceId: z.uuid(),
   text: z.string().min(1).max(8192),
-}).strict();
+  imageRequestId: z.uuid().optional(),
+  ttlMs: z.number().int().min(1).max(60000).optional(),
+}).strict().refine(value => (value.imageRequestId === undefined) === (value.ttlMs === undefined), "画像指示には識別子と期限の両方が必要です");
+export const AssistantImageCancelParams = z.object({requestId: z.uuid()}).strict();
 export const AssistantSessionAdoptParams = AssistantSessionGetParams.extend({
   instanceId: z.uuid(),
 }).strict();

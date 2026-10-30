@@ -62,6 +62,7 @@ try {
       quietFullscreen:true,
       remoteNotifications:true,
       allowPluginCharacters:false,allowPluginViews:false,allowPluginActions:false,
+      ocrProvider: "agent",
       ocrEnabled: false, ocrExecutable: "", ocrLanguage: "jpn+eng",
       transcriptionEnabled: false,
       transcriptionOrigin: "http://127.0.0.1:8080",
@@ -184,6 +185,7 @@ try {
   const origin = `http://127.0.0.1:${server.address().port}`;
   await page.goto(`${origin}/settings.html`);
   await expect(page.getByRole("button", { name: "操舵室を開く" })).toBeDisabled();
+  await expect(page.locator("#ocrProvider")).toHaveValue("agent");
   await page.locator("#claude-model").fill("sonnet");
   await page.locator("#claude-effort").selectOption("high");
   await page.locator("#codex-model").fill("custom-model");
@@ -398,6 +400,12 @@ try {
   await expect(page.locator("#ocr-status")).toContainText("完了してから");
   await page.evaluate(() => window.releaseOcrNote());
   await expect(page.locator("#tool-text")).toBeEnabled();
+  await page.evaluate(()=>{window.currentOcr={...window.currentOcr,provider:"agent",status:"ready",text:""};window.ocrCallback(window.currentOcr);});
+  await expect(page.locator("#ocr-run")).toHaveText("画像をエージェントに送って読む");
+  await expect(page.locator("#ocr-tools")).toContainText("通常24時間");
+  const beforeImage=await page.evaluate(()=>window.calls.filter(call=>call[0]==="ocr-run").length);
+  await page.locator("#ocr-run").press("Enter");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="ocr-run").length),beforeImage+1);
   await page.locator("#ocr-discard").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-result")).toHaveValue("");
   await expect(page.locator("#ocr-preview")).not.toHaveAttribute("src");

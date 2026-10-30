@@ -1,4 +1,5 @@
 import {
+  AssistantImageCancelParams,
   AssistantReminderSaveParams,
   AssistantReminderIdParams,
   AssistantSourceParams,
@@ -19,6 +20,7 @@ import type { MethodDeps } from "./deps.js";
 
 export function registerAssistantMethods(surface: ControlSurface, deps: MethodDeps): void {
   registerAssistantApps(surface, deps);
+  const imagePrompts = new Map<string, {clientId:string; active:boolean; expires:number}>();
   const scheduler = () => {
     if (!deps.scheduler) throw new RpcError("not_found", "予約を利用できません");
     return deps.scheduler;
@@ -136,6 +138,7 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
     params: { deviceId: string; instanceId: string },
     method: "agent.prompt" | "agent.send_keys",
     payload: object,
+    finalGuard?: (agent: AgentInfo) => void,
   ) => {
     const target = sessions.target(params.deviceId, params.instanceId);
     const guard = (agent: AgentInfo) => {
@@ -151,6 +154,7 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
         agent.instanceId !== target.agent.instanceId
       )
         throw new RpcError("agent_not_found", "専用セッションの送信先が変更されました");
+      finalGuard?.(current.agent);
     };
     const result = await surface.invoke({ ...ctx, agentPromptGuard: guard }, method, {
       paneId: target.paneId,
@@ -174,7 +178,27 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
   });
   surface.register("assistant.prompt", {
     schema: AssistantSessionPromptParams,
-    handler: (ctx, params) => forward(ctx, params, "agent.prompt", { text: params.text }),
+    handler: async (ctx, params) => {
+      const requestId = params.imageRequestId;
+      if (!requestId) return forward(ctx, params, "agent.prompt", {text:params.text});
+      if (imagePrompts.has(requestId) || imagePrompts.size >= 16 || [...imagePrompts.values()].filter(entry=>entry.clientId===ctx.clientId).length >= 2)
+        throw new RpcError("agent_pane_busy", "画像指示の完了を待ってください");
+      const lease = {clientId:ctx.clientId, active:true, expires:performance.now()+params.ttlMs!};
+      imagePrompts.set(requestId,lease);
+      const timer=setTimeout(()=>{lease.active=false;},params.ttlMs!);timer.unref();
+      const imageGuard = (agent: AgentInfo) => {
+        if (!lease.active || performance.now() >= lease.expires || agent.state !== "idle") throw new RpcError("agent_pane_busy", "画像指示が取り消されたか期限が切れ、またはエージェントが待機中ではありません");
+      };
+      try {
+        return await forward({...ctx,agentPromptGuard:agent=>{
+          ctx.agentPromptGuard?.(agent);imageGuard(agent);
+        }}, params, "agent.prompt", {text:params.text}, imageGuard);
+      } finally {clearTimeout(timer);if(imagePrompts.get(requestId)===lease)imagePrompts.delete(requestId);}
+    },
+  });
+  surface.register("assistant.cancel_image", {
+    schema: AssistantImageCancelParams,
+    handler: (ctx, params) => {const lease=imagePrompts.get(params.requestId);if(lease?.clientId===ctx.clientId)lease.active=false;return{};},
   });
   surface.register("assistant.send_keys", {
     schema: AssistantSessionKeysParams,

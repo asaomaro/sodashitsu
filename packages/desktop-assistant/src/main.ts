@@ -380,6 +380,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     preferences.enabled && preferences.ocrEnabled,
     preferences.ocrExecutable,
     preferences.ocrLanguage,
+    preferences.ocrProvider,
   );
   if (
     recording?.has() &&
@@ -1327,6 +1328,10 @@ else {
           if (image.isEmpty() || size.width !== expected.width || size.height !== expected.height)
             throw Error("PNG画像を読み取れません。");
           return image.crop(rect).toPNG();
+        },
+        agent: (bytes, signal) => {
+          if (!assistantChat || !controller.preferences.enabled) throw Error("専用エージェントに接続していません");
+          return assistantChat.image(bytes, signal);
         },
         run: (bytes, executable, language, signal) =>
           ocrRunner.run(bytes, executable, language, signal),

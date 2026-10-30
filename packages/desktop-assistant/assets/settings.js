@@ -1,6 +1,6 @@
 "use strict";
 let current;
-const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "launchAtLogin", "reducedMotion", "mute", "transcriptionEnabled", "transcriptionOrigin", "ocrEnabled", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications", "quietFullscreen"];
+const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "launchAtLogin", "reducedMotion", "mute", "transcriptionEnabled", "transcriptionOrigin", "ocrEnabled", "ocrProvider", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications", "quietFullscreen"];
 const status = document.getElementById("status");
 function display(preferences) {
  current = preferences;
@@ -8,7 +8,7 @@ function display(preferences) {
  for (const key of fields) {
   const element = document.getElementById(key);
   if (element.type === "checkbox") element.checked = preferences[key];
-  else element.value = preferences[key];
+  else element.value = preferences[key] ?? (key === "ocrProvider" ? "agent" : "");
  }
  const selector=document.getElementById("displayId"),position=preferences.position;
  if(position&&!Array.from(selector.options).some(option=>option.value===position.displayId)){const option=document.createElement("option");option.value=position.displayId;option.textContent=`未接続：${position.displayId}`;selector.append(option);}

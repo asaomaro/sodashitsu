@@ -1,0 +1,3 @@
+# 独立レビュー
+
+review_pointer / review_transferが差分全体をread-onlyで点検。指摘はqueued promptへの取消/期限伝達、idle制約、画像保存期間とUIの整合、最終target metadata照合後の期限再検査。各条件の実surface/保留modal試験を追加し修正前AssertionError確認後に修正。最後の差分再レビューで残must/shouldなし。固定promptは追加ツール禁止の強制機構ではない点をdocsに明記。実agent/画面送信なし。
