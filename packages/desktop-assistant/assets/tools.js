@@ -86,6 +86,11 @@
   });
   element("transcribe-file").addEventListener("click", () => window.assistant.transcribeFile().catch(report));
   element("cancel-transcription").addEventListener("click", () => window.assistant.cancelTranscription().catch(report));
+  document.addEventListener("assistant-import-text", event => {
+    const value = event.detail;
+    if (saving || typeof value !== "string" || value.length > 8192) { event.preventDefault(); return; }
+    text.value = value; currentNote = null; notes.value = ""; element("delete-note").disabled = true;
+  });
   element("use-transcription").addEventListener("click", () => {
     if (saving) return;
     if (result.value.length > 8192) { report(Error("8192文字以内の部分に編集してから渡してください。")); return; }

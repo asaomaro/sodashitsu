@@ -94,7 +94,25 @@ vi.mock("electron", () => ({
     isPackaged: false,
     setLoginItemSettings: fixture.startup,
   }),
-  clipboard: { readText: vi.fn(() => "generated clipboard text"), writeText: vi.fn() },
+  clipboard: {
+    read: vi.fn(async () => [
+      {
+        types: ["image/png"],
+        getType: async () =>
+          new Blob(
+            [
+              Buffer.from(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=",
+                "base64",
+              ),
+            ],
+            { type: "image/png" },
+          ),
+      },
+    ]),
+    readText: vi.fn(() => "generated clipboard text"),
+    writeText: vi.fn(),
+  },
   dialog: { showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })) },
   BrowserWindow: MockWindow,
   ipcMain: {
@@ -134,6 +152,12 @@ vi.mock("electron", () => ({
   Tray: class extends EventEmitter {
     setToolTip() {}
     setContextMenu() {}
+  },
+}));
+
+vi.mock("./ocrRunner.js", () => ({
+  OcrRunner: class {
+    run = vi.fn(async () => "generated OCR text");
   },
 }));
 
@@ -471,7 +495,9 @@ it("leases microphone permission only to the visible bubble and consumes the sto
       bytes: new ArrayBuffer(25 * 1024 * 1024 + 1),
     }),
   ).rejects.toThrow();
-  await expect(fixture.handlers.get("assistant:record-transcribe")!(local, payload)).resolves.toBeUndefined();
+  await expect(
+    fixture.handlers.get("assistant:record-transcribe")!(local, payload),
+  ).resolves.toBeUndefined();
   expect(await fixture.handlers.get("assistant:tools")!(local)).toMatchObject({
     transcription: { status: "done", text: "generated recording transcription" },
   });
@@ -500,5 +526,41 @@ it("leases microphone permission only to the visible bubble and consumes the sto
       "許可",
     );
   }
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("uses the explicit PNG clipboard action and retires OCR on hide and navigation", async () => {
+  const settings = fixture.windows.find((window) => window.url.endsWith("settings.html"))!;
+  const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    ocrEnabled: true,
+    ocrExecutable: "/usr/bin/tesseract",
+  });
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  await expect(fixture.handlers.get("assistant:ocr-clipboard")!(event)).rejects.toThrow("許可");
+  const image = (await fixture.handlers.get("assistant:ocr-clipboard")!(local)) as any;
+  expect(image.uri).toMatch(/^data:image\/png;base64,/);
+  await fixture.handlers.get("assistant:ocr-run")!(local, { imageId: image.state.imageId });
+  expect(await fixture.handlers.get("assistant:ocr-state")!(local)).toMatchObject({
+    status: "done",
+    text: "generated OCR text",
+  });
+  bubble.hide();
+  expect(await fixture.handlers.get("assistant:ocr-state")!(local)).toMatchObject({
+    imageId: null,
+    text: "",
+  });
+  await expect(fixture.handlers.get("assistant:ocr-clipboard")!(local)).rejects.toThrow("吹き出し");
+  bubble.show();
+  const next = (await fixture.handlers.get("assistant:ocr-clipboard")!(local)) as any;
+  bubble.webContents.emit("did-start-navigation", {}, bubble.url, false, true);
+  await expect(
+    fixture.handlers.get("assistant:ocr-run")!(local, { imageId: next.state.imageId }),
+  ).rejects.toThrow("対象");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });

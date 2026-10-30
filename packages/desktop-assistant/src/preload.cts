@@ -29,6 +29,17 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:recording-cancelled", receive);
       return () => ipcRenderer.removeListener("assistant:recording-cancelled", receive);
     },
+    ocrState: () => ipcRenderer.invoke("assistant:ocr-state"),
+    ocrFile: () => ipcRenderer.invoke("assistant:ocr-file"),
+    ocrClipboard: () => ipcRenderer.invoke("assistant:ocr-clipboard"),
+    ocrCrop: (input: unknown) => ipcRenderer.invoke("assistant:ocr-crop", input),
+    ocrRun: (input: unknown) => ipcRenderer.invoke("assistant:ocr-run", input),
+    ocrDiscard: () => ipcRenderer.invoke("assistant:ocr-discard"),
+    onOcr: (callback: (state: unknown) => void) => {
+      const receive = (_event: unknown, state: unknown) => callback(state);
+      ipcRenderer.on("assistant:ocr-changed", receive);
+      return () => ipcRenderer.removeListener("assistant:ocr-changed", receive);
+    },
     tools: () => ipcRenderer.invoke("assistant:tools"),
     saveNote: (input: unknown) => ipcRenderer.invoke("assistant:note-save", input),
     deleteNote: (input: unknown) => ipcRenderer.invoke("assistant:note-delete", input),

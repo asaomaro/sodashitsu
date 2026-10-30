@@ -21,6 +21,9 @@ import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
 import { NotesFile, NoteSave } from "./notes.js";
 import { Transcription, AUDIO_LIMIT } from "./transcription.js";
+import { Ocr } from "./ocr.js";
+import { OcrRunner } from "./ocrRunner.js";
+import { readPng, pngSize, PNG_LIMIT } from "./png.js";
 import { RecordingLease } from "./recordingLease.js";
 import { z } from "zod";
 import { NoticeConnection } from "./noticeConnection.js";
@@ -48,13 +51,14 @@ const allowedAssets = new Map([
   ["/bubble.js", "text/javascript"],
   ["/tools.js", "text/javascript"],
   ["/recording.js", "text/javascript"],
+  ["/ocr.js", "text/javascript"],
   ["/style.css", "text/css"],
   ["/captain-male.svg", "image/svg+xml"],
   ["/captain-female.svg", "image/svg+xml"],
   ["/captain-robot.svg", "image/svg+xml"],
 ]);
 const csp =
-  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src blob:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src blob:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 let tray: Tray | null = null;
 let character: BrowserWindow | null = null;
 let settings: BrowserWindow | null = null;
@@ -69,6 +73,7 @@ let chatRevision = 0;
 let notesFile: NotesFile;
 let transcription: Transcription;
 let recording: RecordingLease;
+let ocr: Ocr;
 let recordingOrigin: string | null = null;
 let toolsRevision = 0;
 let backend: NoticeConnection | null = null;
@@ -106,6 +111,7 @@ function localWindow(role: LocalRole): BrowserWindow {
   localWindows.set(id, { window: win, role });
   win.on("closed", () => localWindows.delete(id));
   const discardOnHide = () => {
+    if (role === "bubble") ocr?.discard(id);
     if (role === "bubble" && recording?.has(id)) {
       recording.cancel(id);
       if (!win.isDestroyed()) win.destroy(); // End capture even if the hidden renderer cannot respond.
@@ -159,6 +165,7 @@ function openBubble(focus = true): void {
     if (bubble === win) {
       recording?.cancel(contentsId);
       transcription?.cancel();
+      ocr?.discard(contentsId);
       bubble = null;
     }
   });
@@ -249,6 +256,11 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
   rpc.start();
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
+  ocr.configure(
+    preferences.enabled && preferences.ocrEnabled,
+    preferences.ocrExecutable,
+    preferences.ocrLanguage,
+  );
   if (
     recording?.has() &&
     (!preferences.enabled ||
@@ -459,6 +471,12 @@ function registerIpc(): void {
     "start-session",
     "adopt-session",
     "send-message",
+    "ocr-state",
+    "ocr-file",
+    "ocr-clipboard",
+    "ocr-crop",
+    "ocr-run",
+    "ocr-discard",
     "tools",
     "note-save",
     "note-delete",
@@ -491,6 +509,27 @@ function registerIpc(): void {
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
+      if (action.startsWith("ocr-")) {
+        if (action === "ocr-state") return ocr.snapshot();
+        if (!controller.preferences.enabled || !owner.window.isVisible())
+          throw Error("吹き出しを開いて操作してください。");
+        const id = event.sender.id;
+        if (action === "ocr-discard") return ocr.discard(id);
+        if (action === "ocr-file" || action === "ocr-clipboard")
+          return ocr.input(id, action === "ocr-file" ? "file" : "clipboard");
+        const target = z.object({ imageId: z.uuid() });
+        if (action === "ocr-run") return ocr.run(id, target.strict().parse(input).imageId);
+        const rect = z
+          .object({
+            x: z.number().int().nonnegative(),
+            y: z.number().int().nonnegative(),
+            width: z.number().int().positive(),
+            height: z.number().int().positive(),
+          })
+          .strict();
+        const request = target.extend({ rect }).strict().parse(input);
+        return ocr.crop(id, request.imageId, request.rect);
+      }
       if (action === "tools") return toolsState();
       if (["record-start", "record-stop", "record-discard", "record-transcribe"].includes(action)) {
         if (
@@ -642,6 +681,7 @@ else {
     assistantChat?.stop();
     transcription?.cancel();
     recording?.cancel();
+    ocr?.discard();
   });
   app.on("activate", () => {
     if (!quitting && controller) openSettings();
@@ -701,6 +741,54 @@ else {
         changed: () => {
           void publishTools();
         },
+      });
+      const ocrRunner = new OcrRunner();
+      ocr = new Ocr({
+        changed: (state) => {
+          if (bubble && !bubble.isDestroyed())
+            bubble.webContents.send("assistant:ocr-changed", state);
+        },
+        input: async (id, source, signal) => {
+          const owner = localWindows.get(id)?.window;
+          if (!owner || owner.isDestroyed()) return null;
+          if (source === "file") {
+            const selection = await dialog.showOpenDialog(owner, {
+              title: "文字を読み取るPNG画像を選択",
+              properties: ["openFile"],
+              filters: [{ name: "PNG画像（8MiB以内）", extensions: ["png"] }],
+            });
+            signal.throwIfAborted();
+            return selection.canceled || !selection.filePaths[0]
+              ? null
+              : readPng(selection.filePaths[0], signal);
+          }
+          const items = await clipboard.read();
+          signal.throwIfAborted();
+          const item = items.slice(0, 16).find((item) => item.types.includes("image/png"));
+          if (!item)
+            throw Error(
+              "クリップボードにPNG画像がありません。OSの画面切り取りでコピーしてください。",
+            );
+          const blob = await item.getType("image/png");
+          signal.throwIfAborted();
+          if (!(blob instanceof Blob) || !blob.size || blob.size > PNG_LIMIT)
+            throw Error("8MiB以内のPNG画像をコピーしてください。");
+          const bytes = new Uint8Array(await blob.arrayBuffer());
+          signal.throwIfAborted();
+          pngSize(bytes);
+          return bytes;
+        },
+        crop: (bytes, rect) => {
+          pngSize(bytes);
+          const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+          const size = image.getSize();
+          const expected = pngSize(bytes);
+          if (image.isEmpty() || size.width !== expected.width || size.height !== expected.height)
+            throw Error("PNG画像を読み取れません。");
+          return image.crop(rect).toPNG();
+        },
+        run: (bytes, executable, language, signal) =>
+          ocrRunner.run(bytes, executable, language, signal),
       });
       recording = new RecordingLease((id, phase, token) => {
         recordingOrigin = null;

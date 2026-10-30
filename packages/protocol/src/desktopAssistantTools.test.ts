@@ -23,3 +23,25 @@ it("keeps audio processing disabled until explicitly configured on a loopback en
       DesktopAssistantPreferences.parse({ transcriptionEnabled: true, transcriptionOrigin }),
     ).toThrow();
 });
+
+it("keeps OCR disabled and accepts only bounded local paths and language lists", () => {
+  expect(DesktopAssistantPreferences.parse({})).toMatchObject({
+    ocrEnabled: false,
+    ocrExecutable: "",
+    ocrLanguage: "jpn+eng",
+  });
+  for (const ocrExecutable of [
+    "/usr/bin/tesseract",
+    "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+  ])
+    expect(DesktopAssistantPreferences.parse({ ocrExecutable })).toMatchObject({ ocrExecutable });
+  for (const ocrExecutable of [
+    "tesseract",
+    "https://example.com/tesseract",
+    "/bin/tesseract\n--help",
+    "/bin/tes\u0000seract",
+  ])
+    expect(() => DesktopAssistantPreferences.parse({ ocrExecutable })).toThrow();
+  for (const ocrLanguage of ["jpn --psm 1", "eng/../../tmp", "a".repeat(68)])
+    expect(() => DesktopAssistantPreferences.parse({ ocrLanguage })).toThrow();
+});

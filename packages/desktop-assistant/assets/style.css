@@ -8,3 +8,7 @@
 .speech{overflow:hidden}.speech #session-status,.speech #status{margin:4px 0;line-height:1.4;max-height:38px;overflow:auto}.speech #chat{display:grid;grid-template-columns:1fr auto;column-gap:6px;flex:0 0 auto}.speech #chat label{grid-column:1/-1;margin:6px 0 3px}.speech #chat textarea{padding:6px;min-height:48px}.speech #send{float:none;margin:0;align-self:end}.speech nav button,.speech #session-controls button{font-size:13px;padding:6px 10px}.speech #session-controls label{margin:4px 0}.speech #session-controls select{padding:6px;margin-top:3px}#standard-tools{min-height:0;flex:0 1 auto}#standard-tools .tools-body{max-height:160px}.speech #record-indicator{flex:0 0 auto;margin:4px 0;padding:4px 6px;font-size:12px}
 
 @media(max-height:580px){.speech{overflow:auto}.speech section{flex:0 0 50px;min-height:40px}#standard-tools .tools-body{max-height:100px}#record-indicator{position:sticky;top:0;z-index:2}}
+
+#ocr-preview { max-width:100%; max-height:220px; object-fit:contain; }
+.ocr-region { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.ocr-region input { width:100%; min-width:0; box-sizing:border-box; }
