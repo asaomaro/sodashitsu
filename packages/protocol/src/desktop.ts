@@ -31,6 +31,15 @@ export const DESKTOP_IME_PROTOCOL = "soda-desktop-ime-v1";
 export const DESKTOP_INPUT_PROTOCOL = "soda-desktop-input-v1";
 
 export const DESKTOP_MAX_FRAME_BYTES = 2 * 1024 * 1024;
+/** Source-computed regional evidence. Coordinates refer to the transferred image, not OS pixels. */
+const regionFields={x:z.number().int().min(0).max(4095),y:z.number().int().min(0).max(2399),width:z.number().int().positive().max(4096),height:z.number().int().positive().max(2400)};
+const regionBudget=(v:{width:number;height:number})=>v.width*v.height<=1_048_576;
+export const DesktopRegionRect=z.object(regionFields).strict().refine(regionBudget);
+export type DesktopRegionRect=z.infer<typeof DesktopRegionRect>;
+export const DesktopRegionSpec=z.object({...regionFields,id:z.uuid()}).strict().refine(regionBudget);
+export type DesktopRegionSpec=z.infer<typeof DesktopRegionSpec>;
+export const DesktopRegionProof=z.object({...regionFields,id:z.uuid(),digest:z.string().regex(/^[a-f0-9]{64}$/)}).strict().refine(regionBudget);
+export type DesktopRegionProof=z.infer<typeof DesktopRegionProof>;
 export const DesktopDisplaySize = z
   .object({
     width: z.number().int().min(320).max(4096),
@@ -148,7 +157,7 @@ export const RemoteDesktopViewerMessage = z.union([
   z.object({ type: z.literal("heartbeat") }).strict(),
   z.object({ type: z.literal("release") }).strict(),
   z.object({ type: z.literal("native_pointer_cancel") }).strict(),
-  z.object({ type: z.literal("keyframe") }).strict(),
+  z.object({ type: z.literal("keyframe"), region:DesktopRegionSpec.nullable().optional() }).strict(),
   z.object({ type: z.literal("agent_grant"), enabled: z.boolean() }).strict(),
   z.object({ type: z.literal("stop") }).strict(),
 ]);
@@ -157,6 +166,7 @@ export const DesktopReady = z
     type: z.literal("ready"),
     title: z.string().max(256),
     resourceFences: z.literal(true).optional(),
+    agentRegions:z.literal(true).optional(),
     allowInput: z.boolean(),
     width: z.number().int().positive().max(32768),
     height: z.number().int().positive().max(32768),
@@ -213,6 +223,7 @@ export const DesktopFrameInfo = z
     timing: z.enum(["measured","encode-only","unavailable"]).optional(),
     captureMs: z.number().finite().min(0).max(60000),
     encodeMs: z.number().finite().min(0).max(60000),
+    regions:z.array(DesktopRegionProof).max(8).optional(),
     contentId: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
@@ -247,7 +258,8 @@ export const DesktopFrameInfo = z
     sourceMemoryBytes: z.number().finite().min(0).optional(),
   })
   .strict()
-  .refine((v) => v.width * v.height <= 8_000_000);
+  .refine((v) => v.width * v.height <= 8_000_000)
+  .refine(v=>!v.regions||(new Set(v.regions.map(r=>r.id)).size===v.regions.length&&v.regions.every(r=>r.x+r.width<=v.width&&r.y+r.height<=v.height)));
 export type DesktopFrameInfo = z.infer<typeof DesktopFrameInfo>;
 export const DesktopStartParams = z
   .object({
@@ -296,6 +308,7 @@ export const DesktopMethods = {
     .object({
       leaseId: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
       afterFrameSeq: z.number().int().positive().optional(),
+      region:DesktopRegionRect.optional(),
     })
     .strict(),
   "desktop.agent.act": z
@@ -370,6 +383,7 @@ export interface DesktopResults {
     format: "image/jpeg" | "image/png";
     imageBase64: string;
     latestFrameMaxAgeMs: number;
+    verification?:{kind:"region";region:DesktopRegionRect;pointerOnly:true};
   };
   "desktop.agent.act": { acknowledged: number; afterFrameSeq: number };
   "desktop.agent.release": { released: true };

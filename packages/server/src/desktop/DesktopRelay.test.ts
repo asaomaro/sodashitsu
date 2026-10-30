@@ -1,3 +1,4 @@
+import {encodeDesktopFrame} from "@sodashitsu/protocol";
 import {desktopFeaturesProtocol,DESKTOP_FEATURES_PREFIX} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_DELTAS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
@@ -1530,4 +1531,53 @@ it.each(["pipe","json","shared","folder"])("copies a trusted %s selection throug
  }
  expect((await run({action:"native_abort",gesture})).ok).toBe(true);expect((await run({action:"native_read",gesture,lease:offer.lease,request:crypto.randomUUID(),index:0,offset:0,length:1})).ok).toBe(false);
  v.send({type:"stop"});
+});
+
+it.each([false,true])("carries source regional proofs through relay/provider and shared=%s",async shared=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,command:[...cfg.command,"--static","--agent-regions"]});
+ const viewer=await f.viewer(shared?"shared":false);
+ viewer.ws.on("message",(bytes,binary)=>{if(binary){const f=decodeDesktopFrame(new Uint8Array(bytes as Buffer));if(f)viewer.send({type:"ack",seq:f.info.seq});}});
+ viewer.send({...start,options:{...start.options,...(shared?{sharedDesktop:true,features:true}:{})}});
+ await vi.waitFor(()=>expect(viewer.frames.length).toBeGreaterThan(0));
+ viewer.send({type:"agent_grant",enabled:true});await vi.waitFor(()=>expect(viewer.messages.some(m=>m.type==="agent_ticket")).toBe(true));
+ const ticket=viewer.messages.find(m=>m.type==="agent_ticket")!.ticket as string,lease=f.relay.agents.attach("regional-agent",ticket).leaseId;
+ await vi.waitFor(()=>expect(viewer.messages.some(m=>m.type==="agent_state"&&m.active===true)).toBe(true));
+ await f.relay.agents.refresh("regional-agent",lease,undefined,{x:0,y:0,width:32,height:32});
+ const observed=f.relay.agents.observe("regional-agent",lease);
+ expect(observed).toMatchObject({width:320,verification:{kind:"region",pointerOnly:true,region:{x:0,y:0,width:32,height:32}}});
+ expect(await f.relay.agents.act("regional-agent",lease,observed.observationId,[{kind:"pointer",x:0,y:0,event:"move",button:0}])).toMatchObject({acknowledged:1});
+ f.relay.agents.release("regional-agent",lease);
+});
+
+it("cancels revoked regional snapshots and ignores an old nonce while a new grant waits",async()=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,command:[...cfg.command,"--static","--agent-regions"]});
+ const viewer=await f.viewer();viewer.ws.on("message",(bytes,binary)=>{if(binary)viewer.send({type:"ack",seq:decodeDesktopFrame(new Uint8Array(bytes as Buffer)).info.seq});});
+ viewer.send(start);await vi.waitFor(()=>expect(viewer.frames.length).toBeGreaterThan(0));
+ const relay=f.relay as unknown as {viewers:Set<{agent:import("./DesktopAgentAccess.js").AgentTarget;chain:{last?:import("@sodashitsu/protocol").DesktopFrameInfo}}>;send(ws:WebSocket,value:any):boolean};
+ const v=[...relay.viewers][0]!,send=relay.send.bind(relay);let oldId="";
+ const stopOld=vi.spyOn(relay,"send").mockImplementation((ws,value)=>{if(value.type==="keyframe"&&value.region){oldId=value.region.id;return true;}return send(ws,value);});
+ const old=f.relay.agents.attach("old",f.relay.agents.grant(v.agent).ticket).leaseId;
+ const pending=f.relay.agents.refresh("old",old,undefined,{x:0,y:0,width:32,height:32}),rejected=expect(pending).rejects.toThrow(/cancelled|expired/);
+ expect(oldId).not.toBe("");const next=f.relay.agents.grant(v.agent);await rejected;stopOld.mockRestore();
+ const share=(f.provider as unknown as {active:{ws:WebSocket}}).active,wireSend=share.ws.send.bind(share.ws);
+ let replaced=false,held:any;const intercept=vi.spyOn(share.ws,"send").mockImplementation((data:any,...args:any[])=>{
+  if(typeof data!=="string"){
+   const packet=decodeDesktopFrame(new Uint8Array(data));
+   if(packet.info.regions?.length){
+    if(!replaced){replaced=true;return (wireSend as any)(encodeDesktopFrame({...packet.info,regions:packet.info.regions.map(r=>({...r,id:oldId}))},packet.image),...args);}
+    held={data,args};return;
+   }
+  }
+  return (wireSend as any)(data,...args);
+ });
+ try{
+  const lease=f.relay.agents.attach("new",next.ticket).leaseId;let resolved=false;
+  const current=f.relay.agents.refresh("new",lease,undefined,{x:0,y:0,width:32,height:32}).then(()=>{resolved=true;});
+  await vi.waitFor(()=>expect(held).toBeDefined());expect(v.chain.last?.regions?.[0]?.id).toBe(oldId);expect(resolved).toBe(false);
+  // Cleanup for the old grant is ID-conditional and must leave the new snapshot alive.
+  v.agent.region!.clear(oldId);intercept.mockRestore();(wireSend as any)(held.data,...held.args);await current;
+  expect(f.relay.agents.observe("new",lease).verification?.kind).toBe("region");f.relay.agents.release("new",lease);
+ }finally{intercept.mockRestore();stopOld.mockRestore();}
 });

@@ -1,3 +1,4 @@
+import type {DesktopRegionRect} from "@sodashitsu/protocol";
 import WebSocket from "ws";
 import {performance} from "node:perf_hooks";
 import {randomUUID} from "node:crypto";
@@ -94,7 +95,7 @@ export class DesktopEncryptedAgentSession implements DesktopAgentConnection {
   }
   throw failure();
  }
- observe(afterFrameSeq?:number){return this.request("desktop.agent.observe",DesktopMethods["desktop.agent.observe"].parse({leaseId:this.lease,...(afterFrameSeq===undefined?{}:{afterFrameSeq})})) as Promise<DesktopResults["desktop.agent.observe"]>;}
+ observe(afterFrameSeq?:number,region?:DesktopRegionRect){return this.request("desktop.agent.observe",DesktopMethods["desktop.agent.observe"].parse({leaseId:this.lease,...(afterFrameSeq===undefined?{}:{afterFrameSeq}),...(region?{region}:{})})) as Promise<DesktopResults["desktop.agent.observe"]>;}
  async act(observationId:string,inputs:RemoteDesktopInput[]){try{return await this.request("desktop.agent.act",DesktopMethods["desktop.agent.act"].parse({leaseId:this.lease,observationId,inputs})) as DesktopResults["desktop.agent.act"];}catch(error){this.close();throw error;}}
  async release(){try{const result=await this.request("desktop.agent.release",{leaseId:this.lease}) as DesktopResults["desktop.agent.release"];const timer=setTimeout(()=>this.close(),2500);timer.unref();await this.finished;clearTimeout(timer);return result;}finally{this.close();}}
  close():void{

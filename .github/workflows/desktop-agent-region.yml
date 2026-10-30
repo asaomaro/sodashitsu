@@ -1,0 +1,36 @@
+name: Desktop agent region (generated only)
+on:
+  pull_request:
+    paths:
+      - 'packages/**/src/**/desktop*'
+      - 'packages/server/src/desktop/**'
+      - 'packages/protocol/src/desktop.ts'
+      - 'scripts/remote-desktop/**'
+      - '.github/workflows/desktop-agent-region.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows-pixels:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Compile host and test generated BGR arrays without desktop APIs
+        shell: powershell
+        run: scripts/remote-desktop/validate-agent-regions.ps1
+  generated-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/server build
+      - run: pnpm exec vitest run packages/server/src/desktop/DesktopAgentAccess.test.ts packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopRelay.test.ts --maxWorkers=2

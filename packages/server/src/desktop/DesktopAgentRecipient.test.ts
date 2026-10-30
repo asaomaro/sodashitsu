@@ -86,3 +86,11 @@ it("rejects pending capture immediately on human revoke and still delivers an ex
  f.target.capture=()=>new Promise<void>(resolve=>{done=resolve;});const pending=rpc.request(request(2,"desktop.agent.observe",{leaseId})),rejected=expect(pending).rejects.toThrow();let cancelled=false;void pending.catch(()=>{cancelled=true;});f.api.revoke(f.target);await Promise.resolve();const immediately=cancelled;done();await rejected;expect(immediately).toBe(true);expect(closed).toHaveBeenCalledOnce();await Promise.resolve();
  const next=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(next);const grant=f.api.grant(f.target,f.recipient),attached=JSON.parse(await next.request(request(1,"desktop.agent.attach",{ticket:grant.ticket}))).result;expect(JSON.parse(await next.request(request(2,"desktop.agent.release",{leaseId:attached.leaseId}))).result).toEqual({released:true});
 });
+
+it("private recipient RPC forwards regional observations without weakening the owner binding",async()=>{
+ const f=fixture(),rpc=new DesktopEndpointAgentRpc(f.api,fingerprint,()=>true);rpcs.push(rpc);
+ const {leaseId}=JSON.parse(await rpc.request(request(1,"desktop.agent.attach",{ticket:f.api.grant(f.target,f.recipient).ticket}))).result;
+ const refresh=vi.spyOn(f.api,"refresh").mockResolvedValue(),region={x:0,y:0,width:1,height:1};
+ expect(JSON.parse(await rpc.request(request(2,"desktop.agent.observe",{leaseId,region}))).result.imageBase64).toBe("AQID");
+ expect(refresh).toHaveBeenCalledWith(expect.any(String),leaseId,undefined,region);
+});

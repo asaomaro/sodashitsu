@@ -49,10 +49,11 @@ it("MCP exposes only scoped desktop tools and returns image content without a li
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "desktop_observe", arguments: {} },
+      params: { name: "desktop_observe", arguments: {region:{x:0,y:0,width:1,height:1}} },
     }) + "\n",
   );
   await vi.waitFor(() => expect(received).toHaveLength(3));
+  expect(observe).toHaveBeenCalledWith(undefined,{x:0,y:0,width:1,height:1});
   expect(received[2].result.content[0]).toEqual({
     type: "image",
     data: "AQID",

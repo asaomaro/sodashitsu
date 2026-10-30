@@ -9,7 +9,7 @@ function call(method,params){
  return new Promise((resolve,reject)=>{const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('応答待ちを終了しました。操作を自動再送しないでください'));},21000);pending.set(id,{resolve,reject,timer});send({id,method,params});});
 }
 const secret={type:'string',pattern:'^[A-Za-z0-9_-]{43}$'};
-const properties={attach:{ticket:secret},observe:{leaseId:secret,afterFrameSeq:{type:'integer',minimum:1}},act:{leaseId:secret,observationId:secret,inputs:{type:'array',minItems:1,maxItems:32,items:{type:'object'}}},release:{leaseId:secret}};
+const properties={attach:{ticket:secret},observe:{leaseId:secret,afterFrameSeq:{type:'integer',minimum:1},region:{type:'object',properties:{x:{type:'integer',minimum:0},y:{type:'integer',minimum:0},width:{type:'integer',minimum:1},height:{type:'integer',minimum:1}},required:['x','y','width','height'],additionalProperties:false}},act:{leaseId:secret,observationId:secret,inputs:{type:'array',minItems:1,maxItems:32,items:{type:'object'}}},release:{leaseId:secret}};
 const descriptions={attach:'人が共有窓で発行したコードを一度だけ使用する',observe:'許可済み画面の最新画像を取得する',act:'確認済み画像に対する操作を送る（自動再送なし）',release:'このアプリ画面の操作許可を解放する'};
 const operations=methods.map(name=>({name,description:descriptions[name],inputSchema:{type:'object',properties:properties[name],required:name==='attach'?['ticket']:name==='act'?['leaseId','observationId','inputs']:['leaseId'],additionalProperties:false}}));
 const input=createInterface({input:process.stdin});

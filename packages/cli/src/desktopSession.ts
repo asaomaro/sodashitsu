@@ -1,10 +1,11 @@
+import type {DesktopRegionRect} from "@sodashitsu/protocol";
 import { DesktopMethods, type RemoteDesktopInput, type DesktopResults } from "@sodashitsu/protocol";
 import type { SodaClient } from "./wsClient.js";
 
 export interface DesktopAgentConnection {
  readonly abort:AbortController;
  readonly expiresAt:number;
- observe(afterFrameSeq?:number):Promise<DesktopResults["desktop.agent.observe"]>;
+ observe(afterFrameSeq?:number,region?:DesktopRegionRect):Promise<DesktopResults["desktop.agent.observe"]>;
  act(observationId:string,inputs:RemoteDesktopInput[]):Promise<DesktopResults["desktop.agent.act"]>;
  release():Promise<DesktopResults["desktop.agent.release"]>;
  close():void;
@@ -45,12 +46,13 @@ export class DesktopAgentSession implements DesktopAgentConnection {
         .finally(() => this.abort.signal.removeEventListener("abort", stop));
     });
   }
-  observe(afterFrameSeq?: number) {
+  observe(afterFrameSeq?: number,region?:DesktopRegionRect) {
     return this.request(
       "desktop.agent.observe",
       DesktopMethods["desktop.agent.observe"].parse({
         leaseId: this.lease,
         ...(afterFrameSeq === undefined ? {} : { afterFrameSeq }),
+        ...(region?{region}:{}),
       }),
     );
   }

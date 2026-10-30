@@ -318,3 +318,22 @@ it("shares only the proved selected monitor layout and ends every member on topo
 it.each(["unrequested","wrong-device"])("rejects an unexpected shared monitor proof: %s",mode=>{
  const f=fixture(),config=mode==="unrequested"?{type:"configure",options:{width:320}}:{type:"configure",options:{width:320,monitors:true,monitorDevice:"left"},allowMonitors:true},a=f.join("source",config);f.child.send({...ready,monitorLayout});expect(a.messages.some(m=>m.type==="ready")).toBe(false);expect(a.session.exitCode).toBe(0);f.pool.dispose();
 });
+
+it("isolates regional proof IDs across members, coalesces configuration, and removes detached regions",async()=>{
+ const f=fixture(),a=f.join(),b=f.join();
+ try {
+  f.child.send({...ready,agentRegions:true});f.child.send({...frame(1),info:{...frame(1).info,width:1,height:1}});
+  await vi.waitFor(()=>expect(b.messages).toHaveLength(2));a.send({type:"ack",seq:1});b.send({type:"ack",seq:1});
+  const region={id:crypto.randomUUID(),x:0,y:0,width:1,height:1};
+  a.send({type:"keyframe",region});b.send({type:"keyframe",region});
+  await vi.waitFor(()=>expect(f.child.commands.filter(m=>m.type==="keyframe").at(-1)?.regions).toHaveLength(2));
+  const specs=f.child.commands.filter(m=>m.type==="keyframe").at(-1).regions;
+  expect(specs[0].id).not.toBe(specs[1].id);expect(specs.every((s:any)=>s.id!==region.id)).toBe(true);
+  f.child.send({...frame(2),info:{...frame(2).info,width:1,height:1,regions:specs.map((s:any,i:number)=>({...s,digest:String(i).repeat(64)}))}});
+  await vi.waitFor(()=>expect(b.messages.at(-1)?.info?.seq).toBe(2));
+  expect(a.messages.at(-1).info.regions).toEqual([{...region,digest:"0".repeat(64)}]);
+  expect(b.messages.at(-1).info.regions).toEqual([{...region,digest:"1".repeat(64)}]);
+  a.session.stdin.end();await vi.waitFor(()=>expect(f.child.commands.filter(m=>m.type==="keyframe").at(-1)?.regions).toHaveLength(1));
+  b.send({type:"keyframe",region:null});await vi.waitFor(()=>expect(f.child.commands.filter(m=>m.type==="keyframe").at(-1)?.regions).toEqual([]));
+ }finally{f.pool.dispose();}
+});

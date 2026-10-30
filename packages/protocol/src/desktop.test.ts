@@ -166,3 +166,13 @@ it("bounds five-button and extended-key input while identifying legacy-safe inpu
   expect(RemoteDesktopInput.safeParse({kind:"pointer",x:0,y:0,event:"up",button:5}).success).toBe(false);
   expect(RemoteDesktopInput.safeParse({kind:"key",code:"F25",down:true}).success).toBe(false);
 });
+
+it("bounds regional proof area, geometry, count, identity and digest",async()=>{
+ const {DesktopRegionRect,DesktopRegionSpec,DesktopFrameInfo}=await import("./desktop.js");
+ const region={id:crypto.randomUUID(),x:0,y:0,width:1,height:1},proof={...region,digest:"a".repeat(64)};
+ expect(DesktopRegionSpec.safeParse(region).success).toBe(true);
+ expect(DesktopRegionRect.safeParse({x:0,y:0,width:2048,height:1024}).success).toBe(false);
+ expect(DesktopRegionSpec.safeParse({...region,id:"not-uuid"}).success).toBe(false);
+ expect(DesktopFrameInfo.safeParse({...info,regions:[proof]}).success).toBe(true);
+ for(const regions of [[proof,proof],[{...proof,width:2}],[{...proof,digest:"broken"}],Array.from({length:9},()=>({...proof,id:crypto.randomUUID()}))])expect(DesktopFrameInfo.safeParse({...info,regions}).success).toBe(false);
+});

@@ -1,10 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
-import { RpcError, type RemoteDesktopInput, type DesktopFrameInfo } from "@sodashitsu/protocol";
+import { RpcError, DesktopRegionRect, type DesktopRegionSpec, type RemoteDesktopInput, type DesktopFrameInfo } from "@sodashitsu/protocol";
 
 export type AgentFrame = { info: DesktopFrameInfo; image: Uint8Array; at: number };
 export interface AgentTarget {
   frame(): AgentFrame | undefined;
+  region?: {capture(spec:DesktopRegionSpec,afterFrameSeq?:number):Promise<void>;frame():{info:DesktopFrameInfo;at:number}|undefined;clear(id:string):void};
   capture?(afterFrameSeq?: number): Promise<void>;
   control(enabled: boolean): void;
   state(active: boolean, expiresAt: number): void;
@@ -22,7 +23,8 @@ type Grant = {
   ticketExpires: number;
   owner?: string;
   lease?: string;
-  observation?: { id: string; digest: string };
+  observation?: { id: string; digest: string; region?:DesktopRegionSpec;width:number;height:number };
+  region?:DesktopRegionSpec;
   busy: boolean;
   dead: boolean;
   lastObserve?: number;
@@ -90,7 +92,7 @@ export class DesktopAgentAccess {
     }
     return g;
   }
-  async refresh(owner: string, lease: string, afterFrameSeq?: number) {
+  async refresh(owner: string, lease: string, afterFrameSeq?: number, region?:DesktopRegionRect) {
     const g = this.require(owner, lease);
     if (g.busy || g.preparing)
       throw new RpcError("server_busy", "Action or observation is in progress");
@@ -98,7 +100,18 @@ export class DesktopAgentAccess {
       throw new RpcError("server_busy", "Observe is limited to five images per second");
     g.preparing = true;
     try {
-      await g.target.capture?.(afterFrameSeq);
+      if(region){
+        const rect=DesktopRegionRect.parse(region);
+        if(!g.target.region)throw new RpcError("not_found","Region verification is unavailable on this source");
+        if(!g.region||g.region.x!==rect.x||g.region.y!==rect.y||g.region.width!==rect.width||g.region.height!==rect.height){
+          const old=g.region;delete g.observation;
+          g.region={...rect,id:randomUUID()};if(old)g.target.region.clear(old.id);
+        }
+        await g.target.region.capture(g.region,afterFrameSeq);
+      }else{
+        if(g.region){const id=g.region.id;delete g.region;delete g.observation;g.target.region?.clear(id);}
+        await g.target.capture?.(afterFrameSeq);
+      }
       this.require(owner, lease);
     } finally {
       g.preparing = false;
@@ -119,7 +132,9 @@ export class DesktopAgentAccess {
     this.require(owner,lease);
     g.lastObserve = performance.now();
     const id = secret();
-    g.observation = { id, digest: digest(frame.image) };
+    const proof=g.region&&frame.info.regions?.find(r=>r.id===g.region!.id&&r.x===g.region!.x&&r.y===g.region!.y&&r.width===g.region!.width&&r.height===g.region!.height);
+    if(g.region&&!proof)throw new RpcError("server_busy","Fresh regional verification is unavailable");
+    g.observation = { id, digest: proof?proof.digest:digest(frame.image),width:frame.info.width,height:frame.info.height,...(g.region?{region:{...g.region}}:{}) };
     return {
       observationId: id,
       frameSeq: frame.info.seq,
@@ -128,6 +143,7 @@ export class DesktopAgentAccess {
       format: frame.info.format,
       imageBase64: Buffer.from(frame.image).toString("base64"),
       latestFrameMaxAgeMs: 2000,
+      ...(g.region?{verification:{kind:"region" as const,region:{x:g.region.x,y:g.region.y,width:g.region.width,height:g.region.height},pointerOnly:true as const}}:{}),
     };
   }
   async act(owner: string, lease: string, observationId: string, inputs: RemoteDesktopInput[]) {
@@ -135,15 +151,22 @@ export class DesktopAgentAccess {
     if (g.busy || g.preparing) throw new RpcError("server_busy", "Action is in progress");
     const observed = g.observation;
     delete g.observation;
-    const frame = g.target.frame();
+    const frame = observed?.region?g.target.region?.frame():g.target.frame();
+    const proof=observed?.region&&frame?.info.regions?.find(r=>r.id===observed.region!.id&&r.x===observed.region!.x&&r.y===observed.region!.y&&r.width===observed.region!.width&&r.height===observed.region!.height);
     if (
       !observed ||
       observed.id !== observationId ||
       !frame ||
       performance.now() - frame.at >= 2000 ||
-      digest(frame.image) !== observed.digest
+      frame.info.width!==observed.width||frame.info.height!==observed.height||
+      (observed.region?(!proof||proof.digest!==observed.digest):digest((frame as AgentFrame).image)!==observed.digest)
     )
       throw new RpcError("invalid_params", "Desktop changed; observe and decide again");
+    if(observed.region){
+      const r=observed.region;
+      if(inputs.some(input=>input.kind!=="pointer"||input.x*(observed.width-1)<r.x||input.x*(observed.width-1)>r.x+r.width-1||input.y*(observed.height-1)<r.y||input.y*(observed.height-1)>r.y+r.height-1))
+        throw new RpcError("invalid_params","Regional observations allow pointer inputs inside the verified rectangle only");
+    }
     g.busy = true;
     try {
       for (const input of inputs) {
@@ -153,7 +176,7 @@ export class DesktopAgentAccess {
       }
       return {
         acknowledged: inputs.length,
-        afterFrameSeq: g.target.frame()?.info.seq ?? frame.info.seq,
+        afterFrameSeq: (observed.region?g.target.region?.frame()?.info.seq:g.target.frame()?.info.seq) ?? frame.info.seq,
       };
     } catch (e) {
       if (!g.dead) this.revoke(g.target);
@@ -179,6 +202,7 @@ export class DesktopAgentAccess {
     this.grants.delete(target);
     if (g.lease) this.leases.delete(g.lease);
     for (const [key, value] of this.tickets) if (value === g) this.tickets.delete(key);
+    if(g.region){const id=g.region.id;delete g.region;try{g.target.region?.clear(id);}catch{/* Authority is already destroyed. */}}
     if(g.owner)for(const callback of [...(this.ownerRevoked.get(g.owner)??[])])try{callback();}catch{/* Continue all revocations. */}
     // Revocation remains complete even if a helper cleanup callback throws.
     for(const cleanup of [()=>target.releaseInputs(),()=>target.control(false),()=>target.state(false,0)])try{cleanup();}catch{/* best effort after authority was destroyed */}

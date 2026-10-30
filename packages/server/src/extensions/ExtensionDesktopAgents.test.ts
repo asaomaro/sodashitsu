@@ -335,3 +335,10 @@ it("releases a pending capture immediately and fences its late completion from a
   expect(f.replies.filter((r) => r.type === "ext.result" && r.id === oldId)).toHaveLength(1);
   expect((await f.call("desktop.agent.observe", { leaseId: fresh })).ok).toBe(true);
 });
+
+it("passes an explicit region through the plugin owner boundary",async()=>{
+ const f=fixture(),leaseId=await f.claim(),region={x:0,y:0,width:1,height:1};
+ const refresh=vi.spyOn(f.api,"refresh").mockResolvedValue();
+ expect((await f.call("desktop.agent.observe",{leaseId,region})).ok).toBe(true);
+ expect(refresh).toHaveBeenCalledWith(expect.any(String),leaseId,undefined,region);
+});
