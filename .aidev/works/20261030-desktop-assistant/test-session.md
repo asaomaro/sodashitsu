@@ -417,3 +417,25 @@ AssertionError: expected 'asst-deadbeef' not to be 'asst-deadbeef' // Object.is 
    Start at  11:20:18
    Duration  538ms (transform 73%, import 25%, tests 1%, worker 1%)
 ```
+
+## Corrected full source result
+
+- `pnpm build`: exit0, `/tmp/soda-assistant-session-full-build.log`.
+- `pnpm typecheck`: exit0, `/tmp/soda-assistant-session-full-types.log`.
+- `pnpm exec vitest run --maxWorkers=4`: exit0,12,824 tests passed,346.95s. Raw final output:
+
+```text
+ Test Files  870 passed (870)
+      Tests  12824 passed (12824)
+   Start at  11:20:51
+   Duration  346.95s (tests 82%, import 10%, environment 4%, transform 4%)
+
+Environment  |@sodashitsu/web| happy-dom was created 237 times · 50.07s total, 28% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+```
+
+No full-suite failure remained in this completed B2 run. This does not retroactively classify the stage-A TUI timing failure or the source/main-equivalent browser smoke visibility failure as resolved. The current server-only phase does not rerun the unchanged native/browser UI smoke. Prior native Windows UI limitations remain.
+
+Generated CI for source d0f49c2acd1236ece3f2fc1a8a27fe8fef7699ec: Ubuntu server success (run40991366712, job123854302942). Windows generated keyboard UI/unsigned packaging also succeeded (same run, job123854302496); these are generated checks, not native GUI/device evidence.
