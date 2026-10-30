@@ -318,3 +318,10 @@ undefined
  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test remote-desktop-native-sharing.spec.ts --grep fresh linux-portal
 
 ```
+
+## Final checks/delivery
+
+- Full build/typecheck PASS;895 files/12,992 tests PASS,350.34s.
+- Tested head0f6acbc1b92a4af487bd99957463e3b0ca7f68a0: all3 CI PASS. Browser workflow41051336200/job124047856418 uses actual generated sources and2fresh Chromium OS cases; request sharedDesktop:true, reconnect and decoded canvas pixels all pass. No real OS sources.
+- PR326 main e95204aeb5115c9c67a6eda3f105e726ba6ac521; tree c7e50cff91f031cc50800112bb5240ac07af1ce7 equals tested branch. Negative controls and bytes restoration above. Independent reviews/delta have no remaining findings.
+- Local browser precondition failure above is preserved and not called success; CI provides the positive browser result. No live sessions/agents/models/OS devices/permission/service/driver changes.

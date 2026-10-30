@@ -311,6 +311,79 @@ final class AgentRegionProofs {
     func clear() { specs.removeAll() }
 }
 
+protocol TextClipboardSink {
+    func read() throws -> String
+    func write(_ text: String) throws
+}
+final class PasteboardTextSink: TextClipboardSink {
+    func read() throws -> String {
+        let board=NSPasteboard.general,revision=board.changeCount
+        let value=board.string(forType:.string) ?? ""
+        guard board.changeCount==revision else { throw NativeError("backend_failure") }
+        return value
+    }
+    func write(_ text: String) throws {
+        let board=NSPasteboard.general;board.clearContents()
+        if !text.isEmpty && !board.setString(text,forType:.string) { throw NativeError("backend_failure") }
+    }
+}
+struct TextClipboardTicket { let owner: Int64;let expires: Int64;let started: Double;let deadline: Double }
+struct TextClipboardReply { let value: [String:Any];let ticket: TextClipboardTicket? }
+/** Source-local clipboard generation. Parent source gate serializes commands and final publication. */
+final class TextClipboardGuard {
+    let sink: TextClipboardSink
+    let ceiling: Bool
+    let active: () -> Bool
+    let canWrite: () -> Bool
+    let clock: () -> Int64
+    let monotonic: () -> Double
+    private(set) var generation: Int64=0
+    private(set) var enabled=false
+    private var lastId: Int64=0
+    init(sink: TextClipboardSink,ceiling: Bool,active: @escaping () -> Bool,canWrite: @escaping () -> Bool,clock: @escaping () -> Int64=utcMilliseconds,monotonic: @escaping () -> Double=milliseconds) {
+        self.sink=sink;self.ceiling=ceiling;self.active=active;self.canWrite=canWrite;self.clock=clock;self.monotonic=monotonic
+    }
+    func control(_ value: [String:Any]) throws {
+        guard let next=integer(value["generation"],1,Int64(safeInteger)),let requested=boolean(value["enabled"]) else { throw NativeError("backend_failure") }
+        if next<=generation { return }
+        generation=next;enabled=false
+        let alive=requested && ceiling && active()
+        if generation==next { enabled=alive }
+    }
+    func authorized(_ ticket: TextClipboardTicket) -> Bool {
+        guard ceiling,enabled,ticket.owner==generation else { return false }
+        let alive=active(),utc=clock(),now=monotonic()
+        if !alive && generation==ticket.owner { enabled=false }
+        return alive && ceiling && enabled && ticket.owner==generation && utc<=ticket.expires && now.isFinite && now>=ticket.started && now<=ticket.deadline
+    }
+    func request(_ value: [String:Any]) throws -> [String:Any] { try evaluate(value).value }
+    func evaluate(_ value: [String:Any]) throws -> TextClipboardReply {
+        let started=monotonic(),now=clock()
+        guard let id=integer(value["id"],1,Int64(safeInteger)) else { throw NativeError("backend_failure") }
+        let failure=TextClipboardReply(value:["type":"clipboard_result","id":id,"ok":false],ticket:nil)
+        guard let owner=integer(value["generation"],1,Int64(safeInteger)),let expires=integer(value["expiresAt"],now,now+1500),id>lastId,let operation=value["operation"] as? String else { return failure }
+        // Fix the original budget before active/canWrite perform native queries.
+        let ticket=TextClipboardTicket(owner:owner,expires:expires,started:started,deadline:started+Double(expires-now))
+        guard authorized(ticket) else { return failure }
+        lastId=id
+        do {
+            if operation=="read" {
+                guard authorized(ticket) else { return failure }
+                let text=try sink.read()
+                guard text.utf16.count<=8192,authorized(ticket) else { return failure }
+                return TextClipboardReply(value:["type":"clipboard_result","id":id,"ok":true,"text":text],ticket:ticket)
+            }
+            if operation=="write",let text=value["text"] as? String,text.utf16.count<=8192,canWrite(),authorized(ticket) {
+                try sink.write(text)
+                guard authorized(ticket) else { return failure }
+                return TextClipboardReply(value:["type":"clipboard_result","id":id,"ok":true],ticket:nil)
+            }
+        } catch { return failure }
+        return failure
+    }
+    func clear() { enabled=false;generation+=1 }
+}
+
 final class DesktopSource {
     private let factsOverride: (() -> Bool)?
     init(facts: (() -> Bool)?=nil) { factsOverride=facts }
@@ -318,6 +391,8 @@ final class DesktopSource {
     let gate=NSRecursiveLock()
     var dead=false,ready=false,stopping=false
     var input: InputGuard?
+    var clipboard: TextClipboardGuard?
+    var clipboardCeiling=false
     var display: SCDisplay?
     var bounds=CGRect.zero
     var stamp: DisplayStamp?
@@ -412,7 +487,7 @@ final class DesktopSource {
         if kind=="configure" {
             guard !configured,let options=value["options"] as? [String:Any],
                   let width=integer(options["width"],320,1920),let fps=integer(options["fps"],1,30),let quality=integer(options["quality"],20,90) else { throw NativeError("backend_failure") }
-            for key in ["allowNativeVideo","allowClipboard","allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","allowSystemAudio","separateCursor"] {
+            for key in ["allowNativeVideo","allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","allowSystemAudio","separateCursor"] {
                 if boolean(value[key])==true { throw NativeError("unsupported") }
             }
             if boolean(options["deltas"])==true || boolean(options["adaptive"])==true { throw NativeError("unsupported") }
@@ -421,6 +496,7 @@ final class DesktopSource {
             }
             self.width=Int(width);self.fps=Int(fps);self.quality=Int(quality);initialFPS=self.fps;initialQuality=self.quality
             inputCeiling=boolean(value["allowInput"])==true && CommandLine.arguments.contains("--allow-input") && AXIsProcessTrusted() && CGPreflightPostEventAccess()
+            clipboardCeiling=boolean(value["allowClipboard"])==true && CommandLine.arguments.contains("--allow-clipboard")
             configured=true;configuredAt=milliseconds()
             captureTask=Task { @MainActor in await self.capture() }
             return
@@ -442,6 +518,12 @@ final class DesktopSource {
             else { input.control=keep && sourceActive() }
         case "input":
             if let seq=try input?.input(value) { try output.send(["type":"input_ack","seq":seq]) }
+        case "clipboard_control":
+            guard let clipboard=clipboard else { throw NativeError("unsupported") };try clipboard.control(value)
+        case "clipboard":
+            guard let clipboard=clipboard else { throw NativeError("unsupported") }
+            let reply=try clipboard.evaluate(value)
+            try output.send(reply.value,valid:{ reply.value["text"]==nil || (reply.ticket.map { clipboard.authorized($0) } ?? false) })
         case "policy":
             guard let fps=integer(value["fps"],1,Int64(initialFPS)),let quality=integer(value["quality"],20,Int64(initialQuality)) else { throw NativeError("backend_failure") };self.fps=Int(fps);self.quality=Int(quality)
         default:throw NativeError("backend_failure")
@@ -470,6 +552,9 @@ final class DesktopSource {
             input=InputGuard(sink:QuartzSink(bounds:bounds,active:{ [weak self] in self?.sourceActive()==true }),allowed:inputCeiling,active:{ [weak self] in
                 guard let self=self else { return false };return self.ready && milliseconds()-self.lastCapture<1500 && self.sourceActive()
             },releaseAllowed:{ [weak self] in self?.sourceActive()==true })
+            clipboard=TextClipboardGuard(sink:PasteboardTextSink(),ceiling:clipboardCeiling,active:{ [weak self] in
+                guard let self=self else { return false };return self.ready && milliseconds()-self.lastHeartbeat<8000 && self.sourceActive()
+            },canWrite:{ [weak self] in self?.inputCeiling==true && self?.sourceActive()==true })
             while !dead && !Task.isCancelled {
                 let ticket=locked { FrameTicket(revision:input!.revision,started:milliseconds(),inputSeq:input!.seq) }
                 guard sourceActive() else { throw NativeError("source_changed") }
@@ -486,7 +571,7 @@ final class DesktopSource {
                         guard canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) else { return }
                         if !ready {
                             ready=true
-                            try output.send(["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]])
+                            try output.send(["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]])
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
                         sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
@@ -504,7 +589,7 @@ final class DesktopSource {
     }
     func stop(_ code: String?) {
         locked {
-            if dead || stopping { return };stopping=true;input?.release();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
+            if dead || stopping { return };stopping=true;input?.release();clipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
             output.finish { Darwin.exit(code==nil ? 0 : 1) }
@@ -513,6 +598,12 @@ final class DesktopSource {
     }
 }
 
+final class GeneratedTextClipboard: TextClipboardSink {
+    var text="generated clipboard",reads=0,writes=0
+    var afterRead: (() -> Void)?
+    func read() throws -> String { reads+=1;afterRead?();return text }
+    func write(_ text: String) throws { writes+=1;self.text=text }
+}
 final class GeneratedSink: EventSink {
     var events=[InjectedEvent]()
     func post(_ event: InjectedEvent) throws { events.append(event) }
@@ -546,6 +637,31 @@ func generatedTests() throws -> Int {
     do { try regional.configure([spec.merging(["x":3]) { _,new in new }],width:4,height:4) } catch { invalidRejected=true }
     try check(invalidRejected && regional.specs.count==1,"regional invalid configuration is atomic")
     regional.clear();try check(regional.specs.isEmpty,"regional cleanup")
+    let clipboardSink=GeneratedTextClipboard();var clipboardAlive=true,clipboardNow:Int64=1000,writePermitted=true,clipboardMono:Double=0,writeDelay:Double=0,activeDelay:Double=0
+    var clipboardHook: (() -> Void)?
+    let clipboard=TextClipboardGuard(sink:clipboardSink,ceiling:true,active:{clipboardMono+=activeDelay;activeDelay=0;let hook=clipboardHook;clipboardHook=nil;hook?();return clipboardAlive},canWrite:{clipboardMono+=writeDelay;return writePermitted},clock:{clipboardNow},monotonic:{clipboardMono})
+    func clip(_ id: Int64,_ operation: String,_ owner: Int64=1,_ expires: Int64=1400,_ text: String="copy") -> [String:Any] { ["type":"clipboard","id":id,"operation":operation,"generation":owner,"expiresAt":expires,"text":text] }
+    let beforeGrant=try clipboard.request(clip(1,"read"));try check(beforeGrant["ok"] as? Bool==false && clipboardSink.reads==0,"clipboard explicit grant required")
+    try clipboard.control(["generation":1,"enabled":true])
+    let read=try clipboard.request(clip(1,"read"));try check(read["text"] as? String=="generated clipboard","clipboard granted read")
+    let copied=try clipboard.request(clip(2,"write",1,1400,"日本語😀"));try check(copied["ok"] as? Bool==true && clipboardSink.text=="日本語😀","clipboard granted Unicode write")
+    let clipboardReplay=try clipboard.request(clip(2,"write"));try check(clipboardReplay["ok"] as? Bool==false && clipboardSink.writes==1,"clipboard request not replayed")
+    writePermitted=false;let readOnly=try clipboard.request(clip(3,"write"));try check(readOnly["ok"] as? Bool==false && clipboardSink.writes==1,"clipboard write requires input ceiling")
+    writePermitted=true;let oversized=try clipboard.request(clip(4,"write",1,1400,String(repeating:"😀",count:4097)));try check(oversized["ok"] as? Bool==false,"clipboard UTF16 size bound")
+    clipboardSink.text=String(repeating:"a",count:8193);let tooMuch=try clipboard.request(clip(5,"read"));try check(tooMuch["ok"] as? Bool==false && tooMuch["text"]==nil,"clipboard oversized read discarded");clipboardSink.text="valid"
+    clipboardSink.afterRead={clipboardAlive=false};let lost=try clipboard.request(clip(6,"read"));try check(lost["ok"] as? Bool==false && lost["text"]==nil,"clipboard revoked during read is not published")
+    clipboardAlive=true;try clipboard.control(["generation":2,"enabled":true]);clipboardSink.afterRead={clipboardNow=1500};let clipboardExpired=try clipboard.request(clip(7,"read",2));try check(clipboardExpired["ok"] as? Bool==false && clipboardExpired["text"]==nil,"clipboard deadline rechecked after read")
+    clipboardNow=1000;clipboardSink.afterRead={clipboardNow=900;clipboardMono=500};let monoExpired=try clipboard.request(clip(8,"read",2));try check(monoExpired["ok"] as? Bool==false && monoExpired["text"]==nil,"clipboard monotonic deadline survives wall clock rollback");clipboardMono=0;clipboardNow=1000;clipboardSink.afterRead=nil;try clipboard.control(["generation":3,"enabled":false]);try clipboard.control(["generation":2,"enabled":true])
+    let old=try clipboard.request(clip(9,"read",2));try check(old["ok"] as? Bool==false && !clipboard.enabled,"clipboard generation cannot resurrect")
+    try clipboard.control(["generation":4,"enabled":true]);try check(!clipboard.authorized(TextClipboardTicket(owner:1,expires:1400,started:0,deadline:400)),"clipboard queued old generation invalidated");
+    let readsBefore=clipboardSink.reads,writesBefore=clipboardSink.writes
+    activeDelay=500;let slowRead=try clipboard.request(clip(10,"read",4));try check(slowRead["ok"] as? Bool==false && clipboardSink.reads==readsBefore,"clipboard native source query consumes original read budget")
+    activeDelay=0;clipboardMono=0;writeDelay=500;let slowWrite=try clipboard.request(clip(11,"write",4));try check(slowWrite["ok"] as? Bool==false && clipboardSink.writes==writesBefore,"clipboard native write query cannot extend deadline")
+    writeDelay=0;clipboardMono=0;let queued=try clipboard.evaluate(clip(12,"read",4));try check(queued.ticket != nil,"clipboard queued read has original ticket")
+    activeDelay=500;try check(!clipboard.authorized(queued.ticket!),"clipboard queued publisher rechecks native query time");activeDelay=0
+    clipboardMono=0;try clipboard.control(["generation":5,"enabled":true]);let beforeRevokeReads=clipboardSink.reads
+    clipboardHook={clipboard.clear()};let revokedQuery=try clipboard.request(clip(13,"read",5));try check(revokedQuery["ok"] as? Bool==false && clipboardSink.reads==beforeRevokeReads,"clipboard source query cannot resurrect revoked grant")
+    clipboard.clear();try check(!clipboard.enabled,"clipboard teardown")
     try check(integer(1.5,0,5)==nil,"reject fractional integer")
     try check(boolean(1)==nil,"reject numeric boolean")
     try check(normalized(Double.nan)==nil,"reject nonfinite coordinates")
