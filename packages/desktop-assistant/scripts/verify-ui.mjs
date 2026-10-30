@@ -59,6 +59,7 @@ try {
       serverOrigin: "http://127.0.0.1:7780",
       launchAtLogin: false,
       mute: false,
+      remoteNotifications:true,
       allowPluginCharacters:false,allowPluginViews:false,allowPluginActions:false,
       ocrEnabled: false, ocrExecutable: "", ocrLanguage: "jpn+eng",
       transcriptionEnabled: false,

@@ -8,6 +8,7 @@ import { getCACertificates } from "node:tls";
 import WebSocket from "ws";
 
 export type AssistantMethod =
+  | "machine.list"
   | "assistant.apps"
   | "assistant.app_open"
   | "assistant.app_call"
@@ -33,6 +34,7 @@ interface Socket {
   terminate(): unknown;
 }
 export interface AssistantRpcOptions {
+  machineId?: string;
   cookie(origin: string): Promise<string | null>;
   status(connected: boolean): void;
   changed(): void;
@@ -63,6 +65,8 @@ export class AssistantRpc {
     private readonly options: AssistantRpcOptions,
   ) {
     this.origin = desktopAssistantOrigin(origin);
+    if (options.machineId && !/^[a-f0-9]{32}$/.test(options.machineId))
+      throw Error("Invalid machine id");
   }
   start(): void {
     if (!this.stopped) return;
@@ -182,6 +186,7 @@ export class AssistantRpc {
         return;
       }
       const url = new URL("/ws", this.origin);
+      if (this.options.machineId) url.searchParams.set("machine", this.options.machineId);
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
       const authorities =
         url.protocol === "wss:"

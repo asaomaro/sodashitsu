@@ -889,3 +889,76 @@ it("imports only previewed PNG assets and falls back immediately when character 
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   await fixture.handlers.get("assistant:character-pack-remove")!(event, { id: "custom" });
 });
+it("routes a remote notice reply through its registered machine and revokes it without local fallback", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    remoteNotifications: true,
+  });
+  const hub = fixture.controls.at(-1)!,
+    machineId = "a".repeat(32);
+  hub.request.mockImplementation(async (method: string) =>
+    method === "machine.list"
+      ? { machines: [{ id: machineId, label: "sr-pc", state: "online" }] }
+      : method === "assistant.get"
+        ? null
+        : { kinds: [] },
+  );
+  hub.options.status(true);
+  await vi.waitFor(() =>
+    expect(
+      fixture.controls.some((control) => (control.options as any).machineId === machineId),
+    ).toBe(true),
+  );
+  const remote = fixture.controls.find(
+    (control) => (control.options as any).machineId === machineId,
+  )!;
+  const connection = fixture.connections.find(
+    (connection) => (connection.options as any).machineId === machineId,
+  )!;
+  const notice = {
+    id: "00000000-0000-4000-8000-000000000091",
+    key: "blocked:generated:1",
+    source: {
+      serverOrigin: "http://127.0.0.1:7780",
+      machineId,
+      paneId: "00000000-0000-4000-8000-000000000001",
+      workspaceId: "00000000-0000-4000-8000-000000000002",
+      agentInstanceId: "00000000-0000-4000-8000-000000000003",
+    },
+    kind: "attention",
+    title: "worker",
+    message: "確認してください",
+    at: 1,
+  };
+  remote.request.mockImplementation(async () => ({
+    paneId: notice.source.paneId,
+    workspaceId: notice.source.workspaceId,
+    agent: { instanceId: notice.source.agentInstanceId },
+  }));
+  connection.options.changed([notice], true);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  await fixture.handlers.get("assistant:source-key")!(local, { noticeId: notice.id, keyName: "y" });
+  expect(remote.request).toHaveBeenCalledWith("assistant.reply_key", {
+    source: { ...notice.source, machineId: "local" },
+    key: notice.key,
+    keyName: "y",
+  });
+  expect(hub.request.mock.calls.some((call) => call[0] === "assistant.reply_key")).toBe(false);
+  await fixture.handlers.get("assistant:source-open")!(local, { noticeId: notice.id });
+  expect(fixture.windows.at(-1)!.url).toContain(`assistantMachine=${machineId}`);
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    remoteNotifications: false,
+  });
+  await expect(
+    fixture.handlers.get("assistant:source-key")!(local, { noticeId: notice.id, keyName: "y" }),
+  ).rejects.toThrow("対象");
+  expect(remote.stop).toHaveBeenCalled();
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});

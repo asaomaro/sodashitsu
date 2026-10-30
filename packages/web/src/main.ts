@@ -1,4 +1,5 @@
-import {assistantPanelGuard}from"./actions/assistantPanelGuard.js";
+import { assistantPanelTarget } from "./actions/assistantPanelLink.js";
+import { assistantPanelGuard } from "./actions/assistantPanelGuard.js";
 import { useViewerTabsStore } from "./store/viewerTabs.js";
 import { LocalClientFactoryKey } from "./injection.js";
 import { loadStatuslineSettings, TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
@@ -18,7 +19,24 @@ import App from "./App.vue";
 import { ActionDispatcher } from "./actions/ActionDispatcher.js";
 import { installKeepFocusRelease } from "./display/displayOps.js";
 import { installEngageGuard } from "./display/engageGuard.js";
-import { ActionDispatcherKey, AskControllerKey, ConnectionKey, ExtensionControllerKey, DisplayControllerKey, DisplayHostKey, type DisplayHost, DeviceKindKey, FileTransferKey, GraphTerminalControllerKey, KeyInputControllerKey, TerminalHostKey, MachineSwitcherKey, NotificationControllerKey, TerminalRegistryKey, ViewSyncKey } from "./injection.js";
+import {
+  ActionDispatcherKey,
+  AskControllerKey,
+  ConnectionKey,
+  ExtensionControllerKey,
+  DisplayControllerKey,
+  DisplayHostKey,
+  type DisplayHost,
+  DeviceKindKey,
+  FileTransferKey,
+  GraphTerminalControllerKey,
+  KeyInputControllerKey,
+  TerminalHostKey,
+  MachineSwitcherKey,
+  NotificationControllerKey,
+  TerminalRegistryKey,
+  ViewSyncKey,
+} from "./injection.js";
 import { focusPaneIfShown, workPaneForDisplay } from "./actions/paneFocus.js";
 import { MachineSwitcher } from "./actions/MachineSwitcher.js";
 import { MachineWiring } from "./actions/MachineWiring.js";
@@ -30,7 +48,11 @@ import { MachineSummaryClient } from "@sodashitsu/client-core";
 import { LOCAL_MACHINE_ID, wsUrlFor } from "@sodashitsu/client-core";
 import { useMachinesStore } from "./store/machines.js";
 import { useGraphStore } from "./store/graph.js";
-import { acceptsMainGraphEvent, createGraphPort, reloadsOnMainOpened } from "./store/graphRouting.js";
+import {
+  acceptsMainGraphEvent,
+  createGraphPort,
+  reloadsOnMainOpened,
+} from "./store/graphRouting.js";
 import { KeyInputController } from "./keys/KeyInputController.js";
 import { KeyboardLockController } from "./keys/KeyboardLockController.js";
 import { KeyRouter } from "@sodashitsu/client-core";
@@ -65,7 +87,15 @@ import { sweepMarkSeen, useSeenStore } from "./store/seen.js";
 import { useSessionStore } from "./store/session.js";
 import { useOnboardingStore } from "./store/onboarding.js";
 import { useSettingsStore } from "./store/settings.js";
-import { isPrefsMigrated, markPrefsMigrated, onPrefsWritten, readPrefs, replaceSharedPrefs, sharedPrefsOf, useViewStore } from "./store/view.js";
+import {
+  isPrefsMigrated,
+  markPrefsMigrated,
+  onPrefsWritten,
+  readPrefs,
+  replaceSharedPrefs,
+  sharedPrefsOf,
+  useViewStore,
+} from "./store/view.js";
 import { applyPrefsToStores } from "./store/prefsApply.js";
 import { useAgentIntegrationsStore } from "./store/agentIntegrations.js";
 import { isMacPlatform, MouseBridge } from "./term/MouseBridge.js";
@@ -105,8 +135,26 @@ let lastScriptNoticeAt = -Infinity;
 // 保存した SSH のマシン（20260927-multi-host-machines）。モバイルの 1 列の画面では使わない（手元のマシンだけ。今までどおり）。
 // 1 列かは窓の幅で変わる（`App.vue` と同じ media query）ので、変化を購読する。
 const machines = useMachinesStore(pinia);
-const updateAssistantPanel=assistantPanelGuard({model:()=>({panes:session.panes,tabs:session.tabs,workspaces:session.workspaces}),connected:()=>view.connectionState==="open",focus:(pane,tab)=>{view.setScreen("base");view.setView(tab.workspaceId,tab.id);view.focusPane(pane.id);}});
-watchEffect(updateAssistantPanel,{flush:"sync"});
+const assistantPinnedMachine = (() => {
+  try {
+    const target = assistantPanelTarget(window.location.hash);
+    return target && target.assistantMachine !== "local" ? target.assistantMachine : undefined;
+  } catch {
+    return undefined;
+  }
+})();
+const updateAssistantPanel = assistantPanelGuard({
+  machine: () => machines.selectedId,
+  switchMachine: (id) => machineSwitcherBox.current?.switchTo(id),
+  model: () => ({ panes: session.panes, tabs: session.tabs, workspaces: session.workspaces }),
+  connected: () => view.connectionState === "open",
+  focus: (pane, tab) => {
+    view.setScreen("base");
+    view.setView(tab.workspaceId, tab.id);
+    view.focusPane(pane.id);
+  },
+});
+watchEffect(updateAssistantPanel, { flush: "sync" });
 const mobileViewport = trackMediaQuery(mobileViewportQuery());
 // 初回の案内を出すかは、接続より前（同じ読み込みの中で痕跡が書かれる前）に 1 回だけ決める（20260926-settings-onboarding の D4）。
 useOnboardingStore(pinia);
@@ -130,7 +178,8 @@ const prefsSyncBox: { current?: PrefsSync } = {};
 const notificationsBox: { current?: NotificationController } = {};
 const sinkProxy: TerminalSinkPort = {
   onOutput: (paneId, chunk) => registryBox.current?.onOutput(paneId, chunk),
-  onSnapshot: (paneId, cols, rows, text) => registryBox.current?.onSnapshot(paneId, cols, rows, text),
+  onSnapshot: (paneId, cols, rows, text) =>
+    registryBox.current?.onSnapshot(paneId, cols, rows, text),
   onSizeChanged: (paneId, cols, rows) => registryBox.current?.onSizeChanged(paneId, cols, rows),
 };
 
@@ -142,12 +191,18 @@ const storeAdapter = new StoreAdapter({
   // サーバの英語の固定文（`message`）は出さず、code から日本語の文言を引く（D107）。
   onClientError: (code) => view.toast(clientErrorMessage(code)),
   // ほかのマシンを選んでいる間の「開く前に閉じた」は、マシンが繋がっていない（503）ことが多く、Origin の拒否の手がかりにならない。
-  onOriginRejectSuspected: (suspected) => view.setOriginRejectSuspected(suspected && machines.selectedId === LOCAL_MACHINE_ID),
+  onOriginRejectSuspected: (suspected) =>
+    view.setOriginRejectSuspected(suspected && machines.selectedId === LOCAL_MACHINE_ID),
   // 通知（20260920-agent-notifications）。**`notifications` はこの後で作る**ので、遅延で参照する。
-  onAgentChanged: (paneId, prev, next) => notificationsBox.current?.onAgentChanged(paneId, prev, next),
+  onAgentChanged: (paneId, prev, next) =>
+    notificationsBox.current?.onAgentChanged(paneId, prev, next),
   // 窓の pane の直結を、別のクライアントが奪った（20261008-graph-first の X7）。窓は W2 の表示に替わる。
-  onPaneAttachChanged: (paneId, clientId) => graphTerminalBox.current?.onAttachChanged(paneId, clientId),
-  onSnapshotApplied: (panes, first) => {notificationsBox.current?.onSnapshotApplied(panes, first); queueMicrotask(updateAssistantPanel);},
+  onPaneAttachChanged: (paneId, clientId) =>
+    graphTerminalBox.current?.onAttachChanged(paneId, clientId),
+  onSnapshotApplied: (panes, first) => {
+    notificationsBox.current?.onSnapshotApplied(panes, first);
+    queueMicrotask(updateAssistantPanel);
+  },
   onPaneClosed: (paneId) => notificationsBox.current?.onPaneClosed(paneId),
   onAgentIntegrationChanged: (status) => useAgentIntegrationsStore(pinia).setStatus(status),
   // 利用状況の差分（20261010-agent-usage PR3）。ダッシュボードが見えている間（`agent.usage_watch` で頼んだ間）だけ届く。
@@ -170,7 +225,7 @@ const storeAdapter = new StoreAdapter({
     if (acceptsMainGraphEvent(machines.selectedId)) graph.applyEvent(e);
   },
   // 質問のフォーム（20261002-sodactl-ask）。`askController` はこの後で作るので、遅延で参照する。
-  onNotificationState:state=>notifications.onSharedNotification(state),
+  onNotificationState: (state) => notifications.onSharedNotification(state),
   onAskEvent: (e) => askController.onEvent(e),
   // 拡張（20261007-ext-host）。`extensionController` はこの後で作るので、遅延で参照する。
   onExtensionChanged: () => extensionController.onChanged(),
@@ -178,7 +233,13 @@ const storeAdapter = new StoreAdapter({
   onDisplayEvent: (e) => displayController.onEvent(e),
 });
 
-const connection = new Connection({ kind, httpOrigin, wsUrl, store: storeAdapter, sink: sinkProxy });
+const connection = new Connection({
+  kind,
+  httpOrigin,
+  wsUrl,
+  store: storeAdapter,
+  sink: sinkProxy,
+});
 const conn: ConnectionPort = connection;
 
 /**
@@ -190,7 +251,8 @@ graph.bind(
   createGraphPort({
     selectedId: () => machines.selectedId,
     main: conn,
-    localSummary: () => machineWiringBox.current?.summaryClient(LOCAL_MACHINE_ID) as MachineSummaryClient | undefined,
+    localSummary: () =>
+      machineWiringBox.current?.summaryClient(LOCAL_MACHINE_ID) as MachineSummaryClient | undefined,
   }),
 );
 // 接続のたびに取り直す（切れている間の変化を取りこぼさない）。上限の知らせ（AC11）のため、画面を開いていなくても持つ。
@@ -209,11 +271,21 @@ setOptionComposes(isMacPlatform());
 const navigateMode = new NavigateMode(settings.navigateKeymap);
 const router = new KeyRouter(
   settings.keymap,
-  { now: () => Date.now(), setTimeout: (fn, ms) => window.setTimeout(fn, ms), clearTimeout: (h) => window.clearTimeout(h as number) },
+  {
+    now: () => Date.now(),
+    setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimeout: (h) => window.clearTimeout(h as number),
+  },
   { navigate: navigateMode, copy: new CopyMode(), resize: new ResizeMode() },
 );
-watch(() => settings.keymap, (keymap) => router.setKeymap(keymap));
-watch(() => settings.navigateKeymap, (keymap) => navigateMode.setKeymap(keymap));
+watch(
+  () => settings.keymap,
+  (keymap) => router.setKeymap(keymap),
+);
+watch(
+  () => settings.navigateKeymap,
+  (keymap) => navigateMode.setKeymap(keymap),
+);
 const keys = new KeyInputController(router, inputGate);
 
 const renderers = new RendererPool({ capacity: webglCapacity });
@@ -237,16 +309,30 @@ const terminalOptions: Partial<ITerminalOptions> = {};
  * その端末を作ったときの値を使う（D6。途中で設定を変えても xterm の容量と求める行数を食い違わせない。
  * 以前の xterm.js は既定の 1,000 行で、それを超える分を捨てていた——D107）。
  */
-const getScrollbackLines = (): number => effectiveScrollback(settings.scrollback, kind, session.limits.scrollbackLines);
+const getScrollbackLines = (): number =>
+  effectiveScrollback(settings.scrollback, kind, session.limits.scrollbackLines);
 
 // 質問のフォーム（20261002-sodactl-ask）。`inputGate` は素通しの接続（要求だけを使う）。接続のたびに `ask.subscribe` して待っている質問を受け取る（下の `onOpened`）。
-const askController = new AskController({ conn: inputGate, store: useAskStore(pinia), toast: (message) => view.toast(message) });
+const askController = new AskController({
+  conn: inputGate,
+  store: useAskStore(pinia),
+  toast: (message) => view.toast(message),
+});
 
 // 拡張（20261007-ext-host）。接続のたびに `extension.list` で一覧を取り、`extension.changed` で取り直す。
-const extensionController = new ExtensionController({ conn: inputGate, store: useExtensionsStore(pinia), toast: (message) => view.toast(message) });
+const extensionController = new ExtensionController({
+  conn: inputGate,
+  store: useExtensionsStore(pinia),
+  toast: (message) => view.toast(message),
+});
 
 // 表示の面（20261007-soda-extensions）。接続のたびに `display.subscribe` して名乗り、全 pane の面の見出しを受け取る（下の `onOpened`）。
-const displayController = new DisplayController({ conn: inputGate, store: useDisplayStore(pinia), toast: (message) => view.toast(message), livePaneIds: () => new Set(session.panes.keys()) });
+const displayController = new DisplayController({
+  conn: inputGate,
+  store: useDisplayStore(pinia),
+  toast: (message) => view.toast(message),
+  livePaneIds: () => new Set(session.panes.keys()),
+});
 
 // クリップボードの画像の貼り付け（20260927-clipboard-image-paste。herdr の remote_image_paste）。入力は関所を通し、送っている間のキーを溜める。
 // `registry` は下で作る（呼ばれるのは pane を acquire した後）。
@@ -311,7 +397,14 @@ registryBox.current = registry;
  */
 const terminalHost = new TerminalHost({ registry, conn: inputGate, getScrollbackLines });
 const graphTerminals = useGraphTerminalsStore(pinia);
-const graphTerminal = new GraphTerminalController({ conn: inputGate, host: terminalHost, registry, store: graphTerminals, session, view });
+const graphTerminal = new GraphTerminalController({
+  conn: inputGate,
+  host: terminalHost,
+  registry,
+  store: graphTerminals,
+  session,
+  view,
+});
 graphTerminalBox.current = graphTerminal;
 
 /**
@@ -321,7 +414,10 @@ graphTerminalBox.current = graphTerminal;
 const themeController = new ThemeController({
   settings,
   root: document.documentElement,
-  media: typeof window.matchMedia === "function" ? window.matchMedia("(prefers-color-scheme: dark)") : null,
+  media:
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-color-scheme: dark)")
+      : null,
   setTerminalTheme: (palette) => registry.setTheme(toXtermTheme(palette)),
   sendTheme: (theme) => void conn.request("client.theme", { theme }).catch(() => undefined),
   storage: (() => {
@@ -356,7 +452,11 @@ const viewSync = new ViewSync({ conn, registry, getScrollbackLines });
 // 購読を張り直す（D107）。サーバは接続ごとに新しい clientId を振り、前の接続の購読・表示・fit を引き継がない。
 connection.onOpened(() => viewSync.onConnectionOpened());
 // 利用状況の配信（20261010-agent-usage PR3・PR4）。ダッシュボードか pane の利用状況の窓が見えていて、タブが前面で、接続が開いている間だけ、サーバへ頼む（見ている、の数え方は 1 つ）。
-const usageWanted = () => view.usageWatchWanted || (view.screen === "base" && loadStatuslineSettings(settings.statuslineSettings).enabled && [...session.panes.values()].some((p) => p.tabId === view.tabId && p.agent && !p.virtual));
+const usageWanted = () =>
+  view.usageWatchWanted ||
+  (view.screen === "base" &&
+    loadStatuslineSettings(settings.statuslineSettings).enabled &&
+    [...session.panes.values()].some((p) => p.tabId === view.tabId && p.agent && !p.virtual));
 const usageController = new UsageController({
   conn,
   store: useUsageStore(pinia),
@@ -413,8 +513,8 @@ connection.onClosed(() => prefsSync.onClosed());
 // 通知（20260920-agent-notifications）。`registry`（表示中の pane を引く）より後、
 // `ActionDispatcher`（`prefix+o` の行き先に使う）より前にしか置けない。
 const notifications = new NotificationController({
-  loadShared:()=>conn.request("notification.state",{}),
-  updateShared:n=>conn.request("notification.update",n),
+  loadShared: () => conn.request("notification.state", {}),
+  updateShared: (n) => conn.request("notification.update", n),
   pinia,
   desktop: new DesktopNotifier(),
   sound: new ToneSound(),
@@ -439,7 +539,10 @@ window.addEventListener("focus", () => notifications.showHintIfDue());
 // **結線を足す前より悪くなる**（タップ 1 回 → 放置 → 最初の知らせ、が鳴らなくなる。タスク点検 T24 の指摘）。
 // モバイルは OS 通知を出せない（research F79）ので、音が唯一の経路になる。
 for (const type of ["pointerdown", "pointerup", "keydown"] as const) {
-  window.addEventListener(type, () => notifications.noteUserGesture(), { capture: true, passive: true });
+  window.addEventListener(type, () => notifications.noteUserGesture(), {
+    capture: true,
+    passive: true,
+  });
 }
 
 notificationsBox.current = notifications;
@@ -452,21 +555,55 @@ const viewerTabsWaiters = new Set<() => void>();
 function waitForViewerTabs(): Promise<void> {
   if (viewerTabsConnected) return Promise.resolve();
   return new Promise((resolve, reject) => {
-    const ready = () => { clearTimeout(timer); viewerTabsWaiters.delete(ready); resolve(); };
-    const timer = setTimeout(() => { viewerTabsWaiters.delete(ready); reject(new Error("操作元の接続を待っています")); }, 5000);
+    const ready = () => {
+      clearTimeout(timer);
+      viewerTabsWaiters.delete(ready);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      viewerTabsWaiters.delete(ready);
+      reject(new Error("操作元の接続を待っています"));
+    }, 5000);
     viewerTabsWaiters.add(ready);
   });
 }
-const viewerTabsClient = new MachineSummaryClient({ wsUrl, onSnapshot: () => undefined,
-  onConnected: connected => { viewerTabsConnected = connected; if (connected) for (const ready of [...viewerTabsWaiters]) ready(); }, onOpened: () => { void viewerTabs.refresh().catch(() => undefined); },
-  onEvent: e => { if (e.event === "prefs.changed") viewerTabs.apply(e.data.prefs.viewerTabs, e.data.rev); },
+const viewerTabsClient = new MachineSummaryClient({
+  wsUrl,
+  onSnapshot: () => undefined,
+  onConnected: (connected) => {
+    viewerTabsConnected = connected;
+    if (connected) for (const ready of [...viewerTabsWaiters]) ready();
+  },
+  onOpened: () => {
+    void viewerTabs.refresh().catch(() => undefined);
+  },
+  onEvent: (e) => {
+    if (e.event === "prefs.changed") viewerTabs.apply(e.data.prefs.viewerTabs, e.data.rev);
+  },
 });
-viewerTabs.connect({ request: async (method, params) => { await waitForViewerTabs(); return viewerTabsClient.request(method, params); } });
-connection.onOpened(() => { viewerTabsClient.stop(); viewerTabsClient.start(); });
+viewerTabs.connect({
+  request: async (method, params) => {
+    await waitForViewerTabs();
+    return viewerTabsClient.request(method, params);
+  },
+});
+connection.onOpened(() => {
+  viewerTabsClient.stop();
+  viewerTabsClient.start();
+});
 window.addEventListener("pagehide", () => viewerTabsClient.stop());
 window.addEventListener("pageshow", () => viewerTabsClient.start());
 
-const actionDispatcher = new ActionDispatcher({ conn, pinia, registry, keys, input: inputGate, notifications, imagePaste: imagePaster, extensionReload: () => void extensionController.reload(true) });
+const actionDispatcher = new ActionDispatcher({
+  conn,
+  pinia,
+  registry,
+  keys,
+  input: inputGate,
+  notifications,
+  imagePaste: imagePaster,
+  extensionReload: () => void extensionController.reload(true),
+});
 actionDispatcherBox.current = actionDispatcher;
 
 /** サイドバーの workspace の選択と同じ（同じマシンのとき。`Sidebar.vue` の `focusWorkspace`）。 */
@@ -508,7 +645,8 @@ const machineSwitcher = new MachineSwitcher({
   disposeTerminals: () => registry.disposeAll(),
   retarget: (url) => connection.retarget(url),
   wsUrlFor: (id) => wsUrlFor(wsUrl, id),
-  requestWorkspaceFocus: (workspaceId) => void conn.request("workspace.focus", { workspaceId }).catch(() => undefined),
+  requestWorkspaceFocus: (workspaceId) =>
+    void conn.request("workspace.focus", { workspaceId }).catch(() => undefined),
   requestPaneFocus: (paneId) =>
     void focusPaneIfShown(
       {
@@ -532,19 +670,31 @@ const machineWiring = new MachineWiring({
   createSummaryClient: (opts) => new MachineSummaryClient(opts),
   baseWsUrl: wsUrl,
   mobileViewport,
-  onLocalPairing: e=>storeAdapter.applyEvent(e),
+  pinnedMachine: assistantPinnedMachine,
+  onLocalPairing: (e) => storeAdapter.applyEvent(e),
   onLocalGraphEvent: (e) => graph.applyEvent(e),
   onLocalOpened: () => void graph.load(),
   graphOpen: toRef(view, "graphVisible"),
 });
 machineWiringBox.current = machineWiring;
-watch([() => machines.selectedId, () => machines.machines.map((m) => m.id).join("\n"), mobileViewport, () => view.graphVisible], () => machineWiring.reconcileSummaryClients());
+watch(
+  [
+    () => machines.selectedId,
+    () => machines.machines.map((m) => m.id).join("\n"),
+    mobileViewport,
+    () => view.graphVisible,
+  ],
+  () => machineWiring.reconcileSummaryClients(),
+);
 // 窓の幅が 1 列の画面かを、画面の状態（`view.screen`・1 列のグラフのダイアログ）へ伝える。1 列になったら基本画面へ戻る（D13）。
 watch(mobileViewport, (mobile) => view.setMobileViewport(mobile), { immediate: true });
 // 1 列の画面になったらローカルへ戻り一覧を空にする（サイドバーにマシンの見出しが無く戻れなくなるため）。広げたら一覧を読み直す。
 watch(mobileViewport, (mobile) => machineWiring.onMobileChanged(mobile));
 // 1 列の画面でも連携のグラフ画面を開いている間は、別のマシンのノードの状態を出すため一覧と軽い接続を保つ（統合レビュー R1）。
-watch(() => view.graphVisible, (open) => machineWiring.onGraphOpenChanged(open));
+watch(
+  () => view.graphVisible,
+  (open) => machineWiring.onGraphOpenChanged(open),
+);
 // デスクトップのグラフの画面が出ている間は、グラフの面の外にフォーカスがあるときの prefix の 2 打目を、グラフの画面で意味のあるものだけに絞る（見えない基本画面を変えない。D52）。
 keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnNonBaseScreen(decision));
 // グラフの上の端末の窓にフォーカスがある間（端末の道）は、見えない基本画面の構成を変える操作と、選んでいる pane を動かす操作を食う（X2）。`prefix+a` は「グラフの面へ戻る」に読み替える（X1）。
@@ -557,13 +707,24 @@ keys.setTerminalKeyFilter((paneId, decision) => {
   }
   return isAllowedInTerminalWindow(decision);
 });
-keys.bind({ action: actionDispatcher, focus: actionDispatcher, mode: { onModeChange: (m,target) => {view.numberTarget=target??"tab";view.onModeChange(m); } }, imagePaste: imagePaster });
+keys.bind({
+  action: actionDispatcher,
+  focus: actionDispatcher,
+  mode: {
+    onModeChange: (m, target) => {
+      view.numberTarget = target ?? "tab";
+      view.onModeChange(m);
+    },
+  },
+  imagePaste: imagePaster,
+});
 
 // Windows のホストなら ConPTY 向けのオプションを足す（design「エージェントの argv[0]」隣接。H-cfg 相当）。
 watch(
   () => session.host,
   (host) => {
-    if (host?.os === "windows") terminalOptions.windowsPty = { backend: "conpty", buildNumber: host.windowsBuild ?? 0 };
+    if (host?.os === "windows")
+      terminalOptions.windowsPty = { backend: "conpty", buildNumber: host.windowsBuild ?? 0 };
     // マシンを切り替えて Windows でないホストになったら外す（ホストはマシンごと。20260927-multi-host-machines）。
     else if (host) delete terminalOptions.windowsPty;
   },
@@ -625,18 +786,34 @@ window.addEventListener("keydown", (ev) => {
 // reactive ではないため、`nextTick()` の後に読む（`TerminalRegistry.ts` の契約どおり）。
 function markVisibleAgentsSeen(): void {
   void nextTick(() => {
-    sweepMarkSeen(session.panes.values(), (paneId) => registry.isVisible(paneId), document.hasFocus(), seen.markSeen);
+    sweepMarkSeen(
+      session.panes.values(),
+      (paneId) => registry.isVisible(paneId),
+      document.hasFocus(),
+      seen.markSeen,
+    );
   });
 }
-watch(() => [...session.panes.values()].map((p) => p.agent?.completionSeq ?? -1), markVisibleAgentsSeen, { deep: true });
+watch(
+  () => [...session.panes.values()].map((p) => p.agent?.completionSeq ?? -1),
+  markVisibleAgentsSeen,
+  { deep: true },
+);
 window.addEventListener("focus", markVisibleAgentsSeen);
 
 // ブラウザのタブのタイトル（H14／AC4）：`{hostname}: {workspace}`。どちらか欠けていれば既定の製品名 "Sodashitsu"。
 // 名前付き session はその名前を添える（20260926-named-session-ui の AC3。`documentTitle`）。
 watch(
-  () => [session.host?.hostname, session.host?.sessionName, view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null, useNotificationsStore(pinia).queueLength + useNotificationsStore(pinia).historyCount] as const,
+  () =>
+    [
+      session.host?.hostname,
+      session.host?.sessionName,
+      view.workspaceId ? session.workspaces.get(view.workspaceId)?.label : null,
+      useNotificationsStore(pinia).queueLength + useNotificationsStore(pinia).historyCount,
+    ] as const,
   ([hostname, sessionName, workspaceLabel, count]) => {
-    document.title = (count > 0 ? "🔔 " : "") + documentTitle(hostname, sessionName, workspaceLabel);
+    document.title =
+      (count > 0 ? "🔔 " : "") + documentTitle(hostname, sessionName, workspaceLabel);
   },
 );
 
@@ -654,7 +831,17 @@ window.addEventListener("drop", (ev) => {
 const app = createApp(App);
 app.use(pinia);
 app.provide(ConnectionKey, conn);
-app.provide(LocalClientFactoryKey,onOpened=>new MachineSummaryClient({wsUrl,onOpened,onSnapshot:()=>undefined,onEvent:()=>undefined,onConnected:()=>undefined}));
+app.provide(
+  LocalClientFactoryKey,
+  (onOpened) =>
+    new MachineSummaryClient({
+      wsUrl,
+      onOpened,
+      onSnapshot: () => undefined,
+      onEvent: () => undefined,
+      onConnected: () => undefined,
+    }),
+);
 app.provide(ActionDispatcherKey, actionDispatcher);
 app.provide(MachineSwitcherKey, machineSwitcher);
 app.provide(TerminalRegistryKey, registry);
@@ -665,13 +852,22 @@ app.provide(ExtensionControllerKey, extensionController);
 app.provide(DisplayControllerKey, displayController);
 const displayHost: DisplayHost = {
   focusTerminal: (paneId) => {
-    const id=workPaneForDisplay(session.panes,session.tabs,paneId);
-    if(!id)return;
-    const tab=session.tabs.get(session.panes.get(id)!.tabId);
-    if(tab?.id !== view.tabId)return;
-    const focus=()=> { if(session.panes.get(id)?.tabId===view.tabId){ view.focusPane(id); registry.focus(id); } };
-    if(tab.plugin && tab.perspective!=="terminal") {
-      void conn.request("tab.set_perspective",{tabId:tab.id,perspective:"terminal"}).then(()=>nextTick()).then(focus).catch(()=>undefined);
+    const id = workPaneForDisplay(session.panes, session.tabs, paneId);
+    if (!id) return;
+    const tab = session.tabs.get(session.panes.get(id)!.tabId);
+    if (tab?.id !== view.tabId) return;
+    const focus = () => {
+      if (session.panes.get(id)?.tabId === view.tabId) {
+        view.focusPane(id);
+        registry.focus(id);
+      }
+    };
+    if (tab.plugin && tab.perspective !== "terminal") {
+      void conn
+        .request("tab.set_perspective", { tabId: tab.id, perspective: "terminal" })
+        .then(() => nextTick())
+        .then(focus)
+        .catch(() => undefined);
     } else focus();
   },
   focusedPaneId: () => view.focusedPaneId ?? null,
@@ -685,7 +881,10 @@ const displayHost: DisplayHost = {
     return { key: k.key, ctrl: k.ctrl, alt: k.alt, shift: k.shift, meta: k.meta };
   },
   relayKeymap: () => settings.keymap,
-  runRelayedAction: guardRelayRun(() => view.keysCaptured || view.modalOpen, (action) => actionDispatcher.run(action)),
+  runRelayedAction: guardRelayRun(
+    () => view.keysCaptured || view.modalOpen,
+    (action) => actionDispatcher.run(action),
+  ),
 };
 app.provide(DisplayHostKey, displayHost);
 actionDispatcher.setDisplayHost(displayHost);
@@ -696,7 +895,9 @@ installEngageGuard({
   onBlocked: (id) => {
     const d = useDisplayStore(pinia);
     if (id) d.nudgeEngage(id, 1500);
-    view.toast("画面の配置が動いたので、［操作する］を受けませんでした。もう一度押してください（続くときは、その表示を［×］で閉じられます）");
+    view.toast(
+      "画面の配置が動いたので、［操作する］を受けませんでした。もう一度押してください（続くときは、その表示を［×］で閉じられます）",
+    );
   },
   isMobileSheet: () => useDisplayStore(pinia).sheetAvailable,
 });
