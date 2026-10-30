@@ -19,6 +19,16 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:conversation-changed", receive);
       return () => ipcRenderer.removeListener("assistant:conversation-changed", receive);
     },
+    beginRecording: () => ipcRenderer.invoke("assistant:record-start"),
+    stopRecording: (input: unknown) => ipcRenderer.invoke("assistant:record-stop", input),
+    discardRecording: (input: unknown) => ipcRenderer.invoke("assistant:record-discard", input),
+    transcribeRecording: (input: unknown) =>
+      ipcRenderer.invoke("assistant:record-transcribe", input),
+    onRecordingCancelled: (callback: (state: unknown) => void) => {
+      const receive = (_event: unknown, state: unknown) => callback(state);
+      ipcRenderer.on("assistant:recording-cancelled", receive);
+      return () => ipcRenderer.removeListener("assistant:recording-cancelled", receive);
+    },
     tools: () => ipcRenderer.invoke("assistant:tools"),
     saveNote: (input: unknown) => ipcRenderer.invoke("assistant:note-save", input),
     deleteNote: (input: unknown) => ipcRenderer.invoke("assistant:note-delete", input),

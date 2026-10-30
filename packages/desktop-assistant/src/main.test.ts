@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  permissionChecks: new Map<string, (...args: any[]) => boolean>(),
+  permissionRequests: new Map<string, (...args: any[]) => void>(),
   controls: [] as Array<{
     options: { status: (connected: boolean) => void };
     start: ReturnType<typeof vi.fn>;
@@ -42,6 +44,7 @@ const fixture = vi.hoisted(() => ({
 }));
 class MockWindow extends EventEmitter {
   destroyed = false;
+  visible = false;
   url = "";
   readonly webContents = Object.assign(new EventEmitter(), {
     id: fixture.windows.length + 1,
@@ -63,13 +66,24 @@ class MockWindow extends EventEmitter {
   }
   destroy() {
     this.destroyed = true;
+    this.visible = false;
     this.emit("closed");
   }
   setBounds = vi.fn();
-  show = vi.fn();
-  showInactive = vi.fn();
+  isVisible() {
+    return this.visible;
+  }
+  show = vi.fn(() => {
+    this.visible = true;
+  });
+  showInactive = vi.fn(() => {
+    this.visible = true;
+  });
   focus = vi.fn();
-  hide = vi.fn();
+  hide = vi.fn(() => {
+    this.visible = false;
+    this.emit("hide");
+  });
 }
 vi.mock("electron", () => ({
   app: Object.assign(new EventEmitter(), {
@@ -103,8 +117,12 @@ vi.mock("electron", () => ({
               fixture.protocols.set(`${name}:${scheme}`, handler);
             },
           },
-          setPermissionRequestHandler: vi.fn(),
-          setPermissionCheckHandler: vi.fn(),
+          setPermissionRequestHandler: vi.fn((handler: (...args: any[]) => void) =>
+            fixture.permissionRequests.set(name, handler),
+          ),
+          setPermissionCheckHandler: vi.fn((handler: (...args: any[]) => boolean) =>
+            fixture.permissionChecks.set(name, handler),
+          ),
           on: vi.fn(),
           cookies: Object.assign(new EventEmitter(), {
             get: vi.fn(async () => [{ name: "soda_session_work", value: "generated", path: "/" }]),
@@ -118,6 +136,21 @@ vi.mock("electron", () => ({
     setContextMenu() {}
   },
 }));
+
+vi.mock("./transcription.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./transcription.js")>();
+  return {
+    ...actual,
+    Transcription: class extends actual.Transcription {
+      constructor(options: ConstructorParameters<typeof actual.Transcription>[0]) {
+        super({
+          ...options,
+          fetch: async () => Response.json({ text: "generated recording transcription" }),
+        });
+      }
+    },
+  };
+});
 
 vi.mock("./assistantRpc.js", () => ({
   AssistantRpc: class {
@@ -162,6 +195,8 @@ beforeAll(async () => {
   await vi.waitFor(() => expect(fixture.windows).toHaveLength(1));
 });
 afterAll(async () => {
+  const { app } = await import("electron");
+  app.emit("before-quit");
   await rm(fixture.directory, { recursive: true, force: true });
 });
 
@@ -378,5 +413,92 @@ it("keeps notes and clipboard behind the current bubble role and uses the native
   expect(await fixture.handlers.get("assistant:tools")!(local)).toMatchObject({
     transcription: { status: "idle", text: "" },
   });
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("leases microphone permission only to the visible bubble and consumes the stopped recording token once", async () => {
+  const settings = fixture.windows[0]!;
+  const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    transcriptionEnabled: true,
+  });
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  const check = fixture.permissionChecks.get("assistant-local")!;
+  const remoteCheck = fixture.permissionChecks.get("persist:assistant-server")!;
+  const details = { isMainFrame: true, requestingUrl: bubble.url, mediaType: "audio" };
+  expect(check(bubble.webContents, "media", "soda-assistant://app", details)).toBe(false);
+  await expect(fixture.handlers.get("assistant:record-start")!(event)).rejects.toThrow("許可");
+  const grant = (await fixture.handlers.get("assistant:record-start")!(local)) as { token: string };
+  expect(check(bubble.webContents, "media", "soda-assistant://app", details)).toBe(true);
+  bubble.visible = false;
+  expect(check(bubble.webContents, "media", "soda-assistant://app", details)).toBe(false);
+  bubble.visible = true;
+  const permission = vi.fn();
+  fixture.permissionRequests.get("assistant-local")!(bubble.webContents, "media", permission, {
+    isMainFrame: true,
+    requestingUrl: bubble.url,
+    mediaTypes: ["audio"],
+  });
+  expect(permission).toHaveBeenLastCalledWith(true);
+  fixture.permissionRequests.get("assistant-local")!(bubble.webContents, "media", permission, {
+    isMainFrame: true,
+    requestingUrl: bubble.url,
+    mediaTypes: ["audio", "video"],
+  });
+  expect(permission).toHaveBeenLastCalledWith(false);
+
+  expect(
+    check(bubble.webContents, "media", "soda-assistant://app", { ...details, isMainFrame: false }),
+  ).toBe(false);
+  expect(
+    check(bubble.webContents, "media", "soda-assistant://app", { ...details, mediaType: "video" }),
+  ).toBe(false);
+  expect(remoteCheck(bubble.webContents, "media", "soda-assistant://app", details)).toBe(false);
+  await fixture.handlers.get("assistant:record-stop")!(local, { token: grant.token });
+  expect(check(bubble.webContents, "media", "soda-assistant://app", details)).toBe(false);
+  const payload = {
+    token: grant.token,
+    mime: "audio/webm",
+    bytes: new Uint8Array([1, 2, 3]).buffer,
+  };
+  await expect(
+    fixture.handlers.get("assistant:record-transcribe")!(local, {
+      ...payload,
+      bytes: new ArrayBuffer(25 * 1024 * 1024 + 1),
+    }),
+  ).rejects.toThrow();
+  await expect(fixture.handlers.get("assistant:record-transcribe")!(local, payload)).resolves.toBeUndefined();
+  expect(await fixture.handlers.get("assistant:tools")!(local)).toMatchObject({
+    transcription: { status: "done", text: "generated recording transcription" },
+  });
+  await expect(
+    fixture.handlers.get("assistant:record-transcribe")!(local, payload),
+  ).rejects.toThrow("対象");
+  const next = (await fixture.handlers.get("assistant:record-start")!(local)) as { token: string };
+  await expect(
+    fixture.handlers.get("assistant:record-discard")!(local, { token: grant.token }),
+  ).rejects.toThrow();
+  expect(check(bubble.webContents, "media", "soda-assistant://app", details)).toBe(true);
+  await fixture.handlers.get("assistant:record-discard")!(local, { token: next.token });
+  for (const lifecycle of ["hide", "minimize", "navigation"]) {
+    await fixture.handlers.get("assistant:chat")!(event);
+    const current = fixture.windows.at(-1)!;
+    const currentEvent = {
+      sender: current.webContents,
+      senderFrame: current.webContents.mainFrame,
+    };
+    await fixture.handlers.get("assistant:record-start")!(currentEvent);
+    if (lifecycle === "hide") current.hide();
+    else if (lifecycle === "minimize") current.emit("minimize");
+    else current.webContents.emit("did-start-navigation", {}, current.url, false, true);
+    expect(current.isDestroyed()).toBe(true);
+    await expect(fixture.handlers.get("assistant:record-start")!(currentEvent)).rejects.toThrow(
+      "許可",
+    );
+  }
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });

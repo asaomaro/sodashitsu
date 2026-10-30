@@ -50,6 +50,10 @@ export function authorizeLocalSender(
       "transcribe-cancel",
       "clipboard-read",
       "clipboard-write",
+      "record-start",
+      "record-stop",
+      "record-discard",
+      "record-transcribe",
     ].includes(action)
   )
     return sender.role === "bubble";

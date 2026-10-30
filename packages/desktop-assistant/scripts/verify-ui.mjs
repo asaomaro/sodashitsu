@@ -15,6 +15,7 @@ const files = new Set([
   "bubble.html",
   "bubble.js",
   "tools.js",
+  "recording.js",
   "style.css",
   "captain-male.svg",
   "captain-female.svg",
@@ -35,12 +36,14 @@ const server = createServer(async (request, response) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let browser;
+const watchdog = setTimeout(() => { console.error("Generated UI exceeded 30 seconds"); process.exit(124); }, 30000);
+watchdog.unref();
 try {
   browser = await chromium.launch({
     headless: true,
     args: ["--disable-gpu", "--disable-frame-rate-limit"],
   });
-  const context = await browser.newContext();
+  const context = await browser.newContext({viewport:{width:400,height:640}});
   await context.addInitScript(() => {
     window.calls = [];
     window.preferences = {
@@ -62,14 +65,34 @@ try {
     window.currentTools = {revision:1,transcriptionEnabled:true,transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
     Object.defineProperty(window,"speechSynthesis",{configurable:true,value:{getVoices:()=>[{lang:"ja-JP",localService:false},{lang:"ja-JP",localService:true}],cancel:()=>window.calls.push(["stop-reading"]),speak:utterance=>window.calls.push(["speak",utterance.text,utterance.voice.localService])}});
     window.SpeechSynthesisUtterance = class {constructor(text){this.text=text;}};
+    window.recordGrants=[];window.recordSequence=0;
+    window.makeGeneratedMedia=()=>{const track={stop:()=>window.calls.push(["stop-track"]),onended:null};return{getTracks:()=>[track]};};
+    Object.defineProperty(navigator,"mediaDevices",{configurable:true,value:{getUserMedia:async()=>{window.calls.push(["get-user-media"]);return window.makeGeneratedMedia();}}});
+    window.MediaRecorder=class {
+      static isTypeSupported(value){return value==="audio/webm;codecs=opus";}
+      constructor(stream,options){this.stream=stream;this.mimeType=options.mimeType;this.state="inactive";window.generatedRecorder=this;}
+      start(){this.state="recording";}
+      stop(){if(this.state==="inactive")return;this.state="inactive";queueMicrotask(()=>{this.ondataavailable?.({data:new Blob(["generated-audio"],{type:this.mimeType})});this.onstop?.(new Event("stop"));});}
+    };
+    window.toolWatchers=new Set();
+    window.toolsCallback=state=>{for(const callback of window.toolWatchers)callback(state);};
     window.assistant = {
       conversation: async () => ({ revision: 1, connected: false, busy: false, session: null, kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。" }),
       onConversation: callback => { window.chatCallback = callback; return () => {}; },
       startSession: async input => window.calls.push(["start-session",input]),
       adoptSession: async input => window.calls.push(["adopt-session",input]),
       sendMessage: async input => window.calls.push(["send-message",input]),
+      beginRecording: async()=>{
+        const token=`00000000-0000-4000-8000-${String(++window.recordSequence).padStart(12,"0")}`;
+        window.recordGrants.push(token);window.calls.push(["begin-recording",token]);
+        return{token,maxBytes:25*1024*1024,maxDurationMs:300000};
+      },
+      stopRecording: async input=>window.calls.push(["stop-recording",input]),
+      discardRecording: async input=>window.calls.push(["discard-recording",input]),
+      transcribeRecording: async input=>window.calls.push(["transcribe-recording",{token:input.token,mime:input.mime,bytes:input.bytes.byteLength}]),
+      onRecordingCancelled: callback=>{window.recordCancelCallback=callback;return()=>{};},
       tools: async () => window.currentTools,
-      onTools: callback => { window.toolsCallback=callback; return ()=>{}; },
+      onTools: callback => { window.toolWatchers.add(callback); return ()=>window.toolWatchers.delete(callback); },
       readClipboard: async () => "コピーした文章です。",
       writeClipboard: async input => window.calls.push(["write-clipboard",input]),
       saveNote: async input => {
@@ -234,14 +257,63 @@ try {
   await expect(page.locator("#tool-text")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
   await expect(page.locator("#standard-tools img")).toHaveCount(0);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="get-user-media").length),0);
+  await page.locator("#record-start").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("録音中");
+  await expect(page.locator("#record-indicator")).toBeVisible();
+  await expect(page.locator("#record-stop-visible")).toBeVisible();
+  // IntersectionObserver/rAF stalls in this WSL headless environment; inspect browser DOM geometry.
+  assert.deepEqual(await page.evaluate(()=>["record-stop-visible","message"].map(id=>{
+    const bounds=document.getElementById(id).getBoundingClientRect();
+    return{ id,inside:bounds.width>0 && bounds.height>0 && bounds.top>=0 && bounds.bottom<=innerHeight && bounds.left>=0 && bounds.right<=innerWidth };
+  })),[{id:"record-stop-visible",inside:true},{id:"message",inside:true}]);
+  await page.locator("#record-stop-visible").press("Enter");
+  await expect(page.locator("#record-preview")).toBeVisible();
+  await expect(page.locator("#record-status")).toContainText("試聴してから");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="transcribe-recording").length),0);
+  await page.locator("#record-transcribe").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("処理結果は文字起こし欄");
+  assert.deepEqual(await page.evaluate(()=>window.calls.find(call=>call[0]==="transcribe-recording")[1]),{token:"00000000-0000-4000-8000-000000000001",mime:"audio/webm;codecs=opus",bytes:15});
+  await page.locator("#record-start").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("録音中");
+  const oldRecordingToken=await page.evaluate(()=>window.recordGrants.at(-1));
+  await page.locator("#record-discard").press("Enter");
+  await expect(page.locator("#record-start")).toBeEnabled();
+  await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=()=>new Promise(resolve=>{window.resolveGeneratedMedia=resolve;});});
+  await page.locator("#record-start").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("許可を確認");
+  await page.locator("#record-discard").press("Enter");
+  await expect(page.locator("#record-start")).toBeDisabled();
+  const stoppedBeforePermission=await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length);
+  await page.evaluate(()=>window.resolveGeneratedMedia(window.makeGeneratedMedia()));
+  await expect(page.locator("#record-start")).toBeEnabled();
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length),stoppedBeforePermission+1);
+  await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=async()=>window.makeGeneratedMedia();});
+  await page.locator("#record-start").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("録音中");
+  await page.evaluate(token=>window.recordCancelCallback({token,reason:"retired event"}),oldRecordingToken);
+  await expect(page.locator("#record-status")).toContainText("録音中");
+  await page.locator("#record-discard").press("Enter");
+  await expect(page.locator("#record-start")).toBeEnabled();
+  await page.locator("#record-start").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("録音中");
+  const stopsBeforeCollapse=await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length);
+  await page.locator("#standard-tools summary").press("Enter");
+  await expect(page.locator("#record-status")).toContainText("標準ツールを閉じたため");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length),stopsBeforeCollapse+1);
+  await page.locator("#standard-tools summary").press("Enter");
+  await expect(page.locator("#record-start")).toBeEnabled();
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="transcribe-recording").length),1);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
   await page.getByRole("button", { name: "吹き出しを閉じる" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
   assert.deepEqual(errors, []);
   await context.close();
   console.log(
-    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing",
+    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation",
   );
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));
+  clearTimeout(watchdog);
 }
