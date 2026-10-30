@@ -107,7 +107,8 @@ export class AssistantSessions {
     if (this.closed) return Promise.resolve();
     if (this.draining) { this.drainAgain = true; return this.draining; }
     const generation = this.generation;
-    const task = (async () => {
+    let task!: Promise<void>;
+    task = (async () => {
       try {
         do { this.drainAgain = false; await this.closeIdleAgents(generation); }
         while (this.drainAgain && !this.closed && generation === this.generation);
