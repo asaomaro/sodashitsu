@@ -14,6 +14,7 @@ const files = new Set([
   "settings.js",
   "bubble.html",
   "bubble.js",
+  "tools.js",
   "style.css",
   "captain-male.svg",
   "captain-female.svg",
@@ -51,15 +52,38 @@ try {
       serverOrigin: "http://127.0.0.1:7780",
       launchAtLogin: false,
       mute: false,
+      transcriptionEnabled: false,
+      transcriptionOrigin: "http://127.0.0.1:8080",
       reducedMotion: false,
       position: null,
     };
+    window.savedNotes = [];
+    window.toolsRevision = 1;
+    window.currentTools = {revision:1,transcriptionEnabled:true,transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
+    Object.defineProperty(window,"speechSynthesis",{configurable:true,value:{getVoices:()=>[{lang:"ja-JP",localService:false},{lang:"ja-JP",localService:true}],cancel:()=>window.calls.push(["stop-reading"]),speak:utterance=>window.calls.push(["speak",utterance.text,utterance.voice.localService])}});
+    window.SpeechSynthesisUtterance = class {constructor(text){this.text=text;}};
     window.assistant = {
       conversation: async () => ({ revision: 1, connected: false, busy: false, session: null, kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。" }),
       onConversation: callback => { window.chatCallback = callback; return () => {}; },
       startSession: async input => window.calls.push(["start-session",input]),
       adoptSession: async input => window.calls.push(["adopt-session",input]),
       sendMessage: async input => window.calls.push(["send-message",input]),
+      tools: async () => window.currentTools,
+      onTools: callback => { window.toolsCallback=callback; return ()=>{}; },
+      readClipboard: async () => "コピーした文章です。",
+      writeClipboard: async input => window.calls.push(["write-clipboard",input]),
+      saveNote: async input => {
+        const id=input.id || "00000000-0000-4000-8000-000000000077";
+        window.savedNotes=[{id,text:input.text,updatedAt:1}];
+        window.currentTools={...window.currentTools,revision:++window.toolsRevision,notes:window.savedNotes};
+        window.toolsCallback(window.currentTools);window.calls.push(["save-note",input]);return{id};
+      },
+      deleteNote: async input => {
+        window.savedNotes=[];window.currentTools={...window.currentTools,revision:++window.toolsRevision,notes:[]};
+        window.toolsCallback(window.currentTools);window.calls.push(["delete-note",input]);
+      },
+      transcribeFile: async () => window.calls.push(["transcribe-file"]),
+      cancelTranscription: async () => window.calls.push(["cancel-transcription"]),
       inbox: async () => ({
         status: "connected",
         revision: 1,
@@ -163,12 +187,59 @@ try {
   await expect(page.locator("#send")).toBeDisabled();
   await page.locator("#adopt-session").press("Enter");
   assert.deepEqual(await page.evaluate(() => window.calls.at(-1)), ["adopt-session",{revision:4,instanceId:actorId}]);
+  await page.evaluate(actorId=>window.chatCallback({
+    revision:5,connected:true,busy:false,
+    session:{paneId:"00000000-0000-4000-8000-000000000002",kind:"codex",state:"ready",agent:{instanceId:actorId,state:"idle"}},
+    kinds:[{kind:"codex",label:"Codex",available:true}],messages:[],hint:"送信できます。"
+  }),actorId);
+  await expect(page.locator("#send")).toBeEnabled();
+  await page.locator("#standard-tools summary").press("Enter");
+  const sendsBeforeTools=await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length);
+  await page.locator("#read-clipboard").press("Enter");
+  await expect(page.locator("#tool-text")).toHaveValue("コピーした文章です。");
+  await page.evaluate(()=>{
+    window.assistant.readClipboard=()=>new Promise(resolve=>{window.resolveClipboard=resolve;});
+  });
+  const noteSavesBeforeClipboard=await page.evaluate(()=>window.calls.filter(call=>call[0]==="save-note").length);
+  await page.locator("#read-clipboard").press("Enter");
+  await expect(page.locator("#tool-text")).toBeDisabled();
+  await expect(page.locator("#save-note")).toBeDisabled();
+  await page.evaluate(()=>document.getElementById("save-note").click());
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="save-note").length),noteSavesBeforeClipboard);
+  await page.evaluate(()=>window.resolveClipboard("コピーした文章です。"));
+  await expect(page.locator("#tool-text")).toBeEnabled();
+  await page.locator("#prepare-summary").press("Enter");
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
+  await expect(page.locator("#message")).toHaveValue(/要約してください/);
+  await page.locator("#prepare-translation").press("Enter");
+  await expect(page.locator("#message")).toHaveValue(/日本語に翻訳/);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
+  await page.locator("#copy-tool-text").press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["write-clipboard",{text:"コピーした文章です。"}]);
+  await page.locator("#read-aloud").press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["speak","コピーした文章です。",true]);
+  await page.locator("#stop-reading").press("Enter");
+  await page.locator("#save-note").press("Enter");
+  await expect(page.locator("#tools-status")).toContainText("保存しました");
+  await page.locator("#delete-note").press("Enter");
+  await expect(page.locator("#tools-status")).toContainText("削除しました");
+  await page.locator("#transcribe-file").press("Enter");
+  assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"transcribe-file");
+  await page.evaluate(()=>{
+    window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcription:{revision:2,status:"done",name:"generated.wav",text:"<img src=x onerror=alert(1)>認識結果です。",message:"確認してください。"}};
+    window.toolsCallback(window.currentTools);
+  });
+  await expect(page.locator("#transcription-result")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
+  await page.locator("#use-transcription").press("Enter");
+  await expect(page.locator("#tool-text")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
+  await expect(page.locator("#standard-tools img")).toHaveCount(0);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
   await page.getByRole("button", { name: "吹き出しを閉じる" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
   assert.deepEqual(errors, []);
   await context.close();
   console.log(
-    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble start/chat/adoption, literal messages and stale-state fencing",
+    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing",
   );
 } finally {
   await browser?.close();

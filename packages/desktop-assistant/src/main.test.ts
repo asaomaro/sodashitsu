@@ -80,6 +80,8 @@ vi.mock("electron", () => ({
     isPackaged: false,
     setLoginItemSettings: fixture.startup,
   }),
+  clipboard: { readText: vi.fn(() => "generated clipboard text"), writeText: vi.fn() },
+  dialog: { showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })) },
   BrowserWindow: MockWindow,
   ipcMain: {
     handle: (name: string, handler: (event: unknown, input?: unknown) => Promise<unknown>) =>
@@ -277,7 +279,7 @@ it("delivers a verbal notice through an inactive bubble and obeys mute", async (
   const bubble = fixture.windows.at(-1)!;
   await vi.waitFor(() => expect(bubble.showInactive).toHaveBeenCalledOnce());
   expect(bubble.focus).not.toHaveBeenCalled();
-  expect(bubble.webContents.send).toHaveBeenLastCalledWith(
+  expect(bubble.webContents.send).toHaveBeenCalledWith(
     "assistant:inbox-changed",
     expect.objectContaining({ notices: [notice] }),
   );
@@ -334,5 +336,47 @@ it("keeps the newly enabled control connection running and reaches scoped sessio
     connected: true,
   });
   await expect(fixture.handlers.get("assistant:conversation")!(event)).rejects.toThrow("許可");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("keeps notes and clipboard behind the current bubble role and uses the native picker for audio", async () => {
+  const settings = fixture.windows[0]!;
+  const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    transcriptionEnabled: true,
+  });
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  for (const name of [
+    "tools",
+    "note-save",
+    "note-delete",
+    "transcribe-file",
+    "transcribe-cancel",
+    "clipboard-read",
+    "clipboard-write",
+  ])
+    await expect(fixture.handlers.get(`assistant:${name}`)!(event, {})).rejects.toThrow("許可");
+  expect(await fixture.handlers.get("assistant:clipboard-read")!(local)).toBe(
+    "generated clipboard text",
+  );
+  await fixture.handlers.get("assistant:clipboard-write")!(local, { text: "generated" });
+  const saved = (await fixture.handlers.get("assistant:note-save")!(local, {
+    text: "local note",
+  })) as { id: string };
+  expect(await fixture.handlers.get("assistant:tools")!(local)).toMatchObject({
+    notes: [{ id: saved.id, text: "local note" }],
+  });
+  await fixture.handlers.get("assistant:note-delete")!(local, { id: saved.id });
+  expect(await fixture.handlers.get("assistant:tools")!(local)).toMatchObject({ notes: [] });
+  await fixture.handlers.get("assistant:transcribe-file")!(local, {
+    path: "renderer cannot select this path",
+  });
+  expect(await fixture.handlers.get("assistant:tools")!(local)).toMatchObject({
+    transcription: { status: "idle", text: "" },
+  });
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });

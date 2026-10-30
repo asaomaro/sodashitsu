@@ -1,6 +1,8 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
+  dialog,
   ipcMain,
   Menu,
   nativeImage,
@@ -16,6 +18,9 @@ import { DesktopAssistantPreferences, type AssistantNotice } from "@sodashitsu/p
 import { AssistantRpc } from "./assistantRpc.js";
 import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
+import { NotesFile, NoteSave } from "./notes.js";
+import { Transcription } from "./transcription.js";
+import { z } from "zod";
 import { NoticeConnection } from "./noticeConnection.js";
 import { sodaCookieHeader, isSodaSessionCookie } from "./cookieHeader.js";
 import { AssistantController, type NativeAdapter } from "./controller.js";
@@ -39,6 +44,7 @@ const allowedAssets = new Map([
   ["/character.js", "text/javascript"],
   ["/settings.js", "text/javascript"],
   ["/bubble.js", "text/javascript"],
+  ["/tools.js", "text/javascript"],
   ["/style.css", "text/css"],
   ["/captain-male.svg", "image/svg+xml"],
   ["/captain-female.svg", "image/svg+xml"],
@@ -57,6 +63,9 @@ let assistantChat: AssistantChat | null = null;
 let controlOrigin: string | null = null;
 let installationId: string;
 let chatRevision = 0;
+let notesFile: NotesFile;
+let transcription: Transcription;
+let toolsRevision = 0;
 let backend: NoticeConnection | null = null;
 let backendOrigin: string | null = null;
 let notices: readonly AssistantNotice[] = [];
@@ -130,8 +139,37 @@ function openBubble(focus = true): void {
     }
   });
   win.on("closed", () => {
-    if (bubble === win) bubble = null;
+    if (bubble === win) {
+      transcription?.cancel();
+      bubble = null;
+    }
   });
+}
+
+async function toolsState(revision = toolsRevision) {
+  const state = transcription.snapshot();
+  const preferences = controller.preferences;
+  let notes: Awaited<ReturnType<NotesFile["read"]>> = [];
+  let notesError = "";
+  try {
+    notes = await notesFile.read();
+  } catch {
+    notesError = "メモを読み込めません。元のファイルは変更していません。";
+  }
+  return {
+    revision,
+    transcription: state,
+    notes,
+    notesError,
+    transcriptionEnabled: preferences.enabled && preferences.transcriptionEnabled,
+    transcriptionOrigin: preferences.transcriptionOrigin,
+  };
+}
+async function publishTools(): Promise<void> {
+  if (quitting) return;
+  const revision = ++toolsRevision;
+  const state = await toolsState(revision);
+  if (bubble && !bubble.isDestroyed()) bubble.webContents.send("assistant:tools-changed", state);
 }
 
 function inbox() {
@@ -193,6 +231,10 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
   rpc.start();
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
+  transcription.configure(
+    preferences.enabled && preferences.transcriptionEnabled,
+    preferences.transcriptionOrigin,
+  );
   updateChat(preferences);
   if (!preferences.enabled || backendOrigin !== preferences.serverOrigin) {
     backend?.stop();
@@ -364,6 +406,13 @@ function registerIpc(): void {
     "start-session",
     "adopt-session",
     "send-message",
+    "tools",
+    "note-save",
+    "note-delete",
+    "transcribe-file",
+    "transcribe-cancel",
+    "clipboard-read",
+    "clipboard-write",
   ]) {
     ipcMain.handle(`assistant:${action}`, async (event, input: unknown) => {
       const owner = localWindows.get(event.sender.id);
@@ -385,6 +434,43 @@ function registerIpc(): void {
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
+      if (action === "tools") return toolsState();
+      if (
+        [
+          "note-save",
+          "note-delete",
+          "transcribe-file",
+          "transcribe-cancel",
+          "clipboard-read",
+          "clipboard-write",
+        ].includes(action)
+      ) {
+        if (!controller.preferences.enabled) throw Error("アシスタントは無効です。");
+        if (action === "note-save") {
+          const parsed = NoteSave.parse(input);
+          const notes = await notesFile.save(parsed);
+          await publishTools();
+          return { id: parsed.id ?? notes.at(-1)!.id };
+        }
+        if (action === "note-delete") {
+          await notesFile.delete(input);
+          await publishTools();
+          return;
+        }
+        if (action === "transcribe-file") return transcription.file();
+        if (action === "transcribe-cancel") return transcription.cancel();
+        if (action === "clipboard-read") {
+          const text = await clipboard.readText();
+          if (text.length > 8192) throw Error("コピーした文章は8192文字以内にしてください。");
+          return text;
+        }
+        const { text } = z
+          .object({ text: z.string().max(8192) })
+          .strict()
+          .parse(input);
+        await clipboard.writeText(text);
+        return;
+      }
       if (["start-session", "adopt-session", "send-message"].includes(action)) {
         if (!assistantChat || !controller.preferences.enabled)
           throw Error("アシスタントは接続していません。");
@@ -398,6 +484,7 @@ function registerIpc(): void {
         return;
       }
       if (action === "hide") {
+        transcription.cancel();
         bubble?.hide();
         return;
       }
@@ -425,6 +512,7 @@ else {
     backend = null;
     control?.stop();
     assistantChat?.stop();
+    transcription?.cancel();
   });
   app.on("activate", () => {
     if (!quitting && controller) openSettings();
@@ -456,6 +544,27 @@ else {
         isolated.on("will-download", (event) => event.preventDefault());
       }
       installationId = await deviceIdentity(join(app.getPath("userData"), "assistant-device-id"));
+      notesFile = new NotesFile(join(app.getPath("userData"), "assistant-notes.json"));
+      transcription = new Transcription({
+        pick: async () => {
+          const owner = bubble;
+          if (!owner || owner.isDestroyed()) return null;
+          const selection = await dialog.showOpenDialog(owner, {
+            title: "このPCのWhisperで文字起こしする音声を選択",
+            properties: ["openFile"],
+            filters: [
+              {
+                name: "音声（25MB以内）",
+                extensions: ["wav", "mp3", "m4a", "mp4", "ogg", "flac", "webm"],
+              },
+            ],
+          });
+          return selection.canceled ? null : (selection.filePaths[0] ?? null);
+        },
+        changed: () => {
+          void publishTools();
+        },
+      });
       const file = new PreferencesFile(join(app.getPath("userData"), "assistant.json"));
       let preferences: DesktopAssistantPreferences;
       try {

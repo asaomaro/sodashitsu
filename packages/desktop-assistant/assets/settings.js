@@ -1,6 +1,6 @@
 "use strict";
 let current;
-const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "launchAtLogin", "reducedMotion", "mute"];
+const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "launchAtLogin", "reducedMotion", "mute", "transcriptionEnabled", "transcriptionOrigin"];
 const status = document.getElementById("status");
 function display(preferences) {
  current = preferences;

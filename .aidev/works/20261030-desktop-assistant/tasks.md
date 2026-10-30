@@ -20,3 +20,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] B2. Dedicated server session API, exact ownership/restore/adoption, durable launch marker and queued-input guards; independent reviews,22 focused tests,10 negative controls and full source build/types/12,824 tests. Native bubble session use remains B3.
 
 - [x] B3a. Native scoped dedicated-session start/adopt/send and Claude/Codex conversation bubbles;56 generated tests,10 negatives, keyboard UI, unsigned Windows packaging and independent taskcheck/whole/correction. Exact-notice replies and targeted terminal/ask-form expansion remain B3b/C.
+
+- [x] D1. Local notes, explicit clipboard, visible summary/translation drafts, local-only read-aloud and local Whisper audio-file transcription with owned picker/bounds/cancel/retirement;576 related tests,15 valid negatives, generated browser and Windows package, independent reviews. Microphone capture, OCR and reminder integration remain subsequent work.

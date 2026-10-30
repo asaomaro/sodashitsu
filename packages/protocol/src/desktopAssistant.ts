@@ -30,6 +30,32 @@ export const AssistantCharacterId = z
   .regex(
     /^(captain-(?:male|female|robot)|plugin:[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63})$/,
   );
+/** Local whisper.cpp only. No remote audio upload is implicit in enabling this setting. */
+export function desktopAssistantTranscriptionOrigin(input: string): string {
+  const url = new URL(input);
+  if (
+    url.protocol !== "http:" ||
+    !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  )
+    throw Error("文字起こしには、このPCのローカルWhisperサーバのHTTPオリジンを指定してください。");
+  return url.origin;
+}
+const TranscriptionOrigin = z
+  .string()
+  .max(2048)
+  .transform((input, ctx) => {
+    try {
+      return desktopAssistantTranscriptionOrigin(input);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "文字起こしのローカルURLを確認してください" });
+      return z.NEVER;
+    }
+  });
 export const DesktopAssistantPreferences = z
   .object({
     version: z.literal(1).default(1),
@@ -39,6 +65,8 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    transcriptionEnabled: z.boolean().default(false),
+    transcriptionOrigin: TranscriptionOrigin.default("http://127.0.0.1:8080"),
     reducedMotion: z.boolean().default(false),
     characterSize: z.number().int().min(64).max(512).default(192),
     position: z
