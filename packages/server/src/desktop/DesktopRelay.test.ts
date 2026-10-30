@@ -1692,3 +1692,26 @@ it.each([{platform:"macos-sck",shared:false},{platform:"macos-sck",shared:true},
  a.send({type:"clipboard",id:4,operation:"read"});await vi.waitFor(()=>expect(a.messages.some(m=>m.type==="clipboard_result"&&m.id===4&&m.ok===false)).toBe(true));
  a.send({type:"stop"});
 });
+
+
+it.each(["linux-portal","macos-sck"] as const)("negotiates rich clipboard for native %s and fences revocation",async platform=>{
+ const f=await fixture(),cfg=(f.provider as any).config;
+ f.provider.configure({...cfg,nativePlatform:platform,allowClipboard:true,command:[...cfg.command,"--native-platform",platform,"--static","--allow-clipboard","--rich-clipboard"]});
+ expect(f.provider.capabilities().richClipboard).toBe(true);
+ const v=await f.viewer("native-platform-shared-clipboard");
+ v.send({...start,options:{...start.options,features:true,sharedDesktop:true,sharedClipboard:true,richClipboard:true}});
+ await expect.poll(()=>v.messages.find(m=>m.type==="ready")?.richClipboard).toBe(true);
+ expect(f.startRequests.at(-1)!.options).toMatchObject({richClipboard:true,sharedClipboard:true});
+ const ticket=String(v.messages.find(m=>m.type==="clipboard_rich_ticket")?.ticket),pipe=new WebSocket(f.endpoint,DESKTOP_RICH_CLIPBOARD_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),responses:any[]=[];
+ pipe.on("message",raw=>responses.push(JSON.parse(raw.toString())));pipe.on("error",()=>{});
+ try{
+  await new Promise<void>((resolve,reject)=>{pipe.once("open",resolve);pipe.once("error",reject);});pipe.send(JSON.stringify({type:"video_viewer",ticket}));
+  await expect.poll(()=>v.messages.some(m=>m.type==="clipboard_rich_ready")).toBe(true);
+  const call=async()=>{const id=crypto.randomUUID();pipe.send(JSON.stringify({type:"clipboard_rich",id,operation:"read"}));await expect.poll(()=>responses.some(m=>m.id===id)).toBe(true);return responses.find(m=>m.id===id);};
+  expect((await call()).ok).toBe(false);
+  v.send({type:"clipboard_grant",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="clipboard_state"&&m.enabled)).toBe(true);
+  expect(await call()).toMatchObject({ok:true,stage:"begin"});
+  v.send({type:"clipboard_grant",enabled:false});await expect.poll(()=>v.messages.filter(m=>m.type==="clipboard_state").at(-1)?.enabled).toBe(false);
+  expect((await call()).ok).toBe(false);
+ }finally{pipe.terminate();v.send({type:"stop"});}
+});

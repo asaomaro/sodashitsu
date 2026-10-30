@@ -85,7 +85,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
           },
         }),
       },
-      ...entries.filter(([key])=>!state?.nativePlatform||key==="enabled"||key==="allowInput").map(([key, label]) => ({
+      ...entries.filter(([key])=>!state?.nativePlatform||key==="enabled"||key==="allowInput"||key==="allowClipboard").map(([key, label]) => ({
         label,
         value: onOff(state?.permissions[key] === true),
         toggle: true,

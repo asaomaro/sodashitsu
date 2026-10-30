@@ -392,6 +392,8 @@ final class DesktopSource {
     var dead=false,ready=false,stopping=false
     var input: InputGuard?
     var clipboard: TextClipboardGuard?
+    var richClipboard: RichClipboardGuard?
+    var richRequested=false
     var clipboardCeiling=false
     var display: SCDisplay?
     var bounds=CGRect.zero
@@ -442,6 +444,7 @@ final class DesktopSource {
         timer=Timer.scheduledTimer(withTimeInterval:0.1,repeats:true) { [weak self] _ in
             guard let self=self,!self.dead else { return }
             self.locked {
+                self.richClipboard?.expire()
                 if milliseconds()-self.lastHeartbeat>8000 { self.stop("source_changed") }
                 else if self.ready && !self.sourceActive() { self.stop("source_changed") }
                 else if self.ready && milliseconds()-self.lastCapture>1500 { self.stop("source_stalled") }
@@ -497,6 +500,7 @@ final class DesktopSource {
             self.width=Int(width);self.fps=Int(fps);self.quality=Int(quality);initialFPS=self.fps;initialQuality=self.quality
             inputCeiling=boolean(value["allowInput"])==true && CommandLine.arguments.contains("--allow-input") && AXIsProcessTrusted() && CGPreflightPostEventAccess()
             clipboardCeiling=boolean(value["allowClipboard"])==true && CommandLine.arguments.contains("--allow-clipboard")
+            richRequested=boolean(options["richClipboard"])==true
             configured=true;configuredAt=milliseconds()
             captureTask=Task { @MainActor in await self.capture() }
             return
@@ -519,7 +523,9 @@ final class DesktopSource {
         case "input":
             if let seq=try input?.input(value) { try output.send(["type":"input_ack","seq":seq]) }
         case "clipboard_control":
-            guard let clipboard=clipboard else { throw NativeError("unsupported") };try clipboard.control(value)
+            guard let clipboard=clipboard else { throw NativeError("unsupported") };let old=clipboard.generation;try clipboard.control(value);if clipboard.generation != old { richClipboard?.clear() }
+        case "clipboard_rich":
+            guard let rich=richClipboard else { throw NativeError("unsupported") };let reply=try rich.evaluate(value);try output.send(reply.value,valid:reply.valid)
         case "clipboard":
             guard let clipboard=clipboard else { throw NativeError("unsupported") }
             let reply=try clipboard.evaluate(value)
@@ -555,6 +561,7 @@ final class DesktopSource {
             clipboard=TextClipboardGuard(sink:PasteboardTextSink(),ceiling:clipboardCeiling,active:{ [weak self] in
                 guard let self=self else { return false };return self.ready && milliseconds()-self.lastHeartbeat<8000 && self.sourceActive()
             },canWrite:{ [weak self] in self?.inputCeiling==true && self?.sourceActive()==true })
+            if richRequested,let clipboard=clipboard { richClipboard=RichClipboardGuard(clipboard:clipboard,factory:{PasteboardRichSink()}) }
             while !dead && !Task.isCancelled {
                 let ticket=locked { FrameTicket(revision:input!.revision,started:milliseconds(),inputSeq:input!.seq) }
                 guard sourceActive() else { throw NativeError("source_changed") }
@@ -571,7 +578,9 @@ final class DesktopSource {
                         guard canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) else { return }
                         if !ready {
                             ready=true
-                            try output.send(["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]])
+                            var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
+                            if richClipboard != nil { hello["richClipboard"]=true }
+                            try output.send(hello)
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
                         sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
@@ -589,7 +598,7 @@ final class DesktopSource {
     }
     func stop(_ code: String?) {
         locked {
-            if dead || stopping { return };stopping=true;input?.release();clipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
+            if dead || stopping { return };stopping=true;input?.release();clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
             output.finish { Darwin.exit(code==nil ? 0 : 1) }
@@ -760,6 +769,7 @@ func generatedTests() throws -> Int {
     guard let jpeg=bitmap.representation(using:.jpeg,properties:[.compressionFactor:0.65]),let decoded=NSBitmapImageRep(data:jpeg) else { throw GeneratedFailure(detail:"generated JPEG encode") }
     try check(decoded.pixelsWide==8 && decoded.pixelsHigh==8,"generated JPEG dimensions")
     try check(jpeg.count<2*1024*1024,"generated JPEG bound")
+    count += try generatedRichClipboardTests()
     return count
 }
 

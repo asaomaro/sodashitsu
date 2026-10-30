@@ -37,3 +37,11 @@ it("edits a separately approved file root without changing other desktop permiss
     expect(port.set).toHaveBeenCalledWith({ ...permissions, fileRoot: "/tmp/generated-files" }),
   );
 });
+
+it.each(["linux-portal","macos-sck"] as const)("offers native %s clipboard permission independently from input",async nativePlatform=>{
+ const state={nativePlatform,permissions,supported:true,canConfigure:true},changed=vi.fn(),port={get:vi.fn(async()=>state),set:vi.fn(async(p)=>({...state,permissions:p}))};
+ const section=desktopSettingsSection(port,changed);await vi.waitFor(()=>expect(changed).toHaveBeenCalled());
+ expect(section.items().some(i=>i.label.startsWith("管理者権限"))).toBe(false);
+ section.items().find(i=>i.label==="クリップボードを許可")!.activate!();
+ await vi.waitFor(()=>expect(port.set).toHaveBeenCalledWith({...permissions,allowClipboard:true}));
+});

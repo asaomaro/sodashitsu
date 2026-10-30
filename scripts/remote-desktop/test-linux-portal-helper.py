@@ -408,6 +408,98 @@ class Clipboard(unittest.TestCase):
   clip.owner_changed(None,None,None,None,None,params("/wrong"));self.assertEqual(clip.owned,b"old")
   clip.owner_changed(None,None,None,None,None,params(h.session));self.assertIsNone(clip.owned);self.assertEqual(clip.types,("image/png",))
   clip.control({"generation":1,"enabled":True});clip.submit(self.request());self.assertEqual(self.await_result(results)["text"],"");self.assertFalse(calls)
+class RichClipboard(unittest.TestCase):
+ setup_clipboard=Clipboard.setup_clipboard
+ fd_open=Clipboard.fd_open
+ await_result=Clipboard.await_result
+ def setup_rich(self):
+  value=self.setup_clipboard();clip,helper=value[:2];helper.config["rich"]=True;clip.control({"generation":1,"enabled":True});self.addCleanup(clip.close);return value
+ def ticket(self,state):return (1,state["utc"]+400,state["mono"],state["mono"]+400)
+ def command(self,identifier,operation,**fields):return {"type":"clipboard_rich","id":identifier,"operation":operation,"generation":1,"expiresAt":1400,**fields}
+ def bundle(self):
+  return {"text":"コピー😀","html":"<b>コピー</b>","rtf":module.base64.b64encode(b"{\\rtf1 generated}").decode(),"png":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="}
+ def begin_write(self,clip,state,bundle=None):
+  identifier=str(module.uuid.uuid4());data=module.json.dumps(bundle or self.bundle(),ensure_ascii=False,separators=(",",":")).encode();ticket=self.ticket(state)
+  reply,_=clip.rich.request(self.command(identifier,"begin",size=len(data)),ticket);self.assertEqual(reply["stage"],"begin")
+  for offset in range(0,len(data),module.RichClipboardProtocol.CHUNK):
+   reply,_=clip.rich.request(self.command(identifier,"push",offset=offset,data=module.base64.b64encode(data[offset:offset+module.RichClipboardProtocol.CHUNK]).decode()),ticket)
+  return identifier,ticket
+ def test_bundle_limits_and_png_dimensions_match_parent(self):
+  cls=module.RichClipboardProtocol;self.assertEqual(cls.bundle(self.bundle()),self.bundle())
+  png=bytearray(module.base64.b64decode(self.bundle()["png"]));png[16:20]=(4097).to_bytes(4,"big")
+  for invalid in [{},{"unknown":"x"},{"text":"bad\0"},{"html":"x"*(cls.TEXT+1)},{"rtf":"YWJjZA=="},{"png":module.base64.b64encode(png).decode()}]:
+   with self.assertRaises(Exception):cls.bundle(invalid)
+ def test_read_chunking_version_publication_and_retirement(self):
+  clip,h,state,calls,results,publish,done=self.setup_rich();bundle={**self.bundle(),"text":"x"*30000};reads=[]
+  clip.read_rich=lambda ticket:(reads.append(1) or bundle);identifier=str(module.uuid.uuid4());ticket=self.ticket(state)
+  start,witness=clip.rich.request(self.command(identifier,"read"),ticket);self.assertTrue(witness());data=bytearray()
+  while len(data)<start["size"]:
+   reply,witness=clip.rich.request(self.command(identifier,"pull",offset=len(data)),ticket);self.assertTrue(witness());piece=module.base64.b64decode(reply["data"]);self.assertEqual(reply["offset"],len(data)+len(piece));data.extend(piece)
+  self.assertEqual(module.json.loads(data),bundle);self.assertIsNone(clip.rich.current)
+  with self.assertRaises(module.NativeFailure):clip.rich.request(self.command(identifier,"read"),ticket)
+  self.assertEqual(reads,[1]);clip.owner_version+=1;self.assertFalse(witness())
+ def test_write_offers_all_mimes_and_local_png_paste_after_revoke(self):
+  import os
+  clip,h,state,calls,results,publish,done=self.setup_rich();identifier,ticket=self.begin_write(clip,state)
+  reply,witness=clip.rich.request(self.command(identifier,"commit"),ticket);self.assertTrue(witness());self.assertEqual(reply["stage"],"done")
+  self.assertEqual(bytes(clip.owned_formats["image/png"]),module.base64.b64decode(self.bundle()["png"]));self.assertEqual(calls[-1][0],"SetSelection")
+  self.assertEqual(set(clip.owned_formats),{"text/plain;charset=utf-8","text/plain","text/html","application/rtf","text/rtf","image/png"})
+  clip.control({"generation":2,"enabled":False})
+  clip.transfer(None,None,None,None,None,h.GLib.Variant("(osu)",(h.session,"image/png",1)))
+  self.await_result(done);self.assertEqual(done[-1][1],(h.session,1,True));self.assertEqual(os.read(state["transfer_read"],4096),module.base64.b64decode(self.bundle()["png"]))
+ def test_input_ceiling_and_clipboard_version_are_checked_before_commit(self):
+  for change in ("input","version"):
+   clip,h,state,calls,results,publish,done=self.setup_rich();identifier,ticket=self.begin_write(clip,state)
+   if change=="input":h.guard.devices=0
+   else:clip.owner_version+=1
+   with self.assertRaises(module.NativeFailure):clip.rich.request(self.command(identifier,"commit"),ticket)
+   self.assertFalse(calls)
+ def test_original_budget_and_cancel_after_native_query_prevent_write(self):
+  clip,h,state,calls,results,publish,done=self.setup_rich();identifier,ticket=self.begin_write(clip,state)
+  def alive():
+   h.scope.alive=lambda:True
+   clip.rich.cancel(self.command(identifier,"cancel"),ticket)
+   return True
+  h.scope.alive=alive
+  with self.assertRaises(module.NativeFailure):clip.rich.request(self.command(identifier,"commit"),ticket)
+  self.assertFalse(calls)
+  identifier,ticket=self.begin_write(clip,state)
+  h.scope.alive=lambda:(state.update(mono=500) or True)
+  with self.assertRaises(module.NativeFailure):clip.rich.request(self.command(identifier,"commit"),ticket)
+  self.assertFalse(calls)
+ def test_final_chunk_cancel_never_revives_after_bounded_cache_eviction(self):
+  clip,h,state,*_=self.setup_rich();clip.read_rich=lambda ticket:{"text":"generated"}
+  identifier=str(module.uuid.uuid4());ticket=self.ticket(state)
+  clip.rich.request(self.command(identifier,"read"),ticket)
+  reply,witness=clip.rich.request(self.command(identifier,"pull",offset=0),ticket)
+  self.assertTrue(witness());clip.rich.cancel(self.command(identifier,"cancel"),ticket);self.assertFalse(witness())
+  for _ in range(32):clip.rich.cancel(self.command(str(module.uuid.uuid4()),"cancel"),ticket)
+  self.assertFalse(witness())
+  other=str(module.uuid.uuid4());reply,other_witness=clip.rich.request(self.command(other,"read"),ticket)
+  clip.rich.cancel(self.command(identifier,"cancel"),ticket);self.assertTrue(other_witness())
+ def test_cancelled_worker_retains_busy_and_never_publishes_old_content(self):
+  clip,h,state,calls,results,publish,done=self.setup_rich();entered=threading.Event();release=threading.Event();identifier=str(module.uuid.uuid4())
+  def read(ticket):entered.set();release.wait(1);return {"text":"private generated old content"}
+  clip.read_rich=read;clip.submit_rich(self.command(identifier,"read"));self.assertTrue(entered.wait(1))
+  try:
+   clip.submit_rich(self.command(identifier,"cancel"));self.assertEqual(results[-1]["stage"],"cancelled")
+   clip.submit_rich(self.command(str(module.uuid.uuid4()),"read"));self.assertFalse(results[-1]["ok"]);self.assertTrue(clip.busy)
+  finally:release.set()
+  for _ in range(100):
+   if not clip.busy:break
+   module.time.sleep(.005)
+  self.assertFalse(clip.busy);self.assertTrue(all("data" not in value for value in results));self.assertIsNone(clip.rich.current)
+ def test_disabled_rich_config_never_reads_and_grant_change_wipes_cached_bytes(self):
+  clip,h,state,calls,results,publish,done=self.setup_rich();h.config["rich"]=False;clip.read_rich=lambda ticket:self.fail("Disabled rich clipboard read")
+  clip.submit_rich(self.command(str(module.uuid.uuid4()),"read"));self.assertFalse(results[-1]["ok"]);self.assertFalse(calls)
+  h.config["rich"]=True;identifier=str(module.uuid.uuid4());clip.rich.request(self.command(identifier,"begin",size=10),self.ticket(state));data=clip.rich.current["data"];data[0]=9
+  clip.control({"generation":2,"enabled":False});self.assertEqual(data,bytes(10));self.assertIsNone(clip.rich.current)
+ def test_idle_expiry_and_invalid_suffix_never_extend_transaction(self):
+  clip,h,state,calls,results,publish,done=self.setup_rich();identifier=str(module.uuid.uuid4());ticket=self.ticket(state)
+  clip.rich.request(self.command(identifier,"begin",size=10),ticket);data=clip.rich.current["data"];data[0]=9
+  with self.assertRaises(module.NativeFailure):clip.rich.request(self.command(identifier,"push",offset=0,data="AQ==",path="unexpected"),ticket)
+  state["mono"]=5001;clip.rich.expire();self.assertIsNone(clip.rich.current);self.assertEqual(data,bytes(10))
+
 class Entry(unittest.TestCase):
  def test_real_main_accepts_clipboard_flag_before_dispatching_owned_stub(self):
   from unittest.mock import patch

@@ -7,6 +7,7 @@ import tempfile
 
 source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
+rich_source=source.with_name("macos-rich-clipboard.swift").read_text()
 cases = [
     ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),
     ("clipboard-write-ceiling", "canWrite(),authorized(ticket)", "true,authorized(ticket)", "clipboard write requires input ceiling"),
@@ -21,14 +22,22 @@ cases = [
     ("text-source", "guard active(),now()<=expires else", "guard now()<=expires else", "text continued after source revocation"),
     ("release-source", 'if releaseAllowed() { try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers)) }', 'try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers))', "source revocation clears trackers without injection"),
 ]
-for name, before, after, expected in cases:
-    text = original.decode()
+rich_cases = [
+    ("rich-offset", '"stage":"chunk","offset":next,"data":chunk', '"stage":"chunk","offset":next-chunk.count,"data":chunk', "rich clipboard pull replies next offset"),
+    ("rich-late-cancel", 'pending.cancelled=true', 'pending.cancelled=false', "rich clipboard cancelled output never revives after cache eviction"),
+    ("rich-source", 'version==c.version', 'true', "rich clipboard permission query cannot hide local clipboard change"),
+    ("rich-after-clear", 'valid(cleared)', 'true', "rich clipboard clear cannot extend write deadline"),
+    ("rich-input", '!write || clipboard.canWrite()', 'true', "rich clipboard write requires input ceiling"),
+]
+for name, before, after, expected in cases+rich_cases:
+    is_rich=name.startswith("rich-")
+    text = rich_source if is_rich else original.decode()
     occurrences = text.count(before)
-    assert occurrences == (2 if name == "text-source" else 1), (name, occurrences)
+    assert occurrences == (2 if name in ("text-source","rich-after-clear") else 1), (name, occurrences)
     try:
         with tempfile.TemporaryDirectory(prefix="soda-macos-negative-") as temporary:
             candidate = Path(temporary) / source.name
-            candidate.write_text(text.replace(before, after))
+            candidate.write_text(text.replace(before, after)+"\n"+original.decode() if is_rich else rich_source+"\n"+text.replace(before, after))
             binary = Path(temporary) / "generated-helper"
             build = subprocess.run(
                 ["xcrun", "swiftc", "-swift-version", "5", "-O", str(candidate), "-o", str(binary)],
@@ -43,4 +52,5 @@ for name, before, after, expected in cases:
             assert result.returncode != 0 and expected in result.stdout, (name, result.stdout)
     finally:
         assert source.read_bytes() == original, "original source changed"
+        assert source.with_name("macos-rich-clipboard.swift").read_text()==rich_source,"rich source changed"
 print("generated_negative_controls_pass")
