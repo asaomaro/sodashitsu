@@ -61,9 +61,9 @@ final class PasteboardRichSink: RichClipboardSink {
             guard item.setData(data,forType:type) else { throw NativeError("backend_failure") }
         }
         let board=NSPasteboard.general
-        guard board.changeCount==expected,valid(nil) else { throw NativeError("source_changed") }
+        guard valid(expected) else { throw NativeError("source_changed") }
         let cleared=board.clearContents()
-        guard board.changeCount==cleared,valid(cleared) else { throw NativeError("source_changed") }
+        guard valid(cleared) else { throw NativeError("source_changed") }
         guard board.writeObjects([item]) else { throw NativeError("backend_failure") }
     }
 }
@@ -96,7 +96,7 @@ final class RichClipboardGuard {
         return writable && granted && clipboard.ceiling && clipboard.enabled && clipboard.generation==ticket.owner && now>=ticket.started && now<=ticket.deadline
     }
     func live(_ c: RichClipboardTransaction,_ ticket: TextClipboardTicket,write: Bool=false,expectedVersion: Int?=nil) -> Bool {
-        let version=sink?.sequence,granted=allowed(ticket,write:write),now=clipboard.monotonic()
+        let granted=allowed(ticket,write:write),version=sink?.sequence,now=clipboard.monotonic()
         return granted && current===c && !c.cancelled && c.generation==ticket.owner && clipboard.enabled && clipboard.generation==ticket.owner && version==(expectedVersion ?? c.version) && now>=ticket.started && now<=ticket.deadline && now>=c.started && now-c.started<=60000 && now>=c.last && now-c.last<=5000
     }
     func witness(_ c: RichClipboardTransaction,_ ticket: TextClipboardTicket) -> () -> Bool {
@@ -105,7 +105,7 @@ final class RichClipboardGuard {
         }
         return { [weak self] in
             guard let self=self else { return false }
-            let version=c.reading ? self.sink?.sequence:nil,granted=self.allowed(ticket),now=self.clipboard.monotonic()
+            let granted=self.allowed(ticket),version=c.reading ? self.sink?.sequence:nil,now=self.clipboard.monotonic()
             return granted && !c.cancelled && !self.cancelled.contains(c.id) && c.generation==ticket.owner && self.clipboard.enabled && self.clipboard.generation==ticket.owner && now>=ticket.started && now<=ticket.deadline && now>=c.started && now-c.started<=60000 && now>=c.last && now-c.last<=5000 && (!c.reading || version==c.version)
         }
     }
@@ -167,8 +167,8 @@ final class GeneratedRichClipboard: RichClipboardSink {
 func generatedRichClipboardTests() throws -> Int {
     var count=0
     func check(_ condition: @autoclosure () -> Bool,_ detail: String) throws { guard condition() else { throw GeneratedFailure(detail:detail) };count+=1 }
-    var alive=true,writable=true,now:Double=0;let board=GeneratedRichClipboard();var factories=0
-    let text=TextClipboardGuard(sink:GeneratedTextClipboard(),ceiling:true,active:{alive},canWrite:{writable},clock:{1000},monotonic:{now})
+    var alive=true,writable=true,now:Double=0;var activeHook:(()->Void)?;let board=GeneratedRichClipboard();var factories=0
+    let text=TextClipboardGuard(sink:GeneratedTextClipboard(),ceiling:true,active:{activeHook?();return alive},canWrite:{writable},clock:{1000},monotonic:{now})
     let rich=RichClipboardGuard(clipboard:text,factory:{factories+=1;return board})
     func command(_ id: String,_ op: String,_ fields: [String:Any]=[:]) -> [String:Any] {
         return ["type":"clipboard_rich","id":id,"operation":op,"generation":text.generation,"expiresAt":1400].merging(fields) { _,new in new }
@@ -212,6 +212,9 @@ func generatedRichClipboardTests() throws -> Int {
     try check(clearExpired.value["ok"] as? Bool==false && board.writes==1,"rich clipboard clear cannot extend write deadline");now=0
     let reads=board.reads;board.sequenceHook={now=500};let slow=try rich.evaluate(command(UUID().uuidString,"read"));board.sequenceHook=nil
     try check(slow.value["ok"] as? Bool==false && board.reads==reads,"rich clipboard native sequence query uses original budget");now=0
+    let duringRead=UUID().uuidString,readPrepared=try rich.evaluate(command(duringRead,"read"));activeHook={board.version+=1};try check(!readPrepared.valid(),"rich clipboard permission query cannot hide local clipboard change");activeHook=nil;rich.clear()
+    let duringWrite=UUID().uuidString;try stage(duringWrite);board.writeHook={activeHook={board.version+=1}};let queryChanged=try rich.evaluate(command(duringWrite,"commit"));activeHook=nil;board.writeHook=nil
+    try check(queryChanged.value["ok"] as? Bool==false && board.writes==1,"rich clipboard final permission query preserves local clipboard")
     let pending=UUID().uuidString,prepared=try rich.evaluate(command(pending,"read"));board.version+=1
     try check(!prepared.valid(),"rich clipboard source version fences queued read");rich.clear()
     let idle=UUID().uuidString;_ = try rich.evaluate(command(idle,"begin",["size":10]));now=5001;rich.expire();try check(rich.current==nil,"rich clipboard idle clears buffer");now=0

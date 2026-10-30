@@ -25,7 +25,7 @@ cases = [
 rich_cases = [
     ("rich-offset", '"stage":"chunk","offset":next,"data":chunk', '"stage":"chunk","offset":next-chunk.count,"data":chunk', "rich clipboard pull replies next offset"),
     ("rich-late-cancel", 'pending.cancelled=true', 'pending.cancelled=false', "rich clipboard cancelled output never revives after cache eviction"),
-    ("rich-source", 'version==c.version', 'true', "rich clipboard source version fences queued read"),
+    ("rich-source", 'version==c.version', 'true', "rich clipboard permission query cannot hide local clipboard change"),
     ("rich-after-clear", 'valid(cleared)', 'true', "rich clipboard clear cannot extend write deadline"),
     ("rich-input", '!write || clipboard.canWrite()', 'true', "rich clipboard write requires input ceiling"),
 ]
