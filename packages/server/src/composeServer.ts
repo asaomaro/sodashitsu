@@ -108,6 +108,8 @@ import { MachineManager } from "./machine/MachineManager.js";
 import { relayToMachine } from "./machine/MachineRelay.js";
 import { AgentMonitor } from "./agent/AgentMonitor.js";
 import { AgentStarter } from "./agent/AgentStarter.js";
+import { AssistantSessions } from "./assistant/AssistantSessions.js";
+import { savedAssistantBinding } from "./assistant/savedBinding.js";
 import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.js";
 import { FsManifestSource } from "./infra/FsManifestSource.js";
 import { isLocalOnlyServer, paneServerUrl } from "./util/net.js";
@@ -461,6 +463,7 @@ export async function composeServer(
   const desktopEndpointRelay=new DesktopEndpointRelay(auth,originRejections,machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
+  const assistantSessions = new AssistantSessions({session,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
   const agentFork = new AgentForkRunner({
     session,
     worktrees,
@@ -793,6 +796,7 @@ export async function composeServer(
     agentIntegrations,
     gitPoller,
     agentStarter,
+    assistantSessions,
     agentFork,
     subagentTranscripts,
     usage,
@@ -907,6 +911,7 @@ export async function composeServer(
     scrollbackEditors: () => session.handoffScrollbackEditors(),
     boundPort: () => boundPortValue,
     pausePollers: async () => {
+      await assistantSessions.suspend();
       await scheduler.close();
       graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
       graphMaintainer.pause(); // 20261008-graph-first（引き継ぎの停止の間は維持を呼ばない。新しい版が起動の経路で呼ぶ）
@@ -921,6 +926,7 @@ export async function composeServer(
       await extensions.stop();
     },
     resumePollers: () => {
+      assistantSessions.resume();
       desktop.resumeSavedTransfers();
       scheduler.start();
       graphEngine.start();
@@ -1255,6 +1261,7 @@ export async function composeServer(
         claudeSeenSub.dispose();
         usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
+        assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
@@ -1311,6 +1318,7 @@ export async function composeServer(
         claudeSeenSub.dispose();
         usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
+        assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
@@ -1467,6 +1475,7 @@ export function toSessionFileData(session: SessionService): SessionFileData {
       ...(typeof ws.git?.worktreeKey === "string" && typeof ws.representative === "boolean" ? { representative: ws.representative } : {}),
       cwd: ws.cwd,
       ...(ws.projectDir ? { projectDir: ws.projectDir } : {}),
+      ...(ws.assistant ? { assistant: savedAssistantBinding(ws, snapshot.panes,(paneId,instanceId,sessionId)=>session.hasVerifiedAgentSession(paneId,instanceId,sessionId)) } : {}),
       activeTabId: ws.activeTabId,
       // tab は並べ替えた順（`ws.tabIds`）で保存する——復元の tab の並びと、最初の tab（名前と git を決める場所。20260926-workspace-label-follow-cwd）が保たれる。
       tabs: ws.tabIds

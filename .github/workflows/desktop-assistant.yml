@@ -4,6 +4,12 @@ on:
     paths:
       - 'packages/desktop-assistant/**'
       - 'packages/protocol/**'
+      - 'packages/server/src/assistant/**'
+      - 'packages/server/src/session/**'
+      - 'packages/server/src/persist/SessionFile.ts'
+      - 'packages/server/src/surface/methods/assistant.ts'
+      - 'packages/server/src/surface/methods/agent.ts'
+      - 'packages/server/src/composeServer.ts'
       - 'pnpm-lock.yaml'
       - '.github/workflows/desktop-assistant.yml'
   workflow_dispatch:
@@ -35,3 +41,21 @@ jobs:
         run: pnpm --filter @sodashitsu/desktop-assistant verify:ui
       - name: Build unsigned development zip (do not install or launch)
         run: pnpm --filter @sodashitsu/desktop-assistant pack:win
+
+  generated-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/server build
+      - run: pnpm --filter @sodashitsu/server typecheck
+      - name: Ownership and queued input with memory terminals (no actual agent or PTY)
+        run: pnpm exec vitest run --maxWorkers=2 --project @sodashitsu/server --project @sodashitsu/protocol src/assistant/AssistantSessions.test.ts desktopAssistantSession.test.ts

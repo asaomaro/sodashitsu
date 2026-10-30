@@ -16,3 +16,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [ ] I. Read-aloud, selected-text summary/translation, local notes and existing-scheduler reminders (state/safety taskcheck).
 
 - [x] B1. Read-only authenticated source notifications, verbal inactive bubbles, mute, shared-resolved/dedup/expiry, named-session cookie scope, monotonic handshake/heartbeat and revision handling (taskcheck + independent whole/correction).
+
+- [x] B2. Dedicated server session API, exact ownership/restore/adoption, durable launch marker and queued-input guards; independent reviews,22 focused tests,10 negative controls and full source build/types/12,824 tests. Native bubble session use remains B3.
