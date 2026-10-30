@@ -23,21 +23,29 @@ export async function writeAssistantEnabled(dir: string, enabled: boolean): Prom
 export class AssistantLaunchController {
   private watcher: FSWatcher | null = null;
   private active = false;
+  private wanted = false;
+  private deviceId: string | null = null;
   private generation = 0;
   private queue = Promise.resolve();
   private readonly app: ManagedAssistant;
   private readonly saves = new Set<Promise<void>>();
   constructor(private readonly dir: string, private readonly env: NodeJS.ProcessEnv,
     private readonly origin: () => string, private readonly warn: (message: string) => void,
-    app?: ManagedAssistant | ((disabled: () => void) => ManagedAssistant),
-    private readonly save: typeof writeAssistantEnabled = writeAssistantEnabled) {
+    app?: ManagedAssistant | ((disabled: () => void, attached: (deviceId: string) => void) => ManagedAssistant),
+    private readonly save: typeof writeAssistantEnabled = writeAssistantEnabled,
+    private readonly agent?: {activate(deviceId: string):void; requestStop(deviceId: string):Promise<void>}) {
     const disabled = () => {
       if (!this.active) return;
       const pending = this.save(dir, false).catch(() => warn("アシスタントの無効設定を保存できません"));
       this.saves.add(pending);
       void pending.finally(() => this.saves.delete(pending));
     };
-    this.app = typeof app === "function" ? app(disabled) : app ?? new ManagedAssistant(warn, undefined, disabled);
+    const attached = (deviceId: string) => {
+      if (!this.active) return;
+      this.deviceId = deviceId;
+      if (this.wanted) this.agent?.activate(deviceId);
+    };
+    this.app = typeof app === "function" ? app(disabled, attached) : app ?? new ManagedAssistant(warn, undefined, disabled, attached);
   }
   start(): void {
     if (this.active) return;
@@ -55,8 +63,12 @@ export class AssistantLaunchController {
       try {
         const enabled = await readAssistantEnabled(this.dir, this.env.SODA_ASSISTANT_ENABLED === "1");
         if (!this.active || generation !== this.generation) return;
+        this.wanted = enabled;
         if (enabled) this.app.start(assistantLaunchFromEnv({...this.env, SODA_ASSISTANT_ENABLED:"1"}, this.origin()));
-        else await this.app.stop();
+        else {
+          try { await this.app.stop(); }
+          finally { if (this.deviceId) await this.agent?.requestStop(this.deviceId); }
+        }
       } catch { this.warn("アシスタントの起動設定を確認してください"); await this.app.stop(); }
     }).catch(() => { this.warn("アシスタントの終了を確認できません"); });
   }

@@ -1,3 +1,4 @@
+import { AssistantDisabledDevices } from "./AssistantDisabledDevices.js";
 import { assistantLaunchArgs } from "@sodashitsu/protocol";
 import { mkdir, lstat, realpath } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,6 +22,7 @@ export interface AssistantSessionDeps {
     | "getWorkspace"
     | "getTab"
     | "getPane"
+    | "closePane"
     | "createWorkspace"
     | "updateAssistantBinding"
     | "detachAssistantBinding"
@@ -41,6 +43,11 @@ export class AssistantSessions {
     string,
     { kind: string; settings?: string; promise: Promise<AssistantSessionInfo>; adoptInstanceId?: string }
   >();
+  private readonly stopRequests = new Set<Promise<void>>();
+  private draining: Promise<void> | null = null;
+  private drainAgain = false;
+  private readonly disabledDevices: AssistantDisabledDevices;
+  private readonly stopTokens = new Map<string, object>();
   private generation = 0;
   private starting = new Set<string>();
   private startedHere = new Set<string>();
@@ -48,7 +55,7 @@ export class AssistantSessions {
   private runtimeOwners = new Map<string, { paneId: string; instanceId: string }>();
   private creation: Promise<void> = Promise.resolve();
   private closed = false;
-  constructor(private readonly deps: AssistantSessionDeps) {}
+  constructor(private readonly deps: AssistantSessionDeps) { this.disabledDevices = new AssistantDisabledDevices(deps.stateDir); }
 
   close(): void {
     this.closed = true;
@@ -59,7 +66,69 @@ export class AssistantSessions {
   }
   async suspend(): Promise<void> {
     this.close();
-    await Promise.allSettled([...this.pending.values()].map((item) => item.promise));
+    await Promise.allSettled([...this.pending.values()].map((item) => item.promise).map(promise => promise as Promise<unknown>).concat([...this.stopRequests], this.draining ? [this.draining] : []));
+  }
+
+  /** Disable only this installation's dedicated agent; active work may finish before closure. */
+  private isStopped(deviceId: string): boolean {
+    const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
+    return this.stopTokens.has(id) || this.disabledDevices.isDisabled(id);
+  }
+  requestStop(deviceId: string): Promise<void> {
+    const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
+    if (this.closed) return Promise.resolve();
+    this.disabledDevices.disable(id);
+    const token = {}; this.stopTokens.set(id, token);
+    const pending = this.finishStop(id, token);
+    this.stopRequests.add(pending);
+    void pending.then(() => this.stopRequests.delete(pending), () => this.stopRequests.delete(pending));
+    return pending;
+  }
+  private async finishStop(id: string, token: object): Promise<void> {
+    await this.pending.get(id)?.promise.catch(() => {});
+    if (this.closed || this.stopTokens.get(id) !== token) return;
+    const workspace = this.find(id);
+    if (!workspace || !this.scoped(workspace, workspace.assistant!)) return;
+    this.deps.session.updateAssistantBinding(workspace.id, workspace.assistant!, {stopWhenIdle: true});
+    await this.deps.flush();
+    if (this.stopTokens.get(id) === token) await this.drainIdleStops();
+  }
+  activate(deviceId: string): void {
+    const id = AssistantSessionGetParams.parse({deviceId}).deviceId;
+    if (this.closed) return;
+    this.disabledDevices.activate(id);
+    this.stopTokens.delete(id);
+    const workspace = this.find(id);
+    if (workspace && this.scoped(workspace, workspace.assistant!) && workspace.assistant!.stopWhenIdle)
+      this.deps.session.updateAssistantBinding(workspace.id, workspace.assistant!, {stopWhenIdle: false});
+  }
+  /** Existing monitor events drive this; no timer or process is allocated for disabled agents. */
+  drainIdleStops(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    if (this.draining) { this.drainAgain = true; return this.draining; }
+    const generation = this.generation;
+    const task = (async () => {
+      try {
+        do { this.drainAgain = false; await this.closeIdleAgents(generation); }
+        while (this.drainAgain && !this.closed && generation === this.generation);
+      } finally { if (this.draining === task) this.draining = null; }
+    })();
+    this.draining = task;
+    return task;
+  }
+  private async closeIdleAgents(generation: number): Promise<void> {
+    for (const workspace of this.deps.session.snapshot().workspaces) {
+      if (this.closed || generation !== this.generation) return;
+      const current = this.deps.session.getWorkspace(workspace.id);
+      if (!current?.assistant?.stopWhenIdle) continue;
+      const binding = current.assistant;
+      if (!this.scoped(current, binding)) continue;
+      const actor = this.ownAgent(current, binding) ?? this.initialAgent(current, binding);
+      if (actor?.state !== "idle") continue;
+      // No await between final identity/scope check and the session's synchronous pane removal.
+      if (current.assistant !== binding || !binding.stopWhenIdle || this.deps.session.getPane(binding.paneId)?.agent?.instanceId !== actor.instanceId) continue;
+      await this.deps.session.closePane(binding.paneId);
+    }
   }
 
   get(deviceId: string): AssistantSessionInfo | null {
@@ -71,6 +140,11 @@ export class AssistantSessions {
   ensure(input: unknown): Promise<AssistantSessionInfo> {
     const request = AssistantSessionEnsureParams.parse(input);
     assistantLaunchArgs(request.kind, request.launchSettings ?? {});
+
+    if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの起動を停止しています");
+    if (request.activate) this.activate(request.deviceId);
+    if (this.isStopped(request.deviceId) || this.find(request.deviceId)?.assistant?.stopWhenIdle)
+      throw new RpcError("agent_pane_busy", "アシスタントは無効です。明示的に有効化してください");
     if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの起動を停止しています");
     const current = this.pending.get(request.deviceId);
     if (current) {
@@ -91,6 +165,7 @@ export class AssistantSessions {
   /** Explicit user-selected actor only. Used when a live handoff lacks fresh hook/argv evidence. */
   adopt(input: unknown): Promise<AssistantSessionInfo> {
     const request = AssistantSessionAdoptParams.parse(input);
+    if (this.isStopped(request.deviceId) || this.find(request.deviceId)?.assistant?.stopWhenIdle) throw new RpcError("agent_pane_busy", "アシスタントは停止待ちです");
     if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの操作を停止しています");
     const pending = this.pending.get(request.deviceId);
     if (pending) {
@@ -169,6 +244,7 @@ export class AssistantSessions {
     deviceId: string,
     instanceId: string,
   ): { paneId: string; workspaceId: string; tabId: string; projectDir: string; agent: AgentInfo } {
+    if (this.isStopped(deviceId) || this.find(deviceId)?.assistant?.stopWhenIdle) throw new RpcError("agent_pane_busy", "アシスタントは停止待ちです");
     if (this.closed) throw new RpcError("agent_pane_busy", "専用セッションの操作を停止しています");
     const workspace = this.find(AssistantSessionGetParams.parse({ deviceId }).deviceId);
     if (!workspace) throw new RpcError("agent_not_found", "専用セッションが見つかりません");
@@ -322,7 +398,7 @@ export class AssistantSessions {
   ): Promise<AssistantSessionInfo> {
     const generation = this.generation;
     const live = () => {
-      if (this.closed || generation !== this.generation)
+      if (this.closed || generation !== this.generation || this.stopTokens.has(request.deviceId))
         throw new RpcError("agent_pane_busy", "専用セッションの起動を中断しました");
     };
     live();
@@ -440,4 +516,14 @@ export class AssistantSessions {
       this.starting.delete(request.deviceId);
     }
   }
+}
+
+/** Status is published before fresh argv evidence; evaluate after that synchronous update completes. */
+export function watchAssistantIdleStops(bus: Pick<import("../bus/EventBus.js").EventBus, "subscribe">, sessions: AssistantSessions, warn: () => void): {dispose():void} {
+ let active=true, queued=false;
+ const subscription=bus.subscribe(event=>{
+  if(event.event!=="pane.agent_status_changed"||queued)return;
+  queued=true;queueMicrotask(()=>{queued=false;if(active)void sessions.drainIdleStops().catch(warn);});
+ });
+ return {dispose(){active=false;subscription.dispose();}};
 }

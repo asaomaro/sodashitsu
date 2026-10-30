@@ -1,10 +1,11 @@
+import { AssistantDisabledDevices } from "./AssistantDisabledDevices.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { RpcError, type AgentInfo, type AssistantSessionInfo } from "@sodashitsu/protocol";
-import { AssistantSessions } from "./AssistantSessions.js";
+import { watchAssistantIdleStops, AssistantSessions } from "./AssistantSessions.js";
 import { savedAssistantBinding } from "./savedBinding.js";
 import { SessionModel } from "../session/SessionModel.js";
 import { SessionService } from "../session/SessionService.js";
@@ -70,10 +71,12 @@ async function fixture(existing?: { model: SessionModel; stateDir: string }) {
   };
   const touch = vi.fn();
   const flush = vi.fn(async () => {});
+  const bus = new EventBus();
   const session = new SessionService({
+    isAssistantDisabled: device => new AssistantDisabledDevices(stateDir).isDisabled(device),
     model,
     terminals,
-    bus: new EventBus(),
+    bus,
     persist: { touch, flush, cancel() {} },
     serverVersion: "generated",
     host: { os: "linux", windowsBuild: null, hostname: "generated" },
@@ -140,6 +143,7 @@ async function fixture(existing?: { model: SessionModel; stateDir: string }) {
     return { device, info, agent };
   };
   return {
+    bus,
     stateDir,
     model,
     session,
@@ -334,7 +338,7 @@ it("round-trips ownership and verified conversation identity without starting an
   const loaded = await file.load();
   expect(loaded.kind).toBe("ok");
   if (loaded.kind !== "ok") throw Error("No generated session");
-  for (const evidence of ["hook", "argv"]) {
+  for (const evidence of ["hook", "argv", "argv-stop"]) {
     const model = new SessionModel();
     const g = await fixture({ model, stateDir: f.stateDir });
     await g.session.restore(loaded.data);
@@ -342,13 +346,24 @@ it("round-trips ownership and verified conversation identity without starting an
     expect(g.session.wasRestoredPane(info.paneId)).toBe(true);
     const resumed = { ...agent, instanceId: randomUUID() };
     delete resumed.name;
-    if (evidence === "argv")
+    let idleStopSubscription: {dispose():void} | undefined;
+    if (evidence === "argv-stop") {
+      const workspace = g.session.getWorkspace(info.workspaceId)!;
+      g.session.updateAssistantBinding(workspace.id, workspace.assistant!, {stopWhenIdle:true});
+      idleStopSubscription = watchAssistantIdleStops(g.bus,g.manager,()=>{});
+    }
+    if (evidence.startsWith("argv"))
       g.session.setFrontAgent(info.paneId, {
         kind: "codex",
         pids: new Set([1234]),
         resumeId: sessionId,
       });
     g.session.updatePaneRuntime(info.paneId, { agent: resumed });
+    if (evidence === "argv-stop") {
+      try { await vi.waitFor(()=>expect(g.session.getPane(info.paneId)).toBeUndefined()); }
+      finally {idleStopSubscription?.dispose();}
+      continue;
+    }
     if (evidence === "hook") {
       expect((await g.ensure(device)).state).toBe("conflict"); // Persisted reference alone is never proof.
       g.session.reportAgentSession(info.paneId, "codex", sessionId);
@@ -665,4 +680,95 @@ it("coalesces equal profiles but rejects a different concurrent launch profile",
  await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
  release(); await first;
  expect(f.start).toHaveBeenCalledTimes(1);
+});
+
+it("closes only the disabled installation's idle owned agent and requires explicit reactivation", async () => {
+ const f=await fixture();const {device,info}=await f.ready();
+ await f.manager.requestStop(device);
+ expect(f.session.getPane(info.paneId)).toBeUndefined();
+ expect(()=>f.manager.ensure({deviceId:device,kind:"codex"})).toThrow("無効");
+ const next=await f.manager.ensure({deviceId:device,kind:"codex",activate:true});
+ expect(next.paneId).not.toBe(info.paneId);
+});
+it("lets active work finish, persists the stop request, and closes on the existing idle event", async () => {
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});
+ await f.manager.requestStop(device);expect(f.session.getPane(info.paneId)).toBeDefined();
+ expect(f.session.getWorkspace(info.workspaceId)?.assistant?.stopWhenIdle).toBe(true);
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"idle"}});
+ await f.manager.drainIdleStops();expect(f.session.getPane(info.paneId)).toBeUndefined();
+});
+it("does not close a replacement actor and cancels a queued stop on explicit activation", async () => {
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});
+ await f.manager.requestStop(device);f.manager.activate(device);
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"idle"}});
+ await f.manager.drainIdleStops();expect(f.session.getPane(info.paneId)).toBeDefined();
+ const foreign={...agent,instanceId:randomUUID()};f.session.updatePaneRuntime(info.paneId,{agent:foreign});
+ await f.manager.requestStop(device);expect(f.session.getPane(info.paneId)?.agent?.instanceId).toBe(foreign.instanceId);
+});
+
+it("rejects queued input guards after disable while active work finishes", async () => {
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});
+ await f.manager.requestStop(device);
+ expect(()=>f.manager.target(device,agent.instanceId)).toThrow();
+});
+it("remembers a fully stopped device after replacing the manager and requires explicit activation", async () => {
+ const f=await fixture();const {device}=await f.ready();await f.manager.requestStop(device);
+ const g=await fixture({model:new SessionModel(),stateDir:f.stateDir});
+ expect(()=>g.manager.ensure({deviceId:device,kind:"codex"})).toThrow();
+ await expect(g.manager.ensure({deviceId:device,kind:"codex",activate:true})).resolves.toBeDefined();
+});
+it("does not close the next owned idle agent after suspension begins", async () => {
+ const f=await fixture();const first=await f.ready(),second=await f.ready();
+ for(const info of [first.info,second.info]) {const ws=f.session.getWorkspace(info.workspaceId)!;f.session.updateAssistantBinding(ws.id,ws.assistant!,{stopWhenIdle:true});}
+ let release!:()=>void;const original=f.session.closePane.bind(f.session);
+ vi.spyOn(f.session,"closePane").mockImplementationOnce(async pane=>{await original(pane);await new Promise<void>(resolve=>{release=resolve;});});
+ const drain=f.manager.drainIdleStops();await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+ const pause=f.manager.suspend();release();await Promise.all([drain,pause]);
+ expect(f.session.getPane(second.info.paneId)).toBeDefined();
+});
+
+it("drops an already queued assistant prompt after disabling its working owner", async () => {
+ const f=await fixture();const {device,info,agent}=await f.ready();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});
+ const surface=new ControlSurface(new MemoryLogger());
+ const deps={session:f.session,terminals:f.terminals,sizeAuthority:{noteInteraction(){}},assistantSessions:f.manager} as unknown as MethodDeps;
+ registerAgentMethods(surface,deps);registerAssistantMethods(surface,deps);
+ const host=f.hosts.get(info.paneId)!;let release!:()=>void;
+ host.beforeModal=()=>new Promise<void>(resolve=>{release=resolve;});
+ const pending=surface.invoke({clientId:randomUUID(),sink:{} as never},"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"queued"});
+ await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+ await f.manager.requestStop(device);release();
+ expect(await pending).toMatchObject({ok:false});expect(host.writes).toEqual([]);
+});
+
+it("rechecks an idle event received while another dedicated pane is closing", async () => {
+ const f=await fixture();const first=await f.ready(),second=await f.ready();
+ f.session.updatePaneRuntime(first.info.paneId,{agent:{...first.agent,state:"working"}});
+ for(const info of [first.info,second.info]) {const ws=f.session.getWorkspace(info.workspaceId)!;f.session.updateAssistantBinding(ws.id,ws.assistant!,{stopWhenIdle:true});}
+ let release!:()=>void;const original=f.session.closePane.bind(f.session);
+ vi.spyOn(f.session,"closePane").mockImplementationOnce(async pane=>{await original(pane);await new Promise<void>(resolve=>{release=resolve;});});
+ const drain=f.manager.drainIdleStops();await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+ f.session.updatePaneRuntime(first.info.paneId,{agent:{...first.agent,state:"idle"}});
+ const again=f.manager.drainIdleStops();release();await Promise.all([drain,again]);
+ expect(f.session.getPane(first.info.paneId)).toBeUndefined();
+});
+it("does not auto-resume a disabled marker when the binding flag has not been saved", async () => {
+ const f=await fixture();const {device,info}=await f.ready();
+ const sessionId=randomUUID();f.session.reportAgentSession(info.paneId,"codex",sessionId);
+ const pane=f.session.getPane(info.paneId)!,tab=f.session.getTab(pane.tabId)!,ws=f.session.getWorkspace(info.workspaceId)!;
+ const file=new FsSessionFile(f.stateDir);
+ await file.save({schema:1,savedAt:new Date().toISOString(),groups:[],focus:null,workspaces:[{id:ws.id,label:ws.label,cwd:ws.cwd,projectDir:ws.projectDir!,assistant:ws.assistant!,activeTabId:tab.id,tabs:[{id:tab.id,label:tab.label,focusedPaneId:pane.id,zoomedPaneId:null,layout:{type:"pane",paneId:pane.id},panes:[{id:pane.id,label:pane.label,cwd:pane.cwd,shell:pane.shell,agentSession:pane.agentSession!}]}]}]});
+ const loaded=await file.load();if(loaded.kind!=="ok")throw Error("No generated file");
+ const {mkdir,writeFile}=await import("node:fs/promises");await mkdir(join(f.stateDir,"assistant-disabled"),{recursive:true});await writeFile(join(f.stateDir,"assistant-disabled",device),"");
+ const g=await fixture({model:new SessionModel(),stateDir:f.stateDir});await g.session.restore(loaded.data);
+ expect(g.hosts.get(info.paneId)?.writes).toEqual([]);
+});
+it("starts a fresh drain for a notification at the prior drain's completion boundary", async () => {
+ const f=await fixture();const {info}=await f.ready();
+ const first=f.manager.drainIdleStops();let next!:Promise<void>;
+ queueMicrotask(()=>{const ws=f.session.getWorkspace(info.workspaceId)!;f.session.updateAssistantBinding(ws.id,ws.assistant!,{stopWhenIdle:true});next=f.manager.drainIdleStops();});
+ await first;await next;expect(f.session.getPane(info.paneId)).toBeUndefined();
 });

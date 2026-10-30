@@ -133,6 +133,7 @@ export interface SessionServiceOptions {
    * 自動再開の可否を都度読む（設定画面から切り替えられるため、構築時に固定値で受け取らない。
    * design D3）。省略時は既定 ON（herdr の `resume_agents_on_restore` の既定に合わせる）。
    */
+  isAssistantDisabled?: ((deviceId: string) => boolean) | undefined;
   getAutoResumeEnabled?: (() => boolean) | undefined;
   /**
    * pane の中の sodactl がこのサーバへつなげる URL（20260926-agent-skill-file）。pane を起動するたびに読み、あれば `SODA_SERVER_URL` として
@@ -246,6 +247,7 @@ export class SessionService {
   private readonly workspaceLabelDeps: WorkspaceLabelDeps;
   private readonly agentReportSocketPath: string | undefined;
   private readonly paneSocketPath: string | undefined;
+  private readonly isAssistantDisabled: (deviceId: string) => boolean;
   private readonly getAutoResumeEnabled: () => boolean;
   private readonly manualAgentResume: (paneId: string) => Promise<boolean>;
   private readonly serverUrlForPanes: () => string | undefined;
@@ -331,6 +333,7 @@ export class SessionService {
     this.clock = opts.clock ?? { now: monotonicNow };
     this.agentReportSocketPath = opts.agentReportSocketPath;
     this.paneSocketPath = opts.paneSocketPath;
+    this.isAssistantDisabled = opts.isAssistantDisabled ?? (() => false);
     this.getAutoResumeEnabled = opts.getAutoResumeEnabled ?? (() => true);
     this.manualAgentResume = opts.manualAgentResume ?? (async () => false);
     this.serverUrlForPanes = opts.serverUrlForPanes ?? (() => undefined);
@@ -519,7 +522,7 @@ export class SessionService {
   }
 
   /** Internal service only. Preserve identity across async persistence and foreground inspection. */
-  updateAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding, patch: Partial<Pick<AssistantWorkspaceBinding,"launchRequested"|"lastInstanceId"|"sessionId"|"launchSettings">>): AssistantWorkspaceBinding {
+  updateAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding, patch: Partial<Pick<AssistantWorkspaceBinding,"launchRequested"|"lastInstanceId"|"sessionId"|"launchSettings"|"stopWhenIdle">>): AssistantWorkspaceBinding {
     const workspace = this.model.getWorkspace(workspaceId);
     if (!workspace || workspace.assistant !== expected) throw new RpcError("not_found", "専用セッションが変更されました");
     const next = AssistantWorkspaceBinding.parse({ ...expected, ...patch });
@@ -2346,6 +2349,13 @@ export class SessionService {
    * 重複排除はしない（design D11）。
    */
   private maybeResumeAgentSession(paneId: PaneId, agentSession: { kind: string; sessionId: string } | undefined): void {
+    const pane = this.model.getPane(paneId);
+    const tab = pane && this.model.getTab(pane.tabId);
+    const assistant = tab && this.model.getWorkspace(tab.workspaceId)?.assistant;
+    if (assistant?.paneId === paneId && (assistant.stopWhenIdle || this.isAssistantDisabled(assistant.deviceId))) {
+      this.logger.info("agent resume skipped", {paneId, reason: "assistant-disabled"});
+      return;
+    }
     const decision = this.resumeDecision(agentSession);
     if (decision.command === null) {
       this.logger.info("agent resume skipped", { paneId, reason: decision.reason });

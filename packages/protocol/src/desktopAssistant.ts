@@ -168,6 +168,7 @@ export const AssistantWorkspaceBinding = z
     kind: AssistantAgentKind,
     name: z.string().regex(/^asst-[0-9a-z]{1,25}$/),
     launchRequested: z.boolean(),
+    stopWhenIdle: z.boolean().optional(),
     launchSettings: AssistantLaunchSettings.optional(),
     lastInstanceId: z.uuid().optional(),
     sessionId: z
@@ -185,6 +186,7 @@ export const AssistantSessionGetParams = z.object({ deviceId: AssistantDeviceId 
 export const AssistantSessionEnsureParams = AssistantSessionGetParams.extend({
   kind: AssistantAgentKind,
   retry: z.boolean().default(false),
+  activate: z.boolean().default(false),
   launchSettings: AssistantLaunchSettings.optional(),
 }).strict();
 export const AssistantSessionPromptParams = AssistantSessionGetParams.extend({

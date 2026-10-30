@@ -16,7 +16,7 @@ export function assistantLaunchFromEnv(env: NodeJS.ProcessEnv, origin: string): 
 export class ManagedAssistant {
   private child: ChildProcess | null = null;
   private closing: Promise<void> | null = null;
-  constructor(private readonly warn: (message: string) => void, private readonly launch: typeof spawn = spawn, private readonly disabled: () => void = () => {}) {}
+  constructor(private readonly warn: (message: string) => void, private readonly launch: typeof spawn = spawn, private readonly disabled: () => void = () => {}, private readonly attached: (deviceId: string) => void = () => {}) {}
   start(config: AssistantLaunch | null): void {
     if (!config || this.child || this.closing) return;
     const child = this.launch(config.command[0]!, [...config.command.slice(1), "--soda-managed"], {
@@ -24,12 +24,19 @@ export class ManagedAssistant {
     });
     this.child = child;
     let output = "";
+    let identity: string | null = null;
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
       output += chunk;
       if (output.length > 4096) { output = ""; return; }
       while (output.includes("\n")) {
         const end=output.indexOf("\n"), line=output.slice(0,end); output=output.slice(end+1);
+        try {
+          const record = JSON.parse(line) as {type?:string;deviceId?:unknown};
+          if (!identity && record.type === "attached" && typeof record.deviceId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(record.deviceId) && this.child === child) {
+            identity = record.deviceId.toLowerCase(); this.attached(identity);
+          }
+        } catch { /* Other stdout is not control input. */ }
         if (line === '{"type":"disabled"}' && this.child === child) this.disabled();
       }
     });
