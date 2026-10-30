@@ -16,6 +16,7 @@ const files = new Set([
   "bubble.js",
   "tools.js",
   "recording.js",
+  "ocr.js",
   "style.css",
   "captain-male.svg",
   "captain-female.svg",
@@ -55,11 +56,13 @@ try {
       serverOrigin: "http://127.0.0.1:7780",
       launchAtLogin: false,
       mute: false,
+      ocrEnabled: false, ocrExecutable: "", ocrLanguage: "jpn+eng",
       transcriptionEnabled: false,
       transcriptionOrigin: "http://127.0.0.1:8080",
       reducedMotion: false,
       position: null,
     };
+    window.ocrRevision=1; window.currentOcr={};
     window.savedNotes = [];
     window.toolsRevision = 1;
     window.currentTools = {revision:1,transcriptionEnabled:true,transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
@@ -91,6 +94,17 @@ try {
       discardRecording: async input=>window.calls.push(["discard-recording",input]),
       transcribeRecording: async input=>window.calls.push(["transcribe-recording",{token:input.token,mime:input.mime,bytes:input.bytes.byteLength}]),
       onRecordingCancelled: callback=>{window.recordCancelCallback=callback;return()=>{};},
+      ocrState: async () => ({revision:1,status:"idle",enabled:true,imageId:null,width:0,height:0,text:"",message:"画像を確認してから認識します。"}),
+      onOcr: callback => {window.ocrCallback=callback;return()=>{};},
+      ocrFile: async () => {
+        const state={revision:++window.ocrRevision,status:"ready",enabled:true,imageId:`generated-${window.ocrRevision}`,width:1,height:1,text:"",message:"認識前のプレビュー"};
+        window.currentOcr=state; window.ocrCallback(state);window.calls.push(["ocr-file"]);
+        return {state,uri:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="};
+      },
+      ocrClipboard: async () => window.assistant.ocrFile(),
+      ocrCrop: async input => {window.calls.push(["ocr-crop",input]);return window.assistant.ocrFile();},
+      ocrRun: async input => {window.calls.push(["ocr-run",input]);window.currentOcr={...window.currentOcr,revision:++window.ocrRevision,status:"done",text:"画像から読み取った文字"};window.ocrCallback(window.currentOcr);},
+      ocrDiscard: async () => {window.ocrCallback({...window.currentOcr,revision:++window.ocrRevision,status:"idle",imageId:null,text:"",message:"破棄しました"});},
       tools: async () => window.currentTools,
       onTools: callback => { window.toolWatchers.add(callback); return ()=>window.toolWatchers.delete(callback); },
       readClipboard: async () => "コピーした文章です。",
@@ -216,7 +230,7 @@ try {
     kinds:[{kind:"codex",label:"Codex",available:true}],messages:[],hint:"送信できます。"
   }),actorId);
   await expect(page.locator("#send")).toBeEnabled();
-  await page.locator("#standard-tools summary").press("Enter");
+  await page.locator("#standard-tools > summary").press("Enter");
   const sendsBeforeTools=await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length);
   await page.locator("#read-clipboard").press("Enter");
   await expect(page.locator("#tool-text")).toHaveValue("コピーした文章です。");
@@ -255,7 +269,7 @@ try {
   await expect(page.locator("#transcription-result")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
   await page.locator("#use-transcription").press("Enter");
   await expect(page.locator("#tool-text")).toHaveValue("<img src=x onerror=alert(1)>認識結果です。");
-  await expect(page.locator("#standard-tools img")).toHaveCount(0);
+  await expect(page.locator("#standard-tools img:not(#ocr-preview)")).toHaveCount(0);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="get-user-media").length),0);
   await page.locator("#record-start").press("Enter");
@@ -298,19 +312,43 @@ try {
   await page.locator("#record-start").press("Enter");
   await expect(page.locator("#record-status")).toContainText("録音中");
   const stopsBeforeCollapse=await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length);
-  await page.locator("#standard-tools summary").press("Enter");
+  await page.locator("#standard-tools > summary").press("Enter");
   await expect(page.locator("#record-status")).toContainText("標準ツールを閉じたため");
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="stop-track").length),stopsBeforeCollapse+1);
-  await page.locator("#standard-tools summary").press("Enter");
+  await page.locator("#standard-tools > summary").press("Enter");
   await expect(page.locator("#record-start")).toBeEnabled();
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="transcribe-recording").length),1);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
   await page.getByRole("button", { name: "吹き出しを閉じる" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
   assert.deepEqual(errors, []);
+  await page.evaluate(() => { document.getElementById("standard-tools").open=true; document.getElementById("ocr-tools").open=true; });
+  await page.locator("#ocr-file").focus(); await page.keyboard.press("Enter");
+  await expect(page.locator("#ocr-preview")).toHaveAttribute("src", /^data:image\/png;base64,/);
+  await expect(page.locator("#ocr-run")).toBeEnabled();
+  await page.locator("#ocr-run").focus(); await page.keyboard.press("Enter");
+  await expect(page.locator("#ocr-result")).toHaveValue("画像から読み取った文字");
+  await page.locator("#ocr-use").focus(); await page.keyboard.press("Enter");
+  await expect(page.locator("#tool-text")).toHaveValue("画像から読み取った文字");
+  await expect(page.locator("#saved-notes")).toHaveValue("");
+  await page.evaluate(() => {
+    window.assistant.saveNote=async input=>new Promise(resolve=>{window.releaseOcrNote=()=>resolve({id:"00000000-0000-4000-8000-000000000077"});});
+    document.getElementById("tool-text").value="保存中の文章";
+    document.getElementById("save-note").click();
+  });
+  await expect(page.locator("#tool-text")).toBeDisabled();
+  await page.locator("#ocr-use").focus(); await page.keyboard.press("Enter");
+  await expect(page.locator("#tool-text")).toHaveValue("保存中の文章");
+  await expect(page.locator("#ocr-status")).toContainText("完了してから");
+  await page.evaluate(() => window.releaseOcrNote());
+  await expect(page.locator("#tool-text")).toBeEnabled();
+  await page.locator("#ocr-discard").focus(); await page.keyboard.press("Enter");
+  await expect(page.locator("#ocr-result")).toHaveValue("");
+  await expect(page.locator("#ocr-preview")).not.toHaveAttribute("src");
+  assert.deepEqual(errors, []);
   await context.close();
   console.log(
-    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation",
+    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing",
   );
 } finally {
   await browser?.close();

@@ -24,3 +24,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] D1. Local notes, explicit clipboard, visible summary/translation drafts, local-only read-aloud and local Whisper audio-file transcription with owned picker/bounds/cancel/retirement;576 related tests,15 valid negatives, generated browser and Windows package, independent reviews. Microphone capture, OCR and reminder integration remain subsequent work.
 
 - [x] D2. Explicit mic capture, visible indicator/stop, review/listen-on-demand, local inference and scoped cancellation;79 generated tests,12 negatives,400x640 keyboard/DOM UI, unsigned Windows package and independent reviews. Actual capture/listen/recognition still requires a real device.
+
+- [x] D3. Explicit PNG/OS-copied clipboard image preview, bounded pixel crop and local Tesseract OCR;601 related tests,8 valid negatives, generated keyboard UI, Windows package and independent reviews. Direct screen/window capture and real recognition accuracy remain unverified/pending.

@@ -65,6 +65,20 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    ocrEnabled: z.boolean().default(false),
+    ocrExecutable: z
+      .string()
+      .max(2048)
+      .refine(
+        (value) =>
+          value === "" || (/^(?:\/|[A-Za-z]:[\\\\/])/.test(value) && !/[\u0000\r\n]/.test(value)),
+        "OCR実行ファイルの絶対パスを指定してください",
+      )
+      .default(""),
+    ocrLanguage: z
+      .string()
+      .regex(/^[a-z_]{2,16}(?:\+[a-z_]{2,16}){0,3}$/)
+      .default("jpn+eng"),
     transcriptionEnabled: z.boolean().default(false),
     transcriptionOrigin: TranscriptionOrigin.default("http://127.0.0.1:8080"),
     reducedMotion: z.boolean().default(false),
