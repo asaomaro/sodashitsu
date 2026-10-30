@@ -39,7 +39,11 @@ func nativeSamplePCM(_ sample:CMSampleBuffer) throws -> Data {
           format.mBitsPerChannel==32,(format.mFormatFlags & kAudioFormatFlagIsFloat) != 0,
           (format.mFormatFlags & kAudioFormatFlagIsBigEndian)==0,format.mFramesPerPacket==1,
           format.mBytesPerFrame==(planar ? 4:8) else { throw NativePCMError("pcm_format") }
-    let bytes=MemoryLayout<AudioBufferList>.size+MemoryLayout<AudioBuffer>.size
+    var bytes=0
+    let query=CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample,bufferListSizeNeededOut:&bytes,
+        bufferListOut:nil,bufferListSize:0,blockBufferAllocator:kCFAllocatorDefault,
+        blockBufferMemoryAllocator:kCFAllocatorDefault,flags:0,blockBufferOut:nil)
+    guard query==noErr,bytes>=MemoryLayout<AudioBufferList>.size,bytes<=256 else { throw NativePCMError("pcm_buffers_query_\(query)_\(bytes)") }
     let storage=UnsafeMutableRawPointer.allocate(byteCount:bytes,alignment:16)
     storage.initializeMemory(as:UInt8.self,repeating:0,count:bytes)
     defer { storage.deallocate() }
@@ -150,6 +154,8 @@ func generatedNativeAudioTests() throws -> Int {
 
 // The launching Node process creates the 0700 directory. This helper creates
 // only its own socket and never overwrites or recursively removes a path.
+// All methods (including final close) belong to one IO owner thread.
+// Other threads cancel the owning actor; they never close or reuse these fds.
 final class NativePCMParentPipe {
     private var directory:Int32 = -1,listener:Int32 = -1,peer:Int32 = -1
     private var parentIdentity:(dev_t,ino_t)?
@@ -173,7 +179,7 @@ final class NativePCMParentPipe {
             parentIdentity=(value.st_dev,value.st_ino)
             try checkParent()
             listener=Darwin.socket(AF_UNIX,SOCK_STREAM,0)
-            guard listener>=0,fcntl(listener,F_SETFL,O_NONBLOCK)>=0 else { throw NativePCMError("pipe_socket") }
+            guard listener>=0,fcntl(listener,F_SETFD,FD_CLOEXEC)>=0,fcntl(listener,F_SETFL,O_NONBLOCK)>=0 else { throw NativePCMError("pipe_socket") }
             var address=sockaddr_un();address.sun_family=sa_family_t(AF_UNIX);address.sun_len=UInt8(MemoryLayout<sockaddr_un>.size)
             let raw=Array(path.utf8)+[UInt8(0)]
             withUnsafeMutableBytes(of:&address.sun_path) { target in target.copyBytes(from:raw) }
