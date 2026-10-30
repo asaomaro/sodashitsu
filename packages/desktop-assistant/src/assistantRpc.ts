@@ -22,8 +22,13 @@ export type AssistantMethod =
   | "assistant.get"
   | "assistant.ensure"
   | "assistant.adopt"
+  | "assistant.cancel_image"
   | "assistant.prompt"
   | "assistant.send_keys"
+  | "pane.image.begin"
+  | "pane.image.chunk"
+  | "pane.image.commit"
+  | "pane.image.cancel"
   | "agent.kinds"
   | "agent.conversation";
 interface Socket {
@@ -98,7 +103,7 @@ export class AssistantRpc {
   request<M extends AssistantMethod>(method: M, input: ParamsOf<M>): Promise<ResultOf<M>> {
     if (!this.ready || !this.socket || this.stopped)
       return Promise.reject(Error("操舵室へ接続してから操作してください。"));
-    if (this.pending.size >= 16)
+    if (this.pending.size >= (method === "assistant.cancel_image" ? 17 : 16))
       return Promise.reject(Error("前の操作が完了するまでお待ちください。"));
     const params = METHOD_SCHEMAS[method].parse(input);
     const id = `assistant-rpc-${++this.serial}`;

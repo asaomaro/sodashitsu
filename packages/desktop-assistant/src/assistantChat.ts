@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { pngSize } from "./png.js";
 import { z } from "zod";
 import {
+  IMAGE_CHUNK_BYTES,
   AssistantAgentKind,
   AssistantLaunchSettings,
   AssistantAgentProfiles,
@@ -238,6 +241,59 @@ export class AssistantChat {
         activate: true,
         ...((request.kind === "claude" || request.kind === "codex") ? { launchSettings: this.profiles[request.kind] } : {}),
       });
+    });
+  }
+  /** Main-only, preview-approved pixels. No arbitrary renderer path or prompt is accepted. */
+  image(bytes: Uint8Array, signal: AbortSignal): Promise<void> {
+    pngSize(bytes);
+    const pixels = new Uint8Array(bytes);
+    const session = this.state.session;
+    const actor = session?.agent;
+    if (!this.state.connected || session?.state !== "ready" || !actor || actor.state !== "idle" || !["claude", "codex"].includes(session.kind))
+      throw Error("画像を読めるClaude CodeまたはCodexの専用セッションを開始してください。");
+    const generation = this.generation;
+    const expires = performance.now() + 60000;
+    const live = () => {
+      signal.throwIfAborted();
+      if (performance.now() >= expires || !this.state.connected || generation !== this.generation || this.state.session?.paneId !== session.paneId || this.state.session.agent?.instanceId !== actor.instanceId || this.state.session.agent.state !== "idle")
+        throw Error("画像の送信先が変更されたか期限が切れました。");
+    };
+    return this.act(async () => {
+      let uploadId: string | null = null;
+      try {
+        live();
+        const result = await this.rpc.request("pane.image.begin", {paneId:session.paneId, mime:"image/png", size:pixels.byteLength});
+        uploadId = z.string().min(1).max(200).parse(result.uploadId);
+        for (let offset=0;offset<pixels.byteLength;offset+=IMAGE_CHUNK_BYTES) {
+          live();
+          await this.rpc.request("pane.image.chunk", {uploadId,offset,data:Buffer.from(pixels.subarray(offset,offset+IMAGE_CHUNK_BYTES)).toString("base64")});
+        }
+        live();
+        const saved = await this.rpc.request("pane.image.commit", {uploadId});
+        uploadId = null;
+        const path = z.string().min(1).max(4096).regex(/^(?:\/|[A-Za-z]:[\\/])/).refine(value=>!/[\x00-\x1f\x7f]/.test(value)).parse(saved.path);
+        live();
+        const imageRequestId = randomUUID();
+        let cancellation: Promise<unknown> | null = null;
+        const cancel = () => {
+          if (!cancellation && this.state.connected && generation === this.generation)
+            cancellation = this.rpc.request("assistant.cancel_image", {requestId:imageRequestId}).catch(()=>{});
+        };
+        const ttlMs = Math.max(1, Math.floor(expires - performance.now()));
+        const timer = setTimeout(cancel, ttlMs);
+        signal.addEventListener("abort",cancel,{once:true});
+        try {
+          live();
+          await this.rpc.request("assistant.prompt", {deviceId:this.deviceId,instanceId:actor.instanceId,imageRequestId,ttlMs,
+            text:`追加のOCRプログラムやAIサービスを起動せず、モデルの画像入力機能で次の画像ファイルを読み、写っている文字を転記してください。画像入力に対応しない場合は未対応と回答してください。読み取れない部分は推測せず明記してください。結果はこの会話に返してください。画像ファイル: ${JSON.stringify(path)}`});
+        } catch (error) {cancel();throw error;}
+        finally {clearTimeout(timer);signal.removeEventListener("abort",cancel);if(signal.aborted||performance.now()>=expires)cancel();await cancellation;}
+
+      } finally {
+        pixels.fill(0);
+        if (uploadId && this.state.connected && generation === this.generation)
+          await this.rpc.request("pane.image.cancel", {uploadId}).catch(()=>{});
+      }
     });
   }
   adopt(input: unknown): Promise<void> {

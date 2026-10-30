@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pngSize, PNG_LIMIT } from "./png.js";
 export interface OcrState {
+  provider: "agent" | "local";
   revision: number;
   status: "idle" | "loading" | "ready" | "recognizing" | "stopping" | "done" | "error";
   enabled: boolean;
@@ -27,11 +28,13 @@ export interface OcrOptions {
     language: string,
     signal: AbortSignal,
   ): Promise<string>;
+  agent?: (bytes: Uint8Array, signal: AbortSignal) => Promise<void>;
   now?: () => number;
 }
 /** Pixels are ephemeral and owned by one current bubble; cancellation retains the physical I/O slot. */
 export class Ocr {
   private state: OcrState = {
+    provider: "local",
     revision: 0,
     status: "idle",
     enabled: false,
@@ -54,8 +57,9 @@ export class Ocr {
   snapshot(): OcrState {
     return { ...this.state };
   }
-  configure(enabled: boolean, executable: string, language: string): void {
-    if (!enabled || executable !== this.executable || language !== this.language) this.discard();
+  configure(enabled: boolean, executable: string, language: string, provider: "agent" | "local" = "local"): void {
+    if (!enabled || executable !== this.executable || language !== this.language || provider !== this.state.provider) this.discard();
+    this.state.provider = provider;
     this.executable = executable;
     this.language = language;
     this.state.enabled = enabled;
@@ -146,17 +150,19 @@ export class Ocr {
   async run(owner: number, imageId: string): Promise<void> {
     this.image(owner, imageId);
     this.available();
-    if (!this.executable) throw Error("設定にTesseract実行ファイルの絶対パスを入力してください。");
+    if (this.state.provider === "local" && !this.executable) throw Error("設定にTesseract実行ファイルの絶対パスを入力してください。");
     this.busy = true;
     const generation = this.generation;
     const controller = new AbortController();
     this.active = controller;
     this.state.status = "recognizing";
     this.state.text = "";
-    this.state.message = "このPCのTesseractで認識しています。";
+    this.state.message = this.state.provider === "agent" ? "画像を専用エージェントへ送っています。" : "このPCのTesseractで認識しています。";
     this.publish();
     try {
-      const text = await this.options.run(
+      const provider = this.state.provider;
+      if (provider === "agent" && !this.options.agent) throw Error("画像のエージェント連携は利用できません");
+      const text = provider === "agent" ? (await this.options.agent!(this.bytes!, controller.signal), "") : await this.options.run(
         this.bytes!,
         this.executable,
         this.language,
@@ -167,7 +173,7 @@ export class Ocr {
       if (text.length > 65_536) throw Error("認識結果が長すぎます。");
       this.state.status = "done";
       this.state.text = text;
-      this.state.message = "認識できました。確認してから会話やメモへ渡してください。";
+      this.state.message = provider === "agent" ? "画像を専用エージェントへ送りました。結果は吹き出しの会話で確認してください。" : "認識できました。確認してから会話やメモへ渡してください。";
       this.publish();
     } catch (error) {
       if (generation === this.generation) this.fail(error);

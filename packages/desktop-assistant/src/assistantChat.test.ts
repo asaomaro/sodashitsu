@@ -223,3 +223,61 @@ it("uses main-owned profiles at explicit start without starting anything when se
  await f.chat.start({revision:f.chat.snapshot().revision,kind:"codex"});
  expect(f.request).toHaveBeenCalledWith("assistant.ensure",expect.objectContaining({launchSettings:{model:"custom-model",effort:"high"}}));
 });
+const generatedImage=()=>Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=","base64");
+async function imageFixture() {
+ const f=fixture();f.info(f.ready);await connected(f);
+ const fallback=f.request.getMockImplementation()!;
+ f.request.mockImplementation(async(method,input)=>{
+  if(method==="pane.image.begin")return{uploadId:"generated-upload"};
+  if(method==="pane.image.commit")return{path:"/generated/state/images/approved.png"};
+  if(method==="pane.image.chunk"||method==="pane.image.cancel")return{};
+  return fallback(method,input);
+ });
+ return f;
+}
+it("sends approved pixels through the existing upload and pins the image prompt to the selected actor", async () => {
+ const f=await imageFixture();
+ await f.chat.image(generatedImage(),new AbortController().signal);
+ expect(f.request).toHaveBeenCalledWith("pane.image.begin",{paneId:f.ready.paneId,mime:"image/png",size:generatedImage().length});
+ expect(f.request).toHaveBeenCalledWith("pane.image.chunk",expect.objectContaining({offset:0,data:generatedImage().toString("base64")}));
+ expect(f.request).toHaveBeenCalledWith("assistant.prompt",expect.objectContaining({deviceId:f.deviceId,instanceId:f.ready.agent!.instanceId,text:expect.stringContaining("/generated/state/images/approved.png")}));
+ expect(f.request).not.toHaveBeenCalledWith("pane.image.cancel",expect.anything());
+});
+it("aborts an image upload without committing or sending a prompt and cancels the owned upload", async () => {
+ const f=await imageFixture(),abort=new AbortController(),fallback=f.request.getMockImplementation()!;
+ f.request.mockImplementation(async(method,input)=>{if(method==="pane.image.chunk")abort.abort();return fallback(method,input);});
+ await expect(f.chat.image(generatedImage(),abort.signal)).rejects.toThrow();
+ expect(f.request).toHaveBeenCalledWith("pane.image.cancel",{uploadId:"generated-upload"});
+ expect(f.request).not.toHaveBeenCalledWith("assistant.prompt",expect.anything());
+ expect(f.request).not.toHaveBeenCalledWith("pane.image.commit",expect.anything());
+});
+it("refuses a retargeted image after upload instead of addressing the replacement actor", async () => {
+ const f=await imageFixture(),fallback=f.request.getMockImplementation()!;
+ f.request.mockImplementation(async(method,input)=>{if(method==="pane.image.chunk"){f.info({...f.ready,agent:{...f.ready.agent!,instanceId:randomUUID()}});await f.chat.refresh();}return fallback(method,input);});
+ await expect(f.chat.image(generatedImage(),new AbortController().signal)).rejects.toThrow("変更");
+ expect(f.request).not.toHaveBeenCalledWith("assistant.prompt",expect.anything());
+});
+it("keeps one original upload deadline and refuses malformed returned paths", async () => {
+ const f=await imageFixture(),fallback=f.request.getMockImplementation()!;
+ const now=vi.spyOn(performance,"now").mockReturnValue(0);
+ try {f.request.mockImplementation(async(method,input)=>{if(method==="pane.image.begin")now.mockReturnValue(60001);return fallback(method,input);});
+  await expect(f.chat.image(generatedImage(),new AbortController().signal)).rejects.toThrow("期限");
+ } finally {now.mockRestore();}
+ f.request.mockImplementation(async(method,input)=>method==="pane.image.commit"?{path:"/bad\npath"}:fallback(method,input));
+ await expect(f.chat.image(generatedImage(),new AbortController().signal)).rejects.toThrow();
+ expect(f.request).not.toHaveBeenCalledWith("assistant.prompt",expect.anything());
+});
+it("revokes a held image prompt on abort and keeps the physical operation until settled", async () => {
+ const f=await imageFixture(),abort=new AbortController(),fallback=f.request.getMockImplementation()!;let release!:(value:unknown)=>void;
+ f.request.mockImplementation(async(method,input)=>method==="assistant.prompt"?new Promise(resolve=>{release=resolve;}):fallback(method,input));
+ const pending=f.chat.image(generatedImage(),abort.signal);
+ await vi.waitFor(()=>expect(release).toBeTypeOf("function"));abort.abort();
+ await vi.waitFor(()=>expect(f.request).toHaveBeenCalledWith("assistant.cancel_image",expect.objectContaining({requestId:expect.any(String)})));
+ expect(f.chat.snapshot().busy).toBe(true);release({});await pending;
+ expect(f.chat.snapshot().busy).toBe(false);
+});
+it("requires an idle actor before approving image upload", async () => {
+ const f=await imageFixture();f.info({...f.ready,agent:{...f.ready.agent!,state:"working"}});await f.chat.refresh();f.request.mockClear();
+ expect(()=>f.chat.image(generatedImage(),new AbortController().signal)).toThrow();
+ expect(f.request).not.toHaveBeenCalledWith("pane.image.begin",expect.anything());
+});

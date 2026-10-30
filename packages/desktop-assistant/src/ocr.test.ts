@@ -196,3 +196,15 @@ it("cannot revive an expired or discarded image after native crop returns", asyn
   );
   expect(other.snapshot().imageId).toBeNull();
 });
+it("delegates only the explicitly approved preview to the agent without Tesseract or fallback", async () => {
+ const agent=vi.fn(async()=>{});const {service,options}=fixture({agent});
+ service.configure(true,"","jpn+eng","agent");
+ const image=await service.input(1,"file");expect(agent).not.toHaveBeenCalled();
+ await service.run(1,image!.state.imageId!);
+ expect(agent).toHaveBeenCalledOnce();expect(options.run).not.toHaveBeenCalled();
+ expect(service.snapshot()).toMatchObject({provider:"agent",status:"done",text:""});
+ expect(service.snapshot().message).toContain("会話");
+ agent.mockRejectedValueOnce(Error("generated unavailable model"));
+ await service.run(1,image!.state.imageId!);
+ expect(service.snapshot().message).toContain("generated unavailable model");expect(options.run).not.toHaveBeenCalled();
+});

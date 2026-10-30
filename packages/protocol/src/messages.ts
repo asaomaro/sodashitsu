@@ -1,5 +1,5 @@
 import { ExecMethods, type ExecResults } from "./exec.js";
-import { AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
+import { AssistantImageCancelParams, AssistantAppParams, AssistantAppOpenParams, AssistantAppCallParams, type AssistantAppsInfo, AssistantReminderSaveParams, AssistantReminderIdParams, type AssistantRemindersInfo, AssistantSourceParams, AssistantReplyParams, AssistantReplyKeysParams, type AssistantSourceInfo, AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
 import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
@@ -1599,6 +1599,7 @@ export const METHOD_SCHEMAS = {
   "assistant.get": AssistantSessionGetParams,
   "assistant.ensure": AssistantSessionEnsureParams,
   "assistant.adopt": AssistantSessionAdoptParams,
+  "assistant.cancel_image": AssistantImageCancelParams,
   "assistant.prompt": AssistantSessionPromptParams,
   "assistant.send_keys": AssistantSessionKeysParams,
   "agent.fork": AgentForkParams,
@@ -1785,6 +1786,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "assistant.get": AssistantSessionInfo | null;
   "assistant.ensure": AssistantSessionInfo;
   "assistant.adopt": AssistantSessionInfo;
+  "assistant.cancel_image": Record<string, never>;
   "assistant.prompt": AgentPromptResult;
   "assistant.send_keys": Record<string, never>;
   "agent.fork": AgentForkResult;
