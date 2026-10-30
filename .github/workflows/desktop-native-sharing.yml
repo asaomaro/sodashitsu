@@ -1,0 +1,35 @@
+name: Native desktop sharing (generated source)
+on:
+  pull_request:
+    paths:
+      - 'packages/server/src/desktop/DesktopSharedCapture*'
+      - 'packages/server/src/desktop/DesktopProvider*'
+      - 'packages/server/src/desktop/DesktopRelay*'
+      - 'packages/web/src/components/RemoteDesktopWindow.vue'
+      - 'packages/web/src/components/RemoteDesktopNativeSharing.test.ts'
+      - 'packages/e2e/src/specs/remote-desktop-native-sharing.spec.ts'
+      - '.github/workflows/desktop-native-sharing.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generated-sharing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/server build
+      - run: pnpm --filter @sodashitsu/web build
+      - name: Memory source, owned Node helpers and per-viewer grants
+        run: pnpm exec vitest run packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopRelay.test.ts packages/web/src/components/RemoteDesktopNativeSharing.test.ts --maxWorkers=2
+      - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
+      - name: Fresh browser shared desktop controls (generated sources only)
+        run: pnpm --filter @sodashitsu/e2e exec playwright test 'remote-desktop-native-sharing.spec.ts'

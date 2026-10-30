@@ -1,0 +1,17 @@
+import {mount,flushPromises} from "@vue/test-utils";
+import {afterEach,expect,it,vi} from "vitest";
+import RemoteDesktopWindow from "./RemoteDesktopWindow.vue";
+class Socket {readyState=1;bufferedAmount=0;binaryType="";onopen?:()=>void;onmessage?:(event:{data:string})=>Promise<void>;send=vi.fn();close=vi.fn();}
+const sockets:Socket[]=[];
+vi.mock("../desktop/DesktopEndpointSocket.js",()=>({createDesktopSocketFactory:()=>({encrypted:false,dispose(){},open(){const socket=new Socket();sockets.push(socket);return socket;}})}));
+afterEach(()=>{sockets.length=0;localStorage.clear();});
+it.each(["linux-portal","macos-sck"])("lets a fresh %s viewer opt in to shared desktop and reconnect",async backend=>{
+ const viewer=mount(RemoteDesktopWindow,{props:{machineId:"generated",label:"Generated",embedded:true}});
+ try{
+  const socket=sockets[0]!;socket.onopen?.();await socket.onmessage!({data:JSON.stringify({type:"ready",title:"Generated",width:320,height:180,allowInput:false,backend,inputCapabilities:{keys:[],text:false,pointerButtons:[],wheel:false}})});await flushPromises();
+  expect(viewer.find('[data-shared-desktop-option] input').exists()).toBe(true);
+  const option=viewer.get('[data-shared-desktop-option] input');expect((option.element as HTMLInputElement).checked).toBe(false);
+  await option.setValue(true);await flushPromises();expect(sockets.length).toBe(2);sockets[1]!.onopen?.();
+  expect(sockets[1]!.send.mock.calls.map(([value])=>JSON.parse(value)).find(m=>m.type==="start").options.sharedDesktop).toBe(true);
+ }finally{viewer.unmount();}
+});

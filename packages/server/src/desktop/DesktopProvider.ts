@@ -247,13 +247,13 @@ export class DesktopProvider {
       ...(this.config?.nativePlatform?{nativePlatform:this.config.nativePlatform}:{}),
       sharedMicrophone:!this.config?.nativePlatform&&this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
       sharedProtected:!this.config?.nativePlatform&&this.config?.allowElevated===true,
-      sharedDesktop: !this.config?.nativePlatform,
+      sharedDesktop: true,
       sharedDeltas:!this.config?.nativePlatform,
       sharedMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
       independentMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
       sharedCursor:!this.config?.nativePlatform,
       sharedClipboard:!this.config?.nativePlatform&&this.config?.allowClipboard===true,
-      sharedFiles: !this.config?.nativePlatform && !!this.config?.fileRoot,
+      sharedFiles: !!this.config?.fileRoot,
       sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedAudio:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
@@ -301,7 +301,7 @@ export class DesktopProvider {
     if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
-    if(cfg.nativePlatform&&(p.options.sharedDesktop||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
+    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.cursor||p.options.richClipboard||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendは通常のフルカラー画像と対応する入力だけを扱います。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
@@ -905,10 +905,11 @@ export class DesktopProvider {
         }
       }
     });
-    const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop;
+    const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop&&!cfg.nativePlatform;
     const {independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
+      ...(cfg.nativePlatform?{nativePlatform:cfg.nativePlatform}:{}),
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
