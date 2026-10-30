@@ -55,6 +55,10 @@
   status.textContent = "扱う文章へ移しました。会話への送信はまだ行っていません。";
  });
  result.addEventListener("input", controls);
+ document.addEventListener("assistant-ocr-image",event=>{
+   const response=event.detail;apply(response.state);
+   if(state.imageId===response.state.imageId&&state.revision===response.state.revision){previewId=state.imageId;preview.src=response.uri;preview.hidden=false;controls();}
+ });
  api.onOcr(apply);
  api.ocrState().then(apply).catch(error => { status.textContent = error.message; });
  const discard = () => { preview.removeAttribute("src"); preview.hidden = true; result.value = ""; previewId = null; void api.ocrDiscard().catch(() => {}); };

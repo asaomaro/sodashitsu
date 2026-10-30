@@ -18,6 +18,7 @@ const files = new Set([
   "recording.js",
   "ocr.js",
   "reminders.js",
+  "capture.js",
   "style.css",
   "captain-male.svg",
   "captain-female.svg",
@@ -78,9 +79,22 @@ try {
       start(){this.state="recording";}
       stop(){if(this.state==="inactive")return;this.state="inactive";queueMicrotask(()=>{this.ondataavailable?.({data:new Blob(["generated-audio"],{type:this.mimeType})});this.onstop?.(new Event("stop"));});}
     };
+    navigator.mediaDevices.getDisplayMedia=async()=>{window.calls.push(["get-display-media"]);const track={stop:()=>window.calls.push(["stop-display-track"])};return{getTracks:()=>[track],getVideoTracks:()=>[track],getAudioTracks:()=>[]};};
+    window.ImageCapture=class{async grabFrame(){return{width:1,height:1,close:()=>window.calls.push(["close-display-frame"])};}};
+    HTMLCanvasElement.prototype.getContext=()=>({drawImage:()=>window.calls.push(["draw-generated-frame"])});
+    HTMLCanvasElement.prototype.toDataURL=()=>"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=";
     window.toolWatchers=new Set();
     window.toolsCallback=state=>{for(const callback of window.toolWatchers)callback(state);};
     window.assistant = {
+      screenshotSources:async()=>({token:"00000000-0000-4000-8000-000000000088",sources:[{id:"screen:generated",name:"生成した画面"}]}),
+      approveScreenshot:async input=>window.calls.push(["approve-screenshot",input]),
+      submitScreenshot:async input=>{
+        if(!window.calls.some(call=>call[0]==="stop-display-track"))throw Error("capture must stop before submission");
+        window.calls.push(["submit-screenshot",{token:input.token,size:input.bytes.byteLength}]);
+        const bytes=new Uint8Array(input.bytes);window.currentOcr={revision:++window.ocrRevision,status:"ready",enabled:true,imageId:"generated-screenshot",width:2,height:2,text:"",message:"取得しました"};window.ocrCallback(window.currentOcr);
+        return{state:window.currentOcr,uri:`data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`};
+      },
+      cancelScreenshot:async()=>{},
       reminders:async()=>({revision:1,connected:true,jobs:[],runs:[],message:"リマインダーを予約できます。"}),
       onReminders:callback=>{window.remindersCallback=callback;return()=>{};},
       saveReminder:async input=>window.calls.push(["save-reminder",input]),
@@ -333,6 +347,13 @@ try {
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
   assert.deepEqual(errors, []);
   await page.evaluate(() => { document.getElementById("standard-tools").open=true; document.getElementById("ocr-tools").open=true; });
+  await page.locator("#capture-list").focus();await page.keyboard.press("Enter");
+  await expect(page.locator("#capture-start")).toBeEnabled();
+  await page.locator("#capture-start").focus();await page.keyboard.press("Enter");
+  await expect(page.locator("#capture-status")).toContainText("画面を取得しました");
+  await expect(page.locator("#ocr-preview")).toHaveAttribute("src",/^data:image\/png;base64,/);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="get-display-media").length),1);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="submit-screenshot").length),1);
   await page.locator("#ocr-file").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-preview")).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(page.locator("#ocr-run")).toBeEnabled();
