@@ -1,3 +1,8 @@
 # 独立点検（進行中）
 
 review_pointerのkernel点検で、tick前のlate ACKが期限を消す、旧tick/startが新streamを停止/上書きする、取消前の物理job slotが世代跨ぎで再利用される、同UUIDでseq reset、failed candidateの未確認退役後fallbackを指摘。各修正と生成回帰を追加。source/helper配線とGStreamer実生成検証、Mac/設定の後に全体の独立レビューを行う。
+
+
+最終全体レビュー: review_transferがmain55d05955→cd3a6d75の全22filesを読み取り。UUID lifetime修正、Mac4色encode/decode、Linux同一Portal raw source/退役/ACKと画像分離、Settings→Provider/Relay→ready/UI、共有E2E/文書の配線を確認し追加must/shouldなし。b3938bc5のfixture時刻1行修正もdelta再点検済みで追加指摘なし。SDK/テスト/実OSはレビューでは実行していない。
+
+review_pointerの追加点検でfailed Gst candidateの退役確認、first-AU前だけのsoftware fallback、公開後codec維持回帰と負例、未退役workerのhelper実配線、UUID canonical/1024 sticky ledgerを確認し追加mustなし。shouldの公開後failure回帰も実装し、当該guard除去がAssertionErrorになることを確認した。

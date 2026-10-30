@@ -970,7 +970,7 @@ Linuxは同じRemoteDesktop PortalセッションのClipboard APIでMIMEごと�
 
 Linuxは同じPortal/PipeWireのBGR画素から、要求時だけGStreamerのH.264 encoderを起動します。`linux-portal-helper.py`と`linux-native-video.py`を同じ版で配置してください。`h264parse`と利用可能な`nvh264enc`、`vah264enc`、`openh264enc`、`x264enc`のいずれかが必要です。ローカルにあるGPU候補を先に試し、最初の映像を公開する前で、終了確認と元の取得期限が守れる場合だけ次のCPU候補を試します。依存やモデルを自動取得せず、利用できない場合は画像配信へ戻ります。
 
-macOSは同じScreenCaptureKitの取得画像をVideoToolboxへ渡します。`build-macos-desktop.sh`で関連Swiftソースをまとめてビルドしてください。利用可能なGPUを許可し、OSが選択したencoderを使用します。無効時や画像閲覧だけの間は動画encoderを作りません。共有設定や接続の許可を動画へ暗黙に引き継ぐのではなく、同じ許可範囲内の表示経路として使います。
+macOSは同じScreenCaptureKitの取得画像をVideoToolboxへ渡します。`build-macos-desktop.sh`で関連Swiftソースをまとめてビルドしてください。利用可能なGPUを許可し、OSが選択したencoderを使用します。無効時や画像閲覧だけの間は動画encoderを作りません。接続時に許可した同じ画面の範囲で動画を表示します。
 
 圧縮処理は1枚、未描画ACKは最大3枚に制限します。取得から1秒を越えた映像や、2秒を越えたACK待ちを通さず、予測frameの途中を失った場合は動画を停止して画像へ戻します。取消後も古いencoderの終了確認まで枠を保持します。切替直後に利用できない場合は、少し待って動画を依頼し直してください。同じ共有で最大1024回の動画IDを記録し、再利用を拒否します。上限では共有へ接続し直してください。
 
