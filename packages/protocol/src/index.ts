@@ -86,3 +86,5 @@ export {DesktopSigninRequired,DesktopSigninGrant} from "./desktopSignin.js";
 export * from "./desktopNativeFiles.js";
 
 export * from "./desktopNativeHelper.js";
+
+export * from "./desktopAssistant.js";

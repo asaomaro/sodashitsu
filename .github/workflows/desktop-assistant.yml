@@ -1,0 +1,37 @@
+name: Desktop assistant foundation
+on:
+  pull_request:
+    paths:
+      - 'packages/desktop-assistant/**'
+      - 'packages/protocol/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/desktop-assistant.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-assistant-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  generated-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/desktop-assistant build
+      - run: pnpm --filter @sodashitsu/desktop-assistant typecheck
+      - name: Generated adapters only (no desktop, agent, microphone or login registration)
+        run: pnpm exec vitest run --project @sodashitsu/desktop-assistant --maxWorkers=2
+      - run: pnpm --filter @sodashitsu/desktop-assistant exec playwright install chromium
+      - name: Generated headless keyboard UI
+        run: pnpm --filter @sodashitsu/desktop-assistant verify:ui
+      - name: Build unsigned development zip (do not install or launch)
+        run: pnpm --filter @sodashitsu/desktop-assistant pack:win
