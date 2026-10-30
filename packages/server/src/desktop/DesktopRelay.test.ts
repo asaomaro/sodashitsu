@@ -1674,8 +1674,8 @@ it("keeps shared Linux quiet-input liveness private to an ACKed viewer without r
  expect(a.frames).toHaveLength(1);expect(b.frames).toHaveLength(1);a.send({type:"stop"});b.send({type:"stop"});
 });
 
-it.each([false,true])("grants scoped Mac text clipboard separately from input and shared=%s",async shared=>{
- const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:"macos-sck",allowClipboard:true,command:[...cfg.command,"--native-platform","macos-sck","--static","--allow-clipboard"]});
+it.each([{platform:"macos-sck",shared:false},{platform:"macos-sck",shared:true},{platform:"linux-portal",shared:false},{platform:"linux-portal",shared:true}] as const)("grants scoped native $platform text clipboard separately from input and shared=$shared",async({platform,shared})=>{
+ const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,nativePlatform:platform,allowClipboard:true,command:[...cfg.command,"--native-platform",platform,"--static","--allow-clipboard"]});
  const a=await f.viewer(shared?"native-platform-shared-clipboard":"native-platform-clipboard"),options={...start,options:{...start.options,features:true,...(shared?{sharedDesktop:true,sharedClipboard:true}:{})}};a.send(options);
  await vi.waitFor(()=>expect(a.messages.some(m=>m.type==="ready"&&m.allowClipboard===true)).toBe(true));
  expect(a.messages.find(m=>m.type==="ready")).not.toHaveProperty("richClipboard");

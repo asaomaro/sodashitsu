@@ -167,9 +167,34 @@ class PortalProtocol(unittest.TestCase):
   self.helper.configure({"options":{"width":1280,"fps":10,"quality":65},"allowInput":input});self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)})
   if input:self.respond({})
   self.respond({})
+ def test_clipboard_only_session_requests_no_input_and_requires_os_start_grant(self):
+  from unittest.mock import patch
+  with patch.object(module.sys,"argv",["generated","--allow-clipboard"]):
+   self.helper.configure({"options":{"width":1280,"fps":10,"quality":65},"allowInput":False,"allowClipboard":True})
+  self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)});self.respond({});self.respond({})
+  methods=[call[0] for call in self.calls];self.assertLess(methods.index("RequestClipboard"),methods.index("Start"));self.assertEqual(next(call for call in self.calls if call[0]=="SelectDevices")[2][-1]["types"],0)
+  self.assertNotIn("persist_mode",next(call for call in self.calls if call[0]=="SelectSources")[2][-1]);self.assertIsNotNone(self.helper.clipboard)
+  self.helper.started({"clipboard_enabled":False,"devices":3,"streams":[(55,{"size":(1000,600),"source_type":1,"pipewire-serial":987654321})]})
+  self.assertFalse(self.helper.clipboard.os_enabled);self.assertEqual(self.helper.guard.devices,0)
+ def test_clipboard_api_unavailable_does_not_invent_an_os_grant(self):
+  from unittest.mock import patch
+  original=self.connection.call_sync
+  def reject(name,path,interface,method,params,*args):
+   if method=="GetAll" and params.unpack()[0]==module.PortalTextClipboard.INTERFACE:raise RuntimeError("generated missing portal interface")
+   return original(name,path,interface,method,params,*args)
+  self.connection.call_sync=reject
+  with patch.object(module.sys,"argv",["generated","--allow-clipboard"]):self.helper.configure({"options":{"width":1280,"fps":10,"quality":65},"allowInput":False,"allowClipboard":True})
+  self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)});self.respond({});self.respond({});self.assertIsNone(self.helper.clipboard)
+  self.assertFalse(any(call[0]=="RequestClipboard" for call in self.calls));self.assertEqual(self.helper.interface,self.helper.RD)
+ def test_screencast_only_session_keeps_nonpersistent_permission(self):
+  self.create(False);selection=next(call for call in self.calls if call[0]=="SelectSources")[2][-1];self.assertEqual(selection["persist_mode"],0);self.assertNotIn("restore_token",selection)
+ def test_clipboard_needs_explicit_local_helper_flag(self):
+  from unittest.mock import patch
+  with patch.object(module.sys,"argv",["generated"]):self.helper.configure({"options":{"width":1280,"fps":10,"quality":65},"allowInput":False,"allowClipboard":True})
+  self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)});self.respond({});self.assertIsNone(self.helper.clipboard);self.assertEqual(self.helper.interface,self.helper.SC);self.assertFalse(any(call[0]=="RequestClipboard" for call in self.calls))
  def test_os_choice_is_explicit_nonpersistent_and_cancellation_is_terminal(self):
   self.create();methods=[call[0] for call in self.calls];self.assertEqual(methods,["GetAll","CreateSession","SelectDevices","SelectSources","Start"])
-  selection=next(call for call in self.calls if call[0]=="SelectSources")[2][-1];self.assertEqual(selection["types"],1);self.assertFalse(selection["multiple"]);self.assertEqual(selection["persist_mode"],0);self.assertNotIn("restore_token",selection)
+  selection=next(call for call in self.calls if call[0]=="SelectSources")[2][-1];self.assertEqual(selection["types"],1);self.assertFalse(selection["multiple"]);self.assertNotIn("persist_mode",selection);self.assertNotIn("restore_token",selection);self.assertEqual(next(call for call in self.calls if call[0]=="SelectDevices")[2][-1]["persist_mode"],0)
   self.respond({},1);self.assertTrue(self.helper.closed);self.assertTrue(any(call[0]=="Close" and call[1]==self.helper.session for call in self.calls))
  def test_stream_serial_is_required_before_opening_a_remote_or_pipeline(self):
   self.create(False)
@@ -265,4 +290,146 @@ class Regions(unittest.TestCase):
    expected=module.RegionProofs();expected.configure([self.spec()],4,3);expected.capture(pts,bytes([0,0,255]*4*3),4,3,12)
    self.assertEqual(proof,expected.take(pts,4,3));self.assertIsNone(helper.regions.take(pts+1,4,3))
   finally:pipeline.set_state(Gst.State.NULL)
+class Clipboard(unittest.TestCase):
+ def setup_clipboard(self):
+  import os
+  from gi.repository import Gio,GLib
+  state={"alive":True,"utc":1000.,"mono":0.,"query_delay":0.,"pending":None,"owner":False};calls=[];results=[];published=[];done=[];fds=[]
+  helper=SimpleNamespace(NAME=module.PortalHelper.NAME,PATH=module.PortalHelper.PATH,Gio=Gio,GLib=GLib,output_gate=threading.RLock(),session="/generated/session",dead=False,ready=True,scope=SimpleNamespace(alive=lambda:state["alive"]),last_heartbeat=module.time.monotonic(),config={"input":True},guard=SimpleNamespace(devices=3))
+  def output(value,revision=None,publish=None):results.append(dict(value));published.append(publish)
+  helper.output=output
+  class Connection:
+   def call_sync(self,name,path,interface,method,args,*_):
+    calls.append((method,args.unpack()))
+    if state["pending"]:state["pending"]()
+   def call_with_unix_fd_list_sync(self,name,path,interface,method,args,*_):
+    calls.append((method,args.unpack()))
+    if method=="SelectionRead":
+     read,write=os.pipe();os.write(write,state.get("data",b"generated UTF8"));os.close(write);fd=read
+    else:
+     read,write=os.pipe();state["transfer_read"]=read;fds.append((read,os.fstat(read).st_dev,os.fstat(read).st_ino));fd=write
+    fds.append((fd,os.fstat(fd).st_dev,os.fstat(fd).st_ino))
+    return GLib.Variant("(h)",(0,)),SimpleNamespace(get_length=lambda:1,get=lambda index:fd)
+   def call(self,name,path,interface,method,args,*_):done.append((method,args.unpack()))
+  helper.connection=Connection();clip=module.PortalTextClipboard(helper,clock=lambda:state["utc"],mono=lambda:state["mono"]);clip.os_enabled=True
+  self.addCleanup(lambda:[os.close(fd) for fd,dev,ino in set(fds) if self.fd_open(fd,dev,ino)])
+  return clip,helper,state,calls,results,published,done
+ def fd_open(self,fd,dev,ino):
+  import os
+  try:info=os.fstat(fd);return (info.st_dev,info.st_ino)==(dev,ino)
+  except OSError:return False
+ def request(self,id=1,operation="read",generation=1,text="copy"):
+  return {"type":"clipboard","id":id,"operation":operation,"generation":generation,"expiresAt":1400,"text":text}
+ def await_result(self,results):
+  for _ in range(100):
+   if results:return results[-1]
+   module.time.sleep(.005)
+  self.fail("Owned clipboard worker did not settle")
+ def test_requires_os_and_human_grant_reads_real_owned_utf8_pipe(self):
+  clip,h,state,calls,results,publication,done=self.setup_clipboard()
+  clip.submit(self.request());self.assertFalse(results.pop()["ok"]);self.assertFalse(calls)
+  clip.os_enabled=False;clip.control({"generation":1,"enabled":True});clip.submit(self.request());self.assertFalse(results.pop()["ok"])
+  clip.os_enabled=True;clip.control({"generation":2,"enabled":True});state["data"]="日本語😀".encode();clip.submit(self.request(generation=2))
+  self.assertEqual(self.await_result(results)["text"],"日本語😀");self.assertEqual(calls[-1],("SelectionRead",("/generated/session","text/plain;charset=utf-8")));self.assertTrue(publication[-1]())
+  clip.control({"generation":3,"enabled":False});self.assertFalse(publication[-1]())
+ def test_write_mime_offer_scope_and_separate_input_ceiling(self):
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.control({"generation":1,"enabled":True})
+  h.guard.devices=0;clip.submit(self.request(operation="write"));self.assertFalse(self.await_result(results)["ok"]);self.assertFalse(calls);results.clear()
+  h.guard.devices=3;clip.submit(self.request(id=2,operation="write",text="コピー😀"));self.assertTrue(self.await_result(results)["ok"])
+  self.assertEqual(calls[-1][0],"SetSelection");self.assertEqual(tuple(calls[-1][1][1]["mime_types"]),clip.MIMES);self.assertEqual(clip.owned,"コピー😀".encode())
+  clip.control({"generation":2,"enabled":False});clip.control({"generation":1,"enabled":True});self.assertFalse(clip.enabled)
+  # A locally pasted copy may remain in this live portal session, but remote reads are revoked.
+  self.assertEqual(clip.owned,"コピー😀".encode());clip.close();self.assertIsNone(clip.owned)
+ def test_read_scope_change_size_and_malformed_utf8_never_return_text(self):
+  for data in [b"\xff",("😀"*4097).encode(),b"x"*32769]:
+   clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.control({"generation":1,"enabled":True});state["data"]=data
+   # Keep test pipe writes below kernel capacity; large response uses a writer thread.
+   import os
+   def fd_call(name,path,interface,method,args,*_):
+    read,write=os.pipe()
+    def feed():
+     try:
+      remaining=data
+      while remaining:remaining=remaining[os.write(write,remaining):]
+     except BrokenPipeError:pass
+     finally:os.close(write)
+    threading.Thread(target=feed,daemon=True).start()
+    return h.GLib.Variant("(h)",(0,)),SimpleNamespace(get_length=lambda:1,get=lambda index:read)
+   h.connection.call_with_unix_fd_list_sync=fd_call;clip.submit(self.request());result=self.await_result(results);self.assertFalse(result["ok"]);self.assertNotIn("text",result)
+ def test_query_time_consumes_original_budget_before_io(self):
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.control({"generation":1,"enabled":True})
+  def alive():state["mono"]=500;return True
+  h.scope.alive=alive;clip.submit(self.request(operation="write"));self.assertFalse(self.await_result(results)["ok"]);self.assertFalse(calls)
+ def test_revoke_pending_read_retains_busy_until_physical_completion(self):
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.control({"generation":1,"enabled":True});entered=threading.Event();release=threading.Event()
+  def read(ticket):entered.set();release.wait(1);return "private old text"
+  clip.read=read;clip.submit(self.request());self.assertTrue(entered.wait(1));clip.control({"generation":2,"enabled":False});clip.control({"generation":3,"enabled":True})
+  try:
+   clip.submit(self.request(id=2,generation=3));self.assertEqual(len(results),1);self.assertFalse(results[-1]["ok"]);self.assertTrue(clip.busy)
+  finally:release.set()
+  for _ in range(100):
+   if not clip.busy:break
+   module.time.sleep(.005)
+  self.assertFalse(clip.busy);self.assertTrue(all("text" not in r for r in results))
+ def test_os_transfer_writes_owned_text_then_completes_and_closes_fd(self):
+  import os
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.owned=bytearray("paste😀".encode());clip.owner=True
+  clip.transfer(None,None,None,None,None,h.GLib.Variant("(osu)",(h.session,"text/plain;charset=utf-8",42)))
+  for _ in range(100):
+   if done:break
+   module.time.sleep(.005)
+  self.assertEqual(done,[("SelectionWriteDone",(h.session,42,True))]);self.assertEqual(os.read(state["transfer_read"],100),"paste😀".encode())
+ def test_revocation_after_pipe_readiness_performs_no_new_read(self):
+  from unittest.mock import patch
+  import os
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.control({"generation":1,"enabled":True});reads=[]
+  def ready(read,write,error,timeout):state["alive"]=False;return read,write,error
+  original=os.read
+  def read(fd,size):reads.append(fd);return original(fd,size)
+  with patch.object(module.select,"select",ready),patch.object(module.os,"read",read):
+   clip.submit(self.request());self.assertFalse(self.await_result(results)["ok"])
+  self.assertFalse(reads)
+ def test_revocation_after_pipe_write_readiness_performs_no_new_write(self):
+  from unittest.mock import patch
+  import os
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.owned=bytearray(b"private copy");clip.owner=True;writes=[]
+  def ready(read,write,error,timeout):state["alive"]=False;return read,write,error
+  original=os.write
+  def write(fd,data):writes.append(fd);return original(fd,data)
+  with patch.object(module.select,"select",ready),patch.object(module.os,"write",write):
+   clip.transfer(None,None,None,None,None,h.GLib.Variant("(osu)",(h.session,"text/plain;charset=utf-8",42)))
+   for _ in range(100):
+    if done:break
+    module.time.sleep(.005)
+  self.assertEqual(done,[("SelectionWriteDone",(h.session,42,False))]);self.assertFalse(writes)
+ def test_owner_notifications_confined_to_own_session_and_text_types(self):
+  clip,h,state,calls,results,publication,done=self.setup_clipboard();clip.owned=bytearray(b"old");clip.owner=True
+  params=lambda session:h.GLib.Variant("(oa{sv})",(session,{"mime_types":h.GLib.Variant("as",["image/png"]),"session_is_owner":h.GLib.Variant("b",False)}))
+  clip.owner_changed(None,None,None,None,None,params("/wrong"));self.assertEqual(clip.owned,b"old")
+  clip.owner_changed(None,None,None,None,None,params(h.session));self.assertIsNone(clip.owned);self.assertEqual(clip.types,("image/png",))
+  clip.control({"generation":1,"enabled":True});clip.submit(self.request());self.assertEqual(self.await_result(results)["text"],"");self.assertFalse(calls)
+class Entry(unittest.TestCase):
+ def test_real_main_accepts_clipboard_flag_before_dispatching_owned_stub(self):
+  from unittest.mock import patch
+  import io,contextlib
+  invoked=[]
+  fake=lambda *args,**kwargs:SimpleNamespace(run=lambda:invoked.append(tuple(module.sys.argv[1:])))
+  with patch.object(module.sys,"argv",["generated","--allow-clipboard"]),patch.object(module,"PortalHelper",fake),contextlib.redirect_stdout(io.StringIO()):
+   try:module.main();code=0
+   except SystemExit as error:code=error.code
+  self.assertEqual(code,0);self.assertEqual(invoked,[("--allow-clipboard",)])
+ def test_unknown_or_duplicate_flags_are_rejected_before_any_backend(self):
+  from unittest.mock import patch
+  import io,contextlib
+  for flags in [["--unknown"],["--unknown","--probe"],["--allow-clipboard","--allow-clipboard"]]:
+   output=io.StringIO()
+   with patch.object(module.sys,"argv",["generated",*flags]),patch.object(module,"PortalHelper",lambda *args,**kwargs:self.fail("Invalid argument started backend")),contextlib.redirect_stdout(output):
+    with self.assertRaises(SystemExit) as error:module.main()
+   self.assertEqual(error.exception.code,1);self.assertEqual(module.json.loads(output.getvalue())["code"],"unsupported")
+ def test_probe_with_clipboard_flag_is_import_only(self):
+  from unittest.mock import patch
+  import io,contextlib
+  output=io.StringIO()
+  with patch.object(module.sys,"argv",["generated","--allow-clipboard","--probe"]),patch.object(module,"PortalHelper",lambda *args,**kwargs:self.fail("Probe started backend")),contextlib.redirect_stdout(output):module.main()
+  self.assertEqual(module.json.loads(output.getvalue()),{"backend":"linux-portal","dependencies":True})
 if __name__=="__main__":unittest.main()
