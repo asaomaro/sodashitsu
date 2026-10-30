@@ -77,6 +77,7 @@ it("does not launch an agent while discovering a new installation; start is an e
     deviceId: f.deviceId,
     kind: "codex",
     retry: false,
+    activate: true,
     launchSettings: {model: "", effort: ""},
   });
   expect(() => f.chat.start({ revision: f.chat.snapshot().revision, kind: "claude" })).toThrow(

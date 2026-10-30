@@ -16,7 +16,7 @@ it("normalizes device identities and accepts only explicit registered agent kind
   const deviceId = randomUUID();
   expect(
     AssistantSessionEnsureParams.parse({ deviceId: deviceId.toUpperCase(), kind: "codex" }),
-  ).toEqual({ deviceId, kind: "codex", retry: false });
+  ).toEqual({ deviceId, kind: "codex", retry: false, activate: false });
   for (const params of [
     { deviceId, kind: "shell" },
     { deviceId, kind: "codex", command: "generated" },

@@ -1249,6 +1249,7 @@ else {
         charactersError = error instanceof Error ? error.message : "素材を読み込めません。";
       }
       installationId = await deviceIdentity(join(app.getPath("userData"), "assistant-device-id"));
+      if (managed) process.stdout.write(JSON.stringify({type:"attached",deviceId:installationId}) + "\n");
       notesFile = new NotesFile(join(app.getPath("userData"), "assistant-notes.json"));
       transcription = new Transcription({
         pick: async () => {

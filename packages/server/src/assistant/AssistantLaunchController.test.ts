@@ -54,3 +54,17 @@ it("drains accepted writes even when the app cannot confirm exit", async () => {
   expect(done).toBe(false);release();await closing;expect(done).toBe(true);
  } finally {release?.();await controller.stop().catch(()=>{});await rm(dir,{recursive:true,force:true});}
 });
+
+it("keeps an identity that arrives during disable and requests agent stop even if app stop fails", async () => {
+ const dir=await mkdtemp(join(tmpdir(),"soda-assistant-late-attach-"));
+ const deviceId="00000000-0000-4000-8000-000000000001";
+ let attached!:(deviceId:string)=>void;
+ const activate=vi.fn(),requestStop=vi.fn(async()=>{}),start=vi.fn();
+ const stop=vi.fn(async()=>{attached(deviceId);throw Error("generated GUI stop failure");});
+ const app={start,stop} as unknown as ManagedAssistant;
+ const controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:'["generated"]'},()=>"http://127.0.0.1:7780",vi.fn(),(_disabled,onAttached)=>{attached=onAttached;return app;},undefined,{activate,requestStop});
+ try {await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(start).toHaveBeenCalled());
+  await writeAssistantEnabled(dir,false);await vi.waitFor(()=>expect(requestStop).toHaveBeenCalledWith(deviceId));
+  expect(activate).not.toHaveBeenCalled();
+ } finally {await controller.stop().catch(()=>{});await rm(dir,{recursive:true,force:true});}
+});

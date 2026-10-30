@@ -164,6 +164,7 @@ export class AssistantChat {
           deviceId: this.deviceId,
           kind: info.kind,
           retry: false,
+          activate: false,
         });
         if (!live()) return;
         info = Info.parse(next) as AssistantSessionInfo;
@@ -234,6 +235,7 @@ export class AssistantChat {
         deviceId: this.deviceId,
         kind: request.kind,
         retry: request.retry,
+        activate: true,
         ...((request.kind === "claude" || request.kind === "codex") ? { launchSettings: this.profiles[request.kind] } : {}),
       });
     });

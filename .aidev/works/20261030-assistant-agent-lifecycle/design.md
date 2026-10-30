@@ -1,0 +1,9 @@
+# 無効時の専用エージェント停止
+
+管理native appがinstallation UUIDを親へ通知。serverはdesired enable時だけ同UUIDをactivate、disableは表示app停止の成否とは独立して専用agent停止を要求。途中で届くUUIDも保持する。
+
+stop要求はworkspaceと独立した空markerをstate-dir/assistant-disabled/<UUID>へ同期保存し、停止済workspaceが消えても明示activate以外ではensureしない。共通AssistantDisabledDevices authorityをSessionServiceへ注入し、binding flag保存前でもmarkerがあれば自動resumeを拒否。UUID以外のパスは拒否、非通常markerはfail closed。
+
+進行中仕事は止めず、fresh所有・scope・instance一致かつidle時のみclosePane。target/adopt/final queued入力guardは停止待ちを拒否。既存status busのmicrotaskでargv証明確立後に評価し、drain中要求はdirtyで同世代再走。loop終了判定とdraining解除は同じcontinuation。suspendは起動/停止保存/idle drainを全て回収する。
+
+所有不明/別actor/作業先移動/blocked・workingは自動終了しない。通常操舵室で手動確認が必要。Tesseract/Whisper管理やagent画像/音声送信はこの段階の対象外。

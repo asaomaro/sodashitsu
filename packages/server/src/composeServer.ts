@@ -1,3 +1,4 @@
+import { AssistantDisabledDevices } from "./assistant/AssistantDisabledDevices.js";
 import { AssistantLaunchController } from "./assistant/AssistantLaunchController.js";
 import {DesktopNativeHelpers} from "./desktop/DesktopNativeHelpers.js";
 import {openWorkAgentAsk} from "./work/WorkAgentAsk.js";
@@ -109,7 +110,7 @@ import { MachineManager } from "./machine/MachineManager.js";
 import { relayToMachine } from "./machine/MachineRelay.js";
 import { AgentMonitor } from "./agent/AgentMonitor.js";
 import { AgentStarter } from "./agent/AgentStarter.js";
-import { AssistantSessions } from "./assistant/AssistantSessions.js";
+import { watchAssistantIdleStops, AssistantSessions } from "./assistant/AssistantSessions.js";
 import { savedAssistantBinding } from "./assistant/savedBinding.js";
 import { DefaultManifestStore, type ManifestStore } from "./agent/ManifestStore.js";
 import { FsManifestSource } from "./infra/FsManifestSource.js";
@@ -379,7 +380,9 @@ export async function composeServer(
   });
   /** pane の環境の `SODA_SERVER_URL`（`listen()` で待ち受けた後に決める。それまでは undefined）。`SessionService` が読むので、それより前に宣言する。 */
   let paneUrl: string | undefined;
+  const disabledAssistantDevices = new AssistantDisabledDevices(options.stateDir);
   const session = new SessionService({
+    isAssistantDisabled: deviceId => disabledAssistantDevices.isDisabled(deviceId),
     manualAgentResume: async paneId => {
       try { await lstat(join(options.stateDir, "work-agents", "panes", paneId)); return true; }
       catch (e) { return (e as NodeJS.ErrnoException).code !== "ENOENT"; }
@@ -465,6 +468,7 @@ export async function composeServer(
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const assistantSessions = new AssistantSessions({session,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
+  const assistantIdleStops = watchAssistantIdleStops(bus, assistantSessions, () => logger.warn("無効なアシスタントの停止を確認できません"));
   const agentFork = new AgentForkRunner({
     session,
     worktrees,
@@ -737,7 +741,7 @@ export async function composeServer(
     if(action.type === "command" && !session.snapshot().workspaces.some(w=>w.id===action.workspaceId))throw new RpcError("not_found","対象ワークスペースが見つかりません");
   });
   const managedAssistant = new AssistantLaunchController(options.stateDir, process.env,
-    () => `${options.cert && options.key ? "https" : "http"}://127.0.0.1:${boundPortValue ?? options.port}`, message => logger.warn(message));
+    () => `${options.cert && options.key ? "https" : "http"}://127.0.0.1:${boundPortValue ?? options.port}`, message => logger.warn(message), undefined, undefined, assistantSessions);
   const desktopNativeHelpers=new DesktopNativeHelpers();
   const previewHelpers = new ManagedPreviewHelpers(async (machine, gone) => {
     if (machine !== "local") {
@@ -1270,7 +1274,7 @@ export async function composeServer(
         claudeSeenSub.dispose();
         usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
-        assistantSessions.close();
+        assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
@@ -1328,7 +1332,7 @@ export async function composeServer(
         claudeSeenSub.dispose();
         usageIntake.close(); agyUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
-        assistantSessions.close();
+        assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
         graphMaintainer.close();
         paneCleanup.close();
