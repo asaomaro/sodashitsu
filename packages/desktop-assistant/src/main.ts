@@ -157,6 +157,7 @@ function localWindow(role: LocalRole): BrowserWindow {
   const discardOnHide = () => {
     if (role === "bubble") {
       ++bubbleEpoch;
+      transcription?.cancel();
       ocr?.discard(id);
       if (capture?.cancel(id) && !win.isDestroyed()) win.destroy();
     }
@@ -261,6 +262,7 @@ async function toolsState(revision = toolsRevision) {
     notesError,
     transcriptionEnabled: preferences.enabled && preferences.transcriptionEnabled,
     transcriptionOrigin: preferences.transcriptionOrigin,
+    transcriptionProvider:preferences.transcriptionProvider,
   };
 }
 async function publishTools(): Promise<void> {
@@ -386,7 +388,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     recording?.has() &&
     (!preferences.enabled ||
       !preferences.transcriptionEnabled ||
-      recordingOrigin !== preferences.transcriptionOrigin)
+      recordingOrigin !== JSON.stringify([preferences.transcriptionProvider,preferences.transcriptionOrigin,preferences.serverOrigin]))
   ) {
     recording.cancel();
     bubble?.destroy();
@@ -395,6 +397,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
   transcription.configure(
     preferences.enabled && preferences.transcriptionEnabled,
     preferences.transcriptionOrigin,
+    preferences.transcriptionProvider,
   );
   updateChat(preferences);
   remoteNotices?.configure(preferences.remoteNotifications);
@@ -1010,7 +1013,7 @@ function registerIpc(): void {
           !controller.preferences.transcriptionEnabled ||
           !owner.window.isVisible()
         )
-          throw Error("表示中の吹き出しで、ローカル文字起こしを有効にしてから録音してください。");
+          throw Error("表示中の吹き出しで、音声入力を有効にしてから録音してください。");
         const id = event.sender.id;
         if (action === "record-start") {
           if (transcription.isBusy()) throw Error("前の文字起こしが完了するまでお待ちください。");
@@ -1019,7 +1022,7 @@ function registerIpc(): void {
             recording.cancel(id);
             throw Error("吹き出しが閉じられました。");
           }
-          recordingOrigin = controller.preferences.transcriptionOrigin;
+          recordingOrigin = JSON.stringify([controller.preferences.transcriptionProvider,controller.preferences.transcriptionOrigin,controller.preferences.serverOrigin]);
           return { token, maxBytes: AUDIO_LIMIT, maxDurationMs: 300_000 };
         }
         if (action === "record-discard") {
@@ -1062,7 +1065,7 @@ function registerIpc(): void {
             : request.mime.startsWith("audio/wav")
               ? "wav"
               : "webm";
-        return transcription.recorded(
+        await transcription.recorded(
           {
             name: `recording.${suffix}`,
             mime: request.mime,
@@ -1070,6 +1073,9 @@ function registerIpc(): void {
           },
           request.token,
         );
+        const outcome=transcription.snapshot();
+        if(outcome.status!=="done")throw Error(outcome.message || "録音の処理が取り消されました");
+        return;
       }
       if (
         [
@@ -1253,11 +1259,15 @@ else {
       if (managed) process.stdout.write(JSON.stringify({type:"attached",deviceId:installationId}) + "\n");
       notesFile = new NotesFile(join(app.getPath("userData"), "assistant-notes.json"));
       transcription = new Transcription({
+        prepareAgent:()=>{
+          if(!assistantChat)throw Error("専用エージェントへ接続してから送信してください");
+          return assistantChat.prepareAudio();
+        },
         pick: async () => {
           const owner = bubble;
           if (!owner || owner.isDestroyed()) return null;
           const selection = await dialog.showOpenDialog(owner, {
-            title: "このPCのWhisperで文字起こしする音声を選択",
+            title: controller.preferences.transcriptionProvider==="agent"?"専用Codexへ送る音声を選択":"このPCのWhisperで文字起こしする音声を選択",
             properties: ["openFile"],
             filters: [
               {

@@ -113,6 +113,7 @@ export const DesktopAssistantPreferences = z
       .regex(/^[a-z_]{2,16}(?:\+[a-z_]{2,16}){0,3}$/)
       .default("jpn+eng"),
     transcriptionEnabled: z.boolean().default(false),
+    transcriptionProvider:z.enum(["agent","local"]).default("agent"),
     transcriptionOrigin: TranscriptionOrigin.default("http://127.0.0.1:8080"),
     reducedMotion: z.boolean().default(false),
     characterSize: z.number().int().min(64).max(512).default(192),
@@ -155,6 +156,12 @@ export const AssistantAgentKind = z
   .string()
   .max(64)
   .refine((kind) => agentStartExecutable(kind) !== null, "未対応のエージェントです");
+export const ASSISTANT_AUDIO_MAX_BYTES=25*1024*1024;
+export const ASSISTANT_AUDIO_CHUNK_BYTES=48*1024;
+export const AssistantAudioMime=z.enum(["audio/wav","audio/mpeg","audio/mp4","audio/ogg","audio/flac","audio/webm"]);
+export const AssistantAudioBeginParams=z.object({deviceId:z.uuid(),instanceId:z.uuid(),mime:AssistantAudioMime,size:z.number().int().min(1).max(ASSISTANT_AUDIO_MAX_BYTES),ttlMs:z.number().int().min(1).max(300000)}).strict();
+export const AssistantAudioChunkParams=z.object({uploadId:z.uuid(),offset:z.number().int().min(0).max(ASSISTANT_AUDIO_MAX_BYTES),data:z.string().min(4).max(ASSISTANT_AUDIO_CHUNK_BYTES/3*4).regex(/^[A-Za-z0-9+/]*={0,2}$/)}).strict();
+export const AssistantAudioIdParams=z.object({uploadId:z.uuid()}).strict();
 /** Server-created workspace ownership; ordinary workspace.create does not accept this field. */
 const AssistantDeviceId = z.uuid().transform((value) => value.toLowerCase());
 /** Injective full-UUID encoding within the agent name's32-character limit. */

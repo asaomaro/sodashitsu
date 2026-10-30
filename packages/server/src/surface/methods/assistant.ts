@@ -14,12 +14,14 @@ import {
   type AgentInfo,
 } from "@sodashitsu/protocol";
 import { registerAssistantApps } from "../../assistant/AssistantApps.js";
+import { registerAssistantAudio } from "../../assistant/AssistantAudioMethods.js";
 import { sourceTarget } from "../../assistant/SourceTarget.js";
 import type { ControlSurface, MethodContext } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerAssistantMethods(surface: ControlSurface, deps: MethodDeps): void {
   registerAssistantApps(surface, deps);
+  registerAssistantAudio(surface,deps);
   const imagePrompts = new Map<string, {clientId:string; active:boolean; expires:number}>();
   const scheduler = () => {
     if (!deps.scheduler) throw new RpcError("not_found", "予約を利用できません");

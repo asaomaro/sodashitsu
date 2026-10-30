@@ -5,7 +5,7 @@
   let phase = "idle", epoch = 0, token = null, stream = null, recorder = null;
   let chunks = [], size = 0, clip = null, previewUrl = null, ticker = null;
   let operation = null, enabled = false, processing = false, revision = -1, player = null;
-  let limit = 25 * 1024 * 1024, deadline = 0;
+  let limit = 25 * 1024 * 1024, deadline = 0, agent = false;
   const supported = !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined";
   const render = () => {
     element("record-indicator").hidden = phase !== "capturing";
@@ -106,7 +106,7 @@
       const update = () => {
         if (generation !== epoch) return;
         const remaining = Math.max(0, Math.ceil((deadline-performance.now())/1000));
-        status.textContent = `● 録音中（残り${remaining}秒）。停止後に試聴・破棄できます。まだWhisperへ送っていません。`;
+        status.textContent = `● 録音中（残り${remaining}秒）。停止後に試聴・破棄できます。まだ処理先へ送っていません。`;
         if (!remaining) void stop();
       };
       ticker = setInterval(update,250); update();
@@ -125,14 +125,14 @@
     if (phase !== "review" || !clip || operation || processing) return;
     const current = clip, currentToken = token, generation = epoch, job = {};
     operation = job; phase = "sending"; player?.pause();
-    status.textContent = "録音をこのPCのWhisperへ渡します。エージェントには送りません。"; render();
+    status.textContent = agent ? "確認した録音を専用Codexとその提供元へ送ります。" : "録音をこのPCのWhisperへ渡します。エージェントには送りません。"; render();
     try {
       const bytes = await current.arrayBuffer();
       if (generation !== epoch) return;
       await window.assistant.transcribeRecording({token:currentToken,mime:current.type.toLowerCase(),bytes});
       if (generation === epoch) {
         token = null; clearClip(); phase = "idle";
-        status.textContent = "録音データを破棄しました。処理結果は文字起こし欄で確認してください。";
+        status.textContent = agent ? "この窓の録音データを破棄しました。結果は専用エージェントの会話で確認してください。" : "録音データを破棄しました。処理結果は文字起こし欄で確認してください。";
       }
     } catch (error) { if (generation === epoch) cancel(error?.message || "録音の文字起こしを確認できませんでした。"); }
     finally {
@@ -145,7 +145,8 @@
   });
   const updateTools = state => {
     if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
-    revision = state.revision; enabled = state.transcriptionEnabled;
+    revision = state.revision; enabled = state.transcriptionEnabled; agent = state.transcriptionProvider === "agent";
+    element("record-transcribe").textContent = agent ? "録音を専用Codexへ送る" : "録音を文字起こし";
     processing = ["selecting","transcribing","stopping"].includes(state.transcription.status);
     if (!enabled && (phase !== "idle" || operation)) cancel("文字起こしが無効になったため録音を破棄しました。");
     render();

@@ -1,0 +1,7 @@
+# 独立レビュー
+
+review_pointer: CodexAudioの最終guard後の期限/取消検査、proxy終了不明時の所有枠保持を修正し再点検指摘なし。全体ではTranscription元期限の欠落mustを、同期限の事前検査とnative/server残TTLへ渡すことで修正。fileのhide/minimize/navigation取消shouldも実装し生成main回帰で確認。picker/read前のchat/pane/actor固定を追加。再レビュー追加must/shouldなし。origin変更経路は既存bubble破棄cancelで保護されることを独立レビューが確認し、当初の疑いは撤回。
+
+review_transfer: 既存fileの誤unlink、保存済み+新規/並行のadmission、sweepとretention削除のENOENT、handoff中のretention timer/unlink drainを修正。prove後の再入/停止検査shouldを追加。更に未送信file cleanup前の物理枠解放をnested finallyへ変更し、保留削除中の再受付拒否回帰を追加。各修正再レビューで追加must/shouldなし。
+
+レビューは全て読み取りのみ。実Codex/モデル/録音/OS設定変更/サービス導入なし。保存元期限・受理不明時の非再送・real closeまでの所有は生成環境で点検する。最終関連/全体/CI結果はtest-result.mdとPRへ記録する。

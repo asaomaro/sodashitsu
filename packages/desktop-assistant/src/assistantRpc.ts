@@ -23,6 +23,10 @@ export type AssistantMethod =
   | "assistant.ensure"
   | "assistant.adopt"
   | "assistant.cancel_image"
+  | "assistant.audio_begin"
+  | "assistant.audio_chunk"
+  | "assistant.audio_commit"
+  | "assistant.audio_cancel"
   | "assistant.prompt"
   | "assistant.send_keys"
   | "pane.image.begin"
@@ -103,7 +107,7 @@ export class AssistantRpc {
   request<M extends AssistantMethod>(method: M, input: ParamsOf<M>): Promise<ResultOf<M>> {
     if (!this.ready || !this.socket || this.stopped)
       return Promise.reject(Error("操舵室へ接続してから操作してください。"));
-    if (this.pending.size >= (method === "assistant.cancel_image" ? 17 : 16))
+    if (this.pending.size >= (["assistant.cancel_image","assistant.audio_cancel"].includes(method) ? 17 : 16))
       return Promise.reject(Error("前の操作が完了するまでお待ちください。"));
     const params = METHOD_SCHEMAS[method].parse(input);
     const id = `assistant-rpc-${++this.serial}`;

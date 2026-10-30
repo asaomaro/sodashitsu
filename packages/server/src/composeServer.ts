@@ -1,4 +1,5 @@
 import { AssistantDisabledDevices } from "./assistant/AssistantDisabledDevices.js";
+import { AssistantAudioUploads } from "./assistant/AssistantAudioUploads.js";
 import { AssistantLaunchController } from "./assistant/AssistantLaunchController.js";
 import {DesktopNativeHelpers} from "./desktop/DesktopNativeHelpers.js";
 import {openWorkAgentAsk} from "./work/WorkAgentAsk.js";
@@ -468,6 +469,7 @@ export async function composeServer(
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const assistantSessions = new AssistantSessions({session,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
+  const assistantAudio=new AssistantAudioUploads(options.stateDir);
   const assistantIdleStops = watchAssistantIdleStops(bus, assistantSessions, () => logger.warn("無効なアシスタントの停止を確認できません"));
   const agentFork = new AgentForkRunner({
     session,
@@ -807,6 +809,7 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     assistantSessions,
+    assistantAudio,
     agentFork,
     subagentTranscripts,
     usage,
@@ -875,6 +878,7 @@ export async function composeServer(
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // その接続の popup を止める（20260927-custom-command-keys）
       images.onClientGone(clientId); // 受け取り中の画像を捨てる（20260927-clipboard-image-paste）
+      assistantAudio.onClientGone(clientId);
       asks.onClientGone(clientId); // 質問を出した接続・質問を出せる画面の切断（20261002-sodactl-ask）
       displays.onClientGone(clientId); // 面を出せる画面の名乗り・この接続の display.wait（20261007-soda-extensions）
       fileUploads.onClientGone(clientId); // 受け取り中のファイルの書きかけを消す
@@ -896,6 +900,7 @@ export async function composeServer(
       previews.clientGone(clientId);
       commands.onClientGone(clientId); // 中継の接続で開いた popup も止める
       images.onClientGone(clientId);
+      assistantAudio.onClientGone(clientId);
       asks.onClientGone(clientId);
       displays.onClientGone(clientId);
       fileUploads.onClientGone(clientId);
@@ -922,6 +927,7 @@ export async function composeServer(
     boundPort: () => boundPortValue,
     pausePollers: async () => {
       await managedAssistant.stop();
+      await assistantAudio.suspend();
       await assistantSessions.suspend();
       await scheduler.close();
       graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
@@ -939,6 +945,7 @@ export async function composeServer(
     resumePollers: () => {
       managedAssistant.start();
       assistantSessions.resume();
+      assistantAudio.resume();
       desktop.resumeSavedTransfers();
       scheduler.start();
       graphEngine.start();
@@ -1416,6 +1423,7 @@ export async function composeServer(
         metadata.dispose();
         imageSweeper?.stop();
         await images.dispose(); // 書いている途中の画像を書き終えてから（ロックを放す前に）
+        await assistantAudio.close();
         dropSweeper?.stop();
         await fileUploads.dispose(); // 受け取り中のファイルの書きかけを消してから（ロックを放す前に）
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。
