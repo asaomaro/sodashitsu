@@ -21,3 +21,9 @@ review_pointer taskcheck found retained-conversation instance confusion and firs
 review_transfer whole review found requested-only restored markers could adopt a matching name; removed name-only ownership and serializer promotion. Subsequent explicit-adoption recovery was reviewed independently. Self-check added fresh proof to ensure's sessionId update so it cannot reintroduce a stale pane reference after adoption.
 
 The final delta review found successful-start state was a pane boolean and could adopt a same-name replacement before the first detection was claimed. SessionService now records only the actual instance accepted by a launch reservation, invalidates that record on any instance change/null/attribution cleanup, and initial adoption requires this evidence. Regression covers direct and null-mediated replacement before the manager observes A. Correction review confirmed the fix and found no additional must/should. Reviewers read source only; no desktop, actual PTY, agent/model or OS change.
+
+## B3a dedicated bubble conversation
+
+review_pointer read-only taskcheck found initial enable/origin-change stopped the newly created control socket in the unrelated notice reset. Removed that stop and added generated main enable→control.start/not-stopped→scoped assistant.get and bubble-only state-read assertions. Final taskcheck confirmed the fix and found no additional must.
+
+review_transfer independently reviewed the complete native/main/preload/controller/RPC/identity/renderer delta, including exact target generation, real ConversationService record bounds, no input replay, strict TLS/auth and complete-file exclusive hardlink identity publication. Final UI/cursor/cookie delta and added post-JSON absolute hello-budget guard/test were reviewed: no additional must/should. No reviewer ran actual GUI/PTY/model/network or edited source.

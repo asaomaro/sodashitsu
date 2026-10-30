@@ -13,6 +13,9 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { DesktopAssistantPreferences, type AssistantNotice } from "@sodashitsu/protocol";
+import { AssistantRpc } from "./assistantRpc.js";
+import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
+import { deviceIdentity } from "./deviceIdentity.js";
 import { NoticeConnection } from "./noticeConnection.js";
 import { sodaCookieHeader, isSodaSessionCookie } from "./cookieHeader.js";
 import { AssistantController, type NativeAdapter } from "./controller.js";
@@ -49,6 +52,11 @@ let settings: BrowserWindow | null = null;
 let panel: BrowserWindow | null = null;
 let bubble: BrowserWindow | null = null;
 let bubbleCharacterId: string | null = null;
+let control: AssistantRpc | null = null;
+let assistantChat: AssistantChat | null = null;
+let controlOrigin: string | null = null;
+let installationId: string;
+let chatRevision = 0;
 let backend: NoticeConnection | null = null;
 let backendOrigin: string | null = null;
 let notices: readonly AssistantNotice[] = [];
@@ -133,7 +141,59 @@ function publishInbox(): void {
   ++inboxRevision;
   if (bubble && !bubble.isDestroyed()) bubble.webContents.send("assistant:inbox-changed", inbox());
 }
+function chatState(): AssistantChatState {
+  return (
+    assistantChat?.snapshot() ?? {
+      revision: chatRevision,
+      connected: false,
+      busy: false,
+      session: null,
+      kinds: [],
+      messages: [],
+      hint: "アシスタントは接続していません。",
+    }
+  );
+}
+function updateChat(preferences: DesktopAssistantPreferences): void {
+  if (!preferences.enabled || controlOrigin !== preferences.serverOrigin) {
+    control?.stop();
+    assistantChat?.stop();
+    control = null;
+    assistantChat = null;
+    controlOrigin = null;
+  }
+  if (!preferences.enabled || control) return;
+  const origin = preferences.serverOrigin;
+  const rpc = new AssistantRpc(origin, {
+    cookie: async () =>
+      sodaCookieHeader(
+        await session
+          .fromPartition("persist:assistant-server")
+          .cookies.get({ url: `${origin}/ws` }),
+      ),
+    status: (connected) => {
+      if (control === rpc) assistantChat?.connection(connected);
+    },
+    changed: () => {
+      if (control === rpc) void assistantChat?.refresh();
+    },
+  });
+  assistantChat = new AssistantChat(
+    installationId,
+    rpc,
+    (state) => {
+      chatRevision = state.revision;
+      if (bubble && !bubble.isDestroyed())
+        bubble.webContents.send("assistant:conversation-changed", state);
+    },
+    chatRevision,
+  );
+  control = rpc;
+  controlOrigin = origin;
+  rpc.start();
+}
 function updateBackend(preferences: DesktopAssistantPreferences): void {
+  updateChat(preferences);
   if (!preferences.enabled || backendOrigin !== preferences.serverOrigin) {
     backend?.stop();
     backend = null;
@@ -292,7 +352,19 @@ const adapter: NativeAdapter = {
 };
 
 function registerIpc(): void {
-  for (const action of ["read", "save", "open", "settings", "chat", "hide", "inbox"]) {
+  for (const action of [
+    "read",
+    "save",
+    "open",
+    "settings",
+    "chat",
+    "hide",
+    "inbox",
+    "conversation",
+    "start-session",
+    "adopt-session",
+    "send-message",
+  ]) {
     ipcMain.handle(`assistant:${action}`, async (event, input: unknown) => {
       const owner = localWindows.get(event.sender.id);
       const current =
@@ -312,6 +384,14 @@ function registerIpc(): void {
         throw new Error("許可されていない操作です");
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
+      if (action === "conversation") return chatState();
+      if (["start-session", "adopt-session", "send-message"].includes(action)) {
+        if (!assistantChat || !controller.preferences.enabled)
+          throw Error("アシスタントは接続していません。");
+        if (action === "start-session") return assistantChat.start(input);
+        if (action === "adopt-session") return assistantChat.adopt(input);
+        return assistantChat.send(input);
+      }
       if (action === "save") return controller.update(input);
       if (action === "chat") {
         openBubble();
@@ -343,6 +423,8 @@ else {
     quitting = true;
     backend?.stop();
     backend = null;
+    control?.stop();
+    assistantChat?.stop();
   });
   app.on("activate", () => {
     if (!quitting && controller) openSettings();
@@ -373,6 +455,7 @@ else {
         isolated.setPermissionCheckHandler(() => false);
         isolated.on("will-download", (event) => event.preventDefault());
       }
+      installationId = await deviceIdentity(join(app.getPath("userData"), "assistant-device-id"));
       const file = new PreferencesFile(join(app.getPath("userData"), "assistant.json"));
       let preferences: DesktopAssistantPreferences;
       try {
@@ -386,7 +469,10 @@ else {
       }
       controller = new AssistantController(preferences, adapter, (next) => file.write(next));
       session.fromPartition("persist:assistant-server").cookies.on("changed", (_event, cookie) => {
-        if (isSodaSessionCookie(cookie.name)) backend?.reconnect();
+        if (isSodaSessionCookie(cookie.name)) {
+          backend?.reconnect();
+          control?.reconnect();
+        }
       });
       registerIpc();
       controller.initialize();

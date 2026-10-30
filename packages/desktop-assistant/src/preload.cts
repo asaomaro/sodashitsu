@@ -10,6 +10,15 @@ contextBridge.exposeInMainWorld(
     settings: () => ipcRenderer.invoke("assistant:settings"),
     chat: () => ipcRenderer.invoke("assistant:chat"),
     hide: () => ipcRenderer.invoke("assistant:hide"),
+    conversation: () => ipcRenderer.invoke("assistant:conversation"),
+    startSession: (input: unknown) => ipcRenderer.invoke("assistant:start-session", input),
+    adoptSession: (input: unknown) => ipcRenderer.invoke("assistant:adopt-session", input),
+    sendMessage: (input: unknown) => ipcRenderer.invoke("assistant:send-message", input),
+    onConversation: (callback: (state: unknown) => void) => {
+      const receive = (_event: unknown, state: unknown) => callback(state);
+      ipcRenderer.on("assistant:conversation-changed", receive);
+      return () => ipcRenderer.removeListener("assistant:conversation-changed", receive);
+    },
     inbox: () => ipcRenderer.invoke("assistant:inbox"),
     onInbox: (callback: (state: unknown) => void) => {
       const receive = (_event: unknown, state: unknown) => callback(state);

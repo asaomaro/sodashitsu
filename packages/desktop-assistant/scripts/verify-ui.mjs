@@ -55,6 +55,11 @@ try {
       position: null,
     };
     window.assistant = {
+      conversation: async () => ({ revision: 1, connected: false, busy: false, session: null, kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。" }),
+      onConversation: callback => { window.chatCallback = callback; return () => {}; },
+      startSession: async input => window.calls.push(["start-session",input]),
+      adoptSession: async input => window.calls.push(["adopt-session",input]),
+      sendMessage: async input => window.calls.push(["send-message",input]),
       inbox: async () => ({
         status: "connected",
         revision: 1,
@@ -128,12 +133,42 @@ try {
   await page.evaluate(() => window.noticeCallback({ status: "offline", revision: 1, notices: [] }));
   await expect(page.locator(".notice")).toContainText("確認してください。");
   await expect(page.locator("#send")).toBeDisabled(); // No false successful chat before backend connection.
+  await page.evaluate(() => window.chatCallback({
+    revision: 2, connected: true, busy: false, session: null,
+    kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。"
+  }));
+  await page.locator("#start-session").press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.calls.at(-1)), ["start-session", {revision:2,kind:"codex",retry:false}]);
+  const actorId = "00000000-0000-4000-8000-000000000001";
+  await page.evaluate(actorId => window.chatCallback({
+    revision: 3, connected: true, busy: false,
+    session: {paneId:"00000000-0000-4000-8000-000000000002",kind:"codex",state:"ready",agent:{instanceId:actorId,state:"idle"}},
+    kinds: [{kind:"codex",label:"Codex",available:true}],
+    messages: [{role:"assistant",text:"<img src=x onerror=alert(1)>こんにちは。"}], hint:"船長へのメッセージを送れます。"
+  }), actorId);
+  await expect(page.locator("#send")).toBeEnabled();
+  await expect(page.locator(".chat-message")).toHaveText("<img src=x onerror=alert(1)>こんにちは。");
+  await expect(page.locator(".chat-message img")).toHaveCount(0);
+  await page.locator("#message").fill("こんにちは、船長");
+  await page.locator("#send").press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.calls.at(-1)), ["send-message", {revision:3,instanceId:actorId,text:"こんにちは、船長"}]);
+  await expect(page.locator("#message")).toHaveValue("");
+  await page.evaluate(() => window.chatCallback({revision:2,connected:false,busy:false,session:null,kinds:[],messages:[],hint:"old"}));
+  await expect(page.locator("#send")).toBeEnabled();
+  await page.evaluate(actorId => window.chatCallback({
+    revision:4,connected:true,busy:false,
+    session:{paneId:"00000000-0000-4000-8000-000000000002",kind:"codex",state:"conflict",agent:null,observedAgent:{instanceId:actorId,kind:"codex"}},
+    kinds:[{kind:"codex",label:"Codex",available:true}],messages:[],hint:"対象を確認してください。"
+  }),actorId);
+  await expect(page.locator("#send")).toBeDisabled();
+  await page.locator("#adopt-session").press("Enter");
+  assert.deepEqual(await page.evaluate(() => window.calls.at(-1)), ["adopt-session",{revision:4,instanceId:actorId}]);
   await page.getByRole("button", { name: "吹き出しを閉じる" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
   assert.deepEqual(errors, []);
   await context.close();
   console.log(
-    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and disconnected conversation state",
+    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble start/chat/adoption, literal messages and stale-state fencing",
   );
 } finally {
   await browser?.close();

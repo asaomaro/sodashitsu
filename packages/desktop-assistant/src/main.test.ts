@@ -5,6 +5,12 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  controls: [] as Array<{
+    options: { status: (connected: boolean) => void };
+    start: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
+    request: ReturnType<typeof vi.fn>;
+  }>,
   connections: [] as Array<{
     options: {
       cookie: () => Promise<string | null>;
@@ -108,6 +114,25 @@ vi.mock("electron", () => ({
   Tray: class extends EventEmitter {
     setToolTip() {}
     setContextMenu() {}
+  },
+}));
+
+vi.mock("./assistantRpc.js", () => ({
+  AssistantRpc: class {
+    start = vi.fn();
+    stop = vi.fn();
+    reconnect = vi.fn();
+    request = vi.fn(async (method: string) =>
+      method === "assistant.get"
+        ? null
+        : { kinds: [{ kind: "codex", label: "Codex", available: true }] },
+    );
+    constructor(
+      _origin: string,
+      readonly options: { status: (connected: boolean) => void },
+    ) {
+      fixture.controls.push(this);
+    }
   },
 }));
 
@@ -283,5 +308,31 @@ it("uses the scoped named-session cookie only inside main and reconnects on its 
   cookies.emit("changed", {}, { name: "soda_session_work" });
   expect(connection.reconnect).toHaveBeenCalledOnce();
   expect(await fixture.handlers.get("assistant:read")!(event)).not.toHaveProperty("cookie");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+
+it("keeps the newly enabled control connection running and reaches scoped session discovery", async () => {
+  const settings = fixture.windows.find(
+    (window) => !window.destroyed && window.url.endsWith("settings.html"),
+  )!;
+  const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  const control = fixture.controls.at(-1)!;
+  expect(control.start).toHaveBeenCalledOnce();
+  expect(control.stop).not.toHaveBeenCalled();
+  control.options.status(true);
+  await vi.waitFor(() =>
+    expect(control.request).toHaveBeenCalledWith(
+      "assistant.get",
+      expect.objectContaining({ deviceId: expect.any(String) }),
+    ),
+  );
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  const bubbleEvent = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  expect(await fixture.handlers.get("assistant:conversation")!(bubbleEvent)).toMatchObject({
+    connected: true,
+  });
+  await expect(fixture.handlers.get("assistant:conversation")!(event)).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });
