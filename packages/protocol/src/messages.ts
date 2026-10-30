@@ -1,4 +1,5 @@
 import { ExecMethods, type ExecResults } from "./exec.js";
+import { AssistantSessionGetParams, AssistantSessionEnsureParams, AssistantSessionPromptParams, AssistantSessionKeysParams, AssistantSessionAdoptParams, type AssistantSessionInfo } from "./desktopAssistant.js";
 import { WorkMethods, WorkTransferMethods, type WorkResults } from "./work.js";
 import { WorkAgentMethods, type WorkAgentResults } from "./workAgent.js";
 import { ViewerTabMethods, type ViewerTabResults, type ViewerTab } from "./viewerTabs.js";
@@ -1585,6 +1586,11 @@ export const METHOD_SCHEMAS = {
   "agent.send_keys": AgentSendKeysParams,
   "agent.rename": AgentRenameParams,
   "agent.start": AgentStartParams,
+  "assistant.get": AssistantSessionGetParams,
+  "assistant.ensure": AssistantSessionEnsureParams,
+  "assistant.adopt": AssistantSessionAdoptParams,
+  "assistant.prompt": AssistantSessionPromptParams,
+  "assistant.send_keys": AssistantSessionKeysParams,
   "agent.fork": AgentForkParams,
   "agent.fork_preview": AgentForkPreviewParams,
   "agent.kinds": AgentKindsParams,
@@ -1756,6 +1762,11 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.send_keys": Record<string, never>;
   "agent.rename": AgentRenameResult;
   "agent.start": AgentStartResult;
+  "assistant.get": AssistantSessionInfo | null;
+  "assistant.ensure": AssistantSessionInfo;
+  "assistant.adopt": AssistantSessionInfo;
+  "assistant.prompt": AgentPromptResult;
+  "assistant.send_keys": Record<string, never>;
   "agent.fork": AgentForkResult;
   "agent.fork_preview": AgentForkPreviewResult;
   "agent.kinds": AgentKindsResult;

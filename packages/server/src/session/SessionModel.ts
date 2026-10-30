@@ -1453,6 +1453,7 @@ export class SessionModel {
       label: data.label,
       cwd: data.cwd,
       ...(data.projectDir ? { projectDir: data.projectDir } : {}),
+      ...(data.assistant ? { assistant: structuredClone(data.assistant) } : {}),
       tabIds: data.tabs.map((t) => t.id),
       activeTabId: data.activeTabId,
       // 以前の版の保存には無い——無ければ null（`autoLabel`/`agentSession` と同じ「optional 追加」方式。

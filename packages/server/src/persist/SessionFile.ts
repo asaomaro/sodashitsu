@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { LayoutNode, PaneStatus, SplitDirection } from "@sodashitsu/protocol";
-import { SidebarLayoutSchema, NativeTabViewSchema, PluginTabSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
+import { AssistantWorkspaceBinding, SidebarLayoutSchema, NativeTabViewSchema, PluginTabSchema, TabViewInstanceSchema, type SidebarLayout } from "@sodashitsu/protocol";
 import { readFileWithBackup, writeFileAtomic, type ReadResult } from "./atomicFile.js";
 
 /**
@@ -38,6 +38,7 @@ export interface SessionFileTab {
   panes: SessionFilePane[];
 }
 export interface SessionFileWorkspace {
+  assistant?: import("@sodashitsu/protocol").AssistantWorkspaceBinding | undefined;
   id: string;
   label: string;
   /**
@@ -148,6 +149,7 @@ const SessionFileTabSchema: z.ZodType<SessionFileTab> = z.object({
     && new Set((t.views ?? []).map(v => v.id)).size === (t.views?.length ?? 0);
 }, { message: "invalid work panes or display anchor" });
 const SessionFileWorkspaceSchema: z.ZodType<SessionFileWorkspace> = z.object({
+  assistant: AssistantWorkspaceBinding.optional(),
   id: z.string(),
   label: z.string(),
   autoLabel: z.boolean().optional(),

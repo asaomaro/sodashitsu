@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { agentStartExecutable } from "./agentStart.js";
+import type { AgentInfo } from "./model.js";
 /** Explicitly configured Soda endpoint only. Credentials, paths, fragments and insecure LAN are not accepted. */
 export function desktopAssistantOrigin(input: string): string {
   const u = new URL(input);
@@ -73,3 +75,61 @@ export const AssistantNotice = z
   })
   .strict();
 export type AssistantNotice = z.infer<typeof AssistantNotice>;
+
+export const AssistantAgentKind = z
+  .string()
+  .max(64)
+  .refine((kind) => agentStartExecutable(kind) !== null, "未対応のエージェントです");
+/** Server-created workspace ownership; ordinary workspace.create does not accept this field. */
+const AssistantDeviceId = z.uuid().transform((value) => value.toLowerCase());
+/** Injective full-UUID encoding within the agent name's32-character limit. */
+export function assistantAgentName(deviceId: string): string {
+  const id = AssistantDeviceId.parse(deviceId);
+  return `asst-${BigInt(`0x${id.replaceAll("-", "")}`).toString(36)}`;
+}
+export const AssistantWorkspaceBinding = z
+  .object({
+    deviceId: AssistantDeviceId,
+    paneId: z.uuid(),
+    kind: AssistantAgentKind,
+    name: z.string().regex(/^asst-[0-9a-z]{1,25}$/),
+    launchRequested: z.boolean(),
+    lastInstanceId: z.uuid().optional(),
+    sessionId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,128}$/)
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (binding) => binding.name === assistantAgentName(binding.deviceId),
+    "専用セッションの所有情報と名前が一致しません",
+  );
+export type AssistantWorkspaceBinding = z.infer<typeof AssistantWorkspaceBinding>;
+export const AssistantSessionGetParams = z.object({ deviceId: AssistantDeviceId }).strict();
+export const AssistantSessionEnsureParams = AssistantSessionGetParams.extend({
+  kind: AssistantAgentKind,
+  retry: z.boolean().default(false),
+}).strict();
+export const AssistantSessionPromptParams = AssistantSessionGetParams.extend({
+  instanceId: z.uuid(),
+  text: z.string().min(1).max(8192),
+}).strict();
+export const AssistantSessionAdoptParams = AssistantSessionGetParams.extend({
+  instanceId: z.uuid(),
+}).strict();
+export const AssistantSessionKeysParams = AssistantSessionGetParams.extend({
+  instanceId: z.uuid(),
+  keys: z.array(z.string().min(1).max(64)).min(1).max(256),
+}).strict();
+export interface AssistantSessionInfo {
+  deviceId: string;
+  workspaceId: string;
+  tabId: string | null;
+  paneId: string;
+  kind: string;
+  state: "shell" | "starting" | "ready" | "stopped" | "conflict";
+  agent: AgentInfo | null;
+  /** Visible candidate for an explicit user choice; it never grants permission to send input. */
+  observedAgent: AgentInfo | null;
+}

@@ -24,7 +24,7 @@ import type {
   WorkspaceGroup,
   WorkspaceId,
 } from "@sodashitsu/protocol";
-import { countSystemAgents, INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
+import { assistantAgentName, AssistantWorkspaceBinding, AssistantSessionEnsureParams, countSystemAgents, INVALID_AGENT_NAME_MESSAGE, isValidAgentName, RpcError } from "@sodashitsu/protocol";
 import type { SessionFileData, SessionFilePane, SessionFileTab, SessionFileWorkspace } from "../persist/SessionFile.js";
 import type { PaneHistoryEntry } from "../persist/PaneHistoryFile.js";
 import { historyReplayText, sanitizeHistoryAnsi } from "../terminal/historyAnsi.js";
@@ -280,6 +280,8 @@ export class SessionService {
   private readonly labelGen = new Map<WorkspaceId, number>();
   /** `agent start` の起動中（検出前）の名前の予約（20260926-agent-start design「server `SessionService` に足すもの」）。 */
   private readonly agentLaunches = new Map<PaneId, { token: number; name: string; kind: string }>();
+  /** Current detection accepted from an actual launch reservation; never restored from disk/name. */
+  private readonly launchedAgentInstances = new Map<PaneId, { instanceId: string; name: string; kind: string }>();
   private nextAgentLaunchToken = 1;
   /** 復元で会話の再開コマンドを打ち込んだ時刻（まだエージェントが検出されていない pane だけ。20260926-agent-start の cross 点検）。 */
   private readonly resumeWrittenAt = new Map<PaneId, number>();
@@ -289,6 +291,8 @@ export class SessionService {
   private readonly frontAgents = new Map<PaneId, { kind: string; pids: ReadonlySet<number>; verifiable: boolean; resumeId?: string }>();
   /** 前面のエージェントの引数の会話の id を、いつの検出（instanceId）に適用したか（同じ検出では 1 回だけ。あとの報告・終了の文言が優先する）。 */
   private readonly argvApplied = new Map<PaneId, string>();
+  private readonly restoredAssistantPanes = new Set<PaneId>();
+  private readonly verifiedAgentSessions = new Map<PaneId,{instanceId:string;kind:string;sessionId:string}>();
   /** 報告に結んだ最初の入力の時刻（pane ごと）。1 回の入力から出る報告は 1 つなので、同じ入力を別の報告の候補にしない。 */
   private readonly submitConsumed = new Map<PaneId, number>();
   /** 検出の時点で、画面に既にあった終了の文言の id（前の実行のもの。終了のときに、これは拾わない）。 */
@@ -467,6 +471,7 @@ export class SessionService {
     label: string | undefined,
     newCwd?: NewCwd,
     command?:{shell:string;args:string[];env?:Readonly<Record<string,string>>},
+    assistant?: { deviceId: string; kind: string },
   ): Promise<{ workspace: Workspace; tab: Tab; pane: Pane; cwdFallback?: true }> {
     // **明示した `cwd`（worktree を開く）が方針に勝ち、代わりへは回さない**（design D5。使えなければ今までどおり spawn_failed）。
     const pending = cwd !== undefined ? { cwd, fellBack: false } : this.placeFor(newCwd, followSource(newCwd), this.defaultCwd);
@@ -486,6 +491,14 @@ export class SessionService {
       cols: HEADLESS_COLS,
       rows: HEADLESS_ROWS,
     });
+    if (assistant) {
+      const owner = AssistantSessionEnsureParams.parse(assistant);
+      reserved.workspace.assistant = AssistantWorkspaceBinding.parse({
+        deviceId: owner.deviceId, kind: owner.kind, paneId: reserved.pane.id,
+        name: assistantAgentName(owner.deviceId), launchRequested: false,
+      });
+      reserved.workspace.projectDir = resolvedCwd;
+    }
     const spawn = await this.spawnForPane(reserved.pane.id, resolvedCwd,command);
     if (!spawn.ok) {
       // まだ Map に入れていないので、モデル側のロールバックは不要（イベントも出していない）。
@@ -503,6 +516,27 @@ export class SessionService {
     if (naming.autoLabel && !naming.degraded) this.labelCwd.set(reserved.workspace.id, resolvedCwd); // 最初の pane の場所＝開いた場所
     if (spawn.alreadyExited) await this.closePaneAfterExit(reserved.pane.id, 0); // D37：猶予中に code 0 で即終了していた
     return { workspace: reserved.workspace, tab: reserved.tab, pane: reserved.pane, ...(place.fellBack ? { cwdFallback: true as const } : {}) };
+  }
+
+  /** Internal service only. Preserve identity across async persistence and foreground inspection. */
+  updateAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding, patch: Partial<Pick<AssistantWorkspaceBinding,"launchRequested"|"lastInstanceId"|"sessionId">>): AssistantWorkspaceBinding {
+    const workspace = this.model.getWorkspace(workspaceId);
+    if (!workspace || workspace.assistant !== expected) throw new RpcError("not_found", "専用セッションが変更されました");
+    const next = AssistantWorkspaceBinding.parse({ ...expected, ...patch });
+    workspace.assistant = next;
+    this.bus.publish({ event: "workspace.updated", data: { workspace } });
+    this.persist.touch();
+    return next;
+  }
+
+  detachAssistantBinding(workspaceId: string, expected: AssistantWorkspaceBinding): void {
+    const workspace = this.model.getWorkspace(workspaceId);
+    const pane = this.model.getPane(expected.paneId);
+    if (!workspace || workspace.assistant !== expected || !pane || pane.agent || this.hasAgentLaunch(pane.id) || this.hasPendingResume(pane.id))
+      throw new RpcError("agent_pane_busy", "専用セッションは停止していません");
+    delete workspace.assistant;
+    this.bus.publish({ event: "workspace.updated", data: { workspace } });
+    this.persist.touch();
   }
 
   /**
@@ -1364,11 +1398,16 @@ export class SessionService {
     // 「名前の引き継ぎ」）。別の instanceId（入れ替わり）・null（終了）には引き継がない＝名前は消える。
     // 起動中の予約のある pane に新しい検出が来たら予約を終え、種類が合えば予約の名前を付ける（20260926-agent-start）。
     // 付ける名前は予約（受け付け時に assertAgentNameAvailable を通った値）から来る。下の引き継ぎは同じ instanceId のときだけなので上書きしない。
+    if (patch.agent !== undefined && patch.agent?.instanceId !== pane.agent?.instanceId) {
+      this.verifiedAgentSessions.delete(paneId);
+      this.launchedAgentInstances.delete(paneId);
+    }
     if (patch.agent) this.resumeWrittenAt.delete(paneId);
     const launch = this.agentLaunches.get(paneId);
     if (launch && patch.agent && patch.agent.instanceId !== pane.agent?.instanceId) {
       this.agentLaunches.delete(paneId);
       if (patch.agent.kind === launch.kind && this.agentNameHolder(launch.name, paneId) === null) {
+        this.launchedAgentInstances.set(paneId, { instanceId: patch.agent.instanceId, name: launch.name, kind: launch.kind });
         patch = { ...patch, agent: { ...patch.agent, name: launch.name } };
       }
     }
@@ -1773,12 +1812,32 @@ export class SessionService {
     if (prev && prev.sessionId !== sessionId && ctx.source !== "clear") this.pushHistory(paneId, prev);
     else this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
     this.model.setAgentSession(paneId, { kind, sessionId, reportedAt: Date.now() });
+    this.recordVerifiedAgentSession(paneId,kind,sessionId);
     this.persist.touch();
     this.logAttached(paneId, kind, sessionId, ctx.via ?? "hook");
     this.notifyAccepted(paneId, kind, sessionId, ctx);
   }
 
-  /** 受け入れた（会話の参照を付けた）ことを、聞き手へ知らせる。聞き手の失敗で、受け入れを壊さない。 */
+  matchesAgentLaunch(paneId: string, instanceId: string, name: string): boolean {
+    const accepted = this.launchedAgentInstances.get(paneId);
+    const agent = this.model.getPane(paneId)?.agent;
+    return accepted?.instanceId === instanceId && accepted.name === name &&
+      agent?.instanceId === instanceId && agent.kind === accepted.kind && agent.name === name;
+  }
+
+  /** Restore provenance and fresh evidence are separate from the persisted conversation reference. */
+  wasRestoredPane(paneId: string): boolean { return this.restoredAssistantPanes.has(paneId) && this.model.getPane(paneId) !== undefined; }
+  hasVerifiedAgentSession(paneId: string, instanceId: string, sessionId: string): boolean {
+    const evidence=this.verifiedAgentSessions.get(paneId);const pane=this.model.getPane(paneId);
+    return pane?.agent?.instanceId===instanceId && pane.agentSession?.sessionId===sessionId && pane.agentSession.kind===pane.agent.kind && evidence?.instanceId===instanceId && evidence.sessionId===sessionId && evidence.kind===pane.agent.kind;
+  }
+  private recordVerifiedAgentSession(paneId: string, kind: string, sessionId: string): void {
+    const agent=this.model.getPane(paneId)?.agent;
+    if(agent?.kind===kind)this.verifiedAgentSessions.set(paneId,{instanceId:agent.instanceId,kind,sessionId});
+    else this.verifiedAgentSessions.delete(paneId);
+  }
+
+  /** 受け入れた会話の情報を聞き手へ知らせる。聞き手の失敗で受け入れを壊さない。 */
   private notifyAccepted(paneId: PaneId, kind: AgentIntegrationKind, sessionId: string, ctx: AgentReportContext): void {
     for (const l of this.reportAcceptedListeners) {
       try {
@@ -1801,6 +1860,7 @@ export class SessionService {
     const pane = this.model.getPane(paneId);
     if (!pane) return;
     const prev = pane.agentSession;
+    if (via === "argv") this.recordVerifiedAgentSession(paneId,kind,sessionId);
     if (prev && prev.kind === kind && prev.sessionId === sessionId) return;
     if (prev) this.pushHistory(paneId, prev);
     this.model.setAgentSessionHistory(paneId, this.model.agentSessionHistory(paneId).filter((h) => h.sessionId !== sessionId));
@@ -2029,6 +2089,9 @@ export class SessionService {
 
   private clearAttributionState(paneId: PaneId): void {
     this.frontAgents.delete(paneId);
+    this.verifiedAgentSessions.delete(paneId);
+    this.restoredAssistantPanes.delete(paneId);
+    this.launchedAgentInstances.delete(paneId);
     this.lastSeenAgentPids.delete(paneId);
     this.goneAgentPids.delete(paneId);
     this.resumeAttempts.delete(paneId);
@@ -2247,6 +2310,7 @@ export class SessionService {
     // SessionModel には「既存の id を使って作る」専用口が無いので、内部の Map へ直接組み立てる代わりに
     // 通常の作成 API は使わず、復元専用の経路で入れる（実装は SessionModel.restoreFrom に委譲）。
     this.model.restoreWorkspace(wsData, autoLabel);
+    for (const tab of wsData.tabs) for (const pane of tab.panes) this.restoredAssistantPanes.add(pane.id);
   }
 
   private async restorePaneProcess(

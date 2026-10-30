@@ -1,4 +1,5 @@
 import { registerExecMethods } from "./exec.js";
+import { registerAssistantMethods } from "./assistant.js";
 import { registerWorkMethods } from "./work.js";
 import { registerViewerTabs } from "./viewerTabs.js";
 import { registerDesktopMethods } from "./desktop.js";
@@ -55,6 +56,7 @@ export function registerAllMethods(surface: ControlSurface, deps: MethodDeps): v
   registerWorktreeMethods(surface, deps);
   registerAgentIntegrationMethods(surface, deps);
   registerAgentMethods(surface, deps);
+  registerAssistantMethods(surface, deps);
   registerScheduleMethods(surface,deps); // 20260926-agent-prompt-send-keys
   registerConversationMethods(surface, deps);
   registerAgentForkMethods(surface, deps); // 20261009-agent-fork

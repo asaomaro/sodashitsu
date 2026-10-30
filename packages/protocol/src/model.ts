@@ -36,6 +36,8 @@ export interface GitInfo {
 }
 
 export interface Workspace {
+  /** Private assistant service creates and persists this ownership marker. */
+  assistant?: import("./desktopAssistant.js").AssistantWorkspaceBinding;
   id: WorkspaceId;
   label: string;
   cwd: string;

@@ -152,11 +152,13 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
         specs.push(spec);
       }
       const { agent, host } = requireAgent(deps, params.paneId, params.instanceId);
+      ctx.agentPromptGuard?.(agent);
       deps.sizeAuthority.noteInteraction(ctx.clientId, params.paneId);
       try {
         await host.writeModal({
           build: (modes) => {
-            requireSameAgent(deps, params.paneId, agent);
+            const now = requireSameAgent(deps, params.paneId, agent);
+            ctx.agentPromptGuard?.(now);
             return [specs.map((s) => encodeKey(s, modes) ?? "").join("")];
           },
           delayMs: 0,
