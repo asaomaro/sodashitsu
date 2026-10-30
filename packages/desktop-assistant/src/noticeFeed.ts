@@ -34,6 +34,7 @@ const Shared = z.object({
     )
     .max(512),
 });
+const Question = z.object({ askId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), paneId: z.uuid() });
 type FeedPane = z.infer<typeof Pane>;
 
 /** Read-only projection. Formatting notices never calls a model or writes to a terminal. */
@@ -49,6 +50,10 @@ export class NoticeFeed {
   >();
   private pending = new Map<string, AssistantNotice>();
   private ready = false;
+  private asks = new Map<string, string>();
+  private closedAsks = new Set<string>();
+  private seenAsks = new Set<string>();
+  private askSources = new Map<string, string>();
   readonly origin: string;
   constructor(
     origin: string,
@@ -69,6 +74,8 @@ export class NoticeFeed {
     this.tabs = new Map(snapshot.tabs.map((tab) => [tab.id, tab]));
     this.workspaces = new Map(snapshot.workspaces.map((workspace) => [workspace.id, workspace]));
     this.ready = false;
+    this.asks.clear();
+    this.closedAsks.clear();
     this.prune();
   }
 
@@ -88,12 +95,82 @@ export class NoticeFeed {
     let added = false;
     for (const pane of this.panes.values()) added = this.consider(pane) || added;
     this.changed(this.notices, added);
+    if (this.asks.size) this.refreshQuestions();
+  }
+
+  questions(input: unknown): void {
+    const { asks } = z.object({ asks: z.array(Question).max(128) }).parse(input);
+    this.asks = new Map([
+      ...asks.filter((a) => !this.closedAsks.has(a.askId)).map((a) => [a.askId, a.paneId] as const),
+      ...this.asks,
+    ]);
+    this.refreshQuestions();
+  }
+
+  private refreshQuestions(): void {
+    this.prune();
+    let added = false;
+    for (const [askId, paneId] of this.asks) {
+      const pane = this.panes.get(paneId),
+        tab = pane && this.tabs.get(pane.tabId),
+        workspace = tab && this.workspaces.get(tab.workspaceId);
+      const key = `ask:${askId}`;
+      if (!this.ready || !pane?.agent || !workspace || this.pending.has(key)) continue;
+      const signature = `${pane.id}:${pane.agent.instanceId}:${workspace.id}`;
+      if (this.askSources.has(askId) && this.askSources.get(askId) !== signature) continue;
+      this.askSources.set(askId, signature);
+      while (this.askSources.size > 512)
+        this.askSources.delete(this.askSources.keys().next().value!);
+      const title =
+        `${workspace.label} / ${pane.label || pane.title || tab?.label || "エージェント"}`.slice(
+          0,
+          160,
+        );
+      this.pending.set(
+        key,
+        AssistantNotice.parse({
+          id: randomUUID(),
+          key,
+          kind: "question",
+          source: {
+            serverOrigin: this.origin,
+            machineId: this.machineId,
+            workspaceId: workspace.id,
+            paneId,
+            agentInstanceId: pane.agent.instanceId,
+          },
+          title,
+          message: `「${title}」から質問フォームが届きました。フォームを開いて回答してください。`,
+          at: this.now(),
+        }),
+      );
+      while (this.pending.size > 32) this.pending.delete(this.pending.keys().next().value!);
+      if (!this.seenAsks.has(askId)) added = true;
+      this.seenAsks.add(askId);
+      while (this.seenAsks.size > 512) this.seenAsks.delete(this.seenAsks.values().next().value!);
+    }
+    this.changed(this.notices, added);
   }
 
   event(input: unknown): void {
     const envelope = z.object({ event: z.string(), data: z.unknown() }).parse(input);
     const data = envelope.data;
     switch (envelope.event) {
+      case "ask.opened": {
+        const q = Question.parse(data);
+        if (!this.closedAsks.has(q.askId) && this.asks.size < 128) this.asks.set(q.askId, q.paneId);
+        this.refreshQuestions();
+        return;
+      }
+      case "ask.closed": {
+        const q = Question.parse(data);
+        this.asks.delete(q.askId);
+        this.closedAsks.add(q.askId);
+        while (this.closedAsks.size > 512)
+          this.closedAsks.delete(this.closedAsks.values().next().value!);
+        this.refreshQuestions();
+        return;
+      }
       case "notification.changed":
         this.shared(data);
         return;
@@ -140,6 +217,7 @@ export class NoticeFeed {
     let added = false;
     for (const pane of this.panes.values()) added = this.consider(pane) || added;
     this.changed(this.notices, added);
+    if (this.asks.size) this.refreshQuestions();
   }
 
   private prune(): void {
@@ -152,10 +230,12 @@ export class NoticeFeed {
         pane.agent.instanceId !== notice.source.agentInstanceId ||
         tab?.workspaceId !== notice.source.workspaceId ||
         !this.workspaces.has(notice.source.workspaceId) ||
-        notice.key !==
-          (notice.kind === "attention"
-            ? `blocked:${pane.agent.instanceId}:${pane.agent.since}`
-            : `done:${pane.agent.instanceId}:${pane.agent.completionSeq}`) ||
+        (notice.kind === "question"
+          ? this.asks.get(notice.key.slice(4)) !== pane.id
+          : notice.key !==
+            (notice.kind === "attention"
+              ? `blocked:${pane.agent.instanceId}:${pane.agent.since}`
+              : `done:${pane.agent.instanceId}:${pane.agent.completionSeq}`)) ||
         (notice.kind === "attention" && pane.agent.state !== "blocked") ||
         (notice.kind === "done" &&
           (pane.agent.state !== "idle" || pane.agent.serverSeenSeq >= pane.agent.completionSeq))
@@ -187,7 +267,7 @@ export class NoticeFeed {
     });
     if (already || this.resolved.has(key)) return false;
     for (const [oldKey, old] of this.pending)
-      if (old.source.paneId === pane.id) this.pending.delete(oldKey);
+      if (old.source.paneId === pane.id && old.kind !== "question") this.pending.delete(oldKey);
     const title =
       `${workspace.label} / ${pane.label || pane.title || tab?.label || "エージェント"}`.slice(
         0,

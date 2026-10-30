@@ -622,7 +622,7 @@ export const AskOpenParams = z.object({
 });
 export type AskOpenParams = z.infer<typeof AskOpenParams>;
 /** この接続を「質問を出せる画面」として登録し、いま待っている質問を受け取る（接続のたびに呼ぶ）。 */
-export const AskSubscribeParams = z.object({ renderer: z.literal("terminal").optional() });
+export const AskSubscribeParams = z.object({ renderer: z.enum(["terminal", "assistant"]).optional() });
 export type AskSubscribeParams = z.infer<typeof AskSubscribeParams>;
 export interface AskSubscribeResult {
   asks: AskPending[];

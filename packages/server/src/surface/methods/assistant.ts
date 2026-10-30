@@ -77,7 +77,7 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
   surface.register("assistant.source", {
     schema: AssistantSourceParams,
     handler: (_ctx, p) => {
-      const t = sourceTarget(deps, p.source, p.key);
+      const t = sourceTarget(deps, p.source, p.key, true);
       return {
         paneId: t.pane.id,
         tabId: t.tab.id,

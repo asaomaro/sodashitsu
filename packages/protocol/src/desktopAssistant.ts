@@ -65,6 +65,7 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    quietFullscreen: z.boolean().default(true),
     remoteNotifications: z.boolean().default(true),
     allowPluginCharacters: z.boolean().default(false),
     allowPluginViews: z.boolean().default(false),
@@ -113,7 +114,7 @@ export const AssistantNotice = z
   .object({
     id: z.uuid(),
     key: z.string().min(1).max(200),
-    kind: z.enum(["attention", "done", "failed"]),
+    kind: z.enum(["attention", "done", "failed", "question"]),
     source: AssistantSource,
     title: z.string().min(1).max(160),
     message: z.string().max(1000),
@@ -200,6 +201,7 @@ export interface AssistantSourceInfo {
 export const AssistantPanelTarget = z
   .object({
     assistantPane: z.uuid(),
+    assistantAsk: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
     assistantWorkspace: z.uuid(),
     assistantInstance: z.uuid(),
     assistantMachine: z

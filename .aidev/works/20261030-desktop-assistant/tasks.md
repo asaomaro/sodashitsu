@@ -1,38 +1,21 @@
-# Desktop assistant implementation
+# Desktop assistant development completion
 
-- [x] Requirements, native/server/agent/UI/plugin boundaries and initial Windows/WSL environment.
-- [x] A. Validated preferences, native shell/character/tray lifecycle and local persistence (taskcheck).
-- [ ] B. Server dedicated agent/session ownership and authenticated notification routing (taskcheck).
-- [ ] C. Native panel terminal/ask-form/display/chat integration and exact reply targets (taskcheck).
-- [ ] D. Selected capture/local OCR with finite buffers/permissions (taskcheck).
-- [ ] E. Character packs, assistant plugin views/actions and existing approval integration (taskcheck).
-- [ ] F. Settings, startup/launch/packaging and complete user documentation.
-- [ ] Generated verification/negative controls, source full build/types/tests, related browser/native/Windows checks.
-- [ ] Independent whole/correction reviews, guarded root integration, clean smoke and scoped PR delivery.
+- [x] Requirements and native/server/agent/UI/plugin boundaries for the initial Windows / WSL scope.
+- [x] A. Disabled-by-default preferences, three captains, native tray/character/bubble lifecycle, local identity and persistence.
+- [x] B/G. Dedicated server session ownership/restore and authenticated local/registered-machine verbal notices, exact-source reply/confirmation and pinned pane/machine expansion.
+- [x] C. Existing terminal/ask-form/display surfaces reused through guarded expansion; dedicated bubble chat kept separate from source replies. Native-only agent-form subscription, exact-form expansion, reconnect event merge and terminal-reply exclusion complete (fragile-state taskcheck and correction reviewed).
+- [x] D/H. Explicit screen/window still capture, PNG/clipboard/file preview/crop/local OCR, microphone/file transcription with stop/review/cancel and no automatic agent send.
+- [x] E. Inert character bundle preview/import and separate plugin character/view/action switches; approved assistant views and registered correlated operations.
+- [x] I. Notes, explicit clipboard, local read-aloud, visible summary/translation drafts and durable model-free reminders with execution-device ACK.
+- [x] F. Monitor/position settings, work-area bounds, quiet/fullscreen behavior, sleep/lock/reconnect, Windows development zip and user/plugin documentation.
+- [x] Fragile-state taskchecks, independent whole/correction reviews, meaningful negative controls, full source build/types/12,931 runtime tests, generated UI and package inspection.
 
-Do not mark scaffold or generated tests as complete real-device functionality. No actual user screen/input/clipboard, model cost, login registration, certificate trust, service or driver changes in automated tests.
-- [ ] G. Speech bubbles for verbal notices, dedicated chat and exact-source replies, including tray mode and optional expanded terminal/forms (taskcheck).
-- [ ] H. Explicit microphone/file transcription, visible recording/cancel/result review, provider routing and audio bounds (taskcheck).
-- [ ] I. Read-aloud, selected-text summary/translation, local notes and existing-scheduler reminders (state/safety taskcheck).
+Final exact-head CI, clean external smoke and main integration are delivery operations; their receipts are recorded in the final PR. Earlier phase evidence remains in test-notices.md / test-session.md / test-chat.md / test-tools.md / test-microphone.md / test-ocr.md / test-source-replies.md / test-reminders.md / test-capture.md / test-plugins.md / test-remote-notices.md / test-final.md / test-ask-integration.md.
 
-- [x] B1. Read-only authenticated source notifications, verbal inactive bubbles, mute, shared-resolved/dedup/expiry, named-session cookie scope, monotonic handshake/heartbeat and revision handling (taskcheck + independent whole/correction).
+## Device verification (not development)
 
-- [x] B2. Dedicated server session API, exact ownership/restore/adoption, durable launch marker and queued-input guards; independent reviews,22 focused tests,10 negative controls and full source build/types/12,824 tests. Native bubble session use remains B3.
+- [ ] Actual Windows tray/transparent windows/DPI/multi-monitor/startup/lock/sleep/fullscreen and OS TLS trust.
+- [ ] Actual agent login/conversation/forms and registered-machine interactions.
+- [ ] Actual microphone/speaker/clipboard/screen/canvas and Tesseract/Whisper quality/codec behavior.
 
-- [x] B3a. Native scoped dedicated-session start/adopt/send and Claude/Codex conversation bubbles;56 generated tests,10 negatives, keyboard UI, unsigned Windows packaging and independent taskcheck/whole/correction. Exact-notice replies and targeted terminal/ask-form expansion remain B3b/C.
-
-- [x] D1. Local notes, explicit clipboard, visible summary/translation drafts, local-only read-aloud and local Whisper audio-file transcription with owned picker/bounds/cancel/retirement;576 related tests,15 valid negatives, generated browser and Windows package, independent reviews. Microphone capture, OCR and reminder integration remain subsequent work.
-
-- [x] D2. Explicit mic capture, visible indicator/stop, review/listen-on-demand, local inference and scoped cancellation;79 generated tests,12 negatives,400x640 keyboard/DOM UI, unsigned Windows package and independent reviews. Actual capture/listen/recognition still requires a real device.
-
-- [x] D3. Explicit PNG/OS-copied clipboard image preview, bounded pixel crop and local Tesseract OCR;601 related tests,8 valid negatives, generated keyboard UI, Windows package and independent reviews. Direct screen/window capture and real recognition accuracy remain unverified/pending.
-
-- [x] B3b/C. Exact-notice replies/confirmation keys and scoped existing terminal/ask-form/display expansion, initial and per-input binding fences, native hide/navigation guards;124 related tests,4 valid negatives, generated bubble UI and independent taskcheck/whole/correction. Full final integration verification follows remaining phases.
-
-- [x] I. Model-free reminders using existing durable Scheduler, execution-device-pinned history/ACK, queued removal scope and native verbal delivery;37 related tests,3 negatives, generated UI and independent taskcheck/whole/corrections.
-
-- [x] D4. Explicit screen/window one-frame capture into OCR preview with video-only one-use30s source lease,104 native tests,3 negatives, generated Canvas/media-boundary UI and independent reviews. Actual OS capture remains device verification.
-
-- [x] E. Inert character bundle previews/import/removal and separate display/view/action permissions; approved assistant views/registered operations, exact actor/run binding and existing isolation;145 related tests,4 negatives, generated UI and independent taskcheck/whole/corrections.
-
-- [x] B/G registered-machine notices/replies/expansion: authenticated hub routes, online8 cap, disabled/offline fail-closed, exact machine at input, narrow panel support;117 related tests plus33 focused,3 negatives and independent reviews.
+No live user GUI/capture/input, actual model/agent launch, startup registration or service/driver/trust change was used during generated verification.

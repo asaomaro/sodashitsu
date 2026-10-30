@@ -2,7 +2,12 @@ import { notifyKeyOf } from "@sodashitsu/client-core";
 import { RpcError, type AssistantSource } from "@sodashitsu/protocol";
 import type { MethodDeps } from "../surface/methods/deps.js";
 /** Pin UUIDs and project identity so a queued reply cannot follow a moved/replaced project. */
-export function sourceTarget(deps: MethodDeps, source: AssistantSource, key: string) {
+export function sourceTarget(
+  deps: MethodDeps,
+  source: AssistantSource,
+  key: string,
+  allowQuestion = false,
+) {
   const pane = deps.session.getPane(source.paneId),
     tab = pane && deps.session.getTab(pane.tabId),
     workspace = tab && deps.session.getWorkspace(tab.workspaceId),
@@ -15,10 +20,15 @@ export function sourceTarget(deps: MethodDeps, source: AssistantSource, key: str
     !agent ||
     workspace.id !== source.workspaceId ||
     agent.instanceId !== source.agentInstanceId ||
-    ![
-      notifyKeyOf("done", agent),
-      ...(agent.state === "blocked" ? [notifyKeyOf("blocked", agent)] : []),
-    ].includes(key) ||
+    (!(
+      allowQuestion &&
+      /^ask:[A-Za-z0-9_-]{1,128}$/.test(key) &&
+      deps.asks?.isPending(source.paneId, key.slice(4))
+    ) &&
+      ![
+        notifyKeyOf("done", agent),
+        ...(agent.state === "blocked" ? [notifyKeyOf("blocked", agent)] : []),
+      ].includes(key)) ||
     (key.startsWith("done:") &&
       (agent.state !== "idle" ||
         agent.completionSeq <= agent.serverSeenSeq ||
@@ -36,7 +46,7 @@ export function sourceTarget(deps: MethodDeps, source: AssistantSource, key: str
     workspace,
     agent,
     guard() {
-      const current = sourceTarget(deps, source, key);
+      const current = sourceTarget(deps, source, key, allowQuestion);
       if (
         current.tab.id !== tab.id ||
         current.workspace.id !== workspace.id ||

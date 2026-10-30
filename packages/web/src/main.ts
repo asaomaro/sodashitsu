@@ -144,6 +144,7 @@ const assistantPinnedMachine = (() => {
   }
 })();
 const updateAssistantPanel = assistantPanelGuard({
+  focusedPane: () => view.focusedPaneId,
   machine: () => machines.selectedId,
   switchMachine: (id) => machineSwitcherBox.current?.switchTo(id),
   model: () => ({ panes: session.panes, tabs: session.tabs, workspaces: session.workspaces }),
@@ -152,6 +153,9 @@ const updateAssistantPanel = assistantPanelGuard({
     view.setScreen("base");
     view.setView(tab.workspaceId, tab.id);
     view.focusPane(pane.id);
+    queueMicrotask(() => {
+      if (view.focusedPaneId === pane.id) registryBox.current?.focus(pane.id);
+    });
   },
 });
 watchEffect(updateAssistantPanel, { flush: "sync" });

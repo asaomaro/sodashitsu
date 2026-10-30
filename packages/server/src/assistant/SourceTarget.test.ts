@@ -126,6 +126,35 @@ it("allows ordinary same-binding pane runtime replacement", () => {
   expect(() => target.guard()).not.toThrow();
 });
 
-it("rejects a replacement workspace object with the same UUID and a new project",()=>{
- const f=fixture();const target=sourceTarget(f.deps,f.source,f.key);f.deps.session.getWorkspace=()=>({...f.workspace,projectDir:"/replacement"})as any;expect(()=>target.guard()).toThrow("変更");
+it("rejects a replacement workspace object with the same UUID and a new project", () => {
+  const f = fixture();
+  const target = sourceTarget(f.deps, f.source, f.key);
+  f.deps.session.getWorkspace = () => ({ ...f.workspace, projectDir: "/replacement" }) as any;
+  expect(() => target.guard()).toThrow("変更");
+});
+
+it("opens only a live form and never turns a form notice into terminal input", async () => {
+  const f = fixture(),
+    askId = randomUUID();
+  let pending = true;
+  f.deps.asks = {
+    isPending: (paneId: string, id: string) => pending && paneId === f.pane.id && id === askId,
+  } as any;
+  f.pane.agent.state = "working";
+  const key = `ask:${askId}`,
+    surface = new ControlSurface();
+  registerAssistantMethods(surface, f.deps);
+  const ctx = { clientId: "test", sink: {} as any },
+    params = { source: f.source, key };
+  expect((await surface.invoke(ctx, "assistant.source", params)).ok).toBe(true);
+  expect(
+    (await surface.invoke(ctx, "assistant.reply", { ...params, text: "wrong route" })).ok,
+  ).toBe(false);
+  expect(
+    (await surface.invoke(ctx, "assistant.reply_key", { ...params, keyName: "Enter" })).ok,
+  ).toBe(false);
+  const target = sourceTarget(f.deps, f.source, key, true);
+  pending = false;
+  expect(() => target.guard()).toThrow();
+  expect((await surface.invoke(ctx, "assistant.source", params)).ok).toBe(false);
 });

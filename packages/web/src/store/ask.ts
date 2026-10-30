@@ -1,4 +1,4 @@
-import type { AskPending } from "@sodashitsu/protocol";
+import { AssistantPanelTarget, type AskPending } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import type { AskResolved } from "../ask/mediaUrl.js";
@@ -13,7 +13,22 @@ export type AskEntry = AskPending & { resolved?: AskResolved };
 export const useAskStore = defineStore("ask", () => {
   const queue = ref<AskEntry[]>([]);
   /** いま出す質問（先頭）。 */
-  const current = computed<AskEntry | null>(() => queue.value[0] ?? null);
+  const current = computed<AskEntry | null>(() => {
+    if (typeof location !== "undefined" && location.hash.startsWith("#assistantPane=")) {
+      const target = AssistantPanelTarget.safeParse(
+        Object.fromEntries(new URLSearchParams(location.hash.slice(1))),
+      );
+      if (!target.success) return null;
+      if (target.data.assistantAsk)
+        return (
+          queue.value.find(
+            (a) => a.askId === target.data.assistantAsk && a.paneId === target.data.assistantPane,
+          ) ?? null
+        );
+      return queue.value.find((a) => a.paneId === target.data.assistantPane) ?? null;
+    }
+    return queue.value[0] ?? null;
+  });
 
   /** `ask.subscribe` の応答（接続ごと）で丸ごと置き換える。 */
   function replaceAll(asks: readonly AskEntry[]): void {

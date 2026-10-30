@@ -1,3 +1,5 @@
+import { FullscreenPolicy } from "./fullscreen.js";
+import { bubbleBounds } from "./geometry.js";
 import {
   app,
   BrowserWindow,
@@ -9,6 +11,7 @@ import {
   Menu,
   nativeImage,
   protocol,
+  powerMonitor,
   screen,
   session,
   Tray,
@@ -117,6 +120,9 @@ let inboxRevision = 0;
 let noticeStatus: "connecting" | "connected" | "login" | "offline" | "disabled" = "disabled";
 let controller: AssistantController;
 let quitting = false;
+let suspended = false;
+let automaticNoticeEpoch = 0;
+const fullscreen = new FullscreenPolicy();
 let settingsRequested = false;
 const localWindows = new Map<number, { window: BrowserWindow; role: LocalRole }>();
 
@@ -171,7 +177,34 @@ function localWindow(role: LocalRole): BrowserWindow {
   return win;
 }
 
-/** Explicit user action focuses chat; a future notice presentation uses showInactive. */
+function notifyBubble(): void {
+  const preferences = controller.preferences;
+  if (quitting || suspended || !preferences.enabled || preferences.mute) return;
+  if (bubble && !bubble.isDestroyed() && bubble.isVisible()) return;
+  try {
+    if (powerMonitor.getSystemIdleState(1) === "locked") return;
+  } catch {}
+  if (!preferences.quietFullscreen) {
+    openBubble(false);
+    return;
+  }
+  const epoch = automaticNoticeEpoch;
+  void fullscreen.quiet().then((quiet) => {
+    try {
+      if (powerMonitor.getSystemIdleState(1) === "locked") return;
+    } catch {}
+    if (
+      !quiet &&
+      !quitting &&
+      !suspended &&
+      epoch === automaticNoticeEpoch &&
+      controller.preferences.enabled &&
+      !controller.preferences.mute
+    )
+      openBubble(false);
+  });
+}
+/** Explicit user action focuses chat; verbal notices never take focus. */
 function openBubble(focus = true): void {
   if (!controller.preferences.enabled) return;
   if (bubble && !bubble.isDestroyed()) {
@@ -189,15 +222,7 @@ function openBubble(focus = true): void {
     controller.preferences.characterId,
     controller.preferences.allowPluginCharacters,
   ]);
-  const area = screen.getPrimaryDisplay().workArea;
-  const width = Math.min(400, area.width);
-  const height = Math.min(640, area.height);
-  win.setBounds({
-    x: area.x + area.width - width,
-    y: area.y + area.height - height - Math.min(192, Math.max(0, area.height - height)),
-    width,
-    height,
-  });
+  win.setBounds(bubbleBounds(controller.preferences, adapter.displays()));
   win.once("ready-to-show", () => {
     if (!win.isDestroyed()) {
       if (focus) {
@@ -318,7 +343,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     rpc,
     (state, added) => {
       reminderRevision = state.revision;
-      if (added && !controller.preferences.mute) openBubble(false);
+      if (added) notifyBubble();
       if (bubble && !bubble.isDestroyed())
         bubble.webContents.send("assistant:reminders-changed", state);
     },
@@ -334,7 +359,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     changed: (next, added) => {
       if (remoteNotices !== remote) return;
       remoteRows = next;
-      if (added && !controller.preferences.mute) openBubble(false);
+      if (added) notifyBubble();
       combineNotices();
     },
   });
@@ -345,6 +370,9 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
   rpc.start();
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
+  if (suspended) return;
+  ++automaticNoticeEpoch;
+  fullscreen.invalidate();
   if (capture?.cancel()) bubble?.destroy();
   ocr.configure(
     preferences.enabled && preferences.ocrEnabled,
@@ -388,7 +416,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
       if (backend !== connection || !controller.preferences.enabled) return;
       localNotices = next;
       combineNotices();
-      if (added && !controller.preferences.mute) openBubble(false);
+      if (added) notifyBubble();
       publishInbox();
     },
     status(status) {
@@ -428,15 +456,18 @@ function loadPanel(win: BrowserWindow, url: string): void {
 }
 function openPanel(
   origin: string,
-  target?: { paneId: string; workspaceId: string; instanceId: string; machineId?: string },
+  target?: { paneId: string; workspaceId: string; instanceId: string; machineId?: string; askId?: string },
 ): void {
   const url = new URL(origin);
+  // A fresh query forces a new document even when only the guarded pane/form hash changes.
+  if (target) url.searchParams.set("assistantNavigation", randomUUID());
   if (target)
     url.hash = new URLSearchParams({
       assistantPane: target.paneId,
       assistantWorkspace: target.workspaceId,
       assistantInstance: target.instanceId,
       assistantMachine: target.machineId ?? "local",
+      ...(target.askId ? {assistantAsk: target.askId} : {}),
     }).toString();
   if (panel && !panel.isDestroyed()) {
     if (target || panelTargeted) loadPanel(panel, url.href);
@@ -498,6 +529,8 @@ const adapter: NativeAdapter = {
   },
   tray(preferences) {
     updateBackend(preferences);
+    if (bubble && !bubble.isDestroyed())
+      bubble.setBounds(bubbleBounds(preferences, adapter.displays()));
     if (
       bubble &&
       bubblePortraitKey !==
@@ -625,6 +658,7 @@ function registerIpc(): void {
     "apps",
     "app-open",
     "app-call",
+    "display-list",
     "character-info",
     "character-list",
     "character-pack-preview",
@@ -732,6 +766,15 @@ function registerIpc(): void {
           throw Error("返答の対象が変更されました。");
         return result;
       }
+      if (action === "display-list")
+        return screen
+          .getAllDisplays()
+          .slice(0, 32)
+          .map((display) => ({
+            id: String(display.id),
+            label: display.label || String(display.id),
+            workArea: display.workArea,
+          }));
       if (action === "character-info") {
         const selected = controller.preferences.characterId;
         const custom = controller.preferences.allowPluginCharacters
@@ -924,6 +967,7 @@ function registerIpc(): void {
             workspaceId: target.workspaceId,
             instanceId: target.agent.instanceId,
             machineId: notice.source.machineId,
+            ...(notice.kind === "question" ? {askId: notice.key.slice(4)} : {}),
           });
           return;
         }
@@ -1100,6 +1144,8 @@ else {
   });
   app.on("before-quit", () => {
     quitting = true;
+    ++automaticNoticeEpoch;
+    fullscreen.stop();
     backend?.stop();
     backend = null;
     control?.stop();
@@ -1298,6 +1344,49 @@ else {
       });
       registerIpc();
       controller.initialize();
+      powerMonitor.on("suspend", () => {
+        suspended = true;
+        ++automaticNoticeEpoch;
+        fullscreen.stop();
+        transcription.cancel();
+        ocr.discard();
+        const captureOwner = bubble && !bubble.isDestroyed() ? bubble.webContents.id : -1;
+        const media = recording.has() || capture.permits(captureOwner);
+        recording.cancel();
+        capture.cancel();
+        if (bubble && !bubble.isDestroyed()) {
+          if (media) bubble.destroy();
+          else bubble.hide();
+        }
+        control?.stop();
+        backend?.stop();
+        assistantChat?.connection(false);
+        reminders?.connection(false);
+        remoteNotices?.connection(false);
+      });
+      powerMonitor.on("lock-screen", () => {
+        ++automaticNoticeEpoch;
+        fullscreen.stop();
+        transcription.cancel();
+        ocr.discard();
+        if (bubble && !bubble.isDestroyed()) bubble.hide();
+      });
+      powerMonitor.on("unlock-screen", () => {
+        ++automaticNoticeEpoch;
+        fullscreen.invalidate();
+      });
+      powerMonitor.on("resume", () => {
+        suspended = false;
+        ++automaticNoticeEpoch;
+        fullscreen.invalidate();
+        const previousControl = control,
+          previousBackend = backend;
+        controller.refreshDisplays();
+        if (controller.preferences.enabled) {
+          if (control === previousControl) control?.reconnect();
+          if (backend === previousBackend) backend?.reconnect();
+        }
+      });
       screen.on("display-added", () => controller.refreshDisplays());
       screen.on("display-removed", () => controller.refreshDisplays());
       screen.on("display-metrics-changed", () => controller.refreshDisplays());

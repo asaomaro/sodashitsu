@@ -1,6 +1,7 @@
 import { assistantPanelTarget, assistantPanelPane } from "./assistantPanelLink.js";
 import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 export interface PanelPorts {
+  focusedPane?(): string | null;
   machine?(): string;
   switchMachine?(id: string): unknown;
   model(): {
@@ -83,7 +84,7 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     }
     try {
       const { pane, tab, workspace } = check();
-      if (!applied) {
+      if (!applied || (ports.focusedPane && ports.focusedPane() !== pane.id)) {
         project = workspace.projectDir;
         cwd = workspace.cwd;
         applied = true;
@@ -111,7 +112,9 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     const listener: EventListener = (event) => {
       if (dialog?.contains(event.target as Node)) return;
       try {
-        check();
+        const current = check();
+        if (ports.focusedPane && ports.focusedPane() !== current.pane.id)
+          throw Error("表示先が変更されました。元の端末へ戻しています。");
         if (!applied) throw Error("端末を確認しています。");
       } catch (error) {
         event.preventDefault();
