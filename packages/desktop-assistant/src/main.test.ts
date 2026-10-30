@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  displayRequests: new Map<string, (request: any, callback: (value: any) => void) => void>(),
   permissionChecks: new Map<string, (...args: any[]) => boolean>(),
   permissionRequests: new Map<string, (...args: any[]) => void>(),
   controls: [] as Array<{
@@ -31,6 +32,7 @@ const fixture = vi.hoisted(() => ({
       protocol: {
         handle: (scheme: string, handler: (request: Request) => Promise<Response>) => void;
       };
+      setDisplayMediaRequestHandler: ReturnType<typeof vi.fn>;
       setPermissionRequestHandler: ReturnType<typeof vi.fn>;
       setPermissionCheckHandler: ReturnType<typeof vi.fn>;
       on: ReturnType<typeof vi.fn>;
@@ -94,6 +96,11 @@ vi.mock("electron", () => ({
     isPackaged: false,
     setLoginItemSettings: fixture.startup,
   }),
+  desktopCapturer: {
+    getSources: vi.fn(async () => [
+      { id: "screen:generated", name: "Generated screen", display_id: "1" },
+    ]),
+  },
   clipboard: {
     read: vi.fn(async () => [
       {
@@ -135,6 +142,9 @@ vi.mock("electron", () => ({
               fixture.protocols.set(`${name}:${scheme}`, handler);
             },
           },
+          setDisplayMediaRequestHandler: vi.fn((handler) =>
+            fixture.displayRequests.set(name, handler),
+          ),
           setPermissionRequestHandler: vi.fn((handler: (...args: any[]) => void) =>
             fixture.permissionRequests.set(name, handler),
           ),
@@ -612,16 +622,114 @@ it("does not open a source panel after its original bubble is hidden", async () 
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });
 
-it("handles failed retarget navigation and can return explicitly to ordinary Soda",async()=>{
- const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
- await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray"});
- await fixture.handlers.get("assistant:open")!(event);const panel=fixture.windows.find(window=>!window.destroyed&&window.url==="http://127.0.0.1:7780/")!;
- const notice={id:"00000000-0000-4000-8000-000000000091",key:"done:test:1",source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:"00000000-0000-4000-8000-000000000001",workspaceId:"00000000-0000-4000-8000-000000000002",agentInstanceId:"00000000-0000-4000-8000-000000000003"},kind:"done",title:"worker",message:"完了しました",at:1};
- fixture.connections.at(-1)!.options.changed([notice],true);const bubble=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(bubble.isVisible()).toBe(true));
- fixture.controls.at(-1)!.request.mockImplementation(async()=>({paneId:notice.source.paneId,workspaceId:notice.source.workspaceId,agent:{instanceId:notice.source.agentInstanceId}}));
- vi.spyOn(panel,"loadURL").mockRejectedValueOnce(Error("generated connection failure"));
- await fixture.handlers.get("assistant:source-open")!({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame},{noticeId:notice.id});
- await vi.waitFor(()=>expect(panel.url).toMatch(/^data:text\/plain/));
- await fixture.handlers.get("assistant:open")!(event);expect(panel.url).toBe("http://127.0.0.1:7780/");
- await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+it("handles failed retarget navigation and can return explicitly to ordinary Soda", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, { enabled: true, mode: "tray" });
+  await fixture.handlers.get("assistant:open")!(event);
+  const panel = fixture.windows.find(
+    (window) => !window.destroyed && window.url === "http://127.0.0.1:7780/",
+  )!;
+  const notice = {
+    id: "00000000-0000-4000-8000-000000000091",
+    key: "done:test:1",
+    source: {
+      serverOrigin: "http://127.0.0.1:7780",
+      machineId: "local",
+      paneId: "00000000-0000-4000-8000-000000000001",
+      workspaceId: "00000000-0000-4000-8000-000000000002",
+      agentInstanceId: "00000000-0000-4000-8000-000000000003",
+    },
+    kind: "done",
+    title: "worker",
+    message: "完了しました",
+    at: 1,
+  };
+  fixture.connections.at(-1)!.options.changed([notice], true);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  fixture.controls
+    .at(-1)!
+    .request.mockImplementation(async () => ({
+      paneId: notice.source.paneId,
+      workspaceId: notice.source.workspaceId,
+      agent: { instanceId: notice.source.agentInstanceId },
+    }));
+  vi.spyOn(panel, "loadURL").mockRejectedValueOnce(Error("generated connection failure"));
+  await fixture.handlers.get("assistant:source-open")!(
+    { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame },
+    { noticeId: notice.id },
+  );
+  await vi.waitFor(() => expect(panel.url).toMatch(/^data:text\/plain/));
+  await fixture.handlers.get("assistant:open")!(event);
+  expect(panel.url).toBe("http://127.0.0.1:7780/");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
+});
+it("grants one selected display without audio and consumes its PNG only once", async () => {
+  const settings = fixture.windows[0]!,
+    event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
+  await fixture.handlers.get("assistant:save")!(event, {
+    enabled: true,
+    mode: "tray",
+    ocrEnabled: true,
+  });
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
+  const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
+  const list = (await fixture.handlers.get("assistant:screenshot-sources")!(local)) as any;
+  await fixture.handlers.get("assistant:screenshot-approve")!(local, {
+    token: list.token,
+    id: "screen:generated",
+  });
+  const details = { isMainFrame: true, requestingUrl: bubble.url, mediaType: "video" };
+  expect(
+    fixture.permissionChecks.get("assistant-local")!(
+      bubble.webContents,
+      "display-capture",
+      "soda-assistant://app",
+      details,
+    ),
+  ).toBe(true);
+  expect(
+    fixture.permissionChecks.get("assistant-local")!(
+      bubble.webContents,
+      "media",
+      "soda-assistant://app",
+      details,
+    ),
+  ).toBe(false);
+  const callback = vi.fn(),
+    request = {
+      frame: bubble.webContents.mainFrame,
+      securityOrigin: "soda-assistant://app",
+      audioRequested: false,
+      videoRequested: true,
+      userGesture: true,
+    };
+  fixture.displayRequests.get("assistant-local")!({ ...request, audioRequested: true }, callback);
+  expect(callback).toHaveBeenLastCalledWith(null);
+  fixture.displayRequests.get("persist:assistant-server")!(request, callback);
+  expect(callback).toHaveBeenLastCalledWith(null);
+  fixture.displayRequests.get("assistant-local")!(request, callback);
+  expect(callback).toHaveBeenLastCalledWith({
+    video: expect.objectContaining({ id: "screen:generated" }),
+  });
+  fixture.displayRequests.get("assistant-local")!(request, callback);
+  expect(callback).toHaveBeenLastCalledWith(null);
+  const bytes = Uint8Array.from(
+    Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  ).buffer;
+  const result = (await fixture.handlers.get("assistant:screenshot-submit")!(local, {
+    token: list.token,
+    bytes,
+  })) as any;
+  expect(result.state.status).toBe("ready");
+  await expect(
+    fixture.handlers.get("assistant:screenshot-submit")!(local, { token: list.token, bytes }),
+  ).rejects.toThrow("失効");
+  await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });

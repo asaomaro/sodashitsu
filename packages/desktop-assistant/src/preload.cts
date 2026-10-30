@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:recording-cancelled", receive);
       return () => ipcRenderer.removeListener("assistant:recording-cancelled", receive);
     },
+    screenshotSources: () => ipcRenderer.invoke("assistant:screenshot-sources"),
+    approveScreenshot: (input: unknown) =>
+      ipcRenderer.invoke("assistant:screenshot-approve", input),
+    submitScreenshot: (input: unknown) => ipcRenderer.invoke("assistant:screenshot-submit", input),
+    cancelScreenshot: (input: unknown) => ipcRenderer.invoke("assistant:screenshot-cancel", input),
     reminders: () => ipcRenderer.invoke("assistant:reminders"),
     saveReminder: (input: unknown) => ipcRenderer.invoke("assistant:reminder-save", input),
     removeReminder: (input: unknown) => ipcRenderer.invoke("assistant:reminder-remove", input),

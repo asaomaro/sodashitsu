@@ -3,6 +3,8 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
+  desktopCapturer,
+  type DesktopCapturerSource,
   ipcMain,
   Menu,
   nativeImage,
@@ -21,6 +23,7 @@ import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
 import { NotesFile, NoteSave } from "./notes.js";
 import { Transcription, AUDIO_LIMIT } from "./transcription.js";
+import { CaptureLease } from "./captureLease.js";
 import { Reminders } from "./reminders.js";
 import { Ocr } from "./ocr.js";
 import { OcrRunner } from "./ocrRunner.js";
@@ -54,6 +57,7 @@ const allowedAssets = new Map([
   ["/recording.js", "text/javascript"],
   ["/ocr.js", "text/javascript"],
   ["/reminders.js", "text/javascript"],
+  ["/capture.js", "text/javascript"],
   ["/style.css", "text/css"],
   ["/captain-male.svg", "image/svg+xml"],
   ["/captain-female.svg", "image/svg+xml"],
@@ -79,6 +83,7 @@ let notesFile: NotesFile;
 let transcription: Transcription;
 let recording: RecordingLease;
 let ocr: Ocr;
+let capture: CaptureLease<DesktopCapturerSource>;
 let reminders: Reminders | null = null;
 let reminderRevision = 0;
 let recordingOrigin: string | null = null;
@@ -121,6 +126,7 @@ function localWindow(role: LocalRole): BrowserWindow {
     if (role === "bubble") {
       ++bubbleEpoch;
       ocr?.discard(id);
+      if (capture?.cancel(id) && !win.isDestroyed()) win.destroy();
     }
     if (role === "bubble" && recording?.has(id)) {
       recording.cancel(id);
@@ -178,6 +184,7 @@ function openBubble(focus = true): void {
       recording?.cancel(contentsId);
       transcription?.cancel();
       ocr?.discard(contentsId);
+      capture?.cancel(contentsId);
       bubble = null;
     }
   });
@@ -284,6 +291,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
   rpc.start();
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
+  if (capture?.cancel()) bubble?.destroy();
   ocr.configure(
     preferences.enabled && preferences.ocrEnabled,
     preferences.ocrExecutable,
@@ -505,6 +513,39 @@ function microphonePermission(
   return recording?.permits(contents.id, permission, details) ?? false;
 }
 
+function screenshotPermission(
+  contents: WebContents | null,
+  permission: string,
+  details: {
+    isMainFrame: boolean;
+    requestingUrl?: string;
+    mediaType?: string;
+    mediaTypes?: readonly string[];
+  },
+): boolean {
+  if (
+    !contents ||
+    permission !== "display-capture" ||
+    !details.isMainFrame ||
+    !controller?.preferences.enabled ||
+    !controller.preferences.ocrEnabled
+  )
+    return false;
+  const owner = localWindows.get(contents.id),
+    media = details.mediaTypes ?? (details.mediaType ? [details.mediaType] : []);
+  return (
+    !!owner &&
+    owner.role === "bubble" &&
+    owner.window === bubble &&
+    !owner.window.isDestroyed() &&
+    owner.window.isVisible() &&
+    contents === owner.window.webContents &&
+    contents.mainFrame.url === details.requestingUrl &&
+    media.length === 1 &&
+    media[0] === "video" &&
+    (capture?.permits(contents.id) ?? false)
+  );
+}
 function registerIpc(): void {
   for (const action of [
     "read",
@@ -518,6 +559,10 @@ function registerIpc(): void {
     "start-session",
     "adopt-session",
     "send-message",
+    "screenshot-sources",
+    "screenshot-approve",
+    "screenshot-submit",
+    "screenshot-cancel",
     "reminders",
     "reminder-save",
     "reminder-remove",
@@ -564,6 +609,41 @@ function registerIpc(): void {
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "conversation") return chatState();
+      if (action.startsWith("screenshot-")) {
+        if (
+          !controller.preferences.enabled ||
+          !controller.preferences.ocrEnabled ||
+          !owner.window.isVisible()
+        )
+          throw Error("OCRを有効にし、吹き出しを開いて操作してください。");
+        const id = event.sender.id;
+        if (action === "screenshot-sources") return capture.list(id);
+        if (action === "screenshot-cancel") {
+          const request = z.object({ token: z.uuid().optional() }).strict().parse(input);
+          if (capture.cancel(id, request.token)) owner.window.destroy();
+          return;
+        }
+        if (action === "screenshot-approve") {
+          const request = z
+            .object({ token: z.uuid(), id: z.string().min(1).max(256) })
+            .strict()
+            .parse(input);
+          return capture.approve(id, request.token, request.id);
+        }
+        const request = z
+          .object({
+            token: z.uuid(),
+            bytes: z
+              .instanceof(ArrayBuffer)
+              .refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= PNG_LIMIT),
+          })
+          .strict()
+          .parse(input);
+        if (!capture.permits(id)) throw Error("画面の許可が失効しました。");
+        pngSize(new Uint8Array(request.bytes));
+        capture.consume(id, request.token);
+        return ocr.captured(id, new Uint8Array(request.bytes));
+      }
       if (action === "reminders")
         return (
           reminders?.snapshot() ?? {
@@ -823,6 +903,7 @@ else {
     transcription?.cancel();
     recording?.cancel();
     ocr?.discard();
+    capture?.cancel();
   });
   app.on("activate", () => {
     if (!quitting && controller) openSettings();
@@ -851,13 +932,45 @@ else {
         const isolated = session.fromPartition(partition);
         isolated.setPermissionRequestHandler((contents, permission, callback, details) => {
           callback(
-            partition === "assistant-local" && microphonePermission(contents, permission, details),
+            partition === "assistant-local" &&
+              (microphonePermission(contents, permission, details) ||
+                screenshotPermission(contents, permission, details)),
           );
         });
         isolated.setPermissionCheckHandler((contents, permission, _origin, details) => {
           return (
-            partition === "assistant-local" && microphonePermission(contents, permission, details)
+            partition === "assistant-local" &&
+            (microphonePermission(contents, permission, details) ||
+              screenshotPermission(contents, permission, details))
           );
+        });
+        isolated.setDisplayMediaRequestHandler((request, callback) => {
+          const owner = [...localWindows.values()].find(
+            (owner) =>
+              owner.role === "bubble" &&
+              owner.window === bubble &&
+              !owner.window.isDestroyed() &&
+              owner.window.isVisible() &&
+              owner.window.webContents.mainFrame === request.frame,
+          );
+          if (
+            partition !== "assistant-local" ||
+            !owner ||
+            request.securityOrigin !== LOCAL_ORIGIN ||
+            request.audioRequested ||
+            !request.videoRequested ||
+            !request.userGesture ||
+            !controller?.preferences.enabled ||
+            !controller.preferences.ocrEnabled
+          ) {
+            callback(null);
+            return;
+          }
+          try {
+            callback({ video: capture.take(owner.window.webContents.id) });
+          } catch {
+            callback(null);
+          }
         });
         isolated.on("will-download", (event) => event.preventDefault());
       }
@@ -883,6 +996,18 @@ else {
           void publishTools();
         },
       });
+      capture = new CaptureLease(
+        () =>
+          desktopCapturer.getSources({
+            types: ["screen", "window"],
+            thumbnailSize: { width: 0, height: 0 },
+            fetchWindowIcons: false,
+          }),
+        (id, active) => {
+          const owner = localWindows.get(id)?.window;
+          if (active && owner && !owner.isDestroyed()) owner.destroy();
+        },
+      );
       const ocrRunner = new OcrRunner();
       ocr = new Ocr({
         changed: (state) => {

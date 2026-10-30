@@ -82,6 +82,12 @@ export class Ocr {
     };
     this.publish();
   }
+  captured(owner: number, bytes: Uint8Array) {
+    this.available();
+    pngSize(bytes);
+    this.discard();
+    return this.replace(bytes, owner);
+  }
   async input(
     owner: number,
     source: "file" | "clipboard",

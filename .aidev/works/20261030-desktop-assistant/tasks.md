@@ -30,3 +30,5 @@ Do not mark scaffold or generated tests as complete real-device functionality. N
 - [x] B3b/C. Exact-notice replies/confirmation keys and scoped existing terminal/ask-form/display expansion, initial and per-input binding fences, native hide/navigation guards;124 related tests,4 valid negatives, generated bubble UI and independent taskcheck/whole/correction. Full final integration verification follows remaining phases.
 
 - [x] I. Model-free reminders using existing durable Scheduler, execution-device-pinned history/ACK, queued removal scope and native verbal delivery;37 related tests,3 negatives, generated UI and independent taskcheck/whole/corrections.
+
+- [x] D4. Explicit screen/window one-frame capture into OCR preview with video-only one-use30s source lease,104 native tests,3 negatives, generated Canvas/media-boundary UI and independent reviews. Actual OS capture remains device verification.
