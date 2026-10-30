@@ -6,7 +6,9 @@ export interface ParsedArgs {
   command: "tui" | "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help" | "assistant";
   /** `soda machine …`（20260927-multi-host-machines）。 */
   machine?: MachineCommand;
-  assistantAction?: "enable" | "disable" | "status";
+  assistantAction?: "enable" | "disable" | "status" | "install" | "rollback";
+  assistantSource?: string;
+  assistantDestination?: string;
   serve: RawServeArgs;
   stateDir?: string | undefined;
   /** `--session`（serve・token reset・handoff。20260926-named-session・20260926-live-handoff）。serve では `serve.session` にも入る。 */
@@ -67,10 +69,20 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
   }
   if (command === "assistant") {
     const [action, ...options] = rest;
-    if (action !== "enable" && action !== "disable" && action !== "status") throw new ConfigError("soda assistant enable|disable|status", USAGE);
-    const parsed = parseArgs(["serve", ...options]);
-    if (options.some((value,index) => index % 2 === 0 && value !== "--state-dir" && value !== "--session")) throw new ConfigError("assistantでは--state-dirと--sessionだけ指定できます", USAGE);
-    return {...parsed, command: "assistant", assistantAction: action};
+    if (!["enable","disable","status","install","rollback"].includes(action ?? "")) throw new ConfigError("soda assistant enable|disable|status|install|rollback", USAGE);
+    const common:string[]=[],seen=new Set<string>();let source:string|undefined,destination:string|undefined;
+    for(let i=0;i<options.length;i+=2) {
+      const key=options[i]!,value=options[i+1];
+      if(!value || value.startsWith("--") || seen.has(key)) throw new ConfigError("assistantのオプションには重複しない値を指定してください",USAGE);
+      seen.add(key);
+      if(key==="--from" && action==="install") source=value;
+      else if(key==="--destination" && action==="install") destination=value;
+      else if(key==="--state-dir" || key==="--session") common.push(key,value);
+      else throw new ConfigError(`unknown assistant option: ${key}`,USAGE);
+    }
+    if(action==="install" && (!source || !destination)) throw new ConfigError("soda assistant install --from DIR --destination DIR",USAGE);
+    const parsed=parseArgs(["serve",...common]);
+    return {...parsed,command:"assistant",assistantAction:action as NonNullable<ParsedArgs["assistantAction"]>,...(source?{assistantSource:source}:{}),...(destination?{assistantDestination:destination}:{})};
   }
   if (command === "bridge") return parseBridgeArgs(rest, serve);
   if (command !== "serve" && command !== "token" && command !== "session" && command !== "handoff") throw new ConfigError(`unknown command: ${command}`, USAGE);

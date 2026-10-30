@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readAssistantEnabled, writeAssistantEnabled } from "./assistant/AssistantLaunchController.js";
+import { installAssistantPackage, readAssistantPackage, rollbackAssistantPackage } from "./assistant/AssistantPackage.js";
 import { resolveServeOptions } from "./config.js";
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
 import { WorkerPtyBackend } from "./pty/WorkerPtyBackend.js";
@@ -38,6 +39,8 @@ function printHelp(): void {
       "soda session stop NAME [--state-dir DIR] [--json]",
       "soda handoff [--state-dir DIR] [--session NAME]",
       "soda assistant enable|disable|status [--state-dir DIR] [--session NAME]",
+      "soda assistant install --from ZIP_OR_DIR --destination DIR [--state-dir DIR] [--session NAME]",
+      "soda assistant rollback [--state-dir DIR] [--session NAME]",
       ...MACHINE_USAGE.split("\n"),
       "soda bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
     ].join("\n"),
@@ -206,8 +209,11 @@ async function main(): Promise<void> {
       );
     } else if (parsed.command === "assistant") {
       const dir = resolveServeOptions(parsed.serve).stateDir;
-      if (parsed.assistantAction !== "status") await writeAssistantEnabled(dir, parsed.assistantAction === "enable");
-      console.log(JSON.stringify({enabled: await readAssistantEnabled(dir, process.env.SODA_ASSISTANT_ENABLED === "1")}));
+      if (parsed.assistantAction === "install") await installAssistantPackage(dir,parsed.assistantSource!,parsed.assistantDestination!);
+      else if(parsed.assistantAction === "rollback") await rollbackAssistantPackage(dir);
+      else if(parsed.assistantAction === "enable" || parsed.assistantAction === "disable") await writeAssistantEnabled(dir, parsed.assistantAction === "enable");
+      console.log(JSON.stringify({enabled: await readAssistantEnabled(dir, process.env.SODA_ASSISTANT_ENABLED === "1"),
+        installation:await readAssistantPackage(dir),commandOverride:!!process.env.SODA_ASSISTANT_COMMAND}));
     } else if (parsed.command === "machine") {
       process.exitCode = await runMachineCommand(parsed.machine!, parsed.stateDir ?? defaultStateDir(), consoleIo);
     } else if (parsed.command === "session-delete") {
