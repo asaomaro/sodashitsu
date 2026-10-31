@@ -125,6 +125,24 @@ public static class SodaDesktopHost {
     static Func<object,bool> ProtectedPublish;
     static bool SecureAttentionAllowed=true;
     static string ProtectedMode;
+    static bool ProtectedVideoProof(Dictionary<string,object> config) {
+        object value,raw;Dictionary<string,object> options;
+        return Secure&&(ProtectedMode=="elevated-default"||ProtectedMode=="elevated-uac")&&ProtectedCapture!=null&&ProtectedPublish!=null&&SecureGuard!=null&&
+            config.TryGetValue("allowProtectedVideo",out value)&&value is bool&&(bool)value&&
+            config.TryGetValue("options",out raw)&&(options=raw as Dictionary<string,object>)!=null&&
+            options.TryGetValue("features",out value)&&value is bool&&(bool)value&&options.TryGetValue("protectedVideo",out value)&&value is bool&&(bool)value;
+    }
+    static bool PublishProtectedNative(object payload,object ticket,long started,Action committed) {
+        if(MemoryPreparedWait!=null)MemoryPreparedWait();
+        lock(OutputGate) {
+            string wire=MemoryOutput==null?OutputJson.Serialize(payload):null;
+            if(!AllowedDesktop()||!PublishScope(ticket)){Stopping=true;return false;}
+            long now=Clock.ElapsedMilliseconds;if(now<started||now-started>1000)return false;
+            committed();
+            if(MemoryOutput!=null)MemoryOutput(payload);else{Console.Out.WriteLine(wire);Console.Out.Flush();}
+            return true;
+        }
+    }
     static bool SharedProtectedProof(Dictionary<string,object> config,string mode) {
         object flag;return (mode=="elevated-default"||mode=="elevated-uac")&&config.TryGetValue("allowSharedProtected",out flag)&&flag is bool&&(bool)flag;
     }
@@ -395,6 +413,39 @@ public static class SodaDesktopHost {
             return true;
         }
     }
+    public static void VerifyProtectedNativeOutput(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition) {
+        if(Secure||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
+        bool oldStopping=Stopping;int frames=0,commits=0;System.Threading.Tasks.Task<bool> waiting=null;
+        SetProtectedGuards(current,capture,publish,"elevated-default");MemoryOutput=value=>frames++;Stopping=false;
+        using(var reached=new ManualResetEventSlim(false))try {
+            var options=new Dictionary<string,object>{{"features",true},{"protectedVideo",true}};var config=new Dictionary<string,object>{{"options",options}};
+            if(ProtectedVideoProof(config))throw new Exception("Protected native video local flag missing");
+            foreach(object flag in new object[]{false,"true",1,true}) {
+                config["allowProtectedVideo"]=flag;
+                foreach(string mode in new string[]{null,"elevated-default","elevated-uac","other"}) {
+                    ProtectedMode=mode;
+                    bool expected=flag is bool&&(bool)flag&&(mode=="elevated-default"||mode=="elevated-uac");
+                    if(ProtectedVideoProof(config)!=expected)throw new Exception("Protected native video role and local flag proof");
+                }
+            }
+            ProtectedMode="elevated-default";config["allowProtectedVideo"]=true;options["features"]=false;
+            if(ProtectedVideoProof(config))throw new Exception("Protected native video feature proof missing");options["features"]=true;options["protectedVideo"]=false;
+            if(ProtectedVideoProof(config))throw new Exception("Protected native video request missing");options["protectedVideo"]=true;
+            object ticket=CaptureScope(),payload=new {type="native_frame",id="generated",data="AQID"};Action commit=()=>commits++;
+            if(!PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds,commit)||frames!=1||commits!=1)throw new Exception("Stable protected native frame rejected");
+            if(PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds-1001,commit)||frames!=1||commits!=1)throw new Exception("Expired protected native frame published");
+            if(PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds+100,commit)||frames!=1||commits!=1)throw new Exception("Future protected native frame published");
+            MemoryPreparedWait=()=>reached.Set();long started=Clock.ElapsedMilliseconds;
+            lock(OutputGate) {
+                waiting=System.Threading.Tasks.Task.Run(()=>PublishProtectedNative(payload,ticket,started,commit));
+                if(!reached.Wait(1000))throw new Exception("Protected native frame did not wait for output gate");transition();
+            }
+            if(!waiting.Wait(1000)||waiting.Result||frames!=1||commits!=1||!Stopping)throw new Exception("Protected native frame survived scope transition while queued");
+        } finally {
+            if(waiting!=null&&!waiting.IsCompleted)waiting.Wait(2000);MemoryPreparedWait=null;MemoryOutput=null;ClearProtectedGuards();Stopping=oldStopping;
+        }
+        Console.WriteLine("protected_native_output_passed: generated native frame scope, local proof, original budget and output commit");
+    }
     public static void VerifyProtectedQueuedOutput(Func<bool> current,Func<object> capture,Func<object,bool> publish,Action transition){
         if(Secure||MemoryInput!=null||MemoryOutput!=null||MemoryPreparedWait!=null)throw new InvalidOperationException("Fresh validation process required");
         bool oldStopping=Stopping;int frames=0;System.Threading.Tasks.Task<bool> waiting=null;
@@ -542,16 +593,17 @@ public static class SodaDesktopHost {
         }
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         NativePointerProof=!Secure&&VirtualLease==null&&ResourceFence!=null&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
-        bool nativeCeiling=!Secure && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
+        bool protectedVideo=ProtectedVideoProof(config);
+        bool nativeCeiling=(!Secure||protectedVideo) && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
-        bool audioCeiling=nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
+        bool audioCeiling=!Secure&&nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
         int audioPid=audioCeiling&&config.ContainsKey("audioClientPid")?Num(config,"audioClientPid"):0;if(audioPid<=0&&!audioPipeBridge)audioCeiling=false;
-        bool nativeCodecs=nativeCeiling&&config.ContainsKey("nativeCodecs")&&config["nativeCodecs"] is bool&&(bool)config["nativeCodecs"];
+        bool nativeCodecs=!protectedVideo&&nativeCeiling&&config.ContainsKey("nativeCodecs")&&config["nativeCodecs"] is bool&&(bool)config["nativeCodecs"];
         var codecCandidates=new List<string>();
         if(nativeCodecs){try{var probe=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopCodecProbe");if(probe==null)nativeCodecs=false;else foreach(var candidate in (Array)probe.GetMethod("Read").Invoke(null,null)){var type=candidate.GetType();if(Convert.ToUInt32(type.GetField("count").GetValue(candidate))>0)codecCandidates.Add((string)type.GetField("codec").GetValue(candidate));}}catch{nativeCodecs=false;}}
-        bool nativeDatagrams=nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
-        bool nativeAdaptive=nativeCeiling&&config.ContainsKey("nativeAdaptive")&&config["nativeAdaptive"] is bool&&(bool)config["nativeAdaptive"];
-        bool nativeCadence=nativeCeiling&&config.ContainsKey("nativeCadence")&&config["nativeCadence"] is bool&&(bool)config["nativeCadence"];
+        bool nativeDatagrams=!protectedVideo&&nativeCeiling&&config.ContainsKey("nativeDatagrams")&&config["nativeDatagrams"] is bool&&(bool)config["nativeDatagrams"];
+        bool nativeAdaptive=!protectedVideo&&nativeCeiling&&config.ContainsKey("nativeAdaptive")&&config["nativeAdaptive"] is bool&&(bool)config["nativeAdaptive"];
+        bool nativeCadence=!protectedVideo&&nativeCeiling&&config.ContainsKey("nativeCadence")&&config["nativeCadence"] is bool&&(bool)config["nativeCadence"];
         int nativeRateCeiling=nativeCeiling&&config.ContainsKey("nativeMaxFps")&&Num(config,"nativeMaxFps")==60?60:maxFps;
         DeferNativeSnapshots=nativeCeiling&&config.ContainsKey("deferNativeSnapshots")&&config["deferNativeSnapshots"] is bool&&(bool)config["deferNativeSnapshots"];
         bool nativePipeline=nativeCeiling && config.ContainsKey("nativeVideoWindow") && Num(config,"nativeVideoWindow")==3;
@@ -573,7 +625,7 @@ public static class SodaDesktopHost {
             if(ResourceFence!=null)ready["resourceFences"]=true;
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
-            if(nativeCeiling)ready["nativeVideo"]=true;if(nativeDatagrams)ready["nativeDatagrams"]=true;
+            if(nativeCeiling){ready["nativeVideo"]=true;if(protectedVideo)ready["protectedVideo"]=true;}if(nativeDatagrams)ready["nativeDatagrams"]=true;
             if(nativeCodecs){ready["nativeCodecs"]=true;ready["nativeCodecCandidates"]=codecCandidates.ToArray();}
             if(nativeAdaptive)ready["nativeAdaptive"]=true;
             if(nativeCadence)ready["nativeCadence"]=true;
@@ -724,6 +776,8 @@ public static class SodaDesktopHost {
                     }
                     if(!Stopping && video!=null && videoWindow.CanSend && (videoProfile==null||(videoProfile.Configured&&(!videoProfile.Prepared||videoProfile.Resumed))) && Clock.Elapsed.TotalMilliseconds>=videoNext) {
                         try {
+                            long protectedStarted=protectedVideo?Clock.ElapsedMilliseconds:0;object protectedTicket=protectedVideo?CaptureScope():null;
+                            if(protectedVideo&&protectedTicket==null){Stopping=true;break;}
                             double videoStarted=Clock.Elapsed.TotalMilliseconds;
                             var captureTimer=Stopwatch.StartNew();double conversionMs=0;
                             Point cursor=Cursor.Position;bool cursorVisible=showCursor&&(cursorPump==null||!cursorPump.Active)&&Bounds.Contains(cursor);
@@ -749,12 +803,19 @@ public static class SodaDesktopHost {
                             if(videoProfile!=null&&!videoProfile.Resumed){videoProfile.Hold(packet,videoSeq);Output(new {type="native_profile_applied",id=videoId,generation=videoProfile.Generation,baseSeq=videoSeq,width=videoWidth,height=videoHeight,codec=packet.codec});continue;}
                             if(held)videoProfile=null;
                             if(videoSeq==0 && (!packet.key || packet.codec==null))throw new InvalidOperationException("Initial SPS/IDR required");
-                            videoSeq++;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;
-                            var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",videoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",videoWidth},{"height",videoHeight},{"data",Convert.ToBase64String(packet.data)}};
+                            long nextVideoSeq=checked(videoSeq+1);
+                            var encoded=new Dictionary<string,object>{{"type","native_frame"},{"id",videoId},{"seq",nextVideoSeq},{"timestamp",packet.timestamp},{"key",packet.key},{"width",videoWidth},{"height",videoHeight},{"data",Convert.ToBase64String(packet.data)}};
                             if(nativeCodecs){encoded["codecName"]=videoCodec;if(videoCodecFallback!=null)encoded["codecFallback"]=videoCodecFallback;}
                             if(nativeAdaptive)encoded["generation"]=videoGeneration;
                             if(videoWindow.Capacity==3||nativeCadence){encoded["captureMs"]=videoCaptureMs;encoded["conversionMs"]=video.ConversionMs;encoded["encodeMs"]=video.EncodingMs;}
-                            if(packet.codec!=null)encoded["codec"]=packet.codec;Output(encoded);
+                            if(packet.codec!=null)encoded["codec"]=packet.codec;
+                            if(protectedVideo) {
+                                Action commitVideo=()=>{videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;};
+                                if(!PublishProtectedNative(encoded,protectedTicket,protectedStarted,commitVideo)) {
+                                    commands.EnableFast(false);video.Dispose();video=null;Output(new {type="native_video_stopped",id=videoId});videoId=null;videoWindow=new SodaDesktopVideoWindow(1);
+                                    if(Stopping)break;
+                                }
+                            } else {videoSeq=nextVideoSeq;videoWindow.Sent(videoSeq,Clock.ElapsedMilliseconds);videoNext=videoStarted+1000.0/videoFps;Output(encoded);}
                             }
                         } catch {
                             bool surfaceFailure=video!=null&&video.GpuInput,unpublished=videoSeq==0&&videoProfile==null,codecFallback=nativeCodecs&&videoCodec!="h264";

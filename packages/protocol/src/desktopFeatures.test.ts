@@ -14,3 +14,6 @@ it("declines ambiguous hints and leaves legacy protocol parsing independent",()=
 it("does not encode an unregistered feature through an inherited object property",()=>{expect(()=>desktopFeaturesProtocol(["toString" as any])).toThrow(TypeError);});
 it("negotiates shared virtual separately from ordinary sharing hints",()=>{expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(["sharedVirtual"])])]).toEqual(["sharedVirtual"]);expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(["sharedMonitors"])])]).not.toContain("sharedVirtual");});
 it("negotiates protected ordinary-user files as its own bounded feature hint",()=>{const wire=desktopFeaturesProtocol(["protectedFiles"]);expect(wire.length).toBeLessThanOrEqual(64);expect([...desktopFeaturesFromProtocols([wire])]).toEqual(["protectedFiles"]);});
+it("negotiates protected video in its own bounded feature bit",()=>{
+ const protocol=desktopFeaturesProtocol(["protectedVideo"]);expect(protocol).toBe(DESKTOP_FEATURES_PREFIX+"00000000000000000000000000000200");expect([...desktopFeaturesFromProtocols([protocol])]).toEqual(["protectedVideo"]);
+});

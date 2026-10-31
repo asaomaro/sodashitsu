@@ -103,6 +103,7 @@ type Share = {
   ws: WebSocket;
   process?: DesktopHelper;
   shared?: boolean;sharedRate?:boolean;
+  protectedVideoActive?:boolean;
   nativeMonitorIds?:string[];nativeMonitorOrigin:string;
   dead: boolean;
   attached: boolean;
@@ -267,8 +268,10 @@ export class DesktopProvider {
     if(p.options.sharedNative&&(!p.options.sharedDesktop||!p.options.nativeVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画が接続先で許可されていません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
-      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||(p.options.files&&!p.options.protectedFiles)||p.options.richClipboard||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.nativeVideoWindow||p.options.nativeMaxFps||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
+      if(p.options.protectedVideo&&(!p.options.nativeVideo||p.options.sharedDesktop||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の動画には明示した単独の動画経路と接続先の許可が必要です。");
+      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||(p.options.files&&!p.options.protectedFiles)||p.options.richClipboard||p.options.nativeVideo&&!p.options.protectedVideo||p.options.nativeAudio||p.options.microphone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||((p.options.nativeVideoWindow||p.options.nativeMaxFps)&&!p.options.protectedVideo)||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
     }
+    if(p.options.protectedVideo&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
     if(p.options.virtualDisplay&&(!cfg.allowVirtualDisplay||!p.options.features||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の作成が許可されていないか、モニター指定と併用されています");
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
@@ -477,10 +480,11 @@ export class DesktopProvider {
           if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
           if(m.type==="native_audio_control"&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);return;}
           if(m.type==="media"&&m.enabled&&m.settings?.audio&&(cfg.allowSystemAudio??cfg.allowMedia)!==true){this.send(s,{type:"media_unavailable"});return;}
-          if((m.type==="rtc_signal"||m.type==="media_fallback")&&s.ready&&!s.secureDesktop&&s.native?.fromViewer(m))return;
+          if((m.type==="rtc_signal"||m.type==="media_fallback")&&s.ready&&(!s.secureDesktop||s.protectedVideoActive)&&s.native?.fromViewer(m))return;
           if(m.type==="native_codec_fallback"||m.type==="native_format_ack"||m.type==="native_video_ack"||(m.type==="media"&&(m.settings?.transport==="native"||s.native))) {
-            if(!s.ready||s.secureDesktop){this.send(s,{type:"media_unavailable"});return;}
+            if(!s.ready||s.secureDesktop&&!s.protectedVideoActive){this.send(s,{type:"media_unavailable"});return;}
             else {
+              if(s.protectedVideoActive&&m.type==="media"&&m.enabled){if(m.settings?.transport!=="native"||m.settings.audio||m.settings.udp===true||m.settings.codec&&m.settings.codec!=="h264"){this.send(s,{type:"media_unavailable"});return;}m.settings.adaptive=false;}
               if(m.type==="media"&&m.settings?.transport==="native")this.companion.fromViewer(s,{type:"media",enabled:false});
               if(s.native?.fromViewer(m))return;
             }
@@ -726,7 +730,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              resourceFences:_resourceFences,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              resourceFences:_resourceFences,protectedVideo:_protectedVideo,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -740,7 +744,10 @@ export class DesktopProvider {
             if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
             if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
-            const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
+            if(ready.protectedVideo&&!options.protectedVideo)throw Error("Unrequested protected native video proof");
+            if(options.protectedVideo&&ready.protectedVideo!==true)throw Error("Protected native video helper proof missing");
+            s.protectedVideoActive=options.protectedVideo===true&&options.elevatedDesktop===true&&!!s.protectedDesktop&&cfg.allowElevated===true&&cfg.allowNativeVideo===true&&ready.protectedVideo===true;
+            const nativeEnabled=(!s.secureDesktop||s.protectedVideoActive)&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(!s.secureDesktop&&options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(!s.secureDesktop&&options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
@@ -759,7 +766,7 @@ export class DesktopProvider {
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
-              ...(nativeEnabled?{nativeVideo:true}:{}),
+              ...(nativeEnabled?{nativeVideo:true,...(s.protectedVideoActive?{protectedVideo:true}:{})}:{}),
               ...(nativeEnabled&&options.nativeCodecs&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),
               ...(nativeEnabled&&options.nativeAdaptive&&nativeAdaptive?{nativeAdaptive:true}:{}),
               ...(nativeEnabled&&options.nativeCadence&&(!options.sharedDesktop||options.sharedRate)&&nativeCadence?{nativeCadence:true}:{}),
@@ -850,7 +857,7 @@ export class DesktopProvider {
             const {data,...info}=raw;
             if(data!==undefined&&(typeof data!=="string"||data.length>Math.ceil(DESKTOP_CURSOR_MAX_BYTES/3)*4||!/^[A-Za-z0-9+/]*={0,2}$/.test(data)))throw Error("Invalid cursor bytes");
             s.cursor.accept({info,data:Buffer.from(data??"","base64")});
-          } else if (s.ready&&!s.secureDesktop&&s.native?.fromHelper(raw)) {
+          } else if (s.ready&&(!s.secureDesktop||s.protectedVideoActive)&&s.native?.fromHelper(raw)) {
             // Native video has its own bounded frame/draw ACK.
           } else if(raw.type==="clipboard_rich_result"&&s.ready){
             try{s.richClipboard?.fromHelper(raw);}catch{s.richClipboard?.stop();delete s.richClipboard;s.clipboardSocket?.terminate();}
@@ -896,6 +903,7 @@ export class DesktopProvider {
       nativeDatagrams:(poolMedia||options.nativeDatagrams===true)&&cfg.allowNativeVideo===true,
       separateCursor: options.cursor===true,
       ...((poolVideo||options.nativeMaxFps===60)&&cfg.allowNativeVideo===true?{nativeMaxFps:60}:{}),
+      allowProtectedVideo:options.protectedVideo===true&&options.elevatedDesktop===true&&cfg.allowElevated===true&&cfg.allowNativeVideo===true,
       allowNativeVideo: (poolVideo||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
       deferNativeSnapshots: (poolVideo||options.nativeVideo===true)&&cfg.allowNativeVideo===true,
       ...((poolVideo||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
