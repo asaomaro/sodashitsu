@@ -138,14 +138,14 @@ it('revalidates the single attached identity when an equivalent ON arrives durin
  try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(app.start).toHaveBeenCalledOnce());block=true;attached('00000000-0000-4000-8000-000000000001');await controller.setEnabled(true);await(controller as unknown as{queue:Promise<void>}).queue;release();await vi.waitFor(()=>expect(activate).toHaveBeenCalledOnce());expect((await controller.status()).phase).toBe('running');expect(app.start).toHaveBeenCalledOnce();}
  finally{release?.();await controller.stop();read.mockRestore();await rm(dir,{recursive:true,force:true});}
 });
-it('a closed generated host cannot be revived by a late attached authorization result',async()=>{
+it.each([false,true])('a closed generated host cannot be revived by a late attached authorization result (relay=%s)',async(nativeNodeRelay)=>{
  const dir=await mkdtemp(join(tmpdir(),'soda-assistant-closed-identity-'));let arm=false,blocked=false,release!:()=>void;
  const watch=vi.spyOn(nodeFs,"watch").mockReturnValue(Object.assign(new EventEmitter(),{close:vi.fn()}) as unknown as nodeFs.FSWatcher);
  const original=enabledState.readAssistantEnabled,read=vi.spyOn(enabledState,'readAssistantEnabled').mockImplementation(async(...args)=>{if(arm){arm=false;blocked=true;await new Promise<void>(yes=>{release=yes;});}return original(...args);});
  const trigger=join(dir,'generated-trigger');const code='const fs=require("node:fs");process.stdin.once("data",()=>{const timer=setInterval(()=>{if(!fs.existsSync('+JSON.stringify(trigger)+'))return;clearInterval(timer);process.stdout.write(JSON.stringify({type:"attached",deviceId:"00000000-0000-4000-8000-000000000001"})+"\\n");setTimeout(()=>process.exit(0),20);},5);});process.stdin.on("end",()=>process.exit(0));process.stdin.resume();';
- const activate=vi.fn(),controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:JSON.stringify([process.execPath,'-e',code,'--'])},()=>"http://127.0.0.1:7780",vi.fn(),undefined,undefined,{activate,requestStop:vi.fn(async()=>{})});
+ const activate=vi.fn(),controller=new AssistantLaunchController(dir,{},()=>"http://127.0.0.1:7780",vi.fn(),undefined,undefined,{activate,requestStop:vi.fn(async()=>{})},undefined,async()=>({command:[process.execPath,'-e',code,'--'],origin:'http://127.0.0.1:7780',nativeNodeRelay}));
  try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('starting'));arm=true;await writeFile(trigger,'generated');await vi.waitFor(()=>expect(blocked).toBe(true));await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('error'));const pending=[...(controller as unknown as{saves:Set<Promise<void>>}).saves];release();await Promise.all(pending);expect(activate).not.toHaveBeenCalled();expect((await controller.status()).phase).toBe('error');}
- finally{release?.();await controller.stop();read.mockRestore();watch.mockRestore();await rm(dir,{recursive:true,force:true});}
+ finally{release?.();await controller.stop().catch(()=>{});read.mockRestore();watch.mockRestore();await rm(dir,{recursive:true,force:true});}
 });
 
 it('duplicate ON observations during a held preparation preserve the original preparation',async()=>{

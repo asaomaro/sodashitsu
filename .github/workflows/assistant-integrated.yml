@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'packages/server/src/assistant/**'
+      - 'packages/desktop-assistant/**'
       - 'packages/server/assets/assistant-runtime-root.ps1'
       - 'packages/server/src/surface/methods/assistant*'
       - 'packages/protocol/src/assistantSettings*'
@@ -32,7 +33,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm --filter @sodashitsu/server build
       - name: Generated root policy, bundled resources, owned child and local settings (no GUI/device/model)
-        run: pnpm exec vitest run packages/server/src/assistant/AssistantNativeRoot.test.ts packages/server/src/assistant/AssistantNativeRootWindows.test.ts packages/server/src/assistant/AssistantHostApp.test.ts packages/server/src/assistant/AssistantHostBundle.test.ts packages/server/src/assistant/AssistantBundledLaunch.test.ts packages/server/src/assistant/AssistantLaunchController.test.ts packages/server/src/assistant/ManagedAssistant.test.ts packages/server/src/surface/methods/assistantSettings.test.ts packages/web/src/components/AssistantSettings.test.ts --maxWorkers=2
+        run: pnpm exec vitest run packages/server/src/assistant/AssistantNativeRoot.test.ts packages/server/src/assistant/AssistantNativeRootWindows.test.ts packages/server/src/assistant/AssistantHostApp.test.ts packages/server/src/assistant/AssistantHostBundle.test.ts packages/server/src/assistant/AssistantBundledLaunch.test.ts packages/server/src/assistant/AssistantLaunchController.test.ts packages/server/src/assistant/ManagedAssistant.test.ts packages/server/src/surface/methods/assistantSettings.test.ts packages/web/src/components/AssistantSettings.test.ts packages/desktop-assistant/src/managedChannel.test.ts packages/desktop-assistant/src/managedRelay.test.ts --maxWorkers=2
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15

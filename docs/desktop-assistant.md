@@ -37,6 +37,8 @@ soda assistant disable
 
 GUIは別プロセスですが、sodaが有効化時に起動・停止する内部機能です。Windowsログイン時の単独起動、独立した配布ZIP・installer・`soda assistant install/rollback`は廃止しました。ソース開発用の`pnpm --filter @sodashitsu/desktop-assistant start`は通常利用の導入手順ではありません。
 
+Windows・WSLでは、Windows GUIの標準入力に依存しないよう、同じ共通ランタイムを使った内部relayも有効時だけ起動します。接続はランダム名のローカルnamed pipeと、起動ごとの秘密による相互認証を使います。GUIが実際に終了した証明を確認してから起動枠を解放し、証明が取れなければ再起動を止めて状態に表示します。別の実行ファイルを手動で導入する必要はありません。
+
 
 ## 専用セッションのサーバ側基盤
 

@@ -1,3 +1,4 @@
+import {win32} from 'node:path';
 import type {AssistantLaunch} from './AssistantLaunchConfig.js';
 import {assistantNativeRoot} from './AssistantNativeRoot.js';
 import {AssistantRuntimeCache} from './AssistantRuntimeCache.js';
@@ -15,7 +16,7 @@ export async function bundledAssistantLaunch(origin:string,signal:AbortSignal,ch
   const runtime=await cache.prepare(host.platform,host.arch,{signal,expires,check:live});live();
   const app=await(deps.app??prepareAssistantHostApp)(host.root,live);live();
   const appPath=await host.nativePath(app);live();
-  await host.root.assert();live();launch={command:[runtime.executable,appPath],origin:desktopAssistantOrigin(origin)};
+  await host.root.assert();live();launch={command:host.platform==='win32'?[runtime.executable,win32.join(appPath,'dist','managed-relay.cjs')]:[runtime.executable,appPath],origin:desktopAssistantOrigin(origin),...(host.platform==='win32'?{nativeNodeRelay:true}:{})};
  }finally{await cache.dispose();}
  live();return launch;
 }

@@ -1,3 +1,4 @@
+import { managedChannel } from "./managedChannel.js";
 import { managedLaunch } from "./managedLaunch.js";
 import { FullscreenPolicy } from "./fullscreen.js";
 import { bubbleBounds } from "./geometry.js";
@@ -1128,7 +1129,7 @@ function registerIpc(): void {
         if (managed && DesktopAssistantPreferences.parse(input).launchAtLogin) throw Error("sodaによる起動管理中は、Windowsログイン時の単独起動を併用できません");
         const saved = await controller.update(input);
         if (!saved.enabled) {
-          if (managed) process.stdout.write('{"type":"disabled"}\n');
+          if (managed) managedStreams!.output.write('{"type":"disabled"}\n');
           setImmediate(() => app.quit());
         }
         return saved;
@@ -1152,8 +1153,9 @@ function registerIpc(): void {
 }
 
 app.setName("Sodashitsu Assistant");
+const managedStreams = process.argv.includes("--soda-managed") ? await managedChannel(process.argv).catch(()=>{app.exit(1);return undefined;}) : undefined;
 const managed = process.argv.includes("--soda-managed")
-  ? await managedLaunch(process.stdin, () => app.quit()).catch(() => { app.exit(1); return undefined; }) : undefined;
+  ? await managedLaunch(managedStreams!.input, () => app.quit()).catch(() => { app.exit(1); return undefined; }) : undefined;
 if (!app.requestSingleInstanceLock()) {
   if (managed) app.exit(75); else app.quit();
 }
@@ -1257,7 +1259,7 @@ else {
         charactersError = error instanceof Error ? error.message : "素材を読み込めません。";
       }
       installationId = await deviceIdentity(join(app.getPath("userData"), "assistant-device-id"));
-      if (managed) process.stdout.write(JSON.stringify({type:"attached",deviceId:installationId}) + "\n");
+      if (managed) managedStreams!.output.write(JSON.stringify({type:"attached",deviceId:installationId}) + "\n");
       notesFile = new NotesFile(join(app.getPath("userData"), "assistant-notes.json"));
       transcription = new Transcription({
         prepareAgent:()=>{
