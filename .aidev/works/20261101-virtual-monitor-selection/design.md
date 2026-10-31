@@ -1,0 +1,9 @@
+# 所有仮想画面の一覧と明示した物理モニターへの切替
+
+bit12 virtualMonitors を viewer・relay・B・実helperで独立して交渉する。Bの仮想画面とモニターの両許可、実所有画面のroster・selected・画素寸法・resource fence proof が必要。旧monitor hintだけで仮想rosterを公開しない。shared helperの内部monitorsと公開ordinary monitorsは区別する。
+
+UIは所有仮想画面を選択中として表示する。全画面合成は選べず、別のモニターを明示選択した時だけ仮想purpose/解像度指定を解除して再接続し、操作権を引き継がない。対応する場合はモニター独立配信へ切り替える。別窓が継続する所有仮想groupと物理sourceが共存する場合も、PC全体の操作・micの排他所有者と停止receiptを共用する。
+
+共存は実ready/fenceがあるWindowsの所有仮想groupと個別物理sourceのみ。all、同じ所有仮想ID、普通の全画面group・保護・nativeとの混在を拒否する。仮想先行は実rosterから所有selectedを除外したID集合で判定し、物理先行も仮想readyで既存selectedを照合し公開前に拒否する。共有設定は非independent peer同士で一致し、viewer上限8・実退役待ち含むhelper上限8を維持する。最後のindependent source実退役後だけtopologyを消去する。OS構成変更時の既存独立世代の停止は維持する。
+
+権限/protocol/共有状態変更は独立taskcheck/cross対象。生成helper、所有loopback、ブラウザDOM/WS/canvasで確認し、実driverやOS入力は実行しない。

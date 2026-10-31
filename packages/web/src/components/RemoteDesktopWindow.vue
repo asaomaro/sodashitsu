@@ -206,7 +206,7 @@ const mediaState = ref("images"),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>(),sharedMonitorDevice=ref<string>();
-const virtualScreen=ref(false),virtualActive=ref(false),virtualMode=ref('');
+const virtualScreen=ref(false),virtualActive=ref(false),virtualMonitors=ref(false),virtualMode=ref('');let virtualPhysicalSwitch=false;
 function joinVirtualMode(){
  const match=/^(\d{3,4})[x×](\d{3,4})$/.exec(virtualMode.value.trim());
  const width=Number(match?.[1]),height=Number(match?.[2]);
@@ -215,7 +215,7 @@ function joinVirtualMode(){
 }
 if(props.monitorWindow){sharedScreen.value=true;sharedMonitorsScreen.value=true;sharedMonitorDevice.value=props.monitorWindow.independent?props.monitorWindow.monitor:"all";if(props.monitorWindow.independent)monitorDevice.value=props.monitorWindow.monitor;sharedCursorScreen.value=props.monitorWindow.cursor;sharedClipboardScreen.value=props.monitorWindow.clipboard;sharedDeltasScreen.value=props.monitorWindow.deltas;}
 
-function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;if(!sharedVirtualAvailable.value)sharedScreen.value=false;independentScreen.value=false;sharedMonitorDevice.value=undefined;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeVirtualScreen(){virtualPhysicalSwitch=false;if(virtualScreen.value){elevatedScreen.value=false;if(!sharedVirtualAvailable.value)sharedScreen.value=false;independentScreen.value=false;sharedMonitorDevice.value=undefined;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedScreen(){sharedMonitorDevice.value=undefined;if(sharedScreen.value){if(!sharedProtectedAvailable.value)elevatedScreen.value=false;if(!sharedVirtualAvailable.value)virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function joinSharedMonitor(){monitorDevice.value=sharedMonitorDevice.value?.trim()||undefined;changeMonitor();}
 function changeIndependent(){if(independentScreen.value&&!monitorDevice.value)monitorDevice.value="all";sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
@@ -223,9 +223,9 @@ function changeSharedMonitors(){monitorDevice.value=undefined;changeMonitor();}
 function changeSharedDeltas(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedClipboard(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function changeSharedCursor(){releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
-function changeElevatedScreen(){if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeElevatedScreen(){virtualPhysicalSwitch=false;if(elevatedScreen.value){virtualScreen.value=false;if(!sharedProtectedAvailable.value)sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function resetMonitor(){monitorDevice.value=undefined;changeMonitor();}
-function changeMonitor(){if(!props.monitorWindow)localMonitor.value="";if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
+function changeMonitor(){if(virtualScreen.value){const selected=monitorDevice.value;if(!selected||selected==="all"||selected===monitorLayout.value?.selected)return;virtualScreen.value=false;virtualMode.value="";virtualPhysicalSwitch=true;if(sharedScreen.value){sharedMonitorsScreen.value=true;sharedMonitorDevice.value=selected;if(independentAvailable.value)independentScreen.value=true;}}if(!props.monitorWindow)localMonitor.value="";if(sharedScreen.value&&sharedMonitorsScreen.value)sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 const nativeTransfer=ref<InstanceType<typeof DesktopNativeTransfer>>(),fileGranted=ref(false);let nativePointerId:number|undefined;
 const fileClient=shallowRef<DesktopFileClient>(),filePanel=ref<InstanceType<typeof DesktopFiles>>(),durableFileCheckpoints=ref(false),durableFolderCheckpoints=ref(false),fileCheckpoints=ref(false),folderCheckpoints=ref(false),foldersCap=ref(false),filesCap=ref(false),filesReady=ref(false);let fileSocket:WebSocket|undefined;
 function resetFiles(){nativeTransfer.value?.stop();fileGranted.value=false;fileClient.value?.stop();fileClient.value=undefined;const socket=fileSocket;fileSocket=undefined;socket?.close();filesCap.value=filesReady.value=durableFolderCheckpoints.value=durableFileCheckpoints.value=fileCheckpoints.value=folderCheckpoints.value=foldersCap.value=false;}
@@ -499,7 +499,7 @@ function stop(preserveCapabilities=false) {
   sound.value = false;
   nativeStats.value=null;
   if(!preserveCapabilities){sharedProtectedAvailable.value=false;sharedCursorAvailable.value=false;sharedClipboardAvailable.value=false;sharedDeltasAvailable.value=false;sharedMonitorsAvailable.value=false;independentAvailable.value=false;}
-  virtualActive.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=nativeCadence.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
+  virtualActive.value=false;virtualMonitors.value=false;nativeVideo.value=false;nativeCodecs.value=false;nativeCodecCandidates.value=[];nativeActualCodec.value=nativeRequestedCodec.value=undefined;nativeCodecFallback.value="";nativeAdaptive.value=nativeCadence.value=false;nativeMaxFps.value=30;nativeDatagrams.value=nativeUdpActive.value=false;nativeAudio.value=false;nativeAudioState.value="";
   allowMedia.value = false;
   allowClipboard.value = false;
   relinquish();
@@ -592,6 +592,7 @@ function connect(automatic = false) {
     ? ""
     : "このブラウザに設定を保存できませんでした。今回の接続には反映します。";
   activeSettings.value = options;
+  const switchingFromVirtual=virtualPhysicalSwitch;virtualPhysicalSwitch=false;
   stop();
   error.value = "";
   status.value = "接続中";
@@ -610,7 +611,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors","sharedVirtual","protectedFiles","protectedVideo","protectedAudio","sharedProtectedVideo"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors","sharedVirtual","protectedFiles","protectedVideo","protectedAudio","sharedProtectedVideo","virtualMonitors"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -779,7 +780,7 @@ function connect(automatic = false) {
           mediaTransport.value=preferredTransport.value;
           if(nativeSupported&&!allowMedia.value)mediaTransport.value="native";
           else if(!nativeSupported&&mediaTransport.value==="native")mediaTransport.value="auto";
-          virtualActive.value=r.virtualDisplay===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
+          virtualActive.value=r.virtualDisplay===true;virtualMonitors.value=r.virtualMonitors===true;monitorLayout.value=r.monitorLayout;if(r.secureDesktop)monitorDevice.value=undefined;else if(r.monitorLayout)monitorDevice.value=r.monitorLayout.selected;
           filesCap.value=r.files===true;fileCheckpoints.value=r.fileCheckpoints===true;durableFileCheckpoints.value=r.durableFileCheckpoints===true;durableFolderCheckpoints.value=r.durableFolderCheckpoints===true;foldersCap.value=r.folders===true;folderCheckpoints.value=r.folderCheckpoints===true;
           allowClipboard.value = r.allowClipboard === true;
           dynamicQuality.value = r.dynamicQuality === true;
@@ -954,6 +955,7 @@ function connect(automatic = false) {
     stop(true);
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
+    if(!wasReady&&switchingFromVirtual){status.value="停止";error.value=(error.value?error.value+" ":"")+"指定した物理モニターへ切り替えられません。他の共有窓を閉じ、接続先のモニター構成と許可を確認してから接続し直してください。";return;}
     if(elevatedScreen.value){status.value="停止";if(!error.value)error.value=wasReady?"管理者画面の共有が終了しました。接続し直し、操作を許可し直してください。":"管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";return;}
     if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと保護サービスの導入・更新も必要です。";return;}
     if (!wasReady && activeSettings.value?.display) {
@@ -1371,9 +1373,10 @@ onBeforeUnmount(() => {
         <button :disabled="!canOpenMonitor" @click="openMonitorWindow">選択モニターを別窓で開く</button>
         <p v-if="independentScreen">各モニターを別々に取得・圧縮し、選択したモニターだけを受信します。モニターごとに画質を保存します。同じモニターの窓は同じ設定にしてください。共有方式の切替は、ほかの窓を閉じてから行ってください。</p><p v-else>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
       </div>
-      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen||props.monitorWindow?.independent||monitorLayout.switchingSupported===false" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
+      <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen&&!virtualMonitors||props.monitorWindow?.independent||monitorLayout.switchingSupported===false" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="virtualScreen||!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
       <p v-if="ready&&monitorLayout?.coordinateSpace==='logical'" data-native-monitors>画面配置はOSの論理座標です。<template v-if="monitorLayout.switchingSupported===false">OSで画面選択の記憶が許可されていないため、この共有からの画面切替はできません。</template></p>
       <DesktopFiles v-if="ready&&filesCap&&filesReady&&fileClient" ref="filePanel" :client="fileClient" :can-resume="fileCheckpoints" :durable-resume="durableFileCheckpoints" :durable-folder-resume="durableFolderCheckpoints" :can-folders="foldersCap" :can-resume-folders="folderCheckpoints" :machine-id="props.machineId" @grant-change="fileGranted=$event" />
+      <p v-if="virtualActive&&virtualMonitors" data-virtual-monitor-selection>物理モニターを選ぶと、この窓の仮想画面共有を終了して閲覧から接続し直します。操作許可は引き継ぎません。独立配信に対応する接続先では、別の窓の仮想共有を維持して選択したモニターを配信します。</p>
       <DesktopNativeTransfer v-if="ready&&filesCap&&filesReady&&fileClient&&!secureDesktop&&!lockScreenCover&&!elevatedScreen&&!virtualScreen&&!platformBackend" ref="nativeTransfer" :files="fileClient" :granted="fileGranted" :input-enabled="control" @fallback="nativeFallback" @handoff="nativeHandoff" @release="relinquish" />
       <details v-if="ready && microphoneAvailable" data-desktop-microphone>
         <summary>マイク入力</summary>
