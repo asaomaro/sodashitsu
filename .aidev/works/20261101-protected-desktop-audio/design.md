@@ -1,0 +1,11 @@
+# 保護画面中の接続先ユーザー音声
+
+単独elevated-default/UACのH.264/WSSに限り、接続先sodaユーザーの通常のシステム音声を送る。SYSTEMデスクトップの音声を取得する機能ではない。接続元protectedAudio feature、Bの管理者画面・動画・システム音声の各許可、native音声対応とprotectedVideoの実worker証明を必要とする。
+
+保護workerは音声をload/activateせず、映像PTS用のprivate windows-qpc-v1証明だけを返す。Bがその証明を除去・検査しordinary-user音声capを上乗せする。privileged helperがnativeAudio/protectedAudioをclaimすると拒否する。動画と別user-audio processのWASAPI PCMは共通QPC µsで古さを比較し、到着時刻に振り替えない。
+
+音声要求時だけdynamic importし、既存の検証済みcommon hostへ固定user-audio role DLLを渡す。手動導入exeを増やさない。Windows側nonce/id/clock proofとowner-only pipeのclient PID照合、元45秒のprepare開始予算・元2.5秒のactor起動予算・heartbeat/EOF停止を使う。PC標準出力のloopbackでありアプリ別・ユーザー別の音声分離は主張しない。
+
+roleの終了処理はdevice/pipe threadのDispose完了後だけclosed receiptを返す。Bは実child closeとdevice receiptを両方待つ。音声開始後にreceiptなく異常終了した場合はslotを保持し、別producerを重ねて起動しない。必要ならsodaの再起動で復旧する。画面/動画/設定/source終了で音声も終了する。入力・mic・signin・shared protectedへの範囲拡大は行わない。
+
+状態・protocol・clock・role packaging・retirementをtaskcheck/cross対象とする。試験は生成facts/PCM/pixels、所有loopback/pipeだけで実機音声・UAC・service操作を行わない。

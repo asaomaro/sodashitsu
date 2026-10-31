@@ -6,10 +6,10 @@ import {createHash} from 'node:crypto';
 import {join,win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {z} from 'zod';
-export type DesktopNativeRole='copy'|'audio'|'selection';
+export type DesktopNativeRole='copy'|'audio'|'selection'|'user-audio';
 const Host=z.object({binary:z.string().max(4096),directory:z.string().max(4096),sha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 const Module=Host.extend({hostSha256:z.string().regex(/^[a-f0-9]{64}$/)});
-const markers={copy:'soda-native-copy-preflight-v1',audio:'soda-audio-pipe-preflight-v1',selection:'soda-explorer-selection-preflight-v1'};
+const markers={'user-audio':'soda-user-audio-preflight-v1',copy:'soda-native-copy-preflight-v1',audio:'soda-audio-pipe-preflight-v1',selection:'soda-explorer-selection-preflight-v1'};
 const stamp=(info:BigIntStats)=>`${info.dev}:${info.ino}:${info.birthtimeNs}`;
 async function digest(path:string,expected:BigIntStats){
  const file=await open(path,constants.O_RDONLY|(constants.O_NOFOLLOW??0));

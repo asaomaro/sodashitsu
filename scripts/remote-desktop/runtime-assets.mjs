@@ -5,6 +5,7 @@ export const desktopRuntimeAssets = Object.freeze([
   'SigninAclPolicy.ps1',
   'SigninAdminStorage.ps1',
   'WindowsAudioPipeBridge.cs',
+  'WindowsUserAudioRole.cs',
   'WindowsCodecProbe.cs',
   'WindowsDesktopAudio.cs',
   'WindowsDesktopHost.cs',

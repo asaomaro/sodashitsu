@@ -24,3 +24,5 @@ it('prepares permitted shared-source media but never treats pooling as clipboard
 it.each(['linux-portal','macos-sck'] as const)('prepares native audio and microphone policy without Windows codecs for %s',nativePlatform=>{
  const plan=desktopHelperRolePlan({...all,nativePlatform},{...options,sharedDesktop:true});expect(plan).toEqual({...off,allowSystemAudio:true,allowMicrophone:true});
 });
+
+it('never loads optional user audio into the protected helper even with an ordinary-user audio request',()=>{expect(desktopHelperRolePlan(all,{...options,elevatedDesktop:true,protectedVideo:true,protectedAudio:true,nativeVideo:true,nativeAudio:true})).toEqual(off);});

@@ -86,6 +86,7 @@ export const DesktopOptions = z
     files: z.literal(true).optional(),
     protectedFiles:z.literal(true).optional(),
     protectedVideo:z.literal(true).optional(),
+    protectedAudio:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
     folders:z.literal(true).optional(),
     folderCheckpoints:z.literal(true).optional(),
@@ -184,6 +185,7 @@ export const DesktopReady = z
     extendedInput: z.boolean().optional(),
     virtualDisplay:z.literal(true).optional(),
     protectedVideo:z.literal(true).optional(),
+    protectedAudio:z.literal(true).optional(),
     monitorLayout:DesktopMonitorLayout.optional(),
     files:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
@@ -216,8 +218,9 @@ export const DesktopReady = z
   })
   .strict()
   .refine((v) => !v.lockScreenCover || v.secureDesktop === true)
-  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&(!v.nativeVideo||v.protectedVideo===true)&&!v.nativeAudio&&!v.microphone&&!v.nativeDatagrams&&!v.nativeCodecs&&!v.nativeAdaptive&&!v.nativeCadence))
-  .refine(v=>!v.protectedVideo||(!!v.protectedDesktop&&v.nativeVideo===true));
+  .refine(v=>!v.protectedDesktop||(v.secureDesktop===true&&!v.lockScreenCover&&!v.virtualDisplay&&!v.allowMedia&&!v.allowClipboard&&!v.display&&!v.monitorLayout&&!v.files&&!v.richClipboard&&(!v.nativeVideo||v.protectedVideo===true)&&(!v.nativeAudio||v.protectedAudio===true)&&!v.microphone&&!v.nativeDatagrams&&!v.nativeCodecs&&!v.nativeAdaptive&&!v.nativeCadence))
+  .refine(v=>!v.protectedVideo||(!!v.protectedDesktop&&v.nativeVideo===true))
+  .refine(v=>!v.protectedAudio||(v.protectedVideo===true&&v.nativeAudio===true));
 export const DesktopFrameInfo = z
   .object({
     seq: z.number().int().positive(),
@@ -348,6 +351,7 @@ export interface DesktopResults {
     sharedVirtual?:boolean;
     protectedFiles?:boolean;
     protectedVideo?:boolean;
+    protectedAudio?:boolean;
     sharedDeltas?:boolean;
     sharedMonitors?:boolean;
     independentMonitors?:boolean;

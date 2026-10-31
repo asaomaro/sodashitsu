@@ -18,7 +18,7 @@ internal static class SodaNativeRoleHost {
     [MTAThread] private static int Main(string[] args) {
         if(args.Length<6||args[0]!="--role"||args[2]!="--module"||args[4]!="--sha256")return 2;
         string role=args[1],entry;
-        switch(role){case "copy":entry="Sodashitsu.NativeDrag.NativeDragWorker";break;case "audio":entry="SodaDesktopAudioPipeBridge";break;case "selection":entry="Sodashitsu.NativeDrag.ExplorerSelectionWorker";break;default:return 2;}
+        switch(role){case "user-audio":entry="SodaDesktopUserAudioRole";break;case "copy":entry="Sodashitsu.NativeDrag.NativeDragWorker";break;case "audio":entry="SodaDesktopAudioPipeBridge";break;case "selection":entry="Sodashitsu.NativeDrag.ExplorerSelectionWorker";break;default:return 2;}
         if(!Regex.IsMatch(args[3],"\\A[a-f0-9]{32}\\z")||!Regex.IsMatch(args[5],"\\A[a-f0-9]{64}\\z"))return 2;
         try {
             using(var identity=WindowsIdentity.GetCurrent()){if(identity.IsSystem||identity.User==null)return 2;}
@@ -39,7 +39,7 @@ internal static class SodaNativeRoleHost {
             var forwarded=new string[args.Length-6];Array.Copy(args,6,forwarded,0,forwarded.Length);
             int result=2;Exception failure=null;
             ThreadStart run=delegate(){try{result=(int)method.Invoke(null,new object[]{forwarded});}catch(Exception error){failure=error;}};
-            if(role=="audio")run();else{var thread=new Thread(run);thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();}
+            if(role=="audio"||role=="user-audio")run();else{var thread=new Thread(run);thread.SetApartmentState(ApartmentState.STA);thread.Start();thread.Join();}
             if(failure!=null)return 2;return result;
         }catch{return 2;}
     }

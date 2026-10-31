@@ -24,3 +24,5 @@ it.each(['elevated-default','elevated-uac'] as const)('requires a separate prote
  const ready={...base,secureDesktop:true,protectedDesktop,protectedVideo:true,nativeVideo:true,nativeVideoWindow:3};expect(DesktopReady.safeParse(ready).success).toBe(true);
  for(const extra of [{protectedDesktop:undefined},{nativeVideo:undefined},{secureDesktop:false},{nativeAudio:true},{nativeDatagrams:true},{nativeCodecs:true},{nativeAdaptive:true},{nativeCadence:true},{microphone:true},{allowMedia:true},{allowClipboard:true}])expect(DesktopReady.safeParse({...ready,...extra}).success).toBe(false);
 });
+
+it('requires both protected video and native audio for ordinary-user audio overlay',()=>{const ready={...base,secureDesktop:true,protectedDesktop:'elevated-uac',protectedVideo:true,nativeVideo:true,protectedAudio:true,nativeAudio:true};expect(DesktopReady.safeParse(ready).success).toBe(true);for(const key of ['protectedVideo','nativeVideo','nativeAudio','protectedDesktop']){const bad:any={...ready};delete bad[key];expect(DesktopReady.safeParse(bad).success).toBe(false);}});

@@ -3,6 +3,7 @@ import type {DesktopStartParams} from '@sodashitsu/protocol';
 import type {z} from 'zod';
 /** One permission plan drives both compilation and the helper's configure message. */
 export function desktopHelperRolePlan(cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>['options']){
+ if(options.elevatedDesktop)return {richClipboard:false,allowMicrophone:false,allowSystemAudio:false,nativeCodecs:false};
  const pooled=options.sharedDesktop===true&&!options.elevatedDesktop;
  const media=pooled&&!cfg.nativePlatform,audio=pooled;
  return {

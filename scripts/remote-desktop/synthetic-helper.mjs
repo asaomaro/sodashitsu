@@ -97,7 +97,7 @@ function run() {
   const lifecycleAt=process.argv.indexOf("--lifecycle-ledger"),lifecycle=lifecycleAt>=0?process.argv[lifecycleAt+1]:undefined;
   if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"spawn",pid:process.pid})+"\n");
   let configureDelayed=false,regions=[];
-  let protectedVideo=false,options,monitorLayout,topologyStopped=false,
+  let protectedAudio=false,protectedVideo=false,options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
     cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
     outputBlocked = false,
@@ -145,7 +145,7 @@ function run() {
   const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"audio_stop",id:old.id})+"\n");clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
   const startAudio=m=>{
     if(audio?.id===m.id)return; // Match native helpers: bootstrap retry cannot replace an owned actor.
-    stopAudio();if(!native||native.id!==m.id||secure||!process.argv.includes("--native-audio"))return;
+    stopAudio();if(!native||native.id!==m.id||secure&&!protectedAudio||!process.argv.includes("--native-audio"))return;
     const path=process.platform==="win32"?"\\\\.\\pipe\\"+m.pipeName:m.pipePath;
     if(typeof path!=="string")return;
     if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"audio_start",id:m.id})+"\n");
@@ -237,6 +237,7 @@ function run() {
         nativeCodecs=m.nativeCodecs===true&&process.argv.includes("--native-codecs")&&!secure;
         nativeAdaptive=m.nativeAdaptive===true&&process.argv.includes("--native-adaptive")&&!secure;
         protectedVideo=!!protectedMode&&m.allowProtectedVideo===true&&m.allowNativeVideo===true&&m.options.protectedVideo===true&&m.options.features===true&&!process.argv.includes("--no-protected-video");
+        protectedAudio=protectedVideo&&m.protectedAudioClock==="windows-qpc-v1"&&m.options.protectedAudio===true&&m.options.nativeAudio===true;
         options = m.options;if(nativeAdaptive&&nativeFixture)options={...options,syntheticHeight:Math.round(nativeFixture.height*options.width/nativeFixture.width)};nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
         const virtualSource=options.virtualDisplay===true&&m.allowVirtualDisplay===true&&process.argv.includes("--virtual-display")&&!secure;
         if(process.argv.includes("--headless")&&!virtualSource)throw Error("Generated headless source requires an owned virtual monitor");
@@ -262,6 +263,8 @@ function run() {
           ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
           ...(m.allowMicrophone===true&&m.microphoneEndpoint&&process.argv.includes("--microphone-fixture")&&!secure?{microphone:true}:{}),
+          ...(protectedAudio&&!process.argv.includes("--protected-clock-missing")?{protectedAudioClock:process.argv.includes("--protected-clock-wrong")?"process-relative":"windows-qpc-v1"}:{}),
+          ...(protectedAudio&&process.argv.includes("--protected-audio-forged")?{protectedAudio:true,nativeAudio:true}:{}),
           ...(nativeFixture&&m.allowSystemAudio===true&&process.argv.includes("--native-audio")&&!secure?{nativeAudio:true}:{}),
           ...(cursorEnabled?{cursor:true}:{}),
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),

@@ -17,3 +17,5 @@ it("negotiates protected ordinary-user files as its own bounded feature hint",()
 it("negotiates protected video in its own bounded feature bit",()=>{
  const protocol=desktopFeaturesProtocol(["protectedVideo"]);expect(protocol).toBe(DESKTOP_FEATURES_PREFIX+"00000000000000000000000000000200");expect([...desktopFeaturesFromProtocols([protocol])]).toEqual(["protectedVideo"]);
 });
+
+it('keeps ordinary-user protected audio opt-in separate from protected video',()=>{const wire=desktopFeaturesProtocol(['protectedAudio']);expect(wire).toBe(DESKTOP_FEATURES_PREFIX+'00000000000000000000000000000400');expect([...desktopFeaturesFromProtocols([wire])]).toEqual(['protectedAudio']);expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(['protectedVideo'])])]).not.toContain('protectedAudio');});
