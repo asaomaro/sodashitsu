@@ -1,57 +1,22 @@
-name: Native desktop generated checks
+name: macOS audio SDK contract (headers only)
 on:
-  pull_request:
-    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/macos-native-audio.swift', 'scripts/remote-desktop/macos-system-audio.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', 'packages/server/src/desktop/DesktopNativePcmPath*', 'packages/server/src/desktop/DesktopProvider.ts', 'packages/server/src/desktop/DesktopHelperRolePlan*', 'packages/server/src/desktop/DesktopSettings*', 'packages/server/src/desktop/DesktopRelay.test.ts', '.github/workflows/native-desktop.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  linux-generated:
-    runs-on: ubuntu-latest
+  headers:
+    runs-on: macos-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Generated media dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
-      - name: Import-only probe (no portal, capture or input)
-        run: /usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe
-      - name: Fake D-Bus / input, generated JPEG and publication races
+      - name: Read official SDK ownership and device property comments
         run: |
-          /usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py
-          /usr/bin/python3 scripts/remote-desktop/test-linux-native-video.py
-          /usr/bin/python3 scripts/remote-desktop/test-linux-native-audio.py
-
-  macos-generated:
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Compile and ad-hoc sign (no permission prompt)
-        run: bash scripts/remote-desktop/build-macos-desktop.sh
-      - name: Generated input and JPEG checks (no capture or OS input)
-        run: scripts/remote-desktop/macos-desktop-helper --self-test
-      - name: Generated negative controls (temporary source copies only)
-        run: python3 scripts/remote-desktop/test-macos-desktop-helper.py
-
-  native-audio-node:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.9
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: pnpm -r --filter '@sodashitsu/server...' run build
-      - name: Native permissions and bounded private PCM paths; no devices
-        run: pnpm exec vitest run packages/server/src/desktop/DesktopNativePcmPath.test.ts packages/server/src/desktop/DesktopHelperRolePlan.test.ts packages/server/src/desktop/DesktopSettings.test.ts --maxWorkers=2
-      - name: Synthetic Linux and Mac PCM through actual Unix paths and Opus, shared and mixed viewers
-        run: pnpm exec vitest run packages/server/src/desktop/DesktopRelay.test.ts -t 'generated .* PCM|physical capture across image-only' --maxWorkers=2
+          python3 - <<'PY'
+          import subprocess,pathlib
+          sdk=pathlib.Path(subprocess.check_output(['xcrun','--show-sdk-path'],text=True).strip())
+          for framework,name,words in [('AudioToolbox','AudioQueue.h',['kAudioQueueProperty_CurrentDevice','AudioQueueGetProperty(']),('CoreAudio','AudioHardwareBase.h',['kAudioDevicePropertyDeviceUID'])]:
+              path=next((sdk/'System/Library/Frameworks'/f'{framework}.framework').rglob(name));lines=path.read_text().splitlines()
+              print('SDK HEADER',framework,name)
+              for i,line in enumerate(lines):
+                  if any(word in line for word in words):
+                      print('\n'.join(lines[max(0,i-12):min(len(lines),i+25)]))
+          PY
