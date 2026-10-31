@@ -5,9 +5,9 @@
 - [x] ControllerのON-only resolver/取消・retirement/identity/idempotence（risky taskcheck、delta待ち）
 - [x] strict settings RPC/Web/TUI導線、準備中OFFと状態
 - [x] standalone pack/installer/CLI廃止と配布更新・docs
-- [ ] 生成boundary/負例・headless UI/E2E・packaging/3OS CI
-- [ ] 最終build/typecheck/全体試験と独立whole cross、修正delta
-- [ ] PR/main。mainへの稼働更新は検証後に実施
+- [x] 生成boundary/負例・headless UI/E2E・packaging/3OS CI
+- [x] 最終build/typecheck/全体試験と独立whole cross、修正delta
+- [x] PR/main（PR345、main cd09d424）。mainへの稼働更新は検証後に実施
 
 # 後続のstanding残件（完了扱いにしない）
 

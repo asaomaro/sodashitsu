@@ -13,9 +13,9 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Explorer selection generated compilation failed' }
   & $output
   if ($LASTEXITCODE -ne 0) { throw 'Explorer selection generated checks failed' }
-  # The actual fixed builder is exercised, but its worker receives no request:
+  # The private generated-fixture builder is exercised, but its worker receives no request:
   # its independent timer must end a blocked private stdin without touching UIA.
-  $built = (& (Join-Path $PSScriptRoot 'build-explorer-selection.ps1') | ConvertFrom-Json)
+  $built = (& (Join-Path $PSScriptRoot 'build-explorer-selection-fixture.ps1') | ConvertFrom-Json)
   $child = $null
   try {
     $start = New-Object Diagnostics.ProcessStartInfo

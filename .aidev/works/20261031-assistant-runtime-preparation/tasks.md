@@ -5,6 +5,6 @@
 - [x] private immutable cache/cohortとclosed inventory（risky独立点検）
 - [x] 合成境界試験/負例/公式3OS archiveデータ検証（実行なし）
 - [x] build/typecheck/全体試験・独立最終crossと修正delta
-- [ ] hosted CI/PR/main
+- [x] hosted CI/PR/main（PR344、main29c395c7）
 
 次段階: Windows/WSL root証明、実role起動、Web/TUI設定、旧exe/installer廃止、他のnative役割統合、最後にsr-pc接続復旧。
