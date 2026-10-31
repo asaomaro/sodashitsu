@@ -6,9 +6,10 @@ import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { DesktopSettings, bundledDesktopCommand } from "./DesktopSettings.js";
 import { DesktopProvider } from "./DesktopProvider.js";
+vi.mock('node:child_process',async importOriginal=>{const actual=await importOriginal<typeof import('node:child_process')>();return{...actual,spawnSync:vi.fn(actual.spawnSync)};});
 const dirs: string[] = [];
 afterEach(async () => {
-  vi.restoreAllMocks();
+  vi.restoreAllMocks();vi.mocked(childProcess.spawnSync).mockRestore();
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 const off = { enabled: false, allowInput: false, allowClipboard: false, allowDisplayResize: false };
@@ -191,6 +192,6 @@ it.each(["linux-portal","macos-sck"] as const)("persists native %s system-audio 
 });
 
 it('checks WSL helper presence without starting wslpath for disabled metadata',()=>{
- const probe=vi.spyOn(childProcess,'spawnSync').mockImplementation(()=>{throw Error('unexpected helper discovery process');});
+ const probe=vi.mocked(childProcess.spawnSync).mockImplementation(()=>{throw Error('unexpected helper discovery process');});
  expect(bundledDesktopCommand('linux',{WSL_DISTRO_NAME:'Generated'},false)?.[0]).toBe('powershell.exe');expect(probe).not.toHaveBeenCalled();
 });
