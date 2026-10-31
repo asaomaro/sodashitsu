@@ -1,0 +1,7 @@
+# 独立点検
+
+review_pointerが初回taskcheckで、同streamへの再入profileを古い要求が上書きするmustを指摘。両OSでscope照合前のrevisionと照合後revision/profile nilを確認し、受付/resumeでrevisionを更新。16→32/160→320の生成再入回帰で修正し、delta点検はmust解消・追加指摘なし。
+
+元profile期限がresume後の公開中にも残るようpublishにdeadlineを渡し、scope query中の期限越え、profileApplied validityの照合後identity、raw copy抑止を追加。review_pointerのdelta点検は追加must/shouldなし。
+
+review_transferが新E2EとNode cap開放を含む全差分cross。単独のみの交渉、元上限、実物理退役、heldkey/ACK/seq/gen/期限、音声/Control継続の検査を確認、追加must/shouldなし。Mac SDK結果はCIで別確認する。

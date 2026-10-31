@@ -1,0 +1,7 @@
+# 設計
+
+次generation・元size/fps/kbps・aspectを検査し、旧draw ACKをdrainする。Linuxは同workerで旧Gst pipelineを実NULL退役し、新targetをvideoscaleするencoderを作る。MacはVT stop completion後に1つの新encoderを作り、CGImageを明示targetのpixel bufferへ描く。
+
+新しい実codec/keyframeを1枚だけ保持し、native_profile_appliedでbaseSeq/codec/sizeを親へ通知する。decoderのgeneration/baseSeq一致ACKを受けるまで画素を公開しない。元capture1秒/profile3秒をsource query後と最終writerで確認し、resumeでprofileをclearしても元deadlineを保持する。期限・失効・停止で保持keyを破棄する。profile受付はscope照合の前後でrevision/profile未設定を確認し、再入の新要求を上書きしない。
+
+元の画面サイズは画像/入力座標系のままとし、native encoderのtargetだけを変更する。音声actor・viewer peer・操作grantを取り直さない。Node cap/option/helper proofは単独nativeだけで交渉し、共有nativeは既存の拒否を維持する。

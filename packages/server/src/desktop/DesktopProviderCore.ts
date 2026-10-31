@@ -65,7 +65,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       nativeVideo: !config?.nativePlatform||config?.allowNativeVideo===true,nativeDatagrams:!config?.nativePlatform||config?.allowNativeVideo===true,nativeAudio:true,
       nativeInputFreshness: !config?.nativePlatform,
       nativeCodecs: !config?.nativePlatform||config?.allowNativeVideo===true,
-      ...(!config?.nativePlatform?{nativeAdaptive:true as const}:{}),
+      ...(!config?.nativePlatform||config?.allowNativeVideo===true?{nativeAdaptive:true as const}:{}),
       ...(!config?.nativePlatform||config?.allowNativeVideo===true?{nativeCadence:true as const}:{}),
       nativeVideoWindow: 3 as const,
       nativeMaxFps: 60 as const,
