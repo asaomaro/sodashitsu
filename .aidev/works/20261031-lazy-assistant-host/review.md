@@ -1,0 +1,7 @@
+# 独立レビュー
+
+review_pointerがController/config/Managed/test/entry-loadの全差分を点検。metadata await後のOFF保存がwatch配送前なら起動し得るmust 1件を検出。package読取→最後にenabled読取へ両箇所を変更し、watchを配送せずmetadata読取を保持する順序回帰を追加。修正順だけ戻す負例はfactory1で失敗。
+
+修正deltaを同reviewerが点検し解消確認、追加must/shouldなし。Node ESM code cacheはunloadしないため、主張は『OFFの初回loadゼロ/確認済stop後instance解放』に限定する。編集・試験再実行なしの独立read-only点検。
+
+最終test fixtureのunknown経由castもdelta点検済み。runtime同義、追加指摘なし。
