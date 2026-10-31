@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 it.each([0,75])('keeps a native pipe lease until the generated GUI peer closes (%s)',async(code)=>{
- const dir=await mkdtemp(join(tmpdir(),'soda-relay-'));await mkdir(join(dir,'dist'));
+ const dir=await mkdtemp(join(process.platform==='darwin'?'/private/tmp':tmpdir(),'soda-relay-'));await mkdir(join(dir,'dist'));
  let source=await readFile(new URL('../scripts/managed-relay.cjs',import.meta.url),'utf8');
  // Only the platform gate and OS pipe namespace differ on POSIX; relay ownership/auth code is unchanged.
  if(process.platform!=='win32')source=source.replace("process.platform !== 'win32'","false").replace("'\\\\\\\\.\\\\pipe\\\\soda-assistant-'","process.env.SODA_TEST_PIPE_PREFIX");
