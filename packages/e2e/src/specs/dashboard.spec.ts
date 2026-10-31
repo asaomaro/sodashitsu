@@ -150,7 +150,7 @@ test.describe("ダッシュボード（PR3）", () => {
     await appendFile(record, assistant("analytics-update", 1000));
     await expect(analytics.locator("svg")).toBeVisible({ timeout: 20000 });
     await expect(analytics).toContainText("2,101");
-    await analytics.getByLabel("エージェント", { exact: true }).selectOption("claude");
+    await analytics.getByRole("combobox", { name: /^エージェント/ }).selectOption("claude");
     await analytics.locator("[data-generate-usage-report]").click();
     await expect(analytics.locator("[data-usage-report]")).toContainText("改善提案", { timeout: 20000 });
     expect(sent().filter(r => r.method === "agent.usage_report")).toHaveLength(1);
