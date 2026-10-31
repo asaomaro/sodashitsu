@@ -12,3 +12,4 @@ it("declines ambiguous hints and leaves legacy protocol parsing independent",()=
  const wire=desktopFeaturesProtocol(["sharedDeltas"]);expect([...desktopFeaturesFromProtocols([wire,wire])]).toEqual([]);expect([...desktopFeaturesFromProtocols(["soda-desktop-shared-deltas-v1"])]).toEqual([]);expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol([])])]).toEqual([]);
 });
 it("does not encode an unregistered feature through an inherited object property",()=>{expect(()=>desktopFeaturesProtocol(["toString" as any])).toThrow(TypeError);});
+it("negotiates shared virtual separately from ordinary sharing hints",()=>{expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(["sharedVirtual"])])]).toEqual(["sharedVirtual"]);expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(["sharedMonitors"])])]).not.toContain("sharedVirtual");});
