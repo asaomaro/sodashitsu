@@ -7,7 +7,7 @@
 - [x] fixed role argv/同時close/retained artifact生成試験、旧重複試験移管
 - [x] production旧builder廃止、配布inventory、文書
 - [x] 最終独立全差分reviewとclose修正delta（review_transfer、must/shouldなし）
-- [ ] 最終build/typecheck/全体試験/配布物確認
+- [x] 最終build/typecheck/全体試験/配布物確認
 - [ ] CI Windows CLR + Linux/Windows Node boundaries
 - [ ] PR/main
 

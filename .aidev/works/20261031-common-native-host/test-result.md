@@ -2,7 +2,8 @@
 
 - Windows Node 24.19.0 + fixed Windows PowerShell: private generated CLR、3role STA/MTA、未選択moduleなし、未知role/wrong SHA/tamper/hardlink拒否、metadata破損とabsent current pointerをfresh immutable cohortで復旧、実role --preflightのみ。pass。ログ /tmp/soda-common-native-roles-recovery-validation.log。実desktop/input/audio device呼出なし。
 - Node関連7files/67tests pass。/tmp/soda-common-native-focused-final.log。
-- build pass（close latch追加前、最終incrementalは後続）、typecheck pass。全体試験実行中。
+- 全体build + close latch追加後のclient/server incremental build、typecheck pass。全体919files/13,239tests pass、Windows専用1file/1test skip（/tmp/soda-common-native-all.log、exit0）。
+- 配布13runtime資源（新規12+既存EndpointAclPolicy）とcompiled entries一致、旧3builder不存在を確認。/tmp/soda-common-native-package-verify.json。
 - 独立whole/delta review_transfer: must/shouldなし。前shouldの同時closeはPromise latchで修正。
 
 ## 回帰の負例
@@ -31,3 +32,14 @@ Error: Generated native builder failed: #< CLIXML
 ```
 
 初期失敗生ログ: /tmp/soda-common-native-roles-final-validation.log。
+
+## Hosted Windows環境での修正
+
+初回CIのNode境界はUbuntu/Windowsとも67pass、CLR生成jobだけpwsh7親のPSModulePath継承によりGet-Acl自動module loadで失敗。DirectoryInfo.GetAccessControl()へ置換し、同じowner/rules/protected評価を維持した。固定WinPS5/.NET Framework向け。実Windows生成validator再実行pass（/tmp/soda-common-native-roles-clr-acl-validation.log）。独立delta reviewはmust/shouldなし。実行ポリシーやOS ACLは変更しない。
+
+```text
+Get-Acl : The 'Get-Acl' command was found in the module 'Microsoft.PowerShell.Security', but the module could not be
+loaded. For more information, run 'Import-Module Microsoft.PowerShell.Security'.
+```
+
+生ログ: /tmp/soda-common-native-ci-failed.log。最終headのCIとmerge結果はPR346で確認する。実desktop/audio/Explorer操作は未検証。

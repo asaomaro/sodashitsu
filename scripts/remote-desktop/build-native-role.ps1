@@ -15,7 +15,8 @@ function Check-Root([string]$path,[bool]$private=$true){
  $item=Get-Item -LiteralPath $path -Force;$storage=$private
  while($null-ne$item){
   if($item -isnot [IO.DirectoryInfo] -or ($item.Attributes-band[IO.FileAttributes]::ReparsePoint)-ne0){throw 'unsafe native host parent'}
-  $acl=Get-Acl -LiteralPath $item.FullName
+  # Use the CLR ACL API: a PowerShell 7 parent may pass an incompatible PSModulePath.
+  $acl=$item.GetAccessControl()
   if(-not(Test-SodaEndpointAcl -Owner $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -Rules @($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) -User $user.Value -Storage $storage)){throw 'unsafe native host permissions'}
   if($storage -and ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value-ne$user.Value -or -not$acl.AreAccessRulesProtected)){throw 'native host is not private'}
   $storage=$false;$item=$item.Parent
