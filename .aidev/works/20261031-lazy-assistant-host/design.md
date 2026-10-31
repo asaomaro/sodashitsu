@@ -1,0 +1,7 @@
+# 設計
+
+設定検証を薄いAssistantLaunchConfigへ分離し、ManagedAssistantの旧exportも維持。Controllerはtype-only参照し、ON設定と起動metadataを確認した後、実装をdynamic importする。設定watch/generation/revisionと既存の直列queueを保ち、import後にも最新flagとpackage metadataを読む。ロード中OFF/停止ならfactoryを呼ばない。
+
+確認できたstopの後だけinstanceを解放。終了未確認では同じownerを保持し、別ownerで二重起動しない。disabled/attached callback、self-disable保存のdrain、agent停止のfinallyを保つ。Node ESMのcode cache自体はunloadしない。OFFへの切替で未使用instanceとnative processを解放する。
+
+生成テストのfactory/loader注入は実OS起動を行わない。実Node ESMロード記録で、壊れたManagedAssistant moduleが無効controllerに不要なことも確認する。
