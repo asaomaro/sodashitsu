@@ -28,7 +28,7 @@ public static class SodaDesktopSigninPackageChecks {
         foreach(string owner in new[]{"S-1-5-18","S-1-5-19","S-1-5-20","private-invalid-owner"})Reject(()=>new SodaDesktopSigninPackage(owner,Revision,Entries()));
         Reject(()=>new SodaDesktopSigninPackage(Owner,Guid.Empty.ToString("D"),Entries()));
         foreach(string path in new[]{"../node.exe","node.exe:alternate","plugin.js","NODE.EXE"}){var changed=Entries();changed[0]=new SodaDesktopSigninPackage.Entry(path,new string('a',64),10);Reject(()=>new SodaDesktopSigninPackage(Owner,Revision,changed));}
-        foreach(long size in new long[]{0,65537}){var changed=Entries();changed[2]=new SodaDesktopSigninPackage.Entry("bootstrap.mjs",new string('a',64),size);Reject(()=>new SodaDesktopSigninPackage(Owner,Revision,changed));}
+        foreach(long size in new long[]{0,65537}){var changed=Entries();changed[Array.IndexOf(SodaDesktopSigninPackage.RequiredPaths(),"bootstrap.mjs")]=new SodaDesktopSigninPackage.Entry("bootstrap.mjs",new string('a',64),size);Reject(()=>new SodaDesktopSigninPackage(Owner,Revision,changed));}
         var badHash=Entries();badHash[0]=new SodaDesktopSigninPackage.Entry(badHash[0].Path,new string('G',64),10);Reject(()=>new SodaDesktopSigninPackage(Owner,Revision,badHash));
         var tooLarge=Entries();for(int i=0;i<tooLarge.Length;i++)tooLarge[i]=new SodaDesktopSigninPackage.Entry(tooLarge[i].Path,new string('a',64),SodaDesktopSigninPackage.MaximumBytes(tooLarge[i].Path));Reject(()=>new SodaDesktopSigninPackage(Owner,Revision,tooLarge));
         var read=Acl("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;WD)");
