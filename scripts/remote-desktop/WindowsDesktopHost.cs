@@ -50,6 +50,7 @@ public static class SodaDesktopHost {
     static readonly JavaScriptSerializer OutputJson=new JavaScriptSerializer { MaxJsonLength=3*1024*1024 };
     static readonly object OutputGate=new object();
     static readonly Stopwatch Clock=Stopwatch.StartNew();
+    static long QpcTimestamp(){long ticks=Stopwatch.GetTimestamp(),frequency=Stopwatch.Frequency;if(!Stopwatch.IsHighResolution||ticks<0||frequency<=0)throw new InvalidOperationException("Video clock");return checked(ticks/frequency*1000000+(ticks%frequency)*1000000/frequency);}
     static volatile bool Stopping=false;
     static bool Control=false;
     static object ResourceFence;
@@ -432,6 +433,7 @@ public static class SodaDesktopHost {
             if(ProtectedVideoProof(config))throw new Exception("Protected native video feature proof missing");options["features"]=true;options["protectedVideo"]=false;
             if(ProtectedVideoProof(config))throw new Exception("Protected native video request missing");options["protectedVideo"]=true;
             object ticket=CaptureScope(),payload=new {type="native_frame",id="generated",data="AQID"};Action commit=()=>commits++;
+            if(Math.Abs(QpcTimestamp()-(long)(Stopwatch.GetTimestamp()*1000000.0/Stopwatch.Frequency))>100000)throw new Exception("Protected video QPC clock");
             if(!PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds,commit)||frames!=1||commits!=1)throw new Exception("Stable protected native frame rejected");
             if(PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds-1001,commit)||frames!=1||commits!=1)throw new Exception("Expired protected native frame published");
             if(PublishProtectedNative(payload,ticket,Clock.ElapsedMilliseconds+100,commit)||frames!=1||commits!=1)throw new Exception("Future protected native frame published");
@@ -594,6 +596,7 @@ public static class SodaDesktopHost {
         InputAckPipe=!Secure&&config.ContainsKey("inputAckPipe")&&config["inputAckPipe"] is bool&&(bool)config["inputAckPipe"];
         NativePointerProof=!Secure&&VirtualLease==null&&ResourceFence!=null&&config.ContainsKey("nativePointerProof")&&config["nativePointerProof"] is bool&&(bool)config["nativePointerProof"];
         bool protectedVideo=ProtectedVideoProof(config);
+        bool protectedAudioClock=protectedVideo&&config.ContainsKey("protectedAudioClock")&&config["protectedAudioClock"] is string&&(string)config["protectedAudioClock"]=="windows-qpc-v1"&&options.ContainsKey("protectedAudio")&&options["protectedAudio"] is bool&&(bool)options["protectedAudio"]&&options.ContainsKey("nativeAudio")&&options["nativeAudio"] is bool&&(bool)options["nativeAudio"];
         bool nativeCeiling=(!Secure||protectedVideo) && config.ContainsKey("allowNativeVideo") && config["allowNativeVideo"] is bool && (bool)config["allowNativeVideo"];
         Type audioType=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopAudio");
         bool audioCeiling=!Secure&&nativeCeiling&&audioType!=null&&config.ContainsKey("allowSystemAudio")&&config["allowSystemAudio"] is bool&&(bool)config["allowSystemAudio"];
@@ -625,6 +628,7 @@ public static class SodaDesktopHost {
             if(ResourceFence!=null)ready["resourceFences"]=true;
             if(richCeiling)ready["richClipboard"]=true;
             if(audioCeiling)ready["nativeAudio"]=true;
+            if(protectedAudioClock)ready["protectedAudioClock"]="windows-qpc-v1";
             if(nativeCeiling){ready["nativeVideo"]=true;if(protectedVideo)ready["protectedVideo"]=true;}if(nativeDatagrams)ready["nativeDatagrams"]=true;
             if(nativeCodecs){ready["nativeCodecs"]=true;ready["nativeCodecCandidates"]=codecCandidates.ToArray();}
             if(nativeAdaptive)ready["nativeAdaptive"]=true;
@@ -788,14 +792,14 @@ public static class SodaDesktopHost {
                             else if(video.GpuInput) {
                                 using(var surface=dxgi.CaptureGpuFrame(cursorX,cursorY,cursorVisible,out conversionMs)) {
                                     videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
-                                    if(surface!=null)packet=video.EncodeGpuFrame(surface,Clock.ElapsedMilliseconds*1000,conversionMs);
+                                    if(surface!=null)packet=video.EncodeGpuFrame(surface,protectedAudioClock?QpcTimestamp():Clock.ElapsedMilliseconds*1000,conversionMs);
                                 }
                             } else {
                                 if(videoNv12==null)videoNv12=new byte[checked(videoWidth*videoHeight*3/2)];
                                 bool gpu=!video.FullChroma&&!videoCpuOnly&&dxgi!=null&&dxgi.TryCaptureNv12(videoNv12,cursorX,cursorY,cursorVisible,out conversionMs);
                                 if(!gpu){CaptureFrame(resize,w,h,showCursor&&(cursorPump==null||!cursorPump.Active),ref dxgi,beforeCaptureDispose);if(videoBitmap!=null)videoResize.DrawImage(scaled,new Rectangle(0,0,videoWidth,videoHeight));}
                                 videoCaptureMs=Math.Max(0,captureTimer.Elapsed.TotalMilliseconds-conversionMs);
-                                packet=gpu?video.EncodePreparedNv12(videoNv12,Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(videoBitmap??scaled,Clock.ElapsedMilliseconds*1000);
+                                packet=gpu?video.EncodePreparedNv12(videoNv12,protectedAudioClock?QpcTimestamp():Clock.ElapsedMilliseconds*1000,conversionMs):video.EncodeBitmap(videoBitmap??scaled,protectedAudioClock?QpcTimestamp():Clock.ElapsedMilliseconds*1000);
                             }
                             if(!AllowedDesktop())break;
                             videoNext=videoStarted+1000.0/videoFps;

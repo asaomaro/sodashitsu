@@ -53,4 +53,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm -r --filter '@sodashitsu/server...' run build
-      - run: pnpm exec vitest run packages/server/src/desktop/DesktopHelperRolePlan.test.ts packages/server/src/desktop/DesktopProvider.test.ts packages/server/src/desktop/DesktopProvider.audio.test.ts packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopSettings.test.ts --maxWorkers=2
+      - run: pnpm exec vitest run packages/server/src/desktop/DesktopHelperRolePlan.test.ts packages/server/src/desktop/DesktopProvider.test.ts packages/server/src/desktop/DesktopProvider.audio.test.ts packages/server/src/desktop/DesktopProtectedAudio.test.ts packages/client-core/src/desktop/DesktopNativeRoleBinary.node.test.ts packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopSettings.test.ts --maxWorkers=2

@@ -24,13 +24,13 @@ async function setup(role:DesktopNativeRole='copy',mode='success'){
    if(mode==='delayed'){entered();await gate;}
    return JSON.stringify({directory:win32.join(windows,'role-'+id),binary:win32.join(windows,'soda-native-host.exe'),sha256:sha(mode==='bad-module'?'changed':'generated role'),hostSha256:sha('generated host')});
   }
-  if(command===binary){expect(args).toEqual([...prefix,'--preflight']);return mode==='bad-preflight'?'wrong product':({copy:'soda-native-copy-preflight-v1',audio:'soda-audio-pipe-preflight-v1',selection:'soda-explorer-selection-preflight-v1'}[role]);}
+  if(command===binary){expect(args).toEqual([...prefix,'--preflight']);return mode==='bad-preflight'?'wrong product':({'user-audio':'soda-user-audio-preflight-v1',copy:'soda-native-copy-preflight-v1',audio:'soda-audio-pipe-preflight-v1',selection:'soda-explorer-selection-preflight-v1'}[role]);}
   throw Error('Unexpected program in generated fixture');
  });
  const product=role==='copy'?new DesktopNativeBinary('linux',{WSL_DISTRO_NAME:'generated'}):role==='audio'?new DesktopAudioPipeBinary('linux',{WSL_DISTRO_NAME:'generated'}):new DesktopNativeRoleBinary(role,'linux',{WSL_DISTRO_NAME:'generated'});
  return {product,root,directory,roleDirectory,binary,module,prefix,release,admitted};
 }
-for(const role of ['copy','audio','selection'] as const)it(`prepares only ${role}, uses the mounted common host and retains the shared executable`,async()=>{
+for(const role of ['copy','audio','selection','user-audio'] as const)it(`prepares only ${role}, uses the mounted common host and retains the shared executable`,async()=>{
  const f=await setup(role);expect(fixture.run).not.toHaveBeenCalled();expect(()=>f.product.executable).toThrow('準備');await f.product.prepare();expect(f.product.executable).toBe(f.binary);expect(f.product.arguments).toEqual(f.prefix);await f.product.close();await expect(lstat(f.roleDirectory)).rejects.toMatchObject({code:'ENOENT'});expect((await lstat(f.binary)).isFile()).toBe(true);
 });
 for(const [mode,message] of [['bad-path','準備結果'],['bad-host','確認'],['bad-module','変更'],['bad-preflight','事前']])it(`rejects ${mode} before exposing a role`,async()=>{
