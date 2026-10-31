@@ -1,34 +1,21 @@
-name: Native desktop generated checks
+name: Temporary Windows transfer fixture diagnosis
 on:
-  pull_request:
-    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', '.github/workflows/native-desktop.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  linux-generated:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  windows-generated:
+    runs-on: windows-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Generated media dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
-      - name: Import-only probe (no portal, capture or input)
-        run: /usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe
-      - name: Fake D-Bus / input, generated JPEG and publication races
-        run: |
-          /usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py
-          /usr/bin/python3 scripts/remote-desktop/test-linux-native-video.py
-          /usr/bin/python3 scripts/remote-desktop/test-linux-native-audio.py
-
-  macos-generated:
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Compile and ad-hoc sign (no permission prompt)
-        run: bash scripts/remote-desktop/build-macos-desktop.sh
-      - name: Generated input and JPEG checks (no capture or OS input)
-        run: scripts/remote-desktop/macos-desktop-helper --self-test
-      - name: Generated negative controls (temporary source copies only)
-        run: python3 scripts/remote-desktop/test-macos-desktop-helper.py
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm -r --filter '@sodashitsu/server...' run build
+      - run: pnpm exec vitest run packages/server/src/desktop/DesktopSettings.test.ts -t 'rejects replayed completed checkpoints' --maxWorkers=1

@@ -302,7 +302,8 @@ export class DesktopTransferStore {
         this.policy = { version: 1, generation: randomUUID(), binding: this.options.binding };
         await this.write("generation.json", this.seal("generation.json", this.policy));
       }
-    } catch {
+    } catch (error) {
+      console.error("GENERATED_STORE_INITIALIZE",error instanceof Error?error.message:"unknown");
       this.denied = true;
       this.key?.fill(0);
       this.key = undefined;

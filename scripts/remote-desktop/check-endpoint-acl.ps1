@@ -22,9 +22,9 @@ try {
         $acl=Get-Acl -LiteralPath $item.FullName
         $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
         $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
-        if(-not (Test-SodaEndpointAcl -Owner $owner -Rules $rules -User $user -Storage $first)){throw 'permissions'}
+        if(-not (Test-SodaEndpointAcl -Owner $owner -Rules $rules -User $user -Storage $first)){throw ('permissions at '+$item.Name)}
         if($item -is [IO.FileInfo]){$item=$item.Directory}else{$item=$item.Parent};$first=$false
     }
     'endpoint_acl_valid'
-} catch {[Console]::Error.WriteLine('Endpoint storage permissions are unsafe');exit 1}
+} catch {[Console]::Error.WriteLine('GENERATED ACL: '+$_.Exception.Message);exit 1}
 exit 0
