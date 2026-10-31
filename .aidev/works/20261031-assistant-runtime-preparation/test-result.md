@@ -18,3 +18,9 @@ raw logs: /tmp/soda-assistant-runtime-{build,typecheck-final,all,focused-final}.
 Cacheは13件（関連総数45件）になった。再利用の最後の非同期authority検査でreadyを実置換する回帰を追加しpass。private copyから再利用時のconfirmIdentityだけを除去すると、対象1件が「promise resolved instead of rejecting」で失敗。raw /tmp/soda-cache-return-{positive,negative}.log。初回公開もengine identityを検査する。deltaのserver build pass。
 
 最終delta後に全体テストとtypecheckを再実行し、正式結果と最終hosted CIはPR本文およびmerge receiptへ記録する。先の13213件はdelta前の正式passであり、最終headの件数を意味しない。
+
+## 最終製品検証
+
+1e64cd57製品sourceのbuild/typecheck pass。全体915files / 13214tests pass (358.10s, exit 0)。/tmp/soda-assistant-runtime-all-final.log と typecheck-delta.log。
+
+hosted3OSではWindows/macOSのclose監視fixtureのraw pathと、extractorが使うcanonical pathが異なりFDの捕捉に失敗。fixtureをrealpath基準にし、POSIXでは意図的にparent aliasを通すことで同じ不一致をLinuxでも再現。製品sourceは変更しない。ZIP16pass、関連45pass。private copyでraw path比較に戻すと対象close試験だけが失敗する負例を確認。/tmp/soda-runtime-canonical-{positive,negative}.log。test-only delta独立再レビューも追加指摘なし。

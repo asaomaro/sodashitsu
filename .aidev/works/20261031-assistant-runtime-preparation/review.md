@@ -5,3 +5,4 @@
 - root ownership/ACLのcapability提供は呼出側の明示前提。この段階は準備基盤のみでGUIを起動しない。Windows/WSL production root providerと設定連携は後続。
 
 - review_pointerによる凍結b5724c47の14-file全差分crossで、再利用のverify後の最後のroot.assert待機中にもcohort差替えが可能なmustを発見。verifyのcohort/engine identityを保持し、最後のfamilyLive後・成功返却前に両方を再照合。初回公開もengineを同様に再照合。13件目Cache回帰で最終root.assertから実readyを差し替え、成功を拒否することを確認。delta再レビューで解消・追加指摘なし。
+- hostedで発見したclose監視fixtureのcanonical path修正とPOSIX parent alias追加をreview_pointerがtest-only delta再点検。製品のFD監視を維持し、追加must/shouldなし。

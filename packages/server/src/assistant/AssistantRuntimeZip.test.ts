@@ -1,4 +1,4 @@
-import {mkdtemp,writeFile,mkdir,readFile,rm,symlink} from "node:fs/promises";
+import {mkdtemp,writeFile,mkdir,readFile,rm,symlink,realpath} from "node:fs/promises";
 import * as files from "node:fs/promises";
 import {existsSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -54,9 +54,10 @@ it("checks streamed CRC against the pinned catalog even for stored entries",()=>
 }));
 it("never creates an external macOS link",()=>fixture([{name:"link",data:"../outside",mode:0o120777}],async f=>{await expect(extractAssistantRuntimeZip(f.archive,f.target,{...f.options,platform:"darwin"})).rejects.toThrow(/escapes/);expect(existsSync(join(f.target,"link"))).toBe(false);}));
 it("cancellation does not settle until an owned output close completes",()=>fixture([{name:"electron",data:"generated".repeat(10000)}],async f=>{
- const original=(await vi.importActual<typeof files>("node:fs/promises")).open;let release!:()=>void,closing=false,closed=false;
+ if(process.platform!=="win32"){const alias=join(f.root,"root-alias");await symlink(f.root,alias);f.target=join(alias,"stage");}
+ const original=(await vi.importActual<typeof files>("node:fs/promises")).open;const ownedOutput=join(await realpath(f.target),"electron");let release!:()=>void,closing=false,closed=false;
  const mock=vi.spyOn(files,"open").mockImplementation(async(...args:Parameters<typeof files.open>)=>{
-  const handle=await original(...args);if(String(args[0])===join(f.target,"electron")){const close=handle.close.bind(handle);Object.defineProperty(handle,"close",{value:async()=>{closing=true;await new Promise<void>(resolve=>{release=resolve;});await close();closed=true;}});}return handle;
+  const handle=await original(...args);if(String(args[0])===ownedOutput){const close=handle.close.bind(handle);Object.defineProperty(handle,"close",{value:async()=>{closing=true;await new Promise<void>(resolve=>{release=resolve;});await close();closed=true;}});}return handle;
  });
  const controller=new AbortController();let settled=false;
  const operation=extractAssistantRuntimeZip(f.archive,f.target,{...f.options,signal:controller.signal,check:()=>{if(existsSync(join(f.target,"electron")))controller.abort();}});
