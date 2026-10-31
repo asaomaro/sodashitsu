@@ -1,0 +1,7 @@
+# 独立点検
+
+review_pointerがUDP権限と両OSの退役待ちをtaskcheck。Linuxのscope同期照合中に元2秒期限を跨ぐmustを修正し、同期照合後に時計・元期限・pending/current identityを再検査。追加生成回帰は照合中の期限越えとcancelを確認した。
+
+同reviewで旧音声actor/新動画の退役待ち中にbootstrapが失われるmustを発見。NodeのnativePcm経路だけ、同じpipe/id/path/PIDの要求を元2500ms期限内で再送し、接続・stop・source失効時に破棄。再レビューはmust/shouldなし。
+
+review_transferが全差分cross。製品mustなし。ブラウザ復帰の証明が保持済canvasでも通るshouldを、切断前の描画/ACK数を基準に切断後の増分を要求するassertへ変更。再レビューはshould解消・追加指摘なし。

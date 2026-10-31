@@ -18,7 +18,7 @@ test(`${backend} generated H264 shared=${shared} udp=${udp} reaches browser pixe
  const saved=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));Object.assign(process.env,env);
  const provider=await startAppServer().finally(()=>{for(const[key,value]of Object.entries(saved)){if(value===undefined)delete process.env[key];else process.env[key]=value;}});
  await page.addInitScript(()=>{
-  const w=window as any,Context=AudioContext,Decoder=AudioDecoder;w.__nativeTone={outputs:0,energy:0};
+  const w=window as any,Context=AudioContext,Decoder=AudioDecoder,Peer=RTCPeerConnection;w.__nativePeers=[];window.RTCPeerConnection=class extends Peer{constructor(config?:RTCConfiguration){super(config);w.__nativePeers.push(this);}};w.__nativeTone={outputs:0,energy:0};
   // Generated source only; terminate the graph at a virtual stream, never speakers.
   window.AudioContext=class extends Context {private silent:MediaStreamAudioDestinationNode|undefined;override get destination(){return(this.silent??=this.createMediaStreamDestination()) as unknown as AudioDestinationNode;}};
   window.AudioDecoder=class extends Decoder {constructor(init:AudioDecoderInit){super({...init,output:data=>{const pcm=new Float32Array(data.numberOfFrames);data.copyTo(pcm,{planeIndex:0,format:"f32-planar"});w.__nativeTone.outputs++;w.__nativeTone.energy=Math.max(w.__nativeTone.energy,Math.sqrt(pcm.reduce((n,v)=>n+v*v,0)/pcm.length));init.output(data);}});}};
@@ -51,7 +51,15 @@ test(`${backend} generated H264 shared=${shared} udp=${udp} reaches browser pixe
   // The browser decoded only generated test pixels; no OS capture or input occurred.
   const pixel=await canvas.evaluate(el=>Array.from((el as HTMLCanvasElement).getContext("2d")!.getImageData(80,60,1,1).data));
   expect(pixel[0]).toBeGreaterThan(220);expect(pixel[1]).toBeLessThan(35);expect(pixel[2]).toBeLessThan(35);
-  if(!udp)await expect.poll(()=>sent.some(value=>value.type==="native_video_ack")).toBe(true);
+  if(udp){
+   const before=Number(await canvas.getAttribute("data-video-frames")),acks=sent.filter(value=>value.type==="native_video_ack").length;
+   await page.evaluate(()=>{for(const peer of (window as any).__nativePeers as RTCPeerConnection[])if(peer.connectionState==="connected")peer.close();});
+   await expect(view.locator("[data-native-datagrams]")).toHaveCount(0);
+   await expect.poll(()=>sent.filter(value=>value.type==="native_video_ack").length,{timeout:15000}).toBeGreaterThan(acks);
+   await expect.poll(async()=>Number(await canvas.getAttribute("data-video-frames"))).toBeGreaterThan(before+8);
+   const recovered=await canvas.evaluate(el=>Array.from((el as HTMLCanvasElement).getContext("2d")!.getImageData(80,60,1,1).data));
+   expect(recovered[0]).toBeGreaterThan(220);expect(recovered[1]).toBeLessThan(35);expect(recovered[2]).toBeLessThan(35);
+  }else await expect.poll(()=>sent.some(value=>value.type==="native_video_ack")).toBe(true);
   const images=Number(await canvas.getAttribute("data-rendered-frames"));await view.getByRole("button",{name:"動画・音声を停止",exact:true}).click();
   await expect(view.locator("[data-media-state]")).toHaveText("画像配信");await expect.poll(async()=>Number(await canvas.getAttribute("data-rendered-frames"))).toBeGreaterThan(images);
   await expect(view.locator('[role="alert"]')).toHaveCount(0);

@@ -66,3 +66,22 @@ it.skipIf(process.platform==="win32")("rejects a verified hello that arrives bey
  const audio=new DesktopNativeAudio({nativePcm:{paths,owner:{closed:new Promise(()=>{}),exited:()=>false}},id:"22222222-2222-4222-8222-222222222222",synthetic:false,write:raw=>{const m=raw as any;if(m.enabled)server.listen(m.pipePath,()=>chmodSync(m.pipePath,0o600));},send,state,active:()=>true,videoTimestamp:()=>0});
  try{await expect.poll(()=>entered).toBe(true);now+=2500;release();await expect.poll(()=>state.mock.calls.some(([v])=>v==="unavailable")).toBe(true);expect(state).not.toHaveBeenCalledWith("running");expect(send).not.toHaveBeenCalled();}finally{audio.stop();release();clock.mockRestore();verify.mockRestore();for(const client of clients)client.destroy();if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));await expect.poll(()=>paths.pending).toBe(0);}
 });
+
+// Generated PCM only. Model both native helpers refusing bootstrap while a
+// prior video/audio actor is retiring; no system audio producer is constructed.
+it.skipIf(process.platform==="win32")("retries the same native audio capability after helper retirement without extending its lease",async()=>{
+ const paths=new DesktopNativePcmPaths({retryMs:5}),clients=new Set<Socket>(),requests:any[]=[];
+ const server=createServer(socket=>{clients.add(socket);socket.on("close",()=>clients.delete(socket));socket.on("error",()=>{});socket.write(Buffer.concat([DESKTOP_PCM_HELLO,pcm(1)]));});
+ let retiring=true,opening=false;const send=vi.fn(()=>true),state=vi.fn();
+ const audio=new DesktopNativeAudio({nativePcm:{paths,owner:{closed:new Promise(()=>{}),exited:()=>false}},id:"22222222-2222-4222-8222-222222222222",synthetic:false,write:raw=>{const command=raw as any;if(!command.enabled)return;requests.push(command);if(retiring||opening)return;opening=true;server.listen(command.pipePath,()=>chmodSync(command.pipePath,0o600));},send,state,active:()=>true,videoTimestamp:()=>0});
+ try{
+  await expect.poll(()=>requests.length).toBeGreaterThanOrEqual(2);expect(send).not.toHaveBeenCalled();retiring=false;
+  await expect.poll(()=>send.mock.calls.length).toBe(1);expect(state).toHaveBeenCalledWith("running");expect(requests.every(command=>JSON.stringify(command)===JSON.stringify(requests[0]))).toBe(true);
+  const count=requests.length;await new Promise(resolve=>setTimeout(resolve,120));expect(requests).toHaveLength(count);
+ }finally{audio.stop();for(const client of clients)client.destroy();if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));await expect.poll(()=>paths.pending).toBe(0);}
+});
+it.skipIf(process.platform==="win32")("cancels native audio bootstrap retries when its source is revoked",async()=>{
+ const paths=new DesktopNativePcmPaths({retryMs:5}),write=vi.fn();let active=true;
+ const audio=new DesktopNativeAudio({nativePcm:{paths,owner:{closed:new Promise(()=>{}),exited:()=>false}},id:"22222222-2222-4222-8222-222222222222",synthetic:false,write,send:()=>true,state:()=>{},active:()=>active,videoTimestamp:()=>0});
+ try{await expect.poll(()=>write.mock.calls.filter(([raw])=>(raw as any).enabled).length).toBeGreaterThanOrEqual(2);active=false;await expect.poll(()=>paths.pending).toBe(0);const count=write.mock.calls.length;await new Promise(resolve=>setTimeout(resolve,120));expect(write).toHaveBeenCalledTimes(count);}finally{audio.stop();}
+});

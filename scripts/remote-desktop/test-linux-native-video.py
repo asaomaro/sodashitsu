@@ -324,8 +324,8 @@ class HelperWiring(unittest.TestCase):
         with patch.object(helper_module._native_video,"H264Worker",Worker):
             old=str(uuid.uuid4());helper.command(request(old));self.assertEqual(len(workers),1)
             helper.command({"type":"native_video","id":old,"enabled":False});self.assertTrue(workers[0].stopped.is_set())
-            helper.command(request(str(uuid.uuid4())));self.assertEqual(len(workers),1);self.assertIsNone(helper.native.current)
-            workers[0].closed.set();newer=str(uuid.uuid4());helper.command(request(newer));self.assertEqual(len(workers),2)
+            newer=str(uuid.uuid4());helper.command(request(newer));self.assertEqual(len(workers),1);self.assertEqual(helper.native.current["id"],newer)
+            workers[0].closed.set();helper.pump_native();self.assertEqual(len(workers),2)
             helper.command({"type":"native_video","id":old,"enabled":False})
             self.assertEqual(helper.native.current["id"],newer);self.assertFalse(workers[1].stopped.is_set())
 
