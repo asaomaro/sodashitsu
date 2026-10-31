@@ -63,7 +63,7 @@ export class AssistantRuntimeCache{
   const familyLive=async()=>{await rootLive();const current=await lstat(family,{bigint:true});live();if(!sameRuntimeFile(familyStamp,current)||!current.isDirectory()||current.isSymbolicLink())throw Error("Runtime cache family changed");};
   const names=await runtimeChildren(family,16,live);live();
   if(names.some(name=>!COHORT.test(name)))throw Error("Unexpected runtime cache entry");
-  for(const name of names){if(!name.startsWith("ready-"))continue;await familyLive();const cached=await this.verify(join(family,name),variant,live);live();if(cached){await familyLive();return{...cached,relativeDirectory:key+"/"+name,variant,cached:true};}}
+  for(const name of names){if(!name.startsWith("ready-"))continue;await familyLive();const cached=await this.verify(join(family,name),variant,live);live();if(cached){await familyLive();await this.confirmIdentity(cached,live);return{directory:cached.directory,executable:cached.executable,relativeDirectory:key+"/"+name,variant,cached:true};}}
   if(names.length>=8)throw Error("Runtime cache preparation limit exceeded");
   const stageName="stage-"+randomUUID(),stage=join(family,stageName);await familyLive();let stageStamp:BigIntStats|undefined,created=false,published=false;
   const stageLive=async()=>{await familyLive();const current=await lstat(stage,{bigint:true});live();if(!stageStamp||!sameRuntimeFile(stageStamp,current)||!current.isDirectory()||current.isSymbolicLink())throw Error("Owned runtime staging changed");};
@@ -80,7 +80,7 @@ export class AssistantRuntimeCache{
    const bytes=Buffer.from(JSON.stringify(data)+"\n");if(bytes.length>4*1024*1024)throw Error("Runtime inventory limit exceeded");
    await stageLive();await writeFile(join(stage,"runtime.json"),bytes,{flag:"wx",mode:0o600});live();await stageLive();await unlink(archive);live();
    const verified=await this.verify(stage,variant,live);live();if(!verified)throw Error("Prepared runtime verification failed");
-   const name="ready-"+randomUUID(),directory=join(family,name);await stageLive();await rename(stage,directory);published=true;live();await familyLive();const publishedStamp=await lstat(directory,{bigint:true});live();if(!sameRuntimeFile(stageStamp,publishedStamp)||!publishedStamp.isDirectory()||publishedStamp.isSymbolicLink())throw Error("Published runtime identity changed");
+   const name="ready-"+randomUUID(),directory=join(family,name);await stageLive();await rename(stage,directory);published=true;live();await familyLive();const publishedStamp=await lstat(directory,{bigint:true});live();if(!sameRuntimeFile(stageStamp,publishedStamp)||!publishedStamp.isDirectory()||publishedStamp.isSymbolicLink())throw Error("Published runtime identity changed");await this.confirmIdentity({...verified,directory},live);
    return{directory,executable:join(directory,"engine",...variant.entry.split("/")),relativeDirectory:key+"/"+name,variant,cached:false};
   }finally{
    if(created&&!published){
@@ -92,7 +92,11 @@ export class AssistantRuntimeCache{
    }
   }
  }
- private async verify(directory:string,variant:RuntimeVariant,guard:()=>void):Promise<{directory:string;executable:string}|null>{
+ private async confirmIdentity(value:{directory:string;stamp:BigIntStats;engineStamp:BigIntStats},guard:()=>void):Promise<void>{
+  guard();const root=await lstat(value.directory,{bigint:true});guard();const engine=await lstat(join(value.directory,"engine"),{bigint:true});guard();
+  if(!sameRuntimeFile(root,value.stamp)||!sameRuntimeFile(engine,value.engineStamp)||!root.isDirectory()||root.isSymbolicLink()||!engine.isDirectory()||engine.isSymbolicLink())throw Error("Verified runtime identity changed");
+ }
+ private async verify(directory:string,variant:RuntimeVariant,guard:()=>void):Promise<{directory:string;executable:string;stamp:BigIntStats;engineStamp:BigIntStats}|null>{
   try{
    guard();const root=await lstat(directory,{bigint:true});guard();if(!root.isDirectory()||root.isSymbolicLink())corrupt("Invalid ready runtime root");
    const children=await runtimeChildren(directory,3,guard);if(children.length!==2||!children.includes("engine")||!children.includes("runtime.json"))corrupt("Unexpected runtime cohort entry");
@@ -115,7 +119,7 @@ export class AssistantRuntimeCache{
    }
    guard();const afterRoot=await lstat(directory,{bigint:true}),afterEngine=await lstat(engine,{bigint:true});guard();
    if(!sameRuntimeFile(root,afterRoot)||!sameRuntimeFile(engineStat,afterEngine)||afterRoot.isSymbolicLink()||afterEngine.isSymbolicLink())corrupt("Runtime cohort changed during verification");
-   return{directory,executable:join(engine,...variant.entry.split("/"))};
+   return{directory,executable:join(engine,...variant.entry.split("/")),stamp:root,engineStamp:engineStat};
   }catch(error){guard();if(error instanceof RuntimeIntegrityError||["ENOENT","ELOOP","ENOTDIR","EACCES","EPERM","EINVAL"].includes((error as NodeJS.ErrnoException).code??""))return null;throw error;}
  }
 }

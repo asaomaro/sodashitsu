@@ -59,3 +59,9 @@ it('does not reuse a runtime file with a hard link outside its cohort',()=>fixtu
  const first=await f.cache.prepare('linux','x64');await link(first.executable,join(f.root,'generated-external-link'));
  const second=await f.cache.prepare('linux','x64');expect(second.cached).toBe(false);expect(second.directory).not.toBe(first.directory);
 }));
+
+it('rechecks cached cohort identity after the final asynchronous root authority check',()=>fixture(async f=>{
+ const first=await f.cache.prepare('linux','x64');let calls=0;
+ f.authority.mockImplementation(async()=>{if(++calls!==4)return;await files.rename(first.directory,first.directory+'-previous');await mkdir(first.directory);await mkdir(join(first.directory,'engine'));await writeFile(first.executable,'unverified replacement');});
+ await expect(f.cache.prepare('linux','x64')).rejects.toThrow(/Verified runtime identity changed/);
+}));

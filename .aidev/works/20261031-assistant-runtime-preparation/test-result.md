@@ -12,3 +12,9 @@
 公式3OSのrepository compiled実装による展開、Cache.prepare初回と検証済み再利用は全てpass（実行なし）。Linux72files、macOS274files/14内部links、Windows73files。
 
 raw logs: /tmp/soda-assistant-runtime-{build,typecheck-final,all,focused-final}.log、/tmp/soda-official-repository-{linux,darwin,win32}.log、/tmp/soda-official-cache-{linux,darwin,win32}.log。hosted CIはPRで確認する。
+
+## 最終cross delta
+
+Cacheは13件（関連総数45件）になった。再利用の最後の非同期authority検査でreadyを実置換する回帰を追加しpass。private copyから再利用時のconfirmIdentityだけを除去すると、対象1件が「promise resolved instead of rejecting」で失敗。raw /tmp/soda-cache-return-{positive,negative}.log。初回公開もengine identityを検査する。deltaのserver build pass。
+
+最終delta後に全体テストとtypecheckを再実行し、正式結果と最終hosted CIはPR本文およびmerge receiptへ記録する。先の13213件はdelta前の正式passであり、最終headの件数を意味しない。
