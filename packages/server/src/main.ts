@@ -1,29 +1,18 @@
 #!/usr/bin/env node
-import { readAssistantEnabled, writeAssistantEnabled } from "./assistant/AssistantLaunchController.js";
-import { installAssistantPackage, readAssistantPackage, rollbackAssistantPackage } from "./assistant/AssistantPackage.js";
 import { resolveServeOptions } from "./config.js";
 import { isMainThread, parentPort, workerData } from "node:worker_threads";
-import { WorkerPtyBackend } from "./pty/WorkerPtyBackend.js";
 import { HANDOFF_NONCE_ENV } from "./handoff/HandoffManifest.js";
-import { runWindowsSupervisor } from "./pty/WindowsServerSupervisor.js";
 import { bindFailureHint, defaultStateDir, ConfigError } from "./config.js";
-import { composeServer } from "./composeServer.js";
 import type { RawServeArgs } from "./config.js";
-import { type CommandIo, runSessionDelete, runSessionList, runTokenReset } from "./sessionCommands.js";
+import type { CommandIo } from "./sessionCommands.js";
 import { applySessionEnv, parseArgs } from "./cliArgs.js";
 import { OsNetworkInfo } from "./infra/OsNetworkInfo.js";
 import { lastChanceTokenLines, startupLines } from "./startupBanner.js";
 import { join, resolve } from "node:path";
 import { PANE_HISTORY_FILE_NAME } from "./persist/PaneHistoryFile.js";
 import { formatUrlHost } from "./util/net.js";
-import { runHandoff } from "./handoff/handoffCommand.js";
-import { runPreflightStage } from "./handoff/preflight.js";
 import { createShutdown } from "./serveShutdown.js";
-import { runSessionStop } from "./stop/stopCommand.js";
-import { runBridge } from "./machine/bridgeCommand.js";
-import { runMachineCommand } from "./machine/machineCommands.js";
 import { MACHINE_USAGE } from "./machine/machineArgs.js";
-import { runTuiCommand } from "./launch/tuiCommand.js";
 import type { TuiEntry } from "./launch/tuiTarget.js";
 
 function printHelp(): void {
@@ -49,7 +38,9 @@ function printHelp(): void {
 
 async function runServe(args: RawServeArgs, rollbackError?:string): Promise<void> {
   let preparing = !!process.env[HANDOFF_NONCE_ENV];
-  const broker = !isMainThread && workerData?.sodaSupervisor ? new WorkerPtyBackend() : undefined;
+  const workerModule = !isMainThread && workerData?.sodaSupervisor ? await import("./pty/WorkerPtyBackend.js") : undefined;
+  const broker = workerModule ? new workerModule.WorkerPtyBackend() : undefined;
+  const { composeServer } = await import("./composeServer.js");
   const server = await composeServer(args, broker ? {
     workerPty:broker,
     retainEditors:()=>broker.retained || preparing,
@@ -178,6 +169,7 @@ async function main(): Promise<void> {
     const parsed = applySessionEnv(parseArgs(process.argv.slice(2)), process.env);
     if (parsed.command === "tui") {
       // 引数なしの `soda`（20260927-cli-mode）。端末版は動的 import（`soda serve` 等の起動に端末版の読み込みの費用を足さない。architecture）。
+      const { runTuiCommand } = await import("./launch/tuiCommand.js");
       const loadTui = async (): Promise<TuiEntry> => (await import("@sodashitsu/tui")).runTui;
       process.exitCode = await runTuiCommand(parsed, loadTui, { ...consoleIo, help: printHelp }, {
         isTty: process.stdin.isTTY === true && process.stdout.isTTY === true,
@@ -189,34 +181,49 @@ async function main(): Promise<void> {
         mainPath: process.argv[1]!,
       });
     } else if (parsed.command === "serve") {
-      if(process.platform === "win32" && isMainThread) process.exitCode=await runWindowsSupervisor(new URL("./main.js",import.meta.url),process.argv.slice(2));
+      if(process.platform === "win32" && isMainThread) {
+        const {runWindowsSupervisor}=await import("./pty/WindowsServerSupervisor.js");
+        process.exitCode=await runWindowsSupervisor(new URL("./main.js",import.meta.url),process.argv.slice(2));
+      }
       else await runServe(parsed.serve);
     } else if (parsed.command === "token-reset") {
+      const {runTokenReset}=await import("./sessionCommands.js");
       await runTokenReset(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
     } else if (parsed.command === "session-list") {
+      const {runSessionList}=await import("./sessionCommands.js");
       process.exitCode = await runSessionList(parsed.stateDir ?? defaultStateDir(), parsed.json === true, consoleIo);
     } else if (parsed.command === "handoff") {
+      const {runHandoff}=await import("./handoff/handoffCommand.js");
       process.exitCode = await runHandoff(parsed.stateDir ?? defaultStateDir(), parsed.session, consoleIo, parsed.sessionSource);
     } else if (parsed.command === "handoff-preflight") {
+      // Validate the updated server module before replacing the running server.
+      await import("./composeServer.js");
+      const {runPreflightStage}=await import("./handoff/preflight.js");
       runPreflightStage({ stage: parsed.preflightStage ?? 1, probe: parsed.preflightProbe });
     } else if (parsed.command === "session-stop") {
+      const {runSessionStop}=await import("./stop/stopCommand.js");
       process.exitCode = await runSessionStop(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else if (parsed.command === "bridge") {
       // ほかのマシンの `soda serve` が ssh の先で起動する（20260927-multi-host-machines）。標準入出力は中継の素通し。
+      const {runBridge}=await import("./machine/bridgeCommand.js");
       process.exitCode = await runBridge(
         { stateDir: parsed.stateDir ?? defaultStateDir(), session: parsed.session },
         { stdin: process.stdin, stdout: process.stdout, err: (line) => console.error(line) },
       );
     } else if (parsed.command === "assistant") {
+      const {readAssistantEnabled,writeAssistantEnabled}=await import("./assistant/AssistantEnabledState.js");
+      const {readAssistantPackage}=await import("./assistant/AssistantPackageState.js");
       const dir = resolveServeOptions(parsed.serve).stateDir;
-      if (parsed.assistantAction === "install") await installAssistantPackage(dir,parsed.assistantSource!,parsed.assistantDestination!);
-      else if(parsed.assistantAction === "rollback") await rollbackAssistantPackage(dir);
+      if (parsed.assistantAction === "install") await (await import("./assistant/AssistantPackage.js")).installAssistantPackage(dir,parsed.assistantSource!,parsed.assistantDestination!);
+      else if(parsed.assistantAction === "rollback") await (await import("./assistant/AssistantPackage.js")).rollbackAssistantPackage(dir);
       else if(parsed.assistantAction === "enable" || parsed.assistantAction === "disable") await writeAssistantEnabled(dir, parsed.assistantAction === "enable");
       console.log(JSON.stringify({enabled: await readAssistantEnabled(dir, process.env.SODA_ASSISTANT_ENABLED === "1"),
         installation:await readAssistantPackage(dir),commandOverride:!!process.env.SODA_ASSISTANT_COMMAND}));
     } else if (parsed.command === "machine") {
+      const {runMachineCommand}=await import("./machine/machineCommands.js");
       process.exitCode = await runMachineCommand(parsed.machine!, parsed.stateDir ?? defaultStateDir(), consoleIo);
     } else if (parsed.command === "session-delete") {
+      const {runSessionDelete}=await import("./sessionCommands.js");
       process.exitCode = await runSessionDelete(parsed.stateDir ?? defaultStateDir(), parsed.sessionTarget!, parsed.json === true, consoleIo);
     } else {
       printHelp();

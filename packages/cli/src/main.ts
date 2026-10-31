@@ -1,50 +1,11 @@
 #!/usr/bin/env node
-import {runDesktopNativeHelper} from "./commands/desktopNativeHelper.js";
-import {desktopIdentity} from "./commands/desktopIdentity.js";
-import { requestWorkAgent, controlWorkAgent } from "./commands/workAgent.js";
-import { runWorkAgent } from "./workAgentRun.js";
-import { workAgentMcp } from "./workAgentMcp.js";
-import { WorkAgentClient } from "./workAgentIo.js";
-import { runExec } from "./commands/exec.js";
-import { runWork } from "./commands/work.js";
-import { runDesktop } from "./commands/desktop.js";
-import { runMachineDelegation } from "./commands/machineDelegation.js";
-import { runPreview } from "./commands/preview.js";
-import { runSessionTools } from "./commands/sessionTools.js";
-import {runPluginApp} from "./commands/pluginApp.js";
 /**
  * `sodactl` のエントリポイント（design.md「インターフェース/データ構造・コマンド一覧」）。
  * `parseArgs` → 対応する `commands/*` を呼ぶ → 例外は `reportAndExit` が終了コードへ変換する（T11）。
  */
 import { parseArgs, MACHINE_USAGE_LINE, USAGE_LINES } from "./cliArgs.js";
-import {
-  runAgentGet,
-  runAgentList,
-  runAgentPrompt,
-  runAgentRead,
-  runAgentRename,
-  runAgentSendKeys,
-  runAgentWait,
-} from "./commands/agent.js";
-import { runAgentUsage } from "./commands/agentUsage.js";
-import { runAgentIntegrations } from "./commands/agentIntegrations.js";
-import { runAgentFork } from "./commands/agentFork.js";
-import { runAgentStart } from "./commands/agentStart.js";
-import { runAsk } from "./commands/ask.js";
-import { runDisplay } from "./commands/display.js";
-import { runExt } from "./commands/ext.js";
-import { runGraph } from "./commands/graph.js";
-import { runPaneAttach } from "./commands/attach.js";
-import { runPaneControl, runPaneObserve } from "./commands/sessionStream.js";
-import { runTabClose, runTabCreate } from "./commands/tab.js";
-import { runPaneClose, runPaneCurrent, runPaneInput, runPaneRead, runPaneReportMetadata, runPaneRun, runPaneSplit } from "./commands/pane.js";
-import { runNotificationTest, runLogin, runSnapshot, runWatch } from "./commands/session.js";
-import { runWorkspaceClose, runWorkspaceCreate, runWorkspaceRename, runWorkspaceReportMetadata } from "./commands/workspace.js";
 import { reportAndExit } from "./output.js";
-import { FsSessionStore } from "./session.js";
-import { changePlugin, listPlugins, packPlugin } from "./pluginPackage.js";
 import { printJson } from "./output.js";
-import { runSkill } from "./skill.js";
 import { join } from "node:path";
 import { realpath, stat, lstat, mkdir } from "node:fs/promises";
 
@@ -101,29 +62,30 @@ async function main(): Promise<void> {
     printHelp();
     return;
   }
-  if (cmd.kind === "skill") return runSkill(); // サーバへつながない（セッションのキャッシュも読まない）
-  if(cmd.kind === "desktop-native-helper")return runDesktopNativeHelper(cmd);
-  if(cmd.kind === "desktop-identity"){printJson(await desktopIdentity(cmd));return;}
+  if (cmd.kind === "skill") return (await import("./skill.js")).runSkill(); // サーバへつながない（セッションのキャッシュも読まない）
+  if(cmd.kind === "desktop-native-helper")return (await import("./commands/desktopNativeHelper.js")).runDesktopNativeHelper(cmd);
+  if(cmd.kind === "desktop-identity"){printJson(await (await import("./commands/desktopIdentity.js")).desktopIdentity(cmd));return;}
+  const {FsSessionStore}=await import("./session.js");
   const store = new FsSessionStore();
   switch (cmd.kind) {
-    case "work-agent": return requestWorkAgent(cmd, store);
-    case "work-agent-control": return controlWorkAgent(cmd, store);
+    case "work-agent": return (await import("./commands/workAgent.js")).requestWorkAgent(cmd, store);
+    case "work-agent-control": return (await import("./commands/workAgent.js")).controlWorkAgent(cmd, store);
     case "work-agent-internal":
-      if (cmd.action === "run") return runWorkAgent(cmd.file);
-      return workAgentMcp(process.stdin, process.stdout, await WorkAgentClient.open(cmd.file));
+      if (cmd.action === "run") return (await import("./workAgentRun.js")).runWorkAgent(cmd.file);
+      return (await import("./workAgentMcp.js")).workAgentMcp(process.stdin, process.stdout, await (await import("./workAgentIo.js")).WorkAgentClient.open(cmd.file));
     case "login":
-      return runLogin(cmd, store);
+      return (await import("./commands/session.js")).runLogin(cmd, store);
     case "ask":
-      return runAsk(cmd, store);
+      return (await import("./commands/ask.js")).runAsk(cmd, store);
     case "display":
       // 終了コードは 0 か 1（`events` の `connection_closed` は終わりの行を出して 1）。使い方の誤り・サーバのエラーは投げて `reportAndExit` へ。
-      process.exitCode = await runDisplay(cmd, store);
+      process.exitCode = await (await import("./commands/display.js")).runDisplay(cmd, store);
       return;
-    case "desktop": return runDesktop(cmd,store);
-    case "preview": return runPreview(cmd, store);
-    case "plugin-app": return runPluginApp(cmd,store);
+    case "desktop": return (await import("./commands/desktop.js")).runDesktop(cmd,store);
+    case "preview": return (await import("./commands/preview.js")).runPreview(cmd, store);
+    case "plugin-app": return (await import("./commands/pluginApp.js")).runPluginApp(cmd,store);
     case "plugin": {
-      if (cmd.action === "pack") { const bundle = await packPlugin(cmd.target!, cmd.out!); printJson({ id: bundle.manifest.id, version: bundle.manifest.version, out: cmd.out }); }
+      if (cmd.action === "pack") { const bundle = await (await import("./pluginPackage.js")).packPlugin(cmd.target!, cmd.out!); printJson({ id: bundle.manifest.id, version: bundle.manifest.version, out: cmd.out }); }
       else {
         let base = cmd.stateDir!;
         if (cmd.projectDir) {
@@ -133,83 +95,83 @@ async function main(): Promise<void> {
           await mkdir(base, { recursive: true, mode: 0o700 });
           if ((await lstat(base)).isSymbolicLink()) throw new Error("project plugin directory must not be a symlink");
         }
-        if (cmd.action === "list") printJson(await listPlugins(base));
-        else printJson(await changePlugin(base, cmd.action, cmd.target!, !!cmd.projectDir));
+        if (cmd.action === "list") printJson(await (await import("./pluginPackage.js")).listPlugins(base));
+        else printJson(await (await import("./pluginPackage.js")).changePlugin(base, cmd.action, cmd.target!, !!cmd.projectDir));
       }
       return;
     }
     case "ext":
-      return runExt(cmd, store);
+      return (await import("./commands/ext.js")).runExt(cmd, store);
     case "workspace-create":
-      return runWorkspaceCreate(cmd, store);
+      return (await import("./commands/workspace.js")).runWorkspaceCreate(cmd, store);
     case "workspace-close":
-      return runWorkspaceClose(cmd, store);
+      return (await import("./commands/workspace.js")).runWorkspaceClose(cmd, store);
     case "workspace-rename":
-      return runWorkspaceRename(cmd, store);
+      return (await import("./commands/workspace.js")).runWorkspaceRename(cmd, store);
     case "workspace-report-metadata":
-      return runWorkspaceReportMetadata(cmd, store);
+      return (await import("./commands/workspace.js")).runWorkspaceReportMetadata(cmd, store);
     case "tab-create":
-      return runTabCreate(cmd, store);
+      return (await import("./commands/tab.js")).runTabCreate(cmd, store);
     case "tab-close":
-      return runTabClose(cmd, store);
+      return (await import("./commands/tab.js")).runTabClose(cmd, store);
     case "pane-split":
-      return runPaneSplit(cmd, store);
+      return (await import("./commands/pane.js")).runPaneSplit(cmd, store);
     case "pane-current":
-      return runPaneCurrent(cmd, store);
+      return (await import("./commands/pane.js")).runPaneCurrent(cmd, store);
     case "pane-close":
-      return runPaneClose(cmd, store);
+      return (await import("./commands/pane.js")).runPaneClose(cmd, store);
     case "pane-input":
-      return runPaneInput(cmd, store);
+      return (await import("./commands/pane.js")).runPaneInput(cmd, store);
     case "exec":
-      return runExec(cmd, store);
+      return (await import("./commands/exec.js")).runExec(cmd, store);
     case "work":
-      return runWork(cmd, store);
+      return (await import("./commands/work.js")).runWork(cmd, store);
     case "pane-run":
-      return runPaneRun(cmd, store);
+      return (await import("./commands/pane.js")).runPaneRun(cmd, store);
     case "pane-read":
-      return runPaneRead(cmd, store);
+      return (await import("./commands/pane.js")).runPaneRead(cmd, store);
     case "pane-attach":
-      return runPaneAttach(cmd, store);
+      return (await import("./commands/attach.js")).runPaneAttach(cmd, store);
     case "pane-observe":
-      return runPaneObserve(cmd, store);
+      return (await import("./commands/sessionStream.js")).runPaneObserve(cmd, store);
     case "pane-control":
-      return runPaneControl(cmd, store);
+      return (await import("./commands/sessionStream.js")).runPaneControl(cmd, store);
     case "pane-report-metadata":
-      return runPaneReportMetadata(cmd, store);
+      return (await import("./commands/pane.js")).runPaneReportMetadata(cmd, store);
     case "notification-test":
-      return runNotificationTest(cmd, store);
+      return (await import("./commands/session.js")).runNotificationTest(cmd, store);
     case "snapshot":
-      return runSnapshot(cmd, store);
+      return (await import("./commands/session.js")).runSnapshot(cmd, store);
     case "watch":
-      return runWatch(cmd, store);
+      return (await import("./commands/session.js")).runWatch(cmd, store);
     case "agent-list":
-      return runAgentList(cmd, store);
+      return (await import("./commands/agent.js")).runAgentList(cmd, store);
     case "agent-get":
-      return runAgentGet(cmd, store);
+      return (await import("./commands/agent.js")).runAgentGet(cmd, store);
     case "agent-session-tools":
-      return runSessionTools(cmd, store);
+      return (await import("./commands/sessionTools.js")).runSessionTools(cmd, store);
     case "agent-usage":
-      return runAgentUsage(cmd, store);
+      return (await import("./commands/agentUsage.js")).runAgentUsage(cmd, store);
     case "machine-delegation":
-      return runMachineDelegation(cmd, store);
+      return (await import("./commands/machineDelegation.js")).runMachineDelegation(cmd, store);
     case "agent-integrations":
-      return runAgentIntegrations(cmd, store);
+      return (await import("./commands/agentIntegrations.js")).runAgentIntegrations(cmd, store);
     case "agent-wait":
-      return runAgentWait(cmd, store);
+      return (await import("./commands/agent.js")).runAgentWait(cmd, store);
     case "agent-read":
-      return runAgentRead(cmd, store);
+      return (await import("./commands/agent.js")).runAgentRead(cmd, store);
     case "agent-prompt":
-      return runAgentPrompt(cmd, store);
+      return (await import("./commands/agent.js")).runAgentPrompt(cmd, store);
     case "agent-send-keys":
-      return runAgentSendKeys(cmd, store);
+      return (await import("./commands/agent.js")).runAgentSendKeys(cmd, store);
     case "agent-rename":
-      return runAgentRename(cmd, store);
+      return (await import("./commands/agent.js")).runAgentRename(cmd, store);
     case "agent-start":
-      return runAgentStart(cmd, store);
+      return (await import("./commands/agentStart.js")).runAgentStart(cmd, store);
     case "agent-fork":
-      return runAgentFork(cmd, store);
+      return (await import("./commands/agentFork.js")).runAgentFork(cmd, store);
     case "graph":
-      return runGraph(cmd, store);
+      return (await import("./commands/graph.js")).runGraph(cmd, store);
     default: {
       // 網羅性チェック：`Command` に新しい種類が足されたのにここへ分岐を足し忘れると、ここで型エラーになる
       // （coding のタスク横断点検で見つけた——`switch` 単体では TS は非網羅を黙って許す。この tsconfig は
