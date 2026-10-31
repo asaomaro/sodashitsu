@@ -105,8 +105,8 @@ public static class SodaDesktopSigninPackageNative {
         public string Bootstrap {get{return Get("bootstrap.mjs");}}
         public void Dispose(){lock(gate){if(closed)return;closed=true;Release(held);}}
     }
-    public static Lease Verify(string owner){return VerifyImage(owner,"DesktopSigninService.exe",false,null);}
-    public static Lease VerifyWorker(string owner){return VerifyImage(owner,"DesktopSigninWorker.exe",false,null);}
+    public static Lease Verify(string owner){return VerifyImage(owner,"DesktopSigninNative.exe",false,null);}
+    public static Lease VerifyWorker(string owner){return VerifyImage(owner,"DesktopSigninNative.exe",false,null);}
     internal static bool Authority(bool controller){
         if(!controller)return SodaDesktopSigninVault.SystemPrimary();
         try{using(var identity=System.Security.Principal.WindowsIdentity.GetCurrent())return identity.ImpersonationLevel==System.Security.Principal.TokenImpersonationLevel.None&&(identity.IsSystem||new System.Security.Principal.WindowsPrincipal(identity).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator));}catch{return false;}

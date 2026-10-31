@@ -11,7 +11,7 @@ using System.Web.Script.Serialization;
 public sealed class SodaDesktopSigninPackage {
     const string SystemSid="S-1-5-18",Admins="S-1-5-32-544",Installer="S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464";
     static readonly string[] Paths={
-        "DesktopSigninService.exe","DesktopSigninWorker.exe","bootstrap.mjs","node.exe","packages/server/dist/signin/main.bundle.cjs",
+        "DesktopSigninNative.exe","bootstrap.mjs","node.exe","packages/server/dist/signin/main.bundle.cjs",
         "scripts/remote-desktop/EndpointAclPolicy.ps1","scripts/remote-desktop/SigninAclPolicy.ps1","scripts/remote-desktop/WindowsSigninVault.cs",
         "scripts/remote-desktop/check-endpoint-acl.ps1","scripts/remote-desktop/protect-endpoint-key.ps1","scripts/remote-desktop/read-signin-enrollment.ps1",
         "scripts/remote-desktop/SigninAdminStorage.ps1",
@@ -38,7 +38,7 @@ public sealed class SodaDesktopSigninPackage {
     public static string[] RequiredPaths(){return (string[])Paths.Clone();}
     public static long MaximumBytes(string path){
         if(path=="node.exe")return 268435456;
-        if(path=="DesktopSigninService.exe"||path=="DesktopSigninWorker.exe")return 33554432;
+        if(path=="DesktopSigninNative.exe")return 33554432;
         if(path=="packages/server/dist/signin/main.bundle.cjs")return 16777216;
         if(path=="bootstrap.mjs")return 65536;
         return 1048576;

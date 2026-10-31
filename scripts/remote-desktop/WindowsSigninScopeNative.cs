@@ -42,7 +42,7 @@ public sealed class SodaDesktopSigninScopeNative:IDisposable {
         try{
             if(session<1||nonce==Guid.Empty||!SodaDesktopSigninVault.SystemPrimary()||!candidate.SystemWithTcb)throw Failure();
             self=Process.GetCurrentProcess();broker=Process.GetProcessById(brokerPid);
-            string expected=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninWorker.exe");
+            string expected=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninNative.exe");
             if(self.Handle==IntPtr.Zero||broker.Handle==IntPtr.Zero||self.HasExited||broker.HasExited||self.SessionId!=session||broker.SessionId!=0||broker.StartTime.ToUniversalTime().Ticks!=brokerStarted||!String.Equals(self.MainModule.FileName,expected,StringComparison.OrdinalIgnoreCase)||!String.Equals(broker.MainModule.FileName,expected,StringComparison.OrdinalIgnoreCase))throw Failure();
             SodaDesktopSigninCandidate.Candidate facts;RequireCandidate(SodaDesktopSigninCandidate.Read(candidate,(uint)session,out facts));
             observer=new Thread(Observe){IsBackground=true};observer.Start();if(!ready.WaitOne(2000)||!live||closed)throw Failure();

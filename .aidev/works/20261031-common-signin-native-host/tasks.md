@@ -1,0 +1,5 @@
+- [x] 共通privileged image・閉じたRouter・両既存role検証維持（taskcheck対象）
+- [x] package/SCM/worker/Node経路・単一builder
+- [ ] SDK compile・生成負例・単体/全体検証
+- [ ] 独立全体/delta review・CI
+- [ ] PR/main・残件継続
