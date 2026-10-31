@@ -15,4 +15,22 @@
     + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
 ```
 
-最新main反映後の全体試験・配布物・関連browser・最終head CIは未完了。
+main4d33e4f7反映後の全体build/typecheck pass。全体920files/13,248tests pass（Windows専用1file/1test skip、exit0、/tmp/soda-lazy-desktop-all.log）。配布helper16C#資源・compiled RolePlan/Provider一致（/tmp/soda-lazy-desktop-package-verify.json）。独立19paths whole review_pointer: must/shouldなし。
+
+関連browser remote-desktop-native-sharing.spec.tsはbranch/mainそれぞれ1回実行し、両backendとも共有開始前のmachine online表示で45秒timeoutが同一再現。RolePlan/helperを起動する前の箇所で、コード変更による退行ではないとして記録し、反復しない。main比較はPR346 tested head d26b4c82（main4d33e4f7とtree一致）。/tmp/soda-lazy-desktop-e2e.log、/tmp/soda-lazy-desktop-e2e-main-baseline.log。trace/error-contextは各WTのpackages/e2e/test-results/に残る。CI fresh browserでの同経路は後続。
+
+```text
+Test timeout of 45000ms exceeded.
+Locator:  locator('[data-machine-id="f4b39c8f654b014857b7155d98ef0b9e"]').locator('[data-state="online"]')
+```
+
+同一のassert位置 src/specs/remote-desktop-native-sharing.spec.ts:23:160で失敗を確認。最終head CI/mainは未完了。
+
+
+smokeもAPIのlogin/client.hello/workspace/pane/echo/custom-command往復はpassし、browserの初期xterm表示だけ15秒timeout。mainの同一treeで1回比較し同じ失敗、private load hookでpageerror/HTTP statusだけ観察したところ初期session/WebSocket認証が成立していない。今回のhelper起動前の基線問題として記録し、このsliceで認証の変更やdeadline延長はしない。/tmp/soda-lazy-desktop-smoke.log、/tmp/soda-main-smoke-diagnostic.log。実サービス/端末の稼働は変更していない。
+
+```text
+smoke: echo round trip ok
+smoke: custom command popup round trip ok
+smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
+```
