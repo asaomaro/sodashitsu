@@ -49,7 +49,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       imeKeys: !config?.nativePlatform,
       extendedInput: true,
       monitors:config?.allowMonitors===true,
-      virtualDisplay:config?.allowVirtualDisplay===true,
+      virtualDisplay:config?.allowVirtualDisplay===true&&(!config.nativePlatform||config.nativePlatform==="linux-portal"),
       elevatedDesktop:config?.allowElevated===true,
       files:!!config?.fileRoot,
       fileCheckpoints:!!config?.fileRoot,

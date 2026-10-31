@@ -228,3 +228,10 @@ it.each(["linux-portal","macos-sck"] as const)("persists native %s monitor permi
  expect((await DesktopSettings.open({...options,nativePlatform})).get(true).permissions.allowMonitors).toBe(true);
  await settings.set({...off,enabled:true});expect(options.provider.capabilities().monitors).toBe(false);
 });
+it("persists Portal virtual permission without Windows driver/service launch flags",async()=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"linux-portal"});
+ await settings.set({...off,enabled:true,allowVirtualDisplay:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"linux-portal",allowVirtualDisplay:true,allowInput:false,command:["synthetic-helper"]});
+ expect(configure.mock.calls.at(-1)![0]).not.toHaveProperty("unlockLeaseCommand");
+ expect((await DesktopSettings.open({...options,nativePlatform:"linux-portal"})).get(true).permissions.allowVirtualDisplay).toBe(true);
+ const mac=await DesktopSettings.open({...options,nativePlatform:"macos-sck"});expect(mac.get(true).permissions.allowVirtualDisplay).toBe(false);await expect(mac.set({...off,enabled:true,allowVirtualDisplay:true})).rejects.toThrow("native backend");
+});

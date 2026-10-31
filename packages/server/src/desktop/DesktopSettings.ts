@@ -71,7 +71,7 @@ export class DesktopSettings {
     permissions: DesktopPermissions,
   ) {
     this.platform=options.nativePlatform??options.legacy?.nativePlatform??(!options.legacy&&!options.command?nativePlatformFor():undefined);
-    if(this.nativePlatform)permissions={...permissions,allowDisplayResize:false,allowUnlock:false,allowVirtualDisplay:false,allowElevated:false,allowProtectedFiles:false,allowSystemAudio:permissions.allowSystemAudio===true,allowMicrophone:permissions.allowMicrophone===true};
+    if(this.nativePlatform)permissions={...permissions,allowDisplayResize:false,allowUnlock:false,allowVirtualDisplay:this.nativePlatform==="linux-portal"&&permissions.allowVirtualDisplay===true,allowElevated:false,allowProtectedFiles:false,allowSystemAudio:permissions.allowSystemAudio===true,allowMicrophone:permissions.allowMicrophone===true};
     this.permissions = permissions;
     this.apply();
   }
@@ -113,7 +113,7 @@ export class DesktopSettings {
   set(raw: DesktopPermissions): Promise<DesktopSettingsResult> {
     const permissions = DesktopPermissions.parse(raw);
     const work = this.queue.then(async () => {
-      if(this.nativePlatform&&(permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowVirtualDisplay||permissions.allowElevated||permissions.allowProtectedFiles))throw new RpcError("invalid_params","このnative backendでは画面共有・対応する入力・クリップボード・システム音声を許可できます。");
+      if(this.nativePlatform&&(permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowVirtualDisplay&&this.nativePlatform!=="linux-portal"||permissions.allowElevated||permissions.allowProtectedFiles))throw new RpcError("invalid_params","このnative backendでは画面共有・対応する入力・クリップボード・システム音声を許可できます。");
       const command=permissions.enabled&&!this.options.legacy&&!this.options.command?bundledDesktopCommand():this.command;
       if (permissions.enabled && !command)
         throw new RpcError(
@@ -122,7 +122,7 @@ export class DesktopSettings {
         );
       if(permissions.allowProtectedFiles&&(!permissions.allowElevated||!permissions.fileRoot?.trim()||this.options.legacy))throw new RpcError("invalid_params","管理者画面中の転送には、管理者画面の共有許可と通常ユーザーの共有フォルダーを設定してください。");
       if(permissions.allowElevated&&this.options.legacy)throw new RpcError("invalid_params","管理者画面には同梱のWindows補助プログラムを使用してください。");
-      if (permissions.allowVirtualDisplay && this.options.legacy)throw new RpcError("invalid_params","仮想画面には同梱のWindows補助プログラムを使用してください。");
+      if (permissions.allowVirtualDisplay && this.options.legacy && !this.nativePlatform)throw new RpcError("invalid_params","仮想画面には同梱のWindows補助プログラムを使用してください。");
       if (permissions.allowUnlock && this.options.legacy)
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
       if(permissions.allowMicrophone&&!permissions.microphoneEndpoint?.trim())throw new RpcError("invalid_params","マイク転送先の仮想オーディオ再生デバイスIDを指定してください。");
@@ -174,7 +174,7 @@ export class DesktopSettings {
         allowClipboard: p.allowClipboard,
         allowDisplayResize: p.allowDisplayResize,
         allowUnlock: p.allowUnlock === true,
-        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
+        ...((p.allowUnlock||p.allowVirtualDisplay||p.allowElevated) && !legacy && !this.nativePlatform ? { unlockLeaseCommand: [...this.command, "-UnlockLease",...(p.allowVirtualDisplay?["-AllowVirtualDisplay"]:[]),...(p.allowUnlock&&(p.allowVirtualDisplay||p.allowElevated)?["-AllowUnlock"]:[]),...(p.allowElevated?["-AllowElevated"]:[])] } : {}),
         origins: legacy?.origins ?? this.options.origins,
       };
     }

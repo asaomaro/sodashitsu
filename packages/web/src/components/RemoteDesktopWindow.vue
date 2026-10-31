@@ -949,7 +949,7 @@ function connect(automatic = false) {
     status.value = "終了";
     if(monitorChanged){status.value="停止";return;}
     if(elevatedScreen.value){status.value="停止";if(!error.value)error.value=wasReady?"管理者画面の共有が終了しました。接続し直し、操作を許可し直してください。":"管理者画面を開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";return;}
-    if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定、署名済みドライバーと保護サービスの導入・更新を確認してください。";return;}
+    if(virtualScreen.value&&!wasReady){status.value="停止";error.value=(error.value?error.value+" ":"")+"仮想画面を作成できません。接続先の許可設定とOSの対応を確認してください。Windowsでは署名済みドライバーと保護サービスの導入・更新も必要です。";return;}
     if (!wasReady && activeSettings.value?.display) {
       maximumDisplay.value = false;
       requestedDisplay = undefined;
@@ -1233,7 +1233,7 @@ onBeforeUnmount(() => {
           ]
         }}
       </p>
-      <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止中は最後の画像を表示し、人の操作を継続できます。エージェント操作には2秒以内に取得した実画像が必要です。</template></p>
+      <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: {{virtualActive?"OSの許可した仮想画面":"OSの許可した通常画面"}}を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止中は最後の画像を表示し、人の操作を継続できます。エージェント操作には2秒以内に取得した実画像が必要です。</template></p>
       <template v-if="!signinSession">
       <label data-shared-desktop-option><input v-model="sharedScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
       <label v-if="sharedScreen&&!elevatedScreen&&!virtualScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
@@ -1246,7 +1246,7 @@ onBeforeUnmount(() => {
       </template>
       <label v-if="!platformBackend&&!signinSession"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
-      <label v-if="!platformBackend&&!signinSession" data-virtual-desktop-option><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
+      <label v-if="(!platformBackend||platformBackend==='linux-portal')&&!signinSession" data-virtual-desktop-option><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="sharedVirtualAvailable&&!platformBackend" data-shared-virtual-available>仮想画面を複数の窓で共有できます。</p>
       <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。最後の共有窓を閉じた後、補助プログラムの終了を確認して画面を解放します。</p>
       <nav>

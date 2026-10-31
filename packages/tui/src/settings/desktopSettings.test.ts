@@ -51,3 +51,6 @@ it.each(["linux-portal","macos-sck"] as const)("offers system audio for native %
  const section=desktopSettingsSection(port,changed);await vi.waitFor(()=>expect(changed).toHaveBeenCalled());const item=section.items().find(i=>i.label==="システム音声の送信を許可");
  expect(item).toBeDefined();item!.activate!();await vi.waitFor(()=>expect(port.set).toHaveBeenCalledWith({...permissions,allowSystemAudio:true}));
 });
+it("offers Portal virtual permission without showing it for macOS",async()=>{
+ for(const nativePlatform of ["linux-portal","macos-sck"] as const){const state={nativePlatform,permissions,supported:true,canConfigure:true},changed=vi.fn(),port={get:vi.fn(async()=>state),set:vi.fn(async(p)=>({...state,permissions:p}))},section=desktopSettingsSection(port,changed);await vi.waitFor(()=>expect(changed).toHaveBeenCalled());const item=section.items().find(i=>i.label==="OS Portalによる一時仮想画面の作成を許可");if(nativePlatform==="macos-sck")expect(item).toBeUndefined();else{item!.activate!();await vi.waitFor(()=>expect(port.set).toHaveBeenCalledWith({...permissions,allowVirtualDisplay:true}));}}
+});

@@ -659,8 +659,10 @@ class PortalHelper:
         image=options.get("image",{"colorMode":"full","showCursor":True})
         if not isinstance(image,dict) or image.get("colorMode")!="full" or not isinstance(image.get("showCursor"),bool):raise NativeFailure("unsupported")
         self.config={"width":width,"fps":fps,"quality":quality,"cursor":image["showCursor"],"input":message.get("allowInput") is True,"clipboard":message.get("allowClipboard") is True and "--allow-clipboard" in sys.argv,"rich":options.get("richClipboard") is True};self.configured_at=time.monotonic()
-        self.config["monitors"]=message.get("allowMonitors") is True and options.get("monitors") is True
-        if options.get("monitors") is True and not self.config["monitors"]:raise NativeFailure("permission_denied")
+        self.config["virtual"]=options.get("virtualDisplay") is True
+        if self.config["virtual"] and (message.get("allowVirtualDisplay") is not True or options.get("features") is not True or options.get("monitorDevice") is not None or options.get("display") is not None or message.get("nativeMonitorRestoreToken") is not None):raise NativeFailure("permission_denied")
+        self.config["monitors"]=not self.config["virtual"] and message.get("allowMonitors") is True and options.get("monitors") is True
+        if options.get("monitors") is True and not self.config["monitors"] and not self.config["virtual"]:raise NativeFailure("permission_denied")
         self.monitor_selected=options.get("monitorDevice")
         restore=message.get("nativeMonitorRestoreToken")
         if restore is not None and (not self.config["monitors"] or not isinstance(restore,str) or not 1<=len(restore)<=8192 or "\0" in restore):raise NativeFailure("permission_denied")
@@ -688,6 +690,7 @@ class PortalHelper:
         self.connection=self.Gio.bus_get_sync(self.Gio.BusType.SESSION,None)
         props=self.connection.call_sync(self.NAME,self.PATH,"org.freedesktop.DBus.Properties","GetAll",self.GLib.Variant("(s)",(self.SC,)),None,self.Gio.DBusCallFlags.NONE,3000,None).unpack()[0]
         if props.get("version",0)<6:raise NativeFailure("unsupported")
+        if self.config["virtual"] and (not integer(props.get("AvailableSourceTypes"),0,7) or not props["AvailableSourceTypes"]&4):raise NativeFailure("unsupported")
         self.interface=self.RD if self.config["input"] or self.config["clipboard"] else self.SC
         token="soda"+uuid.uuid4().hex;sender=self.connection.get_unique_name()[1:].replace(".","_");self.expected_session=f"{self.PATH}/session/{sender}/{token}"
         self.request(self.interface,"CreateSession","",(),{"session_handle_token":self.GLib.Variant("s",token)},self.created)
@@ -716,7 +719,7 @@ class PortalHelper:
         if self.config["monitors"] and self.config["restore"]:options["restore_token"]=self.GLib.Variant("s",self.config["restore"])
         return options
     def select_sources(self):
-        options={"types":self.GLib.Variant("u",1),"multiple":self.GLib.Variant("b",self.config["monitors"]),"cursor_mode":self.GLib.Variant("u",2 if self.config["cursor"] else 1)}
+        options={"types":self.GLib.Variant("u",4 if self.config["virtual"] else 1),"multiple":self.GLib.Variant("b",self.config["monitors"]),"cursor_mode":self.GLib.Variant("u",2 if self.config["cursor"] else 1)}
         if self.interface==self.SC:options.update(self.persistence_options())
         self.request(self.SC,"SelectSources","o",(self.session,),options,lambda _:self.request(self.interface,"Start","os",(self.session,""),{},self.started))
     def started(self,results):
@@ -733,7 +736,7 @@ class PortalHelper:
             if len(streams)!=1:raise NativeFailure("unsupported")
             self.node,properties=streams[0]
         serial=properties.get("pipewire-serial");dimensions=properties.get("size")
-        if not integer(self.node,1,0xffffffff) or not integer(serial,1,0xffffffffffffffff) or properties.get("source_type")!=1 or not isinstance(dimensions,(tuple,list)) or len(dimensions)!=2 or not all(integer(n,1,32768) for n in dimensions):raise NativeFailure("unsupported")
+        if not integer(self.node,1,0xffffffff) or not integer(serial,1,0xffffffffffffffff) or properties.get("source_type")!=(4 if self.config["virtual"] else 1) or not isinstance(dimensions,(tuple,list)) or len(dimensions)!=2 or not all(integer(n,1,32768) for n in dimensions):raise NativeFailure("unsupported")
         self.dimensions=tuple(properties.get("logical_size",dimensions))
         if len(self.dimensions)!=2 or not all(integer(n,1,32768) for n in self.dimensions):raise NativeFailure("unsupported")
         devices=results.get("devices",0) if self.config["input"] else 0
@@ -966,7 +969,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"monitorLayout":self.monitor_layout(native_size)} if self.monitor_layout(native_size) else {}),**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {}),**({"nativeAdaptive":True} if self.native.adaptive else {}),**({"nativeCodecs":True,"nativeCodecCandidates":_native_video.GstH264Encoder.codecs(self.Gst)} if self.native.codecs else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal",**({"virtualDisplay":True} if self.config["virtual"] else {}),"allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"monitorLayout":self.monitor_layout(native_size)} if self.monitor_layout(native_size) else {}),**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {}),**({"nativeAdaptive":True} if self.native.adaptive else {}),**({"nativeCodecs":True,"nativeCodecCandidates":_native_video.GstH264Encoder.codecs(self.Gst)} if self.native.codecs else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
                         layout=self.monitor_layout(native_size)
                         if layout and layout["switchingSupported"] and not self.restore_sent:
                             self.restore_sent=True;session=self.session

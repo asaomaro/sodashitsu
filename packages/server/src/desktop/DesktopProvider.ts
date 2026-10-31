@@ -242,7 +242,7 @@ export class DesktopProvider {
     if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
-    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.display||p.options.sharedResolution||p.options.sharedRate||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
+    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay&&cfg.nativePlatform!=="linux-portal"||p.options.display||p.options.sharedResolution||p.options.sharedRate||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
     if(p.options.protectedFiles&&(!p.options.elevatedDesktop||!p.options.files||!p.fileTicket||!p.options.features||!cfg.allowElevated||!cfg.allowProtectedFiles||!cfg.fileRoot||cfg.nativePlatform))throw new RpcError("unauthorized","管理者画面中のファイル転送は接続先で許可されていません。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
@@ -615,7 +615,7 @@ export class DesktopProvider {
   }
   private launch(s:Share,cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>["options"]):void {
     const rolePlan=desktopHelperRolePlan(cfg,options),sourceEpoch=this.sourceEpoch;
-    const nativeMonitorRestore=cfg.nativePlatform==="linux-portal"&&cfg.allowMonitors&&options.monitors?this.nativeMonitorRestores.take(s.nativeMonitorOrigin):undefined;
+    const nativeMonitorRestore=cfg.nativePlatform==="linux-portal"&&cfg.allowMonitors&&options.monitors&&!options.virtualDisplay?this.nativeMonitorRestores.take(s.nativeMonitorOrigin):undefined;
     const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,

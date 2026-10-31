@@ -242,7 +242,7 @@ class PortalProtocol(unittest.TestCase):
    def signal_unsubscribe(self,sub):outer.signals.pop(sub,None)
    def call_sync(self,name,path,interface,method,params,reply,flags,timeout,cancel):
     outer.calls.append((method,path,params.unpack()))
-    if method=="GetAll":return GLib.Variant("(a{sv})",({"version":GLib.Variant("u",6)},))
+    if method=="GetAll":return GLib.Variant("(a{sv})",({"version":GLib.Variant("u",6),"AvailableSourceTypes":GLib.Variant("u",7)},))
    def call(self,name,path,interface,method,params,reply,flags,timeout,cancel,callback,user):
     args=params.unpack() if params else ();outer.calls.append((method,path,args))
     if callback:
@@ -267,6 +267,37 @@ class PortalProtocol(unittest.TestCase):
   self.helper.configure({"options":{"width":1280,"fps":10,"quality":65},"allowInput":input});self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)})
   if input:self.respond({})
   self.respond({})
+ def create_virtual(self):
+  self.helper.configure({"options":{"width":1280,"fps":10,"quality":65,"features":True,"virtualDisplay":True,"monitors":True},"allowInput":True,"allowMonitors":True,"allowVirtualDisplay":True})
+  self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)});self.respond({});self.respond({})
+ def test_virtual_source_requests_only_virtual_and_never_persists_physical_selection(self):
+  self.create_virtual();sources=next(call for call in self.calls if call[0]=="SelectSources")[2][-1];devices=next(call for call in self.calls if call[0]=="SelectDevices")[2][-1]
+  self.assertEqual(sources["types"],4);self.assertFalse(sources["multiple"]);self.assertEqual(devices["persist_mode"],0);self.assertNotIn("restore_token",devices);self.assertFalse(self.helper.config["monitors"])
+ def test_virtual_permission_and_features_are_required_before_portal_session(self):
+  for allow,features in ((False,True),(True,False)):
+   self.helper.config=None
+   with self.assertRaises(module.NativeFailure):self.helper.configure({"options":{"width":1280,"fps":10,"quality":65,"features":features,"virtualDisplay":True},"allowVirtualDisplay":allow})
+  self.assertFalse(any(call[0]=="CreateSession" for call in self.calls))
+ def test_portal_must_advertise_virtual_support_before_creating_session(self):
+  original=self.connection.call_sync
+  def unavailable(name,path,interface,method,params,reply,flags,timeout,cancel):
+   if method=="GetAll":return self.GLib.Variant("(a{sv})",({"version":self.GLib.Variant("u",6),"AvailableSourceTypes":self.GLib.Variant("u",1)},))
+   return original(name,path,interface,method,params,reply,flags,timeout,cancel)
+  self.connection.call_sync=unavailable
+  with self.assertRaises(module.NativeFailure) as error:self.create_virtual()
+  self.assertEqual(error.exception.code,"unsupported");self.assertFalse(any(call[0]=="CreateSession" for call in self.calls))
+ def test_virtual_request_never_accepts_a_physical_stream_or_missing_serial(self):
+  self.create_virtual()
+  for props in ({"source_type":1,"pipewire-serial":987},{"source_type":4}):
+   with self.assertRaises(module.NativeFailure):self.helper.started({"devices":3,"streams":[(55,{"size":(1280,800),**props})]})
+   self.assertIsNone(self.fake_fd)
+ def test_wrong_source_response_closes_the_owned_session_without_opening_pipewire(self):
+  self.create_virtual();session=self.helper.session
+  self.respond({"devices":self.GLib.Variant("u",3),"streams":self.GLib.Variant("a(ua{sv})",[(55,{"size":self.GLib.Variant("(ii)",(1280,800)),"source_type":self.GLib.Variant("u",1),"pipewire-serial":self.GLib.Variant("t",987)})])})
+  self.assertTrue(self.helper.closed);self.assertIsNone(self.fake_fd);self.assertTrue(any(call[0]=="Close" and call[1]==session for call in self.calls))
+ def test_virtual_approved_stream_owns_pipewire_session_and_closes_it(self):
+  self.create_virtual();self.helper.started({"devices":3,"streams":[(55,{"size":(1280,800),"logical_size":(640,400),"source_type":4,"pipewire-serial":987})]})
+  self.assertEqual(self.properties["target-object"],"987");self.assertEqual(self.helper.dimensions,(640,400));self.assertIsNone(self.helper.monitor_records);session=self.helper.session;self.helper.close();self.assertEqual(self.states[-1],0);self.assertTrue(any(call[0]=="Close" and call[1]==session for call in self.calls))
  def test_monitor_selection_requests_os_persistence_only_after_local_permission(self):
   self.helper.configure({"options":{"width":1280,"fps":10,"quality":65,"monitors":True},"allowInput":True,"allowMonitors":True})
   self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)});self.respond({})
