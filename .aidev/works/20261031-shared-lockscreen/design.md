@@ -1,0 +1,3 @@
+# 設計
+
+Providerのローカル許可をpoolだけにbindし物理helper前で除去。同じ完全configureのWindows secure通常sourceだけを許可。cover入力禁止、owner専用固定dismiss/SAS、source切替通知を全viewerへ送り世代を終了。clipboard/cursor/monitor proofの通常画面用必須検査はsecureでは機能無効化して継続。

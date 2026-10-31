@@ -1,0 +1,3 @@
+# 要件
+
+sr-pcのロック中にsharedDesktop接続が即終了する不具合を解消。ローカルallowUnlockと既存専用サービス・操作排他を維持。通常機能をsecure画面へ持ち込まない。

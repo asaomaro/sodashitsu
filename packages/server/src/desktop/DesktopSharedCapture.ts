@@ -1,3 +1,4 @@
+import {unlockFailure} from "./unlockFailure.js";
 import type {NativePcmCapability} from "./DesktopNativePcmPath.js";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {DesktopNativePlatformFailure} from "@sodashitsu/protocol";
@@ -222,7 +223,7 @@ export class DesktopSharedCapture {
           }
           return false;
         }
-        if (current.control && current.control !== member) return false;
+        if (!current.ready.allowInput || current.control && current.control !== member) return false;
         current.control = member;
         return true;
       },
@@ -276,7 +277,8 @@ export class DesktopSharedCapture {
         g.configuration = configuration;
         g.protectedSource = value.allowSharedProtected === true;
         g.deltas = value.options?.deltas === true;
-        this.write(g, value);
+        const {allowSharedUnlock:_localUnlock,...physical}=value;
+        this.write(g, physical);
       } else if (g.ready) {
         this.emit(s, g.ready);
         this.cursor(g, s);
@@ -313,8 +315,11 @@ export class DesktopSharedCapture {
       if (g.control === s && value.enabled === true) this.write(g, value);
     } else if (value.type === "release") {
       if (g.control === s) this.write(g, value);
+    } else if(value.type==="dismiss_lock_screen"||value.type==="sas") {
+      if(g.control===s && g.ready?.secureDesktop===true && !g.protectedSource && JSON.parse(g.configuration!).allowSharedUnlock===true &&
+         (value.type==="dismiss_lock_screen"?g.ready.lockScreenCover===true:!g.ready.lockScreenCover))this.write(g,{type:value.type});
     } else if (value.type === "input") {
-      if (g.control !== s) return;
+      if (g.control !== s || g.ready?.lockScreenCover) return;
       // Expired/rejected helper input may never be acknowledged. Retain only the
       // newest ACK routes, as DesktopInputAcks does, without blocking new input.
       if (g.inputs.size >= 64) g.inputs.delete(g.inputs.keys().next().value!);
@@ -338,6 +343,9 @@ export class DesktopSharedCapture {
     if (value.type === "ready" && !g.ready) {
       const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof, ...wire } = value;
       const ready = DesktopReady.parse(wire);
+      const configuration = JSON.parse(g.configuration!);
+      const lockedSource = !g.protectedSource && configuration.allowSharedUnlock===true && ready.secureDesktop===true && !ready.protectedDesktop && !ready.sharedProtected &&
+        (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi");
       const protectedSource =
         ready.secureDesktop === true &&
         !!ready.protectedDesktop &&
@@ -358,15 +366,15 @@ export class DesktopSharedCapture {
             ready.cursor ||
             ready.files ||
             ready.richClipboard
+          : lockedSource ? ready.nativeVideo||ready.nativeAudio||ready.microphone||ready.cursor||ready.files||ready.richClipboard||ready.allowClipboard||ready.allowMedia||ready.monitorLayout||ready.agentRegions
           : ready.secureDesktop || ready.protectedDesktop || ready.sharedProtected) ||
-        ready.lockScreenCover ||
+        (ready.lockScreenCover && !lockedSource) ||
         ready.virtualDisplay ||
         (ready.nativeVideo && !JSON.parse(g.configuration!).allowNativeVideo) ||
         ready.allowMedia ||
         (ready.allowClipboard && !JSON.parse(g.configuration!).allowClipboard)
       )
         throw Error("Source cannot be shared");
-      const configuration = JSON.parse(g.configuration!);
       if(ready.monitorLayout&&(configuration.allowMonitors!==true||configuration.options.monitors!==true||(configuration.options.monitorDevice&&ready.monitorLayout.selected!==configuration.options.monitorDevice)))throw Error("Unexpected shared monitor layout");
       if (ready.cursor && (!configuration.separateCursor || configuration.options.cursor !== true))
         throw Error("Unexpected shared cursor source");
@@ -436,6 +444,7 @@ export class DesktopSharedCapture {
       for(const member of [...g.members])if(member.configured)this.emit(member,failure);
       this.end(g);
     } else if (value.type === "frame" && g.ready) {
+      if(g.ready.lockScreenCover)throw Error("Lock cover cannot publish pixels");
       const info = DesktopFrameInfo.parse(value.info);
       const native=g.ready.backend==="linux-portal"||g.ready.backend==="macos-sck";
       if(native){
@@ -505,8 +514,11 @@ export class DesktopSharedCapture {
         for (const member of [...g.members]) this.emit(member, failure);
       } else if(value.type==="monitor_topology_changed"&&Object.keys(value).length===1&&g.ready?.monitorLayout)
         for(const member of [...g.members])this.emit(member,{type:"monitor_topology_changed"});
-      else if (value.type === "session_locked")
-        for (const s of g.members) this.emit(s, { type: "session_locked" });
+      else if(Object.keys(value).length===1 && (value.type==="session_locked"&&!g.ready?.secureDesktop ||
+          value.type==="session_unlocked"&&g.ready?.secureDesktop || value.type==="lock_screen_changed"&&g.ready?.secureDesktop&&g.ready.lockScreenCover))
+        for(const member of [...g.members])this.emit(member,{type:value.type});
+      else if(value.type==="unlock_failure" && Object.keys(value).length===2 && JSON.parse(g.configuration!).allowSharedUnlock===true && (!g.ready||g.ready.secureDesktop) && unlockFailure(value.code))
+        for(const member of [...g.members])this.emit(member,{type:"unlock_failure",code:value.code});
       this.end(g);
     }
   }
