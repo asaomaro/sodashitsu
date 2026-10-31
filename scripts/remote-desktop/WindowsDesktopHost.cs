@@ -627,6 +627,7 @@ public static class SodaDesktopHost {
             if(separateCursor)ready["cursor"]=true;
             if(!Secure)ready["agentRegions"]=true;
             if(VirtualLease!=null)ready["virtualDisplay"]=true;
+            if(VirtualLease!=null&&monitorCeiling)ready["virtualMonitors"]=true;
             if(InputAckPipe)ready["inputAckPipe"]=true;
             if(NativePointerProof)ready["nativePointerProof"]=true;
             if(ResourceFence!=null)ready["resourceFences"]=true;

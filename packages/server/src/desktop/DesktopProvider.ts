@@ -74,7 +74,7 @@ type Share = {
   protectedFilesActive?:boolean;
   agentRegions?:boolean;
   audioPipes?:DesktopAudioPipes;resourcesManaged:boolean;
-  independent?:boolean;
+  independent?:boolean;virtualGroup?:boolean;selectedMonitor?:string|undefined;virtualPhysicalIds?:readonly string[];
   capturePool?:DesktopSharedCapture;
   captureKey?:string;
   microphoneOwned?:boolean;
@@ -204,11 +204,16 @@ export class DesktopProvider {
   private ownsResource(s:Share,kind:DesktopInteractiveResource):boolean{return !s.resourcesManaged||this.resources.owns(s,kind);}
   private readonly sharedCapture = new DesktopSharedCapture();
   private readonly shared = new Set<Share>();
-  private sharedKey: string | undefined;
   private captureMode:"normal"|"independent"|undefined;
   private monitorTopology:string|undefined;
   private readonly monitorSources=new Map<string,{key:string;pool:DesktopSharedCapture}>();
-  private pruneSources(){for(const[id,source]of this.monitorSources)if(!source.pool.running&&![...this.shared].some(s=>s.capturePool===source.pool))this.monitorSources.delete(id);if(!this.active&&!this.shared.size&&!this.physicalHelpers.size){this.captureMode=undefined;this.monitorTopology=undefined;}}
+  private pruneSources(){for(const[id,source]of this.monitorSources)if(!source.pool.running&&![...this.shared].some(s=>s.capturePool===source.pool))this.monitorSources.delete(id);if(!this.monitorSources.size&&![...this.shared].some(s=>s.independent))this.monitorTopology=undefined;if(!this.active&&!this.shared.size&&!this.physicalHelpers.size){this.captureMode=undefined;this.monitorTopology=undefined;}}
+  /** Only fenced independent physical sources and proven owned virtual groups may coexist. */
+  private virtualPairCompatible(cfg:DesktopProviderConfig,virtual:boolean,independent:boolean,monitor?:string){
+    if(cfg.nativePlatform||!cfg.allowVirtualDisplay||!cfg.allowMonitors||this.active||(!virtual&&!independent))return false;
+    const peers=[...this.shared].filter(s=>!s.dead);
+    return peers.length>0&&peers.every(s=>s.ready&&s.process?.resourceChannel?.supported===true&&(s.independent?s.selectedMonitor!=="all":s.virtualGroup===true&&(!independent||!!monitor&&s.virtualPhysicalIds?.includes(monitor)===true)))&&(!independent||monitor!=="all");
+  }
   private stopMonitorGeneration(){for(const s of [...this.shared])if(s.independent){this.send(s,{type:"monitor_topology_changed"});this.stop(s);}}
 
   private pendingStarts = new Set<{ owner: string; cancelled: boolean }>();
@@ -276,12 +281,17 @@ export class DesktopProvider {
     if(p.options.sharedProtectedVideo&&(!p.options.sharedDesktop||!p.options.sharedProtected||!p.options.protectedVideo||!p.options.sharedNative||!cfg.allowElevated||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の共有動画には明示した共有経路と接続先の許可が必要です。");
     if(p.options.protectedAudio&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
     if(p.options.protectedVideo&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
+    if(p.options.virtualDisplay&&p.options.monitors&&!p.options.virtualMonitors)throw new RpcError("invalid_params","仮想画面のモニター一覧には明示した対応機能が必要です。");
+    if(p.options.virtualMonitors&&(!p.options.virtualDisplay||!p.options.features||!cfg.allowVirtualDisplay||!cfg.allowMonitors||cfg.nativePlatform))throw new RpcError("unauthorized","仮想画面のモニター選択には接続先の仮想画面・モニターの許可が必要です。");
     if(p.options.virtualDisplay&&(!cfg.allowVirtualDisplay||!p.options.features||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の作成が許可されていないか、モニター指定と併用されています");
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
     if (p.options.display && (!cfg.allowDisplayResize || !p.options.features))
       throw new RpcError("unauthorized", "Bでディスプレイ解像度の変更が許可されていません");
-    if(this.captureMode&&this.captureMode!==requestedMode&&(this.active&&!this.active.dead||this.shared.size))throw new RpcError("server_busy","共有方式を切り替える前に、ほかの共有窓を閉じてください");
-    const finishing = this.active?.dead ? this.active.process : selectedPool?.retiring??(this.captureMode&&this.captureMode!==requestedMode?[...this.physicalHelpers][0]:undefined);
+    const pairCompatible=()=>this.virtualPairCompatible(cfg,p.options.sharedDesktop===true&&p.options.sharedVirtual===true&&p.options.virtualMonitors===true,p.options.independentMonitors===true,p.options.monitorDevice);
+    const differentLive=()=>[...this.shared].some(peer=>!peer.dead&&(peer.independent===true)!==(p.options.independentMonitors===true));
+    if(differentLive()&&!pairCompatible())throw new RpcError("server_busy","通常共有と独立配信を混在できるのは、所有仮想画面と個別の物理モニターだけです");
+    if(this.captureMode&&this.captureMode!==requestedMode&&!pairCompatible()&&(this.active&&!this.active.dead||this.shared.size))throw new RpcError("server_busy","共有方式を切り替える前に、ほかの共有窓を閉じてください");
+    const finishing = this.active?.dead ? this.active.process : selectedPool?.retiring??(this.captureMode&&this.captureMode!==requestedMode&&!pairCompatible()?[...this.physicalHelpers][0]:undefined);
     if (finishing) {
       const child = finishing,
         pending = { owner, cancelled: false };
@@ -305,9 +315,11 @@ export class DesktopProvider {
     if (selectedPool?.retiring) throw new RpcError("server_busy", "前の共有画面を終了中です。少し待ってから接続し直してください。");
     const sharedKey = JSON.stringify(p.options.sharedDesktop ? {purpose:p.options.sharedProtected?"protected":p.options.sharedVirtual?"virtual":"normal",options:sharedHelperOptions(p.options),...(p.options.sharedClipboard?{clipboard:true}:{})} : p.options);
     this.pruneSources();const monitorSource=p.options.independentMonitors?this.monitorSources.get(p.options.monitorDevice!):undefined;
-    if(this.captureMode&&this.captureMode!==requestedMode&&(this.active||this.shared.size||this.physicalHelpers.size))throw new RpcError("server_busy","前の共有方式の終了を確認してから切り替えてください");
+    if(differentLive()&&!pairCompatible())throw new RpcError("server_busy","共有元の構成を確認してから接続し直してください");
+    if(this.physicalHelpers.size>=8&&(!p.options.sharedDesktop||!selectedPool?.running))throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");
+    if(this.captureMode&&this.captureMode!==requestedMode&&!pairCompatible()&&(this.active||this.shared.size||this.physicalHelpers.size))throw new RpcError("server_busy","前の共有方式の終了を確認してから切り替えてください");
     if(p.options.independentMonitors&&(monitorSource&&monitorSource.key!==sharedKey||!monitorSource&&this.physicalHelpers.size>=8))throw new RpcError("server_busy","同じモニターの画質設定が異なるか、補助プログラムの上限です");
-    if (this.active || (this.shared.size && (!p.options.sharedDesktop || !p.options.independentMonitors&&this.sharedKey !== sharedKey)) || this.shared.size >= 8)
+    if (this.active || (this.shared.size && (!p.options.sharedDesktop || !p.options.independentMonitors&&[...this.shared].some(peer=>!peer.independent&&peer.captureKey!==sharedKey))) || this.shared.size >= 8)
       throw new RpcError("server_busy", "Bのデスクトップは異なる設定で共有中か、viewer数の上限です。同じ複数viewer設定で接続してください。");
     const url = new URL(p.url);
     if (
@@ -373,7 +385,7 @@ export class DesktopProvider {
     s.timer.unref();
     this.captureMode=requestedMode;
     if(s.independent){let source=this.monitorSources.get(p.options.monitorDevice!);if(!source){source={key:sharedKey,pool:new DesktopSharedCapture()};this.monitorSources.set(p.options.monitorDevice!,source);}s.capturePool=source.pool;}
-    if (s.shared) { this.shared.add(s); if(!s.independent)this.sharedKey = sharedKey; }
+    if (s.shared) this.shared.add(s);
     else this.active = s;
     ws.on("error", () => this.stop(s));
     ws.on("close", () => this.stop(s));
@@ -624,7 +636,7 @@ export class DesktopProvider {
   private launch(s:Share,cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>["options"]):void {
     const rolePlan=desktopHelperRolePlan(cfg,options),sourceEpoch=this.sourceEpoch;
     const nativeMonitorRestore=cfg.nativePlatform==="linux-portal"&&cfg.allowMonitors&&options.monitors&&!options.virtualDisplay?this.nativeMonitorRestores.take(s.nativeMonitorOrigin):undefined;
-    const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
+    const spawnHelper = ():DesktopHelper => {if(this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
       env:{...process.env,...desktopHelperRoleEnvironment(rolePlan),SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
@@ -677,6 +689,7 @@ export class DesktopProvider {
           if (raw.type === "ready" && !s.ready) {
             const {protectedAudioClock,deferNativeSnapshots, inputAckPipe,nativePointerProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
+            if(options.virtualMonitors&&(ready.resourceFences!==true||ready.virtualMonitors!==true||!ready.virtualDisplay||!ready.monitorLayout||ready.monitorLayout.selected==="all"||ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Owned virtual monitor metadata missing");
             s.agentRegions=ready.agentRegions===true&&!ready.secureDesktop;
             if(cfg.nativePlatform?(ready.backend!==cfg.nativePlatform||!ready.inputCapabilities):ready.backend==="linux-portal"||ready.backend==="macos-sck")throw Error("Unexpected native backend proof");
             if(!cfg.nativePlatform&&ready.inputCapabilities)throw Error("Unrequested input capabilities");
@@ -727,6 +740,12 @@ export class DesktopProvider {
               if(size.width!==ready.width||size.height!==ready.height)throw Error("Monitor capture size mismatch");
               if(cfg.nativePlatform==="linux-portal"&&cfg.allowMonitors&&options.monitors&&logical&&ready.monitorLayout.switchingSupported)s.nativeMonitorIds=ready.monitorLayout.monitors.map(monitor=>monitor.id);
             }
+            s.selectedMonitor=ready.monitorLayout?.selected;
+            s.virtualGroup=options.sharedVirtual===true&&options.virtualMonitors===true;
+            if(s.virtualGroup){
+              s.virtualPhysicalIds=ready.monitorLayout!.monitors.filter(m=>m.id!==ready.monitorLayout!.selected).map(m=>m.id);
+              if([...this.shared].some(peer=>peer!==s&&!peer.dead&&peer.independent&&(!peer.ready||!peer.selectedMonitor||!s.virtualPhysicalIds!.includes(peer.selectedMonitor))))throw Error("Virtual group conflicts with a nonphysical source");
+            }
             s.ready = true;
             s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true && (!s.resourcesManaged||s.process?.resourceChannel?.supported===true);
             s.dynamicQuality = ready.dynamicQuality === true;
@@ -734,7 +753,7 @@ export class DesktopProvider {
             const {
               imeKeys,
               extendedInput,
-              resourceFences:_resourceFences,protectedVideo:_protectedVideo,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
+              virtualMonitors:_virtualMonitors,resourceFences:_resourceFences,protectedVideo:_protectedVideo,sharedProtected,sharedProtectedAvailable:_sharedProtectedAvailable,protectedDesktop,virtualDisplay,monitorLayout,files,fileCheckpoints:_helperFileCheckpoints,durableFileCheckpoints:_helperDurable,durableFolderCheckpoints:_helperDurableFolders,folders:_helperFolders,folderCheckpoints:_helperFolderCheckpoints, nativeVideo,nativeDatagrams,nativeAudio,microphone,inputCapabilities,richClipboard,
               nativeVideoWindow,
               nativeMaxFps,nativeCadence,nativeAdaptive,nativeCodecs,nativeCodecCandidates,
               cursor,
@@ -770,7 +789,7 @@ export class DesktopProvider {
               ...(options.sharedProtected&&sharedProtected?{sharedProtected:true}:{}),
               ...(cfg.nativePlatform&&inputCapabilities?{inputCapabilities}:{}),
               ...(options.virtualDisplay&&virtualDisplay&&!s.secureDesktop?{virtualDisplay:true}:{}),
-              ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
+              ...((!options.virtualDisplay&&options.monitors===true||options.virtualMonitors===true)&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout,...(options.virtualMonitors?{virtualMonitors:true}:{})}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
               ...(nativeEnabled?{nativeVideo:true,...(s.protectedVideoActive?{protectedVideo:true,...(options.sharedProtectedVideo?{sharedProtectedVideo:true}:{}),...(s.protectedAudioActive?{protectedAudio:true,nativeAudio:true}:{})}:{})}:{}),
@@ -893,11 +912,11 @@ export class DesktopProvider {
       ...(nativeMonitorRestore?{nativeMonitorRestoreToken:nativeMonitorRestore}:{}),
       ...(options.sharedDesktop&&cfg.allowUnlock?{allowSharedUnlock:true}:{}),
       ...(options.sharedVirtual&&cfg.allowVirtualDisplay?{allowSharedVirtual:true}:{}),
-      options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
+      options:options.sharedDesktop ? sharedHelperOptions(options) : {...helperOptions,...(options.virtualMonitors?{monitors:true}:{})},
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,
       ...(!cfg.nativePlatform?{resourceFences:true,nativePointerProof:!!cfg.fileRoot&&!options.elevatedDesktop&&!options.virtualDisplay}:{}),
-      allowMonitors:options.monitors===true&&cfg.allowMonitors===true,
+      allowMonitors:(options.monitors===true||options.virtualMonitors===true)&&cfg.allowMonitors===true,
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
       ...(options.sharedProtected?{allowSharedProtected:true}:{}),
@@ -972,7 +991,7 @@ export class DesktopProvider {
     s.inputAcks.invalidatePointers();
     delete s.pointerWitness;
     if(s.resourcesManaged)this.resources.releaseAll(s);
-    if (s.shared) { this.shared.delete(s); if (!this.shared.size) this.sharedKey = undefined; }
+    if (s.shared) this.shared.delete(s);
     delete s.heldImage; s.imageSocket?.terminate();
     s.videoSocket?.terminate();
     void s.files?.then(worker=>worker?.close());s.fileSocket?.terminate();
@@ -1024,7 +1043,7 @@ export class DesktopProvider {
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {
-  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedProtectedVideo?{protectedVideo:true as const,...(options.protectedAudio?{protectedAudio:true as const,nativeAudio:true as const}:{})}:{}),...(options.sharedVirtual?{virtualDisplay:true as const,...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
+  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedProtectedVideo?{protectedVideo:true as const,...(options.protectedAudio?{protectedAudio:true as const,nativeAudio:true as const}:{})}:{}),...(options.sharedVirtual?{virtualDisplay:true as const,...(options.virtualMonitors?{monitors:true as const}:{}),...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
 }
 function allowedRelay(url: URL, origins: string[]): boolean {
   if (

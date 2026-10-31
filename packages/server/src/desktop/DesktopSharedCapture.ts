@@ -388,6 +388,7 @@ export class DesktopSharedCapture {
       )
         throw Error("Source cannot be shared");
       if(ready.monitorLayout&&!virtualSource&&(configuration.allowMonitors!==true||configuration.options.monitors!==true||(configuration.options.monitorDevice&&ready.monitorLayout.selected!==configuration.options.monitorDevice)))throw Error("Unexpected shared monitor layout");
+      if(ready.virtualMonitors&&(!virtualSource||configuration.allowMonitors!==true||configuration.options.monitors!==true))throw Error("Unrequested virtual monitor metadata");
       if(virtualSource&&ready.monitorLayout&&(ready.monitorLayout.selected==="all"||!ready.monitorLayout.monitors.some(m=>m.id===ready.monitorLayout!.selected)))throw Error("Virtual source must select its owned monitor");
       if (ready.cursor && (!configuration.separateCursor || configuration.options.cursor !== true))
         throw Error("Unexpected shared cursor source");

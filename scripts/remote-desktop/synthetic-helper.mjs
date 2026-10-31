@@ -243,7 +243,7 @@ function run() {
         if(process.argv.includes("--headless")&&!virtualSource)throw Error("Generated headless source requires an owned virtual monitor");
         if(virtualSource&&process.argv.includes("--virtual-missing")){send({type:"virtual_display_failure",code:"driver_missing"});setTimeout(()=>process.exit(0),25);return;}
         if(m.allowMonitors===true&&options.monitors===true&&process.argv.includes("--monitors")&&!secure){
-          let monitors=[{id:"left",x:-640,y:-200,width:640,height:480,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:800,height:600,primary:true,scalePercent:150}];if(process.argv.includes("--monitors-cinema"))monitors=monitors.map(v=>v.primary?{...v,height:610}:v);if(process.argv.includes("--monitors-wide"))monitors=monitors.map(v=>({...v,height:Math.round(v.width*9/16)}));if(process.argv.includes("--monitors-one"))monitors=monitors.filter(v=>v.primary);const selected=options.monitorDevice??"right",item=monitors.find(v=>v.id===selected);
+          let monitors=[{id:"left",x:-640,y:-200,width:640,height:480,primary:false,scalePercent:125},{id:"right",x:0,y:0,width:800,height:600,primary:true,scalePercent:150}];if(process.argv.includes("--monitors-cinema"))monitors=monitors.map(v=>v.primary?{...v,height:610}:v);if(process.argv.includes("--monitors-wide"))monitors=monitors.map(v=>({...v,height:Math.round(v.width*9/16)}));if(process.argv.includes("--monitors-one"))monitors=monitors.filter(v=>v.primary);if(virtualSource||process.argv.includes("--monitors-owned-existing"))monitors.push({id:"owned-virtual",x:800,y:0,width:640,height:480,primary:false,scalePercent:100});const selected=virtualSource?"owned-virtual":options.monitorDevice??"right",item=monitors.find(v=>v.id===selected);
           if(selected!=="all"&&!item)throw Error("Monitor missing");const lx=Math.min(...monitors.map(v=>v.x)),ly=Math.min(...monitors.map(v=>v.y)),rx=Math.max(...monitors.map(v=>v.x+v.width)),by=Math.max(...monitors.map(v=>v.y+v.height));const bounds=selected==="all"?{x:lx,y:ly,width:rx-lx,height:by-ly}:{x:item.x,y:item.y,width:item.width,height:item.height};monitorLayout={selected,bounds,allSupported:!nativePlatform,monitors,...(nativePlatform?{coordinateSpace:"logical",primaryKnown:true,pixelSize:{width:bounds.width*2,height:bounds.height*2},switchingSupported:!process.argv.includes("--monitors-no-restore")}:{})};const width=Math.min(options.width,bounds.width);options={...options,width,syntheticHeight:Math.round(bounds.height*width/bounds.width)};
         }else if(options.monitorDevice&&!secure&&process.argv.includes("--monitors"))throw Error("Monitor not permitted");
         const modes = nativeAdaptive?[{width:nativeFixture.width,height:nativeFixture.height}]:[{width:640,height:480},{width:800,height:600},{width:1024,height:768},{width:1280,height:720},{width:1600,height:900},{width:1920,height:1080}];
@@ -251,7 +251,7 @@ function run() {
         if (options.display) {
           if (!displayAllowed || !modes.some(mode => mode.width === options.display.width && mode.height === options.display.height)) throw Error("display not allowed");
           options = {...options, width:options.display.width};
-          if(monitorLayout){const bounds={...monitorLayout.bounds,width:options.display.width,height:options.display.height};monitorLayout={...monitorLayout,bounds,monitors:monitorLayout.monitors.map(v=>({...v,width:bounds.width,height:bounds.height}))};options={...options,syntheticHeight:bounds.height};}
+          if(monitorLayout){const bounds={...monitorLayout.bounds,width:options.display.width,height:options.display.height};monitorLayout={...monitorLayout,bounds,monitors:monitorLayout.monitors.map(v=>v.id===monitorLayout.selected?{...v,width:bounds.width,height:bounds.height}:v)};options={...options,syntheticHeight:bounds.height};}
         }
         if (record && (process.argv.includes("--dxgi") || nativePlatform&&monitorLayout)) writeFileSync(record + ".configure.json", JSON.stringify(m));
         send({
@@ -260,6 +260,7 @@ function run() {
           ...(resourceMode?{resourceFences:true}:{}),
           ...(protectedMode?{protectedDesktop:protectedMode,...(m.allowSharedProtected===true&&!process.argv.includes("--no-shared-protected")?{sharedProtected:true}:{})}:{}),
           ...(virtualSource?{virtualDisplay:true}:{}),
+          ...(virtualSource&&m.allowMonitors===true&&m.options.monitors===true&&monitorLayout&&!process.argv.includes("--no-virtual-monitors")?{virtualMonitors:true}:{}),
           ...(monitorLayout?{monitorLayout}:{}),
           ...(m.richClipboard===true&&m.allowClipboard===true&&process.argv.includes("--allow-clipboard")&&process.argv.includes("--rich-clipboard")&&!secure?{richClipboard:true}:{}),
           ...(m.allowMicrophone===true&&m.microphoneEndpoint&&process.argv.includes("--microphone-fixture")&&!secure?{microphone:true}:{}),
