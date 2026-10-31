@@ -12,6 +12,10 @@ video_source=source.with_name("macos-native-video.swift").read_text()
 audio_source=source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()+"\n"+source.with_name("macos-native-microphone.swift").read_text()
 microphone_source=source.with_name("macos-native-microphone.swift").read_text()
 cases = [
+    ("display-live-snapshot", 'guard let first=current(),active(),let confirmed=current(),confirmed==first else {return nil};return confirmed', 'guard let first=current(),active() else {return nil};return first', "display mode live query cannot accept stale snapshot"),
+    ("display-exact-transfer", 'let scale=exact ? 1.0:min', 'let scale=false ? 1.0:min', "explicit display dimensions override transfer width with exact pixels"),
+    ("display-release-order", 'input?.release();lease?.restore()', 'lease?.restore();input?.release()', "display cleanup releases held key and button before restoring mode"),
+    ("display-identity", 'before==original,clock()', 'before.mode==original.mode,clock()', "display mode rejects reused display ID"),
     ("codec-query-ticket", "guard validAfterQuery() else", "guard true else", "codec metadata query cannot extend source ticket"),
     ("source-audio-reentrant", " && audioCeiling && nativeVideo === video", " && nativeVideo === video", "generated source audio reentrant permission retirement"),
     ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),

@@ -102,3 +102,6 @@ it("shows Portal virtual permission without requiring a Windows driver",async()=
  const wrapper=mount(DesktopSettings,{global:{provide:{[ConnectionKey as symbol]:{request}}}});await flushPromises();
  const label=wrapper.findAll("label").find(item=>item.text()==="OS Portalによる一時仮想画面の作成を許可")!;await label.get("input").setValue(true);expect(wrapper.text()).not.toContain("署名済み仮想画面ドライバー");await wrapper.get("button").trigger("click");await flushPromises();expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowVirtualDisplay:true});wrapper.unmount();
 });
+it("saves macOS physical display resize permission separately from input",async()=>{
+ const request=vi.fn(async(method,p)=>({nativePlatform:"macos-sck",permissions:method.endsWith("set")?p:permissions,supported:true,canConfigure:true})),wrapper=mount(DesktopSettings,{global:{provide:{[ConnectionKey as symbol]:{request}}}});await flushPromises();const label=wrapper.findAll("label").find(item=>item.text()==="選択したディスプレイの解像度変更を許可")!;await label.get("input").setValue(true);await wrapper.get("button").trigger("click");await flushPromises();expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowDisplayResize:true});wrapper.unmount();
+});

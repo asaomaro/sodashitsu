@@ -235,3 +235,9 @@ it("persists Portal virtual permission without Windows driver/service launch fla
  expect((await DesktopSettings.open({...options,nativePlatform:"linux-portal"})).get(true).permissions.allowVirtualDisplay).toBe(true);
  const mac=await DesktopSettings.open({...options,nativePlatform:"macos-sck"});expect(mac.get(true).permissions.allowVirtualDisplay).toBe(false);await expect(mac.set({...off,enabled:true,allowVirtualDisplay:true})).rejects.toThrow("native backend");
 });
+it("persists macOS display resize permission with one opt-in helper flag and no Windows lease",async()=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"macos-sck"});
+ await settings.set({...off,enabled:true,allowDisplayResize:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform:"macos-sck",allowDisplayResize:true,allowInput:false,command:["synthetic-helper","--allow-display-resize"]});expect(configure.mock.calls.at(-1)![0]).not.toHaveProperty("unlockLeaseCommand");
+ expect((await DesktopSettings.open({...options,nativePlatform:"macos-sck"})).get(true).permissions.allowDisplayResize).toBe(true);
+ const linux=await DesktopSettings.open({...options,nativePlatform:"linux-portal"});expect(linux.get(true).permissions.allowDisplayResize).toBe(false);await expect(linux.set({...off,enabled:true,allowDisplayResize:true})).rejects.toThrow("native backend");
+});

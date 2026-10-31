@@ -3,6 +3,7 @@ import CryptoKit
 import AppKit
 import ScreenCaptureKit
 import ApplicationServices
+import ColorSync
 import CoreMedia
 import VideoToolbox
 import Darwin
@@ -198,10 +199,76 @@ struct DisplayStamp: Equatable {
     let bounds: CGRect
     let pixelWidth: Int
     let pixelHeight: Int
+    let identity:String,rotation:Double,mode:Int32
+    init(bounds:CGRect,pixelWidth:Int,pixelHeight:Int,identity:String="generated-test",rotation:Double=0,mode:Int32=0) {self.bounds=bounds;self.pixelWidth=pixelWidth;self.pixelHeight=pixelHeight;self.identity=identity;self.rotation=rotation;self.mode=mode}
 }
 func displayStamp(_ id: CGDirectDisplayID) -> DisplayStamp? {
-    guard CGDisplayIsActive(id) != 0,let mode=CGDisplayCopyDisplayMode(id) else { return nil }
-    return DisplayStamp(bounds:CGDisplayBounds(id),pixelWidth:mode.pixelWidth,pixelHeight:mode.pixelHeight)
+    guard CGDisplayIsActive(id) != 0,let mode=CGDisplayCopyDisplayMode(id),let uuid=CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),let identity=CFUUIDCreateString(nil,uuid) else { return nil }
+    let rotation=CGDisplayRotation(id);guard [0.0,90.0,180.0,270.0].contains(rotation) else {return nil}
+    let rotated=rotation==90 || rotation==270
+    return DisplayStamp(bounds:CGDisplayBounds(id),pixelWidth:rotated ? mode.pixelHeight:mode.pixelWidth,pixelHeight:rotated ? mode.pixelWidth:mode.pixelHeight,identity:identity as String,rotation:rotation,mode:mode.ioDisplayModeID)
+}
+
+// Display mutation is opt-in, source-bound and never restores over a later
+// local change. Generated tests inject every OS boundary below.
+struct NativeDisplayModeFact: Equatable {
+    let id:Int32,width:Int,height:Int,logicalWidth:Int,logicalHeight:Int
+}
+struct NativeDisplayModeState: Equatable {
+    let identity:String,mode:Int32,bounds:CGRect,rotation:Double
+}
+final class NativeDisplayModeLease {
+    let original:NativeDisplayModeState
+    private let active:()->Bool,current:()->NativeDisplayModeState?,set:(Int32)->Bool,clock:()->Double
+    private let started:Double
+    private var owned:NativeDisplayModeState?
+    private var consumed=false
+    init?(active:@escaping()->Bool,current:@escaping()->NativeDisplayModeState?,set:@escaping(Int32)->Bool,since:Double?=nil,clock:@escaping()->Double=milliseconds) {
+        self.active=active;self.current=current;self.set=set;self.clock=clock;started=since ?? clock()
+        guard let state=current(),active(),let confirmed=current(),confirmed==state,clock()>=started,clock()-started<3000 else {return nil};original=confirmed
+    }
+    func apply(_ mode:Int32)->Bool {
+        guard !consumed else {return false};consumed=true
+        guard owned==nil,let before=snapshot(),before==original,clock()>=started,clock()-started<3000 else {return false}
+        if mode==original.mode {return true}
+        let applied=set(mode),after=current()
+        if let after=after,after.identity==original.identity,after.mode==mode,after.rotation==original.rotation {owned=after}
+        let valid=active() && clock()>=started && clock()-started<3000 && applied && owned != nil
+        if !valid {restore()};return valid
+    }
+    func restore() {
+        guard let expected=owned else {return};owned=nil
+        guard let now=snapshot(),now==expected else {return}
+        _=set(original.mode)
+    }
+    private func snapshot()->NativeDisplayModeState? {guard let first=current(),active(),let confirmed=current(),confirmed==first else {return nil};return confirmed}
+    func ownsCurrent()->Bool {let state=snapshot(),valid=state != nil && clock()>=started && clock()-started<3000;guard let expected=owned else {return valid && state==original};return valid && state==expected}
+}
+func nativeReleaseDisplayMode(input:InputGuard?,lease:NativeDisplayModeLease?) {
+    input?.release();lease?.restore()
+}
+func nativeCaptureDimensions(sourceWidth:Int,sourceHeight:Int,maxWidth:Int,exact:Bool)->(Int,Int) {
+    let scale=exact ? 1.0:min(1.0,Double(maxWidth)/Double(sourceWidth),2400.0/Double(sourceHeight))
+    return (max(1,Int(Double(sourceWidth)*scale)),max(1,Int(Double(sourceHeight)*scale)))
+}
+func nativeDisplayModeState(_ id:CGDirectDisplayID)->NativeDisplayModeState? {
+    guard CGDisplayIsActive(id) != 0,CGDisplayIsInMirrorSet(id)==0,let mode=CGDisplayCopyDisplayMode(id),let uuid=CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),let identity=CFUUIDCreateString(nil,uuid) else {return nil}
+    return NativeDisplayModeState(identity:identity as String,mode:mode.ioDisplayModeID,bounds:CGDisplayBounds(id),rotation:CGDisplayRotation(id))
+}
+func nativeDisplayModeFacts(_ modes:[CGDisplayMode],rotation:Double)->[NativeDisplayModeFact] {
+    guard modes.count<=512,[0.0,90.0,180.0,270.0].contains(rotation) else {return []}
+    let rotated=rotation==90 || rotation==270
+    return modes.filter{$0.isUsableForDesktopGUI()}.compactMap {mode in
+        let w=rotated ? mode.pixelHeight:mode.pixelWidth,h=rotated ? mode.pixelWidth:mode.pixelHeight
+        guard w>=320,w<=4096,h>=200,h<=2400,w*h<=8_000_000 else {return nil}
+        return NativeDisplayModeFact(id:mode.ioDisplayModeID,width:w,height:h,logicalWidth:rotated ? mode.height:mode.width,logicalHeight:rotated ? mode.width:mode.height)
+    }
+}
+func nativeSelectDisplayMode(_ modes:[NativeDisplayModeFact],width:Int,height:Int,current:Int32,currentScale:Double?=nil)->NativeDisplayModeFact? {
+    let choices=modes.filter{$0.width==width && $0.height==height}
+    if let existing=choices.first(where:{$0.id==current}) {return existing}
+    let scale=currentScale ?? modes.first(where:{$0.id==current}).map{Double($0.width)/Double(max(1,$0.logicalWidth))} ?? 1
+    return choices.min {abs(Double($0.width)/Double(max(1,$0.logicalWidth))-scale)<abs(Double($1.width)/Double(max(1,$1.logicalWidth))-scale)}
 }
 
 struct NativeMonitorFact {
@@ -426,6 +493,7 @@ final class DesktopSource {
     var clipboardCeiling=false
     var monitorRequested=false,monitorChoice:String?,monitorLayout:[String:Any]?
     var monitorStamps=[CGDirectDisplayID:DisplayStamp]()
+    var displayResizeCeiling=false,displayRequest:(width:Int,height:Int)?,displayModes=[[String:Int]](),displayLease:NativeDisplayModeLease?
     var display: SCDisplay?
     var bounds=CGRect.zero
     var stamp: DisplayStamp?
@@ -524,12 +592,17 @@ final class DesktopSource {
         if kind=="configure" {
             guard !configured,let options=value["options"] as? [String:Any],
                   let width=integer(options["width"],320,1920),let fps=integer(options["fps"],1,30),let quality=integer(options["quality"],20,90) else { throw NativeError("backend_failure") }
-            for key in ["allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","separateCursor"] {
+            for key in ["allowVirtualDisplay","allowElevated","allowMicrophone","separateCursor"] {
                 if boolean(value[key])==true { throw NativeError("unsupported") }
             }
             if boolean(options["deltas"])==true || boolean(options["adaptive"])==true { throw NativeError("unsupported") }
             if let image=options["image"] as? [String:Any] {
                 guard image["colorMode"] as? String == "full",let show=boolean(image["showCursor"]) else { throw NativeError("unsupported") };showCursor=show
+            }
+            displayResizeCeiling=boolean(value["allowDisplayResize"])==true && CommandLine.arguments.contains("--allow-display-resize")
+            if let raw=options["display"] {
+                guard displayResizeCeiling,boolean(options["features"])==true,let size=raw as? [String:Any],size.count==2,let w=integer(size["width"],320,4096),let h=integer(size["height"],200,2400),w*h<=8_000_000 else {throw NativeError("permission_denied")}
+                displayRequest=(Int(w),Int(h))
             }
             monitorRequested=boolean(options["monitors"])==true && boolean(value["allowMonitors"])==true
             if boolean(options["monitors"])==true && !monitorRequested {throw NativeError("permission_denied")}
@@ -590,7 +663,7 @@ final class DesktopSource {
     @MainActor func capture() async {
         do {
             guard CGPreflightScreenCaptureAccess(),sessionActive() else { throw NativeError("permission_denied") }
-            let contents=try await SCShareableContent.excludingDesktopWindows(false,onScreenWindowsOnly:true)
+            var contents=try await SCShareableContent.excludingDesktopWindows(false,onScreenWindowsOnly:true)
             guard !dead else { return }
             let args=CommandLine.arguments
             let requested: UInt32?
@@ -599,7 +672,22 @@ final class DesktopSource {
             } else { requested=nil }
             let monitorID=monitorChoice.flatMap{UInt32($0.dropFirst(4))}
             if let pinned=requested,let chosen=monitorID,pinned != chosen {throw NativeError("permission_denied")}
-            guard let selected=contents.displays.first(where:{$0.displayID==(monitorID ?? requested ?? CGMainDisplayID())}) else { throw NativeError("source_changed") }
+            guard var selected=contents.displays.first(where:{$0.displayID==(monitorID ?? requested ?? CGMainDisplayID())}) else { throw NativeError("source_changed") }
+            let selectionStarted=milliseconds()
+            if displayResizeCeiling,let state=nativeDisplayModeState(selected.displayID),let all=CGDisplayCopyAllDisplayModes(selected.displayID,nil) as? [CGDisplayMode],all.contains(where:{$0.ioDisplayModeID==state.mode}) {
+                let chosenID=selected.displayID
+                let modes=nativeDisplayModeFacts(all,rotation:state.rotation)
+                var seen=Set<String>()
+                displayModes=modes.filter{seen.insert("\($0.width)x\($0.height)").inserted}.prefix(128).map{["width":$0.width,"height":$0.height]}
+                if let request=displayRequest {
+                    guard let mode=nativeSelectDisplayMode(modes,width:request.width,height:request.height,current:state.mode,currentScale:all.first(where:{$0.ioDisplayModeID==state.mode}).map{Double($0.pixelWidth)/Double(max(1,$0.width))}),let lease=NativeDisplayModeLease(active:{[weak self] in guard let self=self else {return false};return !self.dead && self.sessionActive() && CGPreflightScreenCaptureAccess()},current:{nativeDisplayModeState(chosenID)},set:{identifier in guard let target=all.first(where:{$0.ioDisplayModeID==identifier}) else {return false};return CGDisplaySetDisplayMode(chosenID,target,nil) == .success},since:selectionStarted),lease.original==state else {throw NativeError("unsupported")}
+                    displayLease=lease
+                    guard lease.apply(mode.id) else {throw NativeError("source_changed")}
+                    contents=try await SCShareableContent.excludingDesktopWindows(false,onScreenWindowsOnly:true)
+                    guard !dead,lease.ownsCurrent(),let updated=contents.displays.first(where:{$0.displayID==chosenID}),let resized=displayStamp(chosenID),resized.pixelWidth==request.width,resized.pixelHeight==request.height else {throw NativeError("source_changed")}
+                    selected=updated
+                }
+            } else if displayRequest != nil {throw NativeError("unsupported")}
             if monitorRequested {
                 var facts=[NativeMonitorFact]()
                 for candidate in contents.displays {
@@ -615,8 +703,8 @@ final class DesktopSource {
             guard sourceActive() else { throw NativeError("source_changed") }
             let sourceWidth=selectedStamp.pixelWidth,sourceHeight=selectedStamp.pixelHeight
             guard sourceWidth>0,sourceHeight>0,sourceWidth<=32768,sourceHeight<=32768 else { throw NativeError("unsupported") }
-            let scale=min(1.0,Double(width)/Double(sourceWidth),2400.0/Double(sourceHeight))
-            width=max(1,Int(Double(sourceWidth)*scale));height=max(1,Int(Double(sourceHeight)*scale))
+            let captureSize=nativeCaptureDimensions(sourceWidth:sourceWidth,sourceHeight:sourceHeight,maxWidth:width,exact:displayRequest != nil)
+            width=captureSize.0;height=captureSize.1
             let configuration=SCStreamConfiguration();configuration.width=width;configuration.height=height;configuration.showsCursor=showCursor
             self.configuration=configuration;filter=SCContentFilter(display:selected,excludingApplications:[],exceptingWindows:[])
             input=InputGuard(sink:QuartzSink(bounds:bounds,active:{ [weak self] in self?.sourceActive()==true }),allowed:inputCeiling,active:{ [weak self] in
@@ -644,6 +732,7 @@ final class DesktopSource {
                         if !ready {
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
                             if monitorRequested,let layout=monitorLayout {hello["monitorLayout"]=layout}
+                            if displayResizeCeiling && !displayModes.isEmpty {hello["display"]=["modes":displayModes]}
                             if richClipboard != nil { hello["richClipboard"]=true }
                             if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60;if nativeVideo?.cadence==true {hello["nativeCadence"]=true};if nativeVideo?.adaptive==true {hello["nativeAdaptive"]=true};if nativeVideo?.codecs==true {hello["nativeCodecs"]=true;guard let candidates=nativeCodecCandidatesAfterQuery(query:{ToolboxH264Encoder.hardwareHEVCAvailable()},validAfterQuery:{self.publishable(ticket)}) else {return};hello["nativeCodecCandidates"]=candidates}}
                             if audioCeiling {hello["nativeAudio"]=true}
@@ -703,7 +792,7 @@ final class DesktopSource {
     }
     func stop(_ code: String?) {
         locked {
-            if dead || stopping { return };stopping=true;systemAudio?.stop();nativeVideo?.stop(notify:false);input?.release();clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
+            if dead || stopping { return };stopping=true;systemAudio?.stop();nativeVideo?.stop(notify:false);nativeReleaseDisplayMode(input:input,lease:displayLease);displayLease=nil;clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
             finishStopped(code)
@@ -729,6 +818,43 @@ func generatedTests() throws -> Int {
     func check(_ condition: @autoclosure () -> Bool,_ detail: String) throws {
         guard condition() else { throw GeneratedFailure(detail:detail) };count+=1
     }
+    let displayBounds=CGRect(x:-640,y:-100,width:1280,height:800)
+    let originalDisplay=NativeDisplayModeState(identity:"generated-display",mode:1,bounds:displayBounds,rotation:0)
+    var displayState:NativeDisplayModeState?=originalDisplay,displayAlive=true,displayNow:Double=100,modeSets=[Int32](),queryEffect:(()->Void)?
+    func makeDisplayLease()->NativeDisplayModeLease? {NativeDisplayModeLease(active:{displayAlive},current:{queryEffect?();return displayState},set:{mode in modeSets.append(mode);displayState=NativeDisplayModeState(identity:"generated-display",mode:mode,bounds:displayBounds,rotation:0);return true},clock:{displayNow})}
+    let firstLease=makeDisplayLease()!
+    try check(firstLease.apply(2) && firstLease.ownsCurrent(),"display mode lease applies one requested mode")
+    try check(!firstLease.apply(3) && modeSets==[2],"display mode lease cannot be reused")
+    firstLease.restore();firstLease.restore();try check(modeSets==[2,1],"display mode lease restores original mode once")
+    modeSets=[];displayState=originalDisplay;let localChange=makeDisplayLease()!;try check(localChange.apply(2),"display mode second generated lease")
+    displayState=NativeDisplayModeState(identity:"generated-display",mode:3,bounds:displayBounds,rotation:0);localChange.restore();try check(modeSets==[2],"display mode restore preserves later local override")
+    modeSets=[];displayState=originalDisplay;let otherDisplay=makeDisplayLease()!;displayState=NativeDisplayModeState(identity:"other-display",mode:1,bounds:displayBounds,rotation:0)
+    try check(!otherDisplay.apply(2) && modeSets.isEmpty,"display mode rejects reused display ID")
+    displayState=originalDisplay;let expiredDisplay=makeDisplayLease()!;queryEffect={displayNow=3100}
+    try check(!expiredDisplay.apply(2) && modeSets.isEmpty,"display mode OS query cannot extend original deadline");queryEffect=nil
+    displayNow=100;displayState=originalDisplay;let revokedDisplay=makeDisplayLease()!;queryEffect={displayAlive=false}
+    try check(!revokedDisplay.apply(2) && modeSets.isEmpty,"display mode query cannot cross permission revoke");queryEffect=nil;displayAlive=true
+    displayState=originalDisplay;displayNow=100;modeSets=[]
+    let activeMutation=NativeDisplayModeLease(active:{displayState=NativeDisplayModeState(identity:"replacement",mode:9,bounds:displayBounds,rotation:0);return true},current:{displayState},set:{modeSets.append($0);return true},clock:{displayNow})
+    try check(activeMutation==nil && modeSets.isEmpty,"display mode scope query cannot replace identity during initialization")
+    displayState=originalDisplay;var mutateScope=false
+    let restoreMutation=NativeDisplayModeLease(active:{if mutateScope {displayState=NativeDisplayModeState(identity:"generated-display",mode:9,bounds:displayBounds,rotation:0)};return true},current:{displayState},set:{mode in modeSets.append(mode);displayState=NativeDisplayModeState(identity:"generated-display",mode:mode,bounds:displayBounds,rotation:0);return true},clock:{displayNow})!
+    try check(restoreMutation.apply(2),"display mode generated scope mutation setup");mutateScope=true
+    try check(!restoreMutation.ownsCurrent(),"display mode live query cannot accept stale snapshot");restoreMutation.restore();try check(modeSets==[2],"display mode restore cannot overwrite local change made during scope query")
+    let exactCapture=nativeCaptureDimensions(sourceWidth:1920,sourceHeight:1080,maxWidth:1280,exact:true),normalCapture=nativeCaptureDimensions(sourceWidth:1920,sourceHeight:1080,maxWidth:1280,exact:false)
+    try check(exactCapture.0==1920 && exactCapture.1==1080 && normalCapture.0==1280 && normalCapture.1==720,"explicit display dimensions override transfer width with exact pixels")
+    modeSets=[];displayState=originalDisplay;displayNow=100;displayAlive=true
+    let cleanupLease=makeDisplayLease()!;try check(cleanupLease.apply(2),"display cleanup generated mode setup")
+    let cleanupSink=GeneratedSink(),cleanupInput=InputGuard(sink:cleanupSink,allowed:true,active:{displayState?.mode==2})
+    cleanupInput.control=true
+    _=try cleanupInput.input(["seq":1,"expiresAt":1100,"input":["kind":"key","code":"ControlLeft","down":true]],now:1000)
+    _=try cleanupInput.input(["seq":2,"expiresAt":1100,"input":["kind":"pointer","x":0.5,"y":0.5,"event":"down","button":0]],now:1000)
+    nativeReleaseDisplayMode(input:cleanupInput,lease:cleanupLease)
+    try check(cleanupSink.events.filter{!$0.down}.count==2 && displayState?.mode==1 && modeSets==[2,1],"display cleanup releases held key and button before restoring mode")
+    let generatedModes=[NativeDisplayModeFact(id:1,width:1280,height:800,logicalWidth:1280,logicalHeight:800),NativeDisplayModeFact(id:2,width:1920,height:1200,logicalWidth:960,logicalHeight:600),NativeDisplayModeFact(id:3,width:1920,height:1200,logicalWidth:1920,logicalHeight:1200)]
+    try check(nativeSelectDisplayMode(generatedModes,width:1920,height:1200,current:1)?.id==3,"display mode selection preserves current logical scale")
+    try check(nativeSelectDisplayMode(generatedModes,width:1920,height:1200,current:99,currentScale:2)?.id==2,"display mode preserves retina scale when original exceeds transfer size limit")
+    try check(nativeSelectDisplayMode(generatedModes,width:999,height:500,current:1)==nil,"display mode never picks a nearby unrequested size")
     try check(integer(true,0,5)==nil,"reject boolean integer")
     let regional=AgentRegionProofs(),regionId=UUID().uuidString.lowercased()
     let spec: [String:Any]=["id":regionId,"x":1,"y":0,"width":2,"height":1]
@@ -881,6 +1007,9 @@ func generatedTests() throws -> Int {
     try check(releaseSink.events.count==sent && releaseGuard.keys.isEmpty,"source revocation clears trackers without injection")
     let logical=CGRect(x:0,y:0,width:100,height:100)
     try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100) != DisplayStamp(bounds:logical,pixelWidth:200,pixelHeight:200),"retina backing change retires same logical bounds")
+    try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,rotation:0) != DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,rotation:180),"same-size display rotation retires source")
+    try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,mode:1) != DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,mode:2),"same-size display mode change retires source")
+    try check(DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,identity:"first") != DisplayStamp(bounds:logical,pixelWidth:100,pixelHeight:100,identity:"replacement"),"display UUID change retires reused ID and geometry")
     var clock:Double=0
     let blocked=writeRecord(Data([1]),valid:{true},clock:{clock},attempt:{_ in .again},wait:{clock+=501})
     try check(blocked == .failed,"blocked output has a finite deadline")

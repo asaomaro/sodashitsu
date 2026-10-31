@@ -1,0 +1,13 @@
+# macOSの物理解像度
+
+local allowDisplayResizeとhelperの--allow-display-resizeを独立に要求する。明示features/display指定でのみ選択したdisplayのmodeを変更する。公開CGDisplaySetDisplayModeを使用し、mirroring setは対象外。利用可能mode512件以内から転送protocolの寸法上限を満たすものだけ列挙し、一覧は128寸法まで。同じ物理寸法では元のlogical scaleを優先する。指定寸法がなければ近似modeを使わない。
+
+NativeDisplayModeLeaseはUUID/modeID/bounds/rotationと元のmodeを束縛し、current→active→currentの同一照合と元の3s期限を維持する。OS metadata問合せやSCK再列挙で期限を取り直さない。切替後はSCKを再列挙し、同じdisplayと指定physical寸法を確認する。明示displayでは転送width設定より優先しexact captureする。通常のwidthによる縮小は維持。
+
+正常終了では元のsourceが有効な間にheld key/buttonを解除し、その後にmode復元を試す。後からlocal利用者がmode/配置/rotationを変更した場合やdisplay UUIDが違う場合は上書きしない。APIのmode変更はprocess lifetimeの設定で、process終了時はOSが恒久設定へ戻す（元の一時modeと同一とは限らない）。runtime DisplayStampもUUID/mode/rotationを保持して同寸法の変更を見逃さない。
+
+許可がない場合はmode列挙も変更もせず、専用processを追加しない。非対応/ミラー環境では通常共有のmode表示だけ省略し、明示変更が要求された場合に失敗する。Linux Portalにはこの物理解像度APIを解禁しない。Macの仮想画面・複数viewerとの併用もこの差分では解禁しない。
+
+公式根拠: [CGDisplaySetDisplayMode](https://developer.apple.com/documentation/coregraphics/cgdisplaysetdisplaymode(_:_:_:))、[Quartz Display Services](https://developer.apple.com/documentation/coregraphics/quartz-display-services)、[ColorSync display UUID](https://developer.apple.com/documentation/colorsync/cgdisplaycreateuuidfromdisplayid(_:))。
+
+risk taskcheck/cross対象。OS境界はclosureによる生成試験にし、実OSのmode変更は試験しない。
