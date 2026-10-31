@@ -56,3 +56,5 @@ Error: Generated native builder failed: #< CLIXML
 
 <Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">optional hash module is unavailable_x000D__x000A_</S><S S="Error">発生場所 行:27 文字:90_x000D__x000A_</S><S S="Error">+ ... function Get-FileHash { throw 'optional hash module is unavailable' }_x000D__x000A_</S><S S="Error">+                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~_x000D__x000A_</S><S S="Error">    + CategoryInfo          : OperationStopped: (optional hash module is unavailable:String) [], RuntimeException_x000D__x000A_</S><S S="Error">    + FullyQualifiedErrorId : optional hash module is unavailable_x000D__x000A_</S><S S="Error"> _x000D__x000A_</S></Objs>
 ```
+
+最終head d26b4c828f59134f727d20101b904072f8452fefの15checks pass後PR346をmerge（main4d33e4f7bec3c6d4ada9b19527f9621a5ae3e2d2、tree一致）。途中の既存AssistantNativeRootWindows生成試験1件はowned child10秒timeout、同一headの当該job再実行で成功した。製品のdeadlineや型/許可のassertは変更していない。稼働版handoffと実desktop接続は未実施。receipt /tmp/soda-common-native-final-receipt.json。
