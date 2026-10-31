@@ -5,6 +5,7 @@
  */
 import { computed,ref,inject,onMounted,onBeforeUnmount } from "vue";
 import { LocalClientFactoryKey } from "../injection.js";
+import { analyticsSelected } from "../dashboard/navigation.js";
 import { SCREENS, type ScreenDef } from "../screens/screens.js";
 import { useViewStore } from "../store/view.js";
 
@@ -44,7 +45,7 @@ function fullName(def: ScreenDef): string {
       :aria-pressed="view.screen === def.id"
       :aria-label="(def as ScreenDef).title ?? (view.sidebarCollapsed ? def.label : undefined)"
       :title="fullName(def)"
-      @click="view.setScreen(def.id)"
+      @click="analyticsSelected = false; view.setScreen(def.id)"
     >
       <span class="screen-switcher-label">{{
         view.sidebarCollapsed ? def.shortLabel : def.label
@@ -53,7 +54,7 @@ function fullName(def: ScreenDef): string {
     <button ref="button" class="screen-switcher-btn" :class="{'screen-switcher-btn-active':current}" data-screen-more aria-haspopup="true" :aria-expanded="menuOpen" :title="current?.label??'その他の画面'" @click="toggle" @keydown.esc="menuOpen=false">
       <span class="screen-switcher-label">{{view.sidebarCollapsed?(current?.shortLabel??'他'):(current?.label??'その他')}} ▾<span v-if="pending" class="screen-pending"> {{pending}}</span></span>
     </button>
-    <Teleport to="body"><nav v-if="menuOpen" ref="menu" class="screen-extra-menu" :style="{left:left+'px',top:top+'px'}" aria-label="その他の画面" @keydown.esc="menuOpen=false;button?.focus()"><button v-for="def in extra" :key="def.id" :data-screen-id="def.id" :aria-current="view.screen===def.id?'page':undefined" @click="view.setScreen(def.id);menuOpen=false;button?.focus()">{{def.label}}<span v-if="def.id==='connections'&&pending">（{{pending}}）</span></button></nav></Teleport>
+    <Teleport to="body"><nav v-if="menuOpen" ref="menu" class="screen-extra-menu" :style="{left:left+'px',top:top+'px'}" aria-label="その他の画面" @keydown.esc="menuOpen=false;button?.focus()"><button data-usage-analytics @click="analyticsSelected=true;view.openDashboard();menuOpen=false;button?.focus()">エージェント利用分析</button><button v-for="def in extra" :key="def.id" :data-screen-id="def.id" :aria-current="view.screen===def.id?'page':undefined" @click="view.setScreen(def.id);menuOpen=false;button?.focus()">{{def.label}}<span v-if="def.id==='connections'&&pending">（{{pending}}）</span></button></nav></Teleport>
   </div>
 </template>
 

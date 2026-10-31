@@ -4,7 +4,8 @@
  * 見えている間（`view.screen === "dashboard"`）だけ中身を出し、利用状況の配信を頼む（`UsageController`。`view.usageWatchWanted`）。
  * 見えない間は、中身を持たない（`v-if`）ので、時計も動かない。基本画面は、`App.vue` が大きさを保ったまま見えなくする（D11）。
  */
-import DashboardView from "../dashboard/DashboardView.vue";
+import { defineAsyncComponent } from "vue";
+const DashboardView = defineAsyncComponent(() => import("../dashboard/DashboardView.vue"));
 import { useViewStore } from "../store/view.js";
 
 const view = useViewStore();

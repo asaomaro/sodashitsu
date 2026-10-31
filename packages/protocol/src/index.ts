@@ -88,3 +88,5 @@ export * from "./desktopNativeFiles.js";
 export * from "./desktopNativeHelper.js";
 
 export * from "./desktopAssistant.js";
+
+export * from "./usageAnalytics.js";

@@ -1,0 +1,7 @@
+# 設計
+
+既存状況ダッシュボードを状況一覧/利用分析に拡張する。ScreenSwitcherのその他に分析入口を置き、分析コンポーネントはdynamic importする。DashboardViewもscreen/dialog側で遅延ロードする。新しい依存ライブラリは増やさずCSS棒とSVG推移を使う。
+種類別トークンはbasisごとに分離する。モデル別金額はagent.account_costの明示的会計記録を再利用し、記録のないモデルは不明。累計推移は表示中の最大60観測だけを保持し、構成変更/減少時にリセットする。過去期間の消費ではない。
+agent.usage_reportは認証済みControlSurfaceに登録しpane.sockに公開しない。受け取るのはkind/model/accountKeyのみ、集計値はserverから読み直す。任意prompt/ファイル/会話本文は受け付けない。SummaryServiceの隔離済みread-only/tools無効・上限・時間制限・停止処理を共用する。セッション再利用なし・自動生成なし・追加プロセス常駐なし。
+
+期間別履歴はRPC時にUsageHistoryReaderをdynamic importし、既知Claude/Codexログのみbounded scan。UTC実応答日時、Claude応答IDによる重複排除、Codex累計の非負差分（tail初回は基準不明として除外）を使う。差分リセットは除外/partial。Codex入力のcacheを分離しreasoningを二重加算しない。複数rootの同IDは別アカウント、同rootのコピーはIDで排除。構成グラフ/日週月の再集計は取得データのみで描く。

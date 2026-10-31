@@ -263,3 +263,27 @@ it.skipIf(process.platform === "win32")(
     expect(await f.service.cached("p")).toMatchObject({ stale: false, partial: true });
   },
 );
+
+it.skipIf(process.platform === "win32")("usage reports reuse the isolated runner without reading conversations or resuming sessions", async () => {
+  const f = await fixture();
+  const result = await f.service.usageReport({ kind: "codex", model: "GPT-5.4" }, { groups: [{ kind: "codex", tokens: 123 }] });
+  expect(result.text).toContain("目的");
+  expect(f.read).not.toHaveBeenCalled();
+  const launch = JSON.parse(await readFile(f.log, "utf8"));
+  expect(launch.args).not.toContain("resume");
+  expect(launch.args).toContain("read-only");
+  expect(launch.args).toContain("gpt-5.4");
+  expect(launch.home).not.toBe(f.home);
+  const prompt = await readFile(join(f.dir, "prompt.txt"), "utf8");
+  expect(prompt).toContain('"tokens":123');
+  expect(prompt).toContain("期間推移");
+  await expect(f.service.usageReport({ kind: "codex", model: "" }, "a".repeat(100001))).rejects.toThrow(/上限/);
+});
+it.skipIf(process.platform === "win32")("stops a report when its connection authorization expires during execution", async () => {
+  const f = await fixture();
+  let allowed = true;
+  // The fake waits 150ms; revoke while it is running and verify the completion guard too.
+  const pending = f.service.usageReport({ kind: "codex", model: "" }, { tokens: 42 }, () => { if (!allowed) throw new Error("revoked"); });
+  setTimeout(() => { allowed = false; }, 80);
+  await expect(pending).rejects.toThrow("revoked");
+});

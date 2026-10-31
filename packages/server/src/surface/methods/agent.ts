@@ -5,6 +5,9 @@ import {
   type AgentPromptParams as PromptParams,
   AgentSubagentTranscriptParams,
   AccountCostParams,
+  UsageReportParams,
+  UsageHistoryParams,
+  usageAnalytics,
   AgentUsageParams,
   AgentUsageWatchParams,
   AgentRenameParams,
@@ -23,7 +26,7 @@ import {
 } from "../../agent/agentInput.js";
 import { createAgentKindsLister } from "../../agent/agentKinds.js";
 import type { TerminalHost } from "../../terminal/TerminalHost.js";
-import type { ControlSurface } from "../ControlSurface.js";
+import type { MethodContext, ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 /**
@@ -106,7 +109,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
       let sentTo = agent;
       try {
         await host.writeModal({
-          ...(ctx.agentPromptPrepare?{prepare:ctx.agentPromptPrepare}:{}),
+          ...(ctx.agentPromptPrepare ? { prepare: ctx.agentPromptPrepare } : {}),
           build: (modes) => {
             if (ctx.signal?.aborted)
               throw new RpcError("agent_prompt_failed", "指示の送信を中断しました");
@@ -193,6 +196,75 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
   // ログイン済みの `/ws` の方式だけ（`pane.sock` には載せない）。
   const usage = deps.usage;
   if (usage) {
+    const checkAccess = (ctx: MethodContext) => {
+      if (ctx.connectionAuthorized?.() === false)
+        throw new RpcError("unauthorized", "接続の認証が失効しました");
+      if (ctx.signal?.aborted) throw new RpcError("agent_prompt_failed", "処理が取り消されました");
+    };
+    let history: Promise<import("../../usage/usageHistory.js").UsageHistoryReader> | undefined;
+    const historyReader = () =>
+      (history ??= import("../../usage/usageHistory.js").then((m) => new m.UsageHistoryReader()));
+    surface.register("agent.usage_history", {
+      schema: UsageHistoryParams,
+      handler: async (ctx, params) => {
+        checkAccess(ctx);
+        const result = await (await historyReader()).read(params, () => checkAccess(ctx));
+        checkAccess(ctx);
+        return result;
+      },
+    });
+    if (deps.summaries)
+      surface.register("agent.usage_report", {
+        schema: UsageReportParams,
+        handler: async (ctx, params) => {
+          checkAccess(ctx);
+          const selectedHistory = params.history
+            ? await (
+                await historyReader()
+              ).read(UsageHistoryParams.parse(params.history), () => checkAccess(ctx))
+            : null;
+          const snapshot = await usage.get();
+          const values = Object.values(snapshot.panes).filter((u) => u !== null);
+          const cost = params.accountKey ? await usage.accountCost(params.accountKey) : null;
+          if (!values.length && !cost && !selectedHistory?.calls)
+            throw new RpcError("not_found", "分析できる利用状況がありません");
+          checkAccess(ctx);
+          return deps.summaries!.usageReport(
+            params.settings,
+            {
+              scope:
+                "現在のマシンの取得できるpaneのセッション累計・記録に残る分・現在のコンテキスト。期間別の履歴ではない。同じ会話の複数paneは重複を含む。modelは最後の主の応答のみ。",
+              asOf: Date.now(),
+              groups: usageAnalytics(values),
+              sessions: values.map((u) => ({
+                kind: u.kind,
+                source: u.source,
+                lastModel: u.model,
+                tokens: u.tokens,
+                contextTokens: u.contextTokens,
+                contextWindowTokens: u.contextWindowTokens,
+                contextUsedPct: u.contextUsedPct,
+                costUsd: u.costUsd,
+                costBasis: u.costBasis,
+                costAsOf: u.costAsOf,
+                credits: u.credits,
+                updatedAt: u.updatedAt,
+                partial: u.partial,
+                scanning: u.scanning,
+                updatesStopped: u.updatesStopped,
+              })),
+              history: selectedHistory,
+              accountCost: cost && {
+                scope:
+                  "選択アカウントの保存済みセッションの記録USD。期間指定なし。内訳は明示的な会計記録のみ。",
+                ...cost,
+                accountKey: undefined,
+              },
+            },
+            () => checkAccess(ctx),
+          );
+        },
+      });
     surface.register("agent.account_cost", {
       schema: AccountCostParams,
       handler: (_ctx, params) => usage.accountCost(params.accountKey),

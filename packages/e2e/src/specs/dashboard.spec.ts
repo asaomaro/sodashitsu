@@ -23,6 +23,11 @@ const FAKE = `
 import { appendFileSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { randomUUID, createHash } from "node:crypto";
+if (process.argv.includes("-p")) {
+  let prompt = "";
+  process.stdin.on("data", c => prompt += c);
+  process.stdin.on("end", () => { writeFileSync(${JSON.stringify(join(dir, "report-prompt.txt"))}, prompt); process.stdout.write(JSON.stringify({ result: "取得した累計トークンを分析しました。改善提案: 記録の範囲を確認してください。", session_id: "report-test" })); });
+} else {
 const pane = process.env.SODA_PANE_ID;
 const sessionId = randomUUID();
 const transcript = ${JSON.stringify(projectDir)} + "/" + sessionId + ".jsonl";
@@ -47,16 +52,18 @@ process.stdin.on("data", (d) => {
   if (String(d).includes("\\u0004")) process.exit(0);
 });
 setInterval(() => {}, 1000);
+}
 `;
 await writeFile(join(dir, "fake-agent.mjs"), FAKE);
 await writeFile(join(dir, "bin", "claude"), `#!/bin/bash\nexec -a claude ${JSON.stringify(process.execPath)} ${JSON.stringify(join(dir, "fake-agent.mjs"))} "$@"\n`);
 await chmod(join(dir, "bin", "claude"), 0o755);
 // pane のシェルが rc を読んで PATH の先頭へ実物の `claude` を足し直さないことは、共通の道具（`startAppServer` の既定の、rc を読まない bash）に任せる。
 // 打ち込みの前に、pane の中で `command -v claude` が偽のものを指すことを `assertPaneResolvesFake` が確かめる（違えば打ち込まずに落ちる）。
-const savedEnv = { PATH: process.env["PATH"], CLAUDE_CONFIG_DIR: process.env["CLAUDE_CONFIG_DIR"] };
+const savedEnv = { PATH: process.env["PATH"], CLAUDE_CONFIG_DIR: process.env["CLAUDE_CONFIG_DIR"], HOME: process.env["HOME"] };
 test.beforeAll(() => {
   process.env["PATH"] = `${join(dir, "bin")}${delimiter}${savedEnv.PATH ?? ""}`;
   process.env["CLAUDE_CONFIG_DIR"] = configDir;
+  process.env["HOME"] = dir;
 });
 test.afterAll(async () => {
   for (const [k, v] of Object.entries(savedEnv)) {
@@ -116,6 +123,53 @@ async function open(page: Page, appServer: AppServer) {
 
 test.describe("ダッシュボード（PR3）", () => {
   test.setTimeout(150_000);
+
+  test("利用分析はその他から遅延ロードし、明示操作だけで偽エージェントのレポートを生成する", async ({ page, appServer }) => {
+    const client = await appServer.openClient();
+    const paneId = client.helloSnapshot()!.panes[0]!.id;
+    const record = await startAgent(appServer, client, paneId, "analytics-test");
+    const sent = await watchSent(page);
+    const resources: string[] = [];
+    page.on("request", r => resources.push(r.url()));
+    const generated = Array.from({length: 12}, (_, i) => ({ type: "assistant", timestamp: new Date(Date.now() - i * 2 * 86400000).toISOString(), message: { id: `history-${i}`, model: i % 3 ? "claude-sonnet-5-5" : "claude-opus-5", usage: { input_tokens: 100 + i * 10, output_tokens: 600 + i * 60, cache_read_input_tokens: 200 + i * 30, cache_creation_input_tokens: 50 } } }));
+    await writeFile(join(projectDir, "generated-history.jsonl"), generated.map(row => JSON.stringify(row)).join("\n") + "\n");
+    const separator = appServer.cookie.indexOf("=");
+    await page.context().addCookies([{ name: appServer.cookie.slice(0, separator), value: appServer.cookie.slice(separator + 1), url: appServer.origin, httpOnly: true, sameSite: "Strict" }]);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(appServer.origin);
+    await expect(page.locator("[data-screen-more]")).toBeVisible();
+    expect(resources.some(r => r.includes("UsageAnalytics-"))).toBe(false);
+    await page.locator("[data-screen-more]").click();
+    await page.locator("[data-usage-analytics]").click();
+    const analytics = page.locator("[data-usage-analytics-panel]");
+    await expect(analytics).toBeVisible();
+    await expect(analytics).toContainText("1,100");
+    await expect(analytics.locator("[data-usage-history]")).toContainText("claude-opus-5");
+    await expect(analytics).toContainText("100.0%");
+    expect(sent().some(r => r.method === "agent.usage_report")).toBe(false);
+    await appendFile(record, assistant("analytics-update", 1000));
+    await expect(analytics.locator("svg")).toBeVisible({ timeout: 20000 });
+    await expect(analytics).toContainText("2,101");
+    await analytics.getByLabel("エージェント", { exact: true }).selectOption("claude");
+    await analytics.locator("[data-generate-usage-report]").click();
+    await expect(analytics.locator("[data-usage-report]")).toContainText("改善提案", { timeout: 20000 });
+    expect(sent().filter(r => r.method === "agent.usage_report")).toHaveLength(1);
+    const prompt = await readFile(join(dir, "report-prompt.txt"), "utf8");
+    expect(prompt).toContain("cumulative");
+    expect(prompt).not.toContain(record);
+    expect(prompt).not.toContain('"text":"x"');
+    await analytics.locator("[data-usage-history]").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: test.info().outputPath("usage-analytics-desktop.png"), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator(".mobile-shell-title").click();
+    await page.locator("[data-picker-dashboard]").click();
+    await expect(analytics).toBeVisible();
+    await expect(analytics.locator("[data-usage-history]")).toContainText("claude-opus-5");
+    const overflow = await analytics.evaluate(element => element.scrollWidth > element.clientWidth + 1);
+    expect(overflow).toBe(false);
+    await page.screenshot({ path: test.info().outputPath("usage-analytics-narrow.png"), fullPage: true });
+    client.close();
+  });
 
   test("切り替えのボタンは 3 つ。一覧にエージェントが出て、数字（トークン・コスト・モデル）が見える。エージェントの居ない pane は出ない。アカウントの枠は「まだ値がありません」", async ({ page, appServer }) => {
     const client = await appServer.openClient();
