@@ -3,7 +3,9 @@ on:
   pull_request:
     paths:
       - 'packages/server/src/desktop/DesktopHelperRolePlan*'
-      - 'packages/server/src/desktop/DesktopProvider.ts'
+      - 'packages/server/src/desktop/DesktopProvider*'
+      - 'packages/server/src/desktop/DesktopSettings*'
+      - 'packages/server/src/desktop/DesktopSharedCapture*'
       - 'scripts/remote-desktop/windows-helper.ps1'
       - 'scripts/remote-desktop/WindowsDesktop*.cs'
       - 'scripts/remote-desktop/WindowsResourceFence.cs'

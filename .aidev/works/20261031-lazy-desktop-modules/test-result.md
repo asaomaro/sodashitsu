@@ -34,3 +34,11 @@ smoke: echo round trip ok
 smoke: custom command popup round trip ok
 smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
 ```
+
+
+最初のhosted Win node-policyで、既存checkpoint replayテストのstart.resultがなく参照時に失敗した（/tmp/soda-lazy-desktop-win-policy-failed.log）。従来tmpdirのfixtureを、Windowsだけ既存native transfer生成検証と同じLOCALAPPDATAの新規mkdtempへ合わせた。未設定は明示fail、製品ACLとRuntimeの5秒child期限は変えない。複数の実WinPS/DPAPI/storage操作を行うこの1テストだけ120秒の試験budget（Unixは従来5秒）とし、checkpoint参照前にstart.ok:trueも検査する。Linux対象32tests pass。fresh Windows結果を待ち、Temp ACLが原因確定とはまだ主張しない。workflowへ実テスト対象pathsも追加した。
+
+```text
+FAIL src/desktop/DesktopSettings.test.ts > rejects replayed completed checkpoints after OFF then ON and server replacement
+TypeError: Cannot read properties of undefined (reading 'checkpoint')
+```
