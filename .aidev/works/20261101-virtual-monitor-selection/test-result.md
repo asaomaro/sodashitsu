@@ -3,7 +3,7 @@
 - Relay/UI virtual境界: 26 passed。新規のall/所有VM自身×両参加順序4ケースは拒否と既存描画継続を確認。
 - build: 最終sourceで成功（selectedMonitor optional型のstrictエラーを型宣言で修正）。typecheck成功。
 - 最終build後のブラウザ: 4 passed（共有VM保持、所有解像度一致、単独/別VM窓継続下の物理切替）。DOM/ブラウザWS/canvas画素を観測。
-- 全体testは実行中。成功とCI完了を確認するまでマージしない。最終値はcompletion統合記録へ記載する。
+- 全体testは931ファイル・13,431件成功、各1skip。CI22ジョブ成功後にPR368をmainへmerge。配布の結果はcompletion統合記録に記載。
 - Windows C#生成コンパイル/既存virtual mode検証: 成功。実driver/画面取得/入力なし。
 - taskcheck review_pointer / independent cross review_transfer: VM自身とallの除外不足を修正し、再レビューでmust/shouldなし。文書crossも追加指摘なし。
 - 以下のprivateコピー8 guard負例では意図したAssertionErrorを確認し、修正を戻した各1件が成功。production sourceは変更せず、各privateコピーは削除。過去のUI負例の復元試験ではfixtureの再接続後cap再通知不足が判明したため修正し、下記全8件を再実行した。
