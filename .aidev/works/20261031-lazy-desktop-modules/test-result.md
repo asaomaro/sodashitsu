@@ -53,3 +53,5 @@ Endpoint storage permissions are unsafe
 ```
 
 上は旧Get-Aclを拒否する生成負例の生stderr抜粋。fresh CIの関連browser/generated-sharingは既に成功しており、local基線の初期認証待ちと区別する。最終headの全CI結果はPR347で確認する。
+
+最終head d8325c39d83e4bf5936b36f96577537c4e636ac7の19checks pass後PR347をmerge（main 1d4797aa73b5707f14d2f9a4f9d525917ce82a2e、tree一致）。Win node-policy/replayとfresh関連browserもpass。実desktop/audio検証・稼働handoffは別。receipt /tmp/soda-lazy-desktop-final-receipt.json。

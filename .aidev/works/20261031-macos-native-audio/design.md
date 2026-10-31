@@ -14,4 +14,9 @@ startCapture直前と全await/callback後に元開始期限・取消・所有・
 
 自動試験は生成PCM/偽SCK/専用Unix peerに限定。実screen/audio入力・再生・OS許可・driver/serviceを触らない。Mac CIで実SDK compile、生成sampleBuffer/codec、元sourceを一時copyしたassertion負例を行う。
 
-DarwinのTMPDIRは長くsockaddr_unに収まらないことがある。Node private0700 directoryはDarwinで短い/tmpの下へ作る（existing pathは上書きしない）。
+DarwinのTMPDIRは長くsockaddr_unに収まらないことがある。Node private0700 directoryはDarwinで短い/private/tmpの下へ作る（existing pathは上書きしない）。
+
+
+音声のOS/session事実確認はIO threadからmain queueへ同期要求し、actorのlockを保持しない。mainはactor停止を同期waitせずRunLoop上で退役をpollする。生成回帰では実audioLiveをbackgroundから通し、fake stop完了をmainへ返す。source終了はSCK退役確認後にoutputを閉じ、失敗時はhelper全体の終了をauthoritativeな境界とする。
+
+Node設定/能力/共有sourceの音声許可をLinuxとMacで統一し、MacもconfigureとCLI ceilingを必要とする。音声のないviewerが先でも同じsourceを共用する。マイク/追加codec/UDP等のnative非対応は変更しない。Unix pathのDarwin既定を/private/tmpにし、長いTMPDIRによる100byte超過を避ける。既存0700/0600/UID/PID/実helperexit/identity cleanupを維持する。

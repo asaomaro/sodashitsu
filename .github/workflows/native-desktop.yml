@@ -1,7 +1,7 @@
 name: Native desktop generated checks
 on:
   pull_request:
-    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/macos-native-audio.swift', 'scripts/remote-desktop/macos-system-audio.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', '.github/workflows/native-desktop.yml']
+    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/macos-native-audio.swift', 'scripts/remote-desktop/macos-system-audio.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', 'packages/server/src/desktop/DesktopNativePcmPath*', 'packages/server/src/desktop/DesktopProvider.ts', 'packages/server/src/desktop/DesktopHelperRolePlan*', 'packages/server/src/desktop/DesktopSettings*', 'packages/server/src/desktop/DesktopRelay.test.ts', '.github/workflows/native-desktop.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,3 +32,26 @@ jobs:
         run: scripts/remote-desktop/macos-desktop-helper --self-test
       - name: Generated negative controls (temporary source copies only)
         run: python3 scripts/remote-desktop/test-macos-desktop-helper.py
+
+  native-audio-node:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm -r --filter '@sodashitsu/server...' run build
+      - name: Native permissions and bounded private PCM paths; no devices
+        run: pnpm exec vitest run packages/server/src/desktop/DesktopNativePcmPath.test.ts packages/server/src/desktop/DesktopHelperRolePlan.test.ts packages/server/src/desktop/DesktopSettings.test.ts --maxWorkers=2
+      - name: Synthetic Linux and Mac PCM through actual Unix paths and Opus, shared and mixed viewers
+        run: pnpm exec vitest run packages/server/src/desktop/DesktopRelay.test.ts -t 'generated .* PCM|physical capture across image-only' --maxWorkers=2

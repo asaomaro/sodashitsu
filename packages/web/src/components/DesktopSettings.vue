@@ -99,10 +99,8 @@ async function save() {
         />ディスプレイ解像度の変更を許可</label
       >
       </template>
-      <template v-if="!state?.nativePlatform || state.nativePlatform==='linux-portal'">
       <label><input v-model="draft.allowSystemAudio" type="checkbox" />システム音声の送信を許可</label>
       <p>共有するPCの通常デスクトップの音を送ります。接続側でも音声共有と再生を開始してください。</p>
-      </template>
       <label>ファイル共有フォルダ（空欄で無効）<input v-model="draft.fileRoot" type="text" maxlength="4096" placeholder="このサーバーOSの絶対パス" /></label>
       <p>このフォルダの中だけを送受信します。既存ファイルは上書きしません。WSLサーバーでは/mnt/c等のパスを指定します。</p>
       <button type="button" @click="save">共有設定を保存</button>
