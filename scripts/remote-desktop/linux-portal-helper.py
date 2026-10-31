@@ -530,7 +530,7 @@ class PortalHelper:
     def __init__(self, Gio, GLib, Gst, scope_factory=None, video=None):
         self.clipboard=None
         self.audio_actor=None;self.audio_available=False;self.microphone_available=False
-        self.native_worker=None;self.native_raw=None;self.native_available=False
+        self.native_worker=None;self.native_pending=None;self.native_raw=None;self.native_available=False
         self.native=_native_video.NativeVideoFlow(self.native_live,lambda:time.monotonic()*1000,lambda value,valid:self.output(value,publish=valid),maximum_fps=60)
         self.regions=RegionProofs();self.video=video;self.transfer_size=None
         self.output_gate=threading.RLock();self.Gio=Gio;self.GLib=GLib;self.Gst=Gst;self.loop=GLib.MainLoop();self.scope_factory=scope_factory or (lambda:LoginScope(Gio,GLib,gate=self.output_gate));self.scope=None;self.last_scope_check=0;self.connection=None;self.session=None;self.requests={};self.subscriptions=[]
@@ -741,13 +741,23 @@ class PortalHelper:
     def pump_native(self):
         self.native.tick()
         if self.audio_actor and not self.audio_live(self.audio_actor.id):self.audio_actor.stop()
+        if self.native_pending:
+            waiting=self.native_pending;stream,deadline=waiting
+            permitted=self.native.live(stream);now=self.native.clock()
+            if self.native_pending is not waiting:return
+            if self.native.current is not stream or not permitted or not deadline-2000<=now<=deadline:
+                self.native_pending=None
+                if self.native.current is stream:self.native.stop()
         if self.native_worker and self.native_worker.closed.is_set():
-            if self.native.current:self.native.stop()
             self.native_worker=None
+            if self.native_pending and self.native.current is self.native_pending[0]:
+                self.native_pending=None
+                self.native_worker=_native_video.H264Worker(self.Gst,self.video,self.native,self.output_gate)
+            elif self.native.current:self.native.stop()
         if self.native.current is None:
             if self.native_worker:self.native_worker.stop()
             if self.native_raw:self.native_raw[1][:]=b"\0"*len(self.native_raw[1]);self.native_raw=None
-        elif self.native_raw:
+        elif self.native_raw and self.native_pending is None:
             stream,raw,width,height,captured=self.native_raw;self.native_raw=None
             reservation=self.native.reserve(captured) if self.native.current is stream else None
             if reservation is not None and self.native_worker:self.native_worker.submit(reservation,raw,width,height)
@@ -757,13 +767,17 @@ class PortalHelper:
         if kind=="native_audio":self.audio_command(value);return
         try:
             if kind=="native_video":
-                if value.get("enabled") is True and self.native_worker is not None:
-                    if not self.native_worker.closed.is_set():
-                        self.native.start(value);self.native.stop();self.native_worker.stop();return
-                    self.native_worker=None
                 stream=self.native.start(value)
-                if stream is not None:self.native_worker=_native_video.H264Worker(self.Gst,self.video,self.native,self.output_gate)
-                elif self.native.current is None and self.native_worker:self.native_worker.stop()
+                if stream is not None:
+                    if self.native_worker and not self.native_worker.closed.is_set():
+                        self.native_worker.stop()
+                        self.native_pending=(stream,self.native.clock()+2000)
+                    else:
+                        self.native_pending=None
+                        self.native_worker=_native_video.H264Worker(self.Gst,self.video,self.native,self.output_gate)
+                elif self.native.current is None:
+                    self.native_pending=None
+                    if self.native_worker:self.native_worker.stop()
             elif kind=="native_video_ack":self.native.acknowledge(value)
             elif kind=="native_keyframe":self.native.keyframe(value)
             else:raise _native_video.VideoFailure("unsupported_control")

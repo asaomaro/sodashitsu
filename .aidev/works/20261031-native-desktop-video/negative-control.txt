@@ -1,0 +1,92 @@
+## before: exit 1
+FFF
+======================================================================
+FAIL: test_cancel_expiry_and_source_revocation_never_resurrect_pending_encoder (__main__.NativeVideoReplacement.test_cancel_expiry_and_source_revocation_never_resurrect_pending_encoder)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/soda-native-retirement-negative-69_vh511/test-linux-portal-helper.py", line 78, in test_cancel_expiry_and_source_revocation_never_resurrect_pending_encoder
+    identifier=self.start(h);self.assertIsNotNone(h.native.current,"replacement must remain pending until old encoder retires");raw=bytearray([9]);h.native_raw=(h.native.current,raw,1,1,100)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : replacement must remain pending until old encoder retires
+
+======================================================================
+FAIL: test_replacement_waits_without_submitting_pixels_to_retiring_worker (__main__.NativeVideoReplacement.test_replacement_waits_without_submitting_pixels_to_retiring_worker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/soda-native-retirement-negative-69_vh511/test-linux-portal-helper.py", line 54, in test_replacement_waits_without_submitting_pixels_to_retiring_worker
+    identifier=self.start(h);self.assertIsNotNone(h.native.current,"replacement must remain pending until old encoder retires");stream=h.native.current;raw=bytearray([1,2,3]);h.native_raw=(stream,raw,1,1,100)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : replacement must remain pending until old encoder retires
+
+======================================================================
+FAIL: test_scope_query_cannot_cross_pending_deadline_or_resurrect_cancelled_start (__main__.NativeVideoReplacement.test_scope_query_cannot_cross_pending_deadline_or_resurrect_cancelled_start)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/soda-native-retirement-negative-69_vh511/test-linux-portal-helper.py", line 65, in test_scope_query_cannot_cross_pending_deadline_or_resurrect_cancelled_start
+    identifier=self.start(h);self.assertIsNotNone(h.native.current,"replacement must remain pending until old encoder retires");queries=[0]
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : replacement must remain pending until old encoder retires
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.015s
+
+FAILED (failures=3)
+
+## restored: exit 0
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.015s
+
+OK
+
+Original source bytes unchanged: true
+## audio before: exit 1
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-video-completion
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopNativeAudioNegative90023b0d704e43299df79e714b450ea5.test.ts (9 tests | 1 failed | 8 skipped) 1063ms
+   × retries the same native audio capability after helper retirement without extending its lease 1061ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  22:17:03
+   Duration  1.96s (tests 57%, transform 32%, import 10%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopNativeAudioNegative90023b0d704e43299df79e714b450ea5.test.ts > retries the same native audio capability after helper retirement without extending its lease
+AssertionError: expected 1 to be greater than or equal to 2
+ ❯ src/desktop/DesktopNativeAudioNegative90023b0d704e43299df79e714b450ea5.test.ts:78:42
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopNativeAudioNegative90023b0d704e43299df79e714b450ea5.test.ts:78:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+## audio restored: exit 0
+
+ RUN  v5.0.1 /workspaces/sodashitsu-native-video-completion
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 8 skipped (9)
+   Start at  22:17:06
+   Duration  1.31s (transform 54%, tests 28%, import 18%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+Original audio source bytes unchanged: true

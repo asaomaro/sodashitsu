@@ -34,6 +34,53 @@ class NativeAudioRouting(unittest.TestCase):
   h=self.helper();actor=SimpleNamespace(id=h.native.current["id"],stop=Mock());h.audio_actor=actor;h.native=SimpleNamespace(current=None,tick=lambda:None)
   h.pump_native();actor.stop.assert_called_once()
 
+class NativeVideoReplacement(unittest.TestCase):
+ def setup_video(self):
+  from unittest.mock import Mock
+  h=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),None)
+  clock=[100];granted=[True]
+  h.native=module._native_video.NativeVideoFlow(lambda:granted[0],lambda:clock[0],Mock())
+  old=SimpleNamespace(closed=threading.Event(),stop=Mock(),submit=Mock())
+  h.native_worker=old
+  return h,old,clock,granted
+ def start(self,h):
+  identifier=str(module.uuid.uuid4())
+  h.native_command({"type":"native_video","enabled":True,"id":identifier,"fps":30,"bitrateKbps":2500})
+  return identifier
+ def test_replacement_waits_without_submitting_pixels_to_retiring_worker(self):
+  from unittest.mock import Mock,patch
+  h,old,clock,granted=self.setup_video();factory=Mock()
+  with patch.object(module._native_video,"H264Worker",factory):
+   identifier=self.start(h);self.assertIsNotNone(h.native.current,"replacement must remain pending until old encoder retires");stream=h.native.current;raw=bytearray([1,2,3]);h.native_raw=(stream,raw,1,1,100)
+   h.pump_native();factory.assert_not_called();old.submit.assert_not_called();self.assertIsNone(h.native.inflight)
+   h.native_command({"type":"native_video","enabled":False,"id":str(module.uuid.uuid4())})
+   self.assertEqual(h.native.current["id"],identifier)
+   old.closed.set();h.pump_native();factory.assert_called_once();self.assertIsNone(h.native_pending)
+   factory.return_value.submit.assert_called_once();self.assertIs(h.native.current,stream)
+ def test_scope_query_cannot_cross_pending_deadline_or_resurrect_cancelled_start(self):
+  from unittest.mock import Mock,patch
+  for reason in ("expiry","cancel"):
+   h,old,clock,granted=self.setup_video();factory=Mock()
+   with patch.object(module._native_video,"H264Worker",factory):
+    identifier=self.start(h);self.assertIsNotNone(h.native.current,"replacement must remain pending until old encoder retires");queries=[0]
+    def active():
+     queries[0]+=1
+     if queries[0]==2:
+      if reason=="expiry":clock[0]=2101
+      else:h.native_command({"type":"native_video","enabled":False,"id":identifier})
+     return True
+    h.native.active=active;old.closed.set();h.pump_native();factory.assert_not_called();self.assertIsNone(h.native.current)
+ def test_cancel_expiry_and_source_revocation_never_resurrect_pending_encoder(self):
+  from unittest.mock import Mock,patch
+  for reason in ("cancel","expiry","source"):
+   h,old,clock,granted=self.setup_video();factory=Mock()
+   with patch.object(module._native_video,"H264Worker",factory):
+    identifier=self.start(h);self.assertIsNotNone(h.native.current,"replacement must remain pending until old encoder retires");raw=bytearray([9]);h.native_raw=(h.native.current,raw,1,1,100)
+    if reason=="cancel":h.native_command({"type":"native_video","enabled":False,"id":identifier})
+    elif reason=="expiry":clock[0]=2101
+    else:granted[0]=False
+    old.closed.set();h.pump_native();factory.assert_not_called();self.assertIsNone(h.native.current);self.assertIsNone(h.native_pending);self.assertEqual(raw,bytes(1))
+
 class Guards(unittest.TestCase):
  def setup_guard(self,devices=3):
   calls=[];alive=[True];guard=module.InputGuard(lambda method,signature,args:calls.append((method,args)),lambda:alive[0],(1000,600),55,devices,lambda:1000);guard.control=True

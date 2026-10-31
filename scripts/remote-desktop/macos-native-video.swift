@@ -142,15 +142,31 @@ func generatedNativeVideoTests() throws -> Int {
     now=34;controller.offer(image,captured:now);try check(encoders[0].completions.count==2,"native video independent capture after encode completes")
     now+=2001;try controller.command(["type":"native_video_ack","id":first,"seq":1])
     try check(controller.current==nil && frame.1?()==false,"native video late ack cannot erase deadline")
-    try start();try check(controller.current==nil && encoders.count==1,"native video retirement holds physical encoder slot")
+    let replacement=UUID().uuidString.lowercased();try start(replacement);try check(controller.current==nil && encoders.count==1,"native video retirement holds physical encoder slot")
     encoders[0].completions[1](.success(packet));try check(spin({controller.inflight==nil}),"native video stale completion drains job")
     encoders[0].retire?();try check(spin({controller.quiescent}),"native video old encoder retired")
-    let next=UUID().uuidString.lowercased();try start(next);controller.offer(image,captured:now)
+    try check(controller.current?.id==replacement,"native video pending replacement activates after physical retirement")
+    let next=replacement;controller.offer(image,captured:now)
     try check(encoders.count==2 && controller.current?.id==next,"native video explicit retry starts after retirement")
     try controller.command(["type":"native_video","id":first,"enabled":false])
     try check(controller.current?.id==next && encoders[1].retire==nil,"native video old disable cannot stop replacement")
     alive=false;controller.tick();try check(controller.current==nil,"native video source revocation ends stream")
     encoders[1].retire?();try check(spin({controller.quiescent}),"native video revoked encoder retired")
+
+    for reason in ["cancel","expiry","source"] {
+        var clock:Double=0,permitted=true,owned=[GeneratedNativeEncoder]()
+        let pending=NativeVideoController(gate:NSRecursiveLock(),active:{permitted},now:{clock},emit:{_,_ in},factory:{_,_ in let encoder=GeneratedNativeEncoder();owned.append(encoder);return encoder})
+        func begin(_ id:String) throws {try pending.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
+        try begin(UUID().uuidString.lowercased());pending.offer(image,captured:0)
+        let waiting=UUID().uuidString.lowercased();try begin(waiting)
+        try check(pending.current==nil && owned.count==1,"native replacement holds physical slot")
+        if reason=="cancel" {try pending.command(["type":"native_video","id":waiting,"enabled":false])}
+        else if reason=="expiry" {clock=2001}
+        else {permitted=false}
+        owned[0].retire?();try check(spin({pending.quiescent}),"native replacement old encoder drains")
+        pending.tick();pending.offer(image,captured:clock)
+        try check(pending.current==nil && owned.count==1,"native replacement cancellation never resurrects source")
+    }
 
     let ledger=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{0},emit:{_,_ in})
     func ledgerStart(_ id:String) throws {try ledger.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
@@ -237,6 +253,7 @@ final class NativeVideoController {
     let factory:(Int,Int)throws->NativeH264Encoder
     private(set) var current:NativeVideoStream?,inflight:NativeVideoJob?
     private var encoder:NativeH264Encoder?,retiring=false,seen=Set<String>(),revision=UUID()
+    private var pendingStart:(stream:NativeVideoStream,at:Double)?
     init(gate:NSRecursiveLock,active:@escaping()->Bool,now:@escaping()->Double=milliseconds,emit:@escaping([String:Any],(() -> Bool)?)throws->Void,factory:@escaping(Int,Int)throws->NativeH264Encoder={ToolboxH264Encoder(fps:$0,kbps:$1)}) {
         self.gate=gate;self.active=active;self.now=now;self.emit=emit;self.factory=factory
     }
@@ -248,12 +265,24 @@ final class NativeVideoController {
     func stop(_ expected:NativeVideoStream?=nil,notify:Bool=true) {
         locked {
             if let expected=expected,current !== expected { return };revision=UUID()
+            if let waiting=pendingStart {pendingStart=nil;waiting.stream.dead=true;if notify {try? emit(["type":"native_video_stopped","id":waiting.stream.id],nil)}}
             if let stream=current { current=nil;stream.dead=true;stream.pending.removeAll();if notify {try? emit(["type":"native_video_stopped","id":stream.id],nil)} }
             guard let old=encoder,!retiring else {return};retiring=true
             old.stop { [weak self] in DispatchQueue.main.async {
-                guard let self=self else {return};self.locked { if self.encoder===old {self.encoder=nil;self.retiring=false;self.inflight=nil} }
+                guard let self=self else {return};self.locked { if self.encoder===old {self.encoder=nil;self.retiring=false;self.inflight=nil};self.activatePending() }
             } }
         }
+    }
+    /** One bounded explicit replacement; never create a second physical encoder. */
+    private func activatePending() {
+        guard let waiting=pendingStart else {return}
+        let permitted=active(),time=now()
+        guard pendingStart?.stream === waiting.stream else {return}
+        guard permitted,time>=waiting.at,time<=waiting.at+2000 else {
+            pendingStart=nil;waiting.stream.dead=true;try? emit(["type":"native_video_stopped","id":waiting.stream.id],nil);return
+        }
+        guard quiescent else {return}
+        pendingStart=nil;current=waiting.stream
     }
     func command(_ value:[String:Any]) throws {
         try locked {
@@ -261,12 +290,13 @@ final class NativeVideoController {
             let id=uuid.uuidString.lowercased()
             if kind=="native_video" {
                 guard Set(value.keys).isSubset(of:["type","id","enabled","fps","bitrateKbps","window","codec"]),let enabled=boolean(value["enabled"]) else { throw NativeError("backend_failure") }
-                if !enabled {if current?.id==id {stop(notify:false)};return}
+                if !enabled {if current?.id==id || pendingStart?.stream.id==id {stop(notify:false)};return}
                 guard let fps=integer(value["fps"],1,60),let kbps=integer(value["bitrateKbps"],128,50000),let window=integer(value["window"] ?? 1,1,3),[1,3].contains(window),(value["codec"]==nil || value["codec"] as? String=="h264"),!seen.contains(id),seen.count<1024,current?.id != id else { throw NativeError("unsupported") }
                 stop();let started=revision,granted=active()
                 guard started==revision else {return}
-                guard granted,quiescent else {try emit(["type":"native_video_stopped","id":id],nil);return}
-                seen.insert(id);current=NativeVideoStream(id:id,fps:Int(fps),kbps:Int(kbps),window:Int(window));revision=UUID();return
+                guard granted else {try emit(["type":"native_video_stopped","id":id],nil);return}
+                seen.insert(id);let stream=NativeVideoStream(id:id,fps:Int(fps),kbps:Int(kbps),window:Int(window));revision=UUID()
+                if quiescent {current=stream} else {pendingStart=(stream,now())};return
             }
             guard let stream=current,stream.id==id else {return}
             if kind=="native_keyframe" {stream.key=true;return}
@@ -276,7 +306,7 @@ final class NativeVideoController {
         }
     }
     func tick() {
-        locked { guard let stream=current else {return};if !live(stream) || (inflight != nil && now()-inflight!.captured>1000) {stop(stream)} }
+        locked { activatePending();guard let stream=current else {return};if !live(stream) || (inflight != nil && now()-inflight!.captured>1000) {stop(stream)} }
     }
     var quiescent:Bool {locked {encoder==nil && !retiring && inflight==nil}}
     var captureFPS:Int { locked {current?.fps ?? 0} }
@@ -298,7 +328,7 @@ final class NativeVideoController {
     func complete(_ job:NativeVideoJob,_ result:Result<NativeH264Packet,Error>) {
         locked {
             guard inflight===job else {return};inflight=nil
-            let stream=job.stream;guard current===stream else {return}
+            let stream=job.stream;guard current===stream else {activatePending();return}
             do {
                 let packet=try result.get()
                 guard live(stream,captured:job.captured),packet.data.count<=512*1024-9,packet.data.count>0,packet.width>=2,packet.width<=1920,packet.height>=2,packet.height<=2400,packet.width%2==0,packet.height%2==0,!job.key || packet.key,stream.seq<0xffffffff,(stream.codec==nil || stream.codec==packet.codec),(stream.width==nil || stream.width==packet.width && stream.height==packet.height) else {throw NativeError("backend_failure")}

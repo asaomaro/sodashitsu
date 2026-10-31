@@ -17,6 +17,7 @@ export interface DesktopAudioLease {stop(notify?:boolean):void;}
 /** PCM stays in a private local pipe. Only bounded Opus packets reach the viewer. */
 export class DesktopNativeAudio {
  private pathLease:DesktopNativePcmPath|undefined;
+ private nativeBootstrap:unknown;
  private dead=false;private requested=false;private ready=false;private socket:Duplex|undefined;private encoder:OpusScript|undefined;
  private headerTimer:ReturnType<typeof setTimeout>|undefined;
  private retry:ReturnType<typeof setTimeout>|undefined;private task:ReturnType<typeof setImmediate>|undefined;private deadline=0;
@@ -44,10 +45,17 @@ export class DesktopNativeAudio {
    const pid=await bridge.ready;if(!this.alive()||this.socket!==bridge){bridge.destroy();return;}
    this.requested=true;this.hooks.write({type:"native_audio",id:this.hooks.id,enabled:true,pipeName:name,clientPid:pid});
    if(!this.alive()){bridge.destroy();return;}bridge.on("data",bytes=>{if(!this.alive()||this.socket!==bridge)return;try{this.parser.push(bytes);}catch{this.fail();}});if(!bridge.connect(name))throw Error("Audio pipe connect");
-  }else{this.requested=true;this.hooks.write({type:"native_audio",id:this.hooks.id,enabled:true,pipeName:name,...(process.platform!=="win32"?{pipePath:path,...(this.pathLease?{clientPid:process.pid}:{})}:{})});this.connect(path);}
+  }else{this.requested=true;const command={type:"native_audio",id:this.hooks.id,enabled:true,pipeName:name,...(process.platform!=="win32"?{pipePath:path,...(this.pathLease?{clientPid:process.pid}:{})}:{})};
+   // Native helpers may still be retiring the previous video/audio actor. Reuse
+   // this exact capability only until the original startup deadline, never after
+   // the private socket has connected or the source lease has ended.
+   if(this.pathLease)this.nativeBootstrap=command;
+   this.hooks.write(command);this.connect(path);
+  }
  }
  private connect(path:string){
   if(!this.alive())return;const socket=this.socket=createConnection(path);
+  socket.once("connect",()=>{if(this.socket===socket)this.nativeBootstrap=undefined;});
   if(this.pathLease){
    socket.pause();const lease=this.pathLease;
    socket.once("connect",()=>{void (async()=>{try{await lease.verify();if(!this.alive()||this.socket!==socket)return;socket.resume();}catch{if(this.socket===socket)this.fail();}})();});
@@ -55,7 +63,7 @@ export class DesktopNativeAudio {
   socket.on("data",bytes=>{if(!this.alive()||this.socket!==socket)return;try{this.parser.push(bytes);}catch{this.fail();}});
   socket.on("error",()=>{
    if(this.dead||this.socket!==socket)return;this.socket=undefined;socket.destroy();
-   if(this.ready||performance.now()>=this.deadline)this.fail();else this.retry=setTimeout(()=>this.connect(path),50);
+   if(this.ready||performance.now()>=this.deadline)this.fail();else this.retry=setTimeout(()=>{if(!this.alive())return;if(this.nativeBootstrap)this.hooks.write(this.nativeBootstrap);if(this.alive())this.connect(path);},50);
   });
   socket.on("close",()=>{if(!this.dead&&this.socket===socket)this.fail();});
 
@@ -80,7 +88,7 @@ export class DesktopNativeAudio {
  private alive(){if(this.dead)return false;if(!this.ready&&this.deadline>0&&performance.now()>=this.deadline){this.stop(false);this.hooks.state("unavailable");return false;}if(!this.hooks.active()){this.stop(false);return false;}return true;}
  private fail(){if(!this.alive())return;this.stop(false);this.hooks.state("unavailable");}
  stop(notify=true){
-  if(this.dead)return;this.dead=true;clearTimeout(this.retry);clearTimeout(this.headerTimer);if(this.task)clearImmediate(this.task);this.task=undefined;
+  if(this.dead)return;this.dead=true;this.nativeBootstrap=undefined;clearTimeout(this.retry);clearTimeout(this.headerTimer);if(this.task)clearImmediate(this.task);this.task=undefined;
   this.socket?.destroy();this.socket=undefined;const lease=this.pathLease;this.pathLease=undefined;if(lease)void lease.retire();this.parser.clear();for(const frame of this.pending)frame.pcm.fill(0);this.pending=[];
   this.encoder?.delete();this.encoder=undefined;
   if(this.requested)this.hooks.write({type:"native_audio",id:this.hooks.id,enabled:false});

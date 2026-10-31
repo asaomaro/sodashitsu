@@ -144,6 +144,7 @@ function run() {
   let native, audio,nativeAcceptedInput=0;
   const stopAudio=()=>{if(!audio)return;const old=audio;audio=undefined;if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"audio_stop",id:old.id})+"\n");clearInterval(old.timer);old.socket?.destroy();old.server.close();if(old.path&&!old.path.startsWith("\\\\")){try{unlinkSync(old.path);}catch{}}};
   const startAudio=m=>{
+    if(audio?.id===m.id)return; // Match native helpers: bootstrap retry cannot replace an owned actor.
     stopAudio();if(!native||native.id!==m.id||secure||!process.argv.includes("--native-audio"))return;
     const path=process.platform==="win32"?"\\\\.\\pipe\\"+m.pipeName:m.pipePath;
     if(typeof path!=="string")return;

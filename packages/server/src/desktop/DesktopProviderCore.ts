@@ -62,7 +62,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       videoLane: true,
       microphone:config?.allowMicrophone===true&&!!config.microphoneEndpoint,
       microphoneOpus:config?.allowMicrophone===true&&!!config.microphoneEndpoint,
-      nativeVideo: !config?.nativePlatform||config?.allowNativeVideo===true,nativeDatagrams:!config?.nativePlatform,nativeAudio:true,
+      nativeVideo: !config?.nativePlatform||config?.allowNativeVideo===true,nativeDatagrams:!config?.nativePlatform||config?.allowNativeVideo===true,nativeAudio:true,
       nativeInputFreshness: !config?.nativePlatform,
       nativeCodecs: !config?.nativePlatform,
       ...(!config?.nativePlatform?{nativeAdaptive:true as const,nativeCadence:true as const}:{}),
