@@ -27,6 +27,10 @@ const same = (a: z.infer<typeof DesktopMonitorRect>, b: z.infer<typeof DesktopMo
   a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 export const DesktopMonitorLayout = z
   .object({
+    primaryKnown:z.boolean().optional(),
+    coordinateSpace:z.enum(["physical","logical"]).optional(),
+    pixelSize:z.object({width:z.number().int().min(1).max(32768),height:z.number().int().min(1).max(32768)}).strict().optional(),
+    switchingSupported:z.boolean().optional(),
     selected: z.string().min(1).max(128),
     bounds: DesktopMonitorRect,
     allSupported: z.boolean(),
@@ -34,6 +38,7 @@ export const DesktopMonitorLayout = z
   })
   .strict()
   .refine((v) => {
+    if(v.coordinateSpace==="logical" ? !v.pixelSize || v.pixelSize.width*v.pixelSize.height>40000000 || v.allSupported || v.switchingSupported===undefined : v.pixelSize!==undefined)return false;
     if (
       new Set(v.monitors.map((m) => m.id)).size !== v.monitors.length ||
       v.bounds.width * v.bounds.height > 40000000

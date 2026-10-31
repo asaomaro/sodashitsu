@@ -204,6 +204,24 @@ func displayStamp(_ id: CGDirectDisplayID) -> DisplayStamp? {
     return DisplayStamp(bounds:CGDisplayBounds(id),pixelWidth:mode.pixelWidth,pixelHeight:mode.pixelHeight)
 }
 
+struct NativeMonitorFact {
+    let id:UInt32,bounds:CGRect,pixelWidth:Int,pixelHeight:Int,primary:Bool
+}
+func nativeMacMonitorLayout(_ facts:[NativeMonitorFact],selected:UInt32) -> [String:Any]? {
+    guard !facts.isEmpty,facts.count<=16,Set(facts.map{$0.id}).count==facts.count,let current=facts.first(where:{$0.id==selected}) else {return nil}
+    var monitors=[[String:Any]]()
+    for fact in facts {
+        let b=fact.bounds,values=[b.origin.x,b.origin.y,b.width,b.height]
+        guard fact.id>0,values.allSatisfy({$0.isFinite && $0.rounded()==$0}),abs(b.origin.x)<=65536,abs(b.origin.y)<=65536,b.width>=1,b.width<=32768,b.height>=1,b.height<=32768,
+              fact.pixelWidth>=1,fact.pixelWidth<=32768,fact.pixelHeight>=1,fact.pixelHeight<=32768,fact.pixelWidth*fact.pixelHeight<=40_000_000 else {return nil}
+        var entry:[String:Any]=["id":"mac:\(fact.id)","x":Int(b.origin.x),"y":Int(b.origin.y),"width":Int(b.width),"height":Int(b.height),"primary":fact.primary]
+        let scale=Int((Double(fact.pixelWidth)/Double(b.width)*100).rounded())
+        if scale>=50 && scale<=1000 {entry["scalePercent"]=scale}
+        monitors.append(entry)
+    }
+    let bounds=current.bounds
+    return ["coordinateSpace":"logical","primaryKnown":true,"pixelSize":["width":current.pixelWidth,"height":current.pixelHeight],"switchingSupported":true,"selected":"mac:\(selected)","allSupported":false,"bounds":["x":Int(bounds.origin.x),"y":Int(bounds.origin.y),"width":Int(bounds.width),"height":Int(bounds.height)],"monitors":monitors]
+}
 struct FrameTicket { let revision: UInt64; let started: Double; let inputSeq: Int64 }
 func canPublish(_ ticket: FrameTicket, revision: UInt64, now: Double, active: Bool) -> Bool {
     active && ticket.revision == revision && now >= ticket.started && now-ticket.started < 1000
@@ -406,6 +424,8 @@ final class DesktopSource {
     var videoCeiling=false,lastJPEG:Double=0
     var richRequested=false
     var clipboardCeiling=false
+    var monitorRequested=false,monitorChoice:String?,monitorLayout:[String:Any]?
+    var monitorStamps=[CGDirectDisplayID:DisplayStamp]()
     var display: SCDisplay?
     var bounds=CGRect.zero
     var stamp: DisplayStamp?
@@ -440,7 +460,7 @@ final class DesktopSource {
     func sourceActive() -> Bool {
         if let facts=factsOverride { return !dead && facts() }
         guard !dead,sessionActive(),CGPreflightScreenCaptureAccess(),let display=display,
-              stamp != nil,displayStamp(display.displayID)==stamp else { return false }
+              stamp != nil,displayStamp(display.displayID)==stamp,monitorStamps.allSatisfy({displayStamp($0.key)==$0.value}) else { return false }
         return !inputCeiling || (AXIsProcessTrusted() && CGPreflightPostEventAccess())
     }
     func publishable(_ ticket:FrameTicket) -> Bool {
@@ -504,12 +524,18 @@ final class DesktopSource {
         if kind=="configure" {
             guard !configured,let options=value["options"] as? [String:Any],
                   let width=integer(options["width"],320,1920),let fps=integer(options["fps"],1,30),let quality=integer(options["quality"],20,90) else { throw NativeError("backend_failure") }
-            for key in ["allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","separateCursor"] {
+            for key in ["allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","separateCursor"] {
                 if boolean(value[key])==true { throw NativeError("unsupported") }
             }
             if boolean(options["deltas"])==true || boolean(options["adaptive"])==true { throw NativeError("unsupported") }
             if let image=options["image"] as? [String:Any] {
                 guard image["colorMode"] as? String == "full",let show=boolean(image["showCursor"]) else { throw NativeError("unsupported") };showCursor=show
+            }
+            monitorRequested=boolean(options["monitors"])==true && boolean(value["allowMonitors"])==true
+            if boolean(options["monitors"])==true && !monitorRequested {throw NativeError("permission_denied")}
+            if let requested=options["monitorDevice"] {
+                guard monitorRequested,let id=requested as? String,id.hasPrefix("mac:"),let number=UInt32(id.dropFirst(4)),number>0,String(number)==String(id.dropFirst(4)) else {throw NativeError("unsupported")}
+                monitorChoice=id
             }
             self.width=Int(width);self.fps=Int(fps);self.quality=Int(quality);initialFPS=self.fps;initialQuality=self.quality
             inputCeiling=boolean(value["allowInput"])==true && CommandLine.arguments.contains("--allow-input") && AXIsProcessTrusted() && CGPreflightPostEventAccess()
@@ -571,7 +597,19 @@ final class DesktopSource {
             if let i=args.firstIndex(of:"--display-id") {
                 guard i+1<args.count,let id=UInt32(args[i+1]) else { throw NativeError("unsupported") };requested=id
             } else { requested=nil }
-            guard let selected=contents.displays.first(where:{$0.displayID==(requested ?? CGMainDisplayID())}) else { throw NativeError("source_changed") }
+            let monitorID=monitorChoice.flatMap{UInt32($0.dropFirst(4))}
+            if let pinned=requested,let chosen=monitorID,pinned != chosen {throw NativeError("permission_denied")}
+            guard let selected=contents.displays.first(where:{$0.displayID==(monitorID ?? requested ?? CGMainDisplayID())}) else { throw NativeError("source_changed") }
+            if monitorRequested {
+                var facts=[NativeMonitorFact]()
+                for candidate in contents.displays {
+                    guard let mode=displayStamp(candidate.displayID) else {throw NativeError("source_changed")}
+                    monitorStamps[candidate.displayID]=mode
+                    facts.append(NativeMonitorFact(id:candidate.displayID,bounds:mode.bounds,pixelWidth:mode.pixelWidth,pixelHeight:mode.pixelHeight,primary:candidate.displayID==CGMainDisplayID()))
+                }
+                monitorLayout=nativeMacMonitorLayout(facts,selected:selected.displayID)
+                if monitorChoice != nil && monitorLayout==nil {throw NativeError("unsupported")}
+            }
             guard let selectedStamp=displayStamp(selected.displayID) else { throw NativeError("source_changed") }
             display=selected;stamp=selectedStamp;bounds=selectedStamp.bounds
             guard sourceActive() else { throw NativeError("source_changed") }
@@ -605,6 +643,7 @@ final class DesktopSource {
                         guard canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) else { return }
                         if !ready {
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
+                            if monitorRequested,let layout=monitorLayout {hello["monitorLayout"]=layout}
                             if richClipboard != nil { hello["richClipboard"]=true }
                             if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60;if nativeVideo?.cadence==true {hello["nativeCadence"]=true};if nativeVideo?.adaptive==true {hello["nativeAdaptive"]=true};if nativeVideo?.codecs==true {hello["nativeCodecs"]=true;guard let candidates=nativeCodecCandidatesAfterQuery(query:{ToolboxH264Encoder.hardwareHEVCAvailable()},validAfterQuery:{self.publishable(ticket)}) else {return};hello["nativeCodecCandidates"]=candidates}}
                             if audioCeiling {hello["nativeAudio"]=true}
@@ -788,6 +827,13 @@ func generatedTests() throws -> Int {
         if candidates != nil {readyWrites+=1}
         try check(candidates==nil && readyWrites==0,"codec metadata query cannot extend source ticket")
     }
+    let generatedMonitors=[NativeMonitorFact(id:10,bounds:CGRect(x:-1280,y:-200,width:1280,height:800),pixelWidth:2560,pixelHeight:1600,primary:false),NativeMonitorFact(id:11,bounds:CGRect(x:0,y:0,width:1920,height:1080),pixelWidth:1920,pixelHeight:1080,primary:true)]
+    let generatedLayout=nativeMacMonitorLayout(generatedMonitors,selected:10)
+    try check(generatedLayout?["coordinateSpace"] as? String=="logical" && generatedLayout?["selected"] as? String=="mac:10","native monitors retain approved display identity")
+    let generatedBounds=generatedLayout?["bounds"] as? [String:Int],generatedPixels=generatedLayout?["pixelSize"] as? [String:Int]
+    try check(generatedBounds?["x"] == -1280 && generatedBounds?["width"]==1280 && generatedPixels?["width"]==2560,"native monitors separate logical and retina pixel dimensions")
+    try check(nativeMacMonitorLayout(generatedMonitors,selected:99)==nil,"native monitors never choose a different missing display")
+    try check(nativeMacMonitorLayout([generatedMonitors[0],generatedMonitors[0]],selected:10)==nil,"native monitors reject ambiguous display ids")
     let chunks=unicodeChunks(unicode)
     try check(chunks.allSatisfy{$0.count<=20},"unicode event chunks bounded")
     try check(String(decoding:chunks.flatMap{$0},as:UTF16.self)==unicode,"unicode chunks preserve content")

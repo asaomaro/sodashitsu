@@ -1,0 +1,11 @@
+# Nativeの単一モニター選択
+
+Linux Portalで利用者が許可したmonitor streamとmacOS SCKの許可済みdisplayを一覧化し、明示IDで選択する。未発見IDは別画面へ代替しない。単一sourceの再接続で操作許可を解除する。all合成・独立同時取得・OS解像度変更・仮想画面はこの差分では解禁しない。後続の全体残件で扱う。
+
+PortalとQuartzの座標は論理座標であり、captureの物理pixelとは分離する。protocolのlogical指定にはpixelSizeが必須。Bはready実寸との一致を検証する。入力は選択画面内の正規化座標を維持する。
+
+Linux restore_tokenはB内部のorigin別・単回・10分以内のメモリだけに保持し、設定変更で全破棄する。OS許可済みstableID一覧との一致を確認したready後のprivate receiptだけを受理し、viewerへ送信しない。endpointOnly経路のloopback WS originではなく検証済みscope.nativeOriginに結び付ける。OSがtokenを返さなければ一覧だけを表示し切替は無効。
+
+公式根拠: [ScreenCast](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)。RDセッションのpersist/restoreはSelectDevicesのみ、SC単独はSelectSources。OSの永続許可に利用者が応じた場合だけtokenが得られる。B側メモリ以外にtokenを保存しない。
+
+source/permission/protocol変更のtaskcheckとcrossを別コンテキストで実施する。生成画像・Portal応答・入力記録だけで検証し実OS操作は行わない。

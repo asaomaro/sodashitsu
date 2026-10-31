@@ -1,3 +1,4 @@
+import {DesktopNativeMonitorRestore,DesktopNativeMonitorRestores} from "./DesktopNativeMonitorRestore.js";
 import {DesktopNativeMicrophoneHost} from './DesktopNativeMicrophoneHost.js';
 import type {DesktopSavedTransferState} from './DesktopSavedTransferState.js';
 import {desktopHelperRolePlan,desktopHelperRoleEnvironment} from './DesktopHelperRolePlan.js';
@@ -102,6 +103,7 @@ type Share = {
   ws: WebSocket;
   process?: DesktopHelper;
   shared?: boolean;sharedRate?:boolean;
+  nativeMonitorIds?:string[];nativeMonitorOrigin:string;
   dead: boolean;
   attached: boolean;
   ready: boolean;
@@ -127,6 +129,7 @@ type Share = {
 export class DesktopProvider {
   private endpointOnly=false;
   private sourceEpoch=0;
+  private nativeMonitorRestores=new DesktopNativeMonitorRestores();
   private nativeSelection=new DesktopNativeSelection();
   private fileCheckpoints=new DesktopFileCheckpoints();
   private transferStore:DesktopTransferStore|undefined;
@@ -239,7 +242,7 @@ export class DesktopProvider {
     if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
-    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.sharedResolution||p.options.sharedRate||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
+    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.display||p.options.sharedResolution||p.options.sharedRate||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
     if(p.options.protectedFiles&&(!p.options.elevatedDesktop||!p.options.files||!p.fileTicket||!p.options.features||!cfg.allowElevated||!cfg.allowProtectedFiles||!cfg.fileRoot||cfg.nativePlatform))throw new RpcError("unauthorized","管理者画面中のファイル転送は接続先で許可されていません。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
@@ -317,6 +320,7 @@ export class DesktopProvider {
       followRedirects: false,
     });
     const s: Share = {
+      nativeMonitorOrigin:scope?.nativeOrigin??url.origin.replace(/^ws/,"http"),
       resourcesManaged:!cfg.nativePlatform,
       independent:p.options.independentMonitors===true,
       captureKey:sharedKey,
@@ -610,7 +614,8 @@ export class DesktopProvider {
     this.launch(s,cfg,options);
   }
   private launch(s:Share,cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>["options"]):void {
-    const rolePlan=desktopHelperRolePlan(cfg,options);
+    const rolePlan=desktopHelperRolePlan(cfg,options),sourceEpoch=this.sourceEpoch;
+    const nativeMonitorRestore=cfg.nativePlatform==="linux-portal"&&cfg.allowMonitors&&options.monitors?this.nativeMonitorRestores.take(s.nativeMonitorOrigin):undefined;
     const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
@@ -628,6 +633,7 @@ export class DesktopProvider {
     s.process = child;
     child.once("error", () => this.stop(s));
     child.once("close", () => {
+      if(cfg.nativePlatform==="linux-portal"&&!s.dead)this.nativeMonitorRestores.forget(s.nativeMonitorOrigin);
       if (this.active === s) this.active = undefined;
       this.stop(s);
     });
@@ -650,10 +656,16 @@ export class DesktopProvider {
         if (!line) continue;
         try {
           const raw = JSON.parse(line);
+          if(raw.type==="platform_failure"&&cfg.nativePlatform==="linux-portal")this.nativeMonitorRestores.forget(s.nativeMonitorOrigin);
           if(options.elevatedDesktop&&["unlock_failure","session_locked","session_unlocked","lock_screen_changed"].includes(raw.type)){this.send(s,{type:"protected_desktop_failure",code:raw.type==="unlock_failure"?"worker_unavailable":"source_changed"});this.stop(s);return;}
           if(raw.type==="protected_desktop_failure"&&options.elevatedDesktop&&cfg.allowElevated){this.send(s,DesktopProtectedFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="virtual_display_failure"&&options.virtualDisplay&&cfg.allowVirtualDisplay){this.send(s,DesktopVirtualFailure.parse(raw));this.stop(s);return;}
           if(raw.type==="monitor_topology_changed"&&Object.keys(raw).length===1&&s.ready&&!s.secureDesktop&&options.monitors===true&&cfg.allowMonitors===true){if(s.independent)this.stopMonitorGeneration();else{this.send(s,{type:"monitor_topology_changed"});this.stop(s);}return;}
+          if(raw.type==="native_monitor_restore"){
+            const receipt=DesktopNativeMonitorRestore.parse(raw);
+            if(cfg.nativePlatform!=="linux-portal"||!cfg.allowMonitors||!options.monitors||!s.ready||s.secureDesktop||!this.live(s)||this.config!==cfg||this.sourceEpoch!==sourceEpoch||!s.nativeMonitorIds||JSON.stringify([...receipt.monitors].sort())!==JSON.stringify([...s.nativeMonitorIds].sort()))throw Error("Unrequested native monitor restore proof");
+            this.nativeMonitorRestores.remember(s.nativeMonitorOrigin,receipt.token);continue;
+          }
           if (raw.type === "ready" && !s.ready) {
             const {deferNativeSnapshots, inputAckPipe,nativePointerProof, ...wireReady}=raw;
             const ready = DesktopReady.parse(wireReady);
@@ -700,7 +712,13 @@ export class DesktopProvider {
             if(options.virtualDisplay&&(ready.virtualDisplay!==true||s.secureDesktop||ready.lockScreenCover)){this.send(s,{type:"virtual_display_failure",code:"helper_incompatible"});throw Error("Helper did not create requested virtual monitor");}
             if(!s.secureDesktop&&options.sharedMonitors&&!ready.monitorLayout){this.send(s,{type:"shared_monitors_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
-            if(ready.monitorLayout&&(ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Monitor capture size mismatch");
+            if(ready.monitorLayout){
+              const logical=ready.monitorLayout.coordinateSpace==="logical";
+              if(logical&&!cfg.nativePlatform)throw Error("Unexpected logical monitor coordinates");
+              const size=logical?ready.monitorLayout.pixelSize!:ready.monitorLayout.bounds;
+              if(size.width!==ready.width||size.height!==ready.height)throw Error("Monitor capture size mismatch");
+              if(cfg.nativePlatform==="linux-portal"&&cfg.allowMonitors&&options.monitors&&logical&&ready.monitorLayout.switchingSupported)s.nativeMonitorIds=ready.monitorLayout.monitors.map(monitor=>monitor.id);
+            }
             s.ready = true;
             s.allowClipboard = !s.secureDesktop && cfg.allowClipboard === true && ready.allowClipboard === true && (!s.resourcesManaged||s.process?.resourceChannel?.supported===true);
             s.dynamicQuality = ready.dynamicQuality === true;
@@ -858,6 +876,7 @@ export class DesktopProvider {
     this.write(s, {
       type: "configure",
       ...(cfg.nativePlatform?{nativePlatform:cfg.nativePlatform}:{}),
+      ...(nativeMonitorRestore?{nativeMonitorRestoreToken:nativeMonitorRestore}:{}),
       ...(options.sharedDesktop&&cfg.allowUnlock?{allowSharedUnlock:true}:{}),
       ...(options.sharedVirtual&&cfg.allowVirtualDisplay?{allowSharedVirtual:true}:{}),
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
@@ -975,7 +994,7 @@ export class DesktopProvider {
   // Also used when pausing clients for handoff; rollback can reuse this provider.
   dispose(preserveTransfers=false): void {
     if(preserveTransfers)this.freezeSavedTransfers();
-    this.sourceEpoch++;void this.nativeMicrophones.close().catch(()=>{});
+    this.sourceEpoch++;this.nativeMonitorRestores.clear();void this.nativeMicrophones.close().catch(()=>{});
     const audioPipes=this.audioPipes;this.audioPipes=new DesktopAudioPipes();void audioPipes.close().catch(()=>{});
     const nativeSelection=this.nativeSelection;this.nativeSelection=new DesktopNativeSelection();void nativeSelection.close().catch(()=>{});
     if(!preserveTransfers){this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});}
