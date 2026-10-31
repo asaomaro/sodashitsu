@@ -19,7 +19,7 @@ public static class SodaDesktopSigninPackageChecks {
         var entries=Entries();var package=new SodaDesktopSigninPackage(Owner,Revision,entries);string wire=package.Encode();
         Check(SodaDesktopSigninPackage.Decode(wire,Owner).Encode()==wire,"Generated package round trip failed");
         entries[0]=null;var clone=package.Entries();clone[0]=null;var paths=SodaDesktopSigninPackage.RequiredPaths();paths[0]="../untrusted";
-        Check(package.Encode()==wire&&SodaDesktopSigninPackage.RequiredPaths()[0]=="DesktopSigninService.exe","Package metadata was mutable");
+        Check(package.Encode()==wire&&SodaDesktopSigninPackage.RequiredPaths()[0]=="DesktopSigninNative.exe","Package metadata was mutable");
         Reject(()=>SodaDesktopSigninPackage.Decode(wire,Other));
         Reject(()=>SodaDesktopSigninPackage.Decode(wire+" ",Owner));
         Reject(()=>SodaDesktopSigninPackage.Decode(wire.Replace("\"version\":1","\"unknown\":true,\"version\":1"),Owner));

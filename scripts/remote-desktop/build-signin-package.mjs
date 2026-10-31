@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 import {createHash,randomUUID} from "node:crypto";
 
 export const signinPackagePaths=Object.freeze([
-  "DesktopSigninService.exe","DesktopSigninWorker.exe","bootstrap.mjs","node.exe","packages/server/dist/signin/main.bundle.cjs",
+  "DesktopSigninNative.exe","bootstrap.mjs","node.exe","packages/server/dist/signin/main.bundle.cjs",
   "scripts/remote-desktop/EndpointAclPolicy.ps1","scripts/remote-desktop/SigninAclPolicy.ps1","scripts/remote-desktop/WindowsSigninVault.cs",
   "scripts/remote-desktop/check-endpoint-acl.ps1","scripts/remote-desktop/protect-endpoint-key.ps1","scripts/remote-desktop/read-signin-enrollment.ps1",
         "scripts/remote-desktop/SigninAdminStorage.ps1",
@@ -25,7 +25,7 @@ export const signinPackagePaths=Object.freeze([
 export function signinPackageMaximum(path) {
   if(!signinPackagePaths.includes(path))throw failure();
   if(path==="node.exe")return 268435456;
-  if(path==="DesktopSigninService.exe"||path==="DesktopSigninWorker.exe")return 33554432;
+  if(path==="DesktopSigninNative.exe")return 33554432;
   if(path==="packages/server/dist/signin/main.bundle.cjs")return 16777216;
   if(path==="bootstrap.mjs")return 65536;
   return 1048576;

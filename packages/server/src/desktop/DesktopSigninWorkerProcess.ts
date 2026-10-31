@@ -41,7 +41,7 @@ export class DesktopSigninWorkerProcess {
     const parsed=optionsSchema.safeParse(options.settings);if(!parsed.success)throw unavailable();const settings=parsed.data;options.signal.addEventListener("abort",this.#abort,{once:true});
     try{
       if(!this.live())throw unavailable();
-      const command=fileURLToPath(new URL("../../../../DesktopSigninWorker.exe",import.meta.url));
+      const command=fileURLToPath(new URL("../../../../DesktopSigninNative.exe",import.meta.url));
       const env:NodeJS.ProcessEnv={};for(const key of ["SystemRoot","windir","PATH","TEMP","TMP"]){const value=process.env[key];if(typeof value==="string")env[key]=value;}
       const child=deps.spawn(command,["--broker",options.control?"input":"view"],{stdio:["pipe","pipe","pipe"],windowsHide:true,cwd:win32.dirname(command),env});
       this.#child=child;this.#spawning=false;

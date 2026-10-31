@@ -1,0 +1,1 @@
+review_transferが役割分岐と製品全差分を独立読取し、SYSTEM・固定ProgramFiles・親PID/creation・nonce・session・Job・heldimageの境界維持を確認。shouldのreflection PEロックをbyte[]loadへ修正し、実Windows生成検証成功。最終delta再点検の結果はPR本文へ追記。

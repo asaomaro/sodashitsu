@@ -12,7 +12,7 @@ public static class SodaDesktopSigninServicePolicy {
         internal uint[] Actions;internal byte[] Security;
     }
     public static string Name(string owner){return "SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(owner);}
-    public static string Executable(string owner){return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninService.exe");}
+    public static string Executable(string owner){return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninNative.exe");}
     internal static bool Acl(byte[] bytes){
         try{
             var descriptor=new RawSecurityDescriptor(bytes,0);if(descriptor.Owner==null||descriptor.Owner.Value!="S-1-5-18"&&descriptor.Owner.Value!="S-1-5-32-544"||descriptor.DiscretionaryAcl==null||(descriptor.ControlFlags&ControlFlags.DiscretionaryAclPresent)==0)return false;

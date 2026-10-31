@@ -57,7 +57,7 @@ internal static class SodaDesktopSigninWorkerNative {
                 job=CreateJobObjectW(IntPtr.Zero,null);Require(job!=IntPtr.Zero);var limits=new Limits();limits.Basic.Flags=0x2000;Require(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(typeof(Limits))));
                 IntPtr size=IntPtr.Zero;InitializeProcThreadAttributeList(IntPtr.Zero,1,0,ref size);Require(size.ToInt64()>0&&size.ToInt64()<65536);list=Marshal.AllocHGlobal(size);Require(InitializeProcThreadAttributeList(list,1,0,ref size));initialized=true;
                 jobValue=Marshal.AllocHGlobal(IntPtr.Size);Marshal.WriteIntPtr(jobValue,job);Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x2000d),jobValue,new IntPtr(IntPtr.Size),IntPtr.Zero,IntPtr.Zero));
-                string application=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninWorker.exe");
+                string application=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSignin-"+SodaDesktopSigninPackage.Slot(owner),"DesktopSigninNative.exe");
                 var plan=new SodaDesktopSigninHost.Plan(application,"--worker "+nonce.ToString("D")+" "+self.Id+" "+self.StartTime.ToUniversalTime().Ticks+" "+session+" "+SodaDesktopSigninWorker.PurposeName(purpose),Environment.GetFolderPath(Environment.SpecialFolder.System),runtime);
                 environment=Marshal.StringToHGlobalUni(plan.EnvironmentBlock);var startup=new SX{Info=new SI{Size=Marshal.SizeOf(typeof(SX)),Desktop=@"WinSta0\Winlogon"},Attributes=list};
                 Require(WTSGetActiveConsoleSessionId()==(uint)session);
