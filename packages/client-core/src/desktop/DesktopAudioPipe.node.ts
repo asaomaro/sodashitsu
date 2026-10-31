@@ -14,12 +14,12 @@ export class DesktopAudioPipe extends Duplex {
  private resolveReady!:(pid:number)=>void;private rejectReady!:(error:Error)=>void;private resolveClosed!:()=>void;
  private born:number;private observed:number;private packets=new Set<Buffer>();
  private nonce=randomBytes(32).toString("hex");private diagnostics=0;
- constructor(binary:{readonly executable:string},private kind:DesktopAudioPipeKind,private allowed:()=>boolean,launch:typeof spawn=spawn,private now:()=>number=()=>performance.now()){
+ constructor(binary:{readonly executable:string;readonly arguments?:readonly string[]},private kind:DesktopAudioPipeKind,private allowed:()=>boolean,launch:typeof spawn=spawn,private now:()=>number=()=>performance.now()){
   super({readableHighWaterMark:16384,writableHighWaterMark:1932});
   this.ready=new Promise((resolve,reject)=>{this.resolveReady=resolve;this.rejectReady=reject;});
   this.childClosed=new Promise(resolve=>{this.resolveClosed=resolve;});
   this.born=this.observed=this.now();
-  this.child=launch(binary.executable,[],{stdio:["pipe","pipe","pipe"],windowsHide:true,shell:false});
+  this.child=launch(binary.executable,[...(binary.arguments??[])],{stdio:["pipe","pipe","pipe"],windowsHide:true,shell:false});
   this.deadline=setTimeout(()=>this.fail(),2500);this.deadline.unref();
   this.child.stdout.on("data",(bytes:Buffer)=>this.receive(bytes));
   this.child.stdout.on("end",()=>{if(!this.destroyed)this.fail();});

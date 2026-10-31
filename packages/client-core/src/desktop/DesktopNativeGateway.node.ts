@@ -6,8 +6,8 @@ import {DesktopNativeHelperDescriptor,type DesktopNativeHelperEvent} from "@soda
 import {DesktopNativeBinary} from "./DesktopNativeBinary.node.js";
 import {DesktopNativeHost} from "./DesktopNativeHost.node.js";
 export type NativeChannel={receive(raw:unknown):void;close():Promise<void>;readonly closed:Promise<void>};
-export type NativeFactory=(options:{origin:string;executable:string;emit(event:DesktopNativeHelperEvent):void})=>NativeChannel;
-type Binary={prepare():Promise<void>;readonly executable:string;close():Promise<void>};
+export type NativeFactory=(options:{origin:string;executable:string;args?:readonly string[];emit(event:DesktopNativeHelperEvent):void})=>NativeChannel;
+type Binary={prepare():Promise<void>;readonly executable:string;readonly arguments?:readonly string[];retirePreparation?():Promise<void>;close():Promise<void>};
 /** A dedicated browser-PC helper. No public server RPC carries file contents. */
 export class DesktopNativeGateway {
  private resolveDone!:(ok:boolean)=>void;readonly done=new Promise<boolean>(resolve=>{this.resolveDone=resolve;});
@@ -42,7 +42,7 @@ export class DesktopNativeGateway {
      if(preparing||!data||Object.keys(data).length!==2||data.type!=="claim"||typeof data.secret!=="string")throw Error("Native helper claim refused");
      const actual=Buffer.from(data.secret),expected=Buffer.from(this.secret);if(actual.length!==expected.length||!timingSafeEqual(actual,expected))throw Error("Native helper claim refused");
      preparing=true;clearTimeout(handshake);clearTimeout(this.expires);
-     this.preparing=(async()=>{await this.binary.prepare();if(this.stopped)return;const native=this.nativeFactory({origin:this.parent,executable:this.binary.executable,emit:event=>this.send(event)});if(this.stopped){await native.close();return;}this.native=native;void native.closed.then(()=>{void this.close();});verified=true;this.send({type:"ready",id:this.id});})();void this.preparing.catch(()=>{this.send({type:"error",message:"このPCのWindows補助プログラムを準備できませんでした"});void this.close();});return;
+     this.preparing=(async()=>{await this.binary.prepare();if(this.stopped)return;const native=this.nativeFactory({origin:this.parent,executable:this.binary.executable,args:this.binary.arguments??[],emit:event=>this.send(event)});if(this.stopped){await native.close();return;}this.native=native;void native.closed.then(()=>{void this.close();});verified=true;this.send({type:"ready",id:this.id});})();void this.preparing.catch(()=>{this.send({type:"error",message:"このPCのWindows補助プログラムを準備できませんでした"});void this.close();});return;
     }
     this.native!.receive(data);if(data.type==="beat")this.send({type:"alive"});
    }catch{void this.close();}
@@ -54,8 +54,8 @@ export class DesktopNativeGateway {
   return `(()=>{"use strict";const id=${JSON.stringify(this.id)},origin=${JSON.stringify(this.parent)};let port,ws,closed=false;function stop(){if(closed)return;closed=true;if(ws)ws.close();if(port)port.close();}addEventListener("message",event=>{if(port||parent===window||event.source!==parent||event.origin!==origin||event.data?.type!=="soda-native-connect"||event.data.id!==id||event.ports.length!==1)return;port=event.ports[0];ws=new WebSocket(${JSON.stringify(`ws://${this.host}/channel`)});ws.onopen=()=>ws.send(JSON.stringify({type:"claim",secret:${JSON.stringify(this.secret)}}));ws.onmessage=event=>{try{port.postMessage(JSON.parse(event.data));}catch{stop();}};ws.onclose=()=>{try{port.postMessage({type:"error",message:"補助プログラムとの接続が終了しました"});}catch{}stop();};ws.onerror=()=>{try{port.postMessage({type:"error",message:"補助プログラムとの接続が終了しました"});}catch{}stop();};port.onmessage=event=>{try{if(ws.readyState!==1)throw Error();ws.send(JSON.stringify(event.data));}catch{stop();}};port.start();});addEventListener("pagehide",stop);parent.postMessage({type:"soda-native-frame",id},origin);})();`;
  }
  close():Promise<void>{return this.closing??=(async()=>{
-  this.stopped=true;clearTimeout(this.expires);this.client?.terminate();for(const socket of this.sockets)socket.destroy();let ok=true;
-  try{await this.preparing?.catch(()=>{});await this.native?.close();await this.binary.close();}catch{ok=false;}
+  this.stopped=true;const retiring=this.binary.retirePreparation?.();clearTimeout(this.expires);this.client?.terminate();for(const socket of this.sockets)socket.destroy();let ok=true;
+  try{await this.preparing?.catch(()=>{});await this.native?.close();await retiring;await this.binary.close();}catch{ok=false;}
   finally{const results=await Promise.allSettled([new Promise<void>(resolve=>this.ws.close(()=>resolve())),new Promise<void>(resolve=>this.server.close(()=>resolve()))]);if(results.some(value=>value.status==="rejected"))ok=false;this.resolveDone(ok);}
  })();}
 }

@@ -8,11 +8,12 @@ const cleanup:Array<()=>Promise<void>>=[];afterEach(async()=>{for(const fn of cl
 function fixture(onEvent?:(value:any,host:DesktopNativeHost)=>void){
  class Child extends EventEmitter{stdin=new PassThrough();stdout=new PassThrough();stderr=new PassThrough();killed=false;kill(){this.killed=true;return true;}}
  const child=new Child(),packets:string[]=[],events:any[]=[];let now=100;child.stdin.on("data",bytes=>packets.push(bytes.toString("utf8")));
- const host=new DesktopNativeHost({origin:"https://example.test",executable:"fixed-generated-only",spawn:(()=>child as unknown as ChildProcessWithoutNullStreams) as unknown as typeof spawn,now:()=>now,emit:value=>{events.push(value);onEvent?.(value,host);}});
+ const launchArgs=["--role","copy","--module","generated","--sha256","digest"];let actualArgs:readonly string[]|undefined;
+ const host=new DesktopNativeHost({args:launchArgs,origin:"https://example.test",executable:"fixed-generated-only",spawn:((_program:string,args:readonly string[])=>{actualArgs=args;return child as unknown as ChildProcessWithoutNullStreams;}) as unknown as typeof spawn,now:()=>now,emit:value=>{events.push(value);onEvent?.(value,host);}});
  cleanup.push(async()=>{const closed=host.close();child.emit("close",3,null);await closed;});
  const gesture=randomUUID(),data=Buffer.alloc(70000);for(let i=0;i<data.length;i++)data[i]=i%251;
  const offer={lease:randomUUID(),generation:randomUUID(),entries:[{name:"generated.bin",directory:false,bytes:data.length,sha256:createHash("sha256").update(data).digest("hex")},{name:"generated-two.bin",directory:false,bytes:data.length,sha256:createHash("sha256").update(data).digest("hex")}]};
- host.receive({type:"arm",gesture});host.receive({type:"start",gesture,offer});const nonce=packets[0]!.trim(),send=(value:object)=>child.stdout.write(JSON.stringify({...value,nonce})+"\n");
+ host.receive({type:"arm",gesture});host.receive({type:"start",gesture,offer});expect(actualArgs).toEqual(launchArgs);const nonce=packets[0]!.trim(),send=(value:object)=>child.stdout.write(JSON.stringify({...value,nonce})+"\n");
  return {host,child,events,packets,nonce,gesture,data,offer,send,clock:(value:number)=>{now=value;},ready:()=>send({type:"ready",now:20})};
 }
 it("allows contiguous chunks under one native request and completes only on actual close zero",()=>{
