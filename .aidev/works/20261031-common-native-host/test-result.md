@@ -43,3 +43,16 @@ loaded. For more information, run 'Import-Module Microsoft.PowerShell.Security'.
 ```
 
 生ログ: /tmp/soda-common-native-ci-failed.log。最終headのCIとmerge結果はPR346で確認する。実desktop/audio/Explorer操作は未検証。
+
+
+続く同環境CIでGet-FileHashも未検出だったため、Hash-FileをCLR FileStream+SHA256へ変更し、stream取得直後のouter finallyとSHA用inner finallyで例外cleanupを維持。validatorはJSONのUtility autoload後にGet-Acl/Get-FileHashだけを拒否するprivate child fixtureで実行する。旧hashへ戻した隔離copyは以下の意図した失敗、現実装は全role試験pass（/tmp/soda-common-native-roles-cmdlets-unavailable-{positive,negative}.log）。初期のPSModulePath変更だけではbuiltin補完により旧hashも通ったので、回帰として採用せずguardを修正した。修正deltaの独立reviewはmust/shouldなし。
+
+```text
+file://wsl.localhost/Ubuntu/tmp/soda-role-no-module-negative-jx6dxamd/verify-native-roles.mjs:19
+ pending.stdin.end(JSON.stringify({operation,role,source:sdk,...(operation==='module'?{expectedHost:selectedHost.directory.split(/[\\/]/).at(-1).slice(5),expectedHash:selectedHost.sha256}:{})}));const result=await new Promise((resolve,reject)=>{let stdout='',stderr='';pending.stdout.on('data',data=>stdout+=data);pending.stderr.on('data',data=>stderr+=data);pending.on('error',reject);pending.on('close',status=>status===0?resolve(stdout):reject(Error('Generated native builder failed: '+stderr)));});const parsed=JSON.parse(result.replace(/^\uFEFF/,''));if(operation==='host')selectedHost=parsed;return parsed;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                               ^
+
+Error: Generated native builder failed: #< CLIXML
+
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><S S="Error">optional hash module is unavailable_x000D__x000A_</S><S S="Error">発生場所 行:27 文字:90_x000D__x000A_</S><S S="Error">+ ... function Get-FileHash { throw 'optional hash module is unavailable' }_x000D__x000A_</S><S S="Error">+                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~_x000D__x000A_</S><S S="Error">    + CategoryInfo          : OperationStopped: (optional hash module is unavailable:String) [], RuntimeException_x000D__x000A_</S><S S="Error">    + FullyQualifiedErrorId : optional hash module is unavailable_x000D__x000A_</S><S S="Error"> _x000D__x000A_</S></Objs>
+```

@@ -25,7 +25,8 @@ function Check-Root([string]$path,[bool]$private=$true){
 function Private-Directory([string]$path){[IO.Directory]::CreateDirectory($path,$security)|Out-Null;Check-Root $path}
 function Hash-File([string]$path){
  $item=Get-Item -LiteralPath $path -Force;if($item.PSIsContainer -or ($item.Attributes-band[IO.FileAttributes]::ReparsePoint)-ne0 -or $item.Length-gt8MB){throw 'invalid native host resource'}
- (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+ $stream=[IO.File]::Open($path,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+ try{$sha=[Security.Cryptography.SHA256]::Create();try{if($stream.Length-lt1 -or $stream.Length-gt8MB){throw 'invalid native resource size'};[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}}finally{$stream.Dispose()}
 }
 function Compile([string]$output,[string[]]$files,[string[]]$references,[bool]$entryHost){
  $arguments=@('/nologo','/noconfig','/unsafe-','/warnaserror+',"/out:$output")

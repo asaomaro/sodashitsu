@@ -9,10 +9,13 @@ if(process.platform!=='win32')throw Error('Synthetic CLR verification requires W
 const run=promisify(execFile),source=dirname(fileURLToPath(import.meta.url)),base=await mkdtemp(join(process.env.LOCALAPPDATA,'nr-')),sdk=join(base,'sdk');await mkdir(sdk);
 const quote=value=>"'"+value.replaceAll("'","''")+"'";
 const policy=await readFile(join(source,'EndpointAclPolicy.ps1'),'utf8'),builder=await readFile(join(source,'build-native-role.ps1'),'utf8'),marker='$base=[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)';assert.equal(builder.split(marker).length,2);
-const code=policy+'\n'+builder.replace(marker,'$base='+quote(base)),system=join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
+// Install the fixture guards after JSON autoloads Utility (which exports Get-FileHash).
+const requestMarker='$request=[Console]::In.ReadToEnd()|ConvertFrom-Json';assert.equal(builder.split(requestMarker).length,2);
+const unavailable="function Get-Acl { throw 'optional ACL module is unavailable' }; function Get-FileHash { throw 'optional hash module is unavailable' }";
+const code=policy+'\n'+builder.replace(marker,'$base='+quote(base)).replace(requestMarker,requestMarker+'\n'+unavailable),system=join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
 let selectedHost;
 async function build(operation,role){
- const pending=execFile(system,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(code,'utf16le').toString('base64')],{timeout:65000,maxBuffer:65536,windowsHide:true,encoding:'utf8'});
+ const pending=execFile(system,['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(code,'utf16le').toString('base64')],{timeout:65000,maxBuffer:65536,windowsHide:true,encoding:'utf8',env:{...process.env,PSModulePath:join(base,'unavailable-modules')}});
  pending.stdin.end(JSON.stringify({operation,role,source:sdk,...(operation==='module'?{expectedHost:selectedHost.directory.split(/[\\/]/).at(-1).slice(5),expectedHash:selectedHost.sha256}:{})}));const result=await new Promise((resolve,reject)=>{let stdout='',stderr='';pending.stdout.on('data',data=>stdout+=data);pending.stderr.on('data',data=>stderr+=data);pending.on('error',reject);pending.on('close',status=>status===0?resolve(stdout):reject(Error('Generated native builder failed: '+stderr)));});const parsed=JSON.parse(result.replace(/^\uFEFF/,''));if(operation==='host')selectedHost=parsed;return parsed;
 }
 const maps={copy:{entry:'namespace Sodashitsu.NativeDrag {internal static class NativeDragWorker',files:['WindowsNativeDragLease.cs','WindowsNativeDragStreams.cs','WindowsNativeDragDataObject.cs','WindowsNativeDragPackets.cs','WindowsNativeDragPump.cs','WindowsNativeDragSlot.cs','WindowsNativeDragWorker.cs'],marker:'soda-native-copy-preflight-v1'},audio:{entry:'public static class SodaDesktopAudioPipeBridge',files:['WindowsAudioPipeBridge.cs'],marker:'soda-audio-pipe-preflight-v1'},selection:{entry:'namespace Sodashitsu.NativeDrag {public static class ExplorerSelectionWorker',files:['WindowsExplorerSelection.cs','WindowsExplorerSelectionWorker.cs'],marker:'soda-explorer-selection-preflight-v1'}};
@@ -35,5 +38,5 @@ try{
  }
  await writeFile(join(host.directory,'host.sha256'),'0'.repeat(64));const repaired=await build('host','copy');assert.notEqual(repaired.binary,host.binary);assert.equal((await stat(host.binary)).isFile(),true);
  await unlink(join(dirname(repaired.directory),'host.current'));const afterInterruptedPointer=await build('host','copy');assert.notEqual(afterInterruptedPointer.binary,repaired.binary);assert.equal((await stat(repaired.binary)).isFile(),true);
- console.log(JSON.stringify({roles:3,apartments:'copy/selection STA; audio MTA',unselectedModulesAbsentBeforeBuild:true,unknownRoleRejected:true,wrongDigestRejected:true,tamperingRejected:true,hardlinksRejected:true,immutableRepair:true,interruptedPointerRecovery:true,actualRolePreflightOnly:true,desktopOrAudioDeviceCalls:false}));
+ console.log(JSON.stringify({roles:3,apartments:'copy/selection STA; audio MTA',unselectedModulesAbsentBeforeBuild:true,unknownRoleRejected:true,wrongDigestRejected:true,tamperingRejected:true,hardlinksRejected:true,immutableRepair:true,interruptedPointerRecovery:true,actualRolePreflightOnly:true,optionalAclAndHashCmdletsRequired:false,desktopOrAudioDeviceCalls:false}));
 }finally{await rm(base,{recursive:true,force:true});}
