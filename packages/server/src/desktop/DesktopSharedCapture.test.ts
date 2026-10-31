@@ -417,3 +417,20 @@ it.skipIf(process.platform==="win32")("keeps the physical PCM owner and nonempty
   physicalClose();await expect.poll(()=>paths.pending).toBe(0);expect(exited).toBe(true);
  }finally{hold.mockRestore();physicalClose();await new Promise<void>(resolve=>server.close(()=>resolve()));await lease.retire();f.pool.dispose();}
 });
+
+it("keeps exclusive native microphone ownership without forwarding inline helper commands",async()=>{
+ const f=fixture(),first=f.join(),a=f.join(),b=f.join();
+ try{
+  f.child.send({...ready,microphone:true});await vi.waitFor(()=>expect(b.messages.length).toBe(1));
+  first.session.stdin.end();await vi.waitFor(()=>expect(first.session.exitCode).toBe(0));expect(f.child.exitCode).toBeNull();
+  expect(a.session.requestMicrophone!("native-a",true,false)).toBe(true);
+  expect(b.session.requestMicrophone!("native-b",true,false)).toBe(false);
+  a.send({type:"native_microphone",id:"native-a",enabled:true,pipeName:"forged"});
+  expect(f.child.commands.some(m=>m.type==="native_microphone")).toBe(false);
+  a.session.requestMicrophone!("native-a",false,false);
+  expect(b.session.requestMicrophone!("native-b",true,false)).toBe(true);
+  b.session.stdin.end();await vi.waitFor(()=>expect(b.session.exitCode).toBe(0));
+  expect(f.child.commands.some(m=>m.type==="native_microphone")).toBe(false);
+  expect(a.session.requestMicrophone!("native-next",true,false)).toBe(true);
+ }finally{f.pool.dispose();}
+});

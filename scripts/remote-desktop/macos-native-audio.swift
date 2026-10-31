@@ -162,17 +162,18 @@ final class NativePCMParentPipe {
     private var parentIdentity:(dev_t,ino_t)?
     private var socketIdentity:(dev_t,ino_t)?
     private let path:String,parent:pid_t
+    private let microphone:Bool
     private let generatedOwner:Bool
     private let now:()->Double
-    init(path:String,name:String,clientPID:pid_t,owner:pid_t?=nil,clock:@escaping()->Double={ProcessInfo.processInfo.systemUptime}) throws {
-        self.path=path;parent=owner ?? getppid();generatedOwner=owner != nil;now=clock
+    init(path:String,name:String,clientPID:pid_t,owner:pid_t?=nil,microphone:Bool=false,clock:@escaping()->Double={ProcessInfo.processInfo.systemUptime}) throws {
+        self.path=path;parent=owner ?? getppid();generatedOwner=owner != nil;self.microphone=microphone;now=clock
         let root=(path as NSString).deletingLastPathComponent,base=(root as NSString).lastPathComponent
         func exact(_ value:String,_ pattern:String) -> Bool {
             value.range(of:pattern,options:.regularExpression)==value.startIndex..<value.endIndex
         }
         guard path.hasPrefix("/"),!path.utf8.contains(0),path.utf8.count<=100,
               (path as NSString).standardizingPath==path,(path as NSString).lastPathComponent=="pcm.sock",
-              exact(base,"^soda-native-pcm-[A-Za-z0-9]{6}$"),exact(name,"^SodaDesktopAudio-[a-f0-9]{32}$"),
+              exact(base,"^soda-native-pcm-[A-Za-z0-9]{6}$"),exact(name,microphone ? "^SodaDesktopMicrophone-[a-f0-9]{32}$":"^SodaDesktopAudio-[a-f0-9]{32}$"),
               clientPID==parent,parent>1,geteuid()==getuid() else { throw NativePCMError("pipe_scope") }
         do {
             directory=Darwin.open(root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC)
@@ -257,6 +258,27 @@ final class NativePCMParentPipe {
                 }
             }
         } catch {closePeer();throw error}
+    }
+    func receiveMicrophone(active:()->Bool,deadline:Double) throws -> Data {
+        guard microphone,peer>=0 else {throw NativePCMError("pipe_record")}
+        var data=Data(count:1932)
+        do {
+            try data.withUnsafeMutableBytes {bytes in
+                var offset=0
+                while offset<bytes.count {
+                    try admissible(active,deadline)
+                    var incoming=pollfd(fd:peer,events:Int16(POLLIN),revents:0)
+                    let result=Darwin.poll(&incoming,1,20)
+                    if result<0 {if errno==EINTR {continue};throw NativePCMError("pipe_poll")}
+                    if result==0 {continue}
+                    try admissible(active,deadline)
+                    let count=Darwin.recv(peer,bytes.baseAddress!.advanced(by:offset),bytes.count-offset,0)
+                    if count<0 {if errno==EINTR || errno==EAGAIN {continue};throw NativePCMError("pipe_read")}
+                    guard count>0 else {throw NativePCMError("pipe_closed")};offset+=count
+                }
+            }
+            return data
+        }catch{data.resetBytes(in:0..<data.count);throw error}
     }
     private func closePeer() {if peer>=0 {Darwin.close(peer);peer = -1}}
     func close() {

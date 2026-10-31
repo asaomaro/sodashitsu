@@ -9,7 +9,7 @@ fi
 umask 077
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/soda-macos-build.XXXXXXXX")
 trap 'rm -rf -- "$build_dir"' EXIT
-cat macos-rich-clipboard.swift macos-native-video.swift macos-native-audio.swift macos-system-audio.swift macos-desktop-helper.swift > "$build_dir/main.swift"
+cat macos-rich-clipboard.swift macos-native-video.swift macos-native-audio.swift macos-system-audio.swift macos-native-microphone.swift macos-desktop-helper.swift > "$build_dir/main.swift"
 MACOSX_DEPLOYMENT_TARGET=14.0 xcrun swiftc -swift-version 5 -O "$build_dir/main.swift" -o "$build_dir/macos-desktop-helper"
 # Ad-hoc signature changes only this generated file. No certificates are installed.
 codesign --force --sign - --identifier dev.sodashitsu.desktop "$build_dir/macos-desktop-helper"

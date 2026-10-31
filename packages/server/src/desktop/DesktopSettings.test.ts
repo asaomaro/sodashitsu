@@ -195,3 +195,11 @@ it('checks WSL helper presence without starting wslpath for disabled metadata',(
  const probe=vi.mocked(childProcess.spawnSync).mockImplementation(()=>{throw Error('unexpected helper discovery process');});
  expect(bundledDesktopCommand('linux',{WSL_DISTRO_NAME:'Generated'},false)?.[0]).toBe('powershell.exe');expect(probe).not.toHaveBeenCalled();
 });
+
+it.each(["linux-portal","macos-sck"] as const)("persists explicit virtual microphone target for %s",async nativePlatform=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform});
+ await settings.set({...off,enabled:true,allowMicrophone:true,microphoneEndpoint:"virtual-target"});
+ expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform,allowMicrophone:true,microphoneEndpoint:"virtual-target",command:["synthetic-helper","--allow-microphone"]});
+ expect((await DesktopSettings.open({...options,nativePlatform})).get(true).permissions).toMatchObject({allowMicrophone:true,microphoneEndpoint:"virtual-target"});
+ await settings.set({...off,enabled:true});expect(configure.mock.calls.at(-1)![0]?.command).not.toContain("--allow-microphone");
+});

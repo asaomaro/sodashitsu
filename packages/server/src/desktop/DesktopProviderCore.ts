@@ -25,7 +25,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
     return {
       ...(endpointOnly?{endpointRequired:true}:{}),
       ...(config?.nativePlatform?{nativePlatform:config.nativePlatform}:{}),
-      sharedMicrophone:!config?.nativePlatform&&config?.allowMicrophone===true&&!!config.microphoneEndpoint,
+      sharedMicrophone:config?.allowMicrophone===true&&!!config.microphoneEndpoint,
       sharedProtected:!config?.nativePlatform&&config?.allowElevated===true,
       sharedDesktop: true,
       sharedDeltas:!config?.nativePlatform,

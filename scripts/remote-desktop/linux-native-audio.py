@@ -76,9 +76,10 @@ class PcmFrames:
 
 class ParentPipe:
     """A single authenticated Unix peer, anchored cleanup through a directory fd."""
-    def __init__(self, path, pipe_name, client_pid, parent_pid=None):
+    def __init__(self, path, pipe_name, client_pid, parent_pid=None, microphone=False):
         parent_pid = os.getppid() if parent_pid is None else parent_pid
         self.parent_pid = parent_pid
+        self.microphone = microphone
         self.listener = None
         self.peer = None
         self.directory_fd = None
@@ -90,7 +91,7 @@ class ParentPipe:
                 or os.path.basename(path) != "pcm.sock"
                 or not re.fullmatch(r"soda-native-pcm-[A-Za-z0-9]{6}", os.path.basename(os.path.dirname(path)))
                 or not isinstance(pipe_name, str)
-                or not re.fullmatch(r"SodaDesktopAudio-[a-f0-9]{32}", pipe_name)
+                or not re.fullmatch(r"SodaDesktop" + ("Microphone" if microphone else "Audio") + r"-[a-f0-9]{32}", pipe_name)
                 or type(client_pid) is not int or client_pid != parent_pid or parent_pid <= 1):
             raise AudioFailure("pipe_scope")
         try:
@@ -145,15 +146,42 @@ class ParentPipe:
                 raise
         raise AudioFailure("pipe_timeout")
 
-    def peer_alive(self):
+    def peer_alive(self, allow_input=False):
         if self.peer is None:
             return False
         self.check_parent()
+        if allow_input and self.microphone:
+            if select.select([self.peer], [], [], 0)[0]:
+                return bool(self.peer.recv(1, socket.MSG_PEEK))
+            return True
         if select.select([self.peer], [], [], 0)[0]:
             # The receiver never writes application data. EOF or unexpected
             # reverse data invalidates capture admission just like source stop.
             return False
         return True
+
+    def receive(self, size, active, deadline):
+        if not self.microphone or size != 1932 or self.peer is None:
+            raise AudioFailure("pipe_record")
+        packet = bytearray()
+        try:
+            while len(packet) < size:
+                self.check_parent()
+                if not active() or time.monotonic() >= deadline:
+                    raise AudioFailure("pipe_expired")
+                if not select.select([self.peer], [], [], min(0.02, max(0, deadline-time.monotonic())))[0]:
+                    continue
+                self.check_parent()
+                if not active() or time.monotonic() >= deadline:
+                    raise AudioFailure("pipe_expired")
+                try: data = self.peer.recv(size-len(packet))
+                except BlockingIOError: continue
+                if not data: raise AudioFailure("pipe_closed")
+                packet.extend(data)
+            return packet
+        except Exception:
+            packet[:] = b"\0" * len(packet)
+            raise
 
     def send(self, record, active, deadline):
         try:
