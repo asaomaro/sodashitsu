@@ -14,6 +14,7 @@ export class DesktopMediaReceiver {
   private datagrams:DesktopDatagramFrames|undefined;
   private nativeControl:RTCDataChannel|undefined;
   private nativeVideo:RTCDataChannel|undefined;
+  private codecFallbackAt:number|undefined;
   private formatEpoch=0;private barrier:{generation:number;at:number}|undefined;
   private nativeFormat:{generation:number;codec:string;width:number;height:number;window?:3}|undefined;
   private lastKey=-Infinity;
@@ -79,15 +80,15 @@ export class DesktopMediaReceiver {
       this.datagramTimer=setInterval(()=>{try{this.datagrams?.tick();}catch{this.datagramFailure();}},25);
     }
     this.peer.ontrack = (e) => {
-      if (this.stopped) return;
+      if (this.stopped||this.codecFallbackAt!==undefined) return;
       this.video.srcObject = e.streams[0] ?? new MediaStream([e.track]);
       void this.video.play().catch(() => {});
     };
     this.peer.onconnectionstatechange = () => {
-      if (this.peer?.connectionState === "failed") this.send({ type: "media_fallback", id });
+      if (!this.stopped&&this.codecFallbackAt===undefined&&this.peer?.connectionState === "failed") this.send({ type: "media_fallback", id });
     };
     const tick = () => {
-      if (this.stopped) return;
+      if (this.stopped||this.codecFallbackAt!==undefined) return;
       if (this.video.readyState >= 2) {
         this.drawnAt = performance.now();
         this.draw(this.video, ++this.count,this.video.videoWidth,this.video.videoHeight);
@@ -97,6 +98,7 @@ export class DesktopMediaReceiver {
     this.frameCallback = this.video.requestVideoFrameCallback(tick);
     this.timer = setInterval(() => {
       const now = performance.now();
+      if(this.codecFallbackAt!==undefined){if(now<this.codecFallbackAt||now-this.codecFallbackAt>=2000)this.fail();return;}
       const barrier=this.barrier&&now-this.barrier.at<3000;
       if ((this.barrier&&now-this.barrier.at>=3000)||(!barrier&&(
         (this.drawnAt && now - this.drawnAt > 2000) ||
@@ -121,7 +123,7 @@ export class DesktopMediaReceiver {
     }, 500);
   }
   get active() {
-    return !this.stopped && this.drawnAt > 0 && performance.now() - this.drawnAt <= 2000;
+    return !this.stopped && this.codecFallbackAt===undefined && this.drawnAt > 0 && performance.now() - this.drawnAt <= 2000;
   }
   async signal(signal: { kind: string; sdp?: string; candidate?: RTCIceCandidateInit }) {
     const pc=this.peer,current=()=>!this.stopped&&this.peer===pc;
@@ -182,7 +184,7 @@ export class DesktopMediaReceiver {
     this.barrier={generation:m.generation,at:performance.now()};
   }
   nativeStream(generation:number,codec:string,width:number,height:number,window?:3,datagrams=false,baseSeq?:number) {
-    if(this.stopped)return;if(datagrams!==this.udp)throw Error("Native stream route changed");
+    if(this.stopped||this.codecFallbackAt!==undefined)return;if(datagrams!==this.udp)throw Error("Native stream route changed");
     if(!datagrams){this.peer?.close();this.peer=undefined;}
     if(baseSeq!==undefined&&(!this.barrier||generation!==this.barrier.generation||performance.now()-this.barrier.at>=3000))throw Error("Unexpected native format");
     this.native?.stop();this.native=undefined;this.releaseSource();this.video.srcObject=null;
@@ -193,35 +195,45 @@ export class DesktopMediaReceiver {
     if(datagrams)this.datagrams!.start();
   }
   private createNative(ready?:()=>void){
-    const format=this.nativeFormat;if(!format||this.stopped)return;
-    const epoch=++this.formatEpoch,current=()=>!this.stopped&&epoch===this.formatEpoch;
-    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>{if(current()){if(this.udp)this.nativeAck(value);else this.send(value);}},frame=>{if(!current())return;if(this.barrier?.generation===format.generation)this.barrier=undefined;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>{if(current()){if(this.nativeCodecs){this.send({type:"native_codec_fallback",id:this.id});this.stop();}else if(this.udp)this.datagramFailure();else this.fail();}},()=>{if(current())ready?.();});
+    const format=this.nativeFormat;if(!format||this.stopped||this.codecFallbackAt!==undefined)return;
+    const epoch=++this.formatEpoch,current=()=>!this.stopped&&this.codecFallbackAt===undefined&&epoch===this.formatEpoch;
+    this.native=new DesktopNativeVideoReceiver({id:this.id,...format},value=>{if(current()){if(this.udp)this.nativeAck(value);else this.send(value);}},frame=>{if(!current())return;if(this.barrier?.generation===format.generation)this.barrier=undefined;this.videoTimestamp=frame.timestamp;this.draw(frame,++this.count,format.width,format.height);this.drawnAt=performance.now();},()=>{if(current()){if(this.nativeCodecs){this.codecFailure();}else if(this.udp)this.datagramFailure();else this.fail();}},()=>{if(current())ready?.();});
+  }
+  private codecFailure(){
+    if(this.stopped||this.codecFallbackAt!==undefined)return;
+    this.codecFallbackAt=performance.now();
+    // Keep the authenticated transport until B acknowledges the codec reset.
+    // Closing the peer here races the ordered fallback request and can make B
+    // start the same rejected codec again over WSS before receiving it.
+    clearInterval(this.datagramTimer);this.datagrams?.stop();this.datagrams=undefined;
+    this.native?.stop();this.native=undefined;this.audio?.stop();this.audio=undefined;
+    this.send({type:"native_codec_fallback",id:this.id});
   }
   notice(raw:unknown){
-    if(this.stopped)return;
+    if(this.stopped||this.codecFallbackAt!==undefined)return;
     const notice=DesktopNativeFrameNotice.parse(raw);if(!this.udp||notice.id!==this.id||notice.generation!==this.generation||!this.nativeFormat)throw Error("Unexpected native notice");
     this.datagrams!.notice(notice.seq,notice.bytes);
   }
   audioStatus(raw:unknown){
-    if(this.stopped)return;const status=DesktopNativeAudioStatus.parse(raw);if(!this.requestedNativeAudio||status.id!==this.id)throw Error("Unexpected audio status");
+    if(this.stopped||this.codecFallbackAt!==undefined)return;const status=DesktopNativeAudioStatus.parse(raw);if(!this.requestedNativeAudio||status.id!==this.id)throw Error("Unexpected audio status");
     if(status.state==="starting"||status.state==="running")this.audio??=new DesktopNativeAudioReceiver(1,()=>this.videoTimestamp,()=>this.audioFailure());
     else{this.audio?.stop();this.audio=undefined;}
     this.audioState(status.state);
   }
-  audioChunk(bytes:Uint8Array){if(this.stopped)return;if(!this.requestedNativeAudio)throw Error("Audio not requested");try{this.audio?.push(bytes);}catch{this.audioFailure();}}
-  private audioFailure(){if(this.stopped)return;this.audio?.stop();this.audio=undefined;this.audioState("unavailable");this.send({type:"native_audio_control",id:this.id,enabled:false});}
+  audioChunk(bytes:Uint8Array){if(this.stopped||this.codecFallbackAt!==undefined)return;if(!this.requestedNativeAudio)throw Error("Audio not requested");try{this.audio?.push(bytes);}catch{this.audioFailure();}}
+  private audioFailure(){if(this.stopped||this.codecFallbackAt!==undefined)return;this.audio?.stop();this.audio=undefined;this.audioState("unavailable");this.send({type:"native_audio_control",id:this.id,enabled:false});}
   private nativeAck(value:unknown){
-    const control=this.nativeControl;if(this.stopped)return;
+    const control=this.nativeControl;if(this.stopped||this.codecFallbackAt!==undefined)return;
     if(control?.readyState!=="open"||control.bufferedAmount>16384){this.datagramFailure();return;}
     if((value as {type:string}).type==="native_video_ack")DesktopNativeVideoAck.parse(value);
     control.send(JSON.stringify(value));
   }
   private datagramFailure(){
-    if(this.stopped)return;
+    if(this.stopped||this.codecFallbackAt!==undefined)return;
     this.send({type:"media_fallback",id:this.id});this.stop();
   }
   chunk(bytes: Uint8Array) {
-    if(this.stopped)return;
+    if(this.stopped||this.codecFallbackAt!==undefined)return;
     const chunk = decodeDesktopMediaChunk(bytes);
     if (chunk.generation !== this.generation) return;
     if (chunk.seq !== this.sequence + 1) throw Error("動画の順序が不正です");

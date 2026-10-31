@@ -122,3 +122,24 @@ it('waits up to three seconds for a new decoder format without accepting retired
   now.mockReturnValue(4100);await vi.advanceTimersByTimeAsync(500);expect(state).toHaveBeenCalledWith('images');
  }finally{receiver.stop();now.mockRestore();vi.useRealTimers();vi.unstubAllGlobals();delete(HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete(HTMLVideoElement.prototype as any).cancelVideoFrameCallback;}
 });
+it.each(["reset","timeout","rollback"] as const)("keeps the native codec transport until B %s without replaying rejected codec",async mode=>{
+ vi.useFakeTimers();let now=100;const clock=vi.spyOn(performance,"now").mockImplementation(()=>now),close=vi.fn();
+ vi.stubGlobal("RTCPeerConnection",class{close=close;});vi.stubGlobal("VideoDecoder",class{static async isConfigSupported(config:unknown){return{supported:false,config};}});
+ Object.defineProperty(HTMLVideoElement.prototype,"requestVideoFrameCallback",{configurable:true,value:vi.fn(()=>1)});Object.defineProperty(HTMLVideoElement.prototype,"cancelVideoFrameCallback",{configurable:true,value:vi.fn()});
+ const send=vi.fn(),state=vi.fn(),receiver=new DesktopMediaReceiver("generated",send,vi.fn(),state,[],true,false,()=>{},true);
+ try{receiver.nativeStream(1,"hev1.1.6.L63.B0",640,360,3,true);await Promise.resolve();await Promise.resolve();await Promise.resolve();expect(send).toHaveBeenCalledWith({type:"native_codec_fallback",id:"generated"});expect(close).not.toHaveBeenCalled();expect(receiver.active).toBe(false);
+  receiver.chunk(new Uint8Array([0]));receiver.notice({type:"ignored after codec rejection"});expect(send.mock.calls.filter(([value])=>value.type==="native_codec_fallback")).toHaveLength(1);
+  now=2099;await vi.advanceTimersByTimeAsync(1500);expect(close).not.toHaveBeenCalled();
+  if(mode==="reset"){receiver.stop();now=2200;await vi.advanceTimersByTimeAsync(500);expect(state).not.toHaveBeenCalled();}
+  else{now=mode==="rollback"?99:2100;await vi.advanceTimersByTimeAsync(500);expect(send).toHaveBeenCalledWith({type:"media",enabled:false});expect(state).toHaveBeenCalledWith("images");}
+  expect(close).toHaveBeenCalledOnce();
+ }finally{receiver.stop();clock.mockRestore();vi.unstubAllGlobals();vi.useRealTimers();delete (HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete (HTMLVideoElement.prototype as any).cancelVideoFrameCallback;}
+});
+it("ignores pending codec peer failure and retired decoder output/error while releasing its frame",async()=>{
+ vi.useFakeTimers();let init:any;const close=vi.fn(),send=vi.fn(),draw=vi.fn(),state=vi.fn();
+ vi.stubGlobal("RTCPeerConnection",class{connectionState="new";close=close;});vi.stubGlobal("VideoDecoder",class{state="configured";constructor(value:any){init=value;}static async isConfigSupported(config:any){return{supported:true,config};}configure(){}close(){this.state="closed";}});
+ Object.defineProperty(HTMLVideoElement.prototype,"requestVideoFrameCallback",{configurable:true,value:vi.fn(()=>1)});Object.defineProperty(HTMLVideoElement.prototype,"cancelVideoFrameCallback",{configurable:true,value:vi.fn()});
+ const receiver=new DesktopMediaReceiver("generated",send,draw,state,[],true,false,()=>{},true);
+ try{receiver.nativeStream(1,"hev1.1.6.L63.B0",640,360,3,true);await Promise.resolve();await Promise.resolve();init.error(Error("generated codec failure"));const peer=(receiver as any).peer;peer.connectionState="failed";peer.onconnectionstatechange();const frame={close:vi.fn(),timestamp:0,displayWidth:640,displayHeight:360};init.output(frame);init.error(Error("late retired decoder failure"));expect(frame.close).toHaveBeenCalledOnce();expect(draw).not.toHaveBeenCalled();expect(send.mock.calls).toEqual([[{type:"native_codec_fallback",id:"generated"}]]);expect(close).not.toHaveBeenCalled();
+ }finally{receiver.stop();vi.unstubAllGlobals();vi.useRealTimers();delete (HTMLVideoElement.prototype as any).requestVideoFrameCallback;delete (HTMLVideoElement.prototype as any).cancelVideoFrameCallback;}
+});
