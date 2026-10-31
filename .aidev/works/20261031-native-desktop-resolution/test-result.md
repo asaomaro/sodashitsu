@@ -7,3 +7,5 @@ Node関連27件、Relay全277件成功。Browser4件（Linux/macOS×UDP/WSS）�
 private-copyで同stream再入・format fence・元deadlineを無効化した3負例は意図したassertionで失敗→復元成功。元source bytesは不変。rawはnegative-control.txt。
 
 Macは生成controllerのACK drain/実退役完了/heldkey/baseSeq/gen/expiry/reentryと、実software VTの32角resize→decode色順を追加。新SDK/CI結果は進行中。増えた有限のnegative compile群に対しMac生成ジョブ全体のbudgetだけ20分へ変更し、各compile/self-testの上限は維持した。
+
+固定sourceでの全体Vitestは925ファイル/13352件成功・2skip、PTY suiteだけrebase後のsrc mtimeがdistより新しく失敗。serverだけtsc -b --force後に当該PTY testを再実行し1件成功。全体は二重に流していない。初回Mac CIの生成decode失敗は期待size引数と圧縮sample size局所変数のshadowによるため、sampleSizeへ改名して再実行する（製品のscope/encoder手順は変更なし）。
