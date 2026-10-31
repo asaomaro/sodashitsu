@@ -71,7 +71,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       nativeMaxFps: 60 as const,
       cursor: !config?.nativePlatform,
       features: true,
-      displayResize: config?.allowDisplayResize === true,
+      displayResize: config?.allowDisplayResize === true&&(!config.nativePlatform||config.nativePlatform==="macos-sck"),
     };
   }
 export function desktopConfigFromEnv(

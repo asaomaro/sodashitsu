@@ -71,7 +71,7 @@ export class DesktopSettings {
     permissions: DesktopPermissions,
   ) {
     this.platform=options.nativePlatform??options.legacy?.nativePlatform??(!options.legacy&&!options.command?nativePlatformFor():undefined);
-    if(this.nativePlatform)permissions={...permissions,allowDisplayResize:false,allowUnlock:false,allowVirtualDisplay:this.nativePlatform==="linux-portal"&&permissions.allowVirtualDisplay===true,allowElevated:false,allowProtectedFiles:false,allowSystemAudio:permissions.allowSystemAudio===true,allowMicrophone:permissions.allowMicrophone===true};
+    if(this.nativePlatform)permissions={...permissions,allowDisplayResize:this.nativePlatform==="macos-sck"&&permissions.allowDisplayResize===true,allowUnlock:false,allowVirtualDisplay:this.nativePlatform==="linux-portal"&&permissions.allowVirtualDisplay===true,allowElevated:false,allowProtectedFiles:false,allowSystemAudio:permissions.allowSystemAudio===true,allowMicrophone:permissions.allowMicrophone===true};
     this.permissions = permissions;
     this.apply();
   }
@@ -113,7 +113,7 @@ export class DesktopSettings {
   set(raw: DesktopPermissions): Promise<DesktopSettingsResult> {
     const permissions = DesktopPermissions.parse(raw);
     const work = this.queue.then(async () => {
-      if(this.nativePlatform&&(permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowVirtualDisplay&&this.nativePlatform!=="linux-portal"||permissions.allowElevated||permissions.allowProtectedFiles))throw new RpcError("invalid_params","このnative backendでは画面共有・対応する入力・クリップボード・システム音声を許可できます。");
+      if(this.nativePlatform&&(permissions.allowDisplayResize&&this.nativePlatform!=="macos-sck"||permissions.allowUnlock||permissions.allowVirtualDisplay&&this.nativePlatform!=="linux-portal"||permissions.allowElevated||permissions.allowProtectedFiles))throw new RpcError("invalid_params","このnative backendでは画面共有・対応する入力・クリップボード・システム音声を許可できます。");
       const command=permissions.enabled&&!this.options.legacy&&!this.options.command?bundledDesktopCommand():this.command;
       if (permissions.enabled && !command)
         throw new RpcError(
@@ -153,6 +153,7 @@ export class DesktopSettings {
         if (p.allowDisplayResize) command.push("-AllowDisplayResize");
         if (p.allowUnlock) command.push("-AllowUnlock");
       }
+      if(!legacy&&this.nativePlatform==="macos-sck"&&p.allowDisplayResize)command.push("--allow-display-resize");
       if(!legacy&&this.nativePlatform&&p.allowSystemAudio)command.push("--allow-system-audio");
       if(!legacy&&this.nativePlatform&&p.allowMicrophone)command.push("--allow-microphone");
       if(!legacy&&this.nativePlatform&&p.allowClipboard)command.push("--allow-clipboard");

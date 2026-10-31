@@ -71,3 +71,7 @@ it.each(["linux-portal","macos-sck"] as const)("admits only Portal virtual sourc
  const provider=new DesktopProvider({command:["never-launched"],nativePlatform,allowInput:false,allowVirtualDisplay:true,origins:()=>["http://127.0.0.1:1"]});
  try{const request=provider.start("generated",{url:"ws://127.0.0.1:1/desktop-share",ticket:"a".repeat(43),options:{nativePlatform,width:320,fps:10,quality:65,features:true,virtualDisplay:true}});await expect(request).rejects.toMatchObject({code:nativePlatform==="linux-portal"?"spawn_failed":"invalid_params"});}finally{provider.dispose();}
 });
+it.each(["linux-portal","macos-sck"] as const)("admits physical display mode changes only for native %s",async nativePlatform=>{
+ const provider=new DesktopProvider({command:["never-launched"],nativePlatform,allowInput:false,allowDisplayResize:true,origins:()=>["http://127.0.0.1:1"]});
+ try{await expect(provider.start("generated",{url:"ws://127.0.0.1:1/desktop-share",ticket:"a".repeat(43),options:{nativePlatform,width:320,fps:10,quality:65,features:true,display:{width:1280,height:800}}})).rejects.toMatchObject({code:nativePlatform==="macos-sck"?"spawn_failed":"invalid_params"});}finally{provider.dispose();}
+});

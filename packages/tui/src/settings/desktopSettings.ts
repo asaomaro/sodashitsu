@@ -86,7 +86,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
           },
         }),
       },
-      ...entries.filter(([key])=>!state?.nativePlatform||key==="allowMonitors"||key==="allowVirtualDisplay"&&state.nativePlatform==="linux-portal"||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, originalLabel]) => ({
+      ...entries.filter(([key])=>!state?.nativePlatform||key==="allowMonitors"||key==="allowDisplayResize"&&state.nativePlatform==="macos-sck"||key==="allowVirtualDisplay"&&state.nativePlatform==="linux-portal"||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, originalLabel]) => ({
         label:key==="allowVirtualDisplay"&&state?.nativePlatform==="linux-portal"?"OS Portalによる一時仮想画面の作成を許可":originalLabel,
         value: onOff(state?.permissions[key] === true),
         toggle: true,
