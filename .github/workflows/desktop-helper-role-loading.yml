@@ -14,6 +14,8 @@ on:
       - 'scripts/remote-desktop/WindowsCodecProbe.cs'
       - 'scripts/remote-desktop/WindowsAudioChecks.cs'
       - 'scripts/remote-desktop/WindowsMicrophoneChecks.cs'
+      - 'scripts/remote-desktop/EndpointAclPolicy.ps1'
+      - 'scripts/remote-desktop/check-endpoint-acl.ps1'
       - 'scripts/remote-desktop/validate-audio.ps1'
       - 'scripts/remote-desktop/validate-microphone.ps1'
       - 'scripts/remote-desktop/verify-helper-role-loading.mjs'

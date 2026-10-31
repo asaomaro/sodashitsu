@@ -42,3 +42,14 @@ smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
 FAIL src/desktop/DesktopSettings.test.ts > rejects replayed completed checkpoints after OFF then ON and server replacement
 TypeError: Cannot read properties of undefined (reading 'checkpoint')
 ```
+
+
+追跡用の別branch（mainへmergeしない）で実Windowsの同テストだけを実行し、保存先確認のmetadata childで初期化失敗することを特定。check-endpoint-acl.ps1のGet-AclをCLR DirectoryInfo/FileInfo.GetAccessControl()へ置換すると、同じowner/rules判定・child5秒のままで完全なreplay試験が成功した（run41174467746、ログ /tmp/soda-win-transfer-clr-ci-success.log）。初期のfixture配置だけでは解消しなかったため、それを原因確定とはしていない。診断のログ出力や仮workflowは製品branchへ取り込まない。
+
+製品生成validatorにも、任意Get-Aclコマンドを拒否したprivate childで実際のACL確認が成功する検査を追加した。旧Get-Acl呼出だけへ戻した隔離copyは意図して失敗、現実装は9case+pipe+ACL全pass。/tmp/soda-lazy-desktop-native-roles-clr-acl.log、/tmp/soda-lazy-desktop-clr-acl-negative.log。全体JS/TSの製品sourceは変更せず、Linux対象32件もpass。
+
+```text
+Endpoint storage permissions are unsafe
+```
+
+上は旧Get-Aclを拒否する生成負例の生stderr抜粋。fresh CIの関連browser/generated-sharingは既に成功しており、local基線の初期認証待ちと区別する。最終headの全CI結果はPR347で確認する。
