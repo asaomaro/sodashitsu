@@ -6,10 +6,12 @@ import {fileURLToPath,pathToFileURL} from "node:url";
 import {expect,it} from "vitest";
 
 const root=fileURLToPath(new URL("../../../",import.meta.url));
-async function execute(entry:string,args:string[],options:{rejectModule?:string;code?:number}={}) {
+async function execute(entry:string,args:string[],options:{rejectModule?:string;code?:number;script?:string}={}) {
  const directory=await mkdtemp(join(tmpdir(),"soda-entry-load-")),loader=join(directory,"loader.mjs"),log=join(directory,"modules.log");
  await writeFile(loader,`import {appendFileSync} from 'node:fs';\nexport async function load(url,context,next){if(process.env.SODA_TEST_REJECT_MODULE && url.endsWith(process.env.SODA_TEST_REJECT_MODULE))throw Error('generated unavailable feature module');const result=await next(url,context);if(url.startsWith('file:'))appendFileSync(process.env.SODA_TEST_IMPORT_LOG,url+'\\n');return result;}\n`);
- const child=spawn(process.execPath,["--no-warnings","--experimental-loader",pathToFileURL(loader).href,join(root,entry),...args],{env:{...process.env,SODA_TEST_IMPORT_LOG:log,SODA_TEST_REJECT_MODULE:options.rejectModule??""},stdio:["ignore","pipe","pipe"]});
+ const entryPath=options.script ? join(directory,"entry.mjs") : join(root,entry);
+ if(options.script)await writeFile(entryPath,options.script);
+ const child=spawn(process.execPath,["--no-warnings","--experimental-loader",pathToFileURL(loader).href,entryPath,...args],{env:{...process.env,SODA_TEST_IMPORT_LOG:log,SODA_TEST_REJECT_MODULE:options.rejectModule??""},stdio:["ignore","pipe","pipe"]});
  let output="",errors="";child.stdout.on("data",data=>{output+=String(data)});child.stderr.on("data",data=>{errors+=String(data)});
  let timeout=false;const timer=setTimeout(()=>{timeout=true;child.kill();},10000);
  try {
@@ -46,4 +48,15 @@ it("an unavailable server implementation cannot break an unrelated help command"
 it("handoff rejects an unavailable server implementation before acknowledging readiness",async()=>{
  const result=await execute("packages/server/dist/main.js",["__handoff-preflight","--stage","2","--probe","invalid"],{rejectModule:"/composeServer.js",code:1});
  expect(result.output).not.toContain('"ok"');expect(result.errors).toContain("generated unavailable feature module");
+});
+
+it("disabled server launch controller does not evaluate the native GUI host",async()=>{
+ const directory=await mkdtemp(join(tmpdir(),"soda-disabled-host-"));
+ try {
+  const controller=pathToFileURL(join(root,"packages/server/dist/assistant/AssistantLaunchController.js")).href;
+  const result=await execute("",[],{rejectModule:"/ManagedAssistant.js",script:`import {AssistantLaunchController} from ${JSON.stringify(controller)};
+   const owner=new AssistantLaunchController(${JSON.stringify(directory)},{},()=>"http://127.0.0.1:7780",()=>{});
+   owner.start();await new Promise(resolve=>setTimeout(resolve,50));await owner.stop();console.log("stopped");`});
+  expect(result.output).toContain("stopped");expect(result.modules.some(url=>url.endsWith("/ManagedAssistant.js"))).toBe(false);
+ }finally {await rm(directory,{recursive:true,force:true});}
 });
