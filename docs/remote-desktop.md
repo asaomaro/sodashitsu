@@ -716,7 +716,7 @@ LinuxのPortal共有は部分実装です。通常インストールでは有効
 
 画面が変わったときだけ画像を送るPortalでは、最後の画像を表示して「新しい画像待ち」と表示します。OSの利用者・セッション・共有許可とパイプラインが有効で、表示済み画像への確認が済んでいる間、人の操作を継続できます。接続維持の通知が届かなくなると操作を拒否します。保持画像の再送を新しい取得や入力後の確認画像とは扱わず、エージェント操作には2秒以内の実画像と既存の入力後取得の確認が必要です。ロック・非アクティブ化・利用者/セッション/画像サイズの変更・Portal終了では共有を終了し、再接続と再許可を必要とします。実験版の明示的な有効化は引き続き必要です。生成テストで通信と権限の境界を検証しており、実際のLinuxデスクトップでの動作は未確認です。
 
-Linux版のマイク・解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。H.264動画とtext/PNG/HTML/RTFのクリップボードは、対応するhelperと明示許可を使います。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
+Linux版の解像度変更・複数monitor・仮想画面・管理者/signin共有は未対応です。マイクは後述のnativeマイク機能と専用sink設定を使います。H.264動画とtext/PNG/HTML/RTFのクリップボードは、対応するhelperと明示許可を使います。ファイルは別許可のサーバー側フォルダを使用できます。macOSには14以降向けの実験的なScreenCaptureKit補助プログラムを追加しています。配布済み・実機確認済みという意味ではありません。どちらもWindows版と同等の対応完了とはしていません。
 
 生成検証は`/usr/bin/python3 scripts/remote-desktop/test-linux-portal-helper.py`で実行します。fake D-Bus/Portal/入力とGStreamerの生成画像を使い、実画面の撮影、Portal要求、OS入力、ロック操作を行いません。Portal/GStreamerの扱いは[ScreenCast仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html)、[RemoteDesktop仕様](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.RemoteDesktop.html)、[PipeWireのGStreamer source](https://github.com/PipeWire/pipewire/blob/master/src/gst/gstpipewiresrc.c)を参照して独自実装しています。既存アプリのコードはコピーしていません。
 
