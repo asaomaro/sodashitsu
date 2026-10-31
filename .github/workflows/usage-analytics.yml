@@ -1,0 +1,49 @@
+name: Usage analytics (generated records and fake agents)
+on:
+  pull_request:
+    paths:
+      - 'packages/protocol/src/usageAnalytics*'
+      - 'packages/server/src/usage/usageHistory*'
+      - 'packages/server/src/conversation/SummaryService*'
+      - 'packages/server/src/surface/methods/agent.ts'
+      - 'packages/server/src/surface/methods/usageReport.test.ts'
+      - 'packages/web/src/dashboard/**'
+      - 'packages/web/src/components/ScreenSwitcher*'
+      - 'packages/web/src/components/DashboardDialog.vue'
+      - 'packages/web/src/screens/DashboardScreen.vue'
+      - 'packages/e2e/src/specs/dashboard.spec.ts'
+      - 'packages/e2e/src/specs/usage-analytics-ui.spec.ts'
+      - '.github/workflows/usage-analytics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analytics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm rebuild node-pty
+      - run: pnpm build
+      - name: Synthetic timestamps, counters, account boundaries and isolated fake CLI
+        run: pnpm exec vitest run packages/protocol/src/usageAnalytics.test.ts packages/server/src/usage/usageHistory.test.ts packages/server/src/surface/methods/usageReport.test.ts packages/server/src/conversation/SummaryService.test.ts packages/web/src/dashboard/UsageAnalytics.test.ts packages/web/src/dashboard/UsageHistoryPanel.test.ts packages/web/src/dashboard/DashboardView.test.ts packages/web/src/components/ScreenSwitcher.test.ts --maxWorkers=2
+      - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
+      - name: Browser charts, deferred loading and explicit fake-agent report
+        run: pnpm --filter @sodashitsu/e2e exec playwright test dashboard.spec.ts --grep '利用分析はその他' --output=test-results/actual
+      - name: Generated browser snapshots and responsive chart layout
+        if: always()
+        run: pnpm --filter @sodashitsu/e2e exec playwright test usage-analytics-ui.spec.ts --output=test-results/generated
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: usage-analytics-browser
+          path: packages/e2e/test-results
+          retention-days: 7

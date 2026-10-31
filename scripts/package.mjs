@@ -32,7 +32,7 @@ const out = join(root, "release", name);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-const runtimePackages = ["protocol", "client-core", "tui", "server", "cli"];
+const runtimePackages = ["protocol", "client-core", "tui", "desktop-assistant", "server", "cli"];
 for (const p of [...runtimePackages, "web"]) {
   const dist = join(root, "packages", p, "dist");
   if (!existsSync(dist)) {
@@ -54,7 +54,13 @@ mkdirSync(join(out,"scripts","vscode-cdp"),{recursive:true});
 for (const file of ["cdp-launcher.mjs","cdp-bridge.mjs","cdp-client.mjs","resident-bridge.mjs"])
   cpSync(join(root,"plugins","vscode-desktop",file),join(out,"scripts","vscode-cdp",file));
 mkdirSync(join(out, "scripts", "remote-desktop"), { recursive: true });
-for (const file of ["windows-helper.ps1", "WindowsDesktopHost.cs", "WindowsDesktopUnlock.cs", "install-unlock-service.ps1", "WindowsResourceFence.cs", "protect-endpoint-key.ps1", "check-endpoint-acl.ps1", "commit-endpoint-vault.ps1", "WindowsProtectedEpoch.cs", "WindowsProtectedScope.cs", "WindowsProtectedScopeNative.cs", "WindowsProtectedHandshake.cs", "WindowsProtectedWorker.cs", "WindowsVirtualDisplay.cs", "WindowsVirtualDisplayNative.cs", "WindowsVirtualDisplayChannel.cs", "WindowsDesktopAudio.cs", "WindowsDesktopMicrophone.cs", "WindowsDesktopRichClipboard.cs", "WindowsCodecProbe.cs"])
+for (const file of ["EndpointAclPolicy.ps1", "windows-helper.ps1", "WindowsDesktopHost.cs", "WindowsDesktopUnlock.cs", "install-unlock-service.ps1", "WindowsResourceFence.cs", "protect-endpoint-key.ps1", "check-endpoint-acl.ps1", "commit-endpoint-vault.ps1", "WindowsProtectedEpoch.cs", "WindowsProtectedScope.cs", "WindowsProtectedScopeNative.cs", "WindowsProtectedHandshake.cs", "WindowsProtectedWorker.cs", "WindowsVirtualDisplay.cs", "WindowsVirtualDisplayNative.cs", "WindowsVirtualDisplayChannel.cs", "WindowsDesktopAudio.cs", "WindowsDesktopMicrophone.cs", "WindowsDesktopRichClipboard.cs", "WindowsCodecProbe.cs"])
+  cpSync(join(root, "scripts", "remote-desktop", file), join(out, "scripts", "remote-desktop", file));
+// Shared native role host: source is bundled; only an explicitly selected role is compiled.
+for (const file of ["build-native-role.ps1", "WindowsNativeRoleHost.cs", "WindowsAudioPipeBridge.cs",
+  "WindowsExplorerSelection.cs", "WindowsExplorerSelectionWorker.cs", "WindowsNativeDragLease.cs",
+  "WindowsNativeDragStreams.cs", "WindowsNativeDragDataObject.cs", "WindowsNativeDragPackets.cs",
+  "WindowsNativeDragPump.cs", "WindowsNativeDragSlot.cs", "WindowsNativeDragWorker.cs"])
   cpSync(join(root, "scripts", "remote-desktop", file), join(out, "scripts", "remote-desktop", file));
 for (const f of ["third_party", "docs", "LICENSE", "NOTICE", "pnpm-workspace.yaml", "pnpm-lock.yaml"]) {
   cpSync(join(root, f), join(out, f), { recursive: true });

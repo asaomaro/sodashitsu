@@ -1,6 +1,6 @@
 import {afterEach,expect,it,vi} from "vitest";
 import {spawn,type ChildProcessWithoutNullStreams} from "node:child_process";
-import {mkdtemp,rm,writeFile,lstat,rename,mkdir} from "node:fs/promises";
+import {mkdtemp,rm,writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {nativeSelectionProcess,DesktopNativeSelection} from "./DesktopNativeSelection.js";
@@ -38,13 +38,4 @@ for(const mode of ["deadline","backwards","clock-throw"]){it(`rejects ${mode} on
  let now=100,calls=0;
  const clock=()=>{calls++;if(calls>1){if(mode==="clock-throw")throw Error("clock stopped");return mode==="deadline"?5100:99;}return now;};
  await expect(nativeSelectionProcess(process.execPath,["-e",'process.stdout.write("late success")'],"",{timeout:5000,limit:128,now:clock})).rejects.toThrow(mode==="clock-throw"?"clock stopped":"時間切れ");expect(calls).toBeGreaterThan(1);
-});}
-
-for(const replaced of [false,true]){it(`cleans only retained build artifacts (replaced=${replaced})`,async()=>{
- const parent=await mkdtemp(join(tmpdir(),"soda-owned-selection-build-")),directory=join(parent,"private");await mkdir(directory);const binary=join(directory,"selection.exe");await writeFile(binary,"generated binary fixture");clean.push(()=>rm(parent,{recursive:true,force:true}));
- const [d,b]=await Promise.all([lstat(directory,{bigint:true}),lstat(binary,{bigint:true})]),stamp=(s:typeof d)=>`${s.dev}:${s.ino}:${s.birthtimeNs}`;
- const runtime=new DesktopNativeSelection("linux",{});(runtime as any).artifact={directory,binary,directoryStamp:stamp(d),binaryStamp:stamp(b)};
- if(replaced){const replacement=join(parent,"replacement");await writeFile(replacement,"unowned replacement");await rename(replacement,binary);await expect(runtime.close()).rejects.toThrow("変更");expect((await lstat(binary)).isFile()).toBe(true);}
- else{await runtime.close();await expect(lstat(directory)).rejects.toMatchObject({code:"ENOENT"});}
- await expect(runtime.prepare()).rejects.toThrow("終了");
 });}

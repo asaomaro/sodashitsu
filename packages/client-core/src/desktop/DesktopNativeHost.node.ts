@@ -16,7 +16,7 @@ const Native=z.discriminatedUnion("type",[
 export class DesktopNativeHost {
  private resolveClosed!:()=>void;readonly closed=new Promise<void>(resolve=>{this.resolveClosed=resolve;});private closing:Promise<void>|undefined;
  private readonly owner=randomUUID();private job:Job|undefined;private armed:Armed|undefined;private dead=false;private seen=new Set<string>();private observed:number;private beatAt:number;private readonly born:number;private readonly timer:ReturnType<typeof setInterval>;
- constructor(private options:{origin:string;executable:string;emit(event:DesktopNativeHelperEvent):void;spawn?:typeof spawn;now?:()=>number}){
+ constructor(private options:{origin:string;executable:string;args?:readonly string[];emit(event:DesktopNativeHelperEvent):void;spawn?:typeof spawn;now?:()=>number}){
   const origin=new URL(options.origin);if(!["http:","https:"].includes(origin.protocol)||origin.origin!==options.origin)throw Error("Invalid native parent origin");
   this.born=this.observed=this.beatAt=this.now();if(!Number.isFinite(this.born)||this.born<0)throw Error("Invalid native clock");
   this.timer=setInterval(()=>{try{this.fence();}catch{void this.close();}},100);this.timer.unref();
@@ -50,7 +50,7 @@ export class DesktopNativeHost {
   const armed=this.armed;if(!armed||armed.gesture!==gesture||this.job||this.fence()-armed.at>=750)throw Error("Native gesture expired");
   if(Buffer.byteLength(JSON.stringify(offer))>98000)throw Error("Native manifest limit");
   const total=offer.entries.reduce((sum,entry)=>sum+entry.bytes,0);if(total>104857600)throw Error("Native total limit");
-  const nonce=randomBytes(32).toString("hex"),child=(this.options.spawn??spawn)(this.options.executable,[],{stdio:["pipe","pipe","pipe"],windowsHide:true,shell:false});let resolveClose!:()=>void;
+  const nonce=randomBytes(32).toString("hex"),child=(this.options.spawn??spawn)(this.options.executable,[...(this.options.args??[])],{stdio:["pipe","pipe","pipe"],windowsHide:true,shell:false});let resolveClose!:()=>void;
   const job:Job={gesture,offer,child,nonce,sequence:0,pending:new Map(),requests:new Map(),ready:false,finished:false,aborted:false,closed:new Promise(resolve=>{resolveClose=resolve;}),resolveClose:()=>resolveClose()};this.job=job;
   let output=Buffer.alloc(0),diagnostics=0;
   child.stdin.on("error",()=>{if(!job.finished)this.cancel(gesture);});child.on("error",()=>this.cancel(gesture));

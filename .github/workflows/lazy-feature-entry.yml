@@ -1,0 +1,40 @@
+name: Lazy feature entry checks
+on:
+  pull_request:
+    paths:
+      - 'packages/server/src/main.ts'
+      - 'packages/server/src/composeServer.ts'
+      - 'packages/server/src/assistant/AssistantLaunchConfig.ts'
+      - 'packages/server/src/assistant/LazyAssistantAudio*'
+      - 'packages/server/src/assistant/AssistantAudioMethods.ts'
+      - 'packages/server/src/assistant/Assistant*State.ts'
+      - 'packages/server/src/assistant/AssistantLaunchController.ts'
+      - 'packages/server/src/assistant/AssistantHostApp.ts'
+      - 'packages/cli/src/main.ts'
+      - 'packages/cli/src/entryLoading.test.ts'
+      - '.github/workflows/lazy-feature-entry.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  entry:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm rebuild node-pty
+      - run: pnpm --filter @sodashitsu/server build
+      - run: pnpm --filter @sodashitsu/cli build
+      - name: Actual ESM module ledger (no server, agent, desktop or PTY start)
+        run: pnpm exec vitest run packages/cli/src/entryLoading.test.ts packages/server/src/assistant/AssistantLaunchController.test.ts packages/server/src/assistant/AssistantHostApp.test.ts packages/server/src/assistant/LazyAssistantAudio.test.ts --maxWorkers=2

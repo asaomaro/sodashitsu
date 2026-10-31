@@ -1,0 +1,19 @@
+# 独立レビュー
+
+review_transferのNativeRoot危険境界点検: 固定PowerShell絶対path、Windows全祖先owner/replace ACLとfixed drive/reparse、POSIX全canonical祖先identity/uid/mode、callback後Abort再確認を指摘し修正。deltaで解消。
+
+review_pointerのHostApp/BundledLaunch/Controller危険境界点検: 同値ON/重複watchで状態がstarting固定、保留attached認可の失効・再評価を指摘し修正。appIdentityと有効状態で認可し、同値requestKeyは既存hostを維持、activateを重複抑止。最終OFF時のteardownとGUI mode環境変数も修正。deltaで解消。
+
+review_pointerの全差分cross: Windows rootの存在確認→mkdir→SetAcl競合と、childが終了後の保留attached認可を指摘。Directory.CreateDirectory(path,DirectorySecurity)で作成時にACLを渡して既存dirを変更せず、終了時にappIdentityを失効して修正。生成回帰を追加、修正delta再レビューで両must解消、追加must/shouldなし。Web/TUI/strictRPC/旧配布廃止/lockfile/cleanup/3OSとbrowserworkflow/docsを含む全差分を確認済み。
+
+.NETの作成時securityと既存directory非変更はMicrosoft公式API/reference sourceを確認。https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.createdirectory#system-io-directory-createdirectory(system-string-system-security-accesscontrol-directorysecurity)
+
+実GUI・production cache・OS policy/service/認証設定を点検用に変更していない。Windows生成race試験のACLは作業用private temp directoryだけで扱い、後始末する。
+
+## hosted OS差分の修正点検
+
+macOSで重複watchがpreparingを取消すことを発見し、tracked observationでsaved desired stateを先に比較するよう変更。generation/observation番号でstale readを捨て、OFF/変更時だけ旧queueを失効・cancelする。stopはobservation→queue→保存とchildをdrainする。
+
+そのdeltaをreview_pointerが点検し、rapid OFF→ONで表示phaseだけstoppingになった場合の状態復帰不足を指摘。actual hostStateを表示phaseから分離し、生きた同一hostはrunning/startingへ復帰、actual stop中は実退役を確認してからfresh起動へ進むよう修正。heldserialqueueのOFF→ON回帰を追加。両delta再レビューで追加must/shouldなし。
+
+closedhost回帰はOSのwatch通知回数に依存する固定read回数を廃止し、fakewatch＋生成childのprivate triggerでattached認可を明示的に保留する。Windows生成ACL fixtureは3×各10秒のowned childがあるためtest上限45秒（製品timeoutは不変）。native設定から旧Windows独立login起動項目を削除。これらも同じdeltaで再レビュー済み。

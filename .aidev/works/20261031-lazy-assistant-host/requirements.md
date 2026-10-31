@@ -1,0 +1,5 @@
+# 要求
+
+機能OFF時は実装を読み込まず、プロセスだけでなく不要なインスタンスも生成しない。入口の分離後も、server composeが生成するAssistantLaunchControllerのstatic importとconstructorがManagedAssistantを先に読み込み生成する不足を解消する。
+
+この段階は起動host所有者のみ。AssistantSessions/AudioUploads等のserver factoriesと独立exe/配布統合は継続作業であり、全要件完了とはしない。

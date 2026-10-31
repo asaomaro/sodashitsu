@@ -28,7 +28,8 @@ import type { LinkRun } from "@sodashitsu/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
-  assistantAudio?:import("../../assistant/AssistantAudioUploads.js").AssistantAudioUploads;
+  assistantLaunch?:Pick<import("../../assistant/AssistantLaunchController.js").AssistantLaunchController,"status"|"setEnabled">;
+  assistantAudio?:import("../../assistant/LazyAssistantAudio.js").AssistantAudioService;
   assistantSessions?: import("../../assistant/AssistantSessions.js").AssistantSessions;
   workAgentRequests?: import("../../work/WorkAgentRequests.js").WorkAgentRequests;
   workAgentLauncher?: import("../../work/WorkAgentLauncher.js").WorkAgentLauncher;

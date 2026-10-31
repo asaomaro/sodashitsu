@@ -1,0 +1,42 @@
+name: Internal assistant resources (no GUI execution)
+on:
+  pull_request:
+    paths:
+      - 'packages/desktop-assistant/**'
+      - 'packages/server/package.json'
+      - 'packages/server/tsconfig.json'
+      - 'packages/server/assets/assistant-runtime.json'
+      - 'packages/server/src/assistant/AssistantHostBundle.test.ts'
+      - 'scripts/package.mjs'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/assistant-host-resources.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  resources:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Server build prepares its internal GUI resources
+        run: pnpm --filter @sodashitsu/server build
+      - name: Evaluate with synthetic Electron only, outside node_modules
+        run: pnpm exec vitest run packages/server/src/assistant/AssistantHostBundle.test.ts --maxWorkers=2
+      - run: pnpm --filter @sodashitsu/cli build
+      - run: pnpm --filter @sodashitsu/web build
+      - name: Stage soda package without installing or executing it
+        run: node scripts/package.mjs --no-build --no-install --no-archive
+      - name: Verify every packaged resource and the fixed runtime catalog
+        run: node packages/desktop-assistant/scripts/verify-host-package.mjs

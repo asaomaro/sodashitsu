@@ -1,5 +1,5 @@
 import { AssistantDisabledDevices } from "./assistant/AssistantDisabledDevices.js";
-import { AssistantAudioUploads } from "./assistant/AssistantAudioUploads.js";
+import { LazyAssistantAudio } from "./assistant/LazyAssistantAudio.js";
 import { AssistantLaunchController } from "./assistant/AssistantLaunchController.js";
 import {DesktopNativeHelpers} from "./desktop/DesktopNativeHelpers.js";
 import {openWorkAgentAsk} from "./work/WorkAgentAsk.js";
@@ -469,7 +469,7 @@ export async function composeServer(
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const assistantSessions = new AssistantSessions({session,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
-  const assistantAudio=new AssistantAudioUploads(options.stateDir);
+  const assistantAudio=new LazyAssistantAudio(options.stateDir);
   const assistantIdleStops = watchAssistantIdleStops(bus, assistantSessions, () => logger.warn("無効なアシスタントの停止を確認できません"));
   const agentFork = new AgentForkRunner({
     session,
@@ -809,6 +809,7 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     assistantSessions,
+    assistantLaunch:managedAssistant,
     assistantAudio,
     agentFork,
     subagentTranscripts,

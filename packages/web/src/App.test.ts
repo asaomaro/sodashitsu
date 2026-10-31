@@ -535,6 +535,8 @@ describe("App — 画面の並び（デスクトップ）", () => {
     expect(wrapper.find(".xterm").exists()).toBe(true); // pane は描かれたまま（PTY の大きさを保つ）
     expect(wrapper.get('[data-screen="dashboard"]').attributes("inert")).toBeUndefined();
     expect(document.querySelector("dialog.dashboard-dialog")).toBeNull(); // デスクトップでは dialog を使わない
+    // DashboardView is loaded only after opening the screen. Observe its rendered row.
+    await vi.waitFor(() => expect(wrapper.find('[data-dash-row="p1"]').exists()).toBe(true));
     const row = wrapper.get('[data-dash-row="p1"]');
     expect(row.text()).toContain("alpha");
     expect(wrapper.get("[data-dash-no-accounts]").text()).toBe("まだ値がありません");

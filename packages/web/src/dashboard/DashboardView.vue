@@ -5,12 +5,15 @@
  * **見るだけ**（サーバへ送るのは、移る操作の `pane.focus` と、見ている間の `agent.usage_watch`〔`UsageController`〕だけ）。数字・モデル名・時刻・ラベルだけを出す。
  * 値が無いものは「—」（0 と書かない）。古い値は薄く、時刻つきで。形（表／カード）は画面の様式のトークンで替わる。
  */
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { defineAsyncComponent, computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { paneNameOf } from "@sodashitsu/client-core";
+import { analyticsSelected } from "./navigation.js";
+const UsageAnalytics = defineAsyncComponent(() => import("./UsageAnalytics.vue"));
 import StateIcon from "../components/StateIcon.vue";
 import AccountCard from "./AccountCard.vue";
 import { ConnectionKey } from "../injection.js";
 import { displayStateFor, useSeenStore } from "../store/seen.js";
+import { useMachinesStore } from "../store/machines.js";
 import { useSessionStore } from "../store/session.js";
 import { useUsageStore } from "../store/usage.js";
 import { useViewStore } from "../store/view.js";
@@ -44,6 +47,7 @@ const props = defineProps<{
 }>();
 
 const view = useViewStore();
+const machines = useMachinesStore();
 const session = useSessionStore();
 const seen = useSeenStore();
 const usage = useUsageStore();
@@ -255,8 +259,10 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
     @keydown="onRootKeydown"
   >
     <header class="dash-head">
-      <h2 class="dash-title">ダッシュボード</h2>
-      <div class="dash-tools">
+      <h2 class="dash-title">{{ analyticsSelected ? "エージェント利用分析" : "ダッシュボード" }}</h2>
+      <button type="button" :aria-pressed="!analyticsSelected" @click="analyticsSelected = false">状況一覧</button>
+      <button type="button" :aria-pressed="analyticsSelected" data-dash-analysis @click="analyticsSelected = true">利用分析</button>
+      <div v-if="!analyticsSelected" class="dash-tools">
         <label class="dash-tool">
           <span>並べ替え</span>
           <select v-model="sortKey" class="dash-select" data-dash-sort>
@@ -277,6 +283,8 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
     <p v-else-if="usage.failed" class="dash-note dash-note-warn" role="status" data-dash-failed>利用状況を取れませんでした。画面を開き直すと、取り直します。</p>
     <p v-else-if="loading" class="dash-note" role="status" data-dash-loading>読み込んでいます…</p>
 
+    <UsageAnalytics v-if="analyticsSelected && active" :key="machines.selectedId" />
+    <template v-else>
     <!-- アカウントの枠 -->
     <section class="dash-accounts" aria-label="アカウントの利用枠" data-dash-accounts>
       <h3 class="dash-sub">アカウントの利用枠</h3>
@@ -359,6 +367,7 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
         </div>
       </div>
     </section>
+    </template>
   </section>
 </template>
 
@@ -383,6 +392,8 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
   gap: 0.6em 1.2em;
   margin-bottom: 0.6em;
 }
+.dash-head > button { font: inherit; padding: .3em .6em; color: inherit; background: var(--soda-menu-bg, #282a36); border: 1px solid var(--soda-menu-border, #44475a); border-radius: 4px; cursor: pointer; }
+.dash-head > button[aria-pressed="true"] { border-color: var(--soda-accent, #80aaff); }
 .dash-title {
   margin: 0;
   font-size: 1.05em;

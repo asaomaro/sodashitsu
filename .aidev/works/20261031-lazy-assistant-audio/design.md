@@ -1,0 +1,7 @@
+# 設計
+
+薄いLazyAssistantAudio facadeをcomposeする。schemaとtarget証明後に初めて実装loaderを呼び、同じloaderと単一runtimeを共有する。chunk/commit/cancel/clientGone/suspend/resume/closeだけではloadしない。
+
+ロード中の最大2ownerは実際のload完了まで枠を維持。切断はleaseを無効にし、suspend/closeはgenerationを進める。await後に認可/送信先identity/元の単調期限を再検査し、残りttlだけをruntimeへ渡す。同時callerはawait後にもruntimeの有無を再検査し二重生成を避ける。既存runtimeのphysical childとretained-file cleanupはそのownerへ維持し、suspend/closeに委譲する。RPCのsignalも証明で再確認する。
+
+テストは合成loader/runtimeだけ、実録音/モデル呼び出しなし。実ESM ledgerでcompose importから重い音声実装が消えることを確認する。

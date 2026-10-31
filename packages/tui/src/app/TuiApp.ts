@@ -49,6 +49,7 @@ import {
 import { TuiDispatcher } from "../actions/TuiDispatcher.js";
 import { GotoDialog } from "../modes/GotoDialog.js";
 import { SettingsDialog } from "../modes/SettingsDialog.js";
+import {assistantSection} from "../settings/assistant.js";
 import { vscodeSharingSection } from "../settings/vscodeSharing.js";
 import { desktopSettingsSection } from "../settings/desktopSettings.js";
 import { settingsSections } from "../settings/sections.js";
@@ -1448,6 +1449,7 @@ export class TuiApp {
 
   /** 設定画面（05 の T1）。開くたびにエージェント連携の状態を読み直す（サーバ全体の設定なので hello に乗らない。web と同じ）。 */
   protected settingsDialog(section?: string): Overlay {
+    const assistantSettings=assistantSection({get:()=>this.rpc.request("assistant.settings.get",{}),set:enabled=>this.rpc.request("assistant.settings.set",{enabled})},()=>this.scheduleRender());
     const vscodeSection = vscodeSharingSection({ get:()=>this.rpc.request("vscode.settings.get",{}), set:p=>this.rpc.request("vscode.settings.set",p) },()=>this.scheduleRender());
     const desktopSection = desktopSettingsSection({
       get: () => this.rpc.request("desktop.settings.get", {}),
@@ -1483,7 +1485,7 @@ export class TuiApp {
           },
           message,
           openOnboarding: () => this.ui.openDialogWithContext({ kind: "onboarding" }),
-        }), desktopSection, vscodeSection],
+        }), assistantSettings, desktopSection, vscodeSection],
       () => this.scheduleRender(),
       section,
     );

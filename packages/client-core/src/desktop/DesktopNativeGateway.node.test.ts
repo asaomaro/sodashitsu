@@ -6,7 +6,7 @@ import {DesktopNativeHost} from "./DesktopNativeHost.node.js";
 const cleanup:Array<()=>Promise<void>>=[];afterEach(async()=>{for(const fn of cleanup.splice(0).reverse())await fn();});
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(done=>{resolve=done;});return {promise,resolve};}
 async function fixture(options:{prepare?:()=>Promise<void>;factory?:NativeFactory}={}){
- const binary={prepare:vi.fn(options.prepare??(async()=>{})),executable:"fixed-memory-test-only",close:vi.fn(async()=>{})};
+ const binary={prepare:vi.fn(options.prepare??(async()=>{})),executable:"fixed-memory-test-only",arguments:["--role","copy","--module","generated","--sha256","digest"],retirePreparation:vi.fn(async()=>{}),close:vi.fn(async()=>{})};
  const gateway=await DesktopNativeGateway.listen("https://browser.example",{binary,...(options.factory?{nativeFactory:options.factory}:{})});cleanup.push(()=>gateway.close());const descriptor=gateway.descriptor(),url=new URL(descriptor.origin),port=Number(url.port);
  const get=(host=url.host,path=`/bridge?id=${descriptor.id}`,method="GET")=>new Promise<{status:number;headers:Record<string,unknown>;body:string}>((resolve,reject)=>{const req=request({hostname:"127.0.0.1",port,method,path,headers:{host}},res=>{let body="";res.on("data",chunk=>{body+=chunk;});res.on("end",()=>resolve({status:res.statusCode!,headers:res.headers,body}));});req.on("error",reject);req.end();});
  const open=async(origin=descriptor.origin,host=url.host)=>{const client=new WebSocket(`ws://127.0.0.1:${port}/channel`,{headers:{origin,host}});client.on("error",()=>{});const messages:any[]=[];client.on("message",bytes=>messages.push(JSON.parse(bytes.toString())));await new Promise<void>((resolve,reject)=>{client.once("open",resolve);client.once("error",reject);});cleanup.push(async()=>client.terminate());return {client,messages};};
@@ -24,7 +24,7 @@ it("closes a claimed helper on the wrong secret without compiling",async()=>{
  const f=await fixture(),channel=await f.open();channel.client.send(JSON.stringify({type:"claim",secret:"wrong"}));await expect.poll(()=>f.binary.prepare.mock.calls.length+(channel.client.readyState===WebSocket.CLOSED?1:0)).toBeGreaterThan(0);expect(f.binary.prepare).not.toHaveBeenCalled();expect(await f.gateway.done).toBe(true);expect(f.binary.prepare).not.toHaveBeenCalled();expect(f.binary.close).toHaveBeenCalledOnce();
 });
 it("owns a deferred preparation through shutdown and never constructs a late host",async()=>{
- const gate=deferred(),factory=vi.fn((options:Parameters<NativeFactory>[0])=>new DesktopNativeHost(options)),f=await fixture({prepare:()=>gate.promise,factory});await f.claim();await expect.poll(()=>f.binary.prepare.mock.calls.length).toBe(1);let done=false;void f.gateway.done.then(()=>{done=true;});const closing=f.gateway.close();await Promise.resolve();expect(done).toBe(false);expect(f.binary.close).not.toHaveBeenCalled();gate.resolve();await closing;expect(await f.gateway.done).toBe(true);expect(factory).not.toHaveBeenCalled();expect(f.binary.close).toHaveBeenCalledOnce();
+ const gate=deferred(),factory=vi.fn((options:Parameters<NativeFactory>[0])=>new DesktopNativeHost(options)),f=await fixture({prepare:()=>gate.promise,factory});await f.claim();await expect.poll(()=>f.binary.prepare.mock.calls.length).toBe(1);let done=false;void f.gateway.done.then(()=>{done=true;});const closing=f.gateway.close();await Promise.resolve();expect(done).toBe(false);expect(f.binary.retirePreparation).toHaveBeenCalledOnce();expect(f.binary.close).not.toHaveBeenCalled();gate.resolve();await closing;expect(await f.gateway.done).toBe(true);expect(factory).not.toHaveBeenCalled();expect(f.binary.close).toHaveBeenCalledOnce();
 });
 it("catches a factory exception and drains the gateway and generated binary",async()=>{
  const f=await fixture({factory:()=>{throw Error("generated factory failure");}});await f.claim();expect(await f.gateway.done).toBe(true);expect(f.binary.close).toHaveBeenCalledOnce();
@@ -38,3 +38,7 @@ for(const mode of ["idle","absolute"]){it(`closes the whole gateway on native ${
  if(mode==="absolute"){for(now=4999;now<900000;now+=4999)native.receive({type:"beat"});now=900000;}else now=5000;
  let closed=false;void f.gateway.done.then(()=>{closed=true;});await expect.poll(()=>closed).toBe(true);expect(await f.gateway.done).toBe(true);await expect.poll(()=>channel.client.readyState).toBe(WebSocket.CLOSED);expect(f.binary.close).toHaveBeenCalledOnce();await expect(f.get()).rejects.toThrow();
 });}
+
+it("passes only the prepared fixed role prefix to the native channel",async()=>{
+ const factory=vi.fn(options=>new DesktopNativeHost(options)),f=await fixture({factory});const channel=await f.claim();await expect.poll(()=>channel.messages.some(value=>value.type==="ready")).toBe(true);expect(factory).toHaveBeenCalledWith(expect.objectContaining({executable:f.binary.executable,args:f.binary.arguments}));
+});

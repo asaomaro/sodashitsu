@@ -9,7 +9,7 @@
   "main": "./dist/testkit.js",
   "types": "./dist/testkit.d.ts",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
     "smoke": "node --enable-source-maps dist/smoke.js"
@@ -26,7 +26,8 @@
     "smol-toml": "^1.8.0",
     "werift": "0.25.2",
     "ws": "^8.21.3",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@sodashitsu/desktop-assistant": "workspace:*"
   },
   "optionalDependencies": {
     "@vscode/windows-process-tree": "^0.8.0"
