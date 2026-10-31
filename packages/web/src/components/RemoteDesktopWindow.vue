@@ -206,7 +206,13 @@ const mediaState = ref("images"),
   videoFps = ref(0);
 let videoStatsAt=0,videoStatsCount=0,mediaRequestSeq=0,soundRequestSeq=0;
 const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>(),sharedMonitorDevice=ref<string>();
-const virtualScreen=ref(false),virtualActive=ref(false);
+const virtualScreen=ref(false),virtualActive=ref(false),virtualMode=ref('');
+function joinVirtualMode(){
+ const match=/^(\d{3,4})[x×](\d{3,4})$/.exec(virtualMode.value.trim());
+ const width=Number(match?.[1]),height=Number(match?.[2]);
+ if(virtualMode.value.trim()&&(!match||width<320||width>4096||height<200||height>2400||width*height>8000000)){error.value="仮想画面の解像度を幅×高さ（例: 1920×1080）で指定してください。";return;}
+ maximumDisplay.value=false;requestedDisplay=match?{width,height}:undefined;releaseInputs();connect();
+}
 if(props.monitorWindow){sharedScreen.value=true;sharedMonitorsScreen.value=true;sharedMonitorDevice.value=props.monitorWindow.independent?props.monitorWindow.monitor:"all";if(props.monitorWindow.independent)monitorDevice.value=props.monitorWindow.monitor;sharedCursorScreen.value=props.monitorWindow.cursor;sharedClipboardScreen.value=props.monitorWindow.clipboard;sharedDeltasScreen.value=props.monitorWindow.deltas;}
 
 function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;if(!sharedVirtualAvailable.value)sharedScreen.value=false;independentScreen.value=false;sharedMonitorDevice.value=undefined;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
@@ -576,7 +582,7 @@ function connect(automatic = false) {
   try {
     options = {
       ...requestedSettings(),
-      ...(maximumDisplay.value && requestedDisplay ? { display: requestedDisplay } : {}),
+      ...((maximumDisplay.value||sharedScreen.value&&virtualScreen.value&&!!virtualMode.value.trim()) && requestedDisplay ? { display: requestedDisplay } : {}),
     };
   } catch {
     settingNotice.value = "設定値を確認してください（幅320～1920、fps 1～30、JPEG品質20～90）。";
@@ -1248,6 +1254,7 @@ onBeforeUnmount(() => {
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label v-if="(!platformBackend||platformBackend==='linux-portal')&&!signinSession" data-virtual-desktop-option><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="sharedVirtualAvailable&&!platformBackend" data-shared-virtual-available>仮想画面を複数の窓で共有できます。</p>
+      <div v-if="sharedScreen&&virtualScreen&&sharedVirtualAvailable" data-shared-virtual-mode><label>共有する仮想画面の解像度<input v-model="virtualMode" maxlength="9" placeholder="空欄は既定（例: 1920×1080）" @keydown.enter.prevent="joinVirtualMode" /></label><button @click="joinVirtualMode">この解像度で接続</button><small>共有する全ての窓で同じ解像度を選んでください。既存の窓とは異なる解像度へ自動変更しません。</small></div>
       <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。最後の共有窓を閉じた後、補助プログラムの終了を確認して画面を解放します。</p>
       <nav>
 
@@ -1446,7 +1453,7 @@ onBeforeUnmount(() => {
           />接続先を最大解像度にする</label
         >
         <p>
-          共有元の実ディスプレイを、対応する中で画素数が最大の解像度へ変更します。窓のサイズでは解像度を下げません。表示の拡縮は「画面に合わせる」で別に選べます。変更ごとに再接続して操作許可を解除し、共有終了時に元の解像度へ復元を試みます。
+          {{virtualActive?"共有中の所有仮想画面":"共有元の実ディスプレイ"}}を、対応する中で画素数が最大の解像度へ変更します。窓のサイズでは解像度を下げません。表示の拡縮は「画面に合わせる」で別に選べます。変更ごとに再接続して操作許可を解除します。{{virtualActive?"最後の共有窓の終了後に所有仮想画面を削除・解放します。":"共有終了時に元の解像度へ復元を試みます。"}}
         </p>
         <p v-if="activeSettings?.display" data-applied-display>
           {{ activeSettings.display.width }}×{{ activeSettings.display.height }} — {{ fit ? '画面に合わせて表示' : '1画素＝1 CSS px' }}

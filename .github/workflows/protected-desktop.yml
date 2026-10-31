@@ -115,6 +115,9 @@ jobs:
       - name: Ordinary-user audio role and generated private PCM (no audio device activation)
         shell: powershell
         run: scripts/remote-desktop/validate-user-audio.ps1 -NegativeControls
+      - name: Owned virtual display mode guards (generated driver only)
+        shell: powershell
+        run: scripts/remote-desktop/validate-virtual-modes.ps1 -NegativeControls
       - name: Generated resource cleanup and input-failure fences (no OS input or devices)
         shell: powershell
         run: scripts/remote-desktop/validate-resource-fence.ps1 -NegativeControls

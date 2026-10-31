@@ -15,6 +15,7 @@ on:
       - 'packages/e2e/src/specs/remote-desktop-shared-virtual.spec.ts'
       - 'packages/e2e/src/specs/remote-desktop-protected-files.spec.ts'
       - 'packages/e2e/src/specs/remote-desktop-protected-video.spec.ts'
+      - 'packages/e2e/src/specs/remote-desktop-virtual-display-modes.spec.ts'
       - 'packages/e2e/src/specs/remote-desktop-native-platform-video.spec.ts'
       - 'packages/e2e/src/specs/remote-desktop-native-cadence.spec.ts'
       - 'packages/e2e/src/specs/remote-desktop-native-platform-adaptive.spec.ts'
@@ -46,7 +47,7 @@ jobs:
         run: pnpm exec vitest run packages/server/src/desktop/DesktopSharedCapture.test.ts packages/server/src/desktop/DesktopRelay.test.ts packages/server/src/desktop/DesktopNativeRichClipboard.test.ts packages/web/src/components/RemoteDesktopNativeSharing.test.ts packages/server/src/desktop/DesktopSettings.test.ts packages/server/src/desktop/DesktopNativeMonitorRestore.test.ts packages/server/src/desktop/DesktopProvider.monitors.test.ts packages/server/src/desktop/DesktopProvider.virtual.test.ts packages/web/src/components/DesktopSettings.test.ts packages/tui/src/settings/desktopSettings.test.ts --maxWorkers=2
       - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
       - name: Fresh browser shared desktop controls (generated sources only)
-        run: pnpm --filter @sodashitsu/e2e exec playwright test 'remote-desktop-native-sharing.spec.ts|remote-desktop-native-platform-video.spec.ts|remote-desktop-native-cadence.spec.ts|remote-desktop-native-platform-codecs.spec.ts|remote-desktop-native-platform-adaptive.spec.ts|remote-desktop-native-platform-monitors.spec.ts|remote-desktop-native-platform-virtual.spec.ts|remote-desktop-native-platform-display.spec.ts|remote-desktop-shared-virtual.spec.ts|remote-desktop-protected-files.spec.ts|remote-desktop-protected-video.spec.ts'
+        run: pnpm --filter @sodashitsu/e2e exec playwright test 'remote-desktop-native-sharing.spec.ts|remote-desktop-native-platform-video.spec.ts|remote-desktop-native-cadence.spec.ts|remote-desktop-native-platform-codecs.spec.ts|remote-desktop-native-platform-adaptive.spec.ts|remote-desktop-native-platform-monitors.spec.ts|remote-desktop-native-platform-virtual.spec.ts|remote-desktop-native-platform-display.spec.ts|remote-desktop-shared-virtual.spec.ts|remote-desktop-protected-files.spec.ts|remote-desktop-protected-video.spec.ts|remote-desktop-virtual-display-modes.spec.ts'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -57,5 +58,7 @@ jobs:
             packages/e2e/test-results/**/macos-sck-*.png
             packages/e2e/test-results/**/shared-virtual-*.png
             packages/e2e/test-results/**/protected-files-*.png
+            packages/e2e/test-results/**/protected-video-*.png
+            packages/e2e/test-results/**/owned-virtual-mode-*.png
           if-no-files-found: ignore
           retention-days: 3

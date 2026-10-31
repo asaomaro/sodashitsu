@@ -713,7 +713,7 @@ export class DesktopRelay {
     v.nativeInputFreshness=v.nativeVideo&&caps.nativeInputFreshness===true;
     v.sharedDesktop=options.sharedDesktop===true&&v.sharedRequested===true&&caps.sharedDesktop===true&&caps.features===true;
     v.sharedProtected=v.sharedProtectedAvailable===true&&v.sharedDesktop===true&&v.elevatedDesktop===true;
-    if(options.sharedDesktop&&(!v.sharedDesktop||(options.elevatedDesktop&&!v.sharedProtected)||(options.virtualDisplay&&!v.sharedVirtual)||options.display))throw new DesktopSetupRequired("複数viewer共有は両端の対応が必要です。管理者画面との併用には対応する保護サービスも必要です。OSの解像度変更とは併用できません。");
+    if(options.sharedDesktop&&(!v.sharedDesktop||(options.elevatedDesktop&&!v.sharedProtected)||(options.virtualDisplay&&!v.sharedVirtual)||options.display&&!v.sharedVirtual))throw new DesktopSetupRequired("複数viewer共有は両端の対応が必要です。管理者画面との併用には対応する保護サービスも必要です。仮想画面以外のOS解像度変更とは併用できません。");
     v.sharedNative=v.sharedDesktop===true&&!v.elevatedDesktop&&v.sharedNativeRequested===true&&caps.sharedNative===true&&v.nativeVideo===true;
     v.sharedAudio=v.sharedNative===true&&v.sharedAudioRequested===true&&caps.sharedAudio===true&&v.nativeAudio===true;
     v.sharedDatagrams=v.sharedNative===true&&v.sharedDatagramsRequested===true&&caps.sharedDatagrams===true&&v.nativeDatagrams===true;
