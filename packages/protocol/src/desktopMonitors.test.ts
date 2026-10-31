@@ -51,3 +51,9 @@ it("uses the Windows ties-to-even physical-pixel rule at a gap boundary", () => 
   expect(desktopMonitorAt(value, 0.5, 0)).toBeUndefined();
   expect(desktopMonitorAt(value, 0.6, 0)?.id).toBe("right");
 });
+
+it("separates compositor coordinates from captured pixels and refuses an ambiguous native layout",()=>{
+ const logical={coordinateSpace:"logical" as const,primaryKnown:false,pixelSize:{width:1280,height:960},switchingSupported:true,selected:"left",allSupported:false,bounds:{x:-640,y:-200,width:640,height:480},monitors};
+ expect(DesktopMonitorLayout.parse(logical)).toEqual(logical);expect(desktopMonitorAt(logical,.5,.5)?.id).toBe("left");
+ for(const invalid of [{...logical,pixelSize:undefined},{...logical,switchingSupported:undefined},{...logical,allSupported:true},{...logical,coordinateSpace:"physical"}])expect(DesktopMonitorLayout.safeParse(invalid).success).toBe(false);
+});

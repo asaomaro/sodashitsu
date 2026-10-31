@@ -221,3 +221,10 @@ it("persists the separate protected-files permission and binds it to the ordinar
 it.each(["permission","folder"])("requires protected-files dependency %s before persisting settings",async missing=>{
  const f=await fixture(),settings=await DesktopSettings.open(f);await expect(settings.set({...off,enabled:true,allowProtectedFiles:true,allowElevated:missing!=="permission",...(missing==="folder"?{}:{fileRoot:dirname(f.file)})})).rejects.toThrow("管理者画面中の転送");expect(settings.get(true).permissions).toEqual(off);
 });
+
+it.each(["linux-portal","macos-sck"] as const)("persists native %s monitor permission without starting unrelated roles",async nativePlatform=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform});
+ await settings.set({...off,enabled:true,allowMonitors:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({nativePlatform,allowMonitors:true,allowInput:false,command:["synthetic-helper"]});
+ expect((await DesktopSettings.open({...options,nativePlatform})).get(true).permissions.allowMonitors).toBe(true);
+ await settings.set({...off,enabled:true});expect(options.provider.capabilities().monitors).toBe(false);
+});

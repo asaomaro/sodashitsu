@@ -86,7 +86,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
           },
         }),
       },
-      ...entries.filter(([key])=>!state?.nativePlatform||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, label]) => ({
+      ...entries.filter(([key])=>!state?.nativePlatform||key==="allowMonitors"||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, label]) => ({
         label,
         value: onOff(state?.permissions[key] === true),
         toggle: true,

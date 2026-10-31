@@ -5,6 +5,30 @@ import unittest
 import threading
 from types import SimpleNamespace
 spec=importlib.util.spec_from_file_location("portal_helper",pathlib.Path(__file__).with_name("linux-portal-helper.py"));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+class MonitorRoster(unittest.TestCase):
+ def stream(self,node=55,serial=987,identifier="DP-1",position=(-1280,-200),size=(1280,800)):
+  return (node,{"pipewire-serial":serial,"id":identifier,"position":position,"size":size,"source_type":1})
+ def test_selection_uses_stable_id_and_preserves_logical_geometry(self):
+  streams=[self.stream(),self.stream(56,988,"DP-2",(0,0),(1920,1080))]
+  selected,stream,records,stable=module.portal_monitor_streams(streams,"portal:DP-2")
+  self.assertEqual(selected,"portal:DP-2");self.assertIs(stream,streams[1]);self.assertTrue(stable);self.assertEqual(records[0]["x"],-1280);self.assertEqual(records[0]["width"],1280)
+  with self.assertRaises(module.NativeFailure) as error:module.portal_monitor_streams(streams,"portal:missing")
+  self.assertEqual(error.exception.code,"source_changed")
+ def test_ambiguous_or_reused_sources_are_rejected(self):
+  for streams in ([self.stream(),self.stream(55,988,"DP-2")],[self.stream(),self.stream(56,987,"DP-2")],[self.stream(),self.stream(56,988,"DP-1")],[],[self.stream(serial=0)]):
+   with self.assertRaises(module.NativeFailure):module.portal_monitor_streams(streams)
+ def test_missing_position_or_id_never_invents_switchable_geometry(self):
+  chosen,stream,records,stable=module.portal_monitor_streams([self.stream(position=None)])
+  self.assertIsNone(records);self.assertTrue(stable)
+  chosen,stream,records,stable=module.portal_monitor_streams([self.stream(identifier=None)])
+  self.assertFalse(stable);self.assertEqual(chosen,"portal:serial-987")
+ def test_retina_capture_size_is_separate_and_restore_requires_permission(self):
+  h=module.PortalHelper(None,SimpleNamespace(MainLoop=lambda:None),None)
+  h.config={"monitors":True,"restore":"generated-private"};h.monitor_selected="portal:DP-1";h.monitor_stable=True;h.restore_token="replacement-private"
+  h.monitor_records=module.portal_monitor_streams([self.stream()])[2]
+  layout=h.monitor_layout((2560,1600));self.assertEqual(layout["pixelSize"],{"width":2560,"height":1600});self.assertEqual(layout["bounds"]["width"],1280);self.assertTrue(layout["switchingSupported"])
+  h.restore_token=None;self.assertFalse(h.monitor_layout((2560,1600))["switchingSupported"])
+
 class NativeAudioRouting(unittest.TestCase):
  def helper(self):
   from unittest.mock import Mock
@@ -243,6 +267,20 @@ class PortalProtocol(unittest.TestCase):
   self.helper.configure({"options":{"width":1280,"fps":10,"quality":65},"allowInput":input});self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)})
   if input:self.respond({})
   self.respond({})
+ def test_monitor_selection_requests_os_persistence_only_after_local_permission(self):
+  self.helper.configure({"options":{"width":1280,"fps":10,"quality":65,"monitors":True},"allowInput":True,"allowMonitors":True})
+  self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)});self.respond({})
+  devices=next(call for call in self.calls if call[0]=="SelectDevices")[2][-1]
+  sources=next(call for call in self.calls if call[0]=="SelectSources")[2][-1]
+  self.assertEqual(devices["persist_mode"],2);self.assertTrue(sources["multiple"]);self.assertNotIn("restore_token",devices)
+ def test_explicit_monitor_requires_private_restore_and_local_permission(self):
+  for value in ({"allowMonitors":False},{"allowMonitors":True}):
+   with self.assertRaises(module.NativeFailure):self.helper.configure({"options":{"width":1280,"fps":10,"quality":65,"monitors":True,"monitorDevice":"portal:DP-1"},**value})
+  self.assertFalse(any(call[0]=="CreateSession" for call in self.calls))
+ def test_restore_is_sent_to_portal_not_taken_from_viewer_options(self):
+  self.helper.configure({"options":{"width":1280,"fps":10,"quality":65,"monitors":True,"monitorDevice":"portal:DP-1","restore_token":"viewer-untrusted"},"allowInput":False,"allowMonitors":True,"nativeMonitorRestoreToken":"server-private"})
+  self.respond({"session_handle":self.GLib.Variant("o",self.helper.expected_session)})
+  sources=next(call for call in self.calls if call[0]=="SelectSources")[2][-1];self.assertEqual(sources["restore_token"],"server-private");self.assertEqual(sources["persist_mode"],2)
  def test_clipboard_only_session_requests_no_input_and_requires_os_start_grant(self):
   from unittest.mock import patch
   with patch.object(module.sys,"argv",["generated","--allow-clipboard"]):
