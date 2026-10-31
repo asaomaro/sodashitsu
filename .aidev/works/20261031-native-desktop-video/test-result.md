@@ -8,4 +8,8 @@
 - ブラウザ8組はLinux/macOS×単独/共有×UDP/WSS。生成H264画素と生成音声のみ。UDP切断後の新ACKと描画増分を確認する。ローカルChromium1243の既知の停止を避け、SODA_E2E_CHROMIUM_PATHでインストール済1217を指定。CIは標準ブラウザ。
 - 負例の生出力はnegative-control.txt。元Linux実装で意図した3 assertion失敗→復元3成功、元Node音声実装で意図した1 assertion失敗→復元成功。元ソースのバイトは変化していない。
 
-全体テスト・macOS生成compile/self-test・CIは進行中。実OS画面/音声取得・操作の成功とは扱わない。
+全体テストは925ファイル・13350件成功、実行中に追加した音声2件は旧モジュールが読み込まれたため失敗。ソース固定後の音声ファイル9件再実行は成功。強化したブラウザ8件も成功。生成helperを実nativeと同じ重複bootstrap無視に揃えた。
+
+CIで既知のWindows checkpoint replay単体試験がhosted profileのACLに依存して失敗したため、このpolicy-generation単体に限りWindows ACL/DPAPI境界を生成adapterへ置換。実ACL/DPAPIの専用検証ジョブと製品の許可条件は変更しない。
+
+macOS生成compile/self-test・CIは進行中。実OS画面/音声取得・操作の成功とは扱わない。
