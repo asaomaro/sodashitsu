@@ -44,6 +44,7 @@ export async function buildAssistantHost(output=target){
   const preload=await bundle(join(root,"packages/desktop-assistant/dist/preload.cjs"),"cjs");
   await save("dist/main.mjs",Buffer.from(main.code));
   await save("dist/preload.cjs",Buffer.from(preload.code));
+  await save("dist/managed-relay.cjs",await readFile(join(root,"packages/desktop-assistant/scripts/managed-relay.cjs")));
   const packages=new Set();
   for(const id of [...main.modules,...preload.modules]){
    const normalized=id.replaceAll("\\","/"),marker="/node_modules/",at=normalized.lastIndexOf(marker);

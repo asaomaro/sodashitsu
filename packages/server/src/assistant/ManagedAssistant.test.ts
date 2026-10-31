@@ -33,3 +33,21 @@ it('keeps the generic runtime in GUI mode instead of inheriting Node mode option
  const app=new ManagedAssistant(vi.fn(),launch);
  try{app.start({command:[process.execPath,'-e','process.stdin.on("end",()=>process.exit(0));process.stdin.resume();','--'],origin:'http://127.0.0.1:7780'});const options=vi.mocked(launch).mock.calls[0]![2] as{env:NodeJS.ProcessEnv};expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();expect(options.env.NODE_OPTIONS).toBeUndefined();expect(options.env.NODE_PATH).toBeUndefined();await app.stop();expect(spawned).toHaveLength(1);}finally{await app.stop();vi.unstubAllEnvs();}
 });
+it('uses Node mode only for the bundled native relay and carries it through WSLENV',async()=>{
+ vi.stubEnv('WSLENV','EXAMPLE/u:ELECTRON_RUN_AS_NODE/u');vi.stubEnv('NODE_OPTIONS','--inspect');
+ const launch=vi.fn((...args:Parameters<typeof spawn>)=>spawn(...args)) as unknown as typeof spawn;
+ const app=new ManagedAssistant(vi.fn(),launch);
+ try{
+  app.start({command:[process.execPath,'-e','process.stdin.on("data",()=>{});process.stdin.on("end",()=>{process.stdout.write(\'{"type":"retired"}\\n\',()=>process.exit(0))});','--'],origin:'http://127.0.0.1:7780',nativeNodeRelay:true});
+  const env=(vi.mocked(launch).mock.calls[0]![2] as{env:NodeJS.ProcessEnv}).env;
+  expect(env.ELECTRON_RUN_AS_NODE).toBe('1');expect(env.WSLENV).toBe('EXAMPLE/u:ELECTRON_RUN_AS_NODE');expect(env.NODE_OPTIONS).toBeUndefined();
+  await app.stop();
+ }finally{await app.stop();vi.unstubAllEnvs();}
+});
+it('keeps a failed relay slot until GUI retirement is proved, including forced relay exit',async()=>{
+ const ended=vi.fn(), launch=vi.fn((...args:Parameters<typeof spawn>)=>spawn(...args)) as unknown as typeof spawn;
+ const app=new ManagedAssistant(vi.fn(),launch,undefined,undefined,ended);
+ const config={command:[process.execPath,'-e','process.exit(0)','--'],origin:'http://127.0.0.1:7780',nativeNodeRelay:true};
+ app.start(config);await vi.waitFor(()=>expect(ended).toHaveBeenCalledWith(false));
+ await expect(app.stop()).rejects.toThrow('終了を確認');app.start(config);expect(launch).toHaveBeenCalledOnce();
+});

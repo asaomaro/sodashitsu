@@ -1,0 +1,1 @@
+review_pointerが実装差分全体を独立読取。相互認証・actual GUI退役証明を追加。続くEOF未settleと遅延attachedの指摘を修正し、最終deltaで追加mustなし。Controllerテストのfinallyがstop失敗を吸収するshouldは、ManagedAssistant別試験の明示reject/slot保持assertで担保済み。実機GUI/デバイスをレビュー側は実行していない。

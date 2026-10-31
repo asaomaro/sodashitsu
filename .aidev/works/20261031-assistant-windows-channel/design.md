@@ -1,0 +1,1 @@
+固定同梱relayを既存の検証済みElectronのNode modeで起動し、Windows GUIへランダムnamed pipeを渡す。秘密はprivate child envのみ、相互nonce/HMAC認証後にbootとstrict controlを転送する。既定pipe ACLをcurrent-user-onlyとは扱わない。relayはGUI actual close後にretiredを通知し、証明のないrelay終了では起動枠を保持してstopを失敗させる。GUIのstdin/stdoutには依存しない。

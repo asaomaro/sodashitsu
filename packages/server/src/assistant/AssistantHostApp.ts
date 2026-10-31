@@ -13,7 +13,7 @@ export async function prepareAssistantHostApp(root:AssistantRuntimeRoot,guard:()
  if(manifest.version!==1||!Array.isArray(manifest.entries)||!manifest.entries.length||manifest.entries.length>64)throw Error('アシスタントの素材一覧が不正です');
  const names=new Set<string>();let total=0;
  for(const entry of manifest.entries){if(!entry||!runtimeRelativePath(entry.path)||names.has(entry.path.toLowerCase())||!Number.isSafeInteger(entry.bytes)||entry.bytes<0||entry.bytes>16*1024*1024||(total+=entry.bytes)>32*1024*1024||!/^[a-f0-9]{64}$/.test(entry.sha256))throw Error('アシスタントの素材が不正です');names.add(entry.path.toLowerCase());}
- if(!names.has('package.json')||!names.has('dist/main.mjs')||!names.has('dist/preload.cjs'))throw Error('アシスタントの起動素材が不足しています');
+ if(!names.has('package.json')||!names.has('dist/main.mjs')||!names.has('dist/preload.cjs')||!names.has('dist/managed-relay.cjs'))throw Error('アシスタントの起動素材が不足しています');
  const bytes=Buffer.from(JSON.stringify(manifest));
  const stamp=createHash('sha256').update(bytes).digest('hex'),directory=join(root.path,'app-'+stamp);
  const ownedRoot=async()=>{guard();await root.assert();guard();const current=await lstat(root.path,{bigint:true});guard();if(!sameRuntimeFile(rootInfo,current)||current.isSymbolicLink())throw Error('素材の準備先が変わりました');};

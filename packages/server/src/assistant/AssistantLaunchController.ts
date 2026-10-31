@@ -61,8 +61,9 @@ export class AssistantLaunchController {
       const {ManagedAssistant}=await import("./ManagedAssistant.js");
       return (onDisabled,onAttached)=>{
         const identity=this.appIdentity;
-        return new ManagedAssistant(warn,undefined,onDisabled,onAttached,()=>{
+        return new ManagedAssistant(warn,undefined,onDisabled,onAttached,(retired)=>{
           if(this.appIdentity!==identity)return;
+          if(retired===false){this.appIdentity=Symbol();this.phase="error";this.hostState="stopping";this.message="Windows側アシスタントの終了を確認できません。プロセスを確認してください。";return;}
           this.appIdentity=Symbol();this.app=null;this.hostState="none";this.launchKey=null;this.requestKey=null;this.activatedDeviceId=null;
           if(this.active&&this.wanted){this.phase="error";this.message="アシスタントが終了しました。有効化を再実行してください。";}
         });

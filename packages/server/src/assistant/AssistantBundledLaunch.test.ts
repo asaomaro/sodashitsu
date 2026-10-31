@@ -7,7 +7,7 @@ import {AssistantLaunchController} from './AssistantLaunchController.js';
 it('on WSL launches the mounted executable while passing the app as a Windows path',async()=>{
  const root={path:'/generated/private',assert:vi.fn(async()=>{})},runtime={prepare:vi.fn(async()=>({directory:'/mnt/c/generated/runtime',executable:'/mnt/c/generated/runtime/electron.exe',relativeDirectory:'generated',variant:{} as never,cached:true})),dispose:vi.fn(async()=>{})};
  const launch=await bundledAssistantLaunch('http://127.0.0.1:7780',new AbortController().signal,()=>{},{root:async()=>({root,platform:'win32',arch:'x64',nativePath:async()=> 'C:\\generated\\app'}),runtime:()=>runtime,app:async()=>'/mnt/c/generated/app'});
- expect(launch.command).toEqual(['/mnt/c/generated/runtime/electron.exe','C:\\generated\\app']);expect(runtime.dispose).toHaveBeenCalledOnce();
+ expect(launch.command).toEqual(['/mnt/c/generated/runtime/electron.exe','C:\\generated\\app\\dist\\managed-relay.cjs']);expect(launch.nativeNodeRelay).toBe(true);expect(runtime.dispose).toHaveBeenCalledOnce();
 });
 it('aborted authorization never resolves a root, downloads or starts a process',async()=>{
  const controller=new AbortController(),root=vi.fn();await expect(bundledAssistantLaunch('http://127.0.0.1:7780',controller.signal,()=>controller.abort(),{root})).rejects.toThrow();expect(root).not.toHaveBeenCalled();

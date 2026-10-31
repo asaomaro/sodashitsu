@@ -1,6 +1,6 @@
 import { desktopAssistantOrigin } from "@sodashitsu/protocol";
 
-export interface AssistantLaunch { command: string[]; origin: string }
+export interface AssistantLaunch { command: string[]; origin: string; nativeNodeRelay?: boolean }
 /** No discovery, executable probes, timers or children when disabled. Local configuration only. */
 export function assistantLaunchFromEnv(env: NodeJS.ProcessEnv, origin: string): AssistantLaunch | null {
   if (env.SODA_ASSISTANT_ENABLED !== "1") return null;
