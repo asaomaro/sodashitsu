@@ -3,7 +3,7 @@
 - Node/protocol/settings 45件、Provider生成helper loopback試験1件成功。
 - Linux Portal 66件成功。GstVideo typelibは一時ディレクトリの既存生成試験用依存を指定。実Portal/画面/入力デバイスは未使用。
 - Browser 4件成功（Linux/macOS × restore有無）。実canvas色、選択ID、論理640と実1280pixel、正規化pointer、private receiptの非公開と次helper configureを確認。ローカルでは既存Chromium1217を環境変数で指定。
-- build/typecheck成功。全体テスト実行中。
+- build/typecheck成功。全体Vitest: 926ファイル/13358件成功、1件skip・2件skip。PTYのdist時刻検査とRelayの一時フォルダー削除競合の2suite失敗。server強制再ビルド後の対象2suite再実行は278件成功。全体の二重実行はしていない。
 - taskcheck/crossで追加mustなし。指摘されたprivate receipt経路を生成helperとbrowserで追加検証し、差分再点検で解消。
 
 ## 負例の生出力
