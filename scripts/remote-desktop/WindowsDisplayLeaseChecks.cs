@@ -19,7 +19,31 @@ public static class DisplayModeChecks {
   public SodaDesktopDisplay.Mode Left=new SodaDesktopDisplay.Mode {X=-1920,Y=360,Width=1920,Height=1080};
   public override SodaDesktopDisplay.Mode Current(string name){return name=="left"?Left:CurrentMode;}
  }
+ class Virtual : SodaDesktopDisplay.Driver {
+  public SodaDesktopDisplay.Mode Mode=new SodaDesktopDisplay.Mode{Width=800,Height=600,X=1920,Y=0};public int Applies,Tests,Arms;public Action ReadModes,Tested,ReadCurrent,Applied;
+  public SodaDesktopDisplay.Mode Current(string name){if(name!="owned-virtual")throw new Exception("Physical source accessed");if(ReadCurrent!=null)ReadCurrent();return Mode;}
+  public System.Collections.Generic.List<SodaDesktopDisplay.Mode> Modes(string name){if(name!="owned-virtual")throw new Exception("Physical modes accessed");if(ReadModes!=null)ReadModes();return new System.Collections.Generic.List<SodaDesktopDisplay.Mode>{new SodaDesktopDisplay.Mode{Width=1280,Height=720}};}
+  public bool Test(string name,SodaDesktopDisplay.Mode mode){Tests++;if(Tested!=null)Tested();return true;}
+  public void Apply(string name,SodaDesktopDisplay.Mode mode){if(name!="owned-virtual")throw new Exception("Physical mode changed");Applies++;Mode=mode;if(Applied!=null)Applied();}
+  public void Arm(string name,SodaDesktopDisplay.Mode original,SodaDesktopDisplay.Mode target){Arms++;throw new Exception("Virtual guardian must not outlive device ownership");}
+  public void Disarm(){}
+ }
+ static void VirtualModes(){
+  var valid=new Virtual();var bounds=SodaDesktopDisplay.ApplyOwnedVirtualMode(valid,"owned-virtual",1280,720,()=>true,()=>0);Check(bounds==new Rectangle(1920,0,1280,720)&&valid.Applies==1&&valid.Arms==0,"Owned virtual mode and no guardian");
+  foreach(string stage in new[]{"modes","test","before-apply","after-apply","deadline","rollback","scope-query-deadline"}){
+   var fake=new Virtual();bool permit=true,expireInScope=false;long now=100;int reads=0;
+   if(stage=="modes")fake.ReadModes=()=>permit=false;if(stage=="test")fake.Tested=()=>permit=false;
+   if(stage=="before-apply")fake.ReadCurrent=()=>{if(++reads==2)permit=false;};if(stage=="after-apply")fake.Applied=()=>permit=false;
+   if(stage=="scope-query-deadline")fake.ReadCurrent=()=>{if(++reads==2)expireInScope=true;};
+   if(stage=="deadline")fake.ReadModes=()=>now=3100;if(stage=="rollback")fake.ReadModes=()=>now=99;
+   bool denied=false;try{SodaDesktopDisplay.ApplyOwnedVirtualMode(fake,"owned-virtual",1280,720,()=>{if(expireInScope)now=3100;return permit;},()=>now);}catch(InvalidOperationException){denied=true;}catch(System.TimeoutException){denied=true;}
+   Check(denied,"Virtual mode source/budget guard missing: "+stage);Check(fake.Applies==(stage=="after-apply"?1:0)&&fake.Arms==0,"Virtual mode committed after source/budget loss: "+stage);
+  }
+  var unsupported=new Virtual();bool rejected=false;try{SodaDesktopDisplay.ApplyOwnedVirtualMode(unsupported,"owned-virtual",1920,1080,()=>true,()=>0);}catch(InvalidOperationException){rejected=true;}Check(rejected&&unsupported.Applies==0,"Unsupported virtual mode applied");
+  Console.WriteLine("owned_virtual_mode_checks_passed: exact source, original deadline, rollback, no orphan restoration guardian; fake driver only");
+ }
  public static string Run() {
+  VirtualModes();
   Check(System.Runtime.InteropServices.Marshal.SizeOf(typeof(SodaDesktopDisplay.Mode))==220,"DEVMODEW layout");
   var layout=new Layout{CurrentMode=new SodaDesktopDisplay.Mode{Width=3840,Height=2160}};
   var native=SodaDesktopDisplay.VirtualRectangle(layout,new[]{"primary","left"});

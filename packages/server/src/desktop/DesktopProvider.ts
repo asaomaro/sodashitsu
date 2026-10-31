@@ -252,9 +252,9 @@ export class DesktopProvider {
     if(p.options.independentMonitors&&(!p.options.sharedDesktop||!p.options.sharedMonitors||!p.options.monitors||!p.options.monitorDevice||!cfg.allowMonitors||cfg.nativePlatform||p.options.elevatedDesktop||p.options.virtualDisplay||p.options.display))throw new RpcError("invalid_params","独立モニターには通常のモニター共有と明示したモニターIDが必要です");
     this.pruneSources();const requestedMode=p.options.independentMonitors?"independent":"normal";const selectedPool=p.options.independentMonitors?this.monitorSources.get(p.options.monitorDevice!)?.pool:this.sharedCapture;
     if(p.options.sharedMonitors&&(!p.options.sharedDesktop||!p.options.monitors||!cfg.allowMonitors||p.options.elevatedDesktop||p.options.virtualDisplay))throw new RpcError("invalid_params","共有モニターには通常共有とモニター許可が必要です");
-    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || (p.options.virtualDisplay&&!p.options.sharedVirtual) || p.options.display || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || (p.options.richClipboard&&!p.options.sharedClipboard) || ((p.options.monitors||p.options.monitorDevice)&&!p.options.sharedMonitors) || (p.options.cursor&&!p.options.sharedCursor)))
+    if (p.options.sharedDesktop && (!p.options.features || (p.options.elevatedDesktop&&!p.options.sharedProtected) || (p.options.virtualDisplay&&!p.options.sharedVirtual) || p.options.display&&!p.options.sharedVirtual || (p.options.nativeVideo && !p.options.sharedNative) || (p.options.nativeAudio&&!p.options.sharedAudio) || (p.options.microphone&&!p.options.sharedMicrophone) || (p.options.nativeDatagrams&&!p.options.sharedDatagrams) || (p.options.nativeAdaptive&&!p.options.sharedResolution) || (p.options.nativeCadence&&!p.options.sharedRate) || (p.options.richClipboard&&!p.options.sharedClipboard) || ((p.options.monitors||p.options.monitorDevice)&&!p.options.sharedMonitors) || (p.options.cursor&&!p.options.sharedCursor)))
       throw new RpcError("invalid_params", "複数viewer共有では管理者画面・仮想画面・解像度変更・音声・クリップボードなどの追加経路を併用できません。");
-    if(p.options.sharedVirtual&&(!p.options.sharedDesktop||!p.options.virtualDisplay||!p.options.features||!cfg.allowVirtualDisplay||cfg.nativePlatform||p.options.elevatedDesktop||p.options.monitors||p.options.monitorDevice||p.options.display))throw new RpcError("unauthorized","仮想画面の共有には明示した仮想画面と接続先の許可が必要です。");
+    if(p.options.sharedVirtual&&(!p.options.sharedDesktop||!p.options.virtualDisplay||!p.options.features||!cfg.allowVirtualDisplay||cfg.nativePlatform||p.options.elevatedDesktop||p.options.monitors||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の共有には明示した仮想画面と接続先の許可が必要です。");
     if(p.options.sharedDeltas&&(!p.options.sharedDesktop||!p.options.features||p.options.deltas!==true||p.options.elevatedDesktop||p.options.virtualDisplay&&!p.options.sharedVirtual))throw new RpcError("invalid_params","通常共有の差分画像には両端の更新と差分設定が必要です。");
     if(p.options.sharedClipboard&&(!p.options.sharedDesktop||!p.options.features||p.options.elevatedDesktop||p.options.virtualDisplay&&!p.options.sharedVirtual||!cfg.allowClipboard))throw new RpcError("invalid_params","通常共有のクリップボードには両端の更新と接続先の許可が必要です。");
     if(p.options.sharedCursor&&(!p.options.sharedDesktop||!p.options.cursor||!p.options.features||p.options.elevatedDesktop||p.options.virtualDisplay&&!p.options.sharedVirtual||p.options.image?.showCursor===false))throw new RpcError("invalid_params","通常共有のカーソル表示を有効にしてください。共有独立カーソルは両端の更新が必要です。");
@@ -916,7 +916,7 @@ export class DesktopProvider {
       ...((poolVideo||options.nativeVideoWindow===3)&&cfg.allowNativeVideo===true?{nativeVideoWindow:3}:{}),
       allowInput: cfg.allowInput,
       allowClipboard: (!options.sharedDesktop||options.sharedClipboard===true) && cfg.allowClipboard === true,
-      allowDisplayResize: !options.sharedDesktop && cfg.allowDisplayResize === true,
+      allowDisplayResize: (!options.sharedDesktop||options.sharedVirtual===true) && cfg.allowDisplayResize === true,
     });
   }
   private failImages(s:Share){
@@ -1023,7 +1023,7 @@ export class DesktopProvider {
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {
-  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedVirtual?{virtualDisplay:true as const}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
+  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedVirtual?{virtualDisplay:true as const,...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
 }
 function allowedRelay(url: URL, origins: string[]): boolean {
   if (

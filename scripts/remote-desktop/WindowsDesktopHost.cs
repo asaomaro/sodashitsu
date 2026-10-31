@@ -488,10 +488,14 @@ public static class SodaDesktopHost {
         Console.WriteLine("protected_host_boundaries_passed: queued frame discarded; key/mouse release and direct input blocked after transition; generated facts/input only");
     }
     static object OpenVirtualOnNormalDesktop(Func<bool> normal,Func<object> open){if(!normal())throw new InvalidOperationException("Virtual display requires the normal input desktop");return open();}
+    static bool SingleResizeSource(bool requestedVirtual,bool ownedVirtual,string virtualDevice,string selectedDevice,int monitorCount){return requestedVirtual?ownedVirtual&&!String.IsNullOrEmpty(virtualDevice)&&String.Equals(virtualDevice,selectedDevice,StringComparison.OrdinalIgnoreCase):monitorCount==1;}
     public static void VerifyVirtualDesktopGuard(){
         bool opened=false,rejected=false;try{OpenVirtualOnNormalDesktop(()=>false,()=>{opened=true;return new object();});}catch(InvalidOperationException){rejected=true;}
         if(!rejected||opened)throw new InvalidOperationException("Virtual device was opened before normal desktop guard");
         object expected=new object();if(!Object.ReferenceEquals(OpenVirtualOnNormalDesktop(()=>true,()=>expected),expected))throw new InvalidOperationException("Normal virtual creation path");
+        if(!SingleResizeSource(true,true,"owned-virtual","owned-virtual",3))throw new InvalidOperationException("Owned virtual monitor resize denied among physical monitors");
+        if(SingleResizeSource(true,false,"owned-virtual","owned-virtual",3)||SingleResizeSource(true,true,"owned-virtual","physical",3)||SingleResizeSource(true,true,null,"physical",3))throw new InvalidOperationException("Virtual resize escaped the owned monitor");
+        if(SingleResizeSource(false,false,null,"physical",3)||!SingleResizeSource(false,false,null,"physical",1))throw new InvalidOperationException("Normal physical resize policy changed");
         Console.WriteLine("virtual_desktop_preflight_guard_passed: fake normal/secure guards; no native device or desktop APIs");
     }
     static SodaDesktopDisplay.Lease DisplayLease;
@@ -547,13 +551,13 @@ public static class SodaDesktopHost {
         string colorMode="full";bool showCursor=true;
         if(options.ContainsKey("image")){var image=Obj(options["image"]);colorMode=(string)image["colorMode"];showCursor=(bool)image["showCursor"];}
         if(colorMode!="full"&&colorMode!="rgb565"&&colorMode!="rgb332"&&colorMode!="gray16")throw new InvalidOperationException("Invalid color mode");
-        bool displayCeiling=!Secure && (ActiveMonitors!=null?ActiveMonitors.Items.Length:screens.Length)==1 && locallyAllowDisplayResize && config.ContainsKey("allowDisplayResize") && (bool)config["allowDisplayResize"];
+        bool displayCeiling=!Secure && SingleResizeSource(virtualRequested,VirtualLease!=null,virtualDevice,sourceDevice,ActiveMonitors!=null?ActiveMonitors.Items.Length:screens.Length) && locallyAllowDisplayResize && config.ContainsKey("allowDisplayResize") && (bool)config["allowDisplayResize"];
         var displayModes=displayCeiling?new SodaDesktopDisplay.NativeDriver(sourcePath).Modes(sourceDevice):new List<SodaDesktopDisplay.Mode>();
         if(!Secure && options.ContainsKey("display")) {
             if(!displayCeiling)throw new InvalidOperationException("Display resize not permitted");
             var requested=Obj(options["display"]);
-            DisplayLease=new SodaDesktopDisplay.Lease(new SodaDesktopDisplay.NativeDriver(sourcePath),sourceDevice,Num(requested,"width"),Num(requested,"height"));
-            Bounds=DisplayLease.Bounds;maxWidth=Bounds.Width;if(ActiveMonitors!=null)ActiveMonitors=new SodaDesktopMonitorLayout(new SodaDesktopMonitorLayout.NativeDriver(),ActiveMonitors.Selected);
+            if(virtualRequested)Bounds=SodaDesktopDisplay.ApplyOwnedVirtualMode(new SodaDesktopDisplay.NativeDriver(null),sourceDevice,Num(requested,"width"),Num(requested,"height"),()=>VirtualLease!=null&&VirtualAlive!=null&&VirtualAlive());
+            else {DisplayLease=new SodaDesktopDisplay.Lease(new SodaDesktopDisplay.NativeDriver(sourcePath),sourceDevice,Num(requested,"width"),Num(requested,"height"));Bounds=DisplayLease.Bounds;}maxWidth=Bounds.Width;if(ActiveMonitors!=null)ActiveMonitors=new SodaDesktopMonitorLayout(new SodaDesktopMonitorLayout.NativeDriver(),ActiveMonitors.Selected);
         }
         CaptureDevice=sourceDevice;
         int w=Math.Min(Bounds.Width,maxWidth),h=(int)Math.Round(Bounds.Height*(double)w/Bounds.Width);
@@ -989,6 +993,23 @@ public static class SodaDesktopDisplay {
     }
     public static bool Same(Mode a,Mode b) {return a.X==b.X&&a.Y==b.Y&&a.Width==b.Width&&a.Height==b.Height&&a.Orientation==b.Orientation;}
     public static bool Matches(string device,Rectangle bounds) {try{return RectangleOf(new NativeDriver(null).Current(device))==bounds;}catch{return false;}}
+    // A temporary monitor is deleted with its owner. Never leave a size-only
+    // restoration guardian able to act on a reused DISPLAY name after deletion.
+    public static Rectangle ApplyOwnedVirtualMode(Driver driver,string device,int width,int height,Func<bool> owned,Func<long> now=null){
+        if(driver==null||owned==null)throw new ArgumentException("Owned display");var clock=Stopwatch.StartNew();if(now==null)now=()=>clock.ElapsedMilliseconds;
+        long started=now(),observed=started;
+        Action gate=()=>{bool currentOwner=owned();long at=now();if(!currentOwner)throw new InvalidOperationException("Virtual display scope changed");if(at<observed||at-started>=3000)throw new System.TimeoutException("Virtual display mode deadline");observed=at;};
+        gate();var original=driver.Current(device);gate();
+        if(!Valid((uint)width,(uint)height))throw new InvalidOperationException("Unsupported virtual resolution");
+        var modes=driver.Modes(device);gate();if(!modes.Exists(m=>m.Width==width&&m.Height==height))throw new InvalidOperationException("Unsupported virtual resolution");
+        var target=original;target.Width=(uint)width;target.Height=(uint)height;target.Fields=0x180000;
+        if(!Same(original,target)){
+            if(!driver.Test(device,target))throw new InvalidOperationException("Virtual display mode test rejected");gate();
+            var current=driver.Current(device);gate();if(!Same(current,original))throw new InvalidOperationException("Virtual display changed locally");
+            driver.Apply(device,target);gate();var applied=driver.Current(device);gate();if(!Same(applied,target))throw new InvalidOperationException("Virtual display mode mismatch");
+        }
+        return RectangleOf(target);
+    }
     public sealed class Lease : IDisposable {
         readonly Driver driver;readonly string device;readonly Mode original,target;bool changed,disposed;
         public readonly Rectangle Bounds;
