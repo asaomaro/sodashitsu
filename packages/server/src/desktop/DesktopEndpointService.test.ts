@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, readdir, rm, rename } from "node:fs/promises";
+import { mkdtemp, realpath, readFile, readdir, rm, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -25,7 +25,7 @@ function deferred() {
   return { promise, resolve };
 }
 async function fixture(options: { activate?: boolean; protector?: DesktopSecretProtector } = {}) {
-  const directory = await mkdtemp(join(tmpdir(), "soda-endpoint-owner-"));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), "soda-endpoint-owner-")));
   const storeOptions = {
     stateDir: directory,
     ...(process.platform === "win32"
