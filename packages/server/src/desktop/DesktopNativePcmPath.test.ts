@@ -3,7 +3,7 @@ import {mkdtemp,readdir,rm,chmod,lstat,mkdir,rename,writeFile,readFile} from "no
 import {tmpdir} from "node:os";
 import {join,dirname} from "node:path";
 import {afterEach,expect,it,vi} from "vitest";
-import {DesktopNativePcmPaths,type NativePcmOwner} from "./DesktopNativePcmPath.js";
+import {DesktopNativePcmPaths,desktopNativePcmRoot,type NativePcmOwner} from "./DesktopNativePcmPath.js";
 
 const gate=vi.hoisted(()=>({wait:undefined as Promise<void>|undefined,unlinkWait:undefined as Promise<void>|undefined,entered:undefined as (()=>void)|undefined,rmdirWait:undefined as Promise<void>|undefined,rmdirEntered:undefined as (()=>void)|undefined}));
 vi.mock("node:fs/promises",async original=>{
@@ -16,7 +16,7 @@ function owner(){
  let exited=false,close!:()=>void;const closed=new Promise<void>(resolve=>{close=()=>{exited=true;resolve();};});
  return {value:{closed,exited:()=>exited} satisfies NativePcmOwner,close};
 }
-async function fixture(){const root=await mkdtemp(join(tmpdir(),"soda-pcm-test-"));cleanup.push(()=>rm(root,{recursive:true,force:true}));return root;}
+async function fixture(){const root=await mkdtemp(join(desktopNativePcmRoot(),"soda-pcm-test-"));cleanup.push(()=>rm(root,{recursive:true,force:true}));return root;}
 const name=()=>"SodaDesktopAudio-"+crypto.randomUUID().replaceAll("-","");
 function stop(server:Server){return new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
 
@@ -62,4 +62,9 @@ it.skipIf(process.platform==="win32")("reruns cleanup when physical close arrive
  await chmod(lease.path,0o600);await lease.verify();let release!:()=>void,entered!:()=>void;const reached=new Promise<void>(resolve=>{entered=resolve;});gate.rmdirEntered=entered;gate.rmdirWait=new Promise<void>(resolve=>{release=resolve;});
  const retiring=lease.retire();await reached;source.close();release();await retiring;
  await vi.waitFor(()=>expect(paths.pending).toBe(0));expect(await readdir(root)).toEqual([]);
+});
+
+it("keeps the default Darwin socket name within sun_path under long per-user TMPDIR",()=>{
+ const temporary="/private/var/folders/"+"a".repeat(80)+"/T";
+ const path=join(desktopNativePcmRoot("darwin",temporary),"soda-native-pcm-ABC123","pcm.sock");expect(Buffer.byteLength(path)).toBeLessThanOrEqual(100);expect(desktopNativePcmRoot("linux",temporary)).toBe(temporary);
 });

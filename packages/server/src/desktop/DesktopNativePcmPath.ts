@@ -10,6 +10,9 @@ type Identity={dev:bigint;ino:bigint};
 const same=(value:BigIntStats,witness:Identity)=>value.dev===witness.dev&&value.ino===witness.ino;
 const absent=(error:unknown)=>(error as NodeJS.ErrnoException).code==="ENOENT";
 
+/** Darwin TMPDIR often exceeds sun_path once a private child is added. */
+export function desktopNativePcmRoot(platform:NodeJS.Platform=process.platform,temporary=tmpdir()):string{return platform==="darwin"?"/private/tmp":temporary;}
+
 /** Bounded private paths. No recursive removal, preexisting unlink or download. */
 export class DesktopNativePcmPaths {
  private leases=new Set<DesktopNativePcmPath>();
@@ -33,7 +36,7 @@ export class DesktopNativePcmPath {
  async create(){
   try{
    if(this.owner.exited()||this.closed)throw Error("Native PCM unavailable");
-   this.directory=await mkdtemp(join(this.options.root??tmpdir(),"soda-native-pcm-"));
+   this.directory=await mkdtemp(join(this.options.root??desktopNativePcmRoot(),"soda-native-pcm-"));
    const value=await lstat(this.directory,{bigint:true});
    if(!value.isDirectory()||value.isSymbolicLink()||value.uid!==BigInt(process.getuid!())||(value.mode&0o777n)!==0o700n)throw Error("Native PCM unavailable");
    this.identity={dev:value.dev,ino:value.ino};this.created=true;
