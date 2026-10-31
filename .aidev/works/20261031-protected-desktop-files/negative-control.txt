@@ -1,0 +1,42 @@
+before 1 
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-files
+
+ ❯ ../../tmp/soda-protected-negative-oqwh7ium/Relay.test.ts (277 tests | 2 failed | 275 skipped) 725ms
+   × keeps elevated-default file operations in the ordinary-user folder with separate viewer grants 405ms
+   × keeps elevated-uac file operations in the ordinary-user folder with separate viewer grants 318ms
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 275 skipped (277)
+   Start at  21:45:08
+   Duration  2.13s (transform 52%, tests 35%, import 12%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ../../tmp/soda-protected-negative-oqwh7ium/Relay.test.ts > keeps elevated-default file operations in the ordinary-user folder with separate viewer grants
+ FAIL  ../../tmp/soda-protected-negative-oqwh7ium/Relay.test.ts > keeps elevated-uac file operations in the ordinary-user folder with separate viewer grants
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ ../../tmp/soda-protected-negative-oqwh7ium/Relay.test.ts:1806:159
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+restored 0 
+ RUN  v5.0.1 /workspaces/sodashitsu-protected-files
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 275 skipped (277)
+   Start at  21:45:11
+   Duration  3.23s (tests 61%, transform 31%, import 8%)
+
+
+original_source_bytes_unchanged

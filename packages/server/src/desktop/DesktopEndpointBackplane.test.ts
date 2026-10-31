@@ -153,3 +153,11 @@ it("binds native file offers to the trusted outer origin across the private endp
  const gesture=randomUUID(),prepared=await run({action:"native_prepare",gesture,origin,seq:1});expect(prepared.ok).toBe(true);const offer=prepared.result.native;expect((await run({action:"native_activate",gesture,lease:offer.lease})).ok).toBe(true);
  const read=await run({action:"native_read",gesture,lease:offer.lease,request:randomUUID(),index:0,offset:0,length:15});expect(read.ok).toBe(true);expect(Buffer.from(read.result.data,"base64").toString()).toBe("endpoint native");root.close();
 });
+it("carries Node-owned protected file grants over an endpoint root and closes its file lane on revocation",async()=>{
+ const {DESKTOP_PROTECTED_PROTOCOL,desktopFeaturesProtocol}=await import("@sodashitsu/protocol"),f=await fixture(),rootDir=join(f.record,".."),end=join(rootDir,"protected-ended");
+ f.provider.configure({...f.config,allowElevated:true,allowProtectedFiles:true,fileRoot:rootDir,command:[...f.config.command,"--protected-mode","elevated-default","--protected-end-marker",end]});
+ const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_FILES_PROTOCOL,desktopFeaturesProtocol(["protectedFiles"])]);v.send({type:"start",machineId:f.publicMachine,options:{features:true,elevatedDesktop:true,protectedFiles:true}});await expect.poll(()=>v.messages.some(m=>m.type==="protected_files_ready")).toBe(true);expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("files");
+ const replies:any[]=[],closed=vi.fn(),child=await v.root.open([DESKTOP_FILES_PROTOCOL],(bytes,binary)=>{expect(binary).toBe(false);replies.push(JSON.parse(new TextDecoder().decode(bytes)));},closed);child.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
+ const id=randomUUID();child.send(JSON.stringify({type:"desktop_file",id,request:{action:"grant",enabled:true}}));await expect.poll(()=>replies.find(m=>m.id===id)?.ok).toBe(true);
+ v.root.close();await expect.poll(()=>closed.mock.calls.length).toBe(1);expect(()=>child.send(JSON.stringify({type:"desktop_file",id:randomUUID(),request:{action:"list",path:""}}))).toThrow();
+});

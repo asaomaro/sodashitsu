@@ -8,6 +8,7 @@ export interface DesktopProviderConfig {
   allowMonitors?:boolean;
   allowVirtualDisplay?:boolean;
   allowElevated?:boolean;
+  allowProtectedFiles?:boolean;
   fileRoot?:string;
   allowClipboard?: boolean;
   allowMedia?: boolean;
@@ -27,6 +28,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       ...(config?.nativePlatform?{nativePlatform:config.nativePlatform}:{}),
       sharedMicrophone:config?.allowMicrophone===true&&!!config.microphoneEndpoint,
       sharedProtected:!config?.nativePlatform&&config?.allowElevated===true,
+      protectedFiles:!config?.nativePlatform&&config?.allowElevated===true&&config?.allowProtectedFiles===true&&!!config?.fileRoot,
       sharedDesktop: true,
       sharedVirtual:!config?.nativePlatform&&config?.allowVirtualDisplay===true,
       sharedDeltas:!config?.nativePlatform,

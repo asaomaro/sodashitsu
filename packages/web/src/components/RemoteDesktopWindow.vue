@@ -3,7 +3,7 @@ import {DESKTOP_FOLDERS_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopSourceIdle} from "@sodashitsu/client-core/desktop/DesktopSourceIdle";
 import {DESKTOP_FILE_CHECKPOINTS_PROTOCOL} from "@sodashitsu/protocol";
 import {DesktopEndpointAgentPeers,DesktopEndpointAgentTicket,DesktopEndpointAgentError,parseDesktopAgentGrant} from "@sodashitsu/protocol";
-import {DesktopSigninRequired,desktopFeaturesProtocol} from "@sodashitsu/protocol";
+import {DesktopProtectedFilesReady,DesktopSigninRequired,desktopFeaturesProtocol} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CLIPBOARD_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_CURSOR_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_SHARED_MICROPHONE_PROTOCOL} from "@sodashitsu/protocol";
@@ -89,7 +89,7 @@ const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<De
 const platformIdle=ref(false),platformIdleCounter=ref(0);let sourceIdle=new DesktopSourceIdle();
 let controlPending=false,controlCancelled=false;
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
-const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedVirtualAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
+const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedVirtualAvailable=ref(false),protectedFilesAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
 const lockScreenCover = ref(false);
 const imeKeys = ref(false);
 const extendedInput = ref(false);
@@ -604,7 +604,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors","sharedVirtual"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors","sharedVirtual","protectedFiles"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -615,7 +615,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(sharedScreen.value?{sharedDesktop:true,...(virtualScreen.value?{virtualDisplay:true,sharedVirtual:true}:{}),...(!elevatedScreen.value&&!virtualScreen.value&&sharedMonitorsScreen.value?{sharedMonitors:true,...(independentScreen.value?{independentMonitors:true}:{}),...(sharedMonitorDevice.value?{monitorDevice:sharedMonitorDevice.value}:{})}:{}),...(elevatedScreen.value?{elevatedDesktop:true}:sharedCursorScreen.value&&showCursor.value?{sharedCursor:true}:{}),...(!elevatedScreen.value&&sharedClipboardScreen.value?{sharedClipboard:true}:{}),...(!elevatedScreen.value&&sharedDeltasScreen.value&&deltas.value?{sharedDeltas:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(sharedScreen.value?{sharedDesktop:true,...(virtualScreen.value?{virtualDisplay:true,sharedVirtual:true}:{}),...(!elevatedScreen.value&&!virtualScreen.value&&sharedMonitorsScreen.value?{sharedMonitors:true,...(independentScreen.value?{independentMonitors:true}:{}),...(sharedMonitorDevice.value?{monitorDevice:sharedMonitorDevice.value}:{})}:{}),...(elevatedScreen.value?{elevatedDesktop:true}:sharedCursorScreen.value&&showCursor.value?{sharedCursor:true}:{}),...(!elevatedScreen.value&&sharedClipboardScreen.value?{sharedClipboard:true}:{}),...(!elevatedScreen.value&&sharedDeltasScreen.value&&deltas.value?{sharedDeltas:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...(elevatedScreen.value&&protectedFilesAvailable.value?{protectedFiles:true}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -678,6 +678,8 @@ function connect(automatic = false) {
         if(m.type==="agent_endpoint_error"){
           if(!endpointEncrypted.value)throw Error("暗号化エージェントの接続状態が不正です");endpointAgentNotice.value=DesktopEndpointAgentError.parse(m).message;endpointAgentBusy.value=false;return;
         }
+        if(m.type==="protected_files_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid protected files capability");protectedFilesAvailable.value=m.enabled;return;}
+        if(m.type==="protected_files_ready"){if(!ready.value||!protectedMode.value||!elevatedScreen.value||!protectedFilesAvailable.value)throw Error("Unexpected protected files proof");const proof=DesktopProtectedFilesReady.parse(m);filesCap.value=true;fileCheckpoints.value=proof.fileCheckpoints===true;durableFileCheckpoints.value=proof.durableFileCheckpoints===true;foldersCap.value=proof.folders===true;folderCheckpoints.value=proof.folderCheckpoints===true;durableFolderCheckpoints.value=proof.durableFolderCheckpoints===true;return;}
         if(m.type==="shared_virtual_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared virtual capability");sharedVirtualAvailable.value=m.enabled;return;}
         if(m.type==="shared_protected_available"){
           if(typeof m.enabled!=="boolean")throw Error("Invalid protected sharing capability");

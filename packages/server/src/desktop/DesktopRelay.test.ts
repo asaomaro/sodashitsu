@@ -1791,3 +1791,58 @@ it.each(["viewer","permission","capability"])("refuses shared virtual admission 
  const f=await fixture(),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowVirtualDisplay:missing!=="permission",command:[...cfg.command,"--virtual-display"]});if(missing==="capability")vi.spyOn(f.provider,"capabilities").mockReturnValue({...f.provider.capabilities(),sharedVirtual:false});
  const v=await f.viewer(missing==="viewer"?[DESKTOP_SHARED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL]:sharedVirtualProtocols);v.send({...start,options:{...start.options,features:true,sharedDesktop:true,virtualDisplay:true}});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(f.startRequests).toHaveLength(0);expect(v.messages.some(m=>m.type==="ready")).toBe(false);
 });
+
+const protectedFileProtocols=[DESKTOP_PROTECTED_PROTOCOL,DESKTOP_FILES_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,desktopFeaturesProtocol(["protectedFiles"])];
+it.each(["elevated-default","elevated-uac"] as const)("keeps %s file operations in the ordinary-user folder with separate viewer grants",async mode=>{
+ const f=await protectedFixture({mode,allowed:true}),cfg=(f.provider as any).config,root=join(dirname(f.record),"allowed");await mkdir(root);await writeFile(join(root,"owned.txt"),"generated");
+ f.provider.configure({...cfg,allowProtectedFiles:true,fileRoot:root,command:[...cfg.command,"--dxgi"]});
+ const a=await f.viewer([...protectedFileProtocols,DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL]),b=await f.viewer([...protectedFileProtocols,DESKTOP_SHARED_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL]);
+ const request={...protectedStart,options:{...protectedStart.options,sharedDesktop:true,protectedFiles:true}};a.send(request);await expect.poll(()=>a.messages.some(m=>m.type==="protected_files_ready")).toBe(true);b.send(request);await expect.poll(()=>b.messages.some(m=>m.type==="protected_files_ready")).toBe(true);
+ for(const v of [a,b]){expect(v.messages.find(m=>m.type==="ready")).toMatchObject({protectedDesktop:mode,secureDesktop:true,allowMedia:false,allowClipboard:false});expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("files");expect(v.messages.find(m=>m.type==="protected_files_ready")).toMatchObject({files:true,folders:true,fileCheckpoints:true});}
+ const configure=JSON.parse(await readFile(f.record+".configure.json","utf8"));for(const key of ["protectedFiles","files","fileCheckpoints","folders","folderCheckpoints"])expect(configure.options).not.toHaveProperty(key);
+ const sockets:WebSocket[]=[];
+ async function lane(v:typeof a){const socket=new WebSocket(f.endpoint,DESKTOP_FILES_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),results:any[]=[];sockets.push(socket);socket.on("error",()=>{});socket.on("message",data=>results.push(JSON.parse(data.toString())));await new Promise<void>((resolve,reject)=>{socket.once("open",resolve);socket.once("error",reject);});socket.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);return async(request:unknown)=>{const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>results.some(r=>r.id===id)).toBe(true);return results.find(r=>r.id===id);};}
+ try{
+  const one=await lane(a),two=await lane(b);expect((await one({action:"list",path:""})).ok).toBe(false);expect((await one({action:"grant",enabled:true})).ok).toBe(true);
+  expect((await one({action:"list",path:""})).result.entries.map((e:any)=>e.name)).toEqual(["owned.txt"]);expect((await one({action:"read_start",path:"../inputs.jsonl"})).ok).toBe(false);expect((await two({action:"list",path:""})).ok).toBe(false);
+  const pending=await one({action:"write_start",path:"pending.bin",bytes:3});expect(pending.ok).toBe(true);expect((await two({action:"grant",enabled:true})).ok).toBe(true);expect((await two({action:"status",id:pending.result.id})).ok).toBe(false);
+  a.send({type:"stop"});await expect.poll(()=>a.ws.readyState).toBe(WebSocket.CLOSED);expect((await two({action:"list",path:""})).ok).toBe(true);
+  const completed=await two({action:"write_start",path:"completed.bin",bytes:3});expect(completed.ok).toBe(true);expect((await two({action:"write",id:completed.result.id,offset:0,data:"YWJj"})).ok).toBe(true);expect((await two({action:"finish",id:completed.result.id,sha256:"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"})).ok).toBe(true);expect(await readFile(join(root,"completed.bin"),"utf8")).toBe("abc");await expect.poll(async()=> (await readdir(root)).filter(n=>n.startsWith(".soda-transfer-")).length).toBe(0);
+  await writeFile(f.endedMarker,"changed");await expect.poll(()=>b.ws.readyState).toBe(WebSocket.CLOSED);await expect.poll(()=>sockets[1]!.readyState).toBe(WebSocket.CLOSED);
+ }finally{for(const socket of sockets)socket.terminate();a.send({type:"stop"});b.send({type:"stop"});}
+});
+it.each(["viewer","permission","folder","provider","protected-option"] as const)("rejects protected file negotiation without the %s gate before starting a helper",async missing=>{
+ const f=await protectedFixture({mode:"elevated-default",allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowProtectedFiles:missing!=="permission",fileRoot:missing==="folder"?undefined:cfg.fileRoot});
+ if(missing==="provider"){const original=f.provider.capabilities.bind(f.provider);vi.spyOn(f.provider,"capabilities").mockImplementation(()=>({...original(),protectedFiles:false}));}
+ const protocols=missing==="viewer"?protectedFileProtocols.filter(p=>!p.startsWith(DESKTOP_FEATURES_PREFIX)):protectedFileProtocols;
+ const v=await f.viewer(protocols);v.send({...protectedStart,options:{...protectedStart.options,protectedFiles:true,...(missing==="protected-option"?{elevatedDesktop:undefined}:{})}});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==="protected_files_ready"||m.type==="ready")).toBe(false);expect(f.startRequests).toHaveLength(0);
+});
+it("rejects a protected file proof injected into an ordinary source",async()=>{
+ const f=await fixture(),v=await f.viewer();v.send(start);await expect.poll(()=>v.frames.length).toBeGreaterThan(0);(f.provider as any).active.ws.send(JSON.stringify({type:"protected_files_ready",files:true}));await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.some(m=>m.type==="protected_files_ready")).toBe(false);
+});
+async function protectedFileLane(f:Awaited<ReturnType<typeof fixture>>,v:Awaited<ReturnType<typeof f.viewer>>){
+ const socket=new WebSocket(f.endpoint,DESKTOP_FILES_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}}),results:any[]=[];socket.on("error",()=>{});socket.on("message",raw=>results.push(JSON.parse(raw.toString())));cleanup.push(async()=>socket.terminate());
+ await new Promise<void>((resolve,reject)=>{socket.once("open",resolve);socket.once("error",reject);});socket.send(JSON.stringify({type:"video_viewer",ticket:v.messages.find(m=>m.type==="files_ticket")!.ticket}));await expect.poll(()=>v.messages.some(m=>m.type==="files_ready")).toBe(true);
+ return {socket,call:async(request:unknown)=>{const id=crypto.randomUUID();socket.send(JSON.stringify({type:"desktop_file",id,request}));await expect.poll(()=>results.some(r=>r.id===id)).toBe(true);return results.find(r=>r.id===id);}};
+}
+it("blocks protected files until the Node-owned proof arrives, then retires pending writes on permission removal",async()=>{
+ const f=await protectedFixture({mode:"elevated-default",allowed:true}),cfg={...(f.provider as any).config,allowProtectedFiles:true};f.provider.configure(cfg);
+ const original=(f.provider as any).send.bind(f.provider),send=vi.spyOn(f.provider as any,"send").mockImplementation((s:any,value:any)=>{if(value.type!=="protected_files_ready")original(s,value);});
+ try{
+  const v=await f.viewer(protectedFileProtocols);v.send({...protectedStart,options:{...protectedStart.options,protectedFiles:true}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(v.messages.some(m=>m.type==="protected_files_ready")).toBe(false);
+  const lane=await protectedFileLane(f,v);expect((await lane.call({action:"grant",enabled:true})).ok).toBe(false);
+  original((f.provider as any).active,{type:"protected_files_ready",files:true});await expect.poll(()=>v.messages.some(m=>m.type==="protected_files_ready")).toBe(true);expect((await lane.call({action:"grant",enabled:true})).ok).toBe(true);
+  const write=await lane.call({action:"write_start",path:"must-not-publish.bin",bytes:3});expect(write.ok).toBe(true);expect((await lane.call({action:"write",id:write.result.id,offset:0,data:"YWJj"})).ok).toBe(true);
+  f.provider.configure({...cfg,allowProtectedFiles:false});await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);await expect.poll(()=>lane.socket.readyState).toBe(WebSocket.CLOSED);
+  await expect.poll(async()=> (await readdir(cfg.fileRoot)).filter(n=>n.startsWith(".soda-transfer-")||n==="must-not-publish.bin")).toEqual([]);
+  const next=await f.viewer(protectedFileProtocols);next.send({...protectedStart,options:{...protectedStart.options,protectedFiles:true}});await expect.poll(()=>next.ws.readyState).toBe(WebSocket.CLOSED);expect(next.messages.some(m=>m.type==="protected_files_ready")).toBe(false);
+ }finally{send.mockRestore();}
+});
+it("terminates a protected source if its physical helper forges the Node-only file proof",async()=>{
+ const f=await protectedFixture({mode:"elevated-default",allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowProtectedFiles:true});const v=await f.viewer(protectedFileProtocols);v.send({...protectedStart,options:{...protectedStart.options,protectedFiles:true}});await expect.poll(()=>v.messages.some(m=>m.type==="protected_files_ready")).toBe(true);
+ (f.provider as any).active.process.stdout.emit("data",JSON.stringify({type:"protected_files_ready",files:true})+"\n");await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);expect(v.messages.filter(m=>m.type==="protected_files_ready")).toHaveLength(1);
+});
+it.each(["local-permission","folder","features","file-ticket","files","protected"] as const)("enforces the protected file %s gate at B for direct callers",async missing=>{
+ const f=await protectedFixture({mode:"elevated-default",allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowProtectedFiles:missing!=="local-permission",fileRoot:missing==="folder"?undefined:cfg.fileRoot});
+ await expect(f.provider.start("direct",{url:f.endpoint,ticket:"x".repeat(43),...(missing==="file-ticket"?{}:{fileTicket:"y".repeat(43)}),options:DesktopOptions.parse({...protectedStart.options,files:true,protectedFiles:true,...(missing==="features"?{features:undefined}:{}),...(missing==="files"?{files:undefined}:{}),...(missing==="protected"?{elevatedDesktop:undefined}:{})})})).rejects.toThrow("管理者画面中");expect((f.provider as any).active).toBeUndefined();
+});

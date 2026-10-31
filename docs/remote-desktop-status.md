@@ -10,7 +10,7 @@
 | Explorer直接ドラッグ | 専用のブラウザPC helperと明示したファイル許可によるWindows向け実験機能を実装 |
 | clipboard/音声 | text/PNG/HTML/RTFの対応範囲、システム音声、マイク転送と局所encoder停滞の有限復帰を実装 |
 | 暗号化/agent | viewerおよび受信者固定agentの暗号化、CLI/MCP/modelを実装。通常grant用のプラグインAPI・operation例を追加 |
-| 保護画面/仮想画面 | 別の許可・scopeで実装。仮想画面は複数viewer・動画/音声/転送/マイクとの併用を追加。保護画面との併用には制限がある |
+| 保護画面/仮想画面 | 別の許可・scopeで実装。仮想画面は複数viewer・動画/音声/転送/マイクとの併用を追加。管理者アプリ/UAC画面中の別許可フォルダー転送も実装。保護画面との併用には制限がある |
 | 専用signinサービス | runtime、鍵・登録管理、初回導入、更新、記録に一致する限定復旧を実装。一般の異常終了の自動修復は提供しない |
 | agentの領域確認 | Windows通常共有・Linux Portal・macOS SCKで明示regionと領域内pointer限定の変更確認を実装。LinuxはGstVideo GIが必要で、新しい実画素を待つ。省略時は全画面一致 |
 | Linux/macOS native | 画像・H.264動画・入力・領域確認・最大8viewer共有と個別file許可、Linux/macOSのシステム音声・仮想出力へのマイク転送とtext/PNG/HTML/RTF clipboardを扱う実験版。Windowsと同等の機能範囲ではない |
@@ -18,7 +18,7 @@
 ## 開発・機能拡張として残るもの
 
 - Linux/macOS nativeの解像度・複数monitorと動画のUDP/追加codec/自動調整の対応拡大。Windows固有のUAC/ドライバー機能とはOSの仕組みが異なる。
-- 保護画面と動画/音声/転送、仮想画面と物理monitor選択・OS解像度変更など、残る併用範囲の拡大。許可の共用や暗黙の経路変更で済ませない。
+- 保護画面と動画/音声、仮想画面と物理monitor選択・OS解像度変更など、残る併用範囲の拡大。許可の共用や暗黙の経路変更で済ませない。
 - 暗号化CLIを組み込むプラグインは、そのCLIと独立した鍵・許可・停止処理を自分で管理する。今回の通常grant用ホストAPIを暗号化用と扱わない。
 
 ## 配布・運用と実機確認

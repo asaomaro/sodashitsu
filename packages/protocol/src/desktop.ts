@@ -84,6 +84,7 @@ export const DesktopOptions = z
     monitors:z.literal(true).optional(),
     monitorDevice:z.string().min(1).max(128).refine(v=>!v.includes("\0")).optional(),
     files: z.literal(true).optional(),
+    protectedFiles:z.literal(true).optional(),
     fileCheckpoints:z.literal(true).optional(),
     folders:z.literal(true).optional(),
     folderCheckpoints:z.literal(true).optional(),
@@ -286,6 +287,7 @@ export const DesktopPermissions = z.object({
   allowMonitors:z.boolean().optional(),
   allowVirtualDisplay:z.boolean().optional(),
   allowElevated:z.boolean().optional(),
+  allowProtectedFiles:z.boolean().optional(),
   fileRoot: z.string().max(4096).refine(v=>!v.includes("\0")).optional(),
 }).strict();
 export type DesktopPermissions = z.infer<typeof DesktopPermissions>;
@@ -341,6 +343,7 @@ export interface DesktopResults {
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
     sharedVirtual?:boolean;
+    protectedFiles?:boolean;
     sharedDeltas?:boolean;
     sharedMonitors?:boolean;
     independentMonitors?:boolean;
