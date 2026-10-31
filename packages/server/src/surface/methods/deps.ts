@@ -39,7 +39,7 @@ export interface MethodDeps {
   desktopNativeHelpers?:import("../../desktop/DesktopNativeHelpers.js").DesktopNativeHelpers;
   desktopRelay?: import("../../desktop/DesktopRelay.js").DesktopRelay;
   desktopSettings?: import("../../desktop/DesktopSettings.js").DesktopSettings;
-  desktop?: import("../../desktop/DesktopProvider.js").DesktopProvider;
+  desktop?: import("../../desktop/DesktopProvider.js").DesktopProviderApi;
   desktopEndpoint?:import("../../desktop/DesktopEndpointService.js").DesktopEndpointService;
   previewHelpers?: import("../../preview/ManagedPreviewHelpers.js").ManagedPreviewHelpers;
   previews?: import("../../preview/PreviewService.js").PreviewService;

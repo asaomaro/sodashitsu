@@ -7,7 +7,7 @@ import {WebSocket,type RawData} from "ws";
 import {z} from "zod";
 import {DESKTOP_FILES_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DesktopStartParams,DesktopEndpointMachine} from "@sodashitsu/protocol";
 import type {LinkChannel} from "../machine/MachineLink.js";
-import {DesktopProvider,type DesktopProviderEndpointScope} from "./DesktopProvider.js";
+import type {DesktopProviderApi as DesktopProvider,DesktopProviderEndpointScope} from "./DesktopProvider.js";
 import {DesktopRelay} from "./DesktopRelay.js";
 
 const children=new Set([DESKTOP_FILES_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL,DESKTOP_MICROPHONE_PROTOCOL,DESKTOP_RICH_CLIPBOARD_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL]);

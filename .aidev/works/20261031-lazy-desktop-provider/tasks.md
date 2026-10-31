@@ -1,0 +1,6 @@
+- [x] ProviderCore・lazy facade・OFF metadata無probe
+- [x] 保留start取消・cold暗号root epoch・永続policy共有（taskcheck対象）
+- [x] failure drain・cold dispose失効の回帰
+- [ ] build/typecheck/全体試験・負例
+- [ ] 独立最終全体レビュー・修正再点検
+- [ ] 3OS CI・PR/main

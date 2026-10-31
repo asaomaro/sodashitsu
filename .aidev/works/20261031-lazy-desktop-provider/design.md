@@ -1,0 +1,1 @@
+薄いpermission/capability/companion境界を常設し、許可されたstartまたはunlock時だけProviderをdynamic importする。cold stateの所有者取消、初期core epoch offset、source世代とimport retirementを保持する。保存済み転送は宣言だけを保持し、明示policy変更時に動的な永続authorityを動かす。同じregistriesをenabled coreへ所有移譲し、通常のOFF shutdownは読まない。失敗時もfile/folder両枝の実I/Oとcleanupを待つ。

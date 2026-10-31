@@ -6,7 +6,7 @@ export function nativePlatformFor(os=process.platform,env=process.env):DesktopNa
  if(os==="linux"&&!env.WSL_DISTRO_NAME)return "linux-portal";
  if(os==="darwin")return "macos-sck";
 }
-export function nativeDesktopCommand(os=process.platform,env=process.env,probe:typeof spawnSync=spawnSync):string[]|undefined {
+export function nativeDesktopCommand(os=process.platform,env=process.env,probe:typeof spawnSync=spawnSync,verify=true):string[]|undefined {
  const platform=nativePlatformFor(os,env);if(!platform)return;
  // Portal cadence/real compositor compatibility is not yet verified. Local
  // administrator opt-in only; normal Linux installations stay unchanged.
@@ -16,6 +16,7 @@ export function nativeDesktopCommand(os=process.platform,env=process.env,probe:t
  if(!existsSync(path))return;
  const command=platform==="linux-portal"?["/usr/bin/python3","-I",path]:[path];
  if(platform==="macos-sck")try{accessSync(path,constants.X_OK);}catch{return;}
+ if(!verify)return command;
  const result=probe(command[0]!,[...command.slice(1),"--probe"],{encoding:"utf8",timeout:3000,maxBuffer:8192,windowsHide:true});
  if(result.status!==0)return;
  try{const value=JSON.parse(String(result.stdout));if(value.backend===platform&&value.dependencies===true)return command;}catch{}

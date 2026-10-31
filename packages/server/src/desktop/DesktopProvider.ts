@@ -1,3 +1,4 @@
+import type {DesktopSavedTransferState} from './DesktopSavedTransferState.js';
 import {desktopHelperRolePlan,desktopHelperRoleEnvironment} from './DesktopHelperRolePlan.js';
 import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
 import {DesktopRegionSpec} from "@sodashitsu/protocol";
@@ -61,33 +62,11 @@ const HelperFrame = z
       .regex(/^[A-Za-z0-9+/]*={0,2}$/),
   })
   .strict();
-export interface DesktopProviderConfig {
-  nativePlatform?:DesktopNativePlatform;
-  command: string[];
-  allowInput: boolean;
-  allowMonitors?:boolean;
-  allowVirtualDisplay?:boolean;
-  allowElevated?:boolean;
-  fileRoot?:string;
-  allowClipboard?: boolean;
-  allowMedia?: boolean;
-  allowSystemAudio?: boolean;
-  allowMicrophone?: boolean;
-  microphoneEndpoint?: string;
-  allowNativeVideo?: boolean;
-  allowDisplayResize?: boolean;
-  allowUnlock?: boolean;
-  unlockLeaseCommand?: string[];
-  iceServers?: z.infer<typeof DesktopIceServers>;
-  origins(): string[];
-}
+import type {DesktopProviderConfig,DesktopProviderEndpointScope} from './DesktopProviderCore.js';
+import {desktopProviderCapabilities} from './DesktopProviderCore.js';
+export type {DesktopProviderConfig,DesktopProviderEndpointScope} from './DesktopProviderCore.js';
+export {desktopConfigFromEnv,desktopOriginsFromEnv} from './DesktopProviderCore.js';
 type EndpointScope={origin:string;nativeOrigin:string;epoch:number;active():boolean};
-export interface DesktopProviderEndpointScope {
- active():boolean;
- start(owner:string,params:z.infer<typeof DesktopStartParams>):Promise<{started:true}>;
- release(owner:string):void;
- close():void;
-}
 type Share = {
   agentRegions?:boolean;
   audioPipes?:DesktopAudioPipes;resourcesManaged:boolean;
@@ -156,7 +135,7 @@ export class DesktopProvider {
   private savedPolicyFault=false;
   failSavedTransferPolicy(){this.savedPolicyFault=true;this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);}
   private async stableTransferBarrier(){for(;;){const pending=this.transferBarrier;await pending;if(pending===this.transferBarrier)return;}}
-  enableSavedTransfers(directory:string,binding:string){if(this.transferStore||this.active||this.shared.size)throw Error("転送記録の初期化順が不正です");this.savedSettingsBinding=binding;this.transferStore=new DesktopTransferStore({directory,binding:this.savedBinding(binding)});this.fileCheckpoints=new DesktopFileCheckpoints(this.transferStore);this.folderCheckpoints=new DesktopFolderCheckpoints(new DesktopTransferStore({directory:join(dirname(directory),"desktop-folder-transfers"),binding:this.savedBinding(binding),folderRecords:true}));}
+  enableSavedTransfers(directory:string,binding:string,state?:DesktopSavedTransferState){if(this.transferStore||this.active||this.shared.size)throw Error("転送記録の初期化順が不正です");this.savedSettingsBinding=binding;if(state){if(state.directory!==directory||state.scope!==this.savedBinding(binding))throw Error("転送記録の権限が一致しません");this.transferStore=state.store;this.fileCheckpoints=state.files;this.folderCheckpoints=state.folders;return;}this.transferStore=new DesktopTransferStore({directory,binding:this.savedBinding(binding)});this.fileCheckpoints=new DesktopFileCheckpoints(this.transferStore);this.folderCheckpoints=new DesktopFolderCheckpoints(new DesktopTransferStore({directory:join(dirname(directory),"desktop-folder-transfers"),binding:this.savedBinding(binding),folderRecords:true}));}
   async invalidateSavedTransfers(){this.savedPolicyHolds++;this.freezeSavedTransfers();this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});try{await this.transferBarrier;}catch(error){this.failSavedTransferPolicy();throw error;}}
   async bindSavedTransfers(binding?:string){if(binding)this.savedSettingsBinding=binding;try{for(;;){const pending=this.transferBarrier;await pending;if(pending!==this.transferBarrier)continue;const scope=this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined;if(scope)await this.savedTransferWork(registry=>registry.bind(scope));if(pending!==this.transferBarrier||scope!==(this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined))continue;break;}this.savedPolicyFault=false;}catch(error){this.savedPolicyFault=true;throw error;}finally{this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);this.resumeSavedTransfers();}}
   async settleSavedTransfers(){await this.stableTransferBarrier();await this.savedTransferWork(registry=>registry.settled());}
@@ -229,8 +208,8 @@ export class DesktopProvider {
   readonly companion: DesktopCompanionHub;
   private audioPipes=new DesktopAudioPipes();
   private nativePcmPaths=new DesktopNativePcmPaths();
-  constructor(private config: DesktopProviderConfig | undefined) {
-    this.companion = new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
+  constructor(private config: DesktopProviderConfig | undefined, companion?:DesktopCompanionHub) {
+    this.companion = companion ?? new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
   }
   configure(config: DesktopProviderConfig | undefined): void {
     this.dispose();
@@ -244,55 +223,8 @@ export class DesktopProvider {
     if ((this.config?.allowUnlock||this.config?.allowVirtualDisplay||this.config?.allowElevated) && this.config.unlockLeaseCommand)
       this.unlockLease.start(this.config.unlockLeaseCommand);
   }
-  capabilities() {
-    return {
-      ...(this.endpointOnly?{endpointRequired:true}:{}),
-      ...(this.config?.nativePlatform?{nativePlatform:this.config.nativePlatform}:{}),
-      sharedMicrophone:!this.config?.nativePlatform&&this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      sharedProtected:!this.config?.nativePlatform&&this.config?.allowElevated===true,
-      sharedDesktop: true,
-      sharedDeltas:!this.config?.nativePlatform,
-      sharedMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
-      independentMonitors:!this.config?.nativePlatform&&this.config?.allowMonitors===true,
-      sharedCursor:!this.config?.nativePlatform,
-      sharedClipboard:this.config?.allowClipboard===true,
-      sharedFiles: !!this.config?.fileRoot,
-      sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
-      sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
-      sharedAudio:this.config?.allowNativeVideo===true,
-      sharedNative: this.config?.allowNativeVideo === true,
-      sharedDatagrams: this.config?.allowNativeVideo === true,
-      available: !!this.config,
-      allowInput: this.config?.allowInput === true,
-      deltas: !this.config?.nativePlatform,
-      imageSettings: !this.config?.nativePlatform,
-      imeKeys: !this.config?.nativePlatform,
-      extendedInput: true,
-      monitors:this.config?.allowMonitors===true,
-      virtualDisplay:this.config?.allowVirtualDisplay===true,
-      elevatedDesktop:this.config?.allowElevated===true,
-      files:!!this.config?.fileRoot,
-      fileCheckpoints:!!this.config?.fileRoot,
-      durableFileCheckpoints:!!this.config?.fileRoot&&!!this.transferStore,
-      durableFolderCheckpoints:!!this.config?.fileRoot&&!!this.transferStore,
-      folderCheckpoints:!!this.config?.fileRoot,
-      folders:!!this.config?.fileRoot,
-      richClipboard:this.config?.allowClipboard===true,
-      imageLane: true,
-      videoLane: true,
-      microphone:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      microphoneOpus:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      nativeVideo: !this.config?.nativePlatform||this.config?.allowNativeVideo===true,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:true,
-      nativeInputFreshness: !this.config?.nativePlatform,
-      nativeCodecs: !this.config?.nativePlatform,
-      ...(!this.config?.nativePlatform?{nativeAdaptive:true as const,nativeCadence:true as const}:{}),
-      nativeVideoWindow: 3 as const,
-      nativeMaxFps: 60 as const,
-      cursor: !this.config?.nativePlatform,
-      features: true,
-      displayResize: this.config?.allowDisplayResize === true,
-    };
-  }
+  capabilities() {return desktopProviderCapabilities(this.config,this.endpointOnly,!!this.transferStore);}
+
   async start(owner: string, raw: z.infer<typeof DesktopStartParams>,scope?:EndpointScope): Promise<{ started: true }> {
     if(this.resources.faulted)throw new RpcError("server_busy","接続先の入力解放を確認できません。接続先で共有設定を確認して再起動してください。");
     if(this.resourceReset&&this.physicalHelpers.size)throw new RpcError("server_busy","前の補助プログラムの終了を待っています。");
@@ -1065,45 +997,6 @@ function allowedRelay(url: URL, origins: string[]): boolean {
     }
   });
 }
-export function desktopConfigFromEnv(
-  env: NodeJS.ProcessEnv,
-  delegatedOrigins: () => string[],
-): DesktopProviderConfig | undefined {
-  if (!env.SODA_DESKTOP_COMMAND) return;
-  try {
-    const command: unknown = JSON.parse(env.SODA_DESKTOP_COMMAND);
-    if (
-      !Array.isArray(command) ||
-      command.length === 0 ||
-      command.length > 32 ||
-      command.some((v) => typeof v !== "string" || !v || v.includes("\0"))
-    )
-      return;
-    const nativePlatform=env.SODA_DESKTOP_NATIVE_PLATFORM;
-    if(nativePlatform!==undefined&&nativePlatform!=="linux-portal"&&nativePlatform!=="macos-sck")return;
-    return {
-      ...(nativePlatform?{nativePlatform}:{}),
-      command: command as string[],
-      allowInput: env.SODA_DESKTOP_ALLOW_INPUT === "1",
-      allowMonitors:env.SODA_DESKTOP_ALLOW_MONITORS==="1",
-      allowVirtualDisplay:env.SODA_DESKTOP_ALLOW_VIRTUAL_DISPLAY==="1",
-      allowElevated:env.SODA_DESKTOP_ALLOW_ELEVATED==="1",
-      allowClipboard: env.SODA_DESKTOP_ALLOW_CLIPBOARD === "1",
-      allowMedia: env.SODA_DESKTOP_ALLOW_MEDIA === "1",
-      allowDisplayResize: env.SODA_DESKTOP_ALLOW_DISPLAY_RESIZE === "1",
-      allowUnlock: env.SODA_DESKTOP_ALLOW_UNLOCK === "1",
-      iceServers: DesktopIceServers.parse(
-        env.SODA_DESKTOP_ICE_SERVERS ? JSON.parse(env.SODA_DESKTOP_ICE_SERVERS) : [],
-      ),
-      origins: desktopOriginsFromEnv(env, delegatedOrigins),
-    };
-  } catch {
-    return;
-  }
-}
 
-/** Destination policy is independent of whether a custom helper command is configured. */
-export function desktopOriginsFromEnv(env: NodeJS.ProcessEnv, delegatedOrigins: () => string[]): () => string[] {
-  const allowed = (env.SODA_DESKTOP_ORIGINS ?? "").split(",").map(s => s.trim()).filter(Boolean);
-  return () => [...allowed, ...delegatedOrigins()];
-}
+/** Public permission/data facade contract; implementation remains dynamically loaded. */
+export type DesktopProviderApi=Pick<DesktopProvider,keyof DesktopProvider>;
