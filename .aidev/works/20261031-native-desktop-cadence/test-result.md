@@ -7,3 +7,5 @@ pnpm build/typecheck成功。Linux portal生成59件成功。Linux native video�
 上限チェックをprivate copyだけ1fps緩めた負例は意図したVideoFailure not raised assertionで失敗→復元成功。rawはnegative-control.txt。元ソースは不変。初回の負例ハーネスfixture欠落は証拠に数えていない。
 
 macOSの実software rate変更/故障注入テストはCIへ。元上限・API非対応・VT失敗・source失効を成功と置き換えない。実機性能/OS許可は別確認。
+
+CIで従来の単独readyにnativeCadenceを出さない期待が失敗。単独UIの交渉表示を追加した新仕様へ期待を更新し、両端proofありの時だけtrue、一方欠落時はfieldなしを確認。変更後Relay277件成功（/tmp/soda-native-cadence-relay.log）。独立delta reviewは追加指摘なし。

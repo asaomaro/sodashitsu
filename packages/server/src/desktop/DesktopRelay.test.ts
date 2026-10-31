@@ -808,7 +808,8 @@ it.each([[true,true],[true,false],[false,true]])('requires both B capability and
  await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
  expect(f.startRequests[0]!.options.nativeCadence).toBe(capability?true:undefined);
  expect((f.provider as any).active.native.hooks.cadence).toBe(capability&&helper);
- expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('nativeCadence');
+ if(capability&&helper)expect(v.messages.find(m=>m.type==='ready')).toHaveProperty('nativeCadence',true);
+ else expect(v.messages.find(m=>m.type==='ready')).not.toHaveProperty('nativeCadence');
  v.send({type:'stop'});
 });
 
