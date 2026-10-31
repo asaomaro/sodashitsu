@@ -692,7 +692,7 @@ export class DesktopProvider {
             )
               throw new Error("Helper does not support requested image settings");
             if(options.virtualDisplay&&(ready.virtualDisplay!==true||s.secureDesktop||ready.lockScreenCover)){this.send(s,{type:"virtual_display_failure",code:"helper_incompatible"});throw Error("Helper did not create requested virtual monitor");}
-            if(options.sharedMonitors&&!ready.monitorLayout){this.send(s,{type:"shared_monitors_failure",code:"helper_incompatible"});this.stop(s);return;}
+            if(!s.secureDesktop&&options.sharedMonitors&&!ready.monitorLayout){this.send(s,{type:"shared_monitors_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(!s.secureDesktop&&options.monitorDevice&&(!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice))throw Error("Helper did not select requested monitor");
             if(ready.monitorLayout&&(ready.monitorLayout.bounds.width!==ready.width||ready.monitorLayout.bounds.height!==ready.height))throw Error("Monitor capture size mismatch");
             s.ready = true;
@@ -717,8 +717,8 @@ export class DesktopProvider {
             if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
-            if(options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
-            if(options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
+            if(!s.secureDesktop&&options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
+            if(!s.secureDesktop&&options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
             const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform&&!!s.process?.nativePcm);
@@ -851,6 +851,7 @@ export class DesktopProvider {
     this.write(s, {
       type: "configure",
       ...(cfg.nativePlatform?{nativePlatform:cfg.nativePlatform}:{}),
+      ...(options.sharedDesktop&&cfg.allowUnlock?{allowSharedUnlock:true}:{}),
       options:options.sharedDesktop ? sharedHelperOptions(options) : helperOptions,
       captureBackends: ["dxgi"],
       inputAckPipe: !options.sharedDesktop,

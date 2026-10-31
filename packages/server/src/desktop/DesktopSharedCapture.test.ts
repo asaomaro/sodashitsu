@@ -1,6 +1,8 @@
 import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
 import {createServer as createUnixServer} from "node:net";
-import {chmod} from "node:fs/promises";
+import {chmod,mkdtemp,readFile,writeFile,rm} from "node:fs/promises";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
 import { expect, it, vi } from "vitest";
@@ -416,4 +418,55 @@ it.skipIf(process.platform==="win32")("keeps the physical PCM owner and nonempty
   b.session.stdin.end();await new Promise<void>(resolve=>setImmediate(resolve));await lease.retire();expect(exited).toBe(false);expect(paths.pending).toBe(1);
   physicalClose();await expect.poll(()=>paths.pending).toBe(0);expect(exited).toBe(true);
  }finally{hold.mockRestore();physicalClose();await new Promise<void>(resolve=>server.close(()=>resolve()));await lease.retire();f.pool.dispose();}
+});
+
+const unlockConfiguration={type:"configure",allowSharedUnlock:true,allowInput:true,options:{width:320}};
+const lockedReady={...ready,backend:"windows-gdi",secureDesktop:true,resourceFences:true};
+it.each([true,false])("shares the locally permitted Windows lock source with one input owner: cover=%s",async cover=>{
+ const f=fixture(),a=f.join("locked",unlockConfiguration),b=f.join("locked",unlockConfiguration);
+ try{
+  expect(f.child.commands[0]).not.toHaveProperty("allowSharedUnlock");
+  f.child.send({...lockedReady,...(cover?{lockScreenCover:true}:{})});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({secureDesktop:true}));
+  expect(a.session.requestControl!(true)).toBe(true);a.send({type:"control",enabled:true});expect(b.session.requestControl!(true)).toBe(false);
+  b.send({type:cover?"dismiss_lock_screen":"sas"});expect(f.child.commands.some(c=>c.type==="dismiss_lock_screen"||c.type==="sas")).toBe(false);
+  a.send({type:cover?"dismiss_lock_screen":"sas",extra:"discarded"});expect(f.child.commands.at(-1)).toEqual({type:cover?"dismiss_lock_screen":"sas"});
+  a.send({type:cover?"sas":"dismiss_lock_screen"});expect(f.child.commands.filter(c=>c.type==="dismiss_lock_screen"||c.type==="sas")).toHaveLength(1);
+  a.send({type:"input",seq:7,input:{kind:"key",code:"KeyA",down:true}});
+  expect(f.child.commands.filter(c=>c.type==="input")).toHaveLength(cover?0:1);
+  if(!cover){f.child.send(frame(1));await vi.waitFor(()=>expect(b.messages.at(-1)?.type).toBe("frame"));}
+ }finally{f.pool.dispose();}
+});
+it.each(["permission","backend","nativeVideo","nativeAudio","microphone","cursor","files","richClipboard","allowClipboard","allowMedia","agentRegions","virtualDisplay","protectedDesktop","sharedProtected"])("rejects unsafe shared lock source proof: %s",async kind=>{
+ const configuration=kind==="permission"?{type:"configure",options:{width:320}}:unlockConfiguration,f=fixture(),a=f.join("locked",configuration);
+ try{
+  const value:any={...lockedReady,lockScreenCover:true};if(kind==="backend")value.backend="linux-portal";else if(kind!=="permission")value[kind]=kind==="protectedDesktop"?"elevated-default":true;
+  f.child.send(value);f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(a.messages).toEqual([]);
+ }finally{f.pool.dispose();}
+});
+it.each(["lock_screen_changed","session_unlocked"])("forwards %s to every locked viewer before retiring the source generation",async type=>{
+ const f=fixture(),a=f.join("locked",unlockConfiguration),b=f.join("locked",unlockConfiguration);
+ try{
+  f.child.send({...lockedReady,lockScreenCover:true});await vi.waitFor(()=>expect(b.messages).toHaveLength(1));
+  f.child.send({type});f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));
+  for(const member of[a,b]){expect(member.messages.map(m=>m.type)).toEqual(["ready",type]);expect(member.session.requestControl!(true)).toBe(false);}
+ }finally{f.pool.dispose();}
+});
+it.each(["worker_start_or_connection","source_transition"])("preserves bounded unlock diagnostic %s before ready",async code=>{
+ const f=fixture(),a=f.join("locked",unlockConfiguration),b=f.join("locked",unlockConfiguration);
+ try{f.child.send({type:"unlock_failure",code});await vi.waitFor(()=>expect(b.session.exitCode).toBe(0));for(const member of[a,b])expect(member.messages).toEqual([{type:"unlock_failure",code}]);}finally{f.pool.dispose();}
+});
+
+it.each([false,true])("maps Provider local unlock permission into shared admission without forwarding it: %s",async allowUnlock=>{
+ const root=await mkdtemp(join(tmpdir(),"soda-lock-provider-")),program=join(root,"fixture.mjs"),received=join(root,"configuration.json");
+ await writeFile(program,`import fs from 'node:fs';import readline from 'node:readline';const lines=readline.createInterface({input:process.stdin});lines.on('line',line=>{const m=JSON.parse(line);if(m.type==='configure'){fs.writeFileSync(process.argv[2],JSON.stringify(m));console.log(JSON.stringify(${JSON.stringify({...lockedReady,lockScreenCover:true})}));}});lines.on('close',()=>process.exit(0));`);
+ const web=createServer(),sockets=new WebSocketServer({server:web});await new Promise<void>(resolve=>web.listen(0,"127.0.0.1",resolve));
+ const origin=`http://127.0.0.1:${(web.address() as AddressInfo).port}`,messages:any[]=[];let closed=false;
+ sockets.on("connection",ws=>{ws.on("close",()=>{closed=true;});ws.on("message",raw=>{const m=JSON.parse(raw.toString());if(m.type==="provider")ws.send(JSON.stringify({type:"attached"}));else messages.push(m);});});
+ const provider=new DesktopProvider({command:[process.execPath,program,received],allowInput:true,allowUnlock,allowClipboard:true,allowMonitors:true,origins:()=>[origin]});
+ try{
+  await provider.start("generated-owner",{url:origin.replace("http","ws")+"/desktop-share",ticket:"a".repeat(43),options:{width:320,fps:10,quality:65,features:true,sharedDesktop:true,sharedClipboard:true,sharedCursor:true,cursor:true,sharedMonitors:true,monitors:true}});
+  if(allowUnlock){await vi.waitFor(()=>expect(messages.some(m=>m.type==="ready"&&m.secureDesktop&&m.lockScreenCover)).toBe(true));expect(closed).toBe(false);expect(messages.some(m=>m.type.endsWith("_failure"))).toBe(false);}
+  else{await vi.waitFor(()=>expect(closed).toBe(true));expect(messages.some(m=>m.type==="ready")).toBe(false);}
+  expect(JSON.parse(await readFile(received,"utf8"))).not.toHaveProperty("allowSharedUnlock");
+ }finally{provider.dispose();for(const ws of sockets.clients)ws.terminate();await new Promise<void>(resolve=>sockets.close(()=>resolve()));await new Promise<void>(resolve=>web.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
