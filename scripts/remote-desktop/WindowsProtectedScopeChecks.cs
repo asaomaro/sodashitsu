@@ -36,6 +36,8 @@ public static class SodaDesktopProtectedScopeChecks {
         SodaDesktopHost.VerifyProtectedBoundaries(()=>hostGuard.Current(hostFacts),()=>hostGuard.Capture(hostFacts),frameTicket=>hostGuard.Publish((SodaDesktopProtectedScope.Guard.Ticket)frameTicket,hostFacts),()=>hostFacts.DesktopEpoch++);
         hostFacts=Facts(hostScope);hostGuard=new SodaDesktopProtectedScope.Guard(hostScope);
         SodaDesktopHost.VerifyProtectedQueuedOutput(()=>hostGuard.Current(hostFacts),()=>hostGuard.Capture(hostFacts),frameTicket=>hostGuard.Publish((SodaDesktopProtectedScope.Guard.Ticket)frameTicket,hostFacts),()=>hostFacts.DesktopEpoch++);
+        hostGuard=new SodaDesktopProtectedScope.Guard(hostScope);hostFacts=Facts(hostScope);
+        SodaDesktopHost.VerifyProtectedNativeOutput(()=>hostGuard.Current(hostFacts),()=>hostGuard.Capture(hostFacts),frameTicket=>hostGuard.Publish((SodaDesktopProtectedScope.Guard.Ticket)frameTicket,hostFacts),()=>hostFacts.DesktopEpoch++);
         var cloud=new SodaDesktopProtectedScope(hostScope.Role,hostScope.Purpose,"S-1-12-1-1-2-3-4",hostScope.Logon,hostScope.Session,hostScope.Generation,hostScope.Nonce,hostScope.BrokerPid,hostScope.BrokerStarted,hostScope.WorkerPid,hostScope.WorkerStarted);
         Need(cloud.Same(SodaDesktopProtectedScope.Decode(cloud.Encode()))&&cloud.Failure(Facts(cloud))==null,"Cloud owner SID rejected");
         foreach(var mode in new[]{SodaDesktopProtectedScope.Mode.LockedWinlogon,SodaDesktopProtectedScope.Mode.ElevatedDefault,SodaDesktopProtectedScope.Mode.ElevatedUac}){

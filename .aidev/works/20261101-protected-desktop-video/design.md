@@ -1,0 +1,11 @@
+# 保護画面のH.264/WSS
+
+単独のelevated-default/elevated-uacだけを対象にする。local allowElevated/allowNativeVideo、client feature bit9、明示したprotected source、auth worker内のProtectedCapture/Publish/Guardと固定Role、readyのprotectedVideo/nativeVideoの積で有効にする。protectedVideoは単なるclient hintでは許可されない。signin/lock cover/shared/追加codec/UDP/adaptive/音声/microphoneはこの段階で有効にしない。client/B双方で禁止media設定を拒否する。
+
+C#は元のstartedをCaptureScope前に採り、encode前のticketを持つ。base64/JSON作成とstdout gate待機後にAllowedDesktop/PublishScope/元1000ms予算を確認し、検査後にだけseq/window.Sentをcommitする。scope失効ならworkerを停止、予算超過ならvideoだけdisposeし画像へ戻す。Scope ticketは公開しない。既存のprivate worker PID/start/nonce/logon/session/epoch検証を維持する。
+
+通常のGPU動画と同じH.264 encoderを遅延作成し、secure sourceはGDI入力を使う。NativeDatagrams/Adaptive/Codecsはprivate helperでも明示的に閉じる。準備・有効化だけではcodec probe、encoder、audio等を開始しない。ユーザーが動画を要求してからencoderを作る。新しい実行ファイルは追加しない。
+
+実SYSTEM worker/GDI/MF/実UAC・ドライバーの組合せは実機確認対象。生成試験で実画面を取得したり、OS入力やservice登録を行わない。更新した保護サービスのhelper proofが必要。
+
+permission/protocol/sourceとcommitはtaskcheck対象、全差分crossと修正再点検も実施。

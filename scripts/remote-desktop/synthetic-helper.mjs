@@ -97,7 +97,7 @@ function run() {
   const lifecycleAt=process.argv.indexOf("--lifecycle-ledger"),lifecycle=lifecycleAt>=0?process.argv[lifecycleAt+1]:undefined;
   if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:"spawn",pid:process.pid})+"\n");
   let configureDelayed=false,regions=[];
-  let options,monitorLayout,topologyStopped=false,
+  let protectedVideo=false,options,monitorLayout,topologyStopped=false,
     inputAckPipe = false,
     cursorEnabled=false,cursorSeq=0,cursorShapeId=1,cursorSentShape=0,cursorX=.5,cursorY=.5,cursorVisible=true,cursorRed=false,lastCursor=-1000,
     outputBlocked = false,
@@ -236,6 +236,7 @@ function run() {
         }
         nativeCodecs=m.nativeCodecs===true&&process.argv.includes("--native-codecs")&&!secure;
         nativeAdaptive=m.nativeAdaptive===true&&process.argv.includes("--native-adaptive")&&!secure;
+        protectedVideo=!!protectedMode&&m.allowProtectedVideo===true&&m.allowNativeVideo===true&&m.options.protectedVideo===true&&m.options.features===true&&!process.argv.includes("--no-protected-video");
         options = m.options;if(nativeAdaptive&&nativeFixture)options={...options,syntheticHeight:Math.round(nativeFixture.height*options.width/nativeFixture.width)};nativeCadence=m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure;
         const virtualSource=options.virtualDisplay===true&&m.allowVirtualDisplay===true&&process.argv.includes("--virtual-display")&&!secure;
         if(process.argv.includes("--headless")&&!virtualSource)throw Error("Generated headless source requires an owned virtual monitor");
@@ -270,7 +271,7 @@ function run() {
           ...(nativeFixture&&nativeAdaptive?{nativeAdaptive:true}:{}),
           ...(nativeFixture&&m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure?{nativeCadence:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),
-          ...(nativeFixture && m.allowNativeVideo===true && !secure ? {nativeVideo:true,...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
+          ...(nativeFixture && m.allowNativeVideo===true && (!secure||protectedVideo) ? {nativeVideo:true,...(protectedVideo?{protectedVideo:true}:{}),...(m.nativeVideoWindow===3&&!process.argv.includes("--no-native-pipeline")?{nativeVideoWindow:3}:{})}:{}),
           ...(nativeFixture&&m.deferNativeSnapshots===true&&process.argv.includes("--native-input-deferral")&&!secure?{deferNativeSnapshots:true}:{}),
           ...(!process.argv.includes("--no-extended-input") && m.options.extendedInput === true ? {extendedInput:true} : {}),
           ...(!process.argv.includes("--no-ime-keys") && (m.options.imeKeys === true || process.argv.includes("--unconditional-ime-keys")) ? {imeKeys:true} : {}),
@@ -303,7 +304,7 @@ function run() {
       else if(m.type==="native_video") {
         if(lifecycle)appendFileSync(lifecycle,JSON.stringify({type:m.enabled?"native_start":"native_stop",id:m.id})+"\n");
         stopAudio();
-        if(m.enabled&&nativeFixture&&!secure){const requested=nativeCodecs?(m.codec??"h264"):"h264",codec=codecFixtures[requested]&&!process.argv.includes("--codec-encoder-failure")?requested:"h264";native={codec,codecFallback:codec!==requested?"unavailable":undefined,generation:1,profile:0,barrier:undefined,lastTimestamp:-1,id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};}
+        if(m.enabled&&nativeFixture&&(!secure||protectedVideo)){const requested=nativeCodecs?(m.codec??"h264"):"h264",codec=codecFixtures[requested]&&!process.argv.includes("--codec-encoder-failure")?requested:"h264";native={codec,codecFallback:codec!==requested?"unavailable":undefined,generation:1,profile:0,barrier:undefined,lastTimestamp:-1,id:m.id,started:performance.now(),seq:0,pending:[],next:0,index:0,fps:m.fps,maxFps:m.fps,maxBitrate:m.bitrateKbps,window:m.window===3?3:1};}
         else native=undefined;
       }
       else if(m.type==="native_profile"&&native&&m.id===native.id){

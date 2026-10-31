@@ -1847,3 +1847,17 @@ it.each(["local-permission","folder","features","file-ticket","files","protected
  const f=await protectedFixture({mode:"elevated-default",allowed:true}),cfg=(f.provider as any).config;f.provider.configure({...cfg,allowProtectedFiles:missing!=="local-permission",fileRoot:missing==="folder"?undefined:cfg.fileRoot});
  await expect(f.provider.start("direct",{url:f.endpoint,ticket:"x".repeat(43),...(missing==="file-ticket"?{}:{fileTicket:"y".repeat(43)}),options:DesktopOptions.parse({...protectedStart.options,files:true,protectedFiles:true,...(missing==="features"?{features:undefined}:{}),...(missing==="files"?{files:undefined}:{}),...(missing==="protected"?{elevatedDesktop:undefined}:{})})})).rejects.toThrow("管理者画面中");expect((f.provider as any).active).toBeUndefined();
 });
+it.each([true,false])("negotiates protected video only with explicit client feature=%s using real Provider caps",async feature=>{
+ const f=await protectedFixture({mode:"elevated-default",allowed:true});expect(f.provider.capabilities()).toMatchObject({protectedVideo:true,nativeCadence:true});
+ const protocols=[DESKTOP_PROTECTED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,...(feature?[desktopFeaturesProtocol(["protectedVideo"])]:[])],v=await f.viewer(protocols);v.send({...protectedStart,options:{...protectedStart.options,width:640}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ const options=f.startRequests[0]!.options,ready=v.messages.find(m=>m.type==="ready");if(!feature){expect(options).not.toHaveProperty("protectedVideo");expect(ready).not.toHaveProperty("nativeVideo");return;}
+ expect(options).toMatchObject({protectedVideo:true,nativeVideo:true,elevatedDesktop:true,nativeVideoWindow:3});for(const name of ["nativeCadence","nativeAdaptive","nativeCodecs","nativeDatagrams","nativeAudio"])expect(options).not.toHaveProperty(name);expect(ready).toMatchObject({secureDesktop:true,protectedDesktop:"elevated-default",protectedVideo:true,nativeVideo:true});
+ const protectedShare=(f.provider as any).active,nativeCalls=vi.spyOn(protectedShare.native,"fromViewer");
+ for(const denied of [{audio:true},{udp:true},{codec:"hevc"}]){nativeCalls.mockClear();protectedShare.ws.emit("message",Buffer.from(JSON.stringify({type:"media",enabled:true,settings:{transport:"native",audio:false,...denied}})),false);expect(nativeCalls).not.toHaveBeenCalled();}
+ nativeCalls.mockRestore();
+ v.send({type:"media",enabled:true,settings:{transport:"native",audio:false,adaptive:false,maxBitrateKbps:2500}});await expect.poll(()=>v.messages.some(m=>m.type==="media_stream"&&m.mime==="video/h264")).toBe(true);await writeFile(f.endedMarker,"generated source change");await expect.poll(()=>v.ws.readyState).toBe(WebSocket.CLOSED);
+});
+it("does not advertise or start protected video after the local native video ceiling is revoked",async()=>{
+ const f=await protectedFixture({mode:"elevated-uac",allowed:true});f.provider.configure({...((f.provider as any).config),allowNativeVideo:false});expect(f.provider.capabilities().protectedVideo).toBe(false);
+ const v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,desktopFeaturesProtocol(["protectedVideo"])]);v.send(protectedStart);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);expect(f.startRequests[0]!.options).not.toHaveProperty("protectedVideo");expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeVideo");
+});

@@ -20,3 +20,7 @@ it('keeps file authority out of privileged ready and parses a bounded Node-side 
  const {DesktopProtectedFilesReady}=await import('./desktopProtected.js');expect(DesktopProtectedFilesReady.parse({type:'protected_files_ready',files:true,folders:true})).toMatchObject({files:true});
  expect(DesktopProtectedFilesReady.safeParse({type:'protected_files_ready',files:true,fileRoot:'/private'}).success).toBe(false);expect(DesktopReady.safeParse({...base,secureDesktop:true,protectedDesktop:'elevated-default',files:true}).success).toBe(false);
 });
+it.each(['elevated-default','elevated-uac'] as const)('requires a separate protected native video proof for %s',protectedDesktop=>{
+ const ready={...base,secureDesktop:true,protectedDesktop,protectedVideo:true,nativeVideo:true,nativeVideoWindow:3};expect(DesktopReady.safeParse(ready).success).toBe(true);
+ for(const extra of [{protectedDesktop:undefined},{nativeVideo:undefined},{secureDesktop:false},{nativeAudio:true},{nativeDatagrams:true},{nativeCodecs:true},{nativeAdaptive:true},{nativeCadence:true},{microphone:true},{allowMedia:true},{allowClipboard:true}])expect(DesktopReady.safeParse({...ready,...extra}).success).toBe(false);
+});
