@@ -1,7 +1,8 @@
 import {spawn} from 'node:child_process';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {tmpdir} from 'node:os';
+import {EventEmitter} from 'node:events';
+import {PassThrough} from 'node:stream';
 import {expect,it,vi} from 'vitest';
 import {DesktopNativeMicrophoneHost} from './DesktopNativeMicrophoneHost.js';
 import {DesktopNativePcmPaths,desktopNativePcmRoot} from './DesktopNativePcmPath.js';
@@ -25,4 +26,17 @@ it.skipIf(process.platform==='win32')('rechecks cancellation after private path 
  const children:ReturnType<typeof spawn>[]=[];const launch=((...args:Parameters<typeof spawn>)=>{const child=spawn(...args);children.push(child);return child;}) as typeof spawn;
  const host=new DesktopNativeMicrophoneHost(paths,launch,()=>[process.execPath,program]);
  try{await expect(host.open('linux-portal','virtual','SodaDesktopMicrophone-'+'a'.repeat(32),()=>active)).rejects.toThrow();expect(children[0]!.exitCode).toBe(0);expect(paths.pending).toBe(0);}finally{await host.close();await rm(dir,{recursive:true,force:true});}
+});
+
+it('retains the physical slot when termination cannot be confirmed',async()=>{
+ vi.useFakeTimers();
+ const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),exitCode:null,signalCode:null,kill:vi.fn(()=>false)});
+ const paths=new DesktopNativePcmPaths();vi.spyOn(paths,'create').mockResolvedValue({path:'/generated/pcm',verify:async()=>{},retire:async()=>{}} as any);
+ const launch=vi.fn(()=>child),host=new DesktopNativeMicrophoneHost(paths,launch as any,()=>['generated']);
+ try{
+  const lease=await host.open('linux-portal','virtual','SodaDesktopMicrophone-'+'a'.repeat(32),()=>true);
+  const stopped=expect(lease.close()).rejects.toThrow('retirement not confirmed');await vi.advanceTimersByTimeAsync(5001);await stopped;
+  expect(child.kill).toHaveBeenCalledTimes(2);
+  await expect(host.open('linux-portal','virtual','SodaDesktopMicrophone-'+'b'.repeat(32),()=>true)).rejects.toThrow();expect(launch).toHaveBeenCalledTimes(1);
+ }finally{child.emit('close');vi.useRealTimers();}
 });

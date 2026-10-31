@@ -419,9 +419,10 @@ it.skipIf(process.platform==="win32")("keeps the physical PCM owner and nonempty
 });
 
 it("keeps exclusive native microphone ownership without forwarding inline helper commands",async()=>{
- const f=fixture(),a=f.join(),b=f.join();
+ const f=fixture(),first=f.join(),a=f.join(),b=f.join();
  try{
   f.child.send({...ready,microphone:true});await vi.waitFor(()=>expect(b.messages.length).toBe(1));
+  first.session.stdin.end();await vi.waitFor(()=>expect(first.session.exitCode).toBe(0));expect(f.child.exitCode).toBeNull();
   expect(a.session.requestMicrophone!("native-a",true,false)).toBe(true);
   expect(b.session.requestMicrophone!("native-b",true,false)).toBe(false);
   a.send({type:"native_microphone",id:"native-a",enabled:true,pipeName:"forged"});
