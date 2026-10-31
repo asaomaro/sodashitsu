@@ -1306,7 +1306,7 @@ onBeforeUnmount(() => {
       </nav>
       <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
         <summary>動画・音声</summary>
-        <label v-if="!sharedScreen&&nativeCadence"><input v-model="adaptive" aria-label="動画のFPS・帯域を自動調整" type="checkbox" />動画のFPS・帯域を自動調整</label>
+        <label v-if="!sharedScreen&&nativeCadence"><input v-model="adaptive" :aria-label="nativeAdaptive?'動画のFPS・帯域・解像度を自動調整':'動画のFPS・帯域を自動調整'" type="checkbox" />動画のFPS・帯域<template v-if="nativeAdaptive">・解像度</template>を自動調整</label>
         <label v-if="sharedScreen&&nativeCadence"><input v-model="adaptive" aria-label="共有動画のFPS・帯域を自動調整" type="checkbox" />動画のFPS・帯域<template v-if="nativeAdaptive">・解像度</template>を自動調整</label>
         <p v-if="sharedScreen&&nativeCadence" data-shared-rate>全viewerの希望を満たすFPS・帯域<template v-if="nativeAdaptive">・解像度</template>で圧縮します。1窓だけ遅い場合は、その窓だけ次のキーフレームから復帰します。画像の自動調整は行いません。<template v-if="nativeAdaptive">固定設定の窓がある間は元の動画解像度を維持します。</template><template v-else>この接続では動画の解像度変更を行いません。</template></p>
         <p v-if="mediaTransport==='native'">{{platformBackend?"接続先のGPUまたはCPU":"接続先のGPU"}}で{{nativeCodecs?"選択した形式":"H.264"}}へ圧縮します。{{ nativeAudio ? "システム音声も要求できます。" : "この接続では音声は含みません。" }}利用できない場合は画像配信へ戻ります。</p>

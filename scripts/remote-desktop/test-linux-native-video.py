@@ -349,6 +349,65 @@ class Flow(unittest.TestCase):
                                  "fps": 30, "bitrateKbps": 2500, **fields})
 
 
+class Profiles(unittest.TestCase):
+    setUp=Flow.setUp
+    start=Flow.start
+    encode=Flow.encode
+    def begin_profile(self,ack=True):
+        self.flow.adaptive=True;identifier=self.start();self.encode()
+        if ack:self.flow.acknowledge({"id":identifier,"seq":1})
+        self.flow.profile({"type":"native_profile","id":identifier,"generation":2,"width":320,"height":180,"fps":15,"bitrateKbps":1200})
+        return identifier
+    def prepare(self):
+        identifier=self.begin_profile();reservation=self.flow.reserve();self.assertIsNotNone(reservation)
+        self.flow.complete(reservation,key,320,180,int(self.now*1000));return identifier
+    def resume_request(self,identifier,**extra):return {"type":"native_profile_resume","id":identifier,"generation":2,"baseSeq":1,**extra}
+    def test_profile_holds_key_until_matching_format_ack_and_preserves_sequence(self):
+        identifier=self.prepare();profile=self.flow.current["profile"];held=profile["held"]
+        self.assertEqual(self.flow.current["seq"],1);self.assertEqual(profile["stage"],"waiting");self.assertIsNone(self.flow.reserve())
+        self.assertEqual(self.output[-1][0],{"type":"native_profile_applied","id":identifier,"generation":2,"baseSeq":1,"width":320,"height":180,"codec":fixture["packets"][0]["codec"]})
+        with self.assertRaises(video.VideoFailure):self.flow.resume(self.resume_request(identifier,baseSeq=2))
+        self.now+=100;self.flow.resume(self.resume_request(identifier));frame=self.output[-1][0]
+        self.assertEqual((frame["type"],frame["seq"],frame["generation"],frame["width"],frame["height"]),("native_frame",2,2,320,180));self.assertEqual(held,bytes(len(held)))
+        self.assertEqual((self.flow.current["fps"],self.flow.current["kbps"]),(15,1200));self.assertIsNone(self.flow.current["profile"])
+    def test_profile_waits_for_draw_ack_before_a_new_encoding_job(self):
+        identifier=self.begin_profile(ack=False);self.assertIsNone(self.flow.reserve())
+        self.flow.acknowledge({"id":identifier,"seq":1});self.assertIsNotNone(self.flow.reserve())
+    def test_profile_timeout_source_loss_and_cancel_wipe_held_key_without_publication(self):
+        for reason in ("timeout","source","cancel"):
+            self.setUp();identifier=self.prepare();held=self.flow.current["profile"]["held"];frames=sum(value["type"]=="native_frame" for value,_ in self.output)
+            if reason=="timeout":self.now+=1001;self.flow.resume(self.resume_request(identifier))
+            elif reason=="source":self.allowed=False;self.flow.tick()
+            else:self.flow.stop()
+            self.assertIsNone(self.flow.current);self.assertEqual(held,bytes(len(held)));self.assertEqual(sum(value["type"]=="native_frame" for value,_ in self.output),frames)
+    def test_profile_rejects_unnegotiated_upscale_aspect_and_rate_ceiling(self):
+        identifier=self.start();self.encode();self.flow.acknowledge({"id":identifier,"seq":1})
+        command={"type":"native_profile","id":identifier,"generation":2,"width":320,"height":180,"fps":15,"bitrateKbps":1200}
+        with self.assertRaises(video.VideoFailure):self.flow.profile(command)
+        self.flow.adaptive=True
+        for fields in ({"generation":3},{"width":1280},{"height":170},{"fps":31},{"bitrateKbps":2501}):
+            with self.assertRaises(video.VideoFailure):self.flow.profile({**command,**fields})
+    def test_resume_publication_cannot_extend_the_original_profile_deadline(self):
+        identifier=self.begin_profile();self.now=2500;reservation=self.flow.reserve();self.flow.complete(reservation,key,320,180,int(self.now*1000))
+        self.now=3020;queries=[0]
+        def active():
+            queries[0]+=1
+            if queries[0]==2:self.now=3035
+        self.query=active;self.flow.resume(self.resume_request(identifier))
+        self.assertIsNone(self.flow.current);self.assertEqual(sum(value["type"]=="native_frame" for value,_ in self.output),1)
+    def test_same_stream_reentrant_profile_is_not_overwritten_after_scope_query(self):
+        self.flow.adaptive=True;identifier=self.start();self.encode();self.flow.acknowledge({"id":identifier,"seq":1})
+        command={"type":"native_profile","id":identifier,"generation":2,"width":320,"height":180,"fps":15,"bitrateKbps":1200}
+        def reenter():self.query=None;self.flow.profile({**command,"width":160,"height":90})
+        self.query=reenter;self.flow.profile(command)
+        self.assertEqual((self.flow.current["profile"]["width"],self.flow.current["profile"]["height"]),(160,90))
+    def test_profile_source_query_cannot_apply_or_resume_a_retired_stream(self):
+        identifier=self.prepare();held=self.flow.current["profile"]["held"]
+        def replace():self.query=None;self.flow.stop();self.start()
+        self.query=replace;self.flow.resume(self.resume_request(identifier))
+        self.assertIsNotNone(self.flow.current);self.assertNotEqual(self.flow.current["id"],identifier);self.assertEqual(self.flow.current["generation"],1);self.assertEqual(held,bytes(len(held)))
+
+
 class Codecs(unittest.TestCase):
     def test_actual_generated_access_units_derive_codec_key_and_preserve_bytes(self):
         for family,name in (("h264","h264-generated.json"),("h264-444","h264-444-software-generated.json"),("hevc","hevc-hardware-generated.json"),("av1","av1-software-generated.json")):
@@ -461,6 +520,61 @@ class GeneratedCodec(unittest.TestCase):
             self.assertIs(encoder.pipeline,pipeline);self.assertEqual(encoder.encoder.get_property("bitrate"),1200)
             self.assertEqual(video.access_unit(first)[0],video.access_unit(second)[0]);self.assertTrue(video.access_unit(second)[1]);self.assertEqual(encoder.fps,10)
         finally:encoder.close()
+
+    def test_real_worker_resizes_generated_pixels_after_drain_and_format_resume(self,family="h264",factory="x264enc"):
+        try:
+            import gi
+            gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
+            from gi.repository import Gst,GstVideo
+        except (ImportError,ValueError):self.skipTest("GStreamer video GI unavailable")
+        Gst.init(None)
+        if not all(Gst.ElementFactory.find(name) for name in ("x264enc","h264parse")):self.skipTest("Generated x264 dependencies unavailable")
+        original=video.GstH264Encoder;encoders=[];closed=[];events={"native_frame":threading.Event(),"native_profile_applied":threading.Event()};output=[];now=[0];gate=threading.RLock()
+        class TrackingEncoder(original):
+            def __init__(self,*args,**kwargs):
+                if encoders and encoders[-1].pipeline is not None:raise AssertionError("Second encoder before retirement")
+                kwargs["candidates"]=[factory];super().__init__(*args,**kwargs);encoders.append(self)
+            def close(self):
+                pipeline=self.pipeline;super().close()
+                if pipeline is not None:closed.append(pipeline)
+        def emit(value,valid):
+            output.append(value)
+            if value["type"] in events:events[value["type"]].set()
+        flow=video.NativeVideoFlow(lambda:True,lambda:now[0],emit,adaptive=True,codecs=True);identifier=str(uuid.uuid4());flow.start({"type":"native_video","enabled":True,"id":identifier,"fps":30,"bitrateKbps":2500,"codec":family})
+        with patch.object(video,"GstH264Encoder",TrackingEncoder):
+            worker=video.H264Worker(Gst,GstVideo,flow,gate)
+            try:
+                with gate:first=flow.reserve()
+                raw=bytearray([0,0,255]*(128*72));worker.submit(first,raw,128,72);self.assertTrue(events["native_frame"].wait(2),output);self.assertEqual(raw,bytes(len(raw)))
+                with gate:
+                    now[0]=34;flow.acknowledge({"id":identifier,"seq":1});flow.profile({"type":"native_profile","id":identifier,"generation":2,"width":64,"height":36,"fps":15,"bitrateKbps":1200});second=flow.reserve()
+                worker.submit(second,bytearray([0,0,255]*(128*72)),128,72);self.assertTrue(events["native_profile_applied"].wait(2),output)
+                self.assertEqual(len(encoders),2);self.assertEqual(len(closed),1);self.assertEqual(closed[0].get_state(Gst.SECOND)[1],Gst.State.NULL);self.assertEqual(len([value for value in output if value["type"]=="native_frame"]),1)
+                with gate:flow.resume({"type":"native_profile_resume","id":identifier,"generation":2,"baseSeq":1})
+                last=output[-1];self.assertEqual((last["type"],last["seq"],last["generation"],last["width"],last["height"]),("native_frame",2,2,64,36))
+                parser_name="h265parse" if family=="hevc" else "av1parse" if family=="av1" else "h264parse"
+                parser=Gst.parse_launch(f"appsrc name=input format=time is-live=true ! {parser_name} ! appsink name=output sync=false")
+                try:
+                    source=parser.get_by_name("input");source.set_property("caps",Gst.Caps.from_string("video/x-av1,stream-format=obu-stream,alignment=tu" if family=="av1" else "video/x-h265,stream-format=byte-stream,alignment=au" if family=="hevc" else "video/x-h264,stream-format=byte-stream,alignment=au"));parser.set_state(Gst.State.PLAYING)
+                    data=base64.b64decode(last["data"]);buffer=Gst.Buffer.new_allocate(None,len(data),None);buffer.fill(0,data);buffer.pts=0;buffer.duration=Gst.SECOND//15;source.emit("push-buffer",buffer)
+                    sample=parser.get_by_name("output").emit("try-pull-sample",Gst.SECOND);self.assertIsNotNone(sample);caps=sample.get_caps().get_structure(0);self.assertEqual((caps.get_value("width"),caps.get_value("height")),(64,36))
+                finally:video.retire_pipeline(Gst,parser)
+            finally:
+                with gate:flow.stop(False)
+                worker.stop();self.assertTrue(worker.closed.wait(2))
+
+    def test_additional_codec_profiles_use_real_serial_encoder_replacement(self):
+        try:
+            import gi
+            gi.require_version("Gst","1.0")
+            from gi.repository import Gst
+        except (ImportError,ValueError):self.skipTest("GStreamer GI unavailable")
+        Gst.init(None);tested=[]
+        for family,factory in (("h264-444","x264enc"),("hevc","x265enc"),("av1","av1enc")):
+            if family not in video.GstH264Encoder.codecs(Gst):continue
+            with self.subTest(family=family):self.test_real_worker_resizes_generated_pixels_after_drain_and_format_resume(family,factory);tested.append(family)
+        if not tested:self.skipTest("Additional generated software codecs unavailable")
+        print("Generated profile codecs:",",".join(tested))
 
     def test_additional_software_codecs_encode_only_generated_pixels(self):
         try:

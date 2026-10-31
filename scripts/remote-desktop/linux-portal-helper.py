@@ -635,6 +635,7 @@ class PortalHelper:
         self.scope=self.scope_factory()
         self.Gst.init(None)
         self.native_available=message.get("allowNativeVideo") is True and self.video is not None and _native_video.GstH264Encoder.available(self.Gst)
+        self.native.adaptive=self.native_available and message.get("nativeAdaptive") is True
         self.native.codecs=self.native_available and message.get("nativeCodecs") is True
         self.native.cadence=self.native_available and message.get("nativeCadence") is True
         if self.native_available and message.get("allowSystemAudio") is True and "--allow-system-audio" in sys.argv:
@@ -710,6 +711,8 @@ class PortalHelper:
         try:
             stream=self.native.current
             if self.dead or stream is None or self.native_raw is not None or self.native_worker is None or self.native_worker.stopped.is_set() or stream["encoding"] is not None or len(stream["pending"])>=stream["window"] or time.monotonic()*1000<stream["next"]:return self.Gst.PadProbeReturn.OK
+            profile=stream["profile"]
+            if profile and (profile["stage"]!="draining" or stream["pending"]):return self.Gst.PadProbeReturn.OK
             captured=time.monotonic()*1000;buffer=probe.get_buffer();info=self.video.VideoInfo.new_from_caps(pad.get_current_caps())
             if info.finfo.name!="BGR" or buffer.pts==self.Gst.CLOCK_TIME_NONE:raise _native_video.VideoFailure("raw_format")
             meta=self.video.buffer_get_video_meta(buffer)
@@ -783,6 +786,8 @@ class PortalHelper:
             elif kind=="native_video_ack":self.native.acknowledge(value)
             elif kind=="native_keyframe":self.native.keyframe(value)
             elif kind in ("native_rate","native_bitrate"):self.native.rate(value)
+            elif kind=="native_profile":self.native.profile(value)
+            elif kind=="native_profile_resume":self.native.resume(value)
             else:raise _native_video.VideoFailure("unsupported_control")
         except Exception:
             self.native.stop()
@@ -902,7 +907,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {}),**({"nativeCodecs":True,"nativeCodecCandidates":_native_video.GstH264Encoder.codecs(self.Gst)} if self.native.codecs else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {}),**({"nativeAdaptive":True} if self.native.adaptive else {}),**({"nativeCodecs":True,"nativeCodecCandidates":_native_video.GstH264Encoder.codecs(self.Gst)} if self.native.codecs else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
