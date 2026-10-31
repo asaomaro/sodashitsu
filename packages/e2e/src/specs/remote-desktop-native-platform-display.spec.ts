@@ -132,7 +132,7 @@ test("macos-sck selects the maximum supported display mode regardless of window 
     await expect.poll(async () => (await oneToOne()).pixelWidth).toBe(1920);
     await expect(view.locator("[data-desktop-display]")).not.toBeVisible();
     await expect.poll(()=>view.locator("[data-desktop-screen]").boundingBox()).toEqual({x:0,y:0,width:1600,height:900});
-    await page.screenshot({path:"/workspaces/sodashitsu-check-logs/20261018-maximize/desktop-content-maximized.png"});
+    await page.screenshot({path:test.info().outputPath("macos-sck-desktop-content-maximized.png")});
     await expect(canvas).toHaveAttribute("data-rendered-frames", /^[1-9][0-9]*$/);
     const enlarged = await oneToOne();
     expect(enlarged.cssWidth).toBe(enlarged.pixelWidth);
