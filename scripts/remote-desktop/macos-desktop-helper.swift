@@ -855,6 +855,25 @@ func generatedSourceAudioTests() throws -> Int {
     try second.command(["type":"native_video","id":id,"enabled":true,"fps":10,"bitrateKbps":2500,"window":1])
     try check(!changed.audioLive(id),"reentrant permission retirement")
     second.stop(notify:false)
+    do {
+        let state=GeneratedAudioState(),pipe=GeneratedAudioPipe(GeneratedAudioState()),producer=GeneratedAudioProducer(state)
+        let live=DesktopSource(facts:{state.bump(Thread.isMainThread ? "mainFacts":"foreignFacts");return Thread.isMainThread})
+        live.ready=true;live.audioCeiling=true;live.videoCeiling=true
+        let stream=NativeVideoController(gate:live.gate,active:{true},emit:{_,_ in});live.nativeVideo=stream
+        try stream.command(["type":"native_video","id":id,"enabled":true,"fps":10,"bitrateKbps":2500,"window":1])
+        producer.stopping={done in DispatchQueue.main.async {state.bump("mainStopCompletion");done(true)}}
+        let actor=NativeSystemAudioActor(id:id,active:{[weak live] in live?.audioLive(id)==true},pipe:{pipe},producer:{producer},fatal:{state.bump("fatal")})
+        live.systemAudio=actor
+        func pump(_ ready:()->Bool) {
+            let until=Date().addingTimeInterval(3)
+            while !ready() && Date()<until {_=RunLoop.current.run(mode:.default,before:Date().addingTimeInterval(0.005))}
+        }
+        pump {pipe.state.value("hello")==1}
+        try check(pipe.state.value("hello")==1 && state.value("mainFacts")>0 && state.value("foreignFacts")==0,"IO admission observes main-thread source authority")
+        stream.stop(notify:false);actor.stop()
+        pump {actor.retired}
+        try check(actor.retired && !actor.retirementFailed && state.value("mainStopCompletion")==1 && pipe.state.value("pipeClose")==1 && state.value("fatal")==0,"main-queue completion retires background actor and pipe")
+    }
     return count
 }
 
