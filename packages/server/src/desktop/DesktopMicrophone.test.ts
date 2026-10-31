@@ -5,6 +5,9 @@ import { DESKTOP_MICROPHONE_HELLO } from "@sodashitsu/protocol";
 import {join} from "node:path";
 import {desktopNativePcmRoot} from "./DesktopNativePcmPath.js";
 import { DesktopMicrophone } from "./DesktopMicrophone.js";
+// Legacy synthetic pipes use tmpdir; Darwin's runner temp path exceeds sockaddr_un.
+// Native output uses its own bounded private path, tested separately below.
+vi.mock("node:os",async importOriginal=>{const actual=await importOriginal<typeof import("node:os")>();return {...actual,tmpdir:()=>actual.platform()==="darwin"?"/private/tmp":actual.tmpdir()};});
 const id="22222222-2222-4222-8222-222222222222";
 function tone(){const pcm=Buffer.alloc(1920);for(let i=0;i<960;i++)pcm.writeInt16LE(Math.round(Math.sin(i*Math.PI*2*440/48000)*12000),i*2);return pcm;}
 it.skipIf(process.platform==="win32")("delivers fixed generated PCM only after the private handshake, ACKs it and closes on ownership loss",async()=>{
