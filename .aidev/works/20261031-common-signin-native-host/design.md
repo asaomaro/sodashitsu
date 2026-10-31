@@ -1,0 +1,1 @@
+DesktopSigninNative.exeに固定service/worker codeをcompileし、noargs SCMか厳密context/broker/worker引数だけをRouterが振り分ける。各既存MainのSYSTEM/親PID+creation/nonce/scope/job/held imageの検証を維持。manifest固定集合・SCM quoted image・worker/Node絶対imageを共通化し、Builderは1本だけにする。生成検証はcompileとmetadata inspectionだけで、service/worker Mainを実行しない。

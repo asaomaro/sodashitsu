@@ -22,7 +22,10 @@ jobs:
         run: scripts/remote-desktop/validate-signin-scope.ps1
       - name: Dedicated signin worker compilation and generated data (no worker launch)
         shell: powershell
-        run: scripts/remote-desktop/build-signin-worker.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
+        run: scripts/remote-desktop/build-signin-host.ps1 -ValidateOnly -OwnerSid S-1-5-21-1-2-3-1001
+      - name: Compile and inspect single privileged image with generated negative controls
+        shell: powershell
+        run: scripts/remote-desktop/validate-signin-native.ps1 -NegativeControls
       - name: Generated signin worker input, topology, and negative controls (no OS input)
         shell: powershell
         run: scripts/remote-desktop/validate-signin-worker.ps1 -NegativeControls

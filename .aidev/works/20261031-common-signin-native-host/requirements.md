@@ -1,0 +1,1 @@
+統合可能な内部exeを統合し、個別導入を減らす。専用signin serviceと対象session workerは異なるOS processのまま、ProgramFilesに固定した同一native imageを使用する。通常user用cache/DLLをSYSTEMへ読み込まない。

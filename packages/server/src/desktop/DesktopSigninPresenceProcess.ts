@@ -34,7 +34,7 @@ export class DesktopSigninPresenceProcess {
   if(deps.platform!=="win32"||!this.owned())throw failure();
   options.signal.addEventListener("abort",this.#abort,{once:true});
   try{
-   const command=fileURLToPath(new URL("../../../../DesktopSigninWorker.exe",import.meta.url));
+   const command=fileURLToPath(new URL("../../../../DesktopSigninNative.exe",import.meta.url));
    const env:NodeJS.ProcessEnv={};for(const key of ["SystemRoot","windir","PATH","TEMP","TMP"]){const value=process.env[key];if(typeof value==="string")env[key]=value;}
    this.#child=deps.spawn(command,(purpose==="context"?["--context"]:["--broker","presence"]),{stdio:["pipe","pipe","pipe"],windowsHide:true,cwd:win32.dirname(command),env});this.#spawning=false;
    const child=this.#child;child.on("error",()=>this.close());child.on("close",code=>this.finished(code));

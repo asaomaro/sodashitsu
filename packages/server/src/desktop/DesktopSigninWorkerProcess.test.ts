@@ -18,7 +18,7 @@ function fixture(control=true){
 }
 it("spawns only the fixed installed broker with pipes and a bounded explicit configuration",()=>{
   const f=fixture();const [command,args,options]=f.spawn.mock.calls[0]!;
-  expect(command).toMatch(/DesktopSigninWorker\.exe$/);expect(args).toEqual(["--broker","input"]);expect(options.stdio).toEqual(["pipe","pipe","pipe"]);expect(options.shell).toBeUndefined();
+  expect(command).toMatch(/DesktopSigninNative\.exe$/);expect(args).toEqual(["--broker","input"]);expect(options.stdio).toEqual(["pipe","pipe","pipe"]);expect(options.shell).toBeUndefined();
   expect(Object.keys(options.env??{}).every(key=>["SystemRoot","windir","PATH","TEMP","TMP"].includes(key))).toBe(true);
   expect(f.child.stdin.read().toString()).toBe('{"type":"configure","width":1280,"fps":10,"quality":65}\n');f.finish();expect(f.unsafeStop).not.toHaveBeenCalled();
 });

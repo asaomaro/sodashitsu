@@ -1016,3 +1016,6 @@ macOS 14以降の実験版で、設定の「システム音声の送信を許可
 
 
 配布物にはWindows/Linux/macOSの固定SDK資源106点を同梱します。PowerShellのポリシーとビルダーの参照先も含めて検証し、機能の有効化や要求まで実行しません。macOS向け配布物はrelease生成時に補助プログラムをコンパイル・ad-hoc署名して同梱するため、利用先での手動ビルドは不要です。通常のsoda起動でコンパイラーを動かすことはありません。OSの画面収録許可やドライバーの導入は別途必要です。
+
+
+専用サインイン機能のサービスと対象セッションのワーカーは、Program Files内の検証済み `DesktopSigninNative.exe` を共用します。SCM用・broker/context用・対象worker用の固定引数だけを受け付け、各経路のSYSTEM・親PID/開始時刻・nonce・session・Jobと実行ファイルの検証は維持します。OSのサービスと対象セッションは別プロセスが必要ですが、機能別のnative exeを個別に用意する必要はありません。通常利用者のcache/DLLをSYSTEMへ読み込む仕組みではありません。
