@@ -91,3 +91,5 @@ native permission has no Windows lease
 production generated module unchanged SHA256 647d7121054782e2e0f6e88d7ecf1a634f0037d239da17f81503952846230ab5
 
 ```
+
+CIのMacで既存checkpoint replay試験が5000ms上限を超過したため、このファイル生成/fsyncを繰り返す試験だけMac上限を30sへ変更。Linux5s/Windows120sは維持し、policy/replayのassertionは変更なし。対象33件はローカル再実行成功。製品のタイムアウトは変更していない。
