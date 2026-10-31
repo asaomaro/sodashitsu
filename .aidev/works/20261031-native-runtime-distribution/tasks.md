@@ -1,0 +1,6 @@
+- [x] 必須SDK資源の固定inventory・package同梱
+- [x] Mac配布時だけcompile/sign/probe
+- [x] 配布物のbyte/参照閉包verifier
+- [ ] 3OS CI・資源欠落の負例
+- [ ] 独立全体レビュー・修正レビュー
+- [ ] PR/main・最終sr-pc確認へ継続
