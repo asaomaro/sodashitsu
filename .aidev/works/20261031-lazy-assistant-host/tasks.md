@@ -5,4 +5,4 @@
 - [x] default実装の無効時ESM評価ゼロ、元実装での負例
 - [x] build/typecheck/全体試験（未変更TUI1件はfocused/main baselineで成功）
 - [x] 独立全差分レビューと修正差分点検（状態/保存/生成競合のrisky対象）
-- [ ] PR/CI/main
+- [x] PR/CI/main（PR340、maina5270bcd、4CI成功）

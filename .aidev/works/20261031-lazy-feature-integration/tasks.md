@@ -3,7 +3,7 @@
 - [x] 既存実行形式・eager import・依頼との不足をread-only独立監査
 - [x] soda/sodactlの選択commandのみload、assistant statusの薄いmetadata分離、preflight維持（risky独立点検）
 - [x] 無効時module評価0/選択時load/壊れたoptional moduleとpreflightの生成回帰・負例
-- [ ] この段階のbuild/typecheck/全体試験/独立最終レビュー/PR/main
+- [x] この段階のbuild/typecheck/全体試験/独立最終レビュー/PR/main（PR339、main8c03db9d）
 
 ## 続く段階（現在の2entry変更だけでは要件全体の完了にしない）
 

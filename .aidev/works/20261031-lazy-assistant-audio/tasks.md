@@ -6,4 +6,4 @@
 - [x] 独立risky全差分レビューと修正delta点検
 - [x] 負例（実ESM moduleロード・同時factory生成）/byte復元
 - [x] 最新main製品ソースと統合build→freeze全体試験
-- [ ] CI、PR/main
+- [x] CI、PR/main（PR342、main5062e172、4CI成功）

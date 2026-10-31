@@ -1,0 +1,5 @@
+# 資源準備段階の独立点検
+
+review_pointerが最初のbundle/設計を点検。main/preload/assets相対配置と外部依存制限に確定mustなし。後続課題としてserver単体buildの依存、実行時資源の固定inventory/digest/信頼root/更新中のimmutable配置、WSLの資源とprofile/identity/実終了を指摘。
+
+server単体buildの依存はDesktop workspace depsとTS references、serverbuildでのbundleへ接続した。残りはruntime/role段階に明記し、この段階ではGUIを起動しない。review_transferが全差分crossを完了、確定mustなし。配布verifierのclosed inventoryとruntime tuple検査をshouldとして指摘し、実treeとの完全一致・空の未掲載dir/links拒否・固定6tuple/byte/hash/version検査を追加。修正deltaを同reviewerが確認し解消、追加指摘なし。

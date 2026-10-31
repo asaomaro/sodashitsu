@@ -32,7 +32,7 @@ const out = join(root, "release", name);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-const runtimePackages = ["protocol", "client-core", "tui", "server", "cli"];
+const runtimePackages = ["protocol", "client-core", "tui", "desktop-assistant", "server", "cli"];
 for (const p of [...runtimePackages, "web"]) {
   const dist = join(root, "packages", p, "dist");
   if (!existsSync(dist)) {

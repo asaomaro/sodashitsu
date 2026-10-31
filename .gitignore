@@ -28,3 +28,7 @@ __pycache__/
 
 # Locally compiled native macOS desktop helper
 /scripts/remote-desktop/macos-desktop-helper
+
+# Generated resources for the internal assistant host
+/packages/server/assets/assistant-host/
+/packages/server/assets/.assistant-host-*/
