@@ -395,6 +395,7 @@ final class DesktopSource {
     var richClipboard: RichClipboardGuard?
     var nativeVideo: NativeVideoController?
     var audioCeiling=false
+    var microphoneCeiling=false
     var systemAudio:NativeSystemAudioActor?
     var videoCeiling=false,lastJPEG:Double=0
     var richRequested=false
@@ -509,6 +510,7 @@ final class DesktopSource {
             richRequested=boolean(options["richClipboard"])==true
             videoCeiling=boolean(value["allowNativeVideo"])==true
             audioCeiling=videoCeiling && boolean(value["allowSystemAudio"])==true && CommandLine.arguments.contains("--allow-system-audio")
+            microphoneCeiling=boolean(value["allowMicrophone"])==true && CommandLine.arguments.contains("--allow-microphone") && !(value["microphoneEndpoint"] as? String ?? "").trimmingCharacters(in:.whitespacesAndNewlines).isEmpty
             if videoCeiling { nativeVideo=NativeVideoController(gate:gate,active:{ [weak self] in
                 guard let self=self else {return false};let granted=self.ready && self.videoCeiling && self.sourceActive()
                 return granted && !self.dead && self.ready && milliseconds()-self.lastHeartbeat<8000
@@ -600,6 +602,7 @@ final class DesktopSource {
                             if richClipboard != nil { hello["richClipboard"]=true }
                             if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60}
                             if audioCeiling {hello["nativeAudio"]=true}
+                            if microphoneCeiling {hello["microphone"]=true}
                             try output.send(hello)
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
@@ -672,6 +675,7 @@ final class GeneratedSink: EventSink {
 }
 struct GeneratedFailure: Error { let detail: String }
 func generatedTests() throws -> Int {
+    let microphoneChecks=try generatedNativeMicrophoneTests()
     var count=0
     func check(_ condition: @autoclosure () -> Bool,_ detail: String) throws {
         guard condition() else { throw GeneratedFailure(detail:detail) };count+=1
@@ -827,8 +831,7 @@ func generatedTests() throws -> Int {
     count += try generatedNativeAudioTests()
     count += try generatedSystemAudioTests()
     count += try generatedSourceAudioTests()
-    return count
-}
+    return count + microphoneChecks}
 
 // Source coupling only: no filter, SCK producer, pipe, window, audio or input is opened.
 func generatedSourceAudioTests() throws -> Int {
@@ -883,6 +886,7 @@ func standalone(_ value: [String:Any],exitCode: Int32=0) -> Never {
     }
     Darwin.exit(exitCode)
 }
+if CommandLine.arguments.contains("--microphone-worker") {Darwin.exit(runNativeMicrophoneWorker())}
 if CommandLine.arguments.contains("--probe") {
     standalone(["backend":"macos-sck","dependencies":ProcessInfo.processInfo.operatingSystemVersion.majorVersion>=14])
 }

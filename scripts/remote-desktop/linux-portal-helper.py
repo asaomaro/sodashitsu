@@ -529,7 +529,7 @@ class PortalHelper:
     SC="org.freedesktop.portal.ScreenCast";RD="org.freedesktop.portal.RemoteDesktop"
     def __init__(self, Gio, GLib, Gst, scope_factory=None, video=None):
         self.clipboard=None
-        self.audio_actor=None;self.audio_available=False
+        self.audio_actor=None;self.audio_available=False;self.microphone_available=False
         self.native_worker=None;self.native_raw=None;self.native_available=False
         self.native=_native_video.NativeVideoFlow(self.native_live,lambda:time.monotonic()*1000,lambda value,valid:self.output(value,publish=valid),maximum_fps=60)
         self.regions=RegionProofs();self.video=video;self.transfer_size=None
@@ -640,6 +640,11 @@ class PortalHelper:
                 _native_audio.pulse_monitor_server()
                 self.audio_available=_native_audio.PulseMonitor.available(self.Gst)
             except _native_audio.AudioFailure:self.audio_available=False
+
+        if message.get("allowMicrophone") is True and "--allow-microphone" in sys.argv and isinstance(message.get("microphoneEndpoint"),str) and message["microphoneEndpoint"].strip():
+            spec=importlib.util.spec_from_file_location("soda_microphone_dependency",Path(__file__).with_name("linux-native-microphone.py"))
+            dependency=importlib.util.module_from_spec(spec);spec.loader.exec_module(dependency)
+            self.microphone_available=dependency.PulseOutput.available()
 
         for name in ["pipewiresrc","videoconvert","videoscale","jpegenc","appsink","identity","videorate"]:
             if self.Gst.ElementFactory.find(name) is None:raise NativeFailure("dependencies")
@@ -880,7 +885,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:
@@ -917,7 +922,7 @@ class PortalHelper:
 def main():
     try:
         arguments=sys.argv[1:]
-        if len(arguments)!=len(set(arguments)) or any(arg not in ("--probe","--allow-clipboard","--allow-system-audio") for arg in arguments):raise NativeFailure("unsupported")
+        if len(arguments)!=len(set(arguments)) or any(arg not in ("--probe","--allow-clipboard","--allow-system-audio","--allow-microphone") for arg in arguments):raise NativeFailure("unsupported")
         import gi
         gi.require_version("Gio","2.0");gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
         from gi.repository import Gio,GLib,Gst,GstVideo

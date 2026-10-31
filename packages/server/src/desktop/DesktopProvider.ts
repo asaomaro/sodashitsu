@@ -1,3 +1,4 @@
+import {DesktopNativeMicrophoneHost} from './DesktopNativeMicrophoneHost.js';
 import type {DesktopSavedTransferState} from './DesktopSavedTransferState.js';
 import {desktopHelperRolePlan,desktopHelperRoleEnvironment} from './DesktopHelperRolePlan.js';
 import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
@@ -139,8 +140,8 @@ export class DesktopProvider {
   async invalidateSavedTransfers(){this.savedPolicyHolds++;this.freezeSavedTransfers();this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});try{await this.transferBarrier;}catch(error){this.failSavedTransferPolicy();throw error;}}
   async bindSavedTransfers(binding?:string){if(binding)this.savedSettingsBinding=binding;try{for(;;){const pending=this.transferBarrier;await pending;if(pending!==this.transferBarrier)continue;const scope=this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined;if(scope)await this.savedTransferWork(registry=>registry.bind(scope));if(pending!==this.transferBarrier||scope!==(this.savedSettingsBinding?this.savedBinding(this.savedSettingsBinding):undefined))continue;break;}this.savedPolicyFault=false;}catch(error){this.savedPolicyFault=true;throw error;}finally{this.savedPolicyHolds=Math.max(0,this.savedPolicyHolds-1);this.resumeSavedTransfers();}}
   async settleSavedTransfers(){await this.stableTransferBarrier();await this.savedTransferWork(registry=>registry.settled());}
-  async suspendSavedTransfers(){const draining=this.savedTransferWork(registry=>registry.suspend());const results=await Promise.allSettled([this.stableTransferBarrier(),draining]);for(const result of results)if(result.status==="rejected")throw result.reason;}
-  resumeSavedTransfers(){if(!this.savedPolicyHolds&&!this.savedPolicyFault)for(const registry of this.savedRegistries())registry.resume();}
+  async suspendSavedTransfers(){const draining=this.savedTransferWork(registry=>registry.suspend());const results=await Promise.allSettled([this.stableTransferBarrier(),draining,this.nativeMicrophones.suspend()]);for(const result of results)if(result.status==="rejected")throw result.reason;}
+  resumeSavedTransfers(){this.nativeMicrophones.resume();if(!this.savedPolicyHolds&&!this.savedPolicyFault)for(const registry of this.savedRegistries())registry.resume();}
   private folderCheckpoints=new DesktopFolderCheckpoints();
   private savedRegistries(){return [this.fileCheckpoints,this.folderCheckpoints] as const;}
   private freezeSavedTransfers(){for(const registry of this.savedRegistries())registry.freeze();}
@@ -208,6 +209,7 @@ export class DesktopProvider {
   readonly companion: DesktopCompanionHub;
   private audioPipes=new DesktopAudioPipes();
   private nativePcmPaths=new DesktopNativePcmPaths();
+  private readonly nativeMicrophones=new DesktopNativeMicrophoneHost(this.nativePcmPaths);
   constructor(private config: DesktopProviderConfig | undefined, companion?:DesktopCompanionHub) {
     this.companion = companion ?? new DesktopCompanionHub(config?.allowMedia === true, config?.iceServers ?? []);
   }
@@ -714,7 +716,7 @@ export class DesktopProvider {
               ...legacyReady
             } = ready;
             if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
-            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
+            if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
             const nativeEnabled=!s.secureDesktop&&options.nativeVideo===true&&cfg.allowNativeVideo===true&&nativeVideo===true;
             if(!s.secureDesktop&&options.sharedClipboard&&allowClipboard!==true){this.send(s,{type:"shared_clipboard_failure",code:"helper_incompatible"});this.stop(s);return;}
@@ -861,7 +863,7 @@ export class DesktopProvider {
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
       ...(options.sharedProtected?{allowSharedProtected:true}:{}),
       ...rolePlan,
-      ...((poolMedia||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
+      ...((poolVideo||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
       audioClientPid:process.pid,
       ...(s.audioPipes?{audioPipeBridge:true}:{}),
       nativeAdaptive:(poolMedia||options.nativeAdaptive===true)&&cfg.allowNativeVideo===true,
@@ -967,7 +969,7 @@ export class DesktopProvider {
   // Also used when pausing clients for handoff; rollback can reuse this provider.
   dispose(preserveTransfers=false): void {
     if(preserveTransfers)this.freezeSavedTransfers();
-    this.sourceEpoch++;
+    this.sourceEpoch++;void this.nativeMicrophones.close().catch(()=>{});
     const audioPipes=this.audioPipes;this.audioPipes=new DesktopAudioPipes();void audioPipes.close().catch(()=>{});
     const nativeSelection=this.nativeSelection;this.nativeSelection=new DesktopNativeSelection();void nativeSelection.close().catch(()=>{});
     if(!preserveTransfers){this.transferBarrier=this.savedTransferWork(registry=>registry.invalidate());this.transferBarrier.catch(()=>{});}

@@ -470,3 +470,19 @@ it.each([false,true])("maps Provider local unlock permission into shared admissi
   expect(JSON.parse(await readFile(received,"utf8"))).not.toHaveProperty("allowSharedUnlock");
  }finally{provider.dispose();for(const ws of sockets.clients)ws.terminate();await new Promise<void>(resolve=>sockets.close(()=>resolve()));await new Promise<void>(resolve=>web.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
+it("keeps exclusive native microphone ownership without forwarding inline helper commands",async()=>{
+ const f=fixture(),first=f.join(),a=f.join(),b=f.join();
+ try{
+  f.child.send({...ready,microphone:true});await vi.waitFor(()=>expect(b.messages.length).toBe(1));
+  first.session.stdin.end();await vi.waitFor(()=>expect(first.session.exitCode).toBe(0));expect(f.child.exitCode).toBeNull();
+  expect(a.session.requestMicrophone!("native-a",true,false)).toBe(true);
+  expect(b.session.requestMicrophone!("native-b",true,false)).toBe(false);
+  a.send({type:"native_microphone",id:"native-a",enabled:true,pipeName:"forged"});
+  expect(f.child.commands.some(m=>m.type==="native_microphone")).toBe(false);
+  a.session.requestMicrophone!("native-a",false,false);
+  expect(b.session.requestMicrophone!("native-b",true,false)).toBe(true);
+  b.session.stdin.end();await vi.waitFor(()=>expect(b.session.exitCode).toBe(0));
+  expect(f.child.commands.some(m=>m.type==="native_microphone")).toBe(false);
+  expect(a.session.requestMicrophone!("native-next",true,false)).toBe(true);
+ }finally{f.pool.dispose();}
+});

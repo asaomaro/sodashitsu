@@ -21,6 +21,6 @@ it('prepares permitted shared-source media but never treats pooling as clipboard
  expect(desktopHelperRolePlan(all,{...options,sharedDesktop:true,sharedClipboard:true})).toEqual({...off,allowMicrophone:true,allowSystemAudio:true,nativeCodecs:true,richClipboard:true});
  expect(desktopHelperRolePlan(all,{...options,sharedDesktop:true,elevatedDesktop:true})).toEqual(off);
 });
-it.each(['linux-portal','macos-sck'] as const)('retains native audio policy without preparing Windows microphone/codecs for %s',nativePlatform=>{
- const plan=desktopHelperRolePlan({...all,nativePlatform},{...options,sharedDesktop:true});expect(plan).toEqual({...off,allowSystemAudio:true});
+it.each(['linux-portal','macos-sck'] as const)('prepares native audio and microphone policy without Windows codecs for %s',nativePlatform=>{
+ const plan=desktopHelperRolePlan({...all,nativePlatform},{...options,sharedDesktop:true});expect(plan).toEqual({...off,allowSystemAudio:true,allowMicrophone:true});
 });

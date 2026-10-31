@@ -9,7 +9,8 @@ source = Path(__file__).with_name("macos-desktop-helper.swift")
 original = source.read_bytes()
 rich_source=source.with_name("macos-rich-clipboard.swift").read_text()
 video_source=source.with_name("macos-native-video.swift").read_text()
-audio_source=source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()
+audio_source=source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()+"\n"+source.with_name("macos-native-microphone.swift").read_text()
+microphone_source=source.with_name("macos-native-microphone.swift").read_text()
 cases = [
     ("source-audio-reentrant", " && audioCeiling && nativeVideo === video", " && nativeVideo === video", "generated source audio reentrant permission retirement"),
     ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),
@@ -37,15 +38,16 @@ native_cases=[
     ("native-inflight", 'guard inflight==nil,!retiring,stream.pending.count<stream.window', 'guard !retiring,stream.pending.count<stream.window', "native video single physical encoding job"),
     ("native-ledger", '!seen.contains(id)', 'true', "native video UUID cannot replay after ledger window or case change"),
 ]
-for name, before, after, expected in cases+rich_cases+native_cases:
-    is_rich=name.startswith("rich-");is_video=name.startswith("native-")
-    text = video_source if is_video else rich_source if is_rich else original.decode()
+microphone_cases=[("microphone-final-authority", "try verify();guard active() else {return false};try submit()", "try verify();try submit()", "metadata query cannot extend authority")]
+for name, before, after, expected in cases+rich_cases+native_cases+microphone_cases:
+    is_rich=name.startswith("rich-");is_video=name.startswith("native-");is_microphone=name.startswith("microphone-")
+    text = microphone_source if is_microphone else video_source if is_video else rich_source if is_rich else original.decode()
     occurrences = text.count(before)
     assert occurrences == (2 if name in ("text-source","rich-after-clear") else 1), (name, occurrences)
     try:
         with tempfile.TemporaryDirectory(prefix="soda-macos-negative-") as temporary:
             candidate = Path(temporary) / source.name
-            candidate.write_text((text.replace(before,after) if is_rich else rich_source)+"\n"+(text.replace(before,after) if is_video else video_source)+"\n"+audio_source+"\n"+(text.replace(before,after) if not is_rich and not is_video else original.decode()))
+            candidate.write_text((text.replace(before,after) if is_rich else rich_source)+"\n"+(text.replace(before,after) if is_video else video_source)+"\n"+(audio_source.replace(microphone_source,text.replace(before,after)) if is_microphone else audio_source)+"\n"+(text.replace(before,after) if not is_rich and not is_video and not is_microphone else original.decode()))
             binary = Path(temporary) / "generated-helper"
             build = subprocess.run(
                 ["xcrun", "swiftc", "-swift-version", "5", "-O", str(candidate), "-o", str(binary)],
@@ -64,4 +66,4 @@ for name, before, after, expected in cases+rich_cases+native_cases:
         assert source.with_name("macos-native-video.swift").read_text()==video_source,"video source changed"
 print("generated_negative_controls_pass")
 
-assert source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()==audio_source,"audio source changed"
+assert source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()+"\n"+source.with_name("macos-native-microphone.swift").read_text()==audio_source,"audio source changed"

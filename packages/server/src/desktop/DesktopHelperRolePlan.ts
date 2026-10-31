@@ -7,7 +7,7 @@ export function desktopHelperRolePlan(cfg:DesktopProviderConfig,options:z.infer<
  const media=pooled&&!cfg.nativePlatform,audio=pooled;
  return {
   richClipboard:(options.sharedClipboard===true||options.richClipboard===true)&&cfg.allowClipboard===true,
-  allowMicrophone:(media||options.microphone===true)&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint,
+  allowMicrophone:(pooled||options.microphone===true)&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint,
   allowSystemAudio:(audio||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
   nativeCodecs:(media||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
  };

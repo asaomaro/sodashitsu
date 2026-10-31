@@ -40,7 +40,7 @@ export interface DesktopHelper extends EventEmitter {
   createAudio?(hooks: DesktopNativeAudioHooks): DesktopAudioLease;
   requestControl?(enabled: boolean): boolean;
   requestClipboard?(enabled: boolean, generation: number): boolean;
-  requestMicrophone?(id: string, enabled: boolean): boolean;
+  requestMicrophone?(id: string, enabled: boolean,inline?:boolean): boolean;
 }
 
 type Subscription = DesktopHelper & {
@@ -70,7 +70,7 @@ export class DesktopSharedCapture {
         audio?: DesktopSharedAudio<Subscription>;
         control?: Subscription;
         clipboard?: DesktopSharedClipboard<Subscription>;
-        microphone?: { member: Subscription; id: string };
+        microphone?: { member: Subscription; id: string;inline:boolean };
         cursorSeq: number;
         cursorPose?: DesktopCursorInfo;
         cursorShape?: { id: number; shape: NonNullable<DesktopCursorInfo["shape"]>; data: string };
@@ -187,10 +187,10 @@ export class DesktopSharedCapture {
           });
         return current.audio.attach(member, hooks);
       },
-      requestMicrophone: (id: string, enabled: boolean) => {
+      requestMicrophone: (id: string, enabled: boolean,inline=true) => {
         if (!enabled) {
           if (current.microphone?.member === member && current.microphone.id === id) {
-            this.write(current, { type: "native_microphone", id, enabled: false });
+            if(current.microphone.inline)this.write(current, { type: "native_microphone", id, enabled: false });
             delete current.microphone;
           }
           return false;
@@ -205,7 +205,7 @@ export class DesktopSharedCapture {
           return false;
         if (current.microphone)
           return current.microphone.member === member && current.microphone.id === id;
-        current.microphone = { member, id };
+        current.microphone = { member, id,inline };
         return true;
       },
       requestClipboard: (enabled: boolean, generation: number) => {
@@ -290,7 +290,7 @@ export class DesktopSharedCapture {
     if (g.clipboard?.command(s, value)) return;
     if (g.native?.command(s, value)) return;
     if (value.type === "native_microphone") {
-      if (g.microphone?.member !== s || g.microphone.id !== value.id) return;
+      if (g.microphone?.member !== s || g.microphone.id !== value.id || !g.microphone.inline) return;
       this.write(g, value);
       if (value.enabled === false) delete g.microphone;
       return;
@@ -564,7 +564,7 @@ export class DesktopSharedCapture {
     if (s.closed) return;
     s.closed = true;
     if (g.microphone?.member === s) {
-      this.write(g, { type: "native_microphone", id: g.microphone.id, enabled: false });
+      if(g.microphone.inline)this.write(g, { type: "native_microphone", id: g.microphone.id, enabled: false });
       delete g.microphone;
     }
     g.clipboard?.detach(s);
