@@ -486,3 +486,8 @@ it("keeps exclusive native microphone ownership without forwarding inline helper
   expect(a.session.requestMicrophone!("native-next",true,false)).toBe(true);
  }finally{f.pool.dispose();}
 });
+
+it("rejects image publication while the shared source is a lock cover",async()=>{
+ const f=fixture(),a=f.join("locked",unlockConfiguration);
+ try{f.child.send({...lockedReady,lockScreenCover:true});await vi.waitFor(()=>expect(a.messages).toHaveLength(1));f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(a.messages.map(m=>m.type)).toEqual(["ready"]);}finally{f.pool.dispose();}
+});

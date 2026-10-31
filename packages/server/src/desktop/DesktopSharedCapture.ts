@@ -444,6 +444,7 @@ export class DesktopSharedCapture {
       for(const member of [...g.members])if(member.configured)this.emit(member,failure);
       this.end(g);
     } else if (value.type === "frame" && g.ready) {
+      if(g.ready.lockScreenCover)throw Error("Lock cover cannot publish pixels");
       const info = DesktopFrameInfo.parse(value.info);
       const native=g.ready.backend==="linux-portal"||g.ready.backend==="macos-sck";
       if(native){
