@@ -394,6 +394,8 @@ final class DesktopSource {
     var clipboard: TextClipboardGuard?
     var richClipboard: RichClipboardGuard?
     var nativeVideo: NativeVideoController?
+    var audioCeiling=false
+    var systemAudio:NativeSystemAudioActor?
     var videoCeiling=false,lastJPEG:Double=0
     var richRequested=false
     var clipboardCeiling=false
@@ -448,6 +450,7 @@ final class DesktopSource {
             self.locked {
                 self.richClipboard?.expire()
                 self.nativeVideo?.tick()
+                if let audio=self.systemAudio,!self.audioLive(audio.id) {audio.stop()}
                 if milliseconds()-self.lastHeartbeat>8000 { self.stop("source_changed") }
                 else if self.ready && !self.sourceActive() { self.stop("source_changed") }
                 else if self.ready && milliseconds()-self.lastCapture>1500 { self.stop("source_stalled") }
@@ -493,7 +496,7 @@ final class DesktopSource {
         if kind=="configure" {
             guard !configured,let options=value["options"] as? [String:Any],
                   let width=integer(options["width"],320,1920),let fps=integer(options["fps"],1,30),let quality=integer(options["quality"],20,90) else { throw NativeError("backend_failure") }
-            for key in ["allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","allowSystemAudio","separateCursor"] {
+            for key in ["allowMonitors","allowVirtualDisplay","allowElevated","allowDisplayResize","allowMicrophone","separateCursor"] {
                 if boolean(value[key])==true { throw NativeError("unsupported") }
             }
             if boolean(options["deltas"])==true || boolean(options["adaptive"])==true { throw NativeError("unsupported") }
@@ -505,6 +508,7 @@ final class DesktopSource {
             clipboardCeiling=boolean(value["allowClipboard"])==true && CommandLine.arguments.contains("--allow-clipboard")
             richRequested=boolean(options["richClipboard"])==true
             videoCeiling=boolean(value["allowNativeVideo"])==true
+            audioCeiling=videoCeiling && boolean(value["allowSystemAudio"])==true && CommandLine.arguments.contains("--allow-system-audio")
             if videoCeiling { nativeVideo=NativeVideoController(gate:gate,active:{ [weak self] in
                 guard let self=self else {return false};let granted=self.ready && self.videoCeiling && self.sourceActive()
                 return granted && !self.dead && self.ready && milliseconds()-self.lastHeartbeat<8000
@@ -532,6 +536,9 @@ final class DesktopSource {
             if let seq=try input?.input(value) { try output.send(["type":"input_ack","seq":seq]) }
         case "native_video","native_video_ack","native_keyframe":
             guard let nativeVideo=nativeVideo else {throw NativeError("unsupported")};try nativeVideo.command(value)
+            if let audio=systemAudio,!audioLive(audio.id) {audio.stop()}
+        case "native_audio":
+            try audioCommand(value)
         case "clipboard_control":
             guard let clipboard=clipboard else { throw NativeError("unsupported") };let old=clipboard.generation;try clipboard.control(value);if clipboard.generation != old { richClipboard?.clear() }
         case "clipboard_rich":
@@ -592,6 +599,7 @@ final class DesktopSource {
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
                             if richClipboard != nil { hello["richClipboard"]=true }
                             if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60}
+                            if audioCeiling {hello["nativeAudio"]=true}
                             try output.send(hello)
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
@@ -608,13 +616,46 @@ final class DesktopSource {
             }
         } catch { if !dead { stop((error as? NativeError)?.code ?? "backend_failure") } }
     }
+    // The IO owner asks the main thread for current OS/session authority; it never calls AppKit itself.
+    func audioLive(_ id:String) -> Bool {
+        if !Thread.isMainThread {return DispatchQueue.main.sync {self.audioLive(id)}}
+        return locked {
+            guard !dead,!stopping,ready,videoCeiling,audioCeiling,
+                  let video=nativeVideo,let stream=video.current,stream.id==id else {return false}
+            let valid=sourceActive() && video.live(stream)
+            return valid && !dead && !stopping && ready && videoCeiling && audioCeiling && nativeVideo === video && video.current === stream && !stream.dead && milliseconds()-lastHeartbeat<8000
+        }
+    }
+    func audioCommand(_ value:[String:Any]) throws {
+        guard let raw=value["id"] as? String,raw.count==36,let uuid=UUID(uuidString:raw),let enabled=boolean(value["enabled"]) else {throw NativeError("backend_failure")}
+        let id=uuid.uuidString.lowercased()
+        if !enabled {
+            guard Set(value.keys)==Set(["type","id","enabled"]) else {throw NativeError("backend_failure")}
+            if systemAudio?.id==id {systemAudio?.stop()};return
+        }
+        guard Set(value.keys)==Set(["type","id","enabled","pipeName","pipePath","clientPid"]),
+              let name=value["pipeName"] as? String,let path=value["pipePath"] as? String,
+              let pid=integer(value["clientPid"],2,Int64(Int32.max)) else {throw NativeError("backend_failure")}
+        guard audioLive(id),let selectedFilter=filter else {return}
+        if let old=systemAudio {guard old.retired else {return};systemAudio=nil}
+        systemAudio=NativeSystemAudioActor(id:id,active:{[weak self] in self?.audioLive(id)==true},
+            pipe:{try NativePCMParentPipe(path:path,name:name,clientPID:pid_t(pid))},
+            producer:{SCKSystemAudioProducer(filter:selectedFilter)},
+            fatal:{DispatchQueue.main.async {Darwin.exit(1)}})
+    }
+    private func finishStopped(_ code:String?) {
+        if let audio=systemAudio,!audio.retired,!audio.retirementFailed {
+            DispatchQueue.main.asyncAfter(deadline:.now()+0.02) {self.finishStopped(code)};return
+        }
+        output.finish {Darwin.exit(code==nil ? 0:1)}
+    }
     func stop(_ code: String?) {
         locked {
-            if dead || stopping { return };stopping=true;nativeVideo?.stop(notify:false);input?.release();clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
+            if dead || stopping { return };stopping=true;systemAudio?.stop();nativeVideo?.stop(notify:false);input?.release();clipboard?.clear();richClipboard?.clear();regions.clear();dead=true;captureTask?.cancel();timer?.invalidate()
             for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) };observers.removeAll()
             if let code=code { try? output.send(["type":"platform_failure","backend":"macos-sck","code":code]) }
-            output.finish { Darwin.exit(code==nil ? 0 : 1) }
-            DispatchQueue.main.asyncAfter(deadline:.now()+1.5) { Darwin.exit(1) }
+            finishStopped(code)
+            DispatchQueue.main.asyncAfter(deadline:.now()+7) { Darwin.exit(1) }
         }
     }
 }
@@ -785,6 +826,35 @@ func generatedTests() throws -> Int {
     count += try generatedNativeVideoTests()
     count += try generatedNativeAudioTests()
     count += try generatedSystemAudioTests()
+    count += try generatedSourceAudioTests()
+    return count
+}
+
+// Source coupling only: no filter, SCK producer, pipe, window, audio or input is opened.
+func generatedSourceAudioTests() throws -> Int {
+    var count=0
+    func check(_ condition:@autoclosure()->Bool,_ label:String) throws {if !condition() {throw NativePCMError("generated source audio \(label)")};count+=1}
+    let id=UUID().uuidString.lowercased(),source=DesktopSource(facts:{true})
+    let video=NativeVideoController(gate:source.gate,active:{true},emit:{_,_ in})
+    source.nativeVideo=video;source.ready=true;source.videoCeiling=true;source.audioCeiling=true
+    try video.command(["type":"native_video","id":id,"enabled":true,"fps":10,"bitrateKbps":2500,"window":1])
+    try check(source.audioLive(id),"same video identity")
+    try check(!source.audioLive(UUID().uuidString.lowercased()),"foreign video identity")
+    source.audioCeiling=false;try check(!source.audioLive(id),"audio ceiling");source.audioCeiling=true
+    source.videoCeiling=false;try check(!source.audioLive(id),"video ceiling");source.videoCeiling=true
+    source.ready=false;try check(!source.audioLive(id),"ready");source.ready=true
+    source.lastHeartbeat=milliseconds()-8001;try check(!source.audioLive(id),"heartbeat");source.lastHeartbeat=milliseconds()
+    // A missing selected filter cannot create an actor, even with a matching video.
+    try source.audioCommand(["type":"native_audio","id":id,"enabled":true,"pipeName":"unused","pipePath":"/unused","clientPid":Int(getpid())])
+    try check(source.systemAudio==nil,"no filter no capture")
+    video.stop(notify:false);try check(!source.audioLive(id),"video retirement")
+    var changed:DesktopSource!
+    changed=DesktopSource(facts:{changed.audioCeiling=false;return true})
+    changed.ready=true;changed.audioCeiling=true;changed.videoCeiling=true
+    let second=NativeVideoController(gate:changed.gate,active:{true},emit:{_,_ in});changed.nativeVideo=second
+    try second.command(["type":"native_video","id":id,"enabled":true,"fps":10,"bitrateKbps":2500,"window":1])
+    try check(!changed.audioLive(id),"reentrant permission retirement")
+    second.stop(notify:false)
     return count
 }
 
