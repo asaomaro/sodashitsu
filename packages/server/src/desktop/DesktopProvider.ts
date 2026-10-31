@@ -69,6 +69,7 @@ export type {DesktopProviderConfig,DesktopProviderEndpointScope} from './Desktop
 export {desktopConfigFromEnv,desktopOriginsFromEnv} from './DesktopProviderCore.js';
 type EndpointScope={origin:string;nativeOrigin:string;epoch:number;active():boolean};
 type Share = {
+  protectedFilesActive?:boolean;
   agentRegions?:boolean;
   audioPipes?:DesktopAudioPipes;resourcesManaged:boolean;
   independent?:boolean;
@@ -239,6 +240,7 @@ export class DesktopProvider {
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
     if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.sharedResolution||p.options.sharedRate||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
+    if(p.options.protectedFiles&&(!p.options.elevatedDesktop||!p.options.files||!p.fileTicket||!p.options.features||!cfg.allowElevated||!cfg.allowProtectedFiles||!cfg.fileRoot||cfg.nativePlatform))throw new RpcError("unauthorized","管理者画面中のファイル転送は接続先で許可されていません。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
@@ -262,7 +264,7 @@ export class DesktopProvider {
     if(p.options.sharedNative&&(!p.options.sharedDesktop||!p.options.nativeVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画が接続先で許可されていません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
-      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||p.options.files||p.options.richClipboard||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.nativeVideoWindow||p.options.nativeMaxFps||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
+      if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||(p.options.files&&!p.options.protectedFiles)||p.options.richClipboard||p.options.nativeVideo||p.options.nativeAudio||p.options.microphone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.nativeVideoWindow||p.options.nativeMaxFps||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
     }
     if(p.options.virtualDisplay&&(!cfg.allowVirtualDisplay||!p.options.features||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の作成が許可されていないか、モニター指定と併用されています");
     if(p.options.monitorDevice&&(!cfg.allowMonitors||p.options.monitors!==true))throw new RpcError("unauthorized","モニター切替が許可されていません");
@@ -402,7 +404,7 @@ export class DesktopProvider {
             if(p.fileTicket){
               if(p.options.files!==true||!cfg.fileRoot)throw Error("File transfer not negotiated");
               const socket=s.fileSocket=new WebSocket(p.url,DESKTOP_FILES_PROTOCOL,{handshakeTimeout:10000,followRedirects:false,perMessageDeflate:false,maxPayload:100000});
-              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&!s.secureDesktop&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&!p.options.virtualDisplay?{
+              s.files=DesktopFiles.open(cfg.fileRoot,()=>this.live(s)&&s.ready&&(!s.secureDesktop||s.protectedFilesActive===true)&&performance.now()-s.lastSeen<5000,p.options.fileCheckpoints?this.fileCheckpoints:undefined,()=>this.config===cfg&&this.sourceEpoch===epoch&&!!cfg.fileRoot,p.options.folders===true,p.options.folderCheckpoints?this.folderCheckpoints:undefined,!cfg.nativePlatform&&!p.options.elevatedDesktop&&!p.options.virtualDisplay?{
                 origin:scope?.nativeOrigin??url.origin.replace(/^ws/,"http"),
                 runtime:this.nativeSelection,paths:(paths,signal)=>this.nativeSelection.paths(paths,signal),
                 pointer:seq=>{
@@ -664,6 +666,7 @@ export class DesktopProvider {
             }
             if(options.sharedProtected&&ready.sharedProtected!==true){this.send(s,{type:"protected_desktop_failure",code:"service_incompatible"});throw Error("Shared protected worker proof missing");}
             if(ready.protectedDesktop&&(!options.elevatedDesktop||!cfg.allowElevated))throw Error("Unrequested protected worker");
+            s.protectedFilesActive=options.protectedFiles===true&&cfg.allowProtectedFiles===true&&!!ready.protectedDesktop&&ready.secureDesktop===true;
             if(ready.protectedDesktop)s.protectedDesktop=ready.protectedDesktop;else delete s.protectedDesktop;
             if(options.independentMonitors){
               if(!ready.resourceFences||!ready.monitorLayout||ready.monitorLayout.selected!==options.monitorDevice||ready.secureDesktop||ready.virtualDisplay||ready.lockScreenCover)throw Error("Independent monitor helper proof missing");
@@ -763,6 +766,7 @@ export class DesktopProvider {
                 : {}),
               allowInput: s.allowInput,
             });
+            if(s.protectedFilesActive&&s.fileSocket)this.send(s,{type:"protected_files_ready",files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})});
             if (options.features && enabledMedia)
               this.companion.bind({
                 owner: s,
@@ -850,7 +854,7 @@ export class DesktopProvider {
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop&&!cfg.nativePlatform;
     const poolVideo=options.sharedDesktop===true&&!options.elevatedDesktop;
-    const {sharedVirtual:_sharedVirtual,independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
+    const {protectedFiles:_protectedFiles,sharedVirtual:_sharedVirtual,independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
       ...(cfg.nativePlatform?{nativePlatform:cfg.nativePlatform}:{}),

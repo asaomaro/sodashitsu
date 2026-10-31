@@ -1,0 +1,7 @@
+# 独立レビュー
+
+review_pointerが入口/local ceiling・ready proof・file lane・source/config/epoch/endpoint・checkpoint失効のtaskcheckを実施。確定mustなし。推奨のproof前拒否、permission OFF中のpending破棄、helperによるproof偽送は全て生成回帰へ追加してPASS。
+
+review_transferが別コンテキストで全差分crossを実施。確定mustなし。追加許可初期OFF、soda実行ユーザー権限の許可フォルダー、signin/lock cover対象外、接続ごとのgrantについて利用者向け説明を追加。既存の併用不可説明も更新した。OS/deviceの実操作は行っていない。
+
+文書/CIの追加deltaもreview_transferが再確認。前should解消、追加must/shouldなし。

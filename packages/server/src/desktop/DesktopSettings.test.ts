@@ -203,3 +203,11 @@ it.each(["linux-portal","macos-sck"] as const)("persists explicit virtual microp
  expect((await DesktopSettings.open({...options,nativePlatform})).get(true).permissions).toMatchObject({allowMicrophone:true,microphoneEndpoint:"virtual-target"});
  await settings.set({...off,enabled:true});expect(configure.mock.calls.at(-1)![0]?.command).not.toContain("--allow-microphone");
 });
+it("persists the separate protected-files permission and binds it to the ordinary-user folder",async()=>{
+ const f=await fixture(),settings=await DesktopSettings.open(f);expect(f.provider.capabilities().protectedFiles).toBe(false);
+ const on={...off,enabled:true,allowElevated:true,allowProtectedFiles:true,fileRoot:dirname(f.file)};await settings.set(on);expect(f.provider.capabilities().protectedFiles).toBe(true);expect((await DesktopSettings.open(f)).get(true).permissions).toEqual(on);
+ await settings.set({...on,allowProtectedFiles:false});expect(f.provider.capabilities().protectedFiles).toBe(false);
+});
+it.each(["permission","folder"])("requires protected-files dependency %s before persisting settings",async missing=>{
+ const f=await fixture(),settings=await DesktopSettings.open(f);await expect(settings.set({...off,enabled:true,allowProtectedFiles:true,allowElevated:missing!=="permission",...(missing==="folder"?{}:{fileRoot:dirname(f.file)})})).rejects.toThrow("管理者画面中の転送");expect(settings.get(true).permissions).toEqual(off);
+});

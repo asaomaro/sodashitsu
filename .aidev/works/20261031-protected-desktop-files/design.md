@@ -1,0 +1,3 @@
+# 設計
+
+ローカルallowProtectedFilesは初期無効、allowElevatedとfileRootを必要とする。feature hint bit8とProvider cap/strict optionで交渉。保護workerのDesktopReadyの禁止条件は維持し、Node側が本物の保護readyを確認してから別のprotected_files_readyを送る。ファイル操作はNodeのDesktopFilesと普通のfile laneで処理し、source/session/permissionsと生存確認を毎回確認する。Explorer直接dragは保護画面へ広げない。

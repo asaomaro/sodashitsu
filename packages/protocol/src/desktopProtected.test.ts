@@ -16,3 +16,7 @@ it('accepts fixed failure codes without forwarding native strings or unknown fie
  expect(DesktopProtectedFailure.safeParse({type:'protected_desktop_failure',code:'native exception'}).success).toBe(false);
  expect(desktopProtectedFailureMessage('source_changed')).toContain('接続し直し');
 });
+it('keeps file authority out of privileged ready and parses a bounded Node-side proof',async()=>{
+ const {DesktopProtectedFilesReady}=await import('./desktopProtected.js');expect(DesktopProtectedFilesReady.parse({type:'protected_files_ready',files:true,folders:true})).toMatchObject({files:true});
+ expect(DesktopProtectedFilesReady.safeParse({type:'protected_files_ready',files:true,fileRoot:'/private'}).success).toBe(false);expect(DesktopReady.safeParse({...base,secureDesktop:true,protectedDesktop:'elevated-default',files:true}).success).toBe(false);
+});

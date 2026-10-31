@@ -14,3 +14,10 @@ export function desktopProtectedFailureMessage(code:z.infer<typeof DesktopProtec
     default:return "管理者画面の補助プログラムを開始できません。接続先の許可と専用保護サービスの導入・更新を確認してください。";
   }
 }
+
+/** Ordinary-user file lane proof; never a privileged worker ready capability. */
+export const DesktopProtectedFilesReady=z.object({
+ type:z.literal("protected_files_ready"),files:z.literal(true),
+ fileCheckpoints:z.literal(true).optional(),durableFileCheckpoints:z.literal(true).optional(),
+ folders:z.literal(true).optional(),folderCheckpoints:z.literal(true).optional(),durableFolderCheckpoints:z.literal(true).optional(),
+}).strict();
