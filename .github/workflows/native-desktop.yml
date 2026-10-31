@@ -1,7 +1,7 @@
 name: Native desktop generated checks
 on:
   pull_request:
-    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/linux-native-audio.py', 'scripts/remote-desktop/linux-native-microphone.py', 'scripts/remote-desktop/test-linux-native-microphone.py', 'scripts/remote-desktop/test-linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/macos-native-audio.swift', 'scripts/remote-desktop/macos-native-microphone.swift', 'scripts/remote-desktop/macos-system-audio.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', 'packages/server/src/desktop/DesktopNativePcmPath*', 'packages/server/src/desktop/DesktopNativeMicrophoneHost*', 'packages/server/src/desktop/DesktopProvider.ts', 'packages/server/src/desktop/DesktopHelperRolePlan*', 'packages/server/src/desktop/DesktopSettings*', 'packages/server/src/desktop/DesktopRelay.test.ts', '.github/workflows/native-desktop.yml']
+    paths: ['scripts/remote-desktop/linux-portal-helper.py', 'scripts/remote-desktop/linux-native-video.py', 'scripts/remote-desktop/linux-native-audio.py', 'scripts/remote-desktop/linux-native-microphone.py', 'scripts/remote-desktop/test-linux-native-microphone.py', 'scripts/remote-desktop/validate-linux-microphone-abi.c', 'scripts/remote-desktop/test-linux-native-audio.py', 'scripts/remote-desktop/test-linux-native-video.py', 'scripts/remote-desktop/test-linux-portal-helper.py', 'scripts/remote-desktop/macos-desktop-helper.swift', 'scripts/remote-desktop/macos-rich-clipboard.swift', 'scripts/remote-desktop/macos-native-video.swift', 'scripts/remote-desktop/macos-native-audio.swift', 'scripts/remote-desktop/macos-native-microphone.swift', 'scripts/remote-desktop/macos-system-audio.swift', 'scripts/remote-desktop/test-macos-desktop-helper.py', 'scripts/remote-desktop/build-macos-desktop.sh', 'packages/server/src/desktop/DesktopNativePcmPath*', 'packages/server/src/desktop/DesktopNativeMicrophoneHost*', 'packages/server/src/desktop/DesktopProvider.ts', 'packages/server/src/desktop/DesktopHelperRolePlan*', 'packages/server/src/desktop/DesktopSettings*', 'packages/server/src/desktop/DesktopRelay.test.ts', '.github/workflows/native-desktop.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,7 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Generated media dependencies
-        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+        run: sudo apt-get update && sudo apt-get install -y libpulse-dev python3-gi gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+      - name: Public Pulse ABI (no audio operations)
+        run: cc -std=c11 -fsyntax-only scripts/remote-desktop/validate-linux-microphone-abi.c
       - name: Import-only probe (no portal, capture or input)
         run: /usr/bin/python3 -I scripts/remote-desktop/linux-portal-helper.py --probe
       - name: Fake D-Bus / input, generated JPEG and publication races

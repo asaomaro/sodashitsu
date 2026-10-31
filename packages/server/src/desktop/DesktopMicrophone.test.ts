@@ -1,7 +1,9 @@
 import { createServer, type Socket } from "node:net";
-import { rm, chmod } from "node:fs/promises";
+import { rm, chmod, mkdtemp } from "node:fs/promises";
 import { expect, it, vi } from "vitest";
 import { DESKTOP_MICROPHONE_HELLO } from "@sodashitsu/protocol";
+import {join} from "node:path";
+import {desktopNativePcmRoot} from "./DesktopNativePcmPath.js";
 import { DesktopMicrophone } from "./DesktopMicrophone.js";
 const id="22222222-2222-4222-8222-222222222222";
 function tone(){const pcm=Buffer.alloc(1920);for(let i=0;i<960;i++)pcm.writeInt16LE(Math.round(Math.sin(i*Math.PI*2*440/48000)*12000),i*2);return pcm;}
@@ -49,4 +51,18 @@ for(const mode of["tone","oversize-duration","mixed-pcm"]as const)it.skipIf(proc
 });
 it("rejects a busy shared microphone before allocating a pipe",()=>{
  const write=vi.fn(),claim=vi.fn(()=>false),release=vi.fn(),send=vi.fn(()=>true),mic=new DesktopMicrophone({synthetic:true,allowed:()=>true,write,send,claim,release});mic.fromViewer({type:"microphone_start",id});expect(claim).toHaveBeenCalledWith(id);expect(write).not.toHaveBeenCalled();expect(release).not.toHaveBeenCalled();expect(send).toHaveBeenCalledWith({type:"microphone_status",id,state:"unavailable"});mic.stop();
+});
+
+it.skipIf(process.platform==="win32")("transfers generated Opus through the native worker lease without inline commands",async()=>{
+ const root=await mkdtemp(join(desktopNativePcmRoot(),"soda-mic-generated-")),path=join(root,"pcm.sock");
+ let client:Socket|undefined,allowed=true;const chunks:Buffer[]=[],write=vi.fn(),verify=vi.fn(async()=>{}),close=vi.fn(async()=>{}),send=vi.fn((_m:unknown)=>true);
+ const server=createServer(socket=>{client=socket;socket.on("error",()=>{});socket.on("data",bytes=>chunks.push(Buffer.from(bytes)));socket.write(DESKTOP_MICROPHONE_HELLO);});
+ const mic=new DesktopMicrophone({allowOpus:true,allowed:()=>allowed,write,send,nativeOutput:async()=>{await new Promise<void>(resolve=>server.listen(path,resolve));await chmod(path,0o600);return{path,verify,close};}});
+ const {default:Opus}=await import("opusscript"),encoder=new Opus(48000,1,Opus.Application.VOIP);
+ try{
+  mic.fromViewer({type:"microphone_start",id,codec:"opus"});await expect.poll(()=>send.mock.calls.some(([m]:any)=>m.state==="running")).toBe(true);
+  expect(verify).toHaveBeenCalledTimes(1);const packet=encoder.encode(tone(),960);mic.fromViewer({type:"microphone_opus",id,seq:1,data:packet.toString("base64")});
+  await expect.poll(()=>Buffer.concat(chunks).length).toBe(1932);expect(Buffer.concat(chunks).readUInt32LE()).toBe(1);expect(write).not.toHaveBeenCalled();
+  allowed=false;mic.fromViewer({type:"microphone_opus",id,seq:2,data:packet.toString("base64")});expect(close).toHaveBeenCalledTimes(1);expect(write).not.toHaveBeenCalled();
+ }finally{mic.stop();encoder.delete();client?.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
