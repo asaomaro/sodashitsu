@@ -38,3 +38,10 @@ jobs:
       - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
       - name: Fresh browser shared desktop controls (generated sources only)
         run: pnpm --filter @sodashitsu/e2e exec playwright test 'remote-desktop-native-sharing.spec.ts|remote-desktop-native-platform-video.spec.ts'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-platform-browser
+          path: packages/e2e/test-results/**/native-platform-*.png
+          if-no-files-found: ignore
+          retention-days: 3

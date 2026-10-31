@@ -8,6 +8,6 @@
 - [x] 生成pipeの実Windows試験と負例
 - [x] 最新main取込み後build/typecheck/全体試験/配布確認（E2Eはmain同一の開始前timeoutを記録）
 - [x] 最終独立whole/delta review（review_pointer、追加must/shouldなし）
-- [ ] PR/最終head CI/main
+- [x] PR/最終head CI/main（PR347、19checks pass、main 1d4797aa）
 
 後続: compose optional load、privileged統合の検討、Mac音声残配線、最後sr-pc接続復旧。実device確認は別。

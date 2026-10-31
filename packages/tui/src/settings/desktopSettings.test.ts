@@ -46,8 +46,8 @@ it.each(["linux-portal","macos-sck"] as const)("offers native %s clipboard permi
  await vi.waitFor(()=>expect(port.set).toHaveBeenCalledWith({...permissions,allowClipboard:true}));
 });
 
-it.each(["linux-portal","macos-sck"] as const)("offers system audio only for implemented native %s",async nativePlatform=>{
+it.each(["linux-portal","macos-sck"] as const)("offers system audio for native %s",async nativePlatform=>{
  const state={nativePlatform,permissions,supported:true,canConfigure:true},changed=vi.fn(),port={get:vi.fn(async()=>state),set:vi.fn(async(p)=>({...state,permissions:p}))};
  const section=desktopSettingsSection(port,changed);await vi.waitFor(()=>expect(changed).toHaveBeenCalled());const item=section.items().find(i=>i.label==="システム音声の送信を許可");
- if(nativePlatform==="macos-sck"){expect(item).toBeUndefined();return;}expect(item).toBeDefined();item!.activate!();await vi.waitFor(()=>expect(port.set).toHaveBeenCalledWith({...permissions,allowSystemAudio:true}));
+ expect(item).toBeDefined();item!.activate!();await vi.waitFor(()=>expect(port.set).toHaveBeenCalledWith({...permissions,allowSystemAudio:true}));
 });

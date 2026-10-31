@@ -1,5 +1,5 @@
 import * as atomic from "../persist/atomicFile.js";
-import { mkdtemp,mkdir,readFile,rm,writeFile } from "node:fs/promises";
+import { mkdtemp,mkdir,readFile,rm,writeFile,realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ async function fixture() {
   // Saved-transfer ACL validation needs the same per-user profile boundary as the Windows runtime.
   const base=process.platform==="win32"?process.env.LOCALAPPDATA:tmpdir();
   if(!base)throw Error("Generated Windows profile directory unavailable");
-  const dir = await mkdtemp(join(base, "desktop-permissions-"));
+  const dir = await realpath(await mkdtemp(join(base, "desktop-permissions-")));
   dirs.push(dir);
   const provider = new DesktopProvider(undefined);
   return {
@@ -182,10 +182,9 @@ it.each(["linux-portal","macos-sck"] as const)("persists native %s clipboard per
  await restored.set({...off,enabled:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowClipboard:false,command:["synthetic-helper"]});
 });
 
-it("persists the Linux system-audio ceiling and revokes its helper flag independently from input",async()=>{
- const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform:"linux-portal"});
+it.each(["linux-portal","macos-sck"] as const)("persists native %s system-audio ceiling and revokes its helper flag independently from input",async nativePlatform=>{
+ const options=await fixture(),configure=vi.spyOn(options.provider,"configure"),settings=await DesktopSettings.open({...options,nativePlatform});
  await settings.set({...off,enabled:true,allowSystemAudio:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowInput:false,allowSystemAudio:true,command:["synthetic-helper","--allow-system-audio"]});
- expect((await DesktopSettings.open({...options,nativePlatform:"linux-portal"})).get(true).permissions.allowSystemAudio).toBe(true);
+ expect((await DesktopSettings.open({...options,nativePlatform})).get(true).permissions.allowSystemAudio).toBe(true);
  await settings.set({...off,enabled:true,allowSystemAudio:false});expect(configure.mock.calls.at(-1)![0]?.command).toEqual(["synthetic-helper"]);expect(configure.mock.calls.at(-1)![0]?.allowSystemAudio).toBe(false);
- const mac=await DesktopSettings.open({...options,nativePlatform:"macos-sck"});await expect(mac.set({...off,enabled:true,allowSystemAudio:true})).rejects.toThrow("native backend");
 });

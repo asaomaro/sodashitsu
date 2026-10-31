@@ -1735,9 +1735,10 @@ it.each([{platform:"linux-portal",shared:false},{platform:"macos-sck",shared:fal
  expect(v.ws.readyState).toBe(WebSocket.OPEN);v.send({type:"stop"});
 });
 
-it.skipIf(process.platform==="win32").each([false,true])("streams generated Linux PCM as Opus through the physical private path (shared=%s)",async shared=>{
+for(const nativePlatform of ["linux-portal","macos-sck"] as const){
+it.skipIf(process.platform==="win32").each([false,true])(`streams generated ${nativePlatform} PCM as Opus through the physical private path (shared=%s)`,async shared=>{
  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;
- f.provider.configure({...cfg,nativePlatform:"linux-portal",allowSystemAudio:true,command:[...cfg.command,"--native-platform","linux-portal","--native-audio"]});
+ f.provider.configure({...cfg,nativePlatform,allowSystemAudio:true,command:[...cfg.command,"--native-platform",nativePlatform,"--native-audio"]});
  const mode=shared?"native-platform-shared-video":"native-platform-video",v=await f.viewer(mode,true),options={...start,options:{...start.options,width:640,features:true,...(shared?{sharedDesktop:true}:{})}};
  const audioFrames=(viewer:typeof v)=>viewer.frames.flatMap(bytes=>{try{return [decodeDesktopAudio(bytes)]}catch{return []}});
  const ackVideo=(viewer:typeof v)=>viewer.ws.on("message",(data,binary)=>{if(!binary)return;try{const packet=decodeDesktopMediaChunk(new Uint8Array(data as Buffer)),id=viewer.messages.find(m=>m.type==="media_stream")?.id;if(id)viewer.send({type:"native_video_ack",id,generation:1,seq:packet.seq});}catch{}});
@@ -1753,9 +1754,9 @@ it.skipIf(process.platform==="win32").each([false,true])("streams generated Linu
  await expect.poll(()=>(f.provider as any).nativePcmPaths.pending).toBe(0);
 });
 
-it.skipIf(process.platform==="win32").each([false,true])("shares one Linux physical capture across image-only and audio viewers in either join order (audioFirst=%s)",async audioFirst=>{
+it.skipIf(process.platform==="win32").each([false,true])(`shares one ${nativePlatform} physical capture across image-only and audio viewers in either join order (audioFirst=%s)`,async audioFirst=>{
  const f=await fixture(true,false,true,false,true,false,undefined,undefined,true,false,true,false,true),cfg=(f.provider as any).config;
- f.provider.configure({...cfg,nativePlatform:"linux-portal",allowSystemAudio:true,command:[...cfg.command,"--native-platform","linux-portal","--native-audio"]});
+ f.provider.configure({...cfg,nativePlatform,allowSystemAudio:true,command:[...cfg.command,"--native-platform",nativePlatform,"--native-audio"]});
  const sound=await f.viewer("native-platform-shared-video",true),image=await f.viewer("native-platform-shared"),options={...start,options:{...start.options,width:640,features:true,sharedDesktop:true}};
  const first=audioFirst?sound:image,second=audioFirst?image:sound;first.send(options);await expect.poll(()=>first.messages.some(m=>m.type==="ready")).toBe(true);second.send(options);await expect.poll(()=>second.messages.some(m=>m.type==="ready")).toBe(true);
  expect(sound.messages.find(m=>m.type==="ready")?.nativeAudio).toBe(true);expect(image.messages.find(m=>m.type==="ready")).not.toHaveProperty("nativeAudio");
@@ -1763,3 +1764,5 @@ it.skipIf(process.platform==="win32").each([false,true])("shares one Linux physi
  await expect.poll(()=>sound.frames.some(bytes=>{try{return decodeDesktopAudio(bytes).seq>0}catch{return false}})).toBe(true);
  expect(image.ws.readyState).toBe(WebSocket.OPEN);expect(sound.ws.readyState).toBe(WebSocket.OPEN);expect((f.provider as any).physicalHelpers.size).toBe(1);sound.send({type:"stop"});image.send({type:"stop"});await expect.poll(()=>(f.provider as any).nativePcmPaths.pending).toBe(0);
 });
+
+}

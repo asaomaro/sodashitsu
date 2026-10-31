@@ -985,7 +985,7 @@ Linux実験版では、設定の「システム音声の送信を許可」を有
 
 共有に使うPortal・ログインセッション・動画のIDに結び付け、録音処理は音声要求時だけ開始します。停止時は取得処理の終了を確認してから専用socketを閉じます。受信側の切断は無音時にも検査します。PCMは親サーバだけが接続できるローカルsocketから既存Opus圧縮へ渡し、PCMをネットワーク配信しません。生成tone・private peer・Opus受信の自動検証と、実際のLinux出力音声・端末間再生の実機確認は別です。
 
-macOSのシステム音声、両native backendのマイク転送は後続の別段階で対応します。
+両native backendのマイク転送は後続の別段階で対応します。
 
 
 ### 通常権限の補助処理と共通ホスト
@@ -1002,3 +1002,14 @@ Windowsのネイティブコピー、音声パイプ、Explorer選択取得は�
 Windowsの共有補助処理は、音声・マイク・リッチクリップボード・追加codec検出を、接続先の許可と共有方式に合わせて組み込みます。仮想画面と保護画面も、対応する許可がある場合に組み込みます。基礎の画面共有と許可判定は共有開始時に読み込みます。マイクだけを使う場合に、システム音声を取得するengineまで読み込むことはありません。
 
 複数viewer用の共有sourceでは、接続先で許可した音声・マイク・動画機能を後続viewerも使えるように準備します。準備だけで音声取得やマイク転送を開始することはなく、従来どおり個別の要求と許可が必要です。
+
+
+### macOS nativeのシステム音声
+
+macOS 14以降の実験版で、設定の「システム音声の送信を許可」を有効にした上で、接続窓でも音声を要求できます。画面と同じScreenCaptureKitの選択filterを使い、音声要求時だけ取得処理を開始します。画面収録のOS許可も必要です。接続窓は最初ミュートで、「音声を再生」を押した窓だけ再生します。共有sourceの音声取得と圧縮は共用し、窓ごとの停止は独立です。
+
+`macos-desktop-helper.swift`・`macos-rich-clipboard.swift`・`macos-native-video.swift`・`macos-native-audio.swift`・`macos-system-audio.swift`を同じ版にし、`build-macos-desktop.sh`で再ビルドしてください。設定経由では保存した許可に応じて`--allow-system-audio`を渡します。独自コマンドではこのフラグも必要です。マイクには自動で切り替えません。
+
+48kHz stereo PCMは親サーバーのUID/PIDを検証したprivate Unix socketだけへ渡し、ネットワークへは既存のOpus圧縮で送ります。動画ID・共有画面・ログイン状態・heartbeatに結び付け、停止中の取得が終了するまで次を開始しません。Darwinの長い一時フォルダ名を避けるため、socketは`/private/tmp`の利用者専用フォルダ内に置きます。
+
+自動検証は生成PCM、SDKのsampleBuffer変換、fake ScreenCaptureKit、private peer、通信とブラウザの仮想音声出力で行います。実画面の取得、実音声の録音・再生、端末間のOS許可確認を済ませたことは意味しません。

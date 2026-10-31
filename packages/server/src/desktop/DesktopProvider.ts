@@ -259,7 +259,7 @@ export class DesktopProvider {
       sharedFiles: !!this.config?.fileRoot,
       sharedResolution:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
       sharedRate:!this.config?.nativePlatform&&this.config?.allowNativeVideo===true,
-      sharedAudio:(!this.config?.nativePlatform||this.config.nativePlatform==="linux-portal")&&this.config?.allowNativeVideo===true,
+      sharedAudio:this.config?.allowNativeVideo===true,
       sharedNative: this.config?.allowNativeVideo === true,
       sharedDatagrams: this.config?.allowNativeVideo === true,
       available: !!this.config,
@@ -282,7 +282,7 @@ export class DesktopProvider {
       videoLane: true,
       microphone:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
       microphoneOpus:this.config?.allowMicrophone===true&&!!this.config.microphoneEndpoint,
-      nativeVideo: !this.config?.nativePlatform||this.config?.allowNativeVideo===true,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:!this.config?.nativePlatform||this.config.nativePlatform==="linux-portal",
+      nativeVideo: !this.config?.nativePlatform||this.config?.allowNativeVideo===true,nativeDatagrams:!this.config?.nativePlatform,nativeAudio:true,
       nativeInputFreshness: !this.config?.nativePlatform,
       nativeCodecs: !this.config?.nativePlatform,
       ...(!this.config?.nativePlatform?{nativeAdaptive:true as const,nativeCadence:true as const}:{}),
@@ -304,7 +304,7 @@ export class DesktopProvider {
     if(scope&&!endpoint||this.endpointOnly&&!endpoint)throw new RpcError("unauthorized","Authenticated desktop endpoint required");
     if (!cfg) throw new RpcError("not_found", "Bでデスクトップ補助プログラムが設定されていません");
     if(cfg.nativePlatform!==p.options.nativePlatform)throw new RpcError("invalid_params","native共有の両端を更新し、対応するOS backendを選択してください。");
-    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.sharedResolution||p.options.sharedRate||p.options.nativeAudio&&cfg.nativePlatform!=="linux-portal"||p.options.microphone||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
+    if(cfg.nativePlatform&&(p.options.elevatedDesktop||p.options.virtualDisplay||p.options.monitors||p.options.monitorDevice||p.options.display||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||p.options.sharedResolution||p.options.sharedRate||p.options.microphone||p.options.cursor||p.options.adaptive||p.options.deltas||p.options.image&&p.options.image.colorMode!=="full"))throw new RpcError("invalid_params","このnative backendでは対応する通常画面と許可した入力・転送を利用できます。");
     if(p.options.folders&&!p.options.files)throw new RpcError("invalid_params","Folders were not negotiated");
     if(p.options.folderCheckpoints&&(!p.options.files||!p.options.folders))throw new RpcError("invalid_params","Folder checkpoints were not negotiated");
     if(p.options.fileCheckpoints&&!p.options.files)throw new RpcError("invalid_params","File checkpoints were not negotiated");
@@ -789,7 +789,7 @@ export class DesktopProvider {
             if(options.sharedCursor&&cursor!==true){this.send(s,{type:"shared_cursor_failure",code:"helper_incompatible"});this.stop(s);return;}
             if(options.cursor===true&&cursor===true&&!s.secureDesktop)s.cursor=new DesktopCursorStream(bytes=>this.send(s,bytes),()=>s.ws.bufferedAmount);
             const nativeRate=options.nativeMaxFps===60&&nativeMaxFps===60&&nativeEnabled?60:undefined;
-            const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||cfg.nativePlatform==="linux-portal"&&!!s.process?.nativePcm);
+            const audioEnabled=options.nativeAudio===true&&nativeAudio===true&&nativeEnabled&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform&&!!s.process?.nativePcm);
             const udpEnabled=options.nativeDatagrams===true&&nativeDatagrams===true&&nativeEnabled;
             const nativeWindow=options.nativeVideoWindow===3&&nativeVideoWindow===3&&nativeEnabled?3:1;
             s.sharedRate=options.sharedRate===true&&nativeCadence===true&&nativeEnabled;
