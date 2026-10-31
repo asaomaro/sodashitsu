@@ -73,11 +73,12 @@ class NativeVideoFlow:
     A lost predictive frame ends this stream; a later record cannot cross its gap.
     """
 
-    def __init__(self, active, clock, emit, maximum_fps=30):
+    def __init__(self, active, clock, emit, maximum_fps=30, cadence=False):
         self.active = active
         self.clock = clock
         self.emit = emit
         self.maximum_fps = maximum_fps
+        self.cadence = cadence
         self.current = None
         self.seen = set()
         self.revision = 0
@@ -118,7 +119,7 @@ class NativeVideoFlow:
         if not granted:
             self.emit({"type": "native_video_stopped", "id": value["id"]}, None)
             return None
-        stream = {"id": value["id"], "fps": fps, "kbps": kbps, "window": window,
+        stream = {"id": value["id"], "fps": fps, "kbps": kbps, "window": window, "max_fps": fps, "max_kbps": kbps,
                   "seq": 0, "timestamp": -1, "pending": [], "encoding": None,
                   "next": self.clock(), "key": True, "dead": False, "codec": None,
                   "size": None}
@@ -143,6 +144,25 @@ class NativeVideoFlow:
                 or stream["encoding"] is not None and self.clock() - stream["encoding"][0] > 1000):
             if self.current is stream:
                 self.stop()
+
+    def rate(self, value):
+        kind = value.get("type")
+        allowed = {"type", "id", "kbps"} | ({"fps"} if kind == "native_rate" else set())
+        if kind not in ("native_rate", "native_bitrate") or set(value) != allowed or not identifier(value.get("id")):
+            raise VideoFailure("rate_request")
+        if kind == "native_rate" and not self.cadence:
+            raise VideoFailure("rate_not_negotiated")
+        stream = self.current
+        if stream is None or stream["id"] != value["id"].lower():
+            return
+        fps = value.get("fps", stream["fps"])
+        kbps = value.get("kbps")
+        if not integer(fps, 1, stream["max_fps"]) or not integer(kbps, 128, stream["max_kbps"]):
+            raise VideoFailure("rate_ceiling")
+        if not self.live(stream):
+            if self.current is stream:self.stop()
+            return
+        stream["fps"], stream["kbps"] = fps, kbps
 
     def reserve(self, captured=None):
         stream = self.current
@@ -317,6 +337,17 @@ class GstH264Encoder:
         if self.pipeline is None:
             raise VideoFailure("encoder_unavailable")
 
+    def rate(self, fps, kbps, valid):
+        if not valid():raise VideoFailure("cancelled")
+        if kbps != self.kbps:
+            spec = self.encoder.find_property("bitrate")
+            if spec is None or not spec.flags & self.Gst.PARAM_MUTABLE_PLAYING:
+                raise VideoFailure("rate_unavailable")
+            self.encoder.set_property("bitrate", kbps * (1000 if self.factory == "openh264enc" else 1))
+            if not valid():raise VideoFailure("cancelled")
+            self.kbps = kbps
+        self.fps = fps
+
     def encode(self, raw, force_key, valid):
         try:
             data = self._encode(raw, force_key, valid)
@@ -416,6 +447,9 @@ class H264Worker:
                         encoder = GstH264Encoder(self.Gst, self.Video, width, height, stream["fps"], stream["kbps"])
                     if (width, height) != (encoder.input_width, encoder.input_height):
                         raise VideoFailure("source_changed")
+                    with self.gate:
+                        fps, kbps = stream["fps"], stream["kbps"]
+                    encoder.rate(fps, kbps, valid)
                     started = time.monotonic()
                     data = encoder.encode(raw, token[1], valid)
                     with self.gate:

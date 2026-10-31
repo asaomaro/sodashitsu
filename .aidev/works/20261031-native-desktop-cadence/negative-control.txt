@@ -1,0 +1,23 @@
+## ceiling-bypass: exit 1
+F
+======================================================================
+FAIL: test_rate_adjustments_preserve_sequence_and_original_request_ceilings (__main__.Flow.test_rate_adjustments_preserve_sequence_and_original_request_ceilings)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/soda-native-cadence-negative-ce33i78x/test-linux-native-video.py", line 55, in test_rate_adjustments_preserve_sequence_and_original_request_ceilings
+    with self.assertRaises(video.VideoFailure):self.flow.rate({"type":"native_rate","id":identifier,**fields})
+AssertionError: VideoFailure not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+
+## restored: exit 0
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+
+Original source bytes unchanged: true
