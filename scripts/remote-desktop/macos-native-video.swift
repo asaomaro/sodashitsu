@@ -21,6 +21,17 @@ final class ToolboxH264Encoder: NativeH264Encoder {
     private var stopped=false,session: VTCompressionSession?,size: (Int,Int)?
     private let setRate:(VTCompressionSession,Int)->OSStatus
     init(fps: Int,kbps: Int,hardware: Bool=true,family:String="h264",setRate:@escaping(VTCompressionSession,Int)->OSStatus={VTSessionSetProperty($0,key:kVTCompressionPropertyKey_AverageBitRate,value:($1*1000) as CFNumber)}) { self.fps=fps;self.kbps=kbps;self.hardware=hardware;self.family=family;self.setRate=setRate }
+    static func hasHardwareHEVC(_ encoders:[[CFString:Any]]) -> Bool {
+        return encoders.prefix(128).contains {encoder in
+            guard let codec=integer(encoder[kVTVideoEncoderList_CodecType],0,Int64(UInt32.max)) else {return false}
+            return UInt32(codec)==kCMVideoCodecType_HEVC && boolean(encoder[kVTVideoEncoderList_IsHardwareAccelerated])==true
+        }
+    }
+    static func hardwareHEVCAvailable() -> Bool {
+        var copied:CFArray?
+        guard VTCopyVideoEncoderList(nil,&copied)==noErr,let encoders=copied as? [[CFString:Any]] else {return false}
+        return hasHardwareHEVC(encoders)
+    }
     func running() -> Bool { flag.lock();defer { flag.unlock() };return !stopped }
     func prepare(_ width: Int,_ height: Int) throws -> VTCompressionSession {
         if let session=session { guard size?.0==width,size?.1==height else { throw NativeError("backend_failure") };return session }
@@ -154,6 +165,10 @@ func generatedNativeVideoTests() throws -> Int {
         while !ready() && Date()<deadline {_=RunLoop.current.run(mode:.default,before:Date().addingTimeInterval(0.005))}
         return ready()
     }
+    let generatedEncoder:[CFString:Any]=[kVTVideoEncoderList_CodecType:NSNumber(value:kCMVideoCodecType_HEVC),kVTVideoEncoderList_IsHardwareAccelerated:true]
+    try check(ToolboxH264Encoder.hasHardwareHEVC([generatedEncoder]),"generated hardware HEVC capability")
+    try check(!ToolboxH264Encoder.hasHardwareHEVC([[kVTVideoEncoderList_CodecType:NSNumber(value:kCMVideoCodecType_HEVC),kVTVideoEncoderList_IsHardwareAccelerated:false]]),"generated software encoder is not hardware HEVC")
+    try check(!ToolboxH264Encoder.hasHardwareHEVC([[kVTVideoEncoderList_CodecType:NSNumber(value:kCMVideoCodecType_H264),kVTVideoEncoderList_IsHardwareAccelerated:true]]),"generated H264 encoder is not HEVC")
     let generatedHEVCSPS=Data(base64Encoded:"QgEBAWAAAAMAsAAAAwAAAwA/oAUCAXHy8uSQpWS4/8AAQABagICAggAAAwACAAADAD2I")!
     let generatedHEVCCodec=try ToolboxH264Encoder.hevcCodec(generatedHEVCSPS)
     try check(generatedHEVCCodec=="hev1.1.6.L63.B0","generated HEVC actual SPS profile tier level")
@@ -283,7 +298,7 @@ func generatedNativeVideoTests() throws -> Int {
     let decoded=try generatedNativeDecode(actual.data)
     try check(decoded.count==4,"generated VideoToolbox decoded pixels")
     for index in 0..<4 {for channel in 0..<3 {try check(abs(Int(decoded[index][channel])-Int(colors[index][channel]))<40,"generated VideoToolbox orientation and color order")}}
-    if VTIsHardwareEncodeSupported(kCMVideoCodecType_HEVC) {
+    if ToolboxH264Encoder.hardwareHEVCAvailable() {
         let hevcEncoder=ToolboxH264Encoder(fps:30,kbps:2500,family:"hevc"),hevcBox=GeneratedNativePacketBox(),hevcDone=DispatchSemaphore(value:0)
         hevcEncoder.encode(image,timestamp:1,key:true,valid:{true}) {hevcBox.put($0);hevcDone.signal()}
         let hevcCompleted=hevcDone.wait(timeout:.now()+5) == .success

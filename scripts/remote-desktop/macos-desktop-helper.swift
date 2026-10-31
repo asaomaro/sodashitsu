@@ -208,6 +208,11 @@ struct FrameTicket { let revision: UInt64; let started: Double; let inputSeq: In
 func canPublish(_ ticket: FrameTicket, revision: UInt64, now: Double, active: Bool) -> Bool {
     active && ticket.revision == revision && now >= ticket.started && now-ticket.started < 1000
 }
+func nativeCodecCandidatesAfterQuery(query:()->Bool,validAfterQuery:()->Bool) -> [String]? {
+    let hevc=query()
+    guard validAfterQuery() else {return nil}
+    return ["h264"]+(hevc ? ["hevc"]:[])
+}
 enum RecordWriteResult: Equatable { case complete, discarded, failed }
 enum WriteAttempt { case wrote(Int), again, interrupted, failed }
 func writeRecord(_ data: Data, valid: () -> Bool, clock: () -> Double,
@@ -439,7 +444,8 @@ final class DesktopSource {
         return !inputCeiling || (AXIsProcessTrusted() && CGPreflightPostEventAccess())
     }
     func publishable(_ ticket:FrameTicket) -> Bool {
-        !dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())
+        let granted=sourceActive()
+        return !dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:granted)
     }
     func start() {
         signal(SIGPIPE,SIG_IGN)
@@ -598,13 +604,16 @@ final class DesktopSource {
                     try locked {
                         guard canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive()) else { return }
                         if !ready {
-                            ready=true
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
                             if richClipboard != nil { hello["richClipboard"]=true }
-                            if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60;if nativeVideo?.cadence==true {hello["nativeCadence"]=true};if nativeVideo?.codecs==true {hello["nativeCodecs"]=true;hello["nativeCodecCandidates"]=["h264"]+(VTIsHardwareEncodeSupported(kCMVideoCodecType_HEVC) ? ["hevc"]:[])}}
+                            if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60;if nativeVideo?.cadence==true {hello["nativeCadence"]=true};if nativeVideo?.codecs==true {hello["nativeCodecs"]=true;guard let candidates=nativeCodecCandidatesAfterQuery(query:{ToolboxH264Encoder.hardwareHEVCAvailable()},validAfterQuery:{self.publishable(ticket)}) else {return};hello["nativeCodecCandidates"]=candidates}}
                             if audioCeiling {hello["nativeAudio"]=true}
                             if microphoneCeiling {hello["microphone"]=true}
-                            try output.send(hello)
+                            guard publishable(ticket) else {return}
+                            ready=true
+                            try output.send(hello,valid:{ [weak self] in self?.publishable(ticket)==true },discarded:{ [weak self] in DispatchQueue.main.async {
+                                guard let self=self,!self.dead,self.input?.revision==ticket.revision else {return};self.ready=false
+                            } })
                         }
                         guard sequence<Int64(safeInteger) else { throw NativeError("backend_failure") }
                         lastJPEG=milliseconds();sequence+=1;pending=sequence;pendingAt=milliseconds();let seq=sequence
@@ -772,6 +781,13 @@ func generatedTests() throws -> Int {
     let denied=try guardInput.input(key(31,"KeyA",true),now:1000)
     try check(denied==nil,"read-only injection blocked")
     let unicode=String(repeating:"a",count:19)+"😀日本語"+String(repeating:"🧭",count:40)
+    for reason in ["deadline","source"] {
+        var metadataTime:Double=0,metadataActive=true,readyWrites=0
+        let metadataTicket=FrameTicket(revision:0,started:0,inputSeq:0)
+        let candidates=nativeCodecCandidatesAfterQuery(query:{if reason=="deadline" {metadataTime=1000}else{metadataActive=false};return true},validAfterQuery:{canPublish(metadataTicket,revision:0,now:metadataTime,active:metadataActive)})
+        if candidates != nil {readyWrites+=1}
+        try check(candidates==nil && readyWrites==0,"codec metadata query cannot extend source ticket")
+    }
     let chunks=unicodeChunks(unicode)
     try check(chunks.allSatisfy{$0.count<=20},"unicode event chunks bounded")
     try check(String(decoding:chunks.flatMap{$0},as:UTF16.self)==unicode,"unicode chunks preserve content")

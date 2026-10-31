@@ -12,6 +12,7 @@ video_source=source.with_name("macos-native-video.swift").read_text()
 audio_source=source.with_name("macos-native-audio.swift").read_text()+"\n"+source.with_name("macos-system-audio.swift").read_text()+"\n"+source.with_name("macos-native-microphone.swift").read_text()
 microphone_source=source.with_name("macos-native-microphone.swift").read_text()
 cases = [
+    ("codec-query-ticket", "guard validAfterQuery() else", "guard true else", "codec metadata query cannot extend source ticket"),
     ("source-audio-reentrant", " && audioCeiling && nativeVideo === video", " && nativeVideo === video", "generated source audio reentrant permission retirement"),
     ("clipboard-replay", "id>lastId", "true", "clipboard request not replayed"),
     ("clipboard-write-ceiling", "canWrite(),authorized(ticket)", "true,authorized(ticket)", "clipboard write requires input ceiling"),
@@ -22,7 +23,7 @@ cases = [
     ("region-revision", "input.revision &+= 1", "input.revision &+= 0", "regional config invalidates in-flight capture"),
     ("region-crop", "image.cropping(to:CGRect(x:r.x,y:r.y,width:r.width,height:r.height))", "image.cropping(to:CGRect(x:0,y:0,width:r.width,height:r.height))", "regional background remains stable"),
     ("region-nonce", r'\(r.id):\(image.width)', r'\(image.width)', "regional nonce binding"),
-    ("queued-source", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:sourceActive())", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:true)", "queued source revocation never writes"),
+    ("queued-source", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:granted)", "!dead && !stopping && input != nil && canPublish(ticket,revision:input!.revision,now:milliseconds(),active:true)", "queued source revocation never writes"),
     ("text-source", "guard active(),now()<=expires else", "guard now()<=expires else", "text continued after source revocation"),
     ("release-source", 'if releaseAllowed() { try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers)) }', 'try? sink.post(InjectedEvent(kind:"key",code:key,down:false,modifiers:modifiers))', "source revocation clears trackers without injection"),
 ]

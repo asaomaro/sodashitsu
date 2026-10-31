@@ -7,3 +7,5 @@ build/typecheck成功。Linux portal59件成功。native video32件中31成功�
 新E2EでH264 codec大文字が既存protocolと不一致になる退行を検出し、Linux/Mac出力をlowercaseへ統一。case不正と複数picture許容のprivate-copy負例は意図したassertionで失敗→復元成功。元ソースは不変、rawはnegative-control.txt。
 
 macOSはHEVC hardware encode対応時、生成64角4色画像を本番VT encoderで圧縮→実parameter set抽出→software HEVC decodeの色順→同encoder退役を試験する。非対応時は未実行を明示し、固定SPS/controllerの生成試験は常時行う。新Mac SDK/CI結果は進行中。
+
+初回Mac CIで存在しないVTIsHardwareEncodeSupported参照をcompile時に検出。公開VTCopyVideoEncoderListとcodecType/IsHardwareAcceleratedキーの検査へ修正し、software/H264を誤ってHEVC対応としない生成metadata試験を追加。修正後CIで再検証する。
