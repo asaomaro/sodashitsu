@@ -1,0 +1,51 @@
+name: Common native roles (generated CLR and preflight only)
+on:
+  pull_request:
+    paths:
+      - 'scripts/remote-desktop/WindowsNativeRoleHost.cs'
+      - 'scripts/remote-desktop/WindowsNativeDrag*.cs'
+      - 'scripts/remote-desktop/WindowsAudioPipeBridge.cs'
+      - 'scripts/remote-desktop/WindowsExplorerSelection*.cs'
+      - 'scripts/remote-desktop/EndpointAclPolicy.ps1'
+      - 'scripts/remote-desktop/build-native-role.ps1'
+      - 'scripts/remote-desktop/verify-native-roles.mjs'
+      - 'packages/client-core/src/desktop/DesktopNative*'
+      - 'packages/client-core/src/desktop/DesktopAudioPipe*'
+      - 'packages/server/src/desktop/DesktopNativeSelection*'
+      - 'packages/server/src/desktop/DesktopAudioPipes*'
+      - 'scripts/package.mjs'
+      - '.github/workflows/native-role-host.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generated:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Compile private generated role DLLs and run apartment/digest checks; actual roles preflight only
+        run: node scripts/remote-desktop/verify-native-roles.mjs
+  node-boundaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm -r --filter '@sodashitsu/server...' run build
+      - name: Generated Node role, ownership, fixed arguments and physical retirement tests
+        run: pnpm exec vitest run packages/client-core/src/desktop/DesktopNativeRoleBinary.node.test.ts packages/client-core/src/desktop/DesktopNativeGateway.node.test.ts packages/client-core/src/desktop/DesktopNativeHost.node.test.ts packages/client-core/src/desktop/DesktopAudioPipe.node.test.ts packages/server/src/desktop/DesktopNativeSelection.test.ts packages/server/src/desktop/DesktopNativeSelection.role.test.ts packages/server/src/desktop/DesktopAudioPipes.test.ts --maxWorkers=2

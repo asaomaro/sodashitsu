@@ -29,7 +29,7 @@ AssertionError: expected "vi.fn()" to not be called at all, but actually been ca
 
 ## OS差分と最終delta
 
-8dc57b35製品の全体試験918files / 13227pass +1Windows専用skip (13228)、build/typecheck pass。generated browser E2E（desktop/narrow screenshot）と両OSの配布resource staging、既存GUI headless/全体server、lazy entry CIはpass。Windows新fixtureは3回のcoldPS呼出しでtest既定5秒を超え、macOSでは重複watch下のprepareを検出したため修正。
+8dc57b35製品の全体試験919files pass +1Windows専用file skip / 13227pass +1Windows専用skip (13228)、build/typecheck pass。generated browser E2E（desktop/narrow screenshot）と両OSの配布resource staging、既存GUI headless/全体server、lazy entry CIはpass。Windows新fixtureは3回のcoldPS呼出しでtest既定5秒を超え、macOSでは重複watch下のprepareを検出したため修正。
 
 現deltaはobservation/idempotence/actual hostState/closedhost fixtureと旧startup項目削除。build pass。private copyで正常版8passから該当guardを外し、以下8件の意図したassertionが全て失敗。元sourceは変更しない。raw /tmp/soda-integrated-negative-{positive,failure}-current.log。最終全体結果と全headCIはPR本文・merge receiptに記録する。
 
@@ -53,3 +53,5 @@ AssertionError: expected "vi.fn()" to not be called at all, but actually been ca
  Test Files  3 failed (3)
       Tests  8 failed | 17 skipped (25)
 ```
+
+最終head1bba0262: build/typecheck pass、919files pass/1Windows専用skip、13229tests pass/1skip。10件の全headCI成功。PR345 main cd09d424、receipt /tmp/soda-assistant-integrated-final-receipt.json。

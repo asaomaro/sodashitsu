@@ -8,7 +8,7 @@ function fixture(kind:"audio"|"microphone"="audio",now?:()=>number,permit?:()=>b
  const child=Object.assign(new EventEmitter(),{stdin:new PassThrough(),stdout:new PassThrough(),stderr:new PassThrough(),kill:vi.fn()});
  const input:Buffer[]=[];child.stdin.on("data",b=>input.push(Buffer.from(b)));
  let allowed=true;const launch=vi.fn(()=>child) as unknown as typeof spawn;
- const bridge=new DesktopAudioPipe({executable:"fixed-generated-audio-pipe.exe"},kind,()=>allowed&&(permit?.()??true),launch,now);bridge.on("error",()=>{});const ready=bridge.ready.catch(e=>e);
+ const bridge=new DesktopAudioPipe({executable:"fixed-generated-audio-pipe.exe",arguments:["--role","audio","--module","generated","--sha256","digest"]},kind,()=>allowed&&(permit?.()??true),launch,now);bridge.on("error",()=>{});const ready=bridge.ready.catch(e=>e);
  clean.push(()=>{bridge.destroy();child.emit("close",0,null);});
  const nonce=JSON.parse(input[0]!.toString()).nonce;
  const descriptor=(extra={})=>Buffer.from(JSON.stringify({type:"audio_pipe",version:1,pid:4321,nonce,...extra})+"\n");
@@ -18,7 +18,7 @@ it("validates a fragmented private descriptor before connecting the exact local 
  const f=fixture(),d=f.descriptor();f.child.stdout.write(d.subarray(0,17));f.child.stdout.write(d.subarray(17));expect(await f.ready).toBe(4321);
  expect(f.bridge.connect("SodaDesktopAudio-"+"a".repeat(32))).toBe(true);expect(JSON.parse(f.input[1]!.toString())).toEqual({kind:"audio",name:"SodaDesktopAudio-"+"a".repeat(32)});
  const output:Buffer[]=[];f.bridge.on("data",b=>output.push(b));const pcm=Buffer.from([0,255,10,13,128,1]);f.child.stdout.write(pcm);await new Promise(resolve=>setImmediate(resolve));expect(Buffer.concat(output)).toEqual(pcm);
- expect(f.launch).toHaveBeenCalledWith("fixed-generated-audio-pipe.exe",[],expect.objectContaining({shell:false,windowsHide:true}));
+ expect(f.launch).toHaveBeenCalledWith("fixed-generated-audio-pipe.exe",["--role","audio","--module","generated","--sha256","digest"],expect.objectContaining({shell:false,windowsHide:true}));
 });
 it.each([{nonce:"b".repeat(64)},{pid:0},{pid:2147483648},{unexpected:true}])("rejects an unauthenticated or malformed descriptor %j",async extra=>{
  const f=fixture();f.child.stdout.write(f.descriptor(extra));expect(await f.ready).toBeInstanceOf(Error);expect(f.child.kill).toHaveBeenCalledOnce();expect(f.bridge.destroyed).toBe(true);
