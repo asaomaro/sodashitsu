@@ -46,9 +46,9 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
         : []),
       {
         label: "マイク転送先の仮想再生デバイスID",
-        value: state?.nativePlatform?"このbackendは未対応":state?.permissions.microphoneEndpoint || "未設定",
-        disabled: busy || !state?.canConfigure || !!state?.nativePlatform,
-        note: "仮想オーディオケーブルのrender側ID。録音側をアプリで選択します。",
+        value: state?.permissions.microphoneEndpoint || "未設定",
+        disabled: busy || !state?.canConfigure,
+        note: "Windowsの再生ID、Linuxの仮想sink名、macOSの仮想デバイスUID。録音側をアプリで選択。",
         activate: () => ({
           kind: "edit" as const, title: "マイク転送先の仮想再生デバイスID", initial: state?.permissions.microphoneEndpoint ?? "",
           commit: (text:string) => {
@@ -85,7 +85,7 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
           },
         }),
       },
-      ...entries.filter(([key])=>!state?.nativePlatform||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio").map(([key, label]) => ({
+      ...entries.filter(([key])=>!state?.nativePlatform||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, label]) => ({
         label,
         value: onOff(state?.permissions[key] === true),
         toggle: true,
