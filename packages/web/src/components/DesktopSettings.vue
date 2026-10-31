@@ -84,6 +84,8 @@ async function save() {
       >
       <label><input v-model="draft.allowClipboard" type="checkbox" />クリップボードを許可</label>
       <label><input v-model="draft.allowMonitors" type="checkbox" />{{state?.nativePlatform?"OSで許可したモニターの一覧・切替を許可":"全モニターの共有と切替を許可"}}</label>
+      <label v-if="state?.nativePlatform==='linux-portal'"><input v-model="draft.allowVirtualDisplay" type="checkbox" />OS Portalによる一時仮想画面の作成を許可</label>
+      <p v-if="state?.nativePlatform==='linux-portal'&&draft.allowVirtualDisplay">VIRTUAL sourceに対応するPortalが必要です。OSの選択・許可画面で承認した仮想画面だけを共有し、通常画面へ代替しません。</p>
       <template v-if="!state?.nativePlatform">
       <label><input v-model="draft.allowElevated" type="checkbox" />管理者権限のアプリ・UAC画面の共有を許可</label>
       <label><input v-model="draft.allowProtectedFiles" type="checkbox" :disabled="!draft.allowElevated||!draft.fileRoot?.trim()" />管理者画面中も共有フォルダーを転送（soda実行ユーザーの権限）</label>

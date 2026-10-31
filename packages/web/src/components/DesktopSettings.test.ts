@@ -97,3 +97,8 @@ it.each(["linux-portal","macos-sck"])("shows and saves native %s system audio",a
  try{const label=wrapper.findAll("label").find(item=>item.text()==="システム音声の送信を許可");
  expect(label).toBeDefined();await label!.get("input").setValue(true);await wrapper.get("button").trigger("click");await flushPromises();expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowSystemAudio:true});}finally{wrapper.unmount();}
 });
+it("shows Portal virtual permission without requiring a Windows driver",async()=>{
+ const request=vi.fn(async(method,p)=>({nativePlatform:"linux-portal",permissions:method.endsWith("set")?p:permissions,supported:true,canConfigure:true}));
+ const wrapper=mount(DesktopSettings,{global:{provide:{[ConnectionKey as symbol]:{request}}}});await flushPromises();
+ const label=wrapper.findAll("label").find(item=>item.text()==="OS Portalによる一時仮想画面の作成を許可")!;await label.get("input").setValue(true);expect(wrapper.text()).not.toContain("署名済み仮想画面ドライバー");await wrapper.get("button").trigger("click");await flushPromises();expect(request).toHaveBeenLastCalledWith("desktop.settings.set",{...permissions,allowVirtualDisplay:true});wrapper.unmount();
+});

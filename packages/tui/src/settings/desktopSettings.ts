@@ -86,8 +86,8 @@ export function desktopSettingsSection(port: Port, changed: () => void): Setting
           },
         }),
       },
-      ...entries.filter(([key])=>!state?.nativePlatform||key==="allowMonitors"||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, label]) => ({
-        label,
+      ...entries.filter(([key])=>!state?.nativePlatform||key==="allowMonitors"||key==="allowVirtualDisplay"&&state.nativePlatform==="linux-portal"||key==="enabled"||key==="allowInput"||key==="allowClipboard"||key==="allowSystemAudio"||key==="allowMicrophone").map(([key, originalLabel]) => ({
+        label:key==="allowVirtualDisplay"&&state?.nativePlatform==="linux-portal"?"OS Portalによる一時仮想画面の作成を許可":originalLabel,
         value: onOff(state?.permissions[key] === true),
         toggle: true,
         disabled: busy || !state?.canConfigure || (!state.supported && !state.permissions.enabled) || (key==="allowProtectedFiles"&&(!state.permissions.allowElevated||!state.permissions.fileRoot?.trim())),
