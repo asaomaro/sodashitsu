@@ -1,6 +1,6 @@
 import * as nodeFs from "node:fs";
+import * as enabledState from "./AssistantEnabledState.js";
 import {EventEmitter} from "node:events";
-import * as packageState from "./AssistantPackageState.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -107,18 +107,42 @@ it.each(["disable","stop"] as const)("does not construct after %s during impleme
  }finally{release?.(create);await controller.stop();await rm(dir,{recursive:true,force:true});}
 });
 
-it("rechecks committed OFF after package metadata await even before watch delivery",async()=>{
- const dir=await mkdtemp(join(tmpdir(),"soda-assistant-metadata-race-"));
- const installed:packageState.AssistantPackage={version:1,current:{id:"00000000-0000-4000-8000-000000000001",command:[process.execPath],sha256:"a".repeat(64)},previous:null};
- let release!:(value:packageState.AssistantPackage)=>void;
- const read=vi.spyOn(packageState,"readAssistantPackage").mockResolvedValueOnce(installed).mockImplementationOnce(()=>new Promise(resolve=>{release=resolve;}));
+it("does not spawn when OFF commits while bundled preparation retires before watch delivery",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"soda-assistant-prepare-race-"));
+ let release!:()=>void;const resolve=vi.fn(async()=>{await new Promise<void>(yes=>{release=yes;});return{command:["generated-host","generated-app"],origin:"http://127.0.0.1:7780"};});
  const watch=vi.spyOn(nodeFs,"watch").mockReturnValue(Object.assign(new EventEmitter(),{close:vi.fn()}) as unknown as nodeFs.FSWatcher);
  const create=vi.fn(()=>({start:vi.fn(),stop:vi.fn(async()=>{})}));
- const controller=new AssistantLaunchController(dir,{},()=>"http://127.0.0.1:7780",vi.fn(),undefined,undefined,undefined,async()=>create);
- try {
-  await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(read).toHaveBeenCalledTimes(2));
-  await writeAssistantEnabled(dir,false);release(installed);
-  await (controller as unknown as {queue:Promise<void>}).queue;
-  expect(create).not.toHaveBeenCalled();
- }finally {release?.(installed);await controller.stop();watch.mockRestore();read.mockRestore();await rm(dir,{recursive:true,force:true});}
+ const controller=new AssistantLaunchController(dir,{},()=>"http://127.0.0.1:7780",vi.fn(),undefined,undefined,undefined,async()=>create,resolve);
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(resolve).toHaveBeenCalledOnce());await writeAssistantEnabled(dir,false);release();await(controller as unknown as{queue:Promise<void>}).queue;expect(create).not.toHaveBeenCalled();}
+ finally{release?.();await controller.stop();watch.mockRestore();await rm(dir,{recursive:true,force:true});}
+});
+
+it("disable aborts pending preparation and waits for its real retirement before another request",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"soda-assistant-cancel-"));let release!:()=>void,signal:AbortSignal|undefined;
+ const resolve=vi.fn(async(_origin:string,value:AbortSignal)=>{signal=value;await new Promise<void>(yes=>{release=yes;});return{command:["generated"],origin:"http://127.0.0.1:7780"};});
+ const app={start:vi.fn(),stop:vi.fn(async()=>{})};const controller=new AssistantLaunchController(dir,{},()=>"http://127.0.0.1:7780",vi.fn(),app,undefined,undefined,undefined,resolve);
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(resolve).toHaveBeenCalledOnce());await controller.setEnabled(false);expect(signal?.aborted).toBe(true);expect(app.start).not.toHaveBeenCalled();release();await(controller as unknown as{queue:Promise<void>}).queue;expect(app.start).not.toHaveBeenCalled();expect((await controller.status()).phase).toBe("disabled");}
+ finally{release?.();await controller.stop();await rm(dir,{recursive:true,force:true});}
+});
+it('retains a running identity through repeated ON and duplicate watch delivery',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-idempotent-'));let attached!:(id:string)=>void;const app={start:vi.fn(),stop:vi.fn(async()=>{})},activate=vi.fn();
+ const controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:'["generated"]'},()=>"http://127.0.0.1:7780",vi.fn(),(_disabled,onAttached)=>{attached=onAttached;return app;},undefined,{activate,requestStop:vi.fn(async()=>{})});
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(app.start).toHaveBeenCalledOnce());attached('00000000-0000-4000-8000-000000000001');await vi.waitFor(()=>expect(activate).toHaveBeenCalledOnce());await controller.setEnabled(true);await(controller as unknown as{queue:Promise<void>}).queue;expect((await controller.status()).phase).toBe('running');expect(app.start).toHaveBeenCalledOnce();expect(activate).toHaveBeenCalledOnce();}
+ finally{await controller.stop();await rm(dir,{recursive:true,force:true});}
+});
+
+it('revalidates the single attached identity when an equivalent ON arrives during authorization',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-attached-race-'));let attached!:(id:string)=>void,release!:()=>void,block=false;
+ const original=enabledState.readAssistantEnabled;const read=vi.spyOn(enabledState,'readAssistantEnabled').mockImplementation(async(...args)=>{if(block){block=false;await new Promise<void>(yes=>{release=yes;});}return original(...args);});
+ const app={start:vi.fn(),stop:vi.fn(async()=>{})},activate=vi.fn();const controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:'["generated"]'},()=>"http://127.0.0.1:7780",vi.fn(),(_disabled,onAttached)=>{attached=onAttached;return app;},undefined,{activate,requestStop:vi.fn(async()=>{})});
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(app.start).toHaveBeenCalledOnce());block=true;attached('00000000-0000-4000-8000-000000000001');await controller.setEnabled(true);await(controller as unknown as{queue:Promise<void>}).queue;release();await vi.waitFor(()=>expect(activate).toHaveBeenCalledOnce());expect((await controller.status()).phase).toBe('running');expect(app.start).toHaveBeenCalledOnce();}
+ finally{release?.();await controller.stop();read.mockRestore();await rm(dir,{recursive:true,force:true});}
+});
+it('a closed generated host cannot be revived by a late attached authorization result',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-closed-identity-'));let calls=0,blocked=false,release!:()=>void;
+ const original=enabledState.readAssistantEnabled,read=vi.spyOn(enabledState,'readAssistantEnabled').mockImplementation(async(...args)=>{if(++calls===4){blocked=true;await new Promise<void>(yes=>{release=yes;});}return original(...args);});
+ const code='process.stdin.once("data",()=>{process.stdout.write(JSON.stringify({type:"attached",deviceId:"00000000-0000-4000-8000-000000000001"})+"\\n");setTimeout(()=>process.exit(0),20);});process.stdin.resume();';
+ const activate=vi.fn(),controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:JSON.stringify([process.execPath,'-e',code,'--'])},()=>"http://127.0.0.1:7780",vi.fn(),undefined,undefined,{activate,requestStop:vi.fn(async()=>{})});
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(blocked).toBe(true));await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('error'));const pending=[...(controller as unknown as{saves:Set<Promise<void>>}).saves];release();await Promise.all(pending);expect(activate).not.toHaveBeenCalled();expect((await controller.status()).phase).toBe('error');}
+ finally{release?.();await controller.stop();read.mockRestore();await rm(dir,{recursive:true,force:true});}
 });

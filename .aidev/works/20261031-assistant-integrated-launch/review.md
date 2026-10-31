@@ -1,0 +1,11 @@
+# 独立レビュー
+
+review_transferのNativeRoot危険境界点検: 固定PowerShell絶対path、Windows全祖先owner/replace ACLとfixed drive/reparse、POSIX全canonical祖先identity/uid/mode、callback後Abort再確認を指摘し修正。deltaで解消。
+
+review_pointerのHostApp/BundledLaunch/Controller危険境界点検: 同値ON/重複watchで状態がstarting固定、保留attached認可の失効・再評価を指摘し修正。appIdentityと有効状態で認可し、同値requestKeyは既存hostを維持、activateを重複抑止。最終OFF時のteardownとGUI mode環境変数も修正。deltaで解消。
+
+review_pointerの全差分cross: Windows rootの存在確認→mkdir→SetAcl競合と、childが終了後の保留attached認可を指摘。Directory.CreateDirectory(path,DirectorySecurity)で作成時にACLを渡して既存dirを変更せず、終了時にappIdentityを失効して修正。生成回帰を追加、修正delta再レビューで両must解消、追加must/shouldなし。Web/TUI/strictRPC/旧配布廃止/lockfile/cleanup/3OSとbrowserworkflow/docsを含む全差分を確認済み。
+
+.NETの作成時securityと既存directory非変更はMicrosoft公式API/reference sourceを確認。https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.createdirectory#system-io-directory-createdirectory(system-string-system-security-accesscontrol-directorysecurity)
+
+実GUI・production cache・OS policy/service/認証設定を点検用に変更していない。Windows生成race試験のACLは作業用private temp directoryだけで扱い、後始末する。

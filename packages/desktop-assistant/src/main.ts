@@ -583,9 +583,9 @@ const adapter: NativeAdapter = {
   },
   openPanel,
   startup(enabled) {
-    if (enabled && (process.platform !== "win32" || !app.isPackaged))
+    if (enabled && (process.platform !== "win32" || (!app.isPackaged && !managed)))
       throw new Error("自動起動はWindows配布版で設定してください");
-    if (process.platform === "win32" && app.isPackaged)
+    if (process.platform === "win32" && (app.isPackaged || managed))
       app.setLoginItemSettings({ openAtLogin: enabled });
   },
 };
@@ -1151,6 +1151,7 @@ function registerIpc(): void {
   }
 }
 
+app.setName("Sodashitsu Assistant");
 const managed = process.argv.includes("--soda-managed")
   ? await managedLaunch(process.stdin, () => app.quit()).catch(() => { app.exit(1); return undefined; }) : undefined;
 if (!app.requestSingleInstanceLock()) {

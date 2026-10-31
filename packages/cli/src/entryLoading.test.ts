@@ -33,8 +33,8 @@ it("skill selects only its command module without starting desktop, preview or w
 
 it("assistant status reads only metadata while disabled",async()=>{
  const directory=await mkdtemp(join(tmpdir(),"soda-disabled-status-"));
- try{const result=await execute("packages/server/dist/main.js",["assistant","status","--state-dir",directory]);expect(JSON.parse(result.output).installation).toBeNull();
- expect(result.modules.filter(url=>/\/packages\/server\/dist\/(?:composeServer\.js|assistant\/(?:AssistantLaunchController|ManagedAssistant|AssistantPackage|AssistantZip|AssistantSessions|AssistantAudioUploads|CodexAudio)\.js)/.test(url))).toEqual([]);
+ try{const result=await execute("packages/server/dist/main.js",["assistant","status","--state-dir",directory]);expect(JSON.parse(result.output).managedBy).toBe("soda");
+ expect(result.modules.filter(url=>/\/packages\/server\/dist\/(?:composeServer\.js|assistant\/(?:AssistantLaunchController|ManagedAssistant|AssistantNativeRoot|AssistantBundledLaunch|AssistantHostApp|AssistantRuntimeCache|AssistantSessions|AssistantAudioUploads|CodexAudio)\.js)/.test(url))).toEqual([]);
  }finally{await rm(directory,{recursive:true,force:true})}
 });
 it("handoff preflight still validates the actual server module before reporting readiness",async()=>{

@@ -90,3 +90,5 @@ export * from "./desktopNativeHelper.js";
 export * from "./desktopAssistant.js";
 
 export * from "./usageAnalytics.js";
+
+export * from "./assistantSettings.js";

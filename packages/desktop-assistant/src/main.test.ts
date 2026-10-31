@@ -92,6 +92,7 @@ class MockWindow extends EventEmitter {
 }
 vi.mock("electron", () => ({
   app: Object.assign(new EventEmitter(), {
+    setName: vi.fn(),
     requestSingleInstanceLock: () => true,
     whenReady: async () => {},
     getPath: () => fixture.directory,

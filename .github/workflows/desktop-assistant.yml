@@ -41,19 +41,11 @@ jobs:
         run: node packages/desktop-assistant/scripts/verify-foreground.mjs
       - name: Generated adapters only (no desktop, agent, microphone or login registration)
         run: pnpm exec vitest run --project @sodashitsu/desktop-assistant --maxWorkers=2
-      - name: Generated Windows package install and rollback (never execute package contents)
-        run: pnpm exec vitest run --project @sodashitsu/server src/assistant/AssistantPackage.test.ts
+      - name: Generated integrated app resources (no GUI execution)
+        run: pnpm exec vitest run --project @sodashitsu/server src/assistant/AssistantHostApp.test.ts
       - run: pnpm --filter @sodashitsu/desktop-assistant exec playwright install chromium
       - name: Generated headless keyboard UI
         run: pnpm --filter @sodashitsu/desktop-assistant verify:ui
-      - name: Build unsigned development zip (do not install or launch)
-        run: pnpm --filter @sodashitsu/desktop-assistant pack:win
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sodashitsu-assistant-windows-x64
-          path: packages/desktop-assistant/release/*.zip
-          if-no-files-found: error
-          retention-days: 7
 
   generated-server:
     runs-on: ubuntu-latest

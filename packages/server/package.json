@@ -9,7 +9,7 @@
   "main": "./dist/testkit.js",
   "types": "./dist/testkit.d.ts",
   "scripts": {
-    "build": "tsc -b && node ../desktop-assistant/scripts/build-host.mjs",
+    "build": "tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
     "smoke": "node --enable-source-maps dist/smoke.js"

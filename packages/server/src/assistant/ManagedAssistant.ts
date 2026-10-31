@@ -7,11 +7,12 @@ export type {AssistantLaunch} from "./AssistantLaunchConfig.js";
 export class ManagedAssistant {
   private child: ChildProcess | null = null;
   private closing: Promise<void> | null = null;
-  constructor(private readonly warn: (message: string) => void, private readonly launch: typeof spawn = spawn, private readonly disabled: () => void = () => {}, private readonly attached: (deviceId: string) => void = () => {}) {}
+  constructor(private readonly warn: (message: string) => void, private readonly launch: typeof spawn = spawn, private readonly disabled: () => void = () => {}, private readonly attached: (deviceId: string) => void = () => {}, private readonly ended:()=>void=()=>{}) {}
   start(config: AssistantLaunch | null): void {
     if (!config || this.child || this.closing) return;
+    const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;delete env.NODE_OPTIONS;delete env.NODE_PATH;
     const child = this.launch(config.command[0]!, [...config.command.slice(1), "--soda-managed"], {
-      shell: false, windowsHide: true, stdio: ["pipe", "pipe", "ignore"],
+      shell: false, windowsHide: true, env, stdio: ["pipe", "pipe", "ignore"],
     });
     this.child = child;
     let output = "";
@@ -33,7 +34,7 @@ export class ManagedAssistant {
     });
     child.once("error", () => this.warn("デスクトップアシスタントを起動できません。起動コマンドを確認してください。"));
     child.once("close", code => {
-      if (this.child === child) this.child = null;
+      if (this.child === child) {this.child = null;this.ended();}
       if (code && !this.closing) this.warn(code === 75
         ? "既存のアシスタントを終了してから、soda assistant enableで再試行してください。"
         : "デスクトップアシスタントが終了しました。自動再起動は行いません。");

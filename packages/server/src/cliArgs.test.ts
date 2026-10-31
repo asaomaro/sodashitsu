@@ -240,10 +240,6 @@ it("accepts assistant state commands with session scope and rejects serve option
  expect(()=>parseArgs(["assistant","unknown"])).toThrow();
 });
 
-it("scopes assistant package installation and rollback and requires explicit paths",()=>{
- expect(parseArgs(["assistant","install","--from","package.zip","--destination","/tmp/app","--session","work"]))
-  .toMatchObject({assistantAction:"install",assistantSource:"package.zip",assistantDestination:"/tmp/app",serve:{session:"work"}});
- expect(parseArgs(["assistant","rollback","--state-dir","/tmp/state"]).assistantAction).toBe("rollback");
- for(const args of [["install","--from","x"],["install","--from","x","--destination","y","--from","z"],["enable","--from","x"],["rollback","--destination","x"]])
-  expect(()=>parseArgs(["assistant",...args])).toThrow();
+it("uses integrated assistant lifecycle and rejects the retired standalone installer",()=>{
+ for(const args of [["install","--from","package.zip","--destination","/tmp/app"],["rollback"]])expect(()=>parseArgs(["assistant",...args])).toThrow();
 });
