@@ -7,7 +7,7 @@ from pathlib import Path
 import unittest
 import uuid
 import threading
-from unittest.mock import patch
+from unittest.mock import Mock,patch
 from types import SimpleNamespace
 
 root = Path(__file__).parent
@@ -43,6 +43,30 @@ class Flow(unittest.TestCase):
         self.flow.complete(reservation, data, fixture["width"], fixture["height"], int(self.now * 1000))
         self.now += 34
         return self.output[-1]
+
+    def test_rate_adjustments_preserve_sequence_and_original_request_ceilings(self):
+        self.flow.cadence = True
+        identifier = self.start()
+        self.encode()
+        self.flow.rate({"type":"native_rate","id":identifier,"fps":10,"kbps":1200})
+        self.assertEqual((self.flow.current["fps"],self.flow.current["kbps"],self.flow.current["seq"]),(10,1200,1))
+        self.flow.rate({"type":"native_rate","id":identifier,"fps":30,"kbps":2500})
+        for fields in ({"fps":31,"kbps":2500},{"fps":30,"kbps":2501},{"fps":True,"kbps":1200}):
+            with self.assertRaises(video.VideoFailure):self.flow.rate({"type":"native_rate","id":identifier,**fields})
+        self.flow.rate({"type":"native_bitrate","id":identifier,"kbps":1000})
+        self.assertEqual(self.flow.current["kbps"],1000)
+        self.flow.cadence=False
+        with self.assertRaises(video.VideoFailure):self.flow.rate({"type":"native_rate","id":identifier,"fps":10,"kbps":1200})
+
+    def test_rate_scope_query_cannot_mutate_a_replacement_stream(self):
+        self.flow.cadence=True
+        identifier=self.start();old=self.flow.current
+        def replace():
+            self.query=None;self.flow.stop();self.start()
+        self.query=replace
+        self.flow.rate({"type":"native_rate","id":identifier,"fps":10,"kbps":1200})
+        self.assertIsNot(self.flow.current,old)
+        self.assertEqual((self.flow.current["fps"],self.flow.current["kbps"]),(30,2500))
 
     def test_annex_b_bounded_in_band_headers(self):
         codec, is_key = video.access_unit(key)
@@ -184,11 +208,27 @@ class Flow(unittest.TestCase):
         self.flow.retire(newer)
         self.assertIsNone(self.flow.inflight)
 
+    def test_unsupported_live_rate_publishes_no_frame_and_retires_owned_encoder(self):
+        self.flow.cadence=True;self.start();reservation=self.flow.reserve();closed=threading.Event();encoded=[]
+        class Encoder:
+            def __init__(self,*args):self.input_width,self.input_height=args[2:4]
+            def rate(self,*args):raise video.VideoFailure("rate_unavailable")
+            def encode(self,*args):encoded.append(1);return key
+            def close(self):closed.set()
+        raw=bytearray([1,2,3])
+        with patch.object(video,"GstH264Encoder",Encoder):
+            worker=video.H264Worker(None,None,self.flow,threading.RLock())
+            worker.submit(reservation,raw,1,1)
+            self.assertTrue(worker.closed.wait(1));self.assertTrue(closed.is_set())
+            self.assertIsNone(self.flow.current);self.assertEqual(raw,bytes(3));self.assertEqual(encoded,[])
+            self.assertFalse(any(value["type"]=="native_frame" for value,_ in self.output))
+
     def test_worker_retains_slot_through_native_encoder_shutdown(self):
         entered, finish, closing, retired = [threading.Event() for _ in range(4)]
         class Encoder:
             def __init__(self, *args):
                 self.input_width,self.input_height=args[2:4]
+            def rate(self, *args):pass
             def encode(self, *args):
                 entered.set()
                 if not finish.wait(2): raise AssertionError("generated encoder did not finish")
@@ -331,6 +371,30 @@ class HelperWiring(unittest.TestCase):
 
 
 class GeneratedCodec(unittest.TestCase):
+    def test_mutable_playing_is_required_before_any_bitrate_write(self):
+        encoder=object.__new__(video.GstH264Encoder)
+        setter=Mock();encoder.encoder=SimpleNamespace(find_property=lambda name:SimpleNamespace(flags=0),set_property=setter)
+        encoder.kbps=2500;encoder.factory="x264enc";encoder.Gst=SimpleNamespace(PARAM_MUTABLE_PLAYING=4096)
+        with self.assertRaises(video.VideoFailure):encoder.rate(10,1200,lambda:True)
+        setter.assert_not_called();self.assertEqual(encoder.kbps,2500)
+
+    def test_live_software_bitrate_update_uses_generated_pixels_without_restarting_encoder(self):
+        try:
+            import gi
+            gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
+            from gi.repository import Gst,GstVideo
+        except (ImportError,ValueError):self.skipTest("GStreamer video GI unavailable")
+        Gst.init(None)
+        if not all(Gst.ElementFactory.find(name) for name in ("x264enc","h264parse")):
+            self.skipTest("Generated x264 dependencies unavailable")
+        encoder=video.GstH264Encoder(Gst,GstVideo,64,64,30,2500,candidates=["x264enc"])
+        try:
+            raw=bytearray([0,0,255]*(64*64));first=encoder.encode(raw,True,lambda:True);pipeline=encoder.pipeline
+            encoder.rate(10,1200,lambda:True);second=encoder.encode(raw,True,lambda:True)
+            self.assertIs(encoder.pipeline,pipeline);self.assertEqual(encoder.encoder.get_property("bitrate"),1200)
+            self.assertEqual(video.access_unit(first)[0],video.access_unit(second)[0]);self.assertTrue(video.access_unit(second)[1]);self.assertEqual(encoder.fps,10)
+        finally:encoder.close()
+
     def test_real_software_encoder_and_decoder_use_generated_pixels_only(self):
         try:
             import gi

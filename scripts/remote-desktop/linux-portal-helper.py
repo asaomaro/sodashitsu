@@ -635,6 +635,7 @@ class PortalHelper:
         self.scope=self.scope_factory()
         self.Gst.init(None)
         self.native_available=message.get("allowNativeVideo") is True and self.video is not None and _native_video.GstH264Encoder.available(self.Gst)
+        self.native.cadence=self.native_available and message.get("nativeCadence") is True
         if self.native_available and message.get("allowSystemAudio") is True and "--allow-system-audio" in sys.argv:
             try:
                 _native_audio.pulse_monitor_server()
@@ -780,6 +781,7 @@ class PortalHelper:
                     if self.native_worker:self.native_worker.stop()
             elif kind=="native_video_ack":self.native.acknowledge(value)
             elif kind=="native_keyframe":self.native.keyframe(value)
+            elif kind in ("native_rate","native_bitrate"):self.native.rate(value)
             else:raise _native_video.VideoFailure("unsupported_control")
         except Exception:
             self.native.stop()
@@ -899,7 +901,7 @@ class PortalHelper:
                     self.queued=(data,width,height,self.guard.revision,time.monotonic(),self.regions.take(pts,width,height))
                     if not self.ready:
                         self.native_size=native_size;self.ready=True
-                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
+                        self.output({"type":"ready","title":"Linux / Portal","width":self.native_size[0],"height":self.native_size[1],"backend":"linux-portal","allowInput":bool(self.guard.devices),"allowClipboard":bool(self.clipboard and self.clipboard.os_enabled),"inputCapabilities":self.guard.capabilities(),"extendedInput":True,**({"richClipboard":True} if self.clipboard and self.clipboard.os_enabled and self.config["rich"] else {}),**({"agentRegions":True} if self.video else {}),**({"nativeVideo":True,"nativeVideoWindow":3,"nativeMaxFps":60,**({"nativeCadence":True} if self.native.cadence else {})} if self.native_available else {}),**({"nativeAudio":True} if self.audio_available else {}),**({"microphone":True} if self.microphone_available else {})})
                 if self.queued and not self.pending and time.monotonic()>=self.next_emit:
                     data,width,height,revision,received,proofs=self.queued;self.queued=None
                     if revision==self.guard.revision and time.monotonic()-received<1:

@@ -514,7 +514,7 @@ final class DesktopSource {
             if videoCeiling { nativeVideo=NativeVideoController(gate:gate,active:{ [weak self] in
                 guard let self=self else {return false};let granted=self.ready && self.videoCeiling && self.sourceActive()
                 return granted && !self.dead && self.ready && milliseconds()-self.lastHeartbeat<8000
-            },emit:{ [weak self] value,valid in guard let self=self else {return};try self.output.send(value,valid:valid ?? {true}) }) }
+            },emit:{ [weak self] value,valid in guard let self=self else {return};try self.output.send(value,valid:valid ?? {true}) },cadence:boolean(value["nativeCadence"])==true) }
             configured=true;configuredAt=milliseconds()
             captureTask=Task { @MainActor in await self.capture() }
             return
@@ -536,7 +536,7 @@ final class DesktopSource {
             else { input.control=keep && sourceActive() }
         case "input":
             if let seq=try input?.input(value) { try output.send(["type":"input_ack","seq":seq]) }
-        case "native_video","native_video_ack","native_keyframe":
+        case "native_video","native_video_ack","native_keyframe","native_rate","native_bitrate":
             guard let nativeVideo=nativeVideo else {throw NativeError("unsupported")};try nativeVideo.command(value)
             if let audio=systemAudio,!audioLive(audio.id) {audio.stop()}
         case "native_audio":
@@ -600,7 +600,7 @@ final class DesktopSource {
                             ready=true
                             var hello:[String:Any]=["type":"ready","title":"macOS / ScreenCaptureKit / \(selected.displayID)","backend":"macos-sck","width":sourceWidth,"height":sourceHeight,"allowInput":inputCeiling,"allowClipboard":clipboardCeiling,"inputCapabilities":input!.capabilities,"extendedInput":true,"agentRegions":true,"image":["colorMode":"full","showCursor":showCursor]]
                             if richClipboard != nil { hello["richClipboard"]=true }
-                            if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60}
+                            if videoCeiling {hello["nativeVideo"]=true;hello["nativeVideoWindow"]=3;hello["nativeMaxFps"]=60;if nativeVideo?.cadence==true {hello["nativeCadence"]=true}}
                             if audioCeiling {hello["nativeAudio"]=true}
                             if microphoneCeiling {hello["microphone"]=true}
                             try output.send(hello)

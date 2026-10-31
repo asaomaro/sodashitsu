@@ -9,15 +9,18 @@ struct NativeH264Packet {
 }
 protocol NativeH264Encoder: AnyObject {
     func encode(_ image: CGImage,timestamp: Int64,key: Bool,valid: @escaping () -> Bool,completion: @escaping (Result<NativeH264Packet,Error>) -> Void)
+    func rate(_ kbps:Int,valid:@escaping()->Bool)
     func stop(_ completion: @escaping () -> Void)
 }
 
 /** One serial, lazily created VT session. Callbacks never wait for the source gate. */
 final class ToolboxH264Encoder: NativeH264Encoder {
     let queue=DispatchQueue(label:"dev.sodashitsu.native-h264"),flag=NSLock()
-    let fps: Int,kbps: Int,hardware: Bool
+    let fps: Int,hardware: Bool
+    private var kbps: Int,rateFailed=false
     private var stopped=false,session: VTCompressionSession?,size: (Int,Int)?
-    init(fps: Int,kbps: Int,hardware: Bool=true) { self.fps=fps;self.kbps=kbps;self.hardware=hardware }
+    private let setRate:(VTCompressionSession,Int)->OSStatus
+    init(fps: Int,kbps: Int,hardware: Bool=true,setRate:@escaping(VTCompressionSession,Int)->OSStatus={VTSessionSetProperty($0,key:kVTCompressionPropertyKey_AverageBitRate,value:($1*1000) as CFNumber)}) { self.fps=fps;self.kbps=kbps;self.hardware=hardware;self.setRate=setRate }
     func running() -> Bool { flag.lock();defer { flag.unlock() };return !stopped }
     func prepare(_ width: Int,_ height: Int) throws -> VTCompressionSession {
         if let session=session { guard size?.0==width,size?.1==height else { throw NativeError("backend_failure") };return session }
@@ -37,10 +40,17 @@ final class ToolboxH264Encoder: NativeH264Encoder {
             session=value;size=(width,height);return value
         } catch { VTCompressionSessionInvalidate(value);throw error }
     }
+    func rate(_ kbps:Int,valid:@escaping()->Bool) {
+        queue.async {
+            guard self.running(),valid(),kbps != self.kbps else {return}
+            if let session=self.session,self.setRate(session,kbps) != noErr {self.rateFailed=true;return}
+            self.kbps=kbps
+        }
+    }
     func encode(_ image: CGImage,timestamp: Int64,key: Bool,valid: @escaping () -> Bool,completion: @escaping (Result<NativeH264Packet,Error>) -> Void) {
         queue.async {
             do {
-                guard self.running(),valid() else { throw NativeError("source_changed") }
+                guard self.running(),!self.rateFailed,valid() else { throw NativeError("source_changed") }
                 let width=image.width-image.width%2,height=image.height-image.height%2
                 guard width>=2,width<=1920,height>=2,height<=2400 else { throw NativeError("unsupported") }
                 let session=try self.prepare(width,height)
@@ -108,6 +118,8 @@ final class ToolboxH264Encoder: NativeH264Encoder {
 final class GeneratedNativeEncoder: NativeH264Encoder {
     var completions=[(Result<NativeH264Packet,Error>)->Void](),retire:(()->Void)?
     func encode(_ image:CGImage,timestamp:Int64,key:Bool,valid:@escaping()->Bool,completion:@escaping(Result<NativeH264Packet,Error>)->Void) { if valid() {completions.append(completion)} }
+    var rates=[Int]()
+    func rate(_ kbps:Int,valid:@escaping()->Bool) {if valid(){rates.append(kbps)}}
     func stop(_ completion:@escaping()->Void) {retire=completion}
 }
 final class GeneratedNativePacketBox {
@@ -168,6 +180,23 @@ func generatedNativeVideoTests() throws -> Int {
         try check(pending.current==nil && owned.count==1,"native replacement cancellation never resurrects source")
     }
 
+    var rateClock:Double=0,rateEncoders=[GeneratedNativeEncoder]()
+    let rate=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{rateClock},emit:{_,_ in},cadence:true,factory:{_,_ in let encoder=GeneratedNativeEncoder();rateEncoders.append(encoder);return encoder})
+    let rateID=UUID().uuidString.lowercased()
+    try rate.command(["type":"native_video","id":rateID,"enabled":true,"fps":30,"bitrateKbps":2500])
+    try rate.command(["type":"native_rate","id":rateID,"fps":10,"kbps":1200])
+    try check(rate.current?.fps==10 && rate.current?.kbps==1200,"native rate obeys original limits")
+    rate.offer(image,captured:rateClock);try check(rateEncoders.count==1 && rateEncoders[0].rates==[1200],"native rate delivered to owned encoder")
+    rateEncoders[0].completions[0](.success(packet));try check(spin({rate.inflight==nil}),"native rate frame completes")
+    rateClock=34;rate.offer(image,captured:rateClock);try check(rateEncoders[0].completions.count==1,"native rate reduces capture cadence")
+    for fields in [["fps":31,"kbps":2500],["fps":30,"kbps":2501]] {
+        var rejected=false;do {try rate.command(["type":"native_rate","id":rateID,"fps":fields["fps"]!,"kbps":fields["kbps"]!])} catch {rejected=true}
+        try check(rejected && rate.current?.fps==10,"native rate cannot exceed original ceiling")
+    }
+    try rate.command(["type":"native_rate","id":rateID,"fps":30,"kbps":2500])
+    try check(rate.current?.fps==30 && rate.current?.kbps==2500 && rate.current?.seq==1,"native rate recovers within same stream sequence")
+    rate.stop(notify:false);rateEncoders[0].retire?();try check(spin({rate.quiescent}),"native rate owned encoder retired")
+
     let ledger=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{0},emit:{_,_ in})
     func ledgerStart(_ id:String) throws {try ledger.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
     let original=UUID().uuidString.lowercased();try ledgerStart(original);ledger.stop(notify:false)
@@ -184,11 +213,32 @@ func generatedNativeVideoTests() throws -> Int {
     let encoder=ToolboxH264Encoder(fps:30,kbps:2500,hardware:false),box=GeneratedNativePacketBox(),encoded=DispatchSemaphore(value:0)
     encoder.encode(image,timestamp:1,key:true,valid:{true}) {box.put($0);encoded.signal()}
     let completed=encoded.wait(timeout:.now()+5) == .success
+    let updatedBox=GeneratedNativePacketBox(),updated=DispatchSemaphore(value:0)
+    encoder.rate(1200,valid:{true})
+    encoder.encode(image,timestamp:33334,key:true,valid:{true}) {updatedBox.put($0);updated.signal()}
+    try check(updated.wait(timeout:.now()+5) == .success,"generated VideoToolbox live bitrate update deadline")
+    guard let updatedResult=updatedBox.get() else {throw GeneratedFailure(detail:"generated VideoToolbox rate output")}
+    let updatedPacket=try updatedResult.get()
+    try check(updatedPacket.key && updatedPacket.width==64 && updatedPacket.height==64,"generated VideoToolbox rate keeps source dimensions")
     let retired=DispatchSemaphore(value:0);encoder.stop {retired.signal()}
     try check(retired.wait(timeout:.now()+5) == .success,"generated VideoToolbox encoder retirement")
     guard completed,let result=box.get() else {throw GeneratedFailure(detail:"generated VideoToolbox encode deadline")}
     let actual=try result.get()
     try check(actual.key && actual.width==64 && actual.height==64 && actual.codec.hasPrefix("avc1.") && actual.data.count>20 && actual.data.count<512*1024,"generated VideoToolbox H264 output")
+    var rateFailures=0
+    let initialBox=GeneratedNativePacketBox(),failingEncoder=ToolboxH264Encoder(fps:30,kbps:2500,hardware:false,setRate:{_,_ in rateFailures+=1;return OSStatus(-1)}),initial=DispatchSemaphore(value:0),failed=DispatchSemaphore(value:0),failedBox=GeneratedNativePacketBox()
+    failingEncoder.encode(image,timestamp:1,key:true,valid:{true}) {initialBox.put($0);initial.signal()}
+    try check(initial.wait(timeout:.now()+5) == .success,"generated rate failure encoder initialized")
+    guard let initialResult=initialBox.get() else {throw GeneratedFailure(detail:"generated rate initial result")}
+    _=try initialResult.get()
+    failingEncoder.rate(1200,valid:{true})
+    failingEncoder.encode(image,timestamp:33334,key:true,valid:{true}) {failedBox.put($0);failed.signal()}
+    try check(failed.wait(timeout:.now()+5) == .success,"generated rate failure completion")
+    try check(rateFailures==1,"generated rate setter failure was exercised")
+    guard let failedResult=failedBox.get() else {throw GeneratedFailure(detail:"generated rate failure missing completion")}
+    switch failedResult {case .success:throw GeneratedFailure(detail:"generated rate failure must not publish frame");case .failure:try check(true,"generated rate failure publishes no frame")}
+    let failedRetired=DispatchSemaphore(value:0);failingEncoder.stop {failedRetired.signal()}
+    try check(failedRetired.wait(timeout:.now()+5) == .success,"generated rate failure retires owned encoder")
     let decoded=try generatedNativeDecode(actual.data)
     try check(decoded.count==4,"generated VideoToolbox decoded pixels")
     for index in 0..<4 {for channel in 0..<3 {try check(abs(Int(decoded[index][channel])-Int(colors[index][channel]))<40,"generated VideoToolbox orientation and color order")}}
@@ -238,10 +288,11 @@ func generatedNativeDecode(_ data:Data) throws -> [[UInt8]] {
 }
 
 final class NativeVideoStream {
-    let id:String,fps:Int,kbps:Int,window:Int
+    let id:String,window:Int,maxFPS:Int,maxKbps:Int
+    var fps:Int,kbps:Int
     var dead=false,seq=0,timestamp:Int64 = -1,key=true,next:Double=0,codec:String?,width:Int?,height:Int?
     var pending=[(seq:Int,at:Double)]()
-    init(id:String,fps:Int,kbps:Int,window:Int) { self.id=id;self.fps=fps;self.kbps=kbps;self.window=window }
+    init(id:String,fps:Int,kbps:Int,window:Int) { self.id=id;self.fps=fps;self.kbps=kbps;self.window=window;self.maxFPS=fps;self.maxKbps=kbps }
 }
 final class NativeVideoJob {
     let stream:NativeVideoStream,captured:Double,key:Bool
@@ -254,8 +305,9 @@ final class NativeVideoController {
     private(set) var current:NativeVideoStream?,inflight:NativeVideoJob?
     private var encoder:NativeH264Encoder?,retiring=false,seen=Set<String>(),revision=UUID()
     private var pendingStart:(stream:NativeVideoStream,at:Double)?
-    init(gate:NSRecursiveLock,active:@escaping()->Bool,now:@escaping()->Double=milliseconds,emit:@escaping([String:Any],(() -> Bool)?)throws->Void,factory:@escaping(Int,Int)throws->NativeH264Encoder={ToolboxH264Encoder(fps:$0,kbps:$1)}) {
-        self.gate=gate;self.active=active;self.now=now;self.emit=emit;self.factory=factory
+    let cadence:Bool
+    init(gate:NSRecursiveLock,active:@escaping()->Bool,now:@escaping()->Double=milliseconds,emit:@escaping([String:Any],(() -> Bool)?)throws->Void,cadence:Bool=false,factory:@escaping(Int,Int)throws->NativeH264Encoder={ToolboxH264Encoder(fps:$0,kbps:$1)}) {
+        self.gate=gate;self.active=active;self.now=now;self.emit=emit;self.factory=factory;self.cadence=cadence
     }
     func locked<T>(_ action:()throws->T) rethrows -> T { gate.lock();defer {gate.unlock()};return try action() }
     func live(_ stream:NativeVideoStream,captured:Double?=nil) -> Bool {
@@ -299,6 +351,13 @@ final class NativeVideoController {
                 if quiescent {current=stream} else {pendingStart=(stream,now())};return
             }
             guard let stream=current,stream.id==id else {return}
+            if kind=="native_rate" || kind=="native_bitrate" {
+                guard kind != "native_rate" || cadence else {throw NativeError("unsupported")}
+                let keys:Set<String>=kind=="native_rate" ? ["type","id","fps","kbps"]:["type","id","kbps"]
+                guard Set(value.keys)==keys,let fps=integer(value["fps"] ?? stream.fps,1,Int64(stream.maxFPS)),let kbps=integer(value["kbps"],128,Int64(stream.maxKbps)) else {throw NativeError("unsupported")}
+                guard live(stream) else {stop(stream);return}
+                stream.fps=Int(fps);stream.kbps=Int(kbps);return
+            }
             if kind=="native_keyframe" {stream.key=true;return}
             guard kind=="native_video_ack",Set(value.keys).isSubset(of:["type","id","seq"]),let seq=integer(value["seq"],1,0xffffffff) else {throw NativeError("backend_failure")}
             guard live(stream) else {stop(stream);return}
@@ -319,6 +378,9 @@ final class NativeVideoController {
             do {
                 if encoder==nil {encoder=try factory(stream.fps,stream.kbps)}
                 guard current===stream,!retiring,let encoder=encoder else {throw NativeError("source_changed")}
+                encoder.rate(stream.kbps,valid:{ [weak self] in
+                    guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && self.now()>=job.captured && self.now()<=job.captured+1000}
+                })
                 encoder.encode(image,timestamp:Int64(captured*1000),key:job.key,valid:{ [weak self] in
                     guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && self.now()>=job.captured && self.now()<=job.captured+1000}
                 },completion:{ [weak self] result in DispatchQueue.main.async {self?.complete(job,result)} })
