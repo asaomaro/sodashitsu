@@ -67,6 +67,7 @@ export const DesktopOptions = z
     elevatedDesktop:z.literal(true).optional(),
     nativePlatform:DesktopNativePlatform.optional(),
     sharedDesktop:z.literal(true).optional(),
+    sharedVirtual:z.literal(true).optional(),
     sharedDeltas:z.literal(true).optional(),
     sharedMonitors:z.literal(true).optional(),
     independentMonitors:z.literal(true).optional(),
@@ -339,6 +340,7 @@ export interface DesktopResults {
     elevatedDesktop?:boolean;
     nativePlatform?:import("./desktopNativePlatform.js").DesktopNativePlatform;
     sharedDesktop?:boolean;
+    sharedVirtual?:boolean;
     sharedDeltas?:boolean;
     sharedMonitors?:boolean;
     independentMonitors?:boolean;

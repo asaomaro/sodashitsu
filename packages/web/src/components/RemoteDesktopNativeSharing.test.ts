@@ -15,3 +15,14 @@ it.each(["linux-portal","macos-sck"])("lets a fresh %s viewer opt in to shared d
   expect(sockets[1]!.send.mock.calls.map(([value])=>JSON.parse(value)).find(m=>m.type==="start").options.sharedDesktop).toBe(true);
  }finally{viewer.unmount();}
 });
+
+it("keeps the user's shared mode when an explicitly supported virtual screen is selected",async()=>{
+ const viewer=mount(RemoteDesktopWindow,{props:{machineId:"generated",label:"Generated",embedded:true}});
+ try{
+  await sockets[0]!.onmessage!({data:JSON.stringify({type:"shared_virtual_available",enabled:true})});
+  await viewer.get('[data-shared-desktop-option] input').setValue(true);await flushPromises();
+  await viewer.get('[data-virtual-desktop-option] input').setValue(true);await flushPromises();
+  const socket=sockets.at(-1)!;socket.onopen?.();const message=socket.send.mock.calls.map(([value])=>JSON.parse(value)).find(m=>m.type==="start");
+  expect(message.options).toMatchObject({sharedDesktop:true,virtualDisplay:true,sharedVirtual:true});expect(message.options).not.toHaveProperty("monitorDevice");expect(message.options).not.toHaveProperty("independentMonitors");
+ }finally{viewer.unmount();}
+});

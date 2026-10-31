@@ -1,0 +1,5 @@
+# 設計
+
+feature bit7(sharedVirtual)、strict DesktopOptionsとProvider cap。virtual purposeとvirtualDisplayを含む完全configurationをsource keyへ結び付ける。poolだけのallowSharedVirtual markerは実helper前に除去。ready.virtualDisplayがない・secure/protected/nativeOSの場合は終了。既存shared native/audio/clipboard/cursor/filesとPC単一mic/control ownerを再利用。VirtualAliveは既存Windows hostのAllowedDesktopを通してマイク停止にも作用する。正常な最終member退去→physical close→VirtualLease.Disposeの寿命を維持。
+
+マイク開始では仮想画面の入口禁止を除去し、既存の明示endpoint/許可/owner/PCM期限を維持。既存nativeMicのProvider入口に残っていたunsupported判定も修正し、両OSを名指しで交渉する回帰を追加。

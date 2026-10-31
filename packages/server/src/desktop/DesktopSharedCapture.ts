@@ -19,6 +19,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough, Readable, Writable } from "node:stream";
 import {
   DesktopProtectedFailure,
+  DesktopVirtualFailure,
   DesktopReady,
   DesktopFrameInfo,
   DesktopFrameChain,
@@ -76,6 +77,7 @@ export class DesktopSharedCapture {
         cursorShape?: { id: number; shape: NonNullable<DesktopCursorInfo["shape"]>; data: string };
         configuration?: string;
         protectedSource?: boolean;
+        virtualSource?:boolean;
         frameSeq: number;
         images: DesktopFrameChain;
         deltas: boolean;
@@ -276,8 +278,10 @@ export class DesktopSharedCapture {
       if (!g.configuration) {
         g.configuration = configuration;
         g.protectedSource = value.allowSharedProtected === true;
+        if(value.allowSharedVirtual===true&&(g.protectedSource||value.allowVirtualDisplay!==true||value.options?.virtualDisplay!==true))throw Error("Invalid virtual source policy");
+        g.virtualSource=value.allowSharedVirtual===true;
         g.deltas = value.options?.deltas === true;
-        const {allowSharedUnlock:_localUnlock,...physical}=value;
+        const {allowSharedUnlock:_localUnlock,allowSharedVirtual:_localVirtual,...physical}=value;
         this.write(g, physical);
       } else if (g.ready) {
         this.emit(s, g.ready);
@@ -344,8 +348,11 @@ export class DesktopSharedCapture {
       const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof, ...wire } = value;
       const ready = DesktopReady.parse(wire);
       const configuration = JSON.parse(g.configuration!);
-      const lockedSource = !g.protectedSource && configuration.allowSharedUnlock===true && ready.secureDesktop===true && !ready.protectedDesktop && !ready.sharedProtected &&
+      const lockedSource = !g.protectedSource && !g.virtualSource && configuration.allowSharedUnlock===true && ready.secureDesktop===true && !ready.protectedDesktop && !ready.sharedProtected &&
         (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi");
+      const virtualSource=g.virtualSource===true && ready.virtualDisplay===true && !ready.secureDesktop && !ready.lockScreenCover && !ready.protectedDesktop && !ready.sharedProtected &&
+        (ready.backend==="windows-gdi"||ready.backend==="windows-dxgi"||ready.backend==="synthetic");
+      if(g.virtualSource&&!virtualSource){for(const member of [...g.members])this.emit(member,{type:"virtual_display_failure",code:"helper_incompatible"});this.end(g);return;}
       const protectedSource =
         ready.secureDesktop === true &&
         !!ready.protectedDesktop &&
@@ -369,13 +376,14 @@ export class DesktopSharedCapture {
           : lockedSource ? ready.nativeVideo||ready.nativeAudio||ready.microphone||ready.cursor||ready.files||ready.richClipboard||ready.allowClipboard||ready.allowMedia||ready.monitorLayout||ready.agentRegions
           : ready.secureDesktop || ready.protectedDesktop || ready.sharedProtected) ||
         (ready.lockScreenCover && !lockedSource) ||
-        ready.virtualDisplay ||
+        (ready.virtualDisplay && !virtualSource) ||
         (ready.nativeVideo && !JSON.parse(g.configuration!).allowNativeVideo) ||
         ready.allowMedia ||
         (ready.allowClipboard && !JSON.parse(g.configuration!).allowClipboard)
       )
         throw Error("Source cannot be shared");
-      if(ready.monitorLayout&&(configuration.allowMonitors!==true||configuration.options.monitors!==true||(configuration.options.monitorDevice&&ready.monitorLayout.selected!==configuration.options.monitorDevice)))throw Error("Unexpected shared monitor layout");
+      if(ready.monitorLayout&&!virtualSource&&(configuration.allowMonitors!==true||configuration.options.monitors!==true||(configuration.options.monitorDevice&&ready.monitorLayout.selected!==configuration.options.monitorDevice)))throw Error("Unexpected shared monitor layout");
+      if(virtualSource&&ready.monitorLayout&&(ready.monitorLayout.selected==="all"||!ready.monitorLayout.monitors.some(m=>m.id===ready.monitorLayout!.selected)))throw Error("Virtual source must select its owned monitor");
       if (ready.cursor && (!configuration.separateCursor || configuration.options.cursor !== true))
         throw Error("Unexpected shared cursor source");
       if (
@@ -512,6 +520,8 @@ export class DesktopSharedCapture {
                 code: value.type === "unlock_failure" ? "worker_unavailable" : "source_changed",
               };
         for (const member of [...g.members]) this.emit(member, failure);
+      } else if(value.type==="virtual_display_failure"&&g.virtualSource){
+        const failure=DesktopVirtualFailure.parse(value);for(const member of [...g.members])this.emit(member,failure);
       } else if(value.type==="monitor_topology_changed"&&Object.keys(value).length===1&&g.ready?.monitorLayout)
         for(const member of [...g.members])this.emit(member,{type:"monitor_topology_changed"});
       else if(Object.keys(value).length===1 && (value.type==="session_locked"&&!g.ready?.secureDesktop ||

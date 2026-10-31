@@ -62,3 +62,8 @@ it("revoking configuration cancels a queued start before its helper can launch",
   await expect(pending).rejects.toThrow(/cancelled/);
   expect(provider.capabilities().available).toBe(false);
 });
+
+it.each(["linux-portal","macos-sck"] as const)("admits permitted %s microphone through to connection setup",async nativePlatform=>{
+ const provider=new DesktopProvider({command:["never-launched"],nativePlatform,allowInput:false,allowMicrophone:true,microphoneEndpoint:"explicit-virtual-target",origins:()=>["http://127.0.0.1:1"]});
+ try{await expect(provider.start("generated",{url:"ws://127.0.0.1:1/desktop-share",ticket:"a".repeat(43),options:{nativePlatform,width:320,fps:10,quality:65,features:true,microphone:true}})).rejects.toMatchObject({code:"spawn_failed"});}finally{provider.dispose();}
+});

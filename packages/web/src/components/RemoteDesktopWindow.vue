@@ -89,7 +89,7 @@ const platformBackend=ref<"linux-portal"|"macos-sck">(),inputCapabilities=ref<De
 const platformIdle=ref(false),platformIdleCounter=ref(0);let sourceIdle=new DesktopSourceIdle();
 let controlPending=false,controlCancelled=false;
 const protectedMode=ref<"elevated-default"|"elevated-uac">();
-const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
+const elevatedScreen=ref(false), sharedScreen=ref(false),sharedProtectedAvailable=ref(false),sharedVirtualAvailable=ref(false),sharedCursorScreen=ref(false),sharedCursorAvailable=ref(false),sharedClipboardScreen=ref(false),sharedClipboardAvailable=ref(false),sharedDeltasScreen=ref(false),sharedDeltasAvailable=ref(false),sharedMonitorsScreen=ref(false),sharedMonitorsAvailable=ref(false);
 const lockScreenCover = ref(false);
 const imeKeys = ref(false);
 const extendedInput = ref(false);
@@ -209,8 +209,8 @@ const monitorLayout=ref<DesktopMonitorLayout>(),monitorDevice=ref<string>(),shar
 const virtualScreen=ref(false),virtualActive=ref(false);
 if(props.monitorWindow){sharedScreen.value=true;sharedMonitorsScreen.value=true;sharedMonitorDevice.value=props.monitorWindow.independent?props.monitorWindow.monitor:"all";if(props.monitorWindow.independent)monitorDevice.value=props.monitorWindow.monitor;sharedCursorScreen.value=props.monitorWindow.cursor;sharedClipboardScreen.value=props.monitorWindow.clipboard;sharedDeltasScreen.value=props.monitorWindow.deltas;}
 
-function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;sharedScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
-function changeSharedScreen(){sharedMonitorDevice.value=undefined;if(sharedScreen.value){if(!sharedProtectedAvailable.value)elevatedScreen.value=false;virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeVirtualScreen(){if(virtualScreen.value){elevatedScreen.value=false;if(!sharedVirtualAvailable.value)sharedScreen.value=false;independentScreen.value=false;sharedMonitorDevice.value=undefined;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
+function changeSharedScreen(){sharedMonitorDevice.value=undefined;if(sharedScreen.value){if(!sharedProtectedAvailable.value)elevatedScreen.value=false;if(!sharedVirtualAvailable.value)virtualScreen.value=false;}monitorDevice.value=undefined;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();const el=canvas.value;el?.getContext("2d")?.clearRect(0,0,el.width,el.height);}
 function joinSharedMonitor(){monitorDevice.value=sharedMonitorDevice.value?.trim()||undefined;changeMonitor();}
 function changeIndependent(){if(independentScreen.value&&!monitorDevice.value)monitorDevice.value="all";sharedMonitorDevice.value=monitorDevice.value;maximumDisplay.value=false;requestedDisplay=undefined;releaseInputs();connect();}
 function changeSharedMonitors(){monitorDevice.value=undefined;changeMonitor();}
@@ -604,7 +604,7 @@ function connect(automatic = false) {
     url = new URL("/desktop-share", location.href);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   let monitorChanged=false;
-  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
+  const socket = desktopSockets.open(url, [desktopFeaturesProtocol(["sharedDeltas","folderCheckpoints","sharedMonitors","endpointClose","endpointAgent","signin","independentMonitors","sharedVirtual"]),DESKTOP_SHARED_CLIPBOARD_PROTOCOL,DESKTOP_SHARED_CURSOR_PROTOCOL,DESKTOP_FOLDERS_PROTOCOL,DESKTOP_FILE_CHECKPOINTS_PROTOCOL,DESKTOP_SHARED_MICROPHONE_PROTOCOL,DESKTOP_SHARED_PROTECTED_PROTOCOL,DESKTOP_SHARED_RESOLUTION_PROTOCOL,DESKTOP_NATIVE_PLATFORM_PROTOCOL,DESKTOP_SHARED_AUDIO_PROTOCOL,...(DesktopMicrophoneClient.supported()?[DESKTOP_MICROPHONE_PROTOCOL,...(typeof AudioEncoder!=="undefined"?[DESKTOP_MICROPHONE_OPUS_FEATURE]:[])]:[]),DESKTOP_SHARED_DATAGRAM_PROTOCOL,DESKTOP_SHARED_NATIVE_PROTOCOL,DESKTOP_SHARED_PROTOCOL,DESKTOP_PROTECTED_PROTOCOL,DESKTOP_VIRTUAL_DISPLAY_PROTOCOL,DESKTOP_MONITORS_PROTOCOL,DESKTOP_FILES_PROTOCOL, DESKTOP_IME_PROTOCOL, DESKTOP_INPUT_PROTOCOL,...(typeof ClipboardItem!=="undefined"&&typeof navigator.clipboard?.read==="function"&&typeof navigator.clipboard?.write==="function"?[DESKTOP_RICH_CLIPBOARD_PROTOCOL]:[]), DESKTOP_CURSOR_PROTOCOL,DESKTOP_IMAGE_LANE_PROTOCOL, ...(typeof VideoDecoder!=="undefined"?[DESKTOP_NATIVE_CODEC_PROTOCOL,DESKTOP_NATIVE_ADAPTIVE_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,DESKTOP_NATIVE_VIDEO_PIPELINE_PROTOCOL,DESKTOP_VIDEO_LANE_PROTOCOL,DESKTOP_NATIVE_RATE_PROTOCOL,DESKTOP_DATAGRAM_PROTOCOL,...(typeof AudioDecoder!=="undefined"&&typeof AudioContext!=="undefined"?[DESKTOP_AUDIO_PROTOCOL]:[])]:[])]);
   ws = socket;
   endpointEncrypted.value=desktopSockets.encrypted;
   socket.binaryType = "arraybuffer";
@@ -615,7 +615,7 @@ function connect(automatic = false) {
         type: "start",
         machineId: props.machineId,
         options: {
-            ...(sharedScreen.value?{sharedDesktop:true,...(!elevatedScreen.value&&sharedMonitorsScreen.value?{sharedMonitors:true,...(independentScreen.value?{independentMonitors:true}:{}),...(sharedMonitorDevice.value?{monitorDevice:sharedMonitorDevice.value}:{})}:{}),...(elevatedScreen.value?{elevatedDesktop:true}:sharedCursorScreen.value&&showCursor.value?{sharedCursor:true}:{}),...(!elevatedScreen.value&&sharedClipboardScreen.value?{sharedClipboard:true}:{}),...(!elevatedScreen.value&&sharedDeltasScreen.value&&deltas.value?{sharedDeltas:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
+            ...(sharedScreen.value?{sharedDesktop:true,...(virtualScreen.value?{virtualDisplay:true,sharedVirtual:true}:{}),...(!elevatedScreen.value&&!virtualScreen.value&&sharedMonitorsScreen.value?{sharedMonitors:true,...(independentScreen.value?{independentMonitors:true}:{}),...(sharedMonitorDevice.value?{monitorDevice:sharedMonitorDevice.value}:{})}:{}),...(elevatedScreen.value?{elevatedDesktop:true}:sharedCursorScreen.value&&showCursor.value?{sharedCursor:true}:{}),...(!elevatedScreen.value&&sharedClipboardScreen.value?{sharedClipboard:true}:{}),...(!elevatedScreen.value&&sharedDeltasScreen.value&&deltas.value?{sharedDeltas:true}:{})}:elevatedScreen.value?{elevatedDesktop:true}:virtualScreen.value?{virtualDisplay:true}:monitorDevice.value?{monitorDevice:monitorDevice.value}:{}), ...options, features: true },
       });
   };
   socket.onmessage = async (event) => {
@@ -678,6 +678,7 @@ function connect(automatic = false) {
         if(m.type==="agent_endpoint_error"){
           if(!endpointEncrypted.value)throw Error("暗号化エージェントの接続状態が不正です");endpointAgentNotice.value=DesktopEndpointAgentError.parse(m).message;endpointAgentBusy.value=false;return;
         }
+        if(m.type==="shared_virtual_available"){if(typeof m.enabled!=="boolean")throw Error("Invalid shared virtual capability");sharedVirtualAvailable.value=m.enabled;return;}
         if(m.type==="shared_protected_available"){
           if(typeof m.enabled!=="boolean")throw Error("Invalid protected sharing capability");
           sharedProtectedAvailable.value=m.enabled;return;
@@ -1233,9 +1234,9 @@ onBeforeUnmount(() => {
       <p v-if="platformBackend" data-native-platform>{{platformBackend==='linux-portal'?'Linux / Portal':'macOS / ScreenCaptureKit'}}: OSの許可した通常画面を共有しています。色はフルカラー、差分と自動画質調整は無効です。<template v-if="platformBackend==='linux-portal'">実験版です。静止中は最後の画像を表示し、人の操作を継続できます。エージェント操作には2秒以内に取得した実画像が必要です。</template></p>
       <template v-if="!signinSession">
       <label data-shared-desktop-option><input v-model="sharedScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
-      <label v-if="sharedScreen&&!elevatedScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
-      <label v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&independentAvailable" data-independent-monitors><input v-model="independentScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeIndependent" />モニターごとに独立して配信</label>
-      <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!props.monitorWindow?.independent" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button @click="joinSharedMonitor">このモニターで接続</button><small>{{independentScreen?"別のモニターIDでは独立した配信を開始します。同じIDでは同じ画質設定を選んでください。":"共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。"}}</small></div>
+      <label v-if="sharedScreen&&!elevatedScreen&&!virtualScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
+      <label v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!virtualScreen&&independentAvailable" data-independent-monitors><input v-model="independentScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeIndependent" />モニターごとに独立して配信</label>
+      <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!virtualScreen&&!props.monitorWindow?.independent" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button @click="joinSharedMonitor">このモニターで接続</button><small>{{independentScreen?"別のモニターIDでは独立した配信を開始します。同じIDでは同じ画質設定を選んでください。":"共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。"}}</small></div>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedDeltasAvailable" data-shared-deltas><input v-model="sharedDeltasScreen" :disabled="!deltas" type="checkbox" @change="changeSharedDeltas" />差分画像を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedClipboardAvailable" data-shared-clipboard><input v-model="sharedClipboardScreen" type="checkbox" @change="changeSharedClipboard" />クリップボード経路を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedCursorAvailable" data-shared-cursor><input v-model="sharedCursorScreen" :disabled="!showCursor" type="checkbox" @change="changeSharedCursor" />独立カーソルを共有（全ての窓で同じ選択が必要）</label>
@@ -1243,8 +1244,9 @@ onBeforeUnmount(() => {
       </template>
       <label v-if="!platformBackend&&!signinSession"><input v-model="elevatedScreen" type="checkbox" @change="changeElevatedScreen" />管理者権限のアプリ・UAC画面を共有</label>
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
-      <label v-if="!platformBackend&&!signinSession"><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
-      <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。共有終了時にこの画面を解放します。</p>
+      <label v-if="!platformBackend&&!signinSession" data-virtual-desktop-option><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
+      <p v-if="sharedVirtualAvailable&&!platformBackend" data-shared-virtual-available>仮想画面を複数の窓で共有できます。</p>
+      <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。最後の共有窓を閉じた後、補助プログラムの終了を確認して画面を解放します。</p>
       <nav>
 
         <button :disabled="!ready" @click="send({ type: 'keyframe' })">再同期</button

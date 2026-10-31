@@ -28,6 +28,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       sharedMicrophone:config?.allowMicrophone===true&&!!config.microphoneEndpoint,
       sharedProtected:!config?.nativePlatform&&config?.allowElevated===true,
       sharedDesktop: true,
+      sharedVirtual:!config?.nativePlatform&&config?.allowVirtualDisplay===true,
       sharedDeltas:!config?.nativePlatform,
       sharedMonitors:!config?.nativePlatform&&config?.allowMonitors===true,
       independentMonitors:!config?.nativePlatform&&config?.allowMonitors===true,

@@ -491,3 +491,26 @@ it("rejects image publication while the shared source is a lock cover",async()=>
  const f=fixture(),a=f.join("locked",unlockConfiguration);
  try{f.child.send({...lockedReady,lockScreenCover:true});await vi.waitFor(()=>expect(a.messages).toHaveLength(1));f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(a.messages.map(m=>m.type)).toEqual(["ready"]);}finally{f.pool.dispose();}
 });
+
+const virtualConfiguration={type:"configure",allowSharedVirtual:true,allowVirtualDisplay:true,allowNativeVideo:true,options:{width:320,virtualDisplay:true}};
+it("owns one shared virtual source until its last viewer and keeps control exclusive",async()=>{
+ const f=fixture(),a=f.join("virtual",virtualConfiguration),b=f.join("virtual",virtualConfiguration);
+ try{
+  expect(f.child.commands[0]).toMatchObject({allowVirtualDisplay:true,options:{virtualDisplay:true}});expect(f.child.commands[0]).not.toHaveProperty("allowSharedVirtual");
+  f.child.send({...ready,virtualDisplay:true,nativeVideo:true});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({virtualDisplay:true,nativeVideo:true}));
+  expect(a.session.requestControl!(true)).toBe(true);expect(b.session.requestControl!(true)).toBe(false);
+  a.session.stdin.end();await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(f.child.exitCode).toBeNull();expect(b.session.requestControl!(true)).toBe(true);
+  f.child.send(frame(1));await vi.waitFor(()=>expect(b.messages.at(-1)?.type).toBe("frame"));expect(f.spawn).toHaveBeenCalledTimes(1);
+  b.session.stdin.end();await vi.waitFor(()=>expect(f.child.exitCode).toBe(0));
+ }finally{f.pool.dispose();}
+});
+it.each(["normal","secure","cover","protected","native-backend"])("rejects a different source instead of an owned shared virtual screen: %s",async kind=>{
+ const f=fixture(),a=f.join("virtual",virtualConfiguration);
+ try{const value:any={...ready,virtualDisplay:true};if(kind==="normal")delete value.virtualDisplay;if(kind==="secure")value.secureDesktop=true;if(kind==="cover"){value.lockScreenCover=true;value.secureDesktop=true;}if(kind==="protected"){value.protectedDesktop="elevated-default";value.secureDesktop=true;delete value.virtualDisplay;}if(kind==="native-backend")value.backend="macos-sck";
+  f.child.send(value);f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));expect(a.messages).toEqual([{type:"virtual_display_failure",code:"helper_incompatible"}]);
+ }finally{f.pool.dispose();}
+});
+it("accepts only the owned virtual monitor layout and propagates lease loss to every viewer",async()=>{
+ const f=fixture(),a=f.join("virtual",virtualConfiguration),b=f.join("virtual",virtualConfiguration),layout={selected:"virtual-owned",bounds:{x:2000,y:0,width:320,height:200},allSupported:false,monitors:[{id:"virtual-owned",x:2000,y:0,width:320,height:200,primary:false}]};
+ try{f.child.send({...ready,virtualDisplay:true,monitorLayout:layout});await vi.waitFor(()=>expect(b.messages[0]).toMatchObject({virtualDisplay:true}));f.child.send({type:"virtual_display_failure",code:"lease_lost"});f.child.send(frame(1));await vi.waitFor(()=>expect(a.session.exitCode).toBe(0));for(const member of[a,b])expect(member.messages.map(m=>m.type)).toEqual(["ready","virtual_display_failure"]);}finally{f.pool.dispose();}
+});
