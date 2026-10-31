@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'packages/server/src/main.ts'
+      - 'packages/server/src/composeServer.ts'
+      - 'packages/server/src/assistant/AssistantLaunchConfig.ts'
+      - 'packages/server/src/assistant/LazyAssistantAudio*'
+      - 'packages/server/src/assistant/AssistantAudioMethods.ts'
       - 'packages/server/src/assistant/Assistant*State.ts'
       - 'packages/server/src/assistant/AssistantLaunchController.ts'
       - 'packages/server/src/assistant/AssistantPackage.ts'
@@ -33,4 +37,4 @@ jobs:
       - run: pnpm --filter @sodashitsu/server build
       - run: pnpm --filter @sodashitsu/cli build
       - name: Actual ESM module ledger (no server, agent, desktop or PTY start)
-        run: pnpm exec vitest run packages/cli/src/entryLoading.test.ts packages/server/src/assistant/AssistantLaunchController.test.ts packages/server/src/assistant/AssistantPackage.test.ts --maxWorkers=2
+        run: pnpm exec vitest run packages/cli/src/entryLoading.test.ts packages/server/src/assistant/AssistantLaunchController.test.ts packages/server/src/assistant/AssistantPackage.test.ts packages/server/src/assistant/LazyAssistantAudio.test.ts --maxWorkers=2
