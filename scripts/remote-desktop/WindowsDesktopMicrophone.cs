@@ -25,7 +25,7 @@ public sealed class SodaDesktopMicrophone : IDisposable {
         NamedPipeServerStream server=null;byte[] packet=new byte[1932],pcm=new byte[1920];
         try {
             if(!Alive())return;
-            server=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous,4096,4096,SodaDesktopAudio.OwnerSecurity());pipe=server;
+            server=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous,4096,4096,SodaDesktopPipeSecurity.OwnerSecurity());pipe=server;
             Complete(callback=>server.BeginWaitForConnection(callback,null),2000,value=>{server.EndWaitForConnection(value);return 0;});
             uint pid;if(!Alive()||!GetNamedPipeClientProcessId(server.SafePipeHandle,out pid)||pid!=(uint)clientPid)return;
             // Enumerate/activate no endpoint before the private pipe is authenticated.
