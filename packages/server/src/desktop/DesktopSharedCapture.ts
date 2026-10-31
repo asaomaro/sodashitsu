@@ -76,7 +76,7 @@ export class DesktopSharedCapture {
         cursorPose?: DesktopCursorInfo;
         cursorShape?: { id: number; shape: NonNullable<DesktopCursorInfo["shape"]>; data: string };
         configuration?: string;
-        protectedSource?: boolean;
+        protectedSource?: boolean;protectedVideoSource?:boolean;protectedAudioSource?:boolean;
         virtualSource?:boolean;
         frameSeq: number;
         images: DesktopFrameChain;
@@ -175,7 +175,7 @@ export class DesktopSharedCapture {
       },
       createAudio: (hooks: DesktopNativeAudioHooks) => {
         const source = current.native?.audioSource(member, hooks.id);
-        if (!source || current.ended || member.closed || !current.ready?.nativeAudio) {
+        if (!source || current.ended || member.closed || !current.ready || !current.ready.nativeAudio&&!current.protectedAudioSource) {
           hooks.state("unavailable");
           return { stop() {} };
         }
@@ -186,6 +186,7 @@ export class DesktopSharedCapture {
             timestamp: source.timestamp,
             active: () => !current.ended && source.active(),
             write: (value) => this.write(current, value),
+            ...(current.protectedAudioSource&&current.ready.backend!=="synthetic"?{create:(hooks:DesktopNativeAudioHooks)=>{let stopped=false,lease:DesktopAudioLease|undefined;const allowed=()=>{if(stopped)return false;const active=hooks.active();return !stopped&&active;};void import("./DesktopProtectedAudio.js").then(module=>{if(allowed())lease=module.createProtectedAudio({...hooks,active:allowed});}).catch(()=>{if(!stopped)hooks.state("unavailable");});return{stop(notify=true){stopped=true;lease?.stop(notify);}};}}:{}),
           });
         return current.audio.attach(member, hooks);
       },
@@ -345,7 +346,7 @@ export class DesktopSharedCapture {
     if (g.clipboard?.receive(value)) return;
     if (g.native?.receive(value)) return;
     if (value.type === "ready" && !g.ready) {
-      const { inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof, ...wire } = value;
+      const {protectedAudioClock,inputAckPipe: _inputAckPipe, deferNativeSnapshots: _defer, nativePointerProof, ...wire } = value;
       const ready = DesktopReady.parse(wire);
       const configuration = JSON.parse(g.configuration!);
       const lockedSource = !g.protectedSource && !g.virtualSource && configuration.allowSharedUnlock===true && ready.secureDesktop===true && !ready.protectedDesktop && !ready.sharedProtected &&
@@ -358,6 +359,10 @@ export class DesktopSharedCapture {
         !!ready.protectedDesktop &&
         ready.sharedProtected === true &&
         !ready.lockScreenCover;
+      const protectedVideo=g.protectedSource===true&&protectedSource&&configuration.allowProtectedVideo===true&&configuration.allowNativeVideo===true&&configuration.options.protectedVideo===true&&ready.protectedVideo===true&&ready.nativeVideo===true;
+      const protectedAudio=protectedVideo&&configuration.protectedAudioClock==="windows-qpc-v1"&&configuration.options.protectedAudio===true&&configuration.options.nativeAudio===true&&protectedAudioClock==="windows-qpc-v1";
+      if(g.protectedSource&&(ready.protectedAudio||ready.nativeAudio||configuration.options.protectedVideo&&!protectedVideo||configuration.options.protectedAudio&&!protectedAudio))throw Error("Protected shared media proof missing");
+      g.protectedVideoSource=protectedVideo;g.protectedAudioSource=protectedAudio;
       if (g.protectedSource && !protectedSource) {
         for (const member of [...g.members])
           this.emit(member, { type: "protected_desktop_failure", code: "service_incompatible" });
@@ -367,7 +372,7 @@ export class DesktopSharedCapture {
       if (
         (g.protectedSource
           ? !protectedSource ||
-            ready.nativeVideo ||
+            ready.nativeVideo&&!protectedVideo ||
             ready.nativeAudio ||
             ready.microphone ||
             ready.cursor ||
@@ -399,6 +404,7 @@ export class DesktopSharedCapture {
       g.ready = {
         ...ready,
         dynamicQuality: false,
+        ...(protectedAudio?{protectedAudioClock:"windows-qpc-v1"}:{}),
         inputAckPipe: false,
         ...(nativePointerProof===true&&configuration.nativePointerProof===true&&!g.protectedSource&&ready.resourceFences===true?{nativePointerProof:true}:{}),
         ...(value.deferNativeSnapshots === true ? { deferNativeSnapshots: true } : {}),

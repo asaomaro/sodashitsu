@@ -19,3 +19,5 @@ it("negotiates protected video in its own bounded feature bit",()=>{
 });
 
 it('keeps ordinary-user protected audio opt-in separate from protected video',()=>{const wire=desktopFeaturesProtocol(['protectedAudio']);expect(wire).toBe(DESKTOP_FEATURES_PREFIX+'00000000000000000000000000000400');expect([...desktopFeaturesFromProtocols([wire])]).toEqual(['protectedAudio']);expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(['protectedVideo'])])]).not.toContain('protectedAudio');});
+
+it('requires an independent hint for pooled protected video',()=>{const wire=desktopFeaturesProtocol(['sharedProtectedVideo']);expect(wire).toBe(DESKTOP_FEATURES_PREFIX+'00000000000000000000000000000800');expect([...desktopFeaturesFromProtocols([wire])]).toEqual(['sharedProtectedVideo']);expect([...desktopFeaturesFromProtocols([desktopFeaturesProtocol(['protectedVideo','protectedAudio'])])]).not.toContain('sharedProtectedVideo');});
