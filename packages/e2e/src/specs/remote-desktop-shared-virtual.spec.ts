@@ -7,6 +7,10 @@ import { expect, test } from "../support/fixtures.js";
 import { startAppServer } from "../support/appServer.js";
 import { openNativeTab } from "../support/nativeTab.js";
 
+// Allow an installed browser override when the host Chromium build stalls at startup.
+const executablePath = process.env["SODA_E2E_CHROMIUM_PATH"];
+if (executablePath) test.use({ launchOptions: { executablePath } });
+
 test("two virtual viewers share one owned source and encoder until the last viewer closes", async ({ page, context, appServer },testInfo) => {
   test.setTimeout(90000);
   const dir = await mkdtemp(join(tmpdir(), "soda-shared-native-")), lifecycle = join(dir, "children.jsonl");
@@ -46,8 +50,9 @@ test("two virtual viewers share one owned source and encoder until the last view
     const separator=appServer.cookie.indexOf("=");await context.addCookies([{name:appServer.cookie.slice(0,separator),value:appServer.cookie.slice(separator+1),url:appServer.origin,httpOnly:true,sameSite:"Strict"}]);
     for (const browserPage of [page, slow]) {
       await browserPage.goto(appServer.origin);
-      await expect(browserPage.locator(`[data-machine-id="${invite.machineId}"] [data-state="online"]`)).toBeVisible();
-      await openNativeTab(browserPage, "desktop", browserPage.locator(`[data-machine-id="${invite.machineId}"]`));
+      const header=browserPage.locator(`[data-machine-id="${invite.machineId}"]`);
+      await expect(header.locator('[data-state="online"]')).toBeVisible();
+      await openNativeTab(browserPage,"desktop",header);
       const view = browserPage.locator("[data-remote-desktop]");
       await expect(view.locator("[data-shared-virtual-available]")).toBeVisible();
       await view.getByLabel("複数viewerで同じ画面を共有", { exact: true }).check();
@@ -88,5 +93,5 @@ test("two virtual viewers share one owned source and encoder until the last view
     await expect(slowView.locator("[data-media-state]")).toHaveText("画像配信");
     await expect.poll(async () => (await ledger()).filter(m => m.type === "native_stop").length).toBe(1);
     await slowView.getByRole("button", { name: "共有停止", exact: true }).click();
-  } finally { await slow.close(); await provider.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await page.goto("about:blank").catch(()=>{}); await slow.close().catch(()=>{}); await provider.close(); await rm(dir, { recursive: true, force: true }); }
 });

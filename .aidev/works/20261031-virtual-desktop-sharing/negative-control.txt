@@ -1,0 +1,44 @@
+before 1 
+ RUN  v5.0.1 /workspaces/sodashitsu-virtual-desktop-sharing
+
+ ❯ ../../tmp/soda-lock-negative-v1imwc2v/pool.test.ts (88 tests | 1 failed | 87 skipped) 9ms
+   × owns one shared virtual source until its last viewer and keeps control exclusive 8ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 87 skipped (88)
+   Start at  20:02:12
+   Duration  1.10s (transform 79%, import 20%, tests 1%)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ../../tmp/soda-lock-negative-v1imwc2v/pool.test.ts > owns one shared virtual source until its last viewer and keeps control exclusive
+AssertionError: expected { type: 'configure', …(4) } to not have property "allowSharedVirtual"
+
+- Expected:
+undefined
+
++ Received:
+true
+
+ ❯ ../../tmp/soda-lock-negative-v1imwc2v/pool.test.ts:499:135
+    497|  const f=fixture(),a=f.join("virtual",virtualConfiguration),b=f.join("…
+    498|  try{
+    499|   expect(f.child.commands[0]).toMatchObject({allowVirtualDisplay:true,…
+       |                                                                                                                                       ^
+    500|   f.child.send({...ready,virtualDisplay:true,nativeVideo:true});await …
+    501|   expect(a.session.requestControl!(true)).toBe(true);expect(b.session.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+restored 0 
+ RUN  v5.0.1 /workspaces/sodashitsu-virtual-desktop-sharing
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 87 skipped (88)
+   Start at  20:02:13
+   Duration  1.17s (transform 75%, import 19%, tests 6%)
+
+
