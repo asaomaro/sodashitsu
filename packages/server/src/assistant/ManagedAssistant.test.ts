@@ -27,3 +27,9 @@ it("reports an existing instance without claiming or killing that instance", asy
   await vi.waitFor(()=>expect(warn).toHaveBeenCalledWith(expect.stringContaining("既存のアシスタント")));
  } finally {await app.stop();}
 });
+it('keeps the generic runtime in GUI mode instead of inheriting Node mode options',async()=>{
+ vi.stubEnv('ELECTRON_RUN_AS_NODE','1');vi.stubEnv('NODE_OPTIONS','--inspect');vi.stubEnv('NODE_PATH','generated-untrusted-path');
+ const spawned:ReturnType<typeof spawn>[]=[];const launch=vi.fn((...args:Parameters<typeof spawn>)=>{const child=spawn(...args);spawned.push(child);return child;}) as unknown as typeof spawn;
+ const app=new ManagedAssistant(vi.fn(),launch);
+ try{app.start({command:[process.execPath,'-e','process.stdin.on("end",()=>process.exit(0));process.stdin.resume();','--'],origin:'http://127.0.0.1:7780'});const options=vi.mocked(launch).mock.calls[0]![2] as{env:NodeJS.ProcessEnv};expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();expect(options.env.NODE_OPTIONS).toBeUndefined();expect(options.env.NODE_PATH).toBeUndefined();await app.stop();expect(spawned).toHaveLength(1);}finally{await app.stop();vi.unstubAllEnvs();}
+});

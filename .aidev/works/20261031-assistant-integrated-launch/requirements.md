@@ -1,0 +1,9 @@
+# 要求
+
+利用者が専用EXE/ZIPを手動導入せず、sodaの設定からデスクトップアシスタントをONにするだけで使用できるようにする。Windows/WSLではWindowsへ表示し、Linux/macOSも同じ同梱GUIを使う。実GUI検証以外の実装・生成試験・配布収録・独立レビューを完了しmainへ統合する。
+
+OFFではGUI/runtime実装のload・ダウンロード・子プロセスを開始しない。初回準備中のOFF/停止/設定更新は元の所有scopeと期限を失効し、物理的な後始末が完了するまで次の準備を開始しない。任意コマンド・path・URL・compiler引数はRPCへ公開しない。設定変更はlocalhost/TUIに限定する。
+
+同じON・監視通知を繰り返しても二重起動せず、既存のidentityと状態を維持する。旧standalone installer/pack/CLIを廃止し、旧コード互換は要求しない。OSで必要なGUIプロセス自体はsoda管理の内部roleとして残る。
+
+この変更は一つの有効化動線のためにprotocol/server/GUI/Web/TUI/配布へまたがる。runtime archive/CRC/cacheはPR344までで分離済み。既存のnative helper role共通化・RDPの残件・sr-pc稼働接続復旧は継続タスクとして追跡し、アシスタント統合と混同して完了としない。

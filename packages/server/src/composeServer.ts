@@ -809,6 +809,7 @@ export async function composeServer(
     gitPoller,
     agentStarter,
     assistantSessions,
+    assistantLaunch:managedAssistant,
     assistantAudio,
     agentFork,
     subagentTranscripts,

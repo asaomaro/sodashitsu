@@ -28,8 +28,6 @@ function printHelp(): void {
       "soda session stop NAME [--state-dir DIR] [--json]",
       "soda handoff [--state-dir DIR] [--session NAME]",
       "soda assistant enable|disable|status [--state-dir DIR] [--session NAME]",
-      "soda assistant install --from ZIP_OR_DIR --destination DIR [--state-dir DIR] [--session NAME]",
-      "soda assistant rollback [--state-dir DIR] [--session NAME]",
       ...MACHINE_USAGE.split("\n"),
       "soda bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
     ].join("\n"),
@@ -212,13 +210,9 @@ async function main(): Promise<void> {
       );
     } else if (parsed.command === "assistant") {
       const {readAssistantEnabled,writeAssistantEnabled}=await import("./assistant/AssistantEnabledState.js");
-      const {readAssistantPackage}=await import("./assistant/AssistantPackageState.js");
       const dir = resolveServeOptions(parsed.serve).stateDir;
-      if (parsed.assistantAction === "install") await (await import("./assistant/AssistantPackage.js")).installAssistantPackage(dir,parsed.assistantSource!,parsed.assistantDestination!);
-      else if(parsed.assistantAction === "rollback") await (await import("./assistant/AssistantPackage.js")).rollbackAssistantPackage(dir);
-      else if(parsed.assistantAction === "enable" || parsed.assistantAction === "disable") await writeAssistantEnabled(dir, parsed.assistantAction === "enable");
-      console.log(JSON.stringify({enabled: await readAssistantEnabled(dir, process.env.SODA_ASSISTANT_ENABLED === "1"),
-        installation:await readAssistantPackage(dir),commandOverride:!!process.env.SODA_ASSISTANT_COMMAND}));
+      if (parsed.assistantAction === "enable" || parsed.assistantAction === "disable") await writeAssistantEnabled(dir, parsed.assistantAction === "enable");
+      console.log(JSON.stringify({enabled:await readAssistantEnabled(dir,process.env.SODA_ASSISTANT_ENABLED==="1"),managedBy:"soda",commandOverride:!!process.env.SODA_ASSISTANT_COMMAND}));
     } else if (parsed.command === "machine") {
       const {runMachineCommand}=await import("./machine/machineCommands.js");
       process.exitCode = await runMachineCommand(parsed.machine!, parsed.stateDir ?? defaultStateDir(), consoleIo);

@@ -28,7 +28,7 @@ it("loads soda's GUI resources without node_modules using a synthetic Electron A
   await run(process.execPath,["--check",join(host,"dist/preload.cjs")]);
   const electron=join(directory,"electron.mjs"),loader=join(directory,"loader.mjs");
   await writeFile(electron,`const deny=new Proxy(function(){throw Error('unexpected native call')},{get(){throw Error('unexpected native access')}});
-   export const app={requestSingleInstanceLock(){return false},quit(){console.log('synthetic_gui_declined_owned_start')}};
+   export const app={setName(name){if(name!=="Sodashitsu Assistant")throw Error("Unexpected application identity")},requestSingleInstanceLock(){return false},quit(){console.log('synthetic_gui_declined_owned_start')}};
    export const protocol={registerSchemesAsPrivileged(){}};
    export const BrowserWindow=deny,Menu=deny,Tray=deny,clipboard=deny,desktopCapturer=deny,dialog=deny,ipcMain=deny,nativeImage=deny,powerMonitor=deny,screen=deny,session=deny;`);
   await writeFile(loader,`export async function resolve(id,ctx,next){if(id==='electron')return {url:${JSON.stringify(pathToFileURL(electron).href)},shortCircuit:true};return next(id,ctx);}`);

@@ -1,0 +1,61 @@
+name: Integrated assistant launch (generated roles only)
+on:
+  pull_request:
+    paths:
+      - 'packages/server/src/assistant/**'
+      - 'packages/server/assets/assistant-runtime-root.ps1'
+      - 'packages/server/src/surface/methods/assistant*'
+      - 'packages/protocol/src/assistantSettings*'
+      - 'packages/web/src/components/AssistantSettings*'
+      - 'packages/tui/src/settings/assistant*'
+      - 'scripts/package.mjs'
+      - '.github/workflows/assistant-integrated.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generated:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @sodashitsu/server build
+      - name: Generated root policy, bundled resources, owned child and local settings (no GUI/device/model)
+        run: pnpm exec vitest run packages/server/src/assistant/AssistantNativeRoot.test.ts packages/server/src/assistant/AssistantNativeRootWindows.test.ts packages/server/src/assistant/AssistantHostApp.test.ts packages/server/src/assistant/AssistantHostBundle.test.ts packages/server/src/assistant/AssistantBundledLaunch.test.ts packages/server/src/assistant/AssistantLaunchController.test.ts packages/server/src/assistant/ManagedAssistant.test.ts packages/server/src/surface/methods/assistantSettings.test.ts packages/web/src/components/AssistantSettings.test.ts --maxWorkers=2
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm rebuild node-pty
+      - run: pnpm build
+      - run: node scripts/package.mjs --no-build --no-install --no-archive
+      - run: node packages/desktop-assistant/scripts/verify-host-package.mjs
+      - run: pnpm --filter @sodashitsu/e2e exec playwright install --with-deps chromium
+      - name: Browser settings with generated enable and cancellation responses only
+        run: pnpm --filter @sodashitsu/e2e exec playwright test assistant-settings.spec.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: assistant-integrated-browser
+          path: packages/e2e/test-results
+          retention-days: 7

@@ -1,3 +1,4 @@
+import {AssistantSettingsGetParams,AssistantSettingsSetParams,type AssistantSettingsResult} from "./assistantSettings.js";
 import { UsageHistoryParams, type UsageHistory, UsageReportParams, type UsageReport } from "./usageAnalytics.js";
 import { ExecMethods, type ExecResults } from "./exec.js";
 import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams } from "./desktopAssistant.js";
@@ -1591,6 +1592,8 @@ export const METHOD_SCHEMAS = {
   "assistant.apps": AssistantSessionAdoptParams,
   "assistant.app_open": AssistantAppOpenParams,
   "assistant.app_call": AssistantAppCallParams,
+  "assistant.settings.get":AssistantSettingsGetParams,
+  "assistant.settings.set":AssistantSettingsSetParams,
   "assistant.reminders": AssistantSessionGetParams,
   "assistant.reminder_save": AssistantReminderSaveParams,
   "assistant.reminder_remove": AssistantReminderIdParams,
@@ -1795,6 +1798,8 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "assistant.ensure": AssistantSessionInfo;
   "assistant.adopt": AssistantSessionInfo;
   "assistant.cancel_image": Record<string, never>;
+  "assistant.settings.get":AssistantSettingsResult;
+  "assistant.settings.set":AssistantSettingsResult;
   "assistant.audio_begin":{uploadId:string};
   "assistant.audio_chunk":Record<string,never>;
   "assistant.audio_commit":{sent:true;turnId:string};

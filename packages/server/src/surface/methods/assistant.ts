@@ -1,4 +1,5 @@
 import {
+  AssistantSettingsGetParams,AssistantSettingsSetParams,
   AssistantImageCancelParams,
   AssistantReminderSaveParams,
   AssistantReminderIdParams,
@@ -20,6 +21,14 @@ import type { ControlSurface, MethodContext } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 
 export function registerAssistantMethods(surface: ControlSurface, deps: MethodDeps): void {
+  if(deps.assistantLaunch){
+    const launch=deps.assistantLaunch;
+    surface.register("assistant.settings.get",{schema:AssistantSettingsGetParams,handler:ctx=>launch.status(ctx.connection?.localSettings===true)});
+    surface.register("assistant.settings.set",{schema:AssistantSettingsSetParams,handler:async(ctx,p)=>{
+      const guard=()=>{ctx.signal?.throwIfAborted();if(ctx.connection?.localSettings!==true||(ctx.connectionAuthorized&&!ctx.connectionAuthorized()))throw new RpcError("unauthorized","このPCのlocalhost画面、または端末版で設定してください。");};
+      guard();return launch.setEnabled(p.enabled,guard);
+    }});
+  }
   registerAssistantApps(surface, deps);
   registerAssistantAudio(surface,deps);
   const imagePrompts = new Map<string, {clientId:string; active:boolean; expires:number}>();

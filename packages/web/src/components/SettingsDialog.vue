@@ -44,6 +44,7 @@ import {
 import ExtensionSettings from "./ExtensionSettings.vue";
 import VscodeSharingSettings from "./VscodeSharingSettings.vue";
 import DesktopSettings from "./DesktopSettings.vue";
+import AssistantSettings from "./AssistantSettings.vue";
 import LoginSettings from "./LoginSettings.vue";
 import AgentToolsSettings from "./AgentToolsSettings.vue";
 import KeySettings from "./KeySettings.vue";
@@ -1823,6 +1824,7 @@ function onNativeCancel(ev: Event): void {
       <ExtensionSettings />
       <AgentToolsSettings />
       <VscodeSharingSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
+      <AssistantSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
       <DesktopSettings :active="view.dialogContext?.kind === 'settings' && view.connectionState === 'open'" />
       <LoginSettings />
       <KeySettings v-model:capturing="keysCapturing" :kind="kind" />

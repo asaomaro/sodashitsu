@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
     "start": "electron .",
-    "pack:win": "electron-builder --win zip --x64 -c.win.signAndEditExecutable=false",
     "verify:ui": "node scripts/verify-ui.mjs",
     "build:host": "tsc -b && node scripts/build-host.mjs"
   },
@@ -22,27 +21,10 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "electron": "45.1.0",
-    "electron-builder": "26.18.0",
     "typescript": "^5.7.3",
     "vitest": "^5.0.1",
     "@playwright/test": "^1.63.0",
     "@types/ws": "^8.5.13"
-  },
-  "build": {
-    "appId": "jp.sodashitsu.desktop-assistant",
-    "productName": "Sodashitsu Assistant",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**",
-      "assets/**",
-      "package.json"
-    ],
-    "win": {
-      "target": "zip",
-      "signAndEditExecutable": false
-    }
   },
   "productName": "Sodashitsu Assistant",
   "description": "Sodashitsu desktop assistant native host"
