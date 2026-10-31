@@ -1,0 +1,3 @@
+# 要求
+
+無効・未使用機能の実装を初回利用まで読み込まない要求の継続。server composeのAssistantAudioUploads/CodexAudio static importと未使用instanceを除く。専用session・音声機能と認可を確認した明示beginだけが起動契機。独立exe統合の全体完了とはしない。

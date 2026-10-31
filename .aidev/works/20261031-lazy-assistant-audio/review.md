@@ -1,0 +1,7 @@
+# 独立点検
+
+review_transferが全差分を読み、初回proveより前にgenerationとleaseを確保していないmustを検出。callback前にgenerationを固定し、初回prove前にleaseをpendingへ登録してfinallyで回収するよう修正。初回prove内suspend/resume・disconnect回帰を追加した。
+
+追加でfactory内の同期失効を想定し、createdを公開したままclose成功まで保持する回帰も追加。validは単調時計取得後にgeneration/lease/closed/期限を検査。修正deltaを独立読取点検しmust解消、追加must/shouldなし。試験のPromise factory型修正も点検済み。
+
+review_pointerがCI delta（新pathsとWindows/Linuxでの11生成ケース）も確認し追加指摘なし。

@@ -40,6 +40,7 @@ it("assistant status reads only metadata while disabled",async()=>{
 it("handoff preflight still validates the actual server module before reporting readiness",async()=>{
  const result=await execute("packages/server/dist/main.js",["__handoff-preflight","--stage","2","--probe","invalid"]);
  expect(JSON.parse(result.output).ok).toBe(false);expect(result.modules.some(url=>url.endsWith("/packages/server/dist/composeServer.js"))).toBe(true);
+ expect(result.modules.filter(url=>/\/assistant\/(?:AssistantAudioUploads|CodexAudio)\.js$/.test(url))).toEqual([]);
 });
 
 it("an unavailable server implementation cannot break an unrelated help command",async()=>{
