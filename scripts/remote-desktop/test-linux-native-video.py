@@ -349,6 +349,73 @@ class Flow(unittest.TestCase):
                                  "fps": 30, "bitrateKbps": 2500, **fields})
 
 
+class Codecs(unittest.TestCase):
+    def test_actual_generated_access_units_derive_codec_key_and_preserve_bytes(self):
+        for family,name in (("h264","h264-generated.json"),("h264-444","h264-444-software-generated.json"),("hevc","hevc-hardware-generated.json"),("av1","av1-software-generated.json")):
+            parser=video.NativeBitstream(family);fixture=json.loads((root/"fixtures"/name).read_text());codec=None
+            for packet in fixture["packets"]:
+                data=base64.b64decode(packet["data"]);result,actual,is_key=parser.normalize(data)
+                codec=packet.get("codec") or codec
+                self.assertEqual(actual.lower(),codec.lower());self.assertEqual(is_key,packet["key"]);self.assertEqual(result,data)
+                if family.startswith("h264"):self.assertEqual(actual,actual.lower(),"H264 codec metadata must use canonical lowercase")
+        profiles=json.loads((root/"fixtures/av1-software-profiles-generated.json").read_text())
+        for profile in profiles["profiles"]:
+            parser=video.NativeBitstream("av1")
+            for packet in profile["packets"]:
+                _,actual,is_key=parser.normalize(base64.b64decode(packet["data"]));self.assertEqual(actual,packet["codec"]);self.assertEqual(is_key,packet["key"])
+
+    def test_bounded_codec_headers_and_frame_units_reject_malformed_input(self):
+        for family,invalid in (("hevc",[b"invalid",b"\0\0\1\x42",b"\0\0\1\x42\0",b"\0\0\1\x42\x01\x01"]),("av1",[b"",b"\x80",b"\x0a\xff",b"\x32\x01\0",b"\x12\x01\0"])):
+            for data in invalid:
+                with self.assertRaises(video.VideoFailure):video.NativeBitstream(family).normalize(data)
+        for family in ("hevc","av1"):
+            with self.assertRaises(video.VideoFailure):video.NativeBitstream(family).normalize(b"x"*(512*1024))
+
+    def test_multiple_pictures_units_layers_and_foreign_chroma_are_rejected(self):
+        hevc=json.loads((root/"fixtures/hevc-hardware-generated.json").read_text());data=base64.b64decode(hevc["packets"][0]["data"])
+        units=video.re.split(b"\x00\x00\x00?\x01",data)[1:];picture=next(nal for nal in units if (nal[0]>>1)&63<=31)
+        for malformed in (data+b"\0\0\0\1"+picture,data+b"\0\0\0\1\x46\x01\x10"):
+            with self.assertRaises(video.VideoFailure):video.NativeBitstream("hevc").normalize(malformed)
+        layered=bytes([picture[0]|1])+picture[1:]
+        with self.assertRaisesRegex(video.VideoFailure,"hevc_layer"):video.NativeBitstream("hevc").normalize(b"\0\0\0\1"+layered)
+        av1=json.loads((root/"fixtures/av1-software-generated.json").read_text());data=base64.b64decode(av1["packets"][0]["data"])
+        with self.assertRaisesRegex(video.VideoFailure,"av1_unit_boundary"):video.NativeBitstream("av1").normalize(data+data)
+        with self.assertRaisesRegex(video.VideoFailure,"av1_extension"):video.NativeBitstream("av1").normalize(bytes([data[0]|4,8])+data[1:])
+        at=0;frame=None;sequence=None
+        while at<len(data):
+            begin=at;header=data[at];at+=1
+            if header&4:at+=1
+            size=shift=0
+            while True:
+                part=data[at];at+=1;size|=(part&127)<<shift;shift+=7
+                if not part&128:break
+            at+=size
+            if (header>>3)&15 in (3,6):frame=data[begin:at]
+            if (header>>3)&15==1:sequence=data[begin:at]
+        self.assertIsNotNone(frame);self.assertIsNotNone(sequence)
+        with self.assertRaisesRegex(video.VideoFailure,"av1_sequence_after_picture"):video.NativeBitstream("av1").normalize(data+sequence)
+        with self.assertRaisesRegex(video.VideoFailure,"av1_picture"):video.NativeBitstream("av1").normalize(data+frame)
+        with self.assertRaisesRegex(video.VideoFailure,"chroma_not_444"):video.NativeBitstream("h264-444").normalize(key)
+
+    def test_random_access_headers_are_owned_by_one_bitstream_instance(self):
+        fixture=json.loads((root/"fixtures/hevc-hardware-generated.json").read_text());data=base64.b64decode(fixture["packets"][0]["data"])
+        units=video.re.split(b"\x00\x00\x00?\x01",data)[1:];bare=b"".join(b"\0\0\0\1"+nal for nal in units if (nal[0]>>1)&63 not in (32,33,34))
+        parser=video.NativeBitstream("hevc");parser.normalize(data);restored,codec,is_key=parser.normalize(bare)
+        self.assertTrue(is_key);self.assertEqual(codec,fixture["packets"][0]["codec"]);self.assertGreater(len(restored),len(bare))
+        with self.assertRaises(video.VideoFailure):video.NativeBitstream("hevc").normalize(bare)
+
+    def test_codec_frames_require_negotiation_and_retain_original_source_guard(self):
+        for family,name in (("hevc","hevc-hardware-generated.json"),("av1","av1-software-generated.json")):
+            output=[];alive=[True];flow=video.NativeVideoFlow(lambda:alive[0],lambda:0,lambda value,valid:output.append((value,valid)))
+            command={"type":"native_video","id":str(uuid.uuid4()),"enabled":True,"fps":30,"bitrateKbps":2500,"codec":family}
+            with self.assertRaises(video.VideoFailure):flow.start(command)
+            flow.codecs=True;flow.start(command);reservation=flow.reserve();fixture=json.loads((root/"fixtures"/name).read_text());packet=fixture["packets"][0]
+            flow.complete(reservation,base64.b64decode(packet["data"]),fixture["width"],fixture["height"],1)
+            frame,valid=next((value,valid) for value,valid in output if value["type"]=="native_frame")
+            self.assertEqual(frame["codecName"],family);self.assertEqual(frame["codec"],packet["codec"]);self.assertTrue(valid())
+            alive[0]=False;self.assertFalse(valid());self.assertIsNone(flow.current)
+
+
 class HelperWiring(unittest.TestCase):
     def test_helper_never_reuses_unretired_worker_and_ignores_old_disable(self):
         spec=importlib.util.spec_from_file_location("owned_helper",root/"linux-portal-helper.py")
@@ -394,6 +461,24 @@ class GeneratedCodec(unittest.TestCase):
             self.assertIs(encoder.pipeline,pipeline);self.assertEqual(encoder.encoder.get_property("bitrate"),1200)
             self.assertEqual(video.access_unit(first)[0],video.access_unit(second)[0]);self.assertTrue(video.access_unit(second)[1]);self.assertEqual(encoder.fps,10)
         finally:encoder.close()
+
+    def test_additional_software_codecs_encode_only_generated_pixels(self):
+        try:
+            import gi
+            gi.require_version("Gst","1.0");gi.require_version("GstVideo","1.0")
+            from gi.repository import Gst,GstVideo
+        except (ImportError,ValueError):self.skipTest("GStreamer video GI unavailable")
+        Gst.init(None);tested=[]
+        for family,factory in (("h264-444","x264enc"),("hevc","x265enc"),("av1","av1enc")):
+            if family not in video.GstH264Encoder.codecs(Gst):continue
+            encoder=video.GstH264Encoder(Gst,GstVideo,64,64,30,2500,candidates=[factory],family=family)
+            try:
+                data=encoder.encode(bytearray([0,0,255]*(64*64)),True,lambda:True)
+                _,codec,key=video.NativeBitstream(family).normalize(data)
+                self.assertTrue(key);self.assertTrue(codec.startswith({"h264-444":"avc1.f4","hevc":"hev1.","av1":"av01."}[family]));tested.append(family)
+            finally:encoder.close()
+        if not tested:self.skipTest("Additional generated software codecs unavailable")
+        print("Generated additional software codecs:",",".join(tested))
 
     def test_real_software_encoder_and_decoder_use_generated_pixels_only(self):
         try:

@@ -1,0 +1,5 @@
+# 独立レビュー
+
+review_pointerのtaskcheckは製品mustなし。推奨の実Mac HEVC生成encode/parameter/decodeと、複数picture/AU・HEVC layer・AV1 extension・chroma偽装・stream別cacheの拒否試験を追加し、delta reviewは追加指摘なし。
+
+review_transferの全差分crossは製品mustなし。normal HEVCの実decode/fallbackを区別するshouldを、browser支持判定とactual codec/MIME・理由logへ強化した。H264-444実fixtureとcanonical lowercase修正も追加して再点検、should解消・追加must/shouldなし。

@@ -1,0 +1,51 @@
+## codec-case bypass: exit 1
+F
+======================================================================
+FAIL: test_actual_generated_access_units_derive_codec_key_and_preserve_bytes (__main__.Codecs.test_actual_generated_access_units_derive_codec_key_and_preserve_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/soda-native-codecs-negative-etsjbpyb/test-linux-native-video.py", line 360, in test_actual_generated_access_units_derive_codec_key_and_preserve_bytes
+    if family.startswith("h264"):self.assertEqual(actual,actual.lower(),"H264 codec metadata must use canonical lowercase")
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'avc1.F4001E' != 'avc1.f4001e'
+- avc1.F4001E
+?      ^    ^
++ avc1.f4001e
+?      ^    ^
+ : H264 codec metadata must use canonical lowercase
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+
+## codec-case restored: exit 0
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+
+## multiple-picture bypass: exit 1
+F
+======================================================================
+FAIL: test_multiple_pictures_units_layers_and_foreign_chroma_are_rejected (__main__.Codecs.test_multiple_pictures_units_layers_and_foreign_chroma_are_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/soda-native-codecs-negative-etsjbpyb/test-linux-native-video.py", line 378, in test_multiple_pictures_units_layers_and_foreign_chroma_are_rejected
+    with self.assertRaises(video.VideoFailure):video.NativeBitstream("hevc").normalize(malformed)
+AssertionError: VideoFailure not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+
+## multiple-picture restored: exit 0
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+
+Original source bytes unchanged: true

@@ -34,6 +34,8 @@ rich_cases = [
     ("rich-input", '!write || clipboard.canWrite()', 'true', "rich clipboard write requires input ceiling"),
 ]
 native_cases=[
+    ("native-h264-codec-case", 'String(format:"avc1.%02x%02x%02x",sps[1],sps[2],sps[3])', 'String(format:"avc1.%02X%02X%02X",sps[1],sps[2],sps[3])', "generated VideoToolbox canonical codec spelling"),
+    ("native-hevc-codec", 'String(rbsp[12])', 'String(0)', "generated HEVC actual SPS profile tier level"),
     ("native-ack-deadline", ' && (stream.pending.first==nil || (time>=stream.pending[0].at && time<=stream.pending[0].at+2000))', '', "native video late ack cannot erase deadline"),
     ("native-inflight", 'guard inflight==nil,!retiring,stream.pending.count<stream.window', 'guard !retiring,stream.pending.count<stream.window', "native video single physical encoding job"),
     ("native-ledger", '!seen.contains(id)', 'true', "native video UUID cannot replay after ledger window or case change"),

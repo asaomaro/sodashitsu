@@ -1,0 +1,9 @@
+# 検証
+
+build/typecheck成功。Linux portal59件成功。native video32件中31成功・既存の完全software H264 decode依存1件skip。追加の実x264 H264-444/x265 HEVC/AOM AV1 encodeは全て生成BGR画素のみで成功。debは/tmpへ展開しsystem設定を変更していない。Node3ファイル27件成功。H264-444の実software生成fixtureを追加し、同じAPIで再生成する手順も記録した。
+
+生成ブラウザ9件成功。LinuxのAV1 UDP/WSS、両OSのHEVC要求・encoder不可/decoder拒否からH264復帰、Linuxの実software生成H264-444を検証。HEVC/444のnormalはbrowser decoder対応時のみ実codec/MIMEをassertし、非対応時はH264へのfallback理由を明示する。H264-444はこのローカル1217でactual codec444の復号画素を確認。この1217ではHEVC decoderが未対応でnormalもH264 fallback。HEVC実decode成功には数えていない（/tmp/soda-native-codecs-browser-final.log）。対応環境では実HEVCとvideo/hevcを要求する。実OS画面/音声/入力は操作していない。
+
+新E2EでH264 codec大文字が既存protocolと不一致になる退行を検出し、Linux/Mac出力をlowercaseへ統一。case不正と複数picture許容のprivate-copy負例は意図したassertionで失敗→復元成功。元ソースは不変、rawはnegative-control.txt。
+
+macOSはHEVC hardware encode対応時、生成64角4色画像を本番VT encoderで圧縮→実parameter set抽出→software HEVC decodeの色順→同encoder退役を試験する。非対応時は未実行を明示し、固定SPS/controllerの生成試験は常時行う。新Mac SDK/CI結果は進行中。
