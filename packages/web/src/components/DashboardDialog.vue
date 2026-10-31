@@ -5,7 +5,8 @@
  * デスクトップは `DashboardScreen`（主な領域の画面）で、この部品は使わない。中身は同じ `DashboardView`。
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import DashboardView from "../dashboard/DashboardView.vue";
+import { defineAsyncComponent } from "vue";
+const DashboardView = defineAsyncComponent(() => import("../dashboard/DashboardView.vue"));
 import { useViewStore } from "../store/view.js";
 
 const view = useViewStore();

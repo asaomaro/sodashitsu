@@ -1,0 +1,34 @@
+import { flushPromises, mount } from "@vue/test-utils";
+import { expect, it, vi } from "vitest";
+import { ConnectionKey } from "../injection.js";
+import UsageHistoryPanel from "./UsageHistoryPanel.vue";
+it("renders dated usage with provider, model, input/cache and hourly charts and requests explicit custom periods", async () => {
+  const tokens = { input: 40, output: 10, cacheRead: 50, cacheWrite: 0, total: 100 };
+  const row = { ...tokens, label: "2026-10-01", calls: 2 };
+  const request = vi.fn(async (_method: string, range: unknown) => ({ ...(range as object), timezone: "UTC", asOf: 1, partial: true, files: 1, excluded: 1, calls: 2, sessions: 1, totals: tokens, byDay: [row], byKind: [{...row,label:"codex"}], byModel: [{...row,label:"codex · gpt-5"}], bySession: [{...row,label:"codex · abc"}], byHour: [{...row,label:"09"}], sources: ["test source"] }));
+  const w = mount(UsageHistoryPanel, { global: { provide: { [ConnectionKey as symbol]: { request } } } });
+  await flushPromises();
+  expect(w.text()).toContain("モデル別の期間トークン");
+  expect(w.text()).toContain("codex · gpt-5");
+  expect(w.text()).toContain("一部の履歴");
+  expect(w.findAll(".hours .hour-cell")).toHaveLength(24);
+  await w.get("[data-history-from]").setValue("2026-10-01");
+  await w.get("[data-history-to]").setValue("2026-10-07");
+  await w.get("[data-load-usage-history]").trigger("click");
+  await flushPromises();
+  expect(request).toHaveBeenLastCalledWith("agent.usage_history", { from: "2026-10-01", to: "2026-10-07" });
+  expect(w.emitted("loaded")?.at(-1)).toEqual([{ from: "2026-10-01", to: "2026-10-07" }]);
+  w.unmount();
+});
+it("keeps the displayed history range bound during a failed refresh and never emits a clearing range", async () => {
+  const initial = {from:"2026-10-01",to:"2026-10-07",asOf:1,partial:false,files:1,excluded:0,calls:0,sessions:0,totals:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0},byDay:[],byKind:[],byModel:[],bySession:[],byHour:[],sources:[]};
+  const request = vi.fn().mockResolvedValueOnce(initial).mockRejectedValueOnce(new Error("offline"));
+  const w = mount(UsageHistoryPanel, { global: { provide: { [ConnectionKey as symbol]: { request } } } });
+  await flushPromises();
+  await w.get("[data-history-from]").setValue("2026-10-02");
+  await w.get("[data-load-usage-history]").trigger("click");
+  await flushPromises();
+  expect(w.emitted("loaded")).toEqual([[{from:"2026-10-01",to:"2026-10-07"}]]);
+  expect(w.get('[role="alert"]').text()).toContain("前回取得した 2026-10-01〜2026-10-07");
+  w.unmount();
+});

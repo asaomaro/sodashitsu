@@ -21,3 +21,15 @@ it("keeps three primary screens and moves secondary screens into a separately na
   expect(w.find("nav").exists()).toBe(false);
   w.unmount();
 });
+it("opens usage analytics from the other menu and returns to status from the primary button", async () => {
+  const { analyticsSelected } = await import("../dashboard/navigation.js");
+  const pinia = createPinia();
+  const w = mount(ScreenSwitcher, { global: { plugins: [pinia], stubs: { Teleport: true } } });
+  await w.get("[data-screen-more]").trigger("click");
+  await w.get("[data-usage-analytics]").trigger("click");
+  expect(useViewStore(pinia).screen).toBe("dashboard");
+  expect(analyticsSelected.value).toBe(true);
+  await w.get('[data-screen-id="dashboard"]').trigger("click");
+  expect(analyticsSelected.value).toBe(false);
+  w.unmount();
+});
