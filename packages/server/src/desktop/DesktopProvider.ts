@@ -269,10 +269,11 @@ export class DesktopProvider {
     if(p.options.sharedNative&&(!p.options.sharedDesktop||!p.options.nativeVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","共有動画が接続先で許可されていません。");
     if(p.options.elevatedDesktop){
       if(!cfg.allowElevated||!p.options.features)throw new RpcError("unauthorized","管理者画面の共有が接続先で許可されていません。");
-      if(p.options.protectedVideo&&(!p.options.nativeVideo||p.options.sharedDesktop||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の動画には明示した単独の動画経路と接続先の許可が必要です。");
+      if(p.options.protectedVideo&&(!p.options.nativeVideo||p.options.sharedDesktop&&!p.options.sharedProtectedVideo||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の動画には明示した単独の動画経路と接続先の許可が必要です。");
       if(p.options.protectedAudio&&(!p.options.protectedVideo||!p.options.nativeAudio||(cfg.allowSystemAudio??cfg.allowMedia)!==true))throw new RpcError("unauthorized","管理者画面の音声には接続先ユーザーのシステム音声許可が必要です。");
       if(p.options.virtualDisplay||p.options.monitorDevice||p.options.monitors||p.options.display||(p.options.files&&!p.options.protectedFiles)||p.options.richClipboard||p.options.nativeVideo&&!p.options.protectedVideo||p.options.nativeAudio&&!p.options.protectedAudio||p.options.microphone||p.options.nativeDatagrams||p.options.nativeCodecs||p.options.nativeAdaptive||p.options.nativeCadence||((p.options.nativeVideoWindow||p.options.nativeMaxFps)&&!p.options.protectedVideo)||p.options.cursor)throw new RpcError("invalid_params",desktopProtectedFailureMessage("conflict"));
     }
+    if(p.options.sharedProtectedVideo&&(!p.options.sharedDesktop||!p.options.sharedProtected||!p.options.protectedVideo||!p.options.sharedNative||!cfg.allowElevated||!cfg.allowNativeVideo))throw new RpcError("unauthorized","管理者画面の共有動画には明示した共有経路と接続先の許可が必要です。");
     if(p.options.protectedAudio&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
     if(p.options.protectedVideo&&!p.options.elevatedDesktop)throw new RpcError("invalid_params","管理者画面を明示してください。");
     if(p.options.virtualDisplay&&(!cfg.allowVirtualDisplay||!p.options.features||p.options.monitorDevice))throw new RpcError("unauthorized","仮想画面の作成が許可されていないか、モニター指定と併用されています");
@@ -747,7 +748,7 @@ export class DesktopProvider {
             if(options.richClipboard===true&&richClipboard===true&&s.allowClipboard&&s.clipboardSocket)s.richClipboard=new DesktopRichClipboard({allowed:write=>s.ready&&this.live(s)&&!s.secureDesktop&&s.allowClipboard&&s.clipboardGranted&&this.ownsResource(s,"clipboard")&&performance.now()-s.lastSeen<5000&&(!write||s.allowInput),generation:()=>s.clipboardGeneration,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.clipboardSocket;if(!socket||socket.readyState!==WebSocket.OPEN||socket.bufferedAmount>65536)return false;socket.send(JSON.stringify(value));return true;}});
             if((!s.resourcesManaged||s.process?.resourceChannel?.supported===true)&&options.microphone&&ready.microphone&&cfg.allowMicrophone&&cfg.microphoneEndpoint&&!s.secureDesktop&&(process.platform==="win32"||ready.backend==="synthetic"||!!s.audioPipes||!!cfg.nativePlatform)&&s.microphoneSocket)s.microphone=new DesktopMicrophone({...(cfg.nativePlatform&&ready.backend!=="synthetic"?{nativeOutput:(name:string,active:()=>boolean)=>this.nativeMicrophones.open(cfg.nativePlatform!,cfg.microphoneEndpoint!,name,active)}:{}),...(s.audioPipes&&ready.backend!=="synthetic"?{bridge:(active:()=>boolean)=>s.audioPipes!.open("microphone",active)}:{}),allowOpus:options.microphoneOpus===true,synthetic:ready.backend==="synthetic",claim:(id:string)=>{if(!this.claimResource(s,"microphone"))return false;if(options.sharedMicrophone&&s.process?.requestMicrophone?.(id,true,cfg.nativePlatform&&ready.backend!=="synthetic"?false:true)!==true){if(s.resourcesManaged)this.resources.release(s,"microphone");return false;}s.microphoneOwned=true;return true;},release:(id:string)=>{if(options.sharedMicrophone)s.process?.requestMicrophone?.(id,false);s.microphoneOwned=false;if(s.resourcesManaged)this.resources.release(s,"microphone");},allowed:()=>this.live(s)&&s.ready&&!s.secureDesktop&&(!s.microphoneOwned||this.ownsResource(s,"microphone"))&&performance.now()-s.lastSeen<5000,write:value=>this.write(s,value),send:value=>{if(!this.live(s))return false;const socket=s.microphoneSocket;if(socket?.readyState!==WebSocket.OPEN||socket.bufferedAmount>8192)return false;socket.send(JSON.stringify(value));return true;}});
             const enabledMedia = !s.secureDesktop && cfg.allowMedia === true && dynamicQuality === true;
-            if(ready.protectedAudio||s.secureDesktop&&ready.nativeAudio)throw Error("Privileged helper must not claim user audio");
+            if(ready.sharedProtectedVideo||ready.protectedAudio||s.secureDesktop&&ready.nativeAudio)throw Error("Privileged helper must not claim user audio");
             if(options.protectedAudio&&protectedAudioClock!=="windows-qpc-v1")throw Error("Protected audio video clock proof missing");
             if(ready.protectedVideo&&!options.protectedVideo)throw Error("Unrequested protected native video proof");
             if(options.protectedVideo&&ready.protectedVideo!==true)throw Error("Protected native video helper proof missing");
@@ -772,7 +773,7 @@ export class DesktopProvider {
               ...(options.monitors===true&&cfg.allowMonitors===true&&monitorLayout&&!s.secureDesktop?{monitorLayout}:{}),
               ...(options.files===true&&cfg.fileRoot&&s.fileSocket&&!s.secureDesktop?{files:true,...(options.fileCheckpoints?{fileCheckpoints:true,...(this.transferStore?{durableFileCheckpoints:true}:{})}:{}),...(options.folders?{folders:true}:{}),...(options.folderCheckpoints?{folderCheckpoints:true,...(this.transferStore?{durableFolderCheckpoints:true}:{})}:{})}:{}),
               ...(s.richClipboard?{richClipboard:true}:{}),
-              ...(nativeEnabled?{nativeVideo:true,...(s.protectedVideoActive?{protectedVideo:true,...(s.protectedAudioActive?{protectedAudio:true,nativeAudio:true}:{})}:{})}:{}),
+              ...(nativeEnabled?{nativeVideo:true,...(s.protectedVideoActive?{protectedVideo:true,...(options.sharedProtectedVideo?{sharedProtectedVideo:true}:{}),...(s.protectedAudioActive?{protectedAudio:true,nativeAudio:true}:{})}:{})}:{}),
               ...(nativeEnabled&&options.nativeCodecs&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:nativeCodecCandidates??[]}:{}),
               ...(nativeEnabled&&options.nativeAdaptive&&nativeAdaptive?{nativeAdaptive:true}:{}),
               ...(nativeEnabled&&options.nativeCadence&&(!options.sharedDesktop||options.sharedRate)&&nativeCadence?{nativeCadence:true}:{}),
@@ -884,7 +885,7 @@ export class DesktopProvider {
       }
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop&&!cfg.nativePlatform;
-    const poolVideo=options.sharedDesktop===true&&!options.elevatedDesktop;
+    const poolVideo=options.sharedDesktop===true&&(!options.elevatedDesktop||options.sharedProtectedVideo===true);
     const {protectedFiles:_protectedFiles,sharedVirtual:_sharedVirtual,independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
@@ -1023,7 +1024,7 @@ export class DesktopProvider {
   }
 }
 function sharedHelperOptions(options: z.infer<typeof DesktopStartParams>["options"]) {
-  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedVirtual?{virtualDisplay:true as const,...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
+  return {width:options.width,fps:options.fps,quality:options.quality,...(options.sharedProtectedVideo?{protectedVideo:true as const,...(options.protectedAudio?{protectedAudio:true as const,nativeAudio:true as const}:{})}:{}),...(options.sharedVirtual?{virtualDisplay:true as const,...(options.display?{display:options.display}:{})}:{}),...(options.image?{image:options.image}:{}),deltas:options.sharedDeltas===true,adaptive:false,features:true,imeKeys:true,extendedInput:true,...(options.sharedCursor?{cursor:true as const}:{}),...(options.sharedMonitors?{monitors:true as const,...(options.monitorDevice?{monitorDevice:options.monitorDevice}:{})}:{})};
 }
 function allowedRelay(url: URL, origins: string[]): boolean {
   if (

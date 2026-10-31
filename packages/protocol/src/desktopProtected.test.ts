@@ -26,3 +26,5 @@ it.each(['elevated-default','elevated-uac'] as const)('requires a separate prote
 });
 
 it('requires both protected video and native audio for ordinary-user audio overlay',()=>{const ready={...base,secureDesktop:true,protectedDesktop:'elevated-uac',protectedVideo:true,nativeVideo:true,protectedAudio:true,nativeAudio:true};expect(DesktopReady.safeParse(ready).success).toBe(true);for(const key of ['protectedVideo','nativeVideo','nativeAudio','protectedDesktop']){const bad:any={...ready};delete bad[key];expect(DesktopReady.safeParse(bad).success).toBe(false);}});
+
+it('requires both shared and protected-video proof for pooled protected video',()=>{const ready={...base,secureDesktop:true,protectedDesktop:'elevated-uac',sharedProtected:true,protectedVideo:true,nativeVideo:true,sharedProtectedVideo:true};expect(DesktopReady.safeParse(ready).success).toBe(true);for(const key of ['sharedProtected','protectedVideo','protectedDesktop']){const bad:any={...ready};delete bad[key];expect(DesktopReady.safeParse(bad).success).toBe(false);}});

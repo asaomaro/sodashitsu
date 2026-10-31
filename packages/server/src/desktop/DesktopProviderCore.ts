@@ -29,6 +29,7 @@ export function desktopProviderCapabilities(config:DesktopProviderConfig|undefin
       sharedMicrophone:config?.allowMicrophone===true&&!!config.microphoneEndpoint,
       sharedProtected:!config?.nativePlatform&&config?.allowElevated===true,
       protectedAudio: !config?.nativePlatform&&config?.allowElevated===true&&config?.allowNativeVideo===true&&(config?.allowSystemAudio??config?.allowMedia)===true,
+      sharedProtectedVideo:!config?.nativePlatform&&config?.allowElevated===true&&config?.allowNativeVideo===true,
       protectedVideo:!config?.nativePlatform&&config?.allowElevated===true&&config?.allowNativeVideo===true,
       protectedFiles:!config?.nativePlatform&&config?.allowElevated===true&&config?.allowProtectedFiles===true&&!!config?.fileRoot,
       sharedDesktop: true,
