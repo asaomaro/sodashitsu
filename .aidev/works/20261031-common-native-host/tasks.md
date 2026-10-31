@@ -8,8 +8,8 @@
 - [x] production旧builder廃止、配布inventory、文書
 - [x] 最終独立全差分reviewとclose修正delta（review_transfer、must/shouldなし）
 - [x] 最終build/typecheck/全体試験/配布物確認
-- [ ] CI Windows CLR + Linux/Windows Node boundaries
-- [ ] PR/main
+- [x] CI Windows CLR + Linux/Windows Node boundaries（最終head15checks pass）
+- [x] PR/main（PR346、main4d33e4f7、2026-10-31）
 
 # このsliceで完了扱いにしないもの
 

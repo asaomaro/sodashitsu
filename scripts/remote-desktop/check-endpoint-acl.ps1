@@ -19,7 +19,8 @@ try {
     $first=$true
     while($null -ne $item) {
         if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'reparse'}
-        $acl=Get-Acl -LiteralPath $item.FullName
+        # Read ACLs through the fixed CLR API without optional PowerShell module loading.
+        $acl=$item.GetAccessControl()
         $owner=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
         $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
         if(-not (Test-SodaEndpointAcl -Owner $owner -Rules $rules -User $user -Storage $first)){throw 'permissions'}

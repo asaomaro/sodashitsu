@@ -1,3 +1,4 @@
+import {desktopHelperRolePlan,desktopHelperRoleEnvironment} from './DesktopHelperRolePlan.js';
 import {DesktopNativePcmPaths} from "./DesktopNativePcmPath.js";
 import {DesktopRegionSpec} from "@sodashitsu/protocol";
 import {DesktopAudioPipes,desktopWslAudioCommand} from "./DesktopAudioPipes.js";
@@ -672,10 +673,11 @@ export class DesktopProvider {
     this.launch(s,cfg,options);
   }
   private launch(s:Share,cfg:DesktopProviderConfig,options:z.infer<typeof DesktopStartParams>["options"]):void {
+    const rolePlan=desktopHelperRolePlan(cfg,options);
     const spawnHelper = ():DesktopHelper => {if(options.independentMonitors&&this.physicalHelpers.size>=8)throw new RpcError("server_busy","補助プログラムの終了待ちを含めた上限です");const raw=spawn(cfg.command[0]!, cfg.command.slice(1), {
       shell: false,
       windowsHide: true,
-      env:{...process.env,SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
+      env:{...process.env,...desktopHelperRoleEnvironment(rolePlan),SODA_DESKTOP_ELEVATED_REQUEST:options.elevatedDesktop===true&&cfg.allowElevated===true?"1":"0",SODA_DESKTOP_VIRTUAL_REQUEST:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true?"1":"0"},
       stdio: ["pipe", "pipe", "pipe"],
     });
       const child:DesktopHelper=cfg.nativePlatform?raw:new DesktopResourceChannel(raw,{ack:(source,id)=>{this.resources.acknowledge(source,id);},close:source=>{this.resources.sourceGone(source);}});
@@ -913,7 +915,6 @@ export class DesktopProvider {
     });
     const poolMedia=options.sharedDesktop===true&&!options.elevatedDesktop&&!cfg.nativePlatform;
     const poolVideo=options.sharedDesktop===true&&!options.elevatedDesktop;
-    const poolAudio=poolVideo&&(!cfg.nativePlatform||cfg.nativePlatform==="linux-portal");
     const {independentMonitors:_independentMonitors,sharedMonitors:_sharedMonitors,sharedDeltas:_sharedDeltas,sharedClipboard:_sharedClipboard,sharedCursor:_sharedCursor,sharedMicrophone:_sharedMicrophone,sharedProtected:_sharedProtected,sharedResolution:_sharedResolution,microphoneOpus:_microphoneOpus,sharedRate:_sharedRate,nativePlatform:_nativePlatform,sharedAudio:_sharedAudio,microphone:_microphone,sharedDatagrams:_sharedDatagrams,sharedNative:_sharedNative,sharedDesktop:_sharedDesktop,folderCheckpoints:_folderCheckpoints,folders:_folders,fileCheckpoints:_fileCheckpoints,files:_files,nativeCadence:_nativeCadence,nativeAdaptive:_nativeAdaptive,nativeCodecs:_nativeCodecs,...helperOptions}=options;
     this.write(s, {
       type: "configure",
@@ -926,13 +927,10 @@ export class DesktopProvider {
       allowVirtualDisplay:options.virtualDisplay===true&&cfg.allowVirtualDisplay===true,
       ...(options.elevatedDesktop?{allowElevated:cfg.allowElevated===true}:{}),
       ...(options.sharedProtected?{allowSharedProtected:true}:{}),
-      richClipboard:(options.sharedClipboard||options.richClipboard===true)&&cfg.allowClipboard===true,
-      allowMicrophone:(poolMedia||options.microphone===true)&&cfg.allowMicrophone===true&&!!cfg.microphoneEndpoint,
+      ...rolePlan,
       ...((poolMedia||options.microphone)&&cfg.allowMicrophone&&cfg.microphoneEndpoint?{microphoneEndpoint:cfg.microphoneEndpoint,microphoneClientPid:process.pid}:{}),
-      allowSystemAudio:(poolAudio||options.nativeAudio===true)&&(cfg.allowSystemAudio??cfg.allowMedia)===true&&cfg.allowNativeVideo===true,
       audioClientPid:process.pid,
       ...(s.audioPipes?{audioPipeBridge:true}:{}),
-      nativeCodecs:(poolMedia||options.nativeCodecs===true)&&cfg.allowNativeVideo===true,
       nativeAdaptive:(poolMedia||options.nativeAdaptive===true)&&cfg.allowNativeVideo===true,
       nativeCadence:(poolMedia||options.nativeCadence===true)&&cfg.allowNativeVideo===true,
       nativeDatagrams:(poolMedia||options.nativeDatagrams===true)&&cfg.allowNativeVideo===true,

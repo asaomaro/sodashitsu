@@ -5,22 +5,25 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing, System.Windows.Forms, System.Web.Extensions, System.ServiceProcess
 $unlock = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopUnlock.cs') -Raw
 $source = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopHost.cs') -Raw
-$audioPath = Join-Path $PSScriptRoot 'WindowsDesktopAudio.cs'
-$audioSource = if (Test-Path -LiteralPath $audioPath) { Get-Content -LiteralPath $audioPath -Raw } else { '' }
-$micPath = Join-Path $PSScriptRoot 'WindowsDesktopMicrophone.cs'
-$micSource = if (Test-Path -LiteralPath $micPath) { Get-Content -LiteralPath $micPath -Raw } else { '' }
-$richPath = Join-Path $PSScriptRoot 'WindowsDesktopRichClipboard.cs'
-$richSource = if (Test-Path -LiteralPath $richPath) { Get-Content -LiteralPath $richPath -Raw } else { '' }
-$codecPath = Join-Path $PSScriptRoot 'WindowsCodecProbe.cs'
-$codecSource = if (Test-Path -LiteralPath $codecPath) { Get-Content -LiteralPath $codecPath -Raw } else { '' }
-$virtualSource = @('WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
-$protectedSource = @('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw }
+# The fixed server launch plan overwrites these four flags; no path/type comes from the viewer.
+$audioSource = if ($env:SODA_DESKTOP_LOAD_AUDIO -ceq '1') { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopAudio.cs') -Raw } else { '' }
+$micSource = if ($env:SODA_DESKTOP_LOAD_MICROPHONE -ceq '1') { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopMicrophone.cs') -Raw } else { '' }
+$pipeSource = if ($audioSource -or $micSource) { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopPipeKernel.cs') -Raw } else { '' }
+$richSource = if ($env:SODA_DESKTOP_LOAD_RICH_CLIPBOARD -ceq '1') { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsDesktopRichClipboard.cs') -Raw } else { '' }
+$codecSource = if ($env:SODA_DESKTOP_LOAD_CODECS -ceq '1') { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsCodecProbe.cs') -Raw } else { '' }
+$virtualSource = if ($AllowVirtualDisplay) { @('WindowsVirtualDisplay.cs','WindowsVirtualDisplayNative.cs','WindowsVirtualDisplayChannel.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw } } else { @() }
+$protectedSource = if ($AllowElevated -or $AllowUnlock -or $UnlockLease) { @('WindowsProtectedEpoch.cs','WindowsProtectedScope.cs','WindowsProtectedScopeNative.cs','WindowsProtectedHandshake.cs','WindowsProtectedWorker.cs') | ForEach-Object { Get-Content -LiteralPath (Join-Path $PSScriptRoot $_) -Raw } } else { @() }
 $resourceSource = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'WindowsResourceFence.cs') -Raw
-$combined = $resourceSource + "`n" + ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource + "`n" + $micSource
+$combined = $pipeSource + "`n" + $resourceSource + "`n" + ($protectedSource -join "`n") + "`n" + ($virtualSource -join "`n") + "`n" + $codecSource + "`n" + $unlock + "`n" + $source + "`n" + $audioSource + "`n" + $richSource + "`n" + $micSource
 $usings = [regex]::Matches($combined,'(?m)^using [^;]+;') | ForEach-Object { $_.Value } | Select-Object -Unique
 $combined = ($usings -join "`n") + "`n" + [regex]::Replace($combined,'(?m)^using [^;]+;','')
 Add-Type -TypeDefinition $combined -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll
-if ($ValidateOnly) { Write-Output 'desktop_helper_compiled'; exit 0 }
+if ($ValidateOnly) {
+    $roles = @{}
+    foreach ($entry in @(@('audio','SodaDesktopAudio'),@('microphone','SodaDesktopMicrophone'),@('pipe','SodaDesktopPipeOperation'),@('richClipboard','SodaDesktopRichClipboard'),@('codecs','SodaDesktopCodecProbe'),@('virtualDisplay','SodaDesktopVirtualClient'),@('protectedDesktop','SodaDesktopProtectedWorker'))) { $roles[$entry[0]] = $null -ne [SodaDesktopHost].Assembly.GetType($entry[1]) }
+    Write-Output ('desktop_helper_roles:' + ($roles | ConvertTo-Json -Compress))
+    Write-Output 'desktop_helper_compiled'; exit 0
+}
 if ($CaptureBackend -eq "gdi") { $env:SODA_DESKTOP_CAPTURE = "gdi" }
 [SodaDesktopUnlock]::SetUtf8Console()
 try {
