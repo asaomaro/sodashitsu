@@ -16,22 +16,34 @@ protocol NativeH264Encoder: AnyObject {
 /** One serial, lazily created VT session. Callbacks never wait for the source gate. */
 final class ToolboxH264Encoder: NativeH264Encoder {
     let queue=DispatchQueue(label:"dev.sodashitsu.native-h264"),flag=NSLock()
-    let fps: Int,hardware: Bool
+    let fps: Int,hardware: Bool,family:String
     private var kbps: Int,rateFailed=false
     private var stopped=false,session: VTCompressionSession?,size: (Int,Int)?
     private let setRate:(VTCompressionSession,Int)->OSStatus
-    init(fps: Int,kbps: Int,hardware: Bool=true,setRate:@escaping(VTCompressionSession,Int)->OSStatus={VTSessionSetProperty($0,key:kVTCompressionPropertyKey_AverageBitRate,value:($1*1000) as CFNumber)}) { self.fps=fps;self.kbps=kbps;self.hardware=hardware;self.setRate=setRate }
+    init(fps: Int,kbps: Int,hardware: Bool=true,family:String="h264",setRate:@escaping(VTCompressionSession,Int)->OSStatus={VTSessionSetProperty($0,key:kVTCompressionPropertyKey_AverageBitRate,value:($1*1000) as CFNumber)}) { self.fps=fps;self.kbps=kbps;self.hardware=hardware;self.family=family;self.setRate=setRate }
+    static func hasHardwareHEVC(_ encoders:[[CFString:Any]]) -> Bool {
+        return encoders.prefix(128).contains {encoder in
+            guard let codec=integer(encoder[kVTVideoEncoderList_CodecType],0,Int64(UInt32.max)) else {return false}
+            return UInt32(codec)==kCMVideoCodecType_HEVC && boolean(encoder[kVTVideoEncoderList_IsHardwareAccelerated])==true
+        }
+    }
+    static func hardwareHEVCAvailable() -> Bool {
+        var copied:CFArray?
+        guard VTCopyVideoEncoderList(nil,&copied)==noErr,let encoders=copied as? [[CFString:Any]] else {return false}
+        return hasHardwareHEVC(encoders)
+    }
     func running() -> Bool { flag.lock();defer { flag.unlock() };return !stopped }
     func prepare(_ width: Int,_ height: Int) throws -> VTCompressionSession {
         if let session=session { guard size?.0==width,size?.1==height else { throw NativeError("backend_failure") };return session }
+        guard ["h264","hevc"].contains(family) else {throw NativeError("unsupported")}
         var created: VTCompressionSession?
         let spec=[kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder:hardware] as CFDictionary
-        guard VTCompressionSessionCreate(allocator:kCFAllocatorDefault,width:Int32(width),height:Int32(height),codecType:kCMVideoCodecType_H264,encoderSpecification:spec,imageBufferAttributes:nil,compressedDataAllocator:nil,outputCallback:nil,refcon:nil,compressionSessionOut:&created)==noErr,let value=created else { throw NativeError("backend_failure") }
+        guard VTCompressionSessionCreate(allocator:kCFAllocatorDefault,width:Int32(width),height:Int32(height),codecType:family=="hevc" ? kCMVideoCodecType_HEVC:kCMVideoCodecType_H264,encoderSpecification:spec,imageBufferAttributes:nil,compressedDataAllocator:nil,outputCallback:nil,refcon:nil,compressionSessionOut:&created)==noErr,let value=created else { throw NativeError("backend_failure") }
         do {
             let properties:[CFString:Any]=[
                 kVTCompressionPropertyKey_RealTime:true,
                 kVTCompressionPropertyKey_AllowFrameReordering:false,
-                kVTCompressionPropertyKey_ProfileLevel:kVTProfileLevel_H264_Baseline_AutoLevel,
+                kVTCompressionPropertyKey_ProfileLevel:family=="hevc" ? kVTProfileLevel_HEVC_Main_AutoLevel:kVTProfileLevel_H264_Baseline_AutoLevel,
                 kVTCompressionPropertyKey_AverageBitRate:kbps*1000,
                 kVTCompressionPropertyKey_ExpectedFrameRate:fps,
                 kVTCompressionPropertyKey_MaxKeyFrameInterval:fps,
@@ -77,19 +89,37 @@ final class ToolboxH264Encoder: NativeH264Encoder {
             } catch { completion(.failure(error)) }
         }
     }
+    static func hevcCodec(_ nal:Data) throws -> String {
+        let bytes=Array(nal);guard bytes.count>=2,(bytes[0]>>1)&63==33 else {throw NativeError("backend_failure")}
+        var rbsp=[UInt8](),zeros=0
+        for value in bytes.dropFirst(2) {if zeros>=2 && value==3 {zeros=0;continue};rbsp.append(value);zeros=value==0 ? zeros+1:0}
+        guard rbsp.count>=13 else {throw NativeError("backend_failure")}
+        let space=Int(rbsp[1]>>6),tier=rbsp[1]&32 != 0,profile=rbsp[1]&31
+        var flags=rbsp[2..<6].reduce(UInt32(0)){($0<<8)|UInt32($1)},compatibility:UInt32=0
+        for _ in 0..<32 {compatibility=(compatibility<<1)|(flags&1);flags>>=1}
+        var constraints=Array(rbsp[6..<12]);while constraints.last==0 {constraints.removeLast()}
+        let spaceText=space==0 ? "":String(UnicodeScalar(64+space)!)
+        let prefix="hev1."+spaceText+String(profile)+String(format:".%X.",compatibility)
+        let suffix=constraints.map{String(format:".%02X",$0)}.joined()
+        return prefix+(tier ? "H":"L")+String(rbsp[12])+suffix
+    }
     static func packet(_ sample: CMSampleBuffer,width: Int,height: Int) throws -> NativeH264Packet {
         guard let format=CMSampleBufferGetFormatDescription(sample),let block=CMSampleBufferGetDataBuffer(sample),CMBlockBufferGetDataLength(block)<=512*1024-9 else { throw NativeError("backend_failure") }
         let attachments=CMSampleBufferGetSampleAttachmentsArray(sample,createIfNecessary:false) as? [[CFString:Any]]
         let key=(attachments?.first?[kCMSampleAttachmentKey_NotSync] as? Bool) != true
+        let subtype=CMFormatDescriptionGetMediaSubType(format),hevc=CMFormatDescriptionGetMediaSubType(format)==kCMVideoCodecType_HEVC
+        guard subtype==kCMVideoCodecType_H264 || hevc else {throw NativeError("unsupported")}
         var lengthSize:Int32=0,count=0,pointer:UnsafePointer<UInt8>?,length=0
-        guard CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format,parameterSetIndex:0,parameterSetPointerOut:&pointer,parameterSetSizeOut:&length,parameterSetCountOut:&count,nalUnitHeaderLengthOut:&lengthSize)==noErr,length>=4,let sps=pointer,lengthSize>=1,lengthSize<=4,count<=8 else { throw NativeError("backend_failure") }
-        let codec=String(format:"avc1.%02X%02X%02X",sps[1],sps[2],sps[3]);var annex=Data()
-        if key {
-            for index in 0..<count {
-                guard CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format,parameterSetIndex:index,parameterSetPointerOut:&pointer,parameterSetSizeOut:&length,parameterSetCountOut:nil,nalUnitHeaderLengthOut:nil)==noErr,length>0,length<=65536,let bytes=pointer else { throw NativeError("backend_failure") }
-                annex.append(contentsOf:[0,0,0,1]);annex.append(bytes,count:length)
-            }
+        let first=hevc ? CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format,parameterSetIndex:0,parameterSetPointerOut:&pointer,parameterSetSizeOut:&length,parameterSetCountOut:&count,nalUnitHeaderLengthOut:&lengthSize):CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format,parameterSetIndex:0,parameterSetPointerOut:&pointer,parameterSetSizeOut:&length,parameterSetCountOut:&count,nalUnitHeaderLengthOut:&lengthSize)
+        guard first==noErr,length>=4,let sps=pointer,lengthSize>=1,lengthSize<=4,count>=2,count<=8 else { throw NativeError("backend_failure") }
+        var codec:String?=hevc ? nil:String(format:"avc1.%02x%02x%02x",sps[1],sps[2],sps[3]),annex=Data(),parameterTypes=Set<Int>()
+        for index in 0..<count {
+            let status=hevc ? CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(format,parameterSetIndex:index,parameterSetPointerOut:&pointer,parameterSetSizeOut:&length,parameterSetCountOut:nil,nalUnitHeaderLengthOut:nil):CMVideoFormatDescriptionGetH264ParameterSetAtIndex(format,parameterSetIndex:index,parameterSetPointerOut:&pointer,parameterSetSizeOut:&length,parameterSetCountOut:nil,nalUnitHeaderLengthOut:nil)
+            guard status==noErr,length>0,length<=65536,let bytes=pointer else {throw NativeError("backend_failure")}
+            if hevc {guard length>=2 else {throw NativeError("backend_failure")};let kind=Int((bytes[0]>>1)&63);parameterTypes.insert(kind);if kind==33 {codec=try hevcCodec(Data(bytes:bytes,count:length))}}
+            if key {annex.append(contentsOf:[0,0,0,1]);annex.append(bytes,count:length)}
         }
+        guard let codec=codec,!hevc || Set([32,33,34]).isSubset(of:parameterTypes) else {throw NativeError("backend_failure")}
         let rawSize=CMBlockBufferGetDataLength(block);var raw=Data(count:rawSize)
         let status=raw.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block,atOffset:0,dataLength:rawSize,destination:$0.baseAddress!) }
         guard status==kCMBlockBufferNoErr else { throw NativeError("backend_failure") };var offset=0
@@ -135,13 +165,20 @@ func generatedNativeVideoTests() throws -> Int {
         while !ready() && Date()<deadline {_=RunLoop.current.run(mode:.default,before:Date().addingTimeInterval(0.005))}
         return ready()
     }
+    let generatedEncoder:[CFString:Any]=[kVTVideoEncoderList_CodecType:NSNumber(value:kCMVideoCodecType_HEVC),kVTVideoEncoderList_IsHardwareAccelerated:true]
+    try check(ToolboxH264Encoder.hasHardwareHEVC([generatedEncoder]),"generated hardware HEVC capability")
+    try check(!ToolboxH264Encoder.hasHardwareHEVC([[kVTVideoEncoderList_CodecType:NSNumber(value:kCMVideoCodecType_HEVC),kVTVideoEncoderList_IsHardwareAccelerated:false]]),"generated software encoder is not hardware HEVC")
+    try check(!ToolboxH264Encoder.hasHardwareHEVC([[kVTVideoEncoderList_CodecType:NSNumber(value:kCMVideoCodecType_H264),kVTVideoEncoderList_IsHardwareAccelerated:true]]),"generated H264 encoder is not HEVC")
+    let generatedHEVCSPS=Data(base64Encoded:"QgEBAWAAAAMAsAAAAwAAAwA/oAUCAXHy8uSQpWS4/8AAQABagICAggAAAwACAAADAD2I")!
+    let generatedHEVCCodec=try ToolboxH264Encoder.hevcCodec(generatedHEVCSPS)
+    try check(generatedHEVCCodec=="hev1.1.6.L63.B0","generated HEVC actual SPS profile tier level")
     let colors:[[UInt8]]=[[255,0,0,255],[0,255,0,255],[0,0,255,255],[255,255,0,255]]
     var pixels=Data()
     for y in 0..<64 {for x in 0..<64 {pixels.append(contentsOf:colors[(y<32 ? 0:2)+(x<32 ? 0:1)])}}
     guard let provider=CGDataProvider(data:pixels as CFData),let image=CGImage(width:64,height:64,bitsPerComponent:8,bitsPerPixel:32,bytesPerRow:256,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGBitmapInfo(rawValue:CGImageAlphaInfo.premultipliedLast.rawValue|CGBitmapInfo.byteOrder32Big.rawValue),provider:provider,decode:nil,shouldInterpolate:false,intent:.defaultIntent) else {throw GeneratedFailure(detail:"generated native video image")}
     let packet=NativeH264Packet(data:Data([0,0,0,1,0x65,0x88]),key:true,codec:"avc1.42E01E",width:64,height:64)
     var now:Double=0,alive=true,encoders=[GeneratedNativeEncoder](),output=[([String:Any],(()->Bool)?)]()
-    let controller=NativeVideoController(gate:NSRecursiveLock(),active:{alive},now:{now},emit:{output.append(($0,$1))},factory:{_,_ in let encoder=GeneratedNativeEncoder();encoders.append(encoder);return encoder})
+    let controller=NativeVideoController(gate:NSRecursiveLock(),active:{alive},now:{now},emit:{output.append(($0,$1))},factory:{_,_,_ in let encoder=GeneratedNativeEncoder();encoders.append(encoder);return encoder})
     func start(_ id:String=UUID().uuidString.lowercased()) throws {try controller.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500,"window":3])}
     controller.offer(image,captured:now);try check(encoders.isEmpty,"native video disabled never creates encoder")
     let first=UUID().uuidString.lowercased();try start(first);controller.offer(image,captured:now);now=34;controller.offer(image,captured:now)
@@ -167,7 +204,7 @@ func generatedNativeVideoTests() throws -> Int {
 
     for reason in ["cancel","expiry","source"] {
         var clock:Double=0,permitted=true,owned=[GeneratedNativeEncoder]()
-        let pending=NativeVideoController(gate:NSRecursiveLock(),active:{permitted},now:{clock},emit:{_,_ in},factory:{_,_ in let encoder=GeneratedNativeEncoder();owned.append(encoder);return encoder})
+        let pending=NativeVideoController(gate:NSRecursiveLock(),active:{permitted},now:{clock},emit:{_,_ in},factory:{_,_,_ in let encoder=GeneratedNativeEncoder();owned.append(encoder);return encoder})
         func begin(_ id:String) throws {try pending.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
         try begin(UUID().uuidString.lowercased());pending.offer(image,captured:0)
         let waiting=UUID().uuidString.lowercased();try begin(waiting)
@@ -181,7 +218,7 @@ func generatedNativeVideoTests() throws -> Int {
     }
 
     var rateClock:Double=0,rateEncoders=[GeneratedNativeEncoder]()
-    let rate=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{rateClock},emit:{_,_ in},cadence:true,factory:{_,_ in let encoder=GeneratedNativeEncoder();rateEncoders.append(encoder);return encoder})
+    let rate=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{rateClock},emit:{_,_ in},cadence:true,factory:{_,_,_ in let encoder=GeneratedNativeEncoder();rateEncoders.append(encoder);return encoder})
     let rateID=UUID().uuidString.lowercased()
     try rate.command(["type":"native_video","id":rateID,"enabled":true,"fps":30,"bitrateKbps":2500])
     try rate.command(["type":"native_rate","id":rateID,"fps":10,"kbps":1200])
@@ -197,6 +234,24 @@ func generatedNativeVideoTests() throws -> Int {
     try check(rate.current?.fps==30 && rate.current?.kbps==2500 && rate.current?.seq==1,"native rate recovers within same stream sequence")
     rate.stop(notify:false);rateEncoders[0].retire?();try check(spin({rate.quiescent}),"native rate owned encoder retired")
 
+    var codecEncoders=[GeneratedNativeEncoder](),codecOutput=[[String:Any]]()
+    let negotiatedCodec=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{0},emit:{value,_ in codecOutput.append(value)},codecs:true,factory:{_,_,family in
+        guard family=="hevc" else {throw NativeError("unsupported")};let encoder=GeneratedNativeEncoder();codecEncoders.append(encoder);return encoder
+    })
+    let codecID=UUID().uuidString.lowercased()
+    try negotiatedCodec.command(["type":"native_video","id":codecID,"enabled":true,"fps":30,"bitrateKbps":2500,"codec":"hevc"])
+    negotiatedCodec.offer(image,captured:0)
+    try check(codecEncoders.count==1,"generated negotiated HEVC owns one encoder")
+    codecEncoders[0].completions[0](.success(NativeH264Packet(data:Data([0,0,0,1,0x26,1,0x80]),key:true,codec:generatedHEVCCodec,width:64,height:64)))
+    try check(spin({negotiatedCodec.inflight==nil}),"generated HEVC completion")
+    try check(codecOutput.contains(where:{$0["type"] as? String=="native_frame" && $0["codecName"] as? String=="hevc" && $0["codec"] as? String==generatedHEVCCodec}),"generated HEVC metadata requires negotiated family")
+    negotiatedCodec.stop(notify:false);codecEncoders[0].retire?();try check(spin({negotiatedCodec.quiescent}),"generated HEVC encoder retired")
+
+    for invalid in [true,12,["codec":"hevc"]] as [Any] {
+        var rejected=false
+        do {try negotiatedCodec.command(["type":"native_video","id":UUID().uuidString.lowercased(),"enabled":true,"fps":30,"bitrateKbps":2500,"codec":invalid])} catch {rejected=true}
+        try check(rejected,"native codec rejects non-string format")
+    }
     let ledger=NativeVideoController(gate:NSRecursiveLock(),active:{true},now:{0},emit:{_,_ in})
     func ledgerStart(_ id:String) throws {try ledger.command(["type":"native_video","id":id,"enabled":true,"fps":30,"bitrateKbps":2500])}
     let original=UUID().uuidString.lowercased();try ledgerStart(original);ledger.stop(notify:false)
@@ -239,14 +294,27 @@ func generatedNativeVideoTests() throws -> Int {
     switch failedResult {case .success:throw GeneratedFailure(detail:"generated rate failure must not publish frame");case .failure:try check(true,"generated rate failure publishes no frame")}
     let failedRetired=DispatchSemaphore(value:0);failingEncoder.stop {failedRetired.signal()}
     try check(failedRetired.wait(timeout:.now()+5) == .success,"generated rate failure retires owned encoder")
+    try check(actual.codec==actual.codec.lowercased(),"generated VideoToolbox canonical codec spelling")
     let decoded=try generatedNativeDecode(actual.data)
     try check(decoded.count==4,"generated VideoToolbox decoded pixels")
     for index in 0..<4 {for channel in 0..<3 {try check(abs(Int(decoded[index][channel])-Int(colors[index][channel]))<40,"generated VideoToolbox orientation and color order")}}
+    if ToolboxH264Encoder.hardwareHEVCAvailable() {
+        let hevcEncoder=ToolboxH264Encoder(fps:30,kbps:2500,family:"hevc"),hevcBox=GeneratedNativePacketBox(),hevcDone=DispatchSemaphore(value:0)
+        hevcEncoder.encode(image,timestamp:1,key:true,valid:{true}) {hevcBox.put($0);hevcDone.signal()}
+        let hevcCompleted=hevcDone.wait(timeout:.now()+5) == .success
+        let hevcRetired=DispatchSemaphore(value:0);hevcEncoder.stop {hevcRetired.signal()}
+        try check(hevcRetired.wait(timeout:.now()+5) == .success,"generated HEVC encoder retirement")
+        guard hevcCompleted,let hevcResult=hevcBox.get() else {throw GeneratedFailure(detail:"generated HEVC encode deadline")}
+        let hevcPacket=try hevcResult.get()
+        try check(hevcPacket.key && hevcPacket.codec.hasPrefix("hev1.") && hevcPacket.width==64 && hevcPacket.height==64,"generated actual VT HEVC parameter extraction")
+        let hevcPixels=try generatedNativeDecode(hevcPacket.data,hevc:true)
+        for index in 0..<4 {for channel in 0..<3 {try check(abs(Int(hevcPixels[index][channel])-Int(colors[index][channel]))<40,"generated HEVC decoded color order")}}
+    } else {print("generated HEVC hardware encode unavailable; SPS/controller checks completed")}
     return count
 }
 
 /** Test-only software decoder for the generated Annex B record, no OS source. */
-func generatedNativeDecode(_ data:Data) throws -> [[UInt8]] {
+func generatedNativeDecode(_ data:Data,hevc:Bool=false) throws -> [[UInt8]] {
     let bytes=Array(data);var units=[Data](),start=0,index=4
     guard bytes.count>4,Array(bytes.prefix(4))==[0,0,0,1] else {throw GeneratedFailure(detail:"generated H264 Annex B")}
     while index+4<=bytes.count {
@@ -254,14 +322,24 @@ func generatedNativeDecode(_ data:Data) throws -> [[UInt8]] {
         else {index+=1}
     }
     units.append(Data(bytes[start+4..<bytes.count]))
-    guard let sps=units.first(where:{$0.first.map{$0&31==7}==true}),let pps=units.first(where:{$0.first.map{$0&31==8}==true}) else {throw GeneratedFailure(detail:"generated H264 parameter sets")}
+    let parameterKinds=hevc ? Set([32,33,34]):Set([7,8])
+    func kind(_ unit:Data)->Int {guard let first=unit.first else {return -1};return hevc ? Int((first>>1)&63):Int(first&31)}
+    guard let sps=units.first(where:{kind($0)==(hevc ? 33:7)}),let pps=units.first(where:{kind($0)==(hevc ? 34:8)}) else {throw GeneratedFailure(detail:"generated codec parameter sets")}
     var format:CMFormatDescription?
-    let formatStatus=sps.withUnsafeBytes { s in pps.withUnsafeBytes { p in
-        CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator:kCFAllocatorDefault,parameterSetCount:2,parameterSetPointers:[s.bindMemory(to:UInt8.self).baseAddress!,p.bindMemory(to:UInt8.self).baseAddress!],parameterSetSizes:[sps.count,pps.count],nalUnitHeaderLength:4,formatDescriptionOut:&format)
-    } }
-    guard formatStatus==noErr,let description=format else {throw GeneratedFailure(detail:"generated H264 format")}
+    let formatStatus:OSStatus
+    if hevc {
+        guard let vps=units.first(where:{kind($0)==32}) else {throw GeneratedFailure(detail:"generated HEVC VPS")}
+        formatStatus=vps.withUnsafeBytes {v in sps.withUnsafeBytes {s in pps.withUnsafeBytes {p in
+            CMVideoFormatDescriptionCreateFromHEVCParameterSets(allocator:kCFAllocatorDefault,parameterSetCount:3,parameterSetPointers:[v.bindMemory(to:UInt8.self).baseAddress!,s.bindMemory(to:UInt8.self).baseAddress!,p.bindMemory(to:UInt8.self).baseAddress!],parameterSetSizes:[vps.count,sps.count,pps.count],nalUnitHeaderLength:4,extensions:nil,formatDescriptionOut:&format)
+        }}}
+    } else {
+        formatStatus=sps.withUnsafeBytes {s in pps.withUnsafeBytes {p in
+            CMVideoFormatDescriptionCreateFromH264ParameterSets(allocator:kCFAllocatorDefault,parameterSetCount:2,parameterSetPointers:[s.bindMemory(to:UInt8.self).baseAddress!,p.bindMemory(to:UInt8.self).baseAddress!],parameterSetSizes:[sps.count,pps.count],nalUnitHeaderLength:4,formatDescriptionOut:&format)
+        }}
+    }
+    guard formatStatus==noErr,let description=format else {throw GeneratedFailure(detail:"generated codec format")}
     var avc=Data()
-    for unit in units where unit.first.map({$0&31 != 7 && $0&31 != 8})==true {
+    for unit in units where !parameterKinds.contains(kind(unit)) {
         var size=UInt32(unit.count).bigEndian;withUnsafeBytes(of:&size) {avc.append(contentsOf:$0)};avc.append(unit)
     }
     var createdBlock:CMBlockBuffer?
@@ -288,11 +366,11 @@ func generatedNativeDecode(_ data:Data) throws -> [[UInt8]] {
 }
 
 final class NativeVideoStream {
-    let id:String,window:Int,maxFPS:Int,maxKbps:Int
+    let id:String,window:Int,maxFPS:Int,maxKbps:Int,family:String
     var fps:Int,kbps:Int
     var dead=false,seq=0,timestamp:Int64 = -1,key=true,next:Double=0,codec:String?,width:Int?,height:Int?
     var pending=[(seq:Int,at:Double)]()
-    init(id:String,fps:Int,kbps:Int,window:Int) { self.id=id;self.fps=fps;self.kbps=kbps;self.window=window;self.maxFPS=fps;self.maxKbps=kbps }
+    init(id:String,fps:Int,kbps:Int,window:Int,family:String="h264") { self.id=id;self.fps=fps;self.kbps=kbps;self.window=window;self.maxFPS=fps;self.maxKbps=kbps;self.family=family }
 }
 final class NativeVideoJob {
     let stream:NativeVideoStream,captured:Double,key:Bool
@@ -301,13 +379,13 @@ final class NativeVideoJob {
 /** Source.gate serializes kernel, callback admission and final publication. */
 final class NativeVideoController {
     let gate:NSRecursiveLock,active:()->Bool,now:()->Double,emit:([String:Any],(() -> Bool)?) throws -> Void
-    let factory:(Int,Int)throws->NativeH264Encoder
+    let factory:(Int,Int,String)throws->NativeH264Encoder
     private(set) var current:NativeVideoStream?,inflight:NativeVideoJob?
     private var encoder:NativeH264Encoder?,retiring=false,seen=Set<String>(),revision=UUID()
     private var pendingStart:(stream:NativeVideoStream,at:Double)?
-    let cadence:Bool
-    init(gate:NSRecursiveLock,active:@escaping()->Bool,now:@escaping()->Double=milliseconds,emit:@escaping([String:Any],(() -> Bool)?)throws->Void,cadence:Bool=false,factory:@escaping(Int,Int)throws->NativeH264Encoder={ToolboxH264Encoder(fps:$0,kbps:$1)}) {
-        self.gate=gate;self.active=active;self.now=now;self.emit=emit;self.factory=factory;self.cadence=cadence
+    let cadence:Bool,codecs:Bool
+    init(gate:NSRecursiveLock,active:@escaping()->Bool,now:@escaping()->Double=milliseconds,emit:@escaping([String:Any],(() -> Bool)?)throws->Void,cadence:Bool=false,codecs:Bool=false,factory:@escaping(Int,Int,String)throws->NativeH264Encoder={ToolboxH264Encoder(fps:$0,kbps:$1,family:$2)}) {
+        self.gate=gate;self.active=active;self.now=now;self.emit=emit;self.factory=factory;self.cadence=cadence;self.codecs=codecs
     }
     func locked<T>(_ action:()throws->T) rethrows -> T { gate.lock();defer {gate.unlock()};return try action() }
     func live(_ stream:NativeVideoStream,captured:Double?=nil) -> Bool {
@@ -343,11 +421,11 @@ final class NativeVideoController {
             if kind=="native_video" {
                 guard Set(value.keys).isSubset(of:["type","id","enabled","fps","bitrateKbps","window","codec"]),let enabled=boolean(value["enabled"]) else { throw NativeError("backend_failure") }
                 if !enabled {if current?.id==id || pendingStart?.stream.id==id {stop(notify:false)};return}
-                guard let fps=integer(value["fps"],1,60),let kbps=integer(value["bitrateKbps"],128,50000),let window=integer(value["window"] ?? 1,1,3),[1,3].contains(window),(value["codec"]==nil || value["codec"] as? String=="h264"),!seen.contains(id),seen.count<1024,current?.id != id else { throw NativeError("unsupported") }
+                guard let fps=integer(value["fps"],1,60),let kbps=integer(value["bitrateKbps"],128,50000),let window=integer(value["window"] ?? 1,1,3),[1,3].contains(window),(value["codec"]==nil || (value["codec"] is String && (codecs ? ["h264","h264-444","hevc","av1"]:["h264"]).contains(value["codec"] as? String ?? ""))),!seen.contains(id),seen.count<1024,current?.id != id else { throw NativeError("unsupported") }
                 stop();let started=revision,granted=active()
                 guard started==revision else {return}
                 guard granted else {try emit(["type":"native_video_stopped","id":id],nil);return}
-                seen.insert(id);let stream=NativeVideoStream(id:id,fps:Int(fps),kbps:Int(kbps),window:Int(window));revision=UUID()
+                seen.insert(id);let stream=NativeVideoStream(id:id,fps:Int(fps),kbps:Int(kbps),window:Int(window),family:value["codec"] as? String ?? "h264");revision=UUID()
                 if quiescent {current=stream} else {pendingStart=(stream,now())};return
             }
             guard let stream=current,stream.id==id else {return}
@@ -376,7 +454,7 @@ final class NativeVideoController {
             guard inflight==nil,!retiring,stream.pending.count<stream.window,captured>=stream.next else {return}
             let job=NativeVideoJob(stream,captured,stream.key);inflight=job;stream.key=false;stream.next=captured+1000/Double(stream.fps)
             do {
-                if encoder==nil {encoder=try factory(stream.fps,stream.kbps)}
+                if encoder==nil {encoder=try factory(stream.fps,stream.kbps,stream.family)}
                 guard current===stream,!retiring,let encoder=encoder else {throw NativeError("source_changed")}
                 encoder.rate(stream.kbps,valid:{ [weak self] in
                     guard let self=self else {return false};return self.locked {self.inflight===job && self.current===stream && !stream.dead && self.now()>=job.captured && self.now()<=job.captured+1000}
@@ -393,10 +471,13 @@ final class NativeVideoController {
             let stream=job.stream;guard current===stream else {activatePending();return}
             do {
                 let packet=try result.get()
+                guard packet.codec.lowercased().hasPrefix(stream.family=="hevc" ? "hev1.":stream.family=="av1" ? "av01.":stream.family=="h264-444" ? "avc1.f4":"avc1.") else {throw NativeError("backend_failure")}
                 guard live(stream,captured:job.captured),packet.data.count<=512*1024-9,packet.data.count>0,packet.width>=2,packet.width<=1920,packet.height>=2,packet.height<=2400,packet.width%2==0,packet.height%2==0,!job.key || packet.key,stream.seq<0xffffffff,(stream.codec==nil || stream.codec==packet.codec),(stream.width==nil || stream.width==packet.width && stream.height==packet.height) else {throw NativeError("backend_failure")}
                 let timestamp=Int64(job.captured*1000);guard timestamp>stream.timestamp else {throw NativeError("backend_failure")}
                 stream.codec=packet.codec;stream.width=packet.width;stream.height=packet.height;stream.timestamp=timestamp;stream.seq+=1;stream.pending.append((stream.seq,now()))
-                try emit(["type":"native_frame","id":stream.id,"seq":stream.seq,"timestamp":timestamp,"key":packet.key,"codec":packet.codec,"width":packet.width,"height":packet.height,"captureMs":0,"conversionMs":0,"encodeMs":max(0,now()-job.captured),"data":packet.data.base64EncodedString()],{ [weak self] in
+                var record:[String:Any]=["type":"native_frame","id":stream.id,"seq":stream.seq,"timestamp":timestamp,"key":packet.key,"codec":packet.codec,"width":packet.width,"height":packet.height,"captureMs":0,"conversionMs":0,"encodeMs":max(0,now()-job.captured),"data":packet.data.base64EncodedString()]
+                if codecs {record["codecName"]=stream.family}
+                try emit(record,{ [weak self] in
                     guard let self=self else {return false};return self.locked {if self.live(stream,captured:job.captured) {return true};self.stop(stream);return false}
                 })
             } catch {stop(stream)}

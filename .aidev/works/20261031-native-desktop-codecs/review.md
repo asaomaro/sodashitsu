@@ -1,0 +1,7 @@
+# 独立レビュー
+
+review_pointerのtaskcheckは製品mustなし。推奨の実Mac HEVC生成encode/parameter/decodeと、複数picture/AU・HEVC layer・AV1 extension・chroma偽装・stream別cacheの拒否試験を追加し、delta reviewは追加指摘なし。
+
+review_transferの全差分crossは製品mustなし。normal HEVCの実decode/fallbackを区別するshouldを、browser支持判定とactual codec/MIME・理由logへ強化した。H264-444実fixtureとcanonical lowercase修正も追加して再点検、should解消・追加must/shouldなし。
+
+Mac SDK correctionのdelta reviewで、metadata query後の元ticket失効を再確認しないmustを指摘。query後・ready送信直前・writerで同じticketを照合し、時計/inputrevisionをsource query後に読み、期限超過/source失効でready0件の生成回帰とguardバイパス負例を追加。最終delta reviewはmust解消・追加指摘なし。

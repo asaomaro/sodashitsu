@@ -64,6 +64,155 @@ def access_unit(data):
     return codec, key
 
 
+class VideoBits:
+    def __init__(self, data):self.data,self.at=data,0
+    def read(self, count):
+        if not integer(count,0,64) or self.at+count>len(self.data)*8:raise VideoFailure("truncated_bits")
+        value=0
+        for _ in range(count):
+            value=(value<<1)|((self.data[self.at//8]>>(7-self.at%8))&1);self.at+=1
+        return value
+    def skip(self,count):
+        if not integer(count,0,len(self.data)*8) or self.at+count>len(self.data)*8:raise VideoFailure("truncated_bits")
+        self.at+=count
+    def ue(self):
+        zeros=0
+        while self.read(1)==0:
+            zeros+=1
+            if zeros>31:raise VideoFailure("golomb_bound")
+        return (1<<zeros)-1+self.read(zeros)
+
+
+def video_rbsp(data):
+    result=bytearray();zeros=0
+    for value in data:
+        if zeros>=2 and value==3:zeros=0;continue
+        result.append(value);zeros=zeros+1 if value==0 else 0
+    return bytes(result)
+
+
+class NativeBitstream:
+    """Bounded codec metadata comes from actual access units, never a guessed MIME."""
+    FAMILIES=("h264","h264-444","hevc","av1")
+    def __init__(self,family):
+        if family not in self.FAMILIES:raise VideoFailure("codec_family")
+        self.family=family;self.codec=None;self.parameters={};self.av1_header=None;self.reduced=False
+    def normalize(self,data):
+        if not isinstance(data,bytes) or not 1<=len(data)<=512*1024-9:raise VideoFailure("frame_bound")
+        if self.family=="av1":return self.av1(data)
+        if self.family=="h264":
+            codec,key=access_unit(data)
+            if codec is not None:self.codec=codec.lower()
+            return data,self.codec,key
+        if not data.startswith((b"\0\0\1",b"\0\0\0\1")):raise VideoFailure("annex_b")
+        units=re.split(b"\x00\x00\x00?\x01",data)[1:]
+        if not 1<=len(units)<=128:raise VideoFailure("nal_count")
+        hevc=self.family=="hevc";vcl=False;key=True;pictures=0;delimiters=0;present=set()
+        for nal in units:
+            if len(nal)<(2 if hevc else 1) or nal[0]&128:raise VideoFailure("nal_header")
+            kind=(nal[0]>>1)&63 if hevc else nal[0]&31
+            if hevc and (((nal[0]&1)<<5)|(nal[1]>>3) or not nal[1]&7):raise VideoFailure("hevc_layer")
+            if kind==(35 if hevc else 9):
+                delimiters+=1
+                if delimiters>1 or vcl:raise VideoFailure("multiple_units")
+            parameter=kind in ((32,33,34) if hevc else (7,8))
+            if parameter:
+                if vcl or len(nal)>65536:raise VideoFailure("parameter_bound")
+                self.parameters[kind]=nal
+                if hevc and kind==33:
+                    bits=VideoBits(video_rbsp(nal[2:]));bits.skip(8)
+                    space,tier,profile,flags=bits.read(2),bits.read(1),bits.read(5),bits.read(32)
+                    compatibility=int(f"{flags:032b}"[::-1],2)
+                    constraints=bytes(bits.read(8) for _ in range(6)).rstrip(b"\0");level=bits.read(8)
+                    self.codec="hev1."+(chr(64+space) if space else "")+str(profile)+f".{compatibility:X}."+("H" if tier else "L")+str(level)+"".join(f".{v:02X}" for v in constraints)
+                elif not hevc and kind==7:
+                    bits=VideoBits(video_rbsp(nal[1:]));profile=bits.read(8);bits.skip(16);bits.ue()
+                    if profile!=244 or bits.ue()!=3 or bits.read(1)!=0:raise VideoFailure("chroma_not_444")
+                    self.codec="avc1."+nal[1:4].hex()
+            present.add(kind)
+            if kind<=31 if hevc else 1<=kind<=5:
+                bits=VideoBits(video_rbsp(nal[2:] if hevc else nal[1:]));first=bits.read(1)!=0 if hevc else bits.ue()==0
+                if first:pictures+=1
+                if pictures>1 or not vcl and not first:raise VideoFailure("multiple_pictures")
+                vcl=True;key=key and (16<=kind<=21 if hevc else kind==5)
+        if not vcl or key and self.codec is None:raise VideoFailure("missing_picture")
+        if key:
+            required=(32,33,34) if hevc else (7,8)
+            if any(kind not in self.parameters for kind in required):raise VideoFailure("key_headers")
+            units=[self.parameters[kind] for kind in required if kind not in present]+units
+        result=b"".join(b"\0\0\0\1"+nal for nal in units)
+        if len(result)>512*1024-9:raise VideoFailure("frame_bound")
+        return result,self.codec,key
+    def sequence(self,payload,raw):
+        if len(payload)>65536:raise VideoFailure("av1_sequence_bound")
+        bits=VideoBits(payload);profile=bits.read(3)
+        if profile>2:raise VideoFailure("av1_profile")
+        bits.skip(1);reduced=bits.read(1)!=0;level=tier=0
+        if reduced:level=bits.read(5)
+        else:
+            model=False;delay=0
+            if bits.read(1):
+                bits.skip(64)
+                if bits.read(1):bits.ue()
+                model=bits.read(1)!=0
+                if model:delay=bits.read(5)+1;bits.skip(42)
+            initial=bits.read(1)!=0;points=bits.read(5)+1
+            for index in range(points):
+                bits.skip(12);candidate=bits.read(5);candidate_tier=bits.read(1) if candidate>7 else 0
+                if index==0:level,tier=candidate,candidate_tier
+                if model and bits.read(1):bits.skip(delay*2+1)
+                if initial and bits.read(1):bits.skip(4)
+        width_bits,height_bits=bits.read(4)+1,bits.read(4)+1;bits.skip(width_bits+height_bits)
+        if not reduced and bits.read(1):bits.skip(7)
+        bits.skip(3)
+        if not reduced:
+            bits.skip(4);order=bits.read(1)!=0
+            if order:bits.skip(2)
+            screen=2 if bits.read(1) else bits.read(1)
+            if screen>0 and bits.read(1)==0:bits.skip(1)
+            if order:bits.skip(3)
+        bits.skip(3);high=bits.read(1)!=0
+        depth=(12 if bits.read(1) else 10) if profile==2 and high else (10 if high else 8)
+        self.codec=f"av01.{profile}.{level:02d}"+("H" if tier else "M")+f".{depth:02d}"
+        self.reduced=reduced;self.av1_header=raw
+    def av1(self,data):
+        at=0;units=[];frame=False;present=False;key=False;delimiters=0
+        while at<len(data):
+            begin=at;header=data[at];at+=1;kind=(header>>3)&15
+            if header&0x81 or not header&2 or kind==0 or 9<=kind<=14:raise VideoFailure("av1_obu")
+            if header&4:
+                if at>=len(data) or data[at]!=0:raise VideoFailure("av1_extension")
+                at+=1
+            size=0;ended=False
+            for index in range(4):
+                if at>=len(data):raise VideoFailure("av1_size")
+                part=data[at];at+=1;size|=(part&127)<<(index*7)
+                if not part&128:ended=True;break
+            if not ended or size>len(data)-at:raise VideoFailure("av1_size")
+            payload=data[at:at+size];at+=size;raw=data[begin:at];units.append((kind,raw))
+            if len(units)>128:raise VideoFailure("av1_obu_count")
+            if kind==2:
+                delimiters+=1
+                if delimiters>1 or frame or payload:raise VideoFailure("av1_unit_boundary")
+            if kind==1:
+                if frame:raise VideoFailure("av1_sequence_after_picture")
+                self.sequence(payload,raw);present=True
+            if kind in (3,6):
+                if frame or self.codec is None:raise VideoFailure("av1_picture")
+                frame=True
+                if self.reduced:key=True
+                else:
+                    bits=VideoBits(payload)
+                    if bits.read(1)==0:key=bits.read(2)==0 and bits.read(1)==1
+        if not frame:raise VideoFailure("av1_picture")
+        if key and not present:
+            if self.av1_header is None:raise VideoFailure("av1_key_headers")
+            units.insert(1 if units and units[0][0]==2 else 0,(1,self.av1_header))
+        result=b"".join(raw for _,raw in units)
+        if len(result)>512*1024-9:raise VideoFailure("frame_bound")
+        return result,self.codec,key
+
+
 class NativeVideoFlow:
     """One stream, one encoding job, at most three unacknowledged records.
 
@@ -73,12 +222,13 @@ class NativeVideoFlow:
     A lost predictive frame ends this stream; a later record cannot cross its gap.
     """
 
-    def __init__(self, active, clock, emit, maximum_fps=30, cadence=False):
+    def __init__(self, active, clock, emit, maximum_fps=30, cadence=False, codecs=False):
         self.active = active
         self.clock = clock
         self.emit = emit
         self.maximum_fps = maximum_fps
         self.cadence = cadence
+        self.codecs = codecs
         self.current = None
         self.seen = set()
         self.revision = 0
@@ -108,7 +258,7 @@ class NativeVideoFlow:
         fps, kbps, window = value.get("fps"), value.get("bitrateKbps"), value.get("window", 1)
         if (not integer(fps, 1, self.maximum_fps) or not integer(kbps, 128, 50000)
                 or not integer(window, 1, 3) or window not in (1, 3)
-                or value.get("codec", "h264") != "h264" or value["id"] in self.seen or len(self.seen) >= 1024
+                or value.get("codec", "h264") not in (NativeBitstream.FAMILIES if self.codecs else ("h264",)) or value["id"] in self.seen or len(self.seen) >= 1024
                 or self.current is not None and value["id"] == self.current["id"]):
             raise VideoFailure("settings")
         self.stop()
@@ -119,7 +269,7 @@ class NativeVideoFlow:
         if not granted:
             self.emit({"type": "native_video_stopped", "id": value["id"]}, None)
             return None
-        stream = {"id": value["id"], "fps": fps, "kbps": kbps, "window": window, "max_fps": fps, "max_kbps": kbps,
+        stream = {"id": value["id"], "fps": fps, "kbps": kbps, "window": window, "max_fps": fps, "max_kbps": kbps, "family": value.get("codec","h264"), "bitstream": NativeBitstream(value.get("codec","h264")),
                   "seq": 0, "timestamp": -1, "pending": [], "encoding": None,
                   "next": self.clock(), "key": True, "dead": False, "codec": None,
                   "size": None}
@@ -202,7 +352,7 @@ class NativeVideoFlow:
                     or not integer(timestamp, 0, 9007199254740991)
                     or timestamp <= stream["timestamp"] or stream["seq"] >= 0xffffffff):
                 raise VideoFailure("stale_frame")
-            codec, key = access_unit(data)
+            data, codec, key = stream["bitstream"].normalize(data)
             if token[1] and not key:
                 raise VideoFailure("missing_keyframe")
             if codec is not None:
@@ -224,7 +374,7 @@ class NativeVideoFlow:
                 return False
             if not valid():
                 return
-            self.emit({"type": "native_frame", "id": stream["id"], "seq": seq,
+            self.emit({"type": "native_frame", **({"codecName": stream["family"]} if self.codecs else {}), "id": stream["id"], "seq": seq,
                        "timestamp": timestamp, "key": key, "codec": stream["codec"],
                        "width": width, "height": height, "captureMs": capture_ms,
                        "conversionMs": 0, "encodeMs": encode_ms,
@@ -272,19 +422,33 @@ class GstH264Encoder:
     """
     CANDIDATES = ("nvh264enc", "vah264enc", "openh264enc", "x264enc")
 
+    FAMILIES={
+        "h264":("h264parse",CANDIDATES),
+        "h264-444":("h264parse",("x264enc",)),
+        "hevc":("h265parse",("nvh265enc","vah265enc","x265enc")),
+        "av1":("av1parse",("av1enc",)),
+    }
+    @staticmethod
+    def codecs(Gst):
+        return [family for family,(parser,choices) in GstH264Encoder.FAMILIES.items()
+                if Gst.ElementFactory.find(parser) and any(Gst.ElementFactory.find(name) for name in choices)]
+
     @staticmethod
     def available(Gst):
         return (Gst.ElementFactory.find("h264parse") is not None
                 and any(Gst.ElementFactory.find(name) is not None for name in GstH264Encoder.CANDIDATES))
 
-    def __init__(self, Gst, Video, width, height, fps, kbps, candidates=None):
+    def __init__(self, Gst, Video, width, height, fps, kbps, candidates=None, family="h264"):
         self.Gst, self.Video = Gst, Video
         self.pipeline = None
         self.input_width, self.input_height = width, height
         self.width, self.height = width - width % 2, height - height % 2
+        if family not in self.FAMILIES:raise VideoFailure("codec_family")
+        self.family=family
         self.kbps = kbps
         self.has_output = False
-        choices = tuple(candidates or self.CANDIDATES)
+        parser,defaults=self.FAMILIES[family]
+        choices = tuple(candidates or defaults)
         self.fps = fps
         self.timestamp = 0
         self.factory = None
@@ -293,32 +457,41 @@ class GstH264Encoder:
                 continue
             pipeline = None
             try:
-                raw = "NV12" if name in ("nvh264enc", "vah264enc") else "I420"
+                raw = "Y444" if family=="h264-444" else "NV12" if name in ("nvh264enc", "vah264enc","nvh265enc","vah265enc") else "I420"
+                parse=f"{parser} "+("config-interval=-1" if family!="av1" else "")
+                media="video/x-av1,stream-format=obu-stream,alignment=tu" if family=="av1" else "video/x-h265,stream-format=byte-stream,alignment=au" if family=="hevc" else "video/x-h264,stream-format=byte-stream,alignment=au"+(",profile=high-4:4:4" if family=="h264-444" else "")
                 pipeline = Gst.parse_launch(
                     "appsrc name=input is-live=true format=time block=false ! videoconvert ! videoscale ! "
                     f"video/x-raw,format={raw},width={self.width},height={self.height} ! "
-                    f"{name} name=encoder ! h264parse config-interval=-1 ! "
-                    "video/x-h264,stream-format=byte-stream,alignment=au ! "
+                    f"{name} name=encoder ! {parse} ! {media} ! "
                     "appsink name=output max-buffers=1 drop=false sync=false")
                 source, encoder = pipeline.get_by_name("input"), pipeline.get_by_name("encoder")
                 source.set_property("caps", Gst.Caps.from_string(
                     f"video/x-raw,format=BGR,width={width},height={height},framerate={fps}/1"))
                 source.set_property("max-bytes", ((width * 3 + 3) & ~3) * height)
                 properties = {"bitrate": kbps * (1000 if name == "openh264enc" else 1)}
-                if name == "x264enc":
+                if name=="av1enc":
+                    properties={"target-bitrate":kbps,"cpu-used":8,"lag-in-frames":0,"threads":2,"keyframe-max-dist":fps}
+                    Gst.util_set_object_arg(encoder,"usage-profile","realtime")
+                    Gst.util_set_object_arg(encoder,"end-usage","cbr")
+                elif name=="x265enc":
+                    properties.update({"key-int-max":fps,"option-string":"pools=none:frame-threads=1:bframes=0:rc-lookahead=0"})
+                    Gst.util_set_object_arg(encoder,"tune","zerolatency")
+                    Gst.util_set_object_arg(encoder,"speed-preset","ultrafast")
+                elif name == "x264enc":
                     properties.update({"key-int-max": fps, "bframes": 0, "threads": 2})
                     Gst.util_set_object_arg(encoder, "tune", "zerolatency")
                     Gst.util_set_object_arg(encoder, "speed-preset", "ultrafast")
                 else:
-                    properties["key-int-max" if name == "vah264enc" else "gop-size"] = fps
+                    properties["key-int-max" if name in ("vah264enc","vah265enc") else "gop-size"] = fps
                     if name == "openh264enc":
                         properties.update({"enable-frame-skip": False, "multi-thread": 2})
                         Gst.util_set_object_arg(encoder, "rate-control", "bitrate")
                         Gst.util_set_object_arg(encoder, "complexity", "low")
-                    elif name == "vah264enc":
+                    elif name in ("vah264enc","vah265enc"):
                         properties["b-frames"] = 0
                         Gst.util_set_object_arg(encoder, "rate-control", "cbr")
-                    elif name == "nvh264enc":
+                    elif name in ("nvh264enc","nvh265enc"):
                         properties.update({"bframes": 0, "zerolatency": True, "rc-lookahead": 0})
                 for key, value in properties.items():
                     if encoder.find_property(key) is None:
@@ -340,10 +513,11 @@ class GstH264Encoder:
     def rate(self, fps, kbps, valid):
         if not valid():raise VideoFailure("cancelled")
         if kbps != self.kbps:
-            spec = self.encoder.find_property("bitrate")
+            property_name="target-bitrate" if self.factory=="av1enc" else "bitrate"
+            spec = self.encoder.find_property(property_name)
             if spec is None or not spec.flags & self.Gst.PARAM_MUTABLE_PLAYING:
                 raise VideoFailure("rate_unavailable")
-            self.encoder.set_property("bitrate", kbps * (1000 if self.factory == "openh264enc" else 1))
+            self.encoder.set_property(property_name, kbps * (1000 if self.factory == "openh264enc" else 1))
             if not valid():raise VideoFailure("cancelled")
             self.kbps = kbps
         self.fps = fps
@@ -364,7 +538,7 @@ class GstH264Encoder:
             if not valid():
                 raise VideoFailure("cancelled")
             replacement = GstH264Encoder(self.Gst, self.Video, self.input_width, self.input_height,
-                                         self.fps, self.kbps, candidates=self.remaining)
+                                         self.fps, self.kbps, candidates=self.remaining, family=self.family)
             self.__dict__.update(replacement.__dict__)
             return self.encode(raw, force_key, valid)
 
@@ -444,7 +618,7 @@ class H264Worker:
                     if not valid():
                         raise VideoFailure("cancelled")
                     if encoder is None:
-                        encoder = GstH264Encoder(self.Gst, self.Video, width, height, stream["fps"], stream["kbps"])
+                        encoder = GstH264Encoder(self.Gst, self.Video, width, height, stream["fps"], stream["kbps"], **({"family":stream["family"]} if stream["family"]!="h264" else {}))
                     if (width, height) != (encoder.input_width, encoder.input_height):
                         raise VideoFailure("source_changed")
                     with self.gate:

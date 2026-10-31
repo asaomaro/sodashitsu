@@ -115,7 +115,7 @@ function run() {
     clipboard="",clipboardAllowed=false,clipboardGeneration=0;
   const nativeAt=process.argv.indexOf("--native-fixture"),nativeRaw=nativeAt>=0?JSON.parse(readFileSync(process.argv[nativeAt+1],"utf8")):undefined,nativeProfiles=nativeRaw?.profiles??(nativeRaw?[nativeRaw]:[]),nativeFixture=nativeProfiles[0];
   const codecFolderAt=process.argv.indexOf("--codec-fixtures"),codecFolder=codecFolderAt>=0?process.argv[codecFolderAt+1]:undefined,codecFixtures={h264:nativeFixture};
-  if(codecFolder)for(const [codec,file]of [["hevc","hevc-hardware-generated.json"],["av1","av1-software-generated.json"]])codecFixtures[codec]=JSON.parse(readFileSync(join(codecFolder,file),"utf8"));
+  if(codecFolder)for(const [codec,file]of [...(process.argv.includes("--native-444")?[["h264-444","h264-444-software-generated.json"]]:[]),["hevc","hevc-hardware-generated.json"],["av1","av1-software-generated.json"]])codecFixtures[codec]=JSON.parse(readFileSync(join(codecFolder,file),"utf8"));
   const codecProfiles=Object.fromEntries(Object.entries(codecFixtures).map(([name,fixture])=>[name,[fixture]]));
   const codecProfileAt=process.argv.indexOf("--codec-profile");if(codecProfileAt>=0){const value=JSON.parse(readFileSync(process.argv[codecProfileAt+1],"utf8"));codecProfiles[value.family]=value.profiles;codecFixtures[value.family]=value.profiles[0];}
   const ledgerAt=process.argv.indexOf("--input-ledger"),ledger=ledgerAt>=0?process.argv[ledgerAt+1]:undefined,held=new Set();
@@ -266,7 +266,7 @@ function run() {
           ...(m.inputAckPipe===true&&process.argv.includes("--input-ack-pipe")&&!secure?{inputAckPipe:true}:{}),
           ...(nativePointerProof?{nativePointerProof:true}:{}),
           ...(nativeFixture&&m.nativeDatagrams===true&&process.argv.includes("--native-datagrams")&&!secure?{nativeDatagrams:true}:{}),
-          ...(nativeFixture&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:["h264","hevc","av1"]}:{}),
+          ...(nativeFixture&&nativeCodecs?{nativeCodecs:true,nativeCodecCandidates:["h264",...(process.argv.includes("--native-444")?["h264-444"]:[]),"hevc","av1"]}:{}),
           ...(nativeFixture&&nativeAdaptive?{nativeAdaptive:true}:{}),
           ...(nativeFixture&&m.nativeCadence===true&&process.argv.includes("--native-cadence")&&!secure?{nativeCadence:true}:{}),
           ...(nativeFixture&&m.nativeMaxFps===60&&process.argv.includes("--native-60fps")&&!secure?{nativeMaxFps:60}:{}),

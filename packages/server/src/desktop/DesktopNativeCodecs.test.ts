@@ -2,7 +2,7 @@ import {expect,it,vi} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {DesktopNativeVideo} from './DesktopNativeVideo.js';
 import {DesktopMediaStatus,DesktopMediaStream} from '@sodashitsu/protocol';
-const fixtures=Object.fromEntries([['h264','h264-generated.json'],['hevc','hevc-hardware-generated.json'],['av1','av1-software-generated.json']].map(([name,file])=>[name,JSON.parse(readFileSync(new URL(`../../../../scripts/remote-desktop/fixtures/${file}`,import.meta.url),'utf8'))]));
+const fixtures=Object.fromEntries([['h264','h264-generated.json'],['h264-444','h264-444-software-generated.json'],['hevc','hevc-hardware-generated.json'],['av1','av1-software-generated.json']].map(([name,file])=>[name,JSON.parse(readFileSync(new URL(`../../../../scripts/remote-desktop/fixtures/${file}`,import.meta.url),'utf8'))]));
 function fixture(codecs=true){
  const send=vi.fn((_value:unknown)=>true),write=vi.fn<(m:Record<string,unknown>)=>void>(),policy=vi.fn();
  const video=new DesktopNativeVideo({enabled:true,codecs,width:640,sourceWidth:640,sourceHeight:360,fps:30,send,write,policy,buffered:()=>0});
@@ -10,9 +10,9 @@ function fixture(codecs=true){
  const frame=(id:string,codec='hevc')=>{const f=fixtures[codec],p=f.packets[0];return {type:'native_frame',id,seq:1,timestamp:33333,key:p.key,codec:p.codec,width:640,height:360,data:p.data,...(codecs?{codecName:codec}:{})};};
  return {video,send,write,policy,start,frame};
 }
-it.each(['h264','hevc','av1'])('sends the real %s format only after negotiated helper output',codec=>{
+it.each(['h264','h264-444','hevc','av1'])('sends the real %s format only after negotiated helper output',codec=>{
  const f=fixture(),id=f.start(codec);f.video.fromHelper(f.frame(id,codec));
- const stream=f.send.mock.calls.map(([v])=>v).find(v=>(v as any).type==='media_stream');expect(DesktopMediaStream.parse(stream)).toMatchObject({codecName:codec,mime:`video/${codec}`});
+ const stream=f.send.mock.calls.map(([v])=>v).find(v=>(v as any).type==='media_stream');expect(DesktopMediaStream.parse(stream)).toMatchObject({codecName:codec,mime:`video/${codec==="h264-444"?"h264":codec}`});
  expect(DesktopMediaStatus.parse(f.send.mock.calls.map(([v])=>v).find(v=>(v as any).state==='native'))).toMatchObject({codecRequested:codec,codec});f.video.stop();
 });
 it('retries H264 once with a fresh id, releases held input, and ignores retired decoder failure',()=>{
