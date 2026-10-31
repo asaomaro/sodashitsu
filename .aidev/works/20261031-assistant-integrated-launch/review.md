@@ -9,3 +9,11 @@ review_pointerの全差分cross: Windows rootの存在確認→mkdir→SetAcl競
 .NETの作成時securityと既存directory非変更はMicrosoft公式API/reference sourceを確認。https://learn.microsoft.com/en-us/dotnet/api/system.io.directory.createdirectory#system-io-directory-createdirectory(system-string-system-security-accesscontrol-directorysecurity)
 
 実GUI・production cache・OS policy/service/認証設定を点検用に変更していない。Windows生成race試験のACLは作業用private temp directoryだけで扱い、後始末する。
+
+## hosted OS差分の修正点検
+
+macOSで重複watchがpreparingを取消すことを発見し、tracked observationでsaved desired stateを先に比較するよう変更。generation/observation番号でstale readを捨て、OFF/変更時だけ旧queueを失効・cancelする。stopはobservation→queue→保存とchildをdrainする。
+
+そのdeltaをreview_pointerが点検し、rapid OFF→ONで表示phaseだけstoppingになった場合の状態復帰不足を指摘。actual hostStateを表示phaseから分離し、生きた同一hostはrunning/startingへ復帰、actual stop中は実退役を確認してからfresh起動へ進むよう修正。heldserialqueueのOFF→ON回帰を追加。両delta再レビューで追加must/shouldなし。
+
+closedhost回帰はOSのwatch通知回数に依存する固定read回数を廃止し、fakewatch＋生成childのprivate triggerでattached認可を明示的に保留する。Windows生成ACL fixtureは3×各10秒のowned childがあるためtest上限45秒（製品timeoutは不変）。native設定から旧Windows独立login起動項目を削除。これらも同じdeltaで再レビュー済み。

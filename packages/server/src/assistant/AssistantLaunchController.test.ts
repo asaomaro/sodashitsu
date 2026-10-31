@@ -139,10 +139,28 @@ it('revalidates the single attached identity when an equivalent ON arrives durin
  finally{release?.();await controller.stop();read.mockRestore();await rm(dir,{recursive:true,force:true});}
 });
 it('a closed generated host cannot be revived by a late attached authorization result',async()=>{
- const dir=await mkdtemp(join(tmpdir(),'soda-assistant-closed-identity-'));let calls=0,blocked=false,release!:()=>void;
- const original=enabledState.readAssistantEnabled,read=vi.spyOn(enabledState,'readAssistantEnabled').mockImplementation(async(...args)=>{if(++calls===4){blocked=true;await new Promise<void>(yes=>{release=yes;});}return original(...args);});
- const code='process.stdin.once("data",()=>{process.stdout.write(JSON.stringify({type:"attached",deviceId:"00000000-0000-4000-8000-000000000001"})+"\\n");setTimeout(()=>process.exit(0),20);});process.stdin.resume();';
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-closed-identity-'));let arm=false,blocked=false,release!:()=>void;
+ const watch=vi.spyOn(nodeFs,"watch").mockReturnValue(Object.assign(new EventEmitter(),{close:vi.fn()}) as unknown as nodeFs.FSWatcher);
+ const original=enabledState.readAssistantEnabled,read=vi.spyOn(enabledState,'readAssistantEnabled').mockImplementation(async(...args)=>{if(arm){arm=false;blocked=true;await new Promise<void>(yes=>{release=yes;});}return original(...args);});
+ const trigger=join(dir,'generated-trigger');const code='const fs=require("node:fs");process.stdin.once("data",()=>{const timer=setInterval(()=>{if(!fs.existsSync('+JSON.stringify(trigger)+'))return;clearInterval(timer);process.stdout.write(JSON.stringify({type:"attached",deviceId:"00000000-0000-4000-8000-000000000001"})+"\\n");setTimeout(()=>process.exit(0),20);},5);});process.stdin.on("end",()=>process.exit(0));process.stdin.resume();';
  const activate=vi.fn(),controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:JSON.stringify([process.execPath,'-e',code,'--'])},()=>"http://127.0.0.1:7780",vi.fn(),undefined,undefined,{activate,requestStop:vi.fn(async()=>{})});
- try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(blocked).toBe(true));await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('error'));const pending=[...(controller as unknown as{saves:Set<Promise<void>>}).saves];release();await Promise.all(pending);expect(activate).not.toHaveBeenCalled();expect((await controller.status()).phase).toBe('error');}
- finally{release?.();await controller.stop();read.mockRestore();await rm(dir,{recursive:true,force:true});}
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('starting'));arm=true;await writeFile(trigger,'generated');await vi.waitFor(()=>expect(blocked).toBe(true));await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('error'));const pending=[...(controller as unknown as{saves:Set<Promise<void>>}).saves];release();await Promise.all(pending);expect(activate).not.toHaveBeenCalled();expect((await controller.status()).phase).toBe('error');}
+ finally{release?.();await controller.stop();read.mockRestore();watch.mockRestore();await rm(dir,{recursive:true,force:true});}
+});
+
+it('duplicate ON observations during a held preparation preserve the original preparation',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-preparing-same-'));let release!:()=>void,signal:AbortSignal|undefined;
+ const resolve=vi.fn(async(_origin:string,value:AbortSignal)=>{signal=value;await new Promise<void>(yes=>{release=yes;});return{command:['generated'],origin:'http://127.0.0.1:7780'};});
+ const app={start:vi.fn(),stop:vi.fn(async()=>{})},controller=new AssistantLaunchController(dir,{},()=>"http://127.0.0.1:7780",vi.fn(),app,undefined,undefined,undefined,resolve);
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(resolve).toHaveBeenCalledOnce());await controller.setEnabled(true);await controller.setEnabled(true);expect(resolve).toHaveBeenCalledOnce();expect(signal?.aborted).toBe(false);release();await vi.waitFor(()=>expect(app.start).toHaveBeenCalledOnce());}
+ finally{release?.();await controller.stop();await rm(dir,{recursive:true,force:true});}
+});
+
+it('rapid OFF then ON before teardown keeps the still-owned running host',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-rapid-toggle-'));let attached!:(id:string)=>void,release!:()=>void;
+ const watch=vi.spyOn(nodeFs,"watch").mockReturnValue(Object.assign(new EventEmitter(),{close:vi.fn()}) as unknown as nodeFs.FSWatcher);
+ const app={start:vi.fn(),stop:vi.fn(async()=>{})},controller=new AssistantLaunchController(dir,{SODA_ASSISTANT_COMMAND:'["generated"]'},()=>"http://127.0.0.1:7780",vi.fn(),(_disabled,onAttached)=>{attached=onAttached;return app;});
+ const internals=controller as unknown as{queue:Promise<void>};
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(app.start).toHaveBeenCalledOnce());attached('00000000-0000-4000-8000-000000000001');await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('running'));internals.queue=new Promise<void>(yes=>{release=yes;});await controller.setEnabled(false);expect((await controller.status()).phase).toBe('stopping');await controller.setEnabled(true);release();await internals.queue;expect((await controller.status()).phase).toBe('running');expect(app.start).toHaveBeenCalledOnce();expect(app.stop).not.toHaveBeenCalled();}
+ finally{release?.();await controller.stop();watch.mockRestore();await rm(dir,{recursive:true,force:true});}
 });

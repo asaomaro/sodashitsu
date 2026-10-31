@@ -44,4 +44,4 @@ function Get-Acl {
    if(unsafe)await expect(run).rejects.toThrow();else expect(JSON.parse(await run).path).toBe(join(directory,'Sodashitsu-Assistant-Host'));
   }
  }finally{await rm(directory,{recursive:true,force:true});}
-});
+},45000);
