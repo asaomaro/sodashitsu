@@ -1,3 +1,4 @@
+import * as childProcess from "node:child_process";
 import * as atomic from "../persist/atomicFile.js";
 import { mkdtemp,mkdir,readFile,rm,writeFile,realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -187,4 +188,9 @@ it.each(["linux-portal","macos-sck"] as const)("persists native %s system-audio 
  await settings.set({...off,enabled:true,allowSystemAudio:true});expect(configure.mock.calls.at(-1)![0]).toMatchObject({allowInput:false,allowSystemAudio:true,command:["synthetic-helper","--allow-system-audio"]});
  expect((await DesktopSettings.open({...options,nativePlatform})).get(true).permissions.allowSystemAudio).toBe(true);
  await settings.set({...off,enabled:true,allowSystemAudio:false});expect(configure.mock.calls.at(-1)![0]?.command).toEqual(["synthetic-helper"]);expect(configure.mock.calls.at(-1)![0]?.allowSystemAudio).toBe(false);
+});
+
+it('checks WSL helper presence without starting wslpath for disabled metadata',()=>{
+ const probe=vi.spyOn(childProcess,'spawnSync').mockImplementation(()=>{throw Error('unexpected helper discovery process');});
+ expect(bundledDesktopCommand('linux',{WSL_DISTRO_NAME:'Generated'},false)?.[0]).toBe('powershell.exe');expect(probe).not.toHaveBeenCalled();
 });

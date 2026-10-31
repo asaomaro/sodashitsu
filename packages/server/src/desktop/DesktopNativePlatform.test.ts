@@ -10,3 +10,6 @@ it("probes imports only and requires matching dependency proof",()=>{
 
 it("keeps unverified Linux Portal capture disabled without an explicit local opt-in",()=>{const probe=vi.fn();expect(nativeDesktopCommand("linux",{},probe)).toBeUndefined();expect(probe).not.toHaveBeenCalled();});
 it("keeps macOS capture disabled without an explicit local experimental opt-in",()=>{const probe=vi.fn();expect(nativeDesktopCommand("darwin",{},probe)).toBeUndefined();expect(probe).not.toHaveBeenCalled();});
+it('reports installed opt-in Linux resources without starting a dependency probe for disabled settings',()=>{
+ const probe=vi.fn();expect(nativeDesktopCommand('linux',{SODA_DESKTOP_LINUX_PORTAL:'1'},probe,false)).toEqual(['/usr/bin/python3','-I',expect.stringContaining('linux-portal-helper.py')]);expect(probe).not.toHaveBeenCalled();
+});

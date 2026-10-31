@@ -26,7 +26,7 @@ import {
   type DesktopEndpointRoot,
   type DesktopEndpointLocalSocket,
 } from "./DesktopEndpointBackplane.js";
-import type { DesktopProvider } from "./DesktopProvider.js";
+import type { DesktopProviderApi as DesktopProvider } from "./DesktopProvider.js";
 
 type Permit = Awaited<ReturnType<DesktopEndpointStore["endpoint"]>>;
 type Invite = { ticket: string; protocol: string; at: number; busy: boolean };

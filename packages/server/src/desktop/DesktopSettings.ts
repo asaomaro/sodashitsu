@@ -1,6 +1,6 @@
 import {nativePlatformFor,nativeDesktopCommand,nativeDesktopSetup} from "./DesktopNativePlatform.js";
 import type {DesktopNativePlatform} from "@sodashitsu/protocol";
-import {DesktopFiles} from "./DesktopFiles.js";
+
 import { existsSync } from "node:fs";
 import {createHash} from "node:crypto";
 import { lstat,readFile } from "node:fs/promises";
@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { DesktopPermissions, RpcError, type DesktopSettingsResult } from "@sodashitsu/protocol";
 import { writeFileAtomic } from "../persist/atomicFile.js";
-import type { DesktopProvider, DesktopProviderConfig } from "./DesktopProvider.js";
+import type { DesktopProviderApi as DesktopProvider, DesktopProviderConfig } from "./DesktopProvider.js";
 
 const disabled: DesktopPermissions = {
   enabled: false,
@@ -21,8 +21,9 @@ const disabled: DesktopPermissions = {
 export function bundledDesktopCommand(
   os = process.platform,
   env = process.env,
+  verify = true,
 ): string[] | undefined {
-  if(nativePlatformFor(os,env))return nativeDesktopCommand(os,env);
+  if(nativePlatformFor(os,env))return nativeDesktopCommand(os,env,undefined,verify);
   const script = fileURLToPath(
     new URL("../../../../scripts/remote-desktop/windows-helper.ps1", import.meta.url),
   );
@@ -30,8 +31,9 @@ export function bundledDesktopCommand(
     "WindowsVirtualDisplay.cs","WindowsVirtualDisplayNative.cs","WindowsVirtualDisplayChannel.cs",
     "WindowsProtectedEpoch.cs","WindowsProtectedScope.cs","WindowsProtectedScopeNative.cs","WindowsProtectedHandshake.cs","WindowsProtectedWorker.cs"];
   if (!required.every(name=>existsSync(fileURLToPath(new URL(`../../../../scripts/remote-desktop/${name}`,import.meta.url))))) return;
+  if(os!=="win32"&&!env.WSL_DISTRO_NAME)return;
   let path = script;
-  if (os !== "win32") {
+  if (os !== "win32" && verify) {
     if (!env.WSL_DISTRO_NAME) return;
     const result = spawnSync("wslpath", ["-w", script], { encoding: "utf8", timeout: 3000 });
     if (result.status !== 0 || !result.stdout.trim()) return;
@@ -65,7 +67,7 @@ export class DesktopSettings {
   private queue: Promise<unknown> = Promise.resolve();
   private constructor(
     private readonly options: Options,
-    private readonly command: string[] | undefined,
+    private command: string[] | undefined,
     permissions: DesktopPermissions,
   ) {
     this.platform=options.nativePlatform??options.legacy?.nativePlatform??(!options.legacy&&!options.command?nativePlatformFor():undefined);
@@ -93,7 +95,7 @@ export class DesktopSettings {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") permissions = { ...disabled };
     }
     permissions = options.startup ?? permissions;
-    const command = options.legacy?.command ?? options.command ?? bundledDesktopCommand();
+    const command = options.legacy?.command ?? options.command ?? bundledDesktopCommand(process.platform,process.env,permissions.enabled);
     if (options.startup?.enabled && !command)
       throw new Error(
         "デスクトップ共有の補助プログラムがありません。接続先OS向けの導入手順を確認してください。",
@@ -112,7 +114,8 @@ export class DesktopSettings {
     const permissions = DesktopPermissions.parse(raw);
     const work = this.queue.then(async () => {
       if(this.nativePlatform&&(permissions.allowDisplayResize||permissions.allowUnlock||permissions.allowMonitors||permissions.allowVirtualDisplay||permissions.allowElevated||permissions.allowMicrophone))throw new RpcError("invalid_params","このnative backendでは画面共有・対応する入力・クリップボード・システム音声を許可できます。");
-      if (permissions.enabled && !this.command)
+      const command=permissions.enabled&&!this.options.legacy&&!this.options.command?bundledDesktopCommand():this.command;
+      if (permissions.enabled && !command)
         throw new RpcError(
           "invalid_params",
           "この環境では画面共有の補助プログラムを使用できません。接続先OS向けの導入手順を確認してください。",
@@ -122,10 +125,10 @@ export class DesktopSettings {
       if (permissions.allowUnlock && this.options.legacy)
         throw new RpcError("invalid_params", "ロック解除には同梱のWindows補助プログラムを使用してください。");
       if(permissions.allowMicrophone&&!permissions.microphoneEndpoint?.trim())throw new RpcError("invalid_params","マイク転送先の仮想オーディオ再生デバイスIDを指定してください。");
-      if(permissions.fileRoot?.trim()){const probe=await DesktopFiles.open(permissions.fileRoot.trim(),()=>false);await probe.close();}
+      if(permissions.fileRoot?.trim()){const{DesktopFiles}=await import("./DesktopFiles.js");const probe=await DesktopFiles.open(permissions.fileRoot.trim(),()=>false);await probe.close();}
       await this.options.provider.invalidateSavedTransfers();
       try{await writeFileAtomic(this.options.file, JSON.stringify(permissions) + "\n");
-        this.permissions = permissions;
+        this.command=command;this.permissions = permissions;
         this.apply();
       }finally{let scope:string;try{scope=await this.transferScope();}catch(error){this.options.provider.failSavedTransferPolicy();throw error;}await this.options.provider.bindSavedTransfers(scope);}
       return this.get(true);

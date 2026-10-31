@@ -13,7 +13,8 @@ import { DesktopCompanionServer } from "./desktop/DesktopCompanion.js";
 import { DesktopRelay } from "./desktop/DesktopRelay.js";
 import {DesktopEndpointService} from "./desktop/DesktopEndpointService.js";
 import {DesktopEndpointRelay} from "./desktop/DesktopEndpointRelay.js";
-import { DesktopProvider, desktopConfigFromEnv, desktopOriginsFromEnv } from "./desktop/DesktopProvider.js";
+import {LazyDesktopProvider} from "./desktop/LazyDesktopProvider.js";
+import {desktopConfigFromEnv,desktopOriginsFromEnv} from "./desktop/DesktopProviderCore.js";
 import { registerDesktopCdpMethods } from "./surface/methods/desktopCdp.js";
 import { DesktopCdpLauncher } from "./desktop/DesktopCdpLauncher.js";
 import { DesktopCdpRelay } from "./desktop/DesktopCdpRelay.js";
@@ -454,7 +455,7 @@ export async function composeServer(
   const bridgeEndpoint = new BridgeEndpoint({ version: SERVER_VERSION, hostname: osHostname(), sessionName: options.sessionName ?? null }, logger);
   const delegations = new ReverseConnections({grants:new DelegationGrants(options.sessionRoot,options.stateDir),machines,endpoint:()=>bridgeEndpoint,logger,stateDir:options.stateDir,pairingChanged:(id,message,closed)=>bus.publish({event:"machine.pairing",data:{id,message,closed}})});
   machines.onChanged((list) => bus.publish({ event: "machine.changed", data: { machines: list } }));
-  const desktop = new DesktopProvider(desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)));
+  const desktop = new LazyDesktopProvider(desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)));
   const desktopSettings = await DesktopSettings.open({
     file: join(options.stateDir, "desktop-permissions.json"), provider: desktop,
     legacy: desktopConfigFromEnv(process.env, () => delegations.list().delegations.filter(d => d.state === "online").map(d => d.url)),

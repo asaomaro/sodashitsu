@@ -28,6 +28,7 @@ import type { AuthService } from "../auth/AuthService.js";
 import { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { LinkChannel, MachineLink } from "../machine/MachineLink.js";
 import { DesktopRelay } from "./DesktopRelay.js";
+import {LazyDesktopProvider} from "./LazyDesktopProvider.js";
 import { DesktopProvider, desktopConfigFromEnv } from "./DesktopProvider.js";
 import { DesktopNativeVideo } from "./DesktopNativeVideo.js";
 import { performance } from "node:perf_hooks";
@@ -41,7 +42,7 @@ afterEach(async () => {
 const helper = fileURLToPath(
   new URL("../../../../scripts/remote-desktop/synthetic-helper.mjs", import.meta.url),
 );
-async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true, dxgi = false, nativeFixture = false, protectedConfig?:{mode?:"elevated-default"|"elevated-uac";allowed?:boolean;force?:boolean;expectEnv?:"0"|"1"}) {
+async function fixture(allowInput = true, legacy = false, configured = true, secure = false, unlockAllowed = true, cover = false, nativeFailure?: string, readyFailure?: string, imeKeys = true, unconditionalIme = false, extendedInput = true, dxgi = false, nativeFixture = false, protectedConfig?:{mode?:"elevated-default"|"elevated-uac";allowed?:boolean;force?:boolean;expectEnv?:"0"|"1"},lazy=false) {
   const dir = await mkdtemp(join(tmpdir(), "soda-desktop-test-")),
     record = join(dir, "inputs.jsonl"),lifecycle=join(dir,"lifecycle.jsonl"),endedMarker=join(dir,"scope-ended"),ledger=join(dir,"ledger.jsonl");
   cleanup.push(() => rm(dir, { recursive: true, force: true }));
@@ -49,7 +50,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   await new Promise<void>((r) => web.listen(0, "127.0.0.1", r));
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
-  const provider = new DesktopProvider(configured ? {
+  const Provider=lazy?LazyDesktopProvider:DesktopProvider;
+  const provider = new Provider(configured ? {
     command: [process.execPath, helper, "--allow-input", "--record", record,"--lifecycle-ledger",lifecycle, ...(protectedConfig?["--protected-end-marker",endedMarker,"--input-ledger",ledger,...(protectedConfig.mode?["--protected-mode",protectedConfig.mode]:[]),...(protectedConfig.force?["--protected-unconditional"]:[]),...(protectedConfig.expectEnv?["--expect-elevated-request",protectedConfig.expectEnv]:[])]:[]), ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
     allowInput,
     allowNativeVideo: nativeFixture,
@@ -1766,3 +1768,11 @@ it.skipIf(process.platform==="win32").each([false,true])(`shares one ${nativePla
 });
 
 }
+
+it('cold lazy provider forwards actual generated helper images through the relay',async()=>{
+ const f=await fixture(true,false,true,false,false,false,undefined,undefined,true,false,true,false,false,undefined,true);
+ const viewer=await f.viewer();viewer.send(start);
+ await expect.poll(()=>viewer.frames.length,{timeout:5000}).toBeGreaterThan(0);
+ expect(f.provider.capabilities().available).toBe(true);
+ viewer.send({type:'stop'});
+});
