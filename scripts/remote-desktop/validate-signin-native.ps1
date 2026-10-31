@@ -36,3 +36,5 @@ try {
  }
  'signin_native_single_image_generated_pass'
 }finally{if([IO.Directory]::Exists($root)){[IO.Directory]::Delete($root,$true)}}
+
+exit 0
