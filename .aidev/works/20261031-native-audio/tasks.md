@@ -5,11 +5,11 @@
 - [x] Linux system monitor取得と有限PCM chunk、生成tone/fake peer検証（risky独立点検）
 - [x] Linux設定/Web/TUI/交渉/shared音声/E2E実配線（risky独立点検。最終E2E/CIは下記）
 - [x] 文書/負例/全体build/typecheck/test/独立差分レビュー/PR #338
-- [ ] 最終CI後にmain反映（最終結果はPR #338のchecks/merge記録を参照）
+- [x] 最終CI後にmain反映（最終結果はPR #338のchecks/merge記録を参照）
 
 ## 後続の独立した変更
 
-- [ ] macOS SCK audioとPCM変換、生成音/SDK/停止検証
+- [x] macOS SCK audioとPCM変換、生成音/SDK/停止検証
 - [ ] nativeマイク転送など残件
 - [ ] 最後に接続元/sr-pcの稼働版とhelper終了原因を確認し、接続を復旧する
 

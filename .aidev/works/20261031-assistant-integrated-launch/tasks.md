@@ -12,7 +12,7 @@
 # 後続のstanding残件（完了扱いにしない）
 
 - [ ] composeの残るoptional implementationの有効後load
-- [ ] native-copy/audio-pipe/selectionの共通内部host化・Windows helperの無効role Add-Type削減
+- [x] native-copy/audio-pipe/selectionの共通内部host化・Windows helperの無効role Add-Type削減
 - [ ] privileged service/workerのOS境界を保った統合可否と可能な統合
-- [ ] Mac音声Node設定/pipe配線等のRDP残件
+- [x] Mac音声Node設定/pipe配線等のRDP残件
 - [ ] 最後にsr-pcとの実際の接続復旧

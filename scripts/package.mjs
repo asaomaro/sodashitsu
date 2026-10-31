@@ -12,6 +12,8 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {desktopRuntimeAssets} from "./remote-desktop/runtime-assets.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -25,6 +27,8 @@ function run(cmd, argv, cwd) {
 }
 
 if (!args.has("--no-build")) run(pnpm, ["build"], root);
+if (process.platform === "darwin")
+  run("/bin/bash", [join(root, "scripts", "remote-desktop", "build-macos-desktop.sh")], root);
 
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const name = `sodashitsu-${version}`;
@@ -54,14 +58,11 @@ mkdirSync(join(out,"scripts","vscode-cdp"),{recursive:true});
 for (const file of ["cdp-launcher.mjs","cdp-bridge.mjs","cdp-client.mjs","resident-bridge.mjs"])
   cpSync(join(root,"plugins","vscode-desktop",file),join(out,"scripts","vscode-cdp",file));
 mkdirSync(join(out, "scripts", "remote-desktop"), { recursive: true });
-for (const file of ["EndpointAclPolicy.ps1", "windows-helper.ps1", "WindowsDesktopHost.cs", "WindowsDesktopUnlock.cs", "install-unlock-service.ps1", "WindowsResourceFence.cs", "protect-endpoint-key.ps1", "check-endpoint-acl.ps1", "commit-endpoint-vault.ps1", "WindowsProtectedEpoch.cs", "WindowsProtectedScope.cs", "WindowsProtectedScopeNative.cs", "WindowsProtectedHandshake.cs", "WindowsProtectedWorker.cs", "WindowsVirtualDisplay.cs", "WindowsVirtualDisplayNative.cs", "WindowsVirtualDisplayChannel.cs", "WindowsDesktopPipeKernel.cs", "WindowsDesktopAudio.cs", "WindowsDesktopMicrophone.cs", "WindowsDesktopRichClipboard.cs", "WindowsCodecProbe.cs"])
+for (const file of desktopRuntimeAssets)
   cpSync(join(root, "scripts", "remote-desktop", file), join(out, "scripts", "remote-desktop", file));
-// Shared native role host: source is bundled; only an explicitly selected role is compiled.
-for (const file of ["build-native-role.ps1", "WindowsNativeRoleHost.cs", "WindowsAudioPipeBridge.cs",
-  "WindowsExplorerSelection.cs", "WindowsExplorerSelectionWorker.cs", "WindowsNativeDragLease.cs",
-  "WindowsNativeDragStreams.cs", "WindowsNativeDragDataObject.cs", "WindowsNativeDragPackets.cs",
-  "WindowsNativeDragPump.cs", "WindowsNativeDragSlot.cs", "WindowsNativeDragWorker.cs"])
-  cpSync(join(root, "scripts", "remote-desktop", file), join(out, "scripts", "remote-desktop", file));
+if (process.platform === "darwin") {
+  cpSync(join(root, "scripts", "remote-desktop", "macos-desktop-helper"), join(out, "scripts", "remote-desktop", "macos-desktop-helper"));
+}
 for (const f of ["third_party", "docs", "LICENSE", "NOTICE", "pnpm-workspace.yaml", "pnpm-lock.yaml"]) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }

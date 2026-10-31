@@ -1,0 +1,7 @@
+# 設計
+
+runtime-assets.mjsの明示closed inventoryをpackageが参照する。globをruntimeで使わず、全OS向けソースと固定管理/ビルドscriptを相対構造のまま同梱する。各機能は既存の設定と要求まで資源を読まず、ファイルが増えてもprocessを増やさない。Checks/Fixture/Generated/Benchmarkとvalidation scriptsは含めない。
+
+Mac package生成は固定build-macos-desktop.shを実行し、SDKからcompile+生成fileだけad-hoc sign+probe（OS版メタデータ）後に同じbinaryをコピーする。依存はMac release builderのXcode CLIで、通常のSoda起動や他OSbuildにMac compileを追加しない。証明書/TCC/driver/SCMは変更しない。
+
+verifierは配布物をデータとしてreadし、全資源SHA256とliteral SDK参照の閉包を確認する。Mac binaryはbyte一致と実行可能modeだけを確認し、verifier自身はhelperを起動しない。生成音声等の機能試験は既存の各workflowと分離する。
