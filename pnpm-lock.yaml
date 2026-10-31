@@ -171,6 +171,9 @@ importers:
       '@sodashitsu/client-core':
         specifier: workspace:*
         version: link:../client-core
+      '@sodashitsu/desktop-assistant':
+        specifier: workspace:*
+        version: link:../desktop-assistant
       '@sodashitsu/protocol':
         specifier: workspace:*
         version: link:../protocol

@@ -1,0 +1,56 @@
+{
+  "version": "45.1.0",
+  "source": "https://github.com/electron/electron/releases/tag/v45.1.0",
+  "checksumsSource": "https://github.com/electron/electron/releases/download/v45.1.0/SHASUMS256.txt",
+  "checksumsSha256": "af5e45cd87fb17b9eafafd74feab5a74fbfddeb5f150e3e25ae8cd6107bb6a99",
+  "entries": [
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "archive": "electron-v45.1.0-darwin-arm64.zip",
+      "bytes": 120939367,
+      "sha256": "002b71efcf90e247317d3da486f2d4e51860e9c2889d49f33e229ab2268b0f3b",
+      "entry": "Electron.app/Contents/MacOS/Electron"
+    },
+    {
+      "platform": "darwin",
+      "arch": "x64",
+      "archive": "electron-v45.1.0-darwin-x64.zip",
+      "bytes": 125139936,
+      "sha256": "b4667d820149e33a6f016d103de0fcf5d6f05b8297a204232a0d970c00b163a5",
+      "entry": "Electron.app/Contents/MacOS/Electron"
+    },
+    {
+      "platform": "linux",
+      "arch": "arm64",
+      "archive": "electron-v45.1.0-linux-arm64.zip",
+      "bytes": 124966511,
+      "sha256": "64b78d93d1129ab805cdc0f2710f446716afbe814a1d08e639dab3175d2285a1",
+      "entry": "electron"
+    },
+    {
+      "platform": "linux",
+      "arch": "x64",
+      "archive": "electron-v45.1.0-linux-x64.zip",
+      "bytes": 123917468,
+      "sha256": "9dafab2c57ce209f8f716f8f3e4fddd8ffe0820e2455bfbbfc00b0fc13e03a3b",
+      "entry": "electron"
+    },
+    {
+      "platform": "win32",
+      "arch": "arm64",
+      "archive": "electron-v45.1.0-win32-arm64.zip",
+      "bytes": 155969843,
+      "sha256": "c0adce10031826896060bba848777bf9f059bfe4a2f7f9d4795008498eeeb248",
+      "entry": "electron.exe"
+    },
+    {
+      "platform": "win32",
+      "arch": "x64",
+      "archive": "electron-v45.1.0-win32-x64.zip",
+      "bytes": 158224448,
+      "sha256": "55eaba17abff7b5bba6c3bbc85068967379024fe742fe9c7fdba9118922ccbe2",
+      "entry": "electron.exe"
+    }
+  ]
+}
