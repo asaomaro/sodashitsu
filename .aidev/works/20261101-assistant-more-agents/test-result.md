@@ -2,9 +2,15 @@
 
 隔離worktreeで生成JSONL/メモリ端末/偽RPC/ヘッドレスDOMのみ使用。実agent/model呼出し、OS画面・入力・録音・サービス設定変更なし。
 
-- 関連5 files / 99 tests成功（独立レビュー後にactor交代2ケースを追加、全体試験で再検証する）。
+- 関連5 files / 99 tests成功、actor交代2ケース追加後の全体試験は933 files / 13,457 tests成功（各1 skipped）。型補正後の関連2 files / 68 testsも成功。
 - `verify:ui`: Chromium headless1217で既存UIと追加2種類の送受信DOM/宛先/HTML非実行を確認し成功。実Electronの実機検証とは別。
-- 型検査中の一時negativeファイル削除によるTS6053は試験ハーネスの並列実行によるもの。privateコピー削除後に全体型検査を独立再実行する。負例の証拠には使わない。
+- 型検査中の一時negativeファイル削除によるTS6053は試験ハーネスの並列実行によるもの。privateコピー削除とtest fixtureの必須reportedAt/literal型補正後に全体型検査を独立再実行して成功。負例の証拠には使わない。
+
+- `pnpm build`: 成功（内蔵assistant資材のbuildのみ。OS実行なし）。
+- `pnpm typecheck`: 全packageとscripts成功。
+- `pnpm exec vitest run --maxWorkers=4`: 933 passed / 1 skipped files、13,457 passed / 1 skipped tests。
+- 文書の管理IDはR1–R5/U1–U12の17件を維持、変更文書のローカルリンク照合成功。
+- 初回CIは上記test fixture型不足で失敗。修正版でCIを再実行し、通過後に統合する。起動前チェックとhandoffは統合後のmainを固定して行う。
 
 ## 負例
 

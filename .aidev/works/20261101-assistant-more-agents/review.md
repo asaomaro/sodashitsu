@@ -7,4 +7,6 @@
 - 修正: 同じsessionIdの空snapshotで全消去をassert、保留RPCのactor交代をcodex/copilot/agyに展開。reset clear欠落のprivate copyで2ケースともAssertionError、現在sourceに戻すと成功。
 - pointer再レビュー: should解消、追加must/shouldなし。文書の専用assistant限定/部分対応/実機未検証も確認。
 
+型検査で判明したtest fixtureの2点（it.eachのliteral型、必須reportedAt）も補正し、pointerが追加指摘なしと再確認。
+
 最終build/typecheck/全体test/CIの結果はtest-result.mdに記録する。
