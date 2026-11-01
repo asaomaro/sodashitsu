@@ -1,6 +1,6 @@
 # 全体の作業
 
-この台帳はPR356〜369の段階実装・配布の記録です。2026-11-01の必須残件への絞り込みと文書整合検証後の現行一覧は[remote-desktop-status.md](../../../docs/remote-desktop-status.md)のR1〜R5/U1〜U12です。以下の完了欄は全OSの完全同等や、未対応機能の実装済みを示しません。
+この台帳はPR356〜369の段階実装・配布の記録です。2026-11-01の文書整合検証と全残件整理後の現行一覧は[remote-desktop-status.md](../../../docs/remote-desktop-status.md)のR1〜R5/U1〜U12です。以下の完了欄は全OSの完全同等や、未対応機能の実装済みを示しません。
 
 - [x] 保護画面中のsodaユーザー権限によるファイル転送（PR356、main c63a409e、CI16ジョブ成功。このPCは反映済み、sr-pcはR1で未完了）
 - [x] Linux/macOS nativeのUDP・codec・動画の自動調整と転送解像度拡張（PR357–360、main 516355ac、各CI成功）
