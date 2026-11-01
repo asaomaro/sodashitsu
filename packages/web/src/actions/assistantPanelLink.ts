@@ -29,3 +29,12 @@ export function assistantPanelPane(
     );
   return { pane, tab };
 }
+
+/** Remove only assistant navigation state when returning to the ordinary UI/login. */
+export function ordinaryAssistantUrl(href: string): string {
+  const url = new URL(href);
+  url.hash = "";
+  url.searchParams.delete("assistantView");
+  url.searchParams.delete("assistantNavigation");
+  return url.href;
+}

@@ -1,3 +1,5 @@
+import {AssistantPersonaPrompts} from "./assistant/AssistantPersonaPrompts.js";
+import { VoiceHost } from "./voice/VoiceHost.js";
 import { AssistantDisabledDevices } from "./assistant/AssistantDisabledDevices.js";
 import { LazyAssistantAudio } from "./assistant/LazyAssistantAudio.js";
 import { AssistantLaunchController } from "./assistant/AssistantLaunchController.js";
@@ -471,6 +473,7 @@ export async function composeServer(
   const agentStarter = new AgentStarter({ session, terminals, processInspector }); // 20260926-agent-start
   const assistantSessions = new AssistantSessions({session,starter:agentStarter,flush:()=>persist.flush(),stateDir:options.stateDir});
   const assistantAudio=new LazyAssistantAudio(options.stateDir);
+  const voiceHost=new VoiceHost(options.stateDir,message=>logger.warn(message));
   const assistantIdleStops = watchAssistantIdleStops(bus, assistantSessions, () => logger.warn("無効なアシスタントの停止を確認できません"));
   const agentFork = new AgentForkRunner({
     session,
@@ -811,6 +814,8 @@ export async function composeServer(
     agentStarter,
     assistantSessions,
     assistantLaunch:managedAssistant,
+    assistantVoice:voiceHost,
+    assistantPersona:new AssistantPersonaPrompts(options.stateDir),
     assistantAudio,
     agentFork,
     subagentTranscripts,
@@ -930,6 +935,7 @@ export async function composeServer(
     pausePollers: async () => {
       await managedAssistant.stop();
       await assistantAudio.suspend();
+      await voiceHost.suspend();
       await assistantSessions.suspend();
       await scheduler.close();
       graphEngine.stop(); // 20260927-agent-graph（待ちは取り消す。引き継いだ先が今の値を基準に始め直す）
@@ -948,6 +954,7 @@ export async function composeServer(
       managedAssistant.start();
       assistantSessions.resume();
       assistantAudio.resume();
+      voiceHost.resume();
       desktop.resumeSavedTransfers();
       scheduler.start();
       graphEngine.start();
@@ -1268,6 +1275,7 @@ export async function composeServer(
         // 7. 拡張を起動する（20261007-ext-host）。ロックの後・復元の後。待たない（設定を読む処理が遅くても、`listen()` を止めない）。投げない。
         void extensions.start();
         managedAssistant.start();
+        voiceHost.start();
       } catch (err) {
         // 失敗した起動はロックを放す（`main` は close() を呼ばずに終わる）。放す前に、復元を済ませていない状態の保存の
         // 予約を取り消す（ロックを放した後に session.json を書かない）。
@@ -1426,6 +1434,7 @@ export async function composeServer(
         imageSweeper?.stop();
         await images.dispose(); // 書いている途中の画像を書き終えてから（ロックを放す前に）
         await assistantAudio.close();
+        await voiceHost.close();
         dropSweeper?.stop();
         await fileUploads.dispose(); // 受け取り中のファイルの書きかけを消してから（ロックを放す前に）
         // スクロールバックの一時ディレクトリ（20260926-edit-scrollback）。途中の処理が投げても消す。

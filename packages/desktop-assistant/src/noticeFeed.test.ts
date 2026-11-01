@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
-import { NoticeFeed } from "./noticeFeed.js";
+import { NoticeFeed, agentRoster } from "./noticeFeed.js";
 
 function fixture() {
   const ids = {
@@ -35,7 +35,7 @@ it("waits for authoritative shared state and announces attention in words withou
   expect(feed.notices).toHaveLength(1);
   expect(feed.notices[0]).toMatchObject({
     kind: "attention",
-    message: "「操舵室 / worker」から確認の依頼です。操舵室で内容を確認してください。",
+    message: expect.stringContaining("から確認の依頼です。"),
     source: { paneId: pane.id, agentInstanceId: agent.instanceId },
   });
   expect(changed).toHaveBeenLastCalledWith(feed.notices, true);
@@ -212,9 +212,160 @@ it("preserves a pushed new form against an older subscribe snapshot", () => {
   ]);
 });
 
-it("does not rebind a pending form to a replacement agent",()=>{
- const f=fixture(),askId="a".repeat(32);f.feed.snapshot(f.snapshot);f.feed.shared({notices:[]});
- f.feed.event({event:"ask.opened",data:{askId,paneId:f.ids.pane}});
- f.feed.event({event:"pane.agent_status_changed",data:{paneId:f.ids.pane,agent:{...f.agent,instanceId:randomUUID()}}});
- expect(f.feed.notices).toEqual([]);
+it("does not rebind a pending form to a replacement agent", () => {
+  const f = fixture(),
+    askId = "a".repeat(32);
+  f.feed.snapshot(f.snapshot);
+  f.feed.shared({ notices: [] });
+  f.feed.event({ event: "ask.opened", data: { askId, paneId: f.ids.pane } });
+  f.feed.event({
+    event: "pane.agent_status_changed",
+    data: { paneId: f.ids.pane, agent: { ...f.agent, instanceId: randomUUID() } },
+  });
+  expect(f.feed.notices).toEqual([]);
+});
+
+it("keeps UUID workspace form notifications when legacy entities share the snapshot and event stream", () => {
+  const f = fixture(),
+    askId = randomUUID();
+  const legacyTab = { id: randomUUID(), workspaceId: "w3", label: "legacy" };
+  const legacyPane = { ...f.pane, id: randomUUID(), tabId: legacyTab.id };
+  f.feed.snapshot({
+    workspaces: [{ id: "w3", label: "legacy" }, ...f.snapshot.workspaces],
+    tabs: [legacyTab, ...f.snapshot.tabs],
+    panes: [legacyPane, ...f.snapshot.panes],
+  });
+  f.feed.shared({ notices: [] });
+  f.feed.questions({
+    asks: [
+      { askId, paneId: f.ids.pane },
+      { askId: randomUUID(), paneId: legacyPane.id },
+    ],
+  });
+  expect(f.feed.notices).toEqual([
+    expect.objectContaining({
+      kind: "question",
+      key: `ask:${askId}`,
+      source: expect.objectContaining({ workspaceId: f.ids.workspace, paneId: f.ids.pane }),
+    }),
+  ]);
+  const original = f.feed.notices[0]!.id;
+  f.feed.event({
+    event: "workspace.updated",
+    data: { workspace: { id: "w3", label: "old changed" } },
+  });
+  f.feed.event({ event: "tab.updated", data: { tab: legacyTab } });
+  f.feed.event({ event: "workspace.closed", data: { workspaceId: "w3" } });
+  expect(f.feed.notices[0]!.id).toBe(original);
+});
+
+it("retires an actionable source when an updated entity is no longer valid", () => {
+  for (const entity of ["pane", "tab", "workspace"] as const) {
+    const f = fixture();
+    f.agent.state = "blocked";
+    f.feed.snapshot(f.snapshot);
+    f.feed.shared({ notices: [] });
+    expect(f.feed.notices).toHaveLength(1);
+    const current =
+      entity === "pane" ? f.pane : entity === "tab" ? f.snapshot.tabs[0] : f.snapshot.workspaces[0];
+    f.feed.event({
+      event: `${entity}.updated`,
+      data: { [entity]: { ...current, label: "x".repeat(5000) } },
+    });
+    expect(f.feed.notices).toEqual([]);
+  }
+});
+
+it("keeps snapshot bounds while excluding invalid identities", () => {
+  const f = fixture();
+  expect(() =>
+    f.feed.snapshot({
+      ...f.snapshot,
+      workspaces: Array.from({ length: 4097 }, () => ({ id: "w3", label: "old" })),
+    }),
+  ).toThrow();
+  expect(() => f.feed.snapshot({ ...f.snapshot, tabs: null })).toThrow();
+});
+
+it("identifies the named agent and previews form questions and the latest response", () => {
+  const { feed, snapshot, agent, pane } = fixture();
+  Object.assign(agent, { kind: "codex", label: "Codex", name: "実装担当" });
+  agent.state = "blocked";
+  feed.snapshot(snapshot);
+  feed.shared({ notices: [] });
+  const notice = feed.notices[0]!;
+  expect(notice.title).toContain(`実装担当 (${agent.instanceId.slice(0, 8)})`);
+  feed.details(notice.id, {
+    nextOffset: null,
+    messages: [{ role: "assistant", text: "変更を適用しますか？" }],
+  });
+  expect(feed.notices[0]!.message).toContain("直近の応答：変更を適用しますか？");
+  feed.questions({
+    asks: [
+      {
+        askId: "content-form",
+        paneId: pane.id,
+        spec: { title: "公開先の選択", questions: [{ label: "どの環境に公開しますか？" }] },
+      },
+    ],
+  });
+  expect(feed.notices.find((n) => n.kind === "question")!.message).toContain(
+    "質問内容：公開先の選択 / どの環境に公開しますか？",
+  );
+  feed.event({
+    event: "pane.agent_status_changed",
+    data: { paneId: pane.id, agent: { ...agent, instanceId: randomUUID() } },
+  });
+  feed.details(notice.id, {
+    nextOffset: null,
+    messages: [{ role: "assistant", text: "別の作業" }],
+  });
+  expect(feed.notices.every((n) => n.id !== notice.id && !n.message.includes("別の作業"))).toBe(
+    true,
+  );
+});
+
+it("lists active agents without waiting for notifications and follows state and lifecycle events", () => {
+  const { feed, snapshot, agent, pane, ids, changed } = fixture();
+  Object.assign(agent, { kind: "codex", name: "実装担当" });
+  feed.snapshot(snapshot);
+  expect(feed.agents).toEqual([]);
+  feed.shared({ notices: [] });
+  expect(feed.notices).toEqual([]);
+  expect(feed.agents).toEqual([
+    expect.objectContaining({
+      title: expect.stringContaining("実装担当"),
+      state: "working",
+      source: expect.objectContaining({ paneId: pane.id, agentInstanceId: agent.instanceId }),
+    }),
+  ]);
+  const rows = feed.agents;
+  rows[0]!.source.paneId = "changed";
+  expect(feed.agents[0]!.source.paneId).toBe(pane.id);
+  feed.event({
+    event: "pane.agent_status_changed",
+    data: { paneId: pane.id, agent: { ...agent, state: "idle" } },
+  });
+  expect(feed.agents[0]!.state).toBe("idle");
+  expect(changed).toHaveBeenLastCalledWith([], false);
+  feed.event({ event: "workspace.closed", data: { workspaceId: ids.workspace } });
+  expect(feed.agents).toEqual([]);
+});
+it("orders active work first and bounds the renderer roster while keeping totals", () => {
+  const { feed, snapshot, agent } = fixture();
+  agent.state = "idle";
+  feed.snapshot(snapshot);
+  feed.shared({ notices: [] });
+  const row = feed.agents[0]!;
+  const rows = Array.from({ length: 300 }, (_, i) => ({
+    ...row,
+    state: i === 299 ? ("working" as const) : ("idle" as const),
+    title: String(i),
+  }));
+  const roster = agentRoster(rows);
+  expect(roster.total).toBe(300);
+  expect(roster.working).toBe(1);
+  expect(roster.agents).toHaveLength(256);
+  expect(roster.agents[0]!.state).toBe("working");
+  expect(rows[0]!.state).toBe("idle");
 });

@@ -27,6 +27,7 @@ export interface NoticeConnectionOptions {
 /** One read-only authenticated socket. It sends hello/state/form subscription only, never input or agent prompts. */
 export class NoticeConnection {
   readonly feed: NoticeFeed;
+  private detailTimers = new Set<ReturnType<typeof setTimeout>>();
   private generation = 0;
   private socket: Socket | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -162,6 +163,47 @@ export class NoticeConnection {
       this.socket = socket;
       if (!handshake()) return;
       let stage: "hello" | "shared" | "asks" | "ready" = "hello";
+      // Bounded, read-only detail reads. Never generate a summary or send agent input.
+      const attempted = new Set<string>();
+      const reads = new Map<
+        string,
+        {
+          notice: AssistantNotice;
+          offset: number;
+          pages: number;
+          session: string | null;
+          last: string;
+          timer: ReturnType<typeof setTimeout>;
+        }
+      >();
+      let sequence = 0;
+      const pump = () => {
+        if (!live() || stage !== "ready") return;
+        for (const notice of this.feed.notices) {
+          if (reads.size >= 4) break;
+          if (attempted.has(notice.id) || !this.feed.wantsDetails(notice)) continue;
+          attempted.add(notice.id);
+          while (attempted.size > 128) attempted.delete(attempted.values().next().value!);
+          const id = `assistant-detail-${++sequence}`;
+          const timer = setTimeout(() => {
+            this.detailTimers.delete(timer);
+            reads.delete(id);
+            pump();
+          }, 10_000);
+          this.detailTimers.add(timer);
+          reads.set(id, { notice, offset: 0, pages: 0, session: null, last: "", timer });
+          socket!.send(
+            JSON.stringify({
+              id,
+              method: notice.kind === "question" ? "ask.get" : "agent.conversation",
+              params:
+                notice.kind === "question"
+                  ? { askId: notice.key.slice(4) }
+                  : { paneId: notice.source.paneId, offset: 0 },
+            }),
+          );
+        }
+      };
       socket.on("open", () => {
         if (!handshake()) return;
         try {
@@ -197,7 +239,66 @@ export class NoticeConnection {
           const message = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
           if (!message || typeof message !== "object") throw Error("Invalid message");
           if (stage !== "ready" && !handshake()) return;
-          if (stage === "hello" && message.id === "assistant-hello") {
+          const read = typeof message.id === "string" ? reads.get(message.id) : undefined;
+          if (read) {
+            const current = this.feed.notices.some((n) => n.id === read.notice.id);
+            if (current && !message.error && read.notice.kind === "question") {
+              const form = message.result as { askId?: string; paneId?: string } | null;
+              if (
+                form?.askId === read.notice.key.slice(4) &&
+                form.paneId === read.notice.source.paneId
+              )
+                this.feed.details(read.notice.id, form);
+            } else if (current && !message.error && read.notice.kind !== "question") {
+              const page = message.result as {
+                sessionId?: unknown;
+                nextOffset?: unknown;
+                messages?: unknown;
+              } | null;
+              if (
+                page &&
+                typeof page.sessionId === "string" &&
+                (!read.session || read.session === page.sessionId) &&
+                Array.isArray(page.messages)
+              ) {
+                read.session = page.sessionId;
+                for (const item of page.messages)
+                  if (
+                    item &&
+                    item.role === "assistant" &&
+                    typeof item.text === "string" &&
+                    item.text.trim()
+                  )
+                    read.last = item.text.slice(0, 8192);
+                if (page.nextOffset === null)
+                  this.feed.details(read.notice.id, {
+                    nextOffset: null,
+                    messages: [{ role: "assistant", text: read.last }],
+                  });
+                else if (
+                  typeof page.nextOffset === "number" &&
+                  Number.isSafeInteger(page.nextOffset) &&
+                  page.nextOffset > read.offset &&
+                  page.nextOffset <= 1024 * 1024 * 1024 &&
+                  ++read.pages < 8
+                ) {
+                  read.offset = page.nextOffset;
+                  socket!.send(
+                    JSON.stringify({
+                      id: message.id,
+                      method: "agent.conversation",
+                      params: { paneId: read.notice.source.paneId, offset: read.offset },
+                    }),
+                  );
+                  return;
+                }
+              }
+            }
+            clearTimeout(read.timer);
+            this.detailTimers.delete(read.timer);
+            reads.delete(message.id as string);
+            pump();
+          } else if (stage === "hello" && message.id === "assistant-hello") {
             if (message.error || !message.result || typeof message.result !== "object")
               throw Error("Hello rejected");
             this.feed.snapshot((message.result as { snapshot: unknown }).snapshot);
@@ -227,6 +328,7 @@ export class NoticeConnection {
             this.deadline = null;
             this.delay = 1000;
             this.options.status("connected");
+            pump();
             if (!handshake()) return;
             this.heartbeat = setInterval(() => {
               if (!live()) return;
@@ -250,6 +352,7 @@ export class NoticeConnection {
             }, 20_000);
           } else if ("event" in message && stage !== "hello") {
             this.feed.event(message);
+            pump();
             if (stage !== "ready") handshake();
           }
         } catch {
@@ -262,6 +365,8 @@ export class NoticeConnection {
   }
 
   private clearHeartbeat(): void {
+    for (const timer of this.detailTimers) clearTimeout(timer);
+    this.detailTimers.clear();
     if (this.heartbeat) clearInterval(this.heartbeat);
     if (this.pongDeadline) clearTimeout(this.pongDeadline);
     this.heartbeat = this.pongDeadline = null;

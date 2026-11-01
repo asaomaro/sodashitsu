@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { RemoteNotices } from "./remoteNotices.js";
 const services: RemoteNotices[] = [];
@@ -8,7 +9,7 @@ function fixture() {
   const id = "a".repeat(32),
     changed = vi.fn(),
     request = vi.fn(async () => ({ machines: [{ id, label: "sr-pc", state: "online" }] })),
-    notices: Array<{ options: any; start: any; stop: any }> = [],
+    notices: Array<{ options: any; start: any; stop: any; feed: { agents: any[] } }> = [],
     rpcs: any[] = [];
   const service = new RemoteNotices(
     "https://hub.test",
@@ -17,7 +18,7 @@ function fixture() {
       cookie: async () => "soda_session=generated",
       changed,
       notice: ((_origin: string, options: any) => {
-        const entry = { options, start: vi.fn(), stop: vi.fn() };
+        const entry = { options, start: vi.fn(), stop: vi.fn(), feed: { agents: [] as any[] } };
         notices.push(entry);
         return entry;
       }) as any,
@@ -75,4 +76,35 @@ it("does not create remote sockets from a stale machine list or unregistered rou
   await Promise.resolve();
   expect(f.notices).toHaveLength(0);
   expect(f.service.rpcFor("unregistered")).toBeNull();
+});
+
+it("includes remote agent names only while their notification connection is current and connected", async () => {
+  const f = fixture();
+  f.service.connection(true);
+  await vi.waitFor(() => expect(f.notices).toHaveLength(1));
+  const n = f.notices[0]!;
+  n.feed.agents = [
+    {
+      source: {
+        serverOrigin: "https://hub.test",
+        machineId: f.id,
+        workspaceId: randomUUID(),
+        paneId: randomUUID(),
+        agentInstanceId: randomUUID(),
+      },
+      title: "調査担当 / remote-project",
+      state: "working",
+      since: 1,
+    },
+  ];
+  expect(f.service.agents).toEqual([]);
+  n.options.status("connected");
+  expect(f.service.agents[0]!.title).toBe("sr-pc / 調査担当 / remote-project");
+  n.options.status("offline");
+  expect(f.service.agents).toEqual([]);
+  n.options.status("connected");
+  f.service.configure(false);
+  expect(f.service.agents).toEqual([]);
+  n.options.status("connected");
+  expect(f.service.agents).toEqual([]);
 });

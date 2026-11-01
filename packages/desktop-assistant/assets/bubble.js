@@ -1,9 +1,11 @@
 "use strict";
 (async () => {
  const preferences = await window.assistant.read();
+ document.getElementById("open-tools").onclick=()=>window.assistant.openTools().catch(error=>{document.getElementById("status").textContent=error.message;});
  const portrait=await window.assistant.characterInfo();
  document.getElementById("portrait").src=portrait.uri;
  document.getElementById("captain-name").textContent=portrait.name;
+ const greeting=document.querySelector("#conversation > .spoken:not([id])");if(greeting&&portrait.greeting)greeting.textContent=portrait.greeting;
  document.getElementById("expand-session").addEventListener("click",()=>window.assistant.openSession().catch(error=>{document.getElementById("status").textContent=error.message;}));
  document.getElementById("open").addEventListener("click", () => window.assistant.open());
  document.getElementById("settings").addEventListener("click", () => window.assistant.settings());
@@ -11,38 +13,85 @@
  const log = document.getElementById("conversation");
  const stateText = { connected: "通知を受信しています。", connecting: "操舵室へ接続しています。", login: "操舵室にログインすると、作業の知らせをお届けします。", offline: "操舵室との接続が切れました。再接続を待っています。", disabled: "アシスタントは無効です。" };
  const noticeRows=new Map();
+ let noticeFocusRevision=-1;
+ const selectNotice=id=>{
+  const row=noticeRows.get(id);
+  for(const item of noticeRows.values())item.classList.toggle("notice-current",item===row);
+  if(!row)return;
+  row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({block:"start"});
+ };
+ const inbox=document.getElementById("notices");
+ let agentList={agents:[],total:0,working:0,blocked:0}, rosterStatus="connecting";
+ const agentStates={working:"作業中",blocked:"確認待ち",idle:"待機中",unknown:"状態不明"};
+ const renderAgents=()=>{
+   const list=document.getElementById("agent-roster-rows"), filter=document.getElementById("agent-filter").value;
+   document.getElementById("agent-roster-summary").textContent=`エージェント一覧（${agentList.total}件・作業中 ${agentList.working}件・確認待ち ${agentList.blocked}件）`;
+   const rows=agentList.agents.filter(row=>filter==="all"||row.state===filter);
+   const previousScroll=list.scrollTop;
+   list.replaceChildren();
+   for(const row of rows){
+     const item=document.createElement("li"), state=document.createElement("span"), title=document.createElement("span");
+     state.className=`agent-state agent-state-${row.state}`;state.textContent=agentStates[row.state]||"状態不明";
+     title.textContent=row.title;item.append(state,title);list.append(item);
+   }
+   list.scrollTop=previousScroll;
+   const status=document.getElementById("agent-roster-status");
+   status.textContent=rows.length ? (agentList.total>agentList.agents.length?`全${agentList.total}件のうち先頭${agentList.agents.length}件を表示しています。`:"") : (agentList.total>agentList.agents.length?`表示対象の先頭${agentList.agents.length}件に、該当するエージェントはいません。全${agentList.total}件は操舵室で確認できます。`:rosterStatus==="connected"?"該当するエージェントはいません。":"接続中のマシンに、表示できるエージェントはいません。");
+   status.hidden=rows.length>0&&!status.textContent;
+ };
+ document.getElementById("agent-filter").addEventListener("change",renderAgents);
  let revision = -1;
  const update = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
    revision = state.revision;
+   agentList=state.agentList||{agents:[],total:0,working:0,blocked:0};rosterStatus=state.status;renderAgents();
    document.getElementById("status").textContent = stateText[state.status] || "接続状態を確認しています。";
    const present=new Set(state.notices.map(notice=>notice.id));
+   inbox.hidden=state.notices.length===0;
+   let added=false;
    for(const [id,row] of noticeRows)if(!present.has(id)){row.remove();noticeRows.delete(id);}
-   for (const notice of state.notices) {
-     if(noticeRows.has(notice.id))continue;
+   for (const notice of [...state.notices].reverse()) {
+     if(noticeRows.has(notice.id)){
+       const row=noticeRows.get(notice.id);
+       row.querySelector(".notice-text").textContent=notice.message;
+       const title=row.querySelector(".notice-title-button");title.textContent=title.title=notice.title || "通知元";
+       continue;
+     }
      const entry = document.createElement("p"); entry.className = "spoken notice";
-     const words=document.createElement("span");words.className="notice-text";words.textContent=notice.message;entry.append(words);
-     const open=document.createElement("button");open.type="button";open.textContent="この端末・質問フォームを開く";
-     open.addEventListener("click",()=>window.assistant.openSource({noticeId:notice.id}).catch(error=>{document.getElementById("status").textContent=error.message;}));
+     const words=document.createElement("span");words.className="notice-text";words.textContent=notice.message;
+     const open=document.createElement("button");open.type="button";open.textContent="小窓で応答";
+     open.addEventListener("click",()=>window.assistant.openSource({noticeId:notice.id,destination:"reply"}).catch(error=>{document.getElementById("status").textContent=error.message;}));
+     const main=document.createElement("button");main.type="button";main.textContent="操舵室で開く";
+     main.addEventListener("click",()=>window.assistant.openSource({noticeId:notice.id,destination:"main"}).catch(error=>{document.getElementById("status").textContent=error.message;}));
      const reply=document.createElement("textarea");reply.rows=2;reply.maxLength=8192;reply.setAttribute("aria-label",`${notice.title || "通知元"}への返答`);
      const submit=document.createElement("button");submit.type="button";submit.textContent="この通知元へ返答";
      const report=error=>{document.getElementById("status").textContent=error.message;};
      submit.addEventListener("click",async()=>{if(!reply.value.trim())return;submit.disabled=true;try{await window.assistant.replySource({noticeId:notice.id,text:reply.value});reply.value="";}catch(error){report(error);}finally{submit.disabled=false;}});
-     const destination=document.createElement("small");destination.textContent=notice.title || "通知元";
-     entry.append(document.createElement("br"),destination,open);
+     const destination=document.createElement("small"),read=document.createElement("button");read.type="button";read.className="notice-title-button";read.textContent=notice.title || "通知元";
+     read.title="この通知の内容を確認";
+     read.addEventListener("click",()=>window.assistant.readNotice({noticeId:notice.id}).then(()=>selectNotice(notice.id)).catch(report));destination.append(read);
+     destination.title=notice.title || "通知元";
+     const actions=document.createElement("span");actions.className="notice-actions";actions.append(open,main);
+     entry.append(destination,actions,words);
      if(notice.kind!=="question")entry.append(reply,submit);
      if(notice.kind==="attention") for(const [keyName,label]of [["Enter","Enterで確認"],["Escape","Escで戻る"],["y","yを送信"],["n","nを送信"]]){
        const key=document.createElement("button");key.type="button";key.textContent=label;key.onclick=async()=>{key.disabled=true;try{await window.assistant.sourceKey({noticeId:notice.id,keyName});}catch(error){report(error);}finally{key.disabled=false;}};entry.append(key);
      }
-     noticeRows.set(notice.id,entry);log.append(entry);
+     noticeRows.set(notice.id,entry);inbox.prepend(entry);added=true;
    }
-   log.scrollTop = log.scrollHeight;
+   if(added)inbox.scrollTop=0;
+   if(Number.isSafeInteger(state.noticeFocusRevision)&&state.noticeFocusRevision>noticeFocusRevision){
+     noticeFocusRevision=state.noticeFocusRevision;selectNotice(state.focusedNoticeId);
+   }
  };
  const unsubscribe = window.assistant.onInbox(update);
  window.addEventListener("pagehide", unsubscribe, {once:true});
  update(await window.assistant.inbox());
  let chatRevision = -1, chatState = null;
  const message = document.getElementById("message");
+ let draftRevision=-1;
+ const updateDraft=state=>{if(!Number.isSafeInteger(state.revision)||state.revision<=draftRevision)return;draftRevision=state.revision;if(state.text!==null){message.value=state.text;message.focus();void window.assistant.consumeDraft({revision:state.revision}).catch(()=>{});}};
+ const offDraft=window.assistant.onDraft(updateDraft);window.addEventListener("pagehide",offDraft,{once:true});window.assistant.draftState().then(updateDraft).catch(()=>{});
  const send = document.getElementById("send");
  const kinds = document.getElementById("agent-kind");
  const start = document.getElementById("start-session");
@@ -114,3 +163,5 @@
  updateChat(await window.assistant.conversation());
  document.addEventListener("keydown", event => { if (event.key === "Escape") window.assistant.hide(); });
 })().catch(() => { document.getElementById("status").textContent = "設定を読み込めませんでした。"; });
+
+(()=>{const stop=document.getElementById("voice-stop");let revision=-1;const update=state=>{if(!Number.isSafeInteger(state.revision)||state.revision<=revision)return;revision=state.revision;stop.hidden=!state.speaking;};const off=window.assistant.onVoice(update);window.addEventListener("pagehide",off,{once:true});window.assistant.voiceState().then(update).catch(()=>{});stop.onclick=()=>window.assistant.stopVoice();})();

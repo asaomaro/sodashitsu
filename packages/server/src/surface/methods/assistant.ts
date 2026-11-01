@@ -1,3 +1,4 @@
+import {VoiceCoreCancelParams,VoiceCoreCallParams} from "@sodashitsu/protocol";
 import {
   AssistantConversationParams,
   AssistantSettingsGetParams,AssistantSettingsSetParams,
@@ -30,6 +31,28 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
       guard();return launch.setEnabled(p.enabled,guard);
     }});
   }
+  const voiceRequests=new Map<string,string>(),voiceConnections=new Set<string>();
+  surface.register("voice.call",{schema:VoiceCoreCallParams,handler:async(ctx,p)=>{
+    if(!deps.assistantVoice?.call)throw Error("COREは利用できません");
+    if(p.operation==="cancel")throw new RpcError("unauthorized","音声の中断にはvoice.cancelを使ってください");
+    const requestId=p.requestId??crypto.randomUUID();if(voiceRequests.has(requestId))throw Error("音声要求IDが重複しています");
+    voiceRequests.set(requestId,ctx.clientId);
+    if(ctx.connection&&!voiceConnections.has(ctx.clientId)){
+      voiceConnections.add(ctx.clientId);ctx.connection.onClose(()=>{
+        voiceConnections.delete(ctx.clientId);
+        for(const [id,owner] of voiceRequests)if(owner===ctx.clientId)void deps.assistantVoice?.cancel?.(id).catch(()=>{});
+      });
+    }
+    try{return await deps.assistantVoice.call({...p,requestId});}finally{voiceRequests.delete(requestId);}
+  }});
+  surface.register("voice.cancel",{schema:VoiceCoreCancelParams,handler:async(ctx,p)=>{
+    if(voiceRequests.get(p.requestId)!==ctx.clientId)return {cancelled:false};
+    return {cancelled:await deps.assistantVoice?.cancel?.(p.requestId)??false};
+  }});
+  surface.register("assistant.voice_core",{schema:AssistantSettingsGetParams,handler:async()=>{
+    try{return await deps.assistantVoice?.endpoint()??{enabled:false,origin:null};}
+    catch{throw new RpcError("not_found","内蔵COREの起動設定を読み込めません。");}
+  }});
   registerAssistantApps(surface, deps);
   registerAssistantAudio(surface,deps);
   const imagePrompts = new Map<string, {clientId:string; active:boolean; expires:number}>();
@@ -188,11 +211,12 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
       const page = source.kind === "claude" || source.kind === "codex"
         ? await (() => { if (!deps.conversations) throw new RpcError("not_found", "会話記録は利用できません"); return deps.conversations.page(source.paneId, params.offset); })()
         : await import("../../assistant/AssistantConversation.js").then(module => module.readAssistantConversation(source.kind as "copilot" | "agy", source.sessionId));
+      const messages=await Promise.all(page.messages.map(async message=>message.role==="user"&&deps.assistantPersona?{...message,text:await deps.assistantPersona.userText(params.deviceId,message.text)}:message));
       authorized();
       const current = sessions.conversationTarget(params.deviceId, params.instanceId);
       if (current.paneId !== source.paneId || current.workspaceId !== source.workspaceId || current.sessionId !== source.sessionId || current.kind !== source.kind || page.sessionId !== source.sessionId || page.kind !== source.kind)
         throw new RpcError("not_found", "会話が変更されました。読み直してください");
-      return page;
+      return {...page,messages};
     },
   });
   surface.register("assistant.get", {
@@ -210,8 +234,9 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
   surface.register("assistant.prompt", {
     schema: AssistantSessionPromptParams,
     handler: async (ctx, params) => {
+      const wrap=()=>deps.assistantPersona?deps.assistantPersona.wrap(params.deviceId,params.characterId,params.text):params.text;
       const requestId = params.imageRequestId;
-      if (!requestId) return forward(ctx, params, "agent.prompt", {text:params.text});
+      if (!requestId) return forward(ctx, params, "agent.prompt", {text:await wrap()});
       if (imagePrompts.has(requestId) || imagePrompts.size >= 16 || [...imagePrompts.values()].filter(entry=>entry.clientId===ctx.clientId).length >= 2)
         throw new RpcError("agent_pane_busy", "画像指示の完了を待ってください");
       const lease = {clientId:ctx.clientId, active:true, expires:performance.now()+params.ttlMs!};
@@ -221,9 +246,11 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
         if (!lease.active || performance.now() >= lease.expires || agent.state !== "idle") throw new RpcError("agent_pane_busy", "画像指示が取り消されたか期限が切れ、またはエージェントが待機中ではありません");
       };
       try {
+        const text=await wrap();
+        imageGuard(sessions.target(params.deviceId,params.instanceId).agent);
         return await forward({...ctx,agentPromptGuard:agent=>{
           ctx.agentPromptGuard?.(agent);imageGuard(agent);
-        }}, params, "agent.prompt", {text:params.text}, imageGuard);
+        }}, params, "agent.prompt", {text}, imageGuard);
       } finally {clearTimeout(timer);if(imagePrompts.get(requestId)===lease)imagePrompts.delete(requestId);}
     },
   });

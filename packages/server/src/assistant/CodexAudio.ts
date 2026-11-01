@@ -3,8 +3,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { z } from "zod";
 
+export const AUDIO_INSTRUCTION="添付した音声をモデルの音声入力で読み、聞こえた言葉を文字起こししてください。聞き取れない部分は推測せず示し、結果をこの会話に返してください。";
 const audioError=(message:string)=>new RpcError("agent_pane_busy",message);
-interface Target { threadId:string; projectDir:string; path:string }
+interface Target { threadId:string; projectDir:string; path:string; instruction?:string }
 interface Options {
   launch?:typeof spawn;
   canonical?:typeof realpath;
@@ -73,7 +74,7 @@ export async function sendCodexAudio(target:Target,signal:AbortSignal,expires:nu
     // Last ownership/cancel/deadline guard and pipe write share the same continuation.
     const result=z.object({turn:z.object({id:z.string().min(1).max(128)})}).parse(await request("turn/start",{
       threadId:target.threadId,
-      input:[{type:"text",text:"添付した音声をモデルの音声入力で読み、聞こえた言葉を文字起こししてください。聞き取れない部分は推測せず示し、結果をこの会話に返してください。"},{type:"localAudio",path:target.path}],
+      input:[{type:"text",text:target.instruction??AUDIO_INSTRUCTION},{type:"localAudio",path:target.path}],
     }));
     return {turnId:result.turn.id};
   } finally {

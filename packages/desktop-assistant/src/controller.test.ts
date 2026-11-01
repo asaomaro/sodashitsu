@@ -131,7 +131,7 @@ describe("monitor geometry", () => {
         }),
         [{ id: "small", workArea: { x: 10, y: 20, width: 100, height: 80 } }],
       ),
-    ).toEqual({ x: 14, y: 20, width: 80, height: 80 });
+    ).toEqual({ x: 30, y: 20, width: 80, height: 80 });
   });
 });
 
@@ -197,4 +197,21 @@ it("does not persist or render if retiring the OS login entry fails", async () =
  const save=vi.fn(async()=>{}),controller=new AssistantController({launchAtLogin:true},native,save);
  await expect(controller.initializeManaged("http://127.0.0.1:7781")).rejects.toThrow("generated startup failure");
  expect(save).not.toHaveBeenCalled();expect(native.tray).not.toHaveBeenCalled();
+});
+
+it("limits compact notification documents to local display and explicit open/dismiss actions",()=>{
+ const sender={frameUrl:"soda-assistant://app/notice.html",mainFrame:true,current:true,role:"notice" as const};
+ expect(localRole(sender.frameUrl)).toBe("notice");
+ for(const action of ["notice-state","notice-dismiss","chat"])expect(authorizeLocalSender(sender,action)).toBe(true);
+ for(const action of ["inbox","save","source-reply","record-start","clipboard-read","resize-start"])expect(authorizeLocalSender(sender,action)).toBe(false);
+ expect(authorizeLocalSender({...sender,mainFrame:false},"notice-state")).toBe(false);
+ expect(authorizeLocalSender({...sender,current:false},"notice-dismiss")).toBe(false);
+});
+
+it("isolates tool windows from conversation sending and settings mutation",()=>{
+ const sender={frameUrl:"soda-assistant://app/tools.html",mainFrame:true,current:true,role:"tools" as const};
+ expect(localRole(sender.frameUrl)).toBe("tools");
+ for(const action of ["tools","draft-message","record-start","screenshot-approve","ocr-run","hide"])expect(authorizeLocalSender(sender,action)).toBe(true);
+ for(const action of ["send-message","start-session","source-reply","save","draft-state","resize-start"])expect(authorizeLocalSender(sender,action)).toBe(false);
+ expect(authorizeLocalSender({...sender,mainFrame:false},"record-start")).toBe(false);
 });

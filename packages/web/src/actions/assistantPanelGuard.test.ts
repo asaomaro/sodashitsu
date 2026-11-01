@@ -44,7 +44,10 @@ it("blocks before connection, re-reads replaced maps and synchronously fences st
   update();
   expect(focus).toHaveBeenCalledTimes(1);
   expect((document.getElementById("app") as HTMLElement).inert).toBe(false);
+  expect(update.canInput(p)).toBe(true);
+  expect(update.canInput("foreign-pane")).toBe(false);
   model.workspaces.get(w)!.projectDir = "/replaced";
+  expect(update.canInput(p)).toBe(false);
   const late = new KeyboardEvent("keydown", { key: "y", bubbles: true, cancelable: true });
   document.getElementById("terminal")!.dispatchEvent(late);
   expect(late.defaultPrevented).toBe(true);
@@ -123,4 +126,40 @@ it("rejects restored foreign focus before input and returns to the pinned pane",
   } finally {
     update.dispose();
   }
+});
+
+it("releases ordinary Soda after its validated destination, retaining no input fence or refocus", () => {
+  document.body.innerHTML = '<div id="app"><input id="terminal"></div>';
+  vi.spyOn(HTMLDialogElement.prototype,"showModal").mockImplementation(function(this:HTMLDialogElement){this.open=true;});
+  vi.spyOn(HTMLDialogElement.prototype,"close").mockImplementation(function(this:HTMLDialogElement){this.open=false;});
+  const model = {panes:new Map([[p,{id:p,tabId:"t",agent:{instanceId:a}} as Pane]]),tabs:new Map([["t",{id:"t",workspaceId:w} as Tab]]),workspaces:new Map([[w,{id:w,cwd:"/same",projectDir:"/same"} as Workspace]])};
+  const focus=vi.fn(), ready=vi.fn();
+  const update=assistantPanelGuard({model:()=>model,connected:()=>true,focus,ready},`#assistantPane=${p}&assistantWorkspace=${w}&assistantInstance=${a}`);
+  update();
+  expect(ready).toHaveBeenCalledTimes(1);
+  model.panes.clear();
+  update();
+  expect(focus).toHaveBeenCalledTimes(1);
+  const event=new KeyboardEvent("keydown",{key:"y",bubbles:true,cancelable:true});
+  document.getElementById("terminal")!.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  expect((document.getElementById("app") as HTMLElement).inert).toBe(false);
+  update.dispose();
+});
+
+it("rejects a delayed terminal write after its agent changes, even before another DOM event", async () => {
+  document.body.innerHTML = '<div id="app"></div>';
+  vi.spyOn(HTMLDialogElement.prototype,"showModal").mockImplementation(function(this:HTMLDialogElement){this.open=true;});
+  vi.spyOn(HTMLDialogElement.prototype,"close").mockImplementation(function(this:HTMLDialogElement){this.open=false;});
+  const pane={id:p,tabId:"t",agent:{instanceId:a}} as Pane;
+  const model={panes:new Map([[p,pane]]),tabs:new Map([["t",{id:"t",workspaceId:w} as Tab]]),workspaces:new Map([[w,{id:w,cwd:"/same",projectDir:"/same"} as Workspace]])};
+  const update=assistantPanelGuard({model:()=>model,connected:()=>true,focus:()=>{}},`#assistantPane=${p}&assistantWorkspace=${w}&assistantInstance=${a}`);
+  update();
+  expect(update.canInput(p)).toBe(true);
+  const send=vi.fn();
+  const delayed=Promise.resolve().then(()=>{if(update.canInput(p))send("late clipboard result");});
+  pane.agent={...pane.agent!,instanceId:w};
+  await delayed;
+  expect(send).not.toHaveBeenCalled();
+  update.dispose();
 });

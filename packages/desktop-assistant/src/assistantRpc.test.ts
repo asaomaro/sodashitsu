@@ -148,3 +148,23 @@ it("does not publish connected if reading the hello message exhausts the handsha
   expect(f.status).not.toHaveBeenCalledWith(true);
   expect(f.socket!.terminate).toHaveBeenCalledOnce();
 });
+it("allows cold CORE replies beyond the ordinary request deadline",async()=>{
+ const f=await fixture();f.ready();const pending=f.rpc.request('voice.call',{operation:'speakers',requestId:randomUUID()});const sent=f.socket!.sent.at(-1);
+ f.now(21000);f.socket!.message({id:sent.id,result:{kind:'json',value:[]}});
+ await expect(pending).resolves.toEqual({kind:'json',value:[]});
+});
+it("aborts speech RPC immediately and sends a scoped backend cancellation",async()=>{
+ const f=await fixture();f.ready();const abort=new AbortController(),requestId=randomUUID();
+ const pending=f.rpc.request('voice.call',{operation:'synthesize',text:'試聴',speaker:8,requestId},{signal:abort.signal});
+ const rejected=expect(pending).rejects.toThrow('停止');abort.abort();await rejected;
+ expect(f.socket!.sent.at(-1)).toMatchObject({method:'voice.cancel',params:{requestId}});
+ const count=f.socket!.sent.length;await expect(f.rpc.request('voice.call',{operation:'speakers'},{signal:abort.signal})).rejects.toBeTruthy();expect(f.socket!.sent).toHaveLength(count);
+});
+
+it("identifies the native form renderer as desktop when subscribing to questions",async()=>{
+ const f=await fixture({kind:"desktop"});f.ready();
+ expect(f.socket!.sent[0].params.kind).toBe("desktop");
+ const pending=f.rpc.request("ask.subscribe",{renderer:"assistant"});await Promise.resolve();
+ const packet=f.socket!.sent.at(-1);expect(packet.method).toBe("ask.subscribe");expect(packet.params).toEqual({renderer:"assistant"});
+ f.socket!.message({id:packet.id,result:{asks:[]}});await expect(pending).resolves.toEqual({asks:[]});
+});

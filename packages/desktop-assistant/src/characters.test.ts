@@ -69,3 +69,12 @@ it("rejects oversized and executable assets without launching an entry", () => {
   bundle.files[0].data = large.toString("base64");
   expect(() => characterPack(bundle)).toThrow("128KiB");
 });
+
+it("keeps a full yukkuri-work roster and source notes in private PNG storage",async()=>{
+ const dir=await mkdtemp(join(tmpdir(),"yukkuri-catalog-"));try{
+  const store=new Characters(join(dir,"characters.json"));await store.load();
+  await store.install({id:"yukkuri-work",name:"yukkuri-work",version:"1",characters:Array.from({length:57},(_,i)=>({id:`character-${i}`,name:`キャラクター${i}`,png,credit:"元の素材メモ"}))});
+  expect(store.list()).toHaveLength(57);expect(store.portrait("plugin:yukkuri-work/character-1")).toMatchObject({width:1,height:1,credit:"元の素材メモ"});
+  const reload=new Characters(join(dir,"characters.json"));await reload.load();expect(reload.list()).toHaveLength(57);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

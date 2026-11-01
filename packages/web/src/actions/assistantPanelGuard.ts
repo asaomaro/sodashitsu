@@ -1,4 +1,4 @@
-import { assistantPanelTarget, assistantPanelPane } from "./assistantPanelLink.js";
+import { assistantPanelTarget, assistantPanelPane, ordinaryAssistantUrl } from "./assistantPanelLink.js";
 import type { Pane, Tab, Workspace } from "@sodashitsu/protocol";
 export interface PanelPorts {
   focusedPane?(): string | null;
@@ -11,16 +11,19 @@ export interface PanelPorts {
   };
   connected(): boolean;
   focus(pane: Pane, tab: Tab): void;
+  /** Ordinary Soda releases the navigation guard after selecting its initial destination. */
+  ready?(target: NonNullable<ReturnType<typeof assistantPanelTarget>>): void;
 }
 /** Install before mount/connect/input controllers. Validate again synchronously on every input event. */
 export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
-  if (!hash.startsWith("#assistantPane=")) return Object.assign(() => {}, { dispose() {} });
+  if (!hash.startsWith("#assistantPane=")) return Object.assign(() => {}, { dispose() {}, canInput: (_paneId: string) => true });
   let target: ReturnType<typeof assistantPanelTarget> = null,
     applied = false,
     project: string | null | undefined,
     cwd: string | undefined;
   let dialog: HTMLDialogElement | null = null;
   let switching = false;
+  let released = false;
   const root = document.getElementById("app");
   if (root) root.inert = true;
   const block = (message: string) => {
@@ -36,8 +39,7 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     const normal = document.createElement("button");
     normal.textContent = "通常の操舵室を開く・ログイン";
     normal.onclick = () => {
-      location.hash = "";
-      location.reload();
+      location.replace(ordinaryAssistantUrl(location.href));
     };
     const close = document.createElement("button");
     close.textContent = "閉じる";
@@ -69,6 +71,7 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
     return { ...value, workspace };
   };
   const update = () => {
+    if (released) return;
     if (
       target &&
       ports.connected() &&
@@ -94,6 +97,11 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
       dialog?.remove();
       dialog = null;
       if (root) root.inert = false;
+      if (ports.ready && target) {
+        released = true;
+        for (const [name, listener] of listeners) document.removeEventListener(name, listener, true);
+        ports.ready(target);
+      }
     } catch (error) {
       block(error instanceof Error ? error.message : "通知の端末を確認できません。");
     }
@@ -127,6 +135,14 @@ export function assistantPanelGuard(ports: PanelPorts, hash = location.hash) {
   }
   block("通知の端末へ接続しています。");
   return Object.assign(update, {
+    // Also checked at the final socket write, after any clipboard/upload/InputGate await.
+    canInput(paneId: string): boolean {
+      if (released) return true;
+      try {
+        const { pane } = check();
+        return applied && pane.id === paneId && (!ports.focusedPane || ports.focusedPane() === pane.id);
+      } catch { return false; }
+    },
     dispose() {
       for (const [name, listener] of listeners) document.removeEventListener(name, listener, true);
       dialog?.close();

@@ -10,6 +10,11 @@ const Character = z
   .object({
     id,
     name: z.string().min(1).max(80),
+    credit: z.string().max(2000).optional(),
+    actorSignature: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     png: z
       .string()
       .max(180000)
@@ -39,7 +44,7 @@ const Pack = z
     characters: z
       .array(Character)
       .min(1)
-      .max(8)
+      .max(64)
       .refine((values) => new Set(values.map((value) => value.id)).size === values.length),
   })
   .strict();
@@ -49,7 +54,7 @@ const Catalog = z
   .refine(
     (packs) =>
       new Set(packs.map((pack) => pack.id)).size === packs.length &&
-      packs.reduce((sum, pack) => sum + pack.characters.length, 0) <= 32,
+      packs.reduce((sum, pack) => sum + pack.characters.length, 0) <= 128,
   );
 export type CharacterPack = z.infer<typeof Pack>;
 const MAX = 8 * 1024 * 1024;
@@ -115,13 +120,29 @@ export class Characters {
         id: `plugin:${pack.id}/${character.id}`,
         packId: pack.id,
         name: character.name,
+        ...(character.credit ? { credit: character.credit } : {}),
+        ...(character.actorSignature ? { actorSignature: character.actorSignature } : {}),
         uri: `data:image/png;base64,${character.png}`,
       })),
     );
   }
   portrait(id: string) {
-    return this.list().find((character) => character.id === id) ?? null;
+    const match = /^plugin:([^/]+)\/([^/]+)$/.exec(id);
+    if (!match) return null;
+    const pack = this.packs.find((p) => p.id === match[1]),
+      character = pack?.characters.find((c) => c.id === match[2]);
+    if (!pack || !character) return null;
+    return {
+      id,
+      packId: pack.id,
+      name: character.name,
+      uri: `data:image/png;base64,${character.png}`,
+      ...(character.credit ? { credit: character.credit } : {}),
+      ...(character.actorSignature ? { actorSignature: character.actorSignature } : {}),
+      ...pngSize(Buffer.from(character.png, "base64")),
+    };
   }
+
   install(input: CharacterPack) {
     const pack = Pack.parse(input);
     return this.change(() => [...this.packs.filter((old) => old.id !== pack.id), pack]);

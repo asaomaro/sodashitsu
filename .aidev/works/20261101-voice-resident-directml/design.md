@@ -1,0 +1,3 @@
+# 設計
+
+認証付きUnix socket/名前付きパイプをNodeが所有し、各SDK版のPython監視親と推論子をstdioで常駐させる。アシスタントは既存Soda RPCを通じて共用し、CORE HTTPは起動しない。WSLからWindows Pythonを起動する際はwslpathでパスを変換し、Python内から依存パスとUTF-8を設定する。GPU/AUTO/CPUをSDKへ渡す。Windowsの可変データはWindowsローカル保存先を使う。UNC保存先・Windows/Linux混在はロックが互換でないため拒否する。

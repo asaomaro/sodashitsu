@@ -1,3 +1,5 @@
+import {VoiceCoreCancelParams,VoiceCoreCallParams,type VoiceCoreResult} from "./voiceCore.js";
+import {ResourceAppReportParams,type ResourceMonitorSnapshot} from "./resourceMonitor.js";
 import { AssistantConversationParams, type AssistantConversationPage } from "./assistantConversation.js";
 import {AssistantSettingsGetParams,AssistantSettingsSetParams,type AssistantSettingsResult} from "./assistantSettings.js";
 import { UsageHistoryParams, type UsageHistory, UsageReportParams, type UsageReport } from "./usageAnalytics.js";
@@ -1594,6 +1596,9 @@ export const METHOD_SCHEMAS = {
   "assistant.app_open": AssistantAppOpenParams,
   "assistant.app_call": AssistantAppCallParams,
   "assistant.settings.get":AssistantSettingsGetParams,
+  "assistant.voice_core":AssistantSettingsGetParams,
+  "voice.call":VoiceCoreCallParams,
+  "voice.cancel":VoiceCoreCancelParams,
   "assistant.settings.set":AssistantSettingsSetParams,
   "assistant.reminders": AssistantSessionGetParams,
   "assistant.reminder_save": AssistantReminderSaveParams,
@@ -1678,6 +1683,9 @@ export const METHOD_SCHEMAS = {
   "graph.resume": GraphResumeParams,
   "graph.history": GraphHistoryParams,
   "server.resources": ServerStopParams,
+  "server.resource_monitor": ServerStopParams,
+  "server.resource_app_demand": ServerStopParams,
+  "server.resource_app_report": ResourceAppReportParams,
   "server.stop": ServerStopParams,
 } as const;
 
@@ -1802,6 +1810,9 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "assistant.adopt": AssistantSessionInfo;
   "assistant.cancel_image": Record<string, never>;
   "assistant.settings.get":AssistantSettingsResult;
+  "assistant.voice_core":{enabled:boolean;origin:string|null;transport?:"http"|"ipc"};
+  "voice.call":VoiceCoreResult;
+  "voice.cancel":{cancelled:boolean};
   "assistant.settings.set":AssistantSettingsResult;
   "assistant.audio_begin":{uploadId:string};
   "assistant.audio_chunk":Record<string,never>;
@@ -1870,6 +1881,9 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "graph.resume": Graph;
   "graph.history": GraphHistoryResult;
   "server.resources": import("./systemFooter.js").SystemResources;
+  "server.resource_monitor": ResourceMonitorSnapshot;
+  "server.resource_app_demand": {active:boolean};
+  "server.resource_app_report": Record<string,never>;
   "server.stop": Record<string, never>;
 }
 

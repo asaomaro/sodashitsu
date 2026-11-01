@@ -735,7 +735,7 @@ export const useViewStore = defineStore("view", () => {
 
   /** 画面を切り替える（デスクトップ）。1 列の画面では画面を持たない（基本画面のまま）。 */
   function setScreen(id: ScreenId): void {
-    if (mobileViewport.value && id !== "base" && id !== "schedule" && id !== "history" && id !== "connections") return;
+    if (mobileViewport.value && id !== "base" && id !== "schedule" && id !== "history" && id !== "connections" && id !== "resources") return;
     screen.value = id;
   }
 

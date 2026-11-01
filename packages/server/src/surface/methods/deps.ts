@@ -28,6 +28,8 @@ import type { LinkRun } from "@sodashitsu/protocol";
 
 /** 方式のハンドラが使う部品一式（architecture.md「surface/methods/*.ts」の依存）。 */
 export interface MethodDeps {
+  assistantPersona?:import("../../assistant/AssistantPersonaPrompts.js").AssistantPersonaPrompts;
+  assistantVoice?:Pick<import("../../voice/VoiceHost.js").VoiceHost,"endpoint">&Partial<Pick<import("../../voice/VoiceHost.js").VoiceHost,"call"|"cancel">>;
   assistantLaunch?:Pick<import("../../assistant/AssistantLaunchController.js").AssistantLaunchController,"status"|"setEnabled">;
   assistantAudio?:import("../../assistant/LazyAssistantAudio.js").AssistantAudioService;
   assistantSessions?: import("../../assistant/AssistantSessions.js").AssistantSessions;

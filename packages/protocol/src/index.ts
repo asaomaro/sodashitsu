@@ -94,3 +94,8 @@ export * from "./usageAnalytics.js";
 export * from "./assistantSettings.js";
 
 export * from "./assistantConversation.js";
+
+export * from "./assistantPersona.js";
+export {ASSISTANT_CHARACTER_PROFILE_SOURCE} from "./assistantCharacterProfiles.js";
+export * from "./resourceMonitor.js";
+export * from "./voiceCore.js";

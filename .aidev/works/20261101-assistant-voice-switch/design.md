@@ -1,0 +1,3 @@
+# 実装
+
+voiceFollowCharacter既定true、実話者metadataを名前で照合し同一人物の手動スタイルを保持。手動選択は追従off。試聴はdraftを厳密検証し発話単位のSpeakへ渡し永続値を変更しない。COREでは未使用外部URLを無視。権限は現行settings mainframeのみ。

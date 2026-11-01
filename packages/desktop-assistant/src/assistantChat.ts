@@ -10,6 +10,7 @@ import {
   AssistantConversationKind,
   AssistantLaunchSettings,
   AssistantAgentProfiles,
+  AssistantCharacterId,
   type AssistantSessionInfo,
   type ConversationMessage,
   type AssistantConversationPage,
@@ -97,13 +98,17 @@ export interface AssistantChatState {
   kinds: { kind: string; label: string; available: boolean }[];
   messages: ConversationMessage[];
   hint: string;
+  conversationSessionId?: string | null;
+  conversationCaughtUp?: boolean;
   launchProfiles?: ReturnType<typeof AssistantAgentProfiles.parse>;
 }
 
 /** Main owns the installation/target. Renderer supplies a revision and intended actor, never a pane. */
 export class AssistantChat {
   private profiles = AssistantAgentProfiles.parse({});
-  configure(profiles: unknown): void {
+  private characterId:string|undefined;
+  configure(profiles: unknown,characterId?:string): void {
+    this.characterId=characterId===undefined?undefined:AssistantCharacterId.parse(characterId);
     this.profiles = AssistantAgentProfiles.parse(profiles);
     this.publish();
   }
@@ -113,6 +118,7 @@ export class AssistantChat {
   private timer: ReturnType<typeof setInterval> | null = null;
   private cursor = 0;
   private conversationId: string | null = null;
+  private conversationCaughtUp = false;
   private state: AssistantChatState = {
     revision: 0,
     connected: false,
@@ -131,7 +137,7 @@ export class AssistantChat {
     this.state.revision = revision;
   }
   snapshot(): AssistantChatState {
-    return structuredClone({ ...this.state, launchProfiles: this.profiles });
+    return structuredClone({ ...this.state, conversationSessionId: this.conversationId, conversationCaughtUp: this.conversationCaughtUp, launchProfiles: this.profiles });
   }
   connection(connected: boolean): void {
     ++this.generation;
@@ -293,7 +299,7 @@ export class AssistantChat {
         signal.addEventListener("abort",cancel,{once:true});
         try {
           live();
-          await this.rpc.request("assistant.prompt", {deviceId:this.deviceId,instanceId:actor.instanceId,imageRequestId,ttlMs,
+          await this.rpc.request("assistant.prompt", {deviceId:this.deviceId,instanceId:actor.instanceId,imageRequestId,ttlMs,...(this.characterId?{characterId:this.characterId}:{}),
             text:`追加のOCRプログラムやAIサービスを起動せず、モデルの画像入力機能で次の画像ファイルを読み、写っている文字を転記してください。画像入力に対応しない場合は未対応と回答してください。読み取れない部分は推測せず明記してください。結果はこの会話に返してください。画像ファイル: ${JSON.stringify(path)}`});
         } catch (error) {cancel();throw error;}
         finally {clearTimeout(timer);signal.removeEventListener("abort",cancel);if(signal.aborted||performance.now()>=expires)cancel();await cancellation;}
@@ -344,7 +350,7 @@ export class AssistantChat {
       };
       signal.addEventListener("abort",cancel,{once:true});const timer=setTimeout(cancel,Math.max(1,expires-performance.now()));
       try {
-        live();const result=await this.rpc.request("assistant.audio_begin",{deviceId:this.deviceId,instanceId:actor.instanceId,mime:type,size:audio.length,ttlMs:Math.max(1,Math.floor(expires-performance.now()))});
+        live();const result=await this.rpc.request("assistant.audio_begin",{deviceId:this.deviceId,instanceId:actor.instanceId,mime:type,size:audio.length,...(this.characterId?{characterId:this.characterId}:{}),ttlMs:Math.max(1,Math.floor(expires-performance.now()))});
         uploadId=z.uuid().parse(result.uploadId);
         for(let offset=0;offset<audio.length;offset+=ASSISTANT_AUDIO_CHUNK_BYTES){live();await this.rpc.request("assistant.audio_chunk",{uploadId,offset,data:Buffer.from(audio.subarray(offset,offset+ASSISTANT_AUDIO_CHUNK_BYTES)).toString("base64")});}
         live();const receipt=z.object({sent:z.literal(true),turnId:z.string().min(1).max(128)}).parse(await this.rpc.request("assistant.audio_commit",{uploadId}));
@@ -368,6 +374,7 @@ export class AssistantChat {
         deviceId: this.deviceId,
         instanceId: request.instanceId,
         text: request.text,
+        ...(this.characterId?{characterId:this.characterId}:{}),
       });
     });
   }
@@ -400,6 +407,7 @@ export class AssistantChat {
       this.state.messages = [];
       this.cursor = 0;
       this.conversationId = null;
+      this.conversationCaughtUp = false;
     }
     this.state.session = info;
     this.state.hint = !info
@@ -419,6 +427,7 @@ export class AssistantChat {
     if (this.conversationId !== page.sessionId) {
       this.state.messages = [];
       this.conversationId = page.sessionId;
+      this.conversationCaughtUp = false;
       if (this.cursor > 0) {
         this.cursor = 0;
         return; // /clear can change the conversation while preserving the same detected actor.
@@ -428,6 +437,7 @@ export class AssistantChat {
     for (const message of page.messages) messages.set(message.id, message);
     this.state.messages = [...messages.values()].slice(-100);
     this.cursor = page.endOffset ?? page.nextOffset ?? this.cursor;
+    this.conversationCaughtUp = page.nextOffset === null;
   }
   private publish(): void {
     ++this.state.revision;

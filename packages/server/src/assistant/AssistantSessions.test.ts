@@ -851,3 +851,17 @@ it("rejects a stored reference without fresh evidence from the current actor",as
  f.session.getPane(info.paneId)!.agentSession={kind:"codex",sessionId:randomUUID(),reportedAt:Date.now()};
  expect(()=>f.manager.conversationTarget(device,agent.instanceId)).toThrow("会話ID");
 });
+
+it.each(["cancel","expires"])("does not send an image after %s while persona context is being prepared",async reason=>{
+ const f=await fixture(),{device,info,agent}=await f.ready(),surface=new ControlSurface(new MemoryLogger());
+ let release!:(value:string)=>void;const wrap=vi.fn(()=>new Promise<string>(resolve=>{release=resolve;}));
+ const deps={session:f.session,terminals:f.terminals,sizeAuthority:{noteInteraction(){}},assistantSessions:f.manager,assistantPersona:{wrap}} as unknown as MethodDeps;
+ registerAgentMethods(surface,deps);registerAssistantMethods(surface,deps);
+ const ctx={clientId:randomUUID(),sink:{} as never,connectionAuthorized:()=>true},requestId=randomUUID(),now=vi.spyOn(performance,"now").mockReturnValue(100);
+ try{
+  const pending=surface.invoke(ctx,"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"approved image",characterId:"captain-male",imageRequestId:requestId,ttlMs:1000});
+  await vi.waitFor(()=>expect(release).toBeTypeOf("function"));
+  if(reason==="cancel")expect(await surface.invoke(ctx,"assistant.cancel_image",{requestId})).toMatchObject({ok:true});else now.mockReturnValue(1101);
+  release("signed image instruction");expect(await pending).toMatchObject({ok:false});expect(f.hosts.get(info.paneId)!.writes).toEqual([]);
+ }finally{now.mockRestore();release?.("cleanup");}
+});

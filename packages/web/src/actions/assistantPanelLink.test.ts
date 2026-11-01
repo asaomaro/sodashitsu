@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { assistantPanelTarget, assistantPanelPane } from "./assistantPanelLink.js";
+import { assistantPanelTarget, assistantPanelPane, ordinaryAssistantUrl } from "./assistantPanelLink.js";
 import type { Pane, Tab } from "@sodashitsu/protocol";
 const paneId = "00000000-0000-4000-8000-000000000001",
   workspaceId = "00000000-0000-4000-8000-000000000002",
@@ -27,4 +27,8 @@ it("opens only its original workspace and instance", () => {
   pane.agent = { ...pane.agent!, instanceId };
   tab.workspaceId = paneId;
   expect(() => assistantPanelPane(target, panes, tabs)).toThrow("変更");
+});
+
+it("leaves compact response mode when returning to ordinary Soda/login", () => {
+  expect(ordinaryAssistantUrl("http://localhost:7780/?assistantView=reply&assistantNavigation=nonce&keep=1#assistantPane=stale")).toBe("http://localhost:7780/?keep=1");
 });

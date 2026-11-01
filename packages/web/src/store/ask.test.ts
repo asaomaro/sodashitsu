@@ -102,3 +102,22 @@ it("assistant form links show exactly the requested form, with no fallback after
     location.hash = old;
   }
 });
+
+it("ordinary Soda prefers the chosen question and returns to its queue after shared closure", () => {
+  setActivePinia(createPinia());
+  const s=useAskStore();
+  s.prefer("chosen");
+  s.replaceAll([ask("first"),ask("chosen")]);
+  expect(s.current?.askId).toBe("chosen");
+  s.remove("chosen");
+  expect(s.current?.askId).toBe("first");
+  s.prefer("stale");
+  s.replaceAll([ask("first")]);
+  expect(s.current?.askId).toBe("first");
+});
+
+it("keeps ordinary questions visible when a stale preferred link arrives after the initial snapshot",()=>{
+ setActivePinia(createPinia());const s=useAskStore();
+ s.replaceAll([ask("waiting")]);s.prefer("already-closed");expect(s.current?.askId).toBe("waiting");
+ s.add(ask("new-question"));expect(s.current?.askId).toBe("waiting");s.remove("waiting");expect(s.current?.askId).toBe("new-question");
+});

@@ -1,9 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { AssistantNotice, desktopAssistantOrigin } from "@sodashitsu/protocol";
+import {
+  AssistantNotice,
+  type AssistantSource,
+  desktopAssistantOrigin,
+} from "@sodashitsu/protocol";
 
 const Agent = z.object({
   instanceId: z.uuid(),
+  kind: z.string().max(128).optional(),
+  label: z.string().max(1024).optional(),
+  name: z.string().max(1024).optional(),
   state: z.enum(["blocked", "working", "idle", "unknown"]),
   completionSeq: z.number().int().nonnegative(),
   serverSeenSeq: z.number().int().nonnegative(),
@@ -19,9 +26,9 @@ const Pane = z.object({
 const Tab = z.object({ id: z.uuid(), workspaceId: z.uuid(), label: z.string().max(1024) });
 const Workspace = z.object({ id: z.uuid(), label: z.string().max(1024) });
 const Snapshot = z.object({
-  panes: z.array(Pane).max(4096),
-  tabs: z.array(Tab).max(4096),
-  workspaces: z.array(Workspace).max(4096),
+  panes: z.array(Pane.nullable().catch(null)).max(4096),
+  tabs: z.array(Tab.nullable().catch(null)).max(4096),
+  workspaces: z.array(Workspace.nullable().catch(null)).max(4096),
 });
 const Shared = z.object({
   notices: z
@@ -35,7 +42,60 @@ const Shared = z.object({
     .max(512),
 });
 const Question = z.object({ askId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), paneId: z.uuid() });
+const FormDetails = z.object({
+  spec: z.object({
+    title: z.string().max(8192),
+    questions: z.array(z.object({ label: z.string().max(16384) })).max(128),
+  }),
+});
+function clean(text: string, limit: number): string {
+  return text
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+export interface AssistantAgentRow {
+  source: AssistantSource;
+  title: string;
+  state: "blocked" | "working" | "idle" | "unknown";
+  since: number;
+}
+
+/** Active work first, with a bounded payload for the local renderer. */
+export function agentRoster(rows: readonly AssistantAgentRow[]) {
+  const priority = { working: 0, blocked: 1, idle: 2, unknown: 3 };
+  return {
+    agents: [...rows]
+      .sort(
+        (a, b) =>
+          priority[a.state] - priority[b.state] ||
+          a.title.localeCompare(b.title) ||
+          a.source.agentInstanceId.localeCompare(b.source.agentInstanceId),
+      )
+      .slice(0, 256),
+    total: rows.length,
+    working: rows.filter((row) => row.state === "working").length,
+    blocked: rows.filter((row) => row.state === "blocked").length,
+  };
+}
 type FeedPane = z.infer<typeof Pane>;
+
+/** A legacy/unusable entity must not disconnect notifications for every valid workspace. */
+function updateEntity<T extends { id: string }>(
+  items: Map<string, T>,
+  schema: z.ZodType<T>,
+  input: unknown,
+): void {
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    // Do not retain an older actionable source if the current entity can no longer be validated.
+    const identity = z.object({ id: z.uuid() }).safeParse(input);
+    if (identity.success) items.delete(identity.data.id);
+    return;
+  }
+  if (items.has(parsed.data.id) || items.size < 4096) items.set(parsed.data.id, parsed.data);
+}
 
 /** Read-only projection. Formatting notices never calls a model or writes to a terminal. */
 export class NoticeFeed {
@@ -64,15 +124,97 @@ export class NoticeFeed {
     this.origin = desktopAssistantOrigin(origin);
   }
 
+  get agents(): AssistantAgentRow[] {
+    if (!this.ready) return [];
+    const rows: AssistantAgentRow[] = [];
+    for (const pane of this.panes.values()) {
+      const tab = this.tabs.get(pane.tabId);
+      const workspace = tab && this.workspaces.get(tab.workspaceId);
+      if (!pane.agent || !workspace) continue;
+      rows.push({
+        source: {
+          serverOrigin: this.origin,
+          machineId: this.machineId,
+          workspaceId: workspace.id,
+          paneId: pane.id,
+          agentInstanceId: pane.agent.instanceId,
+        },
+        title: this.sourceTitle(pane, workspace),
+        state: pane.agent.state,
+        since: pane.agent.since,
+      });
+    }
+    return rows;
+  }
+
   get notices(): AssistantNotice[] {
     return structuredClone([...this.pending.values()]);
   }
 
+  /** Details are only applied to the still-current notice, never a replacement agent/turn. */
+  details(id: string, input: unknown): void {
+    this.prune();
+    const notice = [...this.pending.values()].find((n) => n.id === id);
+    if (!notice) return;
+    let content = "";
+    if (notice.kind === "question") {
+      const parsed = FormDetails.safeParse(input);
+      if (!parsed.success) return;
+      content = [parsed.data.spec.title, ...parsed.data.spec.questions.map((q) => q.label)]
+        .map((t) => clean(t, 180))
+        .filter(Boolean)
+        .join(" / ");
+    } else {
+      const parsed = z
+        .object({
+          nextOffset: z.null(),
+          messages: z
+            .array(z.object({ role: z.enum(["user", "assistant"]), text: z.string() }))
+            .max(4096),
+        })
+        .safeParse(input);
+      if (!parsed.success) return;
+      const latest = parsed.data.messages
+        .filter((m) => m.role === "assistant" && m.text.trim())
+        .at(-1);
+      if (!latest) return;
+      content = latest.text;
+    }
+    content = clean(content, 600);
+    if (!content) return;
+    const heading = notice.kind === "question" ? "質問内容" : "直近の応答";
+    const base = notice.message.split("\n")[0]!;
+    notice.message = `${base}\n${heading}：${content}`.slice(0, 1000);
+    this.changed(this.notices, false);
+  }
+
+  wantsDetails(notice: AssistantNotice): boolean {
+    if (notice.message.includes("\n")) return false;
+    if (notice.kind === "question") return true;
+    const kind = this.panes.get(notice.source.paneId)?.agent?.kind;
+    return kind === "claude" || kind === "codex";
+  }
+
+  private sourceTitle(pane: FeedPane, workspace: z.infer<typeof Workspace>): string {
+    const agent = pane.agent!;
+    const who = clean(agent.name || agent.label || agent.kind || pane.label || "エージェント", 64);
+    return `${who} (${agent.instanceId.slice(0, 8)}) / ${clean(workspace.label, 40)} / ${clean(pane.label || pane.title || "端末", 40)}`.slice(
+      0,
+      160,
+    );
+  }
+
   snapshot(input: unknown): void {
     const snapshot = Snapshot.parse(input);
-    this.panes = new Map(snapshot.panes.map((pane) => [pane.id, pane]));
-    this.tabs = new Map(snapshot.tabs.map((tab) => [tab.id, tab]));
-    this.workspaces = new Map(snapshot.workspaces.map((workspace) => [workspace.id, workspace]));
+    this.panes = new Map(
+      snapshot.panes.filter((pane) => pane !== null).map((pane) => [pane.id, pane]),
+    );
+    this.tabs = new Map(snapshot.tabs.filter((tab) => tab !== null).map((tab) => [tab.id, tab]));
+    this.workspaces = new Map(
+      snapshot.workspaces
+        .filter((workspace) => workspace !== null)
+        .map((workspace) => [workspace.id, workspace]),
+    );
     this.ready = false;
     this.asks.clear();
     this.closedAsks.clear();
@@ -105,6 +247,16 @@ export class NoticeFeed {
       ...this.asks,
     ]);
     this.refreshQuestions();
+    for (const ask of asks) {
+      const notice = this.pending.get(`ask:${ask.askId}`);
+      if (notice)
+        this.details(
+          notice.id,
+          (input as { asks: unknown[] }).asks.find(
+            (a) => Question.safeParse(a).data?.askId === ask.askId,
+          ),
+        );
+    }
   }
 
   private refreshQuestions(): void {
@@ -121,11 +273,7 @@ export class NoticeFeed {
       this.askSources.set(askId, signature);
       while (this.askSources.size > 512)
         this.askSources.delete(this.askSources.keys().next().value!);
-      const title =
-        `${workspace.label} / ${pane.label || pane.title || tab?.label || "エージェント"}`.slice(
-          0,
-          160,
-        );
+      const title = this.sourceTitle(pane, workspace);
       this.pending.set(
         key,
         AssistantNotice.parse({
@@ -176,39 +324,51 @@ export class NoticeFeed {
         return;
       case "pane.created":
       case "pane.updated": {
-        const { pane } = z.object({ pane: Pane }).parse(data);
-        if (this.panes.has(pane.id) || this.panes.size < 4096) this.panes.set(pane.id, pane);
+        updateEntity(this.panes, Pane, z.object({ pane: z.unknown() }).parse(data).pane);
         break;
       }
       case "pane.agent_status_changed": {
-        const update = z.object({ paneId: z.uuid(), agent: Agent.nullable() }).parse(data);
-        const pane = this.panes.get(update.paneId);
-        if (pane) this.panes.set(pane.id, { ...pane, agent: update.agent });
+        const update = z
+          .object({ paneId: z.uuid(), agent: Agent.nullable().catch(null) })
+          .safeParse(data);
+        if (!update.success) return;
+        const pane = this.panes.get(update.data.paneId);
+        if (pane) this.panes.set(pane.id, { ...pane, agent: update.data.agent });
         break;
       }
-      case "pane.closed":
-        this.panes.delete(z.object({ paneId: z.uuid() }).parse(data).paneId);
+      case "pane.closed": {
+        const closed = z.object({ paneId: z.uuid() }).safeParse(data);
+        if (!closed.success) return;
+        this.panes.delete(closed.data.paneId);
         break;
+      }
       case "tab.created":
       case "tab.updated":
       case "layout.updated": {
-        const { tab } = z.object({ tab: Tab }).parse(data);
-        if (this.tabs.has(tab.id) || this.tabs.size < 4096) this.tabs.set(tab.id, tab);
+        updateEntity(this.tabs, Tab, z.object({ tab: z.unknown() }).parse(data).tab);
         break;
       }
-      case "tab.closed":
-        this.tabs.delete(z.object({ tabId: z.uuid() }).parse(data).tabId);
+      case "tab.closed": {
+        const closed = z.object({ tabId: z.uuid() }).safeParse(data);
+        if (!closed.success) return;
+        this.tabs.delete(closed.data.tabId);
         break;
+      }
       case "workspace.created":
       case "workspace.updated": {
-        const { workspace } = z.object({ workspace: Workspace }).parse(data);
-        if (this.workspaces.has(workspace.id) || this.workspaces.size < 4096)
-          this.workspaces.set(workspace.id, workspace);
+        updateEntity(
+          this.workspaces,
+          Workspace,
+          z.object({ workspace: z.unknown() }).parse(data).workspace,
+        );
         break;
       }
-      case "workspace.closed":
-        this.workspaces.delete(z.object({ workspaceId: z.uuid() }).parse(data).workspaceId);
+      case "workspace.closed": {
+        const closed = z.object({ workspaceId: z.uuid() }).safeParse(data);
+        if (!closed.success) return;
+        this.workspaces.delete(closed.data.workspaceId);
         break;
+      }
       default:
         return;
     }
@@ -268,11 +428,7 @@ export class NoticeFeed {
     if (already || this.resolved.has(key)) return false;
     for (const [oldKey, old] of this.pending)
       if (old.source.paneId === pane.id && old.kind !== "question") this.pending.delete(oldKey);
-    const title =
-      `${workspace.label} / ${pane.label || pane.title || tab?.label || "エージェント"}`.slice(
-        0,
-        160,
-      );
+    const title = this.sourceTitle(pane, workspace);
     const notice = AssistantNotice.parse({
       id: randomUUID(),
       key,
@@ -286,7 +442,7 @@ export class NoticeFeed {
       },
       title,
       message: attention
-        ? `「${title}」から確認の依頼です。操舵室で内容を確認してください。`
+        ? `「${title}」から確認の依頼です。承認・入力待ちです。小窓か操舵室で確認してください。`
         : `「${title}」の作業が完了しました。`,
       at: this.now(),
     });

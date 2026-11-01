@@ -1,0 +1,11 @@
+engine-api-0.25.2.json is the OpenAPI schema produced by VOICEVOX ENGINE 0.25.2.
+Original source: https://github.com/VOICEVOX/voicevox_engine/tree/0.25.2
+The original licensing information is included in ENGINE-LICENSE.txt and
+LGPL-3.0.txt. The schema is shipped as editable JSON; all adapter Python source
+is shipped alongside it. This adapter directly uses VOICEVOX CORE and never
+launches VOICEVOX ENGINE or Docker. Character resources have their own policies
+and are installed separately with those policies preserved.
+The engine_frontend directory includes adapted VOICEVOX ENGINE 0.25.2 text
+frontend source, standard dictionary and text utility. Source URLs, hashes and
+adaptations are recorded in engine_frontend/SOURCE.json. CORE dataclass adapters
+replace Pydantic models; the full editable source and LGPL notices are included.

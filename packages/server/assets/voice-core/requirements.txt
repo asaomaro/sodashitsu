@@ -1,0 +1,7 @@
+numpy==2.2.6
+pyworld==0.3.5
+soxr==0.5.0.post1
+kanalizer==0.1.1
+setuptools==80.9.0
+pyopenjtalk @ git+https://github.com/VOICEVOX/pyopenjtalk.git@74703b034dd90a1f199f49bb70bf3b66b1728a86
+soundfile==0.13.1

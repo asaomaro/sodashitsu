@@ -15,28 +15,32 @@ export interface DisplayArea {
 export function characterBounds(
   preferences: DesktopAssistantPreferences,
   displays: readonly DisplayArea[],
+  aspect = 1,
 ): Rect {
   const display =
     displays.find((item) => item.id === preferences.position?.displayId) ?? displays[0];
   if (!display) throw new Error("表示できるディスプレイがありません");
   const area = display.workArea;
   const size = Math.max(1, Math.min(preferences.characterSize, area.width, area.height));
+  const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const width = Math.max(1, Math.round(size * Math.min(1, ratio))),
+    height = Math.max(1, Math.round(size / Math.max(1, ratio)));
   const position = display.id === preferences.position?.displayId ? preferences.position : null;
   return {
     x: Math.round(
       Math.max(
         area.x,
-        Math.min(position?.x ?? area.x + area.width - size - 16, area.x + area.width - size),
+        Math.min(position?.x ?? area.x + area.width - width, area.x + area.width - width),
       ),
     ),
     y: Math.round(
       Math.max(
         area.y,
-        Math.min(position?.y ?? area.y + area.height - size - 16, area.y + area.height - size),
+        Math.min(position?.y ?? area.y + area.height - height, area.y + area.height - height),
       ),
     ),
-    width: size,
-    height: size,
+    width,
+    height,
   };
 }
 
@@ -44,14 +48,56 @@ export function characterBounds(
 export function bubbleBounds(
   preferences: DesktopAssistantPreferences,
   displays: readonly DisplayArea[],
+  size: { width: number; height: number } = { width: 400, height: 640 },
+  aspect = 1,
+): Rect {
+  return anchoredBounds(
+    preferences,
+    displays,
+    Math.max(320, size.width),
+    Math.max(420, size.height),
+    aspect,
+  );
+}
+
+/** Place notices beside the character, below chat where possible, within the work area. */
+export function noticeBounds(
+  preferences: DesktopAssistantPreferences,
+  displays: readonly DisplayArea[],
+  aspect = 1,
+  conversation?: Rect,
+): Rect {
+  if (preferences.mode === "tray" && !conversation) return anchoredBounds(preferences, displays, 340, 220, aspect);
+  const display=displays.find(d=>d.id===preferences.position?.displayId)??displays[0];
+  if(!display)throw Error("表示できるディスプレイがありません");
+  const area=display.workArea,character=characterBounds(preferences,displays,aspect),width=Math.min(340,area.width);
+  const bottom=area.y+area.height,top=Math.max(character.y+4,conversation?conversation.y+conversation.height:area.y);
+  const room=bottom-top;
+  const height=Math.min(220,area.height,room>=160?room:220);
+  const clamp=(n:number,min:number,max:number)=>Math.max(min,Math.min(n,max));
+  let x=clamp(character.x+2-width,area.x,area.x+area.width-width);
+  const y=clamp(room>=160?top:character.y+(character.height-height)/2,area.y,bottom-height);
+  if(conversation&&x<conversation.x+conversation.width&&x+width>conversation.x&&y<conversation.y+conversation.height&&y+height>conversation.y&&conversation.x-width>=area.x)x=conversation.x-width;
+  return {x:Math.round(x),y:Math.round(y),width,height:Math.round(height)};
+}
+
+function anchoredBounds(
+  preferences: DesktopAssistantPreferences,
+  displays: readonly DisplayArea[],
+  requestedWidth: number,
+  requestedHeight: number,
+  aspect: number,
 ): Rect {
   const display =
     displays.find((display) => display.id === preferences.position?.displayId) ?? displays[0];
   if (!display) throw Error("表示できるディスプレイがありません");
   const area = display.workArea,
-    character = characterBounds(preferences, displays),
-    width = Math.min(400, area.width),
-    height = Math.min(640, area.height);
+    character = characterBounds(preferences, displays, aspect),
+    width = Math.min(requestedWidth, area.width),
+    height = Math.min(requestedHeight, area.height);
+  const headInset = 0;
+  // The tail tip (or compact notice edge) ends 8px above the window bottom; retain a 6px cap gap.
+  const panelBottom = character.y + headInset + 8 - 6;
   return {
     width,
     height,
@@ -64,7 +110,30 @@ export function bubbleBounds(
     y: Math.round(
       preferences.mode === "tray"
         ? area.y + area.height - height
-        : Math.max(area.y, Math.min(character.y - height - 12, area.y + area.height - height)),
+        : Math.max(area.y, Math.min(panelBottom - height, area.y + area.height - height)),
     ),
   };
+}
+
+export const BUBBLE_RESIZE_HANDLES = ["n", "w", "nw"] as const;
+export type BubbleResizeHandle = (typeof BUBBLE_RESIZE_HANDLES)[number];
+
+/** Resize from the top/left only, preserving the right and bottom anchors. */
+export function resizeBubbleBounds(
+  start: Rect,
+  handle: BubbleResizeHandle,
+  dx: number,
+  dy: number,
+  area: Rect,
+): Rect {
+  const minWidth = Math.min(320, area.width),
+    minHeight = Math.min(420, area.height);
+  let left = start.x,
+    right = start.x + start.width,
+    top = start.y,
+    bottom = start.y + start.height;
+  const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(n, max));
+  if (handle.includes("w")) left = clamp(start.x + Math.round(dx), area.x, right - minWidth);
+  if (handle.includes("n")) top = clamp(start.y + Math.round(dy), area.y, bottom - minHeight);
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }

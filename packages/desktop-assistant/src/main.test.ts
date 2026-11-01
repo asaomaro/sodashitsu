@@ -1,11 +1,12 @@
 import { EventEmitter } from "node:events";
 import { createHash,randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  nextLoad:null as null|(()=>Promise<void>),
   audioRead:null as null|((path:string,signal?:AbortSignal)=>Promise<import("./transcription.js").AudioFile>),
   displayRequests: new Map<string, (request: any, callback: (value: any) => void) => void>(),
   permissionChecks: new Map<string, (...args: any[]) => boolean>(),
@@ -46,6 +47,8 @@ const fixture = vi.hoisted(() => ({
   fullscreenQuery: vi.fn(async () => false),
   quit: vi.fn(),
   startup: vi.fn(),
+  speech:vi.fn(async (_text:string,_signal:AbortSignal)=>{}),
+  wavPlay:vi.fn(async()=>{}),
 }));
 class MockWindow extends EventEmitter {
   destroyed = false;
@@ -55,6 +58,7 @@ class MockWindow extends EventEmitter {
     id: fixture.windows.length + 1,
     mainFrame: { url: "" },
     setWindowOpenHandler: vi.fn(),
+    invalidate:vi.fn(),
     send: vi.fn(),
   });
   constructor(readonly options: Record<string, unknown>) {
@@ -65,7 +69,9 @@ class MockWindow extends EventEmitter {
     this.url = url;
     this.webContents.mainFrame.url = url;
     queueMicrotask(() => this.emit("ready-to-show"));
+    const delayed=fixture.nextLoad;fixture.nextLoad=null;if(delayed)await delayed();
   }
+  close(){this.destroy();}
   isDestroyed() {
     return this.destroyed;
   }
@@ -74,7 +80,11 @@ class MockWindow extends EventEmitter {
     this.visible = false;
     this.emit("closed");
   }
-  setBounds = vi.fn();
+  bounds = {x:0,y:0,width:400,height:640};
+  getBounds = () => ({...this.bounds});
+  setBounds = vi.fn((value: typeof this.bounds) => {this.bounds={...value};});
+  isMinimized(){return false;}
+  restore=vi.fn();
   isVisible() {
     return this.visible;
   }
@@ -90,9 +100,16 @@ class MockWindow extends EventEmitter {
     this.emit("hide");
   });
 }
+vi.mock("./voicevox.js",async importOriginal=>{
+ const actual=await importOriginal<typeof import("./voicevox.js")>();
+ return {...actual,playWav:fixture.wavPlay,voicevoxSpeak:(settings:Parameters<typeof actual.voicevoxSpeak>[0])=>actual.voicevoxSpeak(settings,fixture.wavPlay)};
+});
+vi.mock("./voice.js",async importOriginal=>({...await importOriginal<typeof import("./voice.js")>(),nativeSpeak:()=>fixture.speech}));
 vi.mock("electron", () => ({
   app: Object.assign(new EventEmitter(), {
     setName: vi.fn(),
+    setAppUserModelId:vi.fn(),
+    disableHardwareAcceleration:vi.fn(),
     requestSingleInstanceLock: () => true,
     whenReady: async () => {},
     getPath: () => fixture.directory,
@@ -132,10 +149,14 @@ vi.mock("electron", () => ({
       fixture.handlers.set(name, handler),
   },
   Menu: { buildFromTemplate: (items: unknown) => items },
-  nativeImage: { createFromPath: (path: string) => path },
+  nativeImage: { createFromPath: (path: string) => path,createFromBuffer:(bytes:Buffer)=>{
+    const cropped={getSize:()=>({width:1,height:1}),resize:()=>({toPNG:()=>bytes})};
+    return {isEmpty:()=>false,getSize:()=>({width:1,height:1}),toBitmap:()=>Buffer.from([0,0,0,255]),crop:()=>cropped};
+  } },
   protocol: { registerSchemesAsPrivileged: vi.fn() },
   screen: Object.assign(new EventEmitter(), {
     getAllDisplays: () => [{ id: 1, workArea: { x: 0, y: 0, width: 1920, height: 1040 } }],
+    getCursorScreenPoint: vi.fn(() => ({x:0,y:0})),
     getPrimaryDisplay: () => ({ id: 1, workArea: { x: 0, y: 0, width: 1920, height: 1040 } }),
   }),
   session: {
@@ -363,7 +384,7 @@ it("uses a focusable local bubble for user chat and closes it when disabled", as
   expect(updatedBubble.isDestroyed()).toBe(true);
 });
 
-it("delivers a verbal notice through an inactive bubble and obeys mute", async () => {
+it("delivers a compact notification without opening chat and obeys mute", async () => {
   const settings = fixture.windows[0]!;
   const event = { sender: settings.webContents, senderFrame: settings.webContents.mainFrame };
   await fixture.handlers.get("assistant:save")!(event, {
@@ -377,14 +398,12 @@ it("delivers a verbal notice through an inactive bubble and obeys mute", async (
   const bubble = fixture.windows.at(-1)!;
   await vi.waitFor(() => expect(bubble.showInactive).toHaveBeenCalledOnce());
   expect(bubble.focus).not.toHaveBeenCalled();
-  expect(bubble.webContents.send).toHaveBeenCalledWith(
-    "assistant:inbox-changed",
-    expect.objectContaining({ notices: [notice] }),
-  );
+  expect(bubble.url).toBe("soda-assistant://app/notice.html");
   const bubbleEvent = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
-  expect(await fixture.handlers.get("assistant:inbox")!(bubbleEvent)).toMatchObject({
-    notices: [notice],
-  });
+  expect(await fixture.handlers.get("assistant:notice-state")!(bubbleEvent)).toMatchObject({message:notice.message});
+  await expect(fixture.handlers.get("assistant:inbox")!(bubbleEvent)).rejects.toThrow("許可");
+  connection.options.changed([{...notice,message:"詳しい完了内容"}],false);
+  expect(bubble.webContents.send).toHaveBeenCalledWith("assistant:notice-changed",expect.objectContaining({message:"詳しい完了内容"}));
   await expect(fixture.handlers.get("assistant:inbox")!(event)).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   expect(connection.stop).toHaveBeenCalledOnce();
@@ -647,6 +666,7 @@ it("does not open a source panel after its original bubble is hidden", async () 
     at: 1,
   };
   fixture.connections.at(-1)!.options.changed([notice], true);
+  await fixture.handlers.get("assistant:chat")!(event);
   const bubble = fixture.windows.at(-1)!;
   await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
   let finish!: (value: unknown) => void;
@@ -702,6 +722,7 @@ it("handles failed retarget navigation and can return explicitly to ordinary Sod
     at: 1,
   };
   fixture.connections.at(-1)!.options.changed([notice], true);
+  await fixture.handlers.get("assistant:chat")!(event);
   const bubble = fixture.windows.at(-1)!;
   await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
   fixture.controls.at(-1)!.request.mockImplementation(async () => ({
@@ -931,6 +952,7 @@ it("imports only previewed PNG assets and falls back immediately when character 
   });
   expect(await fixture.handlers.get("assistant:character-info")!(event)).toEqual({
     name: "追加の船長",
+    greeting:"こんにちは。操舵室の船長です。",
     uri: `data:image/png;base64,${png}`,
   });
   await fixture.handlers.get("assistant:chat")!(event);
@@ -944,7 +966,7 @@ it("imports only previewed PNG assets and falls back immediately when character 
   });
   expect(bubble.isDestroyed()).toBe(true);
   expect(await fixture.handlers.get("assistant:character-info")!(event)).toMatchObject({
-    uri: "soda-assistant://app/captain-female.svg",
+    uri: "soda-assistant://app/captain-female.png",
   });
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   await fixture.handlers.get("assistant:character-pack-remove")!(event, { id: "custom" });
@@ -1000,6 +1022,7 @@ it("routes a remote notice reply through its registered machine and revokes it w
     agent: { instanceId: notice.source.agentInstanceId },
   }));
   connection.options.changed([notice], true);
+  await fixture.handlers.get("assistant:chat")!(event);
   const bubble = fixture.windows.at(-1)!;
   await vi.waitFor(() => expect(bubble.isVisible()).toBe(true));
   const local = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
@@ -1166,4 +1189,431 @@ it.each(["hide","minimize","navigation"])("cancels a file audio read before mode
   if(lifecycle==="hide")bubble.hide();else if(lifecycle==="minimize")bubble.emit("minimize");else bubble.webContents.emit("did-start-navigation",{},"soda-assistant://app/bubble.html",false,true);
   release();await job;expect(control.request.mock.calls.some(call=>call[0]==="assistant.audio_begin")).toBe(false);
  }finally{release?.();fixture.audioRead=null;await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});
+
+
+it("opens a separate response window and focuses the existing full Soda window by explicit choice", async () => {
+  const settings = fixture.windows[0]!, event = {sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+  await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:false,mode:"tray"});
+  await fixture.handlers.get("assistant:open")!(event);
+  const full = fixture.windows.at(-1)!;
+  const notice = {id:"00000000-0000-4000-8000-000000000091",key:"ask:response-choice",kind:"question",title:"worker",message:"確認してください",at:1,
+    source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:"00000000-0000-4000-8000-000000000001",workspaceId:"00000000-0000-4000-8000-000000000002",agentInstanceId:"00000000-0000-4000-8000-000000000003"}};
+  fixture.connections.at(-1)!.options.changed([notice],true);
+  await fixture.handlers.get("assistant:chat")!(event);
+  const bubble = fixture.windows.at(-1)!;
+  await vi.waitFor(()=>expect(bubble.isVisible()).toBe(true));
+  fixture.controls.at(-1)!.request.mockImplementation(async()=>({paneId:notice.source.paneId,workspaceId:notice.source.workspaceId,agent:{instanceId:notice.source.agentInstanceId}}));
+  const local = {sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
+  const fullFocus = full.focus.mock.calls.length;
+  await fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id,destination:"reply"});
+  const reply = fixture.windows.at(-1)!;
+  expect(reply).not.toBe(full);
+  expect(new URL(reply.url).searchParams.get("assistantView")).toBe("reply");
+  expect(new URLSearchParams(new URL(reply.url).hash.slice(1)).get("assistantAsk")).toBe("response-choice");
+  expect(reply.options.webPreferences).toMatchObject({sandbox:true,nodeIntegration:false,contextIsolation:true});
+  expect(reply.options.webPreferences).not.toHaveProperty("preload");
+  expect(full.url).toBe("http://127.0.0.1:7780/");
+  expect(full.focus).toHaveBeenCalledTimes(fullFocus);
+  const count = fixture.windows.length;
+  await fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id,destination:"main"});
+  expect(fixture.windows.length).toBe(count);
+  expect(new URL(full.url).searchParams.get("assistantView")).toBe("main");
+  expect(full.focus).toHaveBeenCalledTimes(fullFocus+1);
+  expect(reply.isDestroyed()).toBe(false);
+  await expect(fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id,destination:"external"})).rejects.toThrow();
+  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+  expect(reply.isDestroyed()).toBe(true);
+});
+
+
+it("uses the actual primary work area for automatic bottom-right placement even when enumerated second", async () => {
+  const {screen}=await import("electron");
+  const displays=vi.spyOn(screen,"getAllDisplays").mockReturnValue([
+    {id:2,workArea:{x:-1280,y:0,width:1280,height:960}},
+    {id:1,workArea:{x:0,y:0,width:1920,height:1040}},
+  ] as never);
+  const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+  try{
+    await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",position:null,characterSize:192,quietFullscreen:false});
+    const character=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;
+    expect(character.setBounds).toHaveBeenLastCalledWith({x:1828,y:848,width:92,height:192});
+  }finally{
+    displays.mockRestore();
+    await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+  }
+});
+
+
+it("resizes only the current visible bubble from the native cursor, retains size, and rejects stale gestures", async () => {
+  const {screen}=await import("electron");
+  const cursor=vi.spyOn(screen,"getCursorScreenPoint").mockReturnValue({x:100,y:100});
+  const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+  try{
+    await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+    await fixture.handlers.get("assistant:chat")!(event);
+    const bubble=fixture.windows.at(-1)!,local={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
+    const original=bubble.getBounds();
+    await expect(fixture.handlers.get("assistant:resize-start")!(event,{handle:"nw"})).rejects.toThrow("許可");
+    for(const handle of ["s","e","ne","se","sw"])await expect(fixture.handlers.get("assistant:resize-start")!(local,{handle})).rejects.toThrow();
+    const {token}=await fixture.handlers.get("assistant:resize-start")!(local,{handle:"nw"}) as {token:string};
+    cursor.mockReturnValue({x:60,y:40});
+    await fixture.handlers.get("assistant:resize-move")!(local,{token});
+    expect(bubble.getBounds()).toEqual({x:original.x-40,y:original.y-60,width:original.width+40,height:original.height+60});
+    await fixture.handlers.get("assistant:resize-end")!(local,{token});
+    await expect(fixture.handlers.get("assistant:resize-move")!(local,{token})).rejects.toThrow("開始し直して");
+    const again=await fixture.handlers.get("assistant:resize-start")!(local,{handle:"n"}) as {token:string};
+    bubble.hide();
+    await expect(fixture.handlers.get("assistant:resize-move")!(local,again)).rejects.toThrow("吹き出し");
+    bubble.destroy();await fixture.handlers.get("assistant:chat")!(event);
+    const reopened=fixture.windows.at(-1)!;
+    expect(reopened.getBounds()).toMatchObject({width:original.width+40,height:original.height+60});
+  }finally{cursor.mockRestore();await fixture.handlers.get("assistant:save")!(event,{enabled:false});}
+});
+
+
+it("toggles the bubble on repeated captain clicks and preserves it without ending the session", async () => {
+  const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+  await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false});
+  const character=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;
+  const click={sender:character.webContents,senderFrame:character.webContents.mainFrame};
+  await fixture.handlers.get("assistant:chat")!(click);
+  const bubble=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(bubble.isVisible()).toBe(true));
+  const count=fixture.windows.length;
+  await fixture.handlers.get("assistant:chat")!(click);
+  expect(bubble.isVisible()).toBe(false);expect(bubble.isDestroyed()).toBe(false);
+  await fixture.handlers.get("assistant:chat")!(click);
+  expect(bubble.isVisible()).toBe(true);expect(fixture.windows.length).toBe(count);
+  await fixture.handlers.get("assistant:chat")!(event);
+  expect(bubble.isVisible()).toBe(true);
+  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("opens the exact notice in chat, keeps compact notices beside chat, and dismisses only matching notices", async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:false,mode:"tray"});
+ const connection=fixture.connections.at(-1)!;
+ const first={id:"compact-first",title:"実装担当",message:"質問の内容",at:1};
+ connection.options.changed([first],true);
+ const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
+ expect(compact.url).toContain("/notice.html");expect(compact.getBounds().height).toBe(220);
+ const click={sender:compact.webContents,senderFrame:compact.webContents.mainFrame};
+ await fixture.handlers.get("assistant:notice-open")!(click,{revision:(await fixture.handlers.get("assistant:notice-state")!(click) as any).revision});
+ expect(compact.isDestroyed()).toBe(true);
+ const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
+ expect(chat.url).toContain("/bubble.html");const count=fixture.windows.length;
+ connection.options.changed([{...first,id:"second",at:2}],true);
+ expect(fixture.windows.length).toBe(count+1);
+ const second=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(second.isVisible()).toBe(true));
+ const local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
+ const secondEvent={sender:second.webContents,senderFrame:second.webContents.mainFrame};
+ const stale=(await fixture.handlers.get("assistant:notice-state")!(secondEvent) as any).revision;
+ connection.options.changed([{...first,id:"second",message:"新しい詳細",at:2}],false);
+ await fixture.handlers.get("assistant:notice-dismiss")!(secondEvent,{revision:stale});expect(second.isDestroyed()).toBe(false);
+ await fixture.handlers.get("assistant:notice-open")!(secondEvent,{revision:stale});expect(second.isDestroyed()).toBe(false);
+ expect(await fixture.handlers.get("assistant:inbox")!(local)).toMatchObject({focusedNoticeId:first.id});
+ // Opening chat and reading an older notice must not discard a newer notification.
+ await fixture.handlers.get("assistant:chat")!(event);expect(second.isDestroyed()).toBe(false);
+ connection.options.changed([first,{...first,id:"second",at:2}],false);
+ await fixture.handlers.get("assistant:notice-read")!(local,{noticeId:first.id});expect(second.isDestroyed()).toBe(false);
+ await fixture.handlers.get("assistant:notice-read")!(local,{noticeId:"second"});expect(second.isDestroyed()).toBe(true);
+ await fixture.handlers.get("assistant:hide")!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame});
+ connection.options.changed([{...first,id:"third",at:3}],true);
+ const third=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(third.isVisible()).toBe(true));
+ const thirdEvent={sender:third.webContents,senderFrame:third.webContents.mainFrame};
+ await fixture.handlers.get("assistant:notice-dismiss")!(thirdEvent,{revision:(await fixture.handlers.get("assistant:notice-state")!(thirdEvent) as any).revision});
+ expect(third.isDestroyed()).toBe(true);expect(chat.isVisible()).toBe(false);
+ await fixture.handlers.get("assistant:chat")!(event);
+ expect(await fixture.handlers.get("assistant:inbox")!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame})).toMatchObject({notices:[{id:"third"}]});
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+it("keeps newer notifications when an older reply completes and retains failed replies",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:false,mode:"character"});
+ await fixture.handlers.get("assistant:chat")!(event);
+ const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
+ const local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame},connection=fixture.connections.at(-1)!,rpc=fixture.controls.at(-1)!;
+ const first={id:"00000000-0000-4000-8000-000000000171",key:"attention:first",kind:"attention",title:"担当",message:"確認",at:1,
+  source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:"00000000-0000-4000-8000-000000000001",workspaceId:"00000000-0000-4000-8000-000000000002",agentInstanceId:"00000000-0000-4000-8000-000000000003"}};
+ connection.options.changed([first],true);const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
+ rpc.request.mockRejectedValueOnce(Error("送信失敗"));
+ await expect(fixture.handlers.get("assistant:source-reply")!(local,{noticeId:first.id,text:"返答"})).rejects.toThrow("送信失敗");expect(compact.isDestroyed()).toBe(false);
+ let finish!:(value:unknown)=>void;rpc.request.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const pending=fixture.handlers.get("assistant:source-reply")!(local,{noticeId:first.id,text:"返答"});
+ const second={...first,id:"00000000-0000-4000-8000-000000000172",at:2};connection.options.changed([first,second],true);
+ finish({ok:true});await pending;expect(compact.isDestroyed()).toBe(false);
+ rpc.request.mockResolvedValueOnce({ok:true});await fixture.handlers.get("assistant:source-reply")!(local,{noticeId:second.id,text:"新しい通知への返答"});expect(compact.isDestroyed()).toBe(true);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+it("does not reopen an acknowledged notification after a delayed fullscreen check",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:true,mode:"character",voiceEnabled:false});
+ let finish!:(value:boolean)=>void;fixture.fullscreenQuery.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const item={id:"ack-before-display",title:"担当",message:"確認",at:1};fixture.connections.at(-1)!.options.changed([item],true);
+ await vi.waitFor(()=>expect(finish).toBeTypeOf("function"));
+ await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
+ await fixture.handlers.get("assistant:notice-read")!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame},{noticeId:item.id});
+ const count=fixture.windows.length;finish(false);await Promise.resolve();await Promise.resolve();expect(fixture.windows.length).toBe(count);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+it("retires compact notifications when their source resolves or the screen locks",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:false,mode:"tray"});
+ const connection=fixture.connections.at(-1)!;
+ connection.options.changed([{id:"expired",title:"確認担当",message:"確認待ち",at:1}],true);
+ const first=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(first.isVisible()).toBe(true));
+ connection.options.changed([],false);expect(first.isDestroyed()).toBe(true);
+ connection.options.changed([{id:"lock",title:"確認担当",message:"確認待ち",at:2}],true);
+ const locked=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(locked.isVisible()).toBe(true));
+ const {powerMonitor}=await import("electron");powerMonitor.emit("lock-screen");expect(locked.isDestroyed()).toBe(true);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("persists the voice toggle, speaks explicit samples and new notifications, and stops when off",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,voiceEnabled:true,quietFullscreen:false,mode:"tray"});
+ expect(await fixture.handlers.get("assistant:read")!(event)).toMatchObject({voiceEnabled:true});
+ await fixture.handlers.get("assistant:voice-test")!(event);
+ await vi.waitFor(()=>expect(fixture.speech).toHaveBeenCalled());
+ expect(fixture.speech.mock.calls.at(-1)![0]).toContain("操舵室の船長");
+ const before=fixture.speech.mock.calls.length;
+ fixture.connections.at(-1)!.options.changed([{id:"voiced",title:"実装担当",message:"確認してください",at:1}],true);
+ await vi.waitFor(()=>expect(fixture.speech.mock.calls.length).toBeGreaterThan(before));
+ expect(fixture.speech.mock.calls.at(-1)![0]).toContain("実装担当");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,voiceEnabled:false,quietFullscreen:false,mode:"tray"});
+ const count=fixture.speech.mock.calls.length;
+ fixture.connections.at(-1)!.options.changed([{id:"silent",title:"実装担当",message:"確認してください",at:2}],true);
+ expect(fixture.speech.mock.calls.length).toBe(count);
+ await expect(fixture.handlers.get("assistant:voice-test")!(event)).rejects.toThrow("オン");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("does not start speech after stop while a fullscreen policy read is pending",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,voiceEnabled:true,quietFullscreen:true,mode:"tray"});
+ let finish!:(value:boolean)=>void;fixture.fullscreenQuery.mockImplementationOnce(()=>new Promise<boolean>(resolve=>{finish=resolve;}));
+ const count=fixture.speech.mock.calls.length;
+ fixture.connections.at(-1)!.options.changed([{id:"delayed-voice",title:"実装担当",message:"確認してください",at:1}],true);
+ await vi.waitFor(()=>expect(finish).toBeTypeOf("function"));
+ await fixture.handlers.get("assistant:voice-stop")!(event);finish(false);
+ await new Promise(resolve=>setImmediate(resolve));await new Promise(resolve=>setImmediate(resolve));
+ expect(fixture.speech.mock.calls.length).toBe(count);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("previews yukkuri-work folder artwork and imports only after explicit confirmation",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ const root=join(fixture.directory,"yukkuri-source");await mkdir(join(root,"chars","zundamon"),{recursive:true});
+ await writeFile(join(root,"casts.json"),JSON.stringify({zundamon:{name:"ずんだもん"}}));
+ await writeFile(join(root,"chars","zundamon","normal.png"),Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=","base64"));
+ await mkdir(join(root,"chars","zundamon","sprite"));
+ await writeFile(join(root,"chars","zundamon","sprite","aaaaaaaaaaaa.png"),Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=","base64"));
+ await writeFile(join(root,"chars","zundamon","sprite.json"),JSON.stringify({w:1,h:1,poses:{"":{base:"aaaaaaaaaaaa",faces:{normal:{blink:["aaaaaaaaaaaa",0,0]}}}}}));
+ const {dialog}=await import("electron");vi.mocked(dialog.showOpenDialog).mockResolvedValueOnce({canceled:false,filePaths:[root]});
+ const preview=await fixture.handlers.get("assistant:yukkuri-characters-preview")!(event) as any;
+ expect(preview.animationCount).toBe(1);expect(preview.characters).toHaveLength(1);expect(preview.characters[0].name).toBe("ずんだもん");
+ const before=await fixture.handlers.get("assistant:character-list")!(event) as any;
+ expect(before.characters.some((c:any)=>c.id==="plugin:yukkuri-work/zundamon")).toBe(false);
+ await fixture.handlers.get("assistant:character-pack-import")!(event,{token:preview.token});
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false,allowPluginCharacters:true,characterId:"plugin:yukkuri-work/zundamon"});
+ expect(await fixture.handlers.get("assistant:character-info")!(event)).toMatchObject({name:"ずんだもん"});
+ const character=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;
+ expect(await fixture.handlers.get("assistant:character-actor")!({sender:character.webContents,senderFrame:character.webContents.mainFrame})).toMatchObject({id:"plugin:yukkuri-work/zundamon"});
+ await expect(fixture.handlers.get("assistant:character-actor")!(event)).rejects.toThrow("許可");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false,characterId:"captain-female"});
+ await fixture.handlers.get("assistant:character-pack-remove")!(event,{id:"yukkuri-work"});
+});
+
+it("publishes only character motion state for notices, speech, reduced motion and screen lock",async()=>{
+ const {powerMonitor}=await import("electron");powerMonitor.emit("unlock-screen");
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false,voiceEnabled:false,reducedMotion:false});
+ let char=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;
+ let owner={sender:char.webContents,senderFrame:char.webContents.mainFrame};
+ const state=await fixture.handlers.get("assistant:character-state")!(owner) as any;
+ expect(state).toMatchObject({mode:"idle",paused:false,reducedMotion:false});
+ await expect(fixture.handlers.get("assistant:character-state")!(event)).rejects.toThrow("許可");
+ fixture.connections.at(-1)!.options.changed([{id:"motion-notice",title:"作業担当",message:"確認",at:1}],true);
+ expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({notificationSeq:state.notificationSeq+1});
+ powerMonitor.emit("lock-screen");
+ expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({paused:true});
+ powerMonitor.emit("unlock-screen");
+ expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({paused:false});
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false,voiceEnabled:true,reducedMotion:true});
+ char=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;owner={sender:char.webContents,senderFrame:char.webContents.mainFrame};
+ let finish!:()=>void;fixture.speech.mockImplementationOnce(()=>new Promise<void>(resolve=>{finish=resolve;}));
+ await fixture.handlers.get("assistant:voice-test")!(event);
+ expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({mode:"speaking",reducedMotion:true});
+ finish();await vi.waitFor(async()=>expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({mode:"idle"}));
+ expect(char.webContents.send).toHaveBeenCalledWith("assistant:character-state-changed",expect.objectContaining({mode:"speaking"}));
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("exposes explicit per-app motion preference while preserving the default OS preference",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",followSystemMotion:false,reducedMotion:false,idleFloating:true});
+ const char=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;
+ expect(await fixture.handlers.get("assistant:character-state")!({sender:char.webContents,senderFrame:char.webContents.mainFrame})).toMatchObject({followSystemMotion:false,reducedMotion:false,idleFloating:true});
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+ expect(await fixture.handlers.get("assistant:read")!(event)).toMatchObject({followSystemMotion:true});
+});
+it("keeps the framed portrait anchor while saving preferences at a manual position",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",characterId:"captain-female",characterSize:192,quietFullscreen:false,position:{displayId:"1",x:1000,y:800}});
+ await fixture.handlers.get("assistant:chat")!(event);
+ const bubble=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/bubble.html")).at(-1)!;
+ const before=bubble.setBounds.mock.calls.at(-1)![0];
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",characterId:"captain-female",characterSize:192,quietFullscreen:false,iconRotation:false,position:{displayId:"1",x:1000,y:800}});
+ expect(bubble.setBounds.mock.calls.at(-1)![0]).toEqual(before);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("opens reusable tools separately, transfers drafts without sending, and revokes media on close",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false,transcriptionEnabled:true,transcriptionProvider:"local",ocrEnabled:true});
+ await fixture.handlers.get("assistant:chat")!(event);const bubble=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(bubble.isVisible()).toBe(true));
+ const chat={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
+ await fixture.handlers.get("assistant:tools-open")!(chat);const tools=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));
+ const local={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};
+ expect(tools.url).toBe("soda-assistant://app/tools.html");expect(tools.options).toMatchObject({show:true,frame:true,resizable:true,transparent:false});
+ const count=fixture.windows.length;await fixture.handlers.get("assistant:tools-open")!(chat);expect(fixture.windows.length).toBe(count);expect(tools.focus).toHaveBeenCalled();
+ await fixture.handlers.get("assistant:hide")!(chat);expect(tools.isVisible()).toBe(true);
+ await fixture.handlers.get("assistant:draft-message")!(local,{text:"要約用の文面"});expect(bubble.isVisible()).toBe(true);
+ const draft=await fixture.handlers.get("assistant:draft-state")!(chat) as {revision:number;text:string};expect(draft.text).toBe("要約用の文面");
+ expect(bubble.webContents.send).toHaveBeenCalledWith("assistant:draft-changed",draft);
+ await fixture.handlers.get("assistant:draft-message")!(local,{text:"新しい文面"});await fixture.handlers.get("assistant:draft-consume")!(chat,{revision:draft.revision});
+ const latest=await fixture.handlers.get("assistant:draft-state")!(chat) as {revision:number;text:string};expect(latest.text).toBe("新しい文面");
+ await fixture.handlers.get("assistant:draft-consume")!(chat,{revision:latest.revision});expect(await fixture.handlers.get("assistant:draft-state")!(chat)).toMatchObject({text:null});
+ await expect(fixture.handlers.get("assistant:draft-message")!(chat,{text:"拒否"})).rejects.toThrow("許可");
+ await fixture.handlers.get("assistant:record-start")!(local);
+ const check=fixture.permissionChecks.get("assistant-local")!;expect(check(tools.webContents,"media","soda-assistant://app",{isMainFrame:true,requestingUrl:tools.url,mediaType:"audio"})).toBe(true);
+ await fixture.handlers.get("assistant:hide")!(local);expect(tools.isDestroyed()).toBe(true);expect(bubble.isVisible()).toBe(true);
+ fixture.connections.at(-1)!.options.changed([{id:"notice-after-tools-close",title:"担当",message:"完了",at:100}],true);
+ const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
+ const noticeBounds=compact.getBounds(),chatBounds=bubble.getBounds();
+ expect(noticeBounds.x+noticeBounds.width<=chatBounds.x||noticeBounds.x>=chatBounds.x+chatBounds.width||noticeBounds.y+noticeBounds.height<=chatBounds.y||noticeBounds.y>=chatBounds.y+chatBounds.height).toBe(true);
+ expect(check(tools.webContents,"media","soda-assistant://app",{isMainFrame:true,requestingUrl:tools.url,mediaType:"audio"})).toBe(false);
+ await fixture.handlers.get("assistant:tools-open")!(chat);const reopened=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(reopened.isVisible()).toBe(true));
+ await fixture.handlers.get("assistant:draft-message")!({sender:reopened.webContents,senderFrame:reopened.webContents.mainFrame},{text:"未受領の文面"});
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+ expect(reopened.isDestroyed()).toBe(true);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ await fixture.handlers.get("assistant:chat")!(event);const nextChat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(nextChat.isVisible()).toBe(true));
+ expect(await fixture.handlers.get("assistant:draft-state")!({sender:nextChat.webContents,senderFrame:nextChat.webContents.mainFrame})).toMatchObject({text:null});
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("opens the dedicated terminal or its pinned form in a reply popup while ordinary Soda remains separate",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ const rpc=fixture.controls.at(-1)!,actor={instanceId:randomUUID(),kind:"codex",label:"generated",state:"idle",completionSeq:0,serverSeenSeq:0,verified:true,since:1};
+ expect(rpc.options).toMatchObject({kind:"desktop"});
+ const scope={workspaceId:randomUUID(),tabId:randomUUID(),paneId:randomUUID()};let pending:{askId:string;paneId:string}[]=[];
+ rpc.request.mockImplementation(async(method:string,p:Record<string,unknown>)=>{
+  if(method==="assistant.get")return{deviceId:p.deviceId,...scope,kind:"codex",state:"ready",agent:actor,observedAgent:actor};
+  if(method==="agent.kinds")return{kinds:[{kind:"codex",label:"generated",available:true}]};
+  if(method==="ask.subscribe")return{asks:pending};
+  if(method==="assistant.conversation")throw Error("no transcript");return{};
+ });
+ rpc.options.status(true);await fixture.handlers.get("assistant:chat")!(event);const bubble=fixture.windows.at(-1)!,local={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
+ await vi.waitFor(async()=>expect(await fixture.handlers.get("assistant:conversation")!(local)).toMatchObject({connected:true,session:{state:"ready"}}));
+ await fixture.handlers.get("assistant:open")!(local);const full=fixture.windows.at(-1)!;
+ await fixture.handlers.get("assistant:session-open")!(local);const reply=fixture.windows.at(-1)!;
+ expect(reply).not.toBe(full);expect(new URL(reply.url).searchParams.get("assistantView")).toBe("reply");
+ expect(new URLSearchParams(new URL(reply.url).hash.slice(1)).has("assistantAsk")).toBe(false);
+ const askId=randomUUID();pending=[{askId:randomUUID(),paneId:randomUUID()},{askId,paneId:scope.paneId},{askId:randomUUID(),paneId:scope.paneId}];
+ await fixture.handlers.get("assistant:session-open")!(local);
+ const target=new URLSearchParams(new URL(reply.url).hash.slice(1));expect(target.get("assistantAsk")).toBe(askId);expect(target.get("assistantPane")).toBe(scope.paneId);
+ expect(full.url).toBe("http://127.0.0.1:7780/");
+ const previous=reply.url;let finish!:(value:unknown)=>void;rpc.request.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const delayed=fixture.handlers.get("assistant:session-open")!(local);rpc.options.status(false);finish({asks:pending});
+ await expect(delayed).rejects.toThrow("専用セッションが変更");expect(reply.url).toBe(previous);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("waits for the first Soda document, then activates and repaints without a second open",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ let finish!:()=>void;fixture.nextLoad=()=>new Promise(resolve=>{finish=resolve;});
+ await fixture.handlers.get("assistant:open")!(event);
+ const panel=fixture.windows.at(-1)!;await new Promise(resolve=>setImmediate(resolve));
+ expect(panel.options.show).toBe(false);expect(panel.options.icon).toMatch(/sodashitsu\.(ico|png)$/);
+ expect(panel.show).not.toHaveBeenCalled();
+ finish();await vi.waitFor(()=>expect(panel.show).toHaveBeenCalledOnce());
+ expect(panel.focus).toHaveBeenCalledOnce();expect(panel.webContents.invalidate).toHaveBeenCalledOnce();
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+it("loads settings in a visible native window and activates the loaded content without another click",async()=>{
+ const {app}=await import("electron");fixture.windows[0]!.destroy();
+ let finish!:()=>void;fixture.nextLoad=()=>new Promise(resolve=>{finish=resolve;});
+ app.emit("activate");const settings=fixture.windows.at(-1)!;
+ await new Promise(resolve=>setImmediate(resolve));
+ expect(settings.url).toBe("soda-assistant://app/settings.html");
+ expect(settings.options.show).toBe(true);expect(settings.options.backgroundColor).toBe("#172438");
+ expect(settings.show).not.toHaveBeenCalled();
+ finish();await vi.waitFor(()=>expect(settings.show).toHaveBeenCalledOnce());
+ expect(settings.focus).toHaveBeenCalledOnce();expect(settings.webContents.invalidate).toHaveBeenCalledOnce();
+ app.emit("activate");expect(settings.webContents.invalidate).toHaveBeenCalledTimes(2);
+});
+it("matches an unsaved character through settings IPC and ignores unused external URLs for PC speech",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ const request=vi.fn(async()=>new Response(JSON.stringify([{name:"女性船長",styles:[{id:8,name:"ノーマル",type:"talk"}]}])));
+ vi.stubGlobal("fetch",request);
+ try{
+  const result=await fixture.handlers.get("assistant:voice-match")!(event,{voiceProvider:"voicevox",voicevoxOrigin:"http://127.0.0.1:50022",voicevoxStyleId:108,voiceFollowCharacter:true,characterId:"captain-female"});
+  expect(result).toMatchObject({id:8});
+  // A hidden unfinished external URL is irrelevant when previewing PC speech.
+  await fixture.handlers.get("assistant:save")!(event,{enabled:true,voiceEnabled:true,voiceProvider:"system",mode:"tray"});
+  fixture.speech.mockClear();
+  await fixture.handlers.get("assistant:voice-test")!(event,{voiceProvider:"system",voicevoxOrigin:"unfinished",voicevoxStyleId:108,voiceFollowCharacter:false,characterId:"captain-female"});
+  await vi.waitFor(()=>expect(fixture.speech).toHaveBeenCalledOnce());
+  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+ }finally{vi.unstubAllGlobals();}
+});
+
+it("synthesizes the draft automatic speaker, then a manual speaker, without overwriting saved voice settings",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,voiceEnabled:true,voiceProvider:"system",voicevoxStyleId:108,mode:"tray"});
+ const wav=Buffer.alloc(44);wav.write('RIFF');wav.write('WAVE',8);
+ const fetcher=vi.fn(async(url:string)=>url.endsWith('/speakers')?new Response(JSON.stringify([{name:"女性船長",styles:[{id:8,name:"ノーマル",type:"talk"}]}])):url.includes('/audio_query')?new Response('{}'):new Response(wav));
+ vi.stubGlobal('fetch',fetcher);fixture.wavPlay.mockClear();
+ try{
+  const draft={voiceProvider:"voicevox",voicevoxOrigin:"http://127.0.0.1:50022",voicevoxStyleId:108,voiceFollowCharacter:true,characterId:"captain-female"};
+  await fixture.handlers.get('assistant:voice-test')!(event,draft);
+  await vi.waitFor(()=>expect(fixture.wavPlay).toHaveBeenCalledOnce());
+  expect(fetcher.mock.calls.some(([url])=>url.includes('/synthesis?speaker=8'))).toBe(true);
+  await fixture.handlers.get('assistant:voice-test')!(event,{...draft,voicevoxStyleId:3,voiceFollowCharacter:false});
+  await vi.waitFor(()=>expect(fixture.wavPlay).toHaveBeenCalledTimes(2));
+  expect(fetcher.mock.calls.some(([url])=>url.includes('/synthesis?speaker=3'))).toBe(true);
+  expect(await fixture.handlers.get('assistant:read')!(event)).toMatchObject({voiceProvider:'system',voicevoxStyleId:108});
+ }finally{vi.unstubAllGlobals();await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
+});
+it("does not send a resident synthesis after stop during CORE configuration lookup",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get('assistant:save')!(event,{enabled:true,voiceEnabled:true,voiceProvider:'core',voiceFollowCharacter:false,mode:'tray'});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation();let resolve!: (value:unknown)=>void;
+ rpc.request.mockImplementation(async(method:string)=>method==='assistant.voice_core'?new Promise(done=>{resolve=done;}):{kind:'json',value:[]});
+ try{
+  await fixture.handlers.get('assistant:voice-test')!(event);await vi.waitFor(()=>expect(resolve).toBeTypeOf('function'));
+  await fixture.handlers.get('assistant:voice-stop')!(event);resolve({enabled:true,transport:'ipc',origin:null});
+  await new Promise(done=>setImmediate(done));expect(rpc.request.mock.calls.some(([method])=>method==='voice.call')).toBe(false);
+ }finally{rpc.request.mockImplementation(original!);await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
+});
+
+it("uses the resident CLI backend and selected CORE version without an HTTP synthesis request",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get('assistant:save')!(event,{enabled:true,voiceEnabled:true,voiceProvider:'core',voiceFollowCharacter:false,voicevoxStyleId:8,voiceCoreVersion:'0.17.0',mode:'tray'});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation(),wav=Buffer.alloc(44);wav.write('RIFF');wav.write('WAVE',8);
+ rpc.request.mockClear();rpc.request.mockImplementation(async(method:string)=>method==='assistant.voice_core'?{enabled:true,transport:'ipc',origin:null}:{kind:'bytes',mime:'audio/wav',base64:wav.toString('base64')});
+ fixture.wavPlay.mockClear();const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
+ try{
+  await fixture.handlers.get('assistant:voice-test')!(event);
+  await vi.waitFor(()=>expect(fixture.wavPlay).toHaveBeenCalledOnce());
+  expect(rpc.request).toHaveBeenCalledWith('voice.call',expect.objectContaining({operation:'synthesize',cancellable:true,speaker:8,coreVersion:'0.17.0',requestId:expect.any(String)}),expect.anything());
+  expect(fetcher).not.toHaveBeenCalled();
+ }finally{vi.unstubAllGlobals();rpc.request.mockImplementation(original!);await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
 });

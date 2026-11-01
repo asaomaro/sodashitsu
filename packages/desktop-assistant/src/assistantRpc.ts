@@ -8,6 +8,12 @@ import { getCACertificates } from "node:tls";
 import WebSocket from "ws";
 
 export type AssistantMethod =
+  | "ask.subscribe"
+  | "server.resource_app_demand"
+  | "server.resource_app_report"
+  | "voice.cancel"
+  | "voice.call"
+  | "assistant.voice_core"
   | "machine.list"
   | "assistant.apps"
   | "assistant.app_open"
@@ -45,6 +51,7 @@ interface Socket {
 }
 export interface AssistantRpcOptions {
   machineId?: string;
+  kind?: "desktop" | "external";
   cookie(origin: string): Promise<string | null>;
   status(connected: boolean): void;
   changed(): void;
@@ -105,25 +112,32 @@ export class AssistantRpc {
     this.start();
   }
 
-  request<M extends AssistantMethod>(method: M, input: ParamsOf<M>): Promise<ResultOf<M>> {
+  request<M extends AssistantMethod>(method: M, input: ParamsOf<M>,options:{signal?:AbortSignal|undefined}={}): Promise<ResultOf<M>> {
+    if(options.signal?.aborted)return Promise.reject(options.signal.reason??Error("操作を停止しました"));
     if (!this.ready || !this.socket || this.stopped)
       return Promise.reject(Error("操舵室へ接続してから操作してください。"));
-    if (this.pending.size >= (["assistant.cancel_image","assistant.audio_cancel"].includes(method) ? 17 : 16))
+    if (this.pending.size >= (["assistant.cancel_image","assistant.audio_cancel","voice.cancel"].includes(method) ? 17 : 16))
       return Promise.reject(Error("前の操作が完了するまでお待ちください。"));
     const params = METHOD_SCHEMAS[method].parse(input);
     const id = `assistant-rpc-${++this.serial}`;
     const socket = this.socket;
     return new Promise((resolve, reject) => {
+      const duration=method==="voice.call"?370000:20000;
+      const signal=options.signal;
+      const cancelBackend=()=>{if(method==="voice.call"){const requestId=(params as {requestId?:string}).requestId;if(requestId)void this.request("voice.cancel",{requestId}).catch(()=>{});}};
+      const abort=()=>{const waiting=this.pending.get(id);if(!waiting)return;this.pending.delete(id);clearTimeout(waiting.timer);waiting.reject(Error("音声要求を停止しました"));cancelBackend();};
+      const cleanup=()=>signal?.removeEventListener("abort",abort);
       const item: Pending = {
-        expires: this.now() + 20_000,
+        expires: this.now() + duration,
         timer: setTimeout(() => {
           this.pending.delete(id);
-          reject(Error("応答を確認できません。送信を繰り返す前に操舵室で結果を確認してください。"));
-        }, 20_000),
-        resolve: (value) => resolve(value as ResultOf<M>),
-        reject,
+          cleanup();cancelBackend();reject(Error("応答を確認できません。送信を繰り返す前に操舵室で結果を確認してください。"));
+        }, duration),
+        resolve: (value) => {cleanup();resolve(value as ResultOf<M>);},
+        reject:(error)=>{cleanup();reject(error);},
       };
       this.pending.set(id, item);
+      signal?.addEventListener("abort",abort,{once:true});
       try {
         socket.send(JSON.stringify({ id, method, params }));
       } catch {
@@ -209,7 +223,7 @@ export class AssistantRpc {
           new WebSocket(url, {
             headers: { Cookie: cookie, Origin: origin },
             followRedirects: false,
-            maxPayload: 8 * 1024 * 1024,
+            maxPayload: 32 * 1024 * 1024,
             handshakeTimeout: 10_000,
             ...(authorities ? { ca: authorities, rejectUnauthorized: true } : {}),
           }))
@@ -228,7 +242,7 @@ export class AssistantRpc {
             JSON.stringify({
               id: "assistant-rpc-hello",
               method: "client.hello",
-              params: { protocol: 1, kind: "external" },
+              params: { protocol: 1, kind: this.options.kind??"external" },
             }),
           );
         } catch {

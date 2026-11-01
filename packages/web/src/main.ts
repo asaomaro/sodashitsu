@@ -1,4 +1,4 @@
-import { assistantPanelTarget } from "./actions/assistantPanelLink.js";
+import { assistantPanelTarget, ordinaryAssistantUrl } from "./actions/assistantPanelLink.js";
 import { assistantPanelGuard } from "./actions/assistantPanelGuard.js";
 import { useViewerTabsStore } from "./store/viewerTabs.js";
 import { LocalClientFactoryKey } from "./injection.js";
@@ -143,7 +143,12 @@ const assistantPinnedMachine = (() => {
     return undefined;
   }
 })();
+const assistantView = new URLSearchParams(location.search).get("assistantView");
 const updateAssistantPanel = assistantPanelGuard({
+  ...(assistantView === "main" ? {ready: (target: NonNullable<ReturnType<typeof assistantPanelTarget>>) => {
+    if (target.assistantAsk) useAskStore(pinia).prefer(target.assistantAsk);
+    history.replaceState(null, "", ordinaryAssistantUrl(location.href));
+  }} : {}),
   focusedPane: () => view.focusedPaneId,
   machine: () => machines.selectedId,
   switchMachine: (id) => machineSwitcherBox.current?.switchTo(id),
@@ -244,7 +249,16 @@ const connection = new Connection({
   store: storeAdapter,
   sink: sinkProxy,
 });
-const conn: ConnectionPort = connection;
+const conn: ConnectionPort = {
+  request: (method, params) => connection.request(method, params),
+  sendInput: (paneId, bytes) => {
+    if (updateAssistantPanel.canInput(paneId)) connection.sendInput(paneId, bytes);
+  },
+  login: (token, method) => connection.login(token, method),
+  logout: () => connection.logout(),
+  connect: () => connection.connect(),
+  createAuxiliary: (state, event) => connection.createAuxiliary(state, event),
+};
 
 /**
  * 連携のグラフの口（20260927-agent-graph の design「別のマシンを見ている間も、グラフは手元のサーバのもの」）。画面の接続がローカルを向いていればそれ、
@@ -700,9 +714,12 @@ watch(
   (open) => machineWiring.onGraphOpenChanged(open),
 );
 // デスクトップのグラフの画面が出ている間は、グラフの面の外にフォーカスがあるときの prefix の 2 打目を、グラフの画面で意味のあるものだけに絞る（見えない基本画面を変えない。D52）。
-keys.setDomKeyFilter((decision) => view.screen === "base" || isAllowedOnNonBaseScreen(decision));
+keys.setDomKeyFilter((decision) => assistantView === "reply"
+  ? decision.kind !== "action" || (["copy", "exitMode", "pasteImage"].includes(decision.action.type) || decision.action.type === "enterMode" && decision.action.mode === "copy")
+  : view.screen === "base" || isAllowedOnNonBaseScreen(decision));
 // グラフの上の端末の窓にフォーカスがある間（端末の道）は、見えない基本画面の構成を変える操作と、選んでいる pane を動かす操作を食う（X2）。`prefix+a` は「グラフの面へ戻る」に読み替える（X1）。
 keys.setTerminalKeyFilter((paneId, decision) => {
+  if (assistantView === "reply") return decision.kind !== "action" || (["copy", "exitMode", "pasteImage"].includes(decision.action.type) || decision.action.type === "enterMode" && decision.action.mode === "copy");
   if (!terminalHost.heldByWindow(paneId)) return true;
   graphTerminal.ensureSelected(paneId); // 窓で打った操作は、窓に見えている pane に効く
   if (decision.kind === "action" && decision.action.type === "openGraph") {

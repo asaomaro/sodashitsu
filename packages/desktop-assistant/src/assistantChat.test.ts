@@ -211,7 +211,9 @@ it("restarts at offset zero when a live actor clears its conversation", async ()
   sessionId = randomUUID();
   await f.chat.refresh();
   expect(f.chat.snapshot().messages).toEqual([]);
+  expect(f.chat.snapshot().conversationCaughtUp).toBe(false);
   await f.chat.refresh();
+  expect(f.chat.snapshot().conversationCaughtUp).toBe(true);
   expect(f.request).toHaveBeenLastCalledWith("assistant.get", { deviceId: f.deviceId });
   const reads = f.request.mock.calls.filter((call) => call[0] === "assistant.conversation");
   expect(reads.at(-1)?.[1]).toEqual({ deviceId: f.deviceId, instanceId: f.ready.agent!.instanceId, offset: 0 });

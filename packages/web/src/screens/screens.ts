@@ -1,3 +1,4 @@
+import ResourcesScreen from "./ResourcesScreen.vue";
 import HistoryScreen from "./HistoryScreen.vue";
 import ConnectionsScreen from "./ConnectionsScreen.vue";
 import ScheduleScreen from "./ScheduleScreen.vue";
@@ -45,6 +46,7 @@ export const SCREENS = [
     title: "処理の予約",
     component: ScheduleScreen,
   },
+  {id:"resources",label:"リソースモニター",shortLabel:"資",component:ResourcesScreen},
   {id:"history",label:"セッション履歴",shortLabel:"履",component:HistoryScreen},
   {id:"connections",label:"外部接続",shortLabel:"接",component:ConnectionsScreen},
 ] as const satisfies readonly ScreenDef[];

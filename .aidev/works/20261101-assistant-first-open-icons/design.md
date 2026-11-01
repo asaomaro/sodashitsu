@@ -1,0 +1,7 @@
+# 実装
+
+初回はloadURL完了後に表示し、既存ウィンドウの再利用と共通のrestore/show/focus/invalidateを行う。ready-to-showだけへの依存を設定画面から除き、操舵室はshow:falseで文書読み込み前の空白表示を避ける。応答窓のナビゲーション世代検査とエラー表示も維持。
+
+Windows実機でGPUプロセスの繰り返し異常終了(-1073740791)を観測したため、Windowsはapp ready前にdisableHardwareAccelerationを指定しソフトウェア描画を使用する。動画等の描画負荷はCPU側に移る。macOS/Linuxは変更しない。
+
+Web版logo.svgを形・色を変えず描画して透過PNGと7サイズのICOを生成。各BrowserWindowのicon、Windows AppUserModelId、macOS Dock、Trayへ適用。共有Electron実行ファイル自体のバイナリ資源は変更しない。

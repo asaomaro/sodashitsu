@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AssistantNotice } from "@sodashitsu/protocol";
 import { AssistantRpc, type AssistantRpcOptions } from "./assistantRpc.js";
+import type { AssistantAgentRow } from "./noticeFeed.js";
 import { NoticeConnection, type NoticeConnectionOptions } from "./noticeConnection.js";
 const Machines = z.object({
   machines: z
@@ -25,6 +26,7 @@ export class RemoteNotices {
     string,
     {
       label: string;
+      online: boolean;
       notice: NoticeConnection;
       rpc: AssistantRpc;
       notices: readonly AssistantNotice[];
@@ -55,6 +57,7 @@ export class RemoteNotices {
         entry.notice.stop();
         entry.rpc.stop();
         entry.notices = [];
+        entry.online = false;
       }
       this.publish(false);
       return;
@@ -66,6 +69,17 @@ export class RemoteNotices {
   stop() {
     this.connection(false);
     this.entries.clear();
+  }
+  get agents(): AssistantAgentRow[] {
+    if (!this.connected || !this.enabled) return [];
+    return [...this.entries.values()]
+      .filter((entry) => entry.online)
+      .flatMap((entry) =>
+        entry.notice.feed.agents.map((row) => ({
+          ...row,
+          title: `${entry.label} / ${row.title}`.slice(0, 160),
+        })),
+      );
   }
   rpcFor(id: string) {
     return this.connected && this.enabled ? (this.entries.get(id)?.rpc ?? null) : null;
@@ -105,10 +119,13 @@ export class RemoteNotices {
           cookie,
           status: (status) => {
             const entry = this.entries.get(machine.id);
-            if (status !== "connected" && entry) {
+            if (!entry || entry.notice !== notice || !this.connected || !this.enabled) return;
+            entry.online = status === "connected";
+            if (status !== "connected") {
               entry.notices = [];
+              entry.online = false;
               this.publish(false);
-            }
+            } else this.publish(false);
           },
           changed: (notices, added) => {
             const entry = this.entries.get(machine.id);
@@ -117,7 +134,13 @@ export class RemoteNotices {
             this.publish(added);
           },
         });
-        this.entries.set(machine.id, { label: machine.label, notice, rpc, notices: [] });
+        this.entries.set(machine.id, {
+          label: machine.label,
+          online: false,
+          notice,
+          rpc,
+          notices: [],
+        });
         rpc.start();
         notice.start();
       }
@@ -128,6 +151,7 @@ export class RemoteNotices {
           entry.notice.stop();
           entry.rpc.stop();
           entry.notices = [];
+          entry.online = false;
         }
         this.publish(false);
       }

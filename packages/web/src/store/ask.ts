@@ -12,6 +12,8 @@ export type AskEntry = AskPending & { resolved?: AskResolved };
  */
 export const useAskStore = defineStore("ask", () => {
   const queue = ref<AskEntry[]>([]);
+  const preferred = ref<string | null>(null);
+  function prefer(askId: string): void { preferred.value = askId; }
   /** いま出す質問（先頭）。 */
   const current = computed<AskEntry | null>(() => {
     if (typeof location !== "undefined" && location.hash.startsWith("#assistantPane=")) {
@@ -27,12 +29,14 @@ export const useAskStore = defineStore("ask", () => {
         );
       return queue.value.find((a) => a.paneId === target.data.assistantPane) ?? null;
     }
+    if (preferred.value) return queue.value.find(a => a.askId === preferred.value) ?? queue.value[0] ?? null;
     return queue.value[0] ?? null;
   });
 
   /** `ask.subscribe` の応答（接続ごと）で丸ごと置き換える。 */
   function replaceAll(asks: readonly AskEntry[]): void {
     queue.value = [...asks];
+    if (preferred.value && !asks.some(a => a.askId === preferred.value)) preferred.value = null;
   }
 
   /** `ask.opened` の後に `ask.get` で取った質問を足す（同じ askId は足さない）。 */
@@ -43,6 +47,7 @@ export const useAskStore = defineStore("ask", () => {
 
   /** 閉じた質問を外す（`ask.closed`・回答／取り消しの後）。知らない id は何もしない。 */
   function remove(askId: string): void {
+    if (preferred.value === askId) preferred.value = null;
     if (!queue.value.some((a) => a.askId === askId)) return;
     queue.value = queue.value.filter((a) => a.askId !== askId);
   }
@@ -50,7 +55,8 @@ export const useAskStore = defineStore("ask", () => {
   /** 切断・マシンの切り替えで空にする。 */
   function clear(): void {
     queue.value = [];
+    preferred.value = null;
   }
 
-  return { queue, current, replaceAll, add, remove, clear };
+  return { queue, current, replaceAll, add, remove, clear, prefer };
 });

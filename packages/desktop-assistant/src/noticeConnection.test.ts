@@ -305,7 +305,7 @@ it("rejects an expired shared reply or a callback crossing the original monotoni
       });
     } else ticks = 10_000;
     f.socket.message({ id: "assistant-shared", result: { notices: [] } });
-  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
+    f.socket.message({ id: "assistant-asks", result: { asks: [] } });
     expect(f.status).toHaveBeenLastCalledWith("offline");
     expect(f.status).not.toHaveBeenCalledWith("connected");
     expect(f.socket.terminate).toHaveBeenCalledOnce();
@@ -404,14 +404,101 @@ it("subscribes as a form-capable browser without fetching media or writing input
     "client.hello",
     "notification.state",
     "ask.subscribe",
+    "ask.get",
   ]);
 });
 
-it("does not report connected until the form subscription completes within the original deadline",async()=>{
- vi.useFakeTimers();const f=fixture();f.connection.start();await vi.waitFor(()=>expect(f.create).toHaveBeenCalledOnce());
- f.socket.emit("open");f.socket.message({id:"assistant-hello",result:{snapshot:f.snapshot}});
- f.socket.message({id:"assistant-shared",result:{notices:[]}});
- expect(f.status).not.toHaveBeenCalledWith("connected");
- await vi.advanceTimersByTimeAsync(10000);expect(f.status).toHaveBeenLastCalledWith("offline");
- f.socket.message({id:"assistant-asks",result:{asks:[]}});expect(f.status).not.toHaveBeenCalledWith("connected");
+it("does not report connected until the form subscription completes within the original deadline", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  f.connection.start();
+  await vi.waitFor(() => expect(f.create).toHaveBeenCalledOnce());
+  f.socket.emit("open");
+  f.socket.message({ id: "assistant-hello", result: { snapshot: f.snapshot } });
+  f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  expect(f.status).not.toHaveBeenCalledWith("connected");
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(f.status).toHaveBeenLastCalledWith("offline");
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
+  expect(f.status).not.toHaveBeenCalledWith("connected");
+});
+
+it("stays connected and projects questions despite an unrelated legacy workspace in hello and updates", async () => {
+  const f = fixture();
+  f.snapshot.panes[0]!.agent.state = "working";
+  const snapshot = {
+    ...f.snapshot,
+    workspaces: [{ id: "w3", label: "old" }, ...f.snapshot.workspaces],
+    tabs: [{ id: randomUUID(), workspaceId: "w3", label: "old" }, ...f.snapshot.tabs],
+  };
+  f.connection.start();
+  await vi.waitFor(() => expect(f.create).toHaveBeenCalledOnce());
+  f.socket.emit("open");
+  f.socket.message({ id: "assistant-hello", result: { snapshot } });
+  f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
+  expect(f.status).toHaveBeenLastCalledWith("connected");
+  const askId = randomUUID(),
+    paneId = f.snapshot.panes[0]!.id;
+  f.socket.message({ event: "workspace.updated", data: { workspace: { id: "w3", label: "old" } } });
+  f.socket.message({ event: "ask.opened", data: { askId, paneId } });
+  expect(f.connection.feed.notices).toEqual([
+    expect.objectContaining({ kind: "question", key: `ask:${askId}` }),
+  ]);
+  expect(f.status).toHaveBeenLastCalledWith("connected");
+  expect(f.socket.terminate).not.toHaveBeenCalled();
+});
+
+it("reads notification content without generating or sending input and rejects late details", async () => {
+  const f = fixture();
+  Object.assign(f.snapshot.panes[0]!.agent, { kind: "codex", label: "Codex", name: "テスト担当" });
+  f.connection.start();
+  await vi.waitFor(() => expect(f.create).toHaveBeenCalledOnce());
+  f.socket.emit("open");
+  f.socket.message({ id: "assistant-hello", result: { snapshot: f.snapshot } });
+  f.socket.message({ id: "assistant-shared", result: { notices: [] } });
+  f.socket.message({ id: "assistant-asks", result: { asks: [] } });
+  const request = JSON.parse(f.socket.sent.at(-1)!);
+  expect(request.method).toBe("agent.conversation");
+  f.socket.message({
+    id: request.id,
+    result: {
+      sessionId: "session",
+      nextOffset: 50,
+      messages: [{ role: "assistant", text: "以前の応答" }],
+    },
+  });
+  expect(JSON.parse(f.socket.sent.at(-1)!).params.offset).toBe(50);
+  f.socket.message({
+    id: request.id,
+    result: {
+      sessionId: "session",
+      nextOffset: null,
+      messages: [{ role: "assistant", text: "テストが完了しました" }],
+    },
+  });
+  expect(f.connection.feed.notices[0]!.message).toContain("テストが完了しました");
+  const pane = f.snapshot.panes[0]!;
+  f.socket.message({ event: "ask.opened", data: { askId: "new-form", paneId: pane.id } });
+  const askRequest = JSON.parse(f.socket.sent.at(-1)!);
+  expect(askRequest.method).toBe("ask.get");
+  f.socket.message({ event: "ask.closed", data: { askId: "new-form", paneId: pane.id } });
+  f.socket.message({
+    id: askRequest.id,
+    result: { askId: "new-form", paneId: pane.id, spec: { title: "古い質問", questions: [] } },
+  });
+  expect(f.connection.feed.notices.some((n) => n.message.includes("古い質問"))).toBe(false);
+  expect(
+    f.socket.sent
+      .map((raw) => JSON.parse(raw).method)
+      .every((method) =>
+        [
+          "client.hello",
+          "notification.state",
+          "ask.subscribe",
+          "ask.get",
+          "agent.conversation",
+        ].includes(method),
+      ),
+  ).toBe(true);
 });

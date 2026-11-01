@@ -57,6 +57,7 @@ export class CaptureLease<T extends CaptureSource> {
     lease.phase = "approved";
     return { token };
   }
+  owner(){return this.lease?.owner;}
   permits(owner: number) {
     this.expire();
     return this.lease?.owner === owner && ["approved", "stream"].includes(this.lease.phase);

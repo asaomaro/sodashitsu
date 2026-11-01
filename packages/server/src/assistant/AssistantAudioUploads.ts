@@ -4,11 +4,12 @@ import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { Stats } from "node:fs";
 import { AssistantAudioBeginParams,AssistantAudioChunkParams,AssistantAudioIdParams,RpcError } from "@sodashitsu/protocol";
-import { sendCodexAudio } from "./CodexAudio.js";
+import {AssistantPersonaPrompts} from "./AssistantPersonaPrompts.js";
+import { sendCodexAudio,AUDIO_INSTRUCTION } from "./CodexAudio.js";
 
-interface Target {threadId:string;projectDir:string;paneId:string;instanceId:string}
+interface Target {threadId:string;projectDir:string;paneId:string;instanceId:string;characterId?:string}
 interface Upload {
- id:string;owner:string;target:Target;prove:()=>Target;mime:string;size:number;received:number;chunks:Buffer[];
+ id:string;owner:string;deviceId:string;target:Target;prove:()=>Target;mime:string;size:number;received:number;chunks:Buffer[];
  expires:number;controller:AbortController;timer:ReturnType<typeof setTimeout>;running:Promise<unknown>|null;
 }
 interface Options {send?:typeof sendCodexAudio;now?:()=>number;files?:{lstat:(path:string)=>Promise<Stats>;unlink:(path:string)=>Promise<void>}}
@@ -29,18 +30,19 @@ export class AssistantAudioUploads {
  private saving:Promise<unknown>=Promise.resolve();
  private closed=false;
  private readonly directory:string;
- constructor(stateDir:string,private readonly options:Options={}){this.directory=join(stateDir,"assistant-audio");}
+ private readonly persona:AssistantPersonaPrompts;
+ constructor(stateDir:string,private readonly options:Options={}){this.directory=join(stateDir,"assistant-audio");this.persona=new AssistantPersonaPrompts(stateDir);}
  private now():number{return this.options.now?.()??performance.now();}
  begin(owner:string,raw:unknown,prove:()=>Target):{uploadId:string} {
   const input=AssistantAudioBeginParams.parse(raw);
   const expires=this.now()+input.ttlMs;
   const available=()=>{if(this.closed || this.uploads.size>=2 || this.owned.size>=2 || [...this.uploads.values()].some(u=>u.owner===owner))throw new RpcError("agent_pane_busy","前の音声処理の終了を待ってください");};
   available();
-  const target={...prove()},id=randomUUID(),controller=new AbortController();
+  const target={...prove(),...(input.characterId?{characterId:input.characterId}:{})},id=randomUUID(),controller=new AbortController();
   available();
   if(this.now()>=expires)throw new RpcError("agent_pane_busy","音声の送信期限が切れました");
   const timer=setTimeout(()=>this.cancel(owner,{uploadId:id}),Math.max(1,expires-this.now()));timer.unref();
-  const upload:Upload={id,owner,target,prove,mime:input.mime,size:input.size,received:0,chunks:[],expires,controller,timer,running:null};
+  const upload:Upload={id,owner,deviceId:input.deviceId,target,prove,mime:input.mime,size:input.size,received:0,chunks:[],expires,controller,timer,running:null};
   this.uploads.set(id,upload);return{uploadId:id};
  }
  private get(owner:string,id:string):Upload {
@@ -120,7 +122,8 @@ export class AssistantAudioUploads {
    const saving=this.saving.then(()=>this.store(u));this.saving=saving.then(()=>{},()=>{});
    saved=await saving;
    this.live(u);attempted=true;
-   const result=await (this.options.send??sendCodexAudio)({...u.target,path:saved.path},u.controller.signal,u.expires,()=>this.live(u),{owned:this.owned});
+   const instruction=await this.persona.wrap(u.deviceId,u.target.characterId,AUDIO_INSTRUCTION);this.live(u);
+   const result=await (this.options.send??sendCodexAudio)({...u.target,instruction,path:saved.path},u.controller.signal,u.expires,()=>this.live(u),{owned:this.owned});
    return{sent:true,...result};
   } finally {
    try {if(saved) {

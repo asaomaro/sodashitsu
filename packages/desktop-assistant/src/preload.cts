@@ -4,6 +4,11 @@ import { contextBridge, ipcRenderer } from "electron";
 contextBridge.exposeInMainWorld(
   "assistant",
   Object.freeze({
+    openTools:()=>ipcRenderer.invoke("assistant:tools-open"),
+    consumeDraft:(input:unknown)=>ipcRenderer.invoke("assistant:draft-consume",input),
+    draftState:()=>ipcRenderer.invoke("assistant:draft-state"),
+    draftMessage:(input:unknown)=>ipcRenderer.invoke("assistant:draft-message",input),
+    onDraft:(callback:(state:unknown)=>void)=>{const receive=(_event:unknown,state:unknown)=>callback(state);ipcRenderer.on("assistant:draft-changed",receive);return()=>ipcRenderer.removeListener("assistant:draft-changed",receive);},
     read: () => ipcRenderer.invoke("assistant:read"),
     save: (preferences: unknown) => ipcRenderer.invoke("assistant:save", preferences),
     open: () => ipcRenderer.invoke("assistant:open"),
@@ -33,8 +38,16 @@ contextBridge.exposeInMainWorld(
     openApp: (input: unknown) => ipcRenderer.invoke("assistant:app-open", input),
     callApp: (input: unknown) => ipcRenderer.invoke("assistant:app-call", input),
     displays: () => ipcRenderer.invoke("assistant:display-list"),
+    characterActor: () => ipcRenderer.invoke("assistant:character-actor"),
+    characterState: () => ipcRenderer.invoke("assistant:character-state"),
+    onCharacterState: (callback: (state: unknown) => void) => {
+      const receive=(_event:unknown,state:unknown)=>callback(state);
+      ipcRenderer.on("assistant:character-state-changed",receive);
+      return ()=>ipcRenderer.removeListener("assistant:character-state-changed",receive);
+    },
     characterInfo: () => ipcRenderer.invoke("assistant:character-info"),
     characters: () => ipcRenderer.invoke("assistant:character-list"),
+    previewYukkuriCharacters: () => ipcRenderer.invoke("assistant:yukkuri-characters-preview"),
     previewCharacterPack: () => ipcRenderer.invoke("assistant:character-pack-preview"),
     importCharacterPack: (input: unknown) =>
       ipcRenderer.invoke("assistant:character-pack-import", input),
@@ -54,6 +67,7 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:reminders-changed", receive);
       return () => ipcRenderer.removeListener("assistant:reminders-changed", receive);
     },
+    readNotice: (input: unknown) => ipcRenderer.invoke("assistant:notice-read", input),
     openSource: (input: unknown) => ipcRenderer.invoke("assistant:source-open", input),
     replySource: (input: unknown) => ipcRenderer.invoke("assistant:source-reply", input),
     sourceKey: (input: unknown) => ipcRenderer.invoke("assistant:source-key", input),
@@ -80,6 +94,28 @@ contextBridge.exposeInMainWorld(
       const receive = (_event: unknown, state: unknown) => callback(state);
       ipcRenderer.on("assistant:tools-changed", receive);
       return () => ipcRenderer.removeListener("assistant:tools-changed", receive);
+    },
+    beginResize: (input: unknown) => ipcRenderer.invoke("assistant:resize-start", input),
+    resize: (input: unknown) => ipcRenderer.invoke("assistant:resize-move", input),
+    endResize: (input: unknown) => ipcRenderer.invoke("assistant:resize-end", input),
+    voiceSpeakers: (input: unknown) => ipcRenderer.invoke("assistant:voice-speakers", input),
+    voiceState: () => ipcRenderer.invoke("assistant:voice-state"),
+    stopVoice: () => ipcRenderer.invoke("assistant:voice-stop"),
+    testVoice: (input?:unknown) => ipcRenderer.invoke("assistant:voice-test",input),
+    voiceVersions:()=>ipcRenderer.invoke("assistant:voice-versions"),
+    matchVoice: (input:unknown)=>ipcRenderer.invoke("assistant:voice-match",input),
+    onVoice: (callback: (state: unknown) => void) => {
+      const receive=(_event:unknown,state:unknown)=>callback(state);
+      ipcRenderer.on("assistant:voice-changed",receive);
+      return ()=>ipcRenderer.removeListener("assistant:voice-changed",receive);
+    },
+    noticeState: () => ipcRenderer.invoke("assistant:notice-state"),
+    dismissNotice: (input: unknown) => ipcRenderer.invoke("assistant:notice-dismiss",input),
+    openNotice: (input: unknown) => ipcRenderer.invoke("assistant:notice-open",input),
+    onNotice: (callback: (state: unknown) => void) => {
+      const receive = (_event: unknown, state: unknown) => callback(state);
+      ipcRenderer.on("assistant:notice-changed", receive);
+      return () => ipcRenderer.removeListener("assistant:notice-changed", receive);
     },
     inbox: () => ipcRenderer.invoke("assistant:inbox"),
     onInbox: (callback: (state: unknown) => void) => {

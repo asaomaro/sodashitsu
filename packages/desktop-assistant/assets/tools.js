@@ -20,8 +20,7 @@
     const source = body();
     const value = `${prefix}\n\n--- 対象の文章 ---\n${source}`;
     if (value.length > 8192) throw Error("送信用の文面を含めて8192文字以内にしてください。");
-    element("message").value = value;
-    status.textContent = "会話の入力欄へ文面を入れました。内容と送信先を確認して送信してください。";
+    void window.assistant.draftMessage({text:value}).then(()=>{status.textContent = "会話の入力欄へ文面を入れました。内容と送信先を確認して送信してください。";}).catch(report);
   };
   const update = state => {
     if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;

@@ -3,6 +3,7 @@ import { characterBounds, type DisplayArea, type Rect } from "./geometry.js";
 
 export interface NativeAdapter {
   displays(): readonly DisplayArea[];
+  portraitAspect?(preferences: DesktopAssistantPreferences): number | undefined;
   character(preferences: DesktopAssistantPreferences, bounds: Rect): void;
   hideCharacter(): void;
   tray(preferences: DesktopAssistantPreferences): void;
@@ -76,7 +77,7 @@ export class AssistantController {
     else
       this.native.character(
         this.preferences,
-        characterBounds(this.current, this.native.displays()),
+        characterBounds(this.current, this.native.displays(), this.native.portraitAspect?.(this.current)),
       );
   }
 }

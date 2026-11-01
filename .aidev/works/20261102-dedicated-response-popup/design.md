@@ -1,0 +1,5 @@
+# 設計
+
+session-openは現在の専用sessionを固定し、ask.subscribe(renderer:assistant)で未回答一覧を取得、専用paneの質問だけを選択。待機中にcontrol/origin/owner/epoch/pane/workspace/instance/接続が変わったら遷移しない。質問IDをURLへ固定し、reply窓へ開く。質問がない場合もreply窓を使う。「操舵室を開く」は従来の通常窓を維持。
+
+ask.subscribeはbrowser種別必須なので、native controlをdesktopとしてhelloする。AssistantRpcの既定externalは維持し、必要なmain controlだけ明示指定する。既存NoticeConnectionもdesktopで接続している。フォーム指定時はWeb AssistantResponseがTerminalPaneをmountしない。回答後は対応済み表示で止める。

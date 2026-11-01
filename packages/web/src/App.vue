@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AssistantResponse from "./components/AssistantResponse.vue";
 import NativePreviewHost from "./components/NativePreviewHost.vue";
 import DesktopMonitorPage from "./components/DesktopMonitorPage.vue";
 import DesktopCompanionPage from "./components/DesktopCompanionPage.vue";
@@ -51,6 +52,7 @@ import { useViewStore } from "./store/view.js";
  * 部品の配線（circular port の bind を含む）は `main.ts`（composition root）の責務——ここはテンプレートの
  * 切り替えと、現在の tab のレイアウト木を `PaneLayout` へ渡すだけ。
  */
+const assistantResponse = new URLSearchParams(location.search).get("assistantView") === "reply";
 const desktopMonitor = location.pathname === "/desktop-view";
 const desktopCompanion = location.pathname === "/desktop-host";
 const view = useViewStore();
@@ -70,12 +72,13 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
 </script>
 
 <template>
-  <WorkAgentRequests v-if="!view.authRequired && !desktopCompanion && !desktopMonitor && view.connectionState === 'open'" />
-  <NativePreviewHost v-if="!view.authRequired && !desktopCompanion && !desktopMonitor && view.connectionState !== 'detached'" />
+  <WorkAgentRequests v-if="!assistantResponse && !view.authRequired && !desktopCompanion && !desktopMonitor && view.connectionState === 'open'" />
+  <NativePreviewHost v-if="!assistantResponse && !view.authRequired && !desktopCompanion && !desktopMonitor && view.connectionState !== 'detached'" />
   <LoginView v-if="view.authRequired" />
   <DesktopMonitorPage v-else-if="desktopMonitor" />
   <DesktopCompanionPage v-else-if="desktopCompanion" />
   <DetachedView v-else-if="view.connectionState === 'detached'" />
+  <AssistantResponse v-else-if="assistantResponse" />
   <div v-else class="app-shell" :style="{ '--soda-pane-gap': paneGapPx }">
     <MobileShell v-if="isMobile" />
     <div v-else class="app-desktop">
@@ -91,7 +94,7 @@ const paneGapPx = computed(() => `${paneGapPxFor(settings.uiStyle, settings.pane
           :data-screen="def.id"
           :inert="view.screen !== def.id"
         >
-          <component v-if="!['history','connections'].includes(def.id) || view.screen===def.id" :is="def.component" />
+          <component v-if="!['history','connections','resources'].includes(def.id) || view.screen===def.id" :is="def.component" />
         </div>
       </div>
     </div>

@@ -1,0 +1,3 @@
+# 独立レビュー
+
+review_bubble_resizeが差分を点検。最初のspeech::afterは既存overflow:hiddenで切れると指摘。body直下のspeech-tail要素へ移して修正。ブラウザ検証を実要素の可視性・枠外のboundingRect・親の非包含まで拡張。修正再点検とPNG目視で解消確認、追加mustなし。

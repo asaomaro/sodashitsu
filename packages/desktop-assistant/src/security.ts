@@ -1,6 +1,6 @@
-export type LocalRole = "character" | "settings" | "bubble";
+export type LocalRole = "character" | "settings" | "bubble" | "notice" | "tools";
 export const LOCAL_ORIGIN = "soda-assistant://app";
-const roles = new Set<LocalRole>(["character", "settings", "bubble"]);
+const roles = new Set<LocalRole>(["character", "settings", "bubble", "notice", "tools"]);
 
 export function localRole(url: string): LocalRole | null {
   try {
@@ -35,21 +35,34 @@ export function authorizeLocalSender(
     return false;
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;
+  if (action === "voice-test" || action === "voice-speakers" || action === "voice-match" || action === "voice-versions") return sender.role === "settings";
+  if (action === "voice-state" || action === "voice-stop") return sender.role !== "character";
+  if (action === "notice-state" || action === "notice-dismiss" || action === "notice-open") return sender.role === "notice";
+  if (action === "character-state" || action === "character-actor") return sender.role === "character";
   if (action === "character-info") return true;
   if (
     [
       "display-list",
       "character-list",
       "character-pack-preview",
+      "yukkuri-characters-preview",
       "character-pack-import",
       "character-pack-remove",
     ].includes(action)
   )
     return sender.role === "settings";
-  if (action === "hide") return sender.role === "bubble";
+  if (action === "hide") return sender.role === "bubble" || sender.role === "tools";
+  if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
+  if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";
+  if(action==="draft-message")return sender.role==="tools";
+  if(sender.role==="tools")return ["tools","apps","app-open","app-call","screenshot-sources","screenshot-approve","screenshot-submit","screenshot-cancel","reminders","reminder-save","reminder-remove","reminder-ack","ocr-state","ocr-file","ocr-clipboard","ocr-crop","ocr-run","ocr-discard","note-save","note-delete","transcribe-file","transcribe-cancel","clipboard-read","clipboard-write","record-start","record-stop","record-discard","record-transcribe"].includes(action);
   if (
     [
       "inbox",
+      "notice-read",
+      "resize-start",
+      "resize-move",
+      "resize-end",
       "conversation",
       "start-session",
       "adopt-session",

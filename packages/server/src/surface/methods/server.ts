@@ -1,3 +1,6 @@
+import {resourceHostIdentity} from "@sodashitsu/client-core/nodeResourceIdentity";
+import { ResourceAppReportParams,type ResourceProcess } from "@sodashitsu/protocol";
+import { ProcessResourceSampler } from "./ResourceProcesses.js";
 import { MachineAddParams, MachineManageParams } from "@sodashitsu/protocol";
 import {
   PairingStartParams,
@@ -68,6 +71,43 @@ export function registerServerMethods(surface: ControlSurface, deps: MethodDeps)
   surface.register("server.resources", {
     schema: ServerStopParams,
     handler: () => ({ ...resources.get(), agents: deps.session.agentCounts() }),
+  });
+  const processes = new ProcessResourceSampler();
+  let demandUntil = 0;
+  const appReports = new Map<string,{at:number;deviceId:string;hostId:string|null;rows:ResourceProcess[]}>();
+  surface.register("server.resource_app_demand", {
+    schema:ServerStopParams,handler:()=>({active:Date.now()<demandUntil}),
+  });
+  surface.register("server.resource_app_report", {
+    schema:ResourceAppReportParams,handler:(ctx,p)=>{
+      const now=Date.now();
+      for(const [key,value] of appReports)if(now-value.at>15000)appReports.delete(key);
+      if(now>=demandUntil)return {};
+      // New connections replace their previous reports; never retain unbounded device history.
+      for(const [key,value] of appReports)if(value.deviceId===p.deviceId)appReports.delete(key);
+      if(appReports.size>=32)appReports.delete(appReports.keys().next().value!);
+      appReports.set(ctx.clientId,{at:now,deviceId:p.deviceId,hostId:p.hostId,rows:p.processes.map(row=>({
+        id:`app:${p.deviceId}:${row.pid}:${row.startedAt}`,startIdentity:row.startIdentity,pid:row.pid,parentPid:null,
+        name:row.name,group:"app",label:"デスクトップアシスタント",source:`app:${p.deviceId}`,
+        platform:p.platform,cpuPercent:row.cpuPercent,rssBytes:row.rssBytes,threads:null,
+      }))});return {};
+    },
+  });
+  surface.register("server.resource_monitor", {
+    schema:ServerStopParams,handler:async()=>{
+      demandUntil=Date.now()+12000;
+      const panes=deps.session.snapshot().panes.flatMap(p=>{
+        const terminal=deps.terminals.get(p.id);
+        return terminal?[{pid:terminal.pid,paneId:p.id,label:p.agent?.name||p.label||p.agent?.label||p.id.slice(0,8),agent:!!p.agent}]:[];
+      });
+      const result=await processes.get(panes),now=Date.now();
+      for(const [key,value] of appReports)if(now-value.at>15000)appReports.delete(key);
+      const hostId=await resourceHostIdentity();
+      const reportedHere=new Set([...appReports.values()].filter(r=>hostId!==null&&r.hostId===hostId).flatMap(r=>r.rows.filter(row=>row.startIdentity!==null).map(row=>`${row.pid}:${row.startIdentity}`)));
+      return {sampledAt:result.at,system:{...resources.get(),agents:deps.session.agentCounts()},
+        processes:[...result.rows.filter(row=>!reportedHere.has(`${row.pid}:${row.startIdentity}`)),...[...appReports.values()].flatMap(r=>r.rows)],
+        warnings:result.warning?[result.warning]:[]};
+    },
   });
   surface.register("server.stop", {
     schema: ServerStopParams,

@@ -28,7 +28,7 @@ const Origin = z
 export const AssistantCharacterId = z
   .string()
   .regex(
-    /^(captain-(?:male|female|robot)|plugin:[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63})$/,
+    /^(captain-(?:male|female|robot)|sodashitsu-icon|plugin:[a-z0-9][a-z0-9_-]{0,63}\/[a-z0-9][a-z0-9_-]{0,63})$/,
   );
 /** Local whisper.cpp only. No remote audio upload is implicit in enabling this setting. */
 export function desktopAssistantTranscriptionOrigin(input: string): string {
@@ -92,6 +92,12 @@ export const DesktopAssistantPreferences = z
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
     mute: z.boolean().default(false),
+    voiceEnabled: z.boolean().default(false),
+    voiceFollowCharacter:z.boolean().default(true),
+    voiceCoreVersion:z.string().max(80).default(""),
+    voiceProvider: z.enum(["system", "core", "voicevox"]).default("system"),
+    voicevoxOrigin: z.string().url().refine(value => { try { const u=new URL(value); return u.protocol==="http:" && ["localhost","127.0.0.1","[::1]"].includes(u.hostname) && !u.username && !u.password && u.pathname==="/" && !u.search && !u.hash; } catch { return false; } }, "このPCのVOICEVOX接続先を指定してください").default("http://127.0.0.1:50021"),
+    voicevoxStyleId: z.number().int().min(0).max(2147483647).default(2),
     quietFullscreen: z.boolean().default(true),
     remoteNotifications: z.boolean().default(true),
     allowPluginCharacters: z.boolean().default(false),
@@ -116,6 +122,9 @@ export const DesktopAssistantPreferences = z
     transcriptionProvider:z.enum(["agent","local"]).default("agent"),
     transcriptionOrigin: TranscriptionOrigin.default("http://127.0.0.1:8080"),
     reducedMotion: z.boolean().default(false),
+    followSystemMotion: z.boolean().default(true),
+    idleFloating: z.boolean().default(false),
+    iconRotation: z.boolean().default(true),
     characterSize: z.number().int().min(64).max(512).default(192),
     position: z
       .object({
@@ -159,7 +168,7 @@ export const AssistantAgentKind = z
 export const ASSISTANT_AUDIO_MAX_BYTES=25*1024*1024;
 export const ASSISTANT_AUDIO_CHUNK_BYTES=48*1024;
 export const AssistantAudioMime=z.enum(["audio/wav","audio/mpeg","audio/mp4","audio/ogg","audio/flac","audio/webm"]);
-export const AssistantAudioBeginParams=z.object({deviceId:z.uuid(),instanceId:z.uuid(),mime:AssistantAudioMime,size:z.number().int().min(1).max(ASSISTANT_AUDIO_MAX_BYTES),ttlMs:z.number().int().min(1).max(300000)}).strict();
+export const AssistantAudioBeginParams=z.object({deviceId:z.uuid(),instanceId:z.uuid(),mime:AssistantAudioMime,characterId:AssistantCharacterId.optional(),size:z.number().int().min(1).max(ASSISTANT_AUDIO_MAX_BYTES),ttlMs:z.number().int().min(1).max(300000)}).strict();
 export const AssistantAudioChunkParams=z.object({uploadId:z.uuid(),offset:z.number().int().min(0).max(ASSISTANT_AUDIO_MAX_BYTES),data:z.string().min(4).max(ASSISTANT_AUDIO_CHUNK_BYTES/3*4).regex(/^[A-Za-z0-9+/]*={0,2}$/)}).strict();
 export const AssistantAudioIdParams=z.object({uploadId:z.uuid()}).strict();
 /** Server-created workspace ownership; ordinary workspace.create does not accept this field. */
@@ -200,6 +209,7 @@ export const AssistantSessionEnsureParams = AssistantSessionGetParams.extend({
 export const AssistantSessionPromptParams = AssistantSessionGetParams.extend({
   instanceId: z.uuid(),
   text: z.string().min(1).max(8192),
+  characterId: AssistantCharacterId.optional(),
   imageRequestId: z.uuid().optional(),
   ttlMs: z.number().int().min(1).max(60000).optional(),
 }).strict().refine(value => (value.imageRequestId === undefined) === (value.ttlMs === undefined), "画像指示には識別子と期限の両方が必要です");

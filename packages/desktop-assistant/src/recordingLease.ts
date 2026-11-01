@@ -19,6 +19,7 @@ export class RecordingLease {
     this.arm();
     return token;
   }
+  owner(){return this.lease?.owner;}
   has(owner?: number): boolean {
     this.expire();
     return !!this.lease && (owner === undefined || owner === this.lease.owner);
@@ -40,7 +41,7 @@ export class RecordingLease {
       this.lease.phase === "capturing" &&
       permission === "media" &&
       details.isMainFrame &&
-      localRole(details.requestingUrl ?? "") === "bubble" &&
+      ["bubble","tools"].includes(localRole(details.requestingUrl ?? "")??"") &&
       media.length === 1 &&
       media[0] === "audio" &&
       (details.mediaType === undefined || details.mediaType === "audio")

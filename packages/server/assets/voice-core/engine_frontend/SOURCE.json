@@ -1,0 +1,24 @@
+{
+  "source": "https://github.com/VOICEVOX/voicevox_engine/tree/0.25.2/voicevox_engine/tts_pipeline",
+  "sha256BeforeAdaptation": {
+    "kana_converter.py": "4bfc1eef1cdfb701c82d843fc36e6b18c149c401ee6faddf5c337d9e30e9efac",
+    "text_analyzer.py": "a1ec60c173ebffab491b1e3e6c22ae0a46b84f67a74c7ced4819728491777ab7",
+    "mora_mapping.py": "82236f0666b97c88ddb8738a071a6bead92fb8e0853392eb3c3699b371f53a7d",
+    "phoneme.py": "7478b81f6a04bb7b2858e97c4d718d8fa1c344f06881ee4d2f6e8b6b4ee0b449",
+    "katakana_english.py": "e683692e11fc804d121b910daada3570832ca8433cc031b9fbb9c6be89489e0c",
+    "njd_feature_processor.py": "1cb2f3fd5bbeb6899f34d44eaab3d5ec17f1521f7ead9c9647c326c2573ef9e4"
+  },
+  "adaptations": [
+    "Pydantic models replaced by public CORE dataclasses",
+    "model_copy(deep=True) replaced by deepcopy",
+    "NJD receives instance-scoped OpenJTalk for dictionary isolation"
+  ],
+  "additionalSources": {
+    "default.csv": "https://github.com/VOICEVOX/voicevox_engine/blob/0.25.2/resources/default.csv",
+    "text_utility.py": "https://github.com/VOICEVOX/voicevox_engine/blob/0.25.2/voicevox_engine/utility/text_utility.py"
+  },
+  "additionalSha256": {
+    "default.csv": "14cc7b95acb392df12074dc517be5397a4f3048cc2500bfbe904c33a5e549b55",
+    "text_utility.py": "85f88bdf8d42b4586b2563d894873e7d5f24f7963bcdefc0493811f203d00df1"
+  }
+}

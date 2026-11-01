@@ -1,0 +1,15 @@
+{
+  "generatedOn": "2026-11-01",
+  "generator": "OpenAI built-in image generation",
+  "files": [
+    "captain-male.png",
+    "captain-female.png",
+    "captain-robot.png"
+  ],
+  "description": "Pop Japanese anime chibi full-body captains, friendly expressive faces, clean cel shading, navy/gold/ivory uniforms. Original generated transparent PNGs preserved; framing at display time.",
+  "icon": {
+    "file": "sodashitsu-icon.svg",
+    "source": "packages/web/public/logo.svg",
+    "modified": false
+  }
+}

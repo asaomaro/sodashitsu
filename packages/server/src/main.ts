@@ -27,6 +27,7 @@ function printHelp(): void {
       "soda session delete NAME [--state-dir DIR] [--json]",
       "soda session stop NAME [--state-dir DIR] [--json]",
       "soda handoff [--state-dir DIR] [--session NAME]",
+      "soda voice configure|enable|disable|status|serve|add-core|remove-core|versions|speakers|query|synthesize|call [--state-dir DIR] [--transport ipc|http] [--acceleration-mode CPU|GPU|AUTO]",
       "soda assistant enable|disable|status [--state-dir DIR] [--session NAME]",
       ...MACHINE_USAGE.split("\n"),
       "soda bridge [--session NAME] [--state-dir DIR]   (started by another machine over ssh)",
@@ -208,6 +209,9 @@ async function main(): Promise<void> {
         { stateDir: parsed.stateDir ?? defaultStateDir(), session: parsed.session },
         { stdin: process.stdin, stdout: process.stdout, err: (line) => console.error(line) },
       );
+    } else if (parsed.command === "voice") {
+      const {runVoiceCommand}=await import("./voice/voiceCommand.js");
+      await runVoiceCommand(parsed.voiceArgs??[],defaultStateDir());
     } else if (parsed.command === "assistant") {
       const {readAssistantEnabled,writeAssistantEnabled}=await import("./assistant/AssistantEnabledState.js");
       const dir = resolveServeOptions(parsed.serve).stateDir;

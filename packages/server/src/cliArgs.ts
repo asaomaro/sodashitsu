@@ -3,9 +3,10 @@ import { SESSION_NAME_RULE, sessionNameProblem } from "./persist/namedSession.js
 import { parseMachineArgs, type MachineCommand } from "./machine/machineArgs.js";
 
 export interface ParsedArgs {
-  command: "tui" | "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help" | "assistant";
+  command: "tui" | "serve" | "token-reset" | "session-list" | "session-delete" | "session-stop" | "handoff" | "handoff-preflight" | "bridge" | "machine" | "help" | "assistant" | "voice";
   /** `soda machine …`（20260927-multi-host-machines）。 */
   machine?: MachineCommand;
+  voiceArgs?: readonly string[];
   assistantAction?: "enable" | "disable" | "status";
   serve: RawServeArgs;
   stateDir?: string | undefined;
@@ -65,6 +66,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     const parsed = parseMachineArgs(rest);
     return { command: "machine", serve, stateDir: parsed.stateDir, machine: parsed };
   }
+  if (command === "voice") return {command:"voice",serve,voiceArgs:rest};
   if (command === "assistant") {
     const [action, ...options] = rest;
     if (!["enable","disable","status"].includes(action ?? "")) throw new ConfigError("soda assistant enable|disable|status", USAGE);

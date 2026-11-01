@@ -10,10 +10,17 @@ const root = fileURLToPath(new URL("../assets/", import.meta.url));
 const files = new Set([
   "character.html",
   "character.js",
+  "actor.js",
   "settings.html",
   "settings.js",
   "bubble.html",
+  "tools.html",
+  "tool-window.js",
+  "reminder-notices.js",
   "bubble.js",
+  "notice.html",
+  "notice.js",
+  "resize.js",
   "tools.js",
   "recording.js",
   "ocr.js",
@@ -21,6 +28,10 @@ const files = new Set([
   "capture.js",
   "apps.js",
   "style.css",
+  "captain-male.png",
+  "captain-female.png",
+  "captain-robot.png",
+  "sodashitsu-icon.svg",
   "captain-male.svg",
   "captain-female.svg",
   "captain-robot.svg",
@@ -34,7 +45,7 @@ const server = createServer(async (request, response) => {
   const ext = path.split(".").at(-1);
   response.setHeader(
     "Content-Type",
-    { html: "text/html", js: "text/javascript", css: "text/css", svg: "image/svg+xml" }[ext],
+    { html: "text/html", js: "text/javascript", css: "text/css", svg: "image/svg+xml", png:"image/png" }[ext],
   );
   response.end(await readFile(join(root, path)));
 });
@@ -50,7 +61,7 @@ try {
   });
   const context = await browser.newContext({viewport:{width:400,height:640}});
   await context.addInitScript(() => {
-    window.calls = [];
+    window.calls = [];window.previewVoiceRevision=1;
     window.preferences = {
       version: 1,
       enabled: false,
@@ -59,7 +70,7 @@ try {
       characterSize: 192,
       serverOrigin: "http://127.0.0.1:7780",
       launchAtLogin: false,
-      mute: false,
+      mute: false,voiceEnabled:false,
       quietFullscreen:true,
       remoteNotifications:true,
       allowPluginCharacters:false,allowPluginViews:false,allowPluginActions:false,
@@ -68,6 +79,7 @@ try {
       transcriptionEnabled: false,
       transcriptionProvider: "local",
       transcriptionOrigin: "http://127.0.0.1:8080",
+      followSystemMotion:true,
       reducedMotion: false,
       position: null,
     };
@@ -96,10 +108,17 @@ try {
       apps:async()=>({instanceId:"00000000-0000-4000-8000-000000000003",allowViews:true,allowActions:true,views:[{extensionKey:"demo",runId:"00000000-0000-4000-8000-000000000004",id:"assistant",title:"プラグインUI"}],operations:[{extensionKey:"demo",runId:"00000000-0000-4000-8000-000000000004",name:"search",description:"明示した検索",inputSchema:{type:"object"}}]}),
       openApp:async input=>window.calls.push(["open-app",input]),
       callApp:async input=>{window.calls.push(["call-app",input]);return{result:"<img src=x>プラグインの結果"};},
-      characterInfo:async()=>({name:window.preferences.characterId==="captain-robot"?"ロボット船長":"船長",uri:`${window.preferences.characterId}.svg`}),
+      voiceVersions:async()=>[{version:"0.17.1",accelerationMode:"CPU"},{version:"0.17.0",accelerationMode:"AUTO"}],
+      voiceSpeakers:async()=>[{id:108,label:"東北きりたん（ノーマル）"},{id:3,label:"ずんだもん（ノーマル）"}],
+      characterActor:async()=>null,
+      characterState:async()=>({revision:1,notificationSeq:0,mode:"idle",paused:false,reducedMotion:false}),
+      onCharacterState:callback=>{window.characterCallback=callback;return()=>{window.characterUnsubscribed=true;};},
+      characterInfo:async()=>({name:window.preferences.characterId==="captain-robot"?"ロボット船長":"船長",uri:`${window.preferences.characterId}.${window.preferences.characterId==="sodashitsu-icon"?"svg":"png"}`}),
       displays:async()=>[{id:"1",label:"生成したディスプレイ",workArea:{x:0,y:0,width:1920,height:1080}}],
       characters:async()=>({characters:[],error:""}),
+      previewYukkuriCharacters:async()=>({token:"00000000-0000-4000-8000-000000000079",name:"yukkuri-work",characters:[{name:"ずんだもん",uri:"captain-robot.svg"}]}),
       previewCharacterPack:async()=>null,
+      importCharacterPack:async input=>{window.calls.push(["import-character-pack",input]);return[{id:"plugin:yukkuri-work/zundamon",packId:"yukkuri-work",name:"ずんだもん",uri:"captain-robot.svg",credit:"元の立ち絵の素材メモ"}];},
       screenshotSources:async()=>({token:"00000000-0000-4000-8000-000000000088",sources:[{id:"screen:generated",name:"生成した画面"}]}),
       approveScreenshot:async input=>window.calls.push(["approve-screenshot",input]),
       submitScreenshot:async input=>{
@@ -159,15 +178,35 @@ try {
       },
       transcribeFile: async () => window.calls.push(["transcribe-file"]),
       cancelTranscription: async () => window.calls.push(["cancel-transcription"]),
+      voiceState:async()=>({revision:1,enabled:false,speaking:false,message:"ボイスはオフです。"}),
+      onVoice:callback=>{window.voiceCallback=callback;return()=>{};},
+      matchVoice:async input=>input.characterId.endsWith("zundamon")?{id:3,label:"ずんだもん（ノーマル）"}:null,
+      testVoice:async input=>{window.calls.push(["test-voice",input]);window.voiceCallback({revision:++window.previewVoiceRevision,enabled:true,speaking:true,message:"読み上げています。"});},
+      stopVoice:async()=>{window.calls.push(["stop-voice"]);window.voiceCallback({revision:++window.previewVoiceRevision,enabled:true,speaking:false,message:"読み上げを停止しました。"});},
+      noticeState: async()=>({revision:1,title:"実装担当 (12345678) / 操舵室",message:"質問内容：変更を適用しますか？"}),
+      readNotice: async input=>window.calls.push(["notice-read",input]),
+      openNotice: async input=>window.calls.push(["open-notice",input]),
+      dismissNotice: async input=>window.calls.push(["dismiss-notice",input]),
+      onNotice: callback=>{window.compactCallback=callback;return()=>{};},
       inbox: async () => ({
         status: "connected",
         revision: 1,
+        agentList:{total:3,working:1,blocked:1,agents:[
+          {title:"実装担当 (12345678) / 操舵室",state:"working"},
+          {title:"レビュー担当 (23456789) / 操舵室",state:"blocked"},
+          {title:"待機担当 (34567890) / 操舵室",state:"idle"},
+        ]},
         notices: [{ id:"00000000-0000-4000-8000-000000000091", message: "「操舵室 / worker」の作業が完了しました。" }],
       }),
       onInbox: (callback) => {
         window.noticeCallback = callback;
         return () => {};
       },
+      openTools:async()=>window.calls.push(["tools-open"]),
+      draftState:async()=>({revision:0,text:null}),
+      onDraft:callback=>{window.draftCallback=callback;return()=>{};},
+      consumeDraft:async input=>window.calls.push(["consume-draft",input]),
+      draftMessage:async input=>{window.calls.push(["draft-message",input]);await window.deliverToolDraft({revision:(window.mockDraftRevision=(window.mockDraftRevision||0)+1),text:input.text});},
       read: async () => window.preferences,
       save: async (preferences) => {
         window.calls.push(["save", preferences]);
@@ -177,10 +216,15 @@ try {
       open: async () => window.calls.push(["open"]),
       settings: async () => window.calls.push(["settings"]),
       chat: async () => window.calls.push(["chat"]),
+      beginResize:async input=>{window.calls.push(["resize-start",input]);return{token:"00000000-0000-4000-8000-000000000080"};},
+      resize:async input=>window.calls.push(["resize-move",input]),
+      endResize:async input=>window.calls.push(["resize-end",input]),
       hide: async () => window.calls.push(["hide"]),
     };
   });
-  const page = await context.newPage();
+  let conversationPage;
+  await context.exposeBinding("deliverToolDraft",async(_source,state)=>{if(conversationPage)await conversationPage.evaluate(value=>window.draftCallback(value),state);});
+  let page = await context.newPage();
   page.setDefaultTimeout(5000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -193,22 +237,74 @@ try {
   await page.locator("#codex-model").fill("custom-model");
   await page.locator("#codex-effort").selectOption("low");
   await page.getByRole("button", {name:"保存",exact:true}).press("Enter");
-  await expect(page.getByRole("status")).toHaveText("保存しました。");
+  await expect(page.locator("#status")).toHaveText("保存しました。");
   assert.deepEqual(await page.evaluate(()=>window.preferences.agentProfiles), {claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"}});
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="start-session").length),0);
   await expect(page.locator("#claude-model")).toHaveValue("sonnet");
+  await expect(page.locator("#followSystemMotion")).toBeChecked();
+  await page.locator("#followSystemMotion").uncheck();
+  await expect(page.locator("#voiceEnabled")).not.toBeChecked();
+  await page.locator("#voiceEnabled").check();
+  await page.locator("#idleFloating").check();
+  await page.locator("#voiceProvider").selectOption("voicevox");
+  await page.locator("#voice-speakers").click();
+  await page.locator("#voicevoxStyleId").selectOption("108");
+  await expect(page.locator("#voiceFollowCharacter")).not.toBeChecked();
+  await page.getByRole("button",{name:"ボイスを試す",exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="test-voice").at(-1)[1].voicevoxStyleId),108);
+  assert.notEqual(await page.evaluate(()=>window.preferences.voicevoxStyleId),108);
+  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
+  await expect(page.locator("#status")).toHaveText("保存しました。");
+  assert.equal(await page.evaluate(()=>window.preferences.voiceEnabled),true);
+  assert.equal(await page.evaluate(()=>window.preferences.idleFloating),true);
+  assert.equal(await page.evaluate(()=>window.preferences.voiceProvider),"voicevox");
+  assert.equal(await page.evaluate(()=>window.preferences.voicevoxStyleId),108);
+  assert.equal(await page.evaluate(()=>window.preferences.followSystemMotion),false);
+  await page.getByRole("button",{name:"ボイスを試す",exact:true}).press("Enter");
+  await expect(page.locator("#voice-status")).toHaveText("読み上げています。");
+  await page.locator("#voice-stop").press("Enter");
+  await expect(page.locator("#voice-status")).toHaveText("読み上げを停止しました。");
+  await page.locator("#voiceProvider").selectOption("core");
+  await page.locator("#voice-core-refresh").click();
+  await page.locator("#voiceCoreVersion").selectOption("0.17.0");
+  await page.getByRole("button",{name:"ボイスを試す",exact:true}).click();
+  const coreDraft=await page.evaluate(()=>window.calls.filter(c=>c[0]==="test-voice").at(-1)[1]);
+  assert.equal(coreDraft.voiceCoreVersion,"0.17.0");assert.equal(coreDraft.voiceProvider,"core");assert.equal(coreDraft.voicevoxOrigin,undefined);
+  await page.evaluate(()=>{window.originalSpeakers=window.assistant.voiceSpeakers;window.assistant.voiceSpeakers=()=>new Promise(resolve=>window.finishSpeakers=resolve);});
+  await page.locator("#voice-speakers").click();await expect(page.locator("#voice-speakers")).toBeDisabled();
+  await page.locator("#voiceCoreVersion").selectOption("0.17.1");
+  await page.evaluate(()=>window.finishSpeakers([{id:999,label:"古いCOREの声"}]));
+  await expect(page.locator("#voice-speakers")).toBeEnabled();await expect(page.locator('#voicevoxStyleId option[value="999"]')).toHaveCount(0);
+  await page.evaluate(()=>window.assistant.voiceSpeakers=window.originalSpeakers);
+  await page.locator("#voiceProvider").selectOption("voicevox");
+
+  await page.locator("#voiceEnabled").uncheck();
+  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
+  assert.equal(await page.evaluate(()=>window.preferences.voiceEnabled),false);
   await page.locator("#enabled").press("Space");
   await expect(page.locator("#enabled")).toBeChecked();
-  for (const character of ["captain-male", "captain-female", "captain-robot"]) {
+  await page.locator("#preview-yukkuri-characters").press("Enter");
+  await expect(page.locator("#character-pack-preview img")).toHaveCount(1);
+  await expect(page.locator("#character-pack-preview img")).toHaveAttribute("alt","ずんだもん");
+  await page.locator("#import-character-pack").press("Enter");
+  await page.locator("#characterId").selectOption("plugin:yukkuri-work/zundamon");
+  await expect(page.locator("#selected-character-preview")).toHaveAttribute("alt","ずんだもん");
+  await expect(page.locator("#selected-character-credit")).toHaveText("元の立ち絵の素材メモ");
+  await page.locator("#voiceFollowCharacter").check();
+  await expect(page.locator("#voicevoxStyleId")).toHaveValue("3");
+  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
+  assert.equal(await page.evaluate(()=>window.preferences.characterId),"plugin:yukkuri-work/zundamon");
+  assert.equal(await page.evaluate(()=>window.preferences.allowPluginCharacters),true);
+  for (const character of ["captain-male", "captain-female", "sodashitsu-icon", "captain-robot"]) {
     await page.locator("#characterId").selectOption(character);
     await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
-    await expect(page.getByRole("status")).toHaveText("保存しました。");
+    await expect(page.locator("#status")).toHaveText("保存しました。");
     assert.equal(await page.evaluate(() => window.preferences.characterId), character);
   }
   await page.locator("#displayId").selectOption("1");await page.locator("#positionX").fill("100");await page.locator("#positionY").fill("200");
   await page.locator("#mode").selectOption("tray");
   await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
-  await expect(page.getByRole("status")).toHaveText("保存しました。");
+  await expect(page.locator("#status")).toHaveText("保存しました。");
   assert.deepEqual(await page.evaluate(()=>window.preferences.position),{displayId:"1",x:100,y:200});
   assert.equal(await page.evaluate(() => window.preferences.characterId), "captain-robot");
   assert.equal(await page.evaluate(() => window.preferences.mode), "tray");
@@ -220,16 +316,109 @@ try {
     };
   });
   await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
-  await expect(page.getByRole("status")).toContainText("disk full");
+  await expect(page.locator("#status")).toContainText("disk full");
   await expect(page.getByRole("button", { name: "保存", exact: true })).toBeEnabled();
   await page.goto(`${origin}/character.html`);
-  await expect(page.locator("#portrait")).toHaveAttribute("src", "captain-female.svg");
+  await expect(page.locator("#portrait")).toHaveAttribute("src", "captain-female.png");
+  await expect.poll(()=>page.locator("#portrait").evaluate(el=>el.naturalWidth)).toBe(1024);
+  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button",{name:"アシスタント設定",exact:true})).toHaveCount(0);
+  const motion=page.locator("#character-motion");
+  await expect(motion).toHaveAttribute("data-motion","idle");
+  const firstMotion=await motion.evaluate(el=>el.style.transform);
+  await expect.poll(()=>motion.evaluate(el=>el.style.transform)).not.toBe(firstMotion);
+  await page.evaluate(()=>window.characterCallback({revision:2,notificationSeq:0,mode:"speaking",paused:false,reducedMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","speaking");
+  await page.evaluate(()=>window.characterCallback({revision:3,notificationSeq:1,mode:"idle",paused:false,reducedMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","notice");
+  const box=await motion.boundingBox();assert.ok(box.x>=-.01&&box.y>=-.01&&box.x+box.width<=400.01&&box.y+box.height<=640.01,"motion stays inside character bounds");
+  await expect(motion).toHaveAttribute("data-motion","idle");
+  await page.evaluate(()=>window.characterCallback({revision:4,notificationSeq:1,mode:"working",paused:false,reducedMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","working");
+  await page.evaluate(()=>window.characterCallback({revision:5,notificationSeq:1,mode:"idle",paused:false,reducedMotion:true}));
+  await expect(motion).toHaveAttribute("data-motion","still");assert.equal(await motion.evaluate(el=>el.style.transform),"");
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.evaluate(()=>window.characterCallback({revision:6,notificationSeq:1,mode:"speaking",paused:false,reducedMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","still");
+  await page.evaluate(()=>window.characterCallback({revision:7,notificationSeq:1,mode:"idle",paused:false,reducedMotion:false,followSystemMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","idle");
+  await expect.poll(()=>motion.evaluate(el=>getComputedStyle(el).transform)).not.toBe("none");
+  await page.evaluate(()=>window.characterCallback({revision:8,notificationSeq:1,mode:"speaking",paused:false,reducedMotion:true,followSystemMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","still");
+  await page.emulateMedia({reducedMotion:"no-preference"});
+  await page.evaluate(()=>window.characterCallback({revision:9,notificationSeq:2,mode:"idle",paused:true,reducedMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","still");
+  await page.evaluate(()=>window.characterCallback({revision:10,notificationSeq:2,mode:"idle",paused:false,reducedMotion:false}));
+  await expect(motion).toHaveAttribute("data-motion","idle");
+  await page.evaluate(()=>window.characterCallback({revision:11,notificationSeq:2,mode:"idle",paused:false,reducedMotion:false,idleFloating:true}));
+  await expect(page.locator("body")).toHaveClass(/idle-floating/);
+  const floatY=await motion.evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m42);
+  await expect.poll(()=>motion.evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m42)).not.toBe(floatY);
+  const floatBox=await motion.boundingBox();assert.ok(floatBox.y>=-.01&&floatBox.y+floatBox.height<=648.01,"floating moves down from the taskbar edge within its clipped eight-DIP range");
+  await page.evaluate(()=>window.characterCallback({revision:12,notificationSeq:2,mode:"idle",paused:false,reducedMotion:false,idleFloating:false}));
+  await expect.poll(()=>motion.evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).m42)).toBe(0);
   await page.getByRole("button", { name: "船長と話す" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "chat");
+  await page.addInitScript(()=>{window.preferences.characterId="sodashitsu-icon";});
+  await page.goto(`${origin}/character.html`);
+  await expect(page.locator("#portrait")).toHaveAttribute("src","sodashitsu-icon.svg");
+  await expect.poll(()=>page.locator("#portrait").evaluate(el=>el.naturalWidth)).toBe(256);
+  const iconMotion=page.locator("#character-motion"),rotation=await iconMotion.evaluate(el=>el.style.transform);
+  await expect.poll(()=>iconMotion.evaluate(el=>el.style.transform)).not.toBe(rotation);
+  assert.equal(await iconMotion.evaluate(el=>getComputedStyle(el).transformOrigin),"200px 320px");
+  await page.evaluate(()=>window.characterCallback({revision:2,notificationSeq:0,mode:"idle",paused:false,reducedMotion:false,iconRotation:false,idleFloating:true}));
+  await expect.poll(()=>iconMotion.evaluate(el=>el.style.transform.includes("rotate(0deg)"))).toBe(true);
+  await page.evaluate(()=>window.characterCallback({revision:3,notificationSeq:0,mode:"idle",paused:false,reducedMotion:true,iconRotation:true,idleFloating:true}));
+  await expect(iconMotion).toHaveAttribute("data-motion","still");
+  console.log("PASS: original Sodashitsu icon loads, rotates around its centre, and obeys rotation/reduced-motion preferences");
+  await page.setViewportSize({width:340,height:220});
+  await page.goto(`${origin}/notice.html`);
+  await expect(page.locator("#notice-title")).toContainText("実装担当");
+  await expect(page.locator("#notice-message")).toContainText("変更を適用しますか？");
+  if(process.env.SODA_ASSISTANT_NOTICE_SCREENSHOT)await page.screenshot({path:process.env.SODA_ASSISTANT_NOTICE_SCREENSHOT});
+  await page.evaluate(()=>window.compactCallback({revision:2,title:"レビュー担当",message:"<img src=x onerror=alert(1)>確認してください。".repeat(30)}));
+  await expect(page.locator("#notice-title")).toHaveText("レビュー担当");
+  await expect(page.locator("#notice-content img")).toHaveCount(0);
+  assert.ok(await page.locator("#notice-content").evaluate(el=>el.scrollHeight>el.clientHeight));
+  await page.evaluate(()=>window.compactCallback({revision:1,title:"古い通知",message:"古い内容"}));
+  await expect(page.locator("#notice-title")).toHaveText("レビュー担当");
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight));
+  await page.getByRole("button",{name:"内容を開く",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["open-notice",{revision:2}]);
+  await page.getByRole("button",{name:"通知の吹き出しを閉じる",exact:true}).press("Enter");
+  assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"dismiss-notice");
+  await page.setViewportSize({width:400,height:640});
   await page.goto(`${origin}/bubble.html`);
   await expect(page.getByRole("log")).toContainText("こんにちは。操舵室の船長です。");
+  await expect(page.locator(".bubble-resize")).toHaveCount(3);
+  assert.deepEqual(await page.locator(".bubble-resize").evaluateAll(rows=>rows.map(el=>el.dataset.resize).sort()),["n","nw","w"]);
+  await expect(page.locator(".speech-tail")).toBeVisible();
+  const tail=await page.locator(".speech-tail").evaluate(el=>{
+   const style=getComputedStyle(el),r=el.getBoundingClientRect(),speech=document.querySelector(".speech");
+   return {width:parseFloat(style.width),transform:style.transform,bottom:r.bottom,bodyBottom:speech.getBoundingClientRect().bottom,outside:!speech.contains(el),height:innerHeight};
+  });
+  assert.equal(tail.width,18);assert.notEqual(tail.transform,"none");assert.ok(tail.outside);assert.ok(tail.bottom>tail.bodyBottom+8);assert.ok(tail.bottom<tail.height);
+
+  await page.mouse.move(200,8); await page.mouse.down();
+  await expect.poll(()=>page.evaluate(()=>window.calls.some(call=>call[0]==="resize-start"&&call[1].handle==="n"))).toBe(true);
+  await page.mouse.move(200,38); await page.mouse.up();
+  await expect.poll(()=>page.evaluate(()=>window.calls.some(call=>call[0]==="resize-end"))).toBe(true);
+  assert.ok(await page.evaluate(()=>window.calls.some(call=>call[0]==="resize-move")));
+
   await expect(page.locator("#destination")).toHaveText("専用アシスタント");
-  await expect(page.getByRole("log")).toContainText("作業が完了しました。");
+  await expect(page.locator("#notices")).toContainText("作業が完了しました。");
+  await expect(page.locator("#agent-roster-summary")).toContainText("3件・作業中 1件・確認待ち 1件");
+  await expect(page.locator("#agent-roster-rows li")).toHaveCount(3);
+  await expect(page.locator("#agent-roster-rows")).toContainText("実装担当");
+  await page.locator("#agent-filter").selectOption("working");
+  await expect(page.locator("#agent-roster-rows li")).toHaveCount(1);
+  await expect(page.locator("#agent-roster-rows")).toContainText("実装担当");
+  await page.locator("#agent-filter").selectOption("blocked");
+  await expect(page.locator("#agent-roster-rows")).toContainText("レビュー担当");
+  await page.locator("#agent-filter").selectOption("all");
+  if(process.env.SODA_ASSISTANT_UI_SCREENSHOT)await page.screenshot({path:process.env.SODA_ASSISTANT_UI_SCREENSHOT});
+
+
   await page.evaluate(() =>
     window.noticeCallback({
       status: "connected",
@@ -241,6 +430,7 @@ try {
     "<img src=x onerror=alert(1)>確認してください。",
   );
   await expect(page.locator(".notice img")).toHaveCount(0);
+  await expect(page.locator("#agent-roster-rows li")).toHaveCount(0);
   await page.evaluate(() => window.noticeCallback({ status: "offline", revision: 1, notices: [] }));
   await expect(page.locator(".notice")).toContainText("確認してください。");
   await expect(page.locator("#send")).toBeDisabled(); // No false successful chat before backend connection.
@@ -283,7 +473,12 @@ try {
     kinds:[{kind:"codex",label:"Codex",available:true}],messages:[],hint:"送信できます。"
   }),actorId);
   await expect(page.locator("#send")).toBeEnabled();
-  await page.locator("#standard-tools > summary").press("Enter");
+  await expect(page.locator("#standard-tools")).toHaveCount(0);
+  await page.getByRole("button",{name:"ツールを開く",exact:true}).press("Enter");
+  assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"tools-open");
+  conversationPage=page;page=await context.newPage();page.on("pageerror",error=>errors.push(String(error)));
+  await page.goto(`${origin}/tools.html`);
+  await expect(page.getByRole("heading",{name:"アシスタントのツール"})).toBeVisible();
   const sendsBeforeTools=await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length);
   await page.locator("#read-clipboard").press("Enter");
   await expect(page.locator("#tool-text")).toHaveValue("コピーした文章です。");
@@ -300,9 +495,9 @@ try {
   await expect(page.locator("#tool-text")).toBeEnabled();
   await page.locator("#prepare-summary").press("Enter");
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
-  await expect(page.locator("#message")).toHaveValue(/要約してください/);
+  await expect(conversationPage.locator("#message")).toHaveValue(/要約してください/);
   await page.locator("#prepare-translation").press("Enter");
-  await expect(page.locator("#message")).toHaveValue(/日本語に翻訳/);
+  await expect(conversationPage.locator("#message")).toHaveValue(/日本語に翻訳/);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
   await page.locator("#copy-tool-text").press("Enter");
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["write-clipboard",{text:"コピーした文章です。"}]);
@@ -337,10 +532,10 @@ try {
   await expect(page.locator("#record-indicator")).toBeVisible();
   await expect(page.locator("#record-stop-visible")).toBeVisible();
   // IntersectionObserver/rAF stalls in this WSL headless environment; inspect browser DOM geometry.
-  assert.deepEqual(await page.evaluate(()=>["record-stop-visible","message"].map(id=>{
+  assert.deepEqual(await page.evaluate(()=>["record-stop-visible"].map(id=>{
     const bounds=document.getElementById(id).getBoundingClientRect();
     return{ id,inside:bounds.width>0 && bounds.height>0 && bounds.top>=0 && bounds.bottom<=innerHeight && bounds.left>=0 && bounds.right<=innerWidth };
-  })),[{id:"record-stop-visible",inside:true},{id:"message",inside:true}]);
+  })),[{id:"record-stop-visible",inside:true}]);
   await page.locator("#record-stop-visible").press("Enter");
   await expect(page.locator("#record-preview")).toBeVisible();
   await expect(page.locator("#record-status")).toContainText("試聴してから");
@@ -379,7 +574,7 @@ try {
   await expect(page.locator("#record-start")).toBeEnabled();
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="transcribe-recording").length),1);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length),sendsBeforeTools);
-  await page.getByRole("button", { name: "吹き出しを閉じる" }).press("Enter");
+  await page.getByRole("button", { name: "閉じる",exact:true }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "hide");
   assert.deepEqual(errors, []);
   await page.evaluate(() => { document.getElementById("standard-tools").open=true; document.getElementById("ocr-tools").open=true; });
@@ -435,16 +630,94 @@ try {
   await expect(page.locator("#app-result")).toHaveValue("<img src=x>プラグインの結果");await expect(page.locator("#app-views img")).toHaveCount(0);
   await page.locator("#app-use").press("Enter");await expect(page.locator("#tool-text")).toHaveValue("<img src=x>プラグインの結果");
   await page.evaluate(()=>{window.assistant.apps=async()=>{throw Error("一覧が変わりました");};});await page.locator("#apps-refresh").press("Enter");await expect(page.locator("#app-views button")).toHaveCount(0);await expect(page.locator("#app-call")).toBeDisabled();
+  page=conversationPage;
+  await page.evaluate(()=>window.remindersCallback({revision:3,connected:true,jobs:[],runs:[{id:"00000000-0000-4000-8000-000000000044",input:"会話で確認するリマインダー"}],message:"届いています"}));
+  await expect(page.locator("#reminder-notices")).toContainText("会話で確認するリマインダー");
+  await page.locator("#reminder-notices").getByRole("button",{name:"確認しました",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["ack-reminder",{id:"00000000-0000-4000-8000-000000000044"}]);
+  await page.evaluate(()=>window.remindersCallback({revision:4,connected:true,jobs:[],runs:[],message:""}));
   const reply=page.locator(".notice textarea");await reply.fill("通知元への返答");
   await page.evaluate(()=>window.noticeCallback({status:"connected",revision:99,notices:[{id:"00000000-0000-4000-8000-000000000092",message:"<img src=x onerror=alert(1)>確認してください。"}]}));
+  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:100,notices:[{id:"00000000-0000-4000-8000-000000000092",title:"実装担当 (12345678) / 操舵室",message:"確認待ち\n直近の応答：変更を適用しますか？"}]}));
+  await expect(page.locator(".notice small")).toContainText("実装担当");
+  await expect(page.locator(".notice-text")).toContainText("変更を適用しますか？");
+  await page.locator(".notice-title-button").press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["notice-read",{noticeId:"00000000-0000-4000-8000-000000000092"}]);
+  await expect(page.locator(".notice-current")).toHaveCount(1);
+
   await expect(reply).toHaveValue("通知元への返答");
   await page.getByRole("button",{name:"この通知元へ返答",exact:true}).press("Enter");
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["reply-source",{noticeId:"00000000-0000-4000-8000-000000000092",text:"通知元への返答"}]);
-  await page.getByRole("button",{name:"この端末・質問フォームを開く",exact:true}).press("Enter");
-  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["open-source",{noticeId:"00000000-0000-4000-8000-000000000092"}]);
+  await page.getByRole("button",{name:"小窓で応答",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["open-source",{noticeId:"00000000-0000-4000-8000-000000000092",destination:"reply"}]);
+  await page.getByRole("button",{name:"操舵室で開く",exact:true}).press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["open-source",{noticeId:"00000000-0000-4000-8000-000000000092",destination:"main"}]);
+  // Pending response choices must stay outside chat even as its transcript is rebuilt.
+  await page.evaluate(()=>window.chatCallback({revision:99,connected:true,busy:false,
+    session:{paneId:"00000000-0000-4000-8000-000000000002",kind:"codex",state:"ready",agent:{instanceId:"00000000-0000-4000-8000-000000000001",kind:"codex",state:"idle"}},
+    kinds:[{kind:"codex",label:"Codex",available:true}],messages:Array.from({length:100},(_,i)=>({id:String(i),role:"assistant",text:"長い会話".repeat(100)})),hint:"船長へのメッセージを送れます。"}));
+  await expect(page.locator("#notices").getByRole("button",{name:"小窓で応答",exact:true})).toBeVisible();
+  await expect(page.locator("#notices").getByRole("button",{name:"操舵室で開く",exact:true})).toBeVisible();
+  await expect(page.locator("#conversation .notice")).toHaveCount(0);
+  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:101,
+    notices:[{id:"00000000-0000-4000-8000-000000000092",message:"確認してください。"}],
+    agentList:{total:300,working:256,blocked:0,agents:Array.from({length:256},(_,i)=>({title:`作業担当 ${i}`,state:"working"}))},
+  }));
+  await page.locator("#agent-filter").selectOption("idle");
+  await expect(page.locator("#agent-roster-status")).toContainText("表示対象の先頭256件");
+  await page.locator("#agent-filter").selectOption("all");
+  assert.ok(await page.locator("#agent-roster-rows").evaluate(element=>element.scrollHeight>element.clientHeight&&element.clientHeight<=150));
+  // Observe real layout with long chat, expanded tools, and launch metadata.
+  // The document and composer must stay fixed even on a short work area.
+  await page.evaluate(() => {
+    document.getElementById("conversation").replaceChildren();
+    for (let i = 0; i < 40; i++) {
+      const message = document.createElement("p");
+      message.className = "spoken";
+      message.textContent = `会話 ${i}: ` + "長い会話の内容です。".repeat(20);
+      document.getElementById("conversation").append(message);
+    }
+    document.getElementById("launch-settings").textContent = "起動時指定：モデル 既定値 / effort 既定値（CLI内での変更は追跡しません）";
+  });
+  for (const viewport of [{width:400,height:640},{width:400,height:540},{width:320,height:480}]) {
+    await page.setViewportSize(viewport);
+    {
+      await page.locator(".speech-content").evaluate(element=>{element.scrollTop=0;});
+      for(const label of ["小窓で応答","操舵室で開く"]){
+        const box=await page.locator("#notices").getByRole("button",{name:label,exact:true}).boundingBox();
+        const content=await page.locator(".speech-content").boundingBox();
+        assert.ok(box && content && box.height>0 && box.y>=content.y && box.y+box.height<=content.y+content.height,`visible notice choice ${label}, ${viewport.width}x${viewport.height}, separate tools window`);
+      }
+      const layout = await page.evaluate(() => {
+        const frame = document.querySelector(".speech").getBoundingClientRect();
+        const chat = document.getElementById("chat").getBoundingClientRect();
+        const nav = document.querySelector(".speech nav").getBoundingClientRect();
+        const content = document.querySelector(".speech-content") ?? document.querySelector(".speech");
+        content.scrollTop = content.scrollHeight;
+        const conversation = document.getElementById("conversation");
+        conversation.scrollTop = 100;
+        return {
+          documentFits: document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth,
+          bodyFits: document.body.scrollHeight <= innerHeight,
+          frameFits: frame.top >= 0 && frame.bottom <= innerHeight,
+          composerFits: chat.top >= frame.top && chat.bottom <= frame.bottom,
+          actionsFit: nav.top >= frame.top && nav.bottom <= chat.top,
+          conversationScrolls: conversation.scrollTop > 0 && conversation.scrollHeight > conversation.clientHeight,
+          scrollbarColor: getComputedStyle(conversation).scrollbarColor,
+          scrollbarWidth: getComputedStyle(conversation).scrollbarWidth,
+        };
+      });
+      assert.deepEqual(layout, {
+        documentFits:true, bodyFits:true, frameFits:true, composerFits:true, actionsFit:true, conversationScrolls:true,
+        scrollbarColor:"rgb(201, 166, 79) rgb(35, 54, 77)", scrollbarWidth:"thin",
+      }, `fixed assistant layout ${viewport.width}x${viewport.height}, separate tools window`);
+    }
+  }
+  await page.setViewportSize({width:400,height:640});
+  console.log("PASS: fixed bubble, visible composer, internal conversation scroll and themed scrollbars at 400x640, 400x540 and 320x480, tools in their own window");
   assert.deepEqual(errors, []);
   console.log(
-    "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing",
+    "PASS: generated settings keyboard flow, four-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing",
   );
   const other = await context.newPage();
   await other.goto(`http://127.0.0.1:${server.address().port}/bubble.html`);
@@ -460,7 +733,7 @@ try {
     await expect(other.locator(".chat-message.assistant")).toHaveText(`${kind}の返答 <script>private</script>`);
     await expect(other.locator(".chat-message script")).toHaveCount(0);
     await other.locator("#message").fill(`${kind}への返答`);
-    await other.locator("#send").click();
+    await other.locator("#send").press("Enter");
     assert.deepEqual(await other.evaluate(()=>window.calls.at(-1)),["send-message",{revision,instanceId:actorId,text:`${kind}への返答`}]);
   }
   await other.close();
