@@ -10,7 +10,7 @@
 - `pnpm typecheck`: 全packageとscripts成功。
 - `pnpm exec vitest run --maxWorkers=4`: 933 passed / 1 skipped files、13,457 passed / 1 skipped tests。
 - 文書の管理IDはR1–R5/U1–U12の17件を維持、変更文書のローカルリンク照合成功。
-- 初回CIは上記test fixture型不足で失敗。修正版でCIを再実行し、通過後に統合する。起動前チェックとhandoffは統合後のmainを固定して行う。
+- 初回CIは上記test fixture型不足で失敗。修正版 `7233c585a664dcca100e2669711246a749126ce6` のCI 8 checksはすべて成功。PR #372をmain `42e27ebe1f6a49d259f7f8c0913a97271b188315` に統合済み。別worktreeの同一製品コードでpreflight `{ok:true}` とsmoke `PASS`。handoffは統合後のmainを固定して行い、稼働状態の最終結果は利用者への報告に残す。
 
 ## 負例
 
