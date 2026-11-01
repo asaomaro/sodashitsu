@@ -7,11 +7,12 @@ import {
   ASSISTANT_AUDIO_MAX_BYTES,
   AssistantAudioMime,
   AssistantAgentKind,
+  AssistantConversationKind,
   AssistantLaunchSettings,
   AssistantAgentProfiles,
   type AssistantSessionInfo,
   type ConversationMessage,
-  type ConversationPage,
+  type AssistantConversationPage,
 } from "@sodashitsu/protocol";
 import type { AssistantRpc } from "./assistantRpc.js";
 
@@ -48,7 +49,8 @@ const Kinds = z.object({
 });
 const Page = z
   .object({
-    kind: z.enum(["claude", "codex"]),
+    reset: z.boolean().optional(),
+    kind: AssistantConversationKind,
     sessionId: z.string().min(1).max(128),
     messages: z
       .array(
@@ -181,10 +183,11 @@ export class AssistantChat {
         if (!live()) return;
         this.state.kinds = Kinds.parse(kinds).kinds;
       }
-      if (info?.state === "ready" && info.agent && ["claude", "codex"].includes(info.kind)) {
+      if (info?.state === "ready" && info.agent && AssistantConversationKind.safeParse(info.kind).success) {
         try {
-          const rawPage = await this.rpc.request("agent.conversation", {
-            paneId: info.paneId,
+          const rawPage = await this.rpc.request("assistant.conversation", {
+            deviceId: this.deviceId,
+            instanceId: info.agent.instanceId,
             offset: this.cursor,
           });
           if (!live()) return;
@@ -194,13 +197,14 @@ export class AssistantChat {
           this.apply(current);
           if (
             current?.state !== "ready" ||
+            current.deviceId !== this.deviceId || current.kind !== info.kind ||
             current.agent?.instanceId !== info.agent.instanceId ||
             current.paneId !== info.paneId
           )
             return;
           const page = Page.parse(rawPage);
           if (page.kind !== info.kind) throw Error("会話の種類が変わりました。");
-          this.append(page);
+          this.append(page as AssistantConversationPage);
           this.state.hint =
             current.agent.state === "blocked"
               ? "船長が確認を待っています。操舵室の端末から回答してください。"
@@ -215,6 +219,8 @@ export class AssistantChat {
           this.state.hint =
             "会話記録を待っています。質問や承認の画面は操舵室の端末で確認できます。";
         }
+      } else if (info?.state === "ready" && info.agent) {
+        this.state.hint = "このエージェントの会話記録表示には未対応です。専用端末から会話を確認できます。";
       }
     } catch (error) {
       if (live())
@@ -408,7 +414,8 @@ export class AssistantChat {
               ? "専用セッションの起動を選んでください。"
               : "専用セッションに接続しています。";
   }
-  private append(page: ConversationPage): void {
+  private append(page: AssistantConversationPage): void {
+    if (page.reset) { this.state.messages = []; this.cursor = 0; }
     if (this.conversationId !== page.sessionId) {
       this.state.messages = [];
       this.conversationId = page.sessionId;

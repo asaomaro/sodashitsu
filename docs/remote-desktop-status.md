@@ -36,7 +36,7 @@
 | 種類 | ID | 現在の状態 |
 | --- | --- | --- |
 | 更新・実機確認 | R1〜R5 | 未完了。接続先/端末/許可を用意して実装済み機能を確認する |
-| 機能実装 | U1〜U4、U7、U10、U11 | 対象の追加機能は未実装。既存の部分対応は各行で区別する |
+| 機能実装 | U1〜U4、U7、U10、U11 | 未実装または一部実装。既存の部分対応は各行で区別する |
 | 方式・連携調査 | U5、U6、U12 | 対象機能は未実装。実現方法・依存条件・対応範囲を確定してから実装する |
 | 権限設計 | U8、U9 | 現行実装は意図的に制限。拡張範囲と権限分離を設計する作業を残す |
 
@@ -72,7 +72,7 @@
 | U8 | Windows管理者画面のUDP・追加codec・自動調整・マイク／権限設計 | 現行は明示拒否。H.264/WSS・通常ユーザー音声・転送は実装済み | 4機能それぞれの利用目的とscope/actorを定義し、通常画面の権限を共用しない設計にする。採用範囲だけを明示交渉し、UAC/lock/session変更・失効・終了時の停止を実装/検証する。未採用の制限は記録を残す。実機合格はR3 |
 | U9 | サインイン画面の音声・転送・clipboard・agent等／権限設計 | 現行は120秒限定の閲覧/許可した入力だけ | ログイン前に提供する機能と提供しない機能、受信者/利用者、許可元、保存先と寿命を定義する。実装対象はログイン後の経路と分離して検証する。制限を維持する項目は設計判断として明記し、設計決定と実装完了を区別する。実機合格はR3 |
 | U10 | Explorer直接dragの他OS/仮想/保護画面への拡大／機能実装 | Windows通常画面の専用経路のみ。通常の許可フォルダー転送は実装済み | OS/画面種別ごとに対象fileの特定、許可root、実ドラッグの因果、受渡しと取消を設計/実装する。誤ったfile選択やroot外取得を拒否する。組合せごとに完了を記録し、通常file転送と混同しない。実機合格はR3/R4 |
-| U11 | Claude/Codex以外の吹き出し会話／機能実装 | 会話記録表示は2種類のみ。他agentは専用端末へ展開 | 追加対象agentを明示し、会話記録adapterと会話ID/対象paneの確認、表示/送信/復元を実装する。agentごとに互換性と試験結果を記録する。全agent対応とはまとめない。実機合格はR5 |
+| U11 | Claude/Codex以外の吹き出し会話／機能実装（一部対応） | Copilot CLI・Antigravity CLIを追加し4種類に対応。Bob Shellなど他agentは専用端末へ展開。追加2種類の実会話往復は未検証 | 追加対象agentを明示し、会話記録adapterと会話ID/対象paneの確認、表示/送信/復元を実装する。agentごとに互換性と試験結果を記録する。全agent対応とはまとめない。実機合格はR5 |
 | U12 | Codex以外への任意音声fileのモデル入力／連携調査 | 直接音声送信の実装はCodexのみ。WhisperとCLI独自音声は別 | 対象CLI/providerの統合方法とモデル入力形式を確認する。利用可能な方式には既存専用sessionへの明示送信・取消/期限・対応外エラーを実装し、別AIへ自動送信しない。利用可能なAPIを確認できないagentは未対応のまま記録する。実機合格はR5 |
 
 U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desktop/DesktopProviderCore.ts)、[Provider](../packages/server/src/desktop/DesktopProvider.ts)、[native helper](../scripts/remote-desktop/linux-portal-helper.py)と[macOS helper](../scripts/remote-desktop/macos-desktop-helper.swift)で確認しました。U9は[サインアウト後の専用経路](remote-desktop.md#サインアウト後の接続専用サービス実機検証待ち)、U11/U12は[assistantChat](../packages/desktop-assistant/src/assistantChat.ts)、[AssistantSessions](../packages/server/src/assistant/AssistantSessions.ts)、[CodexAudio](../packages/server/src/assistant/CodexAudio.ts)で確認しました。

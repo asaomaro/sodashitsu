@@ -1,3 +1,4 @@
+import { AssistantConversationParams, type AssistantConversationPage } from "./assistantConversation.js";
 import {AssistantSettingsGetParams,AssistantSettingsSetParams,type AssistantSettingsResult} from "./assistantSettings.js";
 import { UsageHistoryParams, type UsageHistory, UsageReportParams, type UsageReport } from "./usageAnalytics.js";
 import { ExecMethods, type ExecResults } from "./exec.js";
@@ -1601,6 +1602,7 @@ export const METHOD_SCHEMAS = {
   "assistant.source": AssistantSourceParams,
   "assistant.reply": AssistantReplyParams,
   "assistant.reply_key": AssistantReplyKeysParams,
+  "assistant.conversation": AssistantConversationParams,
   "assistant.get": AssistantSessionGetParams,
   "assistant.ensure": AssistantSessionEnsureParams,
   "assistant.adopt": AssistantSessionAdoptParams,
@@ -1794,6 +1796,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "assistant.source": AssistantSourceInfo;
   "assistant.reply": {sent:true};
   "assistant.reply_key": {sent:true};
+  "assistant.conversation": AssistantConversationPage;
   "assistant.get": AssistantSessionInfo | null;
   "assistant.ensure": AssistantSessionInfo;
   "assistant.adopt": AssistantSessionInfo;

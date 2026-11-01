@@ -24,7 +24,9 @@ CLIを起動し直すと反映されます。自動では利用者の設定を�
 
 SessionStartの `conversationId`、statuslineの `conversation_id`（互換 `session_id`）をpaneに結びます。UUIDを指定した手動の `agy --conversation <id>` も前面プロセスの引数から追います。サーバの保存・復元は同じコマンドを使います。`--continue` の最新会話を推測で紐付けません。
 
-ヘッダーから `/usage` と `/permissions` を開けます。通常のpaneへの送信・キー入力・状態変化の通知は共通経路です。Sodashitsuの別pane/worktreeへのfork、会話本文閲覧・過去会話一覧・要約・ToDo・サブエージェント一覧は未対応で、能力判定から表示しません。CLI自身の `/fork` の存在は、Sodashitsuのfork対応を意味しません。
+ヘッダーから `/usage` と `/permissions` を開けます。通常のpaneへの送信・キー入力・状態変化の通知は共通経路です。Sodashitsuの別pane/worktreeへのfork、一般paneの会話本文閲覧・過去会話一覧・要約・ToDo・サブエージェント一覧は未対応で、能力判定から表示しません。CLI自身の `/fork` の存在は、Sodashitsuのfork対応を意味しません。
+
+専用の[デスクトップアシスタント](desktop-assistant.md#吹き出しでの会話と制限)では、現在の会話IDを確認後に固定位置のJSONLからユーザー入力・最終応答を吹き出し表示します。一般paneの会話閲覧とは別の経路です。生成記録での検証であり、実CLIの会話往復は未検証です。
 
 ## 検証と限界
 

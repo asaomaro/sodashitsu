@@ -824,7 +824,7 @@ it("keeps plugin actions behind explicit capability and revokes pending view ope
       };
     if (method === "agent.kinds")
       return { kinds: [{ kind: "codex", label: "Codex", available: true }] };
-    if (method === "agent.conversation")
+    if (method === "assistant.conversation")
       return {
         kind: "codex",
         sessionId: "generated",
@@ -1154,7 +1154,7 @@ it.each(["hide","minimize","navigation"])("cancels a file audio read before mode
   control.request.mockImplementation(async(method:string,p:Record<string,unknown>)=>{
    if(method==="assistant.get")return{deviceId:p.deviceId,...scope,kind:"codex",state:"ready",agent:actor,observedAgent:actor};
    if(method==="agent.kinds")return{kinds:[{kind:"codex",label:"generated",available:true}]};
-   if(method==="agent.conversation")throw Error("no generated transcript");
+   if(method==="assistant.conversation")throw Error("no generated transcript");
    return{};
   });
   control.options.status(true);await fixture.handlers.get("assistant:chat")!(event);

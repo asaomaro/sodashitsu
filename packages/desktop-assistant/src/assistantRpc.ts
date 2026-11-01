@@ -19,6 +19,7 @@ export type AssistantMethod =
   | "assistant.source"
   | "assistant.reply"
   | "assistant.reply_key"
+  | "assistant.conversation"
   | "assistant.get"
   | "assistant.ensure"
   | "assistant.adopt"
