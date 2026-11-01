@@ -282,6 +282,19 @@ export class AssistantSessions {
     return workspaces[0];
   }
 
+  /** Read only the verified conversation of this installation's current dedicated actor. */
+  conversationTarget(deviceId: string, instanceId: string) {
+    const target = this.target(deviceId, instanceId);
+    const reference = this.deps.session.getPane(target.paneId)?.agentSession;
+    if (!reference || reference.kind !== target.agent.kind ||
+        !["claude", "codex", "copilot", "agy"].includes(reference.kind) ||
+        !/^[a-zA-Z0-9_-]{1,128}$/.test(reference.sessionId) ||
+        (["copilot", "agy"].includes(reference.kind) && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(reference.sessionId)) ||
+        !this.deps.session.hasVerifiedAgentSession(target.paneId, instanceId, reference.sessionId))
+      throw new RpcError("not_found", "専用エージェントの会話IDを確認できません。フックと専用端末を確認してください");
+    return { ...target, kind: reference.kind as "claude" | "codex" | "copilot" | "agy", sessionId: reference.sessionId };
+  }
+
   /** Audio uses a daemon API, so a requested/resumed marker alone is insufficient. */
   audioTarget(deviceId:string,instanceId:string):{paneId:string;instanceId:string;threadId:string;projectDir:string;agent:AgentInfo} {
     const target=this.target(deviceId,instanceId),pane=this.deps.session.getPane(target.paneId),reference=pane?.agentSession;

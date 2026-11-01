@@ -1,4 +1,5 @@
 import {
+  AssistantConversationParams,
   AssistantSettingsGetParams,AssistantSettingsSetParams,
   AssistantImageCancelParams,
   AssistantReminderSaveParams,
@@ -175,6 +176,25 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
     if (!result.ok) throw new RpcError(result.error.code, result.error.message);
     return result.result;
   };
+  surface.register("assistant.conversation", {
+    schema: AssistantConversationParams,
+    handler: async (ctx, params) => {
+      const authorized = () => {
+        ctx.signal?.throwIfAborted();
+        if (ctx.connectionAuthorized && !ctx.connectionAuthorized()) throw new RpcError("unauthorized", "接続が終了しました");
+      };
+      authorized();
+      const source = sessions.conversationTarget(params.deviceId, params.instanceId);
+      const page = source.kind === "claude" || source.kind === "codex"
+        ? await (() => { if (!deps.conversations) throw new RpcError("not_found", "会話記録は利用できません"); return deps.conversations.page(source.paneId, params.offset); })()
+        : await import("../../assistant/AssistantConversation.js").then(module => module.readAssistantConversation(source.kind as "copilot" | "agy", source.sessionId));
+      authorized();
+      const current = sessions.conversationTarget(params.deviceId, params.instanceId);
+      if (current.paneId !== source.paneId || current.workspaceId !== source.workspaceId || current.sessionId !== source.sessionId || current.kind !== source.kind || page.sessionId !== source.sessionId || page.kind !== source.kind)
+        throw new RpcError("not_found", "会話が変更されました。読み直してください");
+      return page;
+    },
+  });
   surface.register("assistant.get", {
     schema: AssistantSessionGetParams,
     handler: (_ctx, params) => sessions.get(params.deviceId),

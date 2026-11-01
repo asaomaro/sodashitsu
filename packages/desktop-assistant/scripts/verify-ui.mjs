@@ -44,6 +44,7 @@ const watchdog = setTimeout(() => { console.error("Generated UI exceeded 30 seco
 watchdog.unref();
 try {
   browser = await chromium.launch({
+    ...(process.env.SODA_E2E_CHROMIUM_PATH ? {executablePath:process.env.SODA_E2E_CHROMIUM_PATH} : {}),
     headless: true,
     args: ["--disable-gpu", "--disable-frame-rate-limit"],
   });
@@ -442,10 +443,29 @@ try {
   await page.getByRole("button",{name:"この端末・質問フォームを開く",exact:true}).press("Enter");
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["open-source",{noticeId:"00000000-0000-4000-8000-000000000092"}]);
   assert.deepEqual(errors, []);
-  await context.close();
   console.log(
     "PASS: generated settings keyboard flow, three-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing",
   );
+  const other = await context.newPage();
+  await other.goto(`http://127.0.0.1:${server.address().port}/bubble.html`);
+  for (const [index,kind] of ["copilot","agy"].entries()) {
+    const revision=100+index;
+    await other.evaluate(({kind,revision,actorId}) => window.chatCallback({
+      revision,connected:true,busy:false,
+      session:{paneId:"00000000-0000-4000-8000-000000000002",kind,state:"ready",agent:{instanceId:actorId,kind,state:"idle"}},
+      kinds:[{kind,label:kind,available:true}],messages:[{id:kind,role:"user",text:`${kind}への質問`},{id:kind+"-answer",role:"assistant",text:`${kind}の返答 <script>private</script>`}],hint:"船長へのメッセージを送れます。"
+    }),{kind,revision,actorId});
+    await expect(other.locator("#destination")).toContainText(kind);
+    await expect(other.locator(".chat-message.user")).toHaveText(`${kind}への質問`);
+    await expect(other.locator(".chat-message.assistant")).toHaveText(`${kind}の返答 <script>private</script>`);
+    await expect(other.locator(".chat-message script")).toHaveCount(0);
+    await other.locator("#message").fill(`${kind}への返答`);
+    await other.locator("#send").click();
+    assert.deepEqual(await other.evaluate(()=>window.calls.at(-1)),["send-message",{revision,instanceId:actorId,text:`${kind}への返答`}]);
+  }
+  await other.close();
+  await context.close();
+  console.log("generated Copilot and Antigravity bubble text and pinned reply PASS");
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));

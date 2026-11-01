@@ -1,6 +1,6 @@
 import { AssistantDisabledDevices } from "./AssistantDisabledDevices.js";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -824,4 +824,30 @@ it("checks image expiry again after final target metadata inspection", async () 
   vi.spyOn(f.manager,"target").mockImplementation((...args)=>{const result=original(...args);now.mockReturnValue(1101);return result;});
   release();expect(await pending).toMatchObject({ok:false});expect(host.writes).toEqual([]);
  } finally {now.mockRestore();release?.();}
+});
+
+it.each(["codex","copilot","agy"])("requires this dedicated %s actor's verified conversation ID",async kind=>{
+ const f=await fixture(),device=randomUUID(),info=await f.ensure(device,kind),actor=f.detect(info);await f.ensure(device,kind);
+ expect(()=>f.manager.conversationTarget(device,actor.instanceId)).toThrow("会話ID");const id=randomUUID();f.session.reportAgentSession(info.paneId,kind,id);
+ expect(f.manager.conversationTarget(device,actor.instanceId)).toMatchObject({kind,sessionId:id,paneId:info.paneId});expect(()=>f.manager.conversationTarget(device,randomUUID())).toThrow();
+ f.session.updatePaneRuntime(info.paneId,{agent:{...actor,instanceId:randomUUID()}});expect(()=>f.manager.conversationTarget(device,actor.instanceId)).toThrow();
+});
+it("routes Copilot bubble conversation through a fixed record path and the current dedicated actor",async()=>{
+ const f=await fixture(),device=randomUUID(),info=await f.ensure(device,"copilot"),actor=f.detect(info);await f.ensure(device,"copilot");const id=randomUUID();f.session.reportAgentSession(info.paneId,"copilot",id);
+ const saved=process.env.COPILOT_HOME,home=join(f.stateDir,"copilot"),directory=join(home,"session-state",id);await mkdir(directory,{recursive:true});await writeFile(join(directory,"events.jsonl"),JSON.stringify({type:"assistant.message",data:{content:"generated Copilot reply"}})+"\n");process.env.COPILOT_HOME=home;
+ try{const surface=new ControlSurface(new MemoryLogger());registerAssistantMethods(surface,{session:f.session,assistantSessions:f.manager} as MethodDeps);const ctx={clientId:randomUUID(),sink:{} as never},params={deviceId:device,instanceId:actor.instanceId};const response=await surface.invoke(ctx,"assistant.conversation",params);expect(response).toMatchObject({ok:true,result:{kind:"copilot",sessionId:id,messages:[{text:"generated Copilot reply"}]}});expect((await surface.invoke(ctx,"assistant.conversation",{...params,paneId:randomUUID()})).ok).toBe(false);}
+ finally{if(saved===undefined)delete process.env.COPILOT_HOME;else process.env.COPILOT_HOME=saved;}
+});
+it.each(["actor","session","disabled","connection"])("discards pending conversation text after %s changes",async change=>{
+ const f=await fixture(),{device,info,agent}=await f.ready(),sid=randomUUID();f.session.reportAgentSession(info.paneId,"codex",sid);let release!:(page:unknown)=>void;const read=vi.fn(()=>new Promise(resolve=>{release=resolve;}));let authorized=true;
+ const surface=new ControlSurface(new MemoryLogger());registerAssistantMethods(surface,{session:f.session,assistantSessions:f.manager,conversations:{page:read}} as unknown as MethodDeps);
+ const pending=surface.invoke({clientId:randomUUID(),sink:{} as never,connectionAuthorized:()=>authorized},"assistant.conversation",{deviceId:device,instanceId:agent.instanceId});await vi.waitFor(()=>expect(read).toHaveBeenCalledOnce());
+ if(change==="actor")f.session.updatePaneRuntime(info.paneId,{agent:{...agent,instanceId:randomUUID()}});if(change==="session")f.session.reportAgentSession(info.paneId,"codex",randomUUID());if(change==="disabled")await f.manager.requestStop(device);if(change==="connection")authorized=false;
+ release({kind:"codex",sessionId:sid,messages:[{id:"secret",role:"assistant",text:"old private conversation"}],nextOffset:null,partial:false});const response=await pending;expect(response.ok).toBe(false);expect(JSON.stringify(response)).not.toContain("old private conversation");
+});
+
+it("rejects a stored reference without fresh evidence from the current actor",async()=>{
+ const f=await fixture(),{device,info,agent}=await f.ready();
+ f.session.getPane(info.paneId)!.agentSession={kind:"codex",sessionId:randomUUID()};
+ expect(()=>f.manager.conversationTarget(device,agent.instanceId)).toThrow("会話ID");
 });

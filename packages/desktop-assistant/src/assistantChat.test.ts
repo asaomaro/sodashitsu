@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AssistantSessionInfo, ConversationPage } from "@sodashitsu/protocol";
+import type { AssistantSessionInfo, AssistantConversationPage } from "@sodashitsu/protocol";
 import { AssistantChat } from "./assistantChat.js";
 import type { AssistantRpc } from "./assistantRpc.js";
 
@@ -11,14 +11,14 @@ afterEach(() => {
 function fixture() {
   const deviceId = randomUUID();
   let info: AssistantSessionInfo | null = null;
-  let conversation: () => Promise<ConversationPage> = async () => {
+  let conversation: () => Promise<AssistantConversationPage> = async () => {
     throw Error("No generated record yet");
   };
   const request = vi.fn(async (method: string, _input: unknown): Promise<unknown> => {
     if (method === "assistant.get" || method === "assistant.ensure") return structuredClone(info);
     if (method === "agent.kinds")
       return { kinds: [{ kind: "codex", label: "Codex", available: true }] };
-    if (method === "agent.conversation") return conversation();
+    if (method === "assistant.conversation") return conversation();
     return {};
   });
   const changed = vi.fn();
@@ -57,7 +57,7 @@ function fixture() {
     info(value: AssistantSessionInfo | null) {
       info = value;
     },
-    page(read: () => Promise<ConversationPage>) {
+    page(read: () => Promise<AssistantConversationPage>) {
       conversation = read;
     },
   };
@@ -141,10 +141,12 @@ it("refuses to turn a blocked confirmation into a chat prompt and requires the e
     instanceId: f.ready.agent!.instanceId,
   });
 });
-it("discards old conversation output when the scoped actor changes during the read", async () => {
+it.each(["codex", "copilot", "agy"] as const)("discards old %s conversation output when the scoped actor changes during the read", async kind => {
   const f = fixture();
+  f.ready.kind = kind;
+  f.ready.agent!.kind = kind;
   f.info(f.ready);
-  let release!: (page: ConversationPage) => void;
+  let release!: (page: AssistantConversationPage) => void;
   f.page(
     () =>
       new Promise((resolve) => {
@@ -156,7 +158,7 @@ it("discards old conversation output when the scoped actor changes during the re
   const next = { ...f.ready, agent: { ...f.ready.agent!, instanceId: randomUUID() } };
   f.info(next);
   release({
-    kind: "codex",
+    kind,
     sessionId: randomUUID(),
     messages: [{ id: "old", role: "assistant", text: "old actor" }],
     nextOffset: null,
@@ -183,8 +185,9 @@ it("keeps literal bounded conversation bubbles and resumes at the last complete 
   await connected(f);
   await vi.waitFor(() => expect(f.chat.snapshot().messages).toHaveLength(1));
   await f.chat.refresh();
-  expect(f.request).toHaveBeenCalledWith("agent.conversation", {
-    paneId: f.ready.paneId,
+  expect(f.request).toHaveBeenCalledWith("assistant.conversation", {
+    deviceId: f.deviceId,
+    instanceId: f.ready.agent!.instanceId,
     offset: 42,
   });
   expect(f.chat.snapshot().messages).toHaveLength(1);
@@ -210,8 +213,8 @@ it("restarts at offset zero when a live actor clears its conversation", async ()
   expect(f.chat.snapshot().messages).toEqual([]);
   await f.chat.refresh();
   expect(f.request).toHaveBeenLastCalledWith("assistant.get", { deviceId: f.deviceId });
-  const reads = f.request.mock.calls.filter((call) => call[0] === "agent.conversation");
-  expect(reads.at(-1)?.[1]).toEqual({ paneId: f.ready.paneId, offset: 0 });
+  const reads = f.request.mock.calls.filter((call) => call[0] === "assistant.conversation");
+  expect(reads.at(-1)?.[1]).toEqual({ deviceId: f.deviceId, instanceId: f.ready.agent!.instanceId, offset: 0 });
   expect(f.chat.snapshot().messages[0]?.id).toBe(sessionId);
 });
 
@@ -317,3 +320,13 @@ it("requires an idle actor before approving image upload", async () => {
  expect(()=>f.chat.image(generatedImage(),new AbortController().signal)).toThrow();
  expect(f.request).not.toHaveBeenCalledWith("pane.image.begin",expect.anything());
 });
+
+it.each(["copilot", "agy"] as const)("displays %s conversation text, replaces the bounded snapshot after history rewrites",async kind=>{
+ const f=fixture(),info={...f.ready,kind,agent:{...f.ready.agent!,kind}};f.info(info);let reset=true,text="generated answer";
+ f.page(async()=>({kind,sessionId:"generated-session",messages:[{id:"generated-row",role:"assistant",text}],nextOffset:null,endOffset:42,partial:false,reset}));
+ await connected(f);await vi.waitFor(()=>expect(f.chat.snapshot().messages[0]?.text).toBe(text));reset=false;await f.chat.refresh();expect(f.request).toHaveBeenCalledWith("assistant.conversation",{deviceId:f.deviceId,instanceId:info.agent.instanceId,offset:42});
+ reset=true;text="rewritten history";await f.chat.refresh();expect(f.chat.snapshot().messages.map(m=>m.text)).toEqual(["rewritten history"]);
+ f.page(async()=>({kind,sessionId:"generated-session",messages:[],nextOffset:null,endOffset:0,partial:false,reset:true}));await f.chat.refresh();expect(f.chat.snapshot().messages).toEqual([]);
+ await f.chat.send({revision:f.chat.snapshot().revision,instanceId:info.agent.instanceId,text:"reply"});expect(f.request).toHaveBeenCalledWith("assistant.prompt",{deviceId:f.deviceId,instanceId:info.agent.instanceId,text:"reply"});
+});
+it("keeps unsupported providers on their dedicated terminal without guessing another transcript",async()=>{const f=fixture();f.info({...f.ready,kind:"bob",agent:{...f.ready.agent!,kind:"bob"}});await connected(f);expect(f.chat.snapshot().hint).toContain("未対応");expect(f.request.mock.calls.some(c=>c[0]==="assistant.conversation")).toBe(false);});

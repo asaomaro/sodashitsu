@@ -92,3 +92,5 @@ export * from "./desktopAssistant.js";
 export * from "./usageAnalytics.js";
 
 export * from "./assistantSettings.js";
+
+export * from "./assistantConversation.js";
