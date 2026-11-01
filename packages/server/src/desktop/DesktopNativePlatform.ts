@@ -22,5 +22,5 @@ export function nativeDesktopCommand(os=process.platform,env=process.env,probe:t
  try{const value=JSON.parse(String(result.stdout));if(value.backend===platform&&value.dependencies===true)return command;}catch{}
 }
 export function nativeDesktopSetup(platform:DesktopNativePlatform):string {
- return platform==="linux-portal"?"Linux実験版（SODA_DESKTOP_LINUX_PORTAL=1）: systemd-logind・静止時も継続送信するPortal・PyGObject・GStreamer/PipeWire・ScreenCast Portal v6が必要です。共有開始時に接続先OSでモニターを選択してください。操作はRemoteDesktop Portalの追加許可が必要です。システム音声は別途許可し、ローカルPulseAudio/PipeWireの出力monitorとGStreamer音声プラグインを使用します。":"macOS 14以降の実験版（SODA_DESKTOP_MACOS_SCK=1）: 補助プログラムをローカルでビルドし、画面収録を許可してください。操作にはアクセシビリティの許可も必要です。動画はH.264へ圧縮します。システム音声には別途送信許可が必要です。マイク・保護画面は未対応です。";
+ return platform==="linux-portal"?"Linux実験版（SODA_DESKTOP_LINUX_PORTAL=1）: systemd-logind・PyGObject・GStreamer/PipeWire・ScreenCast Portal v6が必要です。共有開始時に接続先OSでモニターを選択してください。静止中は新しい実画像を待つ場合があります。操作はRemoteDesktop Portalの追加許可が必要です。システム音声は別途許可し、ローカルPulseAudio/PipeWireの出力monitorとGStreamer音声プラグインを使用します。":"macOS 14以降の実験版（SODA_DESKTOP_MACOS_SCK=1）: macOS用SDKの同梱補助プログラムを使い、画面収録を許可してください。ソースcheckoutではローカルビルドが必要です。操作にはアクセシビリティの許可も必要です。動画はH.264を標準に利用可能なcodecを交渉します。システム音声は別途許可し、マイク転送は許可と明示した仮想出力先が必要です。モニター選択と単独viewerのOS解像度変更にも別許可が必要です。保護画面・仮想画面作成は未対応です。";
 }

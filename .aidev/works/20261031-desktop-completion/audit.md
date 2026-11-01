@@ -4,7 +4,7 @@
 
 AssistantLaunchController/ManagedAssistant/AssistantBundledLaunch と設定・試験、docs/desktop-assistant.mdを再点検。sodaに管理起動を統合済み。既定無効で、無効時は専用GUI/音声device/agentを新規起動しない。共通GUI runtimeは有効化時に検証/準備し、各音声・画像処理は明示した操作時だけ使用する。独立実行ファイルの手動導入は不要だが、GUI runtimeの取得・OS要件と署名driver/専用serviceの管理者導入は別である。
 
-設定済みClaude/Codex model/effortは専用agent起動へ渡す。画像理解/OCRは専用agent、任意音声はCodex app-server対応モデルへ明示送信できる。Claudeの任意音声file送信は公開CLI経路がないため提供せず、専用端末の公式音声機能と区別。Tesseract/Whisperは任意の明示ローカル構成で、自動導入や別AIへの暗黙送信はしない。
+設定済みClaude/Codex model/effortは専用agent起動へ渡す。画像理解/OCRは専用agent、任意音声はCodex app-server対応モデルへ明示送信できる。この実装の任意音声file送信はCodexのみで、Claudeには提供せず、専用端末の公式音声機能と区別。Tesseract/Whisperは任意の明示ローカル構成で、自動導入や別AIへの暗黙送信はしない。
 
 scripts/package.mjs/runtime-assets.mjsは閉じたSDK資材一覧を使用する。追加した通常ユーザー音声roleも共通host/SDKに含む。権限・file hash/cache/no-linkと無効時非起動は既存自動試験の対象であり、実GUI/OSdevice/driverの確認は代用しない。追加の別exe導入手順や未使用常駐processを導入する不足は見つからなかった。
 
@@ -14,6 +14,8 @@ docs/remote-desktop.mdとplugin-cli、ExtensionDesktopAgents/試験、DesktopAge
 
 ## 機能範囲の区別
 
-今回のOS機構対応はLinux Portal VIRTUAL/approved sources、macOS public CG display modes、Windows owned virtual driverである。nativeの全monitor合成/同時独立sourceや公開OS APIで提供できない汎用virtual/physical modeを実装済みとは記録しない。docs/remote-desktop-status.mdに現状を明記した。今回の開発台帳と将来の機能追加、実機確認を混同しない。
+今回のOS機構対応はLinux Portal VIRTUAL/approved sources、macOS public CG display modes、Windows owned virtual driverである。nativeの全monitor合成/同時独立sourceやこの製品で未対応の汎用virtual/physical modeを実装済みとは記録しない。docs/remote-desktop-status.mdに現状を明記した。今回の開発台帳と将来の機能追加、実機確認を混同しない。
 
 最終統合・配布・実接続・cleanupの結果はintegration記録に追記する。
+
+2026-11-01追補: 文書監査の結果と必須R1〜R5/追加候補U1〜U12は[整合検証記録](../20261101-desktop-document-audit/findings.md)と現行status表を参照。前の完了欄から未対応範囲を消したり、実機確認済みと読み替えたりしない。
