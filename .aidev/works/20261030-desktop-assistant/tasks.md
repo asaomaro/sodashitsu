@@ -1,5 +1,7 @@
 # Desktop assistant development completion
 
+This is the historical phase record. Current required verification and unsupported feature candidates are tracked in [remote-desktop-status.md](../../../docs/remote-desktop-status.md). The development ZIP/startup references below do not replace the current soda-managed activation workflow in [desktop-assistant.md](../../../docs/desktop-assistant.md).
+
 - [x] Requirements and native/server/agent/UI/plugin boundaries for the initial Windows / WSL scope.
 - [x] A. Disabled-by-default preferences, three captains, native tray/character/bubble lifecycle, local identity and persistence.
 - [x] B/G. Dedicated server session ownership/restore and authenticated local/registered-machine verbal notices, exact-source reply/confirmation and pinned pane/machine expansion.
