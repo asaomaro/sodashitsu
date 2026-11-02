@@ -5,7 +5,10 @@ import {assertPaneResolvesFake} from '@sodashitsu/server';
 import {expect,test} from '../support/fixtures.js';
 const dir=await mkdtemp(join(tmpdir(),'soda-e2e-muse-')),bin=join(dir,'bin'),script=join(dir,'fake-muse.mjs');
 await mkdir(bin);
-const sessionId='11111111-1111-4111-8111-111111111171';
+const sessionId='01a19c78-bb57-7bd1-b706-d47f06ed0171';
+const dataHome=join(dir,'data'),day=new Date(parseInt(sessionId.replaceAll('-','').slice(0,12),16)).toISOString().slice(0,10).split('-'),recordDir=join(dataHome,'muse','sessions',...day,sessionId);
+await mkdir(recordDir,{recursive:true});
+await writeFile(join(recordDir,'session.jsonl'),JSON.stringify({schema_version:1,payload_schema_version:1,stream:{kind:'session',id:sessionId},payload_type:'runtime.user_intent.accepted',payload:{surface:'main',semantic_kind:{kind:'chat'},source_session_id:sessionId,model_messages:[{content:[{kind:'text',text:'Museブラウザ会話の確認'}]}]}})+'\n');
 await writeFile(script,`
 import {spawn} from 'node:child_process';
 const screen=text=>process.stdout.write('\\x1b[2J\\x1b[H'+text.replaceAll('\\n','\\r\\n'));
@@ -15,9 +18,9 @@ process.stdin.setRawMode(true);idle();report();const timer=setInterval(report,10
 process.stdin.on('data',d=>{const key=String(d);if(key.includes('w'))screen('◈ Thinking (0s · esc to interrupt)\\n❯\\nmodel · /generated');if(key.includes('b'))screen('Allow this stage once\\nAlways allow in this workspace');if(key.includes('i'))idle();if(key.includes('\\x04')){clearInterval(timer);process.exit(0);}});
 `);
 await writeFile(join(bin,'muse'),`#!/bin/bash\nexec -a muse ${JSON.stringify(process.execPath)} ${JSON.stringify(script)} "$@"\n`);await chmod(join(bin,'muse'),0o755);
-const originalPath=process.env.PATH;
-test.beforeAll(()=>{process.env.PATH=bin+delimiter+(originalPath??'');});
-test.afterAll(async()=>{if(originalPath===undefined)delete process.env.PATH;else process.env.PATH=originalPath;await rm(dir,{recursive:true,force:true});});
+const originalPath=process.env.PATH,originalData=process.env.XDG_DATA_HOME;
+test.beforeAll(()=>{process.env.XDG_DATA_HOME=dataHome;process.env.PATH=bin+delimiter+(originalPath??'');});
+test.afterAll(async()=>{if(originalData===undefined)delete process.env.XDG_DATA_HOME;else process.env.XDG_DATA_HOME=originalData;if(originalPath===undefined)delete process.env.PATH;else process.env.PATH=originalPath;await rm(dir,{recursive:true,force:true});});
 /** Browser-observed state + session events, no real model or credentials. */
 test('Muse Code is launchable and its hook and state changes reach the browser',async({page,appServer})=>{
  test.skip(process.platform!=='linux');test.setTimeout(60000);
@@ -35,6 +38,9 @@ test('Muse Code is launchable and its hook and state changes reach the browser',
   await page.locator('.xterm-screen').first().click();await expect(page.locator('.xterm-helper-textarea').first()).toBeFocused();await page.keyboard.press('w');await expect(state).toHaveAttribute('data-state','working');
   await page.keyboard.press('b');await expect(state).toHaveAttribute('data-state','blocked');
   await page.keyboard.press('i');await expect(state).toHaveAttribute('data-state','idle');
+  for(const close of await page.locator('.toast-sticky .toast-close').all())await close.click();
+  await page.getByRole('button',{name:'送信メッセージ',exact:true}).click();
+  await expect(page.locator('.conversation-window')).toContainText('Museブラウザ会話の確認');
   await page.screenshot({path:test.info().outputPath('muse-code-desktop.png')});
  }finally{client.sendInput(pane.id,'\x04');client.close();}
 });

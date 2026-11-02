@@ -13,6 +13,10 @@
 確認済み環境:
 - Muse Code 1.4.14-R7309.1: Linux。SessionStartの環境が剥離されるため近い同UIDのMuse祖先から経路2項目だけを回収。実echoでPID一致・会話・再開を確認。
 - Antigravity CLI 1.4.12: --model/--effort/--print/--settingsがある。
-- PATH上のCopilot CLIはWindows npm領域の0.0.362。現行1.xとフラグ/SDKが異なる。バージョン差を確認して扱い、新しいフラグやSDKを古い版へ無条件に渡さない。
+- PATH上の旧Copilot CLIは0.0.362。利用者の「更新してOK」を受け、Linux版1.0.105をnpm公式パッケージから導入。フック/SDK/effortを現行版で扱う。
+- Agyの実1.4.12の短い生成/own fixture readで保存形式を照合。PLANNER_RESPONSE/DONEのトップレベル数値・tool_calls。bubblewrapでhomeを一時領域へマウントして設定を隔離し、元のHOME変数や設定を書き換えない。
+- MuseのMSPはインストール済みバイナリからschemaをoffline export。initialize/initialized後のsession/readはwriter attach・SessionResumedを発生させず、ツール投影を取得可能。session/forkも生成したecho会話で成功。
 
 未着手の制限を並べた初期Muse文書は、追加要件に合わせて各段階の完了時に更新する。
+
+共通対象はデスクトップ・通知/応答・監督・会話/履歴・利用量/比較/ツール分析・レポート・サーバの通常作業起動。ネイティブAPIや操作先権限のある固有機能（音声API、画像、fork、remote work制限）はdocs/agent-parity.mdで明示。存在しないAPIや検証不能な権限境界を「同等」と称して流用しない。

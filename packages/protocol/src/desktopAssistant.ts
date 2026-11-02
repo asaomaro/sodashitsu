@@ -62,31 +62,40 @@ export const AssistantLaunchSettings = z.object({
   effort: z.enum(["", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]).default(""),
 }).strict();
 export type AssistantLaunchSettings = z.infer<typeof AssistantLaunchSettings>;
-export function assistantLaunchArgs(kind: string, input: unknown): string[] {
-  const settings = AssistantLaunchSettings.parse(input);
-  const levels = kind === "claude" ? ["low", "medium", "high", "xhigh", "max"]
-    : kind === "codex" ? ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] : [];
-  if ((settings.model || settings.effort) && kind !== "claude" && kind !== "codex")
-    throw Error("このエージェントのモデル・effort指定には未対応です");
-  if (settings.effort && !levels.includes(settings.effort)) throw Error("このエージェントでは指定できないeffortです");
-  return [ ...(settings.model ? ["--model", settings.model] : []),
-    ...(settings.effort ? kind === "claude" ? ["--effort", settings.effort]
-      : ["-c", `model_reasoning_effort=${JSON.stringify(settings.effort)}`] : []) ];
+/** CLI spellings and supported effort values, shared by launch validation and settings. */
+export const ASSISTANT_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot"] as const;
+export const ASSISTANT_AGENT_LABELS = {claude:"Claude Code",codex:"Codex",muse:"Muse Code",agy:"Antigravity CLI",copilot:"GitHub Copilot CLI"} as const;
+export const ASSISTANT_EFFORTS = {
+ claude:["low","medium","high","xhigh","max"],
+ codex:["none","minimal","low","medium","high","xhigh","max","ultra"],
+ muse:["none","minimal","low","medium","high","xhigh","max","ultra"],
+ agy:["low","medium","high","xhigh","max"],
+ copilot:["none","minimal","low","medium","high","xhigh","max"],
+} as const;
+export function assistantLaunchArgs(kind:string,input:unknown):string[]{
+ const settings=AssistantLaunchSettings.parse(input);
+ if(!ASSISTANT_AGENT_KINDS.includes(kind as any)){
+  if(settings.model||settings.effort)throw Error("このエージェントのモデル・effort指定には未対応です");return [];
+ }
+ const key=kind as keyof typeof ASSISTANT_EFFORTS;
+ if(settings.effort&&!(ASSISTANT_EFFORTS[key] as readonly string[]).includes(settings.effort))throw Error("このエージェントでは指定できないeffortです");
+ return [...(settings.model?["--model",settings.model]:[]),...(settings.effort?kind==="codex"?["-c",`model_reasoning_effort=${JSON.stringify(settings.effort)}`]:[kind==="muse"||kind==="copilot"?"--reasoning-effort":"--effort",settings.effort]:[])];
 }
-export const AssistantAgentProfiles = z.object({
-  claude: AssistantLaunchSettings.default({ model: "", effort: "" }),
-  codex: AssistantLaunchSettings.default({ model: "", effort: "" }),
-}).strict().superRefine((profiles, ctx) => {
-  for (const kind of ["claude", "codex"] as const) {
-    try { assistantLaunchArgs(kind, profiles[kind]); }
-    catch { ctx.addIssue({code: "custom", path: [kind, "effort"], message: "指定できないeffortです"}); }
-  }
+export const AssistantAgentProfiles=z.object({
+ claude:AssistantLaunchSettings.default({model:"",effort:""}),
+ codex:AssistantLaunchSettings.default({model:"",effort:""}),
+ muse:AssistantLaunchSettings.default({model:"",effort:""}),
+ agy:AssistantLaunchSettings.default({model:"",effort:""}),
+ copilot:AssistantLaunchSettings.default({model:"",effort:""}),
+}).strict().superRefine((profiles,ctx)=>{
+ for(const kind of ASSISTANT_AGENT_KINDS){try{assistantLaunchArgs(kind,profiles[kind]);}
+ catch{ctx.addIssue({code:"custom",path:[kind,"effort"],message:"指定できないeffortです"});}}
 });
 export const DesktopAssistantPreferences = z
   .object({
     version: z.literal(1).default(1),
     enabled: z.boolean().default(false),
-    agentProfiles: AssistantAgentProfiles.default({ claude: {model: "", effort: ""}, codex: {model: "", effort: ""} }),
+    agentProfiles: AssistantAgentProfiles.default(AssistantAgentProfiles.parse({})),
     mode: z.enum(["character", "tray"]).default("character"),
     characterId: AssistantCharacterId.default("captain-female"),
     serverOrigin: Origin.default("http://127.0.0.1:7780"),

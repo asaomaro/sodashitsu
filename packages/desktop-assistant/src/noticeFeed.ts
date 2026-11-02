@@ -192,7 +192,7 @@ export class NoticeFeed {
     if (notice.message.includes("\n")) return false;
     if (notice.kind === "question") return true;
     const kind = this.panes.get(notice.source.paneId)?.agent?.kind;
-    return kind === "claude" || kind === "codex";
+    return !!kind && ["claude","codex","muse","agy","copilot"].includes(kind);
   }
 
   private sourceTitle(pane: FeedPane, workspace: z.infer<typeof Workspace>): string {

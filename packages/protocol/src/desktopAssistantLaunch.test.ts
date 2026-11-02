@@ -17,3 +17,13 @@ it("persists independent profiles while rejecting unsupported combinations", () 
  expect(DesktopAssistantPreferences.parse({}).agentProfiles.claude).toEqual({model:"",effort:""});
  expect(() => DesktopAssistantPreferences.parse({agentProfiles:{claude:{effort:"ultra"}}})).toThrow();
 });
+
+it("offers all five independent profiles with their native model/effort flags",()=>{
+ for(const kind of ["muse","agy","copilot"]){
+  expect(assistantLaunchArgs(kind,{model:"test-model",effort:"high"})).toEqual(["--model","test-model",kind==="agy"?"--effort":"--reasoning-effort","high"]);
+ }
+ const profiles=DesktopAssistantPreferences.parse({}).agentProfiles;
+ expect(Object.keys(profiles)).toEqual(["claude","codex","muse","agy","copilot"]);
+ expect(()=>assistantLaunchArgs("agy",{effort:"ultra"})).toThrow();
+ expect(()=>assistantLaunchArgs("copilot",{effort:"ultra"})).toThrow();
+});

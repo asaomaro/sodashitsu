@@ -53,7 +53,7 @@ async function loadCost() {
   }
 }
 watch(accountKey, loadCost);
-const reportKind = ref<"claude" | "codex">("codex"),
+const reportKind = ref<"claude" | "codex" | "muse" | "agy" | "copilot">("codex"),
   model = ref(""),
   report = ref<UsageReport | null>(null),
   reportBusy = ref(false),
@@ -136,7 +136,7 @@ async function generate() {
           <label
             >分析エージェント<select v-model="reportKind" :disabled="reportBusy">
               <option value="codex">Codex</option>
-              <option value="claude">Claude Code</option>
+              <option value="claude">Claude Code</option><option value="muse">Muse Code</option><option value="agy">Antigravity CLI</option><option value="copilot">GitHub Copilot CLI</option>
             </select></label
           ><label
             >モデル<input

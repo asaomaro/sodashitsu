@@ -254,7 +254,7 @@ export class AssistantChat {
         kind: request.kind,
         retry: request.retry,
         activate: true,
-        ...((request.kind === "claude" || request.kind === "codex") ? { launchSettings: this.profiles[request.kind] } : {}),
+        ...((request.kind in this.profiles) ? { launchSettings: this.profiles[request.kind as keyof typeof this.profiles] } : {}),
       });
     });
   }

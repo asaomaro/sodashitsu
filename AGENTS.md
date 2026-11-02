@@ -33,6 +33,8 @@
 - エージェントの連携のグラフ（画面・線の種類・上限と一時停止・受け渡しの注意・別のマシン）は `docs/agent-graph.md`、`sodactl graph` は `docs/sodactl.md`。
 - エージェントが動かしているサブエージェントの件数と一覧（フックの導入と更新・仕組み・対象外と制約）は `docs/agent-graph.md`「サブエージェントの件数と一覧」「サブエージェントの表示の仕組みと制約」、`sodactl agent get` の `subagents` は `docs/sodactl.md`。
 - Antigravity CLI（`agy`。設定・会話追跡・statusline・利用状況・限界）は `docs/antigravity-cli.md`。
+- 5種類の共通対応・CLIの固有機能・対応版と制約は `docs/agent-parity.md`。
+- Muse Code（`muse`。Linux/WSLのフック・会話再開・専用アシスタントの会話表示と範囲）は `docs/muse-code.md`。
 - IBM Bob Shell（`bob`）への対応（前面の検出・画面の判定〔本製品独自のルール `packages/server/assets/agent-detection/`。herdr のルールへの追加〔Copilot CLI〕もここ〕・会話の再開のフック・限界）は `docs/bob-shell.md`。
 - 実体（workspace・tab・pane・分割・エージェントのインスタンス・手動グループ・グラフの線）の id はすべて UUID（`crypto.randomUUID()`。連番ではなく、再利用されない）。人が見る呼び名は先頭 8 文字（`shortId`）。`sodactl` の指定は完全な id か一意に決まる先頭の部分（4 文字以上）で、`docs/sodactl.md`「id の指定（UUID と先頭の部分）」。
 

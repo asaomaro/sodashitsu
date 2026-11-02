@@ -173,7 +173,8 @@ test("会話窓へフォーカス、メッセージ選択、要約、過去一�
   await expect(window.getByRole("button", { name: "要約を更新", exact: true })).toBeEnabled();
   await expect(window.locator(".summary-result")).toContainText("会話E2Eの要約");
   await window.getByRole("button", { name: "閉じる", exact: true }).click();
-  await page.locator("[data-screen-id=dashboard]").first().click();
+  await page.locator("[data-screen-more]").click();
+  await page.locator("[data-screen-id=history]").click();
   const past = page.locator(".past-sessions");
   await expect(past).toBeVisible();
   await past.getByLabel("過去セッションを検索").fill("会話E2E");
@@ -186,7 +187,8 @@ test("現役エージェントがなくても過去セッション一覧を開�
   // 初期案内の消えない通知を利用者と同じ閉じるボタンで片付ける。
   await expect(page.locator('.pane-frame').first()).toBeVisible();
   for(const close of await page.locator('.toast-sticky .toast-close').all())await close.click();
-  await page.locator("[data-screen-id=dashboard]").first().click();
+  await page.locator("[data-screen-more]").click();
+  await page.locator("[data-screen-id=history]").click();
   await expect(page.locator(".past-sessions")).toBeVisible();
 });
 test("配布プラグインをCLIから操作し、JSON結果と画面の内容を確認する", async ({

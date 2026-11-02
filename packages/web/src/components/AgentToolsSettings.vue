@@ -52,7 +52,7 @@ function update(key: "kind" | "model" | "sessionId", event: Event) {
       >要約するエージェント
       <select :value="settings.summarySettings.kind" @change="update('kind', $event)">
         <option value="claude">Claude Code</option>
-        <option value="codex">Codex</option>
+        <option value="codex">Codex</option><option value="muse">Muse Code</option><option value="agy">Antigravity CLI</option><option value="copilot">GitHub Copilot CLI</option>
       </select></label
     >
     <label

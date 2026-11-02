@@ -336,13 +336,13 @@ export class SessionToolsDialog implements Overlay {
       grid.text(
         r.x,
         r.y + 1,
-        `完了 ${this.todos?.items.filter((n) => n.status === "completed").length ?? 0} / ${this.todos?.items.length ?? 0}${this.todos?.partial ? " · 一部の記録" : ""}`,
+        this.todos?.unavailableReason ? "ToDo一覧は未取得です" : `完了 ${this.todos?.items.filter((n) => n.status === "completed").length ?? 0} / ${this.todos?.items.length ?? 0}${this.todos?.partial ? " · 一部の記録" : ""}`,
         c.fg,
         c.bg,
         0,
         r.w,
       );
-      if (!rows.length) rows.push("このセッションには記録されたToDoがありません。");
+      if (!rows.length) rows.push(this.todos?.unavailableReason??"このセッションには記録されたToDoがありません。");
       const area = { x: r.x, y: r.y + 2, w: r.w, h: Math.max(0, r.h - 3) };
       this.scroll = Math.min(this.scroll, Math.max(0, rows.length - area.h));
       rows

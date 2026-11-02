@@ -69,3 +69,7 @@ describe("GraphAddForm", () => {
     expect(w.get("fieldset").attributes("disabled")).toBeDefined();
   });
 });
+it.each(['claude','codex','muse','agy','copilot'])('%s remains a selectable launch choice',async kind=>{
+ const w=mount(GraphAddForm,{props:{...props,kinds:[{kind,label:kind,available:true}]}});
+ await w.get(`[data-add-kind="${kind}"]`).setValue(true);await w.get('[data-add-submit]').trigger('click');expect(w.emitted('submit')?.[0]).toEqual([{kind,name:'',supervise:true}]);w.unmount();
+});

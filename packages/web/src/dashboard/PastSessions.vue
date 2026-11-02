@@ -22,7 +22,7 @@ async function load() {
     const r = await conn.request("agent.sessions", {
       query: query.value,
       limit: 100,
-      ...(kind.value === "claude" || kind.value === "codex" ? { kind: kind.value } : {}),
+      ...(["claude","codex","muse","agy","copilot"].includes(kind.value) ? { kind: kind.value as "claude"|"codex"|"muse"|"agy"|"copilot" } : {}),
     });
     rows.value = r.sessions;
     partial.value = r.partial;
@@ -73,8 +73,7 @@ onMounted(()=>void load());
 <template>
   <section class="past-sessions">
     <p>
-      ローカルに保存されたClaude
-      Code・Codexの会話です。各CLIの再開一覧とは索引や絞り込みが異なる場合があります。
+      ローカルに保存されたClaude Code・Codex・Muse Code・Antigravity CLI・GitHub Copilot CLIの会話です。各CLIの再開一覧とは索引や絞り込みが異なる場合があります。
     </p>
     <form @submit.prevent="load">
       <input
@@ -84,7 +83,7 @@ onMounted(()=>void load());
       /><select v-model="kind" aria-label="エージェント">
         <option value="">すべて</option>
         <option value="claude">Claude Code</option>
-        <option value="codex">Codex</option></select
+        <option value="codex">Codex</option><option value="muse">Muse Code</option><option value="agy">Antigravity CLI</option><option value="copilot">GitHub Copilot CLI</option></select
       ><button :disabled="busy">{{ busy ? "処理中…" : "検索・更新" }}</button>
     </form>
     <p v-if="error" role="alert">{{ error }}</p>

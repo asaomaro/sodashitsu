@@ -369,3 +369,10 @@ it("orders active work first and bounds the renderer roster while keeping totals
   expect(roster.agents[0]!.state).toBe("working");
   expect(rows[0]!.state).toBe("idle");
 });
+
+it.each(["claude","codex","muse","agy","copilot"])("%s completion includes the originating agent and can load its reply",kind=>{
+ const f=fixture();const actor={...f.agent,kind,label:kind};f.feed.snapshot({...f.snapshot,panes:[{...f.pane,agent:actor}]});f.feed.shared({notices:[]});
+ f.feed.event({event:"pane.agent_status_changed",data:{paneId:f.ids.pane,agent:{...actor,state:"idle",completionSeq:1}}});
+ const notice=f.feed.notices[0]!;expect(notice.title).toContain(kind);expect(f.feed.wantsDetails(notice)).toBe(true);
+ f.feed.details(notice.id,{messages:[{role:"assistant",text:"作業完了です"}],nextOffset:null});expect(f.feed.notices[0]?.message).toContain("作業完了です");
+});

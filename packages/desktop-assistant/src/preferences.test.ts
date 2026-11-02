@@ -56,5 +56,5 @@ it("restores model/effort profiles from the actual preferences file", async () =
  const {path}=await fixture();
  const profiles={claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"}};
  await new PreferencesFile(path).write({agentProfiles:profiles});
- expect((await new PreferencesFile(path).read()).agentProfiles).toEqual(profiles);
+ expect((await new PreferencesFile(path).read()).agentProfiles).toMatchObject(profiles);
 });

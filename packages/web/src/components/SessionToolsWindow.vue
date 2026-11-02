@@ -255,12 +255,13 @@ function key(e: KeyboardEvent) {
     </div>
     <main v-else class="todos">
       <p>参照専用 · 5秒ごとに更新</p>
-      <p v-if="todos">
+      <p v-if="todos && !todos.unavailableReason">
         完了 {{ todos.items.filter((i) => i.status === "completed").length }} /
         {{ todos.items.length }}
       </p>
+      <p v-if="todos?.unavailableReason">{{ todos.unavailableReason }}</p>
       <p v-if="todos?.partial">記録の一部のみを参照しています。</p>
-      <p v-if="todos && !todos.items.length">このセッションには記録されたToDoがありません。</p>
+      <p v-if="todos && !todos.items.length && !todos.unavailableReason">このセッションには記録されたToDoがありません。</p>
       <ul>
         <li v-for="item in todos?.items" :key="item.id" :class="item.status">
           <span>{{

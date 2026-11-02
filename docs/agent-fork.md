@@ -1,6 +1,6 @@
 # エージェントの fork（会話を引き継いだエージェントを、もう 1 つ起こす）
 
-動いている Claude Code・Codex・GitHub Copilot CLI のエージェントを、**ここまでの会話の記憶を持ったまま**、別の pane にもう 1 つ起こします。別の案を並べて試したいとき、同じ調査をやり直させずに済みます。リポジトリの fork（GitHub の上の写し）ではなく、**会話（セッション）の fork** です。
+動いている Claude Code・Codex・Muse Code・GitHub Copilot CLI のエージェントを、**ここまでの会話の記憶を持ったまま**、別の pane にもう 1 つ起こします。別の案を並べて試したいとき、同じ調査をやり直させずに済みます。リポジトリの fork（GitHub の上の写し）ではなく、**会話（セッション）の fork** です。
 
 - 起こす先は、**同じフォルダの新しい pane**、または**新しい worktree（新しいブランチ）の workspace**。
 - 元のエージェントは止まらず、そのまま続きます。元の会話の記録は書き換わりません。
@@ -14,7 +14,7 @@
 | 条件 | 外れたときの理由 |
 | :- | :- |
 | その pane にエージェントが検出されている | `no_agent` |
-| Claude Code・Codex・GitHub Copilot CLI のいずれかである | `not_claude` |
+| Claude Code・Codex・Muse Code・GitHub Copilot CLI のいずれかである | `not_claude` |
 | 会話の id が分かる（**フックの報告**〔`SessionStart`〕で知る。設定の「エージェント連携」でフックを入れて、エージェントを起動し直すと使える） | `no_session_id` |
 | 会話の id が UUID の形（名前・パス・引数に化ける値は通さない） | `bad_session_id` |
 | 前面がシェルだけの pane を作れる（POSIX 系、またはWindowsのPowerShell・pwsh・cmd。fishなどは対象外） | `unsupported_shell` |
@@ -142,3 +142,5 @@ Codex・Copilotへの最初の知らせは、新しい会話IDの報告を確認
 WindowsネイティブでもPowerShell・pwsh・cmdのペインで、自動起動とforkを利用できます。CLIはサーバのPATHにあるネイティブexe、またはnpm標準のcmd shimが対象です。任意の自作batchラッパーは実行しません。Codex・Copilotも同じ起動経路を使います。会話IDの報告と、各CLI側のfork機能は引き続き必要です。
 
 仕様の参照: [Codex CLI](https://developers.openai.com/codex/cli/reference)、[Copilot SDK互換性](https://docs.github.com/en/copilot/how-tos/copilot-sdk/troubleshooting/compatibility)、[公式SDKのRPC定義](https://github.com/github/copilot-sdk/blob/main/nodejs/src/generated/rpc.ts)。
+
+Muse CodeはMSPのsession/forkで新しい会話IDを作ります。元会話にresume・モデルへのpromptを送らず、分岐先だけをmuse resumeで起動します。対応するMSPを持つCLIが必要です。Antigravity CLIには、検証済みのネイティブ会話fork APIがないためfork操作を表示しません。

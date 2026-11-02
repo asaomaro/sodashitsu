@@ -236,11 +236,13 @@ try {
   await page.locator("#claude-effort").selectOption("high");
   await page.locator("#codex-model").fill("custom-model");
   await page.locator("#codex-effort").selectOption("low");
+  for(const kind of ["muse","agy","copilot"]){await page.locator(`#${kind}-model`).fill(`${kind}-test-model`);await page.locator(`#${kind}-effort`).selectOption("high");}
   await page.getByRole("button", {name:"保存",exact:true}).press("Enter");
   await expect(page.locator("#status")).toHaveText("保存しました。");
-  assert.deepEqual(await page.evaluate(()=>window.preferences.agentProfiles), {claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"}});
+  assert.deepEqual(await page.evaluate(()=>window.preferences.agentProfiles), {claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"},muse:{model:"muse-test-model",effort:"high"},agy:{model:"agy-test-model",effort:"high"},copilot:{model:"copilot-test-model",effort:"high"}});
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="start-session").length),0);
   await expect(page.locator("#claude-model")).toHaveValue("sonnet");
+  for(const kind of ["muse","agy","copilot"]){await expect(page.locator(`#${kind}-model`)).toHaveValue(`${kind}-test-model`);await expect(page.locator(`#${kind}-effort`)).toHaveValue("high");}
   await expect(page.locator("#followSystemMotion")).toBeChecked();
   await page.locator("#followSystemMotion").uncheck();
   await expect(page.locator("#voiceEnabled")).not.toBeChecked();

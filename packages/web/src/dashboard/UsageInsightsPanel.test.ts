@@ -48,3 +48,8 @@ it('invalidates report filters when the PC changes while the charts are paused',
  const machines=setup(async(_id,p)=>fixture(p));await flushPromises();await wrapper!.setProps({active:false});expect(wrapper!.emitted('insights')?.at(-1)?.[0]).not.toBeNull();
  machines.selectedId='remote';await flushPromises();expect(wrapper!.emitted('insights')?.at(-1)?.[0]).toBeNull();
 });
+it('shows usage-unavailable sessions without zero-token totals or charts and keeps all five filters',async()=>{
+ setup(async(_id,p)=>{const r=fixture(p);r.totals={...r.totals,input:0,total:0,calls:0};r.byDay=[{...r.totals,key:p.from}];r.coverage=[{kind:'agy',files:1,pending:0,missing:0,invalid:0,oversized:0,firstAt:null,lastAt:null,limited:false}];return r;});await flushPromises();
+ expect(wrapper!.find('.insights-metrics article strong').text()).toBe('未取得');expect(wrapper!.find('svg[aria-label="期間トークンと前期間の推移"]').exists()).toBe(false);
+ for(const kind of ['claude','codex','muse','agy','copilot'])expect(wrapper!.find(`option[value="${kind}"]`).exists()).toBe(true);
+});

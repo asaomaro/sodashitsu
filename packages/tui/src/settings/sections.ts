@@ -956,6 +956,9 @@ function agentToolsSection(env: SettingsEnv): SettingsSection {
           [
             { value: "claude" as const, label: "Claude Code" },
             { value: "codex" as const, label: "Codex" },
+            { value: "muse" as const, label: "Muse Code" },
+            { value: "agy" as const, label: "Antigravity CLI" },
+            { value: "copilot" as const, label: "GitHub Copilot CLI" },
           ],
           summary.kind,
           (kind) => setSummary({ kind, sessionId: "" }),

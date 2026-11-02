@@ -11,7 +11,7 @@ export function forkUnavailableReason(pane: Pane | undefined, local: boolean): F
   if (!local) return "remote";
   if (pane === undefined) return "pane_not_found";
   if (pane.agent === null) return "no_agent";
-  if (!["claude", "codex", "copilot"].includes(pane.agent.kind)) return "not_claude";
+  if (!["claude", "codex", "copilot", "muse"].includes(pane.agent.kind)) return "not_claude";
   const session = pane.agentSession;
   if (session === null || session.kind !== pane.agent.kind) return "no_session_id";
   if (!isForkSessionId(session.sessionId)) return "bad_session_id";
@@ -25,7 +25,7 @@ export function forkReasonText(reason: ForkMenuReason): string {
     case "no_agent":
       return "エージェントが検出されていません";
     case "not_claude":
-      return "Claude Code・Codex・GitHub Copilot CLI の fork に対応しています";
+      return "Claude Code・Codex・Muse Code・GitHub Copilot CLI の fork に対応しています";
     case "no_session_id":
       return "会話の id が分かりません（設定の「エージェント連携」でフックを入れて、エージェントを起動し直してください）";
     case "bad_session_id":

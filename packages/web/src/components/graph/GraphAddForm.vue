@@ -37,8 +37,8 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ submit: [AddFormSubmit]; cancel: [] }>();
 
-const KIND_MAIN = ["claude", "codex"] as const;
-const choice = ref<"shell" | "claude" | "codex" | "other">("shell");
+const KIND_MAIN = ["claude", "codex", "muse", "agy", "copilot"] as const;
+const choice = ref<"shell" | "claude" | "codex" | "muse" | "agy" | "copilot" | "other">("shell");
 const otherKind = ref("");
 const name = ref("");
 const supervise = ref(true);
@@ -107,11 +107,8 @@ onMounted(() => void nextTick(() => root.value?.querySelector<HTMLElement>("inpu
     <fieldset class="graph-add-kinds" :disabled="busyText !== null || retrying">
       <legend class="graph-add-legend">種類</legend>
       <label><input v-model="choice" type="radio" name="graph-add-kind" value="shell" data-add-kind="shell" /> シェル</label>
-      <label :class="{ 'graph-add-na': kinds !== null && !available('claude') }">
-        <input v-model="choice" type="radio" name="graph-add-kind" value="claude" data-add-kind="claude" :disabled="!available('claude')" /> {{ labelOf("claude") }}
-      </label>
-      <label :class="{ 'graph-add-na': kinds !== null && !available('codex') }">
-        <input v-model="choice" type="radio" name="graph-add-kind" value="codex" data-add-kind="codex" :disabled="!available('codex')" /> {{ labelOf("codex") }}
+      <label v-for="kind in KIND_MAIN" :key="kind" :class="{ 'graph-add-na': kinds !== null && !available(kind) }">
+        <input v-model="choice" type="radio" name="graph-add-kind" :value="kind" :data-add-kind="kind" :disabled="!available(kind)" /> {{ labelOf(kind) }}
       </label>
       <label v-if="others.length > 0" class="graph-add-other">
         <input v-model="choice" type="radio" name="graph-add-kind" value="other" data-add-kind="other" :disabled="otherKind === ''" />

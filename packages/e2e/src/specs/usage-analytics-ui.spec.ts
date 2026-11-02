@@ -349,7 +349,12 @@ test("generated usage analytics charts, date selection and explicit report work 
       exact: true,
     }),
   ).toBeVisible();
-  await panel.locator("[data-generate-usage-report]").click();
+  for(const kind of ["claude","codex","muse","agy","copilot"]){
+    await panel.getByRole("combobox",{name:"分析エージェント",exact:true}).selectOption(kind);
+    await panel.locator("[data-generate-usage-report]").click();
+    await expect(panel.locator("[data-generate-usage-report]")).toBeEnabled();
+  }
+  expect(new Set(requests.filter(r=>r.method==="agent.usage_report").map(r=>r.params.settings.kind))).toEqual(new Set(["claude","codex","muse","agy","copilot"]));
   await expect(panel.locator("[data-usage-report] .work-item")).toContainText("分析画面を整備");
   await expect(panel.locator('[data-usage-report] [data-priority="high"]')).toContainText(
     "優先度 高",
