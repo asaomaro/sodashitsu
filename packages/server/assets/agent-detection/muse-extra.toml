@@ -1,0 +1,20 @@
+# Observed with installed Muse Code 1.4.14 using the local echo provider.
+id = "muse"
+version = "2026.11.02.1"
+min_engine_version = 1
+
+[[rules]]
+id = "muse_1_4_idle_prompt"
+state = "idle"
+priority = 700
+region = "bottom_non_empty_lines(5)"
+visible_idle = true
+line_regex = ['^\s*❯(?:\s.*)?$']
+not = [
+  { contains = ["esc to interrupt"] },
+  { contains = ["Enter to select", "Tab for an optional note"] },
+  { contains = ["Enter to toggle", "Esc to interrupt"] },
+  { contains = ["enter confirm", "esc go back"] },
+  { contains = ["enter save", "esc go back"] },
+  { contains = ["space toggle", "esc close", "type filter"] },
+]

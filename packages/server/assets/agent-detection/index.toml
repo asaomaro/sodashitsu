@@ -15,3 +15,7 @@ path = "github-copilot-extra.toml"
 [[agents]]
 id = "agy"
 path = "antigravity-extra.toml"
+
+[[agents]]
+id = "muse"
+path = "muse-extra.toml"

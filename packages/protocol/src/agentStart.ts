@@ -45,6 +45,7 @@ export const AGENT_START_LABELS: Readonly<Record<string, string>> = Object.freez
   qwen: "Qwen Code",
   bob: "Bob Shell",
   agy: "Antigravity CLI",
+  muse: "Muse Code",
 });
 
 export function agentStartLabel(kind: string): string {

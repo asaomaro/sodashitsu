@@ -74,3 +74,8 @@ it("resumes Antigravity by conversation UUID and rejects names/paths/metacharact
   expect(resumeCommandFor("agy", id)).toBe(`agy --conversation ${id}`);
   for (const bad of ["../other", "name", "a;pwd", "--continue"]) expect(resumeCommandFor("agy", bad)).toBeUndefined();
 });
+
+it('resumes only exact Muse session UUIDs without ambiguous names or shell arguments',()=>{
+ const id='01a19c67-c59e-7060-aa2e-7f556e90b495';expect(resumeCommandFor('muse',id)).toBe(`muse resume ${id}`);
+ for(const invalid of ['--last','name','../session','id;echo pwned'])expect(resumeCommandFor('muse',invalid)).toBeUndefined();
+});

@@ -151,17 +151,40 @@ function agentPidOf(kind) {
     } catch {
       return undefined;
     }
-    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && nameOf(n) === want)) return pid;
+    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && (nameOf(n) === want || kind === "muse" && /^muse-bin-\d[\w.-]*$/.test(nameOf(n))))) return pid;
     if (!Number.isFinite(ppid) || ppid <= 1) return undefined;
     pid = ppid;
   }
   return undefined;
 }
 
+/** Muse clears hook env. Recover only routing fields from its nearest Linux ancestor. */
+function museRouting(pid) {
+  if (process.platform !== "linux" || !pid) return {};
+  let fd;
+  try {
+    if (fs.statSync(`/proc/${pid}`).uid !== process.getuid()) return {};
+    const before = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    fd = fs.openSync(`/proc/${pid}/environ`, "r");
+    const buffer = Buffer.alloc(65537), size = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (size > 65536) return {};
+    const after = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    const start = stat => stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19];
+    if (start(before) !== start(after)) return {};
+    const values = buffer.subarray(0,size).toString("utf8").split("\0");
+    const value = key => values.find(v => v.startsWith(key+"="))?.slice(key.length+1);
+    const paneId=value("SODA_PANE_ID"),sock=value("SODA_AGENT_REPORT_SOCKET");
+    if (!paneId || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(paneId) || !sock || !path.isAbsolute(sock) || sock.length>1024) return {};
+    return {paneId,sock};
+  } catch { return {}; }
+  finally { if(fd!==undefined)fs.closeSync(fd); }
+}
+
 async function main() {
-  const paneId = process.env.SODA_PANE_ID;
-  const sock = process.env.SODA_AGENT_REPORT_SOCKET;
   const kind = process.argv[2];
+  const routing = kind === "muse" && (!process.env.SODA_PANE_ID || !process.env.SODA_AGENT_REPORT_SOCKET) ? museRouting(agentPidOf(kind)) : {};
+  const paneId = routing.paneId || process.env.SODA_PANE_ID;
+  const sock = routing.sock || process.env.SODA_AGENT_REPORT_SOCKET;
   if (!paneId || !sock || !kind) return; // 本製品の pane の外・未対応の呼び出し方 → 無害に終わる
 
   const raw = await readStdin();

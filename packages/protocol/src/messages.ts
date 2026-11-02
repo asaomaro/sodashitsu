@@ -944,6 +944,7 @@ const agentIntegrationKind = z.enum([
   "qodercli",
   "bob",
   "agy",
+  "muse",
 ]);
 
 // --- session の一覧（20260926-named-session-ui。herdr の `session list` を画面から）------------------

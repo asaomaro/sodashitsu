@@ -40,7 +40,7 @@ export const AGENTS: readonly AgentDescriptor[] = [
   { kind: "qwen", label: "Qwen Code", verified: false },
   { kind: "letta", label: "Letta Code", verified: false },
   { kind: "maki", label: "Maki", verified: false },
-  { kind: "muse", label: "Muse", verified: false },
+  { kind: "muse", label: "Muse Code", verified: false },
   // 本製品独自（herdr に無い。判定ルールは `packages/server/assets/agent-detection/bob.toml`）。20261016-bob-shell。
   // verified は design の「MVP で検証済み」（Claude Code・Codex）だけの印なので、実機で確かめた Bob も false のまま（docs/bob-shell.md）。
   { kind: "bob", label: "Bob Shell", verified: false },

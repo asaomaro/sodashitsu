@@ -1170,7 +1170,7 @@ describe("FsAgentIntegrationInstaller — qodercli", () => {
   );
 
   it("isAgentIntegrationKind・AGENT_INTEGRATION_KINDS", () => {
-    expect(AGENT_INTEGRATION_KINDS).toHaveLength(11);
+    expect(AGENT_INTEGRATION_KINDS).toHaveLength(12);
     expect(AGENT_INTEGRATION_KINDS).toContain("qodercli");
     expect(AGENT_INTEGRATION_KINDS).toContain("bob");
     for (const kind of AGENT_INTEGRATION_KINDS) expect(isAgentIntegrationKind(kind)).toBe(true);
@@ -1251,4 +1251,22 @@ it("installs Antigravity named SessionStart handlers without disturbing other na
     expect(JSON.parse(await readFile(config, "utf8")).user).toEqual(json.user);
     expect((await installer.status("agy")).installed).toBe(false);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+it('installs Muse schema-v1 hooks without replacing user hooks or managed settings',async()=>{
+ const dir=await makeTempDir('soda-muse-install-');
+ try{
+  const source=join(dir,'report.cjs'),config=join(dir,'config','muse','settings.json');await writeFile(source,'// generated hook');await mkdir(dirname(config),{recursive:true});
+  const userHook={hooks:[{type:'command',command:'existing-hook'}]};
+  await writeFile(config,JSON.stringify({schema_version:1,model:'user-model',managed_hooks_path:'managed.json',hooks:{SessionStart:[userHook]}}));
+  const installer=new FsAgentIntegrationInstaller(source,{XDG_CONFIG_HOME:join(dir,'config'),PATH:''},dir,'linux');
+  expect(await installer.install('muse')).toMatchObject({ok:true});
+  const saved=JSON.parse(await readFile(config,'utf8'));
+  expect(saved).toMatchObject({schema_version:1,model:'user-model',managed_hooks_path:'managed.json'});
+  expect(saved.hooks.SessionStart).toHaveLength(2);expect(saved.hooks.SessionStart[0]).toEqual(userHook);
+  expect(saved.hooks.SessionStart[1]).toMatchObject({hooks:[{type:'command',timeout:5}]});expect(saved.hooks.SessionStart[1]).not.toHaveProperty('matcher');
+  expect((await installer.status('muse')).installed).toBe(true);expect(await installer.install('muse')).toMatchObject({ok:true});
+  await installer.uninstall('muse');expect(JSON.parse(await readFile(config,'utf8')).hooks.SessionStart).toEqual([userHook]);
+  await writeFile(config,'{"schema_version":2}');expect(await installer.install('muse')).toMatchObject({ok:false});expect(await readFile(config,'utf8')).toBe('{"schema_version":2}');
+ }finally{await rm(dir,{recursive:true,force:true});}
 });

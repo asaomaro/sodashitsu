@@ -578,3 +578,15 @@ console.log("PID=" + process.pid);
 it("reports Antigravity conversationId without sending unrelated metadata", async () => {
   expect(await runHook("agy", JSON.stringify({ conversationId: "12345678-abcd-ef01-2345-6789abcdef01", modelName: "m", email: "private", artifactDirectoryPath: "/private" }))).toMatchObject({ paneId: "p1", kind: "agy", sessionId: "12345678-abcd-ef01-2345-6789abcdef01" });
 });
+
+it.runIf(process.platform==='linux')('recovers only routing from the nearest Muse ancestor when its hook environment is cleared',async()=>{
+ const dir=await makeTempDir('soda-muse-hook-'),sock=join(dir,'report.sock'),received:Report[]=[];
+ const server=createServer(conn=>{let data='';conn.on('data',chunk=>data+=chunk);conn.on('end',()=>{received.push(JSON.parse(data));});});
+ await new Promise<void>(resolve=>server.listen(sock,resolve));
+ try{
+  const program=join(dir,'muse-bin-1.4.14-R7309.1.cjs');
+  await writeFile(program,`const {spawnSync}=require('node:child_process');const r=spawnSync(process.execPath,[${JSON.stringify(SCRIPT_PATH)},'muse'],{env:{PATH:process.env.PATH},input:JSON.stringify({session_id:'01a19c67-c59e-7060-aa2e-7f556e90b495',cwd:'/generated',source:'startup',prompt:'private prompt'}),encoding:'utf8'});if(r.stdout||r.stderr||r.status)process.exit(2);`);
+  const code=await new Promise<number|null>(resolve=>{const child=spawn(process.execPath,[program],{env:cleanEnv({SODA_PANE_ID:'11111111-1111-4111-8111-111111111111',SODA_AGENT_REPORT_SOCKET:sock,PRIVATE_SECRET:'not-forwarded'}),stdio:'ignore'});child.once('close',resolve);});
+  expect(code).toBe(0);expect(received).toHaveLength(1);expect(received[0]).toMatchObject({paneId:'11111111-1111-4111-8111-111111111111',kind:'muse',sessionId:'01a19c67-c59e-7060-aa2e-7f556e90b495',cwd:'/generated',source:'startup',agentPid:expect.any(Number)});expect(JSON.stringify(received)).not.toMatch(/private prompt|PRIVATE_SECRET|not-forwarded/);
+ }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(dir,{recursive:true,force:true});}
+});

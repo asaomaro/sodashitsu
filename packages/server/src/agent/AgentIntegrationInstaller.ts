@@ -55,6 +55,7 @@ interface LegacyHookSpec {
  * 読み込み・書き込み・マージ・アトミック書き出しは共通のまま保つ。
  */
 interface HookSpec {
+  schemaVersion?: number;
   configFile(env: NodeJS.ProcessEnv, home: string): string;
   hooksDir(env: NodeJS.ProcessEnv, home: string): string;
   binName: string;
@@ -235,6 +236,14 @@ export function devinUserConfigDir(
 }
 
 const HOOK_SPECS: Record<AgentIntegrationKind, HookSpec> = {
+  muse: {
+    configFile: (env, home) => join(env.XDG_CONFIG_HOME || join(home, ".config"), "muse", "settings.json"),
+    hooksDir: (env, home) => join(env.XDG_CONFIG_HOME || join(home, ".config"), "muse", "hooks"),
+    binName: "muse", schemaVersion: 1,
+    entriesPath: ["hooks", "SessionStart"],
+    buildEntry: (scriptPath, kind) => ({hooks: [{type:"command",command:hookCommand(scriptPath,kind),timeout:5}]}),
+    isOurs: isOursNested,
+  },
   agy: {
     configFile: (_env, home) => join(home, ".gemini", "config", "hooks.json"),
     hooksDir: (_env, home) => join(home, ".gemini", "antigravity-cli", "hooks"),
@@ -520,6 +529,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     private readonly hookScriptSource: string,
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly home: string = homedir(),
+    private readonly platform: NodeJS.Platform = process.platform,
   ) {}
 
   async status(
@@ -578,6 +588,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
    * 変わったので、導入済みは「更新が必要」になる。押したときだけ書き換える）。同梱のスクリプトが読めないときは false（押しても直らない「更新が必要」を出さない）。
    */
   private async needsUpdate(spec: HookSpec, root: JsonObject): Promise<boolean> {
+    if (spec.schemaVersion !== undefined && root.schema_version === undefined) return true;
     const extras = spec.extraEntries ?? [];
     let bundled: Buffer;
     try {
@@ -597,12 +608,15 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
   }
 
   async install(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }> {
+    if (kind === "muse" && this.platform !== "linux") return {ok:false,message:"Muse Codeのフック連携は現在Linux/WSLで利用できます。"};
     const spec = HOOK_SPECS[kind];
     const configFile = spec.configFile(this.env, this.home);
     const hooksDir = spec.hooksDir(this.env, this.home);
     const read = await readJsonObject(configFile);
     if (!read.ok) return unparsable(spec, configFile, read);
     const root = read.data;
+    if (spec.schemaVersion !== undefined && root.schema_version !== undefined && root.schema_version !== spec.schemaVersion)
+      return {ok:false,message:"設定のschema_versionに対応していないため変更しませんでした。"};
     const targets = [
       { path: spec.entriesPath, build: spec.buildEntry },
       ...(spec.extraEntries ?? []),
@@ -622,7 +636,7 @@ export class FsAgentIntegrationInstaller implements AgentIntegrationInstaller {
     await copyFile(this.hookScriptSource, hookScriptPathFor(hooksDir));
 
     const scriptPath = hookScriptPathFor(hooksDir);
-    let updated = root;
+    let updated = spec.schemaVersion === undefined ? root : {schema_version:spec.schemaVersion,...root};
     // 同じファイルにある古いエントリは、足す前に除く。
     for (const hit of hits) {
       if (hit.file === configFile)
