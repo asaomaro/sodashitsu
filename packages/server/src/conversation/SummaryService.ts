@@ -1,3 +1,4 @@
+import {isolatedAntigravity} from "./AgentIsolation.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir, homedir } from "node:os";
@@ -6,7 +7,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { parse, stringify } from "smol-toml";
 import {
   RpcError, reportDocument, structuredReportDocument, usageReportText,
-  type UsageReport, type SummarySettings, type ConversationSummary,
+  type ConversationKind, type UsageReport, type SummarySettings, type ConversationSummary,
 } from "@sodashitsu/protocol";
 import { windowsAgentExecutable } from "../agent/windowsAgentLaunch.js";
 import { openVerified, readRange } from "../agent/safeFile.js";
@@ -58,7 +59,7 @@ export class SummaryService {
       if (
         typeof v.result?.text !== "string" ||
         v.result.text.length > 128 * 1024 ||
-        !["claude", "codex"].includes(v.result.kind) ||
+        !["claude", "codex", "muse", "agy", "copilot"].includes(v.result.kind) ||
         typeof v.result.model !== "string" ||
         typeof v.result.partial !== "boolean" ||
         !Number.isSafeInteger(v.offset) ||
@@ -159,7 +160,7 @@ export class SummaryService {
         const v: unknown = JSON.parse(raw);
         if (Array.isArray(v))
           for (const key of v.slice(-300))
-            if (typeof key === "string" && /^(claude|codex):[a-zA-Z0-9_-]{1,128}$/.test(key))
+            if (typeof key === "string" && /^(claude|codex|muse|agy|copilot):[a-zA-Z0-9_-]{1,128}$/.test(key))
               this.issued.add(key);
       } catch {}
     })());
@@ -203,7 +204,7 @@ export class SummaryService {
   }
   private async verifySource(
     paneId: string,
-    source: { kind: "claude" | "codex"; sessionId: string },
+    source: { kind: ConversationKind; sessionId: string },
     revision: { size: number; identity: string },
     checkpoint: number,
   ) {
@@ -428,7 +429,7 @@ export class SummaryService {
       dir = await mkdtemp(join(tmpdir(), "soda-summary-"));
       const output = join(dir, "summary.txt"),
         newId = randomUUID();
-      const args =
+      let args =
         settings.kind === "claude"
           ? [
               "-p",
@@ -460,6 +461,17 @@ export class SummaryService {
               ...(settings.model ? ["--model", settings.model] : []),
               "-",
             ];
+      const extra=settings.kind!=="claude"&&settings.kind!=="codex";
+      if(extra&&settings.sessionId)throw new RpcError("invalid_params","この種類の要約は毎回独立したセッションで生成します");
+      const modelArgs=settings.model?["--model",settings.model]:[];
+      if(settings.kind==="muse"){
+        const promptFile=join(dir,"prompt.txt");await writeFileAtomic(promptFile,prompt);
+        args=["exec","--json","--preset","empty","--disable-shell","--disable-write","--disable-web-tools","--disable-reminders","--disable-request-user-input","--no-foreign-personal-context","--max-model-steps","1","--no-session-log","--prompt-file",promptFile,...modelArgs];
+      }else if(settings.kind==="agy"){
+        args=["--print",prompt,"--output-format","json","--disable-slash-commands","--mode","plan","--settings",JSON.stringify({permissions:{deny:["read_file(*)","write_file(*)","read_url(*)","execute_url(*)","command(*)","unsandboxed(*)","mcp(*)"]},statusLine:{enabled:false},title:{enabled:false}}),...modelArgs];
+      }else if(settings.kind==="copilot"){
+        args=["--prompt",prompt,"--output-format","json","--no-custom-instructions","--disable-builtin-mcps","--deny-tool","*","--available-tools","--no-ask-user","--no-auto-update",...modelArgs];
+      }
       const env = { ...process.env };
       for (const key of Object.keys(env))
         if (
@@ -470,8 +482,23 @@ export class SummaryService {
           key.startsWith("SODACTL_")
         )
           delete env[key];
+      if(settings.kind==="muse"){
+        const config=join(dir,"config","muse");await mkdir(config,{recursive:true,mode:0o700});
+        const original=join(process.env.XDG_CONFIG_HOME??join(homedir(),".config"),"muse");
+        const auth=await boundedFile(join(original,"auth.json"),512*1024);
+        if(auth)await writeFileAtomic(join(config,"auth.json"),auth);
+        const saved=await boundedFile(join(original,"settings.json"),512*1024);let source:any;try{source=saved?JSON.parse(saved):null;}catch{}const defaults:any={schema_version:1};for(const key of ["provider","model","model_reasoning_efforts","contributor_mode_enabled","contributor_mode_disclosure_acknowledged"])if(source?.[key]!==undefined)defaults[key]=source[key];await writeFileAtomic(join(config,"settings.json"),JSON.stringify(defaults));
+        env.XDG_CONFIG_HOME=join(dir,"config");env.XDG_DATA_HOME=join(dir,"data");env.MUSE_NO_AUTO_UPDATE="1";env.MUSE_LOGIN="0";
+      }
+      if(settings.kind==="copilot"){
+        const original=process.env.COPILOT_HOME??join(homedir(),".copilot"),config=join(dir,"copilot");await mkdir(config,{mode:0o700});
+        // Only CLI authentication is copied. Hooks, plugins, MCP and permissions stay out.
+        const auth=await boundedFile(join(original,"config.json"),512*1024);
+        if(auth){let value:any;try{value=JSON.parse(auth);}catch{};const credentials:any={};for(const key of ["copilot_tokens","logged_in_users","last_logged_in_user","model","reasoning_effort"])if(value?.[key]!==undefined)credentials[key]=value[key];await writeFileAtomic(join(config,"config.json"),JSON.stringify(credentials));}
+        env.COPILOT_HOME=config;
+      }
       if (settings.kind === "codex") await this.codexEnv(env);
-      const target =
+      const target = settings.kind==="agy" ? await isolatedAntigravity(dir,env) :
         process.platform === "win32"
           ? await windowsAgentExecutable(settings.kind, env)
           : { file: settings.kind, prefix: [] };
@@ -554,6 +581,16 @@ export class SummaryService {
           throw new RpcError("agent_prompt_failed", "要約を生成できません");
         text = result.result;
         sessionId = typeof result.session_id === "string" ? result.session_id : newId;
+      } else if(settings.kind==="agy"){
+        let result:any;try{result=JSON.parse(stdout);}catch{throw new RpcError("agent_prompt_failed","分析の応答形式が不正です");}
+        if(result.status!=="SUCCESS"||typeof result.response!=="string")throw new RpcError("agent_prompt_failed","分析を生成できません");
+        text=result.response;sessionId=null;
+      } else if(settings.kind==="muse"||settings.kind==="copilot"){
+        text="";sessionId=null;
+        for(const line of stdout.split("\n")){try{const row=JSON.parse(line);
+          if(settings.kind==="muse"&&row.schema_version===1&&row.payload_type==="run.terminal.completed"&&row.payload?.terminal==="completed"&&typeof row.payload.text==="string")text=row.payload.text;
+          if(settings.kind==="copilot"&&row.type==="assistant.message"&&typeof row.data?.content==="string")text=row.data.content;
+        }catch{}}
       } else {
         text = (await boundedFile(output, 128 * 1024)) ?? "";
         for (const line of stdout.split("\n"))

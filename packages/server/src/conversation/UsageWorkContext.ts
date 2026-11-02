@@ -18,11 +18,12 @@ export async function usageWorkContext(deps:{session:{snapshot():Pick<SessionSna
   check();const identity={paneId:pane.id,instanceId:pane.agent!.instanceId,sessionId:pane.agentSession?.sessionId};const tab=snapshot.tabs.find(t=>t.id===pane.tabId),workspace=snapshot.workspaces.find(w=>w.id===tab?.workspaceId);
   const item:ReportWork={workspace:text(workspace?.label??'不明'),agent:text(pane.agent?.name??pane.label??pane.agent?.label??pane.agent!.kind),kind:pane.agent!.kind,state:pane.agent!.state,available:false,partial:false,messages:[],todos:[]};
   try{
-   const source=deps.conversations.source(pane.id),file=await deps.conversations.locate(source.kind,source.sessionId);check();const opened=await openVerified(file);
+   const source=deps.conversations.source(pane.id),file=await deps.conversations.locate(source.kind,source.sessionId);check();const opened=await deps.conversations.open(source.kind,source.sessionId);
    if(opened){try{check();
     const start=Math.max(0,opened.st.size-256*1024),bytes=await readRange(opened.fd,start,opened.st.size-start);check();
     const lines=bytes.toString('utf8').split('\n');lines.pop();if(start)lines.shift();item.partial=start>0;
     for(const line of lines){let row:any;try{row=JSON.parse(line);}catch{item.partial=true;continue;}
+     if(source.kind==='muse'&&row.stream?.id!==source.sessionId)continue;
      const message=recordMessage(row,source.kind);if(message&&!/^\s*(# AGENTS\.md|<INSTRUCTIONS>|<skills_instructions>|<environment_context>)/.test(message.text))item.messages.push({role:message.role,text:text(message.text,800),...(message.at&&message.at.length<=64&&Number.isFinite(Date.parse(message.at))?{at:message.at}:{})});
      const todos=todoSnapshot(row);if(todos)item.todos=todos.filter(t=>t.status!=='completed').slice(0,4).map(t=>({text:text(t.text,300),status:t.status}));
     }

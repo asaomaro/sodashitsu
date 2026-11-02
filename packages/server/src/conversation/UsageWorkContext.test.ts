@@ -35,3 +35,11 @@ it('revalidates earlier panes after a later pane finishes its asynchronous read'
 });
 
 it('keeps a final-send guard so a replaced session cannot be sent as current work',async()=>{const f=await fixture();await writeFile(f.file,line('user','現在の作業'));const r=await usageWorkContext(f,()=>{});expect(()=>r.verify()).not.toThrow();f.change();expect(()=>r.verify()).toThrow('分析対象の作業が切り替わりました');});
+it('excludes a foreign Muse stream from both goal text and task snapshots',async()=>{
+ const f=await fixture(),id='01a19c78-bb57-7bd1-b706-d47f06ed0001',foreign='11111111-1111-4111-8111-111111111111',data=join(f.dir,'data'),day=new Date(parseInt(id.replaceAll('-','').slice(0,12),16)).toISOString().slice(0,10).split('-'),dir=join(data,'muse','sessions',...day,id);await mkdir(dir,{recursive:true});
+ const todo=(stream:string,text:string)=>({schema_version:1,payload_schema_version:1,stream:{kind:'session',id:stream},payload_type:'runtime.session',payload:{kind:'run',event:{kind:'todo_snapshot_updated',items:[{text,status:'inProgress'}]}}});
+ await writeFile(join(dir,'session.jsonl'),[todo(id,'対象の作業'),todo(foreign,'別会話の秘密')].map(r=>JSON.stringify(r)).join('\n')+'\n');
+ const original=f.session.snapshot(),pane={...original.panes[0]!,agent:{...original.panes[0]!.agent!,kind:'muse'},agentSession:{kind:'muse' as const,sessionId:id,reportedAt:0}},session={getPane:()=>pane,snapshot:()=>({...original,panes:[pane]})};
+ const conversations=new ConversationService(()=>pane,{extraRoots:{home:f.dir,dataHome:data},claudeRoots:[]});const result=await usageWorkContext({session,conversations},()=>{});
+ expect(result.items[0]?.todos).toEqual([{text:'対象の作業',status:'in_progress'}]);expect(JSON.stringify(result.items)).not.toContain('別会話の秘密');
+});

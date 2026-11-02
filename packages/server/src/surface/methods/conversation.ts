@@ -1,3 +1,4 @@
+import {conversationResumeArgs} from "../../agent/conversationResume.js";
 import { SessionToolsParams, SessionNoteSaveParams, SessionNoteDeleteParams } from "@sodashitsu/protocol";
 import { readAgentTodos } from "../../conversation/AgentTodos.js";
 import { NotificationStateParams, NotificationUpdateParams } from "@sodashitsu/protocol";
@@ -87,10 +88,7 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
           paneId: p.paneId,
           name: `resume-${p.sessionId.slice(0, 8)}-${crypto.randomUUID().slice(0, 4)}`,
           kind: p.kind,
-          args:
-            p.kind === "claude"
-              ? ["--resume", p.sessionId]
-              : ["resume", p.sessionId, "--cd", deps.session.getPane(p.paneId)?.cwd ?? "."],
+          args:conversationResumeArgs(p.kind,p.sessionId,deps.session.getPane(p.paneId)?.cwd??"."),
         },
         () => deps.sizeAuthority.noteInteraction(ctx.clientId, p.paneId),
       );

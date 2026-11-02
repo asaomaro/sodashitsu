@@ -14,7 +14,7 @@ it("only offers supported controls and requires a transcript for history and sum
     "permissions",
   ]);
   expect(headerActionsFor("copilot", true, AGENT_HEADER_ACTIONS)).toEqual([
-    "notes",
+    "messages", "summary", "notes", "todos",
     "compact",
     "clear",
     "usage",
@@ -41,4 +41,8 @@ it("separates header and menu visibility and migrates old button settings", asyn
   expect(configuredAgentActions(prefs, [])).toEqual(["summary"]);
   expect(configuredAgentActions(prefs, [], true)).toEqual(["summary", "notes"]);
   expect(loadAgentActionSettings(undefined, []).notes).toBe("hidden");
+});
+
+it("offers history, summary and task inspection for all five installed kinds",()=>{
+ for(const kind of ["claude","codex","muse","agy","copilot"])expect(headerActionsFor(kind,true,["messages","summary","todos"])).toEqual(["messages","summary","todos"]);
 });

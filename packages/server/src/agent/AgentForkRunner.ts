@@ -1,3 +1,4 @@
+import {forkMuseSession} from "./museSession.js";
 import {
   AGENT_START_DEFAULT_TIMEOUT_MS,
   RpcError,
@@ -281,7 +282,7 @@ export class AgentForkRunner {
     try {
       const forkId = sourceAgent.kind === "copilot"
         ? await (this.deps.forkCopilot ?? forkCopilotSession)(sessionId, session.getPane(newPaneId)!.cwd, this.aborter.signal)
-        : sessionId;
+        : sourceAgent.kind==="muse"?await forkMuseSession(sessionId,session.getPane(newPaneId)!.cwd,this.aborter.signal):sessionId;
       const current = checkForkable(session.getPane(sourcePaneId));
       if (!current.ok || current.agent.instanceId !== sourceInstance || current.sessionId !== sessionId) throw new RpcError("fork_failed", SOURCE_AGENT_CHANGED);
       usedName = await this.start(newPaneId, name, sourceAgent.name, sourcePaneId, forkId, sourceAgent.kind);

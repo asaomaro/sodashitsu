@@ -7,39 +7,21 @@ import { openVerified, readRange } from "../agent/safeFile.js";
 
 const WINDOW = 1024 * 1024;
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-type Kind = "copilot" | "agy";
-/** Only persisted human/model text. Tool output, reasoning and subagent messages are not chat. */
-export function assistantRecord(row: Record<string, any>, kind: Kind): Omit<ConversationMessage, "id"> | null {
-  let role: "user" | "assistant", text: unknown;
-  if (kind === "copilot") {
-    if (!["user.message", "assistant.message"].includes(row.type) || row.parentToolCallId || row.data?.parentToolCallId) return null;
-    role = row.type === "user.message" ? "user" : "assistant";
-    text = row.data?.content;
-  } else {
-    if (!["USER_INPUT", "PLANNER_RESPONSE"].includes(row.type)) return null;
-    role = row.type === "USER_INPUT" ? "user" : "assistant";
-    text = row.content;
-  }
-  if (typeof text !== "string" || !text.trim()) return null;
-  const at = kind === "copilot" ? row.timestamp : row.created_at;
-  return { role, text: text.slice(0, 8192), ...(typeof at === "string" && at.length <= 100 ? { at } : {}) };
-}
+type Kind = "copilot" | "agy" | "muse";
+export {extraRecord as assistantRecord} from "../conversation/ExtraAgentRecords.js";
+import {extraRecord as assistantRecord, locateExtra} from "../conversation/ExtraAgentRecords.js";
 
 /** Fixed record paths only; no agent/SDK process, newest-session guessing, watch, or background scan. */
 export async function readAssistantConversation(
   kind: Kind, sessionId: string,
-  options: { home?: string; copilotHome?: string } = {},
+  options: { home?: string; copilotHome?: string; dataHome?: string } = {},
 ): Promise<AssistantConversationPage> {
-  if (!["copilot", "agy"].includes(kind) || !UUID.test(sessionId))
+  if (!["copilot", "agy", "muse"].includes(kind) || !UUID.test(sessionId))
     throw new RpcError("invalid_params", "会話の指定が正しくありません");
-  const home = options.home ?? homedir();
-  const rootPath = kind === "copilot"
-    ? join(options.copilotHome ?? process.env.COPILOT_HOME ?? join(home, ".copilot"), "session-state")
-    : join(home, ".gemini", "antigravity-cli", "brain");
-  const relative = kind === "copilot" ? [sessionId, "events.jsonl"] : [sessionId, ".system_generated", "logs", "transcript.jsonl"];
   let opened: Awaited<ReturnType<typeof openVerified>> = null;
   try {
-    const root = await realpath(rootPath), file = join(root, ...relative);
+    const file=await locateExtra(kind,sessionId,options);
+    if(!file)throw Error("Missing record");
     const verifyPath = async () => {
       if (await realpath(dirname(file)) !== dirname(file)) throw Error("Unverified parent");
       const current = await lstat(file);
@@ -66,7 +48,7 @@ export async function readAssistantConversation(
       try {
         const row: unknown = JSON.parse(bytes.subarray(used, end).toString("utf8"));
         if (!row || typeof row !== "object" || Array.isArray(row)) throw Error("Invalid record");
-        const message = assistantRecord(row, kind);
+        const message = kind === "muse" && (row as any).stream?.id!==sessionId ? null : assistantRecord(row, kind);
         if (message) {
           messages.push({ id: `${kind}:${sessionId}:${start + used}`, ...message });
           if (message.text.length === 8192) partial = true;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const ConversationKind = z.enum(["claude", "codex"]);
+export const ConversationKind = z.enum(["claude", "codex", "muse", "agy", "copilot"]);
 export type ConversationKind = z.infer<typeof ConversationKind>;
 export interface ConversationMessage {
   id: string;
@@ -93,6 +93,7 @@ export interface ConversationSummary {
 }
 export const AGENT_COMMANDS: Readonly<Record<string, Partial<Record<AgentHeaderAction, string>>>> =
   {
+    muse: { usage: "/usage" },
     agy: { usage: "/usage", permissions: "/permissions" },
     claude: { compact: "/compact", clear: "/clear", usage: "/usage", permissions: "shift+tab" },
     copilot: { compact: "/compact", clear: "/clear", usage: "/usage", permissions: "/permissions" },
@@ -118,11 +119,11 @@ export function headerActionsFor(
     action === "notes"
       ? hasSession && !!kind
       : action === "todos"
-        ? hasSession && ["claude", "codex"].includes(kind)
+        ? hasSession && ConversationKind.safeParse(kind).success
         : action === "messages" || action === "summary"
-          ? hasSession && ["claude", "codex"].includes(kind)
+          ? hasSession && ConversationKind.safeParse(kind).success
           : action === "fork"
-            ? hasSession && ["claude", "codex", "copilot"].includes(kind)
+            ? hasSession && ["claude", "codex", "copilot", "muse"].includes(kind)
             : !!AGENT_COMMANDS[kind]?.[action],
   );
 }

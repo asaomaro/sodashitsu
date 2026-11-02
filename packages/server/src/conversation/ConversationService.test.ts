@@ -18,7 +18,7 @@ async function fixture(content: string) {
     file,
     root,
     service: new ConversationService(() => undefined, {
-      claudeRoots: [root],
+      extraRoots:{home:dir,dataHome:join(dir,"data")}, claudeRoots: [root],
       codexHome: join(dir, "codex"),
     }),
   };

@@ -1,3 +1,4 @@
+import { extraRecord, openExtra, locateExtra, discoverExtra, type ExtraRoots } from "./ExtraAgentRecords.js";
 import { readdir, realpath, lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
@@ -27,6 +28,7 @@ export function recordMessage(
   row: Record<string, any>,
   kind: ConversationKind,
 ): { role: "user" | "assistant"; text: string; at?: string } | null {
+  if(kind!=="claude"&&kind!=="codex")return extraRecord(row,kind);
   const message =
     kind === "claude" ? row.message : row.type === "response_item" ? row.payload : null;
   if (row.isMeta || !message || !["user", "assistant"].includes(message.role)) return null;
@@ -60,6 +62,7 @@ export class ConversationService {
   constructor(
     private readonly pane: (id: string) => Pane | undefined,
     private readonly opts: {
+      extraRoots?: ExtraRoots;
       claudeRoots?: string[];
       codexHome?: string;
       activeSession?: (kind: ConversationKind, id: string) => boolean;
@@ -80,7 +83,7 @@ export class ConversationService {
     const file =
       kind === "claude"
         ? await locateClaudeMain(id, undefined, this.roots())
-        : await findCodexRecordFile(this.codexHome(), id);
+        : kind==="codex"?await findCodexRecordFile(this.codexHome(), id):await locateExtra(kind,id,this.opts.extraRoots);
     if (!file) throw new RpcError("not_found", "会話記録が見つかりません");
     if (kind === "codex") {
       const roots = await realRootsOf([join(this.codexHome(), "sessions")]);
@@ -97,12 +100,15 @@ export class ConversationService {
   source(paneId: string): { kind: ConversationKind; sessionId: string; pane: Pane } {
     const pane = this.pane(paneId),
       ref = pane?.agentSession;
-    if (!pane || !ref || !["claude", "codex"].includes(ref.kind) || pane.agent?.kind !== ref.kind)
+    if (!pane || !ref || !["claude", "codex", "muse", "agy", "copilot"].includes(ref.kind) || pane.agent?.kind !== ref.kind)
       throw new RpcError("not_found", "このペインの会話記録は取得できません");
     return { kind: ref.kind as ConversationKind, sessionId: ref.sessionId, pane };
   }
+  async open(kind:ConversationKind,id:string){
+    return kind!=="claude"&&kind!=="codex"?openExtra(kind,id,this.opts.extraRoots):openVerified(await this.locate(kind,id));
+  }
   async revision(kind: ConversationKind, sessionId: string, checkpoint?: number) {
-    const f = await openVerified(await this.locate(kind, sessionId));
+    const f = await this.open(kind,sessionId);
     if (!f) throw new RpcError("not_found", "会話記録を読めません");
     try {
       const size = f.st.size;
@@ -133,7 +139,7 @@ export class ConversationService {
     offset = 0,
     maxBytes = 16 * WINDOW,
   ): Promise<ConversationPage> {
-    const opened = await openVerified(await this.locate(kind, sessionId));
+    const opened = await this.open(kind,sessionId);
     if (!opened) throw new RpcError("not_found", "会話記録を読めません");
     try {
       const { fd, st } = opened;
@@ -151,7 +157,7 @@ export class ConversationService {
         if (end < 0) break;
         try {
           const row = JSON.parse(bytes.subarray(used, end).toString("utf8"));
-          const m = recordMessage(row, kind);
+          const m = kind==="muse"&&row.stream?.id!==sessionId?null:recordMessage(row, kind);
           if (m) {
             messages.push({ id: `${kind}:${sessionId}:${offset + used}`, ...m });
             if (m.text.length === TEXT_MAX) partial = true;
@@ -242,12 +248,16 @@ export class ConversationService {
         if (id && st?.isFile() && !st.isSymbolicLink() && st.nlink === 1)
           files.push({ kind: "codex", id, file, mtime: st.mtimeMs });
       }
+      for(const kind of ["muse","agy","copilot"] as const){
+        const found=await discoverExtra(kind,this.opts.extraRoots,300);partial||=found.limited;
+        for(const f of found.files)if(!f.parent)files.push({kind,id:f.id,file:f.file,mtime:f.mtime});
+      }
       const sessions: PastAgentSession[] = [];
       const seen = new Set<string>();
       for (const f of files.sort((a, b) => b.mtime - a.mtime).slice(0, 300)) {
         if (seen.has(f.kind + f.id)) continue;
         seen.add(f.kind + f.id);
-        const opened = await openVerified(f.file).catch(() => null);
+        const opened = await (f.kind==="claude"||f.kind==="codex"?openVerified(f.file):this.open(f.kind,f.id)).catch(() => null);
         if (!opened) continue;
         try {
           const text = (
@@ -260,7 +270,7 @@ export class ConversationService {
               const row = JSON.parse(line);
               const value = row.cwd ?? (row.type === "session_meta" ? row.payload?.cwd : undefined);
               if (typeof value === "string") cwd ??= value.slice(0, 4096);
-              const m = recordMessage(row, f.kind);
+              const m = f.kind==="muse"&&row.stream?.id!==f.id?null:recordMessage(row, f.kind);
               if (m?.role === "user" && !title) title = m.text.replace(/\s+/g, " ").slice(0, 150);
             } catch {}
           }

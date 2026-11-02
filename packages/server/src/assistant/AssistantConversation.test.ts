@@ -37,3 +37,18 @@ it("keeps partial UTF8 lines pending and bounds message count/text",async()=>{co
 it("skips a partial oversized non-chat row at the tail window boundary",async()=>{const f=await fixture();await f.save({type:"tool.execution_complete",data:"x".repeat(2*1024*1024)},f.row("assistant","visible"));const page=await f.read();expect(page.messages.map(m=>m.text)).toEqual(["visible"]);expect(page.partial).toBe(true);});
 it.runIf(process.platform!=="win32")("rejects file and intermediate-directory symlinks",async()=>{const f=await fixture();const external=join(f.home,"external");await writeFile(external,JSON.stringify(f.row("user","private"))+"\n");await symlink(external,f.file);await expect(f.read()).rejects.toMatchObject({code:"not_found"});await rm(f.file);await rm(f.directory,{recursive:true});const outside=join(f.home,"outside");await mkdir(outside);await writeFile(join(outside,"events.jsonl"),"private");await symlink(outside,f.directory,"dir");await expect(f.read()).rejects.toMatchObject({code:"not_found"});});
 it("rejects hardlinked records and path traversal without exposing filesystem details",async()=>{const f=await fixture();const external=join(f.home,"external");await writeFile(external,"private");await link(external,f.file);await expect(f.read()).rejects.toMatchObject({code:"not_found"});await expect(readAssistantConversation("copilot","../private")).rejects.toMatchObject({code:"invalid_params"});await expect(readAssistantConversation("agy",randomUUID(),{home:f.home})).rejects.toThrow("会話記録を確認できません");});
+
+it('reads only pinned Muse main-session user text and committed answers from its UUIDv7 date path',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'soda-muse-conversation-'));roots.push(home);
+ const id='01a19c67-c59e-7060-aa2e-7f556e90b495',dataHome=join(home,'data'),directory=join(dataHome,'muse','sessions','2026','11','02',id);
+ await mkdir(directory,{recursive:true});
+ const row=(payload_type:string,payload:unknown,sessionId=id)=>({schema_version:1,payload_schema_version:1,stream:{kind:'session',id:sessionId},payload_type,payload});
+ const user=row('runtime.user_intent.accepted',{surface:'main',semantic_kind:{kind:'chat'},source_session_id:id,model_messages:[{content:[{kind:'text',text:'利用者の質問'}]}]});
+ const answer=row('runtime.session',{kind:'run',event:{kind:'assistant_message_committed',text:'船長の回答'}});
+ const file=join(directory,'session.jsonl');
+ await writeFile(file,[user,row('runtime.session',{kind:'run',event:{kind:'model_input_trace_recorded',text:'private reasoning'}}),row('runtime.session',{kind:'run',event:{kind:'assistant_message_committed',text:'private child'}},randomUUID()),answer].map(x=>JSON.stringify(x)+'\n').join(''));
+ const read=()=>readAssistantConversation('muse',id,{home,dataHome});const page=await read();
+ expect(page).toMatchObject({kind:'muse',sessionId:id,reset:true});expect(page.messages.map(m=>[m.role,m.text])).toEqual([['user','利用者の質問'],['assistant','船長の回答']]);expect(JSON.stringify(page)).not.toContain('private');
+ const unknown={...answer,schema_version:2};expect(assistantRecord(unknown,'muse')).toBeNull();
+ if(process.platform!=='win32'){await rename(file,file+'.original');await symlink(file+'.original',file);await expect(read()).rejects.toMatchObject({code:'not_found'});}
+});

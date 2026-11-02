@@ -38,6 +38,7 @@ export interface AgentTodo {
   description?: string;
 }
 export interface AgentTodos {
+  unavailableReason?:string;
   kind: string;
   sessionId: string;
   items: AgentTodo[];

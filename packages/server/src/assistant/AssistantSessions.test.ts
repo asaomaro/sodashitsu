@@ -826,7 +826,7 @@ it("checks image expiry again after final target metadata inspection", async () 
  } finally {now.mockRestore();release?.();}
 });
 
-it.each(["codex","copilot","agy"] as const)("requires this dedicated %s actor's verified conversation ID",async kind=>{
+it.each(["codex","copilot","agy","muse"] as const)("requires this dedicated %s actor's verified conversation ID",async kind=>{
  const f=await fixture(),device=randomUUID(),info=await f.ensure(device,kind),actor=f.detect(info);await f.ensure(device,kind);
  expect(()=>f.manager.conversationTarget(device,actor.instanceId)).toThrow("会話ID");const id=randomUUID();f.session.reportAgentSession(info.paneId,kind,id);
  expect(f.manager.conversationTarget(device,actor.instanceId)).toMatchObject({kind,sessionId:id,paneId:info.paneId});expect(()=>f.manager.conversationTarget(device,randomUUID())).toThrow();

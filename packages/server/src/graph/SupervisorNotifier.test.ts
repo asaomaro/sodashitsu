@@ -135,3 +135,10 @@ describe("subordinatesSignature", () => {
     expect(subordinatesSignature([])).toBe("");
   });
 });
+
+it.each(["claude","codex","muse","agy","copilot"])("%s supervisor waits for idle and receives pending work once",kind=>{
+ const supervisor={...agent("s1","working"),kind};const n=make(supervisor);
+ expect(n.handle({kind:"tick",at:D*2})).toBeNull();
+ expect(n.handle({kind:"supervisor",agent:{...supervisor,state:"idle"},at:D*3})).toEqual({kind:"send"});
+ expect(n.handle({kind:"tick",at:D*4})).toBeNull();
+});

@@ -47,6 +47,7 @@ export class SessionTransfer {
     const life = this.life(owner); this.pending++;
     try {
     const source = this.conversations.source(paneId);
+    if(source.kind!=="claude"&&source.kind!=="codex")throw new RpcError("invalid_params","この種類のネイティブ会話転送には未対応です");
     if (!/^[0-9a-f-]{36}$/i.test(source.sessionId)) throw new RpcError("invalid_params", "UUIDの会話だけを引き継げます");
       const file = await this.conversations.locate(source.kind, source.sessionId);
     this.live(life);

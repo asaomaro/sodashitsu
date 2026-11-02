@@ -210,7 +210,7 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
       const source = sessions.conversationTarget(params.deviceId, params.instanceId);
       const page = source.kind === "claude" || source.kind === "codex"
         ? await (() => { if (!deps.conversations) throw new RpcError("not_found", "会話記録は利用できません"); return deps.conversations.page(source.paneId, params.offset); })()
-        : await import("../../assistant/AssistantConversation.js").then(module => module.readAssistantConversation(source.kind as "copilot" | "agy", source.sessionId));
+        : await import("../../assistant/AssistantConversation.js").then(module => module.readAssistantConversation(source.kind as "copilot" | "agy" | "muse", source.sessionId));
       const messages=await Promise.all(page.messages.map(async message=>message.role==="user"&&deps.assistantPersona?{...message,text:await deps.assistantPersona.userText(params.deviceId,message.text)}:message));
       authorized();
       const current = sessions.conversationTarget(params.deviceId, params.instanceId);

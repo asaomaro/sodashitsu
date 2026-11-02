@@ -9,19 +9,31 @@ function normalized(rows: unknown): AgentTodo[] | null {
   if (!Array.isArray(rows)) return null;
   return rows.slice(0, 500).flatMap((r, i) => {
     if (!r || typeof r !== "object") return [];
-    const text = r.content ?? r.step ?? r.subject;
-    if (typeof text !== "string" || !["pending", "in_progress", "completed"].includes(r.status))
+    const text = r.content ?? r.step ?? r.subject ?? r.text ?? r.title;
+    const status=r.status==="inProgress"?"in_progress":r.status;
+    if (typeof text !== "string" || !["pending", "in_progress", "completed"].includes(status))
       return [];
     return [
       {
         id: String(r.id ?? i).slice(0, 100),
         text: text.slice(0, 4000),
-        status: r.status as AgentTodo["status"],
+        status: status as AgentTodo["status"],
       },
     ];
   });
 }
 export function todoSnapshot(row: any): AgentTodo[] | null {
+  if(row?.schema_version===1&&row.payload_schema_version===1){
+    const event=row.payload?.event??row.payload?.record?.fact;
+    if(event?.kind==="todo_snapshot_updated")return normalized(event.items);
+  }
+  const tools=row?.type==="tool.execution_start"?[{name:row.data?.toolName,args:row.data?.arguments}]:row?.type==="PLANNER_RESPONSE"?row.tool_calls:null;
+  if(Array.isArray(tools)){
+    for(const tool of tools)if(["TodoWrite","write_todos","update_todo","update_plan"].includes(tool?.name)){
+      let args=tool.args;try{if(typeof args==="string")args=JSON.parse(args);}catch{continue;}
+      const found=normalized(args?.todos??args?.plan??args?.items);if(found!==null)return found;
+    }
+  }
   const blocks = row?.message?.content;
   if (Array.isArray(blocks)) {
     let found: AgentTodo[] | null = null;
@@ -44,9 +56,10 @@ export async function readAgentTodos(
   paneId: string,
 ): Promise<AgentTodos> {
   const ref = service.source(paneId);
-  const opened = await openVerified(await service.locate(ref.kind, ref.sessionId));
+  const opened = await service.open(ref.kind,ref.sessionId);
   if (!opened) throw new Error("会話記録を読めません");
   const items = new Map<string, AgentTodo>();
+  let foundSnapshot=false;
   let partial = false,
     pending = Buffer.alloc(0),
     oversized = false;
@@ -61,8 +74,10 @@ export async function readAgentTodos(
       while ((end = bytes.indexOf(10, start)) >= 0) {
         if (!oversized && end - start <= 1024 * 1024) {
           try {
-            const snapshot = todoSnapshot(JSON.parse(bytes.subarray(start, end).toString("utf8")));
+            const row=JSON.parse(bytes.subarray(start,end).toString("utf8"));
+            const snapshot=ref.kind==="muse"&&row.stream?.id!==ref.sessionId?null:todoSnapshot(row);
             if (snapshot !== null) {
+              foundSnapshot=true;
               items.clear();
               for (const item of snapshot) items.set(item.id, item);
             }
@@ -126,7 +141,7 @@ export async function readAgentTodos(
     const now = service.source(paneId);
     if (now.kind !== ref.kind || now.sessionId !== ref.sessionId)
       throw new Error("セッションが切り替わりました");
-    return { kind: ref.kind, sessionId: ref.sessionId, items: [...items.values()], partial };
+    return { kind: ref.kind, sessionId: ref.sessionId, items: [...items.values()], partial, ...(ref.kind!=="claude"&&ref.kind!=="codex"&&!foundSnapshot?{unavailableReason:"このCLIの記録からToDo一覧を取得できません。端末側のタスク表示を確認してください。"}:{}) };
   } finally {
     await opened.fd.close();
   }

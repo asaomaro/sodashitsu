@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, join, sep } from "node:path";
-import { RpcError, hasForbiddenChars, type ExtPane, type AgentKindsResult } from "@sodashitsu/protocol";
+import { RpcError, agentStartLabel, hasForbiddenChars, type ExtPane, type AgentKindsResult } from "@sodashitsu/protocol";
 import { z } from "zod";
 import type { SessionService } from "../session/SessionService.js";
 import type { AgentStarter } from "../agent/AgentStarter.js";
 import type { WorkAgentRequests } from "../work/WorkAgentRequests.js";
 import type { WorkAgentPlugin } from "@sodashitsu/protocol";
 
-export const TASK_AGENT_KINDS = ["claude", "codex"] as const;
+export const TASK_AGENT_KINDS = ["claude", "codex", "muse", "agy", "copilot"] as const;
 export const TaskStartSchema = z.strictObject({ paneId:z.string(), kind:z.enum(TASK_AGENT_KINDS), taskFile:z.string().min(1).max(4096), execution:z.enum(["server","operator"]).optional() });
 export const TaskStatusSchema = z.strictObject({ paneId:z.string(), requestId:z.string().uuid() });
 export const TaskPromptSchema = TaskStatusSchema.extend({ taskFile:z.string().min(1).max(4096) });
@@ -30,12 +30,13 @@ export class TaskAgentLauncher {
   async kinds(execution?: "server" | "operator"):Promise<AgentKindsResult> {
     if(execution === "operator") {
       if(!this.deps.operator)throw new RpcError("not_found","操作元のエージェント起動に対応していません");
-      return {kinds:TASK_AGENT_KINDS.map(kind=>({kind,label:kind === "claude" ? "Claude Code（操作元で確認）" : "Codex（操作元で確認）",available:true}))};
+      return {kinds:(["claude","codex"] as const).map(kind=>({kind,label:agentStartLabel(kind)+"（操作元で確認）",available:true}))};
     }
     return {kinds:(await this.deps.kinds()).kinds.filter(k=>TASK_AGENT_KINDS.includes(k.kind as typeof TASK_AGENT_KINDS[number]))};
   }
   async startOperator(owner:string,pluginKey:string,p:TaskStart,target:()=>ExtPane,invoke:(request:z.infer<typeof WorkAgentPlugin>)=>Promise<unknown>) {
     if(!this.deps.operator)throw new RpcError("not_found","操作元のエージェント起動に対応していません");
+    if(p.kind!=="claude"&&p.kind!=="codex")throw new RpcError("unsupported_agent_kind","操作元でのスコープ制限付き起動には未対応です。サーバで起動してください");
     const origin=target();
     const guard=()=>{const now=target();if(now.id!==origin.id||now.workspaceId!==origin.workspaceId||now.tabId!==origin.tabId||now.projectDir!==origin.projectDir)throw new RpcError("not_found","依頼元のPJまたはタブが変わりました");};
     const key=JSON.stringify([owner,origin.id,p.taskFile]);
@@ -92,7 +93,7 @@ export class TaskAgentLauncher {
       guard();if(this.deps.session.getPane(paneId)?.tabId!==origin.tabId)throw new RpcError("not_found","新しい作業ペインが移動または削除されました");
       const name="task-"+randomUUID().replaceAll("-","").slice(0,20);
       const prompt=`制作指示ファイル ${JSON.stringify(path)} を読み、指定されたスキルに従って制作を進めてください。成果物を制作フォルダに保存し、指示ファイルのコマンドで進捗を更新してください。`;
-      await this.deps.starter.start({paneId,name,kind:p.kind,args:[prompt]},guard,{skipInterrupt:true,beforeWrite:guard});
+      await this.deps.starter.start({paneId,name,kind:p.kind,args:p.kind==="agy"?["--prompt-interactive",prompt]:p.kind==="copilot"?["--interactive",prompt]:[prompt]},guard,{skipInterrupt:true,beforeWrite:guard});
       return {paneId,kind:p.kind,name,status:"submitted"};
     } catch(err) {
       // Preserve failed panes for inspection; a user may already be interacting with the fresh terminal.
