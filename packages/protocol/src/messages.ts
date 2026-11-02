@@ -1145,6 +1145,7 @@ export interface AgentIntegrationStatusResult {
   statusLine?: StatusLineWrapStatus;
   /** Antigravity CLI の包み。対応するサーバだけ返す。 */
   agyStatusLine?: StatusLineWrapStatus;
+  copilotStatusLine?: StatusLineWrapStatus;
 }
 
 export const AgentIntegrationInstallParams = z.object({ kind: agentIntegrationKind });
@@ -1160,7 +1161,7 @@ export type AgentIntegrationUninstallParams = z.infer<typeof AgentIntegrationUni
 export type AgentIntegrationUninstallResult = AgentIntegrationInstallResult;
 
 /** ステータスラインの包みの導入・外す。kind省略は既存のClaude Code。結果は `AgentIntegrationInstallResult`。 */
-export const AgentIntegrationStatusLineParams = z.object({ kind: z.enum(["claude", "agy"]).optional() });
+export const AgentIntegrationStatusLineParams = z.object({ kind: z.enum(["claude", "agy", "copilot"]).optional() });
 export type AgentIntegrationStatusLineParams = z.infer<typeof AgentIntegrationStatusLineParams>;
 
 export const AgentIntegrationSetAutoResumeParams = z.object({ enabled: z.boolean() });

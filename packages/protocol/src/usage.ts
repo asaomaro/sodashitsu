@@ -70,6 +70,11 @@ export interface AgentUsage {
   /** モデルの名前（記録に出た最後の主の応答。分からなければ null）。 */
   model: string | null;
   tokens: AgentUsageTokens;
+  reasoningEffort?: string;
+  contextPressure?: "normal" | "warning" | "blocked";
+  costEstimated?: boolean;
+  costPartial?: boolean;
+  contextRemainingTokens?: number;
   /** 記録に残る分の内訳。 */
   breakdown?: AgentUsageBreakdown;
   /** コスト（USD）。製品は単価の表を持たない: 報告・`cost-state` の値だけ。無ければ項目ごと無い。 */
@@ -125,6 +130,8 @@ export interface AccountUsage {
   label: string;
   windows: UsageWindow[];
   plan?: string;
+  /** Amount-only quotas have no percentage denominator. Never convert to USD. */
+  balances?: { label: string; remaining: number; resetsAt?: number; stale?: boolean }[];
   source: UsageSource;
   asOf: number;
 }

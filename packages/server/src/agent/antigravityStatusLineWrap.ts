@@ -69,8 +69,8 @@ function wrapperCommand(script: string, original: Record<string, unknown> | null
 }
 
 /** command から、包みの引数（元の控え）を読む。読めなければ undefined。 */
-function originalFromCommand(command: string): { original: Record<string, unknown> | null; valueText?: string; fileBefore?: string } | undefined {
-  const m = new RegExp(`${AGY_STATUSLINE_SCRIPT_NAME.replace(".", "\\.")}"?\\s+([A-Za-z0-9_-]+)\\s*$`).exec(command);
+function originalFromCommand(command: string, scriptName = AGY_STATUSLINE_SCRIPT_NAME): { original: Record<string, unknown> | null; valueText?: string; fileBefore?: string } | undefined {
+  const m = new RegExp(`${scriptName.replace(".", "\\.")}"?\\s+([A-Za-z0-9_-]+)\\s*$`).exec(command);
   if (!m) return undefined;
   try {
     const v: unknown = JSON.parse(Buffer.from(m[1]!, "base64url").toString("utf8"));
@@ -132,8 +132,14 @@ export class AntigravityStatusLineWrapper {
     env: NodeJS.ProcessEnv = process.env,
     home: string = homedir(),
     private readonly platform: NodeJS.Platform = process.platform,
+    private readonly kind: "agy" | "copilot" = "agy",
   ) {
-    this.paths = antigravityStatusLinePaths(env, home);
+    const root = env.COPILOT_HOME || join(home, ".copilot");
+    const hooksDir = join(root, "hooks");
+    this.paths = kind === "agy" ? antigravityStatusLinePaths(env, home) : {
+      configFile: join(root, "settings.json"), hooksDir,
+      script: join(hooksDir, "soda-copilot-statusline.cjs"), sidecar: join(hooksDir, "soda-copilot-statusline.orig.json"),
+    };
   }
 
   private async readSidecar(): Promise<Sidecar | null | "absent"> {
@@ -172,8 +178,8 @@ export class AntigravityStatusLineWrapper {
     }
     if (typeof v !== "object" || v === null || Array.isArray(v)) return { failure: "statusLine の形が想定と違います（オブジェクトではありません）。何も変えませんでした" };
     const o = v as Record<string, unknown>;
-    if (o["type"] !== "command" || typeof o["command"] !== "string") return { failure: "statusLine の形が想定と違います（type が command でない）。何も変えませんでした" };
-    return { value: o, command: o["command"], ours: o["command"].includes(AGY_STATUSLINE_SCRIPT_NAME) };
+    if ((o["type"] !== undefined && o["type"] !== "command") || typeof o["command"] !== "string") return { failure: "statusLine の形が想定と違います（type が command でない）。何も変えませんでした" };
+    return { value: o, command: o["command"], ours: o["command"].includes(this.kind === "agy" ? AGY_STATUSLINE_SCRIPT_NAME : "soda-copilot-statusline.cjs") };
   }
 
   private async scriptCurrent(): Promise<boolean> {
@@ -212,7 +218,7 @@ export class AntigravityStatusLineWrapper {
     const wholeNeeded = original === null && (text === null || obj?.members.length === 0);
     const command = wrapperCommand(script, original, originalValueText, wholeNeeded && text !== null && text.length <= FILE_BEFORE_ARG_MAX ? text : null);
     if (command === undefined) return { ok: false, message: "設定のフォルダのパスに、シェルが解釈しうる文字が含まれるため、導入できません" };
-    const wrapped: Record<string, unknown> = original ? { ...original, command } : { type: "command", command, stack_with_default: true };
+    const wrapped: Record<string, unknown> = original ? { ...original, command } : { type: "command", command, ...(this.kind === "agy" ? { stack_with_default: true } : {}) };
     let newText: string;
     if (text === null || obj === null) newText = `${JSON.stringify({ statusLine: wrapped }, null, 2)}\n`;
     else if (member) newText = replaceValue(text, member, renderValue(wrapped, text, member.keyStart));
@@ -246,7 +252,7 @@ export class AntigravityStatusLineWrapper {
     }
     const sc = side !== "absent" && side !== null ? side : undefined;
     // 信じる順は、包みと同じ: 引数が先・横のファイルが後。
-    const fromArg = originalFromCommand(v.command);
+    const fromArg = originalFromCommand(v.command, this.kind === "agy" ? AGY_STATUSLINE_SCRIPT_NAME : "soda-copilot-statusline.cjs");
     const original = fromArg ? fromArg.original : sc ? sc.original : undefined;
     if (original === undefined) return { ok: false, message: "元の statusLine の控えが読めないため、外せませんでした（設定は変えていません）" };
     if (original === null) {
@@ -257,7 +263,7 @@ export class AntigravityStatusLineWrapper {
         // 横のファイルが無くても、引数に元のファイル全体（項目の無いオブジェクト）があり、今の中身が「それに導入が足したもの」と同じなら、そのまま戻す。
         const fb = fromArg?.fileBefore;
         const fbObj = fb !== undefined ? scanTopObject(fb) : null;
-        const expected = fb !== undefined && fbObj !== null ? appendMember(fb, fbObj, "statusLine", { type: "command", command: v.command, stack_with_default: true }) : undefined;
+        const expected = fb !== undefined && fbObj !== null ? appendMember(fb, fbObj, "statusLine", { type: "command", command: v.command, ...(this.kind === "agy" ? { stack_with_default: true } : {}) }) : undefined;
         if (fb !== undefined && expected === parsed.text) await writeConfigFile(configFile, fb);
         else await writeConfigFile(configFile, removeMember(parsed.text, parsed.obj, member));
       }

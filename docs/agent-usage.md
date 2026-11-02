@@ -234,7 +234,7 @@ Statuslineの設定で「今週のコスト（全セッション）」「5時間
 
 ## Antigravity CLI
 
-`agy` のモデル・文脈内トークン・コンテキスト・制限枠と解除時刻は公式statuslineの包みから共通の利用状況へ送ります。Web/モバイル・端末版ダッシュボード、pane情報、標準statuslineで表示します。設定の導入/外しと未取得項目・検証範囲は [Antigravity CLI](antigravity-cli.md) を参照してください。コスト・effort・課金累計は推定しません。
+`agy` のモデル・文脈内トークン・コンテキスト・制限枠と解除時刻は公式statuslineの包みから共通の利用状況へ送ります。Web/モバイル・端末版ダッシュボード、pane情報、標準statuslineで表示します。設定の導入/外しと未取得項目・検証範囲は [Antigravity CLI](antigravity-cli.md) を参照してください。報告されたコスト・effortも表示します。課金累計や不足項目を独自に推定しません。
 
 ## 利用分析とレポート
 
@@ -298,3 +298,15 @@ Claude Code／Codexそれぞれ最大32MiB・64ファイル・約1.8秒、発見
 導入済み5種類の期間・種類・モデル・役割・ツール・比較・レポートを同じ分析画面で扱います。Museは報告済みprovider usage ID、Antigravityは完了したPLANNER_RESPONSEのstep番号と時刻、Copilotはusage record IDで重複を避けます。Antigravityのstatuslineはコンテキスト/割当、保存されたstepの数値は消費記録として区別します。Antigravityのtool_callsとCopilotのtool.execution_startを集計し、結果が対応付けられなければ成功率へ推測で加えません。
 
 記録から使用量を取得できない会話も一覧に表示し、トークンは「未取得」とします。親子関係の根拠がなければ「区分未取得」です。USD以外のクレジットを換算せず、記録にない料金や上限は作りません。詳しくは[5種類の対応表](agent-parity.md)を参照してください。
+
+## ステータスラインの追加情報
+
+設定の「利用状況（ステータスライン）」でClaude Code・Antigravity CLI・GitHub Copilot CLIをそれぞれ導入・更新・解除できます。Copilotは1.0.105で確認しています。Copilotの設定先は`COPILOT_HOME/settings.json`（既定`~/.copilot/settings.json`）です。認証用`config.json`は書き換えません。元の独自コマンドの出力と終了値を維持し、解除時は元の設定を戻します。独自コマンドが無かったCopilotでは、包みがモデル・コンテキスト・AICの簡潔な行を出します。Antigravityは`stack_with_default`で既定表示を維持します。包みはUnix系で利用できます。Windowsでの包みの導入は未対応です。
+
+- Copilot: nativeの累計`total_tokens`・出力・キャッシュ・推論、現在のコンテキストと残トークン、AIクレジット、プレミアムリクエストを別々に保持します。`total_input_tokens`のキャッシュ内包関係は未確認なので、共通の「キャッシュ除外入力」へ変換しません。契約全体の残枠は、確認したcustom statusline入力に含まれず未取得です。AIクレジットをUSDには換算しません。
+- Antigravity: 報告されたUSDコスト・見積りフラグ・effort・プランを追加で表示します。残量だけの割当は、分母のない「残量」として表示し、使用率やUSDへ変換しません。
+- Muse: 読み取り専用MSPの`view/page`から文脈の占有量・窓・圧迫状態・モデル・effort・正規化済み累計を補います。providerのraw入力とcacheを独自に足し直さず、MSPのcounted-once値を採用します。MSPの累計は主セッション分で、子セッションは含みません。コストはMuseの見積りと、一部の呼び出しだけが価格計算された印を保持します。最大256イベント・256KiBの直近ページ、30秒間隔、同時1ホストで読み、情報がページに無いときは保存記録へ戻ります。
+
+Museの契約枠はモデルを呼ばない`muse usage --json`を背景で最大毎分1回取得します。schema v1の`allowance`内の`window`・`weekly`・`tier`・`asOfMs`を使い、解除日時はUnixミリ秒のまま保持します。初回使用前などの`allowance:null`は未取得であり、残量100%とはしません。期間の長さが報告されない場合に「5時間」と決め打ちしません。この環境のアカウントではnullを確認し、値のある枠は生成したデータで検証しています。
+
+追加情報はWebのpane情報・アカウント枠、端末版の利用状況、`sodactl agent usage`（全項目は`--json`）で確認できます。会話本文・メール・ユーザー名・作業フォルダ・transcriptの場所は、利用状況の電文に含めません。既存のClaude Code・Codexの累計と制限の取り方は継続します。

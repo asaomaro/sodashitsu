@@ -26,3 +26,15 @@ describe("AntigravityUsageAdapter", () => {
     expect(await a.accounts()).toEqual([]);
   });
 });
+
+it("keeps Antigravity reported costs, effort and amount-only quota without fictitious percentages",async()=>{
+ const a=new AntigravityUsageAdapter(()=>200000);
+ a.note({paneId:"p",sessionId:"s",costUsd:0.4,costEstimated:true,reasoningEffort:"high",plan:"Pro",balances:[{label:"credits",remaining:123,resetsAt:100}]});
+ expect(await a.usageFor({paneId:"p",sessionId:"s",transcriptPath:undefined})).toMatchObject({costUsd:0.4,costEstimated:true,reasoningEffort:"high",tokens:{basis:"context"}});
+ expect((await a.accounts())[0]).toMatchObject({plan:"Pro",windows:[],balances:[{label:"credits",remaining:123,resetsAt:100000,stale:true}]});a.close();
+});
+it("Copilot native cumulative counters and credits remain separate from current context",async()=>{
+ const a=new AntigravityUsageAdapter(()=>123,{},"copilot");
+ a.note({paneId:"p",sessionId:"12345678-abcd-ef01-2345-6789abcdef01",cumulativeTokens:{input:300,output:50,cacheRead:200,total:550},contextTokens:40,contextRemainingTokens:960,contextWindowSize:1000,creditsAic:0,premiumRequests:2});
+ expect(await a.usageFor({paneId:"p",sessionId:"12345678-abcd-ef01-2345-6789abcdef01",transcriptPath:undefined})).toMatchObject({tokens:{basis:"cumulative",total:550},contextTokens:40,contextRemainingTokens:960,credits:{amount:0,unit:"aic"},premiumRequests:2});a.close();
+});

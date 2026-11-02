@@ -85,10 +85,13 @@ export function usageLines(u: AgentUsage | null | undefined): string[] {
   if (!u) return ["利用状況を取得できません（記録・会話ID・対応状況を確認してください）"];
   return [
     `${u.kind} / ${u.model ?? "モデル不明"} · ${basis[u.tokens.basis]}`,
+    ...(u.reasoningEffort ? [`推論の強さ ${u.reasoningEffort}`] : []),
+    ...(u.contextPressure ? [`文脈の状態 ${u.contextPressure}`] : []),
     `トークン 合計 ${num(totalTokens(u))} / 入力 ${num(u.tokens.input)} / 出力 ${num(u.tokens.output)}`,
     `キャッシュ 読み ${num(u.tokens.cacheRead)} / 書き ${num(u.tokens.cacheWrite)} · 推論 ${num(u.tokens.reasoning)}`,
-    `コスト ${costText(u, 4)}${u.costBasis ? " (" + u.costBasis + ")" : ""}${u.premiumRequests !== undefined ? ` · プレミアムリクエスト ${u.premiumRequests}` : ""}`,
+    `コスト ${costText(u, 4)}${u.costEstimated ? " 見積り" : ""}${u.costPartial ? " 一部のみ" : ""}${u.costBasis ? " (" + u.costBasis + ")" : ""}${u.premiumRequests !== undefined ? ` · プレミアムリクエスト ${u.premiumRequests}` : ""}`,
     `コンテキスト ${usageGauge(contextPercent(u))} · ${num(u.contextTokens)} / ${num(u.contextWindowTokens)}`,
+    ...(u.contextRemainingTokens !== undefined ? [`コンテキスト残量 ${num(u.contextRemainingTokens)}`] : []),
     `更新 ${new Date(u.updatedAt).toLocaleString("ja-JP")} · ${u.source}`,
     ...(u.partial ? ["一部の記録のみ"] : []),
     ...(u.scanning ? ["記録を読み取り中"] : []),
@@ -178,6 +181,7 @@ export class UsageDialog implements Overlay {
           ? usageLines(this.usage.data.panes[this.paneId])
           : this.usage.data.accounts.flatMap((a, i) => [
               `${i === this.selectedAccount ? "▶ " : "  "}${a.label} [コスト]`,
+              ...(a.balances??[]).map(b=>`${b.label}: 残量 ${b.remaining}${b.resetsAt ? " · リセット " + new Date(b.resetsAt).toLocaleString("ja-JP") : ""}${b.stale ? "（古い値）" : ""}`),
               ...a.windows.map(
                 (w) =>
                   `${w.label}: ${usageGauge(w.usedPct)} · リセット ${w.resetsAt ? new Date(w.resetsAt).toLocaleString("ja-JP") : "—"}${w.stale ? "（古い値）" : ""}`,
@@ -191,7 +195,7 @@ export class UsageDialog implements Overlay {
       for (const a of this.usage.data.accounts) {
         const y = area.y + offset - this.scroll;
         if (y >= area.y && y < area.y + area.h) this.accountHits.push({ y, key: a.accountKey });
-        offset += 1 + a.windows.length;
+        offset += 1 + a.windows.length + (a.balances?.length??0);
       }
     }
     lines
@@ -317,6 +321,7 @@ export class UsageDashboard {
     section("アカウントの利用枠");
     const accountLines = this.usage.data.accounts.flatMap((a) => [
       `${a.label}${a.plan ? " · " + a.plan : ""} · ${new Date(a.asOf).toLocaleString("ja-JP")}`,
+      ...(a.balances??[]).map(b=>`${b.label}: 残量 ${b.remaining}${b.stale ? "（古い値）" : ""}`),
       ...a.windows.map(
         (w) =>
           `  ${w.label}: ${usageGauge(w.usedPct)}${w.resetsAt ? " · リセット " + new Date(w.resetsAt).toLocaleString("ja-JP") : ""}${w.stale ? "（古い値）" : ""}`,
@@ -327,7 +332,7 @@ export class UsageDashboard {
     for (const a of this.usage.data.accounts) {
       if (accountOffset < accountRoom)
         this.accountHits.push({ y: y + accountOffset, key: a.accountKey });
-      accountOffset += a.windows.length + 1;
+      accountOffset += a.windows.length + (a.balances?.length??0) + 1;
     }
     for (const line of accountLines.slice(0, accountRoom)) put(y++, line);
     if (accountLines.length > accountRoom && accountRoom > 0) {

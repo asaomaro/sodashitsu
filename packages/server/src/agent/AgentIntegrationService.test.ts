@@ -93,11 +93,13 @@ describe("DefaultAgentIntegrationService — statusLine の silent", () => {
 it("keeps Antigravity and default Claude statusline controls independent", async () => {
   const installer: AgentIntegrationInstaller = { status: async () => ({ cliDetected: false, installed: false, needsUpdate: false }), install: async () => ({ ok: true, message: null }), uninstall: async () => ({ ok: true, message: null }) };
   const control = () => ({ status: async () => ({ state: "none" as const }), install: vi.fn(async () => ({ ok: true, message: null })), uninstall: vi.fn(async () => ({ ok: true, message: null })) });
-  const claude = control(), agy = control();
+  const claude = control(), agy = control(), copilot = control();
   const file = { load: async () => ({ kind: "missing" }), save: async () => undefined } as unknown as IntegrationFile;
-  const service = await DefaultAgentIntegrationService.load(installer, file, new EventBus(), { statusLine: claude, agyStatusLine: agy });
+  const service = await DefaultAgentIntegrationService.load(installer, file, new EventBus(), { statusLine: claude, agyStatusLine: agy, copilotStatusLine: copilot });
   expect((await service.status()).agyStatusLine?.state).toBe("none");
   await service.installStatusLine("agy"); expect(agy.install).toHaveBeenCalledOnce(); expect(claude.install).not.toHaveBeenCalled();
   await service.uninstallStatusLine("agy"); expect(agy.uninstall).toHaveBeenCalledOnce();
+  await service.installStatusLine("copilot"); expect(copilot.install).toHaveBeenCalledOnce();
+  await service.uninstallStatusLine("copilot"); expect(copilot.uninstall).toHaveBeenCalledOnce();
   await service.installStatusLine(); expect(claude.install).toHaveBeenCalledOnce();
 });

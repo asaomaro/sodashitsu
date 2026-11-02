@@ -46,7 +46,7 @@ function tokensCell(u: AgentUsage): string {
 function costCell(u: AgentUsage): string {
   if (u.costUsd === undefined) return u.credits !== undefined ? formatUsageCredits(u.credits) : "—"; // USD でないクレジット（換算しない）
   const asOf = u.costAsOf !== undefined ? `・${new Date(u.costAsOf).toISOString().slice(0, 16).replace("T", " ")} 時点` : "";
-  return `$${u.costUsd.toFixed(2)}${asOf}`;
+  return `$${u.costUsd.toFixed(2)}${asOf}${u.costEstimated ? " 見積り" : ""}${u.costPartial ? " 一部のみ" : ""}`;
 }
 
 function contextCell(u: AgentUsage): string {
@@ -65,7 +65,7 @@ export function formatUsageTable(
       rows.push([paneId.slice(0, 8), "—", names.get(paneId) ?? "—", "—", "—", "—", "—", "—"]);
       continue;
     }
-    rows.push([paneId.slice(0, 8), u.kind, names.get(paneId) ?? "—", u.model ?? "—", tokensCell(u), costCell(u), contextCell(u), clock(u.updatedAt, now)]);
+    rows.push([paneId.slice(0, 8), u.kind, names.get(paneId) ?? "—", (u.model ?? "—") + (u.reasoningEffort ? ` (${u.reasoningEffort})` : ""), tokensCell(u), costCell(u), contextCell(u) + (u.contextRemainingTokens !== undefined ? ` 残 ${compact(u.contextRemainingTokens)}` : ""), clock(u.updatedAt, now)]);
   }
   const out: string[] = [];
   out.push(formatTable(["pane", "種類", "名前", "モデル", "トークン", "コスト", "コンテキスト", "更新"], rows));
@@ -82,6 +82,7 @@ function formatAccounts(accounts: readonly AccountUsage[], now: number): string 
   const sorted = [...accounts].sort((x, y) => (x.kind < y.kind ? -1 : x.kind > y.kind ? 1 : 0));
   for (const a of sorted) {
     const name = a.plan !== undefined ? `${a.label}（${a.plan}）` : a.label;
+    for(const b of a.balances??[]) rows.push([name,b.label,`残量 ${b.remaining}${b.stale ? "（古い）" : ""}`,b.resetsAt ? clock(b.resetsAt,now).replace(/（.*）/, "") : "—",clock(a.asOf,now)]);
     for (const w of a.windows) {
       const usd = w.usedUsd !== undefined || w.limitUsd !== undefined ? `（$${(w.usedUsd ?? 0).toFixed(2)} / ${w.limitUsd !== undefined ? `$${w.limitUsd.toFixed(2)}` : "—"}）` : "";
       const reset = w.resetsAt === undefined ? "—" : w.stale === true ? `${clock(w.resetsAt, now).replace(/（.*）/, "")}（過ぎた。値は古い）` : clock(w.resetsAt, now).replace(/（.*）/, "");

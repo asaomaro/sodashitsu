@@ -20,8 +20,8 @@ export interface AgentIntegrationService {
   uninstall(kind: AgentIntegrationKind): Promise<AgentIntegrationInstallResult>;
   setAutoResume(enabled: boolean): Promise<void>;
   /** Claude Code のステータスラインの包み（20261010-agent-usage の PR2。フックの導入とは別。押したときだけ書き換える）。 */
-  installStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult>;
-  uninstallStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult>;
+  installStatusLine(kind?: "claude" | "agy" | "copilot"): Promise<AgentIntegrationInstallResult>;
+  uninstallStatusLine(kind?: "claude" | "agy" | "copilot"): Promise<AgentIntegrationInstallResult>;
 }
 
 /** ステータスラインの包みの部品（`statusLineWrap.ts` の `StatusLineWrapper`）。 */
@@ -56,6 +56,7 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     private readonly health?: StatusLineHealth,
     private readonly agyStatusLine?: StatusLineControl,
     private readonly now: () => number = Date.now,
+    private readonly copilotStatusLine?: StatusLineControl,
   ) {
     this.autoResumeEnabled = autoResumeEnabled;
   }
@@ -65,11 +66,11 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     installer: AgentIntegrationInstaller,
     file: IntegrationFile,
     bus: EventBus,
-    extras: { statusLine?: StatusLineControl; health?: StatusLineHealth; agyStatusLine?: StatusLineControl; now?: () => number } = {},
+    extras: { statusLine?: StatusLineControl; health?: StatusLineHealth; agyStatusLine?: StatusLineControl; copilotStatusLine?: StatusLineControl; now?: () => number } = {},
   ): Promise<DefaultAgentIntegrationService> {
     const loaded = await file.load();
     const autoResumeEnabled = loaded.kind === "ok" ? loaded.data.autoResumeEnabled : defaultIntegrationFileData().autoResumeEnabled;
-    return new DefaultAgentIntegrationService(installer, file, bus, autoResumeEnabled, extras.statusLine, extras.health, extras.agyStatusLine, extras.now);
+    return new DefaultAgentIntegrationService(installer, file, bus, autoResumeEnabled, extras.statusLine, extras.health, extras.agyStatusLine, extras.now, extras.copilotStatusLine);
   }
 
   getAutoResumeEnabled = (): boolean => this.autoResumeEnabled;
@@ -81,6 +82,7 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
       autoResumeEnabled: this.autoResumeEnabled,
       agents: Object.fromEntries(entries) as AgentIntegrationStatusResult["agents"],
       ...(statusLine ? { statusLine } : {}),
+      ...(this.copilotStatusLine ? {copilotStatusLine: await this.copilotStatusLine.status()} : {}),
       ...(this.agyStatusLine ? { agyStatusLine: await this.agyStatusLine.status() } : {}),
     };
   }
@@ -103,16 +105,16 @@ export class DefaultAgentIntegrationService implements AgentIntegrationService {
     return { state: s.state, ...(s.message !== undefined ? { message: s.message } : {}), ...(silent ? { silent: true } : {}), ...(lastReportAt !== undefined ? { lastReportAt } : {}) };
   }
 
-  async installStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult> {
-    const control = kind === "agy" ? this.agyStatusLine : this.statusLine;
+  async installStatusLine(kind?: "claude" | "agy" | "copilot"): Promise<AgentIntegrationInstallResult> {
+    const control = kind === "copilot" ? this.copilotStatusLine : kind === "agy" ? this.agyStatusLine : this.statusLine;
     if (!control) return { ok: false, message: "このサーバでは、ステータスラインの包みを使えません" };
     const result = await control.install();
     if (result.ok) await this.publishChanged();
     return result;
   }
 
-  async uninstallStatusLine(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult> {
-    const control = kind === "agy" ? this.agyStatusLine : this.statusLine;
+  async uninstallStatusLine(kind?: "claude" | "agy" | "copilot"): Promise<AgentIntegrationInstallResult> {
+    const control = kind === "copilot" ? this.copilotStatusLine : kind === "agy" ? this.agyStatusLine : this.statusLine;
     if (!control) return { ok: false, message: "このサーバでは、ステータスラインの包みを使えません" };
     const result = await control.uninstall();
     if (result.ok) await this.publishChanged();

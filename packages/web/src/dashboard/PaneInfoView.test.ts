@@ -202,3 +202,9 @@ describe("PaneInfoView", () => {
     wrapper.unmount();
   });
 });
+
+it("renders effort, remaining context and explicitly estimated/partial costs",async()=>{
+ const {wrapper,usage:store}=setup(pane("p1",agent({kind:"muse"})));
+ store.setSnapshot({panes:{p1:usage("p1",{reasoningEffort:"high",contextRemainingTokens:800,costUsd:0.1,costEstimated:true,costPartial:true})},accounts:[]});
+ await wrapper.vm.$nextTick();expect(wrapper.get("[data-pane-info-effort]").text()).toBe("high");expect(wrapper.get("[data-pane-info-remaining]").text()).toContain("800");expect(wrapper.get("[data-pane-info-cost]").text()).toContain("見積り");expect(wrapper.get("[data-pane-info-cost]").text()).toContain("一部のみ");wrapper.unmount();
+});

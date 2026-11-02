@@ -106,3 +106,24 @@ it("does not treat missing context counters as zero", async () => {
     expect(reports[1]).not.toHaveProperty("cacheReadTokens");
   } finally { await socket.close(); }
 });
+
+it("Copilot wraps settings.json, retains command without optional type and restores exact bytes",async()=>{
+ const root=join(dir,"copilot"),file=join(root,"settings.json");await mkdir(root);
+ const text='{\n "statusLine": {"command":"printf old", "refreshInterval": 2}, "theme":"dark"\n}\n';await writeFile(file,text);
+ const w=new AntigravityStatusLineWrapper(asset,{COPILOT_HOME:root},dir,"linux","copilot");
+ expect((await w.install()).ok).toBe(true);
+ const installed=JSON.parse(await readFile(file,"utf8"));expect(installed.statusLine.command).toContain("soda-copilot-statusline.cjs");expect(installed.statusLine).not.toHaveProperty("stack_with_default");
+ expect((await w.status()).state).toBe("installed");await w.uninstall();expect(await readFile(file,"utf8")).toBe(text);
+});
+it("Copilot real payload crosses the socket with numeric metadata only and preserves original output",async()=>{
+ const root=join(dir,"copilot");const w=new AntigravityStatusLineWrapper(asset,{COPILOT_HOME:root},dir,"linux","copilot");await w.install();
+ const reports:AgentReport[]=[];const socket=await startAgentReportSocket(join(dir,"copilot.sock"),r=>reports.push(r),new MemoryLogger());
+ try{
+ const output=await new Promise<string>((resolve,reject)=>{
+  const backup=Buffer.from(JSON.stringify({soda:1,original:{command:"printf original"}})).toString("base64url");
+  const c=spawn(process.execPath,[join(root,"hooks","soda-copilot-statusline.cjs"),backup],{env:{...process.env,SODA_PANE_ID:"p",SODA_AGENT_REPORT_SOCKET:socket.path}});let out="";c.stdout.on("data",b=>out+=b);c.on("error",reject);c.on("close",()=>resolve(out));
+  c.stdin.end(JSON.stringify({session_id:"12345678-abcd-ef01-2345-6789abcdef01",username:"SECRET",cwd:"/SECRET",transcript_path:"/SECRET",model:{id:"model"},cost:{total_premium_requests:2},ai_used:{total_nano_aiu:150000000},context_window:{total_input_tokens:300,total_output_tokens:50,total_cache_read_tokens:200,total_tokens:550,current_context_tokens:40,context_window_size:1000,used_percentage:4,remaining_tokens:960}}));
+ });
+ expect(output).toBe("original");expect(reports).toHaveLength(2);expect(reports[1]).toMatchObject({kind:"copilot",cumulativeTokens:{output:50,cacheRead:200,total:550},contextTokens:40,contextRemainingTokens:960,creditsAic:0.15,premiumRequests:2});expect(JSON.stringify(reports)).not.toContain("SECRET");
+ }finally{await socket.close();}
+});

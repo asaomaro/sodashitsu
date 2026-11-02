@@ -849,11 +849,11 @@ export class ActionDispatcher implements ActionPort, FocusPort, UiPort {
   }
 
   /** Claude Code のステータスラインの包み（20261010-agent-usage の PR2。フックの導入とは別。押したときだけ書き換える）。 */
-  installStatusLineWrap(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult> {
+  installStatusLineWrap(kind?: "claude" | "agy" | "copilot"): Promise<AgentIntegrationInstallResult> {
     return this.conn.request("agent_integration.statusline_install", kind ? { kind } : {});
   }
 
-  uninstallStatusLineWrap(kind?: "claude" | "agy"): Promise<AgentIntegrationInstallResult> {
+  uninstallStatusLineWrap(kind?: "claude" | "agy" | "copilot"): Promise<AgentIntegrationInstallResult> {
     return this.conn.request("agent_integration.statusline_uninstall", kind ? { kind } : {});
   }
 

@@ -14,7 +14,7 @@ function commandId() {
 }
 /** Only read/fork are exposed: no turn submission, approval, subscriptions, or writer resume. */
 export async function museSession(
-  method: "session/read" | "session/fork",
+  method: "session/read" | "session/fork" | "view/page",
   id: string,
   opts: {
     roots?: ExtraRoots | undefined;
@@ -32,7 +32,7 @@ export async function museSession(
     for (const key of Object.keys(env))
       if (key.startsWith("SODA_") || key.startsWith("SODACTL_")) delete env[key];
     // read never loads a session or emits SessionResumed. Empty tools/provider avoids network work.
-    if (method === "session/read") {
+    if (method !== "session/fork") {
       env.XDG_CONFIG_HOME = join(dir, "config");
       await mkdir(join(env.XDG_CONFIG_HOME, "muse"), { recursive: true });
     }
@@ -41,7 +41,7 @@ export async function museSession(
     env.MUSE_LOGIN = "0";
     const args = [
       "serve",
-      ...(method === "session/read" ? ["--provider", "echo", "--preset", "empty"] : []),
+      ...(method !== "session/fork" ? ["--provider", "echo", "--preset", "empty"] : []),
       "--disable-shell",
       "--disable-write",
     ];
@@ -143,7 +143,7 @@ export async function museSession(
                 sessionId: id,
                 ...(method === "session/fork"
                   ? { commandId: commandId(), excludeItems: true }
-                  : { excludeItems: false }),
+                  : method === "view/page" ? {direction:"backward",limit:256,maxBytes:262144} : { excludeItems: false }),
               },
             });
           } else if (row.id === 2) {

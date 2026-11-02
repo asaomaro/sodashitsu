@@ -30,8 +30,8 @@ const view = useViewStore();
         formatAgo(account.asOf, now)
       }}</span>
     </div>
-    <p v-if="account.windows.length === 0" class="dash-muted">枠の値がありません</p>
-    <ul v-else class="dash-windows">
+    <p v-if="account.windows.length === 0 && !account.balances?.length" class="dash-muted">枠の値がありません</p>
+    <ul v-if="account.windows.length" class="dash-windows">
       <li
         v-for="w in account.windows"
         :key="w.label + String(w.windowMinutes ?? '')"
@@ -61,6 +61,12 @@ const view = useViewStore();
         <span v-if="windowDisplay(w, now).reset" class="dash-muted dash-window-reset">{{
           windowDisplay(w, now).reset
         }}</span>
+      </li>
+    </ul>
+    <ul v-if="account.balances?.length" class="dash-windows">
+      <li v-for="b in account.balances" :key="b.label" :class="{'dash-stale':b.stale || (b.resetsAt !== undefined && b.resetsAt <= now)}" data-dash-balance>
+        {{ b.label }} · 残量 {{ b.remaining.toLocaleString() }}
+        <span v-if="b.resetsAt" class="dash-muted"> · リセット {{ new Date(b.resetsAt).toLocaleString() }}{{ b.resetsAt <= now ? '（古い値）' : '' }}</span>
       </li>
     </ul>
   </div>

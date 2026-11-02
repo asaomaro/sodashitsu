@@ -52,6 +52,15 @@ export interface UsageFields {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  reasoningEffort?: string;
+  plan?: string;
+  costEstimated?: boolean;
+  costPartial?: boolean;
+  contextRemainingTokens?: number;
+  cumulativeTokens?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; reasoning?: number; total?: number };
+  creditsAic?: number;
+  premiumRequests?: number;
+  balances?: { label: string; remaining: number; resetsAt?: number }[];
   quota?: { label: string; usedPct: number; resetsAt?: number }[];
   agentState?: "idle" | "thinking" | "working" | "tool_use" | "initializing";
   toolConfirmationPending?: boolean;
@@ -284,6 +293,27 @@ function usageFieldsOf(o: Record<string, unknown>): UsageFields {
     const n = numIn(o[key], 0, 1e12);
     if (n !== undefined) out[key] = n;
   }
+  for (const key of ["reasoningEffort", "plan"] as const) {
+    const v = o[key];
+    if (typeof v === "string" && /^[a-zA-Z0-9_. -]{1,64}$/.test(v)) out[key] = v;
+  }
+  for (const key of ["costEstimated", "costPartial"] as const) if (typeof o[key] === "boolean") out[key] = o[key];
+  for (const key of ["contextRemainingTokens", "creditsAic", "premiumRequests"] as const) {
+    const n = numIn(o[key], 0, 1e12); if (n !== undefined) out[key] = n;
+  }
+  if (o.cumulativeTokens && typeof o.cumulativeTokens === "object") {
+    const t: NonNullable<UsageFields["cumulativeTokens"]> = {};
+    for (const key of ["input", "output", "cacheRead", "cacheWrite", "reasoning", "total"] as const) {
+      const n = numIn((o.cumulativeTokens as Record<string, unknown>)[key], 0, 1e12); if (n !== undefined) t[key] = n;
+    }
+    if (Object.keys(t).length) out.cumulativeTokens = t;
+  }
+  if (Array.isArray(o.balances)) out.balances = o.balances.slice(0, 16).flatMap(v => {
+    if (!v || typeof v !== "object") return [];
+    const label = v.label, remaining = numIn(v.remaining, 0, 1e12), resetsAt = numIn(v.resetsAt, 0, 1e11);
+    return typeof label === "string" && /^[a-zA-Z0-9_.() -]{1,64}$/.test(label) && remaining !== undefined
+      ? [{ label, remaining, ...(resetsAt !== undefined ? {resetsAt} : {}) }] : [];
+  });
   if (Array.isArray(o.quota)) {
     out.quota = o.quota.slice(0, 16).flatMap((v: unknown) => {
       if (!v || typeof v !== "object") return [];

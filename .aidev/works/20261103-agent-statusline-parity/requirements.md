@@ -1,0 +1,5 @@
+# 要件
+
+利用者: 「statuslineで取れる情報も同等に対応できましたか？」への未完了報告を受け「対応を進めて」。導入済み5 CLIの取得可能な利用情報を共通画面へ統合する。契約やCLIが報告しない値を推測しない。元の独自statusline設定を保全し、数値・短いモデル名以外の私的内容を共有しない。
+
+対象はCopilot custom statusLine、Museの読み取り専用MSPとusageコマンド、Antigravityで捨てていた公式statusline項目。Claude Code/Codexの既存会計・制限は継続する。CLIごとの非公開項目まで同じデータが取得できることを保証する要件ではない。

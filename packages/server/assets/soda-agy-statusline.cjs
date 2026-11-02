@@ -18,6 +18,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 
+const KIND = path.basename(__filename).includes("copilot") ? "copilot" : "agy";
 const SEND_BUDGET_MS = 200;
 const STDIN_BUDGET_MS = 3000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,7 +44,7 @@ function originalCommand() {
     }
   }
   try {
-    const side = JSON.parse(fs.readFileSync(path.join(__dirname, "soda-agy-statusline.orig.json"), "utf8"));
+    const side = JSON.parse(fs.readFileSync(path.join(__dirname, `soda-${KIND}-statusline.orig.json`), "utf8"));
     if (side && typeof side === "object" && "original" in side) {
       const o = side.original;
       if (o === null) return null;
@@ -97,14 +98,34 @@ function buildReport(payload) {
     quota.push(clean({ label, usedPct: (1 - remaining) * 100,
       resetsAt: num(reset, 0, 1e11) ?? (seconds === undefined ? undefined : Date.now() / 1000 + seconds) }));
   }
-  return clean({ type: "usage", paneId, kind: "agy", sessionId: sid, agentPid: agentPid(),
+  const balances = Object.entries(payload.quota || {}).slice(0, 16).flatMap(([label, value]) => {
+    if (!/^[a-zA-Z0-9_.() -]{1,64}$/.test(label) || !value || typeof value !== "object") return [];
+    const remaining = num(value.remaining_amount, 0, 1e12);
+    const reset = typeof value.reset_time === "string" ? num(Date.parse(value.reset_time)/1000, 0, 1e11) : undefined;
+    const seconds = num(value.reset_in_seconds, 0, 1e9);
+    return remaining === undefined ? [] : [clean({label, remaining, resetsAt:reset ?? (seconds === undefined ? undefined : Date.now()/1000+seconds)})];
+  });
+  const cumulativeTokens = KIND === "copilot" ? clean({
+    // total_input_tokens cache convention is not documented; retain native total without inventing a disjoint input split.
+    output:num(ctx.total_output_tokens,0,1e12),
+    cacheRead:num(ctx.total_cache_read_tokens,0,1e12), cacheWrite:num(ctx.total_cache_write_tokens,0,1e12),
+    reasoning:num(ctx.total_reasoning_tokens,0,1e12), total:num(ctx.total_tokens,0,1e12),
+  }) : undefined;
+  return clean({ type: "usage", paneId, kind: KIND, sessionId: sid, agentPid: agentPid(),
+    reasoningEffort: str(model.effort, 64), plan: str(payload.plan_tier, 64),
+    costUsd: num(payload.cost?.total_usd, 0, 1e9),
+    costEstimated: typeof payload.cost?.estimated === "boolean" ? payload.cost.estimated : undefined,
+    contextRemainingTokens: num(ctx.remaining_tokens,0,1e12), cumulativeTokens,
+    creditsAic: num(payload.ai_used?.total_nano_aiu,0,1e21) === undefined ? undefined : payload.ai_used.total_nano_aiu / 1e9,
+    premiumRequests: num(payload.cost?.total_premium_requests,0,1e12),
+    balances: balances.length ? balances : undefined,
     model: str(model.id, 128), modelName: str(model.display_name, 64),
     contextUsedPct: num(ctx.used_percentage, 0, 1000), contextWindowSize: num(ctx.context_window_size, 0, 1e12),
-    contextTokens: counts.every(x => x !== undefined) ? counts.reduce((a,x) => a + x, 0) : undefined,
+    contextTokens: num(ctx.current_context_tokens, 0, 1e12) ?? (counts.every(x => x !== undefined) ? counts.reduce((a,x) => a + x, 0) : undefined),
     inputTokens: num(cur.input_tokens, 0, 1e12), outputTokens: num(cur.output_tokens, 0, 1e12),
     cacheReadTokens: num(cur.cache_read_input_tokens, 0, 1e12), cacheWriteTokens: num(cur.cache_creation_input_tokens, 0, 1e12),
     quota: quota.length ? quota : undefined,
-    configKey: crypto.createHash("sha256").update(path.join(os.homedir(), ".gemini", "antigravity-cli")).digest("hex").slice(0,16),
+    configKey: crypto.createHash("sha256").update((KIND === "agy" ? path.join(os.homedir(), ".gemini", "antigravity-cli") : process.env.COPILOT_HOME || path.join(os.homedir(), ".copilot"))).digest("hex").slice(0,16),
     agentState: ["idle", "thinking", "working", "tool_use", "initializing"].includes(payload.agent_state) ? payload.agent_state : undefined,
     toolConfirmationPending: typeof payload.tool_confirmation_pending === "boolean" ? payload.tool_confirmation_pending : undefined,
   });
@@ -112,7 +133,7 @@ function buildReport(payload) {
 
 /** このステータスラインを動かした `agy` のプロセスの pid（フックのスクリプトと同じ決まり）。 */
 function agentPid() {
-  const fromEnv = Number(process.env.ANTIGRAVITY_PID);
+  const fromEnv = Number(KIND === "agy" ? process.env.ANTIGRAVITY_PID : undefined);
   if (Number.isInteger(fromEnv) && fromEnv > 0 && fromEnv <= 0x7fffffff) return fromEnv;
   if (process.platform !== "linux") return undefined;
   const nameOf = (s) => path.basename(String(s)).replace(/\.(c|m)?js$/i, "").toLowerCase();
@@ -129,7 +150,7 @@ function agentPid() {
     } catch {
       return undefined;
     }
-    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && nameOf(n) === "agy")) return pid;
+    if ([comm, argv[0], argv[1]].some((n) => n !== undefined && (nameOf(n) === KIND || (KIND === "copilot" && /^copilot(?:-linux|-darwin|-win32)/.test(nameOf(n)))))) return pid;
     if (!Number.isFinite(ppid) || ppid <= 1) return undefined;
     pid = ppid;
   }
@@ -178,10 +199,17 @@ async function main() {
   } catch {
     report = undefined;
   }
-  const sent = report ? sendReport({ paneId: report.paneId, kind: "agy", sessionId: report.sessionId, agentPid: report.agentPid }).then(() => sendReport(report)) : Promise.resolve();
+  const sent = report ? sendReport({ paneId: report.paneId, kind: KIND, sessionId: report.sessionId, agentPid: report.agentPid }).then(() => sendReport(report)) : Promise.resolve();
 
   if (typeof command !== "string") {
     // 元が無い（`statusLine` が無かった）・読めない: 何も出さずに 0。報告だけ送る。
+    if (KIND === "copilot" && command === null && report) {
+      // Copilot custom statusLine replaces its default: retain a useful numeric footer.
+      const parts = [report.modelName ?? report.model];
+      if (report.contextUsedPct !== undefined) parts.push(`Context ${report.contextUsedPct.toFixed(1)}%`);
+      if (report.creditsAic !== undefined) parts.push(`${report.creditsAic.toFixed(3)} AIC`);
+      process.stdout.write(parts.filter(Boolean).join(" | "));
+    }
     await sent;
     return 0;
   }

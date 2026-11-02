@@ -159,6 +159,8 @@ function openDashboard(): void {
       <p v-else-if="loading" class="dash-muted" role="status" data-pane-info-loading>読み込んでいます…</p>
       <p v-else-if="!usage" class="dash-muted" data-pane-info-none>このセッションの利用状況は、まだ取れていません（記録が見つからない・対応していない種類・始まったばかり）。</p>
       <dl v-else class="pinfo-dl" :class="{ 'dash-stale': stale }" data-pane-info-usage>
+        <template v-if="usage.reasoningEffort"><dt>推論の強さ</dt><dd data-pane-info-effort>{{ usage.reasoningEffort }}</dd></template>
+        <template v-if="usage.contextPressure"><dt>文脈の状態</dt><dd>{{ usage.contextPressure }}</dd></template>
         <dt>トークン</dt>
         <dd data-pane-info-tokens>
           <span class="dash-num">{{ totalText }}</span>
@@ -177,6 +179,7 @@ function openDashboard(): void {
         <dt>コスト</dt>
         <dd data-pane-info-cost>
           <span class="dash-num">{{ formatUsageCost(usage) }}</span>
+          <span v-if="usage.costEstimated" class="dash-chip">見積り</span><span v-if="usage.costPartial" class="dash-chip">一部のみ</span>
           <span v-if="costNote" class="dash-muted pinfo-basis">{{ costNote }}</span>
         </dd>
         <template v-if="usage.premiumRequests !== undefined">
@@ -199,6 +202,7 @@ function openDashboard(): void {
           <span class="dash-num">{{ context.text }}</span>
           <span v-if="context.pct !== null && usage.contextWindowTokens !== undefined" class="dash-muted pinfo-basis">窓 {{ formatTokens(usage.contextWindowTokens) }}</span>
         </dd>
+        <template v-if="usage.contextRemainingTokens !== undefined"><dt>コンテキスト残量</dt><dd data-pane-info-remaining>{{ formatTokens(usage.contextRemainingTokens) }} tok</dd></template>
         <dt>更新</dt>
         <dd data-pane-info-updated :title="new Date(usage.updatedAt).toLocaleString()">
           {{ formatAgo(usage.updatedAt, now) }}

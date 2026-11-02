@@ -369,6 +369,7 @@ export async function composeServer(
   });
   const agentIntegrations = await DefaultAgentIntegrationService.load(agentIntegrationInstaller, integrationFile, bus, {
     statusLine: new StatusLineWrapper(statusLineScriptFor()),
+    copilotStatusLine: new AntigravityStatusLineWrapper(join(import.meta.dirname, "..", "assets", "soda-agy-statusline.cjs"), process.env, undefined, process.platform, "copilot"),
     agyStatusLine: new AntigravityStatusLineWrapper(join(import.meta.dirname, "..", "assets", "soda-agy-statusline.cjs")),
     health: {
       lastReportAt: () => reportedUsage.lastReportAt(),
@@ -672,7 +673,8 @@ export async function composeServer(
   });
   // エージェントの利用状況（20261010-agent-usage）。種類ごとのアダプタ（Claude Code・Codex）。pane が閉じたら、その pane の集計を捨てる。
   const agyUsage = new AntigravityUsageAdapter();
-  const usage = new UsageService({ session, adapters: [new MuseUsageAdapter(), agyUsage, new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), new CopilotUsageAdapter()], logger, reported: reportedUsage });
+  const copilotUsage = new AntigravityUsageAdapter(Date.now, {}, "copilot");
+  const usage = new UsageService({ session, adapters: [new MuseUsageAdapter(), agyUsage, new ClaudeUsageAdapter(), new CodexUsageAdapter(), new BobUsageAdapter(), copilotUsage], logger, reported: reportedUsage });
   // 会話の記録の場所（信用しない。利用状況の読み口が、根の下・名前の形を確かめる）は、**受け入れられた報告のものだけ**覚える
   // （捨てた報告・子のエージェント・別の pane・Codex の daemon のものは覚えない。保留の後で受けた場合も。20261010-agent-usage の U1）。
   // Claude Code の分だけ覚える。Codex は、記録を会話の id で探す（報告の `transcript_path` は使わない。報告の `paneId` は当てにならず、付ける pane は SessionService が決める〔#132〕）。
@@ -693,6 +695,11 @@ export async function composeServer(
     sink: reportedUsage,
     log: (reason, r) => logger.info("usage report ignored", { paneId: r.paneId, kind: "claude", reason }),
   });
+  const copilotUsageIntake = new UsageReportIntake({
+    verdict: (r) => session.usageReportVerdict(r.paneId, "copilot", r.agentPid, r.sessionId),
+    sink: {note:r => copilotUsage.note(r)},
+    log: (reason,r) => logger.info("usage report ignored", {paneId:r.paneId,kind:"copilot",reason}),
+  });
   const agyUsageIntake = new UsageReportIntake({
     verdict: (r) => session.usageReportVerdict(r.paneId, "agy", r.agentPid, r.sessionId),
     sink: { note: (r) => {
@@ -710,6 +717,7 @@ export async function composeServer(
       usage.forgetPane(e.data.paneId);
       usageIntake.forgetPane(e.data.paneId);
       agyUsageIntake.forgetPane(e.data.paneId);
+      copilotUsageIntake.forgetPane(e.data.paneId);
     }
   });
   const conversations=new ConversationService(id=>session.getPane(id),{activeSession:(kind,id)=>session.snapshot().panes.some(p=>p.agent?.kind===kind&&p.agentSession?.kind===kind&&p.agentSession.sessionId===id)});
@@ -1176,6 +1184,7 @@ export async function composeServer(
                 });
               }
               if (report.kind === "agy") agyUsageIntake.offer(report);
+              if (report.kind === "copilot") copilotUsageIntake.offer(report);
             } else if (report.kind === "claude") {
               // サブエージェントの報告は claude だけ。入れ子の子の `claude` の報告は、親の pane の件数に混ぜない（同じ確かめ。pid の無い報告は今までどおり）。
               if (session.acceptsReporter(report.paneId, report.kind, report.agentPid)) subagents.report(report);
@@ -1292,7 +1301,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close(); agyUsageIntake.close();
+        usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
@@ -1350,7 +1359,7 @@ export async function composeServer(
         usageSub.dispose();
         usageFeed.close(); // 配信の確かめを止める（20261010-agent-usage PR3）
         claudeSeenSub.dispose();
-        usageIntake.close(); agyUsageIntake.close();
+        usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close();
         usage.close(); // 利用状況の読みを止める（20261010-agent-usage の U2）
         assistantIdleStops.dispose(); assistantSessions.close();
         agentFork.close(); // 20261009-agent-fork: 裏で続いている検知・知らせの待ちをやめる
@@ -1397,7 +1406,7 @@ export async function composeServer(
           // Worker復旧では同じスレッドで旧コードを再構成する。保存失敗でも
           // 旧待ち受け・周期処理を残して新サーバと競合させない。
           graphEngine.stop();lineage.close();builtinViews.close();summarySub.dispose();summaries.close();await scheduler.close();usageSub.dispose();usageFeed.close();claudeSeenSub.dispose();
-          usageIntake.close(); agyUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
+          usageIntake.close(); agyUsageIntake.close(); copilotUsageIntake.close();usage.close();agentFork.close();graphMaintainer.close();paneCleanup.close();subagents.close();
           remoteLinks.closeAll();await machines.stop().catch(()=>undefined);
           await agentMonitor.stop().catch(()=>undefined);gitPoller.stop();paneHistory?.stop();persist.cancel();
           await graph.close().catch(()=>undefined);

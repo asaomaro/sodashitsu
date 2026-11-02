@@ -1,4 +1,7 @@
-import type { AgentUsage } from "@sodashitsu/protocol";
+import { museSession } from "../agent/museSession.js";
+import { extraRoot } from "../conversation/ExtraAgentRecords.js";
+import { museViewUsage, museAllowanceAccount, readMuseAllowance } from "./museLiveUsage.js";
+import type { AccountUsage, AgentUsage } from "@sodashitsu/protocol";
 import { openExtra, type ExtraKind, type ExtraRoots } from "../conversation/ExtraAgentRecords.js";
 import { readRange } from "../agent/safeFile.js";
 import { extraUsage } from "./extraEvents.js";
@@ -145,7 +148,82 @@ export class ExtraUsageAdapter implements UsageAdapter {
 }
 
 export class MuseUsageAdapter extends ExtraUsageAdapter {
-  constructor(roots: ExtraRoots = {}) {
-    super("muse", roots);
+  private readonly abort = new AbortController();
+  private readonly live = new Map<string, { id: string; at: number; value: Usage | null }>();
+  private active = false;
+  private readonly reads = new Map<string, AbortController>();
+  private allowanceAt = -Infinity;
+  private allowance: AccountUsage | null = null;
+  private allowanceBusy: Promise<void> | null = null;
+  constructor(
+    private readonly museRoots: ExtraRoots = {},
+    private readonly query = museSession,
+    private readonly allowanceQuery = readMuseAllowance,
+    private readonly now = Date.now,
+  ) {
+    super("muse", museRoots);
+  }
+  override async usageFor(source: UsageSourceInfo): Promise<Usage | null> {
+    const fallback = await super.usageFor(source);
+    if (this.abort.signal.aborted) return null;
+    const cached = this.live.get(source.paneId);
+    if (cached?.id === source.sessionId && this.now() - cached.at < 30000)
+      return cached.value ?? fallback;
+    if (this.active) return cached?.id === source.sessionId ? (cached.value ?? fallback) : fallback;
+    this.active = true;
+    const controller = new AbortController();
+    this.reads.set(source.paneId, controller);
+    const abort = () => controller.abort();
+    this.abort.signal.addEventListener("abort", abort, { once: true });
+    const entry = { id: source.sessionId, at: this.now(), value: fallback };
+    this.live.set(source.paneId, entry);
+    while (this.live.size > 256) this.live.delete(this.live.keys().next().value!);
+    try {
+      const page = await this.query("view/page", source.sessionId, {
+        roots: this.museRoots,
+        signal: controller.signal,
+        timeoutMs: 2000,
+      });
+      if (this.live.get(source.paneId) !== entry || this.abort.signal.aborted) return null;
+      // Every event must belong to this read-only session, including malformed test/old hosts.
+      if (Array.isArray(page?.events))
+        page.events = page.events.filter((e: any) => e?.params?.sessionId === source.sessionId);
+      entry.value = museViewUsage(page, fallback, this.now());
+      return entry.value;
+    } catch {
+      return fallback;
+    } finally {
+      this.active = false;
+      this.reads.delete(source.paneId);
+      this.abort.signal.removeEventListener("abort", abort);
+    }
+  }
+  async accounts(): Promise<AccountUsage[]> {
+    if (this.abort.signal.aborted) return [];
+    if (!this.allowanceBusy && this.now() - this.allowanceAt >= 60000) {
+      this.allowanceAt = this.now();
+      this.allowanceBusy = this.allowanceQuery(this.abort.signal)
+        .then((v) => {
+          if (!this.abort.signal.aborted)
+            this.allowance = museAllowanceAccount(v, extraRoot("muse", this.museRoots), this.now());
+        })
+        .catch(() => {})
+        .finally(() => {
+          this.allowanceBusy = null;
+        });
+    }
+    // UsageService polls again; account network latency must not stall every pane/dashboard.
+    return this.allowance ? [this.allowance] : [];
+  }
+  override forget(paneId: string) {
+    this.reads.get(paneId)?.abort();
+    super.forget(paneId);
+    this.live.delete(paneId);
+  }
+  override close() {
+    this.abort.abort();
+    this.live.clear();
+    this.allowance = null;
+    super.close();
   }
 }

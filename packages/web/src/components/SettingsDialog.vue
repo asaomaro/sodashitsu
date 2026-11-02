@@ -574,6 +574,15 @@ async function runAgyStatusLine(installed: boolean): Promise<void> {
     agentIntegrationMessage.value = r.message ?? (r.ok ? "変更しました。Antigravity CLI を起動し直すと反映されます。" : "操作に失敗しました");
   } finally { agyStatusLineBusy.value = false; }
 }
+const copilotStatusLineBusy = ref(false);
+async function runCopilotStatusLine(installed: boolean): Promise<void> {
+  if (!actions || copilotStatusLineBusy.value) return;
+  copilotStatusLineBusy.value = true;
+  try {
+    const r = installed ? await actions.uninstallStatusLineWrap("copilot") : await actions.installStatusLineWrap("copilot");
+    agentIntegrationMessage.value = r.message ?? (r.ok ? "変更しました。GitHub Copilot CLI を起動し直すと反映されます。" : "操作に失敗しました");
+  } finally { copilotStatusLineBusy.value = false; }
+}
 
 function toggleAgentIntegrationAutoResume(): void {
   const current = agentIntegrations.status?.autoResumeEnabled ?? true;
@@ -1791,6 +1800,15 @@ function onNativeCancel(ev: Event): void {
             </div>
             <button v-if="agentIntegrations.status.agyStatusLine.state === 'needs_update'" class="settings-btn" :disabled="agyStatusLineBusy" @click="runAgyStatusLine(false)">更新</button>
             <button class="settings-btn" :disabled="agyStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.agyStatusLine.state)" @click="runAgyStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state) ? '外す' : '導入' }}</button>
+          </li>
+          <li v-if="agentIntegrations.status?.copilotStatusLine" class="settings-row agent-integration-row" data-copilot-statusline-wrap>
+            <div class="agent-integration-label">
+              <span>GitHub Copilot CLI 利用状況（ステータスライン）</span>
+              <span class="settings-note">{{ agentIntegrations.status.copilotStatusLine.state === 'installed' ? '導入済み' : agentIntegrations.status.copilotStatusLine.state === 'none' ? '未導入' : agentIntegrations.status.copilotStatusLine.message ?? agentIntegrations.status.copilotStatusLine.state }}</span>
+              <span class="settings-note">モデル・累計トークン・コンテキスト・AI クレジットを共有します。独自の元表示と設定を保存し、外すと戻します。メール・会話本文は送信しません。</span>
+            </div>
+            <button v-if="agentIntegrations.status.copilotStatusLine.state === 'needs_update'" class="settings-btn" :disabled="copilotStatusLineBusy" @click="runCopilotStatusLine(false)">更新</button>
+            <button class="settings-btn" :disabled="copilotStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.copilotStatusLine.state)" @click="runCopilotStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state) ? '外す' : '導入' }}</button>
           </li>
           <li v-if="agentIntegrations.status?.statusLine" class="settings-row">
             <p class="settings-note">

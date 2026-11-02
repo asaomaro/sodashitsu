@@ -67,7 +67,7 @@ export interface AgentIntegrationPort {
   install(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }>;
   uninstall(kind: AgentIntegrationKind): Promise<{ ok: boolean; message: string | null }>;
   setAutoResume(enabled: boolean): Promise<void>;
-  statusLine?(kind: "claude" | "agy", install: boolean): Promise<{ ok: boolean; message: string | null }>;
+  statusLine?(kind: "claude" | "agy" | "copilot", install: boolean): Promise<{ ok: boolean; message: string | null }>;
 }
 
 export interface SettingsEnv extends KeySectionEnv {
@@ -729,11 +729,11 @@ function agentSection(env: SettingsEnv): SettingsSection {
           },
         ];
       });
-      for (const kind of ["claude", "agy"] as const) {
-        const wrap = kind === "agy" ? status.agyStatusLine : status.statusLine;
+      for (const kind of ["claude", "agy", "copilot"] as const) {
+        const wrap = kind === "copilot" ? status.copilotStatusLine : kind === "agy" ? status.agyStatusLine : status.statusLine;
         if (!wrap || !env.agentIntegration.statusLine) continue;
         const installed = wrap.state === "installed" || wrap.state === "needs_update";
-        const label = `${kind === "agy" ? "Antigravity CLI" : "Claude Code"} 利用状況（ステータスライン）`;
+        const label = `${kind === "copilot" ? "GitHub Copilot CLI" : kind === "agy" ? "Antigravity CLI" : "Claude Code"} 利用状況（ステータスライン）`;
         const invoke = (install: boolean): string => {
           busy = kind;
           env.agentIntegration.statusLine!(kind, install).then(r => env.message(r.message ?? (r.ok ? "変更しました。エージェントを起動し直すと反映されます。" : "操作に失敗しました")), () => env.message("操作に失敗しました")).finally(() => { busy = null; });
