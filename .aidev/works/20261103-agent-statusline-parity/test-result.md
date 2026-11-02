@@ -41,3 +41,9 @@ If this is a long-running test, pass a timeout value as the last argument or con
 ```
 
 実ログ: `/tmp/soda-statusline-{build,full-test,final-focused,web,e2e}.log`。資格情報やnativeの私的payloadは収録しない。
+
+## 稼働環境への反映
+
+mainへfast-forwardで統合。安全なhandoffで7つの実PTYが稼働を継続し、反映前9ペインのUUIDすべてが反映後も存在することを確認した。デスクトップアシスタントはphase=running / stage=ready。5種類のCLIは全てavailable=true、integration installed=true、needsUpdate=false。Claude・Antigravity・Copilotのstatusline包みはinstalled。Antigravityの包みを更新、Copilotの包みを導入し、元の設定はsidecarに保全した。稼働中の作業CLI自体を停止・再起動していないため、新しいstatusLine設定はCLIの設定再読込または次回起動で適用される。
+
+全体テストがCLIログインキャッシュを一時サーバー向けに更新する既存挙動を確認したため、既存の主接続先7780への認証を公式local-login経路で復元した。認証情報・cookieをログやリポジトリに出力していない。
