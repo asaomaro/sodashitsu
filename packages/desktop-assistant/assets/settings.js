@@ -44,7 +44,7 @@ function characterList(data){
  characterCatalog=data.characters??data;
  const selector=document.getElementById("characterId");selector.querySelectorAll("option[data-plugin]").forEach(option=>option.remove());
  const packs=document.getElementById("character-pack-list");packs.replaceChildren();const packIds=new Set();
- for(const character of data.characters??data){const option=document.createElement("option");option.value=character.id;option.textContent=character.name;option.dataset.plugin="true";selector.append(option);if(!packIds.has(character.packId)){packIds.add(character.packId);const pack=document.createElement("option");pack.value=character.packId;pack.textContent=character.packId;packs.append(pack);}}
+ for(const character of data.characters??data){const option=document.createElement("option");option.value=character.id;option.textContent=character.name;option.dataset.plugin="true";selector.append(option);if(!packIds.has(character.packId)){packIds.add(character.packId);const pack=document.createElement("option");pack.value=character.packId;pack.textContent=character.packId==="yukkuri-work"?"フォルダから取り込んだキャラクター":character.packId;packs.append(pack);}}
  if(data.error)status.textContent=data.error;
  if(current)selector.value=current.characterId;selectedPortrait();
 }

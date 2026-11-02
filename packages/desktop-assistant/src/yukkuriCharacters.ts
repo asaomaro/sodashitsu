@@ -30,7 +30,7 @@ export async function yukkuriCharacters(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  if (!root) throw Error("yukkuri-work、またはcasts.jsonとcharsのあるフォルダを選んでください。");
+  if (!root) throw Error("casts.jsonとchars/を含むキャラクター素材フォルダを選んでください。");
   const casts = await readAssetJson(join(root, "casts.json"), signal);
   const entries = await readdir(join(root, "chars"), { withFileTypes: true });
   if (entries.length > 256) throw Error("素材フォルダの項目が多すぎます。");
@@ -90,7 +90,7 @@ export async function yukkuriCharacters(
   return {
     pack: {
       id: "yukkuri-work",
-      name: "yukkuri-workのキャラクター",
+      name: "フォルダから取り込んだキャラクター",
       version: "1.0.0",
       characters,
     } satisfies CharacterPack,

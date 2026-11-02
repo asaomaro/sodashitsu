@@ -1187,7 +1187,7 @@ function registerIpc(): void {
         const guard = () => { if(owner.window !== settings || owner.window.isDestroyed() || !owner.window.isVisible()) throw Error("設定画面を開いて選び直してください。"); };
         const closed = () => cancel.abort(); owner.window.once("closed", closed);
         try {
-          const selection=await dialog.showOpenDialog(owner.window,{title:"yukkuri-work または yukkuri-kaisetsu のフォルダを選択",properties:["openDirectory"]});
+          const selection=await dialog.showOpenDialog(owner.window,{title:"キャラクター素材フォルダ（casts.json・chars）を選択",properties:["openDirectory"]});
           if(selection.canceled || !selection.filePaths[0])return null;
           const {pack,warnings,actors}=await yukkuriCharacters(selection.filePaths[0],bytes=>characterPng(bytes,value=>nativeImage.createFromBuffer(value)),cancel.signal,guard,true);
           guard();
