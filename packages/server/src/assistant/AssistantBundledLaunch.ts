@@ -1,19 +1,21 @@
+import type {AssistantSetupUpdate} from '@sodashitsu/protocol';
 import {win32} from 'node:path';
 import type {AssistantLaunch} from './AssistantLaunchConfig.js';
 import {assistantNativeRoot} from './AssistantNativeRoot.js';
 import {AssistantRuntimeCache} from './AssistantRuntimeCache.js';
 import {prepareAssistantHostApp} from './AssistantHostApp.js';
 import {desktopAssistantOrigin} from '@sodashitsu/protocol';
-interface Dependencies{root?:typeof assistantNativeRoot;runtime?:(root:import("./AssistantRuntimeCache.js").AssistantRuntimeRoot)=>Pick<AssistantRuntimeCache,"prepare"|"dispose">;app?:typeof prepareAssistantHostApp}
+interface Dependencies{progress?:(value:AssistantSetupUpdate)=>void;root?:typeof assistantNativeRoot;runtime?:(root:import("./AssistantRuntimeCache.js").AssistantRuntimeRoot)=>Pick<AssistantRuntimeCache,"prepare"|"dispose">;app?:typeof prepareAssistantHostApp}
 /** No executable/file inputs from RPC. Invoked only while one explicit enable owns its signal. */
 export async function bundledAssistantLaunch(origin:string,signal:AbortSignal,check:()=>void,deps:Dependencies={}):Promise<AssistantLaunch>{
  const expires=performance.now()+240000;
  const live=()=>{signal.throwIfAborted();check();if(performance.now()>=expires)throw Error('アシスタントの準備が時間切れです');signal.throwIfAborted();};
- live();const host=await(deps.root??assistantNativeRoot)({signal,expires,check:live});live();
+ live();deps.progress?.({stage:"environment"});const host=await(deps.root??assistantNativeRoot)({signal,expires,check:live});live();
  let launch:AssistantLaunch;
  const cache=deps.runtime?deps.runtime(host.root):new AssistantRuntimeCache(async()=>host.root);
  try{
-  const runtime=await cache.prepare(host.platform,host.arch,{signal,expires,check:live});live();
+  const runtime=await cache.prepare(host.platform,host.arch,{signal,expires,check:live,...(deps.progress?{progress:deps.progress}:{})});live();
+  deps.progress?.({stage:"app"});
   const app=await(deps.app??prepareAssistantHostApp)(host.root,live);live();
   const appPath=await host.nativePath(app);live();
   await host.root.assert();live();launch={command:host.platform==='win32'?[runtime.executable,win32.join(appPath,'dist','managed-relay.cjs')]:[runtime.executable,appPath],origin:desktopAssistantOrigin(origin),...(host.platform==='win32'?{nativeNodeRelay:true}:{})};

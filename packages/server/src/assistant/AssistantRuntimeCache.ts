@@ -1,3 +1,4 @@
+import type {AssistantSetupUpdate} from "@sodashitsu/protocol";
 import {lstat,mkdir,realpath,readlink,rename,rm,unlink,writeFile} from "node:fs/promises";
 import {join,relative,isAbsolute} from "node:path";
 import {randomUUID,createHash} from "node:crypto";
@@ -9,7 +10,7 @@ import {boundedRuntimeJson,runtimeChildren,runtimeTree,runtimeFileDigest,runtime
 /** Caller capability: native root ownership/ACL and stable ancestor identity, never RPC data. */
 export interface AssistantRuntimeRoot{path:string;assert():Promise<void>}
 export interface PreparedAssistantRuntime{directory:string;executable:string;relativeDirectory:string;variant:RuntimeVariant;cached:boolean}
-interface Options{signal?:AbortSignal;check?:()=>void;expires?:number}
+interface Options{signal?:AbortSignal;check?:()=>void;expires?:number;progress?:(value:AssistantSetupUpdate)=>void}
 interface Dependencies{now?:()=>number;select?:typeof selectAssistantRuntime;transport?:RuntimeTransport;download?:typeof downloadAssistantRuntime;extract?:typeof extractAssistantRuntimeZip}
 interface Ready{version:1;archiveSha256:string;platform:RuntimePlatform;arch:RuntimeArchitecture;entry:string;directories:string[];files:RuntimeFile[]}
 interface Job{controller:AbortController;promise:Promise<PreparedAssistantRuntime>;token:symbol}
@@ -39,19 +40,19 @@ export class AssistantRuntimeCache{
   if(options.signal?.aborted)abort();else options.signal?.addEventListener("abort",abort,{once:true});
   let expires:number;
   try{const started=this.deps.now?.()??performance.now();expires=options.expires??started+240000;if(!Number.isFinite(expires)||expires<=started||expires-started>300000)throw Error("Invalid runtime preparation deadline");}catch(error){options.signal?.removeEventListener("abort",abort);this.active=null;reject(error);return promise;}
-  void Promise.resolve().then(()=>this.run(job,generation,platform,arch,expires,options.check)).finally(()=>{options.signal?.removeEventListener("abort",abort);if(this.active===job)this.active=null;}).then(resolve,reject);
+  void Promise.resolve().then(()=>this.run(job,generation,platform,arch,expires,options.check,options.progress)).finally(()=>{options.signal?.removeEventListener("abort",abort);if(this.active===job)this.active=null;}).then(resolve,reject);
   return promise;
  }
  cancel():void{this.active?.controller.abort(Error("Runtime preparation cancelled"));}
  async dispose():Promise<void>{this.closed=true;++this.generation;const active=this.active;active?.controller.abort(Error("Runtime preparation stopped"));await active?.promise.catch(()=>{});if(this.cleanupFailure)throw this.cleanupFailure;}
- private async run(job:Job,generation:number,platform:RuntimePlatform,arch:RuntimeArchitecture,expires:number,check?:()=>void):Promise<PreparedAssistantRuntime>{
+ private async run(job:Job,generation:number,platform:RuntimePlatform,arch:RuntimeArchitecture,expires:number,check?:()=>void,progress?:(value:AssistantSetupUpdate)=>void):Promise<PreparedAssistantRuntime>{
   const signal=job.controller.signal,clock=this.deps.now??(()=>performance.now());
   const live=()=>{
    signal.throwIfAborted();if(this.closed||generation!==this.generation||this.active!==job){job.controller.abort(Error("Runtime owner changed"));signal.throwIfAborted();}
    try{check?.();}catch(error){job.controller.abort(error);throw error;}
    if(!Number.isFinite(expires)||clock()>=expires){job.controller.abort(Error("Runtime preparation deadline"));signal.throwIfAborted();}signal.throwIfAborted();
   };
-  live();const selected=await(this.deps.select??selectAssistantRuntime)(platform,arch,live);live();const variant=Object.freeze({...selected});validateRuntimeVariant(variant);
+  live();progress?.({stage:"cache"});const selected=await(this.deps.select??selectAssistantRuntime)(platform,arch,live);live();const variant=Object.freeze({...selected});validateRuntimeVariant(variant);
   const root=await this.root(signal,expires);live();if(!root||!isAbsolute(root.path)||typeof root.assert!=="function")throw Error("Runtime root authorization is required");
   const assertAuthority=async()=>{live();try{await root.assert();}catch(error){job.controller.abort(error);throw error;}live();};
   await assertAuthority();const path=await realpath(root.path);live();const rootStamp=await lstat(path,{bigint:true});live();
@@ -71,8 +72,11 @@ export class AssistantRuntimeCache{
    await mkdir(stage,{mode:0o700});created=true;stageStamp=await lstat(stage,{bigint:true});live();
    if(!stageStamp.isDirectory()||stageStamp.isSymbolicLink())throw Error("Invalid owned runtime staging");
    const archive=join(stage,"archive.zip"),engine=join(stage,"engine");await stageLive();await mkdir(engine,{mode:0o700});live();
-   await(this.deps.download??downloadAssistantRuntime)(variant,archive,{signal,expires,now:clock,check:live,...(this.deps.transport?{transport:this.deps.transport}:{})});live();await stageLive();
+   progress?.({stage:"download",receivedBytes:0,totalBytes:variant.bytes});
+   await(this.deps.download??downloadAssistantRuntime)(variant,archive,{signal,expires,now:clock,check:live,progress:(received,total)=>{live();progress?.({stage:"download",receivedBytes:received,totalBytes:total});},...(this.deps.transport?{transport:this.deps.transport}:{})});live();await stageLive();
+   progress?.({stage:"extract"});
    const files=await(this.deps.extract??extractAssistantRuntimeZip)(archive,engine,{bytes:variant.bytes,sha256:variant.sha256,platform:variant.platform,signal,check:live});live();await stageLive();
+   progress?.({stage:"verify"});
    const tree=await runtimeTree(engine,live),directories:string[]=[];const expected=new Map(files.map(file=>[file.path,file]));
    for(const [name,info]of tree){if(info.isDirectory()&&!info.isSymbolicLink())directories.push(name);else if(!expected.has(name))corrupt("Unexpected extracted runtime file");}
    if(files.length+directories.length!==tree.size)corrupt("Extracted runtime inventory differs");

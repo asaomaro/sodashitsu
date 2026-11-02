@@ -1,0 +1,37 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/web| src/components/AssistantSettings.test.ts (5 tests | 1 failed | 4 skipped) 41ms
+   × shows live download progress and changes to an indeterminate extraction stage 39ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/AssistantSettings.test.ts > shows live download progress and changes to an indeterminate extraction stage
+Error: Unable to get [data-assistant-setup-progress] within: <section class="settings-section" aria-labelledby="settings-assistant">
+  <h3 class="settings-heading" id="settings-assistant">デスクトップアシスタント</h3>
+  <p>デスクトップの船長キャラクターや通知領域から、通知への返答・吹き出しチャットを利用できます。専用アプリの手動導入は不要です。</p>
+  <p>初回は共通ランタイムをダウンロードします。Windows・WSLではWindowsのデスクトップに表示します。無効時はアシスタントの常駐プロセスを起動しません。</p><label><input type="checkbox" checked="">デスクトップアシスタントを有効にする</label>
+  <!--v-if-->
+  <p>状態：初回準備中</p>
+  <!--v-if-->
+  <!--v-if-->
+  <p>起動後、キャラクターまたは通知領域のメニューから表示方法・モデル・effortなどを設定できます。操舵室へのログイン後、専用エージェントを選んで開始してください。</p>
+  <!--v-if-->
+</section>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/components/AssistantSettings.test.ts:28:37
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  18:45:13
+   Duration  932ms (environment 62%, transform 21%, import 10%, tests 5%, worker 1%)

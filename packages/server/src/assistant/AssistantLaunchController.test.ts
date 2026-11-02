@@ -164,3 +164,11 @@ it('rapid OFF then ON before teardown keeps the still-owned running host',async(
  try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(app.start).toHaveBeenCalledOnce());attached('00000000-0000-4000-8000-000000000001');await vi.waitFor(async()=>expect((await controller.status()).phase).toBe('running'));internals.queue=new Promise<void>(yes=>{release=yes;});await controller.setEnabled(false);expect((await controller.status()).phase).toBe('stopping');await controller.setEnabled(true);release();await internals.queue;expect((await controller.status()).phase).toBe('running');expect(app.start).toHaveBeenCalledOnce();expect(app.stop).not.toHaveBeenCalled();}
  finally{release?.();await controller.stop();watch.mockRestore();await rm(dir,{recursive:true,force:true});}
 });
+it('exposes preparation progress while pending and ignores updates after cancellation',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'soda-assistant-progress-'));
+ let release!:()=>void,report!:(value:import('@sodashitsu/protocol').AssistantSetupUpdate)=>void;
+ const resolve=vi.fn(async(_origin:string,_signal:AbortSignal,_check:()=>void,progress?:(value:import('@sodashitsu/protocol').AssistantSetupUpdate)=>void)=>{report=progress!;report({stage:'download',receivedBytes:50,totalBytes:100});await new Promise<void>(yes=>{release=yes;});return{command:['generated'],origin:'http://127.0.0.1:7780'};});
+ const app={start:vi.fn(),stop:vi.fn(async()=>{})},controller=new AssistantLaunchController(dir,{},()=> 'http://127.0.0.1:7780',vi.fn(),app,undefined,undefined,undefined,resolve);
+ try{await writeAssistantEnabled(dir,true);controller.start();await vi.waitFor(()=>expect(resolve).toHaveBeenCalledOnce());expect(await controller.status()).toMatchObject({phase:'preparing',progress:{stage:'download',receivedBytes:50,totalBytes:100}});await controller.setEnabled(false);expect(()=>report({stage:'extract'})).toThrow();release();await(controller as unknown as{queue:Promise<void>}).queue;expect(await controller.status()).toMatchObject({phase:'disabled'});expect((await controller.status()).progress).toBeUndefined();expect(app.start).not.toHaveBeenCalled();}
+ finally{release?.();await controller.stop();await rm(dir,{recursive:true,force:true});}
+});

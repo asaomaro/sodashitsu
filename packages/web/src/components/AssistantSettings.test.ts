@@ -21,3 +21,10 @@ it('an older polling response cannot overwrite a successful toggle',async()=>{
  try{await flushPromises();await vi.advanceTimersByTimeAsync(2000);expect(gets).toBe(2);await w.get('input').setValue(true);await flushPromises();release(initial);await flushPromises();expect((w.get('input').element as HTMLInputElement).checked).toBe(true);}
  finally{release?.(initial);w.unmount();vi.useRealTimers();}
 });
+it('shows live download progress and changes to an indeterminate extraction stage',async()=>{
+ vi.useFakeTimers();let stage='download';
+ const request=vi.fn(async()=>({enabled:true,canConfigure:true,phase:'preparing',message:'',progress:{stage,receivedBytes:50*1024*1024,totalBytes:100*1024*1024,startedAt:Date.now()-10000,updatedAt:Date.now()}}));
+ const w=mount(AssistantSettings,{global:{provide:{[ConnectionKey as symbol]:{request}}}});
+ try{await flushPromises();expect(w.get('[data-assistant-setup-progress]').text()).toContain('50% · 50.0 MB / 100.0 MB');expect(w.get('progress').attributes('value')).toBe('50');expect(w.text()).toContain('経過 10秒');stage='extract';await vi.advanceTimersByTimeAsync(2000);await flushPromises();expect(w.get('progress').attributes('value')).toBeUndefined();expect(w.text()).toContain('ファイルを展開中');expect(w.text()).not.toContain('50%');}
+ finally{w.unmount();vi.useRealTimers();}
+});

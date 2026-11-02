@@ -1,0 +1,81 @@
+ FAIL  |@sodashitsu/server| src/desktop/DesktopEndpointBackplane.test.ts > rejects another root's image ticket without consuming the legitimate attachment
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ src/desktop/DesktopEndpointBackplane.test.ts:109:282
+
+
+Caused by: Error: Matcher did not succeed in time.
+ ❯ src/desktop/DesktopEndpointBackplane.test.ts:109:245
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/server| src/usage/UsageInsights.test.ts > recovers from page-capacity exhaustion and continues the file without a permanent RPC failure
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/usage/UsageInsights.test.ts:86:1
+     84|  expect((await f.reader.read(range)).sessions[0]).toMatchObject({role:…
+     85| });
+     86| it('recovers from page-capacity exhaustion and continues the file with…
+       | ^
+     87|  const f=await fixture({maxPages:32,maxBytesPerKind:4096}),file=join(f…
+     88|  await writeFile(file,json(...Array.from({length:500},(_,i)=>usage('re…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/tui| src/app/TuiApp.subagents.test.ts > 端末版のサブエージェントの表示 > 一覧を開いている間は、経過時間が進む（10 秒ごとに描き直す）。閉じたら描き直さない
+AssertionError: expected ' 端末 グラフ 状況 他 ▾   │ t1   ＋            …' to match /T\s+17秒/
+
+- Expected:
+/T\s+17秒/
+
++ Received:
+" 端末 グラフ 状況 他 ▾   │ t1   ＋                                   [ ＋作業ビュー ] session: work
+ ▾ Spaces     開いた順   │┌─ pane p1 ───────[⋮][+][│][─][□][×]┐┌─ pane p2 ───────[⋮][+][│][─][□][×]┐
+     w1                  ││                                   ││                                   │
+   ◐ w2                  ││                                   ││                                   │
+                         ││                                   ││                                   │
+─ ▾ Agents ───グループ順─││                                   ││                                   │
+ ◐ w2 t2              ⤷1 ││                                   ││                                   │
+   Claude                ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+          ┌─ サブエージェント — worker ──────────────────────────────────────────────────┐         │
+          │ T                                                                      16秒  │         │
+          │                                                                              │         │
+          │                                                                              │         │
+          └──────────────────────────────────────────────────────────────────────────────┘         │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+                         ││                                   ││                                   │
+ ＋新規 ⋯           🔔0  ││                                   ││                                   │
+                       « │└───────────────────────────────────⋯└───────────────────────────────────⋯"
+
+ ❯ src/app/TuiApp.subagents.test.ts:260:61
+    258|       // 開いている間: 時間が進むと、キーを押さなくても描き直されて経過時間が進む。
+    259|       await vi.advanceTimersByTimeAsync(12_000);
+    260|       await vi.waitFor(async () => expect(await h.screen()).toMatch(/T…
+       |                                                             ^
+    261|       // 閉じたら、時間が進んでも描き直さない（余計な描画をしない）。
+    262|       h.io.type("\x1b");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed | 949 passed | 1 skipped (953)
+      Tests  3 failed | 13593 passed | 1 skipped (13597)

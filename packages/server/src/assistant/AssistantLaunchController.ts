@@ -1,3 +1,4 @@
+import type {AssistantSetupProgress,AssistantSetupUpdate} from "@sodashitsu/protocol";
 import { watch, type FSWatcher } from "node:fs";
 import type {ManagedAssistant} from "./ManagedAssistant.js";
 import {assistantLaunchFromEnv} from "./AssistantLaunchConfig.js";
@@ -20,6 +21,7 @@ export class AssistantLaunchController {
   private preparing:AbortController|null=null;
   private phase:"disabled"|"preparing"|"starting"|"running"|"stopping"|"error"="disabled";
   private message="";
+  private progress:AssistantSetupProgress|undefined;
   private writes=Promise.resolve();
   private watcher: FSWatcher | null = null;
   private active = false;
@@ -40,7 +42,7 @@ export class AssistantLaunchController {
     private readonly save: typeof writeAssistantEnabled = writeAssistantEnabled,
     private readonly agent?: {activate(deviceId: string):void; requestStop(deviceId: string):Promise<void>},
     load?:AppLoader,
-    private readonly resolveBundled=(origin:string,signal:AbortSignal,check:()=>void)=>import("./AssistantBundledLaunch.js").then(module=>module.bundledAssistantLaunch(origin,signal,check))) {
+    private readonly resolveBundled=(origin:string,signal:AbortSignal,check:()=>void,progress?:(value:AssistantSetupUpdate)=>void)=>import("./AssistantBundledLaunch.js").then(module=>module.bundledAssistantLaunch(origin,signal,check,{...(progress?{progress}:{})}))) {
     const disabled = () => {
       if (!this.active) return;
       const pending = this.persist(false).catch(() => warn("アシスタントの無効設定を保存できません"));
@@ -52,7 +54,7 @@ export class AssistantLaunchController {
       this.deviceId = deviceId;
       const generation=this.generation,identity=this.appIdentity;
       const pending=readAssistantEnabled(this.dir,this.env.SODA_ASSISTANT_ENABLED==="1").then(enabled=>{
-        if(enabled&&this.active&&generation===this.generation&&identity===this.appIdentity&&this.wanted&&this.deviceId===deviceId){this.phase="running";this.hostState="running";if(this.activatedDeviceId!==deviceId){this.activatedDeviceId=deviceId;this.agent?.activate(deviceId);}}
+        if(enabled&&this.active&&generation===this.generation&&identity===this.appIdentity&&this.wanted&&this.deviceId===deviceId){this.phase="running";this.hostState="running";if(this.progress)this.progress={stage:"ready",startedAt:this.progress.startedAt,updatedAt:Date.now()};if(this.activatedDeviceId!==deviceId){this.activatedDeviceId=deviceId;this.agent?.activate(deviceId);}}
       }).catch(()=>{});this.saves.add(pending);void pending.finally(()=>this.saves.delete(pending));
     };
     this.disabled=disabled;this.attached=attached;
@@ -82,7 +84,7 @@ export class AssistantLaunchController {
   private persist(enabled:boolean,guard:()=>void=()=>{}):Promise<void>{
     const pending=this.writes.then(()=>{guard();return this.save(this.dir,enabled);});this.writes=pending.catch(()=>{});return pending;
   }
-  async status(canConfigure=true){return{enabled:await readAssistantEnabled(this.dir,this.env.SODA_ASSISTANT_ENABLED==="1"),canConfigure,phase:this.phase,message:this.message};}
+  async status(canConfigure=true){return{enabled:await readAssistantEnabled(this.dir,this.env.SODA_ASSISTANT_ENABLED==="1"),canConfigure,phase:this.phase,message:this.message,...(this.progress?{progress:this.progress}:{})};}
   async setEnabled(enabled:boolean,guard:()=>void=()=>{}){
     const pending=this.persist(enabled,guard);this.saves.add(pending);try{await pending;}finally{this.saves.delete(pending);}await this.apply();return this.status();
   }
@@ -117,10 +119,10 @@ export class AssistantLaunchController {
         if (enabled) {
           const requestKey=JSON.stringify({origin:this.origin(),command:this.env.SODA_ASSISTANT_COMMAND??null});
           if(this.app&&this.launchKey&&this.requestKey===requestKey&&(this.hostState==="running"||this.hostState==="starting")){this.phase=this.hostState;if(this.deviceId&&this.activatedDeviceId!==this.deviceId)this.attached(this.deviceId);return;}
-          const controller=new AbortController();this.preparing=controller;this.phase="preparing";this.message="初回は共通ランタイムを準備します。";
+          const controller=new AbortController();this.preparing=controller;this.phase="preparing";this.message="初回は共通ランタイムを準備します。";this.progress={stage:"environment",startedAt:Date.now(),updatedAt:Date.now()};
           const check=()=>{controller.signal.throwIfAborted();if(!live())throw Error("アシスタントの起動を中止しました");};
           let config:AssistantLaunch;
-          try{config=this.env.SODA_ASSISTANT_COMMAND?assistantLaunchFromEnv({...this.env,SODA_ASSISTANT_ENABLED:"1"},this.origin())!:await this.resolveBundled(this.origin(),controller.signal,check);check();}
+          try{config=this.env.SODA_ASSISTANT_COMMAND?assistantLaunchFromEnv({...this.env,SODA_ASSISTANT_ENABLED:"1"},this.origin())!:await this.resolveBundled(this.origin(),controller.signal,check,value=>{check();if(this.preparing===controller&&this.phase==="preparing")this.progress={...value,startedAt:this.progress!.startedAt,updatedAt:Date.now()};});check();}
           finally{if(this.preparing===controller)this.preparing=null;}
           const key=JSON.stringify(config);
           if(this.hostState==="stopping"||(this.launchKey!==null && this.launchKey!==key)){this.hostState="stopping";await this.app?.stop();this.hostState="none";this.app=null;this.appIdentity=Symbol();this.deviceId=null;this.activatedDeviceId=null;this.launchKey=null;if(!live())return;}
@@ -136,10 +138,10 @@ export class AssistantLaunchController {
             this.app=create(()=>{if(this.appIdentity===identity)this.disabled();},deviceId=>{if(this.appIdentity===identity)this.attached(deviceId);});
           }
           const stillEnabled=await readAssistantEnabled(this.dir,this.env.SODA_ASSISTANT_ENABLED==="1");if(!live())return;if(!stillEnabled){this.apply();return;}
-          this.phase="starting";this.hostState="starting";this.message="";this.app.start(config);this.launchKey=key;this.requestKey=requestKey;
+          this.phase="starting";this.hostState="starting";this.progress={stage:"connect",startedAt:this.progress?.startedAt??Date.now(),updatedAt:Date.now()};this.message="";this.app.start(config);this.launchKey=key;this.requestKey=requestKey;
         }
         else {
-          try { this.phase="stopping";this.hostState="stopping";await this.app?.stop();this.hostState="none";this.app=null;this.launchKey=null;this.phase="disabled";this.message=""; }
+          try { this.phase="stopping";this.hostState="stopping";await this.app?.stop();this.hostState="none";this.app=null;this.launchKey=null;this.phase="disabled";this.progress=undefined;this.message=""; }
           finally { try{if(this.deviceId)await this.agent?.requestStop(this.deviceId);}finally{if(!this.app){this.appIdentity=Symbol();this.deviceId=null;this.activatedDeviceId=null;this.requestKey=null;}} }
         }
       } catch { if(!live())return;this.phase="error";this.message="アシスタントを準備・起動できませんでした。通信、空き容量、保存先の権限を確認して再試行してください。";this.warn(this.message);this.hostState="stopping";await this.app?.stop();this.hostState="none";this.launchKey=null; }

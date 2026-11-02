@@ -11,7 +11,7 @@ const digest=(data:string)=>createHash('sha256').update(data).digest('hex');
 async function fixture(run:(f:{root:string;cache:AssistantRuntimeCache;download:ReturnType<typeof vi.fn>;authority:ReturnType<typeof vi.fn>})=>Promise<void>){
  const root=await mkdtemp(join(tmpdir(),'soda-runtime-cache-'));
  const variant:RuntimeVariant={version:'45.1.0',platform:'linux',arch:'x64',archive:'electron-v45.1.0-linux-x64.zip',bytes:22,sha256:digest('generated archive'),entry:'electron'};
- const authority=vi.fn(async()=>{}),download=vi.fn(async(_spec:unknown,path:string)=>{await writeFile(path,'generated archive',{flag:'wx'});});
+ const authority=vi.fn(async()=>{}),download=vi.fn(async(_spec:unknown,path:string,options?:{progress?:(received:number,total:number)=>void})=>{options?.progress?.(11,22);await writeFile(path,'generated archive',{flag:'wx'});});
  const cache=new AssistantRuntimeCache(async()=>({path:root,assert:authority}),{select:async()=>variant,download,extract:async(_archive,engine)=>{await writeFile(join(engine,'electron'),'generated inert fixture',{flag:'wx',mode:0o700});await chmod(join(engine,'electron'),0o700);return[{kind:'file',path:'electron',bytes:23,sha256:digest('generated inert fixture'),executable:true}];}});
  try{await run({root,cache,download,authority});}finally{await cache.dispose().catch(()=>{});await rm(root,{recursive:true,force:true});}
 }
@@ -64,4 +64,18 @@ it('rechecks cached cohort identity after the final asynchronous root authority 
  const first=await f.cache.prepare('linux','x64');let calls=0;
  f.authority.mockImplementation(async()=>{if(++calls!==4)return;await files.rename(first.directory,first.directory+'-previous');await mkdir(first.directory);await mkdir(join(first.directory,'engine'));await writeFile(first.executable,'unverified replacement');});
  await expect(f.cache.prepare('linux','x64')).rejects.toThrow(/Verified runtime identity changed/);
+}));
+it('reports download bytes and preparation stages, and skips download stages for cached reuse',()=>fixture(async f=>{
+ const updates:import('@sodashitsu/protocol').AssistantSetupUpdate[]=[];
+ const progress=(value:import('@sodashitsu/protocol').AssistantSetupUpdate)=>updates.push(value);
+ await f.cache.prepare('linux','x64',{progress});
+ expect(updates.map(p=>p.stage)).toEqual(['cache','download','download','extract','verify']);
+ expect(updates[1]).toEqual({stage:'download',receivedBytes:0,totalBytes:22});
+ expect(updates[2]).toEqual({stage:'download',receivedBytes:11,totalBytes:22});
+ const options=f.download.mock.calls[0]?.[2] as {progress:(received:number,total:number)=>void};
+ // The real downloader's incremental byte callback is wired, not just the initial stage.
+ expect(options.progress).toBeTypeOf('function');
+ updates.length=0;
+ await f.cache.prepare('linux','x64',{progress});
+ expect(updates.map(p=>p.stage)).toEqual(['cache']);
 }));
