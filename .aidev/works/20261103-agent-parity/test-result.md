@@ -38,4 +38,13 @@
 - desktop verify:ui pass（/tmp/soda-parity-assistant-ui-verified.log）。5種類のモデル/effortをDOMから入力し保存・再表示。初回の2profile固定期待値を5種類へ更新した。検証スクリプトの差分にも独立再レビューを行い必須なし。
 - git diff --check pass。最終のcursor二重書込解消の差分にも独立再レビューを行い必須なし。
 
-安全な反映の結果は、完了時に追記する。
+## 安全な反映とmain
+
+- 検証済みの共通機能を4コミット（core、会話/隔離実行、数値分析、UI/文書）に分割し、mainへfast-forward。製品コードの最終commitはa19ab4fb。
+- 実装したmuseSession helperでも、生成した会話を実CLIでsession/read（元ID一致）/session/fork（別ID）できることを確認。追加のモデルターンは送っていない。/tmp/soda-parity-native-msp.log。
+- sodaの安全なhandoffは成功。coordinator PID3290557を維持し、実PTY6件を動かしたまま切替。前後の全8pane UUID保持をclient.helloで確認。/tmp/soda-parity-handoff.log。
+- desktop assistantはrunning / readyを確認。更新によるエージェントの再起動やpaneの作り直しは行っていない。
+- 5種類すべてのCLI available=true、integration installed=true / needsUpdate=false。既存Claude/Codex/Copilotは更新、Muse/Antigravityは不足フックを導入。Antigravity statuslineは既存のinstalledを維持。/tmp/soda-parity-installed.log。
+- 起動中CLIが読み込み済みのhook設定は次回起動から反映される。作業中プロセスは保持した。
+- mainをoriginへpush成功。残る差分はこの検証記録とタスク完了印だけ。
+- 検証後に失われていたCLIの7780用cookie cacheは、既定のlocal-login経路で再発行して復旧した。秘密やcookieをログ・会話・gitへ出していない。その他の接続先のcacheは削除していない。
