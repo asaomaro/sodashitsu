@@ -101,3 +101,5 @@ export * from "./resourceMonitor.js";
 export * from "./voiceCore.js";
 
 export * from "./usageInsights.js";
+
+export * from "./usageReportDocument.js";

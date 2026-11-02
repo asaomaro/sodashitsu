@@ -242,7 +242,7 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
           if (!values.length && !cost && !selectedHistory?.calls&&!insights?.totals.calls&&!insights?.totals.tools&&!work.items.length)
             throw new RpcError("not_found", "分析できる利用状況がありません");
           checkAccess(ctx);
-          return deps.summaries!.usageReport(
+          const generated = await deps.summaries!.usageReport(
             params.settings,
             {
               scope:
@@ -278,6 +278,21 @@ export function registerAgentMethods(surface: ControlSurface, deps: MethodDeps):
             },
             () => {checkAccess(ctx);work.verify();},
           );
+          const main = insights?.byRole.find(r => r.key === 'main')?.total ?? 0;
+          const sub = insights?.byRole.find(r => r.key === 'sub')?.total ?? 0;
+          const input = (insights?.totals.input ?? 0) + (insights?.totals.cacheRead ?? 0);
+          return {
+            ...generated,
+            metrics: {
+              ...(insights ? {
+                tokens: insights.totals.total,
+                toolCalls: insights.totals.tools,
+                ...(main + sub > 0 ? {subRatio: sub / (main + sub) * 100} : {}),
+                ...(input > 0 ? {cacheRatio: insights.totals.cacheRead / input * 100} : {}),
+              } : {}),
+              ...(cost?.totalUsd !== undefined ? {costUsd: cost.totalUsd} : {}),
+            },
+          };
         },
       });
     surface.register("agent.account_cost", {

@@ -100,3 +100,16 @@ it("waits briefly for the chart collector before generating the filtered report"
  const f=fixture({usageInsights:{read}});const response=await f.call({settings:{kind:"codex",model:""},history:{from:"2026-11-01",to:"2026-11-02"},insights:{timezone:"UTC"}});
  expect(response.ok).toBe(true);expect(read).toHaveBeenCalledTimes(2);expect(f.usageReport.mock.calls[0]?.[1]).toMatchObject({insights:{totals:{calls:1,tools:1}},work:{items:[]}});
 });
+
+it("attaches observed report metrics without turning missing USD or unknown roles into zero", async () => {
+  const totals = {calls: 2, tools: 9, total: 100, input: 20, cacheRead: 60};
+  const read = vi.fn().mockResolvedValue({from:"2026-11-01",to:"2026-11-02",totals,byRole:[{key:"main",total:20},{key:"sub",total:60}],previous:{},byKind:[],byModel:[],byProject:[],tools:[],coverage:[]});
+  const f = fixture({usageInsights:{read}});
+  const params = {settings:{kind:"codex",model:""},history:{from:"2026-11-01",to:"2026-11-02"},insights:{timezone:"UTC"}};
+  expect(await f.call(params)).toMatchObject({ok:true,result:{metrics:{tokens:100,toolCalls:9,subRatio:75,cacheRatio:75}}});
+  read.mockResolvedValue({totals:{calls:1,tools:0,total:10,input:0,cacheRead:0},byRole:[],byKind:[],byModel:[],byProject:[],tools:[],coverage:[]});
+  const missing = await f.call(params);
+  expect(missing).toMatchObject({ok:true,result:{metrics:{tokens:10,toolCalls:0}}});
+  if(missing.ok)expect((missing.result as {metrics:unknown}).metrics).toEqual({tokens:10,toolCalls:0});
+  expect(await f.call({...params,accountKey:"a"})).toMatchObject({ok:true,result:{metrics:{costUsd:2}}});
+});

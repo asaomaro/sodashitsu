@@ -12,7 +12,7 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 const issued = "11111111-1111-4111-8111-111111111111";
-async function fixture() {
+async function fixture(output = "目的: 作業を整理する") {
   const dir = await mkdtemp(join(tmpdir(), "soda-summary-test-"));
   dirs.push(dir);
   const bin = join(dir, "bin"),
@@ -27,7 +27,7 @@ async function fixture() {
   const log = join(dir, "launch.json");
   await writeFile(
     join(bin, "codex"),
-    `#!${process.execPath}\nimport {writeFileSync,readFileSync} from 'node:fs';import {join} from 'node:path';const args=process.argv.slice(2);writeFileSync(${JSON.stringify(log)},JSON.stringify({args,home:process.env.CODEX_HOME,config:readFileSync(join(process.env.CODEX_HOME,'config.toml'),'utf8')}));let input="";process.stdin.on("data",c=>input+=c);process.stdin.on('end',()=>{writeFileSync(${JSON.stringify(join(dir, "prompt.txt"))},input);setTimeout(()=>{writeFileSync(args[args.indexOf('--output-last-message')+1],'目的: 作業を整理する');console.log(JSON.stringify({type:'thread.started',thread_id:'${issued}'}));},150)});`,
+    `#!${process.execPath}\nimport {writeFileSync,readFileSync} from 'node:fs';import {join} from 'node:path';const args=process.argv.slice(2);writeFileSync(${JSON.stringify(log)},JSON.stringify({args,home:process.env.CODEX_HOME,config:readFileSync(join(process.env.CODEX_HOME,'config.toml'),'utf8')}));let input="";process.stdin.on("data",c=>input+=c);process.stdin.on('end',()=>{writeFileSync(${JSON.stringify(join(dir, "prompt.txt"))},input);setTimeout(()=>{writeFileSync(args[args.indexOf('--output-last-message')+1],${JSON.stringify(output)});console.log(JSON.stringify({type:'thread.started',thread_id:'${issued}'}));},150)});`,
   );
   await chmod(join(bin, "codex"), 0o755);
   vi.stubEnv("PATH", bin + delimiter + process.env.PATH);
@@ -264,28 +264,62 @@ it.skipIf(process.platform === "win32")(
   },
 );
 
-it.skipIf(process.platform === "win32")("usage reports reuse the isolated runner without reading conversations or resuming sessions", async () => {
-  const f = await fixture();
-  const result = await f.service.usageReport({ kind: "codex", model: "GPT-5.4" }, { groups: [{ kind: "codex", tokens: 123 }] });
-  expect(result.text).toContain("目的");
-  expect(f.read).not.toHaveBeenCalled();
-  const launch = JSON.parse(await readFile(f.log, "utf8"));
-  expect(launch.args).not.toContain("resume");
-  expect(launch.args).toContain("read-only");
-  expect(launch.args).toContain("gpt-5.4");
-  expect(launch.home).not.toBe(f.home);
-  const prompt = await readFile(join(f.dir, "prompt.txt"), "utf8");
-  expect(prompt).toContain('"tokens":123');
-  expect(prompt).toContain("期間推移");
-  expect(prompt).toContain("現在の取り組み");
-  expect(prompt).toContain("数値だけから作業内容や完了を推測しない");
-  await expect(f.service.usageReport({ kind: "codex", model: "" }, "a".repeat(100001))).rejects.toThrow(/上限/);
-});
-it.skipIf(process.platform === "win32")("stops a report when its connection authorization expires during execution", async () => {
-  const f = await fixture();
-  let allowed = true;
-  // The fake waits 150ms; revoke while it is running and verify the completion guard too.
-  const pending = f.service.usageReport({ kind: "codex", model: "" }, { tokens: 42 }, () => { if (!allowed) throw new Error("revoked"); });
-  setTimeout(() => { allowed = false; }, 80);
-  await expect(pending).rejects.toThrow("revoked");
-});
+it.skipIf(process.platform === "win32")(
+  "usage reports reuse the isolated runner without reading conversations or resuming sessions",
+  async () => {
+    const f = await fixture();
+    const result = await f.service.usageReport(
+      { kind: "codex", model: "GPT-5.4" },
+      { groups: [{ kind: "codex", tokens: 123 }] },
+    );
+    expect(result.text).toContain("目的");
+    expect(f.read).not.toHaveBeenCalled();
+    const launch = JSON.parse(await readFile(f.log, "utf8"));
+    expect(launch.args).not.toContain("resume");
+    expect(launch.args).toContain("read-only");
+    expect(launch.args).toContain("gpt-5.4");
+    expect(launch.home).not.toBe(f.home);
+    const prompt = await readFile(join(f.dir, "prompt.txt"), "utf8");
+    expect(prompt).toContain('"tokens":123');
+    expect(prompt).toContain("期間推移");
+    expect(prompt).toContain("現在の取り組み");
+    expect(prompt).toContain("数値だけから作業内容や完了を推測しない");
+    await expect(
+      f.service.usageReport({ kind: "codex", model: "" }, "a".repeat(100001)),
+    ).rejects.toThrow(/上限/);
+  },
+);
+it.skipIf(process.platform === "win32")(
+  "stops a report when its connection authorization expires during execution",
+  async () => {
+    const f = await fixture();
+    let allowed = true;
+    // The fake waits 150ms; revoke while it is running and verify the completion guard too.
+    const pending = f.service.usageReport({ kind: "codex", model: "" }, { tokens: 42 }, () => {
+      if (!allowed) throw new Error("revoked");
+    });
+    setTimeout(() => {
+      allowed = false;
+    }, 80);
+    await expect(pending).rejects.toThrow("revoked");
+  },
+);
+
+it.skipIf(process.platform === "win32")(
+  "keeps structured reports readable for text-only clients",
+  async () => {
+    const document = {
+      summary: "利用の要点",
+      work: [{ agent: "実装担当", description: "分析画面を整備" }],
+      patterns: [],
+      recommendations: [{ priority: "high", title: "取得範囲を確認", detail: "欠損を点検" }],
+      limitations: ["部分取得"],
+    };
+    const f = await fixture(JSON.stringify(document));
+    const result = await f.service.usageReport({ kind: "codex", model: "" }, { tokens: 42 });
+    expect(result.document?.work[0]?.description).toBe("分析画面を整備");
+    expect(result.text).toContain("現在の取り組み");
+    expect(result.text).toContain("優先度 高: 取得範囲を確認");
+    expect(() => JSON.parse(result.text)).toThrow();
+  },
+);

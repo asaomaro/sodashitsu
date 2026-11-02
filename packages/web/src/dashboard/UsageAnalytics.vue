@@ -1,31 +1,18 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
-import { usageAnalytics, type AccountCostResult, type UsageReport,type UsageInsightsParams } from "@sodashitsu/protocol";
+import type { AccountCostResult, UsageReport, UsageInsightsParams } from "@sodashitsu/protocol";
 import { ConnectionKey } from "../injection.js";
 import { useUsageStore } from "../store/usage.js";
-import { kindLabel } from "./dashboardModel.js";
-import UsageHistoryPanel from "./UsageHistoryPanel.vue";
 import UsageInsightsPanel from "./UsageInsightsPanel.vue";
-const screen=ref("overview");
-const insightSelection=ref<UsageInsightsParams|null>(null);
-const historyRange = ref<{ from: string; to: string } | null>(null);
+import UsageAccountCost from "./UsageAccountCost.vue";
+import AgentUsageReport from "./AgentUsageReport.vue";
+const screen = ref("overview"),
+  insightSelection = ref<UsageInsightsParams | null>(null),
+  historyRange = ref<{ from: string; to: string } | null>(null);
 const usage = useUsageStore(),
   conn = inject(ConnectionKey, null);
-const values = computed(() => Object.values(usage.panes));
-const groups = computed(() => usageAnalytics(values.value));
-const basisNames = {
-  cumulative: "セッション累計",
-  transcript: "記録に残る分",
-  context: "現在のコンテキスト",
-};
-const sections = computed(() =>
-  Object.entries(basisNames)
-    .map(([basis, title]) => {
-      const rows = groups.value.filter((g) => g.basis === basis);
-      const total = rows.reduce((n, g) => n + (g.tokens ?? 0), 0);
-      return { basis, title, total, rows };
-    })
-    .filter((s) => s.rows.length),
+const selectedAccountLabel = computed(
+  () => usage.accounts.find((a) => a.accountKey === accountKey.value)?.label ?? "選択なし",
 );
 const accountKey = ref(""),
   cost = ref<AccountCostResult | null>(null),
@@ -66,51 +53,6 @@ async function loadCost() {
   }
 }
 watch(accountKey, loadCost);
-const money = (n: number | undefined) =>
-  n === undefined ? "—" : `$${n.toLocaleString("en-US", { maximumFractionDigits: 4 })}`;
-const number = (n: number | undefined) => (n === undefined ? "—" : n.toLocaleString());
-const percent = (n: number | undefined, total: number) =>
-  n === undefined || !total ? "—" : `${((n / total) * 100).toFixed(1)}%`;
-// Bounded, in-memory observations only. These are cumulative snapshots, never per-period spend.
-interface Observation {
-  at: number;
-  total: number;
-  roster: string;
-}
-const observations = ref<Observation[]>([]);
-watch(
-  () => usage.panes,
-  () => {
-    const cumulative = values.value.filter((u) => u.tokens.basis === "cumulative");
-    const rows = usageAnalytics(cumulative);
-    if (!rows.some((g) => g.tokens !== undefined)) return;
-    const next = {
-      at: Date.now(),
-      total: rows.reduce((n, g) => n + (g.tokens ?? 0), 0),
-      roster: cumulative
-        .map((u) => `${u.paneId}:${u.kind}`)
-        .sort()
-        .join("|"),
-    };
-    let last = observations.value.at(-1);
-    if (last && (last.roster !== next.roster || next.total < last.total)) {
-      observations.value = [];
-      last = undefined;
-    }
-    if (!last || last.total !== next.total || next.at - last.at > 10_000)
-      observations.value = [...observations.value, next].slice(-60);
-  },
-  { immediate: true },
-);
-const trendPoints = computed(() => {
-  const points = observations.value,
-    max = Math.max(1, ...points.map((p) => p.total));
-  return points
-    .map(
-      (p, i) => `${10 + (i / Math.max(1, points.length - 1)) * 580},${145 - (p.total / max) * 130}`,
-    )
-    .join(" ");
-});
 const reportKind = ref<"claude" | "codex">("codex"),
   model = ref(""),
   report = ref<UsageReport | null>(null),
@@ -134,7 +76,7 @@ async function generate() {
       settings: { kind: reportKind.value, model: model.value },
       ...(key ? { accountKey: key } : {}),
       ...(historyRange.value ? { history: historyRange.value } : {}),
-      ...(insightSelection.value?{insights:insightSelection.value}:{}),
+      ...(insightSelection.value ? { insights: insightSelection.value } : {}),
     });
     if (!disposed) {
       report.value = result;
@@ -149,248 +91,262 @@ async function generate() {
   }
 }
 </script>
-
 <template>
   <section class="analytics" aria-label="エージェント利用分析" data-usage-analytics-panel>
-    <nav class="analysis-navigation" aria-label="利用分析の画面"><button v-for="tab in [['overview','概要'],['compare','比較'],['agents','親子・ツール'],['report','エージェント分析']]" :key="tab[0]" :aria-pressed="screen===tab[0]" @click="screen=tab[0]!">{{ tab[1] }}</button></nav>
-    <UsageInsightsPanel v-show="screen!=='report'" :layout="screen" :active="screen!=='report'" @loaded="historyRange = $event" @insights="insightSelection=$event" />
-    <details v-show="screen!=='report'" class="legacy-analysis"><summary>現在のpaneと従来の集計</summary>
-    <p>
-      このマシンで取得できる利用状況です。期間別の履歴と、現在のpaneの状況をそれぞれ表示します。現在paneの種類別トークンは同じ数え方の中で比較する累計・記録値で、期間消費量や請求額ではありません。同じ会話を複数paneで開いている場合は重複を含みます。
-    </p>
-    <p v-if="!values.length" role="status">
-      分析できる利用状況がありません。記録を取得できるエージェントを起動すると表示します。
-    </p>
-    <UsageHistoryPanel @loaded="historyRange = $event; insightSelection=null" />
-    <div class="charts">
-      <section
-        v-for="section in sections"
-        :key="section.basis"
-        class="chart"
-        :aria-label="section.title"
-      >
-        <h3>{{ section.title }} · 種類別トークン</h3>
-        <p>
-          取得分合計
-          {{ number(section.rows.some((r) => r.tokenSessions > 0) ? section.total : undefined) }} ·
-          同じ数え方の取得済みトークンに対する割合
-        </p>
-        <div v-for="row in section.rows" :key="row.kind" class="bar-row">
-          <div class="bar-label">
-            <strong>{{ kindLabel(row.kind) }}</strong
-            ><span>{{ number(row.tokens) }} · {{ percent(row.tokens, section.total) }}</span>
-          </div>
-          <div class="track" aria-hidden="true">
-            <div
-              :style="{
-                width: `${section.total ? ((row.tokens ?? 0) / section.total) * 100 : 0}%`,
-              }"
-            />
-          </div>
-          <small
-            >{{ row.sessions }} pane · トークン取得 {{ row.tokenSessions }} · 一部/読取中/更新停止
-            {{ row.partialSessions }}</small
-          >
-        </div>
-      </section>
-      <section class="chart" aria-label="累計の観測推移">
-        <h3>表示中の観測推移 · セッション累計トークン</h3>
-        <template v-if="observations.length > 1">
-          <svg
-            viewBox="0 0 600 160"
-            role="img"
-            :aria-label="`累計トークン ${number(observations[0]?.total)} から ${number(observations.at(-1)?.total)}`"
-          >
-            <polyline :points="trendPoints" fill="none" stroke="currentColor" stroke-width="3" />
-          </svg>
-          <p>
-            {{ new Date(observations[0]!.at).toLocaleTimeString() }} —
-            {{ new Date(observations.at(-1)!.at).toLocaleTimeString() }} ·
-            {{ number(observations[0]!.total) }} → {{ number(observations.at(-1)!.total) }}
-          </p>
-        </template>
-        <p v-else>
-          表示中に累計値を2回以上取得すると描画します。この推移は現在paneの観測です。保存済みの期間履歴は上の「期間別の利用履歴」で確認できます。
-        </p>
-        <small
-          >この画面を開いている間の最大60観測。paneの構成変更・値の減少でリセットします。記録の追加読取でも増えるため、この期間に消費した量とは限りません。閉じると消えます。</small
-        >
-      </section>
-    </div>
-    </details>
-    <section v-show="screen==='report'" class="agent-analysis" data-agent-analysis><h2>エージェントによる分析</h2><p>現在の取り組み、使われ方、改善案をまとめて確認します。生成するまでモデルは呼び出しません。</p>
-    <section class="chart">
-      <h3>モデル別コスト · 保存済みセッション</h3>
-      <label
-        >アカウント
-        <select v-model="accountKey" data-analytics-account>
-          <option value="">選択してください</option>
-          <option
-            v-for="account in usage.accounts"
-            :key="account.accountKey"
-            :value="account.accountKey"
-          >
-            {{ account.label }}
-          </option>
-        </select></label
-      >
-      <button :disabled="!accountKey || costBusy" @click="loadCost">記録を更新</button>
-      <p>
-        選択時だけ記録を読みます。期間指定なしの記録USDです。最後のモデルからトークン・コストを割り振りません。Bobcoin・AICはUSDと合算しません。paneごとの値は「状況一覧」で確認できます。
-      </p>
-      <p v-if="costBusy" role="status">記録を読み込み中…</p>
-      <p v-if="error" role="alert">{{ error }}</p>
-      <template v-if="cost">
-        <p>
-          取得額 {{ money(cost.totalUsd) }} · {{ cost.sessions }} セッション · コスト未取得
-          {{ cost.unpricedSessions }} · {{ new Date(cost.asOf).toLocaleString() }}
-        </p>
-        <p v-if="cost.partial" role="status">読取上限または読めない記録があり、一部の集計です。</p>
-        <p v-if="!cost.byModel.length">モデル別に取得できるUSDの記録がありません。</p>
-        <div v-for="row in cost.byModel" :key="row.label" class="bar-row" data-analytics-model>
-          <div class="bar-label">
-            <strong>{{ row.label }}</strong
-            ><span
-              >{{ money(row.usd) }} · {{ percent(row.usd, cost.totalUsd ?? 0) }} ·
-              {{ row.sessions }} セッション</span
-            >
-          </div>
-          <div class="track" aria-hidden="true">
-            <div :style="{ width: `${cost.totalUsd ? (row.usd / cost.totalUsd) * 100 : 0}%` }" />
-          </div>
-        </div>
-        <small
-          >会計記録に明示されたモデルだけに分類し、残りは「不明」です。契約料金ではありません。</small
-        >
-      </template>
-    </section>
-    <section class="chart" aria-label="利用状況レポート">
-      <h3>エージェントによる利用状況レポート</h3>
-      <p>
-        「レポートを生成」を押すと、このマシンでログイン済みのエージェントが数値・モデル名・時点から説明と改善提案を作ります。対象は現在接続PCです。別PCの比較結果は含めません。現在の取り組みを説明するため、現在のエージェントの直近会話の限定抜粋、作業項目、保存済み要約を生成先へ渡します。モデルの利用が発生します。
-      </p>
-      <label
-        >エージェント
-        <select v-model="reportKind" :disabled="reportBusy">
-          <option value="codex">Codex</option>
-          <option value="claude">Claude Code</option>
-        </select></label
-      >
-      <label
-        >モデル
-        <input
-          v-model="model"
-          :disabled="reportBusy"
-          maxlength="100"
-          placeholder="空欄は既定モデル"
-      /></label>
+    <nav class="analysis-navigation" aria-label="利用分析の画面">
       <button
-        data-generate-usage-report
-        :disabled="reportBusy || (!values.length && !cost && !historyRange)"
-        @click="generate"
+        v-for="tab in [
+          ['overview', '概要'],
+          ['compare', '比較'],
+          ['agents', '親子・ツール'],
+          ['report', 'エージェント分析'],
+        ]"
+        :key="tab[0]"
+        :aria-pressed="screen === tab[0]"
+        @click="screen = tab[0]!"
       >
-        {{ reportBusy ? "生成中…" : "レポートを生成" }}
+        {{ tab[1] }}
       </button>
-      <p v-if="reportBusy" role="status">エージェントがレポートを生成しています…</p>
-      <p v-if="reportError" role="alert">{{ reportError }}</p>
-      <template v-if="report">
-        <p>
-          {{ report.kind }} · {{ report.model || "既定モデル" }} ·
-          {{ new Date(report.updatedAt).toLocaleString() }} · {{ reportScope }}（生成時のデータ）
+    </nav>
+    <UsageInsightsPanel
+      v-show="screen !== 'report'"
+      :layout="screen"
+      :active="screen !== 'report'"
+      @loaded="historyRange = $event"
+      @insights="insightSelection = $event"
+    />
+    <UsageAccountCost
+      v-show="screen === 'compare'"
+      :accounts="usage.accounts"
+      :selected="accountKey"
+      :cost="cost"
+      :busy="costBusy"
+      :error="error"
+      @select="accountKey = $event"
+      @refresh="loadCost"
+    />
+    <section v-show="screen === 'report'" class="agent-analysis" data-agent-analysis>
+      <header class="analysis-heading">
+        <span class="eyebrow">AGENT ANALYSIS</span>
+        <h2>作業と利用の傾向を、次の改善につなげる</h2>
+        <p>現在の取り組み、使われ方、改善案をまとめたレポートを作成します。</p>
+      </header>
+      <section class="report-settings" aria-label="レポート生成設定">
+        <div class="report-controls">
+          <label
+            >分析エージェント<select v-model="reportKind" :disabled="reportBusy">
+              <option value="codex">Codex</option>
+              <option value="claude">Claude Code</option>
+            </select></label
+          ><label
+            >モデル<input
+              v-model="model"
+              :disabled="reportBusy"
+              maxlength="100"
+              placeholder="空欄は既定モデル" /></label
+          ><label
+            >コストの対象<select
+              v-model="accountKey"
+              :disabled="reportBusy || costBusy"
+              data-report-account
+            >
+              <option value="">追加しない</option>
+              <option v-for="a in usage.accounts" :key="a.accountKey" :value="a.accountKey">
+                {{ a.label }}
+              </option>
+            </select></label
+          ><button
+            class="generate-report"
+            data-generate-usage-report
+            :disabled="reportBusy"
+            @click="generate"
+          >
+            {{ reportBusy ? "分析中…" : "レポートを生成" }}
+          </button>
+        </div>
+        <p class="scope-caption">
+          対象は現在接続PC ·
+          {{ historyRange ? `${historyRange.from}〜${historyRange.to} UTC` : "現在のペイン" }} ·
+          コスト {{ selectedAccountLabel }}
         </p>
-        <p class="report" data-usage-report>{{ report.text }}</p>
-        <small
-          >エージェントの提案です。現在のグラフが更新されても、このレポートは自動更新されません。</small
-        >
-      </template>
-    </section>
+        <p class="scope-caption">現在の作業の抜粋を生成先へ渡します。モデルの利用が発生します。</p>
+        <details>
+          <summary>分析対象と送信する情報</summary>
+          <p>
+            概要で取得した期間・条件と現在の作業を、選択したログイン済みエージェントで分析します。現在のエージェントの直近会話の限定抜粋、作業項目、保存済み要約を生成先へ渡します。モデルの利用が発生します。別PCの比較結果は含めません。画面を開くだけではモデルを呼びません。
+          </p>
+        </details>
+      </section>
+      <p v-if="reportBusy" class="analysis-status" role="status">
+        現在の取り組みと利用データを分析しています…
+      </p>
+      <p v-if="reportError" role="alert">{{ reportError }}</p>
+      <AgentUsageReport v-if="report" :report="report" :scope="reportScope" />
+      <section v-else-if="!reportBusy" class="report-empty">
+        <div class="empty-symbol" aria-hidden="true">◈</div>
+        <h3>取り組みと、次の一手を見渡す</h3>
+        <p>レポートを生成すると、根拠のある作業状況と利用傾向を、読みやすいカードで表示します。</p>
+        <div class="report-preview-labels">
+          <span>01 現在の取り組み</span><span>02 使われ方</span><span>03 改善案</span
+          ><span>04 取得範囲と限界</span>
+        </div>
+      </section>
     </section>
   </section>
 </template>
-
 <style scoped>
-.analysis-navigation{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 20px}.analysis-navigation button{font:inherit;padding:9px 14px;border:1px solid var(--soda-menu-border);border-radius:9px;color:inherit;background:var(--soda-menu-bg);cursor:pointer}.analysis-navigation button[aria-pressed=true]{border-color:var(--soda-accent);background:color-mix(in srgb,var(--soda-accent) 16%,var(--soda-menu-bg))}.agent-analysis h2{font-size:26px}
-
 .analytics {
   max-width: 100rem;
   margin: auto;
-  line-height: 1.6;
-}
-.charts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
-  gap: 1rem;
-}
-.chart {
+  line-height: 1.7;
   min-width: 0;
-  margin: 1rem 0;
-  padding: 1rem;
-  border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: var(--soda-shape-card-radius, 8px);
-  background: var(--soda-menu-bg, #282a36);
 }
-h3 {
-  margin: 0 0 0.8rem;
-  font-size: 1rem;
-}
-p {
-  margin: 0.8rem 0;
-}
-small {
-  opacity: 0.8;
-}
-.bar-row {
-  margin: 1rem 0;
-}
-.bar-label {
+.analysis-navigation {
   display: flex;
+  gap: 8px;
   flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.5rem;
-  overflow-wrap: anywhere;
+  margin: 8px 0 20px;
 }
-.track {
-  height: 0.7rem;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 5px;
-  margin: 0.4rem 0;
-  overflow: hidden;
-}
-.track > div {
-  height: 100%;
-  background: var(--soda-accent, #80aaff);
-}
-svg {
-  width: 100%;
-  color: var(--soda-accent, #80aaff);
-}
-label {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.3rem 0.8rem 0.3rem 0;
-}
+button,
 select,
-input,
-button {
-  color: inherit;
-  background: var(--soda-bg, #1e1f29);
-  border: 1px solid var(--soda-menu-border, #44475a);
-  border-radius: 4px;
-  padding: 0.5rem;
+input {
   font: inherit;
+  color: inherit;
+  background: var(--soda-menu-bg);
+  border: 1px solid var(--soda-menu-border);
+  border-radius: 9px;
+  padding: 9px 14px;
+  min-width: 0;
   max-width: 100%;
+  box-sizing: border-box;
 }
 button {
   cursor: pointer;
 }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--soda-accent);
+  outline-offset: 3px;
+}
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
-.report {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.analysis-navigation button[aria-pressed="true"] {
+  border-color: var(--soda-accent);
+  background: color-mix(in srgb, var(--soda-accent) 16%, var(--soda-menu-bg));
+}
+.analysis-heading {
+  margin: 28px 0;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--soda-accent);
+}
+.analysis-heading h2 {
+  font-size: clamp(22px, 3vw, 30px);
+  line-height: 1.4;
+  margin: 8px 0;
+}
+.analysis-heading p,
+.scope-caption,
+details,
+.report-empty p {
+  color: color-mix(in srgb, var(--soda-fg) 76%, transparent);
+}
+.report-settings {
+  padding: 22px;
+  border: 1px solid var(--soda-menu-border);
+  border-radius: 16px;
+  background: var(--soda-menu-bg);
+}
+.report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: end;
+}
+.report-controls label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  font-size: 12px;
+  flex: 1;
+  min-width: 130px;
+  max-width: 260px;
+}
+.report-controls input,
+.report-controls select {
+  width: 100%;
+  background: var(--soda-bg);
+}
+.generate-report {
+  border-color: var(--soda-accent);
+  background: color-mix(in srgb, var(--soda-accent) 18%, var(--soda-bg));
+  font-weight: 600;
+}
+.scope-caption,
+details {
+  font-size: 12px;
+}
+.scope-caption {
+  margin: 14px 0 8px;
+}
+summary {
+  cursor: pointer;
+}
+.analysis-status {
+  padding: 18px;
+  border-left: 3px solid var(--soda-accent);
+  background: color-mix(in srgb, var(--soda-accent) 7%, transparent);
+}
+.report-empty {
+  text-align: center;
+  padding: 42px 24px;
+  border: 1px dashed var(--soda-menu-border);
+  border-radius: 18px;
+  margin-top: 22px;
+  background: color-mix(in srgb, var(--soda-accent) 3%, var(--soda-menu-bg));
+}
+.empty-symbol {
+  font-size: 46px;
+  color: var(--soda-accent);
+}
+.report-preview-labels {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 26px;
+}
+.report-preview-labels span {
+  border: 1px solid var(--soda-menu-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12px;
+}
+@media (max-width: 680px) {
+  .report-settings {
+    padding: 16px;
+  }
+  .report-controls {
+    gap: 10px;
+  }
+  .report-controls label {
+    min-width: 120px;
+    max-width: 100%;
+  }
+  .generate-report {
+    width: 100%;
+  }
+  .report-empty {
+    padding: 26px 16px;
+  }
+  .report-preview-labels {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

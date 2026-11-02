@@ -1,3 +1,4 @@
+import type {UsageReportDocument,UsageReportMetrics} from "./usageReportDocument.js";
 import { z } from "zod";
 import type { AgentUsage, UsageTokenBasis } from "./usage.js";
 import { SummarySettingsSchema } from "./conversation.js";
@@ -32,6 +33,8 @@ export const UsageReportParams = z.object({
   insights:UsageInsightFilters.optional(),
 });
 export interface UsageReport {
+  document?:UsageReportDocument;
+  metrics?:UsageReportMetrics;
   text: string;
   kind: string;
   model: string;

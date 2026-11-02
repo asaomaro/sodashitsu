@@ -1,0 +1,91 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/web| src/dashboard/AgentUsageReport.test.ts (4 tests | 1 failed | 3 skipped) 32ms
+   × keeps the full previous report available beyond the compact card excerpt 31ms
+ ❯ |@sodashitsu/server| src/conversation/SummaryService.test.ts (13 tests | 1 failed | 12 skipped) 205ms
+   × keeps structured reports readable for text-only clients 204ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/dashboard/AgentUsageReport.test.ts > keeps the full previous report available beyond the compact card excerpt
+Error: Unable to get .report-source pre within: <article data-v-7d1b67de="" class="report-sheet" data-usage-report="" aria-label="分析レポート">
+  <header data-v-7d1b67de="" class="report-hero">
+    <div data-v-7d1b67de="" class="report-heading">
+      <div data-v-7d1b67de=""><span data-v-7d1b67de="" class="eyebrow">SODASHITSU / AGENT ANALYSIS</span>
+        <h2 data-v-7d1b67de="">エージェント利用分析レポート</h2>
+      </div><button data-v-7d1b67de="" data-save-report-html="">HTMLを保存</button>
+    </div>
+    <p data-v-7d1b67de="" class="report-meta">claude · 既定モデル · 1/1/1970, 9:00:00 AM</p>
+    <p data-v-7d1b67de="" class="report-meta">scope</p>
+    <p data-v-7d1b67de="" class="report-summary">長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポート長い旧レポー</p>
+  </header>
+  <!--v-if-->
+  <div data-v-7d1b67de="" class="report-grid">
+    <section data-v-7d1b67de="" class="report-card work">
+      <div data-v-7d1b67de="" class="section-title"><span data-v-7d1b67de="" class="section-number">01</span>
+        <h3 data-v-7d1b67de="">現在の取り組み</h3>
+      </div>
+      <div data-v-7d1b67de="" class="work-grid">
+        <p data-v-7d1b67de="" class="muted">作業内容の説明は未取得です。</p>
+      </div>
+    </section>
+    <section data-v-7d1b67de="" class="report-card">
+      <div data-v-7d1b67de="" class="section-title"><span data-v-7d1b67de="" class="section-number">02</span>
+        <h3 data-v-7d1b67de="">使われ方</h3>
+      </div>
+      <p data-v-7d1b67de="" class="muted">利用傾向の説明は未取得です。</p>
+    </section>
+    <section data-v-7d1b67de="" class="report-card">
+      <div data-v-7d1b67de="" class="section-title"><span data-v-7d1b67de="" class="section-number">03</span>
+        <h3 data-v-7d1b67de="">改善案</h3>
+      </div>
+      <p data-v-7d1b67de="" class="muted">改善案は未取得です。</p>
+    </section>
+    <section data-v-7d1b67de="" class="report-card limits">
+      <div data-v-7d1b67de="" class="section-title"><span data-v-7d1b67de="" class="section-number">04</span>
+        <h3 data-v-7d1b67de="">取得範囲と限界</h3>
+      </div>
+      <p data-v-7d1b67de="" class="muted">取得範囲の説明は未取得です。</p>
+    </section>
+  </div>
+  <footer data-v-7d1b67de=""> 生成時点の分析です。改善案はエージェントによる提案で、現在の集計が変わっても自動更新されません。 </footer>
+</article>
+ ❯ VueWrapper.get ../../node_modules/.pnpm/@vue+test-utils@2.5.1_@vue+compiler-dom@3.5.43_@vue+server-renderer@3.5.43_vue@3.5.43_typescript@5.9.3_/node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:7333:15
+ ❯ src/dashboard/AgentUsageReport.test.ts:80:12
+     78|   };
+     79|   const w = mount(AgentUsageReport, { props: { report: old, scope: "sc…
+     80|   expect(w.get(".report-source pre").text()).toContain("終端の重要な説明");
+       |            ^
+     81|   expect(reportHtml(old, "scope")).toContain("終端の重要な説明");
+     82|   w.unmount();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |@sodashitsu/server| src/conversation/SummaryService.test.ts > keeps structured reports readable for text-only clients
+AssertionError: expected '{"summary":"利用の要点","work":[{"agent":"…' to contain '現在の取り組み'
+
+Expected: "現在の取り組み"
+Received: "{"summary":"利用の要点","work":[{"agent":"実装担当","description":"分析画面を整備"}],"patterns":[],"recommendations":[{"priority":"high","title":"取得範囲を確認","detail":"欠損を点検"}],"limitations":["部分取得"]}"
+
+ ❯ src/conversation/SummaryService.test.ts:321:25
+    319|     const result = await f.service.usageReport({ kind: "codex", model:…
+    320|     expect(result.document?.work[0]?.description).toBe("分析画面を整備");
+    321|     expect(result.text).toContain("現在の取り組み");
+       |                         ^
+    322|     expect(result.text).toContain("優先度 高: 取得範囲を確認");
+    323|     expect(() => JSON.parse(result.text)).toThrow();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 15 skipped (17)
+   Start at  12:38:54
+   Duration  1.36s (transform 71%, import 13%, tests 10%, environment 6%)
