@@ -5,6 +5,6 @@
 - [x] リッチHTML表示・単一HTML保存・旧結果全文
 - [x] 回帰テストと独立レビュー（差分全体＋修正再レビュー）
 - [x] ビルド・型・全体テスト・ブラウザE2E・起動確認（全体1件時間切れ、単独全件passを記録）
-- [ ] 実稼働handoff・pane保持確認・mainへpush
+- [x] 実稼働handoff・pane保持確認・mainへpush（99ca6e83、origin/mainの一致を確認）
 
 個別taskcheckは不要。状態保存の変更なし。プロトコル・HTML安全性は最後の独立レビューで点検する。
