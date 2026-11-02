@@ -41,7 +41,9 @@ export type UsageSource =
   /** Bob Shell の記録（`~/.bob/db/bob.db` のタスクの行。20261016-agent-usage-bob-copilot）。 */
   | "bob-db"
   /** GitHub Copilot CLI の記録（`session-state/<id>/events.jsonl`。同上）。 */
-  | "copilot-events";
+  | "copilot-events"
+  | "muse-events"
+  | "agy-transcript";
 
 /**
  * USD でない、エージェントの製品のクレジット（20261016-agent-usage-bob-copilot）。**USD に換算しない**（換算の率を製品は持たない）。

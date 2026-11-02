@@ -1,3 +1,5 @@
+import {ExtraUsageAdapter} from "./museAdapter.js";
+import type {ExtraRoots} from "../conversation/ExtraAgentRecords.js";
 import type { AccountUsage, AgentUsage } from "@sodashitsu/protocol";
 import type { UsageFields } from "../agent/AgentReportSocket.js";
 import type { UsageAdapter, UsageSourceInfo } from "./UsageService.js";
@@ -16,7 +18,8 @@ export class AntigravityUsageAdapter implements UsageAdapter {
   private readonly panes = new Map<string, { report: AntigravityUsageReport; at: number }>();
   private readonly accountReports = new Map<string, { report: AntigravityUsageReport; at: number }>();
   private closed = false;
-  constructor(private readonly now: () => number = Date.now) {}
+  private readonly transcript:ExtraUsageAdapter;
+  constructor(private readonly now: () => number = Date.now,roots:ExtraRoots={}) {this.transcript=new ExtraUsageAdapter("agy",roots);}
 
   note(report: AntigravityUsageReport): void {
     if (this.closed) return;
@@ -33,8 +36,9 @@ export class AntigravityUsageAdapter implements UsageAdapter {
   }
 
   async usageFor(source: UsageSourceInfo): Promise<Omit<AgentUsage, "paneId" | "kind"> | null> {
+    const transcript=await this.transcript.usageFor(source);
     const entry = this.panes.get(source.paneId);
-    if (!entry || entry.report.sessionId !== source.sessionId) return null;
+    if (!entry || entry.report.sessionId !== source.sessionId) return transcript;
     const { report: r, at } = entry;
     // current_usage describes the current context, not billed or lifetime totals.
     const tokens: AgentUsage["tokens"] = { basis: "context" };
@@ -43,7 +47,8 @@ export class AntigravityUsageAdapter implements UsageAdapter {
     if (r.cacheReadTokens !== undefined) tokens.cacheRead = r.cacheReadTokens;
     if (r.cacheWriteTokens !== undefined) tokens.cacheWrite = r.cacheWriteTokens;
     return {
-      model: r.model ?? r.modelName ?? null, tokens, source: "statusline", updatedAt: at,
+      model: r.model ?? r.modelName ?? transcript?.model ?? null, tokens:transcript?.tokens??tokens, source: transcript?.source??"statusline", updatedAt: transcript?.updatedAt??at,
+      ...(transcript?.partial?{partial:true}:{}),...(transcript?.scanning?{scanning:true}:{}),
       ...(r.contextTokens !== undefined ? { contextTokens: r.contextTokens } : {}),
       ...(r.contextWindowSize !== undefined ? { contextWindowTokens: r.contextWindowSize } : {}),
       ...(r.contextUsedPct !== undefined ? { contextUsedPct: r.contextUsedPct } : {}),
@@ -61,6 +66,6 @@ export class AntigravityUsageAdapter implements UsageAdapter {
     }));
   }
 
-  forget(paneId: string): void { this.panes.delete(paneId); }
-  close(): void { this.closed = true; this.panes.clear(); this.accountReports.clear(); }
+  forget(paneId: string): void { this.panes.delete(paneId);this.transcript.forget(paneId); }
+  close(): void { this.closed = true;this.transcript.close(); this.panes.clear(); this.accountReports.clear(); }
 }

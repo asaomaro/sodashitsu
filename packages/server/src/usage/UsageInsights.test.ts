@@ -9,7 +9,7 @@ const usage=(id:string,at='2026-10-15T00:00:00Z')=>({type:'assistant',timestamp:
 const tool=(id:string,name:string,input:unknown={})=>({type:'assistant',timestamp:'2026-10-15T00:00:00Z',message:{content:[{type:'tool_use',id,name,input}]}});
 async function fixture(extra:Record<string,number>={}){
  const dir=await mkdtemp(join(tmpdir(),'soda-insights-'));dirs.push(dir);const root=join(dir,'claude','projects'),project=join(root,'demo'),codex=join(dir,'codex'),day=join(codex,'sessions','2026','10','15'),stateDir=join(dir,'state');await mkdir(project,{recursive:true});await mkdir(day,{recursive:true});
- const options={stateDir,claudeRoots:()=>[root],codexHome:()=>codex,now:()=>now,...extra};return {dir,project,day,stateDir,options,reader:new UsageInsightsReader(options)};
+ const options={stateDir,extraRoots:{home:dir,dataHome:join(dir,"data")},claudeRoots:()=>[root],codexHome:()=>codex,now:()=>now,...extra};return {dir,project,day,stateDir,options,reader:new UsageInsightsReader(options)};
 }
 it('persists numbers, appends incrementally across restart, compares periods and excludes conversation/tool arguments',async()=>{
  const f=await fixture(),file=join(f.project,'main.jsonl');await writeFile(file,json(usage('old','2026-10-01T00:00:00Z'),usage('one'),tool('call','Bash',{command:'SUPER_SECRET_COMMAND'})));

@@ -14,7 +14,7 @@ async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "usage-history-")); dirs.push(dir);
   const root = join(dir, "claude", "projects"), project = join(root, "p"), codex = join(dir, "codex"), day = join(codex, "sessions", "2026", "10", "01");
   await mkdir(project, { recursive: true }); await mkdir(day, { recursive: true });
-  const reader = new UsageHistoryReader({ claudeRoots: () => [root], codexHome: () => codex });
+  const reader = new UsageHistoryReader({ extraRoots:{home:dir,dataHome:join(dir,"data")}, claudeRoots: () => [root], codexHome: () => codex });
   return { dir, root, project, codex, day, reader };
 }
 it("aggregates actual UTC response timestamps, deduplicates repeated IDs/copies, separates roots, and excludes undated usage", async () => {
@@ -24,7 +24,7 @@ it("aggregates actual UTC response timestamps, deduplicates repeated IDs/copies,
   await writeFile(join(f.root, "copy", "s1.jsonl"), lines(claude("b", "2026-10-02T01:00:00+09:00")));
   const otherRoot = join(f.dir, "other", "projects"); await mkdir(join(otherRoot, "p"), { recursive: true });
   await writeFile(join(otherRoot, "p", "s1.jsonl"), lines(claude("b", "2026-10-03T00:00:00Z")));
-  const result = await new UsageHistoryReader({ claudeRoots: () => [f.root, otherRoot], codexHome: () => f.codex }).read(range);
+  const result = await new UsageHistoryReader({ extraRoots:{home:f.dir,dataHome:join(f.dir,"data")}, claudeRoots: () => [f.root, otherRoot], codexHome: () => f.codex }).read(range);
   expect(result.calls).toBe(2); expect(result.sessions).toBe(2); expect(result.excluded).toBe(1);
   expect(result.byDay.map(d => d.label)).toEqual(["2026-10-01", "2026-10-03"]);
   expect(result.totals).toEqual({ input: 20, output: 40, cacheRead: 60, cacheWrite: 80, total: 200 });

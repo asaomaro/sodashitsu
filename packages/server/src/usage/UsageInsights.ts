@@ -1,3 +1,6 @@
+import {museSession} from "../agent/museSession.js";
+import {discoverExtra,openExtraFile,extraRoot,type ExtraRoots} from "../conversation/ExtraAgentRecords.js";
+import {extraUsage,extraTools,extraEventTime} from "./extraEvents.js";
 import {createHash} from 'node:crypto';
 import {mkdir,chmod,opendir,realpath} from 'node:fs/promises';
 import {homedir} from 'node:os';
@@ -14,17 +17,17 @@ const number=(n:unknown)=>typeof n==='number'&&Number.isSafeInteger(n)&&n>=0&&n<
 const blank=(key:string,text=key):InsightGroup=>({key,label:text,input:0,output:0,cacheRead:0,cacheWrite:0,total:0,calls:0,tools:0,errors:0,knownResults:0});
 export function classifyTool(name:string,input:unknown):{name:string;category:string;basis:'direct'|'inferred'}{
  const n=label(name),o=typeof input==='object'&&input!==null?input as Record<string,unknown>:{};
- if(/^mcp__/.test(n)){return {name:n,category:'mcp',basis:'direct'};}
+ if(/^mcp(?:__|_)/.test(n)){return {name:n,category:'mcp',basis:'direct'};}
  if(/^(Skill|skill)$/i.test(n))return {name:label(o.skill,n),category:'skill',basis:'direct'};
- const path=o.file_path??o.path;
+ let path=o.file_path??o.path??o.Path;if(typeof path==='string'&&path.startsWith('"'))try{path=JSON.parse(path);}catch{}
  if(/^(Read|read_file)$/i.test(n)&&typeof path==='string'&&/[\\/]SKILL\.md$/.test(path))return {name:label(displayBase(dirname(path.replaceAll('\\','/')))),category:'skill',basis:'inferred'};
  const category=/^(bash|shell|exec_command|run_command|terminal)$/i.test(n)?'shell':/read|write|edit|patch|file/i.test(n)?'file':/search|grep|glob|find|web/i.test(n)?'search':/spawn|agent|task|delegate/i.test(n)?'agent':'other';
  return {name:n,category,basis:'direct'};
 }
-interface Cursor {offset:number;dev:string;ino:string;model:string;previous:{input:number;output:number;cached:number;at?:number}|null;invalid:number;oversized:number;}
-interface File {path:string;kind:'claude'|'codex';session:string;parent:string|null;role:'main'|'sub'|'unknown';account:string;accountLabel:string;project:string;projectLabel:string;}
+interface Cursor {projectionOffset?:number;projectionLimited?:boolean;projectionRetryAt?:number;wantsProjection?:boolean;offset:number;dev:string;ino:string;model:string;previous:{input:number;output:number;cached:number;at?:number}|null;invalid:number;oversized:number;}
+interface File {path:string;kind:'claude'|'codex'|'muse'|'agy'|'copilot';session:string;parent:string|null;role:'main'|'sub'|'unknown';account:string;accountLabel:string;project:string;projectLabel:string;}
 interface EventRow {id:string;session:string;at:number;model:string;input:number;output:number;cacheRead:number;cacheWrite:number;eventType:string;name:string;category:string;basis:string;status:string;intervalStart:number;}
-export interface InsightsOptions {stateDir:string;claudeRoots?:()=>string[];codexHome?:()=>string;now?:()=>number;maxBytesPerKind?:number;maxFilesPerKind?:number;maxEntriesPerKind?:number;maxPages?:number;maxReconcileEvents?:number;workspaces?:()=>{cwd:string;label:string}[];}
+export interface InsightsOptions {stateDir:string;extraRoots?:ExtraRoots;claudeRoots?:()=>string[];codexHome?:()=>string;now?:()=>number;maxBytesPerKind?:number;maxFilesPerKind?:number;maxEntriesPerKind?:number;maxPages?:number;maxReconcileEvents?:number;workspaces?:()=>{cwd:string;label:string}[];}
 /** Numeric index only. No messages, commands, tool arguments or full paths are retained. */
 export class UsageInsightsReader {
  private active=false;
@@ -53,8 +56,9 @@ export class UsageInsightsReader {
    db.prepare('DELETE FROM events WHERE at < ?').run(now-400*86400000);
    const discovery=await this.discover(check);
    let collecting=false;
-   for(const kind of ['claude','codex'] as const){
+   for(const kind of ['claude','codex','muse','agy','copilot'] as const){
     check();const files=discovery.files.filter(f=>f.kind===kind),cov:InsightCoverage={kind,files:files.length,pending:0,missing:0,invalid:0,oversized:0,firstAt:null,lastAt:null,limited:discovery.limited};
+    let projectionBudget=1;
     coverage.push(cov);let budget=this.options.maxBytesPerKind??32*1024*1024,processed=0;
     const maxFiles=this.options.maxFilesPerKind??64,deadline=performance.now()+1800;
     const setting=db.prepare('SELECT value FROM settings WHERE id=?').get(`next:${kind}`) as {value:string}|undefined;
@@ -64,15 +68,17 @@ export class UsageInsightsReader {
      const index=(start+i)%files.length,f=files[index]!;
      const key=hash(f.path),saved=db.prepare('SELECT value FROM cursors WHERE id=?').get(key) as {value:string}|undefined;
      let cursor:Cursor=saved?JSON.parse(saved.value):{offset:0,dev:'',ino:'',model:'不明',previous:{input:0,output:0,cached:0},invalid:0,oversized:0};
-     const opened=await openVerified(f.path).catch(()=>null);
+     const opened=await (f.kind!=="claude"&&f.kind!=="codex"?openExtraFile({kind:f.kind,id:f.session.split(':').at(-1)!,parent:null,file:f.path,mtime:0},this.options.extraRoots):openVerified(f.path)).catch(()=>null);
      if(!opened){cov.missing++;continue;}
      try{
+      let dirty=false;
       if(cursor.dev!==String(opened.st.dev)||cursor.ino!==String(opened.st.ino)||opened.st.size<cursor.offset)cursor={offset:0,dev:String(opened.st.dev),ino:String(opened.st.ino),model:'不明',previous:{input:0,output:0,cached:0},invalid:0,oversized:0};
       if(opened.st.size>cursor.offset){
        if(budget<=0||processed>=maxFiles||performance.now()>=deadline){cov.pending++;continue;}
-       processed++;next=(index+1)%files.length;
+       dirty=true;processed++;next=(index+1)%files.length;
        db.prepare('INSERT INTO sessions VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').run(f.session,f.kind,f.parent,f.role,f.project,f.projectLabel,f.account,f.accountLabel);
        const size=Math.min(opened.st.size-cursor.offset,budget,Math.min(2*1024*1024,Math.max(4096,(this.options.maxPages??32768)*256))),buf=await readRange(opened.fd,cursor.offset,size);check();budget-=buf.length;
+       if(f.kind==='muse'&&/"(?:tool_[a-z_]+|todo_snapshot_updated)"/.test(buf.toString('utf8')))cursor.wantsProjection=true;
        let end=buf.lastIndexOf(10);
        if(end<0&&buf.length===2*1024*1024){cursor.oversized++;cursor.offset+=buf.length;cursor.invalid++;}
        else if(end>=0){
@@ -83,8 +89,22 @@ export class UsageInsightsReader {
         cursor.offset+=end+1;
        }
        if(cursor.offset<opened.st.size)cov.pending++;
-       db.prepare('INSERT OR REPLACE INTO cursors VALUES(?,?)').run(key,JSON.stringify(cursor));
       }
+       if(f.kind==='muse'&&cursor.wantsProjection&&(cursor.projectionOffset!==cursor.offset||(cursor.projectionLimited&&Date.now()>=(cursor.projectionRetryAt??0)))&&projectionBudget>0){
+        dirty=true;projectionBudget--;check();cursor.projectionLimited=false;
+        try{
+         const view=await museSession('session/read',f.session.split(':').at(-1)!,{roots:this.options.extraRoots,timeoutMs:1200});check();
+         const history=view?.history,items=history?.mode==='inline'?history.items:history?.snapshot?.state?.items;
+         if(Array.isArray(items)){
+          for(const item of items.slice(0,500))if(item?.kind==='toolCall')this.consume(db,f,cursor,{...item,type:'_muse_tool_view',timestamp:item.recordedAt});
+          if(items.length>500||history.mode==='anchoredSnapshot')cursor.projectionLimited=true;
+         }else cursor.projectionLimited=true;
+        }catch{check();cursor.projectionLimited=true;}
+        cursor.projectionOffset=cursor.offset;cursor.projectionRetryAt=Date.now()+60000;
+       }
+      if(dirty)db.prepare('INSERT OR REPLACE INTO cursors VALUES(?,?)').run(key,JSON.stringify(cursor));
+      if(f.kind==='muse'&&cursor.wantsProjection&&cursor.projectionOffset!==cursor.offset)cov.pending++;
+      cov.limited||=cursor.projectionLimited===true;
       cov.invalid+=cursor.invalid;cov.oversized+=cursor.oversized;
      }finally{await opened.fd.close();}
     }
@@ -137,11 +157,16 @@ export class UsageInsightsReader {
   const codex=(this.options.codexHome??(()=>process.env.CODEX_HOME||join(homedir(),'.codex')))();
   entries=0;
   for(const directory of ['sessions','archived_sessions']){const root=await realpath(join(codex,directory)).catch(()=>null);if(root)await walk(root,'codex',4,hash(codex),`Codex 設定 ${hash(codex).slice(0,6)}`);}
+  for(const kind of ['muse','agy','copilot'] as const){
+   check();const found=await discoverExtra(kind,this.options.extraRoots,this.options.maxFilesPerKind??1000);limited||=found.limited;
+   const account=hash(extraRoot(kind,this.options.extraRoots));
+   for(const f of found.files)files.push({path:f.file,kind,session:`${kind}:${account}:${f.id}`,parent:f.parent?`${kind}:${account}:${f.parent}`:null,role:f.parent?'sub':kind==='muse'?'main':'unknown',account,accountLabel:`${kind} 設定 ${account.slice(0,6)}`,project:hash('不明'),projectLabel:'不明'});
+  }
   return {files,limited};
  }
  private projectLabel(cwd:string){return label(this.options.workspaces?.().find(w=>w.cwd===cwd)?.label??displayBase(cwd));}
  private consume(db:DatabaseSync,f:File,c:Cursor,row:any){
-  if(!row||typeof row!=='object')return;const at=typeof row.timestamp==='string'?Date.parse(row.timestamp):NaN,p=row.payload;
+  if(!row||typeof row!=='object')return;const at=f.kind==='claude'||f.kind==='codex'?(typeof row.timestamp==='string'?Date.parse(row.timestamp):NaN):extraEventTime(row,f.kind),p=row.payload;
   if(f.kind==='codex'&&row.type==='session_meta'&&p){
    const source=p.source?.subagent?.thread_spawn;const candidate=source?.parent_thread_id??p.parent_thread_id;const parent=typeof candidate==='string'&&/^[\w-]{1,160}$/.test(candidate)?candidate:null;
    const isSub=!!parent||p.thread_source==='subagent'||!!p.source?.subagent;
@@ -165,6 +190,18 @@ export class UsageInsightsReader {
    }
   };
   const outcome=(id:unknown,status:string)=>{if(typeof id==='string')db.prepare('UPDATE events SET status=? WHERE id=?').run(status,hash(`${f.session}:tool:${id}`));};
+  if(f.kind!=='claude'&&f.kind!=='codex'){
+   const usage=extraUsage(row,f.kind,f.session.split(':').at(-1));
+   if(usage){c.model=usage.model??c.model;put(`usage:${usage.id}`,'usage',usage,'','','direct','unknown',usage.at);}
+   for(const t of extraTools(row,f.kind))tool(t.id,t.name,t.input);
+   if(f.kind==='muse'&&row.type==='_muse_tool_view'&&['completed','failed'].includes(row.status))outcome(row.itemId,row.status==='failed'?'failed':'success');
+   if(f.kind==='copilot'&&row.type==='tool.execution_complete')outcome(row.data?.toolCallId,row.data?.success===true?'success':row.data?.success===false?'failed':'unknown');
+   // A numeric activity marker makes zero-token/usage-unavailable sessions visible.
+   if(f.kind==='muse'&&row.payload_type==='runtime.session'&&row.payload?.kind==='run'&&['started','terminal'].includes(row.payload.event?.kind))put(`activity:${row.id}`,'activity',zero,row.payload.event.kind,'','direct','unknown',extraEventTime(row,f.kind));
+   if(f.kind==='copilot'&&['session.start','session.idle','user.message'].includes(row.type))put(`activity:${row.id}`,'activity',zero,row.type);
+   if(f.kind==='agy'&&['USER_INPUT','PLANNER_RESPONSE'].includes(row.type))put(`activity:${row.id??row.created_at}:${row.type}`,'activity',zero,row.type,'','direct','unknown',extraEventTime(row,f.kind));
+   return;
+  }
   if(f.kind==='claude'){
    if(row.isSidechain&&f.role!=='sub')return;
    const m=row.message;
@@ -242,10 +279,10 @@ export class UsageInsightsReader {
   const activity={started:0,completed:0,aborted:0,failed:0};
   const totals=blank('total'),previous=blank('previous'),sessions=new Map<string,InsightSession>(),tools=new Map<string,InsightTool>();
   const dateFormatter=new Intl.DateTimeFormat('en-CA',{timeZone:p.timezone,year:'numeric',month:'2-digit',day:'2-digit'}),hourFormatter=new Intl.DateTimeFormat('en-GB',{timeZone:p.timezone,hour:'2-digit',hourCycle:'h23'});
-  const sum=(g:InsightGroup,r:EventRow)=>{if(r.eventType==='inferred_tool')return;if(r.eventType==='tool'){g.tools++;if(r.status==='failed')g.errors++;if(r.status!=='unknown')g.knownResults++;}else{g.input+=r.input;g.output+=r.output;g.cacheRead+=r.cacheRead;g.cacheWrite+=r.cacheWrite;g.total+=r.input+r.output+r.cacheRead+r.cacheWrite;g.calls++;}};
+  const sum=(g:InsightGroup,r:EventRow)=>{if(r.eventType==='inferred_tool'||r.eventType==='activity')return;if(r.eventType==='tool'){g.tools++;if(r.status==='failed')g.errors++;if(r.status!=='unknown')g.knownResults++;}else{g.input+=r.input;g.output+=r.output;g.cacheRead+=r.cacheRead;g.cacheWrite+=r.cacheWrite;g.total+=r.input+r.output+r.cacheRead+r.cacheWrite;g.calls++;}};
   const group=(map:Map<string,InsightGroup>,key:string,r:EventRow,text=key)=>{if(map!==maps.byDay&&map!==maps.previousByDay&&map!==maps.byDayRole&&map.size>=256&&!map.has(key)){key='__other';text='その他（分類上限）';dimensionLimited=true;}const g=map.get(key)??blank(key,text);sum(g,r);map.set(key,g);};
   for(const r of filtered){
-   const current=r.at>=from;if(r.eventType==='activity'){if(current){const key={task_started:'started',task_complete:'completed',turn_aborted:'aborted',task_failed:'failed'}[r.name] as keyof typeof activity|undefined;if(key)activity[key]++;}continue;}sum(current?totals:previous,r);group(current?maps.byDay:maps.previousByDay,dateFormatter.format(r.at),r);
+   const current=r.at>=from;if(r.eventType==='activity'){if(current){const key={task_started:'started',task_complete:'completed',turn_aborted:'aborted',task_failed:'failed'}[r.name] as keyof typeof activity|undefined;if(key)activity[key]++;}}sum(current?totals:previous,r);group(current?maps.byDay:maps.previousByDay,dateFormatter.format(r.at),r);
    if(!current)continue;group(maps.byDayRole,`${dateFormatter.format(r.at)}:${r.role}`,r);
    group(maps.byKind,r.kind,r);group(maps.byModel,`${r.kind}:${r.model}`,r,r.model);group(maps.byProject,r.project,r,r.projectLabel);group(maps.byAccount,r.account,r,r.accountLabel);group(maps.byRole,r.role,r);group(maps.byHour,hourFormatter.format(r.at),r);
    const session=sessions.get(r.session)??{...blank(r.session,r.session.split(':').at(-1)!.slice(0,8)),kind:r.kind,parent:r.parent,role:r.role,project:r.projectLabel,account:r.accountLabel,firstAt:r.at,lastAt:r.at};sum(session,r);session.lastAt=Math.max(session.lastAt,r.at);sessions.set(r.session,session);

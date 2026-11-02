@@ -22,7 +22,7 @@ export const UsageHistoryParams = HistoryRange.refine((v) => {
 export type UsageHistoryParams = z.infer<typeof UsageHistoryParams>;
 
 export const UsageInsightFilters=z.object({
- kind:z.enum(['claude','codex']).optional(), model:z.string().max(128).optional(), project:z.string().max(128).optional(), account:z.string().max(128).optional(), role:z.enum(['main','sub','unknown']).optional(),
+ kind:z.enum(['claude','codex','muse','agy','copilot']).optional(), model:z.string().max(128).optional(), project:z.string().max(128).optional(), account:z.string().max(128).optional(), role:z.enum(['main','sub','unknown']).optional(),
  session:z.string().max(128).optional(), timezone:z.string().max(80).default('UTC'),
 });
 

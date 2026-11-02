@@ -1,3 +1,5 @@
+import {discoverExtra, openExtraFile, type ExtraRoots} from "../conversation/ExtraAgentRecords.js";
+import {extraUsage} from "./extraEvents.js";
 import { createHash } from "node:crypto";
 import { opendir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -23,6 +25,7 @@ interface Event {
   tokens: HistoryTokens;
 }
 export interface HistoryOptions {
+  extraRoots?:ExtraRoots;
   claudeRoots?: () => string[];
   codexHome?: () => string;
   now?: () => number;
@@ -93,10 +96,10 @@ export class UsageHistoryReader {
       // Claude can repeat the same response in separate content blocks; keep the final/largest usage once.
       if (!old || event.tokens.total > old.tokens.total) events.set(key, event);
     };
-    const read = async (file: string, kind: "claude" | "codex", session: string) => {
+    const read = async (file: string, kind: "claude" | "codex" | "muse" | "agy" | "copilot", session: string) => {
       if (!running()) return;
       files++;
-      const opened = await openVerified(file).catch(() => null);
+      const opened = await (kind!=="claude"&&kind!=="codex"?openExtraFile({kind,id:session,parent:null,file,mtime:0},this.options.extraRoots):openVerified(file)).catch(() => null);
       if (!opened) {
         partial = true;
         return;
@@ -115,7 +118,7 @@ export class UsageHistoryReader {
         for (const line of lines) {
           if (!running()) break;
           if (
-            !line.includes('"usage"') &&
+            (kind==="claude"||kind==="codex") && !line.includes('"usage"') &&
             !line.includes('"token_count"') &&
             !line.includes('"turn_context"')
           )
@@ -128,6 +131,9 @@ export class UsageHistoryReader {
             continue;
           }
           if (!row || typeof row !== "object") continue;
+          if(kind!=="claude"&&kind!=="codex"){
+            const u=extraUsage(row,kind,session);if(u){const tokens={input:u.input,output:u.output,cacheRead:u.cacheRead,cacheWrite:u.cacheWrite,total:u.input+u.output+u.cacheRead+u.cacheWrite};add(`${kind}:${session}:${u.id}`,{kind,session,at:u.at,model:u.model??"不明",tokens});}continue;
+          }
           if (kind === "claude") {
             const message = row.message,
               u = message?.usage;
@@ -276,6 +282,11 @@ export class UsageHistoryReader {
       const codexRoot = await realpath(join(codexHome, directory)).catch(() => null);
       if (codexRoot) await walk(codexRoot, "codex", 3, "codex");
     }
+    for(const kind of ["muse","agy","copilot"] as const){
+      budget=32*1024*1024;entries=0;deadline=performance.now()+2000;fileLimit=files+256;eventLimit=events.size+50000;
+      const found=await discoverExtra(kind,this.options.extraRoots,256);partial||=found.limited;
+      for(const f of found.files)if(!f.parent&&running())await read(f.file,kind,f.id);
+    }
     const totals = zero(),
       sessions = new Set<string>();
     const maps = {
@@ -339,6 +350,9 @@ export class UsageHistoryReader {
       sources: [
         "Claude Code: assistant.message.usage（主会話のみ・応答IDで重複排除）",
         "Codex: event_msg.token_count累計差分（入力内のキャッシュを分離）",
+        "Muse Code: provider goal_usage_attribution（報告済みのトークンのみ）",
+        "GitHub Copilot CLI: session.usage_record（USD換算なし）",
+        "Antigravity CLI: 完了PLANNER_RESPONSEの数値（statuslineのコンテキスト・割当は別）",
       ],
     };
   }
