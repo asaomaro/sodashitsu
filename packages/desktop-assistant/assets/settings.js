@@ -26,6 +26,7 @@ function display(preferences) {
 }
 let pendingPack=null,characterCatalog=[];
 function selectedPortrait(){
+ document.getElementById("icon-rotation-setting").hidden=document.getElementById("characterId").value!=="sodashitsu-icon";
  const value=document.getElementById("characterId").value,character=characterCatalog.find(item=>item.id===value),image=document.getElementById("selected-character-preview");
  image.hidden=!character&&!/^(captain-(male|female|robot)|sodashitsu-icon)$/.test(value);
  if(!image.hidden){image.src=character?.uri||`${value}.${value==="sodashitsu-icon"?"svg":"png"}`;image.alt=character?.name||"選択中の立ち絵";}

@@ -87,3 +87,4 @@
 .tools-panel #record-indicator{position:sticky;top:0;z-index:5}
 
 .speech #reminder-notices{max-height:150px;overflow:auto;flex:0 0 auto}.speech #reminder-notices[hidden]{display:none}
+.settings #icon-rotation-setting[hidden]{display:none}
