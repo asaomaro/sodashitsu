@@ -71,6 +71,7 @@ export interface MethodDeps {
   subagentTranscripts?: Pick<SubagentTranscriptReader, "read">;
   /** エージェントの利用状況（20261010-agent-usage）。無ければ `agent.usage` を登録しない。 */
   usage?: Pick<UsageService, "get" | "accountCost">;
+  usageInsights?: Pick<import("../../usage/UsageInsights.js").UsageInsightsReader,"read">;
   /**
    * 利用状況の配信を、この接続に送るか（`agent.usage_watch`。20261010-agent-usage PR3）。印の持ち方と、確かめの開始・停止は、配線（`composeServer`）が決める。
    * 無ければ `agent.usage_watch` を登録しない。

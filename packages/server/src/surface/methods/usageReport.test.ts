@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
 import { registerAgentMethods } from "./agent.js";
-function fixture() {
+function fixture(extra:Partial<MethodDeps>={}) {
   const usageReport = vi.fn(async (_settings: unknown, _data: unknown, _check?: unknown) => ({
     text: "report",
     kind: "codex",
@@ -37,6 +37,7 @@ function fixture() {
     session: {},
     terminals: {},
     sizeAuthority: {},
+    ...extra,
   } as unknown as MethodDeps);
   const call = (params: unknown) =>
     surface.invoke({ clientId: "c", sink: {} as never }, "agent.usage_report", params);
@@ -91,4 +92,11 @@ it("does not launch a model if authentication is revoked during data collection"
   );
   expect(response).toMatchObject({ ok: false, error: { code: "unauthorized" } });
   expect(f.usageReport).not.toHaveBeenCalled();
+});
+
+it("waits briefly for the chart collector before generating the filtered report",async()=>{
+ const {RpcError}=await import("@sodashitsu/protocol");
+ const read=vi.fn().mockRejectedValueOnce(new RpcError("agent_pane_busy","busy")).mockResolvedValue({from:"2026-11-01",to:"2026-11-02",totals:{calls:1,tools:1},previous:{},byRole:[],byKind:[],byModel:[],byProject:[],tools:[],coverage:[]});
+ const f=fixture({usageInsights:{read}});const response=await f.call({settings:{kind:"codex",model:""},history:{from:"2026-11-01",to:"2026-11-02"},insights:{timezone:"UTC"}});
+ expect(response.ok).toBe(true);expect(read).toHaveBeenCalledTimes(2);expect(f.usageReport.mock.calls[0]?.[1]).toMatchObject({insights:{totals:{calls:1,tools:1}},work:{items:[]}});
 });

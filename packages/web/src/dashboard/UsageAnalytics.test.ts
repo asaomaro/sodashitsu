@@ -9,7 +9,7 @@ it("does no account scan or model call until explicit action and keeps unknown m
   const usage = useUsageStore(pinia);
   usage.setSnapshot({ panes: { p: { paneId: "p", kind: "codex", model: "last-only", tokens: { basis: "cumulative", total: 123 }, source: "rollout", updatedAt: 1 } }, accounts: [{ kind: "claude", accountKey: "a", label: "Claude", windows: [], source: "transcript", asOf: 1 }] });
   const request = vi.fn(async (method: string) => method === "agent.account_cost" ? { accountKey: "a", totalUsd: 10, sessions: 2, unpricedSessions: 1, byModel: [{ label: "不明", usd: 10, sessions: 2 }], byEffort: [], partial: true, asOf: 1 } : { text: "改善提案", kind: "codex", model: "", updatedAt: 1 });
-  const w = mount(UsageAnalytics, { global: { plugins: [pinia], stubs: { UsageHistoryPanel: true }, provide: { [ConnectionKey as symbol]: { request } } } });
+  const w = mount(UsageAnalytics, { global: { plugins: [pinia], stubs: { UsageHistoryPanel: true,UsageInsightsPanel:true }, provide: { [ConnectionKey as symbol]: { request } } } });
   expect(request).not.toHaveBeenCalled();
   expect(w.text()).toContain("123");
   expect(w.text()).not.toContain("last-only");
@@ -31,4 +31,13 @@ it("shows missing tokens as unknown instead of zero", () => {
   expect(w.text()).toContain("取得分合計 —");
   expect(w.text()).toContain("トークン取得 0");
   w.unmount();
+});
+
+it("puts agent analysis on its own screen and pauses the chart reader",async()=>{
+ const w=mount(UsageAnalytics,{attachTo:document.body,global:{plugins:[createPinia()],stubs:{UsageHistoryPanel:true,UsageInsightsPanel:{props:["active","layout"],template:'<div class="chart-stub" :data-active="active" :data-layout="layout" />'}}}});
+ expect(w.get('[data-agent-analysis]').isVisible()).toBe(false);
+ await w.get('.analysis-navigation button:last-child').trigger('click');
+ expect(w.get('[data-agent-analysis]').isVisible()).toBe(true);expect(w.get('.chart-stub').attributes('data-active')).toBe('false');
+ expect(w.get('[data-agent-analysis]').text()).toContain('直近会話の限定抜粋');
+ await w.get('.analysis-navigation button:nth-child(2)').trigger('click');expect(w.get('[data-agent-analysis]').isVisible()).toBe(false);expect(w.get('.chart-stub').attributes('data-layout')).toBe('compare');w.unmount();
 });

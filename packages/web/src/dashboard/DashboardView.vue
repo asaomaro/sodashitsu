@@ -6,7 +6,7 @@
  * 値が無いものは「—」（0 と書かない）。古い値は薄く、時刻つきで。形（表／カード）は画面の様式のトークンで替わる。
  */
 import { defineAsyncComponent, computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { paneNameOf } from "@sodashitsu/client-core";
+import { paneNameOf, stateLabel } from "@sodashitsu/client-core";
 import { analyticsSelected } from "./navigation.js";
 const UsageAnalytics = defineAsyncComponent(() => import("./UsageAnalytics.vue"));
 import StateIcon from "../components/StateIcon.vue";
@@ -104,6 +104,10 @@ const allRows = computed(() =>
     nameOf: (p) => paneNameOf(p),
   }),
 );
+const stateSummary=computed(()=>{
+ const counts=new Map<DashboardRow["state"],number>();for(const row of allRows.value)counts.set(row.state,(counts.get(row.state)??0)+1);
+ return [...counts].map(([state,count])=>({state,count,label:stateLabel(state)}));
+});
 const kinds = computed(() => kindsOf(allRows.value));
 // 絞り込みの種類が居なくなったら、すべてに戻す。
 watch(kinds, (k) => {
@@ -286,6 +290,10 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
     <UsageAnalytics v-if="analyticsSelected && active" :key="machines.selectedId" />
     <template v-else>
     <!-- アカウントの枠 -->
+    <section v-if="allRows.length" class="dash-state-overview" aria-label="エージェントの状態の構成">
+      <div class="dash-state-strip" aria-hidden="true"><i v-for="s in stateSummary" :key="s.state" :data-state="s.state" :style="{flex:s.count}"/></div>
+      <div class="dash-state-cards"><article v-for="s in stateSummary" :key="s.state"><StateIcon :state="s.state"/><span>{{ s.label }}</span><strong>{{ s.count }}</strong></article></div>
+    </section>
     <section class="dash-accounts" aria-label="アカウントの利用枠" data-dash-accounts>
       <h3 class="dash-sub">アカウントの利用枠</h3>
       <p v-if="accountGroups.length === 0" class="dash-muted" data-dash-no-accounts>まだ値がありません</p>
@@ -372,6 +380,8 @@ const loading = computed(() => !usage.loaded && !usage.unsupported && !usage.fai
 </template>
 
 <style scoped>
+.dash-state-overview{margin:16px 0 24px}.dash-state-strip{display:flex;gap:4px;height:10px;border-radius:8px;overflow:hidden}.dash-state-strip i{background:var(--soda-accent,#8197ec)}.dash-state-strip i[data-state="working"]{background:#62d8bd}.dash-state-strip i[data-state="waiting_input"],.dash-state-strip i[data-state="waiting_approval"]{background:#edbd6e}.dash-state-cards{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px}.dash-state-cards article{display:flex;align-items:center;gap:10px;border:1px solid var(--soda-border,#3c4c66);border-radius:12px;padding:12px 18px}.dash-state-cards strong{font-size:25px}
+
 .dash {
   box-sizing: border-box;
   height: 100%;

@@ -20,10 +20,16 @@ export const UsageHistoryParams = HistoryRange.refine((v) => {
 }, "有効な日付を最大366日間で指定してください");
 export type UsageHistoryParams = z.infer<typeof UsageHistoryParams>;
 
+export const UsageInsightFilters=z.object({
+ kind:z.enum(['claude','codex']).optional(), model:z.string().max(128).optional(), project:z.string().max(128).optional(), account:z.string().max(128).optional(), role:z.enum(['main','sub','unknown']).optional(),
+ session:z.string().max(128).optional(), timezone:z.string().max(80).default('UTC'),
+});
+
 export const UsageReportParams = z.object({
   settings: SummarySettingsSchema.pick({ kind: true, model: true }),
   accountKey: z.string().min(1).max(128).optional(),
   history: UsageHistoryParams.optional(),
+  insights:UsageInsightFilters.optional(),
 });
 export interface UsageReport {
   text: string;

@@ -78,3 +78,5 @@ export const TerminalHostKey: InjectionKey<TerminalHost> = Symbol("terminalHost"
 export const GraphTerminalControllerKey: InjectionKey<GraphTerminalController> = Symbol("graphTerminalController");
 
 export const LocalClientFactoryKey: InjectionKey<(onOpened:()=>void)=>import("@sodashitsu/client-core").MachineSummaryClient> = Symbol("localClientFactory");
+/** Read-only, existing authenticated connections. This never retargets the active terminal. */
+export const UsageInsightsPortKey:InjectionKey<(machineId:string,params:import('@sodashitsu/protocol').UsageInsightsParams)=>Promise<import('@sodashitsu/protocol').UsageInsights>>=Symbol('usageInsightsPort');

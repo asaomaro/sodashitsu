@@ -1,3 +1,4 @@
+import {UsageInsightsParams,type UsageInsights} from "./usageInsights.js";
 import {VoiceCoreCancelParams,VoiceCoreCallParams,type VoiceCoreResult} from "./voiceCore.js";
 import {ResourceAppReportParams,type ResourceMonitorSnapshot} from "./resourceMonitor.js";
 import { AssistantConversationParams, type AssistantConversationPage } from "./assistantConversation.js";
@@ -1642,6 +1643,7 @@ export const METHOD_SCHEMAS = {
   "agent.sessions": AgentSessionsParams,
   "agent.resume": AgentResumeParams,
   "agent.command": AgentCommandParams,
+  "agent.usage_insights": UsageInsightsParams,
   "agent.usage_history": UsageHistoryParams,
   "agent.usage_report": UsageReportParams,
   "agent.summary": AgentSummaryParams,
@@ -1841,6 +1843,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.sessions": { sessions: PastAgentSession[]; partial: boolean };
   "agent.resume": Record<string, never>;
   "agent.command": Record<string, never>;
+  "agent.usage_insights": UsageInsights;
   "agent.usage_history": UsageHistory;
   "agent.usage_report": UsageReport;
   "agent.summary": ConversationSummary;

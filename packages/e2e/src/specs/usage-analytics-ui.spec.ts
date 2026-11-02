@@ -1,4 +1,4 @@
-import type { HistoryGroup, UsageHistory, HistoryTokens } from "@sodashitsu/protocol";
+import type { UsageInsights, InsightGroup, HistoryGroup, UsageHistory, HistoryTokens } from "@sodashitsu/protocol";
 import { expect, test } from "../support/fixtures.js";
 
 /** Browser rendering test with generated numeric RPC responses. Server readers and isolated fake CLI are verified separately by unit tests; no model executes here. */
@@ -91,6 +91,11 @@ test("generated usage analytics charts, date selection and explicit report work 
       sources: ["生成した主会話の応答使用量"],
     };
   }
+  function insights(from:string,to:string,kind?:string):UsageInsights{
+    const h=history(from,to),group=(key:string,total:number,label=key):InsightGroup=>({key,label,input:total,output:0,cacheRead:0,cacheWrite:0,total,calls:1,tools:0,errors:0,knownResults:0});
+    const total=kind==='codex'?1200:10000,main=group('main',total*.38),sub=group('sub',total*.62);
+    return {activity:{started:3,completed:2,aborted:1,failed:0},from,to,asOf:Date.now(),timezone:'UTC',partial:true,collecting:false,retainedFrom:'2025-01-01',totals:{...group('total',total),tools:10,knownResults:9,errors:1},previous:group('previous',5000),byDay:h.byDay.map(r=>group(r.label,r.total)),previousByDay:[],byDayRole:h.byDay.flatMap(r=>[group(r.label+':main',r.total*.38),group(r.label+':sub',r.total*.62)]),byKind:[group(kind||'claude',total)],byModel:[group('sonnet',total)],byProject:[group('demo',total,'テストPJ')],byAccount:[group('generated',total,'設定A')],byRole:[main,sub],byHour:[group('09',total)],tools:[{name:'Bash',category:'shell',basis:'direct',calls:7,success:6,failed:1,unknown:0},{name:'mcp__github__read',category:'mcp',basis:'direct',calls:3,success:2,failed:0,unknown:1}],sessions:[{...main,key:'main',label:'main0001',kind:'claude',parent:null,role:'main',project:'テストPJ',account:'設定A',firstAt:Date.now(),lastAt:Date.now()},{...sub,key:'sub',label:'sub00001',kind:'claude',parent:'main',role:'sub',project:'テストPJ',account:'設定A',firstAt:Date.now(),lastAt:Date.now()}],coverage:[{kind:'claude',files:3,pending:0,missing:1,invalid:0,oversized:0,firstAt:Date.now(),lastAt:Date.now(),limited:false},{kind:'codex',files:1,pending:0,missing:0,invalid:0,oversized:0,firstAt:Date.now(),lastAt:Date.now(),limited:false}],options:{kinds:['claude','codex'],models:['sonnet','long-model-name-'.repeat(6)],projects:[{key:'demo',label:'テストPJ'}],accounts:[{key:'generated',label:'設定A'}]}};
+  }
   await page.routeWebSocket(/\/ws$/, (route) => {
     route.onMessage(async (data) => {
       if (typeof data !== "string") return;
@@ -102,6 +107,7 @@ test("generated usage analytics charts, date selection and explicit report work 
         if (request.method === "client.hello") result = { clientId: "generated-browser", snapshot };
         else if (request.method === "agent.usage") result = usage;
         else if (request.method === "agent.usage_watch") result = {};
+        else if (request.method === "agent.usage_insights") result=insights(request.params.from,request.params.to,request.params.kind);
         else if (request.method === "agent.usage_history")
           result = history(request.params.from, request.params.to);
         else if (request.method === "agent.account_cost")
@@ -120,7 +126,7 @@ test("generated usage analytics charts, date selection and explicit report work 
           };
         else if (request.method === "agent.usage_report")
           result = {
-            text: "生成した数値の説明。改善提案: キャッシュ利用の変化を確認してください。",
+            text: "現在の取り組み: 利用ダッシュボードの整備。生成した数値の説明。改善提案: キャッシュ利用の変化を確認してください。",
             kind: request.params.settings.kind,
             model: request.params.settings.model,
             updatedAt: Date.now(),
@@ -159,6 +165,21 @@ test("generated usage analytics charts, date selection and explicit report work 
   expect(resources.some((url) => url.includes("UsageAnalytics-"))).toBe(false);
   await page.locator("[data-screen-more]").click();
   await page.locator("[data-usage-analytics]").click();
+  const expanded=page.locator('[data-usage-insights]');
+  await expect(expanded.locator('.role-donut')).toContainText('62%');
+  await expect(expanded.locator('.parent-branch .child-nodes')).toContainText('sub00001');
+  await expect(expanded.locator('.period-bars button')).toHaveCount(30);
+  await expanded.getByRole('button',{name:'期間・条件',exact:true}).click();
+  await expanded.getByRole('combobox',{name:'種類',exact:true}).selectOption('codex');
+  await expanded.getByRole('button',{name:'集計・更新',exact:true}).click();
+  await expect(expanded.locator('.insights-metrics article').first()).toContainText('1200');
+  await expanded.getByText('取得範囲と欠損を確認',{exact:true}).click();
+  await expect(expanded.locator('.coverage')).toContainText('読取不可 1');
+  await expanded.locator('.insight-card').filter({has:page.getByRole('heading',{name:'ツール利用の構成',exact:true})}).locator('summary').click();
+  await expect(expanded).toContainText('mcp__github__read');
+  const download=page.waitForEvent('download');await expanded.getByRole('button',{name:'JSON',exact:true}).click();expect((await download).suggestedFilename()).toMatch(/^soda-usage-/);
+  await page.screenshot({path:test.info().outputPath('usage-insights-desktop.png'),fullPage:true});
+  await page.locator('.legacy-analysis>summary').click();
   const panel = page.locator("[data-usage-analytics-panel]"),
     hist = panel.locator("[data-usage-history]");
   await expect(hist).toContainText("claude · sonnet");
@@ -169,10 +190,15 @@ test("generated usage analytics charts, date selection and explicit report work 
     path: test.info().outputPath("usage-analytics-desktop.png"),
     fullPage: true,
   });
+  await panel.getByRole("button",{name:"エージェント分析",exact:true}).click();
+  await expect(panel.locator("[data-usage-insights]")).toBeHidden();
   await panel.locator("[data-analytics-account]").selectOption("generated");
   await expect(panel.locator("[data-analytics-model]")).toHaveCount(2);
   await panel.locator("[data-generate-usage-report]").click();
   await expect(panel.locator("[data-usage-report]")).toContainText("改善提案");
+  await expect(panel.locator("[data-usage-report]")).toContainText("現在の取り組み");
+  await page.screenshot({path:test.info().outputPath("agent-analysis-report.png"),fullPage:true});
+  await panel.getByRole("button",{name:"概要",exact:true}).click();
   const report = requests.find((r) => r.method === "agent.usage_report");
   expect(report?.params.history).toEqual({
     from: await hist.locator("[data-history-from]").inputValue(),
@@ -182,6 +208,7 @@ test("generated usage analytics charts, date selection and explicit report work 
   await page.locator(".mobile-shell-title").click();
   await page.locator("[data-picker-dashboard]").click();
   await expect(hist).toContainText("claude · sonnet");
+  if(await expanded.getByRole('button',{name:'期間・条件',exact:true}).getAttribute('aria-expanded')==='false')await expanded.getByRole('button',{name:'期間・条件',exact:true}).click();
   expect(await panel.evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
   await page.screenshot({
     path: test.info().outputPath("usage-analytics-narrow.png"),

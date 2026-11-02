@@ -1,7 +1,7 @@
 import { assistantPanelTarget, ordinaryAssistantUrl } from "./actions/assistantPanelLink.js";
 import { assistantPanelGuard } from "./actions/assistantPanelGuard.js";
 import { useViewerTabsStore } from "./store/viewerTabs.js";
-import { LocalClientFactoryKey } from "./injection.js";
+import { UsageInsightsPortKey, LocalClientFactoryKey } from "./injection.js";
 import { loadStatuslineSettings, TERMINAL_PALETTES, type SharedPrefs } from "@sodashitsu/protocol";
 import type { ITerminalOptions } from "@xterm/xterm";
 // xterm.js の必須の CSS（canvas の重ね方・入力用 textarea の隠し方）。無いと描画用の canvas が端末の下へ
@@ -852,6 +852,11 @@ window.addEventListener("drop", (ev) => {
 const app = createApp(App);
 app.use(pinia);
 app.provide(ConnectionKey, conn);
+app.provide(UsageInsightsPortKey,(machineId,params)=>{
+ const target=machineId===machines.selectedId?conn:machineWiringBox.current?.summaryClient(machineId) as MachineSummaryClient | undefined;
+ if(!target)return Promise.reject(new Error("machine unavailable"));
+ return target.request("agent.usage_insights",params);
+});
 app.provide(
   LocalClientFactoryKey,
   (onOpened) =>

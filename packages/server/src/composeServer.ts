@@ -138,6 +138,7 @@ import { GraphPaneCleanup } from "./graph/GraphPaneCleanup.js";
 import { GraphMaintainer } from "./graph/GraphMaintainer.js";
 import { SubagentTracker } from "./agent/SubagentTracker.js";
 import { SubagentTranscriptReader } from "./agent/SubagentTranscript.js";
+import { UsageInsightsReader } from "./usage/UsageInsights.js";
 import { UsageService } from "./usage/UsageService.js";
 import { UsageFeed } from "./usage/UsageFeed.js";
 import { ReportedUsage, UsageReportIntake } from "./usage/reportedUsage.js";
@@ -820,6 +821,7 @@ export async function composeServer(
     agentFork,
     subagentTranscripts,
     usage,
+    usageInsights:new UsageInsightsReader({stateDir:join(options.stateDir,"usage-insights"),workspaces:()=>session.snapshot().workspaces}),
     usageWatch,
     notificationTest: () => bus.publish({event:"notification.test",data:{message:"通知テスト：右上のスナックバーの動作確認です"}}),
     serverSessions: () => listServerSessions(options.sessionRoot, options.sessionName), // 20260926-named-session-ui

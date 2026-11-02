@@ -99,3 +99,5 @@ export * from "./assistantPersona.js";
 export {ASSISTANT_CHARACTER_PROFILE_SOURCE} from "./assistantCharacterProfiles.js";
 export * from "./resourceMonitor.js";
 export * from "./voiceCore.js";
+
+export * from "./usageInsights.js";

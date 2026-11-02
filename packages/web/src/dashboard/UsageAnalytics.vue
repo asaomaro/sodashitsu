@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
-import { usageAnalytics, type AccountCostResult, type UsageReport } from "@sodashitsu/protocol";
+import { usageAnalytics, type AccountCostResult, type UsageReport,type UsageInsightsParams } from "@sodashitsu/protocol";
 import { ConnectionKey } from "../injection.js";
 import { useUsageStore } from "../store/usage.js";
 import { kindLabel } from "./dashboardModel.js";
 import UsageHistoryPanel from "./UsageHistoryPanel.vue";
+import UsageInsightsPanel from "./UsageInsightsPanel.vue";
+const screen=ref("overview");
+const insightSelection=ref<UsageInsightsParams|null>(null);
 const historyRange = ref<{ from: string; to: string } | null>(null);
 const usage = useUsageStore(),
   conn = inject(ConnectionKey, null);
@@ -131,6 +134,7 @@ async function generate() {
       settings: { kind: reportKind.value, model: model.value },
       ...(key ? { accountKey: key } : {}),
       ...(historyRange.value ? { history: historyRange.value } : {}),
+      ...(insightSelection.value?{insights:insightSelection.value}:{}),
     });
     if (!disposed) {
       report.value = result;
@@ -139,7 +143,7 @@ async function generate() {
   } catch {
     if (!disposed)
       reportError.value =
-        "レポートを生成できませんでした。選択したエージェントのログインとモデル設定、接続を確認してください。";
+        "レポートを生成できませんでした。選択したエージェントのログインとモデル設定、接続を確認してください。対象の作業が切り替わった場合は再生成してください。";
   } finally {
     if (!disposed) reportBusy.value = false;
   }
@@ -148,13 +152,16 @@ async function generate() {
 
 <template>
   <section class="analytics" aria-label="エージェント利用分析" data-usage-analytics-panel>
+    <nav class="analysis-navigation" aria-label="利用分析の画面"><button v-for="tab in [['overview','概要'],['compare','比較'],['agents','親子・ツール'],['report','エージェント分析']]" :key="tab[0]" :aria-pressed="screen===tab[0]" @click="screen=tab[0]!">{{ tab[1] }}</button></nav>
+    <UsageInsightsPanel v-show="screen!=='report'" :layout="screen" :active="screen!=='report'" @loaded="historyRange = $event" @insights="insightSelection=$event" />
+    <details v-show="screen!=='report'" class="legacy-analysis"><summary>現在のpaneと従来の集計</summary>
     <p>
       このマシンで取得できる利用状況です。期間別の履歴と、現在のpaneの状況をそれぞれ表示します。現在paneの種類別トークンは同じ数え方の中で比較する累計・記録値で、期間消費量や請求額ではありません。同じ会話を複数paneで開いている場合は重複を含みます。
     </p>
     <p v-if="!values.length" role="status">
       分析できる利用状況がありません。記録を取得できるエージェントを起動すると表示します。
     </p>
-    <UsageHistoryPanel @loaded="historyRange = $event" />
+    <UsageHistoryPanel @loaded="historyRange = $event; insightSelection=null" />
     <div class="charts">
       <section
         v-for="section in sections"
@@ -210,6 +217,8 @@ async function generate() {
         >
       </section>
     </div>
+    </details>
+    <section v-show="screen==='report'" class="agent-analysis" data-agent-analysis><h2>エージェントによる分析</h2><p>現在の取り組み、使われ方、改善案をまとめて確認します。生成するまでモデルは呼び出しません。</p>
     <section class="chart">
       <h3>モデル別コスト · 保存済みセッション</h3>
       <label
@@ -258,7 +267,7 @@ async function generate() {
     <section class="chart" aria-label="利用状況レポート">
       <h3>エージェントによる利用状況レポート</h3>
       <p>
-        「レポートを生成」を押すと、このマシンでログイン済みのエージェントが数値・モデル名・時点から説明と改善提案を作ります。会話本文は送りません。モデルの利用が発生します。
+        「レポートを生成」を押すと、このマシンでログイン済みのエージェントが数値・モデル名・時点から説明と改善提案を作ります。対象は現在接続PCです。別PCの比較結果は含めません。現在の取り組みを説明するため、現在のエージェントの直近会話の限定抜粋、作業項目、保存済み要約を生成先へ渡します。モデルの利用が発生します。
       </p>
       <label
         >エージェント
@@ -295,10 +304,13 @@ async function generate() {
         >
       </template>
     </section>
+    </section>
   </section>
 </template>
 
 <style scoped>
+.analysis-navigation{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 20px}.analysis-navigation button{font:inherit;padding:9px 14px;border:1px solid var(--soda-menu-border);border-radius:9px;color:inherit;background:var(--soda-menu-bg);cursor:pointer}.analysis-navigation button[aria-pressed=true]{border-color:var(--soda-accent);background:color-mix(in srgb,var(--soda-accent) 16%,var(--soda-menu-bg))}.agent-analysis h2{font-size:26px}
+
 .analytics {
   max-width: 100rem;
   margin: auto;

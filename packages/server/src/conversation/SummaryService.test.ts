@@ -277,6 +277,8 @@ it.skipIf(process.platform === "win32")("usage reports reuse the isolated runner
   const prompt = await readFile(join(f.dir, "prompt.txt"), "utf8");
   expect(prompt).toContain('"tokens":123');
   expect(prompt).toContain("期間推移");
+  expect(prompt).toContain("現在の取り組み");
+  expect(prompt).toContain("数値だけから作業内容や完了を推測しない");
   await expect(f.service.usageReport({ kind: "codex", model: "" }, "a".repeat(100001))).rejects.toThrow(/上限/);
 });
 it.skipIf(process.platform === "win32")("stops a report when its connection authorization expires during execution", async () => {
