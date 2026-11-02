@@ -5,4 +5,6 @@
 - [x] 認証・対象差替え・PC条件失効の回帰試験
 - [x] 独立レビューと修正の再レビュー
 - [x] ビルド・型検査・全体テスト・関連E2E
-- [ ] 稼働環境への反映とmain統合・push
+- [x] 稼働環境への反映とmain統合・push
+
+統合結果: 788f2f05（種類別走査枠）と9dbd6e45（グラフ・作業分析）をmainへfast-forwardし、origin/mainへpush済み。全体13,588件成功／1件skip。main上でもserver buildを再確認した。別worktreeの未コミット変更は触れていない。
