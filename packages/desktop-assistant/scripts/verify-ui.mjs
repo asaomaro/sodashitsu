@@ -633,14 +633,25 @@ try {
   page=conversationPage;
   await page.evaluate(()=>window.remindersCallback({revision:3,connected:true,jobs:[],runs:[{id:"00000000-0000-4000-8000-000000000044",input:"会話で確認するリマインダー"}],message:"届いています"}));
   await expect(page.locator("#reminder-notices")).toContainText("会話で確認するリマインダー");
+  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:98,latestNotification:{seq:1,title:"リマインダー：予定",message:"会話で確認するリマインダー"},notices:[{id:"00000000-0000-4000-8000-000000000092",message:"確認してください。"}]}));
+  await expect(page.locator("#notification-indicator")).toContainText("リマインダー：予定");
+  await page.locator("#notification-indicator").press("Enter");
+  await expect(page.locator("#notification-indicator")).toBeHidden();
+
   await page.locator("#reminder-notices").getByRole("button",{name:"確認しました",exact:true}).press("Enter");
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["ack-reminder",{id:"00000000-0000-4000-8000-000000000044"}]);
   await page.evaluate(()=>window.remindersCallback({revision:4,connected:true,jobs:[],runs:[],message:""}));
   const reply=page.locator(".notice textarea");await reply.fill("通知元への返答");
   await page.evaluate(()=>window.noticeCallback({status:"connected",revision:99,notices:[{id:"00000000-0000-4000-8000-000000000092",message:"<img src=x onerror=alert(1)>確認してください。"}]}));
-  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:100,notices:[{id:"00000000-0000-4000-8000-000000000092",title:"実装担当 (12345678) / 操舵室",message:"確認待ち\n直近の応答：変更を適用しますか？"}]}));
+  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:100,latestNotification:{seq:2,id:"00000000-0000-4000-8000-000000000092",title:"実装担当 (12345678) / 操舵室",message:"確認待ち"},notices:[{id:"00000000-0000-4000-8000-000000000092",title:"実装担当 (12345678) / 操舵室",message:"確認待ち\n直近の応答：変更を適用しますか？"}]}));
   await expect(page.locator(".notice small")).toContainText("実装担当");
   await expect(page.locator(".notice-text")).toContainText("変更を適用しますか？");
+  await expect(page.locator("#notification-indicator")).toBeVisible();
+  await expect(page.locator("#notification-indicator")).toContainText("新しい通知：実装担当");
+  await expect(page.locator("#notification-indicator")).toBeInViewport();
+  if(process.env.SODA_ASSISTANT_UI_SCREENSHOT)await page.screenshot({path:process.env.SODA_ASSISTANT_UI_SCREENSHOT});
+  await page.locator("#notification-indicator").press("Enter");
+  await expect(page.locator("#notification-indicator")).toBeHidden();
   await page.locator(".notice-title-button").press("Enter");
   assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["notice-read",{noticeId:"00000000-0000-4000-8000-000000000092"}]);
   await expect(page.locator(".notice-current")).toHaveCount(1);

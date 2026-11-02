@@ -14,6 +14,19 @@
  const stateText = { connected: "通知を受信しています。", connecting: "操舵室へ接続しています。", login: "操舵室にログインすると、作業の知らせをお届けします。", offline: "操舵室との接続が切れました。再接続を待っています。", disabled: "アシスタントは無効です。" };
  const noticeRows=new Map();
  let noticeFocusRevision=-1;
+ const notificationIndicator=document.getElementById("notification-indicator");
+ let notification=null,readNotificationSequence=-1;
+ const acknowledgeNotification=id=>{
+  if(notification && (!id || notification.id===id)){readNotificationSequence=notification.seq;notificationIndicator.hidden=true;}
+ };
+ notificationIndicator.onclick=async()=>{
+  const current=notification;if(!current)return;
+  try{
+   if(current.id&&noticeRows.has(current.id)){await window.assistant.readNotice({noticeId:current.id});selectNotice(current.id);}
+   else {const target=document.getElementById("reminder-notices");if(target&&!target.hidden)target.scrollIntoView({block:"start"});else document.getElementById("status").textContent=current.message;}
+   if(notification?.seq===current.seq)acknowledgeNotification();
+  }catch(error){document.getElementById("status").textContent=error.message;}
+ };
  const selectNotice=id=>{
   const row=noticeRows.get(id);
   for(const item of noticeRows.values())item.classList.toggle("notice-current",item===row);
@@ -47,6 +60,10 @@
    agentList=state.agentList||{agents:[],total:0,working:0,blocked:0};rosterStatus=state.status;renderAgents();
    document.getElementById("status").textContent = stateText[state.status] || "接続状態を確認しています。";
    const present=new Set(state.notices.map(notice=>notice.id));
+   notification=state.latestNotification??null;
+   if(notification?.id&&!present.has(notification.id))readNotificationSequence=Math.max(readNotificationSequence,notification.seq);
+   notificationIndicator.hidden=!notification||notification.seq<=readNotificationSequence;
+   if(notification){notificationIndicator.textContent=`新しい通知：${notification.title}`;notificationIndicator.title=notification.message;}
    inbox.hidden=state.notices.length===0;
    let added=false;
    for(const [id,row] of noticeRows)if(!present.has(id)){row.remove();noticeRows.delete(id);}
@@ -69,7 +86,7 @@
      submit.addEventListener("click",async()=>{if(!reply.value.trim())return;submit.disabled=true;try{await window.assistant.replySource({noticeId:notice.id,text:reply.value});reply.value="";}catch(error){report(error);}finally{submit.disabled=false;}});
      const destination=document.createElement("small"),read=document.createElement("button");read.type="button";read.className="notice-title-button";read.textContent=notice.title || "通知元";
      read.title="この通知の内容を確認";
-     read.addEventListener("click",()=>window.assistant.readNotice({noticeId:notice.id}).then(()=>selectNotice(notice.id)).catch(report));destination.append(read);
+     read.addEventListener("click",()=>window.assistant.readNotice({noticeId:notice.id}).then(()=>{selectNotice(notice.id);acknowledgeNotification(notice.id);}).catch(report));destination.append(read);
      destination.title=notice.title || "通知元";
      const actions=document.createElement("span");actions.className="notice-actions";actions.append(open,main);
      entry.append(destination,actions,words);

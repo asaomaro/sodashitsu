@@ -88,3 +88,5 @@
 
 .speech #reminder-notices{max-height:150px;overflow:auto;flex:0 0 auto}.speech #reminder-notices[hidden]{display:none}
 .settings #icon-rotation-setting[hidden]{display:none}
+
+.speech #notification-indicator{flex:0 0 auto;max-width:100%;margin:8px 0;padding:7px 10px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #e5be61;font-size:12px}.speech #notification-indicator[hidden]{display:none}

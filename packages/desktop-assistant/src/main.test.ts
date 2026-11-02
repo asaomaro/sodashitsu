@@ -1289,42 +1289,30 @@ it("toggles the bubble on repeated captain clicks and preserves it without endin
   await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });
 
-it("opens the exact notice in chat, keeps compact notices beside chat, and dismisses only matching notices", async()=>{
+it("suppresses compact notices while chat is open and publishes a notification indicator",async()=>{
  const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
  await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:false,mode:"tray"});
- const connection=fixture.connections.at(-1)!;
- const first={id:"compact-first",title:"実装担当",message:"質問の内容",at:1};
+ const connection=fixture.connections.at(-1)!,first={id:"first",title:"実装担当",message:"質問の内容",at:1};
  connection.options.changed([first],true);
  const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
- expect(compact.url).toContain("/notice.html");expect(compact.getBounds().height).toBe(220);
  const click={sender:compact.webContents,senderFrame:compact.webContents.mainFrame};
+ const stale=(await fixture.handlers.get("assistant:notice-state")!(click) as any).revision;
+ connection.options.changed([{...first,message:"新しい詳細"}],false);
+ await fixture.handlers.get("assistant:notice-dismiss")!(click,{revision:stale});expect(compact.isDestroyed()).toBe(false);
+ await fixture.handlers.get("assistant:notice-open")!(click,{revision:stale});expect(compact.isDestroyed()).toBe(false);
  await fixture.handlers.get("assistant:notice-open")!(click,{revision:(await fixture.handlers.get("assistant:notice-state")!(click) as any).revision});
  expect(compact.isDestroyed()).toBe(true);
  const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
- expect(chat.url).toContain("/bubble.html");const count=fixture.windows.length;
- connection.options.changed([{...first,id:"second",at:2}],true);
- expect(fixture.windows.length).toBe(count+1);
- const second=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(second.isVisible()).toBe(true));
- const local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
- const secondEvent={sender:second.webContents,senderFrame:second.webContents.mainFrame};
- const stale=(await fixture.handlers.get("assistant:notice-state")!(secondEvent) as any).revision;
- connection.options.changed([{...first,id:"second",message:"新しい詳細",at:2}],false);
- await fixture.handlers.get("assistant:notice-dismiss")!(secondEvent,{revision:stale});expect(second.isDestroyed()).toBe(false);
- await fixture.handlers.get("assistant:notice-open")!(secondEvent,{revision:stale});expect(second.isDestroyed()).toBe(false);
- expect(await fixture.handlers.get("assistant:inbox")!(local)).toMatchObject({focusedNoticeId:first.id});
- // Opening chat and reading an older notice must not discard a newer notification.
- await fixture.handlers.get("assistant:chat")!(event);expect(second.isDestroyed()).toBe(false);
- connection.options.changed([first,{...first,id:"second",at:2}],false);
- await fixture.handlers.get("assistant:notice-read")!(local,{noticeId:first.id});expect(second.isDestroyed()).toBe(false);
- await fixture.handlers.get("assistant:notice-read")!(local,{noticeId:"second"});expect(second.isDestroyed()).toBe(true);
- await fixture.handlers.get("assistant:hide")!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame});
+ const local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame},count=fixture.windows.length;
+ connection.options.changed([{...first,id:"second",title:"レビュー担当",at:2}],true);
+ expect(fixture.windows.length).toBe(count);
+ expect(await fixture.handlers.get("assistant:inbox")!(local)).toMatchObject({latestNotification:{id:"second",title:"レビュー担当"},notices:[{id:"second"}]});
+ await fixture.handlers.get("assistant:hide")!(local);
  connection.options.changed([{...first,id:"third",at:3}],true);
- const third=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(third.isVisible()).toBe(true));
- const thirdEvent={sender:third.webContents,senderFrame:third.webContents.mainFrame};
- await fixture.handlers.get("assistant:notice-dismiss")!(thirdEvent,{revision:(await fixture.handlers.get("assistant:notice-state")!(thirdEvent) as any).revision});
- expect(third.isDestroyed()).toBe(true);expect(chat.isVisible()).toBe(false);
- await fixture.handlers.get("assistant:chat")!(event);
- expect(await fixture.handlers.get("assistant:inbox")!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame})).toMatchObject({notices:[{id:"third"}]});
+ const third=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(third.isVisible()).toBe(true));expect(third.url).toContain("/notice.html");
+ await fixture.handlers.get("assistant:chat")!(event);expect(third.isDestroyed()).toBe(true);expect(chat.isVisible()).toBe(true);
+ // Merely opening chat closes an existing compact window without losing its inbox entry.
+ expect(await fixture.handlers.get("assistant:inbox")!(local)).toMatchObject({notices:[{id:"third"}]});
  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });
 it("keeps newer notifications when an older reply completes and retains failed replies",async()=>{
@@ -1335,14 +1323,14 @@ it("keeps newer notifications when an older reply completes and retains failed r
  const local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame},connection=fixture.connections.at(-1)!,rpc=fixture.controls.at(-1)!;
  const first={id:"00000000-0000-4000-8000-000000000171",key:"attention:first",kind:"attention",title:"担当",message:"確認",at:1,
   source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:"00000000-0000-4000-8000-000000000001",workspaceId:"00000000-0000-4000-8000-000000000002",agentInstanceId:"00000000-0000-4000-8000-000000000003"}};
- connection.options.changed([first],true);const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
+ connection.options.changed([first],true);const windowCount=fixture.windows.length;
  rpc.request.mockRejectedValueOnce(Error("送信失敗"));
- await expect(fixture.handlers.get("assistant:source-reply")!(local,{noticeId:first.id,text:"返答"})).rejects.toThrow("送信失敗");expect(compact.isDestroyed()).toBe(false);
+ await expect(fixture.handlers.get("assistant:source-reply")!(local,{noticeId:first.id,text:"返答"})).rejects.toThrow("送信失敗");expect(fixture.windows.length).toBe(windowCount);
  let finish!:(value:unknown)=>void;rpc.request.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
  const pending=fixture.handlers.get("assistant:source-reply")!(local,{noticeId:first.id,text:"返答"});
  const second={...first,id:"00000000-0000-4000-8000-000000000172",at:2};connection.options.changed([first,second],true);
- finish({ok:true});await pending;expect(compact.isDestroyed()).toBe(false);
- rpc.request.mockResolvedValueOnce({ok:true});await fixture.handlers.get("assistant:source-reply")!(local,{noticeId:second.id,text:"新しい通知への返答"});expect(compact.isDestroyed()).toBe(true);
+ finish({ok:true});await pending;expect(await fixture.handlers.get("assistant:inbox")!(local)).toMatchObject({latestNotification:{id:second.id}});
+ rpc.request.mockResolvedValueOnce({ok:true});await fixture.handlers.get("assistant:source-reply")!(local,{noticeId:second.id,text:"新しい通知への返答"});expect(fixture.windows.length).toBe(windowCount);
  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });
 it("does not reopen an acknowledged notification after a delayed fullscreen check",async()=>{
@@ -1353,6 +1341,16 @@ it("does not reopen an acknowledged notification after a delayed fullscreen chec
  await vi.waitFor(()=>expect(finish).toBeTypeOf("function"));
  await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
  await fixture.handlers.get("assistant:notice-read")!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame},{noticeId:item.id});
+ const count=fixture.windows.length;finish(false);await Promise.resolve();await Promise.resolve();expect(fixture.windows.length).toBe(count);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+it("does not open a compact after chat is shown during the fullscreen check",async()=>{
+ const settings=fixture.windows[0]!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,quietFullscreen:true,mode:"character",voiceEnabled:false});
+ let finish!:(value:boolean)=>void;fixture.fullscreenQuery.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const item={id:"ack-before-display",title:"担当",message:"確認",at:1};fixture.connections.at(-1)!.options.changed([item],true);
+ await vi.waitFor(()=>expect(finish).toBeTypeOf("function"));
+ await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
  const count=fixture.windows.length;finish(false);await Promise.resolve();await Promise.resolve();expect(fixture.windows.length).toBe(count);
  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });
@@ -1489,9 +1487,9 @@ it("opens reusable tools separately, transfers drafts without sending, and revok
  const check=fixture.permissionChecks.get("assistant-local")!;expect(check(tools.webContents,"media","soda-assistant://app",{isMainFrame:true,requestingUrl:tools.url,mediaType:"audio"})).toBe(true);
  await fixture.handlers.get("assistant:hide")!(local);expect(tools.isDestroyed()).toBe(true);expect(bubble.isVisible()).toBe(true);
  fixture.connections.at(-1)!.options.changed([{id:"notice-after-tools-close",title:"担当",message:"完了",at:100}],true);
- const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
- const noticeBounds=compact.getBounds(),chatBounds=bubble.getBounds();
- expect(noticeBounds.x+noticeBounds.width<=chatBounds.x||noticeBounds.x>=chatBounds.x+chatBounds.width||noticeBounds.y+noticeBounds.height<=chatBounds.y||noticeBounds.y>=chatBounds.y+chatBounds.height).toBe(true);
+ expect(bubble.isVisible()).toBe(true);
+ expect(fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/notice.html'))).toHaveLength(0);
+ expect(await fixture.handlers.get("assistant:inbox")!(chat)).toMatchObject({latestNotification:{id:"notice-after-tools-close"}});
  expect(check(tools.webContents,"media","soda-assistant://app",{isMainFrame:true,requestingUrl:tools.url,mediaType:"audio"})).toBe(false);
  await fixture.handlers.get("assistant:tools-open")!(chat);const reopened=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(reopened.isVisible()).toBe(true));
  await fixture.handlers.get("assistant:draft-message")!({sender:reopened.webContents,senderFrame:reopened.webContents.mainFrame},{text:"未受領の文面"});

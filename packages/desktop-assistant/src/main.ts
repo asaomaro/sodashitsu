@@ -178,6 +178,11 @@ let automaticNoticeEpoch = 0;
 let compact: BrowserWindow | null = null;
 let compactPayload: { id?: string; title: string; message: string } | null = null;
 let compactRevision = 0;
+let latestNotification: {seq:number;id?:string;title:string;message:string}|null=null;
+let notificationSequence=0;
+function chatVisible():boolean {
+  return !!(bubble && !bubble.isDestroyed() && (bubbleRequested || bubble.isVisible() && !bubble.isMinimized()));
+}
 let focusedNoticeId:string|null=null,noticeFocusRevision=0;
 const handledCompactIds=new Set<string>();
 function dismissCompact(id?:string):void {
@@ -205,6 +210,7 @@ function refreshCompact(): void {
   compact?.webContents.send("assistant:notice-changed", compactState());
 }
 function showCompact(payload: { id?: string; title: string; message: string }): void {
+  if (chatVisible()) return;
   if (payload.id && handledCompactIds.has(payload.id)) return;
   if (payload.id) {
     const current = [...localNotices, ...remoteRows].find(n => n.id === payload.id);
@@ -222,7 +228,7 @@ function showCompact(payload: { id?: string; title: string; message: string }): 
   compact = win;
   positionCompact();
   win.once("ready-to-show", () => {
-    if (!win.isDestroyed() && compact === win && compactPayload && !quitting && !suspended && controller.preferences.enabled && !controller.preferences.mute) win.showInactive();
+    if (!win.isDestroyed() && compact === win && compactPayload && !chatVisible() && !quitting && !suspended && controller.preferences.enabled && !controller.preferences.mute) win.showInactive();
   });
   win.on("closed", () => { if (compact === win) compact = null; });
 }
@@ -377,6 +383,7 @@ function localWindow(role: LocalRole): BrowserWindow {
       if (!win.isDestroyed()) win.destroy(); // End capture even if the hidden renderer cannot respond.
     }
   };
+  win.on("show", () => { if (role === "bubble") closeCompact(); });
   win.on("hide", () => { if (role === "bubble") bubbleRequested = false; discardOnHide(); });
   win.on("minimize", () => { if (role === "bubble") bubbleRequested = false; discardOnHide(); });
   win.webContents.on("did-start-navigation", (_event, _url, _inPlace, mainFrame) => {
@@ -396,6 +403,8 @@ function notifyBubble(payload?: { id?: string; title: string; message: string })
   const latest = [...localNotices, ...remoteRows].sort((a,b) => b.at - a.at)[0];
   payload ??= latest ? { id: latest.id, title: latest.title || "エージェントからの通知", message: latest.message } : { title: "操舵室からのお知らせ", message: "新しい通知が届きました。" };
   const content = payload;
+  latestNotification = {...payload,seq:++notificationSequence};
+  publishInbox();
   const requestEpoch = ++automaticNoticeEpoch;
   const speechEpoch=voiceEpoch;
   const preferences = controller.preferences;
@@ -433,6 +442,7 @@ function notifyBubble(payload?: { id?: string; title: string; message: string })
 /** Explicit user action focuses chat; verbal notices never take focus. */
 function openBubble(focus = true): void {
   if (!controller.preferences.enabled) return;
+  closeCompact();
   bubbleRequested = true;
   if (bubble && !bubble.isDestroyed()) {
     if (focus) {
@@ -510,7 +520,7 @@ function inbox() {
     ...(noticeStatus === "connected" ? backend?.feed.agents ?? [] : []),
     ...(remoteNotices?.agents ?? []),
   ] : [];
-  return { notices, status: noticeStatus, revision: inboxRevision, agentList: agentRoster(rows),focusedNoticeId,noticeFocusRevision };
+  return { notices, status: noticeStatus, revision: inboxRevision, agentList: agentRoster(rows),latestNotification,focusedNoticeId,noticeFocusRevision };
 }
 function publishInbox(): void {
   refreshCompact();
@@ -609,8 +619,8 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     changed: (next, added) => {
       if (remoteNotices !== remote) return;
       remoteRows = next;
-      if (added) notifyBubble();
       combineNotices();
+      if (added) notifyBubble();
     },
   });
   remoteNotices = remote;
@@ -655,6 +665,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     backend = null;
     backendOrigin = null;
     notices = [];
+    latestNotification = null;
     localNotices = [];
     remoteRows = [];
     noticeStatus = "disabled";
