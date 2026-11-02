@@ -63,20 +63,23 @@ export class UsageHistoryReader {
     const from = Date.parse(range.from + "T00:00:00Z"),
       until = Date.parse(range.to + "T00:00:00Z") + 86400000;
     const events = new Map<string, Event>();
-    let budget = 64 * 1024 * 1024,
+    // Reserve bounded work for each kind: a large Claude history must not consume Codex's scan.
+    let budget = 32 * 1024 * 1024,
       entries = 0,
       files = 0,
       excluded = 0,
       partial = false;
-    const deadline = performance.now() + 4000;
+    let deadline = performance.now() + 2000,
+      fileLimit = 256,
+      eventLimit = 50000;
     const running = () => {
       check();
       const ok =
-        entries < 20000 &&
-        files < 512 &&
+        entries < 10000 &&
+        files < fileLimit &&
         budget > 0 &&
         performance.now() < deadline &&
-        events.size < 100000;
+        events.size < eventLimit;
       if (!ok) partial = true;
       return ok;
     };
@@ -260,6 +263,12 @@ export class UsageHistoryReader {
       if (root)
         await walk(root, "claude", 1, createHash("sha256").update(root).digest("hex").slice(0, 16));
     }
+    // The second kind gets its own budget even when the first kind reaches a limit.
+    budget = 32 * 1024 * 1024;
+    entries = 0;
+    deadline = performance.now() + 2000;
+    fileLimit = files + 256;
+    eventLimit = events.size + 50000;
     const codexHome = (
       this.options.codexHome ?? (() => process.env.CODEX_HOME || join(homedir(), ".codex"))
     )();

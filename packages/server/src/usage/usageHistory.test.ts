@@ -88,3 +88,20 @@ it("includes archived Codex records without double counting a copy in active ses
   await writeFile(join(f.codex,"archived_sessions",filename),data);
   expect(await f.reader.read(range)).toMatchObject({calls:1,sessions:1,totals:{total:120}});
 });
+
+it.each(["bytes", "files"])("reserves Codex scanning after Claude reaches the %s limit", async (limit) => {
+  const f = await fixture();
+  const data = lines(claude("response", "2026-10-01T00:00:00Z"));
+  // Each source retains a bounded share of the existing total scan limits.
+  const payload = limit === "bytes" ? " ".repeat(2 * 1024 * 1024) + "\n" + data : data;
+  for (let i = 0; i < (limit === "bytes" ? 34 : 513); i++) {
+    await writeFile(join(f.project, `session-${i}.jsonl`), payload);
+  }
+  await writeFile(join(f.day, "rollout-2026-10-01T00-00-00-11111111-1111-4111-8111-111111111111.jsonl"),
+    lines(count("2026-10-01T00:00:00Z", 100, 20)));
+  const result = await f.reader.read(range);
+  expect(result.partial).toBe(true);
+  expect(result.byKind.map(row => row.label).sort()).toEqual(["claude", "codex"]);
+  expect(result.byKind.find(row => row.label === "codex")?.total).toBe(120);
+  expect(result.files).toBeLessThanOrEqual(512);
+});
