@@ -97,17 +97,32 @@ function onButtonKeydown(ev: KeyboardEvent): void {
       @keydown="onButtonKeydown"
     >
       <span class="machine-label">{{ compact ? shortLabel : label }}</span>
-      <span v-if="!compact" class="machine-state" :data-state="state">{{ stateText }}</span>
     </button>
-    <button data-assistant-feature v-if="machineId !== LOCAL_MACHINE_ID" type="button" class="machine-desktop"
-      :disabled="state !== 'online'" :aria-label="`${label} のデスクトップを別窓で開く`"
-      title="デスクトップを別窓で開く" @click="openDesktop" @keydown="onButtonKeydown">▤</button>
+    <component :is="machineId === LOCAL_MACHINE_ID ? 'span' : 'button'"
+      :type="machineId === LOCAL_MACHINE_ID ? undefined : 'button'"
+      class="machine-desktop soda-button-plain" :data-state="state"
+      :role="machineId === LOCAL_MACHINE_ID ? 'img' : undefined"
+      :disabled="machineId !== LOCAL_MACHINE_ID && state !== 'online' ? true : undefined"
+      :aria-label="machineId === LOCAL_MACHINE_ID ? `${label}: ${stateText}` : `${label} のデスクトップを別窓で開く・${stateText}`"
+      :title="machineId === LOCAL_MACHINE_ID ? `${label}: ${stateText}` : `${label}: ${stateText} — デスクトップを別窓で開く`"
+      @click="openDesktop" @keydown="onButtonKeydown">
+      <svg class="machine-pc-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="13" rx="2" />
+        <path d="M12 16v5m-4 0h8" />
+      </svg>
+    </component>
 
   </div>
 </template>
 
 <style scoped>
-.machine-desktop{flex:none;padding:0.15em 0.4em;}
+.machine-desktop{flex:none;display:inline-flex;align-items:center;justify-content:center;padding:0.15em 0.3em;border:0;background:none;font:inherit;cursor:pointer;}
+span.machine-desktop,.machine-desktop:disabled{cursor:default;opacity:1;}
+.machine-pc-icon{display:block;color:var(--soda-state-idle,#8b93a5);}
+.machine-desktop[data-state="online"] .machine-pc-icon{color:var(--soda-state-done,#50a55b);}
+.machine-desktop[data-state="connecting"] .machine-pc-icon,
+.machine-desktop[data-state="reconnecting"] .machine-pc-icon{color:var(--soda-warn-fg,#ffb86c);}
+.machine-desktop[data-state="attention"] .machine-pc-icon{color:var(--soda-error-fg,#ff5555);}
 .machine-header {
   display: flex;
   align-items: center;
@@ -156,16 +171,5 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.machine-state {
-  flex: none;
-  margin-left: auto;
-  font-size: 0.8em;
-  font-weight: normal;
-  opacity: 0.75;
-}
-.machine-state[data-state="attention"] {
-  color: var(--soda-warn-fg, #ffb86c);
-  opacity: 1;
 }
 </style>
