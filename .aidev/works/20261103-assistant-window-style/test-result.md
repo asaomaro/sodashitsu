@@ -10,3 +10,7 @@
 - ブラウザ確認はElectron API部分を生成したpreloadで置き換えている。nativeウィンドウの実際の移動/リサイズ/最大化はOS実機の受け入れ範囲として残る。ホストの操作dispatchと送信元制限は実main.tsをテストしている。
 
 元ログ: /tmp/soda-window-style-{build,typecheck,final-tests,final-ui}.log。
+
+## 稼働反映
+
+mainへfast-forward統合後、安全なhandoffを実行。6つの実端末を停止せず維持し、反映前の8ペインUUIDすべてが反映後も存在することを確認。デスクトップアシスタントはphase=running / stage=readyへ復帰した。設定とツールは次に開くと新しい外観になる。
