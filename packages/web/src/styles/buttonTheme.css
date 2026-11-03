@@ -20,7 +20,9 @@
 @supports (appearance:base-select){
  :root select:not([multiple]):not([size]),:root select:not([multiple]):not([size])::picker(select){appearance:base-select}
  :root select:not([multiple]):not([size]){display:flex;align-items:center;justify-content:space-between;gap:8px;font:inherit;cursor:pointer}
- :root select::picker-icon{color:var(--soda-accent)}
+ :root select::picker-icon{color:var(--soda-accent);transition:rotate .15s}
+ :root select:open::picker-icon{rotate:180deg}
+ @media (prefers-reduced-motion:reduce){:root select::picker-icon{transition:none}}
  :root select::picker(select){background:var(--soda-menu-bg);color:var(--soda-menu-fg,var(--soda-fg));border:1px solid var(--soda-menu-border);border-radius:10px;padding:5px;margin-block:4px;max-height:min(360px,70vh);max-width:calc(100vw - 16px);box-sizing:border-box;overflow:auto;box-shadow:0 6px 20px #0004}
  :root select:not([multiple]):not([size]) option{font:inherit;padding:7px 10px;border:0;border-radius:6px;white-space:normal;overflow-wrap:anywhere;background:transparent;color:var(--soda-menu-fg,var(--soda-fg))}
  :root select:not([multiple]):not([size]) option:not(:disabled):hover,:root select:not([multiple]):not([size]) option:not(:disabled):focus{background:var(--soda-menu-hover-bg);outline:0}

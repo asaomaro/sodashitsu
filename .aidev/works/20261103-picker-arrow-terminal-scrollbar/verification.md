@@ -1,0 +1,11 @@
+# select開閉の矢印と端末のスクロールバー
+
+Web selectのpicker-iconをopenで180degへ回転、閉じると元に戻す。prefers-reduced-motionではtransitionを無効にして状態変化だけを表示する。
+
+terminalAppearance.cssを通常pane/EmbeddedTerminal/CommandPopupで共有し、縦つまみだけ8px/角丸に統一。xtermのtrack/hit領域、slider高さ/位置、scroll計算は維持する。追加canvas描画を必要としないCSS方式とした。
+
+Chromiumの全19テーマ×3段階で実selectを開閉し矢印の状態を検証。実xtermを単独起動しsliderが8pxでtrackのhit領域を維持し、スクロールとマウスドラッグが機能することをverify-terminal-scrollbar.mjsで検証。mainから共通CSSを読み込むことを確認。修正のみ取り消した負例が失敗することをnegative-*.txtへ保存しbytes同一で復元した。
+
+review_resource_monitorの独立レビュー完了、追加必須指摘なし。
+
+Web TerminalRegistryの既存41件成功。root build/typecheck成功。実Web設定画面でopen時180deg/close時none、paneの実slider幅8pxを確認（保存値は変更しない）。幅は見えるつまみのみを変更し、広いtrackの操作領域は保持する。最終CSS方式も独立再レビュー済み、追加必須指摘なし。

@@ -13,6 +13,7 @@ import "./styles/displayDrag.css";
 import "./styles/uiStyle.css";
 import "./styles/assistantTheme.css";
 import "./styles/buttonTheme.css";
+import "./styles/terminalAppearance.css";
 import "./styles/terminalFonts.css";
 import { loadTerminalFonts } from "./term/terminalFonts.js";
 import { createPinia } from "pinia";

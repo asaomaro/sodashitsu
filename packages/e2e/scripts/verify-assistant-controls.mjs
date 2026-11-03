@@ -86,6 +86,11 @@ try{
     assert.deepEqual(rows[1],rows[0],`${name}/${mode}: remote row shape differs from local`);
     if(mode==="modern")assert.ok(parseFloat(rows[0].radius)>0);
   }
+  await page.emulateMedia({reducedMotion:"reduce"});
+  await page.locator("#flat-select").click();
+  assert.equal(await page.locator("#flat-select").evaluate(el=>getComputedStyle(el,"::picker-icon").rotate),"180deg",`${name}/${mode}: picker arrow did not rotate`);
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#flat-select").evaluate(el=>getComputedStyle(el,"::picker-icon").rotate),"none");
   const accent=await page.evaluate(()=>{const e=document.createElement("span");e.style.background="var(--soda-accent)";document.body.append(e);const bg=getComputedStyle(e).backgroundColor;e.remove();return bg;});
   for(const id of actionIds){if(mode==="none")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
   for(const id of featureIds){if(mode!=="features")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
