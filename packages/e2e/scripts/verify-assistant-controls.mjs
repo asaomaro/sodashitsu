@@ -8,7 +8,7 @@ import {uiTokens} from "@sodashitsu/client-core";
 // Source CSS verification in Chromium: use the components' actual rules and compare
 // navigation before/after the theme sheet, including active rows. No server or PTY.
 const root=new URL("../../web/src/",import.meta.url);
-const components=["App","Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog","TabBar","ViewerTabBar","NotificationHistoryDialog","WorktreeOpenDialog"];
+const components=["App","Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog","RemoteDesktopWindow","TabBar","ViewerTabBar","NotificationHistoryDialog","WorktreeOpenDialog"];
 const {parse}=createRequire(new URL("../../web/package.json",import.meta.url))("vue/compiler-sfc");
 async function actionProbe(file,match,id){
  const source=await readFile(new URL(file,root),"utf8"),{descriptor}=parse(source);let found;
@@ -18,6 +18,7 @@ async function actionProbe(file,match,id){
  return `<button id="${id}" ${Object.entries(found).filter(([k])=>["type","class","data-assistant-action","data-assistant-feature"].includes(k)).map(([k,v])=>`${k}="${v}"`).join(" ")}>操作</button>`;
 }
 const probes=await Promise.all([
+ actionProbe("components/RemoteDesktopWindow.vue",(_a,s)=>s.includes('@click="toggleControl"'),"remote-control"),
  actionProbe("components/TabBar.vue",a=>a.class?.includes("tab-bar-add-view"),"work-view"),
  actionProbe("components/ViewerTabBar.vue",a=>a.class==="viewer-menu-button","connection-view"),
  actionProbe("components/AssistantSettings.vue",()=>true,"assistant-retry"),
@@ -27,15 +28,16 @@ const probes=await Promise.all([
  actionProbe("components/SettingsDialog.vue",a=>a.class==="settings-close","close"),
  actionProbe("components/NameDialog.vue",a=>a.type==="submit","save"),
 ]);
-const featureIds=["sidebar-edge","pane-footer","system-footer","screen-more"];
+const featureIds=["remote-info","sidebar-edge","pane-footer","system-footer","screen-more"];
 const featureProbes=await Promise.all([
- actionProbe("components/Sidebar.vue",(_a,s)=>s.includes('sidebar-edge'),featureIds[0]),
- actionProbe("components/PaneStatusline.vue",a=>a["data-assistant-feature"]!==undefined,featureIds[1]),
- actionProbe("components/SystemFooter.vue",a=>a["data-assistant-feature"]!==undefined,featureIds[2]),
- actionProbe("components/ScreenSwitcher.vue",a=>a["data-assistant-feature"]!==undefined,featureIds[3]),
+ actionProbe("components/RemoteDesktopWindow.vue",(_a,s)=>s.includes('@click="infoOpen = !infoOpen"'),"remote-info"),
+ actionProbe("components/Sidebar.vue",(_a,s)=>s.includes('sidebar-edge'),"sidebar-edge"),
+ actionProbe("components/PaneStatusline.vue",a=>a["data-assistant-feature"]!==undefined,"pane-footer"),
+ actionProbe("components/SystemFooter.vue",a=>a["data-assistant-feature"]!==undefined,"system-footer"),
+ actionProbe("components/ScreenSwitcher.vue",a=>a["data-assistant-feature"]!==undefined,"screen-more"),
 ]);
 const dangerProbes=await Promise.all([actionProbe("components/NotificationHistoryDialog.vue",a=>a.class==="nh-confirm","danger-confirm"),actionProbe("components/WorktreeOpenDialog.vue",a=>a.class==="worktree-open-dialog-delete","danger-delete")]);
-const actionIds=["work-view","connection-view","assistant-retry","resource-refresh","file-save","report-generate","close","save"];
+const actionIds=["remote-control","work-view","connection-view","assistant-retry","resource-refresh","file-save","report-generate","close","save"];
 let componentCss="";
 for(const name of components){
  const source=await readFile(new URL(name==="App"?"App.vue":`components/${name}.vue`,root),"utf8");
@@ -59,6 +61,8 @@ try{
   const inspect=()=>page.evaluate(actionIds=>Object.fromEntries(["section","sort","group","desktop","toggle","machine","screen","menu","category","switch","danger-confirm","danger-delete","plain",...actionIds].map(id=>{const s=getComputedStyle(document.getElementById(id));return[id,{background:s.backgroundColor,color:s.color,radius:s.borderRadius,shadow:s.boxShadow}];})),[...actionIds,...featureIds]);
   const before=await inspect();await page.addStyleTag({content:sheet});const after=await inspect();
   for(const id of ["section","sort","group","desktop","toggle","machine","screen","menu","category","switch","danger-confirm","danger-delete","plain"])assert.deepEqual(after[id],before[id],`${name}/${mode}: navigation/label ${id} changed`);
+  const flat=await page.evaluate(ids=>ids.every(id=>{const s=getComputedStyle(document.getElementById(id));return s.borderTopStyle==="solid"&&s.borderTopWidth==="1px"&&s.appearance==="none";}),[...actionIds,...featureIds]);
+  assert.equal(flat,true,`${name}/${mode}: native button bevel remains`);
   const accent=await page.evaluate(()=>{const e=document.createElement("span");e.style.background="var(--soda-accent)";document.body.append(e);const bg=getComputedStyle(e).backgroundColor;e.remove();return bg;});
   for(const id of actionIds){if(mode==="none")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
   for(const id of featureIds){if(mode!=="features")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
