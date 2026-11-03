@@ -9,3 +9,7 @@
 - 3件のnegative control: opaque外周、未補正restore、破棄後view参照へそれぞれ戻すと対象確認が失敗。SHA256一致で復元し、Desktop全237テストとverify:uiを再実行して成功。生出力はnegative-controls.md。
 
 ログ: `/tmp/soda-outline-{final-build,final-typecheck,final-tests,final-ui,server-tests,native}.log`。
+
+## 稼働反映
+
+同梱38リソース・6 runtime variantsのmanifest/hash検証成功。mainへfast-forward統合後、安全なhandoffで6つの実端末を停止せず維持した。反映前8ペインのUUID全件が反映後も存在することを確認。デスクトップアシスタントはphase=running / stage=ready。
