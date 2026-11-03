@@ -1,0 +1,32 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/desktop-assistant| src/noticeSummaries.test.ts (4 tests | 1 failed | 3 skipped) 8ms
+   × retains real in-flight slots across repeated setting changes 7ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  23:17:06
+   Duration  182ms (transform 65%, import 19%, tests 11%, worker 5%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/noticeSummaries.test.ts > retains real in-flight slots across repeated setting changes
+AssertionError: expected "vi.fn()" to be called 4 times, but got 12 times
+ ❯ src/noticeSummaries.test.ts:34:87
+     32|  const feed=new NoticeSummaries(request,()=>{});feeds.push(feed);
+     33|  const rows=Array.from({length:4},(_,i)=>({...notice,id:`n${i}`}));fee…
+     34|  feed.configure(rows,"second",true);feed.configure(rows,"third",true);…
+       |                                                                                       ^
+     35|  release.slice(0,4).forEach(done=>done({status:"ready",text:"old",mess…
+     36|  expect(feed.snapshot()).toEqual({});expect(request).toHaveBeenCalledT…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

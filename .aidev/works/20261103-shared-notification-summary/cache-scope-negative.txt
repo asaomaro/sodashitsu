@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/server| src/conversation/NotificationSummary.test.ts (5 tests | 1 failed | 4 skipped) 612ms
+   × keeps notification cache identity stable across unrelated pane updates and pins the conversation 611ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  23:01:38
+   Duration  1.78s (transform 50%, tests 37%, import 14%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/conversation/NotificationSummary.test.ts > keeps notification cache identity stable across unrelated pane updates and pins the conversation
+AssertionError: expected '["done:c4acc7da-0b8e-4283-a828-c15495…' to be '["done:c4acc7da-0b8e-4283-a828-c15495…' // Object.is equality
+
+Expected: "["done:c4acc7da-0b8e-4283-a828-c15495b334bb:1",{"serverOrigin":"http://127.0.0.1:7780","machineId":"local","paneId":"44c1b476-1873-44a4-a300-6a635531fe40","workspaceId":"80cb6c03-f4a6-487c-a9e9-4d69eb7eb9ea","agentInstanceId":"c4acc7da-0b8e-4283-a828-c15495b334bb"},"session",{"kind":"codex","sessionId":"session","pane":{"id":"44c1b476-1873-44a4-a300-6a635531fe40","tabId":"63bead15-67e2-4abe-aa9c-e00f43759c2c","cols":80,"title":"worker","agentSession":{"sessionId":"session","reportedAt":1},"agent":{"instanceId":"c4acc7da-0b8e-4283-a828-c15495b334bb","state":"idle","completionSeq":1,"serverSeenSeq":0}}},"/project","/project"]"
+Received: "["done:c4acc7da-0b8e-4283-a828-c15495b334bb:1",{"serverOrigin":"http://127.0.0.1:7780","machineId":"local","paneId":"44c1b476-1873-44a4-a300-6a635531fe40","workspaceId":"80cb6c03-f4a6-487c-a9e9-4d69eb7eb9ea","agentInstanceId":"c4acc7da-0b8e-4283-a828-c15495b334bb"},"session",{"kind":"codex","sessionId":"session","pane":{"id":"44c1b476-1873-44a4-a300-6a635531fe40","tabId":"63bead15-67e2-4abe-aa9c-e00f43759c2c","cols":120,"title":"renamed","agentSession":{"sessionId":"session","reportedAt":2},"agent":{"instanceId":"c4acc7da-0b8e-4283-a828-c15495b334bb","state":"idle","completionSeq":1,"serverSeenSeq":0}}},"/project","/project"]"
+
+ ❯ src/conversation/NotificationSummary.test.ts:56:93
+     54|  const request={paneId:pane.id,key:`done:${actor}:1`,refresh:false};ha…
+     55|  const first=summary.mock.calls[0] as any;pane.cols=120;pane.title="re…
+     56|  handlers.get("notification.summary")({},request);expect((summary.mock…
+       |                                                                                             ^
+     57|  pane.agentSession.sessionId="replaced";expect(()=>first[3]()).toThrow…
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

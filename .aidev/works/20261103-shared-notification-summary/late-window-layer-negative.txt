@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (58 tests | 1 failed | 57 skipped) 1797ms
+   × uses the current stacking mode when a delayed chat window becomes ready 28ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 57 skipped (58)
+   Start at  23:17:07
+   Duration  2.09s (tests 90%, transform 8%, import 1%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > uses the current stacking mode when a delayed chat window becomes ready
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ src/main.test.ts:1922:26
+    1920|   await fixture.handlers.get('assistant:chat')!(event);const chat=fixt…
+    1921|   await save(event,{enabled:true,mode:'tray',windowLayer:'back'});chat…
+    1922|   expect(chat.focus).not.toHaveBeenCalled();expect(chat.showInactive).…
+       |                          ^
+    1923|  }finally{fixture.deferReady=false;await save(event,{enabled:false});}
+    1924| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
