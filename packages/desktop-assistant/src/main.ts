@@ -256,6 +256,14 @@ function publishChromeState(win:BrowserWindow){
 function setChromeBounds(win:BrowserWindow,bounds:Rect){
  windowBoundsChanging.add(win);try{win.setBounds(bounds);}finally{windowBoundsChanging.delete(win);}
 }
+/** A real size change exits maximization without snapping back to the saved normal bounds. */
+function applyResizeBounds(win:BrowserWindow,bounds:Rect){
+ const current=win.getBounds();
+ if(current.x===bounds.x&&current.y===bounds.y&&current.width===bounds.width&&current.height===bounds.height)return;
+ const wasMaximized=windowRestores.delete(win);windowMaxBounds.delete(win);
+ setChromeBounds(win,bounds);
+ if(wasMaximized)publishChromeState(win);
+}
 function reconcileChromeState(win:BrowserWindow){
  const restore=windowRestores.get(win),maximum=windowMaxBounds.get(win);
  if(!restore||!maximum||win.isDestroyed()||windowBoundsChanging.has(win))return;
@@ -1126,7 +1134,6 @@ function registerIpc(): void {
       if (action.startsWith("resize-")) {
         if (owner.window !== bubble || !controller.preferences.enabled || !owner.window.isVisible()) throw Error("吹き出しを開いて操作してください。");
         if (action === "resize-start") {
-          if(windowRestores.has(owner.window))throw Error("元の大きさに戻して操作してください。");
           const {handle} = z.object({handle:z.enum(BUBBLE_RESIZE_HANDLES)}).strict().parse(input);
           const displays = adapter.displays(), preferences = controller.preferences;
           const display = displays.find(d=>d.id === preferences.position?.displayId) ?? displays[0];
@@ -1141,8 +1148,8 @@ function registerIpc(): void {
         if (action === "resize-end") { bubbleResize = null; return; }
         const cursor = screen.getCursorScreenPoint();
         const bounds = resizeBubbleBounds(resize.start,resize.handle,cursor.x-resize.cursor.x,cursor.y-resize.cursor.y,resize.area);
-        owner.window.setBounds(bounds);
-        bubbleSize = {width:bounds.width,height:bounds.height};
+        applyResizeBounds(owner.window,bounds);
+        if(!windowRestores.has(owner.window))bubbleSize = {width:bounds.width,height:bounds.height};
         positionCompact();
         resize.expires = Date.now()+30000;
         return;
@@ -1155,13 +1162,13 @@ function registerIpc(): void {
           z.object({phase:z.enum(["move","end"]),token:z.uuid()}).strict(),
         ]).parse(input);
         if(operation.phase==="start"){
-          if(windowRestores.has(owner.window)||!owner.window.isVisible()||owner.window.isMinimized())throw Error("元の大きさに戻して操作してください。");
+          if(!owner.window.isVisible()||owner.window.isMinimized())throw Error("ウィンドウを開いて操作してください。");
           const token=randomUUID();windowResizes.set(owner.window,{token,handle:operation.handle,start:owner.window.getBounds(),cursor:screen.getCursorScreenPoint(),area:windowArea(owner.window),expires:Date.now()+30000});return {token};
         }
         const resize=windowResizes.get(owner.window);
         if(!resize||resize.token!==operation.token||Date.now()>resize.expires||!owner.window.isVisible()||owner.window.isMinimized())throw Error("リサイズを開始し直してください。");
         if(operation.phase==="end"){windowResizes.delete(owner.window);return;}
-        const cursor=screen.getCursorScreenPoint();owner.window.setBounds(resizeWindowBounds(resize.start,resize.handle,cursor.x-resize.cursor.x,cursor.y-resize.cursor.y,resize.area));resize.expires=Date.now()+30000;return;
+        const cursor=screen.getCursorScreenPoint();applyResizeBounds(owner.window,resizeWindowBounds(resize.start,resize.handle,cursor.x-resize.cursor.x,cursor.y-resize.cursor.y,resize.area));resize.expires=Date.now()+30000;return;
       }
       if (action === "window-action") {
         const operation=z.enum(["minimize","maximize","close"]).parse(input);

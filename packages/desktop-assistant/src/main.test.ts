@@ -1699,7 +1699,8 @@ it("restores every maximized assistant window on drag, updates its icon state, a
   win.show();const local=eventOf(win);win.setBounds({x:100,y:100,width:500,height:500});
   expect(await action(local,"maximize")).toMatchObject({maximized:true});
   expect(await state(local)).toMatchObject({maximized:true});
-  await expect(resize(local,{phase:"start",handle:"se"})).rejects.toThrow("元の大きさ");
+  const idle=await resize(local,{phase:"start",handle:"se"}) as {token:string};await resize(local,{phase:"end",token:idle.token});
+  expect(await state(local)).toMatchObject({maximized:true});
   cursor.mockReturnValue({x:600,y:100});const maximum=win.getBounds();win.bounds={...maximum,x:100,y:80};win.emit("move");
   expect(win.getBounds()).toMatchObject({width:500,height:500});
   expect(win.webContents.send).toHaveBeenCalledWith("assistant:window-state-changed",{maximized:false,revision:expect.any(Number)});
@@ -1760,7 +1761,8 @@ it("maximizes chat to the top and left while retaining its anchors and normal si
  const before=chat.getBounds();
  expect(await action(local,"maximize")).toMatchObject({maximized:true});
  expect(chat.getBounds()).toEqual({x:0,y:0,width:before.x+before.width,height:before.y+before.height});
- await expect(fixture.handlers.get("assistant:resize-start")!(local,{handle:"nw"})).rejects.toThrow("元の大きさ");
+ const idle=await fixture.handlers.get("assistant:resize-start")!(local,{handle:"nw"}) as {token:string};
+ await fixture.handlers.get("assistant:resize-end")!(local,idle);expect(await state(local)).toMatchObject({maximized:true});
  await expect(fixture.handlers.get("assistant:window-resize")!(local,{phase:"start",handle:"e"})).rejects.toThrow("許可");
  const saved=await fixture.handlers.get("assistant:read")!(event) as Record<string,unknown>;
  await fixture.handlers.get("assistant:save")!(event,{...saved,appearance:"light"});
@@ -1775,4 +1777,33 @@ it("maximizes chat to the top and left while retaining its anchors and normal si
  await expect(action({sender:character.webContents,senderFrame:character.webContents.mainFrame},"maximize")).rejects.toThrow("許可");
  await expect(action({sender:chat.webContents,senderFrame:{url:"soda-assistant://app/bubble.html"}},"maximize")).rejects.toThrow("許可");
  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+
+it("resizes stationary maximized windows and exits maximization only when their bounds change",async()=>{
+ const {screen}=await import("electron"),cursor=vi.spyOn(screen,"getCursorScreenPoint").mockReturnValue({x:100,y:100});
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
+ const eventOf=(win:MockWindow)=>({sender:win.webContents,senderFrame:win.webContents.mainFrame}),event=eventOf(settings);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false});
+ await fixture.handlers.get("assistant:tools-open")!(event);const tools=fixture.windows.at(-1)!;
+ await fixture.handlers.get("assistant:open")!(event);const panel=fixture.windows.at(-1)!;
+ await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!;
+ const action=fixture.handlers.get("assistant:window-action")!,state=fixture.handlers.get("assistant:window-state")!,resize=fixture.handlers.get("assistant:window-resize")!;
+ for(const win of [settings,tools,panel,chat]){
+  await vi.waitFor(()=>expect(win.isVisible()).toBe(true));const local=eventOf(win);
+  await action(local,"maximize");const maximum=win.getBounds();cursor.mockReturnValue({x:100,y:100});
+  const start=win===chat?()=>fixture.handlers.get("assistant:resize-start")!(local,{handle:"nw"}):()=>resize(local,{phase:"start",handle:"nw"});
+  const move=(token:string)=>win===chat?fixture.handlers.get("assistant:resize-move")!(local,{token}):resize(local,{phase:"move",token});
+  const end=(token:string)=>win===chat?fixture.handlers.get("assistant:resize-end")!(local,{token}):resize(local,{phase:"end",token});
+  const {token}=await start() as {token:string};await move(token);
+  expect(win.getBounds()).toEqual(maximum);expect(await state(local)).toMatchObject({maximized:true});
+  cursor.mockReturnValue({x:140,y:130});await move(token);
+  expect(win.getBounds()).toEqual({x:maximum.x+40,y:maximum.y+30,width:maximum.width-40,height:maximum.height-30});
+  expect(await state(local)).toMatchObject({maximized:false});
+  expect(win.webContents.send).toHaveBeenLastCalledWith("assistant:window-state-changed",{maximized:false,revision:expect.any(Number)});
+  cursor.mockReturnValue({x:160,y:140});await move(token);await end(token);const resized=win.getBounds();
+  expect(resized).toEqual({x:maximum.x+60,y:maximum.y+40,width:maximum.width-60,height:maximum.height-40});
+  await action(local,"maximize");await action(local,"maximize");expect(win.getBounds()).toEqual(resized);
+ }
+ cursor.mockRestore();await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });

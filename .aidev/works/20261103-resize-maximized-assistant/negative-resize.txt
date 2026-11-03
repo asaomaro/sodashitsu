@@ -1,0 +1,26 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (52 tests | 1 failed | 51 skipped) 1031ms
+   × resizes stationary maximized windows and exits maximization only when their bounds change 29ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > resizes stationary maximized windows and exits maximization only when their bounds change
+Error: 元の大きさに戻して操作してください。
+ ❯ src/main.ts:1158:108
+
+ ❯ start src/main.test.ts:1795:103
+ ❯ src/main.test.ts:1798:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 51 skipped (52)
+   Start at  21:02:50
+   Duration  1.29s (tests 86%, transform 12%, import 2%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts -t resizes stationary maximized windows
