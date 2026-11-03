@@ -900,7 +900,8 @@ try {
   await expect(page.locator("#notice-section")).toHaveJSProperty("open",false);
   await page.locator("#notice-section > summary").click();
   await expect(page.locator("#notices > details")).toHaveJSProperty("open",false);
-  await page.locator("#notices > details > summary").press("Enter");await expect(page.locator("#notices .notice-text")).toBeVisible();
+  await page.locator("#notices > details > summary").press("Enter");
+  await page.locator("#notices > details > details > summary").click();await expect(page.locator("#notices .notice-text")).toBeVisible();
   await expect(page.locator("#notices textarea")).toHaveValue("折り畳んでも保持する返答\n".repeat(20));
   await expect.poll(()=>page.locator("#notices textarea").evaluate(el=>el.clientHeight>=el.scrollHeight-1)).toBe(true);
 
@@ -975,12 +976,24 @@ try {
   for(const role of ["bubble","notice","tools","panel","character"]){
     await appearancePage.goto(`${origin}/${role}.html`);await appearancePage.evaluate(()=>window.appearanceCallback({revision:2,mode:"light"}));
     await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
-    if(role==="bubble")assert.equal(await appearancePage.locator('#notification-summary-enabled').evaluate(el=>getComputedStyle(el).accentColor),"rgb(201, 166, 79)");
   }
   await appearancePage.goto(`${origin}/settings.html`);
+  for(const mode of ['light','dark']){
+    await appearancePage.locator('#appearance').selectOption(mode);
+    const candidates=await appearancePage.locator('#colorTheme option').evaluateAll(options=>options.filter(o=>!o.hidden).map(o=>o.dataset.mode));
+    assert.ok(candidates.length>0);assert.ok(candidates.every(value=>value===mode));
+  }
+  await appearancePage.locator('#appearance').selectOption('dark');await appearancePage.locator('#colorTheme').selectOption('nord');
+  await appearancePage.locator('#appearance').selectOption('system');await appearancePage.emulateMedia({colorScheme:'light'});
+  await expect(appearancePage.locator('#colorTheme')).toHaveValue('nord');
+  await appearancePage.locator('button[type="submit"]').first().click();assert.equal(await appearancePage.evaluate(()=>window.preferences.colorTheme),'nord');
+  await appearancePage.emulateMedia({colorScheme:'dark'});await expect(appearancePage.locator('#colorTheme')).toHaveValue('nord');
+  await appearancePage.locator('#windowLayer').selectOption('back');await appearancePage.locator('button[type="submit"]').first().click();assert.equal(await appearancePage.evaluate(()=>window.preferences.windowLayer),'back');
+  await appearancePage.locator('#windowLayer').selectOption('front');
   const themeOptions=await appearancePage.locator('#colorTheme option').evaluateAll(options=>options.map(o=>o.value));
   assert.deepEqual(new Set(themeOptions),new Set(THEME_NAMES));
   for(const theme of THEME_NAMES){
+    await appearancePage.locator('#appearance').selectOption(THEME_APPEARANCE[theme]);
     await appearancePage.locator('#colorTheme').selectOption(theme);
     await expect(appearancePage.locator('#appearance')).toHaveValue(THEME_APPEARANCE[theme]);
     await appearancePage.locator('button[type="submit"]').first().click();
@@ -997,6 +1010,7 @@ try {
   }
   await appearancePage.locator('#appearance').selectOption('sodashitsu');
   await expect(appearancePage.locator('#colorTheme')).toBeDisabled();
+  await expect(appearancePage.locator('#color-theme-setting')).toBeHidden();
   const remembered=await appearancePage.locator('#colorTheme').inputValue();
   await appearancePage.locator('button[type="submit"]').first().click();
   assert.equal(await appearancePage.evaluate(()=>window.preferences.appearance),'sodashitsu');
@@ -1013,20 +1027,27 @@ try {
   await expect(captainPage.locator("#captain-choice-status")).toContainText("選択を保存しました");
   await captainPage.reload();await expect(captainPage.locator("#agent-kind")).toHaveValue("muse");
   await expect(captainPage.locator("#agent-effort")).toHaveValue("high");
+  await expect(captainPage.locator('#conversation-section #chat')).toHaveCount(1);
+  await expect(captainPage.locator('#message-section')).toHaveCount(0);
+  await expect(captainPage.locator('#notification-summary-enabled')).toHaveCount(0);
   await captainPage.evaluate(()=>{
     const id="00000000-0000-4000-8000-000000000092";
-    window.noticeCallback({status:"connected",revision:200,notices:[{id,title:"作業担当",message:"確認待ち"}]});
-    window.chatCallback({revision:200,connected:true,busy:false,session:{paneId:"captain",kind:"muse",state:"ready",agent:{instanceId:"captain-actor",state:"idle"}},kinds:[{kind:"muse",label:"Muse",available:true}],messages:[],hint:"待機中",notificationSummary:{status:"ready",text:"作業担当：保存先を統一。検証済み。返信案：リリースしてください。<img src=x>",message:"作業要約",noticeIds:[id]}});
+    window.noticeCallback({status:"connected",revision:200,notices:[{id,title:"作業担当",message:"確認待ち"}],noticeSummaries:{[id]:{status:"ready",text:"目的：保存先を統一。検証済み。返信案：リリースしてください。<img src=x>",message:"共有の作業要約"}}});
+    window.chatCallback({revision:200,connected:true,busy:false,session:null,kinds:[{kind:"muse",label:"Muse",available:true}],messages:[],hint:"船長なし"});
     window.assistant.replySource=input=>new Promise(resolve=>{window.calls.push(["summary-reply",input]);window.releaseSummaryReply=resolve;});
   });
-  await expect(captainPage.locator("#notification-summary-section")).toBeVisible();await expect(captainPage.locator("#notification-summary-text img")).toHaveCount(0);
-  await captainPage.locator("#summary-reply-target").selectOption("00000000-0000-4000-8000-000000000092");
-  await captainPage.locator("#summary-reply-text").fill("リリースを進めてください");await captainPage.locator("#summary-reply-send").click();
-  await captainPage.locator("#summary-reply-text").fill("次の下書き");await expect(captainPage.locator("#summary-reply-send")).toBeDisabled();
-  await captainPage.evaluate(()=>window.releaseSummaryReply());await expect(captainPage.locator("#summary-reply-send")).toBeEnabled();await expect(captainPage.locator("#summary-reply-text")).toHaveValue("次の下書き");
+  const card=captainPage.locator('#notices .notice');
+  await expect(card.locator('.notice-work-summary')).toBeVisible();await expect(card.locator('.notice-work-summary-text')).toContainText('返信案');
+  await expect(card.locator('.notice-work-summary-text img')).toHaveCount(0);
+  assert.equal(await card.locator('textarea').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(35, 54, 77)');
+  await expect(card.locator('details')).not.toHaveAttribute('open');
+  await card.locator('textarea').fill("リリースを進めてください");await card.getByRole('button',{name:'この通知元へ返答',exact:true}).click();
+  await card.locator('textarea').fill("次の下書き");await expect(card.getByRole('button',{name:'この通知元へ返答',exact:true})).toBeDisabled();
+  await captainPage.evaluate(()=>window.releaseSummaryReply());await expect(card.getByRole('button',{name:'この通知元へ返答',exact:true})).toBeEnabled();await expect(card.locator('textarea')).toHaveValue('次の下書き');
   assert.equal(await captainPage.evaluate(()=>window.calls.filter(c=>c[0]==="summary-reply").length),1);
-  await captainPage.locator("#notification-summary-enabled").uncheck();await expect(captainPage.locator("#notification-summary-section")).toBeHidden();
-  await expect(captainPage.locator("#captain-choice-status")).toContainText("選択を保存しました");await captainPage.reload();await expect(captainPage.locator("#notification-summary-enabled")).not.toBeChecked();
+  await captainPage.screenshot({path:'/tmp/soda-shared-notification-desktop.png'});
+  await captainPage.evaluate(()=>{const id='00000000-0000-4000-8000-000000000092';window.noticeCallback({status:'connected',revision:201,notices:[{id,title:'作業担当',message:'確認待ち'}],noticeSummaries:{[id]:{status:'disabled',text:'',message:'無効'}}});});await expect(card.locator('.notice-work-summary')).toBeHidden();
+  await captainPage.evaluate(()=>window.noticeCallback({status:'connected',revision:202,notices:[],noticeSummaries:{}}));await expect(card).toHaveCount(0);
   await captainPage.screenshot({path:"/tmp/soda-captain-selection.png"});await captainPage.close();
   await context.close();
   console.log("generated Copilot and Antigravity bubble text and pinned reply PASS");

@@ -1,3 +1,5 @@
+import {NoticeSummaries} from "./noticeSummaries.js";
+import {loadSummarySettings} from "@sodashitsu/protocol";
 import {assistantAppearance} from "./appearance.js";
 import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog} from "@sodashitsu/protocol";
 import {presentWindow} from "./windowPresentation.js";
@@ -197,7 +199,7 @@ function publishAppearance():void {
 }
 function receiveAppearance(rpc:AssistantRpc,state:import("@sodashitsu/protocol").ResultOf<"prefs.get">):void {
  if(control!==rpc||!state||!Number.isSafeInteger(state.rev)||state.rev<sharedAppearanceRev||!state.prefs||typeof state.prefs!=="object"||Array.isArray(state.prefs))return;
- sharedAppearanceRev=state.rev;sharedAppearance=state.prefs;publishAppearance();
+ sharedAppearanceRev=state.rev;sharedAppearance=state.prefs;publishAppearance();configureNoticeSummaries();publishInbox();
 }
 let compactRevision = 0;
 let compactHeight = 220;
@@ -427,7 +429,7 @@ function localWindow(role: LocalRole): BrowserWindow {
     resizable: false,
     focusable: role !== "character",
     skipTaskbar: role !== "settings" && role !== "tools",
-    alwaysOnTop: role !== "settings" && role !== "tools",
+    alwaysOnTop: ["character","bubble","notice"].includes(role) && controller.preferences.windowLayer === "front",
     webPreferences: {
       preload,
       sandbox: true,
@@ -504,9 +506,10 @@ function notifyBubble(payload?: { id?: string; title: string; message: string })
 function openBubble(focus = true): void {
   if (!controller.preferences.enabled) return;
   closeCompact();
+  const bringForward=()=>focus && controller.preferences.windowLayer === "front";
   bubbleRequested = true;
   if (bubble && !bubble.isDestroyed()) {
-    if (focus) {
+    if (bringForward()) {
       bubble.show();
       bubble.focus();
     } else bubble.showInactive();
@@ -525,7 +528,7 @@ function openBubble(focus = true): void {
   positionCompact();
   win.once("ready-to-show", () => {
     if (!win.isDestroyed() && bubbleRequested) {
-      if (focus) {
+      if (bringForward()) {
         win.show();
         win.focus();
       } else win.showInactive();
@@ -578,9 +581,18 @@ async function publishTools(): Promise<void> {
   publishToolEvent("assistant:tools-changed",state);
 }
 
+const noticeSummaries=new NoticeSummaries(async(notice,refresh)=>{
+ const rpc=notice.source.machineId==="local"?control:remoteNotices?.rpcFor(notice.source.machineId);
+ if(!rpc||notice.source.serverOrigin!==controller.preferences.serverOrigin)throw Error("通知元に接続できません。");
+ return rpc.request("notification.summary",{paneId:notice.source.paneId,workspaceId:notice.source.workspaceId,agentInstanceId:notice.source.agentInstanceId,key:notice.key,refresh});
+},()=>publishInbox());
+function configureNoticeSummaries(){
+ const settings=loadSummarySettings(sharedAppearance.summarySettings);
+ noticeSummaries.configure(notices,JSON.stringify([controller.preferences.serverOrigin,settings]),controller.preferences.enabled&&settings.notificationSummary!==false);
+}
 function combineNotices() {
   notices = [...localNotices, ...remoteRows].sort((a, b) => b.at - a.at).slice(0, 32);
-  assistantChat?.notifications(notices);
+  configureNoticeSummaries();
   publishInbox();
 }
 function inbox() {
@@ -588,30 +600,13 @@ function inbox() {
     ...(noticeStatus === "connected" ? backend?.feed.agents ?? [] : []),
     ...(remoteNotices?.agents ?? []),
   ] : [];
-  return { notices, status: noticeStatus, revision: inboxRevision, agentList: agentRoster(rows),latestNotification,focusedNoticeId,noticeFocusRevision };
+  return { notices, status: noticeStatus, revision: inboxRevision,noticeSummaries:noticeSummaries.snapshot(), agentList: agentRoster(rows),latestNotification,focusedNoticeId,noticeFocusRevision };
 }
 function publishInbox(): void {
   refreshCompact();
   voice.validate();
   ++inboxRevision;
   if (bubble && !bubble.isDestroyed()) bubble.webContents.send("assistant:inbox-changed", inbox());
-}
-async function notificationWorkContext(notice:AssistantNotice):Promise<string>{
- try{
- const hub=control,rpc=notice.source.machineId==="local"?hub:remoteNotices?.rpcFor(notice.source.machineId);
- if(!rpc||notice.source.serverOrigin!==controller.preferences.serverOrigin)throw Error("通知元に接続できません。");
- const params={source:{...notice.source,machineId:"local"},key:notice.key};
- const before=await rpc.request("assistant.source",params);
- const cached=await rpc.request("agent.summary_cached",{paneId:notice.source.paneId,offset:0}).catch(()=>({summary:null}));
- const page=await rpc.request("agent.conversation_tail",{paneId:notice.source.paneId,offset:0}).catch(()=>null);
- const after=await rpc.request("assistant.source",params);
- if(page&&(before.conversationSessionId!==page.sessionId||after.conversationSessionId!==page.sessionId||page.kind!==before.agent.kind))throw Error("通知元の会話が変更されました。");
- if(control!==hub||!notices.some(n=>n.id===notice.id)||notice.source.machineId!=="local"&&remoteNotices?.rpcFor(notice.source.machineId)!==rpc)throw Error("通知元が変更されました。");
- const parts:string[]=[];
- if(page&&cached.summary&&!cached.summary.stale&&cached.summary.sourceSessionId===page.sessionId&&cached.summary.sourceKind===page.kind)parts.push(`${cached.summary.stale?"過去の参考要約（古い可能性）":"既存のペイン要約"}: ${cached.summary.text.slice(0,400)}`);
- if(page)parts.push(`${page.partial||page.nextOffset!==null?"部分的な":"取得できた"}会話記録: `+page.messages.slice(-6).map(m=>`${m.role}: ${m.text.slice(0,300)}`).join("\n"));
- return parts.join("\n")||"作業記録は取得できませんでした。";
- }catch(error){throw Object.assign(error instanceof Error?error:Error("通知元を確認できませんでした。"),{notificationInvalid:true});}
 }
 function chatState(): AssistantChatState {
   return (
@@ -653,7 +648,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
       ),
     status: (connected) => {
       if (control === rpc) {
-        if(connected)void rpc.request("prefs.get",{}).then(state=>receiveAppearance(rpc,state)).catch(()=>{});
+        if(connected){noticeSummaries.reconnect();void rpc.request("prefs.get",{}).then(state=>receiveAppearance(rpc,state)).catch(()=>{});}
         assistantChat?.connection(connected);
         reminders?.connection(connected);
         remoteNotices?.connection(connected);
@@ -684,10 +679,9 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
         bubble.webContents.send("assistant:conversation-changed", state);
     },
     chatRevision,
-    notificationWorkContext,
   );
-  assistantChat.configure(controller.preferences.agentProfiles,activeCharacterId(),controller.preferences.notificationSummary);
-  assistantChat.notifications(notices);
+  assistantChat.configure(controller.preferences.agentProfiles,activeCharacterId());
+  configureNoticeSummaries();
   reminders = new Reminders(
     installationId,
     rpc,
@@ -725,6 +719,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
   if (suspended) return;
   ++automaticNoticeEpoch;
   voice.configure(preferences.enabled && preferences.voiceEnabled && !preferences.mute);
+  configureNoticeSummaries();
   closeCompact();
   fullscreen.invalidate();
   const captureOwner=capture?.owner();
@@ -744,7 +739,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     const recordingOwner=recording.owner();recording.cancel();
     if(recordingOwner!==undefined)localWindows.get(recordingOwner)?.window.destroy();
   }
-  assistantChat?.configure(preferences.agentProfiles,activeCharacterId(preferences),preferences.notificationSummary);
+  assistantChat?.configure(preferences.agentProfiles,activeCharacterId(preferences));
   transcription.configure(
     preferences.enabled && preferences.transcriptionEnabled,
     preferences.transcriptionOrigin,
@@ -934,6 +929,7 @@ const adapter: NativeAdapter = {
   },
   tray(preferences) {
     publishAppearance();
+    for(const {window,role} of localWindows.values())if(["character","bubble","notice"].includes(role)&&!window.isDestroyed())window.setAlwaysOnTop(preferences.windowLayer === "front");
     bubbleResize = null;
     updateBackend(preferences);
     if (bubble && !bubble.isDestroyed()) {
@@ -1731,7 +1727,7 @@ function registerIpc(): void {
         await clipboard.writeText(text);
         return;
       }
-      if(action==="notification-summary-refresh"){assistantChat?.retryNotificationSummary();return;}
+      if(action==="notification-summary-refresh"){const p=z.object({noticeId:z.uuid()}).parse(input);if(!notices.some(n=>n.id===p.noticeId))throw Error("通知は解消しました。");noticeSummaries.retry(p.noticeId);return;}
       if(action==="agent-open"){
         const {source}=z.object({source:AssistantSource}).strict().parse(input);
         if(owner.window!==bubble||!owner.window.isVisible()||!controller.preferences.enabled||source.serverOrigin!==controller.preferences.serverOrigin)throw Error("会話を開いて対象を選び直してください。");
@@ -1747,7 +1743,7 @@ function registerIpc(): void {
       if(action==="captain-choice"){
         const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot"]),profile:AssistantLaunchSettings,notificationSummary:z.boolean()}).strict().parse(input);
         const saved=await controller.chooseCaptain(request.kind,request.profile,request.notificationSummary);
-        assistantChat?.configure(saved.agentProfiles,activeCharacterId(),saved.notificationSummary);
+        assistantChat?.configure(saved.agentProfiles,activeCharacterId());
         return saved;
       }
       if (["start-session", "adopt-session", "send-message"].includes(action)) {
@@ -1816,6 +1812,7 @@ else {
     quitting = true;
     if(resourceReportTimer)clearInterval(resourceReportTimer);
     voice.stop();
+    noticeSummaries.stop();
     closeCompact();
     ++automaticNoticeEpoch;
     fullscreen.stop();

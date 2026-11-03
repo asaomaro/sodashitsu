@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld(
     open: () => ipcRenderer.invoke("assistant:open"),
     settings: () => ipcRenderer.invoke("assistant:settings"),
     chat: () => ipcRenderer.invoke("assistant:chat"),
-    refreshNotificationSummary:()=>ipcRenderer.invoke("assistant:notification-summary-refresh"),
+    refreshNotificationSummary:(input:unknown)=>ipcRenderer.invoke("assistant:notification-summary-refresh",input),
     openAgent:(input:unknown)=>ipcRenderer.invoke("assistant:agent-open",input),
     agentModels:(input:unknown)=>ipcRenderer.invoke("assistant:agent-models",input),
     chooseCaptain:(input:unknown)=>ipcRenderer.invoke("assistant:captain-choice",input),

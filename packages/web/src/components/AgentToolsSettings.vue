@@ -47,7 +47,7 @@ function update(key: "kind" | "model" | "sessionId", event: Event) {
         </select>
       </label>
     </div>
-    <h4>会話の要約</h4>
+    <h4>会話・通知の作業要約</h4>
     <label
       >要約するエージェント
       <select :value="settings.summarySettings.kind" @change="update('kind', $event)">
@@ -59,6 +59,8 @@ function update(key: "kind" | "model" | "sessionId", event: Event) {
       >モデル（空欄はエージェントの既定）
       <input :value="settings.summarySettings.model" @change="update('model', $event)"
     /></label>
+    <label><input type="checkbox" :checked="settings.summarySettings.notificationSummary !== false" @change="settings.setSummarySettings({...settings.summarySettings,notificationSummary:($event.target as HTMLInputElement).checked})">通知に作業要約・判断事項・返信案を表示</label>
+    <p>操舵室とデスクトップアシスタントで同じ通知要約を共有します。船長とは別の専用セッションで処理し、船長の割り当ては不要です。</p>
     <p v-if="settings.summarySettings.kind === 'codex'">
       モデルIDの例: gpt-6-luna。GPT系のモデル名は小文字にそろえて実行します。
     </p>

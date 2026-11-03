@@ -271,6 +271,7 @@ export class NotificationController {
     const toastId = routes.toast
       ? this.#view.toast(`${label}${TOAST_SUFFIX[kind]}`, {
           kind: "sticky",
+          notification:{paneId,key},
           actions: [{ label: "移動", run: () => this.focusNotification(key) }],
         })
       : null;

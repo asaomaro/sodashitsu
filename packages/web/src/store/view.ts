@@ -254,6 +254,7 @@ export interface ToastAction {
 }
 
 export interface Toast {
+  notification?: {paneId:string;key:string};
   id: number;
   message: string;
   /**
@@ -270,6 +271,7 @@ export interface Toast {
 }
 
 export interface ToastOptions {
+  notification?: {paneId:string;key:string};
   kind?: "sticky";
   actions?: ToastAction[];
   wrap?: boolean;

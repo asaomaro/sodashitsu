@@ -34,22 +34,15 @@
   row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({block:"start"});
  };
  const inbox=document.getElementById("notices");
- let currentNotices=[],summaryReplyPending=false;
- let chatRevision = -1, chatState = null;
- document.getElementById("notification-summary-refresh").addEventListener("click",()=>window.assistant.refreshNotificationSummary().catch(error=>{document.getElementById("notification-summary-status").textContent=error.message;}));
- const summaryReplyTarget=document.getElementById("summary-reply-target"),summaryReplyText=document.getElementById("summary-reply-text"),summaryReplySend=document.getElementById("summary-reply-send");
- const updateSummaryReplies=()=>{
-  const before=summaryReplyTarget.value,ids=chatState?.notificationSummary?.noticeIds??[];
-  summaryReplyTarget.replaceChildren();const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="返答する通知元を選んでください";summaryReplyTarget.append(placeholder);for(const notice of currentNotices.filter(n=>ids.includes(n.id))){const option=document.createElement("option");option.value=notice.id;option.textContent=notice.title;summaryReplyTarget.append(option);}
-  summaryReplyTarget.value=Array.from(summaryReplyTarget.options).some(o=>o.value===before)?before:"";
-  summaryReplySend.disabled=summaryReplyPending||!summaryReplyTarget.value||!summaryReplyText.value.trim();
+ let currentNotices=[];
+ let chatRevision=-1,chatState=null;
+ const renderSummary=(row,value)=>{
+  const wrap=row.querySelector(".notice-work-summary"),text=row.querySelector(".notice-work-summary-text"),status=row.querySelector(".notice-work-summary-status");
+  wrap.hidden=value?.status==="disabled";
+  text.textContent=value?.status==="ready"?value.text:"";
+  status.textContent=value?.message??"作業要約を確認しています。";
+  row.querySelector(".notice-summary-refresh").disabled=["waiting","summarizing"].includes(value?.status);
  };
- summaryReplyText.addEventListener("input",updateSummaryReplies);summaryReplyTarget.addEventListener("change",updateSummaryReplies);
- summaryReplySend.addEventListener("click",async()=>{
-  const noticeId=summaryReplyTarget.value,draft=summaryReplyText.value,text=draft.trim();if(summaryReplyPending||!noticeId||!text)return;
-  summaryReplyPending=true;summaryReplySend.disabled=true;try{await window.assistant.replySource({noticeId,text});if(summaryReplyText.value===draft&&summaryReplyTarget.value===noticeId)summaryReplyText.value="";document.getElementById("summary-reply-status").textContent="選択した通知元へ送信しました。";}catch(error){document.getElementById("summary-reply-status").textContent=error.message;}finally{summaryReplyPending=false;updateSummaryReplies();}
- });
-
  let agentList={agents:[],total:0,working:0,blocked:0}, rosterStatus="connecting";
  const agentStates={working:"作業中",blocked:"確認待ち",idle:"待機中",unknown:"状態不明"};
  const renderAgents=()=>{
@@ -72,7 +65,7 @@
  const update = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
    revision = state.revision;
-   currentNotices=state.notices??[];updateSummaryReplies();
+   currentNotices=state.notices??[];
    agentList=state.agentList||{agents:[],total:0,working:0,blocked:0};rosterStatus=state.status;renderAgents();
    document.getElementById("status").textContent = stateText[state.status] || "接続状態を確認しています。";
    const present=new Set(state.notices.map(notice=>notice.id));
@@ -88,6 +81,7 @@
        const row=noticeRows.get(notice.id);
        row.querySelector(".notice-text").textContent=notice.message;
        const title=row.querySelector(".notice-title-button");title.textContent=title.title=notice.title || "通知元";
+       renderSummary(row,state.noticeSummaries?.[notice.id]);
        continue;
      }
      const entry = document.createElement("details"); entry.className = "spoken notice";entry.open=true;
@@ -99,18 +93,26 @@
      const reply=document.createElement("textarea");reply.rows=2;reply.maxLength=8192;reply.setAttribute("aria-label",`${notice.title || "通知元"}への返答`);
      const submit=document.createElement("button");submit.type="button";submit.textContent="この通知元へ返答";
      const report=error=>{document.getElementById("status").textContent=error.message;};
-     submit.addEventListener("click",async()=>{if(!reply.value.trim())return;submit.disabled=true;try{await window.assistant.replySource({noticeId:notice.id,text:reply.value});reply.value="";}catch(error){report(error);}finally{submit.disabled=false;}});
+     let sending=false;submit.addEventListener("click",async()=>{const draft=reply.value;if(sending||!draft.trim())return;sending=true;submit.disabled=true;try{await window.assistant.replySource({noticeId:notice.id,text:draft});if(reply.value===draft)reply.value="";}catch(error){report(error);}finally{sending=false;submit.disabled=false;}});
      const destination=document.createElement("small"),read=document.createElement("button");read.type="button";read.className="notice-title-button";read.textContent=notice.title || "通知元";
      read.title="この通知の内容を確認";
      read.addEventListener("click",()=>window.assistant.readNotice({noticeId:notice.id}).then(()=>{selectNotice(notice.id);acknowledgeNotification(notice.id);}).catch(report));destination.append(read);
      destination.title=notice.title || "通知元";
      const actions=document.createElement("span");actions.className="notice-actions";actions.append(open,main);
-     const summary=document.createElement("summary");summary.append(destination);entry.append(summary,actions,words);
+     const summary=document.createElement("summary");summary.append(destination);
+     const work=document.createElement("div");work.className="notice-work-summary";
+     const workTitle=document.createElement("strong");workTitle.textContent="作業要約・判断事項";
+     const workText=document.createElement("p");workText.className="notice-work-summary-text";
+     const workStatus=document.createElement("p");workStatus.className="notice-work-summary-status";
+     const refresh=document.createElement("button");refresh.type="button";refresh.className="notice-summary-refresh";refresh.textContent="要約を再試行";refresh.onclick=()=>window.assistant.refreshNotificationSummary({noticeId:notice.id}).catch(report);
+     work.append(workTitle,workStatus,workText,refresh);
+     const original=document.createElement("details"),originalTitle=document.createElement("summary");originalTitle.textContent="原文・詳細";original.append(originalTitle,words);
+     entry.append(summary,work,original,actions);
      if(notice.kind!=="question")entry.append(reply,submit);
      if(notice.kind==="attention") for(const [keyName,label]of [["Enter","Enterで確認"],["Escape","Escで戻る"],["y","yを送信"],["n","nを送信"]]){
        const key=document.createElement("button");key.type="button";key.textContent=label;key.onclick=async()=>{key.disabled=true;try{await window.assistant.sourceKey({noticeId:notice.id,keyName});}catch(error){report(error);}finally{key.disabled=false;}};entry.append(key);
      }
-     noticeRows.set(notice.id,entry);inbox.prepend(entry);
+     renderSummary(entry,state.noticeSummaries?.[notice.id]);noticeRows.set(notice.id,entry);inbox.prepend(entry);
    }
    if(Number.isSafeInteger(state.noticeFocusRevision)&&state.noticeFocusRevision>noticeFocusRevision){
      noticeFocusRevision=state.noticeFocusRevision;selectNotice(state.focusedNoticeId);
@@ -128,16 +130,14 @@
  const start = document.getElementById("start-session");
  const adopt = document.getElementById("adopt-session");
  const sessionStatus = document.getElementById("session-status");
- const models=document.getElementById("agent-model"),efforts=document.getElementById("agent-effort"),summaryToggle=document.getElementById("notification-summary-enabled");
+ const models=document.getElementById("agent-model"),efforts=document.getElementById("agent-effort");
  const choiceStatus=document.getElementById("captain-choice-status"),catalogStatus=document.getElementById("model-options-status");
- summaryToggle.checked=preferences.notificationSummary!==false;
  let choiceLoading=false,choiceSaving=false,choiceValid=true,catalogEpoch=0,modelRows=[],selectedKind="";
  const catalogs=new Map();
  const fill=(select,rows,value)=>{select.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=row.id;option.textContent=row.label;select.append(option);}select.value=value;};
  const setChoiceDisabled=()=>{
   kinds.disabled=choiceSaving||!!chatState?.busy;
   models.disabled=efforts.disabled=choiceLoading||choiceSaving||!!chatState?.busy;
-  summaryToggle.disabled=choiceLoading||choiceSaving;
   if(choiceLoading||choiceSaving||!choiceValid)start.disabled=true;
  };
  const fillEfforts=(wanted="",retainSaved=false)=>{
@@ -162,13 +162,13 @@
  const saveChoice=async()=>{
   if(choiceLoading||choiceSaving||!kinds.value)return;
   choiceSaving=true;choiceValid=false;setChoiceDisabled();choiceStatus.textContent="選択を保存しています。";
-  try{const saved=await window.assistant.chooseCaptain({kind:kinds.value,profile:{model:models.value,effort:efforts.value},notificationSummary:summaryToggle.checked});Object.assign(preferences,saved);choiceValid=true;choiceStatus.textContent="選択を保存しました。次回の新しい専用セッションから反映します。";}
+  try{const saved=await window.assistant.chooseCaptain({kind:kinds.value,profile:{model:models.value,effort:efforts.value},notificationSummary:preferences.notificationSummary!==false});Object.assign(preferences,saved);choiceValid=true;choiceStatus.textContent="選択を保存しました。次回の新しい専用セッションから反映します。";}
   catch(error){choiceStatus.textContent=`保存できません：${error.message}。もう一度選択してください。`;}
   finally{choiceSaving=false;setChoiceDisabled();if(chatState)updateChatControls();}
  };
  kinds.addEventListener("change",()=>{void loadSelection().then(current=>{if(current)return saveChoice();});});
  models.addEventListener("change",()=>{fillEfforts(efforts.value);void saveChoice();});
- efforts.addEventListener("change",()=>void saveChoice());summaryToggle.addEventListener("change",()=>{document.getElementById("notification-summary-section").hidden=!summaryToggle.checked||!chatState?.session||!chatState?.notificationSummary;void saveChoice();});
+ efforts.addEventListener("change",()=>void saveChoice());
  const updateChatControls=()=>{
   const info=chatState?.session;
   start.disabled=!chatState?.connected||chatState.busy||!chatState.kinds.some(k=>k.kind===kinds.value&&k.available)||!!info&&!["shell","stopped"].includes(info.state)||choiceLoading||choiceSaving||!choiceValid;
@@ -188,15 +188,9 @@
    document.getElementById("destination").textContent = info ? `専用アシスタント・${info.kind}・${info.paneId.slice(0,8)}` : "専用アシスタント";
    document.getElementById("connection").hidden = true;
    sessionStatus.textContent = state.hint;
-   const canSend = state.notificationSummary?.status!=="summarizing" && state.connected && !state.busy && info?.state === "ready" && target?.state === "idle";
+   const canSend = state.connected && !state.busy && info?.state === "ready" && target?.state === "idle";
    message.disabled = send.disabled = !canSend;
    message.placeholder = canSend ? "船長へのメッセージ" : "専用セッションの接続を確認してください";
-   const summary=state.notificationSummary;
-   document.getElementById("notification-summary-refresh").disabled=summary?.status==="summarizing"||state.busy||!state.connected;
-   updateSummaryReplies();
-   document.getElementById("notification-summary-section").hidden=!info||!summaryToggle.checked||!summary;
-   document.getElementById("notification-summary-status").textContent=summary?.message??"";
-   document.getElementById("notification-summary-text").textContent=summary?.text??"";
    const launch=info?.launchSettings, desired=state.launchProfiles?.[info?.kind];
    const requested=launch ? `起動時指定：モデル ${launch.model||"既定値"} / effort ${launch.effort||"既定値"}` : "起動時のモデル・effort指定は不明です";
    const differs=launch&&desired&&(launch.model!==desired.model||launch.effort!==desired.effort);
@@ -222,7 +216,6 @@
    log.querySelectorAll(".chat-message").forEach(element => element.remove());
    for (const entry of state.messages) {
      if(entry.role==="user"&&/\[操舵室の通知まとめ [a-f0-9-]{36}\]/.test(entry.text))continue;
-     if(summary?.status==="ready"&&entry.role==="assistant"&&entry.text===summary.text)continue;
      const paragraph = document.createElement("p"); paragraph.className = `spoken chat-message ${entry.role}`;
      paragraph.textContent = entry.text; log.append(paragraph);
    }

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
   nextLoad:null as null|(()=>Promise<void>),
+  deferReady:false,
   audioRead:null as null|((path:string,signal?:AbortSignal)=>Promise<import("./transcription.js").AudioFile>),
   displayRequests: new Map<string, (request: any, callback: (value: any) => void) => void>(),
   permissionChecks: new Map<string, (...args: any[]) => boolean>(),
@@ -83,7 +84,7 @@ class MockWindow extends EventEmitter {
   async loadURL(url: string) {
     this.url = url;
     this.webContents.mainFrame.url = url;
-    queueMicrotask(() => this.emit("ready-to-show"));
+    if(!fixture.deferReady)queueMicrotask(() => this.emit("ready-to-show"));
     const delayed=fixture.nextLoad;fixture.nextLoad=null;if(delayed)await delayed();
   }
   close(){this.destroy();}
@@ -101,6 +102,7 @@ class MockWindow extends EventEmitter {
   setBounds = vi.fn((value: typeof this.bounds) => {this.bounds={...value};this.emit("resize");});
   menu:unknown="default";
   setMenu=vi.fn(value=>{this.menu=value;});
+  setAlwaysOnTop=vi.fn();
   minimized=false;maximized=false;
   minimize=vi.fn(()=>{this.minimized=true;this.emit("minimize");});
   maximize=vi.fn(()=>{this.maximized=true;});
@@ -1890,4 +1892,33 @@ it("follows shared theme changes and OS selection without overwriting the indepe
  await save(event,{enabled:true,mode:'tray',appearance:'dark',colorTheme:'nord'});
  rpc.options.prefsChanged!({rev:102,prefs:{theme:'one-light'}});expect(await state(event)).toMatchObject({mode:'dark',theme:'nord'});
  await save(event,{enabled:false});
+});
+
+it("applies the selected front/back layer to the character, chat and notifications only",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},save=fixture.handlers.get('assistant:save')!;
+ await save(event,{enabled:true,mode:'character',windowLayer:'front',quietFullscreen:false,voiceEnabled:false});
+ const character=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/character.html')).at(-1)!;expect(character.options.alwaysOnTop).toBe(true);
+ await fixture.handlers.get('assistant:chat')!(event);const chat=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/bubble.html')).at(-1)!;
+ await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));chat.focus.mockClear();chat.showInactive.mockClear();
+ await save(event,{enabled:true,mode:'character',windowLayer:'back',quietFullscreen:false,voiceEnabled:false});
+ expect(chat.setAlwaysOnTop).toHaveBeenLastCalledWith(false);
+ const backCharacter=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/character.html')).at(-1)!;expect(backCharacter.options.alwaysOnTop).toBe(false);
+ await fixture.handlers.get('assistant:chat')!(event);expect(chat.showInactive).toHaveBeenCalled();expect(chat.focus).not.toHaveBeenCalled();
+ expect(settings.options.alwaysOnTop).toBe(false);expect(settings.setAlwaysOnTop).not.toHaveBeenCalled();
+ await save(event,{enabled:true,mode:'character',windowLayer:'front',quietFullscreen:false,voiceEnabled:false});expect(chat.setAlwaysOnTop).toHaveBeenLastCalledWith(true);
+ await save(event,{enabled:false});
+});
+
+it("uses the current stacking mode when a delayed chat window becomes ready",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},save=fixture.handlers.get('assistant:save')!;
+ await save(event,{enabled:true,mode:'tray',windowLayer:'front'});
+ fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/bubble.html')).forEach(w=>w.destroy());
+ fixture.deferReady=true;
+ try{
+  await fixture.handlers.get('assistant:chat')!(event);const chat=fixture.windows.at(-1)!;
+  await save(event,{enabled:true,mode:'tray',windowLayer:'back'});chat.emit('ready-to-show');
+  expect(chat.focus).not.toHaveBeenCalled();expect(chat.showInactive).toHaveBeenCalled();expect(chat.setAlwaysOnTop).toHaveBeenLastCalledWith(false);
+ }finally{fixture.deferReady=false;await save(event,{enabled:false});}
 });

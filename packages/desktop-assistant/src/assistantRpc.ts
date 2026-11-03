@@ -9,6 +9,7 @@ import WebSocket from "ws";
 
 export type AssistantMethod =
   | "prefs.get"
+  | "notification.summary"
   | "ask.subscribe"
   | "server.resource_app_demand"
   | "server.resource_app_report"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import NotificationWorkSummary from "./NotificationWorkSummary.vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { pickToastSlot } from "../display/toastSlot.js";
 import { useDisplayStore } from "../store/display.js";
@@ -124,7 +125,7 @@ function dismiss(id: number): void {
 <template>
   <div ref="listEl" class="toast-list" :class="{ 'toast-list-low': low }" role="status" aria-live="polite">
     <div v-for="t in view.toasts" :key="t.id" class="toast" :class="{ 'toast-sticky': t.kind === 'sticky', 'toast-wrap': t.wrap }" @click="dismiss(t.id)">
-      <span class="toast-message" :title="t.kind === 'sticky' ? t.message : undefined">{{ t.message }}</span>
+      <div class="toast-body"><span class="toast-message" :title="t.kind === 'sticky' ? t.message : undefined">{{ t.message }}</span><NotificationWorkSummary v-if="t.notification" :pane-id="t.notification.paneId" :notice-key="t.notification.key" /></div>
       <!-- 行動ボタンと閉じるボタンは `<button>`。既存のトーストは `<div>` で Tab の順に入らず、
            4 秒で消えるので実害が無かったが、**消えないトーストはキーボードで片付けられる必要がある**。
            本体のクリックは「消す」なので、ボタン側は `.stop` で食い止める。 -->
@@ -135,6 +136,7 @@ function dismiss(id: number): void {
 </template>
 
 <style scoped>
+.toast-body{min-width:0;flex:1}.toast-body>.toast-message{display:block}
 /*
  * 置き場所は**画面の右上**（20261005-notify-bell。以前は下・中央で、端末の入力欄に被さっていた）。古いものが上・新しいものが下に積む——
  * 新しいものを上に差し込むと、押そうとしている［移動］・［×］が下へずれる。下に足せば、既にある行は動かない。

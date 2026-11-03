@@ -66,4 +66,5 @@ it("keeps existing dark appearance and persists the system appearance choice",as
  await file.write({appearance:"sodashitsu",colorTheme:"nord"});expect(await file.read()).toMatchObject({appearance:"sodashitsu",colorTheme:"nord"});
  expect(()=>DesktopAssistantPreferences.parse({appearance:"arbitrary"})).toThrow();
  expect(()=>DesktopAssistantPreferences.parse({colorTheme:"arbitrary"})).toThrow();
+ await file.write({windowLayer:"back"});expect((await file.read()).windowLayer).toBe("back");
 });

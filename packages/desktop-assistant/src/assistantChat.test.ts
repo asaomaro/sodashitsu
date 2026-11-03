@@ -8,7 +8,7 @@ const chats: AssistantChat[] = [];
 afterEach(() => {
   for (const chat of chats.splice(0)) chat.stop();
 });
-function fixture(workContext?:(notice:import("@sodashitsu/protocol").AssistantNotice)=>Promise<string>) {
+function fixture() {
   const deviceId = randomUUID();
   let info: AssistantSessionInfo | null = null;
   let conversation: () => Promise<AssistantConversationPage> = async () => {
@@ -27,7 +27,6 @@ function fixture(workContext?:(notice:import("@sodashitsu/protocol").AssistantNo
     { request } as unknown as Pick<AssistantRpc, "request">,
     changed,
     0,
-    workContext,
   );
   chats.push(chat);
   const actor = {
@@ -334,70 +333,3 @@ it.each(["copilot", "agy"] as const)("displays %s conversation text, replaces th
  await f.chat.send({revision:f.chat.snapshot().revision,instanceId:info.agent.instanceId,text:"reply"});expect(f.request).toHaveBeenCalledWith("assistant.prompt",{deviceId:f.deviceId,instanceId:info.agent.instanceId,text:"reply"});
 });
 it("keeps unsupported providers on their dedicated terminal without guessing another transcript",async()=>{const f=fixture();f.info({...f.ready,kind:"bob",agent:{...f.ready.agent!,kind:"bob"}});await connected(f);expect(f.chat.snapshot().hint).toContain("未対応");expect(f.request.mock.calls.some(c=>c[0]==="assistant.conversation")).toBe(false);});
-
-
-it("summarizes worker context only when captain is idle, recognizes the answer, and avoids duplicate/self notifications",async()=>{
- const context=vi.fn(async()=>"依頼：設定を修正。作業：保存先を統一。検証：3件成功。判断待ち：リリース可否。");
- const f=fixture(context),sessionId=randomUUID();let messages:AssistantConversationPage["messages"]=[];
- f.info({...f.ready,agent:{...f.ready.agent!,state:"working"}});
- f.page(async()=>({kind:"codex",sessionId,messages,nextOffset:null,partial:false}));
- f.chat.configure({},undefined,true);
- const notice={id:randomUUID(),key:"done:1",kind:"done" as const,source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",workspaceId:randomUUID(),paneId:randomUUID(),agentInstanceId:randomUUID()},title:"作業担当",message:"作業が完了しました",at:1};
- f.chat.notifications([notice]);await connected(f);await f.chat.refresh();
- expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(0);
- f.info(f.ready);await f.chat.refresh();await vi.waitFor(()=>expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(1));
- const prompt=f.request.mock.calls.find(c=>c[0]==="assistant.prompt")![1] as {text:string};
- expect(prompt.text).toContain("保存先を統一");expect(prompt.text).toContain("返信案");expect(prompt.text).toContain("ツール実行・コード変更・他エージェントへの送信はせず");
- messages=[{id:"summary-question",role:"user",text:prompt.text},{id:"summary-commentary",role:"assistant",text:"通知を確認します。"},{id:"summary-answer",role:"assistant",text:"作業担当：保存先を統一、3件検証済み。返信案：リリースを進めてください。"}];
- await f.chat.refresh();await vi.waitFor(()=>expect(f.chat.snapshot().notificationSummary?.status).toBe("ready"));
- expect(f.chat.snapshot().notificationSummary?.text).toContain("返信案");
- f.chat.notifications([notice,{...notice,id:randomUUID(),source:{...notice.source,paneId:f.ready.paneId}}]);await f.chat.refresh();
- expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(1);expect(context).toHaveBeenCalledOnce();
- f.chat.configure({},undefined,false);expect(f.chat.snapshot().notificationSummary).toBeUndefined();
-});
-
-it("does not send an automatic summary after opting out while worker context is being read",async()=>{
- let release!:(value:string)=>void;const f=fixture(()=>new Promise(resolve=>{release=resolve;}));
- f.info(f.ready);f.page(async()=>({kind:"codex",sessionId:"summary-opt-out",messages:[],nextOffset:null,partial:false}));
- f.chat.configure({},undefined,true);f.chat.notifications([{id:randomUUID(),key:"done:1",kind:"done",source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",workspaceId:randomUUID(),paneId:randomUUID(),agentInstanceId:randomUUID()},title:"担当",message:"判断待ち",at:1}]);
- await connected(f);await vi.waitFor(()=>expect(release).toBeTypeOf("function"));f.chat.configure({},undefined,false);release("作業内容");await f.chat.refresh();
- expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(0);
-});
-
-
-it("discards a notification batch that resolves while work context is loading",async()=>{
- let release!:(value:string)=>void;const f=fixture(()=>new Promise(resolve=>{release=resolve;}));
- f.info(f.ready);f.page(async()=>({kind:"codex",sessionId:"batch-change",messages:[],nextOffset:null,partial:false}));
- f.chat.configure({},undefined,true);f.chat.notifications([{id:randomUUID(),key:"done:1",kind:"done",source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",workspaceId:randomUUID(),paneId:randomUUID(),agentInstanceId:randomUUID()},title:"担当",message:"承認待ち",at:1}]);
- await connected(f);await vi.waitFor(()=>expect(release).toBeTypeOf("function"));f.chat.notifications([]);release("判断待ちの詳細");await f.chat.refresh();
- expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(0);expect(f.chat.snapshot().notificationSummary).toBeUndefined();
-});
-
-it("recovers an accepted summary after reconnect without sending it twice, and resets on conversation change",async()=>{
- const f=fixture(),id=randomUUID();let sessionId="scope-a",messages:AssistantConversationPage["messages"]=[];
- f.info(f.ready);f.page(async()=>({kind:"codex",sessionId,messages,nextOffset:null,partial:false}));
- f.chat.configure({},undefined,true);f.chat.notifications([{id,key:"done:1",kind:"done",source:{serverOrigin:"http://127.0.0.1:7780",machineId:"local",workspaceId:randomUUID(),paneId:randomUUID(),agentInstanceId:randomUUID()},title:"担当",message:"作業完了",at:1}]);
- await connected(f);await vi.waitFor(()=>expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(1));
- const prompt=(f.request.mock.calls.find(c=>c[0]==="assistant.prompt")![1] as {text:string}).text;
- f.chat.connection(false);messages=[{id:"request",role:"user",text:prompt},{id:"reply",role:"assistant",text:"前の通知要約"}];f.chat.connection(true);
- await vi.waitFor(()=>expect(f.chat.snapshot().notificationSummary?.status).toBe("ready"));expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(1);
- sessionId="scope-b";messages=[];await f.chat.refresh();
- await vi.waitFor(()=>expect(f.request.mock.calls.filter(c=>c[0]==="assistant.prompt")).toHaveLength(2));expect(f.chat.snapshot().notificationSummary?.text).not.toBe("前の通知要約");
-});
-
-it("returns to idle waiting after a definite server busy refusal",async()=>{
- const f=fixture(),original=f.request.getMockImplementation()!;let first=true;
- f.request.mockImplementation(async(method,input)=>{if(method==='assistant.prompt'&&first){first=false;f.info({...f.ready,agent:{...f.ready.agent!,state:'working'}});throw Object.assign(Error('not idle'),{code:'agent_pane_busy'});}return original(method,input);});
- f.info(f.ready);f.page(async()=>({kind:'codex',sessionId:'busy-summary',messages:[],nextOffset:null,partial:false}));f.chat.configure({},undefined,true);
- f.chat.notifications([{id:randomUUID(),key:'done:1',kind:'done',source:{serverOrigin:'http://127.0.0.1:7780',machineId:'local',workspaceId:randomUUID(),paneId:randomUUID(),agentInstanceId:randomUUID()},title:'担当',message:'作業完了',at:1}]);
- await connected(f);await vi.waitFor(()=>expect(first).toBe(false));await f.chat.refresh();expect(f.chat.snapshot().notificationSummary?.status).toBe('waiting');
- f.info(f.ready);await f.chat.refresh();await vi.waitFor(()=>expect(f.request.mock.calls.filter(c=>c[0]==='assistant.prompt')).toHaveLength(2));
-});
-
-it("does not summarize stale notification text when source validation fails",async()=>{
- const f=fixture(async()=>{throw Object.assign(Error('通知元が変更されました'),{notificationInvalid:true});});
- f.info(f.ready);f.page(async()=>({kind:'codex',sessionId:'stale-source',messages:[],nextOffset:null,partial:false}));f.chat.configure({},undefined,true);
- f.chat.notifications([{id:randomUUID(),key:'done:1',kind:'done',source:{serverOrigin:'http://127.0.0.1:7780',machineId:'local',workspaceId:randomUUID(),paneId:randomUUID(),agentInstanceId:randomUUID()},title:'担当',message:'古い判断待ち',at:1}]);
- await connected(f);await vi.waitFor(()=>expect(f.chat.snapshot().notificationSummary?.status).toBe('error'));
- expect(f.request.mock.calls.filter(c=>c[0]==='assistant.prompt')).toHaveLength(0);
-});

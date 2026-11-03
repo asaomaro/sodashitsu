@@ -1,6 +1,6 @@
 "use strict";
 let current;
-const fields = ["enabled", "mode", "appearance", "colorTheme", "characterId", "characterSize", "serverOrigin", "reducedMotion", "followSystemMotion", "idleFloating", "iconRotation", "mute", "voiceEnabled", "voiceFollowCharacter", "voiceCoreVersion", "voiceProvider", "voicevoxOrigin", "voicevoxStyleId", "transcriptionEnabled", "transcriptionProvider", "transcriptionOrigin", "ocrEnabled", "ocrProvider", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications", "quietFullscreen"];
+const fields = ["enabled", "mode", "appearance", "colorTheme", "windowLayer", "characterId", "characterSize", "serverOrigin", "reducedMotion", "followSystemMotion", "idleFloating", "iconRotation", "mute", "voiceEnabled", "voiceFollowCharacter", "voiceCoreVersion", "voiceProvider", "voicevoxOrigin", "voicevoxStyleId", "transcriptionEnabled", "transcriptionProvider", "transcriptionOrigin", "ocrEnabled", "ocrProvider", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications", "quietFullscreen"];
 const status = document.getElementById("status");
 function display(preferences) {
  current = preferences;
@@ -8,7 +8,7 @@ function display(preferences) {
   const element = document.getElementById(key);
   if (element.type === "checkbox") element.checked = (key === "followSystemMotion" || key === "iconRotation" || key === "voiceFollowCharacter") ? preferences[key] !== false : preferences[key];
   else {
-   const defaults={colorTheme:"sodashitsu-assistant-dark",appearance:"dark",voiceProvider:"system",voicevoxOrigin:"http://127.0.0.1:50021",voicevoxStyleId:2,ocrProvider:"agent"};
+   const defaults={windowLayer:"front",colorTheme:"sodashitsu-assistant-dark",appearance:"dark",voiceProvider:"system",voicevoxOrigin:"http://127.0.0.1:50021",voicevoxStyleId:2,ocrProvider:"agent"};
    const value=preferences[key]??defaults[key]??"";
    if(key==="voiceCoreVersion"&&value&&!Array.from(element.options).some(o=>o.value===value)){const o=document.createElement("option");o.value=value;o.textContent=value;element.append(o);}
    if(key==="voicevoxStyleId"&&!Array.from(element.options).some(o=>o.value===String(value))){const o=document.createElement("option");o.value=String(value);o.textContent=`保存済みの声（${value}）`;element.append(o);}
@@ -114,13 +114,21 @@ document.getElementById("voice-stop").onclick=()=>window.assistant.stopVoice();
 
 document.getElementById("voice-speakers").onclick=async()=>{const button=document.getElementById("voice-speakers");button.disabled=true;try{const provider=document.getElementById("voiceProvider").value,origin=document.getElementById("voicevoxOrigin").value,coreVersion=document.getElementById("voiceCoreVersion").value;const rows=await window.assistant.voiceSpeakers({provider,...(provider==="voicevox"?{origin}:{coreVersion})});if(document.getElementById("voiceProvider").value!==provider||(provider==="core"&&document.getElementById("voiceCoreVersion").value!==coreVersion)||(provider==="voicevox"&&document.getElementById("voicevoxOrigin").value!==origin))return;const select=document.getElementById("voicevoxStyleId"),value=select.value;select.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=String(row.id);option.textContent=row.label;select.append(option);}if(rows.some(r=>String(r.id)===value))select.value=value;await syncCharacterVoice();status.textContent=`${rows.length}種類の声を読み込みました。選んで保存してください。`;}catch(error){status.textContent=error.message;}finally{button.disabled=false;}};
 
+const themeMedia=window.matchMedia("(prefers-color-scheme: dark)");
 function syncAppearanceFields(adjust=false){
  const mode=document.getElementById("appearance"),theme=document.getElementById("colorTheme");
- theme.disabled=mode.value==="sodashitsu";
- if(adjust&&["light","dark"].includes(mode.value))theme.value=theme.selectedOptions[0]?.dataset[mode.value]??theme.value;
+ const following=mode.value==="sodashitsu";
+ theme.disabled=following;document.getElementById("color-theme-setting").hidden=following;
+ if(following)return;
+ if(mode.value==="system"){for(const option of theme.options)option.hidden=false;return;}
+ const appearance=mode.value==="system"?(themeMedia.matches?"dark":"light"):mode.value;
+ if(adjust)theme.value=theme.selectedOptions[0]?.dataset[appearance]??theme.value;
+ for(const option of theme.options)option.hidden=option.dataset.mode!==appearance;
 }
+themeMedia.addEventListener("change",()=>syncAppearanceFields(true));
 document.getElementById("appearance").addEventListener("change",()=>syncAppearanceFields(true));
 document.getElementById("colorTheme").addEventListener("change",()=>{
  const mode=document.getElementById("appearance");
  if(mode.value!=="system"&&mode.value!=="sodashitsu")mode.value=document.getElementById("colorTheme").selectedOptions[0].dataset.mode;
+ syncAppearanceFields(false);
 });
