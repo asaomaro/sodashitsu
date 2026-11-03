@@ -1,0 +1,6 @@
+exitCode: 0
+> @sodashitsu/server@0.1.0 build C:\git\sodashitsu\packages\server
+> tsc -b && node ../desktop-assistant/scripts/build-host.mjs && node scripts/prune-retired-features.mjs
+
+assistant_internal_resources_built_no_execution
+7b789d32 fix(desktop): localhost閲覧時は設定済みの公開URLへ接続

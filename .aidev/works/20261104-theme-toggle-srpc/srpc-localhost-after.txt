@@ -1,0 +1,3 @@
+{"ready":true,"status":"接続中","errors":[],"frames":"0","video":"0","locked":false,"buttons":["操作する","IME ON","IME OFF","情報・設定","最大化","閉じる","▴"]}
+{"event":"ready","allowInput":true,"secureDesktop":true,"lockScreenCover":true}
+{"status":"ロック画面・閲覧中","errors":[],"frames":"0","video":"0","locked":true,"buttons":["操作する","情報・設定","最大化","閉じる","▴","サインイン画面へ進む"]}

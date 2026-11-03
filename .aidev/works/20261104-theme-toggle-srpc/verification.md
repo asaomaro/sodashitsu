@@ -17,3 +17,11 @@ sr-pcへの更新とWindows上のpnpm install --frozen-lockfile・pnpm build成�
 ## Windowsロック解除サービス
 
 sr-pcのインストール済みサービスは古い版で停止しており、ロック画面からサインイン画面へ切り替えると共有が終了する。現行インストーラーは-ValidateOnlyでコンパイル成功。現在のリモート実行は非管理者のため、WindowsのUAC確認が必要。昇格起動の要求を行い、利用者へ本体のロック解除・UAC承認を依頼している。PINはログ・成果物・リポジトリへ保存していない。
+
+## 最終反映と残る承認
+
+localhost修正もsr-pcでpull/build成功。Windowsのhandoffを別プロセスで起動し、接続先ログの「3 pane(s) kept running」と、既存4ペインの保持を確認した。手元は既存13ペイン保持・アシスタントrunning/ready。
+
+双方の更新後、localhostから実機sr-pcへ新しく接続し、errorなし・allowInput=true・secureDesktop=true・lockScreenCover=trueのreadyをブラウザで受信した（srpc-localhost-after.txt）。初期ロック画面では意図的に撮影しないため、フレーム数0は正常。サインイン後の実画面取得はまだ確認できていない。
+
+インストーラーの昇格起動を要求したが、exec.readはtimeoutになった。sr-pcではconsentプロセス1件、更新結果ファイル未作成を確認している。更新完了・PINによる解除・サインイン後の実画面確認は、Windows本体でのロック解除/UAC承認待ち。利用者への非同期質問を出している。完了扱いにはしていない。作成した検証ブラウザは終了済み。
