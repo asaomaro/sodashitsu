@@ -1,0 +1,4 @@
+{"ok":true,"output":"desktop_unlock_installed_demand_start"}
+
+{"Name":"SodaDesktopUnlock-68F6FB663A79FE16","State":"Stopped"}
+{"LastWriteTime":"\/Date(1793743548292)\/"}
