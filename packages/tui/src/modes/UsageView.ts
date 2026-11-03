@@ -316,7 +316,9 @@ export class UsageDashboard {
     if (status) put(y++, status);
     const section = (title: string) => {
       const label = truncate(`─ ${title} `, Math.max(0, area.w - 2));
-      put(y++, label + "─".repeat(Math.max(0, area.w - 2 - stringWidth(label))));
+      const row = y++;
+      put(row, label + "─".repeat(Math.max(0, area.w - 2 - stringWidth(label))), c.active);
+      if (row < area.y + area.h) grid.text(area.x + 1, row, label, c.accent, c.active, 0, Math.max(0, area.w - 2));
     };
     section("アカウントの利用枠");
     const accountLines = this.usage.data.accounts.flatMap((a) => [

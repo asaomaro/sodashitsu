@@ -3,11 +3,18 @@ import type { KeyInput } from "@sodashitsu/client-core";
 import type { RequestPort } from "../term/PaneRegistry.js";
 import type { UiState } from "../model/UiState.js";
 import type { Grid, Rect, CursorState } from "../render/Screen.js";
+import { ATTR } from "../render/color.js";
+import { pageHeader } from "../render/chrome/page.js";
 import type { ThemeColors } from "../render/color.js";
 import { dialogColors, hiddenCursor, inside, isEsc, isDown, isUp, wrapText, type OverlayMouse } from "./overlay.js";
-import { stringWidth } from "../render/width.js";
+import { stringWidth, truncate } from "../render/width.js";
 import { safeText } from "./document.js";
 import { ScrollBar } from "./ScrollBar.js";
+
+type MonitorLine = string | {text:string;style:"section"|"metric"|"end"|"table"|"warning"|"normal";usage?:boolean};
+const sectionLine = (text:string):MonitorLine => ({text,style:"section"});
+const metricLine = (text:string,usage=false):MonitorLine => ({text,style:"metric",usage});
+const endLine = ():MonitorLine => ({text:"",style:"end"});
 
 const number = (n: number) => n.toLocaleString("ja-JP");
 const percent = (n: number | null) => n === null ? "—" : `${n.toFixed(1)}%`;
@@ -170,49 +177,60 @@ export class MonitorView {
     }
     this.redraw(); return true;
   }
-  private resourceLines(): string[] {
+  private resourceLines(): MonitorLine[] {
     const d = this.resource;
     if (!d) return ["リソース情報を取得しています…"];
     const all = d.processes, cpu = all.filter(p => p.cpuPercent !== null), mem = all.filter(p => p.rssBytes !== null);
     const groups = [undefined, ...Object.keys(labels)] as (keyof typeof labels | undefined)[];
     const selected = groups[this.group];
+    const wide = (this.rect?.w ?? 0) >= 80;
+    const column = (text:string,width:number,right=false) => {const value=truncate(safeText(text),width);const pad=" ".repeat(Math.max(0,width-stringWidth(value)));return right?pad+value:value+pad;};
+    const cells = (name:string,pid:string,cpu:string,rss:string,group:string) => [column(name,20),column(pid,8,true),column(cpu,8,true),column(rss,12,true),group].join(" │ ");
     const rows = all.filter(p => !selected || p.group === selected).sort((a,b) => this.sort === 0 ? (b.rssBytes ?? -1) - (a.rssBytes ?? -1) : this.sort === 1 ? (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1) : a.name.localeCompare(b.name));
     return [
       `ホスト ${d.system.hostname} · ${new Date(d.sampledAt).toLocaleTimeString()}`,
-      `操舵室関連 CPU ${cpu.length ? percent(cpu.reduce((s,p)=>s+p.cpuPercent!,0)) : "—"} (${cpu.length}/${all.length}取得)`,
-      `操舵室関連 RSS ${mem.length ? bytes(mem.reduce((s,p)=>s+p.rssBytes!,0)) : "—"} (${mem.length}/${all.length}取得) · ${all.length}プロセス`,
-      `ホスト全体 CPU ${percent(d.system.cpuPercent)} · メモリ ${bytes(d.system.memoryTotalBytes-d.system.memoryAvailableBytes)} / ${bytes(d.system.memoryTotalBytes)}`,
+      sectionLine("使用量サマリー"),
+      metricLine(`操舵室関連 CPU ${cpu.length ? percent(cpu.reduce((s,p)=>s+p.cpuPercent!,0)) : "—"} (${cpu.length}/${all.length}取得)`,true),
+      metricLine(`操舵室関連 RSS ${mem.length ? bytes(mem.reduce((s,p)=>s+p.rssBytes!,0)) : "—"} (${mem.length}/${all.length}取得) · ${all.length}プロセス`),
+      metricLine(`ホスト全体 CPU ${percent(d.system.cpuPercent)} · メモリ ${bytes(d.system.memoryTotalBytes-d.system.memoryAvailableBytes)} / ${bytes(d.system.memoryTotalBytes)}`,true),
+      metricLine(`CPU ${d.system.cpuPercent === null ? "[????????????]" : bar(d.system.cpuPercent,100)} ${percent(d.system.cpuPercent)} · メモリ ${d.system.memoryTotalBytes > 0 ? bar(d.system.memoryTotalBytes-d.system.memoryAvailableBytes,d.system.memoryTotalBytes) : "[????????????]"}`,true),
+      endLine(),
       "CPUは1コア=100%。合計は100%を超えます。RSSは共有ページを重複して含みます。",
       "取得不能は—。合計は絞り込み前の全対象（別OSアプリを含む）です。",
-      ...d.warnings.map(w=>`注意: ${w}`),
+      ...d.warnings.map((w):MonitorLine=>({text:`注意: ${w}`,style:"warning"})),
+      sectionLine("プロセス一覧"),
       `対象: ${selected ? labels[selected] : "すべて"} · 並び: ${["メモリ","CPU","名前"][this.sort]} · ${rows.length}件`,
-      "プロセス / PID / CPU / RSS / スレッド / 対象・作業 / OS・接続元",
-      ...rows.map(p=>`${p.name} | ${p.pid} | ${percent(p.cpuPercent)} | ${bytes(p.rssBytes)} | ${p.threads ?? "—"} | ${labels[p.group]} · ${p.label} | ${p.platform} · ${p.source}${p.paneId ? ` · pane ${p.paneId.slice(0,8)}` : ""}`),
+      {text:wide?cells("プロセス","PID","CPU","RSS","分類"):"プロセス / PID / CPU / RSS / スレッド / 対象・作業 / OS・接続元",style:"table"},
+      ...rows.flatMap(p=>wide?[cells(p.name,String(p.pid),percent(p.cpuPercent),bytes(p.rssBytes),labels[p.group]),`  ${p.label} · ${p.platform} / ${p.source} · threads ${p.threads ?? "—"}${p.paneId ? ` · pane ${p.paneId.slice(0,8)}` : ""}`]:[`${p.name} | ${p.pid} | ${percent(p.cpuPercent)} | ${bytes(p.rssBytes)} | ${p.threads ?? "—"} | ${labels[p.group]} · ${p.label} | ${p.platform} · ${p.source}${p.paneId ? ` · pane ${p.paneId.slice(0,8)}` : ""}`]).map((text):MonitorLine=>({text,style:"normal"})),
+      endLine(),
       ...(rows.length ? [] : ["表示するプロセスがありません。"]),
     ];
   }
-  private analyticsLines(): string[] {
+  private analyticsLines(): MonitorLine[] {
     const d = this.insights;
     if (!d) return ["利用記録を集計しています…"];
-    const summary = [`期間 ${d.from} ～ ${d.to} (${d.timezone})`,
-      `トークン ${tokens(d.totals)} · 呼出 ${number(d.totals.calls)} · ツール ${number(d.totals.tools)} · エラー ${number(d.totals.errors)}`,
-      `入力 ${tokens(d.totals,d.totals.input)} / 出力 ${tokens(d.totals,d.totals.output)} / キャッシュ読込 ${tokens(d.totals,d.totals.cacheRead)} / 書込 ${tokens(d.totals,d.totals.cacheWrite)}`,
+    const summary:MonitorLine[] = [sectionLine("利用サマリー"),`期間 ${d.from} ～ ${d.to} (${d.timezone})`,
+      metricLine(`トークン ${tokens(d.totals)} · 呼出 ${number(d.totals.calls)} · ツール ${number(d.totals.tools)} · エラー ${number(d.totals.errors)}`),
+      metricLine(`入力 ${tokens(d.totals,d.totals.input)} / 出力 ${tokens(d.totals,d.totals.output)} / キャッシュ読込 ${tokens(d.totals,d.totals.cacheRead)} / 書込 ${tokens(d.totals,d.totals.cacheWrite)}`),
+      endLine(),
       d.collecting ? "記録を収集中です。自動更新で集計が進みます。" : d.partial ? "一部の記録のみの集計です（収集状況を参照）。" : "取得できた記録に基づく集計です。",
     ];
-    const groups = (title: string, rows: InsightGroup[]) => [title, ...rows.map(g=>`${g.calls > 0 && d.totals.calls > 0 ? bar(g.total,d.totals.total) : "[????????????]"} ${g.label} · ${tokens(g)} tok (${g.calls > 0 && d.totals.calls > 0 ? share(g.total,d.totals.total) : "未取得"}) · ${g.calls}回 · tool ${g.tools}`), ...(rows.length ? [] : ["記録なし"])];
+    const groups = (title: string, rows: InsightGroup[]) => [sectionLine(title), ...rows.map(g=>`${g.calls > 0 && d.totals.calls > 0 ? bar(g.total,d.totals.total) : "[????????????]"} ${g.label} · ${tokens(g)} tok (${g.calls > 0 && d.totals.calls > 0 ? share(g.total,d.totals.total) : "未取得"}) · ${g.calls}回 · tool ${g.tools}`), ...(rows.length ? [] : ["記録なし"]),endLine()];
     if (this.section === 0) return [...summary,`活動: 開始 ${d.activity.started} / 完了 ${d.activity.completed} / 中断 ${d.activity.aborted} / 失敗 ${d.activity.failed}`,...groups("エージェント別",d.byKind),...groups("日別",d.byDay)];
-    if (this.section === 1) return [...summary,`前期間 ${tokens(d.previous)} tok / ${d.previous.calls}回 · 差分 ${d.totals.calls > 0 && d.previous.calls > 0 ? number(d.totals.total-d.previous.total) : "未取得"} tok`,...groups("モデル別",d.byModel),...groups("プロジェクト別",d.byProject),...groups("アカウント別",d.byAccount),...groups("時間帯別",d.byHour)];
+    if (this.section === 1) return [...summary,sectionLine("前期間との比較"),`前期間 ${tokens(d.previous)} tok / ${d.previous.calls}回 · 差分 ${d.totals.calls > 0 && d.previous.calls > 0 ? number(d.totals.total-d.previous.total) : "未取得"} tok`,...groups("モデル別",d.byModel),...groups("プロジェクト別",d.byProject),...groups("アカウント別",d.byAccount),...groups("時間帯別",d.byHour)];
     if (this.section === 2) {
       const direct = d.tools.filter(t=>!t.nested), total = direct.reduce((n,t)=>n+t.calls,0);
       return [...summary,...groups("メイン / サブ（トークン比率）",d.byRole.map(g=>({...g,label:roles[g.key as keyof typeof roles] ?? g.label}))),
-        "ツール（呼出比率。同じ呼出の内訳となるnested行は分母から除外）",
+        sectionLine("ツールの利用"),
+        "呼出比率: nested内訳は分母から除外",
         ...d.tools.map(t=>`${t.category}/${t.name} ${t.calls}回 ${t.nested ? "内訳" : share(t.calls,total)} · 成功 ${t.success} / 失敗 ${t.failed} / 不明 ${t.unknown} · ${t.basis === "inferred" ? "推定" : "直接記録"}`),
-        "セッション（親子・取り組み先）",...d.sessions.map(s=>`${roles[s.role]} ${s.kind} ${s.label} · project ${s.project} · parent ${s.parent ?? "—"} · ${tokens(s)} tok`),
+        endLine(),
+        sectionLine("セッション（親子・取り組み先）"),...d.sessions.map(s=>`${roles[s.role]} ${s.kind} ${s.label} · project ${s.project} · parent ${s.parent ?? "—"} · ${tokens(s)} tok`),endLine(),
       ];
     }
     if (this.section === 4) {
       const r = this.report, doc = r?.document;
-      return [...summary,`a 分析CLI ${kinds[this.reportKind]} · g 分析を生成（CLIを実行します）`,
+      return [...summary,sectionLine("エージェントによる分析"),`a 分析CLI ${kinds[this.reportKind]} · g 分析を生成（CLIを実行します）`,
         ...(this.reportBusy ? ["分析を生成しています…"] : []),
         ...(this.reportError ? [this.reportError] : []),
         ...(r ? [`生成: ${r.kind} / ${r.model || "既定モデル"} · ${this.reportScope}`,new Date(r.updatedAt).toLocaleString(),
@@ -221,7 +239,7 @@ export class MonitorView {
           : ["分析はgを押したときだけ生成します。表示・更新だけではモデルを呼びません。"]),
       ];
     }
-    return [...summary,`保持開始 ${d.retainedFrom} · 更新 ${new Date(d.asOf).toLocaleString()}`,
+    return [...summary,sectionLine("収集状況と限界"),`保持開始 ${d.retainedFrom} · 更新 ${new Date(d.asOf).toLocaleString()}`,
       ...d.coverage.map(c=>`${c.kind}: 読込 ${c.files} / 待機 ${c.pending} / 不足 ${c.missing} / 不正 ${c.invalid} / 上限超 ${c.oversized}${c.limited ? " · 件数上限あり" : ""}`),
       "記録にない呼出・結果は推測で補いません。トークンは収集対象と期間内の記録分です。",
       "ツールの内訳やサブエージェントの取得範囲はCLIごとに異なります。",
@@ -241,9 +259,33 @@ export class MonitorView {
     } else { write(1,"g 対象を切替 · s 並べ替え（メモリ / CPU / 名前）"); write(2,"操舵室本体・エージェント・端末・関連サービス・アプリ"); }
     write(3,this.error ? this.error + ((this.resource||this.insights) ? " 最終取得値を表示中。" : "") : "r 更新 · p 自動更新停止/再開 · ↑↓/PgUp/PgDn スクロール · Esc 端末");
     const body = {...area,y:area.y+4,h:Math.max(0,area.h-4)};
-    const lines = (this.mode === "resources" ? this.resourceLines() : this.analyticsLines()).flatMap(line=>wrapText(safeText(line),Math.max(1,area.w-3)));
+    const lines = (this.mode === "resources" ? this.resourceLines() : this.analyticsLines()).flatMap(line=>{
+      const row = typeof line === "string" ? {text:line,style:"normal" as const,usage:false} : line;
+      return (row.style === "section" || row.style === "end" ? [row.text] : wrapText(safeText(row.text),Math.max(1,area.w-6))).map(text=>({...row,text}));
+    });
     this.total = lines.length; this.offset = Math.max(0,Math.min(this.offset,Math.max(0,lines.length-body.h)));
-    for(let i=0;i<body.h;i++) write(i+4,lines[this.offset+i] ?? "");
+    for(let i=0;i<body.h;i++) {
+      const row=lines[this.offset+i];if(!row)continue;
+      const y=body.y+i,x=area.x+1,w=Math.max(0,area.w-3);
+      const background=row.style==="metric"||row.style==="table"?c.active:c.bg;
+      grid.fill({x,y,w,h:1},c.fg,background);
+      if(row.style==="section"||row.style==="end"){
+        const title=row.style==="section"?`╭─ ${safeText(row.text)} `:"╰";
+        grid.text(x,y,title+"─".repeat(Math.max(0,w-stringWidth(title)-1))+(row.style==="section"?"╮":"╯"),c.accent,c.bg,ATTR.bold,w);
+      }else{
+        const fg=row.style==="warning"?c.warn:row.style==="table"?c.accent:c.fg;
+        grid.text(x,y,`${row.style==="metric"?"│ ":"  "}${safeText(row.text)}`,fg,background,row.style==="metric"||row.style==="table"?ATTR.bold:0,w);
+        if(row.style==="metric"&&w>0)grid.text(x+w-1,y,"│",c.accent,background,0,1);
+        // Colored bars and percentages convey ratios without interpreting a missing value as zero.
+        for(const match of row.text.matchAll(/\[[#?\-]+\]|\b\d+(?:\.\d+)?%/g)){
+          const col=stringWidth(row.text.slice(0,match.index))+2;
+          const pct=match[0].endsWith("%")?parseFloat(match[0]):null;
+          const color=match[0].includes("?")?c.dim:!row.usage?(this.mode==="analytics"?c.accent:fg):pct!==null&&pct>=90?theme.ui("--soda-error-fg"):pct!==null&&pct>=70?c.warn:theme.ui("--soda-state-done");
+          if(col<w)grid.text(x+col,y,match[0],color,background,ATTR.bold,w-col);
+        }
+      }
+    }
+    pageHeader(grid,area,theme);
     this.scrollbar.render(grid,body,lines.length,this.offset,c,offset=>{this.offset=offset;this.redraw();});
     return hiddenCursor();
   }

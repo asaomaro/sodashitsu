@@ -15,8 +15,9 @@ function make(mode:"analytics"|"resources",request=vi.fn(async()=>mode==="analyt
  const ui = new UiState(new SessionModel());
  const v = new MonitorView(mode,ui,{request} as unknown as RequestPort,()=>{});views.push(v);
  const key=(s:string)=>v.handleKey(chordToKeyInput(s)!);
- const text=(w=110,h=45)=>{const g=new Grid(w,h);v.render(g,{x:0,y:0,w,h},new ThemeColors("dracula"));return Array.from({length:h},(_,y)=>g.ch.slice(y*w,(y+1)*w).join("")).join("\n");};
- return {v,ui,request,key,text};
+ const grid=(w=110,h=45)=>{const g=new Grid(w,h);v.render(g,{x:0,y:0,w,h},new ThemeColors("dracula"));return g;};
+ const text=(w=110,h=45)=>{const g=grid(w,h);return Array.from({length:h},(_,y)=>g.ch.slice(y*w,(y+1)*w).join("")).join("\n");};
+ return {v,ui,request,key,text,grid};
 }
 it("shows resource totals before filtering, unknown coverage and stops polling when inactive",async()=>{
  vi.useFakeTimers();const h=make("resources");h.v.sync(true);await vi.advanceTimersByTimeAsync(0);
@@ -65,4 +66,18 @@ it("coalesces rapid filter changes until the outstanding collection finishes",as
  const request=vi.fn().mockImplementationOnce(()=>new Promise<UsageInsights>(r=>{resolve=r;})).mockResolvedValue(insightsFixture());
  const h=make("analytics",request);h.v.sync(true);h.key("d");h.key("k");h.key("m");expect(request).toHaveBeenCalledTimes(1);
  resolve(insightsFixture());await vi.waitFor(()=>expect(request).toHaveBeenCalledTimes(2));expect(request.mock.calls[1]).toMatchObject(["agent.usage_insights",{kind:"claude",role:"main"}]);
+});
+
+it("separates cards and headings, keeps composition shares neutral and marks resource warnings",async()=>{
+ const h=make("analytics");h.v.sync(true);await vi.waitFor(()=>expect(h.text()).toContain("利用サマリー"));h.key("3");
+ const grid=h.grid();const theme=new ThemeColors("dracula");
+ expect(h.text()).toContain("╭─ 利用サマリー");expect(h.text()).toContain("╰");
+ expect(h.text()).toContain("╭─ ツールの利用");
+ const percentages=grid.ch.map((ch,i)=>ch==="%"?grid.fg[i]:null).filter(x=>x!==null);
+ expect(percentages.length).toBeGreaterThan(0);expect(percentages.every(c=>c===theme.ui("--soda-accent"))).toBe(true);
+ const bars=grid.ch.map((ch,i)=>ch==="#"?grid.fg[i]:null).filter(x=>x!==null);
+ expect(bars.length).toBeGreaterThan(0);expect(new Set(bars)).toEqual(new Set([theme.ui("--soda-accent")]));
+ const r=make("resources");r.v.sync(true);await vi.waitFor(()=>expect(r.text()).toContain("使用量サマリー"));const g=r.grid();const warning=g.ch.indexOf("注");expect(warning).toBeGreaterThan(0);expect(g.fg[warning]).toBe(theme.ui("--soda-warn-fg"));
+ const noteY=Array.from({length:g.h},(_,y)=>y).find(y=>g.rowText(y).includes("CPUは1コア"))!;
+ const notePercent=g.ch.slice(noteY*g.w,(noteY+1)*g.w).indexOf("%");expect(notePercent).toBeGreaterThan(0);expect(g.fg[noteY*g.w+notePercent]).not.toBe(theme.ui("--soda-error-fg"));
 });

@@ -434,6 +434,10 @@ export class ScheduleView {
         (this.mode === "list" && this.selected === start + i ? "▶ " : "  ") + text,
         this.mode === "list" && this.selected === start + i,
       );
+      if (this.mode === "list") {
+        const enabled=this.data.jobs[start+i]?.enabled;
+        grid.text(area.x+3,area.y+i+3,enabled?"●":"○",enabled?theme.ui("--soda-state-done"):c.dim,this.selected===start+i?c.active:c.bg,0,1);
+      }
       this.hits.set(area.y + i + 3, start + i);
     });
     this.scrollbar.render(

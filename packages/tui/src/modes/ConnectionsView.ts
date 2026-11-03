@@ -17,7 +17,7 @@ import {
 import { safeText } from "./document.js";
 import { TextInput } from "./TextInput.js";
 import { ScrollBar } from "./ScrollBar.js";
-type Row = { text: string; run?: () => void };
+type Row = { heading?:boolean; state?:string; text: string; run?: () => void };
 export class ConnectionsView {
   private connections: ManagedConnection[] = [];
   private delegations: DelegationStatus[] = [];
@@ -131,12 +131,12 @@ export class ConnectionsView {
           this.field = 0;
         },
       },
-      { text: "─ 操作する接続 ─" },
+      { text: "─ 操作する接続 ─", heading:true },
     ];
     if (!this.connections.length) rows.push({ text: "登録された接続はありません。" });
     for (const item of this.connections) {
       rows.push({
-        text: `${item.label} · ${item.transport === "ssh" ? "SSH" : "外向き接続"} · ${state(item.state)} ${item.message ?? ""}`,
+        state:item.state, text: `${item.label} · ${item.transport === "ssh" ? "SSH" : "外向き接続"} · ${state(item.state)} ${item.message ?? ""}`,
       });
       rows.push(
         {
@@ -146,18 +146,18 @@ export class ConnectionsView {
         { text: "  [ 登録削除 ]", run: () => this.manage(item, "remove") },
       );
     }
-    rows.push({ text: "─ 操作を委譲している接続 ─" });
+    rows.push({ text: "─ 操作を委譲している接続 ─", heading:true });
     if (!this.delegations.length) rows.push({ text: "委譲中の接続はありません。" });
     for (const item of this.delegations)
       rows.push(
-        { text: `${item.url} · ${state(item.state)}` },
+        { state:item.state,text: `${item.url} · ${state(item.state)}` },
         {
           text: "  [ 委譲を停止 ]",
           run: () =>
             void this.run(() => this.conn.request("machine.stop_delegation", { id: item.id })),
         },
       );
-    rows.push({ text: `─ 承認待ちの申請 (${this.requests.length}) ─` });
+    rows.push({ text: `─ 承認待ちの申請 (${this.requests.length}) ─`, heading:true });
     if (!this.requests.length) rows.push({ text: "申請はありません。" });
     for (const item of this.requests)
       rows.push(
@@ -327,12 +327,13 @@ export class ConnectionsView {
       grid.text(
         area.x + 1,
         area.y + 3 + i,
-        safeText(row.text),
-        c.fg,
-        this.selected === this.scroll + i ? c.active : c.bg,
+        safeText((row.state?"● ":"")+row.text),
+        row.heading?c.accent:c.fg,
+        this.selected === this.scroll + i || row.heading ? c.active : c.bg,
         0,
         Math.max(0, area.w - 3),
       );
+      if (row.state) grid.text(area.x+1,area.y+3+i,"●",row.state==="online"?theme.ui("--soda-state-done"):row.state==="attention"?c.warn:c.dim,this.selected===this.scroll+i?c.active:c.bg,0,1);
       if (row.run) this.hits.set(area.y + 3 + i, row.run);
     }
     text(area.h - 1, this.error || (this.busy ? "処理中…" : ""));

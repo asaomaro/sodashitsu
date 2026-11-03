@@ -8,6 +8,7 @@ import { SessionToolsDialog } from "../modes/SessionToolsDialog.js";
 import { systemFooterSettingsSections } from "../settings/systemFooterSettings.js";
 import { statuslineSettingsSections } from "../settings/statuslineSettings.js";
 import { GraphTerminal } from "../modes/GraphTerminal.js";
+import { pageHeader } from "../render/chrome/page.js";
 import { MonitorView } from "../modes/MonitorView.js";
 import { ScheduleView } from "../modes/ScheduleView.js";
 import { PluginPackages } from "../modes/PluginPackages.js";
@@ -1785,17 +1786,20 @@ export class TuiApp {
           }
           if(!parts.length && footer.fields.length) grid.text(2, grid.h - 1, systemFooterPlaceholder(this.systemResources, this.systemResourcesFailed), fg, bg, 0, Math.max(0, grid.w - 2));
         }
-        if (this.ui.screen === "graph")
-          return this.graphView.render(grid, layout.paneArea, this.theme);
-        if (this.ui.screen === "analytics") return this.analytics.render(grid, layout.paneArea, this.theme);
-        if (this.ui.screen === "resources") return this.resources.render(grid, layout.paneArea, this.theme);
-        if(this.ui.screen==="connections")return this.connections.render(grid,layout.paneArea,this.theme);
-        if(this.ui.screen==="history")return this.historyScreen?.render({grid,theme:this.theme},layout.paneArea)??null;
-        if (this.ui.screen === "schedule")
-          return this.schedules.render(grid, layout.paneArea, this.theme);
-        if (this.ui.screen === "dashboard") {
-          this.dashboard.render(grid, layout.paneArea, this.theme);
-          return { x: 0, y: 0, visible: false, style: "block", blink: false };
+        if (this.ui.screen !== "base") {
+          let cursor: CursorState | null = null;
+          if (this.ui.screen === "graph") cursor = this.graphView.render(grid, layout.paneArea, this.theme);
+          else if (this.ui.screen === "analytics") cursor = this.analytics.render(grid, layout.paneArea, this.theme);
+          else if (this.ui.screen === "resources") cursor = this.resources.render(grid, layout.paneArea, this.theme);
+          else if (this.ui.screen === "connections") cursor = this.connections.render(grid, layout.paneArea, this.theme);
+          else if (this.ui.screen === "history") cursor = this.historyScreen?.render({grid,theme:this.theme},layout.paneArea) ?? null;
+          else if (this.ui.screen === "schedule") cursor = this.schedules.render(grid, layout.paneArea, this.theme);
+          else if (this.ui.screen === "dashboard") {
+            this.dashboard.render(grid, layout.paneArea, this.theme);
+            cursor = {x:0,y:0,visible:false,style:"block",blink:false};
+          }
+          pageHeader(grid,layout.paneArea,this.theme);
+          return cursor;
         }
         this.statuslines.render(grid, this.theme);
         const cursor = this.decorate(grid, layout);
