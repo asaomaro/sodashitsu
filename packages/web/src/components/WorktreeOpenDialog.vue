@@ -133,7 +133,7 @@ function onKeydown(ev: KeyboardEvent): void {
         </div>
         <!-- タブ順には乗せない（tabindex="-1"）——キーボードでの削除は Delete/Backspace に一本化し、
              role="option" の中に2つ目のタブ停止点を作らない（design「クライアント側」）。 -->
-        <button type="button" class="worktree-open-dialog-delete" tabindex="-1" @click.stop="remove(entry.path)">削除</button>
+        <button data-assistant-action="danger" type="button" class="worktree-open-dialog-delete" tabindex="-1" @click.stop="remove(entry.path)">削除</button>
       </li>
     </ul>
   </dialog>

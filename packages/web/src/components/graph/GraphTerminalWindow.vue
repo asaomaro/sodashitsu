@@ -340,14 +340,14 @@ const sizeText = computed(() => (props.win.cols > 0 ? `${props.win.cols} × ${pr
         <p>別のクライアントが、この pane に直結しています。</p>
         <p class="gtw-notice-sub">引き取ると、そのクライアントの直結は終わります。</p>
         <div class="gtw-notice-actions">
-          <button type="button" class="gtw-btn gtw-takeover" data-graph-terminal-takeover @click="onTakeover">引き取って開く</button>
-          <button type="button" class="gtw-btn" @click="onClose">閉じる</button>
+          <button data-assistant-action type="button" class="gtw-btn gtw-takeover" data-graph-terminal-takeover @click="onTakeover">引き取って開く</button>
+          <button data-assistant-action type="button" class="gtw-btn" @click="onClose">閉じる</button>
         </div>
       </div>
       <div v-else-if="win.status === 'failed'" class="gtw-notice" role="alert" data-graph-terminal-failed>
         <p>{{ win.failure ?? "開けませんでした" }}</p>
         <div class="gtw-notice-actions">
-          <button type="button" class="gtw-btn" @click="onClose">閉じる</button>
+          <button data-assistant-action type="button" class="gtw-btn" @click="onClose">閉じる</button>
         </div>
       </div>
     </div>

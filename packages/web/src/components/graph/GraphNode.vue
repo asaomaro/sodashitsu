@@ -151,7 +151,7 @@ const ariaLabel = computed(() => {
     <div v-if="invalid" class="graph-node-warn">
       ⚠ 無効（pane がありません）
       <!-- 選び直す（rekey_node で線を保つ。design「選び直すか除去するまで」）。キーは r。 -->
-      <button
+      <button data-assistant-action
         v-if="rekeyable"
         type="button"
         class="graph-node-rekey"

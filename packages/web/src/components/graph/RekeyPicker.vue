@@ -126,8 +126,8 @@ onMounted(() => {
       <span v-if="r.note" class="rekey-picker-note">{{ r.note }}</span>
     </label>
     <div class="rekey-picker-actions">
-      <button type="button" class="rekey-picker-cancel" @click="emit('close')">取り消し</button>
-      <button type="button" class="rekey-picker-apply" :disabled="!chosen" @click="apply">
+      <button data-assistant-action type="button" class="rekey-picker-cancel" @click="emit('close')">取り消し</button>
+      <button data-assistant-action type="button" class="rekey-picker-apply" :disabled="!chosen" @click="apply">
         選び直す
       </button>
     </div>

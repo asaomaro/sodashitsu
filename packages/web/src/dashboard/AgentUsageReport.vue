@@ -46,7 +46,7 @@ function saveHtml() {
           <span class="eyebrow">SODASHITSU / AGENT ANALYSIS</span>
           <h2>エージェント利用分析レポート</h2>
         </div>
-        <button data-save-report-html @click="saveHtml">HTMLを保存</button>
+        <button data-assistant-action data-save-report-html @click="saveHtml">HTMLを保存</button>
       </div>
       <p class="report-meta">
         {{ report.kind }} · {{ report.model || "既定モデル" }} ·

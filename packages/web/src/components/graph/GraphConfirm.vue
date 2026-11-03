@@ -57,10 +57,10 @@ function onKeydown(ev: KeyboardEvent): void {
       <p class="graph-confirm-message">{{ message }}</p>
       <p v-if="detail" class="graph-confirm-detail">{{ detail }}</p>
       <div class="graph-confirm-actions">
-        <button ref="cancelBtn" type="button" class="graph-confirm-cancel" @click="emit('cancel')">
+        <button data-assistant-action ref="cancelBtn" type="button" class="graph-confirm-cancel" @click="emit('cancel')">
           {{ cancelLabel }}
         </button>
-        <button ref="confirmBtn" type="button" class="graph-confirm-ok" @click="emit('confirm')">
+        <button data-assistant-action="danger" ref="confirmBtn" type="button" class="graph-confirm-ok" @click="emit('confirm')">
           {{ confirmLabel }}
         </button>
       </div>

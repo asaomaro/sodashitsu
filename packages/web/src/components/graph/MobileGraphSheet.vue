@@ -85,7 +85,7 @@ onMounted(() => {
               }}</span
             >
           </div>
-          <button
+          <button data-assistant-action
             v-if="l.paused"
             type="button"
             class="graph-sheet-resume"
@@ -93,7 +93,7 @@ onMounted(() => {
           >
             再開（回数を 0 に戻す）
           </button>
-          <button
+          <button data-assistant-action
             v-else
             type="button"
             class="graph-sheet-pause"

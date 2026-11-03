@@ -40,7 +40,7 @@ onBeforeUnmount(()=>{dead=true;clearInterval(timer);document.removeEventListener
 </script>
 <template>
  <section class="resource-monitor" aria-label="リソースモニター">
-  <header><div><h1>リソースモニター</h1><p>操舵室と作業中のプロセスの使用量</p></div><div class="resource-actions"><button @click="paused=!paused">{{paused?'自動更新を再開':'自動更新を一時停止'}}</button><button :disabled="busy" @click="refresh(true)">更新</button></div></header>
+  <header><div><h1>リソースモニター</h1><p>操舵室と作業中のプロセスの使用量</p></div><div class="resource-actions"><button data-assistant-action @click="paused=!paused">{{paused?'自動更新を再開':'自動更新を一時停止'}}</button><button data-assistant-action :disabled="busy" @click="refresh(true)">更新</button></div></header>
   <p v-if="error" role="alert" class="resource-error">{{error}}<span v-if="data"> 最後に取得した情報を表示しています。</span></p>
   <template v-if="data">
    <p class="resource-meta">{{data.system.hostname}} · {{data.system.cpuCount}} CPU · {{new Date(data.sampledAt).toLocaleTimeString()}} 更新 · {{paused?'一時停止中':'3秒ごとに更新'}}</p>

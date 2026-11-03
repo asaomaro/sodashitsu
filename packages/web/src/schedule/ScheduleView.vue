@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
   <section class="schedule-view" aria-label="処理の予約">
     <header>
       <h1>予約</h1>
-      <button @click="edit()">予約を登録</button><button @click="refresh">更新</button>
+      <button data-assistant-action @click="edit()">予約を登録</button><button data-assistant-action @click="refresh">更新</button>
     </header>
     <p v-if="error" role="alert">{{ error }}</p>
     <form v-if="editing" @submit.prevent="save" class="schedule-editor">
@@ -188,8 +188,8 @@ onBeforeUnmount(() => {
       </label>
       <label><input type="checkbox" v-model="enabled" />有効</label>
       <div>
-        <button :disabled="busy" type="submit">予約を保存</button
-        ><button type="button" :disabled="busy" @click="editing = false">キャンセル</button>
+        <button data-assistant-action :disabled="busy" type="submit">予約を保存</button
+        ><button data-assistant-action type="button" :disabled="busy" @click="editing = false">キャンセル</button>
       </div>
     </form>
     <p v-if="!data.jobs.length">予約はありません。</p>
@@ -207,11 +207,11 @@ onBeforeUnmount(() => {
           {{ when(job.nextRunAt) }}
         </p>
         <div>
-          <button @click="edit(job)">編集</button
-          ><button @click="toggle(job)">{{ job.enabled ? "無効にする" : "有効にする" }}</button
-          ><button @click="run(job)">今すぐ実行</button
+          <button data-assistant-action @click="edit(job)">編集</button
+          ><button data-assistant-action @click="toggle(job)">{{ job.enabled ? "無効にする" : "有効にする" }}</button
+          ><button data-assistant-action @click="run(job)">今すぐ実行</button
           ><button @click="selected = job.id">実行結果</button
-          ><button @click="remove(job)">削除</button>
+          ><button data-assistant-action @click="remove(job)">削除</button>
         </div>
       </article>
     </div>

@@ -188,7 +188,7 @@ function subtitle(info: FrameInfo): string {
           </template>
           <span v-if="r.more > 0" class="graph-frame-more">+{{ r.more }}</span>
         </span>
-        <button
+        <button data-assistant-action
           v-if="canAdd(r)"
           type="button"
           class="graph-frame-add"

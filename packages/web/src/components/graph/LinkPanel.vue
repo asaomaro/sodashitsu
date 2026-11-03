@@ -296,12 +296,12 @@ defineExpose({ requestClose, focusFirstField, showConflict });
     <p v-else-if="conflictFields" class="link-panel-note link-panel-conflict" role="alert">
       ほかの画面・sodactl で同じ項目が変わりました:
       {{ conflictText }}。保存していません（上書きしません）。 最新を読み込んでから直してください。
-      <button type="button" class="link-panel-reload" @click="reloadLatest">最新を読み込む</button>
+      <button data-assistant-action type="button" class="link-panel-reload" @click="reloadLatest">最新を読み込む</button>
     </p>
     <p v-else-if="changedElsewhere" class="link-panel-note" role="alert">
       この線はほかの画面・sodactl
       で変わりました。保存すると、ここで変えた項目だけを最新の設定に重ねます（同じ項目がほかでも変わっていれば保存しません）。
-      <button type="button" class="link-panel-reload" @click="reloadLatest">最新を読み込む</button>
+      <button data-assistant-action type="button" class="link-panel-reload" @click="reloadLatest">最新を読み込む</button>
     </p>
 
     <fieldset v-if="isNew" class="link-panel-field">
@@ -320,7 +320,7 @@ defineExpose({ requestClose, focusFirstField, showConflict });
         <span>配下: {{ nameOf(form.from) }}</span>
         <span>監督役: {{ nameOf(form.to) }}</span>
       </template>
-      <button v-if="isNew" type="button" class="link-panel-swap" @click="swapEnds">
+      <button data-assistant-action v-if="isNew" type="button" class="link-panel-swap" @click="swapEnds">
         向きを入れ替える
       </button>
     </div>
@@ -414,7 +414,7 @@ defineExpose({ requestClose, focusFirstField, showConflict });
           linkStateText(link, { invalid, graphPaused: graph.paused })
         }}</span
       >
-      <button
+      <button data-assistant-action
         v-if="link.paused"
         type="button"
         class="link-panel-resume"
@@ -422,7 +422,7 @@ defineExpose({ requestClose, focusFirstField, showConflict });
       >
         再開（回数を 0 に戻す）
       </button>
-      <button v-else type="button" class="link-panel-pause" @click="emit('pause', true)">
+      <button data-assistant-action v-else type="button" class="link-panel-pause" @click="emit('pause', true)">
         一時停止
       </button>
       <button type="button" class="link-panel-history" @click="emit('history')">履歴</button>
@@ -434,12 +434,12 @@ defineExpose({ requestClose, focusFirstField, showConflict });
     </ul>
 
     <div class="link-panel-actions">
-      <button v-if="link" type="button" class="link-panel-delete" @click="emit('delete')">
+      <button data-assistant-action="danger" v-if="link" type="button" class="link-panel-delete" @click="emit('delete')">
         削除…
       </button>
       <span class="link-panel-spacer"></span>
-      <button type="button" class="link-panel-cancel" @click="requestClose">取り消し</button>
-      <button type="button" class="link-panel-save" :disabled="saving || gone" @click="save">
+      <button data-assistant-action type="button" class="link-panel-cancel" @click="requestClose">取り消し</button>
+      <button data-assistant-action type="button" class="link-panel-save" :disabled="saving || gone" @click="save">
         保存
       </button>
     </div>

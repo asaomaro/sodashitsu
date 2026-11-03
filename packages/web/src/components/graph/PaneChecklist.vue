@@ -238,8 +238,8 @@ onMounted(() => {
       </fieldset>
     </div>
     <div class="pane-checklist-actions">
-      <button type="button" class="pane-checklist-cancel" @click="emit('close')">取り消し</button>
-      <button type="button" class="pane-checklist-apply" @click="apply">適用</button>
+      <button data-assistant-action type="button" class="pane-checklist-cancel" @click="emit('close')">取り消し</button>
+      <button data-assistant-action type="button" class="pane-checklist-apply" @click="apply">適用</button>
     </div>
   </section>
 </template>

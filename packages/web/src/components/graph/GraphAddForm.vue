@@ -129,8 +129,8 @@ onMounted(() => void nextTick(() => root.value?.querySelector<HTMLElement>("inpu
     <p v-if="busyText !== null" class="graph-add-busy" role="status">{{ busyText }}</p>
     <p v-if="error !== null" class="graph-add-error" role="alert" data-add-error>{{ error }}</p>
     <div class="graph-add-actions">
-      <button type="button" class="graph-add-cancel" :disabled="busyText !== null" @click="emit('cancel')">取りやめ</button>
-      <button type="button" class="graph-add-submit" :disabled="!canSubmit" data-add-submit @click="submit">{{ retrying ? "もう一度起動する" : "足して、端末を開く" }}</button>
+      <button data-assistant-action type="button" class="graph-add-cancel" :disabled="busyText !== null" @click="emit('cancel')">取りやめ</button>
+      <button data-assistant-action type="button" class="graph-add-submit" :disabled="!canSubmit" data-add-submit @click="submit">{{ retrying ? "もう一度起動する" : "足して、端末を開く" }}</button>
     </div>
   </div>
 </template>

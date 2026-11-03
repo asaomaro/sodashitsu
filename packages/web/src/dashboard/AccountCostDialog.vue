@@ -50,7 +50,7 @@ const money = (n: number | undefined) =>
   >
     <header>
       <strong>{{ account.label }} · コスト</strong
-      ><button type="button" @click="emit('close')">閉じる</button>
+      ><button data-assistant-action type="button" @click="emit('close')">閉じる</button>
     </header>
     <div class="account-cost-body">
       <p>
@@ -99,7 +99,7 @@ const money = (n: number | undefined) =>
       </template>
     </div>
     <footer>
-      <button type="button" :disabled="busy" @click="load">更新</button
+      <button data-assistant-action type="button" :disabled="busy" @click="load">更新</button
       ><span>集計は最大10秒間キャッシュされます。</span>
     </footer>
   </dialog>

@@ -124,9 +124,9 @@ const stateName = (state: string) =>
   <section class="connections-screen" aria-label="外部接続" @keydown.esc.stop>
     <header>
       <h1>外部接続</h1>
-      <button :disabled="busy" @click="showAdd = !showAdd">外部Sodashitsuを追加</button>
-      <button :disabled="busy" @click="openDelegation">操作を委譲する</button>
-      <button :disabled="busy" @click="refresh">更新</button>
+      <button data-assistant-action :disabled="busy" @click="showAdd = !showAdd">外部Sodashitsuを追加</button>
+      <button data-assistant-action :disabled="busy" @click="openDelegation">操作を委譲する</button>
+      <button data-assistant-action :disabled="busy" @click="refresh">更新</button>
     </header>
     <p>
       このSodashitsuの外部接続を管理します。別のマシンを表示中でも、管理対象はこのサーバーです。
@@ -153,8 +153,8 @@ const stateName = (state: string) =>
             maxlength="128"
             placeholder="default"
         /></label>
-        <button>登録して接続</button>
-        <button type="button" @click="showAdd = false">キャンセル</button>
+        <button data-assistant-action>登録して接続</button>
+        <button data-assistant-action type="button" @click="showAdd = false">キャンセル</button>
       </form>
       <p>登録後、接続状態を一覧に表示します。接続できない場合も登録は残ります。</p>
     </fieldset>
@@ -168,9 +168,9 @@ const stateName = (state: string) =>
         >
         <small>{{ item.transport === "ssh" ? item.target : "" }} {{ item.message }}</small>
         <div>
-          <button @click="manage(item, item.enabled ? 'disable' : 'enable')">
+          <button data-assistant-action @click="manage(item, item.enabled ? 'disable' : 'enable')">
             {{ item.enabled ? "無効化" : "有効化" }}</button
-          ><button @click="manage(item, 'remove')">登録削除</button>
+          ><button data-assistant-action @click="manage(item, 'remove')">登録削除</button>
         </div>
       </article>
     </fieldset>
@@ -180,7 +180,7 @@ const stateName = (state: string) =>
       <article v-for="item in delegations" :key="item.id">
         <strong>{{ item.url }}</strong
         ><span>{{ stateName(item.state) }} {{ item.message }}</span
-        ><button @click="run(() => conn!.request('machine.stop_delegation', { id: item.id }))">
+        ><button data-assistant-action @click="run(() => conn!.request('machine.stop_delegation', { id: item.id }))">
           委譲を停止
         </button>
       </article>
@@ -195,7 +195,7 @@ const stateName = (state: string) =>
         <strong>{{ item.label }}</strong
         ><span>{{ item.address }} · {{ new Date(item.expiresAt).toLocaleTimeString() }}まで</span
         ><strong class="pairing-code">{{ item.code }}</strong
-        ><button @click="run(() => conn!.request('machine.reject_pairing', { id: item.id }))">
+        ><button data-assistant-action @click="run(() => conn!.request('machine.reject_pairing', { id: item.id }))">
           申請を拒否
         </button>
       </article>
@@ -213,7 +213,7 @@ const stateName = (state: string) =>
             required
             placeholder="https://soda.example.com" /></label
         ><label>このPCの名前<input v-model="label" required maxlength="128" /></label
-        ><button>接続を申請</button>
+        ><button data-assistant-action>接続を申請</button>
       </form>
       <form v-else @submit.prevent="confirm">
         <label
@@ -224,8 +224,8 @@ const stateName = (state: string) =>
             pattern="[0-9]{8}"
             maxlength="8"
             autocomplete="off" /></label
-        ><button>コードを確認して委譲</button
-        ><button
+        ><button data-assistant-action>コードを確認して委譲</button
+        ><button data-assistant-action
           type="button"
           @click="
             requestId = '';

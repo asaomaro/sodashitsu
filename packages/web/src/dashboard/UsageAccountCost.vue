@@ -32,7 +32,7 @@ const money = (n: number | undefined) =>
               {{ a.label }}
             </option>
           </select></label
-        ><button :disabled="!selected || busy" @click="emit('refresh')">
+        ><button data-assistant-action :disabled="!selected || busy" @click="emit('refresh')">
           {{ busy ? "取得中…" : "記録を更新" }}
         </button>
       </div>

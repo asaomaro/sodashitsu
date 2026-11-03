@@ -77,8 +77,8 @@ function onNativeCancel(ev: Event): void {
         <span class="worktree-dialog-preview-path">{{ previewPath }}</span>
       </p>
       <div class="worktree-dialog-actions">
-        <button type="button" @click="cancel">キャンセル</button>
-        <button type="submit" :disabled="!canConfirm">作成して開く</button>
+        <button data-assistant-action type="button" @click="cancel">キャンセル</button>
+        <button data-assistant-action type="submit" :disabled="!canConfirm">作成して開く</button>
       </div>
     </form>
   </dialog>

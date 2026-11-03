@@ -84,7 +84,7 @@ onMounted(()=>void load());
         <option value="">すべて</option>
         <option value="claude">Claude Code</option>
         <option value="codex">Codex</option><option value="muse">Muse Code</option><option value="agy">Antigravity CLI</option><option value="copilot">GitHub Copilot CLI</option></select
-      ><button :disabled="busy">{{ busy ? "処理中…" : "検索・更新" }}</button>
+      ><button data-assistant-action :disabled="busy">{{ busy ? "処理中…" : "検索・更新" }}</button>
     </form>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="partial">探索上限内のセッションを表示しています。</p>
@@ -95,7 +95,7 @@ onMounted(()=>void load());
         ><span
           >{{ row.kind }} · {{ row.cwd ?? "フォルダ不明" }} ·
           {{ new Date(row.updatedAt).toLocaleString() }}</span
-        ><button :disabled="busy || !view.focusedPaneId" @click="resume(row)">
+        ><button data-assistant-action :disabled="busy || !view.focusedPaneId" @click="resume(row)">
           別ペインで再開
         </button>
       </li>

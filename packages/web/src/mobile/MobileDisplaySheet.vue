@@ -56,8 +56,8 @@ function dismissActive(): void {
         <div class="mobile-display-label" data-mobile-display-label><DisplayScriptMark :info="active" part="mark" />{{ displayLabel(active) }}</div>
         <DisplayScriptMark :info="active" part="button" />
         <DisplayScriptMark :info="active" part="end" />
-        <button type="button" class="mobile-display-btn" data-mobile-display-dismiss @click="dismissActive">この表示を消す</button>
-        <button type="button" class="mobile-display-btn" data-mobile-display-close @click="emit('close')">閉じる</button>
+        <button data-assistant-action type="button" class="mobile-display-btn" data-mobile-display-dismiss @click="dismissActive">この表示を消す</button>
+        <button data-assistant-action type="button" class="mobile-display-btn" data-mobile-display-close @click="emit('close')">閉じる</button>
       </div>
       <div v-if="panels.length > 1" class="mobile-display-tabs" role="tablist" aria-label="パネルの一覧" @keydown="onTabKey">
         <button
@@ -80,7 +80,7 @@ function dismissActive(): void {
         <DisplayFrame :key="placedFrameKey(active, 'sheet')" :info="active" :content="content" />
       </div>
     </div>
-    <p v-else class="mobile-display-empty">表示はありません。<button type="button" class="mobile-display-btn" @click="emit('close')">閉じる</button></p>
+    <p v-else class="mobile-display-empty">表示はありません。<button data-assistant-action type="button" class="mobile-display-btn" @click="emit('close')">閉じる</button></p>
   </dialog>
 </template>
 

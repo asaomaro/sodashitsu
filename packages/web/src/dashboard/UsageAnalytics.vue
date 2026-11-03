@@ -155,7 +155,7 @@ async function generate() {
                 {{ a.label }}
               </option>
             </select></label
-          ><button
+          ><button data-assistant-action
             class="generate-report"
             data-generate-usage-report
             :disabled="reportBusy"

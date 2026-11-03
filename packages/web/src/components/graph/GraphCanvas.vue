@@ -2691,10 +2691,10 @@ function chipAria(e: EdgeView): string {
       <header class="graph-toolbar" :class="{ 'graph-toolbar-screen': kind === 'screen' }">
         <template v-if="kind === 'screen'">
           <!-- デスクトップの画面（PR1e T17b）: よく使う操作を前に。「＋ pane」「＋ workspace」は PR3 でここへ（左端の置き場所）。題と「×」は出さない（戻るのは、サイドバーの上の切り替え・prefix+a・Esc） -->
-          <button type="button" class="graph-tool graph-add-pane" :disabled="!graph.graph || !view.workspaceId" title="選んでいる workspace に pane を足す" @click="openAddFormForSelection">
+          <button data-assistant-action type="button" class="graph-tool graph-add-pane" :disabled="!graph.graph || !view.workspaceId" title="選んでいる workspace に pane を足す" @click="openAddFormForSelection">
             ＋ pane
           </button>
-          <button
+          <button data-assistant-action
             type="button"
             class="graph-tool graph-add-workspace"
             aria-haspopup="menu"
@@ -2703,7 +2703,7 @@ function chipAria(e: EdgeView): string {
           >
             ＋ workspace ▾
           </button>
-          <button
+          <button data-assistant-action
             type="button"
             class="graph-tool graph-connect"
             :disabled="!graph.graph"
@@ -2712,7 +2712,7 @@ function chipAria(e: EdgeView): string {
           >
             線を結ぶ
           </button>
-          <button type="button" class="graph-tool graph-tidy" :disabled="!graph.graph" title="この空間の囲いとノードを詰めて並べ直します（確認します）" @click="requestTidy">
+          <button data-assistant-action type="button" class="graph-tool graph-tidy" :disabled="!graph.graph" title="この空間の囲いとノードを詰めて並べ直します（確認します）" @click="requestTidy">
             並びを整える
           </button>
           <button
@@ -2726,7 +2726,7 @@ function chipAria(e: EdgeView): string {
             そのほか ▾
           </button>
           <span v-if="graph.graph?.paused" class="graph-paused-badge" role="status">⏸ 一時停止中</span>
-          <button v-if="graph.graph?.paused" type="button" class="graph-tool graph-resume" @click="toggleGraphPaused">再開</button>
+          <button data-assistant-action v-if="graph.graph?.paused" type="button" class="graph-tool graph-resume" @click="toggleGraphPaused">再開</button>
           <span
             v-if="graph.hiddenLocalPaneCount > 0"
             class="graph-hidden-panes"
@@ -2745,7 +2745,7 @@ function chipAria(e: EdgeView): string {
         <template v-else>
         <h2 class="graph-title">連携（グラフ）</h2>
         <span v-if="graph.graph?.paused" class="graph-paused-badge">⏸ 全体が一時停止中</span>
-        <button
+        <button data-assistant-action
           type="button"
           class="graph-tool graph-pause-all"
           :aria-pressed="graph.graph?.paused === true"
@@ -2754,7 +2754,7 @@ function chipAria(e: EdgeView): string {
         >
           {{ graph.graph?.paused ? "全体を再開" : "全体を一時停止" }}
         </button>
-        <button
+        <button data-assistant-action
           v-if="!isMobile"
           type="button"
           class="graph-tool graph-add-panes"
