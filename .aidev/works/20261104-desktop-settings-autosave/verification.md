@@ -20,3 +20,7 @@
 review_bubble_resizeによる全差分点検で、protocol不正値の再試行が正常設定を巻き添えにする問題を指摘。変更グループを分離し、ブラウザ回帰検査を追加した。修正差分と最終HTML・文書・テストを再レビューし、必須指摘なし。
 
 - pnpm build・pnpm typecheck成功。生ログの末尾改行・出力空白は維持している。
+
+## 反映
+
+mainへプッシュし、handoffで稼働環境へ反映。11 PTYを引き継ぎ、既存13ペインを保持。アシスタントのrunning／readyを確認した（handoff.txt、live-after.txt）。
