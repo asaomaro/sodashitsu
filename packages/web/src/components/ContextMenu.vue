@@ -763,8 +763,8 @@ onBeforeUnmount(() => {
   position: fixed;
   list-style: none;
   margin: 0;
-  padding: var(--soda-shape-menu-pad-y, 0.25em) 0;
-  border-radius: var(--soda-shape-menu-radius, 0);
+  padding: var(--soda-shape-menu-pad-y, 0.25em) 4px;
+  border-radius: max(8px, var(--soda-shape-menu-radius, 0px));
   background: var(--soda-menu-bg, #282a36);
   color: var(--soda-menu-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
@@ -772,6 +772,7 @@ onBeforeUnmount(() => {
   z-index: 1000;
 }
 .context-menu li {
+  border-radius: 6px;
   padding: 0.35em var(--soda-shape-pad-x, 1em);
   min-height: var(--soda-shape-control-h, auto);
   box-sizing: border-box;

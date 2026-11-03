@@ -1,0 +1,18 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: catppuccin/none: menu has square corners
+    at file:///workspaces/sodashitsu-main-live-assistant-agents/packages/e2e/scripts/verify-assistant-controls.mjs:76:61 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.15.0
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: node scripts/verify-assistant-controls.mjs

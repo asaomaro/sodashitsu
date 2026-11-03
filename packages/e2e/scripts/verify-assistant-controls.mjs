@@ -8,7 +8,7 @@ import {uiTokens} from "@sodashitsu/client-core";
 // Source CSS verification in Chromium: use the components' actual rules and compare
 // navigation before/after the theme sheet, including active rows. No server or PTY.
 const root=new URL("../../web/src/",import.meta.url);
-const components=["App","Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog","RemoteDesktopWindow","TabBar","ViewerTabBar","NotificationHistoryDialog","WorktreeOpenDialog"];
+const components=["App","Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog","RemoteDesktopWindow","ContextMenu","TabBar","ViewerTabBar","NotificationHistoryDialog","WorktreeOpenDialog"];
 const {parse}=createRequire(new URL("../../web/package.json",import.meta.url))("vue/compiler-sfc");
 async function actionProbe(file,match,id){
  const source=await readFile(new URL(file,root),"utf8"),{descriptor}=parse(source);let found;
@@ -59,6 +59,7 @@ try{
    <button id="switch" class="settings-switch" aria-checked="true"><span class="settings-mark">入</span>通知</button>
    ${probes.join("\n")}${featureProbes.join("\n")}${dangerProbes.join("\n")}<button id="plain" class="soda-button-action soda-button-plain">plain</button>
    ${fingerprintInput.replace("<input",'<input id="fingerprint"')}<textarea id="flat-textarea"></textarea><select id="flat-select"><option>sample</option></select><input id="untouched-check" type="checkbox"><input id="untouched-range" type="range">
+   <ul class="context-menu" id="context-popup"><li class="context-menu-active" id="context-row">menu</li></ul>
    <section id="scroll" style="height:50px;overflow:auto"><div style="height:300px">scroll</div></section>`);
   await page.evaluate(({name,tokens,mode})=>{document.documentElement.dataset.buttonTheme=mode;document.documentElement.dataset.theme=name;for(const[k,v]of Object.entries(tokens.vars))document.documentElement.style.setProperty(k,v);}, {name,tokens:uiTokens(name),mode});
   const inspect=()=>page.evaluate(actionIds=>Object.fromEntries(["section","sort","group","desktop","toggle","machine","screen","menu","category","switch","danger-confirm","danger-delete","plain",...actionIds].map(id=>{const s=getComputedStyle(document.getElementById(id));return[id,{background:s.backgroundColor,color:s.color,radius:s.borderRadius,shadow:s.boxShadow}];})),[...actionIds,...featureIds]);
@@ -71,6 +72,8 @@ try{
   assert.deepEqual(await widgets(),originalWidgets,`${name}/${mode}: native check/range changed`);
   const fields=await page.evaluate(()=>["fingerprint","flat-textarea","flat-select"].every(id=>{const c=getComputedStyle(document.getElementById(id));return c.borderTopStyle==="solid"&&c.borderTopWidth==="1px"&&c.boxShadow==="none";}));
   assert.equal(fields,true,`${name}/${mode}: native field bevel remains`);
+  const rounded=await page.evaluate(()=>({menu:getComputedStyle(document.querySelector(".screen-extra-menu")).borderRadius,row:getComputedStyle(document.getElementById("menu")).borderRadius,footer:getComputedStyle(document.getElementById("section")).borderRadius,context:getComputedStyle(document.getElementById("context-popup")).borderRadius,contextRow:getComputedStyle(document.getElementById("context-row")).borderRadius}));
+  for(const [kind,radius] of Object.entries(rounded))assert.ok(parseFloat(radius)>=6,`${name}/${mode}: ${kind} has square corners`);
   const accent=await page.evaluate(()=>{const e=document.createElement("span");e.style.background="var(--soda-accent)";document.body.append(e);const bg=getComputedStyle(e).backgroundColor;e.remove();return bg;});
   for(const id of actionIds){if(mode==="none")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
   for(const id of featureIds){if(mode!=="features")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}

@@ -1596,7 +1596,7 @@ watchDragInterrupt(view, () => {
   border: none;
   padding: 0.2em 0.4em;
   min-height: var(--soda-shape-control-h, auto);
-  border-radius: 2px;
+  border-radius: 8px;
   cursor: pointer;
   white-space: nowrap;
 }

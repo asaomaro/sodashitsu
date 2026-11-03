@@ -179,6 +179,6 @@ function fullName(def: ScreenDef): string {
 :root[data-ui-style="modern"] .screen-switcher-btn-active {
   background: var(--soda-menu-active-bg, #44475a);
 }
-.screen-extra-menu{position:fixed;z-index:10000;display:grid;min-width:180px;max-width:calc(100vw - 8px);padding:4px;background:var(--soda-menu-bg,#282a36);border:1px solid var(--soda-menu-border,#44475a);border-radius:4px;box-shadow:0 4px 12px #0005}
-.screen-extra-menu button{font:inherit;padding:8px 12px;text-align:left;border:0;color:var(--soda-fg,#f8f8f2);background:transparent;cursor:pointer}.screen-extra-menu button:hover,.screen-extra-menu button:focus-visible{background:var(--soda-menu-active-bg,#44475a)}.screen-pending{color:var(--soda-warn-fg,#ffb86c)}
+.screen-extra-menu{position:fixed;z-index:10000;display:grid;min-width:180px;max-width:calc(100vw - 8px);padding:4px;background:var(--soda-menu-bg,#282a36);border:1px solid var(--soda-menu-border,#44475a);border-radius:10px;box-shadow:0 4px 12px #0005}
+.screen-extra-menu button{border-radius:6px;font:inherit;padding:8px 12px;text-align:left;border:0;color:var(--soda-fg,#f8f8f2);background:transparent;cursor:pointer}.screen-extra-menu button:hover,.screen-extra-menu button:focus-visible{background:var(--soda-menu-active-bg,#44475a)}.screen-pending{color:var(--soda-warn-fg,#ffb86c)}
 </style>

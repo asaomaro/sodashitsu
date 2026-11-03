@@ -155,3 +155,17 @@
 .settings-footer{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 0 0;border-top:1px solid var(--assistant-line);background:var(--assistant-bg)}
 .settings-footer button{flex:0 0 auto;font-size:13px;padding:6px 10px}
 .settings-footer #status{flex:1;min-width:0;margin:0;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+
+/* Chromium/Electron customizable selects retain native form/keyboard behaviour. */
+@supports (appearance:base-select){
+ select:not([multiple]):not([size]),select:not([multiple]):not([size])::picker(select){appearance:base-select}
+ select:not([multiple]):not([size]){display:flex;justify-content:space-between;align-items:center;gap:8px;font:inherit;cursor:pointer}
+ select::picker-icon{color:var(--assistant-gold);transition:rotate .15s}
+ select:open::picker-icon{rotate:180deg}
+ select::picker(select){background:var(--assistant-input);color:var(--assistant-fg);border:1px solid var(--assistant-gold);border-radius:10px;padding:5px;margin-block:4px;box-shadow:0 6px 20px #0004;max-height:min(360px,70vh);overflow:auto}
+ select option{font:inherit;border:0;border-radius:6px;padding:7px 10px;white-space:normal;overflow-wrap:anywhere;color:var(--assistant-fg);background:transparent}
+ select option:hover,select option:focus{background:var(--assistant-selection);outline:0}
+ select option:checked{background:var(--assistant-strong-surface);color:var(--assistant-fg)}
+ select option::checkmark{color:var(--assistant-gold)}
+ select:focus-visible{outline:2px solid var(--assistant-gold);outline-offset:2px}
+}

@@ -247,6 +247,13 @@ try {
   page.on("pageerror", (error) => errors.push(String(error)));
   const origin = `http://127.0.0.1:${server.address().port}`;
   await page.goto(`${origin}/settings.html`);
+  const checkSelect = async () => {
+    const result=await page.locator("select").first().evaluate(el=>({supported:CSS.supports("appearance","base-select"),appearance:getComputedStyle(el).appearance,radius:getComputedStyle(el,"::picker(select)").borderRadius,background:getComputedStyle(el,"::picker(select)").backgroundColor,optionRadius:getComputedStyle(el.options[0]).borderRadius}));
+    assert.equal(result.supported,true);assert.equal(result.appearance,"base-select");assert.equal(result.radius,"10px");assert.equal(result.optionRadius,"6px");
+    return result;
+  };
+  await checkSelect();
+  await page.locator("#mode").click();await expect(page.locator("#mode")).toHaveJSProperty("value","character");await page.keyboard.press("ArrowDown");await page.keyboard.press("Enter");await expect(page.locator("#mode")).toHaveValue("tray");await page.locator("#mode").selectOption("character");
   const checkWindow = async role => {
     for(const size of [{width:520,height:670},{width:360,height:480}]){
       await page.setViewportSize(size);
@@ -905,6 +912,7 @@ try {
   await appearancePage.locator('button[type="submit"]').first().click();
   await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
   assert.equal(await appearancePage.evaluate(()=>getComputedStyle(document.querySelector(".assistant-card")).backgroundColor),"rgb(248, 245, 236)");
+  assert.equal(await appearancePage.locator("select").first().evaluate(el=>getComputedStyle(el,"::picker(select)").backgroundColor),"rgb(255, 253, 248)");
   if(process.env.SODA_ASSISTANT_LIGHT_SCREENSHOT)await appearancePage.screenshot({path:process.env.SODA_ASSISTANT_LIGHT_SCREENSHOT});
   await appearancePage.locator("#appearance").selectOption("system");
   await appearancePage.locator('button[type="submit"]').first().click();
