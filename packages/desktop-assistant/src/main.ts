@@ -1,3 +1,4 @@
+import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog} from "@sodashitsu/protocol";
 import {presentWindow} from "./windowPresentation.js";
 import {resourceHostIdentity,resourceProcessIdentities} from "@sodashitsu/client-core/nodeResourceIdentity";
 import { cpus } from "node:os";
@@ -579,6 +580,7 @@ async function publishTools(): Promise<void> {
 
 function combineNotices() {
   notices = [...localNotices, ...remoteRows].sort((a, b) => b.at - a.at).slice(0, 32);
+  assistantChat?.notifications(notices);
   publishInbox();
 }
 function inbox() {
@@ -593,6 +595,23 @@ function publishInbox(): void {
   voice.validate();
   ++inboxRevision;
   if (bubble && !bubble.isDestroyed()) bubble.webContents.send("assistant:inbox-changed", inbox());
+}
+async function notificationWorkContext(notice:AssistantNotice):Promise<string>{
+ try{
+ const hub=control,rpc=notice.source.machineId==="local"?hub:remoteNotices?.rpcFor(notice.source.machineId);
+ if(!rpc||notice.source.serverOrigin!==controller.preferences.serverOrigin)throw Error("通知元に接続できません。");
+ const params={source:{...notice.source,machineId:"local"},key:notice.key};
+ const before=await rpc.request("assistant.source",params);
+ const cached=await rpc.request("agent.summary_cached",{paneId:notice.source.paneId,offset:0}).catch(()=>({summary:null}));
+ const page=await rpc.request("agent.conversation_tail",{paneId:notice.source.paneId,offset:0}).catch(()=>null);
+ const after=await rpc.request("assistant.source",params);
+ if(page&&(before.conversationSessionId!==page.sessionId||after.conversationSessionId!==page.sessionId||page.kind!==before.agent.kind))throw Error("通知元の会話が変更されました。");
+ if(control!==hub||!notices.some(n=>n.id===notice.id)||notice.source.machineId!=="local"&&remoteNotices?.rpcFor(notice.source.machineId)!==rpc)throw Error("通知元が変更されました。");
+ const parts:string[]=[];
+ if(page&&cached.summary&&!cached.summary.stale&&cached.summary.sourceSessionId===page.sessionId&&cached.summary.sourceKind===page.kind)parts.push(`${cached.summary.stale?"過去の参考要約（古い可能性）":"既存のペイン要約"}: ${cached.summary.text.slice(0,400)}`);
+ if(page)parts.push(`${page.partial||page.nextOffset!==null?"部分的な":"取得できた"}会話記録: `+page.messages.slice(-6).map(m=>`${m.role}: ${m.text.slice(0,300)}`).join("\n"));
+ return parts.join("\n")||"作業記録は取得できませんでした。";
+ }catch(error){throw Object.assign(error instanceof Error?error:Error("通知元を確認できませんでした。"),{notificationInvalid:true});}
 }
 function chatState(): AssistantChatState {
   return (
@@ -662,8 +681,10 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
         bubble.webContents.send("assistant:conversation-changed", state);
     },
     chatRevision,
+    notificationWorkContext,
   );
-  assistantChat.configure(controller.preferences.agentProfiles,activeCharacterId());
+  assistantChat.configure(controller.preferences.agentProfiles,activeCharacterId(),controller.preferences.notificationSummary);
+  assistantChat.notifications(notices);
   reminders = new Reminders(
     installationId,
     rpc,
@@ -720,7 +741,7 @@ function updateBackend(preferences: DesktopAssistantPreferences): void {
     const recordingOwner=recording.owner();recording.cancel();
     if(recordingOwner!==undefined)localWindows.get(recordingOwner)?.window.destroy();
   }
-  assistantChat?.configure(preferences.agentProfiles,activeCharacterId(preferences));
+  assistantChat?.configure(preferences.agentProfiles,activeCharacterId(preferences),preferences.notificationSummary);
   transcription.configure(
     preferences.enabled && preferences.transcriptionEnabled,
     preferences.transcriptionOrigin,
@@ -1067,6 +1088,10 @@ function registerIpc(): void {
     "resize-move",
     "resize-end",
     "conversation",
+    "captain-choice",
+    "agent-models",
+    "agent-open",
+    "notification-summary-refresh",
     "start-session",
     "adopt-session",
     "send-message",
@@ -1703,6 +1728,25 @@ function registerIpc(): void {
         await clipboard.writeText(text);
         return;
       }
+      if(action==="notification-summary-refresh"){assistantChat?.retryNotificationSummary();return;}
+      if(action==="agent-open"){
+        const {source}=z.object({source:AssistantSource}).strict().parse(input);
+        if(owner.window!==bubble||!owner.window.isVisible()||!controller.preferences.enabled||source.serverOrigin!==controller.preferences.serverOrigin)throw Error("会話を開いて対象を選び直してください。");
+        const row=inbox().agentList.agents.find(row=>row.source.paneId===source.paneId&&row.source.agentInstanceId===source.agentInstanceId&&row.source.workspaceId===source.workspaceId&&row.source.machineId===source.machineId&&row.source.serverOrigin===source.serverOrigin);
+        if(!row)throw Error("エージェントが変更されたか、接続が切れました。一覧を確認してください。");
+        openPanel(source.serverOrigin,{paneId:source.paneId,workspaceId:source.workspaceId,instanceId:source.agentInstanceId,machineId:source.machineId},"reply");return;
+      }
+      if(action==="agent-models"){
+        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot"])}).strict().parse(input);
+        if(!control)throw Error("操舵室に接続してください。");
+        return AssistantModelCatalog.parse(await control.request("agent.model_options",request));
+      }
+      if(action==="captain-choice"){
+        const request=z.object({kind:z.enum(["claude","codex","muse","agy","copilot"]),profile:AssistantLaunchSettings,notificationSummary:z.boolean()}).strict().parse(input);
+        const saved=await controller.chooseCaptain(request.kind,request.profile,request.notificationSummary);
+        assistantChat?.configure(saved.agentProfiles,activeCharacterId(),saved.notificationSummary);
+        return saved;
+      }
       if (["start-session", "adopt-session", "send-message"].includes(action)) {
         if (!assistantChat || !controller.preferences.enabled)
           throw Error("アシスタントは接続していません。");
@@ -1713,7 +1757,7 @@ function registerIpc(): void {
       if (action === "save") {
         if (managed && DesktopAssistantPreferences.parse(input).launchAtLogin) throw Error("sodaによる起動管理中は、Windowsログイン時の単独起動を併用できません");
         const oldVoice=JSON.stringify([controller.preferences.voiceProvider,controller.preferences.voicevoxOrigin,controller.preferences.voicevoxStyleId,controller.preferences.voiceFollowCharacter,controller.preferences.characterId,controller.preferences.voiceCoreVersion,controller.preferences.serverOrigin]);
-        const saved = await controller.update(input);
+        const saved = await controller.update(input,true);
         if(oldVoice!==JSON.stringify([saved.voiceProvider,saved.voicevoxOrigin,saved.voicevoxStyleId,saved.voiceFollowCharacter,saved.characterId,saved.voiceCoreVersion,saved.serverOrigin])){++voiceEpoch;voice.stop();}
         if (!saved.enabled) {
           if (managed) managedStreams!.output.write('{"type":"disabled"}\n');

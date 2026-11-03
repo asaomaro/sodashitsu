@@ -1,4 +1,4 @@
-import { DesktopAssistantPreferences } from "@sodashitsu/protocol";
+import { DesktopAssistantPreferences, type AssistantAgentKind, type AssistantLaunchSettings } from "@sodashitsu/protocol";
 import { characterBounds, type DisplayArea, type Rect } from "./geometry.js";
 
 export interface NativeAdapter {
@@ -34,10 +34,11 @@ export class AssistantController {
   async initializeManaged(serverOrigin: string): Promise<void> {
     await this.update({...this.preferences, enabled:true, serverOrigin, launchAtLogin:false});
   }
-  update(input: unknown): Promise<DesktopAssistantPreferences> {
-    const next = DesktopAssistantPreferences.parse(input);
+  update(input: unknown, preserveCaptain = false): Promise<DesktopAssistantPreferences> {
+    let next = DesktopAssistantPreferences.parse(input);
     const operation = this.queue.then(async () => {
       const old = this.current;
+      if(preserveCaptain)next={...next,captainKind:old.captainKind,agentProfiles:old.agentProfiles,notificationSummary:old.notificationSummary};
       const startupChanged = old.launchAtLogin !== next.launchAtLogin;
       // Native startup can reject (for example an unpackaged development build).
       // Do not persist that unsupported request as a successful setting.
@@ -64,6 +65,12 @@ export class AssistantController {
       () => {},
     );
     return operation;
+  }
+  chooseCaptain(kind:AssistantAgentKind,profile:AssistantLaunchSettings,notificationSummary:boolean):Promise<DesktopAssistantPreferences>{
+    const operation=this.queue.then(async()=>{
+      const next=DesktopAssistantPreferences.parse({...this.current,captainKind:kind,notificationSummary,agentProfiles:{...this.current.agentProfiles,[kind]:profile}});
+      await this.save(next);this.current=next;return this.preferences;
+    });this.queue=operation.then(()=>{},()=>{});return operation;
   }
   refreshDisplays(): void {
     this.render();

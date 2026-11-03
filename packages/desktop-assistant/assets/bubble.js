@@ -34,6 +34,22 @@
   row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({block:"start"});
  };
  const inbox=document.getElementById("notices");
+ let currentNotices=[],summaryReplyPending=false;
+ let chatRevision = -1, chatState = null;
+ document.getElementById("notification-summary-refresh").addEventListener("click",()=>window.assistant.refreshNotificationSummary().catch(error=>{document.getElementById("notification-summary-status").textContent=error.message;}));
+ const summaryReplyTarget=document.getElementById("summary-reply-target"),summaryReplyText=document.getElementById("summary-reply-text"),summaryReplySend=document.getElementById("summary-reply-send");
+ const updateSummaryReplies=()=>{
+  const before=summaryReplyTarget.value,ids=chatState?.notificationSummary?.noticeIds??[];
+  summaryReplyTarget.replaceChildren();const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="返答する通知元を選んでください";summaryReplyTarget.append(placeholder);for(const notice of currentNotices.filter(n=>ids.includes(n.id))){const option=document.createElement("option");option.value=notice.id;option.textContent=notice.title;summaryReplyTarget.append(option);}
+  summaryReplyTarget.value=Array.from(summaryReplyTarget.options).some(o=>o.value===before)?before:"";
+  summaryReplySend.disabled=summaryReplyPending||!summaryReplyTarget.value||!summaryReplyText.value.trim();
+ };
+ summaryReplyText.addEventListener("input",updateSummaryReplies);summaryReplyTarget.addEventListener("change",updateSummaryReplies);
+ summaryReplySend.addEventListener("click",async()=>{
+  const noticeId=summaryReplyTarget.value,draft=summaryReplyText.value,text=draft.trim();if(summaryReplyPending||!noticeId||!text)return;
+  summaryReplyPending=true;summaryReplySend.disabled=true;try{await window.assistant.replySource({noticeId,text});if(summaryReplyText.value===draft&&summaryReplyTarget.value===noticeId)summaryReplyText.value="";document.getElementById("summary-reply-status").textContent="選択した通知元へ送信しました。";}catch(error){document.getElementById("summary-reply-status").textContent=error.message;}finally{summaryReplyPending=false;updateSummaryReplies();}
+ });
+
  let agentList={agents:[],total:0,working:0,blocked:0}, rosterStatus="connecting";
  const agentStates={working:"作業中",blocked:"確認待ち",idle:"待機中",unknown:"状態不明"};
  const renderAgents=()=>{
@@ -42,9 +58,10 @@
    const rows=agentList.agents.filter(row=>filter==="all"||row.state===filter);
    list.replaceChildren();
    for(const row of rows){
-     const item=document.createElement("li"), state=document.createElement("span"), title=document.createElement("span");
+     const item=document.createElement("li"), open=document.createElement("button"), state=document.createElement("span"), title=document.createElement("span");
      state.className=`agent-state agent-state-${row.state}`;state.textContent=agentStates[row.state]||"状態不明";
-     title.textContent=row.title;item.append(state,title);list.append(item);
+     title.textContent=row.title;open.type="button";open.className="agent-row-open";open.title="このエージェントの端末を開く";open.append(state,title);item.append(open);list.append(item);
+     open.addEventListener("click",async()=>{open.disabled=true;try{await window.assistant.openAgent({source:row.source});}catch(error){const status=document.getElementById("agent-roster-status");status.hidden=false;status.textContent=error.message;}finally{open.disabled=false;}});
    }
    const status=document.getElementById("agent-roster-status");
    status.textContent=rows.length ? (agentList.total>agentList.agents.length?`全${agentList.total}件のうち先頭${agentList.agents.length}件を表示しています。`:"") : (agentList.total>agentList.agents.length?`表示対象の先頭${agentList.agents.length}件に、該当するエージェントはいません。全${agentList.total}件は操舵室で確認できます。`:rosterStatus==="connected"?"該当するエージェントはいません。":"接続中のマシンに、表示できるエージェントはいません。");
@@ -55,6 +72,7 @@
  const update = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
    revision = state.revision;
+   currentNotices=state.notices??[];updateSummaryReplies();
    agentList=state.agentList||{agents:[],total:0,working:0,blocked:0};rosterStatus=state.status;renderAgents();
    document.getElementById("status").textContent = stateText[state.status] || "接続状態を確認しています。";
    const present=new Set(state.notices.map(notice=>notice.id));
@@ -101,7 +119,6 @@
  const unsubscribe = window.assistant.onInbox(update);
  window.addEventListener("pagehide", unsubscribe, {once:true});
  update(await window.assistant.inbox());
- let chatRevision = -1, chatState = null;
  const message = document.getElementById("message");
  let draftRevision=-1;
  const updateDraft=state=>{if(!Number.isSafeInteger(state.revision)||state.revision<=draftRevision)return;draftRevision=state.revision;if(state.text!==null){message.value=state.text;window.assistantSections.reveal(message);window.assistantSections.fitTextareas();message.focus();void window.assistant.consumeDraft({revision:state.revision}).catch(()=>{});}};
@@ -111,45 +128,101 @@
  const start = document.getElementById("start-session");
  const adopt = document.getElementById("adopt-session");
  const sessionStatus = document.getElementById("session-status");
+ const models=document.getElementById("agent-model"),efforts=document.getElementById("agent-effort"),summaryToggle=document.getElementById("notification-summary-enabled");
+ const choiceStatus=document.getElementById("captain-choice-status"),catalogStatus=document.getElementById("model-options-status");
+ summaryToggle.checked=preferences.notificationSummary!==false;
+ let choiceLoading=false,choiceSaving=false,choiceValid=true,catalogEpoch=0,modelRows=[],selectedKind="";
+ const catalogs=new Map();
+ const fill=(select,rows,value)=>{select.replaceChildren();for(const row of rows){const option=document.createElement("option");option.value=row.id;option.textContent=row.label;select.append(option);}select.value=value;};
+ const setChoiceDisabled=()=>{
+  kinds.disabled=choiceSaving||!!chatState?.busy;
+  models.disabled=efforts.disabled=choiceLoading||choiceSaving||!!chatState?.busy;
+  summaryToggle.disabled=choiceLoading||choiceSaving;
+  if(choiceLoading||choiceSaving||!choiceValid)start.disabled=true;
+ };
+ const fillEfforts=(wanted="",retainSaved=false)=>{
+  const row=modelRows.find(m=>m.id===models.value),tiers=row?.efforts??[];
+  const rows=[{id:"",label:"エージェントの既定値"},...tiers.map(id=>({id,label:id}))];
+  if(retainSaved&&!row&&wanted&&!tiers.includes(wanted))rows.push({id:wanted,label:`保存済み：${wanted}`});
+  fill(efforts,rows,rows.some(r=>r.id===wanted)?wanted:"");
+ };
+ const loadSelection=async()=>{
+  const kind=kinds.value,epoch=++catalogEpoch;selectedKind=kind;choiceLoading=true;setChoiceDisabled();
+  catalogStatus.textContent="モデル候補を読み込んでいます。";
+  let catalog;try{if(!catalogs.has(kind))catalogs.set(kind,window.assistant.agentModels({kind}));catalog=await catalogs.get(kind);}catch{catalogs.delete(kind);catalog={models:[],message:"モデル候補を取得できません。既定値と保存済みの指定を表示します。"};}
+  if(epoch!==catalogEpoch)return false;
+  modelRows=catalog.models??[];const profile=preferences.agentProfiles?.[kind]??{model:"",effort:""};
+  const rows=[{id:"",label:"エージェントの既定値"},...modelRows];
+  if(profile.model&&!rows.some(r=>r.id===profile.model))rows.push({id:profile.model,label:`保存済み：${profile.model}`});
+  fill(models,rows,profile.model);fillEfforts(profile.effort,true);
+  catalogStatus.textContent=catalog.message??"";choiceLoading=false;setChoiceDisabled();if(chatState)updateChatControls();
+  if(profile.effort!==efforts.value&&modelRows.some(row=>row.id===models.value))await saveChoice();
+  return true;
+ };
+ const saveChoice=async()=>{
+  if(choiceLoading||choiceSaving||!kinds.value)return;
+  choiceSaving=true;choiceValid=false;setChoiceDisabled();choiceStatus.textContent="選択を保存しています。";
+  try{const saved=await window.assistant.chooseCaptain({kind:kinds.value,profile:{model:models.value,effort:efforts.value},notificationSummary:summaryToggle.checked});Object.assign(preferences,saved);choiceValid=true;choiceStatus.textContent="選択を保存しました。次回の新しい専用セッションから反映します。";}
+  catch(error){choiceStatus.textContent=`保存できません：${error.message}。もう一度選択してください。`;}
+  finally{choiceSaving=false;setChoiceDisabled();if(chatState)updateChatControls();}
+ };
+ kinds.addEventListener("change",()=>{void loadSelection().then(current=>{if(current)return saveChoice();});});
+ models.addEventListener("change",()=>{fillEfforts(efforts.value);void saveChoice();});
+ efforts.addEventListener("change",()=>void saveChoice());summaryToggle.addEventListener("change",()=>{document.getElementById("notification-summary-section").hidden=!summaryToggle.checked||!chatState?.session||!chatState?.notificationSummary;void saveChoice();});
+ const updateChatControls=()=>{
+  const info=chatState?.session;
+  start.disabled=!chatState?.connected||chatState.busy||!chatState.kinds.some(k=>k.kind===kinds.value&&k.available)||!!info&&!["shell","stopped"].includes(info.state)||choiceLoading||choiceSaving||!choiceValid;
+  setChoiceDisabled();
+ };
+
  const updateChat = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= chatRevision) return;
+   const reconnected=state.connected&&!chatState?.connected;
    chatRevision = state.revision; chatState = state;
+   if(reconnected){catalogs.clear();selectedKind="";}
    const viewport=document.querySelector(".speech-content");
    const follow = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 24;
    const info = state.session;
    const target = info?.agent;
-   document.getElementById("session-controls").hidden = !!info && ["ready", "starting"].includes(info.state);
+   document.getElementById("session-controls").hidden = false;
    document.getElementById("destination").textContent = info ? `専用アシスタント・${info.kind}・${info.paneId.slice(0,8)}` : "専用アシスタント";
    document.getElementById("connection").hidden = true;
    sessionStatus.textContent = state.hint;
-   const canSend = state.connected && !state.busy && info?.state === "ready" && target?.state === "idle";
+   const canSend = state.notificationSummary?.status!=="summarizing" && state.connected && !state.busy && info?.state === "ready" && target?.state === "idle";
    message.disabled = send.disabled = !canSend;
    message.placeholder = canSend ? "船長へのメッセージ" : "専用セッションの接続を確認してください";
+   const summary=state.notificationSummary;
+   document.getElementById("notification-summary-refresh").disabled=summary?.status==="summarizing"||state.busy||!state.connected;
+   updateSummaryReplies();
+   document.getElementById("notification-summary-section").hidden=!info||!summaryToggle.checked||!summary;
+   document.getElementById("notification-summary-status").textContent=summary?.message??"";
+   document.getElementById("notification-summary-text").textContent=summary?.text??"";
    const launch=info?.launchSettings, desired=state.launchProfiles?.[info?.kind];
    const requested=launch ? `起動時指定：モデル ${launch.model||"既定値"} / effort ${launch.effort||"既定値"}` : "起動時のモデル・effort指定は不明です";
    const differs=launch&&desired&&(launch.model!==desired.model||launch.effort!==desired.effort);
-   document.getElementById("launch-settings").textContent=info ? `${requested}${differs?"。保存済み設定と異なります。停止後、新しく開始すると反映します。":""}（CLI内での変更は追跡しません）` : "モデル・effortは設定画面で指定できます。";
-   const before = kinds.value;
-   const options = state.kinds.filter(kind => kind.available);
+   document.getElementById("launch-settings").textContent=info ? `${requested}${differs?"。保存済み設定と異なります。停止後、新しく開始すると反映します。":""}（CLI内での変更は追跡しません）` : "種類・モデル・effortは専用セッション欄で選べます。";
+   const before = kinds.value || preferences.captainKind || info?.kind;
+   const options = state.kinds.filter(kind => ["claude","codex","muse","agy","copilot"].includes(kind.kind)&&(kind.available||kind.kind===preferences.captainKind));
    const signature = JSON.stringify(options);
    if (kinds.dataset.signature !== signature) {
      kinds.replaceChildren(); kinds.dataset.signature = signature;
      for (const kind of options) {
-       const option = document.createElement("option"); option.value = kind.kind; option.textContent = kind.label;
+       const option = document.createElement("option"); option.value = kind.kind; option.textContent = kind.label+(kind.available?"":"（利用不可）");option.disabled=!kind.available;
        kinds.append(option);
      }
      if (options.some(kind => kind.kind === before)) kinds.value = before;
      else if (info && options.some(kind => kind.kind === info.kind)) kinds.value = info.kind;
    }
-   if (info && info.state !== "stopped" && options.some(kind => kind.kind === info.kind)) kinds.value = info.kind;
-   kinds.disabled = !!info && info.state !== "stopped";
-   start.disabled = !state.connected || state.busy || !options.length || !!info && !["shell","stopped"].includes(info.state);
+   if(kinds.value&&kinds.value!==selectedKind&&!choiceSaving)void loadSelection();
+   updateChatControls();
    start.textContent = info?.state === "stopped" ? "旧端末を残して新しく開始" : "専用セッションを開始";
    adopt.hidden = !(state.connected && info?.state === "conflict" && info.observedAgent);
    adopt.disabled = state.busy;
    adopt.textContent = info?.observedAgent ? `このエージェントを使う（${info.observedAgent.kind}・${info.observedAgent.instanceId.slice(0,8)}）` : "このエージェントを使う";
    log.querySelectorAll(".chat-message").forEach(element => element.remove());
    for (const entry of state.messages) {
+     if(entry.role==="user"&&/\[操舵室の通知まとめ [a-f0-9-]{36}\]/.test(entry.text))continue;
+     if(summary?.status==="ready"&&entry.role==="assistant"&&entry.text===summary.text)continue;
      const paragraph = document.createElement("p"); paragraph.className = `spoken chat-message ${entry.role}`;
      paragraph.textContent = entry.text; log.append(paragraph);
    }

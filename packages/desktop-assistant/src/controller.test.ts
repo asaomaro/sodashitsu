@@ -215,3 +215,15 @@ it("isolates tool windows from conversation sending and settings mutation",()=>{
  for(const action of ["send-message","start-session","source-reply","save","draft-state","resize-start"])expect(authorizeLocalSender(sender,action)).toBe(false);
  expect(authorizeLocalSender({...sender,mainFrame:false},"record-start")).toBe(false);
 });
+
+it("remembers captain kind and profiles without recreating windows or letting stale settings overwrite them",async()=>{
+ const {controller,native,save}=fixture();const stale=controller.preferences;
+ await controller.chooseCaptain("codex",{model:"gpt-test",effort:"high"},true);
+ await controller.chooseCaptain("muse",{model:"muse-test",effort:"low"},false);
+ expect(controller.preferences).toMatchObject({captainKind:"muse",notificationSummary:false,agentProfiles:{codex:{model:"gpt-test",effort:"high"},muse:{model:"muse-test",effort:"low"}}});
+ expect(native.character).not.toHaveBeenCalled();expect(native.tray).not.toHaveBeenCalled();
+ await controller.update({...stale,appearance:"light"},true);
+ expect(controller.preferences).toMatchObject({captainKind:"muse",notificationSummary:false,appearance:"light",agentProfiles:{codex:{model:"gpt-test",effort:"high"}}});
+ const reopened=new AssistantController((save.mock.calls as unknown as [DesktopAssistantPreferences][]).at(-1)![0],native,save);
+ expect(reopened.preferences.captainKind).toBe("muse");expect(reopened.preferences.agentProfiles.muse.effort).toBe("low");
+});

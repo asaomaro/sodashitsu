@@ -41,6 +41,9 @@ export type AssistantMethod =
   | "pane.image.commit"
   | "pane.image.cancel"
   | "agent.kinds"
+  | "agent.model_options"
+  | "agent.summary_cached"
+  | "agent.conversation_tail"
   | "agent.conversation";
 interface Socket {
   on(name: "open" | "pong" | "close" | "error", callback: () => void): unknown;
@@ -288,13 +291,13 @@ export class AssistantRpc {
             if (this.now() >= item.expires)
               item.reject(Error("操作の応答が遅れました。結果を確認してください。"));
             else if (message.error) {
-              const error = message.error as { message?: unknown };
+              const error = message.error as { message?: unknown;code?:unknown };
               item.reject(
-                Error(
+                Object.assign(Error(
                   typeof error.message === "string"
                     ? error.message.slice(0, 1000)
                     : "操作できませんでした。",
-                ),
+                ),typeof error.code==="string"?{code:error.code.slice(0,64)}:{}),
               );
             } else item.resolve(message.result);
           } else if (

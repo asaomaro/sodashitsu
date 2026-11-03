@@ -88,6 +88,7 @@ try {
       reducedMotion: false,
       position: null,
     };
+    Object.assign(window.preferences,{captainKind:"codex",notificationSummary:true,agentProfiles:{claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"},muse:{model:"muse-test-model",effort:"high"},agy:{model:"agy-test-model",effort:"high"},copilot:{model:"copilot-test-model",effort:"high"}}},JSON.parse(localStorage.getItem("generated-captain-choice")||"{}"));
     window.ocrRevision=1; window.currentOcr={};
     window.savedNotes = [];
     window.toolsRevision = 1;
@@ -139,12 +140,15 @@ try {
       saveReminder:async input=>window.calls.push(["save-reminder",input]),
       removeReminder:async input=>window.calls.push(["remove-reminder",input]),
       acknowledgeReminder:async input=>window.calls.push(["ack-reminder",input]),
+      openAgent:async input=>window.calls.push(["agent-open",input]),
       openSource: async input=>window.calls.push(["open-source",input]),
       replySource: async input=>window.calls.push(["reply-source",input]),
       sourceKey: async input=>window.calls.push(["source-key",input]),
       openSession: async()=>window.calls.push(["open-session"]),
-      conversation: async () => ({ revision: 1, connected: false, busy: false, session: null, kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。" }),
+      conversation: async () => ({ revision: 1, connected: false, busy: false, session: null, kinds: ["claude","codex","muse","agy","copilot"].map(kind=>({kind,label:kind,available:true})), messages: [], hint: "専用セッションを開始できます。" }),
       onConversation: callback => { window.chatCallback = callback; return () => {}; },
+      agentModels:async({kind})=>({models:kind==="codex"?[{id:"custom-model",label:"Codex custom",efforts:["low","high"]},{id:"fast-model",label:"Codex fast",efforts:["minimal"]}]:[{id:`${kind}-test-model`,label:kind+" model",efforts:["high"]},{id:"sonnet",label:"Sonnet",efforts:["low","high"]}],message:""}),
+      chooseCaptain:async input=>{window.calls.push(["captain-choice",input]);window.preferences.captainKind=input.kind;window.preferences.notificationSummary=input.notificationSummary;window.preferences.agentProfiles={...window.preferences.agentProfiles,[input.kind]:input.profile};localStorage.setItem("generated-captain-choice",JSON.stringify({captainKind:input.kind,agentProfiles:window.preferences.agentProfiles,notificationSummary:input.notificationSummary}));return structuredClone(window.preferences);},
       startSession: async input => window.calls.push(["start-session",input]),
       adoptSession: async input => window.calls.push(["adopt-session",input]),
       sendMessage: async input => window.calls.push(["send-message",input]),
@@ -332,17 +336,10 @@ try {
   await page.setViewportSize({width:400,height:640});
   await expect(page.getByRole("button", { name: "操舵室を開く" })).toBeDisabled();
   await expect(page.locator("#ocrProvider")).toHaveValue("agent");
-  await page.locator("#claude-model").fill("sonnet");
-  await page.locator("#claude-effort").selectOption("high");
-  await page.locator("#codex-model").fill("custom-model");
-  await page.locator("#codex-effort").selectOption("low");
-  for(const kind of ["muse","agy","copilot"]){await page.locator(`#${kind}-model`).fill(`${kind}-test-model`);await page.locator(`#${kind}-effort`).selectOption("high");}
-  await page.getByRole("button", {name:"保存",exact:true}).press("Enter");
+  await expect(page.locator("#claude-model,#codex-effort")).toHaveCount(0);
+  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
   await expect(page.locator("#status")).toHaveText("保存しました。");
-  assert.deepEqual(await page.evaluate(()=>window.preferences.agentProfiles), {claude:{model:"sonnet",effort:"high"},codex:{model:"custom-model",effort:"low"},muse:{model:"muse-test-model",effort:"high"},agy:{model:"agy-test-model",effort:"high"},copilot:{model:"copilot-test-model",effort:"high"}});
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="start-session").length),0);
-  await expect(page.locator("#claude-model")).toHaveValue("sonnet");
-  for(const kind of ["muse","agy","copilot"]){await expect(page.locator(`#${kind}-model`)).toHaveValue(`${kind}-test-model`);await expect(page.locator(`#${kind}-effort`)).toHaveValue("high");}
   await expect(page.locator("#followSystemMotion")).toBeChecked();
   await page.locator("#followSystemMotion").uncheck();
   await expect(page.locator("#voiceEnabled")).not.toBeChecked();
@@ -513,6 +510,22 @@ try {
   await expect(page.getByRole("button",{name:"最大化",exact:true})).toHaveAttribute("data-maximized","false");
   await expect(page.locator("[data-window-resize]")).toHaveCount(0);
   await expect(page.locator("[data-resize]")).toHaveCount(3);
+  await expect(page.locator("#agent-model")).toHaveValue("custom-model");
+  await expect(page.locator("#agent-effort")).toHaveValue("low");
+  await page.locator("#agent-model").selectOption("fast-model");
+  await expect(page.locator("#agent-effort option")).toHaveCount(2);
+  await expect(page.locator("#agent-effort")).toHaveValue("");
+  await expect(page.locator("#captain-choice-status")).toContainText("選択を保存しました");
+  await page.locator("#agent-effort").selectOption("minimal");
+  await expect.poll(()=>page.evaluate(()=>window.preferences.agentProfiles.codex.effort)).toBe("minimal");
+  await page.reload();
+  await expect(page.locator("#agent-model")).toHaveValue("fast-model");
+  await expect(page.locator("#agent-effort")).toHaveValue("minimal");
+  await page.locator("#agent-model").selectOption("custom-model");
+  await expect(page.locator("#captain-choice-status")).toContainText("選択を保存しました");
+  await page.locator("#agent-effort").selectOption("low");
+  await expect.poll(()=>page.evaluate(()=>window.preferences.agentProfiles.codex.effort)).toBe("low");
+
   await page.screenshot({path:"/tmp/soda-chat-window-controls.png"});
 
   await expect(page.getByRole("log")).toContainText("こんにちは。操舵室の船長です。");
@@ -535,6 +548,8 @@ try {
   await expect(page.locator("#notices")).toContainText("作業が完了しました。");
   await expect(page.locator("#agent-roster-summary")).toContainText("3件・作業中 1件・確認待ち 1件");
   await expect(page.locator("#agent-roster-rows li")).toHaveCount(3);
+  await page.locator("#agent-roster-rows button").first().click();
+  assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"agent-open");
   await expect(page.locator("#agent-roster-rows")).toContainText("実装担当");
   await page.locator("#agent-filter").selectOption("working");
   await expect(page.locator("#agent-roster-rows li")).toHaveCount(1);
@@ -564,6 +579,7 @@ try {
     revision: 2, connected: true, busy: false, session: null,
     kinds: [{kind:"codex",label:"Codex",available:true}], messages: [], hint: "専用セッションを開始できます。"
   }));
+  await expect(page.locator("#start-session")).toBeEnabled();
   await page.locator("#start-session").press("Enter");
   assert.deepEqual(await page.evaluate(() => window.calls.at(-1)), ["start-session", {revision:2,kind:"codex",retry:false}]);
   const actorId = "00000000-0000-4000-8000-000000000001";
@@ -960,6 +976,27 @@ try {
   }
   await appearancePage.close();assert.deepEqual(errors,[]);
   console.log("PASS: assistant normal/dark/system preferences, live OS changes, stale revisions, and every local window");
+  const captainPage=await context.newPage();await captainPage.goto(`${origin}/bubble.html`);
+  await captainPage.locator("#agent-kind").selectOption("muse");
+  await expect(captainPage.locator("#agent-model")).toHaveValue("muse-test-model");
+  await expect(captainPage.locator("#captain-choice-status")).toContainText("選択を保存しました");
+  await captainPage.reload();await expect(captainPage.locator("#agent-kind")).toHaveValue("muse");
+  await expect(captainPage.locator("#agent-effort")).toHaveValue("high");
+  await captainPage.evaluate(()=>{
+    const id="00000000-0000-4000-8000-000000000092";
+    window.noticeCallback({status:"connected",revision:200,notices:[{id,title:"作業担当",message:"確認待ち"}]});
+    window.chatCallback({revision:200,connected:true,busy:false,session:{paneId:"captain",kind:"muse",state:"ready",agent:{instanceId:"captain-actor",state:"idle"}},kinds:[{kind:"muse",label:"Muse",available:true}],messages:[],hint:"待機中",notificationSummary:{status:"ready",text:"作業担当：保存先を統一。検証済み。返信案：リリースしてください。<img src=x>",message:"作業要約",noticeIds:[id]}});
+    window.assistant.replySource=input=>new Promise(resolve=>{window.calls.push(["summary-reply",input]);window.releaseSummaryReply=resolve;});
+  });
+  await expect(captainPage.locator("#notification-summary-section")).toBeVisible();await expect(captainPage.locator("#notification-summary-text img")).toHaveCount(0);
+  await captainPage.locator("#summary-reply-target").selectOption("00000000-0000-4000-8000-000000000092");
+  await captainPage.locator("#summary-reply-text").fill("リリースを進めてください");await captainPage.locator("#summary-reply-send").click();
+  await captainPage.locator("#summary-reply-text").fill("次の下書き");await expect(captainPage.locator("#summary-reply-send")).toBeDisabled();
+  await captainPage.evaluate(()=>window.releaseSummaryReply());await expect(captainPage.locator("#summary-reply-send")).toBeEnabled();await expect(captainPage.locator("#summary-reply-text")).toHaveValue("次の下書き");
+  assert.equal(await captainPage.evaluate(()=>window.calls.filter(c=>c[0]==="summary-reply").length),1);
+  await captainPage.locator("#notification-summary-enabled").uncheck();await expect(captainPage.locator("#notification-summary-section")).toBeHidden();
+  await expect(captainPage.locator("#captain-choice-status")).toContainText("選択を保存しました");await captainPage.reload();await expect(captainPage.locator("#notification-summary-enabled")).not.toBeChecked();
+  await captainPage.screenshot({path:"/tmp/soda-captain-selection.png"});await captainPage.close();
   await context.close();
   console.log("generated Copilot and Antigravity bubble text and pinned reply PASS");
 } finally {

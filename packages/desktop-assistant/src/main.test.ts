@@ -18,6 +18,7 @@ const fixture = vi.hoisted(() => ({
     request: ReturnType<typeof vi.fn>;
   }>,
   connections: [] as Array<{
+    feed:{agents:import("./noticeFeed.js").AssistantAgentRow[]};
     options: {
       cookie: () => Promise<string | null>;
       changed: (notices: unknown[], added: boolean) => void;
@@ -269,6 +270,7 @@ vi.mock("./assistantRpc.js", () => ({
 
 vi.mock("./noticeConnection.js", () => ({
   NoticeConnection: class {
+    feed={agents:[] as import("./noticeFeed.js").AssistantAgentRow[]};
     start = vi.fn();
     stop = vi.fn();
     reconnect = vi.fn();
@@ -1806,4 +1808,35 @@ it("resizes stationary maximized windows and exits maximization only when their 
   await action(local,"maximize");await action(local,"maximize");expect(win.getBounds()).toEqual(resized);
  }
  cursor.mockRestore();await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+
+it("opens only a current roster actor in a reply terminal and rejects stale, hidden, and settings callers",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
+ const source={serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:randomUUID(),workspaceId:randomUUID(),agentInstanceId:randomUUID()};
+ const connection=fixture.connections.at(-1)!;connection.feed.agents=[{source,title:"作業担当",state:"working",since:1}];connection.options.status("connected");
+ const open=fixture.handlers.get("assistant:agent-open")!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
+ await expect(open(event,{source})).rejects.toThrow("許可");
+ await open(local,{source});const panel=fixture.windows.at(-1)!,url=remoteOf(panel).url;
+ expect(url).toContain("assistantView=reply");expect(url).toContain(source.paneId);expect(url).toContain(source.agentInstanceId);
+ await expect(open(local,{source:{...source,agentInstanceId:randomUUID()}})).rejects.toThrow("エージェントが変更");
+ connection.feed.agents=[];await expect(open(local,{source})).rejects.toThrow("エージェントが変更");
+ chat.hide();await expect(open(local,{source})).rejects.toThrow("会話を開いて");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("persists captain choices only from chat and protects them from an older settings form",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ const old=await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false}) as Record<string,unknown>;
+ await fixture.handlers.get("assistant:chat")!(event);const chat=fixture.windows.at(-1)!,local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
+ const choose=fixture.handlers.get("assistant:captain-choice")!;
+ const input={kind:"muse",profile:{model:"muse-wonder-1.0",effort:"high"},notificationSummary:true};
+ await expect(choose(event,input)).rejects.toThrow("許可");
+ expect(await choose(local,input)).toMatchObject({captainKind:"muse",agentProfiles:{muse:input.profile}});
+ await fixture.handlers.get("assistant:save")!(event,{...old,appearance:"light"});
+ expect(await fixture.handlers.get("assistant:read")!(local)).toMatchObject({captainKind:"muse",notificationSummary:true,agentProfiles:{muse:input.profile}});
+ await expect(choose(local,{...input,kind:"claude",profile:{model:"haiku",effort:"ultra"}})).rejects.toThrow();
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });

@@ -172,3 +172,5 @@
  select option::checkmark{color:var(--assistant-gold)}
  select:focus-visible{outline:2px solid var(--assistant-gold);outline-offset:2px}
 }
+
+#agent-roster-rows .agent-row-open{display:flex;align-items:flex-start;gap:6px;width:100%;padding:4px;background:transparent;color:var(--assistant-fg);text-align:left;font:inherit;border-radius:6px}#agent-roster-rows .agent-row-open:hover{background:var(--assistant-surface)}
