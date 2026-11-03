@@ -3,7 +3,7 @@ import { hexColor, type ThemeColors } from "./color.js";
 import { stringWidth } from "./width.js";
 
 // 公式アイコン（64×64）の輪・8本のスポーク・色分けを、空白セルの背景色で表す。
-// 端末のセルは縦長なので、横2セルに対して縦1セルを正方形として扱う。
+// 端末のセルの実寸（未取得時は縦横比2.2）に合わせて行数を決める。
 function wheelColor(x: number, y: number, cellHeight: number): string | null {
   const dx = x - 32, dy = y - 32, r = Math.hypot(dx, dy);
   if (r <= 10.8) return r >= 8.2 ? "#c8923a" : "#0f2230";
@@ -17,12 +17,13 @@ function wheelColor(x: number, y: number, cellHeight: number): string | null {
 }
 
 /** 接続を待つ初回の画面。小さい端末では短縮し、折り返さない。 */
-export function drawStartup(grid: Grid, theme: ThemeColors): void {
+export function drawStartup(grid: Grid, theme: ThemeColors, cellAspect = 2.2): void {
   const bg = theme.ground("--soda-bg"), fg = theme.ui("--soda-fg");
   const cyan = hexColor("#2bd1b8"), hub = hexColor("#0f2230");
   grid.fill({ x: 0, y: 0, w: grid.w, h: grid.h }, fg, bg);
-  const size = grid.w >= 44 && grid.h >= 24 ? 40 : grid.w >= 36 && grid.h >= 20 ? 32 : grid.w >= 28 && grid.h >= 16 ? 24 : 0;
-  const height = size / 2;
+  const aspect = Number.isFinite(cellAspect) && cellAspect >= 1 && cellAspect <= 4 ? cellAspect : 2.2;
+  const size = [40, 32, 24].find(w => grid.w >= w + 4 && grid.h >= Math.round(w / aspect) + 3) ?? 0;
+  const height = Math.round(size / aspect);
   const top = Math.max(0, Math.floor((grid.h - (size ? height + 3 : 2)) / 2));
   if (size) {
     const left = Math.floor((grid.w - size) / 2);

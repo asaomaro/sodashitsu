@@ -69,3 +69,15 @@ it("keeps dialogs visible while the initial connection is pending", async () => 
     outer.dispose();
   }
 });
+
+it("keeps the wheel round across terminal cell aspect ratios", () => {
+  for (const [width, height] of [[11, 24], [10, 20], [8, 24], [20, 20]]) {
+    const grid = new Grid(100, 45);
+    drawStartup(grid, new ThemeColors("dracula"), height! / width!);
+    const colored = Array.from(grid.bg).flatMap((bg, i) => bg === hexColor("#c8923a") ? [[i % grid.w, Math.floor(i / grid.w)]] : []);
+    const xs = colored.map(p => p[0]!), ys = colored.map(p => p[1]!);
+    const pixelWidth = (Math.max(...xs) - Math.min(...xs) + 1) * width!;
+    const pixelHeight = (Math.max(...ys) - Math.min(...ys) + 1) * height!;
+    expect(Math.abs(pixelWidth / pixelHeight - 1)).toBeLessThan(0.15);
+  }
+});

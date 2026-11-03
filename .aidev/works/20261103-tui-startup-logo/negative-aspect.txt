@@ -1,0 +1,33 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/render/startup.test.ts (7 tests | 1 failed | 6 skipped) 17ms
+   × keeps the wheel round across terminal cell aspect ratios 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/render/startup.test.ts > keeps the wheel round across terminal cell aspect ratios
+AssertionError: expected 0.2962962962962963 to be less than 0.15
+ ❯ src/render/startup.test.ts:81:52
+     79|     const pixelWidth = (Math.max(...xs) - Math.min(...xs) + 1) * width…
+     80|     const pixelHeight = (Math.max(...ys) - Math.min(...ys) + 1) * heig…
+     81|     expect(Math.abs(pixelWidth / pixelHeight - 1)).toBeLessThan(0.15);
+       |                                                    ^
+     82|   }
+     83| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  20:14:10
+   Duration  3.00s (transform 82%, import 17%, tests 1%)
+
+  Transform  transforming modules took 2.37s · 82% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/render/startup.test.ts -t across terminal cell aspect ratios

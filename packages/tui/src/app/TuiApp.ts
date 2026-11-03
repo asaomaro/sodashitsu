@@ -165,6 +165,7 @@ export class TuiApp {
   protected net: TuiNet | null = null;
   connectionState: ConnectionState = "connecting";
   private startupPending = true;
+  private startupCellAspect = 2.2;
   protected theme: ThemeColors;
   private readonly renderer: Renderer;
   private renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -704,7 +705,7 @@ export class TuiApp {
       this.escTimer = null;
     });
     this.disposers.push(this.io.onInput((bytes) => this.onInput(bytes)));
-    if (this.kitty?.protocol === "sixel") this.io.write("\x1b[16t");
+    this.io.write("\x1b[16t"); // 起動アイコンと画像のセル縦横比を外側の端末へ問い合わせる。
     // tab バーの右端に日時を出していれば、毎秒描き直す（差分だけが出る）。
     const clock = setInterval(() => {
       if (this.lastLayout?.tabBar.h && this.prefs.tabBarRight.some((e) => e.kind === "datetime"))
@@ -981,6 +982,7 @@ export class TuiApp {
     if (ev.kind === "key" && ev.key.key === "Escape" && this.statuslines.dragging) { this.statuslines.cancel(); return; }
     // オーバーレイが開いている間のキー・貼り付け・マウスはオーバーレイへ（pane へは流さない。AC-I5）。
     if (ev.kind === "cellSize") {
+      this.startupCellAspect = ev.height / ev.width;
       this.kitty?.setCellSize(ev.width, ev.height);
       this.renderer.invalidate();
       this.scheduleRender();
@@ -1778,7 +1780,7 @@ export class TuiApp {
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => {
         if (this.startupPending && this.connectionState === "connecting") {
-          drawStartup(grid, this.theme);
+          drawStartup(grid, this.theme, this.startupCellAspect);
           return { x: 0, y: 0, visible: false, style: "block", blink: false };
         }
         const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
