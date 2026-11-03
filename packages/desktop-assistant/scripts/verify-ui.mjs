@@ -221,8 +221,10 @@ try {
       beginResize:async input=>{window.calls.push(["resize-start",input]);return{token:"00000000-0000-4000-8000-000000000080"};},
       resize:async input=>window.calls.push(["resize-move",input]),
       endResize:async input=>window.calls.push(["resize-end",input]),
+      windowState:async()=>window.chromeState??{maximized:false,revision:0},
+      onWindowState:callback=>{window.chromeStateCallback=callback;return()=>{};},
       windowResize: async input => {window.calls.push(["window-resize",input]);return {token:"00000000-0000-4000-8000-000000000080"};},
-      windowAction: async action => window.calls.push(["window-action",action]),
+      windowAction: async action => {window.calls.push(["window-action",action]);const state=window.chromeState??{maximized:false,revision:0};window.chromeState=action==="maximize"?{maximized:!state.maximized,revision:state.revision+1}:state;window.chromeStateCallback?.(window.chromeState);return window.chromeState;},
       hide: async () => window.calls.push(["hide"]),
     };
   });
@@ -248,8 +250,17 @@ try {
       assert.equal(await page.locator(".assistant-window-header").evaluate(el=>el.getBoundingClientRect().top),layout.head);
       await page.getByRole("button",{name:"最小化",exact:true}).click();
       assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["window-action","minimize"]);
-      await page.getByRole("button",{name:"最大化・元に戻す",exact:true}).click();
+      await page.getByRole("button",{name:"最大化",exact:true}).click();
       assert.deepEqual(await page.evaluate(()=>window.calls.at(-1)),["window-action","maximize"]);
+      const restore=page.getByRole("button",{name:"元のサイズに戻す",exact:true});
+      await expect(restore).toHaveAttribute("data-maximized","true");await expect(restore.locator("svg path")).toHaveCount(2);
+      await restore.click();
+      await expect(page.getByRole("button",{name:"最大化",exact:true}).locator("svg rect")).toHaveCount(1);
+      await page.getByRole("button",{name:"最大化",exact:true}).click();
+      await page.evaluate(()=>{window.chromeState={maximized:false,revision:window.chromeState.revision+1};window.chromeStateCallback(window.chromeState);});
+      await expect(page.getByRole("button",{name:"最大化",exact:true})).toHaveAttribute("data-maximized","false");
+      await page.evaluate(()=>window.chromeStateCallback({maximized:true,revision:0}));
+      await expect(page.getByRole("button",{name:"最大化",exact:true})).toHaveAttribute("data-maximized","false");
       await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=0;});
     }
     await page.setViewportSize({width:520,height:670});

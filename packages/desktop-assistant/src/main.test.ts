@@ -1680,3 +1680,29 @@ it("isolates the compact panel shell from remote contents and closes child rende
  const remoteContents=view.webContents;(view as any).webContents=undefined;
  panel.close();expect(view.destroyed).toBe(true);expect(remoteContents.close).toHaveBeenCalledOnce();expect(settings.destroyed).toBe(false);
 });
+
+it("restores every maximized assistant window on drag, updates its icon state, and allows immediate resizing",async()=>{
+ const {screen}=await import("electron"),settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
+ const eventOf=(win:MockWindow)=>({sender:win.webContents,senderFrame:win.webContents.mainFrame}),event=eventOf(settings);
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ await fixture.handlers.get("assistant:tools-open")!(event);const tools=fixture.windows.at(-1)!;
+ await fixture.handlers.get("assistant:open")!(event);const panel=fixture.windows.at(-1)!;
+ const action=fixture.handlers.get("assistant:window-action")!,state=fixture.handlers.get("assistant:window-state")!,resize=fixture.handlers.get("assistant:window-resize")!;
+ const cursor=vi.spyOn(screen,"getCursorScreenPoint");
+ for(const win of [settings,tools,panel]){
+  win.show();const local=eventOf(win);win.setBounds({x:100,y:100,width:500,height:500});
+  expect(await action(local,"maximize")).toMatchObject({maximized:true});
+  expect(await state(local)).toMatchObject({maximized:true});
+  await expect(resize(local,{phase:"start",handle:"se"})).rejects.toThrow("元の大きさ");
+  cursor.mockReturnValue({x:600,y:100});const maximum=win.getBounds();win.bounds={...maximum,x:100,y:80};win.emit("move");
+  expect(win.getBounds()).toMatchObject({width:500,height:500});
+  expect(win.webContents.send).toHaveBeenCalledWith("assistant:window-state-changed",{maximized:false,revision:expect.any(Number)});
+  expect(await state(local)).toMatchObject({maximized:false});
+  const {token}=await resize(local,{phase:"start",handle:"se"}) as {token:string};
+  cursor.mockReturnValue({x:640,y:130});await resize(local,{phase:"move",token});await resize(local,{phase:"end",token});
+  expect(win.getBounds()).toMatchObject({width:540,height:530});
+  expect(await action(local,"maximize")).toMatchObject({maximized:true});
+  expect(await action(local,"maximize")).toMatchObject({maximized:false});expect(win.getBounds()).toMatchObject({width:540,height:530});
+ }
+ const contents=remoteOf(panel).webContents;await expect(state({sender:contents,senderFrame:contents.mainFrame})).rejects.toThrow("許可");tools.close();panel.close();
+});

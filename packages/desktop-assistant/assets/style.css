@@ -122,3 +122,5 @@
 .window-resize-w,.window-resize-e{top:14px;bottom:14px;width:5px;cursor:ew-resize}.window-resize-w{left:0}.window-resize-e{right:0}
 .window-resize-nw,.window-resize-ne,.window-resize-sw,.window-resize-se{width:12px;height:12px}
 .window-resize-nw{top:0;left:0;cursor:nwse-resize}.window-resize-ne{top:0;right:0;cursor:nesw-resize}.window-resize-sw{bottom:0;left:0;cursor:nesw-resize}.window-resize-se{bottom:0;right:0;cursor:nwse-resize}
+
+.window-controls button[data-window-action=maximize]{display:flex;align-items:center;justify-content:center}

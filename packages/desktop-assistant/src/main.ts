@@ -239,6 +239,34 @@ const fullscreen = new FullscreenPolicy();
 let settingsRequested = false;
 const panelViews = new WeakMap<BrowserWindow,{view:WebContentsView;shell:Promise<void>}>();
 const windowRestores=new WeakMap<BrowserWindow,Rect>();
+const windowMaxBounds=new WeakMap<BrowserWindow,Rect>();
+const windowBoundsChanging=new WeakSet<BrowserWindow>();
+const windowStateRevisions=new WeakMap<BrowserWindow,number>();
+function chromeState(win:BrowserWindow){return {maximized:windowRestores.has(win),revision:windowStateRevisions.get(win)??0};}
+function publishChromeState(win:BrowserWindow){
+ windowStateRevisions.set(win,(windowStateRevisions.get(win)??0)+1);
+ if(!win.isDestroyed())win.webContents.send("assistant:window-state-changed",chromeState(win));
+}
+function setChromeBounds(win:BrowserWindow,bounds:Rect){
+ windowBoundsChanging.add(win);try{win.setBounds(bounds);}finally{windowBoundsChanging.delete(win);}
+}
+function reconcileChromeState(win:BrowserWindow){
+ const restore=windowRestores.get(win),maximum=windowMaxBounds.get(win);
+ if(!restore||!maximum||win.isDestroyed()||windowBoundsChanging.has(win))return;
+ const moved=win.getBounds();
+ if(moved.x===maximum.x&&moved.y===maximum.y&&moved.width===maximum.width&&moved.height===maximum.height)return;
+ windowRestores.delete(win);windowMaxBounds.delete(win);windowResizes.delete(win);
+ // A native titlebar drag keeps the maximized dimensions. Restore the normal size under the pointer.
+ if(moved.width===maximum.width&&moved.height===maximum.height){
+  const cursor=screen.getCursorScreenPoint(),fraction=Math.max(0,Math.min(1,(cursor.x-moved.x)/maximum.width));
+  const bounds={x:Math.round(cursor.x-restore.width*fraction),y:moved.y,width:restore.width,height:restore.height};
+  setChromeBounds(win,resizeWindowBounds(bounds,"e",0,0,windowArea(win,moved)));
+ }
+ publishChromeState(win);
+}
+function watchChromeState(win:BrowserWindow){
+ win.on("move",()=>reconcileChromeState(win));win.on("resize",()=>reconcileChromeState(win));
+}
 const windowResizes=new WeakMap<BrowserWindow,{token:string;handle:WindowResizeHandle;start:Rect;cursor:{x:number;y:number};area:Rect;expires:number}>();
 function windowArea(win:BrowserWindow,bounds:Rect=win.getBounds()):Rect {
  const displays=adapter.displays();if(!displays.length)throw Error("表示できるディスプレイがありません。");
@@ -380,7 +408,7 @@ function localWindow(role: LocalRole): BrowserWindow {
       webSecurity: true,
     },
   });
-  if (role === "settings" || role === "tools") win.setMenu(null);
+  if (role === "settings" || role === "tools") {win.setMenu(null);watchChromeState(win);}
   const id = win.webContents.id;
   localWindows.set(id, { window: win, role });
   win.on("closed", () => {
@@ -803,7 +831,7 @@ function openPanel(
   const remoteContents=view.webContents;
   view.setBackgroundColor("#172438");win.contentView.addChildView(view);
   const layout=()=>{const {width,height}=win.getBounds();view.setBounds({x:12,y:42,width:Math.max(1,width-24),height:Math.max(1,height-54)});};
-  win.on("resize",layout);layout();win.setMenu(null);
+  win.on("resize",layout);layout();win.setMenu(null);watchChromeState(win);
   const shellId=win.webContents.id;localWindows.set(shellId,{window:win,role:"panel"});
   const cancelResize=()=>{windowResizes.delete(win);};
   win.on("hide",cancelResize);win.on("minimize",cancelResize);win.on("blur",cancelResize);
@@ -988,6 +1016,7 @@ function registerIpc(): void {
     "chat",
     "hide",
     "window-action",
+    "window-state",
     "window-resize",
     "inbox",
     "tools-open",
@@ -1093,7 +1122,9 @@ function registerIpc(): void {
         resize.expires = Date.now()+30000;
         return;
       }
+      if (action === "window-state") {reconcileChromeState(owner.window);return chromeState(owner.window);}
       if (action === "window-resize") {
+        reconcileChromeState(owner.window);
         const operation=z.discriminatedUnion("phase",[
           z.object({phase:z.literal("start"),handle:z.enum(WINDOW_RESIZE_HANDLES)}).strict(),
           z.object({phase:z.enum(["move","end"]),token:z.uuid()}).strict(),
@@ -1112,8 +1143,14 @@ function registerIpc(): void {
         windowResizes.delete(owner.window);
         if (operation === "close") owner.window.close();
         else if (operation === "minimize") owner.window.minimize();
-        else {const restore=windowRestores.get(owner.window);if(restore){windowRestores.delete(owner.window);owner.window.setBounds(resizeWindowBounds(restore,"e",0,0,windowArea(owner.window,restore)));}else{windowRestores.set(owner.window,owner.window.getBounds());owner.window.setBounds(windowArea(owner.window));}}
-        return;
+        else {
+          reconcileChromeState(owner.window);
+          const restore=windowRestores.get(owner.window);
+          if(restore){windowRestores.delete(owner.window);windowMaxBounds.delete(owner.window);setChromeBounds(owner.window,resizeWindowBounds(restore,"e",0,0,windowArea(owner.window,restore)));}
+          else{windowRestores.set(owner.window,owner.window.getBounds());const area=windowArea(owner.window);windowMaxBounds.set(owner.window,area);setChromeBounds(owner.window,area);windowMaxBounds.set(owner.window,owner.window.getBounds());}
+          publishChromeState(owner.window);
+        }
+        return chromeState(owner.window);
       }
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();

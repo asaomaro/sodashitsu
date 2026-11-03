@@ -33,7 +33,7 @@ export function authorizeLocalSender(
 ): boolean {
   if (!sender.mainFrame || !sender.current || localRole(sender.frameUrl) !== sender.role)
     return false;
-  if (sender.role === "panel") return action === "window-action" || action === "window-resize";
+  if (sender.role === "panel") return action === "window-action" || action === "window-resize" || action === "window-state";
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;
   if (action === "voice-test" || action === "voice-speakers" || action === "voice-match" || action === "voice-versions") return sender.role === "settings";
@@ -52,7 +52,7 @@ export function authorizeLocalSender(
     ].includes(action)
   )
     return sender.role === "settings";
-  if (action === "window-action" || action === "window-resize") return sender.role === "settings" || sender.role === "tools";
+  if (action === "window-action" || action === "window-resize" || action === "window-state") return sender.role === "settings" || sender.role === "tools";
   if (action === "hide") return sender.role === "bubble" || sender.role === "tools";
   if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
   if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";

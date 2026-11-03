@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld(
     open: () => ipcRenderer.invoke("assistant:open"),
     settings: () => ipcRenderer.invoke("assistant:settings"),
     chat: () => ipcRenderer.invoke("assistant:chat"),
+    windowState:()=>ipcRenderer.invoke("assistant:window-state"),
+    onWindowState:(callback:(state:unknown)=>void)=>{const receive=(_event:unknown,state:unknown)=>callback(state);ipcRenderer.on("assistant:window-state-changed",receive);return()=>ipcRenderer.removeListener("assistant:window-state-changed",receive);},
     windowResize: (input: unknown) => ipcRenderer.invoke("assistant:window-resize", input),
     windowAction: (action: unknown) => ipcRenderer.invoke("assistant:window-action", action),
     hide: () => ipcRenderer.invoke("assistant:hide"),
