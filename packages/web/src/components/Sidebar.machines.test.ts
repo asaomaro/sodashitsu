@@ -159,14 +159,13 @@ describe("Sidebar のマシンのまとまり（T14）", () => {
       "GPU",
       "Build",
     ]);
-    expect(headers.map((h) => h.find(".machine-desktop").attributes("data-state"))).toEqual([
-      "reconnecting",
+    expect(headers.slice(1).map((h) => h.find(".machine-desktop").attributes("data-state"))).toEqual([
       "online",
       "attention",
-    ]); // ローカルは画面の接続がまだ open でない
+    ]); // リモート接続先だけにPCアイコンを出す
     expect(wrapper.find(".machine-state").exists()).toBe(false);
-    expect(headers.every(h => h.find(".machine-pc-icon").exists())).toBe(true);
-    expect(headers[0]!.find(".machine-desktop").element.tagName).toBe("SPAN");
+    expect(headers.slice(1).every(h => h.find(".machine-pc-icon").exists())).toBe(true);
+    expect(headers[0]!.find(".machine-desktop").exists()).toBe(false);
     expect(headers[1]!.find(".machine-desktop").element.tagName).toBe("BUTTON");
     expect(headers[2]!.find(".machine-select").attributes("title")).toMatch(/動いていません/);
     expect(headers[0]!.find(".machine-select").attributes("aria-current")).toBe("true");
