@@ -253,6 +253,7 @@ try {
     return result;
   };
   await checkSelect();
+  const disabledOpacity=await page.locator("select").first().evaluate(el=>{const option=document.createElement("option");option.disabled=true;option.textContent="利用不可";el.append(option);const opacity=getComputedStyle(option).opacity;option.remove();return opacity;});assert.equal(disabledOpacity,"0.5");
   await page.locator("#mode").click();await expect(page.locator("#mode")).toHaveJSProperty("value","character");await page.keyboard.press("ArrowDown");await page.keyboard.press("Enter");await expect(page.locator("#mode")).toHaveValue("tray");await page.locator("#mode").selectOption("character");
   const checkWindow = async role => {
     for(const size of [{width:520,height:670},{width:360,height:480}]){

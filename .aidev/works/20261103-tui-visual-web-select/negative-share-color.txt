@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/modes/MonitorView.test.ts (8 tests | 1 failed | 7 skipped) 82ms
+   × separates cards and headings, keeps composition shares neutral and marks resource warnings 80ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/MonitorView.test.ts > separates cards and headings, keeps composition shares neutral and marks resource warnings
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/modes/MonitorView.test.ts:77:108
+     75|  expect(h.text()).toContain("╭─ ツールの利用");
+     76|  const percentages=grid.ch.map((ch,i)=>ch==="%"?grid.fg[i]:null).filte…
+     77|  expect(percentages.length).toBeGreaterThan(0);expect(percentages.ever…
+       |                                                                                                            ^
+     78|  const bars=grid.ch.map((ch,i)=>ch==="#"?grid.fg[i]:null).filter(x=>x!…
+     79|  expect(bars.length).toBeGreaterThan(0);expect(new Set(bars)).toEqual(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 skipped (8)
+   Start at  18:15:32
+   Duration  1.51s (transform 76%, import 18%, tests 6%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/MonitorView.test.ts -t separates cards

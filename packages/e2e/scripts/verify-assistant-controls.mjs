@@ -58,7 +58,7 @@ try{
    <nav class="settings-menu"><button id="category" class="settings-menu-item" aria-current="true">通知</button></nav>
    <button id="switch" class="settings-switch" aria-checked="true"><span class="settings-mark">入</span>通知</button>
    ${probes.join("\n")}${featureProbes.join("\n")}${dangerProbes.join("\n")}<button id="plain" class="soda-button-action soda-button-plain">plain</button>
-   ${fingerprintInput.replace("<input",'<input id="fingerprint"')}<textarea id="flat-textarea"></textarea><select id="flat-select"><option>sample</option></select><input id="untouched-check" type="checkbox"><input id="untouched-range" type="range">
+   ${fingerprintInput.replace("<input",'<input id="fingerprint"')}<textarea id="flat-textarea"></textarea><select id="flat-select"><option>sample</option><option disabled>unavailable</option><optgroup disabled label="group"><option>disabled group item</option></optgroup></select><input id="untouched-check" type="checkbox"><input id="untouched-range" type="range">
    <ul class="context-menu" id="context-popup"><li class="context-menu-active" id="context-row">menu</li></ul>
    <section id="scroll" style="height:50px;overflow:auto"><div style="height:300px">scroll</div></section>`);
   await page.evaluate(({name,tokens,mode})=>{document.documentElement.dataset.buttonTheme=mode;document.documentElement.dataset.theme=name;for(const[k,v]of Object.entries(tokens.vars))document.documentElement.style.setProperty(k,v);}, {name,tokens:uiTokens(name),mode});
@@ -74,6 +74,10 @@ try{
   assert.equal(fields,true,`${name}/${mode}: native field bevel remains`);
   const rounded=await page.evaluate(()=>({menu:getComputedStyle(document.querySelector(".screen-extra-menu")).borderRadius,row:getComputedStyle(document.getElementById("menu")).borderRadius,footer:getComputedStyle(document.getElementById("section")).borderRadius,context:getComputedStyle(document.getElementById("context-popup")).borderRadius,contextRow:getComputedStyle(document.getElementById("context-row")).borderRadius}));
   for(const [kind,radius] of Object.entries(rounded))assert.ok(parseFloat(radius)>=6,`${name}/${mode}: ${kind} has square corners`);
+  const picker=await page.locator("#flat-select").evaluate(el=>({appearance:getComputedStyle(el).appearance,radius:getComputedStyle(el,"::picker(select)").borderRadius,option:getComputedStyle(el.options[0]).borderRadius}));
+  assert.deepEqual(picker,{appearance:"base-select",radius:"10px",option:"6px"},`${name}/${mode}: native square picker remains`);
+  const disabledOptions=await page.locator("#flat-select").evaluate(el=>[...el.querySelectorAll("option:disabled")].map(o=>getComputedStyle(o).opacity));
+  assert.deepEqual(disabledOptions,["0.5","0.5"],`${name}/${mode}: disabled option looks enabled`);
   const accent=await page.evaluate(()=>{const e=document.createElement("span");e.style.background="var(--soda-accent)";document.body.append(e);const bg=getComputedStyle(e).backgroundColor;e.remove();return bg;});
   for(const id of actionIds){if(mode==="none")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
   for(const id of featureIds){if(mode!=="features")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
