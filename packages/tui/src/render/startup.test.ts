@@ -13,7 +13,11 @@ it("draws the gold wheel and cyan terminal from the product icon", () => {
   expect(grid.ch.join("")).toContain("Sodashitsu / 操舵室");
   const prompt = grid.ch.indexOf(">");
   expect(grid.fg[prompt]).toBe(hexColor("#2bd1b8"));
-  expect(grid.fg[grid.ch.indexOf("+")]).toBe(hexColor("#c8923a"));
+  expect(Array.from(grid.bg)).toContain(hexColor("#c8923a"));
+  expect(Array.from(grid.bg)).toContain(hexColor("#1d5d6e"));
+  const blocks = grid.ch.filter((_, i) => grid.bg[i] === hexColor("#c8923a"));
+  expect(blocks.length).toBeGreaterThan(40);
+  expect(blocks.every(ch => ch === " ")).toBe(true);
   for (const mode of ["truecolor", "256"] as const) {
     const ansi = new Screen(mode).frame(grid, null);
     expect(ansi).toContain(">_");
