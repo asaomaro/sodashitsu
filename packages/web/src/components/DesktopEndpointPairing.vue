@@ -103,7 +103,7 @@ function plain() {
     <p>
       接続先PCのlocalhost設定で鍵を作成し、このブラウザの指紋を許可してください。接続先で「暗号化接続を必須にする」を有効にします。
     </p>
-    <button type="button" :disabled="busy || !!fingerprint" @click="initialize">
+    <button data-assistant-action type="button" :disabled="busy || !!fingerprint" @click="initialize">
       このブラウザの鍵を作成
     </button>
     <p v-if="fingerprint">
@@ -125,10 +125,10 @@ function plain() {
         :disabled="busy"
       />接続先PCのlocalhost画面に表示された指紋と一致することを確認しました</label
     >
-    <button type="button" :disabled="busy || !fingerprint || !confirmed" @click="save">
+    <button data-assistant-action type="button" :disabled="busy || !fingerprint || !confirmed" @click="save">
       この接続先を記憶して暗号化で接続
     </button>
-    <button v-if="required" type="button" :disabled="busy" @click="forget">
+    <button data-assistant-action v-if="required" type="button" :disabled="busy" @click="forget">
       相手の設定を削除して切断
     </button>
     <template v-if="required"
@@ -138,7 +138,7 @@ function plain() {
           type="checkbox"
           :disabled="busy"
         />接続先PCでも必須設定を解除し、通常接続へ戻すことを確認しました</label
-      ><button type="button" :disabled="busy || !plainConfirmed" @click="plain">
+      ><button data-assistant-action type="button" :disabled="busy || !plainConfirmed" @click="plain">
         通常接続へ明示的に切り替える
       </button></template
     >

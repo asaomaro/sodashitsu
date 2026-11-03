@@ -149,7 +149,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
       利用者の設定の場所: <code class="ext-path">{{ store.list.userConfigPath }}</code>
     </p>
     <p class="ext-actions">
-      <button
+      <button data-assistant-action
         type="button"
         class="settings-btn"
         data-ext-reload
@@ -224,13 +224,13 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
               <span class="settings-mark">{{ isOn(e) ? "入" : "切" }}</span>
               <span>有効</span>
             </button>
-            <button type="button" class="settings-btn" :disabled="!isOn(e)" :aria-disabled="store.busy.has(e.key) ? 'true' : undefined" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="restart(e)">
+            <button data-assistant-action type="button" class="settings-btn" :disabled="!isOn(e)" :aria-disabled="store.busy.has(e.key) ? 'true' : undefined" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="restart(e)">
               {{ store.busy.has(e.key) ? "処理中…" : "起動し直す" }}
             </button>
             <button type="button" class="settings-btn" data-ext-log-toggle :aria-expanded="logs[e.key] !== undefined" :aria-label="`拡張 ${e.id} のログ`" @click="toggleLog(e.key)">
               ログ
             </button>
-            <button
+            <button data-assistant-action
               v-if="e.scope === 'project' && (e.state === 'pending' || e.state === 'denied')"
               type="button"
               class="settings-btn ext-review"
@@ -240,7 +240,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
             >
               確認
             </button>
-            <button
+            <button data-assistant-action
               v-if="e.scope === 'project' && e.approval?.approvedAlive"
               type="button"
               class="settings-btn"
@@ -251,7 +251,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
             >
               承認を取り消す
             </button>
-            <button v-if="logs[e.key] !== undefined" type="button" class="settings-btn" data-ext-log-refresh :aria-label="`拡張 ${e.id} のログを更新する`" @click="loadLog(e.key)">更新</button>
+            <button data-assistant-action v-if="logs[e.key] !== undefined" type="button" class="settings-btn" data-ext-log-refresh :aria-label="`拡張 ${e.id} のログを更新する`" @click="loadLog(e.key)">更新</button>
           </div>
           <p class="settings-note ext-done" role="status" aria-live="polite" data-ext-done>{{ doneNotes[e.key] ?? "" }}</p>
           <template v-if="logs[e.key] !== undefined">
@@ -272,7 +272,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
               <template v-if="r.deniedAt">承認しない: {{ r.deniedAt }}</template>
               <template v-if="!r.active">　（いま開いていません）</template>
             </span>
-            <button type="button" class="settings-btn" data-ext-record-delete :aria-label="`${r.id}（${showPath(r.root)}）の承認の記録を消す`" @click="revokeRecord(r)">記録を消す</button>
+            <button data-assistant-action type="button" class="settings-btn" data-ext-record-delete :aria-label="`${r.id}（${showPath(r.root)}）の承認の記録を消す`" @click="revokeRecord(r)">記録を消す</button>
           </li>
         </ul>
       </details>

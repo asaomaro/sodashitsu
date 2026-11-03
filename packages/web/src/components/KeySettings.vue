@@ -512,7 +512,7 @@ watch(
     <div class="keys-prefix">
       <span class="keys-prefix-label">prefix</span>
       <code class="keys-binding">{{ displayFor(settings.keymap.prefix) }}</code>
-      <button
+      <button data-assistant-action
         type="button"
         class="keys-btn"
         data-prefix-change
@@ -521,7 +521,7 @@ watch(
       >
         変更
       </button>
-      <button
+      <button data-assistant-action
         v-if="settings.keyPrefs.prefix !== null"
         type="button"
         class="keys-btn"
@@ -570,7 +570,7 @@ watch(
               <ul class="keys-chips">
                 <li v-for="b in bindingsOf(def.id)" :key="b" class="keys-chip">
                   <code class="keys-binding">{{ displayFor(b) }}</code>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="keys-btn"
                     :data-change="`${def.id}|${b}`"
@@ -579,7 +579,7 @@ watch(
                   >
                     変更
                   </button>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="keys-btn"
                     :aria-label="`「${def.label}」の ${displayFor(b)} を削除`"
@@ -593,7 +593,7 @@ watch(
                 </li>
               </ul>
               <div class="keys-add">
-                <button
+                <button data-assistant-action
                   type="button"
                   class="keys-btn"
                   data-add="prefix"
@@ -602,7 +602,7 @@ watch(
                 >
                   追加：prefix の後
                 </button>
-                <button
+                <button data-assistant-action
                   type="button"
                   class="keys-btn"
                   data-add="direct"
@@ -612,7 +612,7 @@ watch(
                   追加：直接
                 </button>
               </div>
-              <button
+              <button data-assistant-action
                 v-if="isOverridden(def.id)"
                 type="button"
                 class="keys-btn keys-reset"
@@ -676,7 +676,7 @@ watch(
               <ul class="keys-chips">
                 <li v-for="b in navigateBindingsOf(def.id)" :key="b" class="keys-chip">
                   <code class="keys-binding">{{ displayFor(b) }}</code>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="keys-btn"
                     :data-nav-change="`${def.id}|${b}`"
@@ -685,7 +685,7 @@ watch(
                   >
                     変更
                   </button>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="keys-btn"
                     :aria-label="`「${def.label}」の ${displayFor(b)} を削除`"
@@ -699,7 +699,7 @@ watch(
                 </li>
               </ul>
               <div class="keys-add">
-                <button
+                <button data-assistant-action
                   type="button"
                   class="keys-btn"
                   data-nav-add
@@ -709,7 +709,7 @@ watch(
                   追加
                 </button>
               </div>
-              <button
+              <button data-assistant-action
                 v-if="isNavigateOverridden(def.id)"
                 type="button"
                 class="keys-btn keys-reset"
@@ -733,7 +733,7 @@ watch(
       <select id="keys-preset-select" v-model="selectedPresetId" class="keys-select">
         <option v-for="p in KEY_PRESETS" :key="p.id" :value="p.id">{{ p.label }}</option>
       </select>
-      <button
+      <button data-assistant-action
         type="button"
         class="keys-btn"
         data-add-preset
@@ -742,7 +742,7 @@ watch(
       >
         足す
       </button>
-      <button
+      <button data-assistant-action
         v-if="!confirmingReset"
         type="button"
         class="keys-btn"
@@ -759,10 +759,10 @@ watch(
         @keydown.esc.stop.prevent="endResetConfirm"
       >
         <span>すべての割り当てと prefix を既定へ戻します。取り消せません。</span>
-        <button type="button" class="keys-btn" data-confirm-yes @click="confirmResetAll">
+        <button data-assistant-action type="button" class="keys-btn" data-confirm-yes @click="confirmResetAll">
           戻す
         </button>
-        <button type="button" class="keys-btn" data-confirm-no @click="endResetConfirm">
+        <button data-assistant-action type="button" class="keys-btn" data-confirm-no @click="endResetConfirm">
           やめる
         </button>
       </div>
@@ -787,7 +787,7 @@ watch(
 
     <div class="keys-status-band">
       <p class="keys-message" role="status" aria-live="polite">{{ message }}</p>
-      <button
+      <button data-assistant-action
         v-if="pendingMove !== null"
         type="button"
         class="keys-btn keys-move-here"

@@ -115,8 +115,8 @@ onBeforeUnmount(() => {
     </p>
     <p role="status">{{ status }}</p>
     <p v-if="error" role="alert">{{ error }}</p>
-    <button :disabled="view.connectionState !== 'open'" @click="connect">共有補助を接続</button
-    ><button @click="disconnect">補助を切断</button>
+    <button data-assistant-action :disabled="view.connectionState !== 'open'" @click="connect">共有補助を接続</button
+    ><button data-assistant-action @click="disconnect">補助を切断</button>
     <section v-if="request">
       <h2>共有要求</h2>
       <p>{{ request.target.title }} — {{ request.target.width }}×{{ request.target.height }}</p>
@@ -134,8 +134,8 @@ onBeforeUnmount(() => {
           :disabled="sharing"
         />選択するモニターが上の対象と同じことを確認しました</label
       >
-      <button :disabled="!confirmed || sharing" @click="start">画面を選んで共有開始</button
-      ><button :disabled="!sharing" @click="stopSharing">動画・音声を停止</button>
+      <button data-assistant-action :disabled="!confirmed || sharing" @click="start">画面を選んで共有開始</button
+      ><button data-assistant-action :disabled="!sharing" @click="stopSharing">動画・音声を停止</button>
     </section>
     <p>
       補助を閉じると動画・音声は停止し、従来の画像配信へ戻ります。共有窓を閉じると補助側の配信も終了します。

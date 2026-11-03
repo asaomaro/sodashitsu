@@ -32,7 +32,7 @@ function onCancel(ev: Event): void {
 <template>
   <dialog ref="dialogEl" class="dashboard-dialog" aria-label="ダッシュボード" @cancel="onCancel">
     <div class="dashboard-dialog-bar">
-      <button type="button" class="dashboard-dialog-close" data-dash-close @click="view.closeDashboard()">閉じる</button>
+      <button data-assistant-action type="button" class="dashboard-dialog-close" data-dash-close @click="view.closeDashboard()">閉じる</button>
     </div>
     <div class="dashboard-dialog-body">
       <DashboardView v-if="open" kind="dialog" :active="open" />

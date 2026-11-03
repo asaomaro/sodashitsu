@@ -189,7 +189,7 @@ function onSubmit(): void {
           :disabled="busy"
         />
       </label>
-      <button type="submit" :disabled="busy || !token">ログイン</button>
+      <button data-assistant-action type="submit" :disabled="busy || !token">ログイン</button>
       <p v-if="connecting" class="login-view-status" role="status" aria-live="polite">
         接続中…<span class="login-view-status-note"
           >（サーバが起動の途中なら、つながるまで少しかかります）</span

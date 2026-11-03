@@ -36,14 +36,14 @@ defineExpose({begin:(point:Point)=>core?.begin(point)??false,pointer:(point:Poin
  <details data-native-desktop-transfer>
   <summary>Explorerへの直接ドラッグ</summary>
   <p>ファイル転送を許可し、このPCの補助プログラムを準備してください。共有元のExplorerで選択したファイルを、このPCのExplorerへドラッグしてコピーできます。</p>
-  <button :disabled="!granted||starting" @click="connect(false)">このPCで直接ドラッグを準備</button>
-  <button :disabled="!connected&&!starting" @click="stop">補助プログラムを停止</button>
+  <button data-assistant-action :disabled="!granted||starting" @click="connect(false)">このPCで直接ドラッグを準備</button>
+  <button data-assistant-action :disabled="!connected&&!starting" @click="stop">補助プログラムを停止</button>
   <label><input v-model="enabled" type="checkbox" :disabled="!connected||!granted" />直接ドラッグを有効にする</label>
   <output role="status">{{status}}</output>
   <details><summary>補助プログラムを手動で起動する</summary>
    <p>ブラウザPCで次を実行し、表示されたURLを入力してください。</p>
    <code>sodactl desktop native-helper --origin {{parentOrigin}}</code>
-   <label>補助プログラムのURL <input v-model="manual" data-native-helper-url /></label><button :disabled="!granted||starting||!manual" @click="connect(true)">手動の補助プログラムへ接続</button>
+   <label>補助プログラムのURL <input v-model="manual" data-native-helper-url /></label><button data-assistant-action :disabled="!granted||starting||!manual" @click="connect(true)">手動の補助プログラムへ接続</button>
   </details>
  </details>
 </template>

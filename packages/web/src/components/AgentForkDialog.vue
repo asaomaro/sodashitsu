@@ -166,7 +166,7 @@ function dismissRun(): void {
       </p>
       <p v-if="!run.finished" class="fork-hint">閉じても、裏で続きます。終わったらお知らせします。</p>
       <div class="fork-actions">
-        <button type="button" class="fork-primary" @click="dismissRun">{{ run.finished ? "閉じる" : "閉じる（裏で続けます）" }}</button>
+        <button data-assistant-action type="button" class="fork-primary" @click="dismissRun">{{ run.finished ? "閉じる" : "閉じる（裏で続けます）" }}</button>
       </div>
     </div>
 
@@ -211,8 +211,8 @@ function dismissRun(): void {
       </template>
 
       <div class="fork-actions">
-        <button type="button" @click="cancel">取りやめ</button>
-        <button type="submit" class="fork-primary" :disabled="!canConfirm" data-fork-submit>{{ submitting ? "起動しています…" : "fork する" }}</button>
+        <button data-assistant-action type="button" @click="cancel">取りやめ</button>
+        <button data-assistant-action type="submit" class="fork-primary" :disabled="!canConfirm" data-fork-submit>{{ submitting ? "起動しています…" : "fork する" }}</button>
       </div>
     </form>
   </dialog>

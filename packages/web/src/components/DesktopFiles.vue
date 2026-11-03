@@ -1007,7 +1007,7 @@ defineExpose({ addFiles, handleDrop });
     data-desktop-files
   >
     <summary>ファイル転送</summary>
-    <button :disabled="busy" @click="grant">
+    <button data-assistant-action :disabled="busy" @click="grant">
       {{ enabled ? "ファイル転送を解除" : "ファイル転送を許可" }}
     </button>
     <p v-if="canResume || canResumeFolders" data-file-resume-notice>
@@ -1027,7 +1027,7 @@ defineExpose({ addFiles, handleDrop });
           v-model="folder"
           maxlength="4096"
           @keydown.enter.prevent="list" /></label
-      ><button @click="list">一覧を更新</button>
+      ><button data-assistant-action @click="list">一覧を更新</button>
       <input ref="input" type="file" multiple aria-label="送信するファイル" @change="selected" />
       <p v-if="!canFolders">
         このデスクトップ窓にファイルをドロップして送信できます。フォルダ転送には両端の更新が必要です。
@@ -1037,7 +1037,7 @@ defineExpose({ addFiles, handleDrop });
           >送信フォルダの保存名（空欄なら元の名前）<input
             v-model="folderName"
             maxlength="255" /></label
-        ><button @click="chooseFolder">フォルダを選んで送信</button>
+        ><button data-assistant-action @click="chooseFolder">フォルダを選んで送信</button>
         <p>
           フォルダをドロップしても送信できます。1000項目・合計100MiBまで。同名フォルダには混ぜません。取消・失敗でも転送完了済みファイルは残ります。<template v-if="canResumeFolders">再開用保存を選ぶと切断・再読込後にも再開できます。</template><template v-else>フォルダの再開はこの窓の接続中だけです。</template>
         </p></template
@@ -1053,10 +1053,10 @@ defineExpose({ addFiles, handleDrop });
             "
           >
             📁 {{ entry.name }}</button
-          ><button v-if="entry.directory && canFolders" @click="downloadFolder(entry.name)">
+          ><button data-assistant-action v-if="entry.directory && canFolders" @click="downloadFolder(entry.name)">
             {{ entry.name }} をZIPで受信</button
           ><template v-else-if="!entry.directory"
-            >{{ entry.name }}（{{ entry.bytes }} bytes）<button
+            >{{ entry.name }}（{{ entry.bytes }} bytes）<button data-assistant-action
               @click="download(entry.name, entry.bytes)"
             >
               ダウンロード
@@ -1079,10 +1079,10 @@ defineExpose({ addFiles, handleDrop });
             failed: "失敗",
           }[job.state]
         }}
-        <button v-if="job.state === 'running' && !job.committing" @click="pause(job)">
+        <button data-assistant-action v-if="job.state === 'running' && !job.committing" @click="pause(job)">
           一時停止</button
-        ><button v-if="job.state === 'paused'" @click="resume(job)">再開</button
-        ><button
+        ><button data-assistant-action v-if="job.state === 'paused'" @click="resume(job)">再開</button
+        ><button data-assistant-action
           v-if="!job.committing && ['queued', 'running', 'paused'].includes(job.state)"
           @click="cancel(job)"
         >

@@ -199,7 +199,7 @@ function close() {
           >
             <time v-if="m.at">{{ new Date(m.at).toLocaleString() }}</time
             >{{ m.text.slice(0, 100) }}</button
-          ><button v-if="next !== null" :disabled="busy" @click="load">
+          ><button data-assistant-action v-if="next !== null" :disabled="busy" @click="load">
             {{ busy ? "読み込み中…" : "続きを読む" }}
           </button>
           <p v-if="!busy && !users.length">送信メッセージはありません。</p>
@@ -224,10 +224,10 @@ function close() {
         要約セッションは自動管理
       </p>
       <div class="summary-actions">
-        <button :disabled="busy" @click="generate()">
+        <button data-assistant-action :disabled="busy" @click="generate()">
           {{ busy ? "要約中…" : summary ? "要約を更新" : "要約を生成" }}
         </button>
-        <button v-if="summary" :disabled="busy" @click="generate('rebuild')">
+        <button data-assistant-action v-if="summary" :disabled="busy" @click="generate('rebuild')">
           履歴から作り直す
         </button>
       </div>

@@ -168,8 +168,8 @@ function onKeydown(ev: KeyboardEvent): void {
       束ねた worktree も一緒に閉じる（{{ linkedWorktrees.length }} 件）
     </label>
     <div class="confirm-dialog-actions">
-      <button ref="cancelBtn" type="button" @click="cancel">キャンセル</button>
-      <button type="button" @click="confirm">{{ confirmLabel }}</button>
+      <button data-assistant-action ref="cancelBtn" type="button" @click="cancel">キャンセル</button>
+      <button data-assistant-action type="button" @click="confirm">{{ confirmLabel }}</button>
     </div>
   </dialog>
 </template>

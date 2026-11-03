@@ -337,9 +337,9 @@ onBeforeUnmount(() => removeToast());
       <p v-if="approval.deniedBefore" class="ext-approval-warn" data-ext-approval-denied-before>この拡張は、前に、別の中身を「承認しない」としています。登録が、その後に変えられました。</p>
 
       <div class="ext-approval-buttons">
-        <button ref="denyBtn" type="button" class="ext-approval-btn" data-ext-approval-deny :aria-disabled="working ? 'true' : undefined" @click="decide('deny')">承認しない</button>
-        <button type="button" class="ext-approval-btn" data-ext-approval-later @click="later">後で</button>
-        <button
+        <button data-assistant-action ref="denyBtn" type="button" class="ext-approval-btn" data-ext-approval-deny :aria-disabled="working ? 'true' : undefined" @click="decide('deny')">承認しない</button>
+        <button data-assistant-action type="button" class="ext-approval-btn" data-ext-approval-later @click="later">後で</button>
+        <button data-assistant-action
           type="button"
           class="ext-approval-btn ext-approval-primary"
           data-ext-approval-approve

@@ -787,7 +787,7 @@ defineExpose({ key: () => frameKey(props.info) });
     :data-display-engaged="isScript ? (engagedRef ? '1' : '0') : undefined"
     :data-display-direct="direct ? '' : undefined"
   >
-    <button v-if="viewportMaximized" type="button" class="display-viewport-restore" data-display-viewport-restore @mousedown.prevent @click="restoreViewport">元の表示へ戻す</button>
+    <button data-assistant-action v-if="viewportMaximized" type="button" class="display-viewport-restore" data-display-viewport-restore @mousedown.prevent @click="restoreViewport">元の表示へ戻す</button>
     <iframe
       v-if="page && phase !== 'closed'"
       :key="gen"
@@ -838,7 +838,7 @@ defineExpose({ key: () => frameKey(props.info) });
     </p>
     <p v-if="visibleNote" class="display-frame-note" data-display-note>
       {{ visibleNote }}
-      <button
+      <button data-assistant-action
         v-if="detached"
         type="button"
         class="display-frame-redisplay"

@@ -110,7 +110,7 @@ async function save() {
       <p>共有するPCの通常デスクトップの音を送ります。接続側でも音声共有と再生を開始してください。</p>
       <label>ファイル共有フォルダ（空欄で無効）<input v-model="draft.fileRoot" type="text" maxlength="4096" placeholder="このサーバーOSの絶対パス" /></label>
       <p>このフォルダの中だけを送受信します。既存ファイルは上書きしません。WSLサーバーでは/mnt/c等のパスを指定します。</p>
-      <button type="button" @click="save">共有設定を保存</button>
+      <button data-assistant-action type="button" @click="save">共有設定を保存</button>
     </fieldset>
     <DesktopEndpointSettings :can-configure="state?.canConfigure===true" />
     <p v-if="message" role="status">{{ message }}</p>

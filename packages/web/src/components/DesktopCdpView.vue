@@ -439,26 +439,26 @@ onBeforeUnmount(() => {
           {{ device.title }}{{ !device.online ? '（オフライン）' : device.busy ? '（使用中・停止処理中）' : '（接続可能）' }}
         </option>
       </select>
-      <button :disabled="!enabled || connected || !selected?.online || selected.busy" @click="attachRegistered">接続</button>
-      <button :disabled="!enabled || !selected" @click="focusSurface(); send({ type: 'forget', deviceId: selectedDevice })">登録を解除</button>
+      <button data-assistant-action :disabled="!enabled || connected || !selected?.online || selected.busy" @click="attachRegistered">接続</button>
+      <button data-assistant-action :disabled="!enabled || !selected" @click="focusSurface(); send({ type: 'forget', deviceId: selectedDevice })">登録を解除</button>
     </div>
     <p v-if="machineLabel" class="connection-tools">接続先: {{ machineLabel }}</p>
     <p v-if="remote && !launcherAvailable && socket?.readyState === 1" class="connection-tools">共有するPCの「設定 → VSCode共有」で自動起動を許可してください。対応するWindows/WSLではhelperを自動起動します。</p>
     <div v-if="launcherAvailable" class="connection-tools">
-      <button :disabled="!enabled || connected || launchPending || launcherBusy || socket?.readyState !== 1" @click="launchWindows">VSCodeを起動・接続</button>
+      <button data-assistant-action :disabled="!enabled || connected || launchPending || launcherBusy || socket?.readyState !== 1" @click="launchWindows">VSCodeを起動・接続</button>
       <p>このSodashitsuサーバー側のVSCodeを共有します。起動済みなら再利用します。</p>
       <p v-if="launcherBusy && !connected && !launchPending">起動・接続処理が使用中です。終了を待ってください。</p>
       <template v-if="launchTargets.length > 1 && !connected">
         <select v-model="launchTarget" aria-label="起動・接続するVSCode" :disabled="launchPending">
           <option v-for="target in launchTargets" :key="target.id" :value="target.id">{{ target.title }}</option>
         </select>
-        <button :disabled="!enabled || launchPending || !launchTarget || socket?.readyState !== 1" @click="connectLaunched">選択したVSCodeに接続</button>
+        <button data-assistant-action :disabled="!enabled || launchPending || !launchTarget || socket?.readyState !== 1" @click="connectLaunched">選択したVSCodeに接続</button>
       </template>
     </div>
     <label v-if="!remote" class="fit-toggle connection-tools"><input v-model="remember" type="checkbox" />共有元を登録する（次回は一覧から接続）</label>
     <div class="toolbar viewer-toolbar" :class="{ 'toolbar-collapsed': toolbarCollapsed && connected }">
       <div v-show="!toolbarCollapsed || !connected" class="viewer-toolbar-content">
-      <button
+      <button data-assistant-action
         v-if="!remote"
         class="connection-tools"
         :disabled="!enabled || socket?.readyState !== 1"
@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
       >
         共有元を接続
       </button>
-      <button
+      <button data-assistant-action
         v-if="connected && allowInput"
         :disabled="!enabled"
         @click="
@@ -480,7 +480,7 @@ onBeforeUnmount(() => {
       >
         {{ control ? "閲覧に戻る" : "操作する" }}
       </button>
-      <button
+      <button data-assistant-action
         v-if="connected || invitation || launchPending || launchTargets.length"
         @click="
           focusSurface();
@@ -494,10 +494,10 @@ onBeforeUnmount(() => {
         共有を停止
       </button>
       <button v-if="connected" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
-      <button v-if="connected" :disabled="!enabled" title="ブラウザのタブ内全体へ最大化。Escでも元に戻せます"
+      <button data-assistant-action v-if="connected" :disabled="!enabled" title="ブラウザのタブ内全体へ最大化。Escでも元に戻せます"
         :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? '元に戻す' : '最大化' }}</button>
     <label v-if="control && allowFit" class="fit-toggle" title="Windows側で開いている同じVSCodeのレイアウトも変わります"><input v-model="fit" type="checkbox" />表示領域に合わせる</label>
-      <button v-if="socket?.readyState === 3" :disabled="!enabled" @click="connect">再接続</button>
+      <button data-assistant-action v-if="socket?.readyState === 3" :disabled="!enabled" @click="connect">再接続</button>
       </div>
       <button v-if="connected" type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
         :aria-label="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
@@ -535,7 +535,7 @@ onBeforeUnmount(() => {
         maxlength="8192"
         aria-label="日本語・文字列入力"
         placeholder="日本語などをここで変換して送信"
-      /><button :disabled="!enabled">文字を送る</button>
+      /><button data-assistant-action :disabled="!enabled">文字を送る</button>
     </form>
     <button type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
       :aria-label="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"

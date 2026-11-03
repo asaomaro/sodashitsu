@@ -19,7 +19,7 @@ const reconnect = (): void => {
 <template>
   <div class="detached-view">
     <p>このブラウザを切り離しました</p>
-    <button type="button" @click="reconnect">再接続</button>
+    <button data-assistant-action type="button" @click="reconnect">再接続</button>
   </div>
 </template>
 

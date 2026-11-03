@@ -88,7 +88,7 @@ function revoke(peer: DesktopEndpointPeer) {
       <p>
         中継へ画面・入力・音声・ファイルの平文を渡さない接続を設定します。接続元とこのPCの指紋を、それぞれの画面で確認して相互に許可してください。
       </p>
-      <button
+      <button data-assistant-action
         type="button"
         :disabled="busy || state?.initialized || state?.available === false"
         @click="initialize"
@@ -100,7 +100,7 @@ function revoke(peer: DesktopEndpointPeer) {
       </p>
       <fieldset :disabled="busy || !state?.initialized || !state?.available">
         <label><input v-model="required" type="checkbox" />暗号化接続を必須にする</label>
-        <button type="button" @click="save">暗号化の必須設定を保存</button>
+        <button data-assistant-action type="button" @click="save">暗号化の必須設定を保存</button>
         <p>
           有効にすると、通常接続と古い接続元からの共有を拒否します。許可済みの接続元を登録してから有効にしてください。
         </p>
@@ -114,12 +114,12 @@ function revoke(peer: DesktopEndpointPeer) {
         /></label>
         <label>接続元の名前<input v-model="label" type="text" maxlength="80" /></label>
         <label><input v-model="confirmed" type="checkbox" />接続元の画面で指紋を確認しました</label>
-        <button type="button" :disabled="!confirmed" @click="trust">この接続元を許可</button>
+        <button data-assistant-action type="button" :disabled="!confirmed" @click="trust">この接続元を許可</button>
         <ul>
           <li v-for="peer in state?.peers" :key="peer.role + peer.fingerprint">
             {{ peer.label }}（{{ peer.role === "viewer" ? "ブラウザ" : "エージェント" }}）
             <code>{{ peer.fingerprint }}</code>
-            <button type="button" @click="revoke(peer)">許可を取り消す</button>
+            <button data-assistant-action type="button" @click="revoke(peer)">許可を取り消す</button>
           </li>
         </ul>
       </fieldset>

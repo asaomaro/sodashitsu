@@ -44,7 +44,7 @@ function onEnd(): void {
 
 <template>
   <span v-if="script && part === 'mark'" class="display-script-mark" :title="direct ? DISPLAY_SCRIPT_MARK_TITLE_DIRECT : DISPLAY_SCRIPT_MARK_TITLE" data-display-script-mark>スクリプト</span>
-  <button
+  <button data-assistant-action
     v-else-if="script && part === 'button' && !engaged && !direct"
     type="button"
     class="display-engage"
@@ -56,7 +56,7 @@ function onEnd(): void {
   >
     {{ DISPLAY_ENGAGE_LABEL }}
   </button>
-  <button
+  <button data-assistant-action
     v-else-if="script && part === 'end' && engaged"
     type="button"
     class="display-engage display-engage-end"

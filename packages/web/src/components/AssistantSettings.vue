@@ -24,7 +24,7 @@ async function setEnabled(enabled:boolean){if(busy.value||!state.value?.canConfi
   <p>デスクトップの船長キャラクターや通知領域から、通知への返答・吹き出しチャットを利用できます。専用アプリの手動導入は不要です。</p>
   <p>初回は共通ランタイムをダウンロードします。Windows・WSLではWindowsのデスクトップに表示します。無効時はアシスタントの常駐プロセスを起動しません。</p>
   <label><input type="checkbox" :checked="state?.enabled" :disabled="busy||!state?.canConfigure" @change="setEnabled(($event.target as HTMLInputElement).checked)" />デスクトップアシスタントを有効にする</label>
-  <button v-if="state?.enabled&&state.phase==='error'" type="button" :disabled="busy||!state.canConfigure" @click="setEnabled(true)">準備・起動を再試行</button>
+  <button data-assistant-action v-if="state?.enabled&&state.phase==='error'" type="button" :disabled="busy||!state.canConfigure" @click="setEnabled(true)">準備・起動を再試行</button>
   <p v-if="state">状態：{{labels[state.phase]}}</p><p v-if="state?.message" role="status">{{state.message}}</p>
   <section v-if="progress && state?.enabled && state.phase!=='stopping'" class="setup-progress" aria-label="セットアップの進捗" data-assistant-setup-progress>
    <strong role="status">{{ stages[progress.stage] }}</strong>

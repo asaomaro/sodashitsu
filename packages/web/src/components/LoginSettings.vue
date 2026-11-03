@@ -67,18 +67,18 @@ onMounted(() => void run());
     <h3 id="settings-login" class="settings-heading">追加ログイン手段</h3>
     <p>通常のトークンに加えて、以下のコードでもログインできます。</p>
     <h4>使い切りコード</h4>
-    <button type="button" :disabled="busy" @click="run('issue')">使い切りコードを発行</button>
+    <button data-assistant-action type="button" :disabled="busy" @click="run('issue')">使い切りコードを発行</button>
     <div v-if="issued" class="login-code" role="status">
       <code>{{ issued.code }}</code>
       <span>有効期限: {{ new Date(issued.expiresAt).toLocaleString() }} · 使用は１回</span>
-      <button type="button" :disabled="busy" @click="run('revoke')">コードを失効</button>
+      <button data-assistant-action type="button" :disabled="busy" @click="run('revoke')">コードを失効</button>
     </div>
     <p>有効期間は５分です。発行し直すと前のコードは失効します。サーバの再起動でも失効します。</p>
     <h4>認証アプリ</h4>
     <ul v-if="devices.length">
       <li v-for="device in devices" :key="device.id">
         {{ device.label }}
-        <button
+        <button data-assistant-action
           type="button"
           :disabled="busy"
           :aria-label="device.label + 'の登録を削除'"
@@ -89,7 +89,7 @@ onMounted(() => void run());
       </li>
     </ul>
     <label>登録名 <input v-model="label" maxlength="64" :disabled="busy" /></label>
-    <button
+    <button data-assistant-action
       type="button"
       :disabled="busy || !label.trim() || devices.length >= 8"
       @click="run('begin', { label })"
@@ -126,8 +126,8 @@ onMounted(() => void run());
             pattern="[0-9]{6}"
             :disabled="busy"
         /></label>
-        <button type="submit" :disabled="busy || !/^\d{6}$/.test(code)">登録を確定</button>
-        <button
+        <button data-assistant-action type="submit" :disabled="busy || !/^\d{6}$/.test(code)">登録を確定</button>
+        <button data-assistant-action
           type="button"
           :disabled="busy"
           @click="

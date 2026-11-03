@@ -160,8 +160,8 @@ function onNativeCancel(ev: Event): void {
       <!-- workspace の名前を変えるときだけ（tab・pane の見た目は変えない。20260921-workspace-auto-label の design D8）。 -->
       <p v-if="workspaceHint" id="name-dialog-hint" class="name-dialog-hint">{{ workspaceHint }}</p>
       <div class="name-dialog-actions">
-        <button type="button" @click="cancel">キャンセル</button>
-        <button type="submit">OK</button>
+        <button data-assistant-action type="button" @click="cancel">キャンセル</button>
+        <button data-assistant-action type="submit">OK</button>
       </div>
     </form>
   </dialog>

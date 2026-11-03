@@ -272,7 +272,7 @@ const onDialogKeydown = (ev: KeyboardEvent): void => {
       <p v-if="filteredGroups.length === 0" class="help-dialog-empty">一致するキーがありません</p>
     </div>
     <div class="help-dialog-actions">
-      <button type="button" @click="close">閉じる</button>
+      <button data-assistant-action type="button" @click="close">閉じる</button>
     </div>
   </dialog>
 </template>
