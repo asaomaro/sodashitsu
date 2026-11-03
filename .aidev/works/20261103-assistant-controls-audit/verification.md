@@ -6,3 +6,9 @@
 - Vue型チェック・Vite build通過。
 - 関連7ファイル154テスト通過: ViewerTabBar、TabBar、AssistantSettings、WorkspaceView、KeySettings、ScheduleView、UsageAnalytics。
 - 66ファイルは配色data属性を除去すると修正前mainのソースとバイト一致。業務処理・イベント・既存class/typeは変更していない。
+
+## 稼働反映
+
+26fce9d1までの4コミットをmainへpush。サーバhandoffで8 PTYを引き継ぎ、保存した10 pane UUIDを全件保持。管理アシスタントrunning/readyを確認。
+
+配布後の実画面で通常/ダークとも「＋作業ビュー」「＋接続ビュー」が同じ金色、サイドバー見出しとその他メニュー内部は通常表示とcomputed styleで確認。保存設定は変更していない。/tmp/soda-controls-audit-live.pngを目視確認。既存ページには再読み込みで適用される。
