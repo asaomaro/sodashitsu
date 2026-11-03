@@ -1,0 +1,33 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/modes/ConnectionsView.test.ts (4 tests | 1 failed | 3 skipped) 8ms
+   × keeps form fields and send controls visible when the screen is too short for a section frame 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/ConnectionsView.test.ts > keeps form fields and send controls visible when the screen is too short for a section frame
+AssertionError: expected '╰────────────────────────────────────…' to contain '相手のセッション名'
+
+Expected: "相手のセッション名"
+Received: "╰─────────────────────────────────────────────────────────────────────────────╯                     "
+
+ ❯ src/modes/ConnectionsView.test.ts:112:29
+    110|   const g=new Grid(100,30);view.render(g,{x:0,y:0,w:80,h},new ThemeCol…
+    111|   if(h===13)expect(g.rowText(11)).toContain(mode==="a"?"登録して接続":"接続を申請…
+    112|   else expect(g.rowText(9)).toContain(mode==="a"?"相手のセッション名":"入力中");
+       |                             ^
+    113|  }}finally{view.dispose();}}
+    114| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  18:51:47
+   Duration  1.35s (transform 81%, import 18%, tests 1%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/ConnectionsView.test.ts -t too short

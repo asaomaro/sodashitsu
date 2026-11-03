@@ -36,9 +36,9 @@ function setup(
   };
   const dialog = new GraphTerminal("p1", deps),
     window = new WindowOverlay(dialog, { w: 80, h: 23 });
-  const render = () => {
+  const render = (theme = new ThemeColors("dracula")) => {
     const grid = new Grid(100, 30);
-    window.render({ grid, theme: new ThemeColors("dracula") });
+    window.render({ grid, theme });
     return grid;
   };
   return { dialog, window, render, request, ui, input, focus, remove, sink: () => sink, deps };
@@ -167,4 +167,19 @@ it("keeps both footer buttons visible and clickable at the minimum window width"
   const y = lines.findIndex((s) => s.includes("[ 閉じる ]"));
   window.handleMouse({ action: "down", button: 0, x: 4, y });
   expect(k.ui.dialogContext).toBeNull();
+});
+
+it("follows transparency for default terminal cells while preserving explicit ANSI backgrounds",async()=>{
+ const k=setup();k.render();try{
+  await vi.waitFor(()=>expect(k.sink()).toBeDefined());
+  k.sink()!.onSnapshot("p1",72,17,"DEFAULT\r\n\x1b[41mCOLORED\x1b[0m");
+  await vi.waitFor(()=>expect(Array.from({length:30},(_,y)=>k.render().rowText(y)).join("\n")).toContain("COLORED"));
+  for(const transparent of [false,true,false]){
+   const theme=new ThemeColors("dracula",undefined,transparent),g=k.render(theme);
+   const row=Array.from({length:g.h},(_,y)=>y).find(y=>g.rowText(y).includes("DEFAULT"))!;
+   const x=g.ch.slice(row*g.w,(row+1)*g.w).indexOf("D");expect(g.bg[row*g.w+x]).toBe(theme.paneGround);
+   const colored=Array.from({length:g.h},(_,y)=>y).find(y=>g.rowText(y).includes("COLORED"))!;
+   const cx=g.ch.slice(colored*g.w,(colored+1)*g.w).indexOf("C");expect(g.bg[colored*g.w+cx]).toBe(theme.paneColor(1,1,true));
+  }
+ }finally{k.dialog.dispose();}
 });

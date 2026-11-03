@@ -1,3 +1,4 @@
+import { sectionRule, sectionSides } from "../render/chrome/page.js";
 import { ScrollBar } from "./ScrollBar.js";
 import { glyphFor, stateColor } from "../render/chrome/context.js";
 import { paneNameOf, type KeyInput } from "@sodashitsu/client-core";
@@ -303,7 +304,7 @@ export class UsageDashboard {
     grid.fill(area, c.fg, c.bg);
     const put = (y: number, text: string, bg = c.bg) => {
       if (y < area.y + area.h)
-        paintUsageLine(grid, area.x + 1, y, text, theme, c.fg, bg, Math.max(0, area.w - 2));
+        paintUsageLine(grid, area.x + 1, y, text, theme, c.fg, bg, Math.max(0, area.w - 3));
     };
     let y = area.y;
     put(
@@ -314,11 +315,9 @@ export class UsageDashboard {
     );
     const status = statusText(this.usage);
     if (status) put(y++, status);
+    const sectionHeads:{y:number;title:string}[]=[];
     const section = (title: string) => {
-      const label = truncate(`─ ${title} `, Math.max(0, area.w - 2));
-      const row = y++;
-      put(row, label + "─".repeat(Math.max(0, area.w - 2 - stringWidth(label))), c.active);
-      if (row < area.y + area.h) grid.text(area.x + 1, row, label, c.accent, c.active, 0, Math.max(0, area.w - 2));
+      sectionHeads.push({y:y++,title});
     };
     section("アカウントの利用枠");
     const accountLines = this.usage.data.accounts.flatMap((a) => [
@@ -345,8 +344,8 @@ export class UsageDashboard {
     section("エージェント");
     const rows = this.rows();
     this.selected = Math.max(0, Math.min(this.selected, rows.length - 1));
-    const rowHeight = area.y + area.h - y - 1 < 3 ? 1 : 3;
-    const available = Math.max(0, Math.floor((area.y + area.h - y - 1) / rowHeight));
+    const rowHeight = area.y + area.h - y - 2 < 3 ? 1 : 3;
+    const available = Math.max(0, Math.floor((area.y + area.h - y - 2) / rowHeight));
     const start = Math.max(0, this.selected - available + 1);
     if (!rows.length) put(y++, "エージェントがありません");
     const trackY = y;
@@ -362,7 +361,7 @@ export class UsageDashboard {
         bg,
       );
       if (y < area.y + area.h)
-        grid.text(area.x + 1, y, glyph, stateColor(theme, state), bg, 0, Math.max(0, area.w - 2));
+        grid.text(area.x + 1, y, glyph, stateColor(theme, state), bg, 0, Math.max(0, area.w - 3));
       this.hits.push({ y, paneId: p.id });
       y++;
       if (rowHeight === 1) continue;
@@ -401,6 +400,16 @@ export class UsageDashboard {
       area.y + area.h - 1,
       `${rows.length} エージェント · ${this.selected + Number(rows.length > 0)} / ${rows.length}`,
     );
+    const frame={...area,w:Math.max(0,area.w-1),h:Math.max(0,area.h-1)};
+    const first=sectionHeads[0]?.y;
+    if(first!==undefined&&first<area.y+area.h-2){
+      for(let row=first;row<area.y+area.h-2;row++){
+        const heading=sectionHeads.find(h=>h.y===row);
+        if(heading)sectionRule(grid,frame,row,theme,heading.title,false,row!==first);
+        else sectionSides(grid,frame,row,theme);
+      }
+      sectionRule(grid,frame,area.y+area.h-2,theme,"",true);
+    }
   }
 }
 

@@ -122,7 +122,7 @@ it("dashboard shows live colored sidebar symbols in compact and full rows", asyn
     );
     expect(y).toBeGreaterThanOrEqual(0);
     expect(grid.cell(1, y)?.fg).toBe(theme.ui("--soda-state-working"));
-    if (height === 24) expect(grid.rowText(y + 1)).toContain(" codex ·");
+    if (height === 24) expect(grid.rowText(y + 1)).toContain("codex ·");
   }
   symbols = false;
   expect(Array.from({ length: 24 }, (_, y) => render(24).rowText(y)).join("\n")).toContain(

@@ -16,6 +16,7 @@ import {
 } from "./overlay.js";
 import { safeText } from "./document.js";
 import { TextInput } from "./TextInput.js";
+import { sectionRule, sectionSides, sectionBox } from "../render/chrome/page.js";
 import { ScrollBar } from "./ScrollBar.js";
 type Row = { heading?:boolean; state?:string; text: string; run?: () => void };
 export class ConnectionsView {
@@ -261,7 +262,7 @@ export class ConnectionsView {
   render(grid: Grid, area: Rect, theme: ThemeColors) {
     this.area = area;
     this.hits.clear();
-    const c = dialogColors(theme);
+    const c = {...dialogColors(theme),bg:theme.ground("--soda-menu-bg")};
     grid.fill(area, c.fg, c.bg);
     const text = (y: number, s: string) => {
       if (y < 0 || y >= area.h) return;
@@ -281,6 +282,7 @@ export class ConnectionsView {
       this.hits.set(area.y + 11, () => this.submit());
       text(12, "接続失敗時も登録は残り、一覧に接続状態を表示します。");
       text(area.h - 1, this.error || (this.busy ? "処理中…" : ""));
+      if(area.h>=15&&area.w>=12)sectionBox(grid,{x:area.x,y:area.y+2,w:Math.max(0,area.w-1),h:Math.max(0,area.h-3)},theme,"接続・委譲の設定");
       return hiddenCursor();
     }
     if (this.mode !== "list") {
@@ -314,27 +316,39 @@ export class ConnectionsView {
         );
       }
       text(area.h - 1, this.error || (this.busy ? "処理中…" : ""));
+      if(area.h>=15&&area.w>=12)sectionBox(grid,{x:area.x,y:area.y+2,w:Math.max(0,area.w-1),h:Math.max(0,area.h-3)},theme,"接続・委譲の設定");
       return hiddenCursor();
     }
     const rows = this.rows(),
-      h = Math.max(0, area.h - 4);
+      h = Math.max(0, area.h - 5);
     this.selected = Math.min(this.selected, Math.max(0, rows.length - 1));
     if (this.selected < this.scroll) this.scroll = this.selected;
     else if (this.selected >= this.scroll + h) this.scroll = Math.max(0, this.selected - h + 1);
+    const frame={x:area.x+1,y:area.y+3,w:Math.max(0,area.w-2),h:Math.max(0,area.h-4)};
+    let framed=rows.slice(0,this.scroll).some(r=>r.heading);
     for (let i = 0; i < h; i++) {
       const row = rows[this.scroll + i];
       if (!row) break;
+      if (row.heading) {
+        sectionRule(grid,frame,area.y+3+i,theme,row.text.replace(/^─\s*|\s*─$/g,""),false,framed);
+        framed=true;continue;
+      }
       grid.text(
-        area.x + 1,
+        area.x + (framed?3:1),
         area.y + 3 + i,
         safeText((row.state?"● ":"")+row.text),
         row.heading?c.accent:c.fg,
-        this.selected === this.scroll + i || row.heading ? c.active : c.bg,
+        this.selected === this.scroll + i ? c.active : c.bg,
         0,
-        Math.max(0, area.w - 3),
+        Math.max(0, area.w - (framed?6:3)),
       );
-      if (row.state) grid.text(area.x+1,area.y+3+i,"●",row.state==="online"?theme.ui("--soda-state-done"):row.state==="attention"?c.warn:c.dim,this.selected===this.scroll+i?c.active:c.bg,0,1);
+      if (row.state) grid.text(area.x+(framed?3:1),area.y+3+i,"●",row.state==="online"?theme.ui("--soda-state-done"):row.state==="attention"?c.warn:c.dim,this.selected===this.scroll+i?c.active:c.bg,0,1);
+      if (framed) sectionSides(grid,frame,area.y+3+i,theme);
       if (row.run) this.hits.set(area.y + 3 + i, row.run);
+    }
+    if(framed){
+      for(let y=area.y+3+Math.min(h,rows.length-this.scroll);y<area.y+area.h-2;y++) sectionSides(grid,frame,y,theme);
+      sectionRule(grid,frame,area.y+area.h-2,theme,"",true);
     }
     text(area.h - 1, this.error || (this.busy ? "処理中…" : ""));
     this.scrollbar.render(

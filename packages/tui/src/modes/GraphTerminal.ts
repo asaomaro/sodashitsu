@@ -234,7 +234,7 @@ export class GraphTerminal implements Overlay {
       this.cancel();
       return hiddenCursor();
     }
-    const c = dialogColors(theme);
+    const c = {...dialogColors(theme),bg:theme.ground("--soda-menu-bg")};
     const area = drawBox(
       grid,
       { x: 1, y: 1, w: Math.max(1, grid.w - 2), h: Math.max(1, grid.h - 2) },
@@ -255,6 +255,6 @@ export class GraphTerminal implements Overlay {
       grid.text(area.x, area.y, this.failed || "接続中…", c.fg, c.bg, 0, area.w);
       return hiddenCursor();
     }
-    return paintPane(grid, this.term, this.content, theme.solid);
+    return paintPane(grid, this.term, this.content, theme);
   }
 }

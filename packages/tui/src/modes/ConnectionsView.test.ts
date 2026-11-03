@@ -104,3 +104,11 @@ it("adds an SSH connection from keyboard and preserves delegation request/confir
     view.dispose();
   }
 });
+
+it("keeps form fields and send controls visible when the screen is too short for a section frame",()=>{
+ for(const mode of ["a","n"]){const {view}=setup();try{view.handleKey(chordToKeyInput(mode)!);for(const h of [11,13]){
+  const g=new Grid(100,30);view.render(g,{x:0,y:0,w:80,h},new ThemeColors("dracula"));
+  if(h===13)expect(g.rowText(11)).toContain(mode==="a"?"登録して接続":"接続を申請");
+  else expect(g.rowText(9)).toContain(mode==="a"?"相手のセッション名":"入力中");
+ }}finally{view.dispose();}}
+});

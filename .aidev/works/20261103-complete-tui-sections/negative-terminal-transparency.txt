@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/modes/GraphTerminal.test.ts (7 tests | 1 failed | 6 skipped) 139ms
+   × follows transparency for default terminal cells while preserving explicit ANSI backgrounds 138ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/GraphTerminal.test.ts > follows transparency for default terminal cells while preserving explicit ANSI backgrounds
+AssertionError: expected 36186678 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 36186678
+
+ ❯ src/modes/GraphTerminal.test.ts:180:81
+    178|    const theme=new ThemeColors("dracula",undefined,transparent),g=k.re…
+    179|    const row=Array.from({length:g.h},(_,y)=>y).find(y=>g.rowText(y).in…
+    180|    const x=g.ch.slice(row*g.w,(row+1)*g.w).indexOf("D");expect(g.bg[ro…
+       |                                                                                 ^
+    181|    const colored=Array.from({length:g.h},(_,y)=>y).find(y=>g.rowText(y…
+    182|    const cx=g.ch.slice(colored*g.w,(colored+1)*g.w).indexOf("C");expec…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  18:51:45
+   Duration  1.59s (transform 72%, import 18%, tests 9%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/GraphTerminal.test.ts -t follows transparency

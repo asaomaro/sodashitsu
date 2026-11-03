@@ -1,3 +1,4 @@
+import { sectionBox } from "../render/chrome/page.js";
 import { ScrollBar } from "./ScrollBar.js";
 import type { ScheduleListResult, ScheduledJob, ScheduleDraft } from "@sodashitsu/protocol";
 import type { KeyInput } from "@sodashitsu/client-core";
@@ -312,6 +313,7 @@ export class ScheduleView {
     this.hits.clear();
     const c = { ...dialogColors(theme), bg: theme.ground("--soda-menu-bg") };
     grid.fill(area, c.fg, c.bg);
+    const frame=()=>sectionBox(grid,{x:area.x,y:area.y+2,w:Math.max(0,area.w-(this.mode==="edit"?1:0)),h:Math.max(0,area.h-3)},theme,this.mode==="edit"?"予約の設定":this.mode==="list"?"登録済みの予約":"実行結果");
     const write = (row: number, text: string, active = false) =>
       grid.text(
         area.x + 1,
@@ -320,7 +322,7 @@ export class ScheduleView {
         c.fg,
         active ? c.active : c.bg,
         0,
-        Math.max(0, area.w - 2),
+        Math.max(0, area.w - 3),
       );
     write(
       0,
@@ -360,13 +362,13 @@ export class ScheduleView {
       let row = 3;
       for (let i = 0; i < 9; i++) {
         rows[i] = row;
-        if (row >= area.h - 1) break;
+        if (row >= area.h - 2) break;
         if (i === 7) {
           const input = this.inputs[4]!,
             before = [...input.value].slice(0, input.cursor).join(""),
             cursorLine = before.split("\n").length - 1;
           const lines = input.value.split("\n"),
-            height = Math.max(1, Math.min(5, area.h - row - 2)),
+            height = Math.max(1, Math.min(5, area.h - row - 3)),
             start = Math.max(0, cursorLine - height + 1);
           for (let j = 0; j < height; j++) {
             write(
@@ -379,8 +381,9 @@ export class ScheduleView {
           if (this.field === 7) {
             const col = stringWidth(before.split("\n").at(-1) ?? "");
             write(area.h - 1, "Tab 欄移動 · Enter 改行 · Ctrl+S 保存 · Esc 取消");
+            frame();
             return {
-              x: area.x + Math.min(area.w - 2, 7 + col),
+              x: area.x + Math.min(area.w - 3, 7 + col),
               y: area.y + row + cursorLine - start,
               visible: true,
               style: "bar",
@@ -392,19 +395,20 @@ export class ScheduleView {
         }
         const current = i === this.field ? this.currentInput() : undefined;
         const value = current
-          ? current.view(Math.max(0, area.w - 2 - stringWidth(prefixes[i]!))).text
+          ? current.view(Math.max(0, area.w - 3 - stringWidth(prefixes[i]!))).text
           : values[i];
         write(row, prefixes[i]! + (value ?? ""), this.field === i);
         this.hits.set(area.y + row, i);
         row++;
       }
       write(Math.max(2, area.h - 1), "Tab 欄移動 · ←→ 選択 · Ctrl+S 保存 · Esc 取消");
+      frame();
       const input = this.currentInput(),
         y = rows[this.field];
-      if (input && y !== undefined && y < area.h - 1) {
+      if (input && y !== undefined && y < area.h - 2) {
         const prefix = stringWidth(prefixes[this.field]!);
         return {
-          x: area.x + 1 + prefix + input.view(Math.max(0, area.w - 2 - prefix)).cursorCol,
+          x: area.x + 1 + prefix + input.view(Math.max(0, area.w - 3 - prefix)).cursorCol,
           y: area.y + y,
           visible: true,
           style: "bar",
@@ -426,7 +430,7 @@ export class ScheduleView {
             "",
           ]);
     area.w = Math.max(1, area.w - 1);
-    const height = Math.max(0, area.h - 4),
+    const height = Math.max(0, area.h - 5),
       start = Math.max(0, this.selected - height + 1);
     lines.slice(start, start + height).forEach((text, i) => {
       write(
@@ -457,6 +461,7 @@ export class ScheduleView {
         ? "n 登録 · Enter 編集 · Space 結果 · x 実行 · e 有効切替 · Delete 削除 · Esc 端末"
         : "↑↓ スクロール · Esc 一覧",
     );
+    frame();
     return hiddenCursor();
   }
   dispose() {

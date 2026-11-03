@@ -299,7 +299,7 @@ export class ConversationDialog implements Overlay {
     this.hits = [];
     this.orderRect = null;
     this.rect = screenArea ?? centeredRect(grid, grid.w - 2, grid.h - 2);
-    const c = dialogColors(theme),
+    const c = {...dialogColors(theme),bg:screenArea?theme.ground("--soda-menu-bg"):theme.ui("--soda-menu-bg")},
       area = drawBox(
         grid,
         this.rect,

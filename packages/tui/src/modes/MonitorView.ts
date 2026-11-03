@@ -4,7 +4,7 @@ import type { RequestPort } from "../term/PaneRegistry.js";
 import type { UiState } from "../model/UiState.js";
 import type { Grid, Rect, CursorState } from "../render/Screen.js";
 import { ATTR } from "../render/color.js";
-import { pageHeader } from "../render/chrome/page.js";
+import { pageHeader, sectionRule, sectionSides } from "../render/chrome/page.js";
 import type { ThemeColors } from "../render/color.js";
 import { dialogColors, hiddenCursor, inside, isEsc, isDown, isUp, wrapText, type OverlayMouse } from "./overlay.js";
 import { stringWidth, truncate } from "../render/width.js";
@@ -259,30 +259,42 @@ export class MonitorView {
     } else { write(1,"g 対象を切替 · s 並べ替え（メモリ / CPU / 名前）"); write(2,"操舵室本体・エージェント・端末・関連サービス・アプリ"); }
     write(3,this.error ? this.error + ((this.resource||this.insights) ? " 最終取得値を表示中。" : "") : "r 更新 · p 自動更新停止/再開 · ↑↓/PgUp/PgDn スクロール · Esc 端末");
     const body = {...area,y:area.y+4,h:Math.max(0,area.h-4)};
-    const lines = (this.mode === "resources" ? this.resourceLines() : this.analyticsLines()).flatMap(line=>{
-      const row = typeof line === "string" ? {text:line,style:"normal" as const,usage:false} : line;
-      return (row.style === "section" || row.style === "end" ? [row.text] : wrapText(safeText(row.text),Math.max(1,area.w-6))).map(text=>({...row,text}));
+    const source=this.mode==="resources"?this.resourceLines():this.analyticsLines();
+    const normalized:MonitorLine[]=[];let open=false;
+    for(const line of source){
+      const row=typeof line==="string"?{text:line,style:"normal" as const}:line;
+      if(row.style==="section"){if(open)normalized.push(endLine());open=true;}
+      if(row.style==="end"){if(!open)continue;open=false;}
+      normalized.push(row);
+    }
+    if(open)normalized.push(endLine());
+    let boxed=false;
+    const lines=normalized.flatMap(line=>{
+      const row=typeof line==="string"?{text:line,style:"normal" as const,usage:false}:line;
+      if(row.style==="section")boxed=true;
+      const framed=boxed;if(row.style==="end")boxed=false;
+      return (row.style==="section"||row.style==="end"?[row.text]:wrapText(safeText(row.text),Math.max(1,area.w-6))).map(text=>({...row,text,boxed:framed}));
     });
     this.total = lines.length; this.offset = Math.max(0,Math.min(this.offset,Math.max(0,lines.length-body.h)));
     for(let i=0;i<body.h;i++) {
       const row=lines[this.offset+i];if(!row)continue;
       const y=body.y+i,x=area.x+1,w=Math.max(0,area.w-3);
-      const background=row.style==="metric"||row.style==="table"?c.active:c.bg;
+      const background=!theme.transparent&&(row.style==="metric"||row.style==="table")?c.active:c.bg;
       grid.fill({x,y,w,h:1},c.fg,background);
       if(row.style==="section"||row.style==="end"){
-        const title=row.style==="section"?`╭─ ${safeText(row.text)} `:"╰";
-        grid.text(x,y,title+"─".repeat(Math.max(0,w-stringWidth(title)-1))+(row.style==="section"?"╮":"╯"),c.accent,c.bg,ATTR.bold,w);
+        sectionRule(grid,{x,y:body.y,w,h:body.h},y,theme,row.text,row.style==="end");
       }else{
         const fg=row.style==="warning"?c.warn:row.style==="table"?c.accent:c.fg;
-        grid.text(x,y,`${row.style==="metric"?"│ ":"  "}${safeText(row.text)}`,fg,background,row.style==="metric"||row.style==="table"?ATTR.bold:0,w);
-        if(row.style==="metric"&&w>0)grid.text(x+w-1,y,"│",c.accent,background,0,1);
+        grid.text(x,y,`  ${safeText(row.text)}`,fg,background,row.style==="metric"||row.style==="table"?ATTR.bold:0,Math.max(0,w-(row.boxed?1:0)));
+
         // Colored bars and percentages convey ratios without interpreting a missing value as zero.
         for(const match of row.text.matchAll(/\[[#?\-]+\]|\b\d+(?:\.\d+)?%/g)){
           const col=stringWidth(row.text.slice(0,match.index))+2;
           const pct=match[0].endsWith("%")?parseFloat(match[0]):null;
           const color=match[0].includes("?")?c.dim:!row.usage?(this.mode==="analytics"?c.accent:fg):pct!==null&&pct>=90?theme.ui("--soda-error-fg"):pct!==null&&pct>=70?c.warn:theme.ui("--soda-state-done");
-          if(col<w)grid.text(x+col,y,match[0],color,background,ATTR.bold,w-col);
+          if(col<w-1)grid.text(x+col,y,match[0],color,background,ATTR.bold,w-col-1);
         }
+        if(row.boxed)sectionSides(grid,{x,y:body.y,w,h:body.h},y,theme);
       }
     }
     pageHeader(grid,area,theme);

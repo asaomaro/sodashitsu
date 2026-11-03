@@ -1,0 +1,32 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/modes/SectionFrames.test.ts (5 tests | 2 failed | 3 skipped) 29ms
+   × analytics frames every group on all four sides, including scrolled content 25ms
+   × resources frames every group on all four sides, including scrolled content 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/SectionFrames.test.ts > analytics frames every group on all four sides, including scrolled content
+ FAIL  src/modes/SectionFrames.test.ts > resources frames every group on all four sides, including scrolled content
+AssertionError: expected [ '│', '├' ] to include ' '
+ ❯ sides src/modes/SectionFrames.test.ts:20:50
+     18|  expect(g.cell(x,top).ch).toBe("╭");expect(g.cell(right,top).ch).toBe(…
+     19|  expect(g.cell(x,bottom).ch).toBe("╰");expect(g.cell(right,bottom).ch)…
+     20|  for(let y=top+1;y<bottom;y++){expect(["│","├"]).toContain(g.cell(x,y)…
+       |                                                  ^
+     21| }
+     22| it.each(["analytics","resources"] as const)("%s frames every group on …
+ ❯ src/modes/SectionFrames.test.ts:28:169
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 skipped (5)
+   Start at  18:51:41
+   Duration  1.53s (transform 80%, import 18%, tests 2%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/SectionFrames.test.ts -t frames every group
