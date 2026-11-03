@@ -16,3 +16,9 @@
 - /root/review_bubble_resize の独立差分全体レビューで必須指摘なし。調整後の2点も再レビューを依頼。
 
 - pnpm build / pnpm typecheckは終了コード0。状態表示2点調整後にWeb配布物を再生成。host内蔵リソース41件・共通runtime6種の整合確認。最終2点の独立再レビューも必須指摘なし。
+
+## 稼働反映
+
+実装984c01b7をmainへpushし、サーバhandoffで8 PTYを引き継いだ。保存した10 pane UUIDが全件残り、アシスタントphase=running / stage=readyを確認。
+
+配布後のWebで実際に配信されたCSSを使い、通常/ダークの両方でボタン/スクロールバーが金色であることと入マークの文字対背景比4.5以上を確認。ユーザーの保存テーマは変更していない。キャプチャ: /tmp/sodashitsu-assistant-controls-final.png、/tmp/sodashitsu-assistant-dark-controls-final.png。
