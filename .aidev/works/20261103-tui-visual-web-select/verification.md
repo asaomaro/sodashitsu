@@ -18,3 +18,7 @@
 - native popup修正、構成比色修正だけ取り消した負例がそれぞれ失敗。negative-*.txtへ原文保存、修正をbytes同一で復元。
 
 Web差分の独立レビューreview_resource_monitorで、option色指定による無効項目の減光消失を検出。Web/assistant両方でoption:disabled/disabled optgroup配下をopacity .5とし、hover/focusを除外。全19×3のdisabled項目/optgroup配下2項目とassistant実UIテストが成功。減光修正だけ取り消す負例は失敗（negative-disabled-options.txt）。差分再レビュー完了、必須指摘なし。
+
+## 稼働反映
+
+main 4e902864/ed4fab9bをpush。handoffで10pane UUIDと8実行PTYを保持、assistant running/readyを確認。稼働Webの設定を開いてpopupのappearance/base-select、外枠10px/項目6px、Escで保存値不変を再確認した。端末版は次回起動から適用。

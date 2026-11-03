@@ -86,8 +86,11 @@ function onButtonKeydown(ev: KeyboardEvent): void {
   display: flex;
   align-items: center;
   gap: 0.5em;
-  width: 100%;
-  padding: 0.4em 0.8em;
+  width: calc(100% - 2 * var(--soda-shape-row-inset, 0px));
+  margin-inline: var(--soda-shape-row-inset, 0px);
+  border-radius: var(--soda-shape-row-radius, 0px);
+  min-height: var(--soda-shape-row-h, auto);
+  padding: 0.4em var(--soda-shape-pad-x, 0.8em);
   font: inherit;
   color: inherit;
   background: none;
@@ -98,6 +101,10 @@ function onButtonKeydown(ev: KeyboardEvent): void {
 .machine-row:hover:not([aria-disabled="true"]) {
   background: var(--soda-menu-hover-bg, #343746);
 }
+.machine-row:focus-visible:not([aria-disabled="true"]) {
+  outline: 2px solid var(--soda-accent, #8be9fd);
+  outline-offset: -2px;
+}
 /* 切れているマシンの行は無効な部品（`aria-disabled`）として薄く描く（最後の状態を「古い情報」と分かる形で。WCAG の対比の対象外）。 */
 .machine-row[aria-disabled="true"] {
   cursor: default;
@@ -106,6 +113,10 @@ function onButtonKeydown(ev: KeyboardEvent): void {
 .machine-rows-compact .machine-rows-empty,
 .machine-rows-compact .machine-row {
   padding-inline: 0.2em;
+}
+.machine-rows-compact .machine-row {
+  margin-inline: 0;
+  width: 100%;
 }
 .machine-row-label {
   overflow: hidden;

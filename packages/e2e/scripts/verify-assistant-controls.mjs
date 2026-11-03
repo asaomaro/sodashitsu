@@ -8,7 +8,7 @@ import {uiTokens} from "@sodashitsu/client-core";
 // Source CSS verification in Chromium: use the components' actual rules and compare
 // navigation before/after the theme sheet, including active rows. No server or PTY.
 const root=new URL("../../web/src/",import.meta.url);
-const components=["App","Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog","RemoteDesktopWindow","ContextMenu","TabBar","ViewerTabBar","NotificationHistoryDialog","WorktreeOpenDialog"];
+const components=["App","Sidebar","MachineHeader","MachineRows","ScreenSwitcher","SettingsDialog","NameDialog","RemoteDesktopWindow","ContextMenu","TabBar","ViewerTabBar","NotificationHistoryDialog","WorktreeOpenDialog"];
 const {parse}=createRequire(new URL("../../web/package.json",import.meta.url))("vue/compiler-sfc");
 async function actionProbe(file,match,id){
  const source=await readFile(new URL(file,root),"utf8"),{descriptor}=parse(source);let found;
@@ -45,6 +45,7 @@ for(const name of components){
 }
 const pairing=await readFile(new URL("components/DesktopEndpointPairing.vue",root),"utf8");
 const fingerprintInput=/<input\s+v-model="peer"[\s\S]*?\/>/.exec(pairing)?.[0];assert.ok(fingerprintInput,"fingerprint input probe missing");
+componentCss+=await readFile(new URL("styles/uiStyle.css",root),"utf8");
 const sheet=await readFile(new URL("styles/buttonTheme.css",root),"utf8");
 const browser=await chromium.launch({headless:true,...(process.env.SODA_E2E_CHROMIUM_PATH?{executablePath:process.env.SODA_E2E_CHROMIUM_PATH}:{})});
 try{
@@ -60,6 +61,7 @@ try{
    ${probes.join("\n")}${featureProbes.join("\n")}${dangerProbes.join("\n")}<button id="plain" class="soda-button-action soda-button-plain">plain</button>
    ${fingerprintInput.replace("<input",'<input id="fingerprint"')}<textarea id="flat-textarea"></textarea><select id="flat-select"><option>sample</option><option disabled>unavailable</option><optgroup disabled label="group"><option>disabled group item</option></optgroup></select><input id="untouched-check" type="checkbox"><input id="untouched-range" type="range">
    <ul class="context-menu" id="context-popup"><li class="context-menu-active" id="context-row">menu</li></ul>
+   <div style="width:240px"><div class="sidebar-row" id="local-row">local</div><div class="machine-rows"><button class="machine-row" id="remote-row">remote</button></div></div>
    <section id="scroll" style="height:50px;overflow:auto"><div style="height:300px">scroll</div></section>`);
   await page.evaluate(({name,tokens,mode})=>{document.documentElement.dataset.buttonTheme=mode;document.documentElement.dataset.theme=name;for(const[k,v]of Object.entries(tokens.vars))document.documentElement.style.setProperty(k,v);}, {name,tokens:uiTokens(name),mode});
   const inspect=()=>page.evaluate(actionIds=>Object.fromEntries(["section","sort","group","desktop","toggle","machine","screen","menu","category","switch","danger-confirm","danger-delete","plain",...actionIds].map(id=>{const s=getComputedStyle(document.getElementById(id));return[id,{background:s.backgroundColor,color:s.color,radius:s.borderRadius,shadow:s.boxShadow}];})),[...actionIds,...featureIds]);
@@ -78,6 +80,12 @@ try{
   assert.deepEqual(picker,{appearance:"base-select",radius:"10px",option:"6px"},`${name}/${mode}: native square picker remains`);
   const disabledOptions=await page.locator("#flat-select").evaluate(el=>[...el.querySelectorAll("option:disabled")].map(o=>getComputedStyle(o).opacity));
   assert.deepEqual(disabledOptions,["0.5","0.5"],`${name}/${mode}: disabled option looks enabled`);
+  for(const mode of ["modern","classic"]){
+    await page.evaluate(mode=>document.documentElement.dataset.uiStyle=mode,mode);
+    const rows=await page.evaluate(()=>["local-row","remote-row"].map(id=>{const el=document.getElementById(id),s=getComputedStyle(el);return{radius:s.borderRadius,margin:s.marginInlineStart,width:el.getBoundingClientRect().width};}));
+    assert.deepEqual(rows[1],rows[0],`${name}/${mode}: remote row shape differs from local`);
+    if(mode==="modern")assert.ok(parseFloat(rows[0].radius)>0);
+  }
   const accent=await page.evaluate(()=>{const e=document.createElement("span");e.style.background="var(--soda-accent)";document.body.append(e);const bg=getComputedStyle(e).backgroundColor;e.remove();return bg;});
   for(const id of actionIds){if(mode==="none")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
   for(const id of featureIds){if(mode!=="features")assert.deepEqual(after[id],before[id],`${name}/${mode}: ${id}`);else assert.equal(after[id].background,accent,`${name}/${mode}: ${id}`);}
