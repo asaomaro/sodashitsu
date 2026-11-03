@@ -48,7 +48,7 @@ const retry = (): void => {
       </p>
       <code class="reconnect-overlay-command">--origin {{ origin }}</code>
       <p class="reconnect-overlay-note">リバースプロキシの後ろに置いているときは、プロキシが元の Host をそのまま渡しているかも確かめてください。</p>
-      <button type="button" class="reconnect-overlay-retry" @click="retry">再試行</button>
+      <button data-assistant-action type="button" class="reconnect-overlay-retry" @click="retry">再試行</button>
     </div>
   </div>
   <div v-else-if="title" class="reconnect-overlay" role="status" aria-live="polite">

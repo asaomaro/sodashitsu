@@ -538,7 +538,7 @@ watch(
         <li v-for="(row, ri) in layoutOf(area)" :key="ri" class="sr-line" data-line>
           <div class="sr-line-head">
             <span class="sr-line-title">{{ ri + 1 }} 行目</span>
-            <button
+            <button data-assistant-action
               type="button"
               class="sr-btn"
               data-move-line="-1"
@@ -548,7 +548,7 @@ watch(
             >
               行を上へ
             </button>
-            <button
+            <button data-assistant-action
               type="button"
               class="sr-btn"
               data-move-line="1"
@@ -558,7 +558,7 @@ watch(
             >
               行を下へ
             </button>
-            <button
+            <button data-assistant-action
               type="button"
               class="sr-btn"
               data-remove-line
@@ -576,7 +576,7 @@ watch(
               <div class="sr-token-head">
                 <span class="sr-token-label">{{ tokenLabel(area, tok.token) }}</span>
                 <code class="sr-token-id">{{ tok.token }}</code>
-                <button
+                <button data-assistant-action
                   type="button"
                   class="sr-btn"
                   data-move-token="-1"
@@ -586,7 +586,7 @@ watch(
                 >
                   前へ
                 </button>
-                <button
+                <button data-assistant-action
                   type="button"
                   class="sr-btn"
                   data-move-token="1"
@@ -607,7 +607,7 @@ watch(
                 >
                   詳細
                 </button>
-                <button
+                <button data-assistant-action
                   type="button"
                   class="sr-btn"
                   data-remove-token
@@ -781,7 +781,7 @@ watch(
                             </option>
                           </select>
                         </label>
-                        <button
+                        <button data-assistant-action
                           type="button"
                           class="sr-btn"
                           data-move-rule="-1"
@@ -791,7 +791,7 @@ watch(
                         >
                           上へ
                         </button>
-                        <button
+                        <button data-assistant-action
                           type="button"
                           class="sr-btn"
                           data-move-rule="1"
@@ -801,7 +801,7 @@ watch(
                         >
                           下へ
                         </button>
-                        <button
+                        <button data-assistant-action
                           type="button"
                           class="sr-btn"
                           data-remove-rule
@@ -813,7 +813,7 @@ watch(
                       </div>
                     </li>
                   </ol>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="sr-btn"
                     data-add-rule
@@ -853,7 +853,7 @@ watch(
               @input="onDraftInput(customKey(area, ri), $event, () => null)"
               @keydown.enter="onEnter($event, () => addToken(area, ri))"
             />
-            <button
+            <button data-assistant-action
               type="button"
               class="sr-btn"
               data-add-token
@@ -866,7 +866,7 @@ watch(
         </li>
       </ol>
       <div class="sr-area-foot">
-        <button
+        <button data-assistant-action
           type="button"
           class="sr-btn"
           data-add-line
@@ -875,7 +875,7 @@ watch(
         >
           行を追加
         </button>
-        <button
+        <button data-assistant-action
           v-if="confirming !== area"
           type="button"
           class="sr-btn"
@@ -892,10 +892,10 @@ watch(
           @keydown.esc.stop.prevent="endReset(area)"
         >
           <span>{{ AREA_LABEL[area] }}の並びを既定に戻します。取り消せません。</span>
-          <button type="button" class="sr-btn" data-confirm-yes @click="confirmReset(area)">
+          <button data-assistant-action type="button" class="sr-btn" data-confirm-yes @click="confirmReset(area)">
             戻す
           </button>
-          <button type="button" class="sr-btn" data-confirm-no @click="endReset(area)">
+          <button data-assistant-action type="button" class="sr-btn" data-confirm-no @click="endReset(area)">
             やめる
           </button>
         </div>

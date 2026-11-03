@@ -92,7 +92,7 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
         <option value="k">1000をk表記</option>
       </select></label
     >
-    <button @click="settings.setStatuslineSettings({ ...current, rows: 1 })">
+    <button data-assistant-action @click="settings.setStatuslineSettings({ ...current, rows: 1 })">
       表示行数を1行に戻す
     </button>
     <fieldset>
@@ -104,14 +104,14 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
           :checked="current.fields[item.id]"
           @change="field(item.id, $event)"
         />{{ item.label
-        }}<button
+        }}<button data-assistant-action
           type="button"
           :aria-label="`${item.label}を上へ`"
           :disabled="index === 0"
           @click.prevent="reorder(index, -1)"
         >
           ↑</button
-        ><button
+        ><button data-assistant-action
           type="button"
           :aria-label="`${item.label}を下へ`"
           :disabled="index === ordered.length - 1"
@@ -148,7 +148,7 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
       </div>
     </fieldset>
     <p>グラフを非表示にしても、表示項目が有効なら数値は表示します。</p>
-    <footer><button type="button" @click="view.closeDialog()">閉じる</button></footer>
+    <footer><button data-assistant-action type="button" @click="view.closeDialog()">閉じる</button></footer>
   </dialog>
 </template>
 <style scoped>

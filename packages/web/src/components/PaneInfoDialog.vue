@@ -30,7 +30,7 @@ function onCancel(ev: Event): void {
 <template>
   <dialog ref="dialogEl" class="pane-info-dialog" aria-label="pane の利用状況" @cancel="onCancel">
     <div class="pane-info-dialog-bar">
-      <button type="button" class="pane-info-dialog-close" data-pane-info-close @click="view.closePaneInfo()">閉じる</button>
+      <button data-assistant-action type="button" class="pane-info-dialog-close" data-pane-info-close @click="view.closePaneInfo()">閉じる</button>
     </div>
     <div class="pane-info-dialog-body">
       <PaneInfoView v-if="paneId !== null" :pane-id="paneId" kind="dialog" :active="open" @close="view.closePaneInfo()" />

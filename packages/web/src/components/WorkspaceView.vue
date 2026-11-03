@@ -391,7 +391,7 @@ watch([staged, diffPath, () => selection.value.commit], () => {
             "git-diff": "Git差分",
           }[kind]
         }}</strong
-        ><button :disabled="busy" @click="kind === 'file' ? read(loadedPath) : refresh()">
+        ><button data-assistant-action :disabled="busy" @click="kind === 'file' ? read(loadedPath) : refresh()">
           再読込</button
         ><span v-if="busy" role="status">読込中…</span>
       </header>
@@ -404,10 +404,10 @@ watch([staged, diffPath, () => selection.value.commit], () => {
             aria-label="ファイル検索語"
             placeholder="ファイル名・内容を検索"
             required
-          /><button :disabled="searching">検索</button
+          /><button data-assistant-action :disabled="searching">検索</button
           ><label><input v-model="grep" type="checkbox" />内容をGrep</label
           ><label><input v-model="caseSensitive" type="checkbox" />大文字小文字を区別</label>
-          <button v-if="!showHeading" type="button" :disabled="busy" @click="refresh">
+          <button data-assistant-action v-if="!showHeading" type="button" :disabled="busy" @click="refresh">
             再読込
           </button>
           <span v-if="busy && !showHeading" role="status">読込中…</span>
@@ -440,12 +440,12 @@ watch([staged, diffPath, () => selection.value.commit], () => {
             v-model="pathInput"
             aria-label="ファイルの相対パス"
             placeholder="PJ内のファイルパス"
-          /><button>開く</button>
+          /><button data-assistant-action>開く</button>
         </form>
         <div v-if="loadedPath" class="workspace-toolbar">
           <span class="workspace-path">{{ loadedPath }}{{ dirty ? " *" : "" }}</span
           ><label><input v-model="editing" type="checkbox" />編集</label
-          ><button :disabled="!dirty || busy" @click="save">保存</button>
+          ><button data-assistant-action :disabled="!dirty || busy" @click="save">保存</button>
         </div>
         <textarea
           v-if="editing"
@@ -485,7 +485,7 @@ watch([staged, diffPath, () => selection.value.commit], () => {
             aria-label="コミットSHA"
             placeholder="コミットSHA（省略で作業差分）"
             pattern="[a-f0-9]{40,64}"
-          /><button>表示</button>
+          /><button data-assistant-action>表示</button>
         </form>
         <select v-model="diffPath" aria-label="差分のファイル">
           <option value="">すべてのファイル</option>

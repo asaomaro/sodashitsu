@@ -45,14 +45,14 @@ onBeforeUnmount(() => (dead = true));
 <template>
   <div class="plugin-packages">
     <h4>配置されたプラグインパッケージ</h4>
-    <button :disabled="busy" @click="refresh">パッケージを探す</button>
+    <button data-assistant-action :disabled="busy" @click="refresh">パッケージを探す</button>
     <p role="status" v-if="error">{{ error }}</p>
     <p v-if="!candidates.length">未登録のパッケージはありません。</p>
     <article v-for="candidate in candidates" :key="candidate.key">
       <strong>{{ candidate.name }} {{ candidate.version }}</strong
       ><span> · {{ candidate.scope === "user" ? "ユーザー全体" : "PJ限定" }}</span>
       <p>{{ candidate.path }}</p>
-      <button :disabled="busy" @click="selected = candidate">確認して登録</button>
+      <button data-assistant-action :disabled="busy" @click="selected = candidate">確認して登録</button>
     </article>
     <section v-if="selected" class="plugin-package-review" aria-label="パッケージ登録の確認">
       <h4>{{ selected.name }} {{ selected.version }} を登録</h4>
@@ -62,8 +62,8 @@ onBeforeUnmount(() => (dead = true));
       <p>権限: {{ selected.allow.join("、") || "追加権限なし" }} · {{ selected.files }}ファイル</p>
       <p>OSの利用者の権限でプログラムを起動します。</p>
       <p class="package-digest">検証値: {{ selected.digest }}</p>
-      <button :disabled="busy" @click="register">許可して登録・有効化</button
-      ><button :disabled="busy" @click="selected = null">キャンセル</button>
+      <button data-assistant-action :disabled="busy" @click="register">許可して登録・有効化</button
+      ><button data-assistant-action :disabled="busy" @click="selected = null">キャンセル</button>
     </section>
   </div>
 </template>

@@ -49,8 +49,8 @@ onBeforeUnmount(() => { disposed = true; local?.stop(); if (timer) clearInterval
       <p v-if="request.terminalHere">操作端末と質問フォームを依頼元PCの起動paneへ中継します。</p>
       <p v-if="request.task">プラグイン: {{ request.task.pluginKey }}<br>制作指示: {{ request.task.taskFile }}</p>
       <p>このPCのエージェントを新しいペインで起動し、上の接続先PJを操作します。</p>
-      <button type="button" :disabled="busy || !local" @click="launch(request)">{{ busy ? '起動中…' : '起動' }}</button>
-      <button type="button" :disabled="busy" @click="reject(request)">取り消す</button>
+      <button data-assistant-action type="button" :disabled="busy || !local" @click="launch(request)">{{ busy ? '起動中…' : '起動' }}</button>
+      <button data-assistant-action type="button" :disabled="busy" @click="reject(request)">取り消す</button>
     </div>
     <p v-if="message" role="alert">{{ message }}</p>
   </aside>

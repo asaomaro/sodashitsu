@@ -106,7 +106,7 @@ async function save() {
       <p v-if="!state?.customCommand">
         Sodashitsu自体でHTTPSを使う場合は、証明書が有効なこのPCのURLを指定してください。証明書の検証は無効にしません。
       </p>
-      <button type="button" @click="save">共有設定を保存</button>
+      <button data-assistant-action type="button" @click="save">共有設定を保存</button>
     </fieldset>
     <p v-if="message" role="status">{{ message }}</p>
   </section>

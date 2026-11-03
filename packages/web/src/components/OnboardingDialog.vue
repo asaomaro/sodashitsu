@@ -316,10 +316,10 @@ function onNativeCancel(ev: Event): void {
       あとから設定で変えられ、この案内も設定から開き直せます。
     </p>
     <div class="onboarding-actions">
-      <button type="button" class="onboarding-button" data-onboarding-skip @click="skip">
+      <button data-assistant-action type="button" class="onboarding-button" data-onboarding-skip @click="skip">
         スキップ
       </button>
-      <button
+      <button data-assistant-action
         type="button"
         class="onboarding-button onboarding-primary"
         data-onboarding-confirm

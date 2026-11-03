@@ -194,13 +194,13 @@ function key(e: KeyboardEvent) {
     <header>
       <strong>{{ target?.mode === "notes" ? "セッションのメモ" : "エージェントのToDo" }}</strong>
       <span>{{ identity?.sessionId.slice(0, 8) }}</span
-      ><button :disabled="busy" @click="load()">再読込</button
+      ><button data-assistant-action :disabled="busy" @click="load()">再読込</button
       ><button aria-label="閉じる" @click="close">×</button>
     </header>
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="target?.mode === 'notes'" class="notes-layout">
       <aside aria-label="メモ一覧">
-        <button :disabled="busy || !data" @click="select(null)">新しいメモ</button>
+        <button data-assistant-action :disabled="busy || !data" @click="select(null)">新しいメモ</button>
         <input v-model="search" aria-label="メモを検索" placeholder="タイトル・本文・タグを検索" />
         <select v-model="groupFilter" aria-label="グループで絞り込み">
           <option value="">すべてのグループ</option>
@@ -247,9 +247,9 @@ function key(e: KeyboardEvent) {
         </label>
         <footer>
           <span>{{ dirty ? "未保存" : "保存済み" }}</span
-          ><button v-if="selected" type="button" :disabled="busy || !data" @click="save(true)">
+          ><button data-assistant-action v-if="selected" type="button" :disabled="busy || !data" @click="save(true)">
             削除</button
-          ><button :disabled="busy || !data || !title.trim()">保存</button>
+          ><button data-assistant-action :disabled="busy || !data || !title.trim()">保存</button>
         </footer>
       </form>
     </div>

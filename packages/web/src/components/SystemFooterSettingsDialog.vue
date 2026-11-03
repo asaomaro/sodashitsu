@@ -108,7 +108,7 @@ function graph(id: keyof SystemFooterGraphs, event: Event, pattern = false) {
     <p>
       グラフを非表示にしても数値は表示します。エージェント数はSodashitsuが認識しているペインを集計し、履歴やサブエージェントを含みません。
     </p>
-    <footer><button type="button" @click="view.closeDialog()">閉じる</button></footer>
+    <footer><button data-assistant-action type="button" @click="view.closeDialog()">閉じる</button></footer>
   </dialog>
 </template>
 <style scoped>

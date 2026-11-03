@@ -129,17 +129,17 @@ onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value
 
 <template>
   <section ref="surface" class="preview-window" :class="{ 'soda-viewport-maximized': maximized, 'has-app': !!current }" :popover="maximized ? 'manual' : undefined" tabindex="-1" role="region" aria-label="Webプレビュー" data-web-preview @keydown.capture="maximizeKey">
-    <header><strong>Webプレビュー</strong><button v-if="current" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button><button :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? "元に戻す" : "最大化" }}</button></header>
+    <header><strong>Webプレビュー</strong><button v-if="current" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button><button data-assistant-action :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? "元に戻す" : "最大化" }}</button></header>
     <div v-show="!current || infoOpen" class="preview-controls">
     <label>表示元のペイン <select v-model="sourcePane" aria-label="表示元のペイン"><option value="">自動選択</option><option v-for="p in panes" :key="p.id" :value="p.id">{{ p.label || p.title || p.id.slice(0,8) }}</option></select></label>
     <div class="preview-tools">
-      <template v-if="!allowedPane"><p>このpaneの開発アプリを表示します。PC側で補助プログラムを動かします。</p><button :disabled="!targetPane" @click="enable">このpaneでエージェントからの表示を許可</button></template>
-      <template v-else><span>{{ helperConnected ? "ブラウザPCのhelperに接続済み" : helperStarting ? "helperを自動起動しています…" : "ブラウザPCのhelperが未接続です" }}</span><button @click="disable">許可を取り消す</button><template v-if="!helperConnected && !helperStarting"><p>このブラウザPCでhelperを自動起動できませんでした。ブラウザを使うPCで次を実行してください（ログイン済みのsodactl）。</p><code data-preview-helper-command>{{ helperCommand }}</code></template></template>
-      <form @submit.prevent="register"><input v-model="name" aria-label="アプリ名" maxlength="80"><input v-model="port" aria-label="ポート" type="number" min="1" max="65535"><button :disabled="opening">{{ helperConnected ? "登録して開く" : "登録" }}</button></form>
-      <div class="preview-apps"><span v-for="app in apps" :key="app.id">{{ app.name }} :{{ app.port }} <button :disabled="!allowedPane || !helperConnected || opening || app.state === 'stopped'" @click="open(app)">開く</button></span></div>
+      <template v-if="!allowedPane"><p>このpaneの開発アプリを表示します。PC側で補助プログラムを動かします。</p><button data-assistant-action :disabled="!targetPane" @click="enable">このpaneでエージェントからの表示を許可</button></template>
+      <template v-else><span>{{ helperConnected ? "ブラウザPCのhelperに接続済み" : helperStarting ? "helperを自動起動しています…" : "ブラウザPCのhelperが未接続です" }}</span><button data-assistant-action @click="disable">許可を取り消す</button><template v-if="!helperConnected && !helperStarting"><p>このブラウザPCでhelperを自動起動できませんでした。ブラウザを使うPCで次を実行してください（ログイン済みのsodactl）。</p><code data-preview-helper-command>{{ helperCommand }}</code></template></template>
+      <form @submit.prevent="register"><input v-model="name" aria-label="アプリ名" maxlength="80"><input v-model="port" aria-label="ポート" type="number" min="1" max="65535"><button data-assistant-action :disabled="opening">{{ helperConnected ? "登録して開く" : "登録" }}</button></form>
+      <div class="preview-apps"><span v-for="app in apps" :key="app.id">{{ app.name }} :{{ app.port }} <button data-assistant-action :disabled="!allowedPane || !helperConnected || opening || app.state === 'stopped'" @click="open(app)">開く</button></span></div>
       <p v-if="error" role="alert">{{ error }}</p>
     </div>
-    <nav v-if="displays.length"><select v-model="selected" aria-label="表示するアプリ"><option v-for="d in displays" :key="d.requestId" :value="d.requestId">{{ d.app.name }}</option></select><button @click="refresh++">更新</button><button @click="closeDisplay">表示を閉じる</button><a v-if="current" :href="current.url" target="_blank" rel="noopener noreferrer">別タブで開く</a></nav>
+    <nav v-if="displays.length"><select v-model="selected" aria-label="表示するアプリ"><option v-for="d in displays" :key="d.requestId" :value="d.requestId">{{ d.app.name }}</option></select><button data-assistant-action @click="refresh++">更新</button><button data-assistant-action @click="closeDisplay">表示を閉じる</button><a v-if="current" :href="current.url" target="_blank" rel="noopener noreferrer">別タブで開く</a></nav>
     <p class="preview-help">初回はこのSodashitsuサイトへの「ローカルネットワークアクセス」を許可してください。表示されない場合は別タブで開くか、ブラウザのサイト権限を確認してください。</p>
     </div>
     <iframe v-for="d in displays" v-show="d.requestId === selected" :key="d.requestId + ':' + refresh" :src="d.url" :title="d.app.name" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads" referrerpolicy="no-referrer" data-preview-frame />

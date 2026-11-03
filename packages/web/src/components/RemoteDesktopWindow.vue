@@ -1187,24 +1187,24 @@ onBeforeUnmount(() => {
         <div v-show="!toolbarCollapsed" class="viewer-toolbar-content">
         <strong>{{ label }} — デスクトップ</strong><span data-desktop-status>{{ status }}</span>
         <span v-if="platformIdle" data-native-idle :data-idle-counter="platformIdleCounter">新しい画像待ち（最終画像を表示）</span>
-        <button
+        <button data-assistant-action
           :disabled="!ready || !allowed"
           @pointerdown.prevent
           @click="toggleControl"
         >
           {{ agentActive ? "操作を引き取る" : control ? "閲覧に戻る" : "操作する" }}
         </button>
-        <button v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
+        <button data-assistant-action v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
           :title="imeKeys ? '接続先のIMEをONにする' : '接続先をIMEキー対応版に更新してください'"
           @pointerdown.prevent @click="sendIme('ImeOn')">IME ON</button>
-        <button v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
+        <button data-assistant-action v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
           :title="imeKeys ? '接続先のIMEをOFFにする' : '接続先をIMEキー対応版に更新してください'"
           @pointerdown.prevent @click="sendIme('ImeOff')">IME OFF</button>
         <button :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
-        <button data-desktop-maximize :aria-pressed="maximized" @click="toggleMaximize">
+        <button data-assistant-action data-desktop-maximize :aria-pressed="maximized" @click="toggleMaximize">
           {{ maximized ? "元に戻す" : "最大化" }}
         </button>
-        <button @click="close">閉じる</button>
+        <button data-assistant-action @click="close">閉じる</button>
         </div>
         <button type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
           :aria-label="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
@@ -1212,16 +1212,16 @@ onBeforeUnmount(() => {
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
       </header>
       <p v-if="error&&!infoOpen" class="desktop-alert" role="alert">{{ error }}</p>
-      <button v-if="!ready&&error&&!elevatedScreen&&!infoOpen" @click="resetMonitor">既定のモニターで接続し直す</button>
+      <button data-assistant-action v-if="!ready&&error&&!elevatedScreen&&!infoOpen" @click="resetMonitor">既定のモニターで接続し直す</button>
       <div v-if="signinOffer" data-desktop-signin-consent role="group" aria-label="サインイン画面への接続許可">
         <p>Windowsのサインイン画面に接続します。今回の接続だけ許可し、最長120秒で終了します。ログインや画面構成の変更後は接続し直してください。</p>
-        <button @click="grantSignin(false)">閲覧だけ許可</button>
-        <button v-if="signinOffer.allowInput" @click="grantSignin(true)">キーボード・マウス操作も許可</button>
-        <button @click="close">キャンセル</button>
+        <button data-assistant-action @click="grantSignin(false)">閲覧だけ許可</button>
+        <button data-assistant-action v-if="signinOffer.allowInput" @click="grantSignin(true)">キーボード・マウス操作も許可</button>
+        <button data-assistant-action @click="close">キャンセル</button>
       </div>
       <div v-show="infoOpen" class="desktop-controls">
         <p v-if="error" role="alert">{{ error }}</p>
-        <button v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
+        <button data-assistant-action v-if="!ready&&error&&!elevatedScreen" @click="resetMonitor">既定のモニターで接続し直す</button>
         <p v-if="ready&&endpointEncrypted" data-endpoint-encrypted>暗号化接続（相手の指紋を確認済み）</p>
         <DesktopEndpointPairing :machine-id="props.machineId" @reconnect="connect()" @plain="usePlainDesktop()" />
       <p v-if="title" class="target">
@@ -1230,7 +1230,7 @@ onBeforeUnmount(() => {
       <p v-if="secureDesktop && !protectedMode && !lockScreenCover" data-desktop-locked>
         <template v-if="signinSession">Windows標準の認証画面を表示しています。終了すると操作許可も破棄します。</template>
         <template v-else>Windows標準の認証画面で解除してください。認証情報は保存しません。解除後は閲覧専用に戻ります。</template>
-        <button v-if="!signinSession" :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
+        <button data-assistant-action v-if="!signinSession" :disabled="!control" @click="send({ type: 'sas' })">Ctrl+Alt+Del</button>
       </p>
       <p v-if="activeSettings && ready" data-desktop-applied>
         画像設定: <template v-if="activeSettings.display">{{activeSettings.display.width}}×{{activeSettings.display.height}}等倍（幅上限より優先）</template><template v-else>幅上限{{ activeSettings.width }}</template> / {{ activeSettings.fps }}fps上限 / JPEG
@@ -1246,7 +1246,7 @@ onBeforeUnmount(() => {
       <label data-shared-desktop-option><input v-model="sharedScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedScreen" />複数viewerで同じ画面を共有</label>
       <label v-if="sharedScreen&&!elevatedScreen&&!virtualScreen&&sharedMonitorsAvailable" data-shared-monitors><input v-model="sharedMonitorsScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeSharedMonitors" />モニター選択を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!virtualScreen&&independentAvailable" data-independent-monitors><input v-model="independentScreen" :disabled="props.monitorWindow?.independent" type="checkbox" @change="changeIndependent" />モニターごとに独立して配信</label>
-      <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!virtualScreen&&!props.monitorWindow?.independent" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button @click="joinSharedMonitor">このモニターで接続</button><small>{{independentScreen?"別のモニターIDでは独立した配信を開始します。同じIDでは同じ画質設定を選んでください。":"共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。"}}</small></div>
+      <div v-if="sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&!virtualScreen&&!props.monitorWindow?.independent" data-shared-monitor-join><label>参加するモニターID<input v-model="sharedMonitorDevice" maxlength="128" placeholder="空欄は主画面" @keydown.enter.prevent="joinSharedMonitor" /></label><button data-assistant-action @click="joinSharedMonitor">このモニターで接続</button><small>{{independentScreen?"別のモニターIDでは独立した配信を開始します。同じIDでは同じ画質設定を選んでください。":"共有中の窓と同じモニターIDを指定してください。別のIDでは参加できません。"}}</small></div>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedDeltasAvailable" data-shared-deltas><input v-model="sharedDeltasScreen" :disabled="!deltas" type="checkbox" @change="changeSharedDeltas" />差分画像を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedClipboardAvailable" data-shared-clipboard><input v-model="sharedClipboardScreen" type="checkbox" @change="changeSharedClipboard" />クリップボード経路を共有（全ての窓で同じ選択が必要）</label>
       <label v-if="sharedScreen&&!elevatedScreen&&sharedCursorAvailable" data-shared-cursor><input v-model="sharedCursorScreen" :disabled="!showCursor" type="checkbox" @change="changeSharedCursor" />独立カーソルを共有（全ての窓で同じ選択が必要）</label>
@@ -1256,12 +1256,12 @@ onBeforeUnmount(() => {
       <p v-if="protectedMode" data-desktop-protected>管理者画面を共有中です。画面・ロック状態が変わった場合は接続し直し、操作を許可し直してください。</p>
       <label v-if="(!platformBackend||platformBackend==='linux-portal')&&!signinSession" data-virtual-desktop-option><input v-model="virtualScreen" type="checkbox" @change="changeVirtualScreen" />一時的な仮想画面を使う</label>
       <p v-if="sharedVirtualAvailable&&!platformBackend" data-shared-virtual-available>仮想画面を複数の窓で共有できます。</p>
-      <div v-if="sharedScreen&&virtualScreen&&sharedVirtualAvailable" data-shared-virtual-mode><label>共有する仮想画面の解像度<input v-model="virtualMode" maxlength="9" placeholder="空欄は既定（例: 1920×1080）" @keydown.enter.prevent="joinVirtualMode" /></label><button @click="joinVirtualMode">この解像度で接続</button><small>共有する全ての窓で同じ解像度を選んでください。既存の窓とは異なる解像度へ自動変更しません。</small></div>
+      <div v-if="sharedScreen&&virtualScreen&&sharedVirtualAvailable" data-shared-virtual-mode><label>共有する仮想画面の解像度<input v-model="virtualMode" maxlength="9" placeholder="空欄は既定（例: 1920×1080）" @keydown.enter.prevent="joinVirtualMode" /></label><button data-assistant-action @click="joinVirtualMode">この解像度で接続</button><small>共有する全ての窓で同じ解像度を選んでください。既存の窓とは異なる解像度へ自動変更しません。</small></div>
       <p v-if="virtualActive" data-virtual-display-active>一時仮想画面を共有中です。最後の共有窓を閉じた後、補助プログラムの終了を確認して画面を解放します。</p>
       <nav>
 
-        <button :disabled="!ready" @click="send({ type: 'keyframe' })">再同期</button
-        ><button @click="close">共有停止</button
+        <button data-assistant-action :disabled="!ready" @click="send({ type: 'keyframe' })">再同期</button
+        ><button data-assistant-action @click="close">共有停止</button
         ><label
           ><input v-model="fit" type="checkbox" />画面に合わせる</label
         >
@@ -1310,7 +1310,7 @@ onBeforeUnmount(() => {
             適用すると共有へ再接続し、操作とエージェント許可を解除します。設定はこのブラウザで{{props.monitorWindow?.independent?"モニター":"マシン"}}ごとに記憶します。
           </p>
           <p v-if="settingNotice" role="status">{{ settingNotice }}</p>
-          <button @click="connect()">適用して再接続</button>
+          <button data-assistant-action @click="connect()">適用して再接続</button>
         </details>
       </nav>
       <details v-if="ready && (allowMedia || nativeVideo)" data-desktop-media>
@@ -1344,9 +1344,9 @@ onBeforeUnmount(() => {
         <label v-if="mediaTransport==='native'&&nativeCodecs">動画コーデック<select v-model="nativeCodec" aria-label="動画コーデック"><option value="h264">H.264</option><option v-for="codec in (['hevc','av1','h264-444'] as const)" :key="codec" :value="codec" :disabled="!nativeCodecCandidates.includes(codec)">{{codecLabel(codec)}}{{nativeCodecCandidates.includes(codec)?'（GPUで試行）':'（接続先に候補なし）'}}</option></select></label>
         <p v-if="mediaTransport==='native'&&nativeCodecs&&nativeRequestedCodec&&mediaState!=='images'" data-native-codec>要求: {{codecLabel(nativeRequestedCodec)}} / 実際: {{nativeActualCodec?codecLabel(nativeActualCodec):'確認中'}}<span v-if="nativeCodecFallback"> — {{nativeCodecFallback==='decoder'?'このブラウザで復号できないため':'接続先で利用できないため'}}H.264へ復帰</span></p>
         <label v-if="mediaTransport==='native'&&nativeMaxFps===60">動画FPS上限<select v-model="nativeFps" aria-label="動画FPS上限"><option :value="30">30 fps</option><option :value="60">60 fps</option></select></label>
-        <button @click="requestVideo">動画共有を依頼</button
-        ><button @click="stopVideo">動画・音声を停止</button>
-        <button v-if="mediaAudio" @click="toggleSound">
+        <button data-assistant-action @click="requestVideo">動画共有を依頼</button
+        ><button data-assistant-action @click="stopVideo">動画・音声を停止</button>
+        <button data-assistant-action v-if="mediaAudio" @click="toggleSound">
           {{ sound ? "音声を止める" : "音声を再生" }}
         </button>
         <p v-if="nativeAudioState" data-native-audio>システム音声: {{ nativeAudioState==='starting' ? '準備中' : nativeAudioState==='running' ? (sound ? '再生中' : 'ミュート') : nativeAudioState==='unavailable' ? '利用できません' : '停止' }}</p>
@@ -1370,7 +1370,7 @@ onBeforeUnmount(() => {
       </details>
       <div v-if="ready&&monitorLayout&&sharedScreen&&sharedMonitorsScreen&&!elevatedScreen&&(independentScreen||monitorLayout.selected==='all')" data-monitor-windows>
         <label>{{independentScreen?"別窓で開くモニター":"この窓に表示するモニター"}}<select aria-label="この窓に表示するモニター" v-model="localMonitor" @change="changeLocalMonitor"><option value="">全体</option><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}</option></select></label>
-        <button :disabled="!canOpenMonitor" @click="openMonitorWindow">選択モニターを別窓で開く</button>
+        <button data-assistant-action :disabled="!canOpenMonitor" @click="openMonitorWindow">選択モニターを別窓で開く</button>
         <p v-if="independentScreen">各モニターを別々に取得・圧縮し、選択したモニターだけを受信します。モニターごとに画質を保存します。同じモニターの窓は同じ設定にしてください。共有方式の切替は、ほかの窓を閉じてから行ってください。</p><p v-else>全モニターの取得・転送を共有し、全モニターの画像を各窓で受信し、選択領域だけ表示します。領域外へのドラッグは表示モニター端で止まります。操作権は1窓ずつ取得してください。モニター別の独立圧縮には対応していません。</p><p role="status">{{monitorWindowNotice}}</p>
       </div>
       <label v-if="ready&&monitorLayout" data-monitor-selector>表示モニター<select v-model="monitorDevice" :disabled="virtualScreen&&!virtualMonitors||props.monitorWindow?.independent||monitorLayout.switchingSupported===false" @change="changeMonitor"><option v-for="monitor in monitorLayout.monitors" :key="monitor.id" :value="monitor.id">{{monitor.id}} — {{monitor.width}}×{{monitor.height}}{{monitor.primary?'（主画面）':''}}{{monitor.scalePercent?' / '+monitor.scalePercent+'%':''}}</option><option value="all" :disabled="virtualScreen||!monitorLayout.allSupported">全モニターをまとめて表示</option></select></label>
@@ -1382,8 +1382,8 @@ onBeforeUnmount(() => {
         <summary>マイク入力</summary>
         <p v-if="sharedScreen">複数窓での共有中は、1つの窓からだけマイクを送信できます。切り替える場合は、送信中の窓で停止してください。</p>
         <p>このPCのマイクを接続先の仮想オーディオデバイスへ送ります。接続先アプリで、そのデバイスの録音側を選んでください。</p>
-        <button type="button" :disabled="!microphonePipeReady || !['stopped','unavailable'].includes(microphoneState)" @click="startMicrophone">マイク転送を開始</button>
-        <button type="button" :disabled="['stopped','unavailable'].includes(microphoneState)" @click="microphoneClient?.stop()">マイク転送を停止</button>
+        <button data-assistant-action type="button" :disabled="!microphonePipeReady || !['stopped','unavailable'].includes(microphoneState)" @click="startMicrophone">マイク転送を開始</button>
+        <button data-assistant-action type="button" :disabled="['stopped','unavailable'].includes(microphoneState)" @click="microphoneClient?.stop()">マイク転送を停止</button>
         <p data-microphone-codec>{{microphoneCodec}}</p>
         <p data-microphone-state>{{ microphoneState==='running'?'マイク転送中':microphoneState==='preparing'?'マイクの許可・準備中':microphoneState==='starting'?'接続先を準備中':microphoneState==='unavailable'?'マイクを利用できません。両端の許可と仮想デバイスを確認してください。':'マイク停止' }}</p>
       </details>
@@ -1392,7 +1392,7 @@ onBeforeUnmount(() => {
         <p>
           PC全体のクリップボードを扱います。8192文字まで。同期はこの窓が前面の間だけ動き、同時変更時はAを優先します。
         </p>
-        <button @click="send({ type: 'clipboard_grant', enabled: !clipboardGranted })">
+        <button data-assistant-action @click="send({ type: 'clipboard_grant', enabled: !clipboardGranted })">
           {{ clipboardGranted ? "クリップボード共有を解除" : "クリップボード共有を許可" }}
         </button>
         <textarea
@@ -1401,20 +1401,20 @@ onBeforeUnmount(() => {
           maxlength="8192"
           :disabled="!clipboardGranted"
         />
-        <button :disabled="!clipboardGranted" @click="transferClipboard('read')">
+        <button data-assistant-action :disabled="!clipboardGranted" @click="transferClipboard('read')">
           共有元から取得</button
-        ><button :disabled="!clipboardGranted || !allowed" @click="transferClipboard('write')">
+        ><button data-assistant-action :disabled="!clipboardGranted || !allowed" @click="transferClipboard('write')">
           共有元へ送信
         </button>
-        <button :disabled="!clipboardGranted||(!clipboardSync&&richBusy)" @click="toggleClipboardSync">
+        <button data-assistant-action :disabled="!clipboardGranted||(!clipboardSync&&richBusy)" @click="toggleClipboardSync">
           {{ clipboardSync ? "自動同期を停止" : "双方向の自動同期を開始" }}
         </button>
         <div v-if="richClipboard" data-rich-clipboard>
           <p>PNG画像とHTMLの表・書式を転送します。画像2MiB、テキスト/HTML/RTF各512KiB、全体4MiBまで。RTFの貼り付けはブラウザの対応に従います。</p>
-          <button :disabled="!clipboardGranted||!richPipeReady||richBusy||clipboardSync" @click="transferRichClipboard('read')">画像・書式を手元へコピー</button>
-          <button :disabled="!clipboardGranted||!allowed||!richPipeReady||richBusy||clipboardSync" @click="transferRichClipboard('write')">画像・書式を共有元へ送信</button>
+          <button data-assistant-action :disabled="!clipboardGranted||!richPipeReady||richBusy||clipboardSync" @click="transferRichClipboard('read')">画像・書式を手元へコピー</button>
+          <button data-assistant-action :disabled="!clipboardGranted||!allowed||!richPipeReady||richBusy||clipboardSync" @click="transferRichClipboard('write')">画像・書式を共有元へ送信</button>
           <label><input v-model="richSyncMode" type="checkbox" :disabled="clipboardSync||richBusy||!richPipeReady" />画像・書式も自動同期する</label>
-          <button v-if="richBusy" @click="cancelRichFromUi()">画像・書式の転送を取り消す</button>
+          <button data-assistant-action v-if="richBusy" @click="cancelRichFromUi()">画像・書式の転送を取り消す</button>
         </div>
         <p role="status">{{ clipboardNotice }}</p>
       </details>
@@ -1426,13 +1426,13 @@ onBeforeUnmount(() => {
         <template v-if="endpointEncrypted">
           <p>接続先PCで登録したエージェントの鍵を選びます。CLIでは別途確認した接続先PCの指紋も指定してください。</p>
           <label>許可するエージェント<select v-model="endpointAgentSelected" :disabled="endpointAgentBusy" aria-label="許可するエージェント"><option v-for="peer in endpointAgentPeers" :key="peer.fingerprint" :value="peer.fingerprint">{{ peer.label }} / {{ peer.fingerprint }}</option></select></label>
-          <button :disabled="endpointAgentBusy" @click="refreshAgentPeers">候補を更新</button>
+          <button data-assistant-action :disabled="endpointAgentBusy" @click="refreshAgentPeers">候補を更新</button>
           <p v-if="!endpointAgentPeers.length">接続先PCの暗号化接続の設定で、エージェントの指紋を登録してください。</p>
         </template>
-        <button :disabled="endpointEncrypted && (endpointAgentBusy || !endpointAgentSelected)" @click="grantAgentAccess">
+        <button data-assistant-action :disabled="endpointEncrypted && (endpointAgentBusy || !endpointAgentSelected)" @click="grantAgentAccess">
           エージェントへの画面提供・操作を許可
         </button>
-        <button v-if="agentExpires || endpointAgentBusy" @click="revokeAgentAccess">
+        <button data-assistant-action v-if="agentExpires || endpointAgentBusy" @click="revokeAgentAccess">
           エージェント許可を取り消す
         </button>
         <input
@@ -1494,7 +1494,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="lockScreenCover" class="lock-screen-cover" data-desktop-lock-cover>
           <p>接続先はWindowsのロック画面です。</p>
-          <button :disabled="!ready || !allowed || dismissInFlight" @click="dismissLockScreen">サインイン画面へ進む</button>
+          <button data-assistant-action :disabled="!ready || !allowed || dismissInFlight" @click="dismissLockScreen">サインイン画面へ進む</button>
           <p>PIN・パスワードは、次の認証画面で入力してください。</p>
         </div>
         <span v-else-if="!info" class="cover">{{ status }}{{ error ? " — " + error : "" }}</span>
@@ -1513,7 +1513,7 @@ onBeforeUnmount(() => {
           maxlength="1024"
           aria-label="確定した文字を送る"
           :placeholder="secureDesktop ? 'Windowsの認証画面に送る文字（保存しません）' : '日本語はここで変換を確定'"
-        /><button :disabled="!control || !text">文字を送る</button>
+        /><button data-assistant-action :disabled="!control || !text">文字を送る</button>
       </form>
       <button type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
         :aria-label="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"

@@ -112,7 +112,7 @@ function onNativeCancel(ev: Event): void {
     <h2 id="subagent-dialog-title" class="subagent-dialog-title">{{ title }}</h2>
     <SubagentList v-if="target" ref="listRef" :subagents="subagents" />
     <div class="subagent-dialog-actions">
-      <button type="button" @click="close">閉じる</button>
+      <button data-assistant-action type="button" @click="close">閉じる</button>
     </div>
   </dialog>
 </template>

@@ -24,7 +24,7 @@ async function migrate() {
 </script>
 <template>
   <div class="native-tab-view" :data-native-tab="tab.nativeView" @keydown.stop @keyup.stop>
-    <div class="legacy-view-notice"><span>以前の形式の共有タブです。</span><button type="button" @click="migrate">操作元の閲覧タブに移す</button></div>
+    <div class="legacy-view-notice"><span>以前の形式の共有タブです。</span><button data-assistant-action type="button" @click="migrate">操作元の閲覧タブに移す</button></div>
     <div v-if="tab.nativeView === 'web-preview'" :ref="el => previews.target(tab.id, el as HTMLElement | null)" class="preview-target" />
     <RemoteDesktopWindow :key="machines.selectedId" v-else-if="tab.nativeView === 'desktop' && machines.selectedId !== 'local'" embedded :machine-id="machines.selectedId" :label="machineLabel" @close="actions?.closeTabById(tab.id)" />
     <p v-else-if="tab.nativeView === 'desktop'" role="status">デスクトップは操作側のSodashitsuで外部マシンを選択して利用してください。</p>

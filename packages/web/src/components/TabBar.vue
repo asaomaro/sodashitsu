@@ -396,11 +396,11 @@ function onWheel(ev: WheelEvent): void {
       </button>
     </div>
     <span v-if="view.paneDrag?.overTabId" class="tab-bar-drop-hint" role="status">ここへ移動：{{ tabs.find(t => t.id === view.paneDrag?.overTabId)?.label }}（離して確定）</span>
-    <button type="button" class="tab-bar-new tab-bar-action" :disabled="!view.workspaceId" aria-label="新しいタブ" @click="onNewTab" @keydown="onButtonKeydown">＋</button>
+    <button data-assistant-action type="button" class="tab-bar-new tab-bar-action" :disabled="!view.workspaceId" aria-label="新しいタブ" @click="onNewTab" @keydown="onButtonKeydown">＋</button>
     <span v-if="rightText" class="tab-bar-right" aria-hidden="true">{{ rightText }}</span>
     <ViewerTabBar>
       <template #actions>
-        <button v-if="viewActions" type="button" class="tab-bar-action tab-bar-add-view" :disabled="!currentTab || !!viewers.active" @click="currentTab && view.openDialogWithContext({ kind: 'addView', tabId: currentTab.id })" @keydown="onButtonKeydown">＋作業ビュー</button>
+        <button data-assistant-action v-if="viewActions" type="button" class="tab-bar-action tab-bar-add-view" :disabled="!currentTab || !!viewers.active" @click="currentTab && view.openDialogWithContext({ kind: 'addView', tabId: currentTab.id })" @keydown="onButtonKeydown">＋作業ビュー</button>
       </template>
     </ViewerTabBar>
   </div>

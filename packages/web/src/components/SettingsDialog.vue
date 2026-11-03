@@ -1036,7 +1036,7 @@ function onNativeCancel(ev: Event): void {
          背景のタップの余地も無いので、閉じる手段を画面に出す（review ラウンド1 の指摘。先例は HelpDialog の［閉じる］）。 -->
     <div class="settings-header">
       <h2 id="settings-title" class="settings-title">設定</h2>
-      <button type="button" class="settings-close" @click="cancel">閉じる</button>
+      <button data-assistant-action type="button" class="settings-close" @click="cancel">閉じる</button>
     </div>
     <!-- 左の列（幅 768px 以上だけ）。**入れ物は grid のセルいっぱいに伸ばす**——`@click.self` は `<dialog>` 自身が押されたときだけ閉じるので、
          メニューを直に grid の子にしてセルより短くすると、その下の空きを押して閉じてしまう。項目は右の節の見出しから作る（20261004-settings-side-menu の design）。 -->
@@ -1217,7 +1217,7 @@ function onNativeCancel(ev: Event): void {
                     @change="commitOverride(bucket, key)"
                     @keydown.enter="onOverrideEnter(bucket, key, $event)"
                   />
-                  <button
+                  <button data-assistant-action
                     v-if="isOverridden(bucket, key)"
                     type="button"
                     class="settings-btn"
@@ -1229,7 +1229,7 @@ function onNativeCancel(ev: Event): void {
                 </div>
               </li>
             </ul>
-            <button
+            <button data-assistant-action
               v-if="!confirmingOverrideReset"
               type="button"
               class="settings-btn"
@@ -1246,7 +1246,7 @@ function onNativeCancel(ev: Event): void {
               @keydown.esc.stop.prevent="endResetAllOverridesConfirm"
             >
               <span>すべての色の上書きを既定へ戻します。取り消せません。</span>
-              <button
+              <button data-assistant-action
                 type="button"
                 class="settings-btn"
                 data-confirm-yes-overrides
@@ -1254,7 +1254,7 @@ function onNativeCancel(ev: Event): void {
               >
                 戻す
               </button>
-              <button
+              <button data-assistant-action
                 type="button"
                 class="settings-btn"
                 data-confirm-no-overrides
@@ -1406,7 +1406,7 @@ function onNativeCancel(ev: Event): void {
               <template v-if="settings.tabBarAlways === null"
                 >様式に従っています（クラシック: 出さない・モダン: 出す）</template
               >
-              <button
+              <button data-assistant-action
                 v-else
                 type="button"
                 class="settings-btn"
@@ -1461,7 +1461,7 @@ function onNativeCancel(ev: Event): void {
                     @change="onTabBarRightEntryTextChange(index, $event)"
                     @keydown.enter="onTabBarRightEntryTextEnter(index, $event)"
                   />
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="settings-btn"
                     :disabled="index === 0"
@@ -1469,7 +1469,7 @@ function onNativeCancel(ev: Event): void {
                   >
                     上へ
                   </button>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="settings-btn"
                     :disabled="index === settings.tabBarRight.length - 1"
@@ -1477,7 +1477,7 @@ function onNativeCancel(ev: Event): void {
                   >
                     下へ
                   </button>
-                  <button
+                  <button data-assistant-action
                     type="button"
                     class="settings-btn"
                     data-remove-entry
@@ -1496,7 +1496,7 @@ function onNativeCancel(ev: Event): void {
                     </option>
                   </select>
                 </label>
-                <button
+                <button data-assistant-action
                   type="button"
                   class="settings-btn"
                   data-add-entry
@@ -1724,7 +1724,7 @@ function onNativeCancel(ev: Event): void {
                 </template>
               </span>
             </div>
-            <button
+            <button data-assistant-action
               v-if="agentIntegrations.status?.agents[k.value]?.needsUpdate"
               type="button"
               class="settings-btn agent-integration-update"
@@ -1734,7 +1734,7 @@ function onNativeCancel(ev: Event): void {
             >
               更新
             </button>
-            <button
+            <button data-assistant-action
               type="button"
               class="settings-btn"
               :disabled="!agentIntegrations.status || agentIntegrationBusy === k.value"
@@ -1759,7 +1759,7 @@ function onNativeCancel(ev: Event): void {
                 statusLineText
               }}</span>
             </div>
-            <button
+            <button data-assistant-action
               v-if="statusLine?.state === 'needs_update'"
               type="button"
               class="settings-btn agent-integration-update"
@@ -1769,7 +1769,7 @@ function onNativeCancel(ev: Event): void {
             >
               更新
             </button>
-            <button
+            <button data-assistant-action
               v-if="statusLine?.state === 'installed' || statusLine?.state === 'needs_update'"
               type="button"
               class="settings-btn"
@@ -1778,7 +1778,7 @@ function onNativeCancel(ev: Event): void {
             >
               外す
             </button>
-            <button
+            <button data-assistant-action
               v-else
               type="button"
               class="settings-btn"
@@ -1798,8 +1798,8 @@ function onNativeCancel(ev: Event): void {
               <span class="settings-note">{{ agentIntegrations.status.agyStatusLine.state === 'installed' ? '導入済み' : agentIntegrations.status.agyStatusLine.state === 'none' ? '未導入' : agentIntegrations.status.agyStatusLine.message ?? agentIntegrations.status.agyStatusLine.state }}</span>
               <span class="settings-note">モデル・文脈内トークン・制限枠を共有します。元の表示と設定を保存し、外すと戻します。メール・会話本文は送信しません。</span>
             </div>
-            <button v-if="agentIntegrations.status.agyStatusLine.state === 'needs_update'" class="settings-btn" :disabled="agyStatusLineBusy" @click="runAgyStatusLine(false)">更新</button>
-            <button class="settings-btn" :disabled="agyStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.agyStatusLine.state)" @click="runAgyStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state) ? '外す' : '導入' }}</button>
+            <button data-assistant-action v-if="agentIntegrations.status.agyStatusLine.state === 'needs_update'" class="settings-btn" :disabled="agyStatusLineBusy" @click="runAgyStatusLine(false)">更新</button>
+            <button data-assistant-action class="settings-btn" :disabled="agyStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.agyStatusLine.state)" @click="runAgyStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state) ? '外す' : '導入' }}</button>
           </li>
           <li v-if="agentIntegrations.status?.copilotStatusLine" class="settings-row agent-integration-row" data-copilot-statusline-wrap>
             <div class="agent-integration-label">
@@ -1807,8 +1807,8 @@ function onNativeCancel(ev: Event): void {
               <span class="settings-note">{{ agentIntegrations.status.copilotStatusLine.state === 'installed' ? '導入済み' : agentIntegrations.status.copilotStatusLine.state === 'none' ? '未導入' : agentIntegrations.status.copilotStatusLine.message ?? agentIntegrations.status.copilotStatusLine.state }}</span>
               <span class="settings-note">モデル・累計トークン・コンテキスト・AI クレジットを共有します。独自の元表示と設定を保存し、外すと戻します。メール・会話本文は送信しません。</span>
             </div>
-            <button v-if="agentIntegrations.status.copilotStatusLine.state === 'needs_update'" class="settings-btn" :disabled="copilotStatusLineBusy" @click="runCopilotStatusLine(false)">更新</button>
-            <button class="settings-btn" :disabled="copilotStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.copilotStatusLine.state)" @click="runCopilotStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state) ? '外す' : '導入' }}</button>
+            <button data-assistant-action v-if="agentIntegrations.status.copilotStatusLine.state === 'needs_update'" class="settings-btn" :disabled="copilotStatusLineBusy" @click="runCopilotStatusLine(false)">更新</button>
+            <button data-assistant-action class="settings-btn" :disabled="copilotStatusLineBusy || ['invalid', 'unsupported'].includes(agentIntegrations.status.copilotStatusLine.state)" @click="runCopilotStatusLine(['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state))">{{ ['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state) ? '外す' : '導入' }}</button>
           </li>
           <li v-if="agentIntegrations.status?.statusLine" class="settings-row">
             <p class="settings-note">
@@ -1849,7 +1849,7 @@ function onNativeCancel(ev: Event): void {
       <KeySettings v-model:capturing="keysCapturing" :kind="kind" />
       <!-- はじめの案内を開き直す（20260926-settings-onboarding の AC6）。設定画面は自分の watch で閉じる（kind が変わるので）。 -->
       <p class="settings-reopen-onboarding">
-        <button
+        <button data-assistant-action
           type="button"
           class="settings-reopen-button"
           data-open-onboarding

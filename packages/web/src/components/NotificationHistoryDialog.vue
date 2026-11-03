@@ -167,13 +167,13 @@ function cancelClear(): void {
       </li>
     </ul>
     <div class="nh-actions">
-      <button v-if="!confirming" type="button" class="nh-clear" :disabled="rows.length === 0" @click="askClear">すべて削除</button>
+      <button data-assistant-action v-if="!confirming" type="button" class="nh-clear" :disabled="rows.length === 0" @click="askClear">すべて削除</button>
       <template v-else>
         <span class="nh-confirm-text" role="alert">{{ rows.length }} 件をすべて削除しますか？</span>
-        <button type="button" class="nh-confirm" @click="confirmClear">削除する</button>
-        <button type="button" class="nh-cancel" @click="cancelClear">やめる</button>
+        <button data-assistant-action="danger" type="button" class="nh-confirm" @click="confirmClear">削除する</button>
+        <button data-assistant-action type="button" class="nh-cancel" @click="cancelClear">やめる</button>
       </template>
-      <button type="button" class="nh-close" @click="close">閉じる</button>
+      <button data-assistant-action type="button" class="nh-close" @click="close">閉じる</button>
     </div>
   </dialog>
 </template>

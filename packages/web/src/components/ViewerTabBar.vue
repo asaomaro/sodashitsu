@@ -91,7 +91,7 @@ async function close(id: string) {
     <div class="viewer-actions">
     <slot name="actions" />
     <div class="viewer-menu-anchor">
-      <button
+      <button data-assistant-action
         type="button"
         class="viewer-menu-button"
         :aria-expanded="menu"

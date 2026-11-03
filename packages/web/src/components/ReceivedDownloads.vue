@@ -36,7 +36,7 @@ defineExpose({begin,publish});
     <ul>
       <li v-for="entry in entries" :key="entry.key" data-received-download>
         <a :href="entry.url" :download="entry.name" draggable="true" @dragstart="drag($event,entry.key)" @click.prevent="save(entry.key)">{{entry.name}} をドラッグ</a>
-        （{{entry.bytes}} bytes）<button type="button" @click="save(entry.key)">もう一度保存</button><button type="button" @click="shelf.remove(entry.key)">解放</button>
+        （{{entry.bytes}} bytes）<button data-assistant-action type="button" @click="save(entry.key)">もう一度保存</button><button data-assistant-action type="button" @click="shelf.remove(entry.key)">解放</button>
       </li>
     </ul>
     <p v-if="notice" role="status">{{notice}}</p>

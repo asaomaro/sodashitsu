@@ -128,7 +128,7 @@ function dismiss(id: number): void {
       <!-- 行動ボタンと閉じるボタンは `<button>`。既存のトーストは `<div>` で Tab の順に入らず、
            4 秒で消えるので実害が無かったが、**消えないトーストはキーボードで片付けられる必要がある**。
            本体のクリックは「消す」なので、ボタン側は `.stop` で食い止める。 -->
-      <button v-for="a in t.actions" :key="a.label" type="button" class="toast-action" @click.stop="a.run()">{{ a.label }}</button>
+      <button data-assistant-action v-for="a in t.actions" :key="a.label" type="button" class="toast-action" @click.stop="a.run()">{{ a.label }}</button>
       <button v-if="t.kind === 'sticky'" type="button" class="toast-close" aria-label="閉じる" @click.stop="dismiss(t.id)">×</button>
     </div>
   </div>

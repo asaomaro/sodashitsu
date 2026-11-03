@@ -142,7 +142,7 @@ async function showWorker(id: string) {
         アプリ画面
       </button>
     </div>
-    <button v-if="showAddButton" class="tab-add-view" @click="open">ビューを追加</button>
+    <button data-assistant-action v-if="showAddButton" class="tab-add-view" @click="open">ビューを追加</button>
     <div v-if="tab.plugin && workers.length > 1" class="tab-workers" aria-label="ペインを選択">
       <span>ペインを選択:</span>
       <button v-for="p in workers" :key="p.id" @click="showWorker(p.id)">
@@ -183,8 +183,8 @@ async function showWorker(id: string) {
         このビューにはワークスペースのPJフォルダ設定が必要です。
       </p>
       <div class="view-picker-actions">
-        <button type="button" @click="close">キャンセル</button
-        ><button type="submit" :disabled="!selected || missingProject">追加</button>
+        <button data-assistant-action type="button" @click="close">キャンセル</button
+        ><button data-assistant-action type="submit" :disabled="!selected || missingProject">追加</button>
       </div>
     </form>
   </dialog>
