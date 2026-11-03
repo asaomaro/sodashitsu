@@ -216,3 +216,10 @@ describe("frame.js", () => {
     }
   });
 });
+
+it("updates plugin button theme without rerendering or discarding edited fields",()=>{
+ const f=boot();f.init();f.render({rev:1,format:"html",source:'<input name="draft" value="original"><button class="soda-button-action">save</button>'});
+ const input=f.root().querySelector("input")!;input.value="edited";
+ f.port.onmessage!({data:{type:"theme",theme:{dark:false,vars:{"--soda-accent":"#123456"},buttonTheme:"actions",buttonCss:".soda-button-action{color:red}"}}});
+ expect(document.documentElement.dataset.buttonTheme).toBe("actions");expect(document.documentElement.style.getPropertyValue("--soda-accent")).toBe("#123456");expect(f.root().querySelector("input")).toBe(input);expect(input.value).toBe("edited");expect(document.head.textContent).toContain(".soda-button-action");
+});

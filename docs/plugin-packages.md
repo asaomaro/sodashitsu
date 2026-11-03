@@ -262,3 +262,7 @@ script-htmlでsoda.maximize(true)を呼ぶと、現在の表示枠をpopoverの�
 # 操作元のエージェントとの連携
 
 接続先PCで動くプラグインから、操作元PCのClaude Code / Codexに制作を依頼する場合は、[プラグイン作成ガイド：操作元のエージェント](plugin-agents.md)を参照してください。`task.start` の `execution:'operator'`、状態取得・追加指示、固定したアプリへのMCP操作、質問フォームの出し先を説明しています。
+
+### プラグイン画面のボタン配色
+
+ホストのテーマと「ボタンの配色」の適用範囲を利用する場合は、`soda-button-action`（保存・実行）、`soda-button-feature`（機能展開・開閉）、`soda-button-danger`（危険操作）、`soda-button-plain`（メニュー・タブ・一覧）の共通クラスを使う。全テーマに追従し、変更時にも画面の入力状態を保持する。指定例と優先順位は [画面の様式・ボタンのテーマ配色](ui-style.md#ボタンのテーマ配色webプラグイン共通) を参照。

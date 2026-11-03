@@ -247,7 +247,7 @@ sodactl display send chart --json '{"labels":["月","火"],"values":[3,7]}'
 |---|---|
 | `soda.action(name, data?)` | 操作を返す。静的な形式の `data-soda-action` と同じ `display.action` になる（名前・値・上限も同じ。値は文字列の組で 8 KiB まで）。規則の外は `false` を返して何も送らない。行には `source: "script"` が付く |
 | `soda.onMessage(fn)` | `sodactl display send` のデータを受ける関数を登録する。戻り値は登録を外す関数。1 つが投げても、ほかの関数は呼ばれる |
-| `soda.theme` | `{ dark, vars }`。アプリの配色（`--soda-bg` など）。同じ値が `:root` の CSS の変数にも当たっている |
+| `soda.theme` | `{ dark, vars, buttonTheme }`。現在の配色とボタンの適用範囲。変更後は再取得する読み取り専用スナップショット。アプリの配色（`--soda-bg` など）。同じ値が `:root` の CSS の変数にも当たっている |
 | `soda.version` | `1` |
 
 - `send` は**保存されない**: あとからつないだ画面・たたんでいた画面には届かない。拡張は、状態の全体を送り直せる形にする。
@@ -461,3 +461,7 @@ Web版の摘みアイコンは他の操作ボタンの文字サイズに合わ�
 スクリプトが動く形式の `soda.mount("terminal", element, {paneId})` は、同じワークスペースの端末をアプリへ配置する（省略時は閲覧専用、`interactive:true` で端末入力も可能）。専用の入力欄は `soda.action` から拡張へ渡す。**使える面は、Sodashitsuが起動した拡張（プラグインのアプリを含む）が出した面だけ**（サーバが拡張の面にだけ付ける `DisplayInfo.source` で判定する）。pane のプログラムが出した `script-html` の面からは埋め込めず、`component-error`（`pane_not_available`）で知らせる。対象範囲、4部品の上限、リサイズ・スクロール、例は [プラグイン開発ガイド](plugin-packages.md#sodashitsuの部品をアプリへ埋め込む)。静的なHTMLの隔離設定・認証は変えない。埋め込み端末の行列数は部品のCSS領域に合わせ、独立接続でサイズを確保し、閉じると解放する。
 
 スクリプト表示内のhttp(s)リンクは、利用者が実際にクリックしたときだけ親画面へ取り次ぎ、ブラウザの別タブで開く（noopener/noreferrer）。親は現行版・操作中・一時的なユーザー操作を照合する。自動クリック、資格情報付きURL、javascript/data等は受け付けず、枠のsandboxはallow-scriptsのまま維持する。
+
+### ボタンの共通配色
+
+HTML のボタンは `soda-button-action`／`soda-button-feature`／`soda-button-danger`／`soda-button-plain` で役割を指定すると、ホストの全テーマと3段階の適用範囲に追従する。ホストは CSS と設定を隔離画面にも渡し、変更時には内容を再描画せず配色だけ更新する。例・除外規則は [画面の様式](ui-style.md#ボタンのテーマ配色webプラグイン共通) を参照。

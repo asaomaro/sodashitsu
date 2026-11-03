@@ -254,3 +254,31 @@ describe("DisplayFrame", () => {
     expect(s.store.focusedDisplayId).toBeNull();
   });
 });
+
+
+it("theme changes update the connected plugin port without rendering again", async () => {
+  const sent: { type: string; theme?: { buttonTheme: string; buttonCss: string } }[] = [];
+  const Real = globalThis.MessageChannel;
+  vi.stubGlobal("MessageChannel", class {
+    port1 = { postMessage: (m: never) => void sent.push(m), close: () => undefined, onmessage: null as unknown };
+    port2 = {};
+  });
+  const old = document.documentElement.getAttribute("data-button-theme");
+  const s = setup({ content: content() });
+  try {
+    s.load(); s.ready();
+    await nextTick();
+    const renders = sent.filter(m => m.type === "render").length;
+    document.documentElement.setAttribute("data-button-theme", "none");
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const updates = sent.filter(m => m.type === "theme");
+    expect(updates.at(-1)?.theme?.buttonTheme).toBe("none");
+    expect(updates.at(-1)?.theme?.buttonCss).toContain(".soda-button-action");
+    expect(sent.filter(m => m.type === "render")).toHaveLength(renders);
+  } finally {
+    s.w.unmount();
+    if (old === null) document.documentElement.removeAttribute("data-button-theme");
+    else document.documentElement.setAttribute("data-button-theme", old);
+    vi.stubGlobal("MessageChannel", Real);
+  }
+});

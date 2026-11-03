@@ -109,6 +109,7 @@
   var attrValue = typeof Attr !== 'undefined' ? getterOf(Attr.prototype, 'value') : undefined;
   var scriptTextSet = typeof HTMLScriptElement !== 'undefined' ? setterOf(HTMLScriptElement.prototype, 'text') : undefined;
   var nodeTextSet = setterOf(N, 'textContent');
+  var styleTextSet = typeof HTMLStyleElement !== 'undefined' ? setterOf(HTMLStyleElement.prototype, 'textContent') : nodeTextSet;
   var domParse = ParserCtor.prototype.parseFromString;
   var encoderEncode = Encoder.prototype.encode;
   var paramsGet = UrlParams.prototype.get;
@@ -253,7 +254,7 @@
   }, true]);
 
   /** window.soda。action は、規則の外の名前・値なら false を返して送らない（静的な形式の data-soda-action と同じ規則）。 */
-  function makeSoda(theme) {
+  function themeSnapshot(theme) {
     var vars = mk();
     var dark = false;
     if (theme && typeof theme === 'object') {
@@ -267,6 +268,12 @@
     var th = mk();
     own(th, 'dark', dark);
     own(th, 'vars', objFreeze(vars));
+    own(th,'buttonTheme',theme&&theme.buttonTheme==='none'?'none':theme&&theme.buttonTheme==='actions'?'actions':'features');
+    return objFreeze(th);
+  }
+  var currentTheme;
+  function makeSoda(theme) {
+    currentTheme=themeSnapshot(theme);
     var soda = mk();
     own(soda, 'version', 1);
     own(soda, 'mount', mountComponent);
@@ -295,14 +302,21 @@
       own(listeners, id, fn);
       return function () { delete listeners[id]; };
     });
-    own(soda, 'theme', objFreeze(th));
+    defProp(soda,'theme',{get:function(){return currentTheme;},enumerable:true,configurable:false});
     return objFreeze(soda);
   }
 
+  var buttonThemeStyle=null;
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
     var de = rd(docElement, DOC, 'documentElement');
     rApply(setAttribute, de, ['data-dark', theme.dark ? '1' : '0']);
+    currentTheme=themeSnapshot(theme);
+    rApply(setAttribute,de,['data-button-theme',currentTheme.buttonTheme]);
+    if(typeof theme.buttonCss==='string'&&theme.buttonCss.length<=32768){
+      if(!buttonThemeStyle){buttonThemeStyle=rApply(docCreateElementNS,DOC,[HTML_NS,'style']);rApply(nodeAppend,rd(docHead,DOC,'head'),[buttonThemeStyle]);}
+      if(styleTextSet)rApply(styleTextSet,buttonThemeStyle,[theme.buttonCss]);
+    }
     var vars = theme.vars;
     if (vars && typeof vars === 'object') {
       var ks = objKeys(vars);
@@ -516,6 +530,8 @@
       reply('pong', ['n', m.n]);
     } else if (type === 'render') {
       onRender(m);
+    } else if(type==='theme'){
+      try{applyTheme(m.theme);}catch(e){/* appearance only */}
     } else if (type === 'message') {
       // 登録の順に呼ぶ。1 つが投げても、ほかを呼ぶ。呼ぶ間に増えた分は呼ばない。
       var count = listenerCount;

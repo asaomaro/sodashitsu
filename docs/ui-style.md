@@ -108,3 +108,41 @@ Web版・端末版とも、ワークスペースごとに最後に選んだタ�
 部品を追加するときは、操作を実行するbuttonに`data-assistant-action`を付けます。クラス名からの推測や全buttonへの一括指定は使いません。既存の警告色を維持するボタンには`data-assistant-action="danger"`を付け、部品側の警告表示を保ちます。クリック処理・権限・確認の有無はこの属性では変更しません。nativeの`input[type=button]`・`input[type=submit]`も操作用として配色します。
 
 適用範囲の検証は`node packages/e2e/scripts/verify-assistant-controls.mjs`で実行できます（Chromiumが必要。実際のSFCの属性とCSSをブラウザで確認し、サーバやPTYは起動しません）。
+
+## ボタンのテーマ配色（Web・プラグイン共通）
+
+設定「テーマ」の「ボタンの配色」で、全カラーテーマについて次の適用範囲を選べる。共有設定 `buttonTheme` に保存され、初期表示にも反映する。
+
+| 値 | 設定の表示 | 対象 |
+| --- | --- | --- |
+| `none` | なし（標準表示） | 部品本来の表示。危険操作の警告色は残す |
+| `actions` | 操作ボタンのみ | 保存・実行・追加・確定など |
+| `features`（既定） | 操作・機能展開・開閉ボタン | 操作に加え、サイドバー開閉、詳細・ツール・設定を開く操作、ペインと画面下部のフッター操作、折り畳み |
+
+メニューの項目、タブ、一覧の行、単なるラベルは、どの範囲でも一律にアクセント色で塗らない。選択中の表示はそれぞれの部品が担当する。
+
+### プラグイン開発者向けのクラス規則
+
+標準のプラグイン画面・`sodactl display` の隔離 HTML には、共通の `buttonTheme.css` と `--soda-*` の配色変数をホストが渡す。プラグインで独自に設定を保存したり、この CSS をコピーしたりする必要はない。
+
+| クラス | 役割 |
+| --- | --- |
+| `soda-button` | 任意。文字・余白・枠・無効時の基本表示 |
+| `soda-button-action` | 保存・実行・追加など。`actions` と `features` で配色 |
+| `soda-button-feature` | 機能展開・設定・開閉など。`features` で配色 |
+| `soda-button-danger` | 削除など危険な操作。アクセント色の対象から外し警告色を維持 |
+| `soda-button-plain` | メニュー項目・タブ・一覧などの明示的な適用除外。他の指定より優先 |
+
+```html
+<button class="soda-button soda-button-action">保存</button>
+<button class="soda-button soda-button-feature" aria-expanded="false">詳細</button>
+<button class="soda-button soda-button-danger">削除</button>
+<button class="soda-button-plain" role="tab">概要</button>
+<details><summary>詳細設定</summary>…</details>
+```
+
+`summary` は機能展開として扱う。除外したい場合は `soda-button-plain` を付ける。`input[type=button]` と `input[type=submit]` は操作として扱う。通常の `button` は役割のクラスを明示する。危険操作では `soda-button-danger` を必ず指定し、メニュー全体や一覧行へ `soda-button-action` を付けない。
+
+色は `--soda-accent`／`--soda-accent-fg`、警告は `--soda-error-fg` を使う。独自の強いセレクターや `!important` で背景・文字色を固定すると追従できないため避ける。ホバー・フォーカス・選択状態も共通 CSS が配色する。アプリ内部の `data-assistant-action`／`data-assistant-feature` は互換用で、プラグインには上記クラスを推奨する。
+
+ホストはテーマと適用範囲の変更を既存の専用通信路で通知する。HTML を再読み込みせず、入力内容や動作中のスクリプトを保持したまま CSS と `:root[data-button-theme]` を更新する。`script-html` では `soda.theme` から現在の `{ dark, vars, buttonTheme }` を取得できる（読み取り専用のスナップショット。変更後は再取得する）。独自 UI の描画には CSS 変数の利用を優先する。この配色共有はプラグインの操作権限や隔離条件を変えない。

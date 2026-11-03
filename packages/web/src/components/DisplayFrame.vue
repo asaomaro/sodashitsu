@@ -149,6 +149,8 @@ let relay: PrefixRelay | null = null;
 let directEngagedOnce = false;
 let readySeen = false;
 let renderSent = false;
+let lastThemeKey="";
+let themeObserver:MutationObserver|null=null;
 let port: MessagePort | null = null;
 let handshakeTimer: ReturnType<typeof setTimeout> | null = null;
 let patrolTimer: ReturnType<typeof setInterval> | null = null;
@@ -204,6 +206,7 @@ function start(): void {
   closePort();
   readySeen = false;
   renderSent = false;
+  lastThemeKey="";
   renderFailed.value = false;
   detached.value = false;
   loads.value = 0;
@@ -316,6 +319,7 @@ function sendRender(): void {
   // 手元の中身が、いまの見出しと同じ面・同じ版・同じ形式のときだけ送る（形式・版が替わった直後の前の中身を、新しい枠へ送らない）。
   if (!c || c.id !== i.id || c.rev !== i.rev || c.format !== i.format) return;
   const theme = readThemeVars();
+  lastThemeKey=JSON.stringify(theme);
   // prefix のキーは、スクリプトが動く形式の枠には渡さない（信頼しない中身に、利用者のキーの設定を教えない）。
   // 例外: アプリのメイン画面（拡張が出した面。`direct`）には渡す。`Esc` はアプリが使えるようにし、prefix は枠が先に受けて親へ中継する。
   const relayOn = direct.value && host?.relayKeymap !== undefined && host.runRelayedAction !== undefined;
@@ -672,7 +676,14 @@ const handle: RegisteredFrame = {
   },
 };
 
+function sendTheme():void {
+ if(!port||phase.value!=="connected"||!lastThemeKey)return;
+ const theme=readThemeVars(),key=JSON.stringify(theme);if(key===lastThemeKey)return;
+ lastThemeKey=key;port.postMessage({type:"theme",theme});
+}
 onMounted(() => {
+  themeObserver=new MutationObserver(sendTheme);
+  themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:["style","data-theme","data-button-theme"]});
   componentResize = new ResizeObserver(() => {
     viewport.value = { width: wrap.value?.clientWidth ?? 0, height: wrap.value?.clientHeight ?? 0 };
   });
@@ -698,6 +709,7 @@ onMounted(() => {
 // 合い札・待ちの時計は、最初の描画の前（setup）で用意する（描画の後に作り直すと iframe が作り直される）。
 start();
 onBeforeUnmount(() => {
+  themeObserver?.disconnect();
   componentResize?.disconnect();
   window.removeEventListener("message", onWindowMessage);
   window.removeEventListener("blur", onWindowBlur);

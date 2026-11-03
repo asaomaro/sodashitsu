@@ -128,7 +128,7 @@ describe("script.html（土台）", () => {
     expect(posted(f)).toContainEqual({ type: "rendered", rev: 5 });
     const soda = f.win.soda as { version: number; theme: { dark: boolean; vars: Record<string, string> } };
     expect(soda.version).toBe(1);
-    expect(soda.theme).toEqual({ dark: true, vars: { "--soda-bg": "#111" } });
+    expect(soda.theme).toEqual({ dark: true, vars: { "--soda-bg": "#111" },buttonTheme:"features" });
     expect(document.documentElement.style.getPropertyValue("--soda-bg")).toBe("#111");
     // 2 回目の render は無視（作り直しは親が枠ごと）
     f.render({ rev: 6, format: "script-html", source: "<p id='again'>x</p>" });
@@ -409,4 +409,13 @@ describe("script.html（土台）", () => {
     f.fire("keydown", { key: "Escape", isTrusted: false });
     expect(f.port.postMessage).not.toHaveBeenCalled();
   });
+});
+
+it("updates immutable soda.theme and CSS without replaying the script or losing its DOM",()=>{
+ const f=boot();f.init();f.render({rev:1,format:"script-html",source:'<input id="draft" value="original">'});
+ const input=document.querySelector<HTMLInputElement>("#draft")!;input.value="edited";
+ const soda=f.win.soda as {theme:{buttonTheme:string;vars:Record<string,string>}};
+ const old=soda.theme;
+ f.send({type:"theme",theme:{dark:false,buttonTheme:"none",buttonCss:".soda-button{color:red}",vars:{"--soda-accent":"#123456"}}});
+ expect(soda.theme).not.toBe(old);expect(soda.theme.buttonTheme).toBe("none");expect(Object.isFrozen(soda.theme)).toBe(true);expect(document.querySelector("#draft")).toBe(input);expect(input.value).toBe("edited");expect(document.head.querySelector("style")?.textContent).toContain(".soda-button");expect(posted(f).filter((m:any)=>m.type==="rendered")).toHaveLength(1);
 });

@@ -77,10 +77,16 @@
     return root;
   }
 
+  var buttonThemeStyle = null;
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
     var de = docElement.call(document);
     setAttribute.call(de, 'data-dark', theme.dark ? '1' : '0');
+    setAttribute.call(de, 'data-button-theme',theme.buttonTheme==='none'||theme.buttonTheme==='actions'?theme.buttonTheme:'features');
+    if(typeof theme.buttonCss==='string'&&theme.buttonCss.length<=32768){
+      if(!buttonThemeStyle){buttonThemeStyle=docCreateElement.call(document,'style');appendChild.call(docHead.call(document),buttonThemeStyle);}
+      buttonThemeStyle.textContent=theme.buttonCss;
+    }
     var vars = theme.vars;
     if (vars && typeof vars === 'object') {
       Object.keys(vars).forEach(function (k) {
@@ -300,6 +306,7 @@
     if (!m || typeof m !== 'object') return;
     if (m.type === 'ping') post({ type: 'pong', n: m.n });
     else if (m.type === 'render') render(m);
+    else if(m.type==='theme'){try{applyTheme(m.theme);}catch(e){/* broken appearance does not affect input routing */}}
     else if (m.type === 'focus') {
       lastParentFocusAt = Date.now();
       focusFirst();
