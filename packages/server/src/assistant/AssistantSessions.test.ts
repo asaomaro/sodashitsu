@@ -865,3 +865,13 @@ it.each(["cancel","expires"])("does not send an image after %s while persona con
   release("signed image instruction");expect(await pending).toMatchObject({ok:false});expect(f.hosts.get(info.paneId)!.writes).toEqual([]);
  }finally{now.mockRestore();release?.("cleanup");}
 });
+
+it("does not inject an automatic notification summary if the captain starts working while input is queued",async()=>{
+ const f=await fixture(),{device,info,agent}=await f.ready();
+ const surface=new ControlSurface(new MemoryLogger());const deps={session:f.session,terminals:f.terminals,sizeAuthority:{noteInteraction(){}},assistantSessions:f.manager} as unknown as MethodDeps;
+ registerAgentMethods(surface,deps);registerAssistantMethods(surface,deps);
+ const host=f.hosts.get(info.paneId)!;let release!:()=>void;host.beforeModal=()=>new Promise(resolve=>{release=resolve;});
+ const pending=surface.invoke({clientId:randomUUID(),sink:{} as never},"assistant.prompt",{deviceId:device,instanceId:agent.instanceId,text:"通知の作業要約",idleOnly:true});
+ await vi.waitFor(()=>expect(release).toBeTypeOf("function"));f.session.updatePaneRuntime(info.paneId,{agent:{...agent,state:"working"}});release();
+ expect(await pending).toMatchObject({ok:false});expect(host.writes).toEqual([]);
+});

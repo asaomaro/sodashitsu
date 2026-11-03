@@ -115,7 +115,9 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
     schema: AssistantSourceParams,
     handler: (_ctx, p) => {
       const t = sourceTarget(deps, p.source, p.key, true);
+      const reference=t.pane.agentSession;
       return {
+        ...(reference&&deps.session.hasVerifiedAgentSession(t.pane.id,t.agent.instanceId,reference.sessionId)?{conversationSessionId:reference.sessionId}:{}),
         paneId: t.pane.id,
         tabId: t.tab.id,
         workspaceId: t.workspace.id,
@@ -236,7 +238,11 @@ export function registerAssistantMethods(surface: ControlSurface, deps: MethodDe
     handler: async (ctx, params) => {
       const wrap=()=>deps.assistantPersona?deps.assistantPersona.wrap(params.deviceId,params.characterId,params.text):params.text;
       const requestId = params.imageRequestId;
-      if (!requestId) return forward(ctx, params, "agent.prompt", {text:await wrap()});
+      if (!requestId){
+        const idleGuard=(agent:AgentInfo)=>{if(params.idleOnly&&agent.state!=="idle")throw new RpcError("agent_pane_busy","船長が待機中になるまで要約を待ちます");};
+        const text=await wrap();idleGuard(sessions.target(params.deviceId,params.instanceId).agent);
+        return forward({...ctx,agentPromptGuard:agent=>{ctx.agentPromptGuard?.(agent);idleGuard(agent);}},params,"agent.prompt",{text},idleGuard);
+      }
       if (imagePrompts.has(requestId) || imagePrompts.size >= 16 || [...imagePrompts.values()].filter(entry=>entry.clientId===ctx.clientId).length >= 2)
         throw new RpcError("agent_pane_busy", "画像指示の完了を待ってください");
       const lease = {clientId:ctx.clientId, active:true, expires:performance.now()+params.ttlMs!};

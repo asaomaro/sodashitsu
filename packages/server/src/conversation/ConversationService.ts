@@ -125,6 +125,18 @@ export class ConversationService {
       await f.fd.close();
     }
   }
+  /** Bounded recent context for notification summaries; never starts a summarizer/model. */
+  async tail(paneId:string):Promise<ConversationPage>{
+    const source=this.source(paneId),opened=await this.open(source.kind,source.sessionId);
+    if(!opened)throw new RpcError("not_found","会話記録を読めません");
+    try{
+      const {fd,st}=opened,start=Math.max(0,st.size-WINDOW),bytes=await readRange(fd,start,WINDOW);
+      let partial=start>0;const boundary=start?await readRange(fd,start-1,1):null;let at=start&&boundary?.[0]!==10?bytes.indexOf(10)+1:0;if(start&&boundary?.[0]!==10&&at===0)at=bytes.length;let end=at;const messages:ConversationMessage[]=[];
+      while(at<bytes.length){const newline=bytes.indexOf(10,at);if(newline<0){partial=true;break;}try{const row=JSON.parse(bytes.subarray(at,newline).toString('utf8'));const m=source.kind==='muse'&&row.stream?.id!==source.sessionId?null:recordMessage(row,source.kind);if(m){messages.push({id:`${source.kind}:${source.sessionId}:${start+at}`,...m});if(m.text.length===TEXT_MAX)partial=true;if(messages.length>12){messages.shift();partial=true;}}}catch{partial=true;}at=newline+1;end=at;}
+      const current=this.source(paneId);if(current.kind!==source.kind||current.sessionId!==source.sessionId)throw new RpcError("not_found","会話が変更されました");
+      return {kind:source.kind,sessionId:source.sessionId,messages,nextOffset:null,endOffset:start+end,partial};
+    }finally{await opened.fd.close();}
+  }
   async page(paneId: string, offset = 0): Promise<ConversationPage> {
     const source = this.source(paneId);
     const page = await this.read(source.kind, source.sessionId, offset);

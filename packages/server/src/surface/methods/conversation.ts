@@ -46,6 +46,7 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
   const service = deps.conversations;
   if (!service) return;
   surface.register("agent.todos", { schema: SessionToolsParams, handler: (_, p) => readAgentTodos(service, p.paneId) });
+  surface.register("agent.conversation_tail",{schema:AgentConversationParams,handler:(_,p)=>service.tail(p.paneId)});
   surface.register("agent.conversation", {
     schema: AgentConversationParams,
     handler: (_, p) => service.page(p.paneId, p.offset),

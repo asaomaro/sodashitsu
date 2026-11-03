@@ -83,6 +83,8 @@ export class SummaryService {
     if (now.kind !== source.kind || now.sessionId !== source.sessionId) return null;
     return {
       ...saved.result,
+      sourceSessionId:source.sessionId,
+      sourceKind:source.kind,
       stale:
         revision.size !== saved.size ||
         saved.offset < revision.size ||
@@ -342,6 +344,7 @@ export class SummaryService {
       const result: ConversationSummary = {
         updatedAt: Date.now(),
         sourceSessionId: source.sessionId,
+        sourceKind: source.kind,
         stale: false,
         text: text.slice(0, 128 * 1024),
         sessionId,

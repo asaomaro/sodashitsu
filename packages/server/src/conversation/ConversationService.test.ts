@@ -116,3 +116,17 @@ it("refuses a linked Codex record before returning its path for resume", async (
   const service = new ConversationService(() => undefined, { codexHome: home });
   await expect(service.locate("codex", id)).rejects.toThrow();
 });
+
+it("reads the most recent work context beyond the first conversation page",async()=>{
+ const f=await fixture(Array.from({length:250},(_,i)=>row(`作業${i}`,i%2?'assistant':'user')).join(''));
+ const pane={id:'worker',agent:{kind:'claude'},agentSession:{kind:'claude',sessionId:'session-1'}} as import('@sodashitsu/protocol').Pane;
+ const service=new ConversationService(()=>pane,{claudeRoots:[f.root]});
+ const page=await service.tail('worker');expect(page.messages).toHaveLength(12);expect(page.messages.at(-1)?.text).toBe('作業249');expect(page.partial).toBe(true);
+});
+
+it("marks malformed and unfinished recent context as partial",async()=>{
+ const f=await fixture(row("完成した作業","assistant")+'broken\n{"message":');
+ const pane={id:'worker',agent:{kind:'claude'},agentSession:{kind:'claude',sessionId:'session-1'}} as import('@sodashitsu/protocol').Pane;
+ const page=await new ConversationService(()=>pane,{claudeRoots:[f.root]}).tail('worker');
+ expect(page.messages.map(m=>m.text)).toEqual(['完成した作業']);expect(page.partial).toBe(true);
+});
