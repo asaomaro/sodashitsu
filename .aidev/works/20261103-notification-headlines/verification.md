@@ -19,3 +19,9 @@
 - review_bubble_resize: Web／native。共有設定同期のsummaryConfigured更新漏れ、初回保存前disabledでポーリング停止する競合を指摘。両者を修正し回帰テスト追加、再レビューで必須指摘なし。
 
 - pnpm build・pnpm typecheck成功。デスクトップの生成HTMLをChromiumで検査し成功。WebはRPCを模擬して実モデルを起動せず、短い見出しだけが出ることと400px幅で操作ボタンに重ならないことを確認（web-ui.txt）。ブラウザストアの一時値のみ変更し、共有設定は保存していない。
+
+## 稼働環境への反映
+
+mainへプッシュ後、handoffで11 PTYを引き継いだ。既存13ペインをすべて保持し、デスクトップアシスタントはrunning／readyまで確認した（handoff.txt・live-after.txt）。引き継ぎ後のブラウザでも一言表示・400px幅の配置検査を再確認した（web-ui-after.txt）。
+
+テストの生出力は元の空白・末尾改行を維持しているため、ログtxtのdiff --checkには空白の指摘が残る。ソースと説明文には該当しない。
