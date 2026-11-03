@@ -18,7 +18,7 @@ const prefs = (p: Partial<ThemePrefs>): ThemePrefs => ({
 });
 
 describe("THEME_LABELS", () => {
-  it("17 のテーマすべてに、design の表示名（上流のテーマの正式な呼び名）", () => {
+  it("19 のテーマすべてに、design の表示名（上流のテーマの正式な呼び名）", () => {
     expect(THEME_LABELS).toEqual({
       catppuccin: "Catppuccin Mocha",
       "catppuccin-latte": "Catppuccin Latte",
@@ -37,6 +37,8 @@ describe("THEME_LABELS", () => {
       "rose-pine": "Rosé Pine",
       "rose-pine-dawn": "Rosé Pine Dawn",
       vesper: "Vesper",
+      "sodashitsu-assistant":"操舵室アシスタント",
+      "sodashitsu-assistant-dark":"操舵室アシスタント（ダーク）",
     });
     expect(Object.keys(THEME_LABELS).sort()).toEqual([...THEME_NAMES].sort());
   });
@@ -171,4 +173,18 @@ describe("loadThemePrefs（AC4：値ごとに落とす）", () => {
     expect(p.light).toBeNull();
     expect(resolveTheme(p, false)).toBe("kanagawa-lotus");
   });
+});
+
+describe("three-state theme mode shortcut",()=>{
+ it("cycles light, dark and system while preserving an unpaired dark theme",async()=>{
+  const {themeModeOf,nextThemeModePatch}=await import("./themes.js");
+  let value:Record<string,unknown>={theme:"nord",themeAuto:false};
+  expect(themeModeOf(value)).toBe("dark");
+  for(const expected of ["system","light","dark","system"]){value={...value,...nextThemeModePatch(value)};expect(themeModeOf(value)).toBe(expected);}
+  expect(value.themeDark).toBe("nord");expect(value.themeLight).toBe("catppuccin-latte");
+ });
+ it("respects the configured light and dark theme choices",async()=>{
+  const {nextThemeModePatch}=await import("./themes.js");
+  expect(nextThemeModePatch({theme:"one-light",themeAuto:false,themeLight:"gruvbox-light",themeDark:"kanagawa"})).toMatchObject({theme:"kanagawa",themeAuto:false});
+ });
 });

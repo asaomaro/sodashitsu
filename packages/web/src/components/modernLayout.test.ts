@@ -95,7 +95,7 @@ describe("モダンの配置 — サイドバー（AC13・AC14）", () => {
     expect(w.find(".sidebar-collapse-btn").exists()).toBe(false);
     const footer = w.find(".sidebar-footer");
     const kids = footer.element.children;
-    expect([...kids].map((e) => (e as HTMLElement).dataset.sidebarAct ?? (e.hasAttribute("data-notification-bell") ? "bell" : "?"))).toEqual(["new", "menu", "bell"]);
+    expect([...kids].map((e) => (e as HTMLElement).dataset.sidebarAct ?? (e.hasAttribute("data-notification-bell") ? "bell" : e.hasAttribute("data-theme-mode-toggle")?"theme":"?"))).toEqual(["new", "menu", "theme", "bell"]);
   });
 
   it("モダン: 畳む・広げるの印が境の線の上にある。押すと toggleSidebar。畳んだ状態でも同じ印（読み上げの名前が変わる）", async () => {

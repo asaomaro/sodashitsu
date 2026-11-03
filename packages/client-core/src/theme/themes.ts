@@ -1,4 +1,4 @@
-import { BUTTON_THEME_MODES, type ButtonThemeMode, DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "@sodashitsu/protocol";
+import { BUTTON_THEME_MODES, type ButtonThemeMode, DEFAULT_THEME_NAME, THEME_APPEARANCE, isThemeName, type ThemeName } from "@sodashitsu/protocol";
 
 /**
  * テーマの名前の扱い（20260921-theme-settings）。**どのテーマを使うかの規則はここの 1 か所**——設定の store・`ThemeController`・設定ダイアログは
@@ -86,4 +86,17 @@ export function loadThemePrefs(raw: Record<string, unknown>): ThemePrefs {
 /** ボタン配色は全テーマで共通。旧設定にも補助・開閉までを適用する。 */
 export function loadButtonTheme(value:unknown):ButtonThemeMode {
  return typeof value==="string"&&(BUTTON_THEME_MODES as readonly string[]).includes(value)?value as ButtonThemeMode:"features";
+}
+
+/** Shared three-state shortcut for Web and TUI; retain the selected light/dark pair. */
+export type ThemeMode = "light" | "dark" | "system";
+export const THEME_MODE_LABELS = {light:"通常モード",dark:"ダークモード",system:"システムに合わせる"} as const;
+export function themeModeOf(raw:Record<string,unknown>):ThemeMode {
+ const prefs=loadThemePrefs(raw);return prefs.auto?"system":THEME_APPEARANCE[prefs.theme];
+}
+export function nextThemeModePatch(raw:Record<string,unknown>){
+ const prefs=loadThemePrefs(raw),mode=themeModeOf(raw),next=mode==="light"?"dark":mode==="dark"?"system":"light",pair=lightDarkOf(prefs);
+ const light=THEME_APPEARANCE[pair.light]==="light"?pair.light:siblingThemes(pair.light).light;
+ const dark=THEME_APPEARANCE[pair.dark]==="dark"?pair.dark:siblingThemes(pair.dark).dark;
+ return {theme:next==="system"?prefs.theme:next==="light"?light:dark,themeAuto:next==="system",themeLight:light,themeDark:dark};
 }

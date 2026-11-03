@@ -22,6 +22,7 @@ import TerminalPane from "../components/TerminalPane.vue";
 import { ConnectionKey, TerminalRegistryKey, ViewSyncKey } from "../injection.js";
 import { useSessionStore } from "../store/session.js";
 import { useViewStore } from "../store/view.js";
+import ThemeModeToggle from "../components/ThemeModeToggle.vue";
 import NotificationBell from "../components/NotificationBell.vue";
 import PaneBands from "../components/PaneBands.vue";
 import { useDisplayStore } from "../store/display.js";
@@ -185,6 +186,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
            設定全体を開くのに通知の絵を出すと中身と食い違う（⚙ も絵文字の属性を持つので避ける）。 -->
       <!-- 連携のグラフ（20260927-agent-graph の AC20。モバイルは閲覧と一時停止・再開だけ）。文字のボタン（設定と同じ理由）。 -->
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
+      <ThemeModeToggle variant="mobile" />
       <NotificationBell variant="mobile" />
       <details><summary>{{view.screen==='schedule'?'予約':view.screen==='history'?'セッション履歴':view.screen==='connections'?'外部接続':view.screen==='resources'?'リソースモニター':'その他'}} ▾</summary><button @click="view.setScreen('schedule')">予約</button><button @click="view.setScreen('history')">セッション履歴</button><button @click="view.setScreen('connections')">外部接続</button><button @click="view.setScreen('resources')">リソースモニター</button></details>
       <button data-assistant-feature

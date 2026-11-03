@@ -3,6 +3,7 @@ import type { DisplayState, ItemTarget, MachineState, Pane, Workspace } from "@s
 import { remoteKey, type MachineSection } from "../../model/MachinesModel.js";
 import {
   aggregate,
+  themeModeOf,
   sameItemTarget,
   depthFirstPaneIds,
   displayStateFor,
@@ -61,7 +62,7 @@ export type SidebarTarget =
   | { kind: "newWorkspace"; x: number }
   | {
       kind: "control";
-      action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule" | "screens";
+      action: "new" | "menu" | "bell" | "theme" | "base" | "dashboard" | "graph" | "schedule" | "screens";
       x: number;
       w: number;
     }
@@ -222,7 +223,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     y: number,
     x: number,
     text: string,
-    action: "new" | "menu" | "bell" | "base" | "dashboard" | "graph" | "schedule" | "screens",
+    action: "new" | "menu" | "bell" | "theme" | "base" | "dashboard" | "graph" | "schedule" | "screens",
   ) => {
     const width = Math.min(stringWidth(text), rect.x + inner - x);
     if (y < rect.y || y >= rect.y + rect.h || width <= 0) return;
@@ -237,15 +238,17 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     );
     controls.push({ kind: "control", action, x, w: width, y });
   };
+  const modeGlyph={light:"明",dark:"暗",system:"自"}[themeModeOf(prefs.shared)];
   if (ctx.chromeControls && ctx.sidebarCollapsed) {
-    control(rect.y, rect.x, "▣", "base");
-    control(rect.y + 1, rect.x, "◇", "graph");
-    control(rect.y + 2, rect.x, "%", "dashboard");
-    control(rect.y + 3, rect.x, "▾", "screens");
-    if (rect.h >= 7) {
-      control(rect.y + rect.h - 4, rect.x, "＋", "new");
-      control(rect.y + rect.h - 3, rect.x, "⋯", "menu");
+    if(rect.h>3)control(rect.y, rect.x, "▣", "base");
+    if(rect.h>4)control(rect.y + 1, rect.x, "◇", "graph");
+    if(rect.h>5)control(rect.y + 2, rect.x, "%", "dashboard");
+    if(rect.h>6)control(rect.y + 3, rect.x, "▾", "screens");
+    if (rect.h >= 9) {
+      control(rect.y + rect.h - 5, rect.x, "＋", "new");
+      control(rect.y + rect.h - 4, rect.x, "⋯", "menu");
     }
+    control(rect.y + rect.h - 3, rect.x, modeGlyph, "theme");
     control(rect.y + rect.h - 2, rect.x, "🔔", "bell");
     grid.set(rect.x, rect.y + rect.h - 1, "»", 1, fg, activeBg);
     controls.push({ kind: "collapse", x: rect.x, y: rect.y + rect.h - 1 });
@@ -311,13 +314,15 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 13 : 1), "状況", "dashboard");
     control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), (switchRows === 1 && inner < 26 ? "他 ▾" : ctx.screen === "schedule" ? "予約 ▾" : ctx.screen === "history" ? "履歴 ▾" : ctx.screen === "connections" ? "接続 ▾" : ctx.screen === "analytics" ? "分析 ▾" : ctx.screen === "resources" ? "リソース ▾" : "その他 ▾")+(ctx.pendingConnectionRequests?` ${ctx.pendingConnectionRequests}`:""), "screens");
     const footerY = rect.y + rect.h - 2;
-    if (inner >= 16) {
+    if (inner >= 19) {
       control(footerY, rect.x + 1, "＋新規", "new");
       control(footerY, rect.x + 8, "⋯", "menu");
+      control(footerY, rect.x + inner - 8, modeGlyph, "theme");
       control(footerY, rect.x + inner - 5, "🔔" + String(ctx.notificationCount ?? 0), "bell");
     } else {
-      control(footerY, rect.x + 1, "＋", "new");
-      control(footerY, rect.x + 4, "⋯", "menu");
+      if(inner>=6)control(footerY, rect.x, "＋", "new");
+      if(inner>=7)control(footerY, rect.x + (inner>=8?3:2), "⋯", "menu");
+      control(footerY, rect.x + inner - 4, modeGlyph, "theme");
       control(footerY, rect.x + inner - 2, "🔔", "bell");
     }
     if (rect.h < 8) {

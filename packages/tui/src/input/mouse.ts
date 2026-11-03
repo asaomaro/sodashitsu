@@ -397,6 +397,7 @@ export class MouseController {
             { x, y: Math.max(0, y - 6) },
           );
         else if(hit.action === "screens") ui.openContextMenu({kind:"screens"},{x,y:y+1});
+        else if (hit.action === "theme") actions.cycleThemeMode();
         else if (hit.action === "bell") ui.openDialogWithContext({ kind: "notifications" });
         else if (hit.action === "graph") actions.run({ type: "openGraph" });
         else ui.setScreen(hit.action);

@@ -12,7 +12,7 @@ import {
 import type { DisplayDock, DisplayEdge, ThemeName } from "@sodashitsu/protocol";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { commandKeyDefs, type KeyTargetId } from "@sodashitsu/client-core";
+import { nextThemeModePatch, commandKeyDefs, type KeyTargetId } from "@sodashitsu/client-core";
 import { useCommandsStore } from "./commands.js";
 import {
   emptyKeyPrefs,
@@ -463,6 +463,11 @@ export const useSettingsStore = defineStore("settings", () => {
     writePrefs({ theme: v, themeAuto: false });
   }
 
+  function cycleThemeMode():void {
+    const patch=nextThemeModePatch({theme:theme.value,themeAuto:themeAuto.value,themeLight:themeLight.value,themeDark:themeDark.value});
+    theme.value=patch.theme;themeAuto.value=patch.themeAuto;themeLight.value=patch.themeLight;themeDark.value=patch.themeDark;writePrefs(patch);
+  }
+
   /** ボタンにテーマ色を当てる範囲。 */
   function setButtonTheme(v: import("@sodashitsu/protocol").ButtonThemeMode): void {
     buttonTheme.value = loadButtonTheme(v);
@@ -768,7 +773,7 @@ export const useSettingsStore = defineStore("settings", () => {
     setNewCwdPath,
     setShellCwdTracking,
     setTheme,
-    setThemeAuto,
+    setThemeAuto,cycleThemeMode,
     setButtonTheme,
     setThemeLight,
     setThemeDark,

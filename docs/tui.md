@@ -111,6 +111,8 @@ Spaces の workspace は、次の 3 種類のまとまり方で並ぶ（ブラ�
 3. 自動: `COLORTERM=truecolor|24bit`・Windows Terminal（`WT_SESSION`）・`TERM` が `-direct` で終わる・`TERM_PROGRAM` が iTerm.app / WezTerm / vscode / ghostty・kitty。
    どれでもなければ 256 色。
 
+通知ベルの左の「明／暗／自」ボタンで、通常・ダーク・システム追従を順に切り替えられます。設定はWeb版と共有し、選択済みの明暗テーマを保持します。サイドバーを畳むとベルの一つ上に表示します。
+
 テーマは Web 版と同じで、pane の中の配色もテーマが決める。明暗の自動は外側の端末に背景色を訊いて（OSC 11）追従する（対応する端末だけ）。
 
 ### 背景の透過

@@ -134,7 +134,7 @@ it("幅10のサイドバーでもベルは新規と重ならず、短い画面�
   h.app.renderNow();
   const hits = (h.app as unknown as { sidebarHits: SidebarHit[] }).sidebarHits;
   const buttons = hits.filter(
-    (b) => b.kind === "control" && ["new", "menu", "bell"].includes(b.action),
+    (b) => b.kind === "control" && ["new", "menu", "theme", "bell"].includes(b.action),
   ) as Extract<SidebarHit, { kind: "control" }>[];
   for (let i = 0; i < buttons.length; i++)
     for (let j = i + 1; j < buttons.length; j++) {
@@ -308,4 +308,19 @@ it("leaves old session history before retargeting the terminal connection to ano
   h.app.switchMachine("other-machine",undefined,{force:true});
   expect(h.app.ui.screen).toBe("base");
   expect(h.ws.requests("agent.resume")).toHaveLength(0);
+});
+
+it("cycles the theme mode from the button immediately left of the bell",async()=>{
+ const h=await startedApp();close.push(h.close);
+ await vi.waitFor(()=>expect(h.ws.requests('client.view')).toHaveLength(1));
+ h.app.prefs.apply({theme:'sodashitsu-assistant',themeAuto:false},100);
+ for(const expected of ['dark','system','light']){
+  h.app.renderNow();
+  const hits=(h.app as unknown as {sidebarHits:SidebarHit[]}).sidebarHits;
+  const theme=hits.find(b=>b.kind==='control'&&b.action==='theme')! as Extract<SidebarHit,{kind:'control'}>;
+  const bell=hits.find(b=>b.kind==='control'&&b.action==='bell')! as Extract<SidebarHit,{kind:'control'}>;
+  expect(theme.y).toBe(bell.y);expect(theme.x+theme.w).toBeLessThanOrEqual(bell.x);
+  h.io.type(click(theme.x,theme.y));
+  const {themeModeOf}=await import('@sodashitsu/client-core');expect(themeModeOf(h.app.prefs.shared)).toBe(expected);
+ }
 });

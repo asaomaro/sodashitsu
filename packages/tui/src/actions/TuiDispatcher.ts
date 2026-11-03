@@ -2,6 +2,7 @@ import {configuredAgentActions, headerActionsFor} from "@sodashitsu/protocol";
 import type { CommandListResult, ItemTarget, WorkspaceGroup } from "@sodashitsu/protocol";
 import {
   LOCAL_MACHINE_ID,
+  nextThemeModePatch,
   clientErrorMessage,
   depthFirstPaneIds,
   errorCodeOf,
@@ -740,6 +741,8 @@ export class TuiDispatcher {
       "折りたたみを保存できませんでした",
     );
   }
+
+  cycleThemeMode():void {this.saveSharedPrefs(nextThemeModePatch(this.host.prefs.shared),"表示モードを保存できませんでした");}
 
   /** spaces の並び順を 2 値で行き来する（web の `view.toggleWorkspaceSort`。サイドバーのボタン。herdr の M14）。 */
   toggleWorkspaceSort(): void {
