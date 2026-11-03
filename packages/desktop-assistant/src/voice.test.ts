@@ -163,3 +163,43 @@ it("previews a draft voice for one utterance without changing the saved speaker"
  expect(draft).toHaveBeenCalledOnce();expect(saved).not.toHaveBeenCalled();
  voice.say("notification","通常通知");await vi.waitFor(()=>expect(saved).toHaveBeenCalledOnce());
 });
+
+it("waits for audio readiness before speaking and announcing, and falls back to text on synthesis failure", async () => {
+ let start!:()=>void, finish!:()=>void;
+ const announce=vi.fn();
+ const voice=new AssistantVoice((_text,_signal,ready)=>new Promise<void>(resolve=>{start=ready!;finish=resolve}));
+ voice.configure(true);voice.say("ready","新しい通知",()=>true,undefined,announce);
+ expect(voice.snapshot().speaking).toBe(false);expect(announce).not.toHaveBeenCalled();
+ expect(voice.snapshot().message).toContain("準備");
+ start();expect(voice.snapshot().speaking).toBe(true);expect(announce).toHaveBeenCalledOnce();
+ start();expect(announce).toHaveBeenCalledOnce();finish();
+ await vi.waitFor(()=>expect(voice.snapshot().speaking).toBe(false));
+ const fail=vi.fn();voice.say("failure","失敗",()=>true,async()=>{throw Error("synthesis failed")},fail);
+ await vi.waitFor(()=>expect(fail).toHaveBeenCalledOnce());expect(voice.snapshot().speaking).toBe(false);
+});
+it("does not announce or animate if the source disappears before readiness", async () => {
+ let start!:()=>void, finish!:()=>void,valid=true;
+ const announce=vi.fn(),voice=new AssistantVoice((_text,_signal,ready)=>new Promise<void>(resolve=>{start=ready!;finish=resolve}));
+ voice.configure(true);voice.say("stale","古い通知",()=>valid,undefined,announce);
+ valid=false;start();expect(voice.snapshot().speaking).toBe(false);expect(announce).not.toHaveBeenCalled();finish();
+ await vi.waitFor(()=>expect(voice.snapshot().message).toContain("準備"));
+});
+it("recognizes fragmented playback readiness exactly once and ignores it after abort", async () => {
+ const {watchSpeechReady}=await import("./speechReady.js");
+ const stdout=new EventEmitter(),controller=new AbortController(),started=vi.fn();
+ watchSpeechReady({stdout:stdout as never},controller.signal,started);
+ stdout.emit("data",Buffer.from("SODA_VOICE_"));expect(started).not.toHaveBeenCalled();
+ stdout.emit("data",Buffer.from("READY\r\n"));stdout.emit("data",Buffer.from("SODA_VOICE_READY\n"));expect(started).toHaveBeenCalledOnce();
+ const late=vi.fn();watchSpeechReady({stdout:stdout as never},controller.signal,late);controller.abort();stdout.emit("data","SODA_VOICE_READY\n");expect(late).not.toHaveBeenCalled();
+});
+
+it("keeps text notifications when speech is stopped or a pending utterance is replaced", async () => {
+ const jobs:Array<{start:()=>void;finish:()=>void}>=[];
+ const voice=new AssistantVoice((_text,_signal,start)=>new Promise<void>(finish=>jobs.push({start:start!,finish})));
+ const active=vi.fn(),pending=vi.fn();voice.configure(true);
+ voice.say("active","通知1",()=>true,undefined,active);
+ voice.say("pending","通知2",()=>true,undefined,pending);
+ voice.say("reply","返信");expect(pending).toHaveBeenCalledOnce();
+ voice.stop();expect(active).toHaveBeenCalledOnce();expect(voice.snapshot().speaking).toBe(false);
+ jobs[0]!.start();expect(voice.snapshot().speaking).toBe(false);expect(active).toHaveBeenCalledOnce();jobs[0]!.finish();
+});

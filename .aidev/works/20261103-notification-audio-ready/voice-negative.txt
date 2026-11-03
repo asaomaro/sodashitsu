@@ -1,0 +1,39 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/desktop-assistant| src/voice.test.ts (12 tests | 1 failed | 11 skipped) 12ms
+   × waits for audio readiness before speaking and announcing, and falls back to text on synthesis failure 10ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  22:16:55
+   Duration  205ms (transform 64%, import 20%, tests 11%, worker 5%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/voice.test.ts > waits for audio readiness before speaking and announcing, and falls back to text on synthesis failure
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/voice.test.ts:172:36
+    170|  const voice=new AssistantVoice((_text,_signal,ready)=>new Promise<voi…
+    171|  voice.configure(true);voice.say("ready","新しい通知",()=>true,undefined,an…
+    172|  expect(voice.snapshot().speaking).toBe(false);expect(announce).not.to…
+       |                                    ^
+    173|  expect(voice.snapshot().message).toContain("準備");
+    174|  start();expect(voice.snapshot().speaking).toBe(true);expect(announce)…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

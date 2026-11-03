@@ -49,8 +49,8 @@ const fixture = vi.hoisted(() => ({
   quit: vi.fn(),
   startup: vi.fn(),
   audioFetch:vi.fn(async () => Response.json({ text: "generated recording transcription" })),
-  speech:vi.fn(async (_text:string,_signal:AbortSignal)=>{}),
-  wavPlay:vi.fn(async()=>{}),
+  speech:vi.fn(async (_text:string,_signal:AbortSignal,started?:()=>void)=>{started?.();}),
+  wavPlay:vi.fn(async(_wav:Uint8Array,_signal:AbortSignal,_platform?:unknown,_run?:unknown,started?:()=>void)=>{started?.();}),
 }));
 class MockView {
  static count=0;
@@ -1469,8 +1469,10 @@ it("publishes only character motion state for notices, speech, reduced motion an
  expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({paused:false});
  await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false,voiceEnabled:true,reducedMotion:true});
  char=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith("/character.html")).at(-1)!;owner={sender:char.webContents,senderFrame:char.webContents.mainFrame};
- let finish!:()=>void;fixture.speech.mockImplementationOnce(()=>new Promise<void>(resolve=>{finish=resolve;}));
+ let finish!:()=>void,start!:()=>void;fixture.speech.mockImplementationOnce((_text,_signal,started)=>new Promise<void>(resolve=>{finish=resolve;start=started!;}));
  await fixture.handlers.get("assistant:voice-test")!(event);
+ expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({mode:"idle",reducedMotion:true});
+ start();
  expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({mode:"speaking",reducedMotion:true});
  finish();await vi.waitFor(async()=>expect(await fixture.handlers.get("assistant:character-state")!(owner)).toMatchObject({mode:"idle"}));
  expect(char.webContents.send).toHaveBeenCalledWith("assistant:character-state-changed",expect.objectContaining({mode:"speaking"}));
@@ -1839,4 +1841,27 @@ it("persists captain choices only from chat and protects them from an older sett
  expect(await fixture.handlers.get("assistant:read")!(local)).toMatchObject({captainKind:"muse",notificationSummary:true,agentProfiles:{muse:input.profile}});
  await expect(choose(local,{...input,kind:"claude",profile:{model:"haiku",effort:"ultra"}})).rejects.toThrow();
  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
+});
+
+it("defers notification display until audio is ready and keeps text when stopped during preparation",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get('assistant:save')!(event,{enabled:true,voiceEnabled:true,voiceProvider:'system',quietFullscreen:false,mode:'tray'});
+ let start!:()=>void,finish!:()=>void;
+ const defer=()=>fixture.speech.mockImplementationOnce((_text,_signal,ready)=>new Promise<void>(resolve=>{start=ready!;finish=resolve}));
+ try{
+  defer();const connection=fixture.connections.at(-1)!;
+  connection.options.changed([{id:'prepare-visible',title:'準備担当',message:'作業が完了しました',at:100}],true);
+  expect(fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/notice.html'))).toHaveLength(0);
+  expect(await fixture.handlers.get('assistant:voice-state')!(event)).toMatchObject({speaking:false});
+  start();const notice=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(notice.isVisible()).toBe(true));expect(notice.url).toContain('/notice.html');
+  expect(await fixture.handlers.get('assistant:voice-state')!(event)).toMatchObject({speaking:true});
+  finish();await vi.waitFor(async()=>expect(await fixture.handlers.get('assistant:voice-state')!(event)).toMatchObject({speaking:false}));
+  await fixture.handlers.get('assistant:save')!(event,{enabled:true,voiceEnabled:true,voiceProvider:'system',quietFullscreen:false,mode:'tray'});
+  defer();fixture.connections.at(-1)!.options.changed([{id:'prepare-stopped',title:'停止担当',message:'文字で残す通知',at:101}],true);
+  expect(fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/notice.html'))).toHaveLength(0);
+  await fixture.handlers.get('assistant:voice-stop')!(event);
+  const textNotice=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(textNotice.isVisible()).toBe(true));expect(textNotice.url).toContain('/notice.html');
+  expect(await fixture.handlers.get('assistant:voice-state')!(event)).toMatchObject({speaking:false});
+ }finally{finish?.();await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
 });

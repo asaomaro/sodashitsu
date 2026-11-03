@@ -343,7 +343,7 @@ async function matchedVoice(preferences:ReturnType<typeof DesktopAssistantPrefer
 }
 function voiceFor(preferences:ReturnType<typeof DesktopAssistantPreferences.parse>):import("./voice.js").Speak {
  if(preferences.voiceProvider==="system")return systemSpeak;
- return async(text,signal)=>{
+ return async(text,signal,started)=>{
   const builtin=preferences.voiceProvider==="core"?await builtinCore(signal):null;signal.throwIfAborted();
   if(builtin?.transport==="ipc"){
    const selected=preferences.voiceFollowCharacter?characterVoice(await coreSpeakers(preferences.voiceCoreVersion,signal,builtin),voiceCharacterName(activeCharacterId(preferences)),preferences.voicevoxStyleId):null;
@@ -352,7 +352,7 @@ function voiceFor(preferences:ReturnType<typeof DesktopAssistantPreferences.pars
    signal.throwIfAborted();
    if(result.kind!=="bytes"||result.mime!=="audio/wav"||result.base64.length>16*1024*1024)throw Error("COREの音声データが不正です");
    const wav=Buffer.from(result.base64,"base64");if(wav.length<44||wav.toString('ascii',0,4)!=='RIFF'||wav.toString('ascii',8,12)!=='WAVE')throw Error("COREからWAVを受信できませんでした");
-   await playWav(wav,signal);return;
+   await playWav(wav,signal,undefined,undefined,started);return;
   }
   if(builtin&&preferences.voiceCoreVersion)throw Error("COREの版指定にはHTTPなし常駐モードを使ってください。");
   const origin=builtin?.origin??voicevoxOrigin(preferences.voicevoxOrigin);
@@ -360,10 +360,10 @@ function voiceFor(preferences:ReturnType<typeof DesktopAssistantPreferences.pars
   return voicevoxSpeak(async(activeSignal)=>{
    const selected=preferences.voiceFollowCharacter?characterVoice(await voicevoxSpeakers(origin,activeSignal),voiceCharacterName(activeCharacterId(preferences)),preferences.voicevoxStyleId):null;
    return {voicevoxOrigin:origin,voicevoxStyleId:selected?.id??preferences.voicevoxStyleId};
-  })(text,signal);
+  })(text,signal,started);
  };
 }
-const voice = new AssistantVoice((text,signal)=>voiceFor(controller.preferences)(text,signal), state => {
+const voice = new AssistantVoice((text,signal,started)=>voiceFor(controller.preferences)(text,signal,started), state => {
  if(controller)publishCharacterState();
  for(const {window,role} of localWindows.values())if(role!=="character"&&!window.isDestroyed())window.webContents.send("assistant:voice-changed",state);
 });
@@ -380,19 +380,19 @@ function publishCharacterState():void {
 function animateNotification():void {++characterNotificationSeq;publishCharacterState();}
 const voiceConversation = new VoiceConversation();
 let voiceEpoch=0;
-function speakWithPolicy(key:string,text:string,stillCurrent:()=>boolean=()=>true):void {
+function speakWithPolicy(key:string,text:string,stillCurrent:()=>boolean=()=>true,ready?:()=>void):void {
  const preferences=controller.preferences,epoch=automaticNoticeEpoch,speechEpoch=voiceEpoch;
  const valid=()=>{
   if(speechEpoch!==voiceEpoch||quitting||suspended||!controller.preferences.enabled||!controller.preferences.voiceEnabled||controller.preferences.mute||recording?.has()||!stillCurrent())return false;
   try{return powerMonitor.getSystemIdleState(1)!=="locked";}catch{return false;}
  };
- if(!valid())return;
- if(!preferences.quietFullscreen){voice.say(key,text,valid);return;}
- void fullscreen.quiet().then(quiet=>{if(!quiet&&epoch===automaticNoticeEpoch&&valid())voice.say(key,text,valid);});
+ if(!valid()){ready?.();return;}
+ if(!preferences.quietFullscreen){voice.say(key,text,valid,undefined,ready);return;}
+ void fullscreen.quiet().then(quiet=>{if(!quiet&&epoch===automaticNoticeEpoch){if(valid())voice.say(key,text,valid,undefined,ready);else ready?.();}});
 }
-function speakNotice(content:{id?:string;title:string;message:string},speechEpoch=voiceEpoch):void {
+function speakNotice(content:{id?:string;title:string;message:string},speechEpoch=voiceEpoch,ready?:()=>void):void {
  const current=()=>speechEpoch===voiceEpoch&&(!content.id||[...localNotices,...remoteRows].some(n=>n.id===content.id));
- speakWithPolicy(content.id?`notice:${content.id}`:`reminder:${content.title}:${content.message}`,assistantPersonaNotification(activeCharacterId(),content.title,content.message),current);
+ speakWithPolicy(content.id?`notice:${content.id}`:`reminder:${content.title}:${content.message}`,assistantPersonaNotification(activeCharacterId(),content.title,content.message),current,ready);
 }
 
 function localWindow(role: LocalRole): BrowserWindow {
@@ -464,8 +464,6 @@ function notifyBubble(payload?: { id?: string; title: string; message: string })
   const latest = [...localNotices, ...remoteRows].sort((a,b) => b.at - a.at)[0];
   payload ??= latest ? { id: latest.id, title: latest.title || "エージェントからの通知", message: latest.message } : { title: "操舵室からのお知らせ", message: "新しい通知が届きました。" };
   const content = payload;
-  latestNotification = {...payload,seq:++notificationSequence};
-  publishInbox();
   const requestEpoch = ++automaticNoticeEpoch;
   const speechEpoch=voiceEpoch;
   const preferences = controller.preferences;
@@ -473,32 +471,20 @@ function notifyBubble(payload?: { id?: string; title: string; message: string })
   try {
     if (powerMonitor.getSystemIdleState(1) === "locked") return;
   } catch {}
-  if (!preferences.quietFullscreen) {
-    if(content.id && ![...localNotices,...remoteRows].some(n=>n.id===content.id))return;
+  const current = () => requestEpoch === automaticNoticeEpoch && !quitting && !suspended &&
+    controller.preferences.enabled && !controller.preferences.mute &&
+    (!content.id || [...localNotices,...remoteRows].some(n=>n.id===content.id));
+  const present = () => {
+    if (!current()) return;
+    try { if (powerMonitor.getSystemIdleState(1) === "locked") return; } catch {}
+    latestNotification = {...content,seq:++notificationSequence};
+    publishInbox();
     animateNotification();
-    speakNotice(content,speechEpoch);
     showCompact(content);
-    return;
-  }
-  const epoch = requestEpoch;
-  void fullscreen.quiet().then((quiet) => {
-    try {
-      if (powerMonitor.getSystemIdleState(1) === "locked") return;
-    } catch {}
-    if (
-      !quiet &&
-      !quitting &&
-      !suspended &&
-      epoch === automaticNoticeEpoch &&
-      controller.preferences.enabled &&
-      !controller.preferences.mute
-    ) {
-      if(content.id && ![...localNotices,...remoteRows].some(n=>n.id===content.id))return;
-      animateNotification();
-      speakNotice(content,speechEpoch);
-      showCompact(content);
-    }
-  });
+  };
+  const prepare = () => { if (current()) speakNotice(content,speechEpoch,present); };
+  if (!preferences.quietFullscreen) prepare();
+  else void fullscreen.quiet().then(quiet => { if (!quiet) prepare(); });
 }
 /** Explicit user action focuses chat; verbal notices never take focus. */
 function openBubble(focus = true): void {
@@ -720,8 +706,8 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
   if (suspended) return;
-  voice.configure(preferences.enabled && preferences.voiceEnabled && !preferences.mute);
   ++automaticNoticeEpoch;
+  voice.configure(preferences.enabled && preferences.voiceEnabled && !preferences.mute);
   closeCompact();
   fullscreen.invalidate();
   const captureOwner=capture?.owner();

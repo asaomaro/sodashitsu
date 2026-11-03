@@ -3,6 +3,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join, win32 } from "node:path";
 import { tmpdir } from "node:os";
 import type { Speak } from "./voice.js";
+import { watchSpeechReady } from "./speechReady.js";
 const LIMIT=12*1024*1024;
 export function voicevoxOrigin(value:string):string {
  const url=new URL(value);
@@ -39,8 +40,8 @@ export const playWavScript=String.raw`$ErrorActionPreference='Stop'
 $data=ConvertFrom-Json ([Console]::In.ReadToEnd())
 $stream=[System.IO.MemoryStream]::new([Convert]::FromBase64String([string]$data.wav))
 $player=[System.Media.SoundPlayer]::new($stream)
-try {$player.Load();$player.PlaySync()} finally {$player.Dispose();$stream.Dispose()}`;
-export async function playWav(wav:Uint8Array,signal:AbortSignal,platform=process.platform,run:typeof execFile=execFile):Promise<void>{
+try {$player.Load();[Console]::Out.WriteLine('SODA_VOICE_READY');[Console]::Out.Flush();$player.PlaySync()} finally {$player.Dispose();$stream.Dispose()}`;
+export async function playWav(wav:Uint8Array,signal:AbortSignal,platform=process.platform,run:typeof execFile=execFile,started?:()=>void):Promise<void>{
  signal.throwIfAborted();let directory:string|undefined;
  try{
   let command:string,args:string[],input:Uint8Array|string|undefined;
@@ -55,12 +56,12 @@ export async function playWav(wav:Uint8Array,signal:AbortSignal,platform=process
    const child=run(command,args,{signal,windowsHide:true,timeout:130000,maxBuffer:2048},error=>{
     const done=()=>error?reject(Error("音声を再生できません。出力先を確認してください。")):resolve();
     if(signal.aborted&&child.exitCode===null&&child.signalCode===null)child.once("close",done);else done();
-   });child.stdin?.on("error",()=>{});child.stdin?.end(input);
+   });if(platform==="win32")watchSpeechReady(child,signal,started);else child.once("spawn",()=>{if(!signal.aborted)started?.();});child.stdin?.on("error",()=>{});child.stdin?.end(input);
   });
  }finally{if(directory)await rm(directory,{recursive:true,force:true});}
 }
 export function voicevoxSpeak(settings:(signal:AbortSignal)=>{voicevoxOrigin:string;voicevoxStyleId:number}|Promise<{voicevoxOrigin:string;voicevoxStyleId:number}>,play:typeof playWav=playWav):Speak {
- return async(text,signal)=>{signal.throwIfAborted();const prefs=await settings(signal);signal.throwIfAborted();const wav=await synthesizeVoicevox(prefs.voicevoxOrigin,prefs.voicevoxStyleId,text,signal);signal.throwIfAborted();await play(wav,signal);};
+ return async(text,signal,started)=>{signal.throwIfAborted();const prefs=await settings(signal);signal.throwIfAborted();const wav=await synthesizeVoicevox(prefs.voicevoxOrigin,prefs.voicevoxStyleId,text,signal);signal.throwIfAborted();await play(wav,signal,undefined,undefined,started);};
 }
 
 /** Use installed speaker metadata; IDs may differ between CORE/model versions. */
