@@ -22,3 +22,7 @@
 - negative control: 標準ツール内にpluginを戻すとapps-refresh可視性で失敗。同一画像でもrevision一致を要求するとpreview-panel可視性で失敗。修正済みソースへバイト一致で復元後、生成UIは通過。
 - Chromiumキャプチャで縮小したプレビューと金色の選択枠、元画像座標（左240/上60/幅720/高さ180）を目視確認。
 - 最終2行（非表示後の応答抑止・無効範囲の古い表示消去）も独立再レビューで必須指摘なし。
+
+## 稼働反映
+
+実装ee972d80をmainへfast-forwardしorigin/mainへpush。ビルド済みサーバをhandoffして6 PTYを停止せず引き継ぎ、保存した8 pane UUIDが全件残ることを確認。管理アシスタントphase=running / stage=readyまで確認済み。
