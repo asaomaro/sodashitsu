@@ -83,6 +83,13 @@ class MockWindow extends EventEmitter {
   bounds = {x:0,y:0,width:400,height:640};
   getBounds = () => ({...this.bounds});
   setBounds = vi.fn((value: typeof this.bounds) => {this.bounds={...value};});
+  menu:unknown="default";
+  setMenu=vi.fn(value=>{this.menu=value;});
+  minimized=false;maximized=false;
+  minimize=vi.fn(()=>{this.minimized=true;this.emit("minimize");});
+  maximize=vi.fn(()=>{this.maximized=true;});
+  unmaximize=vi.fn(()=>{this.maximized=false;});
+  isMaximized(){return this.maximized;}
   isMinimized(){return false;}
   restore=vi.fn();
   isVisible() {
@@ -1473,7 +1480,7 @@ it("opens reusable tools separately, transfers drafts without sending, and revok
  const chat={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
  await fixture.handlers.get("assistant:tools-open")!(chat);const tools=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));
  const local={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};
- expect(tools.url).toBe("soda-assistant://app/tools.html");expect(tools.options).toMatchObject({show:true,frame:true,resizable:true,transparent:false});
+ expect(tools.url).toBe("soda-assistant://app/tools.html");expect(tools.options).toMatchObject({show:true,frame:false,resizable:true,transparent:false});
  const count=fixture.windows.length;await fixture.handlers.get("assistant:tools-open")!(chat);expect(fixture.windows.length).toBe(count);expect(tools.focus).toHaveBeenCalled();
  await fixture.handlers.get("assistant:hide")!(chat);expect(tools.isVisible()).toBe(true);
  await fixture.handlers.get("assistant:draft-message")!(local,{text:"要約用の文面"});expect(bubble.isVisible()).toBe(true);
@@ -1614,4 +1621,21 @@ it("uses the resident CLI backend and selected CORE version without an HTTP synt
   expect(rpc.request).toHaveBeenCalledWith('voice.call',expect.objectContaining({operation:'synthesize',cancellable:true,speaker:8,coreVersion:'0.17.0',requestId:expect.any(String)}),expect.anything());
   expect(fetcher).not.toHaveBeenCalled();
  }finally{vi.unstubAllGlobals();rpc.request.mockImplementation(original!);await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
+});
+
+it("limits native window controls to their own settings/tools main frame",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ expect(settings.options).toMatchObject({frame:false,resizable:true,show:true,minWidth:360,minHeight:360});expect(settings.menu).toBeNull();
+ const action=fixture.handlers.get("assistant:window-action")!;
+ await action(event,"maximize");expect(settings.isMaximized()).toBe(true);
+ await action(event,"maximize");expect(settings.isMaximized()).toBe(false);
+ await action(event,"minimize");expect(settings.minimize).toHaveBeenCalledOnce();
+ await expect(action(event,"shell")).rejects.toThrow();
+ await expect(action({...event,senderFrame:{url:settings.url}},"close")).rejects.toThrow("許可");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ await fixture.handlers.get("assistant:chat")!(event);const bubble=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("bubble.html"))!;
+ await expect(action({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame},"close")).rejects.toThrow("許可");
+ await fixture.handlers.get("assistant:tools-open")!({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame});const tools=fixture.windows.at(-1)!;
+ await action({sender:tools.webContents,senderFrame:tools.webContents.mainFrame},"close");expect(tools.destroyed).toBe(true);expect(settings.destroyed).toBe(false);
 });

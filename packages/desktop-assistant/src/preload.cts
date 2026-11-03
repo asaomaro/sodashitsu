@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld(
     open: () => ipcRenderer.invoke("assistant:open"),
     settings: () => ipcRenderer.invoke("assistant:settings"),
     chat: () => ipcRenderer.invoke("assistant:chat"),
+    windowAction: (action: unknown) => ipcRenderer.invoke("assistant:window-action", action),
     hide: () => ipcRenderer.invoke("assistant:hide"),
     conversation: () => ipcRenderer.invoke("assistant:conversation"),
     startSession: (input: unknown) => ipcRenderer.invoke("assistant:start-session", input),

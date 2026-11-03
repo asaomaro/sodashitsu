@@ -51,6 +51,7 @@ export function authorizeLocalSender(
     ].includes(action)
   )
     return sender.role === "settings";
+  if (action === "window-action") return sender.role === "settings" || sender.role === "tools";
   if (action === "hide") return sender.role === "bubble" || sender.role === "tools";
   if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
   if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";

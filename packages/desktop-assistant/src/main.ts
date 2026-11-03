@@ -77,6 +77,7 @@ const allowedAssets = new Map([
   ["/bubble.html", "text/html"],
   ["/tools.html", "text/html"],
   ["/tool-window.js", "text/javascript"],
+  ["/window.js", "text/javascript"],
   ["/reminder-notices.js", "text/javascript"],
   ["/notice.html", "text/html"],
   ["/notice.js", "text/javascript"],
@@ -344,13 +345,14 @@ function localWindow(role: LocalRole): BrowserWindow {
     width: role === "tools" ? 640 : role === "settings" ? 520 : role === "bubble" ? 400 : 192,
     height: role === "tools" ? 760 : role === "settings" ? 670 : role === "bubble" ? 640 : 192,
     // Windows can retain an empty compositor surface when a hidden settings
-    // window is loaded before its first show. Load this ordinary framed window
+    // window is loaded before its first show. Load this ordinary window
     // while visible; transparent character/notification windows still stay hidden.
     show: role === "settings" || role === "tools",
     title: "操舵室アシスタント",
     icon:join(assets,process.platform==="win32"?"sodashitsu.ico":"sodashitsu.png"),
     backgroundColor:(role==="settings"||role==="tools")?"#172438":"#00000000",
-    frame: role === "settings" || role === "tools",
+    frame: false,
+    ...((role === "settings" || role === "tools") ? {minWidth:360,minHeight:360} : {}),
     transparent: role !== "settings" && role !== "tools",
     resizable: role === "settings" || role === "tools",
     focusable: role !== "character",
@@ -365,6 +367,7 @@ function localWindow(role: LocalRole): BrowserWindow {
       webSecurity: true,
     },
   });
+  if (role === "settings" || role === "tools") win.setMenu(null);
   const id = win.webContents.id;
   localWindows.set(id, { window: win, role });
   win.on("closed", () => {
@@ -950,6 +953,7 @@ function registerIpc(): void {
     "settings",
     "chat",
     "hide",
+    "window-action",
     "inbox",
     "tools-open",
     "draft-state",
@@ -1052,6 +1056,14 @@ function registerIpc(): void {
         bubbleSize = {width:bounds.width,height:bounds.height};
         positionCompact();
         resize.expires = Date.now()+30000;
+        return;
+      }
+      if (action === "window-action") {
+        const operation=z.enum(["minimize","maximize","close"]).parse(input);
+        if (operation === "close") owner.window.close();
+        else if (operation === "minimize") owner.window.minimize();
+        else if (owner.window.isMaximized()) owner.window.unmaximize();
+        else owner.window.maximize();
         return;
       }
       if (action === "read") return controller.preferences;
