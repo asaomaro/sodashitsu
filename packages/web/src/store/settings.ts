@@ -27,7 +27,7 @@ import {
 import { resolveKeymap, type ResolvedKeymap } from "@sodashitsu/client-core";
 import type { NavigateKeyId } from "@sodashitsu/client-core";
 import { resolveNavigateKeymap, type ResolvedNavigateKeymap } from "@sodashitsu/client-core";
-import { loadThemePrefs, resolveTheme } from "@sodashitsu/client-core";
+import { loadButtonTheme, loadThemePrefs, resolveTheme } from "@sodashitsu/client-core";
 import {
   emptyThemeOverrides,
   loadThemeOverrides,
@@ -249,6 +249,7 @@ export const useSettingsStore = defineStore("settings", () => {
   const themePrefs = loadThemePrefs(initial);
   const theme = ref<ThemeName>(themePrefs.theme);
   const themeAuto = ref(themePrefs.auto);
+  const buttonTheme=ref(loadButtonTheme(initial["buttonTheme"]));
   const themeLight = ref<ThemeName | null>(themePrefs.light);
   const themeDark = ref<ThemeName | null>(themePrefs.dark);
   /**
@@ -456,6 +457,12 @@ export const useSettingsStore = defineStore("settings", () => {
     theme.value = v;
     themeAuto.value = false;
     writePrefs({ theme: v, themeAuto: false });
+  }
+
+  /** ボタンにテーマ色を当てる範囲。 */
+  function setButtonTheme(v: import("@sodashitsu/protocol").ButtonThemeMode): void {
+    buttonTheme.value = loadButtonTheme(v);
+    writePrefs({ buttonTheme: buttonTheme.value });
   }
 
   /** 自動の切替の入切。切ると 1 つのテーマに戻る（`resolveTheme`。AC7）。 */
@@ -722,6 +729,7 @@ export const useSettingsStore = defineStore("settings", () => {
     setDisplayBandEdge,
     theme,
     themeAuto,
+    buttonTheme,
     themeLight,
     themeDark,
     systemDark,
@@ -756,6 +764,7 @@ export const useSettingsStore = defineStore("settings", () => {
     setShellCwdTracking,
     setTheme,
     setThemeAuto,
+    setButtonTheme,
     setThemeLight,
     setThemeDark,
     replaceKeyPrefs,

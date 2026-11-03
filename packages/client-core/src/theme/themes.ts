@@ -1,4 +1,4 @@
-import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "@sodashitsu/protocol";
+import { BUTTON_THEME_MODES, type ButtonThemeMode, DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "@sodashitsu/protocol";
 
 /**
  * テーマの名前の扱い（20260921-theme-settings）。**どのテーマを使うかの規則はここの 1 か所**——設定の store・`ThemeController`・設定ダイアログは
@@ -81,4 +81,9 @@ export function loadThemePrefs(raw: Record<string, unknown>): ThemePrefs {
     light: isThemeName(raw["themeLight"]) ? raw["themeLight"] : null,
     dark: isThemeName(raw["themeDark"]) ? raw["themeDark"] : null,
   };
+}
+
+/** ボタン配色は全テーマで共通。旧設定にも補助・開閉までを適用する。 */
+export function loadButtonTheme(value:unknown):ButtonThemeMode {
+ return typeof value==="string"&&(BUTTON_THEME_MODES as readonly string[]).includes(value)?value as ButtonThemeMode:"features";
 }

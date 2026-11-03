@@ -210,3 +210,7 @@ describe("画面の様式の控え（20261008-ui-style）", () => {
     expect(bootSource).not.toMatch(/https?:\/\//);
   });
 });
+
+it("restores the button color level before the first paint",()=>{
+ for(const mode of ["none","actions","features"]){const root=document.createElement("div");runBoot({stored:JSON.stringify({buttonTheme:mode}),dark:true,root});expect(root.dataset.buttonTheme).toBe(mode);}
+});

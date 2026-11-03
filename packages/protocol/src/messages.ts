@@ -997,6 +997,8 @@ export interface SharedPrefs {
   keys?: Record<string, unknown>;
   theme?: ThemeName;
   themeAuto?: boolean;
+  /** Webのボタン配色。none=標準、actions=操作のみ、features=補助/開閉も含む。 */
+  buttonTheme?: import("./theme.js").ButtonThemeMode;
   themeLight?: ThemeName | null;
   themeDark?: ThemeName | null;
   /** 色の上書き（web の `serializeThemeOverrides` の形）。 */

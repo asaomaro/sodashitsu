@@ -1133,6 +1133,15 @@ function onNativeCancel(ev: Event): void {
               </optgroup>
             </select>
           </label>
+          <label class="settings-select-row">
+            <span>ボタンのテーマ配色</span>
+            <select id="settings-button-theme" class="settings-select" :value="settings.buttonTheme" @change="settings.setButtonTheme(($event.target as HTMLSelectElement).value as 'none'|'actions'|'features')">
+              <option value="none">なし（標準表示）</option>
+              <option value="actions">操作ボタンのみ</option>
+              <option value="features">操作・機能展開・開閉ボタン</option>
+            </select>
+          </label>
+          <p class="settings-note">すべてのカラーテーマに適用します。機能展開にはサイドバーの開閉、ペインや画面フッターのボタンを含みます。メニュー内部・タブ・一覧項目は通常表示を保ちます。</p>
           <button
             type="button"
             role="switch"

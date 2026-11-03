@@ -12,6 +12,7 @@ import {
   loadTabBarRightEntries,
   loadTabBarRightSeparator,
   loadThemePrefs,
+  loadButtonTheme,
 } from "@sodashitsu/client-core";
 import { loadThemeOverrides } from "../theme/themeOverrides.js";
 import { loadScrollbackPref } from "../term/scrollback.js";
@@ -84,6 +85,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   const theme = loadThemePrefs(raw);
   set("theme", theme.theme);
   set("themeAuto", theme.auto);
+  set("buttonTheme",loadButtonTheme(raw["buttonTheme"]));
   set("themeLight", theme.light);
   set("themeDark", theme.dark);
   set("sidebarRows", loadSidebarRows(raw["sidebarRows"]));

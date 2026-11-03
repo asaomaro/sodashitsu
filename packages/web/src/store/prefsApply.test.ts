@@ -182,3 +182,9 @@ it("applies shared view title visibility immediately and restores its default wh
   applyPrefsToStores(pinia, {});
   expect(settings.viewTitleVisible).toBe(true);
 });
+
+it("applies and normalizes shared button appearance independently of the color theme",()=>{
+ applyPrefsToStores(pinia,{buttonTheme:"none"});expect(useSettingsStore(pinia).buttonTheme).toBe("none");
+ applyPrefsToStores(pinia,{buttonTheme:"actions"});expect(useSettingsStore(pinia).buttonTheme).toBe("actions");
+ applyPrefsToStores(pinia,{buttonTheme:"broken"});expect(useSettingsStore(pinia).buttonTheme).toBe("features");
+});

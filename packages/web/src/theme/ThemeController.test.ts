@@ -159,6 +159,7 @@ describe("変化を追う", () => {
       light: { colorScheme: "light", vars: uiTokens("catppuccin-latte").vars },
       dark: { colorScheme: "dark", vars: uiTokens("catppuccin").vars },
       uiStyle: "classic",
+      buttonTheme: "features",
     });
     settings.setThemeDark("one-dark");
     await nextTick();
@@ -406,4 +407,12 @@ describe("画面の様式（20261008-ui-style）", () => {
     expect(storage.boot()?.fixed).toEqual(before.fixed);
     expect(root.getAttribute("style")).toBe(before.vars);
   });
+});
+
+describe("button theme level",()=>{
+ it("persists none/actions/features, updates root and boot, and accepts shared changes",async()=>{
+  const f=make();f.controller.start();expect(root.dataset.buttonTheme).toBe("features");
+  for(const mode of ["none","actions","features"] as const){f.settings.setButtonTheme(mode);await nextTick();expect(root.dataset.buttonTheme).toBe(mode);expect(f.storage.boot()?.buttonTheme).toBe(mode);}
+  f.settings.buttonTheme="actions";await nextTick();expect(root.dataset.buttonTheme).toBe("actions");f.controller.stop();
+ });
 });

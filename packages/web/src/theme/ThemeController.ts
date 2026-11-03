@@ -2,7 +2,7 @@ import { TERMINAL_PALETTES, type TerminalPalette, type ThemeName } from "@sodash
 import { watch, type WatchStopHandle } from "vue";
 import type { useSettingsStore } from "../store/settings.js";
 import { readPrefs } from "../store/view.js";
-import { lightDarkOf, loadThemePrefs, loadUiStyle, type UiStyle } from "@sodashitsu/client-core";
+import { lightDarkOf, loadButtonTheme, loadThemePrefs, loadUiStyle, type UiStyle } from "@sodashitsu/client-core";
 import { loadThemeOverrides, mergeVars, type ThemeOverrideLayer, type ThemeOverrides } from "./themeOverrides.js";
 import { CSS_VARS, uiTokens, type UiTokens } from "@sodashitsu/client-core";
 
@@ -25,6 +25,7 @@ export interface BootCache {
   dark: BootVars;
   /** 画面の様式（20261008-ui-style）。`theme-boot.js` は `"modern"` のときだけ `data-ui-style` を当てる（無い・ほかの値はクラシック＝何もしない）。 */
   uiStyle: UiStyle;
+  buttonTheme?: import("@sodashitsu/protocol").ButtonThemeMode;
 }
 
 export interface ThemeControllerOptions {
@@ -65,6 +66,7 @@ export class ThemeController {
     this.applied = null; // 1 回目は省略しない（start の前に apply が呼ばれていても・stop の後に start し直しても）
     this.apply(settings.effectiveTheme);
     this.applyUiStyle();
+    this.opts.root.dataset.buttonTheme=loadButtonTheme(settings.buttonTheme);
     this.writeBoot();
     if (media) {
       const onChange = (ev: MediaQueryListEvent): void => {
@@ -106,7 +108,8 @@ export class ThemeController {
         this.writeBoot();
       },
     );
-    this.stops.push(stopApply, stopBoot, stopUiStyle, stopOverrides);
+    const stopButtons=watch(()=>settings.buttonTheme,()=>{this.opts.root.dataset.buttonTheme=loadButtonTheme(settings.buttonTheme);this.writeBoot();});
+    this.stops.push(stopApply, stopBoot, stopUiStyle, stopOverrides,stopButtons);
   }
 
   /** 聞くのをやめる（テスト用）。 */
@@ -171,6 +174,7 @@ export class ThemeController {
       light: bootVars(ld.light, overrides),
       dark: bootVars(ld.dark, overrides),
       uiStyle: loadUiStyle(prefs["uiStyle"]),
+      buttonTheme:loadButtonTheme(prefs["buttonTheme"]),
     };
     try {
       storage?.setItem(BOOT_KEY, JSON.stringify(cache));

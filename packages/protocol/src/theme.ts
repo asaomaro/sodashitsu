@@ -346,3 +346,6 @@ export function finalizePalette(p: TerminalPalette): TerminalPalette {
 export const TERMINAL_PALETTES: Readonly<Record<ThemeName, TerminalPalette>> = Object.fromEntries(
   THEME_NAMES.map((name) => [name, name === "dracula" ? DEFAULT_THEME : finalizePalette(TERMINAL_BASE[name])]),
 ) as Record<ThemeName, TerminalPalette>;
+
+export const BUTTON_THEME_MODES = ["none", "actions", "features"] as const;
+export type ButtonThemeMode = (typeof BUTTON_THEME_MODES)[number];

@@ -16,6 +16,7 @@
     // 画面の様式（20261008-ui-style）。"modern" のときだけ属性を当てる（無い・読めない値は何もしない＝クラシック。クラシックの規則は属性の有無によらず効く）。
     // テーマの組が壊れていても、様式は当てる（互いに独立）。
     if (cache.uiStyle === "modern") document.documentElement.setAttribute("data-ui-style", "modern");
+    document.documentElement.setAttribute("data-button-theme",["none","actions","features"].indexOf(cache.buttonTheme)>=0?cache.buttonTheme:"features");
     var dark =
       typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)").matches : true;
     var chosen = cache.auto === true ? (dark ? cache.dark : cache.light) : cache.fixed;

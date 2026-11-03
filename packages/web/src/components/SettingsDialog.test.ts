@@ -1108,8 +1108,20 @@ describe("SettingsDialog — 表示の節 — pane の枠の表示・隙間（AC
 
 // 20260921-theme-settings：テーマの節（design D4・decisions D11。AC1・AC5〜AC7・AC-I2・AC-I4）。
 describe("SettingsDialog — テーマの節", () => {
+  it("ボタン配色の3段階を選択して保存できる", async () => {
+    const { wrapper } = await openDialog();
+    const select = wrapper.get("#settings-button-theme");
+    expect((select.element as HTMLSelectElement).value).toBe("features");
+    for (const mode of ["none", "actions", "features"]) {
+      await select.setValue(mode);
+      expect(useSettingsStore(pinia).buttonTheme).toBe(mode);
+      expect(readPrefs()["buttonTheme"]).toBe(mode);
+    }
+    wrapper.unmount();
+  });
+
   const themeSection = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => w.get('section[aria-labelledby="settings-theme"]');
-  const selects = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => themeSection(w).findAll("select");
+  const selects = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => themeSection(w).findAll("select:not(#settings-button-theme)");
 
   it("「テーマ」の選択肢は 19 個（暗い11・明るい8 の 2 群）で、dracula に「（既定）」。いまの値が選ばれている", async () => {
     const { wrapper } = await openDialog();
@@ -1353,7 +1365,7 @@ describe("SettingsDialog — 色の個別の上書き", () => {
 
 describe("SettingsDialog — テーマの節（名前付けと値の束縛）", () => {
   const themeSection = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => w.get('section[aria-labelledby="settings-theme"]');
-  const selects = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => themeSection(w).findAll("select");
+  const selects = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => themeSection(w).findAll("select:not(#settings-button-theme)");
 
   it("3 つの選択肢は <label> で名前が付き、「テーマ」は自動の切替の注記といまのテーマの注記に結び付く", async () => {
     const { wrapper } = await openDialog();
