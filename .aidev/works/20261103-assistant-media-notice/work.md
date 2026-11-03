@@ -19,3 +19,10 @@
 ## 範囲
 
 実OSのD&D/clipboard、音声認識エンジンやモデルの認識品質は生成UI検証の対象外。既存のcapture backendは互換用に残すがUIからは呼ばない。
+
+## 稼働反映
+
+- 実装33cda933をmainへfast-forwardしorigin/mainへpush。
+- pnpm build / pnpm typecheckは終了コード0。
+- 稼働サーバをhandoff。6 PTYを停止せず引き継ぎ、保存した8 pane UUIDが全件残っていることを照合。
+- 管理アシスタント phase=running / progress.stage=ready を確認。初回アプリ準備完了後の状態である。
