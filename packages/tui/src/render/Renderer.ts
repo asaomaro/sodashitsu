@@ -197,6 +197,12 @@ export class Renderer {
       cursor = overlayCursor;
       covered = true;
     }
+    if (theme.transparent) {
+      for(let i=0;i<grid.ch.length;i++){
+        if(grid.width[i]===0)continue;
+        grid.fg[i]=theme.readableForeground(grid.fg[i]!,grid.bg[i]!);
+      }
+    }
     if (covered) painted.clear();
     this.lastGrid = grid;
     this.lastPaint = painted;

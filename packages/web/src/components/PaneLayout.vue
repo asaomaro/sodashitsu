@@ -170,15 +170,27 @@ function commitView(): void {
 // 変わる」再描画が一度も起きていない状態）に `client.view` が一度も送られない不具合があった
 // （05-e2e-docs T3 の E2E で発見。D91）。`onMounted` も併用する——`ownLeaves`（テンプレート ref の
 // コールバックで詰める）は Vue の仕様上、`onMounted` が発火する時点で既に埋まっている。
+let measurementFrame: number | null = null;
+function remeasureAfterPaint():void {
+  if(!mounted||!props.followResize||!isRoot)return;
+  if(measurementFrame!==null)cancelAnimationFrame(measurementFrame);
+  measurementFrame=requestAnimationFrame(()=>{
+    measurementFrame=requestAnimationFrame(()=>{measurementFrame=null;if(mounted)resizeCommit.schedule();});
+  });
+}
+function onVisible():void {if(!document.hidden)remeasureAfterPaint();}
 onMounted(() => {
   mounted = true;
   commitView();
-  // 新しい接続の hello の後に、描き直しを待ってから今の表示で commit し直す（D107）。
-  if (isRoot && viewSync) detachCommitter = viewSync.attachCommitter(() => void nextTick(commitView));
+  remeasureAfterPaint();
+  if(isRoot&&props.followResize){document.addEventListener("visibilitychange",onVisible);void document.fonts?.ready.then(()=>{if(mounted)remeasureAfterPaint();});}
+  if (isRoot && viewSync) detachCommitter = viewSync.attachCommitter(() => void nextTick(()=>{commitView();remeasureAfterPaint();}));
 });
 onUpdated(commitView);
 onBeforeUnmount(() => {
   mounted = false;
+  if(measurementFrame!==null)cancelAnimationFrame(measurementFrame);
+  document.removeEventListener("visibilitychange",onVisible);
   detachCommitter?.();
   detachCommitter = null;
   resizeObserver?.disconnect();

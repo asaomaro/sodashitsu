@@ -1,0 +1,30 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/render/Renderer.test.ts (19 tests | 1 failed | 18 skipped) 31ms
+   ❯ Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10） (11)
+     × keeps inverse spaces contiguous when correcting normal-theme contrast 30ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/render/Renderer.test.ts > Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10） > keeps inverse spaces contiguous when correcting normal-theme contrast
+AssertionError: expected 35071032 not to be 35071032 // Object.is equality
+ ❯ src/render/Renderer.test.ts:89:28
+     87|     expect(grid.ch.slice(i,i+3)).toEqual(["A"," ","B"]);
+     88|     expect(grid.fg[i]).toBe(grid.fg[i+1]);expect(grid.fg[i+1]).toBe(gr…
+     89|     expect(grid.fg[i]).not.toBe(new ThemeColors("sodashitsu-assistant"…
+       |                            ^
+     90|   });
+     91|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 18 skipped (19)
+   Start at  19:54:23
+   Duration  1.66s (transform 80%, import 18%, tests 2%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/render/Renderer.test.ts -t inverse spaces

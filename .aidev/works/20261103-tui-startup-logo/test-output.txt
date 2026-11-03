@@ -1,0 +1,16 @@
+
+> @sodashitsu/tui@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+> vitest run
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+
+ Test Files  84 passed (84)
+      Tests  775 passed (775)
+   Start at  20:05:52
+   Duration  7.75s (transform 39%, import 33%, tests 27%, worker 1%)
+
+  Transform  transforming modules took 58.01s · 39% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

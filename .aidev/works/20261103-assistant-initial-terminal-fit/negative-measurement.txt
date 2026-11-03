@@ -1,0 +1,33 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+
+ ❯ src/components/PaneLayout.test.ts (29 tests | 1 failed | 28 skipped) 34ms
+   × remeasures after initial rendering without any keyboard or resize input 32ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/PaneLayout.test.ts > remeasures after initial rendering without any keyboard or resize input
+AssertionError: expected 1 to be greater than 1
+ ❯ src/components/PaneLayout.test.ts:544:41
+    542|   for(let i=0;i<3;i++){const pending=[...frames];frames.clear();for(co…
+    543|   vi.advanceTimersByTime(100);
+    544|   expect(sync.commit.mock.calls.length).toBeGreaterThan(before);
+       |                                         ^
+    545|   wrapper.unmount();expect(frames.size).toBe(0);
+    546|  }finally{vi.unstubAllGlobals();vi.useRealTimers();}
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 skipped (29)
+   Start at  19:54:28
+   Duration  2.85s (transform 79%, import 14%, environment 6%, tests 1%)
+
+  Transform  transforming modules took 2.18s · 79% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/PaneLayout.test.ts -t remeasures after initial

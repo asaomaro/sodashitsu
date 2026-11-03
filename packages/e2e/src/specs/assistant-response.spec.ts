@@ -30,6 +30,30 @@ async function source(appServer: AppServer) {
   return {client,pane,hash};
 }
 
+test("reply terminal fits its popup before any input", async ({page,context,appServer}) => {
+  await signedIn(context,appServer);
+  const {client,pane,hash}=await source(appServer);
+  const popup=page;
+  await popup.setViewportSize({width:800,height:560});
+  const received=await watchReceivedFrames(popup),sent=await watchSentInput(popup);
+  await popup.goto(`${appServer.origin}/?assistantView=reply#${hash}`);
+  await expect(popup.locator("[data-assistant-response]")).toBeVisible();
+  await expect(popup.locator(".xterm-helper-textarea")).toHaveCount(1);
+  await expect.poll(()=>Array.from({length:received.connectionCount()},(_,i)=>received.snapshots(i,pane.id).join("")).join("")).toContain("ASSISTANT_RESPONSE_READY");
+  // Observe the browser's size and authority before any click or key can claim it.
+  const fitsWindow=()=>popup.locator(".terminal-pane").evaluate(el=>{
+    const pane=el.getBoundingClientRect(),screen=el.querySelector(".xterm-screen")?.getBoundingClientRect();
+    return !!screen&&screen.width<=pane.width+1&&screen.height<=pane.height+1&&pane.width-screen.width<30&&pane.height-screen.height<35;
+  });
+  await expect(popup.locator(".terminal-pane-scaled")).toHaveCount(0);
+  await expect.poll(fitsWindow).toBe(true);
+  await popup.setViewportSize({width:920,height:650});
+  await expect.poll(fitsWindow).toBe(true);
+  expect(sent()).toHaveLength(0);
+  await popup.screenshot({path:test.info().outputPath("assistant-initial-fit.png")});
+  client.close();
+});
+
 test("response popup displays only its existing terminal, sends input there, and leaves full Soda usable", async ({page,context,appServer}) => {
   await signedIn(context,appServer);
   const {client,pane,hash} = await source(appServer);

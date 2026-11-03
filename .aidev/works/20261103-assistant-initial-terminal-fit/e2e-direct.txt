@@ -1,0 +1,50 @@
+
+Running 1 test using 1 worker
+
+(node:784059) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-11-03T11:06:09.309Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-03T11:06:09.311Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-03T11:06:09.312Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-03T11:06:09.312Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-03T11:06:09.315Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-GSVVFq/commands.json","count":0}
+  ✘  1 src/specs/assistant-response.spec.ts:33:1 › reply terminal fits its popup before any input (1.0m)
+
+
+  1) src/specs/assistant-response.spec.ts:33:1 › reply terminal fits its popup before any input ────
+
+    Test timeout of 30000ms exceeded.
+
+    Tearing down "appServer" exceeded the test timeout of 30000ms.
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  locator('[data-assistant-response]')
+    Expected: visible
+    Received: undefined
+
+
+      38 |   const received=await watchReceivedFrames(popup),sent=await watchSentInput(popup);
+      39 |   await popup.goto(`${appServer.origin}/?assistantView=reply#${hash}`);
+    > 40 |   await expect(popup.locator("[data-assistant-response]")).toBeVisible();
+         |                                                            ^
+      41 |   await expect(popup.locator(".xterm-helper-textarea")).toHaveCount(1);
+      42 |   await expect.poll(()=>Array.from({length:received.connectionCount()},(_,i)=>received.snapshots(i,pane.id).join("")).join("")).toContain("ASSISTANT_RESPONSE_READY");
+      43 |   // Observe the browser's size and authority before any click or key can claim it.
+        at /workspaces/sodashitsu-main-live-assistant-agents/packages/e2e/src/specs/assistant-response.spec.ts:40:60
+
+    Error Context: test-results/assistant-response-reply-t-22c67--its-popup-before-any-input/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/assistant-response-reply-t-22c67--its-popup-before-any-input/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/assistant-response-reply-t-22c67--its-popup-before-any-input/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/assistant-response.spec.ts:33:1 › reply terminal fits its popup before any input ─────
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test assistant-response.spec.ts -g reply terminal fits its popup before any input --workers=1

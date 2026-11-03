@@ -1,3 +1,4 @@
+import type { ThemeName } from "@sodashitsu/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { computeLayout } from "../layout/computeLayout.js";
 import { PrefsModel } from "../model/PrefsModel.js";
@@ -19,7 +20,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     for (const fn of cleanup.splice(0)) fn();
   });
 
-  async function setup(snap = snapshot()) {
+  async function setup(snap = snapshot(), themeName: ThemeName = "dracula") {
     const model = new SessionModel();
     model.applySnapshot(snap, "c1");
     const prefs = new PrefsModel();
@@ -46,7 +47,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     const ctx = (): ChromeContext => ({
       model,
       prefs,
-      theme: new ThemeColors("dracula", undefined, transparent),
+      theme: new ThemeColors(themeName, undefined, transparent),
       mode: "terminal",
       connection: "open",
       notice: null,
@@ -77,6 +78,16 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     };
     return { model, prefs, panes, outer, draw, commit, layout, renderer, setTransparent };
   }
+
+  it("keeps inverse spaces contiguous when correcting normal-theme contrast",async()=>{
+    const h=await setup(undefined,"sodashitsu-assistant");h.commit();const term=h.panes.get("p1")!;
+    term.snapshot(28,17,"\x1b[7mA B\x1b[0m");await term.flush();h.setTransparent(true);await h.draw();
+    const grid=(h.renderer as unknown as {lastGrid:import("./Screen.js").Grid}).lastGrid;
+    const area=h.layout().panes[0]!.content,i=area.y*grid.w+area.x;
+    expect(grid.ch.slice(i,i+3)).toEqual(["A"," ","B"]);
+    expect(grid.fg[i]).toBe(grid.fg[i+1]);expect(grid.fg[i+1]).toBe(grid.fg[i+2]);
+    expect(grid.fg[i]).not.toBe(new ThemeColors("sodashitsu-assistant").paneFg);
+  });
 
   it("stacks recent snackbar notifications at the top right in chronological order and restores covered content", async () => {
     const s = await setup();
@@ -189,7 +200,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
     });
 
     it("有効のとき、pane の既定の背景・画面の地（空き・tab バー・枠・サイドバー）は RGB で塗らない。塗る所は塗ったまま", async () => {
-      const { draw, commit, setTransparent, panes } = await setup();
+      const { draw, commit, setTransparent, panes, outer, layout } = await setup();
       commit();
       const p1 = panes.get("p1")!;
       // プログラムが背景を指定したセル（赤の ANSI・256 色の 100 番・RGB）。
@@ -207,7 +218,7 @@ describe("Renderer（pane の中身と最小限の chrome。AC2・AC6・AC10）"
       // AC3: プログラムが指定した背景は塗る。
       expect(out).toContain("48;2;1;2;3");
       expect(out).toContain("48;5;100");
-      expect(out).toMatch(/48;2;\d+;\d+;\d+m A /); // ANSI 16 色の背景はテーマの RGB へ置き換わって塗る
+      expect(outer.cellBg(layout().panes[0]!.content.x+1,layout().panes[0]!.content.y)).toBe(new ThemeColors("dracula").paneColor(1,1,true).toString(16).slice(-6)); // ANSI 16 色の背景はテーマの RGB へ置き換わって塗る
       // AC3: 強調（いまの tab・選ばれた workspace の行・枠の色の前景など）は塗る。
       expect(out).toContain(ui("--soda-menu-active-bg"));
     });

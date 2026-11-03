@@ -531,3 +531,17 @@ describe("PaneLayout — 枠の描画モードと隙間（AC1〜AC5・AC7・AC9�
     expect(document.querySelector(".pane-frame[style]")).toBeNull();
   });
 });
+
+it("remeasures after initial rendering without any keyboard or resize input",async()=>{
+ vi.useFakeTimers();
+ const frames=new Map<number,FrameRequestCallback>();let seq=0;
+ vi.stubGlobal("requestAnimationFrame",(fn:FrameRequestCallback)=>{frames.set(++seq,fn);return seq;});vi.stubGlobal("cancelAnimationFrame",(id:number)=>frames.delete(id));
+ try{
+  const sync={commit:vi.fn(),attachCommitter:()=>()=>undefined};const {wrapper}=mountLayout({type:"pane",paneId:"p1"},{viewSync:sync,followResize:true});
+  const before=sync.commit.mock.calls.length;
+  for(let i=0;i<3;i++){const pending=[...frames];frames.clear();for(const [,fn]of pending)fn(16*i);await Promise.resolve();}
+  vi.advanceTimersByTime(100);
+  expect(sync.commit.mock.calls.length).toBeGreaterThan(before);
+  wrapper.unmount();expect(frames.size).toBe(0);
+ }finally{vi.unstubAllGlobals();vi.useRealTimers();}
+});

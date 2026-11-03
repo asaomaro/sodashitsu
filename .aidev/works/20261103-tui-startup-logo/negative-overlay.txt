@@ -1,0 +1,69 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/render/startup.test.ts (6 tests | 1 failed | 5 skipped) 45ms
+   × keeps dialogs visible while the initial connection is pending 43ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/render/startup.test.ts > keeps dialogs visible while the initial connection is pending
+AssertionError: expected '\n\n\n\n\n\n\n\n\n                   …' to contain 'workspace'
+
+- Expected
++ Received
+
+- workspace
++
++
++
++
++
++
++
++
++
++                                                  |
++                                            \  .--+--.  /
++                                             \/   |   \/
++                                             /     |     \
++                                         ---+----[>_]----+---
++                                             \     |     /
++                                             /\   |   /\
++                                            /  '--+--'  \
++                                                  |
++
++                                         Sodashitsu / 操舵室
++                                           接続しています…
++
++
++
++
++
++
++
++
++
+
+ ❯ src/render/startup.test.ts:60:26
+     58|     app.renderNow();
+     59|     await outer.write(io.output());
+     60|     expect(outer.text()).toContain("workspace");
+       |                          ^
+     61|     expect(outer.text()).toContain("名前");
+     62|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  20:02:55
+   Duration  2.85s (transform 81%, import 17%, tests 2%)
+
+  Transform  transforming modules took 2.22s · 81% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/render/startup.test.ts -t keeps dialogs visible

@@ -1,4 +1,4 @@
-import { TERMINAL_PALETTES, type ThemeName } from "@sodashitsu/protocol";
+import { contrastRatio, ensureContrast, TERMINAL_PALETTES, type ThemeName } from "@sodashitsu/protocol";
 import {
   mergeVars,
   uiTokens,
@@ -159,6 +159,7 @@ export class ThemeColors {
      * それ以外（プログラムが指定した背景・選択・強調・メニュー・ダイアログ）は塗ったまま。
      */
     readonly transparent = false,
+    readonly terminalDark = true,
   ) {
     const pal = TERMINAL_PALETTES[name];
     this.paneFg = hexColor(pal.foreground);
@@ -175,7 +176,7 @@ export class ThemeColors {
     for (const [k, v] of Object.entries(layer) as [CssVar, string][])
       if (parseCssColor(v)) usable[k] = v;
     this.vars = mergeVars(base.vars, usable);
-    this.key = `${name}:${JSON.stringify(usable)}${transparent ? ":transparent" : ""}`;
+    this.key = `${name}:${JSON.stringify(usable)}${transparent ? ":transparent:"+(terminalDark?"dark":"light") : ""}`;
   }
 
   /** テーマと効いている上書きを表す鍵（同じなら描き直しの必要が無い）。 */
@@ -190,6 +191,24 @@ export class ThemeColors {
       this.cache.set(v, c);
     }
     return c;
+  }
+
+  private readableCache = new Map<string, PackedColor>();
+  /** Correct text on transparent ground; retain explicit backgrounds and well-contrasted colors. */
+  readableForeground(fg: PackedColor, bg: PackedColor): PackedColor {
+    if (!this.transparent || fg === DEFAULT_COLOR || (fg & RGB) === 0) return fg;
+    if (bg !== DEFAULT_COLOR && fg !== this.paneFg && fg !== this.ui("--soda-fg") && fg !== this.ui("--soda-menu-fg")) return fg;
+    const key = `${fg}:${bg}`, cached=this.readableCache.get(key);if(cached!==undefined)return cached;
+    const hex=(color:PackedColor)=>"#"+(color&0xffffff).toString(16).padStart(6,"0");
+    let against: string;
+    if(bg===DEFAULT_COLOR)against=this.terminalDark?"#202020":"#f5f5f5";
+    else if((bg&RGB)!==0)against=hex(bg);
+    else return fg;
+    const original=hex(fg);
+    const toward=contrastRatio("#000000",against)>contrastRatio("#ffffff",against)?"#000000":"#ffffff";
+    const corrected=contrastRatio(original,against)>=4.5?fg:hexColor(ensureContrast(original,[against],7,toward));
+    if(this.readableCache.size>=4096)this.readableCache.clear();
+    this.readableCache.set(key,corrected);return corrected;
   }
 
   private solidCache: ThemeColors | undefined;

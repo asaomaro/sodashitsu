@@ -1,4 +1,5 @@
 import { ConnectionsView } from "../modes/ConnectionsView.js";
+import { drawStartup } from "../render/startup.js";
 import { stringWidth } from "../render/width.js";
 import { loadSystemFooterSettings, systemFooterDisplaySegments, STATUSLINE_COLOR_VARIABLES, systemFooterPlaceholder, type SystemResources } from "@sodashitsu/protocol";
 import { SystemResourcePoller } from "@sodashitsu/client-core";
@@ -163,6 +164,7 @@ export class TuiApp {
   readonly panes: PaneRegistry;
   protected net: TuiNet | null = null;
   connectionState: ConnectionState = "connecting";
+  private startupPending = true;
   protected theme: ThemeColors;
   private readonly renderer: Renderer;
   private renderTimer: ReturnType<typeof setTimeout> | null = null;
@@ -340,6 +342,7 @@ export class TuiApp {
       this.prefs.theme,
       this.prefs.themeOverrides,
       this.prefs.transparentBg,
+      this.prefs.systemDark,
     );
     this.renderer = new Renderer(
       colorModeOf(io.env, this.prefs.colorMode),
@@ -750,7 +753,8 @@ export class TuiApp {
     this.disposers.push(() => wiring.stop());
     this.disposers.push(this.machines.onChange(() => this.scheduleRender()));
     this.disposers.push(() => net.stop());
-    this.scheduleRender();
+    // 接続が即座に完了しても起動の絵を一度は出す。待ち時間は加えない。
+    this.renderNow();
     void net.start();
   }
 
@@ -803,6 +807,7 @@ export class TuiApp {
   }
 
   protected onConnectionOpened(_clientId: string): void {
+    this.startupPending = false;
     this.asks.onOpened();
     this.panes.connectionOpened();
     this.resourcesConnected = true;
@@ -911,7 +916,7 @@ export class TuiApp {
     this.renderer.setColorMode(colorModeOf(this.io.env, this.prefs.colorMode));
     this.refreshKeymap();
     const theme = this.prefs.theme;
-    const next = new ThemeColors(theme, this.prefs.themeOverrides, this.prefs.transparentBg);
+    const next = new ThemeColors(theme, this.prefs.themeOverrides, this.prefs.transparentBg, this.prefs.systemDark);
     if (next.key !== this.theme.key) {
       const nameChanged = theme !== this.theme.name;
       this.theme = next;
@@ -1772,6 +1777,10 @@ export class TuiApp {
     if (this.kitty?.needsRepaint) this.renderer.invalidate();
     const result = this.renderer.render(layout, ctx, this.panes, {
       decorate: (grid) => {
+        if (this.startupPending && this.connectionState === "connecting") {
+          drawStartup(grid, this.theme);
+          return { x: 0, y: 0, visible: false, style: "block", blink: false };
+        }
         const footer = loadSystemFooterSettings(this.prefs.shared.systemFooterSettings);
         if (footer.enabled && grid.h >= 4) {
           const parts = systemFooterDisplaySegments(this.systemResources, footer);

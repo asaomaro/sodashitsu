@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, inject, onBeforeUnmount } from "vue";
+import { ConnectionKey, ViewSyncKey } from "../injection.js";
 import { paneNameOf } from "@sodashitsu/client-core";
 import { assistantPanelTarget, assistantPanelPane } from "../actions/assistantPanelLink.js";
 import { useSessionStore } from "../store/session.js";
@@ -21,6 +22,15 @@ const source = computed(() => {
 });
 const label = computed(() => source.value ? paneNameOf(source.value.pane) : "通知への応答");
 const questionFinished = computed(() => !!target?.assistantAsk && !asks.queue.some(a => a.askId === target.assistantAsk));
+// A deliberately opened reply terminal owns its size from the first view, before subscribe/input.
+const conn=inject(ConnectionKey,undefined),viewSync=inject(ViewSyncKey,undefined);
+let fitted=false;
+const stopFit=target&&!target.assistantAsk&&conn&&viewSync?viewSync.onViewEstablished(()=>{
+  if(!source.value)return;
+  fitted=true;void conn.request("client.fit",{enabled:true}).catch(()=>view.toast("端末をウィンドウに合わせられませんでした。開き直してください。"));
+},true):undefined;
+onBeforeUnmount(()=>{stopFit?.();if(fitted&&conn)void conn.request("client.fit",{enabled:false}).catch(()=>undefined);});
+
 </script>
 
 <template>

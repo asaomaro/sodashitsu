@@ -1,0 +1,49 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/web
+
+ ❯ src/components/AssistantResponse.test.ts (2 tests | 1 failed) 31ms
+   × fits the reply terminal at the first established view and on reconnect without input 25ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/components/AssistantResponse.test.ts > fits the reply terminal at the first established view and on reconnect without input
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'client.fit', { enabled: true } ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "client.fit",
+    {
+-     "enabled": true,
++     "enabled": false,
+    },
+  ]
+
+
+Number of calls: 1
+
+ ❯ src/components/AssistantResponse.test.ts:20:36
+     18| it("fits the reply terminal at the first established view and on recon…
+     19|  const h=setup();expect(h.request).not.toHaveBeenCalled();expect(h.onV…
+     20|  h.established();expect(h.request).toHaveBeenCalledWith("client.fit",{…
+       |                                    ^
+     21|  h.wrapper.unmount();expect(h.remove).toHaveBeenCalledOnce();expect(h.…
+     22| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  19:54:25
+   Duration  2.95s (transform 79%, import 14%, environment 6%, tests 1%)
+
+  Transform  transforming modules took 2.27s · 79% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/web:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/components/AssistantResponse.test.ts

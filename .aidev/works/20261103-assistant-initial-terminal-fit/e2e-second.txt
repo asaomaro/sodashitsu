@@ -1,0 +1,52 @@
+
+Running 1 test using 1 worker
+
+(node:763821) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"ts":"2026-11-03T11:01:07.826Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-03T11:01:07.828Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-03T11:01:07.829Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-03T11:01:07.829Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-03T11:01:07.832Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-e2e-xyUAHy/commands.json","count":0}
+  ✘  1 src/specs/assistant-response.spec.ts:33:1 › response popup displays only its existing terminal, sends input there, and leaves full Soda usable (2.1m)
+
+
+  1) src/specs/assistant-response.spec.ts:33:1 › response popup displays only its existing terminal, sends input there, and leaves full Soda usable
+
+    Test timeout of 90000ms exceeded.
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('.xterm-helper-textarea')
+    Expected: 2
+    Received: undefined
+
+    Call log:
+      - Expect "toHaveCount" locator('.xterm-helper-textarea') with timeout 5000ms
+      - waiting for locator('.xterm-helper-textarea')
+
+
+      36 |   await client.request("pane.split", {paneId:pane.id,direction:"right"});
+      37 |   await page.goto(appServer.origin);
+    > 38 |   await expect(page.locator(".xterm-helper-textarea")).toHaveCount(2);
+         |                                                        ^
+      39 |   const popup = await context.newPage();
+      40 |   await popup.setViewportSize({width:800,height:560});
+      41 |   const received = await watchReceivedFrames(popup), sent = await watchSentInput(popup);
+        at /workspaces/sodashitsu-main-live-assistant-agents/packages/e2e/src/specs/assistant-response.spec.ts:38:56
+
+    Error Context: test-results/assistant-response-respons-e5486-and-leaves-full-Soda-usable/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/assistant-response-respons-e5486-and-leaves-full-Soda-usable/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/assistant-response-respons-e5486-and-leaves-full-Soda-usable/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    src/specs/assistant-response.spec.ts:33:1 › response popup displays only its existing terminal, sends input there, and leaves full Soda usable
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/e2e:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: playwright test assistant-response.spec.ts -g response popup displays only --workers=1 --timeout=90000
