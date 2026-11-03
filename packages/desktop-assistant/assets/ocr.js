@@ -2,15 +2,51 @@
 (() => {
  const api = window.assistant;
  const element = id => document.getElementById(id);
- let state = null, previewId = null, pending = false,importEpoch=0;
+ let state = null, previewId = null, pending = false,importEpoch=0,gesture=null;
  const result = element("ocr-result"), preview = element("ocr-preview");
- const status = element("ocr-status");
+ const status = element("ocr-status"),panel=element("ocr-preview-panel"),stage=element("ocr-preview-stage"),selection=element("ocr-selection");
+ const keys=["x","y","width","height"];
+ const region=()=>Object.fromEntries(keys.map(key=>[key,Number(element(`ocr-${key}`).value)]));
+ const valid=rect=>state&&Object.values(rect).every(Number.isSafeInteger)&&rect.x>=0&&rect.y>=0&&rect.width>0&&rect.height>0&&rect.x+rect.width<=state.width&&rect.y+rect.height<=state.height;
+ const draw=()=>{
+  const rect=region();selection.hidden=previewId!==state?.imageId||!previewId||!valid(rect);
+  if(selection.hidden){element("ocr-selection-status").textContent=previewId?"範囲の数値を確認してください。":"";return;}
+  Object.assign(selection.style,{left:`${rect.x/state.width*100}%`,top:`${rect.y/state.height*100}%`,width:`${rect.width/state.width*100}%`,height:`${rect.height/state.height*100}%`});
+  element("ocr-selection-status").textContent=`選択範囲：左 ${rect.x}、上 ${rect.y}、幅 ${rect.width}、高さ ${rect.height}（画素）`;
+ };
+ const setRegion=rect=>{for(const key of keys)element(`ocr-${key}`).value=String(rect[key]);draw();};
+ const clearPreview=()=>{gesture=null;previewId=null;preview.removeAttribute("src");preview.hidden=true;panel.hidden=true;selection.hidden=true;element("ocr-selection-status").textContent="";};
+ const showPreview=response=>{
+  apply(response.state);
+  // A newer metadata revision for the same immutable image must not lose its pixels.
+  if(document.hidden||!state.enabled||!state.imageId||state.imageId!==response.state.imageId)return;
+  previewId=null;preview.dataset.imageId=state.imageId;preview.src=response.uri;preview.hidden=false;panel.hidden=false;
+  window.assistantSections.reveal(panel);controls();
+ };
+ preview.addEventListener("load",()=>{if(preview.dataset.imageId!==state?.imageId||!state?.imageId)return;previewId=state.imageId;draw();controls();});
+ preview.addEventListener("error",()=>{if(preview.dataset.imageId!==state?.imageId)return;previewId=null;status.textContent="プレビュー画像を表示できません。PNG画像を取り込み直してください。";controls();});
+ const point=event=>{const box=preview.getBoundingClientRect();return{x:Math.max(0,Math.min(state.width,(event.clientX-box.left)/box.width*state.width)),y:Math.max(0,Math.min(state.height,(event.clientY-box.top)/box.height*state.height))};};
+ stage.addEventListener("pointerdown",event=>{
+  if(event.button!==0||pending||previewId!==state?.imageId||!previewId||["loading","recognizing","stopping"].includes(state.status))return;
+  gesture={id:event.pointerId,imageId:previewId,start:point(event),previous:region()};stage.setPointerCapture(event.pointerId);event.preventDefault();
+ });
+ const move=event=>{
+  if(!gesture||gesture.id!==event.pointerId||gesture.imageId!==state?.imageId)return;
+  const end=point(event),start=gesture.start;if(Math.abs(end.x-start.x)<1||Math.abs(end.y-start.y)<1)return;
+  const x=Math.floor(Math.min(start.x,end.x)),y=Math.floor(Math.min(start.y,end.y));
+  setRegion({x,y,width:Math.ceil(Math.max(start.x,end.x))-x,height:Math.ceil(Math.max(start.y,end.y))-y});controls();
+ };
+ stage.addEventListener("pointermove",move);
+ stage.addEventListener("pointerup",event=>{if(!gesture||gesture.id!==event.pointerId)return;move(event);gesture=null;if(stage.hasPointerCapture(event.pointerId))stage.releasePointerCapture(event.pointerId);});
+ stage.addEventListener("pointercancel",()=>{if(gesture){setRegion(gesture.previous);gesture=null;}});
+ stage.addEventListener("lostpointercapture",()=>{gesture=null;});
+ for(const key of keys)element(`ocr-${key}`).addEventListener("input",()=>{draw();controls();});
  function apply(next) {
   if (state && next.revision < state.revision) return;
   const changed = state?.imageId !== next.imageId;
   state = next;
   if (changed) {
-   preview.removeAttribute("src"); preview.hidden = true; previewId = null;
+   clearPreview();
    result.value = "";
    for (const [key, value] of Object.entries({ x: 0, y: 0, width: next.width, height: next.height })) element(`ocr-${key}`).value = String(value);
   }
@@ -18,12 +54,15 @@
   if (!next.imageId) result.value = "";
   status.textContent = next.message;
   element("ocr-run").textContent = next.provider === "agent" ? "画像をエージェントに送って読む" : "文字を認識";
-  controls();
+  draw();controls();
  }
  function controls() {
   const busy = pending || ["loading", "recognizing", "stopping"].includes(state?.status);
+  if(busy)gesture=null;
   for (const id of ["ocr-file", "ocr-clipboard"]) element(id).disabled = !state?.enabled || busy;
   for (const id of ["ocr-crop", "ocr-run"]) element(id).disabled = !state?.enabled || busy || !state.imageId || previewId !== state.imageId;
+  element("ocr-crop").disabled=element("ocr-crop").disabled||!valid(region());
+  for(const key of keys)element(`ocr-${key}`).disabled=busy||!previewId;
   element("ocr-drop").setAttribute("aria-disabled",String(!state?.enabled||busy));
   element("ocr-discard").disabled = !state?.imageId && !busy;
   element("ocr-use").disabled = !state?.imageId || !result.value.trim() || busy;
@@ -33,12 +72,7 @@
   pending = true; controls();
   try {
    const response = await action();
-   if (response?.state) {
-    apply(response.state);
-    if (state.imageId === response.state.imageId && state.revision === response.state.revision) {
-     previewId = state.imageId; preview.src = response.uri; preview.hidden = false;
-    }
-   }
+   if (response?.state) showPreview(response);
   } catch (error) { status.textContent = error.message || "画像を処理できませんでした。"; }
   finally { pending = false; controls(); }
  }
@@ -69,12 +103,11 @@
  });
  result.addEventListener("input", controls);
  document.addEventListener("assistant-ocr-image",event=>{
-   const response=event.detail;apply(response.state);
-   if(state.imageId===response.state.imageId&&state.revision===response.state.revision){previewId=state.imageId;preview.src=response.uri;preview.hidden=false;controls();}
+   showPreview(event.detail);
  });
  api.onOcr(apply);
  api.ocrState().then(apply).catch(error => { status.textContent = error.message; });
- const discard = () => {++importEpoch; preview.removeAttribute("src"); preview.hidden = true; result.value = ""; previewId = null; void api.ocrDiscard().catch(() => {}); };
+ const discard = () => {++importEpoch;clearPreview();result.value = ""; void api.ocrDiscard().catch(() => {}); };
  document.addEventListener("visibilitychange", () => { if (document.hidden) discard(); });
  window.addEventListener("pagehide", discard);
 })();

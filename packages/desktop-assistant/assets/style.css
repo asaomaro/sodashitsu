@@ -140,3 +140,12 @@
 
 .file-drop{margin:10px 0;padding:18px 12px;border:1px dashed #c9a64f;border-radius:10px;background:#23364d;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .file-drop:focus-visible{outline:3px solid #7bcfff;outline-offset:2px}.file-drop.drag-over{background:#354b65;border-style:solid}.file-drop[aria-disabled=true]{opacity:.55}
+
+#ocr-preview-panel{margin:12px 0;min-width:0}
+#ocr-preview-panel[hidden]{display:none}
+#ocr-preview-panel figcaption{font-size:13px;line-height:1.6;margin-bottom:8px;color:#e5be61}
+#ocr-preview-stage{position:relative;width:fit-content;max-width:100%;line-height:0;touch-action:none;user-select:none;cursor:crosshair;background:#23364d}
+.tools-panel #ocr-preview{display:block;max-width:100%;max-height:none;height:auto;user-select:none}
+.tools-panel #ocr-preview[hidden]{display:none}
+#ocr-selection{position:absolute;border:2px solid #e5be61;background:#e5be6130;pointer-events:none}
+#ocr-selection[hidden]{display:none}

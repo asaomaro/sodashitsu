@@ -104,6 +104,7 @@ try {
     };
     navigator.mediaDevices.getDisplayMedia=async()=>{window.calls.push(["get-display-media"]);const track={stop:()=>window.calls.push(["stop-display-track"])};return{getTracks:()=>[track],getVideoTracks:()=>[track],getAudioTracks:()=>[]};};
     window.ImageCapture=class{async grabFrame(){return{width:1,height:1,close:()=>window.calls.push(["close-display-frame"])};}};
+    window.realCanvasContext=HTMLCanvasElement.prototype.getContext;window.realCanvasDataURL=HTMLCanvasElement.prototype.toDataURL;
     HTMLCanvasElement.prototype.getContext=()=>({drawImage:()=>window.calls.push(["draw-generated-frame"])});
     HTMLCanvasElement.prototype.toDataURL=()=>"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=";
     window.toolWatchers=new Set();
@@ -158,9 +159,10 @@ try {
       ocrState: async () => ({revision:1,status:"idle",enabled:true,imageId:null,width:0,height:0,text:"",message:"画像を確認してから認識します。"}),
       onOcr: callback => {window.ocrCallback=callback;return()=>{};},
       ocrFile: async () => {
-        const state={revision:++window.ocrRevision,status:"ready",enabled:true,imageId:`generated-${window.ocrRevision}`,width:1,height:1,text:"",message:"認識前のプレビュー"};
+        const state={revision:++window.ocrRevision,status:"ready",enabled:true,imageId:`generated-${window.ocrRevision}`,width:window.ocrTestImage?1200:1,height:window.ocrTestImage?300:1,text:"",message:"認識前のプレビュー"};
         window.currentOcr=state; window.ocrCallback(state);window.calls.push(["ocr-file"]);
-        return {state,uri:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="};
+        if(window.ocrMetadataRace){window.currentOcr={...state,revision:++window.ocrRevision};window.ocrCallback(window.currentOcr);}
+        return {state,uri:window.ocrTestImage||"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="};
       },
       ocrUpload:async input=>{window.calls.push(["ocr-upload",{bytes:input.bytes.byteLength,revision:input.revision}]);return window.assistant.ocrFile();},
       ocrClipboard: async () => window.assistant.ocrFile(),
@@ -548,6 +550,16 @@ try {
   await checkWindow("tools");
   await page.setViewportSize({width:400,height:640});
   await expect(page.getByRole("heading",{name:"アシスタントのツール"})).toBeVisible();
+  // Standard tools share one parent; plugin state survives folding that parent.
+  assert.equal(await page.locator("#ocr-tools").evaluate(el=>el.closest("#standard-tools")!==null),true);
+  assert.equal(await page.locator("#reminder-tools").evaluate(el=>el.closest("#standard-tools")!==null),true);
+  await page.locator("#plugin-tools > summary").press("Enter");
+  await page.locator("#standard-tools > summary").press("Enter");
+  await expect(page.locator("#apps-refresh")).toBeVisible();
+  await expect(page.locator("#ocr-drop")).toBeHidden();
+  await page.locator("#standard-tools > summary").press("Enter");
+  await expect(page.locator("#apps-refresh")).toBeVisible();
+  await page.locator("#plugin-tools > summary").press("Enter");
   const sendsBeforeTools=await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length);
   await page.evaluate(()=>{const data=new DataTransfer();data.items.add(new File([new Uint8Array([1,2,3])],"generated.wav",{type:"audio/wav"}));document.getElementById("audio-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));});
   await expect(page.locator("#audio-drop-name")).toContainText("generated.wav");
@@ -691,6 +703,25 @@ try {
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-upload").length),importsBefore+2);
   await page.locator("#ocr-file").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-preview")).toHaveAttribute("src", /^data:image\/png;base64,/);
+  await expect(page.locator("#ocr-run")).toBeEnabled();
+  // A later metadata event for the same image may precede the image response.
+  await page.evaluate(()=>{const canvas=document.createElement("canvas");canvas.width=1200;canvas.height=300;const ctx=window.realCanvasContext.call(canvas,"2d");ctx.fillStyle="white";ctx.fillRect(0,0,1200,300);ctx.fillStyle="black";ctx.font="40px sans-serif";ctx.fillText("OCR preview selection",60,100);window.ocrTestImage=window.realCanvasDataURL.call(canvas);window.ocrMetadataRace=true;});
+  await page.locator("#ocr-file").press("Enter");
+  await expect(page.locator("#ocr-preview-panel")).toBeVisible();
+  await expect.poll(()=>page.locator("#ocr-preview").evaluate(el=>el.naturalWidth)).toBe(1200);
+  await expect(page.locator("#ocr-run")).toBeEnabled();
+  const selectOcr=async(reverse=false)=>{
+    await page.locator("#ocr-preview").scrollIntoViewIfNeeded();const box=await page.locator("#ocr-preview").boundingBox();assert.ok(box.width<1200&&box.height>0);
+    const a={x:box.x+box.width*.2,y:box.y+box.height*.2},b={x:box.x+box.width*.8,y:box.y+box.height*.8};
+    await page.mouse.move((reverse?b:a).x,(reverse?b:a).y);await page.mouse.down();await page.mouse.move((reverse?a:b).x,(reverse?a:b).y,{steps:5});await page.mouse.up();
+    const values=await page.evaluate(()=>Object.fromEntries(["x","y","width","height"].map(k=>[k,Number(document.getElementById(`ocr-${k}`).value)])));
+    for(const [k,v] of Object.entries({x:240,y:60,width:720,height:180}))assert.ok(Math.abs(values[k]-v)<=2,`${k}: ${values[k]}`);
+    await expect(page.locator("#ocr-selection")).toBeVisible();return values;
+  };
+  await selectOcr();const chosen=await selectOcr(true);
+  if(process.env.SODA_ASSISTANT_OCR_SCREENSHOT)await page.locator("#ocr-preview-panel").screenshot({path:process.env.SODA_ASSISTANT_OCR_SCREENSHOT});
+  await page.locator("#ocr-crop").press("Enter");
+  assert.deepEqual(await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-crop").at(-1)[1].rect),chosen);
   await expect(page.locator("#ocr-run")).toBeEnabled();
   await page.locator("#ocr-run").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-result")).toHaveValue("画像から読み取った文字");
