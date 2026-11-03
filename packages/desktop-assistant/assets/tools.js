@@ -4,7 +4,27 @@
   const text = element("tool-text"), notes = element("saved-notes"), result = element("transcription-result");
   const status = element("tools-status");
   let revision = -1, transcriptRevision = -1, currentNote = null, savedNotes = [];
-  let saving = false;
+  let saving = false,stagedAudio=null,readingAudio=false,audioEpoch=0,audioState=null;
+  const audioControls=()=>{
+    const active=readingAudio||!audioState?.transcriptionEnabled||["selecting","transcribing","stopping"].includes(audioState?.transcription?.status);
+    element("audio-drop").setAttribute("aria-disabled",String(active));element("audio-drop-start").disabled=active||!stagedAudio;element("audio-drop-clear").disabled=readingAudio||!stagedAudio;
+    element("audio-drop-start").textContent=audioState?.transcriptionProvider==="agent"?"この音声を専用エージェントへ送る":"この音声を文字起こし";
+  };
+  const clearAudio=()=>{++audioEpoch;stagedAudio=null;element("audio-drop-name").textContent="音声ファイルはまだ選択されていません。";audioControls();};
+  window.assistantFileInputs.bind({target:element("audio-drop"),report:error=>{element("audio-drop-name").textContent=error.message;},accept:file=>{
+    if(readingAudio||!audioState?.transcriptionEnabled||["selecting","transcribing","stopping"].includes(audioState?.transcription?.status))throw Error("音声入力を有効にし、前の処理が終わってから選んでください。");
+    window.assistantFileInputs.validate(file,["wav","mp3","m4a","mp4","ogg","flac","webm"],25*1024*1024);
+    ++audioEpoch;stagedAudio=file;element("audio-drop-name").textContent=`選択した音声：${file.name}（${Math.ceil(file.size/1024)}KiB）。処理先を確認し、開始ボタンを押してください。`;audioControls();
+  }});
+  element("audio-drop-clear").onclick=clearAudio;
+  element("audio-drop-start").onclick=async()=>{
+    if(!stagedAudio||readingAudio)return;const file=stagedAudio,epoch=audioEpoch,context=audioState?.transcriptionContext;readingAudio=true;audioControls();
+    try{const snapshot=await window.assistant.tools();if(!context||snapshot.transcriptionContext!==context)throw Error("処理先が変わりました。音声を選び直してください。");const bytes=await window.assistantFileInputs.read(file,["wav","mp3","m4a","mp4","ogg","flac","webm"],25*1024*1024);
+      if(epoch!==audioEpoch||document.hidden)throw Error("音声の読み込みを取り消しました。");
+      await window.assistant.transcribeUpload({name:file.name,bytes,revision:snapshot.revision,context:snapshot.transcriptionContext});if(epoch===audioEpoch)clearAudio();
+    }catch(error){element("audio-drop-name").textContent=error.message;}finally{readingAudio=false;audioControls();}
+  };
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)clearAudio();});window.addEventListener("pagehide",clearAudio,{once:true});
   const editorBusy = value => {
     saving = value;
     text.disabled = notes.disabled = element("save-note").disabled = element("read-clipboard").disabled = element("use-transcription").disabled = value;
@@ -24,6 +44,8 @@
   };
   const update = state => {
     if (!Number.isSafeInteger(state.revision) || state.revision <= revision) return;
+    if(audioState&&(audioState.transcriptionContext!==state.transcriptionContext||audioState.transcriptionProvider!==state.transcriptionProvider||audioState.transcriptionOrigin!==state.transcriptionOrigin||!state.transcriptionEnabled))clearAudio();
+    audioState=state;audioControls();
     revision = state.revision;
     savedNotes = state.notes;
     notes.replaceChildren();

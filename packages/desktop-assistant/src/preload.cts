@@ -77,6 +77,7 @@ contextBridge.exposeInMainWorld(
     sourceKey: (input: unknown) => ipcRenderer.invoke("assistant:source-key", input),
     openSession: () => ipcRenderer.invoke("assistant:session-open"),
     ocrState: () => ipcRenderer.invoke("assistant:ocr-state"),
+    ocrUpload:(input:unknown)=>ipcRenderer.invoke("assistant:ocr-upload",input),
     ocrFile: () => ipcRenderer.invoke("assistant:ocr-file"),
     ocrClipboard: () => ipcRenderer.invoke("assistant:ocr-clipboard"),
     ocrCrop: (input: unknown) => ipcRenderer.invoke("assistant:ocr-crop", input),
@@ -90,6 +91,7 @@ contextBridge.exposeInMainWorld(
     tools: () => ipcRenderer.invoke("assistant:tools"),
     saveNote: (input: unknown) => ipcRenderer.invoke("assistant:note-save", input),
     deleteNote: (input: unknown) => ipcRenderer.invoke("assistant:note-delete", input),
+    transcribeUpload:(input:unknown)=>ipcRenderer.invoke("assistant:transcribe-upload",input),
     transcribeFile: () => ipcRenderer.invoke("assistant:transcribe-file"),
     cancelTranscription: () => ipcRenderer.invoke("assistant:transcribe-cancel"),
     readClipboard: () => ipcRenderer.invoke("assistant:clipboard-read"),
@@ -113,6 +115,7 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on("assistant:voice-changed",receive);
       return ()=>ipcRenderer.removeListener("assistant:voice-changed",receive);
     },
+    sizeNotice: (input: unknown) => ipcRenderer.invoke("assistant:notice-size",input),
     noticeState: () => ipcRenderer.invoke("assistant:notice-state"),
     dismissNotice: (input: unknown) => ipcRenderer.invoke("assistant:notice-dismiss",input),
     openNotice: (input: unknown) => ipcRenderer.invoke("assistant:notice-open",input),

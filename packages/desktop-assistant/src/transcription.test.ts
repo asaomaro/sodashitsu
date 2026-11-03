@@ -397,3 +397,10 @@ it("cannot let an old recording cancel a later recording or file job", async () 
   expect(f.service.cancel(old)).toBe(false);
   expect(f.service.snapshot()).toMatchObject({ status: "done", text: "こんにちは、船長" });
 });
+
+it("accepts bounded dropped audio bytes without a path/picker and rejects unsupported names",async()=>{
+ const {service,fetch,pick}=fixture();
+ await service.uploaded("dropped.wav",new Uint8Array([1,2,3]));expect(fetch).toHaveBeenCalledOnce();expect(pick).not.toHaveBeenCalled();expect(service.snapshot()).toMatchObject({status:"done",name:"dropped.wav",text:"こんにちは、船長"});
+ for(const name of ["file.txt","../audio.wav","bad\n.wav"]){expect(()=>service.uploaded(name,new Uint8Array([1]))).toThrow();}
+ expect(()=>service.uploaded("big.wav",new Uint8Array(25*1024*1024+1))).toThrow("25MiB");expect(fetch).toHaveBeenCalledOnce();
+});

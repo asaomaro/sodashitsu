@@ -44,7 +44,7 @@ import { AssistantChat, type AssistantChatState } from "./assistantChat.js";
 import { deviceIdentity } from "./deviceIdentity.js";
 import { NotesFile, NoteSave } from "./notes.js";
 import { Transcription, AUDIO_LIMIT } from "./transcription.js";
-import { randomUUID } from "node:crypto";
+import { randomUUID,createHash } from "node:crypto";
 import { readPluginBundle } from "@sodashitsu/client-core/node/pluginPackage";
 import { agentRoster } from "./noticeFeed.js";
 import { RemoteNotices } from "./remoteNotices.js";
@@ -81,6 +81,7 @@ const allowedAssets = new Map([
   ["/tool-window.js", "text/javascript"],
   ["/window.js", "text/javascript"],
   ["/sections.js", "text/javascript"],
+  ["/file-inputs.js", "text/javascript"],
   ["/reminder-notices.js", "text/javascript"],
   ["/notice.html", "text/html"],
   ["/notice.js", "text/javascript"],
@@ -182,6 +183,7 @@ let automaticNoticeEpoch = 0;
 let compact: BrowserWindow | null = null;
 let compactPayload: { id?: string; title: string; message: string } | null = null;
 let compactRevision = 0;
+let compactHeight = 220;
 let latestNotification: {seq:number;id?:string;title:string;message:string}|null=null;
 let notificationSequence=0;
 function chatVisible():boolean {
@@ -196,11 +198,12 @@ function dismissCompact(id?:string):void {
 function positionCompact():void {
   if(!compact||compact.isDestroyed())return;
   const chat=bubble&&!bubble.isDestroyed()&&bubbleRequested?bubble.getBounds():undefined;
-  compact.setBounds(noticeBounds(controller.preferences,adapter.displays(),adapter.portraitAspect?.(controller.preferences),chat));
+  compact.setBounds(noticeBounds(controller.preferences,adapter.displays(),adapter.portraitAspect?.(controller.preferences),chat,compactHeight));
 }
 function closeCompact(): void {
   ++compactRevision;
   compactPayload = null;
+  compactHeight = 220;
   compact?.destroy();
   compact = null;
 }
@@ -531,9 +534,14 @@ function openBubble(focus = true): void {
   });
 }
 
+let publishedAudioContext="";
+function audioInputContext():string {
+ const p=controller.preferences,chat=assistantChat?.snapshot(),session=chat?.session;
+ return createHash("sha256").update(JSON.stringify([p.enabled,p.transcriptionEnabled,p.transcriptionProvider,p.transcriptionOrigin,p.serverOrigin,session?.paneId,session?.agent?.instanceId,chat?.conversationSessionId])).digest("hex");
+}
 async function toolsState(revision = toolsRevision) {
   const state = transcription.snapshot();
-  const preferences = controller.preferences;
+  const preferences = controller.preferences,transcriptionContext=audioInputContext();
   let notes: Awaited<ReturnType<NotesFile["read"]>> = [];
   let notesError = "";
   try {
@@ -549,6 +557,7 @@ async function toolsState(revision = toolsRevision) {
     transcriptionEnabled: preferences.enabled && preferences.transcriptionEnabled,
     transcriptionOrigin: preferences.transcriptionOrigin,
     transcriptionProvider:preferences.transcriptionProvider,
+    transcriptionContext,
   };
 }
 async function publishTools(): Promise<void> {
@@ -636,6 +645,8 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
         const current=chatState();return current.connected&&current.session?.state==="ready"&&current.session.agent?.instanceId===state.session?.agent?.instanceId&&current.conversationSessionId===state.conversationSessionId;
       });
       publishCharacterState();
+      const audioContext=audioInputContext();
+      if(audioContext!==publishedAudioContext){publishedAudioContext=audioContext;if(transcription&&notesFile)void publishTools();}
       chatRevision = state.revision;
       if (bubble && !bubble.isDestroyed())
         bubble.webContents.send("assistant:conversation-changed", state);
@@ -1025,6 +1036,7 @@ function registerIpc(): void {
     "draft-message",
     "draft-consume",
     "notice-state",
+    "notice-size",
     "notice-dismiss",
     "notice-read",
     "notice-open",
@@ -1067,6 +1079,7 @@ function registerIpc(): void {
     "session-open",
     "ocr-state",
     "ocr-file",
+    "ocr-upload",
     "ocr-clipboard",
     "ocr-crop",
     "ocr-run",
@@ -1075,6 +1088,7 @@ function registerIpc(): void {
     "note-save",
     "note-delete",
     "transcribe-file",
+    "transcribe-upload",
     "transcribe-cancel",
     "clipboard-read",
     "clipboard-write",
@@ -1178,6 +1192,11 @@ function registerIpc(): void {
         voice.say(`sample:${randomUUID()}`,assistantPersonaGreeting(preferences.characterId),()=>true,voiceFor(preferences));return;
       }
       if (action === "notice-state") return compactState();
+      if (action === "notice-size") {
+        const {revision,height}=z.object({revision:z.number().int().nonnegative(),height:z.number().int().min(1).max(16384)}).strict().parse(input);
+        if(owner.window!==compact||revision!==compactRevision)return;
+        compactHeight=height;positionCompact();return compact!.getBounds();
+      }
       if (action === "notice-dismiss" || action === "notice-open") {
         const {revision}=z.object({revision:z.number().int().nonnegative()}).strict().parse(input);
         if(owner.window!==compact||revision!==compactRevision)return;
@@ -1511,6 +1530,12 @@ function registerIpc(): void {
         if (action === "ocr-discard") return ocr.discard(id);
         if (action === "ocr-file" || action === "ocr-clipboard")
           return ocr.input(id, action === "ocr-file" ? "file" : "clipboard");
+        if(action==="ocr-upload"){
+          if(owner.window.isMinimized())throw Error("ツール画面を開いて操作してください。");
+          const request=z.object({revision:z.number().int().nonnegative(),bytes:z.instanceof(ArrayBuffer).refine(b=>b.byteLength>0&&b.byteLength<=PNG_LIMIT)}).strict().parse(input);
+          if(request.revision!==ocr.snapshot().revision)throw Error("画像の状態が変わりました。もう一度取り込んでください。");
+          return ocr.captured(id,new Uint8Array(request.bytes));
+        }
         const target = z.object({ imageId: z.uuid() });
         if (action === "ocr-run") return ocr.run(id, target.strict().parse(input).imageId);
         const rect = z
@@ -1601,6 +1626,7 @@ function registerIpc(): void {
           "note-save",
           "note-delete",
           "transcribe-file",
+          "transcribe-upload",
           "transcribe-cancel",
           "clipboard-read",
           "clipboard-write",
@@ -1617,6 +1643,13 @@ function registerIpc(): void {
           await notesFile.delete(input);
           await publishTools();
           return;
+        }
+        if(action==="transcribe-upload"){
+          if(!owner.window.isVisible()||owner.window.isMinimized())throw Error("ツール画面を開いて操作してください。");
+          if(recording.has())throw Error("録音を文字起こしするか破棄してから選んでください。");
+          const request=z.object({name:z.string().min(1).max(200),context:z.string().regex(/^[0-9a-f]{64}$/),revision:z.number().int().nonnegative(),bytes:z.instanceof(ArrayBuffer).refine(b=>b.byteLength>0&&b.byteLength<=AUDIO_LIMIT)}).strict().parse(input);
+          if(request.revision!==toolsRevision||request.context!==audioInputContext())throw Error("処理先または状態が変わりました。確認してもう一度実行してください。");
+          return transcription.uploaded(request.name,new Uint8Array(request.bytes));
         }
         if (action === "transcribe-file") {
           if (recording.has())

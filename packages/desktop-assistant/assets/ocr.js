@@ -2,7 +2,7 @@
 (() => {
  const api = window.assistant;
  const element = id => document.getElementById(id);
- let state = null, previewId = null, pending = false;
+ let state = null, previewId = null, pending = false,importEpoch=0;
  const result = element("ocr-result"), preview = element("ocr-preview");
  const status = element("ocr-status");
  function apply(next) {
@@ -24,6 +24,7 @@
   const busy = pending || ["loading", "recognizing", "stopping"].includes(state?.status);
   for (const id of ["ocr-file", "ocr-clipboard"]) element(id).disabled = !state?.enabled || busy;
   for (const id of ["ocr-crop", "ocr-run"]) element(id).disabled = !state?.enabled || busy || !state.imageId || previewId !== state.imageId;
+  element("ocr-drop").setAttribute("aria-disabled",String(!state?.enabled||busy));
   element("ocr-discard").disabled = !state?.imageId && !busy;
   element("ocr-use").disabled = !state?.imageId || !result.value.trim() || busy;
  }
@@ -41,6 +42,17 @@
   } catch (error) { status.textContent = error.message || "画像を処理できませんでした。"; }
   finally { pending = false; controls(); }
  }
+ const receive=async file=>{
+  window.assistantSections.reveal(element("ocr-drop"));
+  if(!state?.enabled||pending||["loading","recognizing","stopping"].includes(state?.status))throw Error("OCRを有効にし、前の処理が終わってから取り込んでください。");
+  const epoch=importEpoch,revision=state.revision;
+  return perform(async()=>{const bytes=await window.assistantFileInputs.read(file,["png"],8*1024*1024);if(document.hidden||epoch!==importEpoch)throw Error("画像の取り込みを取り消しました。");return api.ocrUpload({bytes,revision});});
+ };
+ const receiveFiles=window.assistantFileInputs.bind({target:element("ocr-drop"),accept:receive,report:error=>{status.textContent=error.message;}});
+ document.addEventListener("paste",event=>{
+  const files=Array.from(event.clipboardData?.files??[]).filter(file=>file.type.startsWith("image/"));if(!files.length)return;
+  event.preventDefault();receiveFiles(files);
+ });
  element("ocr-file").addEventListener("click", () => perform(() => api.ocrFile()));
  element("ocr-clipboard").addEventListener("click", () => perform(() => api.ocrClipboard()));
  element("ocr-crop").addEventListener("click", () => {
@@ -48,7 +60,7 @@
   void perform(() => api.ocrCrop({ imageId: state.imageId, rect }));
  });
  element("ocr-run").addEventListener("click", () => perform(() => api.ocrRun({ imageId: state.imageId })));
- element("ocr-discard").addEventListener("click", () => { void api.ocrDiscard().catch(error => { status.textContent = error.message; }); });
+ element("ocr-discard").addEventListener("click", () => { ++importEpoch;void api.ocrDiscard().catch(error => { status.textContent = error.message; }); });
  element("ocr-use").addEventListener("click", () => {
   if (!state?.imageId) return;
   if (result.value.length > 8192) { status.textContent = "8192文字以内に編集してから渡してください。"; return; }
@@ -62,7 +74,7 @@
  });
  api.onOcr(apply);
  api.ocrState().then(apply).catch(error => { status.textContent = error.message; });
- const discard = () => { preview.removeAttribute("src"); preview.hidden = true; result.value = ""; previewId = null; void api.ocrDiscard().catch(() => {}); };
+ const discard = () => {++importEpoch; preview.removeAttribute("src"); preview.hidden = true; result.value = ""; previewId = null; void api.ocrDiscard().catch(() => {}); };
  document.addEventListener("visibilitychange", () => { if (document.hidden) discard(); });
  window.addEventListener("pagehide", discard);
 })();

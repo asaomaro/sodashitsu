@@ -47,6 +47,7 @@ const fixture = vi.hoisted(() => ({
   fullscreenQuery: vi.fn(async () => false),
   quit: vi.fn(),
   startup: vi.fn(),
+  audioFetch:vi.fn(async () => Response.json({ text: "generated recording transcription" })),
   speech:vi.fn(async (_text:string,_signal:AbortSignal)=>{}),
   wavPlay:vi.fn(async()=>{}),
 }));
@@ -238,7 +239,7 @@ vi.mock("./transcription.js", async (importOriginal) => {
         super({
           ...options,
           read:(path,signal)=>fixture.audioRead?fixture.audioRead(path,signal):actual.readAudioFile(path,signal),
-          fetch: async () => Response.json({ text: "generated recording transcription" }),
+          fetch: fixture.audioFetch,
         });
       }
     },
@@ -1319,6 +1320,11 @@ it("suppresses compact notices while chat is open and publishes a notification i
  const compact=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(compact.isVisible()).toBe(true));
  const click={sender:compact.webContents,senderFrame:compact.webContents.mainFrame};
  const stale=(await fixture.handlers.get("assistant:notice-state")!(click) as any).revision;
+ const size=fixture.handlers.get("assistant:notice-size")!;
+ await expect(size(event,{revision:stale,height:350})).rejects.toThrow("許可");
+ await size(click,{revision:stale,height:350});expect(compact.getBounds().height).toBe(350);
+ await size(click,{revision:stale-1,height:220});expect(compact.getBounds().height).toBe(350);
+ await expect(size(click,{revision:stale,height:20000})).rejects.toThrow();
  connection.options.changed([{...first,message:"新しい詳細"}],false);
  await fixture.handlers.get("assistant:notice-dismiss")!(click,{revision:stale});expect(compact.isDestroyed()).toBe(false);
  await fixture.handlers.get("assistant:notice-open")!(click,{revision:stale});expect(compact.isDestroyed()).toBe(false);
@@ -1705,4 +1711,25 @@ it("restores every maximized assistant window on drag, updates its icon state, a
   expect(await action(local,"maximize")).toMatchObject({maximized:false});expect(win.getBounds()).toMatchObject({width:540,height:530});
  }
  const contents=remoteOf(panel).webContents;await expect(state({sender:contents,senderFrame:contents.mainFrame})).rejects.toThrow("許可");tools.close();panel.close();
+});
+
+it("accepts tools-only bounded media imports and rejects stale OCR/audio contexts",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false,ocrEnabled:true,ocrProvider:"local",transcriptionEnabled:true,transcriptionProvider:"local"});
+ await fixture.handlers.get("assistant:tools-open")!(event);const tools=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));const local={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};
+ const upload=fixture.handlers.get("assistant:ocr-upload")!,state=await fixture.handlers.get("assistant:ocr-state")!(local) as any;
+ const bytes=Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII=","base64")).buffer;
+ await expect(upload(event,{revision:state.revision,bytes})).rejects.toThrow("許可");
+ const image=await upload(local,{revision:state.revision,bytes}) as any;expect(image.state).toMatchObject({status:"ready",width:1,height:1});
+ await expect(upload(local,{revision:state.revision,bytes})).rejects.toThrow("状態が変わり");
+ await expect(upload(local,{revision:image.state.revision,bytes:new ArrayBuffer(8*1024*1024+1)})).rejects.toThrow();
+ await expect(upload(local,{revision:image.state.revision,bytes:new ArrayBuffer(1)})).rejects.toThrow("PNG");
+ const audio=fixture.handlers.get("assistant:transcribe-upload")!,snapshot=await fixture.handlers.get("assistant:tools")!(local) as any;
+ const fetch=fixture.audioFetch;fetch.mockClear();
+ const request={name:"dropped.wav",bytes:new Uint8Array([1,2,3]).buffer,revision:snapshot.revision,context:snapshot.transcriptionContext};
+ await expect(audio(event,request)).rejects.toThrow("許可");await expect(audio(local,{...request,context:"0".repeat(64)})).rejects.toThrow("変わり");expect(fetch).not.toHaveBeenCalled();
+ await audio(local,request);expect((await fixture.handlers.get("assistant:tools")!(local) as any).transcription).toMatchObject({status:"done"});expect(fetch).toHaveBeenCalledOnce();await expect(audio(local,request)).rejects.toThrow("変わり");
+ const current=await fixture.handlers.get("assistant:tools")!(local) as any;expect(current.transcription.text).toBe("generated recording transcription");
+ const minimized=vi.spyOn(tools,"isMinimized").mockReturnValue(true);await expect(audio(local,{...request,revision:current.revision,context:current.transcriptionContext})).rejects.toThrow("開いて");await expect(upload(local,{revision:image.state.revision,bytes})).rejects.toThrow("開いて");minimized.mockRestore();
+ tools.hide();await expect(audio(local,{...request,revision:current.revision,context:current.transcriptionContext})).rejects.toThrow("開いて");tools.close();
 });

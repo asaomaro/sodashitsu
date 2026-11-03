@@ -151,6 +151,13 @@ export class Transcription {
         : null;
     });
   }
+  uploaded(name: string, bytes: Uint8Array): Promise<void> {
+    const mime=types[extname(name).toLowerCase()];
+    if(!mime||!name||name.length>200||/[\\/\x00-\x1f]/.test(name))throw Error("対応する音声ファイルを選んでください。");
+    if(!bytes.byteLength||bytes.byteLength>AUDIO_LIMIT)throw Error("音声ファイルは空でない25MiB以内にしてください。");
+    const audio={name,mime,bytes:Uint8Array.from(bytes)};
+    return this.process(async()=>async()=>audio);
+  }
   recorded(audio: AudioFile, key: string): Promise<void> {
     if (
       !Object.values(types).includes(audio.mime.split(";")[0]!) ||

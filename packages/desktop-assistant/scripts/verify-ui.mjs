@@ -19,6 +19,7 @@ const files = new Set([
   "tool-window.js",
   "window.js",
   "sections.js",
+  "file-inputs.js",
   "reminder-notices.js",
   "bubble.js",
   "notice.html",
@@ -89,7 +90,7 @@ try {
     window.ocrRevision=1; window.currentOcr={};
     window.savedNotes = [];
     window.toolsRevision = 1;
-    window.currentTools = {revision:1,transcriptionEnabled:true,transcriptionProvider:"local",transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
+    window.currentTools = {transcriptionContext:"a".repeat(64),revision:1,transcriptionEnabled:true,transcriptionProvider:"local",transcriptionOrigin:"http://127.0.0.1:8080",notes:[],notesError:"",transcription:{revision:1,status:"idle",name:"",text:"",message:"生成されたテストです。"}};
     Object.defineProperty(window,"speechSynthesis",{configurable:true,value:{getVoices:()=>[{lang:"ja-JP",localService:false},{lang:"ja-JP",localService:true}],cancel:()=>window.calls.push(["stop-reading"]),speak:utterance=>window.calls.push(["speak",utterance.text,utterance.voice.localService])}});
     window.SpeechSynthesisUtterance = class {constructor(text){this.text=text;}};
     window.recordGrants=[];window.recordSequence=0;
@@ -161,6 +162,7 @@ try {
         window.currentOcr=state; window.ocrCallback(state);window.calls.push(["ocr-file"]);
         return {state,uri:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="};
       },
+      ocrUpload:async input=>{window.calls.push(["ocr-upload",{bytes:input.bytes.byteLength,revision:input.revision}]);return window.assistant.ocrFile();},
       ocrClipboard: async () => window.assistant.ocrFile(),
       ocrCrop: async input => {window.calls.push(["ocr-crop",input]);return window.assistant.ocrFile();},
       ocrRun: async input => {window.calls.push(["ocr-run",input]);window.currentOcr={...window.currentOcr,revision:++window.ocrRevision,status:"done",text:"画像から読み取った文字"};window.ocrCallback(window.currentOcr);},
@@ -179,6 +181,7 @@ try {
         window.savedNotes=[];window.currentTools={...window.currentTools,revision:++window.toolsRevision,notes:[]};
         window.toolsCallback(window.currentTools);window.calls.push(["delete-note",input]);
       },
+      transcribeUpload:async input=>window.calls.push(["transcribe-upload",{name:input.name,bytes:input.bytes.byteLength,revision:input.revision,context:input.context}]),
       transcribeFile: async () => window.calls.push(["transcribe-file"]),
       cancelTranscription: async () => window.calls.push(["cancel-transcription"]),
       voiceState:async()=>({revision:1,enabled:false,speaking:false,message:"ボイスはオフです。"}),
@@ -186,6 +189,7 @@ try {
       matchVoice:async input=>input.characterId.endsWith("zundamon")?{id:3,label:"ずんだもん（ノーマル）"}:null,
       testVoice:async input=>{window.calls.push(["test-voice",input]);window.voiceCallback({revision:++window.previewVoiceRevision,enabled:true,speaking:true,message:"読み上げています。"});},
       stopVoice:async()=>{window.calls.push(["stop-voice"]);window.voiceCallback({revision:++window.previewVoiceRevision,enabled:true,speaking:false,message:"読み上げを停止しました。"});},
+      sizeNotice: async input=>window.calls.push(["notice-size",input]),
       noticeState: async()=>({revision:1,title:"実装担当 (12345678) / 操舵室",message:"質問内容：変更を適用しますか？"}),
       readNotice: async input=>window.calls.push(["notice-read",input]),
       openNotice: async input=>window.calls.push(["open-notice",input]),
@@ -436,7 +440,13 @@ try {
   await page.evaluate(()=>window.compactCallback({revision:2,title:"レビュー担当",message:"<img src=x onerror=alert(1)>確認してください。".repeat(30)}));
   await expect(page.locator("#notice-title")).toHaveText("レビュー担当");
   await expect(page.locator("#notice-content img")).toHaveCount(0);
-  assert.ok(await page.locator("#notice-content").evaluate(el=>el.scrollHeight>el.clientHeight));
+  await expect(page.locator("#notice-more")).toBeVisible();
+  assert.equal(await page.locator("#notice-content").evaluate(el=>getComputedStyle(el).overflowY),"hidden");
+  await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c[0]==="notice-size").at(-1)?.[1].height)).toBeGreaterThan(220);
+  const naturalHeight=await page.evaluate(()=>window.calls.filter(c=>c[0]==="notice-size").at(-1)[1].height);
+  await page.setViewportSize({width:340,height:naturalHeight});
+  await expect(page.locator("#notice-more")).toBeHidden();
+  await page.setViewportSize({width:340,height:220});
   await page.evaluate(()=>window.compactCallback({revision:1,title:"古い通知",message:"古い内容"}));
   await expect(page.locator("#notice-title")).toHaveText("レビュー担当");
   assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight));
@@ -539,6 +549,25 @@ try {
   await page.setViewportSize({width:400,height:640});
   await expect(page.getByRole("heading",{name:"アシスタントのツール"})).toBeVisible();
   const sendsBeforeTools=await page.evaluate(()=>window.calls.filter(call=>call[0]==="send-message").length);
+  await page.evaluate(()=>{const data=new DataTransfer();data.items.add(new File([new Uint8Array([1,2,3])],"generated.wav",{type:"audio/wav"}));document.getElementById("audio-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));});
+  await expect(page.locator("#audio-drop-name")).toContainText("generated.wav");
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="transcribe-upload").length),0);
+  await page.locator("#audio-drop-start").press("Enter");
+  await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c[0]==="transcribe-upload").length)).toBe(1);
+  assert.deepEqual(await page.evaluate(()=>window.calls.find(c=>c[0]==="transcribe-upload")[1]),{name:"generated.wav",bytes:3,revision:1,context:"a".repeat(64)});
+  await expect(page.locator("#audio-drop-start")).toBeDisabled();
+  await page.evaluate(()=>{const data=new DataTransfer();data.items.add(new File(["bad"],"bad.txt"));document.getElementById("audio-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));});
+  await expect(page.locator("#audio-drop-name")).toContainText("対応形式");
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="transcribe-upload").length),1);
+
+  // A conversation/provider switch while bytes are loading must invalidate consent.
+  await page.evaluate(()=>{const file=new File(["wav"],"pending.wav");file.arrayBuffer=()=>new Promise(resolve=>{window.finishAudioRead=()=>resolve(new Uint8Array([1,2,3]).buffer);});const data=new DataTransfer();data.items.add(file);document.getElementById("audio-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));});
+  await page.locator("#audio-drop-start").press("Enter");
+  await expect.poll(()=>page.evaluate(()=>typeof window.finishAudioRead)).toBe("function");
+  await page.evaluate(()=>{window.currentTools={...window.currentTools,revision:++window.toolsRevision,transcriptionContext:"b".repeat(64)};for(const callback of window.toolWatchers)callback(window.currentTools);window.finishAudioRead();});
+  await expect(page.locator("#audio-drop-name")).toContainText("取り消しました");
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="transcribe-upload").length),1);
+
   await page.locator("#read-clipboard").press("Enter");
   await expect(page.locator("#tool-text")).toHaveValue("コピーした文章です。");
   await page.evaluate(()=>{
@@ -637,13 +666,29 @@ try {
   assert.deepEqual(await page.evaluate(() => window.calls.at(-1)), ["window-action", "close"]);
   assert.deepEqual(errors, []);
   await page.evaluate(() => { document.getElementById("standard-tools").open=true; document.getElementById("ocr-tools").open=true; });
-  await page.locator("#capture-list").focus();await page.keyboard.press("Enter");
-  await expect(page.locator("#capture-start")).toBeEnabled();
-  await page.locator("#capture-start").focus();await page.keyboard.press("Enter");
-  await expect(page.locator("#capture-status")).toContainText("画面を取得しました");
+  await expect(page.locator("#capture-list,#capture-start,#capture-sources")).toHaveCount(0);
+  const importsBefore=await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-upload").length);
+  await page.evaluate(()=>{
+    const bytes=Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="),c=>c.charCodeAt(0)),data=new DataTransfer();
+    data.items.add(new File([bytes],"generated.png",{type:"image/png"}));document.getElementById("ocr-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));
+  });
+  await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-upload").length)).toBe(importsBefore+1);
   await expect(page.locator("#ocr-preview")).toHaveAttribute("src",/^data:image\/png;base64,/);
-  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="get-display-media").length),1);
-  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="submit-screenshot").length),1);
+  const recognitionBefore=await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-run").length);
+  await page.evaluate(()=>{
+    const data=new DataTransfer(),bytes=Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPuoAAAAASUVORK5CYII="),c=>c.charCodeAt(0));
+    data.items.add(new File([bytes],"pasted.png",{type:"image/png"}));document.dispatchEvent(new ClipboardEvent("paste",{bubbles:true,cancelable:true,clipboardData:data}));
+  });
+  await expect.poll(()=>page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-upload").length)).toBe(importsBefore+2);
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-run").length),recognitionBefore);
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="get-display-media").length),0);
+  assert.equal(await page.evaluate(()=>{const data=new DataTransfer();data.setData("text/plain","通常の文章");const event=new ClipboardEvent("paste",{bubbles:true,cancelable:true,clipboardData:data});document.getElementById("tool-text").dispatchEvent(event);return event.defaultPrevented;}),false);
+  await page.evaluate(()=>{const data=new DataTransfer();data.items.add(new File(["bad"],"invalid.txt"));document.getElementById("ocr-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));});
+  await expect(page.locator("#ocr-status")).toContainText("対応形式");
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-upload").length),importsBefore+2);
+  await page.evaluate(()=>{const data=new DataTransfer();data.items.add(new File([new Uint8Array(8*1024*1024+1)],"large.png",{type:"image/png"}));document.getElementById("ocr-drop").dispatchEvent(new DragEvent("drop",{bubbles:true,cancelable:true,dataTransfer:data}));});
+  await expect(page.locator("#ocr-status")).toContainText("8MiB");
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="ocr-upload").length),importsBefore+2);
   await page.locator("#ocr-file").focus(); await page.keyboard.press("Enter");
   await expect(page.locator("#ocr-preview")).toHaveAttribute("src", /^data:image\/png;base64,/);
   await expect(page.locator("#ocr-run")).toBeEnabled();

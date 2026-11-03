@@ -38,7 +38,7 @@ export function authorizeLocalSender(
     return true;
   if (action === "voice-test" || action === "voice-speakers" || action === "voice-match" || action === "voice-versions") return sender.role === "settings";
   if (action === "voice-state" || action === "voice-stop") return sender.role !== "character";
-  if (action === "notice-state" || action === "notice-dismiss" || action === "notice-open") return sender.role === "notice";
+  if (action === "notice-size" || action === "notice-state" || action === "notice-dismiss" || action === "notice-open") return sender.role === "notice";
   if (action === "character-state" || action === "character-actor") return sender.role === "character";
   if (action === "character-info") return true;
   if (
@@ -57,7 +57,7 @@ export function authorizeLocalSender(
   if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
   if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";
   if(action==="draft-message")return sender.role==="tools";
-  if(sender.role==="tools")return ["tools","apps","app-open","app-call","screenshot-sources","screenshot-approve","screenshot-submit","screenshot-cancel","reminders","reminder-save","reminder-remove","reminder-ack","ocr-state","ocr-file","ocr-clipboard","ocr-crop","ocr-run","ocr-discard","note-save","note-delete","transcribe-file","transcribe-cancel","clipboard-read","clipboard-write","record-start","record-stop","record-discard","record-transcribe"].includes(action);
+  if(sender.role==="tools")return ["ocr-upload","transcribe-upload","tools","apps","app-open","app-call","screenshot-sources","screenshot-approve","screenshot-submit","screenshot-cancel","reminders","reminder-save","reminder-remove","reminder-ack","ocr-state","ocr-file","ocr-clipboard","ocr-crop","ocr-run","ocr-discard","note-save","note-delete","transcribe-file","transcribe-cancel","clipboard-read","clipboard-write","record-start","record-stop","record-discard","record-transcribe"].includes(action);
   if (
     [
       "inbox",

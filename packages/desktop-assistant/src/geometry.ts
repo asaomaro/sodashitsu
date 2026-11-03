@@ -66,14 +66,16 @@ export function noticeBounds(
   displays: readonly DisplayArea[],
   aspect = 1,
   conversation?: Rect,
+  requestedHeight?: number,
 ): Rect {
-  if (preferences.mode === "tray" && !conversation) return anchoredBounds(preferences, displays, 340, 220, aspect);
+  const desired=Math.max(160,Math.min(16384,requestedHeight??220));
+  if (preferences.mode === "tray" && !conversation) return anchoredBounds(preferences, displays, 340, desired, aspect);
   const display=displays.find(d=>d.id===preferences.position?.displayId)??displays[0];
   if(!display)throw Error("表示できるディスプレイがありません");
   const area=display.workArea,character=characterBounds(preferences,displays,aspect),width=Math.min(340,area.width);
   const bottom=area.y+area.height,top=Math.max(character.y+4,conversation?conversation.y+conversation.height:area.y);
   const room=bottom-top;
-  const height=Math.min(220,area.height,room>=160?room:220);
+  const height=Math.min(desired,area.height,requestedHeight===undefined&&room>=160?room:area.height);
   const clamp=(n:number,min:number,max:number)=>Math.max(min,Math.min(n,max));
   let x=clamp(character.x+2-width,area.x,area.x+area.width-width);
   const y=clamp(room>=160?top:character.y+(character.height-height)/2,area.y,bottom-height);

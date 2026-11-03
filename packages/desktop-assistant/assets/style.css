@@ -56,13 +56,17 @@
 
 .notice-bubble{background:transparent;padding:8px 20px 8px 8px;height:100vh;overflow:hidden}
 .notice-card{height:100%;position:relative;display:flex;flex-direction:column;gap:6px;padding:12px;background:#172438;border:2px solid #e5be61;border-radius:16px;color:#edf3fa;box-shadow:0 2px 6px #0006}
-.notice-card::after{content:"";position:absolute;right:-10px;top:calc(50% - 9px);width:18px;height:18px;background:#172438;border-right:2px solid #e5be61;border-top:2px solid #e5be61;transform:rotate(45deg)}
+.notice-card::before,.notice-card::after{content:"";position:absolute;top:50%;transform:translateY(-50%);clip-path:polygon(0 0,100% 50%,0 100%)}
+.notice-card::before{right:-14px;width:14px;height:28px;background:#e5be61}
+.notice-card::after{right:-11px;width:13px;height:24px;background:#172438}
 .notice-card header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#e5be61}
 .notice-card header button{background:transparent;color:#edf3fa;padding:0 4px}
-#notice-content{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain;scrollbar-color:#c9a64f #23364d;scrollbar-width:thin}
-#notice-title{font-weight:600;font-size:12px;margin:0 0 4px}
-#notice-message{margin:0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
-#notice-title{overflow-wrap:anywhere}
+#notice-content{min-height:0;flex:1;overflow:hidden}
+.notice-title,.notice-message{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+#notice-more{margin:0;font-size:11px;color:#e5be61}
+.notice-title{font-weight:600;font-size:12px;margin:0 0 4px}
+.notice-message{margin:0;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.notice-title{overflow-wrap:anywhere}
 #notice-open{flex:0 0 auto;align-self:flex-end;font-size:12px;padding:6px 12px}
 
 #selected-character-preview{display:block;object-fit:contain;background:#23364d;border-radius:8px}
@@ -133,3 +137,6 @@
 .speech #notices{border:0;padding:0}.speech #notices .notice{font-size:13px;white-space:normal}
 .speech #notices .notice>summary{cursor:pointer;color:#e5be61}.speech #notices .notice .notice-text{white-space:pre-wrap}
 .speech-content textarea,.assistant-scroll textarea{resize:none;overflow:hidden}
+
+.file-drop{margin:10px 0;padding:18px 12px;border:1px dashed #c9a64f;border-radius:10px;background:#23364d;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.file-drop:focus-visible{outline:3px solid #7bcfff;outline-offset:2px}.file-drop.drag-over{background:#354b65;border-style:solid}.file-drop[aria-disabled=true]{opacity:.55}

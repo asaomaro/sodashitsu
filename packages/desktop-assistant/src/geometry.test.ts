@@ -67,6 +67,8 @@ it("places compact notices to the left and below chat without leaving negative o
  expect(notice.y+notice.height).toBeLessThanOrEqual(1040);
  const tiny=noticeBounds(prefs,[{id:"secondary",workArea:{x:-240,y:-100,width:240,height:180}}]);
  expect(tiny).toEqual({x:-240,y:-96,width:240,height:176});
+ const tall=noticeBounds(prefs,displays,1,undefined,460);expect(tall.height).toBe(460);expect(tall.y+tall.height).toBeLessThanOrEqual(1040);
+ const capped=noticeBounds(prefs,displays,1,undefined,4000);expect(capped.height).toBe(1040);expect(capped.y).toBe(0);
 });
 
 it("keeps tall and wide custom artwork flush with the taskbar and anchors bubbles to its actual top",()=>{
