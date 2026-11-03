@@ -18,6 +18,7 @@ const files = new Set([
   "tools.html",
   "tool-window.js",
   "window.js",
+  "sections.js",
   "reminder-notices.js",
   "bubble.js",
   "notice.html",
@@ -245,6 +246,7 @@ try {
         const body=document.body,card=document.querySelector(".assistant-card"),content=document.querySelector(".assistant-scroll");
         return {outer:document.documentElement.scrollHeight<=innerHeight&&document.documentElement.scrollWidth<=innerWidth,scroll:getComputedStyle(content).overflowY,border:getComputedStyle(card).borderTopColor,radius:getComputedStyle(card).borderTopLeftRadius,scrollbar:getComputedStyle(content).scrollbarColor,background:getComputedStyle(body).backgroundColor,card:card.getBoundingClientRect().toJSON(),header:document.querySelector(".assistant-window-header").getBoundingClientRect().height,head:document.querySelector(".assistant-window-header").getBoundingClientRect().top};
       });
+      if(!layout.outer)await page.screenshot({path:"/tmp/soda-sections-layout-failure.png"});
       assert.ok(layout.outer,role+" has no page scrollbar");assert.equal(layout.background,"rgba(0, 0, 0, 0)");assert.equal(layout.card.x,0);assert.equal(layout.card.y,0);assert.equal(layout.card.width,size.width);assert.ok(layout.header<=30);assert.equal(layout.scroll,"auto");assert.equal(layout.border,"rgb(229, 190, 97)");assert.equal(layout.radius,"20px");assert.ok(layout.scrollbar.includes("201, 166, 79"));
       await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=el.scrollHeight;});
       assert.equal(await page.locator(".assistant-window-header").evaluate(el=>el.getBoundingClientRect().top),layout.head);
@@ -336,6 +338,15 @@ try {
   await page.locator("#characterId").selectOption("plugin:yukkuri-work/zundamon");
   await expect(page.locator("#selected-character-preview")).toHaveAttribute("alt","ずんだもん");
   await expect(page.locator("#selected-character-credit")).toHaveText("元の立ち絵の素材メモ");
+  await page.locator("#selected-character-credit").evaluate(el=>el.textContent="利用条件と説明文です。\n".repeat(80));
+  const creditSection=page.locator('[data-collapse-empty="selected-character-credit selected-character-persona"]');
+  await expect.poll(()=>page.locator("#selected-character-credit").evaluate(el=>el.clientHeight>=el.scrollHeight-1)).toBe(true);
+  await creditSection.locator(":scope > summary").click();await expect(page.locator("#selected-character-credit")).not.toBeVisible();
+  await creditSection.locator(":scope > summary").press("Enter");await expect(page.locator("#selected-character-credit")).toBeVisible();
+  await page.locator("#appearance-section > summary").click();
+  await page.locator("#characterSize").evaluate(el=>{el.value="";el.form.reportValidity();});
+  await expect(page.locator("#appearance-section")).toHaveJSProperty("open",true);await page.locator("#characterSize").fill("192");
+
   await page.locator("#voiceFollowCharacter").check();
   await expect(page.locator("#voicevoxStyleId")).toHaveValue("3");
   await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
@@ -678,6 +689,10 @@ try {
   await expect(page.locator("#app-result")).toHaveValue("<img src=x>プラグインの結果");await expect(page.locator("#app-views img")).toHaveCount(0);
   await page.locator("#app-use").press("Enter");await expect(page.locator("#tool-text")).toHaveValue("<img src=x>プラグインの結果");
   await page.evaluate(()=>{window.assistant.apps=async()=>{throw Error("一覧が変わりました");};});await page.locator("#apps-refresh").press("Enter");await expect(page.locator("#app-views button")).toHaveCount(0);await expect(page.locator("#app-call")).toBeDisabled();
+  await page.evaluate(()=>{window.originalClipboardRead=window.assistant.readClipboard;window.assistant.readClipboard=async()=>"コピーした長い文章\n".repeat(100);});
+  await page.locator("#read-clipboard").press("Enter");
+  await expect.poll(()=>page.locator("#tool-text").evaluate(el=>el.clientHeight>=el.scrollHeight-1)).toBe(true);
+  await page.evaluate(()=>{window.assistant.readClipboard=window.originalClipboardRead;});
   page=conversationPage;
   await page.evaluate(()=>window.remindersCallback({revision:3,connected:true,jobs:[],runs:[{id:"00000000-0000-4000-8000-000000000044",input:"会話で確認するリマインダー"}],message:"届いています"}));
   await expect(page.locator("#reminder-notices")).toContainText("会話で確認するリマインダー");
@@ -725,55 +740,47 @@ try {
   await page.locator("#agent-filter").selectOption("idle");
   await expect(page.locator("#agent-roster-status")).toContainText("表示対象の先頭256件");
   await page.locator("#agent-filter").selectOption("all");
-  assert.ok(await page.locator("#agent-roster-rows").evaluate(element=>element.scrollHeight>element.clientHeight&&element.clientHeight<=150));
-  // Observe real layout with long chat, expanded tools, and launch metadata.
-  // The document and composer must stay fixed even on a short work area.
+  assert.ok(await page.locator("#agent-roster-rows").evaluate(element=>element.scrollHeight<=element.clientHeight+1&&element.clientHeight>150));
+  await page.locator("#notices textarea").fill("折り畳んでも保持する返答\n".repeat(20));
+  await page.locator("#notices > details > summary").click();
+  await expect(page.locator("#notices .notice-text")).not.toBeVisible();
+  await page.locator("#notice-section > summary").click();
+  await page.evaluate(()=>window.noticeCallback({status:"connected",revision:102,notices:[{id:"00000000-0000-4000-8000-000000000092",message:"更新した通知です。"}]}));
+  await expect(page.locator("#notice-section")).toHaveJSProperty("open",false);
+  await page.locator("#notice-section > summary").click();
+  await expect(page.locator("#notices > details")).toHaveJSProperty("open",false);
+  await page.locator("#notices > details > summary").press("Enter");await expect(page.locator("#notices .notice-text")).toBeVisible();
+  await expect(page.locator("#notices textarea")).toHaveValue("折り畳んでも保持する返答\n".repeat(20));
+  await expect.poll(()=>page.locator("#notices textarea").evaluate(el=>el.clientHeight>=el.scrollHeight-1)).toBe(true);
+
+  // Expanded sections show every row; only the outer content area scrolls.
   await page.evaluate(() => {
     document.getElementById("conversation").replaceChildren();
-    for (let i = 0; i < 40; i++) {
-      const message = document.createElement("p");
-      message.className = "spoken";
-      message.textContent = `会話 ${i}: ` + "長い会話の内容です。".repeat(20);
-      document.getElementById("conversation").append(message);
-    }
-    document.getElementById("launch-settings").textContent = "起動時指定：モデル 既定値 / effort 既定値（CLI内での変更は追跡しません）";
+    for (let i=0;i<40;i++){const message=document.createElement("p");message.className="spoken";message.textContent=`会話 ${i}: `+"長い会話の内容です。".repeat(20);document.getElementById("conversation").append(message);}
+    document.getElementById("launch-settings").textContent="起動時指定：モデル 既定値 / effort 既定値（CLI内での変更は追跡しません）";
   });
-  for (const viewport of [{width:400,height:640},{width:400,height:540},{width:320,height:480}]) {
+  for(const viewport of [{width:400,height:640},{width:400,height:540},{width:320,height:480}]){
     await page.setViewportSize(viewport);
-    {
-      await page.locator(".speech-content").evaluate(element=>{element.scrollTop=0;});
-      for(const label of ["小窓で応答","操舵室で開く"]){
-        const box=await page.locator("#notices").getByRole("button",{name:label,exact:true}).boundingBox();
-        const content=await page.locator(".speech-content").boundingBox();
-        assert.ok(box && content && box.height>0 && box.y>=content.y && box.y+box.height<=content.y+content.height,`visible notice choice ${label}, ${viewport.width}x${viewport.height}, separate tools window`);
-      }
-      const layout = await page.evaluate(() => {
-        const frame = document.querySelector(".speech").getBoundingClientRect();
-        const chat = document.getElementById("chat").getBoundingClientRect();
-        const nav = document.querySelector(".speech nav").getBoundingClientRect();
-        const content = document.querySelector(".speech-content") ?? document.querySelector(".speech");
-        content.scrollTop = content.scrollHeight;
-        const conversation = document.getElementById("conversation");
-        conversation.scrollTop = 100;
-        return {
-          documentFits: document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth,
-          bodyFits: document.body.scrollHeight <= innerHeight,
-          frameFits: frame.top >= 0 && frame.bottom <= innerHeight,
-          composerFits: chat.top >= frame.top && chat.bottom <= frame.bottom,
-          actionsFit: nav.top >= frame.top && nav.bottom <= chat.top,
-          conversationScrolls: conversation.scrollTop > 0 && conversation.scrollHeight > conversation.clientHeight,
-          scrollbarColor: getComputedStyle(conversation).scrollbarColor,
-          scrollbarWidth: getComputedStyle(conversation).scrollbarWidth,
-        };
-      });
-      assert.deepEqual(layout, {
-        documentFits:true, bodyFits:true, frameFits:true, composerFits:true, actionsFit:true, conversationScrolls:true,
-        scrollbarColor:"rgb(201, 166, 79) rgb(35, 54, 77)", scrollbarWidth:"thin",
-      }, `fixed assistant layout ${viewport.width}x${viewport.height}, separate tools window`);
-    }
+    const layout=await page.evaluate(()=>{
+      const outer=document.querySelector(".speech-content"),frame=document.querySelector(".speech").getBoundingClientRect();outer.scrollTop=0;
+      const nested=[...outer.querySelectorAll("*")].filter(el=>{
+        const style=getComputedStyle(el);return ["auto","scroll"].includes(style.overflowY)&&el.scrollHeight>el.clientHeight+1;
+      }).map(el=>el.id||el.tagName);
+      const conversation=document.getElementById("conversation");conversation.scrollTop=100;
+      return {fits:document.documentElement.scrollHeight<=innerHeight&&document.documentElement.scrollWidth<=innerWidth,frameFits:frame.top>=0&&frame.bottom<=innerHeight,outerScrolls:outer.scrollHeight>outer.clientHeight,nested,conversationDoesNotScroll:conversation.scrollTop===0&&conversation.scrollHeight<=conversation.clientHeight+1};
+    });
+    assert.deepEqual(layout,{fits:true,frameFits:true,outerScrolls:true,nested:[],conversationDoesNotScroll:true},`single content scroll ${viewport.width}x${viewport.height}`);
+    await page.locator("#conversation-section > summary").click();await expect(page.locator("#conversation")).not.toBeVisible();
+    await page.locator("#conversation-section > summary").press("Enter");await expect(page.locator("#conversation")).toBeVisible();
+    await page.locator("#message").fill("長い入力です。\n".repeat(20));
+    await expect.poll(()=>page.locator("#message").evaluate(el=>el.clientHeight>=el.scrollHeight-1)).toBe(true);
+    await page.locator("#chat").scrollIntoViewIfNeeded();await expect(page.locator("#send")).toBeVisible();
+    await page.locator("#message").fill("");
   }
   await page.setViewportSize({width:400,height:640});
-  console.log("PASS: fixed bubble, visible composer, internal conversation scroll and themed scrollbars at 400x640, 400x540 and 320x480, tools in their own window");
+  await page.locator(".speech-content").evaluate(el=>{el.scrollTop=0;});
+  await page.screenshot({path:"/tmp/soda-sections-conversation.png"});
+  console.log("PASS: one outer content scroll, fully expanded sections/editors, and keyboard folding at 400x640, 400x540 and 320x480");
   assert.deepEqual(errors, []);
   console.log(
     "PASS: generated settings keyboard flow, four-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing",

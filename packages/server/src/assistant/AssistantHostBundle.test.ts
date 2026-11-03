@@ -21,7 +21,7 @@ it("loads soda's GUI resources without node_modules using a synthetic Electron A
    expect(info.isFile()&&!info.isSymbolicLink()).toBe(true);expect(bytes.length).toBe(entry.bytes);
    expect(createHash("sha256").update(bytes).digest("hex")).toBe(entry.sha256);
   }
-  for(const name of ["dist/main.mjs","dist/preload.cjs","assets/character.html","assets/bubble.html","assets/panel.html","assets/window.js","assets/captain-robot.svg","THIRD_PARTY_NOTICES.txt"])
+  for(const name of ["dist/main.mjs","dist/preload.cjs","assets/character.html","assets/bubble.html","assets/panel.html","assets/window.js","assets/sections.js","assets/captain-robot.svg","THIRD_PARTY_NOTICES.txt"])
    expect(manifest.entries.some(entry=>entry.path===name)).toBe(true);
   expect(await readFile(join(host,"THIRD_PARTY_NOTICES.txt"),"utf8")).toMatch(/zod@/);
   await run(process.execPath,["--check",join(host,"dist/main.mjs")]);

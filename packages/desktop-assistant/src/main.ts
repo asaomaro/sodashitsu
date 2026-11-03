@@ -80,6 +80,7 @@ const allowedAssets = new Map([
   ["/tools.html", "text/html"],
   ["/tool-window.js", "text/javascript"],
   ["/window.js", "text/javascript"],
+  ["/sections.js", "text/javascript"],
   ["/reminder-notices.js", "text/javascript"],
   ["/notice.html", "text/html"],
   ["/notice.js", "text/javascript"],

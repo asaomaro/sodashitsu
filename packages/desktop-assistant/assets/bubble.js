@@ -23,7 +23,7 @@
   const current=notification;if(!current)return;
   try{
    if(current.id&&noticeRows.has(current.id)){await window.assistant.readNotice({noticeId:current.id});selectNotice(current.id);}
-   else {const target=document.getElementById("reminder-notices");if(target&&!target.hidden)target.scrollIntoView({block:"start"});else document.getElementById("status").textContent=current.message;}
+   else {const target=document.getElementById("reminder-notices");if(target&&!target.hidden){window.assistantSections.reveal(target);target.scrollIntoView({block:"start"});}else document.getElementById("status").textContent=current.message;}
    if(notification?.seq===current.seq)acknowledgeNotification();
   }catch(error){document.getElementById("status").textContent=error.message;}
  };
@@ -31,6 +31,7 @@
   const row=noticeRows.get(id);
   for(const item of noticeRows.values())item.classList.toggle("notice-current",item===row);
   if(!row)return;
+  window.assistantSections.reveal(row);
   row.tabIndex=-1;row.focus({preventScroll:true});row.scrollIntoView({block:"start"});
  };
  const inbox=document.getElementById("notices");
@@ -40,14 +41,12 @@
    const list=document.getElementById("agent-roster-rows"), filter=document.getElementById("agent-filter").value;
    document.getElementById("agent-roster-summary").textContent=`エージェント一覧（${agentList.total}件・作業中 ${agentList.working}件・確認待ち ${agentList.blocked}件）`;
    const rows=agentList.agents.filter(row=>filter==="all"||row.state===filter);
-   const previousScroll=list.scrollTop;
    list.replaceChildren();
    for(const row of rows){
      const item=document.createElement("li"), state=document.createElement("span"), title=document.createElement("span");
      state.className=`agent-state agent-state-${row.state}`;state.textContent=agentStates[row.state]||"状態不明";
      title.textContent=row.title;item.append(state,title);list.append(item);
    }
-   list.scrollTop=previousScroll;
    const status=document.getElementById("agent-roster-status");
    status.textContent=rows.length ? (agentList.total>agentList.agents.length?`全${agentList.total}件のうち先頭${agentList.agents.length}件を表示しています。`:"") : (agentList.total>agentList.agents.length?`表示対象の先頭${agentList.agents.length}件に、該当するエージェントはいません。全${agentList.total}件は操舵室で確認できます。`:rosterStatus==="connected"?"該当するエージェントはいません。":"接続中のマシンに、表示できるエージェントはいません。");
    status.hidden=rows.length>0&&!status.textContent;
@@ -65,7 +64,7 @@
    notificationIndicator.hidden=!notification||notification.seq<=readNotificationSequence;
    if(notification){notificationIndicator.textContent=`新しい通知：${notification.title}`;notificationIndicator.title=notification.message;}
    inbox.hidden=state.notices.length===0;
-   let added=false;
+   document.getElementById("notice-section").hidden=inbox.hidden;document.getElementById("notice-section-summary").textContent=`通知・確認待ち（${state.notices.length}件）`;
    for(const [id,row] of noticeRows)if(!present.has(id)){row.remove();noticeRows.delete(id);}
    for (const notice of [...state.notices].reverse()) {
      if(noticeRows.has(notice.id)){
@@ -74,7 +73,7 @@
        const title=row.querySelector(".notice-title-button");title.textContent=title.title=notice.title || "通知元";
        continue;
      }
-     const entry = document.createElement("p"); entry.className = "spoken notice";
+     const entry = document.createElement("details"); entry.className = "spoken notice";entry.open=true;
      const words=document.createElement("span");words.className="notice-text";words.textContent=notice.message;
      const open=document.createElement("button");open.type="button";open.textContent="小窓で応答";
      open.addEventListener("click",()=>window.assistant.openSource({noticeId:notice.id,destination:"reply"}).catch(error=>{document.getElementById("status").textContent=error.message;}));
@@ -89,14 +88,13 @@
      read.addEventListener("click",()=>window.assistant.readNotice({noticeId:notice.id}).then(()=>{selectNotice(notice.id);acknowledgeNotification(notice.id);}).catch(report));destination.append(read);
      destination.title=notice.title || "通知元";
      const actions=document.createElement("span");actions.className="notice-actions";actions.append(open,main);
-     entry.append(destination,actions,words);
+     const summary=document.createElement("summary");summary.append(destination);entry.append(summary,actions,words);
      if(notice.kind!=="question")entry.append(reply,submit);
      if(notice.kind==="attention") for(const [keyName,label]of [["Enter","Enterで確認"],["Escape","Escで戻る"],["y","yを送信"],["n","nを送信"]]){
        const key=document.createElement("button");key.type="button";key.textContent=label;key.onclick=async()=>{key.disabled=true;try{await window.assistant.sourceKey({noticeId:notice.id,keyName});}catch(error){report(error);}finally{key.disabled=false;}};entry.append(key);
      }
-     noticeRows.set(notice.id,entry);inbox.prepend(entry);added=true;
+     noticeRows.set(notice.id,entry);inbox.prepend(entry);
    }
-   if(added)inbox.scrollTop=0;
    if(Number.isSafeInteger(state.noticeFocusRevision)&&state.noticeFocusRevision>noticeFocusRevision){
      noticeFocusRevision=state.noticeFocusRevision;selectNotice(state.focusedNoticeId);
    }
@@ -107,7 +105,7 @@
  let chatRevision = -1, chatState = null;
  const message = document.getElementById("message");
  let draftRevision=-1;
- const updateDraft=state=>{if(!Number.isSafeInteger(state.revision)||state.revision<=draftRevision)return;draftRevision=state.revision;if(state.text!==null){message.value=state.text;message.focus();void window.assistant.consumeDraft({revision:state.revision}).catch(()=>{});}};
+ const updateDraft=state=>{if(!Number.isSafeInteger(state.revision)||state.revision<=draftRevision)return;draftRevision=state.revision;if(state.text!==null){message.value=state.text;window.assistantSections.reveal(message);window.assistantSections.fitTextareas();message.focus();void window.assistant.consumeDraft({revision:state.revision}).catch(()=>{});}};
  const offDraft=window.assistant.onDraft(updateDraft);window.addEventListener("pagehide",offDraft,{once:true});window.assistant.draftState().then(updateDraft).catch(()=>{});
  const send = document.getElementById("send");
  const kinds = document.getElementById("agent-kind");
@@ -117,7 +115,8 @@
  const updateChat = state => {
    if (!Number.isSafeInteger(state.revision) || state.revision <= chatRevision) return;
    chatRevision = state.revision; chatState = state;
-   const follow = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
+   const viewport=document.querySelector(".speech-content");
+   const follow = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 24;
    const info = state.session;
    const target = info?.agent;
    document.getElementById("session-controls").hidden = !!info && ["ready", "starting"].includes(info.state);
@@ -155,7 +154,8 @@
      const paragraph = document.createElement("p"); paragraph.className = `spoken chat-message ${entry.role}`;
      paragraph.textContent = entry.text; log.append(paragraph);
    }
-   if (follow) log.scrollTop = log.scrollHeight;
+   window.assistantSections.fitTextareas();
+   if (follow) viewport.scrollTop = viewport.scrollHeight;
  };
  const report = error => { sessionStatus.textContent = error?.message || "操作を確認できませんでした。"; };
  start.addEventListener("click", () => {
@@ -172,7 +172,7 @@
    if (!actor || send.disabled || !text.trim()) return;
    try {
      await window.assistant.sendMessage({ revision: chatState.revision, instanceId: actor.instanceId, text });
-     if (message.value === text) message.value = "";
+     if (message.value === text) {message.value = "";window.assistantSections.fitTextareas();}
    } catch (error) { report(error); }
  });
  const unsubscribeChat = window.assistant.onConversation(updateChat);
