@@ -106,8 +106,8 @@
 .assistant-window-title h1{font-size:14px;line-height:1.35;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .assistant-window-title p{display:none}
 .window-controls{display:flex;gap:2px;flex:0 0 auto;-webkit-app-region:no-drag;app-region:no-drag}
-.window-controls button{background:transparent;color:var(--assistant-fg);padding:4px;width:28px;height:26px;margin:0;border-radius:6px;line-height:1;font-size:20px}
-.window-controls button:hover{background:var(--assistant-surface)}.window-controls button[data-window-action=close]:hover{background:#6e2630}
+.window-controls button{display:flex;align-items:center;justify-content:center;background:transparent;color:var(--assistant-fg);padding:4px;width:28px;height:26px;margin:0;border-radius:6px;line-height:1;font-size:20px}
+.window-controls button:hover{background:var(--assistant-surface)}.window-controls button[data-window-action=close]:hover{background:#6e2630;color:#edf3fa}
 .assistant-scroll{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;padding:0 4px 4px 0;scrollbar-gutter:stable}
 .assistant-scroll>form{margin:0}.assistant-scroll fieldset{min-width:0;max-width:100%;border:1px solid var(--assistant-line);border-radius:10px;margin:14px 0;padding:12px;background:var(--assistant-muted-surface)}
 .assistant-scroll legend{color:var(--assistant-gold);padding:0 5px}
@@ -129,7 +129,9 @@
 .window-resize-nw,.window-resize-ne,.window-resize-sw,.window-resize-se{width:12px;height:12px}
 .window-resize-nw{top:0;left:0;cursor:nwse-resize}.window-resize-ne{top:0;right:0;cursor:nesw-resize}.window-resize-sw{bottom:0;left:0;cursor:nesw-resize}.window-resize-se{bottom:0;right:0;cursor:nwse-resize}
 
-.window-controls button[data-window-action=maximize]{display:flex;align-items:center;justify-content:center}
+.window-controls button svg{display:block;flex-shrink:0}
+.speech header>.window-controls{margin-left:auto;overflow:visible}
+.speech .window-controls button{margin:0}
 
 /* One scrolling content area; expanded sections and editors always show their full height. */
 .assistant-section{margin:8px 0;border:1px solid var(--assistant-line);border-radius:10px;padding:8px 10px;background:var(--assistant-muted-surface)}

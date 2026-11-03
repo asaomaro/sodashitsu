@@ -1,0 +1,11 @@
+# アシスタント窓の操作ボタンと会話の最大化
+
+閉じる・最小化記号をSVG化し、共通のflex中央配置で文字のベースラインによる下寄りを解消。会話にも共通window-controls/window.jsを使用し、最大化/復元アイコンとhoverを揃える。通常配色のclose hoverは白い記号を明示。
+
+会話は現在の右端/下端を保持しworkArea左上まで拡大。復元先を保存し、設定変更でも通常位置と最大化位置を再計算。既存の最大化状態通知・revisionを共用。最大化中の手動リサイズと進行中のgestureを拒否。closeはhideしセッションを維持。bubbleにはwindow-action/stateのみ許可し、8方向window-resizeは引き続き拒否。会話rendererでは標準8方向handleも生成しない。
+
+検証: host51件、新規にアンカー固定・復元・設定更新・hide再表示・権限境界を確認。アシスタント全30ファイル243件通過。Chromiumで実DOMのアイコン中心（誤差0.2px未満）、hoverの背景/前景、会話のmax/restore、3方向handleのみを検証しUI全チェック通過。共通中央配置を外すとUI確認が失敗、bubble最大化分岐を外すとアンカー確認が失敗。生ログnegative-centering.txt/negative-anchor.txt。ソースはバイト一致で復元。
+
+独立レビュー: review_resource_monitorがhost/権限/保存を点検し必須指摘なし。review_bubble_resizeがUI差分を点検、通常配色のclose hoverコントラスト指摘を修正して再レビュー必須指摘なし。
+
+全体ビルド・全体型チェック通過。内部ホスト同梱物を再構築しhandoffで稼働へ反映。前後のsnapshotで既存11paneをすべて保持したことを確認（handoff対象PTYは9）。更新後のアシスタントはphase=running/stage=ready。

@@ -1644,7 +1644,7 @@ it("uses the resident CLI backend and selected CORE version without an HTTP synt
  }finally{vi.unstubAllGlobals();rpc.request.mockImplementation(original!);await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
 });
 
-it("limits native window controls to their own settings/tools main frame",async()=>{
+it("limits native window controls to approved local main frames",async()=>{
  const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
  const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
  expect(settings.options).toMatchObject({frame:false,resizable:false,show:true,minWidth:360,minHeight:360});expect(settings.menu).toBeNull();
@@ -1656,7 +1656,7 @@ it("limits native window controls to their own settings/tools main frame",async(
  await expect(action({...event,senderFrame:{url:settings.url}},"close")).rejects.toThrow("許可");
  await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
  await fixture.handlers.get("assistant:chat")!(event);const bubble=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("bubble.html"))!;
- await expect(action({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame},"close")).rejects.toThrow("許可");
+ await expect(fixture.handlers.get("assistant:window-resize")!({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame},{phase:"start",handle:"e"})).rejects.toThrow("許可");
  await fixture.handlers.get("assistant:tools-open")!({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame});const tools=fixture.windows.at(-1)!;
  await action({sender:tools.webContents,senderFrame:tools.webContents.mainFrame},"close");expect(tools.destroyed).toBe(true);expect(settings.destroyed).toBe(false);
 });
@@ -1746,4 +1746,33 @@ it("shares only the saved appearance mode with local windows and broadcasts mode
  expect(await state(toolEvent)).toEqual({revision:first.revision+1,mode:"system"});
  await expect(state({sender:tools.webContents,senderFrame:{url:"https://untrusted.test/"}})).rejects.toThrow("許可");
  tools.close();
+});
+
+it("maximizes chat to the top and left while retaining its anchors and normal size",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"character",quietFullscreen:false});
+ await fixture.handlers.get("assistant:chat")!(event);
+ const chat=fixture.windows.filter(w=>!w.destroyed&&w.url.endsWith("bubble.html")).at(-1)!;
+ await vi.waitFor(()=>expect(chat.isVisible()).toBe(true));
+ const local={sender:chat.webContents,senderFrame:chat.webContents.mainFrame};
+ const action=fixture.handlers.get("assistant:window-action")!,state=fixture.handlers.get("assistant:window-state")!;
+ const before=chat.getBounds();
+ expect(await action(local,"maximize")).toMatchObject({maximized:true});
+ expect(chat.getBounds()).toEqual({x:0,y:0,width:before.x+before.width,height:before.y+before.height});
+ await expect(fixture.handlers.get("assistant:resize-start")!(local,{handle:"nw"})).rejects.toThrow("元の大きさ");
+ await expect(fixture.handlers.get("assistant:window-resize")!(local,{phase:"start",handle:"e"})).rejects.toThrow("許可");
+ const saved=await fixture.handlers.get("assistant:read")!(event) as Record<string,unknown>;
+ await fixture.handlers.get("assistant:save")!(event,{...saved,appearance:"light"});
+ expect(await state(local)).toMatchObject({maximized:true});
+ expect(chat.getBounds()).toEqual({x:0,y:0,width:before.x+before.width,height:before.y+before.height});
+ expect(await action(local,"maximize")).toMatchObject({maximized:false});expect(chat.getBounds()).toEqual(before);
+ await action(local,"maximize");await action(local,"close");
+ expect(chat.isDestroyed()).toBe(false);expect(chat.isVisible()).toBe(false);
+ await fixture.handlers.get("assistant:chat")!(event);expect(chat.isVisible()).toBe(true);
+ await action(local,"maximize");expect(chat.getBounds()).toEqual(before);
+ const character=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("character.html"))!;
+ await expect(action({sender:character.webContents,senderFrame:character.webContents.mainFrame},"maximize")).rejects.toThrow("許可");
+ await expect(action({sender:chat.webContents,senderFrame:{url:"soda-assistant://app/bubble.html"}},"maximize")).rejects.toThrow("許可");
+ await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });

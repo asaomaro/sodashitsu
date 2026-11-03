@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (51 tests | 1 failed | 50 skipped) 1039ms
+   × maximizes chat to the top and left while retaining its anchors and normal size 22ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > maximizes chat to the top and left while retaining its anchors and normal size
+AssertionError: expected { x: +0, y: +0, width: 1920, …(1) } to deeply equal { x: +0, y: +0, width: 1920, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "height": 850,
++   "height": 1040,
+    "width": 1920,
+    "x": 0,
+    "y": 0,
+  }
+
+ ❯ src/main.test.ts:1762:27
+    1760|  const before=chat.getBounds();
+    1761|  expect(await action(local,"maximize")).toMatchObject({maximized:true}…
+    1762|  expect(chat.getBounds()).toEqual({x:0,y:0,width:before.x+before.width…
+       |                           ^
+    1763|  await expect(fixture.handlers.get("assistant:resize-start")!(local,{h…
+    1764|  await expect(fixture.handlers.get("assistant:window-resize")!(local,{…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 50 skipped (51)
+   Start at  20:44:28
+   Duration  1.28s (tests 86%, transform 11%, import 2%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts -t maximizes chat to the top and left

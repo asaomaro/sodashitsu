@@ -904,8 +904,13 @@ const adapter: NativeAdapter = {
     if(appearanceMode!==preferences.appearance){appearanceMode=preferences.appearance;++appearanceRevision;for(const {window} of localWindows.values())if(!window.isDestroyed())window.webContents.send("assistant:appearance-changed",{revision:appearanceRevision,mode:appearanceMode});}
     bubbleResize = null;
     updateBackend(preferences);
-    if (bubble && !bubble.isDestroyed())
-      bubble.setBounds(bubbleBounds(preferences, adapter.displays(), bubbleSize, adapter.portraitAspect?.(preferences)));
+    if (bubble && !bubble.isDestroyed()) {
+      const normal=bubbleBounds(preferences, adapter.displays(), bubbleSize, adapter.portraitAspect?.(preferences));
+      if(windowRestores.has(bubble)){
+        const area=windowArea(bubble,normal),bounds=resizeBubbleBounds(normal,"nw",area.x-normal.x,area.y-normal.y,area);
+        windowRestores.set(bubble,normal);windowMaxBounds.set(bubble,bounds);setChromeBounds(bubble,bounds);publishChromeState(bubble);
+      }else setChromeBounds(bubble,normal);
+    }
     positionCompact();
     if (
       bubble &&
@@ -1121,6 +1126,7 @@ function registerIpc(): void {
       if (action.startsWith("resize-")) {
         if (owner.window !== bubble || !controller.preferences.enabled || !owner.window.isVisible()) throw Error("吹き出しを開いて操作してください。");
         if (action === "resize-start") {
+          if(windowRestores.has(owner.window))throw Error("元の大きさに戻して操作してください。");
           const {handle} = z.object({handle:z.enum(BUBBLE_RESIZE_HANDLES)}).strict().parse(input);
           const displays = adapter.displays(), preferences = controller.preferences;
           const display = displays.find(d=>d.id === preferences.position?.displayId) ?? displays[0];
@@ -1160,6 +1166,22 @@ function registerIpc(): void {
       if (action === "window-action") {
         const operation=z.enum(["minimize","maximize","close"]).parse(input);
         windowResizes.delete(owner.window);
+        if(owner.role==="bubble"){
+          bubbleResize=null;
+          if(operation==="close"){owner.window.hide();return chromeState(owner.window);}
+          if(operation!=="maximize"||!controller.preferences.enabled||!owner.window.isVisible())throw Error("会話を開いて操作してください。");
+          const restore=windowRestores.get(owner.window);
+          if(restore){
+            windowRestores.delete(owner.window);windowMaxBounds.delete(owner.window);
+            setChromeBounds(owner.window,resizeBubbleBounds(restore,"nw",0,0,windowArea(owner.window,restore)));
+          }else{
+            const before=owner.window.getBounds(),area=windowArea(owner.window);
+            windowRestores.set(owner.window,before);
+            const bounds=resizeBubbleBounds(before,"nw",area.x-before.x,area.y-before.y,area);
+            windowMaxBounds.set(owner.window,bounds);setChromeBounds(owner.window,bounds);
+          }
+          positionCompact();publishChromeState(owner.window);return chromeState(owner.window);
+        }
         if (operation === "close") owner.window.close();
         else if (operation === "minimize") owner.window.minimize();
         else {

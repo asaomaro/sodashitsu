@@ -255,10 +255,31 @@ try {
   await checkSelect();
   const disabledOpacity=await page.locator("select").first().evaluate(el=>{const option=document.createElement("option");option.disabled=true;option.textContent="利用不可";el.append(option);const opacity=getComputedStyle(option).opacity;option.remove();return opacity;});assert.equal(disabledOpacity,"0.5");
   await page.locator("#mode").click();await expect(page.locator("#mode")).toHaveJSProperty("value","character");await page.keyboard.press("ArrowDown");await page.keyboard.press("Enter");await expect(page.locator("#mode")).toHaveValue("tray");await page.locator("#mode").selectOption("character");
+  const checkControls = async () => {
+    const buttons=page.locator(".window-controls button");
+    for(let i=0;i<await buttons.count();i++){
+      const button=buttons.nth(i);await expect(button.locator("svg")).toHaveCount(1);
+      const centered=await button.evaluate(el=>{
+        const button=el.getBoundingClientRect(),icon=el.querySelector("svg").getBoundingClientRect();
+        return Math.abs(button.x+button.width/2-icon.x-icon.width/2)<0.2&&Math.abs(button.y+button.height/2-icon.y-icon.height/2)<0.2;
+      });assert.ok(centered,"window control icon must be centered in its button");
+      await button.hover();
+      const colors=await button.evaluate(el=>{
+        const style=getComputedStyle(el),probe=document.createElement("div");
+        probe.style.backgroundColor=style.getPropertyValue("--assistant-surface");document.body.append(probe);
+        const result={background:style.backgroundColor,foreground:style.color,surface:getComputedStyle(probe).backgroundColor};probe.remove();return result;
+      });
+      if(await button.getAttribute("data-window-action")==="close"){
+        assert.equal(colors.background,"rgb(110, 38, 48)");assert.equal(colors.foreground,"rgb(237, 243, 250)");
+      }else assert.equal(colors.background,colors.surface);
+    }
+    await page.mouse.move(0,0);
+  };
   const checkWindow = async role => {
     for(const size of [{width:520,height:670},{width:360,height:480}]){
       await page.setViewportSize(size);
       await expect(page.locator(".assistant-window-header")).toBeVisible();
+      await checkControls();
       await expect(page.locator(".speech-tail")).toHaveCount(0);
       const layout=await page.evaluate(()=>{
         const body=document.body,card=document.querySelector(".assistant-card"),content=document.querySelector(".assistant-scroll");
@@ -485,6 +506,15 @@ try {
   assert.equal(await page.evaluate(()=>window.calls.at(-1)[0]),"dismiss-notice");
   await page.setViewportSize({width:400,height:640});
   await page.goto(`${origin}/bubble.html`);
+  await checkControls();
+  await page.getByRole("button",{name:"最大化",exact:true}).click();
+  await expect(page.getByRole("button",{name:"元のサイズに戻す",exact:true})).toHaveAttribute("data-maximized","true");
+  await page.getByRole("button",{name:"元のサイズに戻す",exact:true}).click();
+  await expect(page.getByRole("button",{name:"最大化",exact:true})).toHaveAttribute("data-maximized","false");
+  await expect(page.locator("[data-window-resize]")).toHaveCount(0);
+  await expect(page.locator("[data-resize]")).toHaveCount(3);
+  await page.screenshot({path:"/tmp/soda-chat-window-controls.png"});
+
   await expect(page.getByRole("log")).toContainText("こんにちは。操舵室の船長です。");
   await expect(page.locator(".bubble-resize")).toHaveCount(3);
   assert.deepEqual(await page.locator(".bubble-resize").evaluateAll(rows=>rows.map(el=>el.dataset.resize).sort()),["n","nw","w"]);

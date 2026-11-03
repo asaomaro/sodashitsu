@@ -12,6 +12,11 @@ const updateWindowState=state=>{
   ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M5 5V2h9v9h-3"/><path d="M2 5h9v9H2z"/></svg>'
   : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="3" y="3" width="10" height="10"/></svg>';
 };
+for(const button of document.querySelectorAll('[data-window-action="close"], [data-window-action="minimize"]')){
+ button.innerHTML=button.dataset.windowAction==="close"
+  ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg>'
+  : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M2 8h12"/></svg>';
+}
 updateWindowState({maximized:false,revision:0});
 window.assistant.onWindowState(updateWindowState);
 void window.assistant.windowState().then(updateWindowState).catch(()=>{});
@@ -22,11 +27,11 @@ for (const button of document.querySelectorAll("[data-window-action]")) {
   });
  });
 }
-document.querySelector(".assistant-window-header").addEventListener("dblclick",event=>{
+document.querySelector(".assistant-window-header")?.addEventListener("dblclick",event=>{
  if(!event.target.closest("button"))void window.assistant.windowAction("maximize").then(updateWindowState).catch(()=>{});
 });
 
-(() => {
+if(!document.body.classList.contains("bubble")) (() => {
  let active=null;
  const cancel=()=>{const drag=active;active=null;if(drag){drag.ended=true;if(drag.token)void window.assistant.windowResize({phase:"end",token:drag.token}).catch(()=>{});}};
  window.addEventListener("blur",cancel);window.addEventListener("pagehide",cancel);

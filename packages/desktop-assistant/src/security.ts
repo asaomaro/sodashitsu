@@ -53,7 +53,8 @@ export function authorizeLocalSender(
     ].includes(action)
   )
     return sender.role === "settings";
-  if (action === "window-action" || action === "window-resize" || action === "window-state") return sender.role === "settings" || sender.role === "tools";
+  if (action === "window-resize") return sender.role === "settings" || sender.role === "tools";
+  if (action === "window-action" || action === "window-state") return sender.role === "settings" || sender.role === "tools" || sender.role === "bubble";
   if (action === "hide") return sender.role === "bubble" || sender.role === "tools";
   if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
   if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";

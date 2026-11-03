@@ -9,7 +9,6 @@
  document.getElementById("expand-session").addEventListener("click",()=>window.assistant.openSession().catch(error=>{document.getElementById("status").textContent=error.message;}));
  document.getElementById("open").addEventListener("click", () => window.assistant.open());
  document.getElementById("settings").addEventListener("click", () => window.assistant.settings());
- document.getElementById("hide").addEventListener("click", () => window.assistant.hide());
  const log = document.getElementById("conversation");
  const stateText = { connected: "通知を受信しています。", connecting: "操舵室へ接続しています。", login: "操舵室にログインすると、作業の知らせをお届けします。", offline: "操舵室との接続が切れました。再接続を待っています。", disabled: "アシスタントは無効です。" };
  const noticeRows=new Map();
