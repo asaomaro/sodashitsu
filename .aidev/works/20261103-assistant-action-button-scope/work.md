@@ -12,3 +12,7 @@ HTMLのbutton要素すべてに金色の面・角丸・選択枠を適用して�
 - negative-controls.md: 配色修正だけを戻すとサイドバー見出しの背景/角丸が変わって失敗。元へバイト一致で戻して再検証成功。
 - pnpm --filter @sodashitsu/web build（Vue型チェック・Vite配布物生成）成功。
 - /root/review_bubble_resizeの差分全体の独立レビューで必須指摘なし。
+
+## 実画面での追加補正
+
+金背景を除去すると、既存MachineHeaderの選択PC名のaccent-fg（紺色）が紺背景上で読みにくいため、この2テーマの選択PC名だけ通常fgへ補正。fixtureにApp.vueの実CSSも含め、選択PC名の前景色を検証。独立再レビューで必須指摘なし。再検証とnegative control、最終Vite生成は通過。

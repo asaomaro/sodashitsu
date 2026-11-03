@@ -6,10 +6,10 @@ import {uiTokens} from "@sodashitsu/client-core";
 // Source CSS verification in Chromium: use the components' actual rules and compare
 // navigation before/after the theme sheet, including active rows. No server or PTY.
 const root=new URL("../../web/src/",import.meta.url);
-const components=["Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog"];
+const components=["App","Sidebar","MachineHeader","ScreenSwitcher","SettingsDialog","NameDialog"];
 let componentCss="";
 for(const name of components){
- const source=await readFile(new URL(`components/${name}.vue`,root),"utf8");
+ const source=await readFile(new URL(name==="App"?"App.vue":`components/${name}.vue`,root),"utf8");
  for(const match of source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g))componentCss+=match[1]+"\n";
 }
 const sheet=await readFile(new URL("styles/assistantTheme.css",root),"utf8");
@@ -28,7 +28,7 @@ try{
    <section id="scroll" style="height:50px;overflow:auto"><div style="height:300px">scroll</div></section>`);
   await page.evaluate(({name,tokens})=>{document.documentElement.dataset.theme=name;for(const[k,v]of Object.entries(tokens.vars))document.documentElement.style.setProperty(k,v);}, {name,tokens:uiTokens(name)});
   const inspect=()=>page.evaluate(()=>Object.fromEntries(["section","sort","group","desktop","toggle","machine","screen","menu","category","switch","close","save"].map(id=>{const s=getComputedStyle(document.getElementById(id));return[id,{background:s.backgroundColor,color:s.color,radius:s.borderRadius,shadow:s.boxShadow}];})));
-  const before=await inspect();await page.addStyleTag({content:sheet});const after=await inspect();
+  const before=await inspect();if(name!=="dracula")before.machine.color=before.category.color;await page.addStyleTag({content:sheet});const after=await inspect();
   for(const id of ["section","sort","group","desktop","toggle","machine","screen","menu","category","switch"])assert.deepEqual(after[id],before[id],`${name}: navigation/label ${id} changed`);
   if(name==="dracula")assert.deepEqual(after,before,"unrelated theme changed");
   else{

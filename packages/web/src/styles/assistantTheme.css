@@ -7,6 +7,9 @@
   scrollbar-width: thin;
 }
 :root[data-theme="sodashitsu-assistant-dark"] { --soda-assistant-scroll-track: #23364d;--soda-assistant-field-bg: #23364d; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) .machine-select[aria-current="true"] {
+  color: var(--soda-fg);
+}
 :root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) * {
   scrollbar-color: var(--soda-accent) var(--soda-assistant-scroll-track);
   scrollbar-width: thin;

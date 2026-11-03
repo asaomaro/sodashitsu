@@ -1,6 +1,6 @@
 # Negative control
 
-配色CSSの修正だけをHEADへ戻し、source CSSを直接使うChromium検証を実行。サイドバーlabelの背景/文字/角が変わり失敗することを確認。修正ファイルへバイト一致で復元。
+修正前f717c1d2の配色CSSだけに戻し、source CSSを使うChromium検証でサイドバー見出しの背景/角丸の退行を捕捉。修正済みCSSへバイト一致で復元。
 
 ```text
 node:internal/modules/run_main:107
@@ -41,4 +41,4 @@ AssertionError [ERR_ASSERTION]: sodashitsu-assistant: navigation/label section c
 Node.js v24.15.0
 
 ```
-復元SHA256: 5d5ff682a372c3a2b1c60793d4775344a661cf12565817d7569b91867fbc8114
+復元SHA256: 04f8cad243342a79e5b2a603f3a9aea6d4fdc1f4fd67f81a74afccf85fc3f354
