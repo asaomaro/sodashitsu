@@ -6,3 +6,7 @@
 - ソースChromium検証は全19テーマ×3段階で外枠/行/サイドバーボタンの角丸を確認。
 - CSS/SFCの修正のみ取り消した負例でappearance:auto、menu radius4pxを捕捉。negative-select.txt/negative-rounded-menu.txtへ保存。修正はbytes同一で復元。
 - root build/typecheck成功。review_bubble_resize独立レビュー完了、指摘なし。
+
+## 稼働反映
+
+main beed9af7としてpush済み。内蔵資産41/共通runtime6種のパッケージ検証成功。handoff後、アシスタントrunning/readyを確認。稼働Webでメニュー外枠10px/行6px/サイドバー下部ボタン8pxの実スタイルを確認。
