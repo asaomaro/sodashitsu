@@ -1111,12 +1111,12 @@ describe("SettingsDialog — テーマの節", () => {
   const themeSection = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => w.get('section[aria-labelledby="settings-theme"]');
   const selects = (w: Awaited<ReturnType<typeof openDialog>>["wrapper"]) => themeSection(w).findAll("select");
 
-  it("「テーマ」の選択肢は 17 個（暗い 10・明るい 7 の 2 群）で、dracula に「（既定）」。いまの値が選ばれている", async () => {
+  it("「テーマ」の選択肢は 19 個（暗い11・明るい8 の 2 群）で、dracula に「（既定）」。いまの値が選ばれている", async () => {
     const { wrapper } = await openDialog();
     const [main] = selects(wrapper);
     const groups = main!.findAll("optgroup");
     expect(groups.map((g) => g.attributes("label"))).toEqual(["暗いテーマ", "明るいテーマ"]);
-    expect(groups.map((g) => g.findAll("option").length)).toEqual([10, 7]);
+    expect(groups.map((g) => g.findAll("option").length)).toEqual([11, 8]);
     expect(main!.findAll("option").map((o) => o.attributes("value")).sort()).toEqual([...THEME_NAMES].sort());
     expect(main!.find('option[value="dracula"]').text()).toBe("Dracula（既定）");
     expect((main!.element as HTMLSelectElement).value).toBe("dracula");
@@ -1151,8 +1151,8 @@ describe("SettingsDialog — テーマの節", () => {
     expect(light!.find('option[value=""]').text()).toBe("既定（Tokyo Night Day）");
     expect(dark!.find('option[value=""]').text()).toBe("既定（Tokyo Night）");
     expect((light!.element as HTMLSelectElement).value).toBe("");
-    // 明るいとき・暗いときは 17 のどれからでも選べる（明るいときに暗いテーマも）。
-    expect(light!.findAll("option[value]").filter((o) => o.attributes("value") !== "")).toHaveLength(17);
+    // 明るいとき・暗いときは 19 のどれからでも選べる（明るいときに暗いテーマも）。
+    expect(light!.findAll("option[value]").filter((o) => o.attributes("value") !== "")).toHaveLength(19);
     settings.systemDark = false;
     await wrapper.vm.$nextTick();
     expect(themeSection(wrapper).get("#settings-theme-note").text()).toBe("いま使っているテーマ：Tokyo Night Day（OS の設定が明るいため）");

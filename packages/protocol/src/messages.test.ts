@@ -320,8 +320,8 @@ describe("WorkspaceRenameParams", () => {
 
 // 20260921-theme-settings：ブラウザが表示しているテーマの名前をサーバへ伝える（design D1）。
 describe("ClientThemeParams", () => {
-  it("17 のテーマの名前だけを受ける", () => {
-    expect(THEME_NAMES).toHaveLength(17);
+  it("19 のテーマの名前だけを受ける", () => {
+    expect(THEME_NAMES).toHaveLength(19);
     for (const theme of THEME_NAMES) expect(ClientThemeParams.parse({ theme })).toEqual({ theme });
     expect(() => ClientThemeParams.parse({ theme: "terminal" })).toThrow();
     expect(() => ClientThemeParams.parse({ theme: "Dracula" })).toThrow();

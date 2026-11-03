@@ -207,7 +207,7 @@ test("キーだけでテーマを選ぶと、画面の枠と開いている全�
 
   await openSettingsByKey(o.page);
   await expect(themeSection(o.page).locator("h3")).toHaveText("テーマ");
-  await expect(themeSelect(o.page).locator("option")).toHaveCount(17);
+  await expect(themeSelect(o.page).locator("option")).toHaveCount(19);
   await tabToThemeSelect(o.page);
   // 閉じたまま上下キーで選ぶと、そのたびに反映される（確定ボタンは無い。design D4）。暗いテーマの並びで dracula の次は nord。
   await o.page.keyboard.press("ArrowDown");
@@ -606,4 +606,26 @@ test.describe("モバイル", () => {
     await expect.poll(barBg).toBe(hexToRgb(MENU_BG.catppuccin!));
     await expectTerminals(page, "catppuccin", 1);
   });
+});
+
+
+test("操舵室アシスタントの通常版とダーク版を選択し、保存とOSの明暗に追従する", async ({ browser, appServer }) => {
+  const o=await openBrowser(browser,appServer,{colorScheme:"light"});
+  await openSettingsByKey(o.page);
+  await expect(themeSelect(o.page).locator('option[value="sodashitsu-assistant"]')).toHaveText("操舵室アシスタント");
+  await expect(themeSelect(o.page).locator('option[value="sodashitsu-assistant-dark"]')).toHaveText("操舵室アシスタント（ダーク）");
+  for(const [name,bg,scheme] of [["sodashitsu-assistant","#f8f5ec","light"],["sodashitsu-assistant-dark","#172438","dark"]] as const){
+    await themeSelect(o.page).selectOption(name);
+    await expect.poll(()=>sidebarBg(o.page)).toBe(hexToRgb(bg));
+    expect(await colorScheme(o.page)).toBe(scheme);await expectTerminals(o.page,name,1);
+    await expectBordersReadable(o.page,name);
+  }
+  await themeSection(o.page).locator('[role="switch"]').click();
+  await expect.poll(()=>dataTheme(o.page)).toBe("sodashitsu-assistant");
+  await o.page.keyboard.press("Escape");
+  await o.page.emulateMedia({colorScheme:"dark"});
+  await expect.poll(()=>dataTheme(o.page)).toBe("sodashitsu-assistant-dark");
+  await reloadAndWait(o);
+  expect(await firstPaint(o.page)).toEqual({menuBg:"#172438",colorScheme:"dark"});
+  await o.context.close();
 });

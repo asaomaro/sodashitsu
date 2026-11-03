@@ -6,7 +6,7 @@ import { contrastRatio } from "./color.js";
  * （CSS 変数）は web の `theme/uiTokens.ts` が持つ。
  */
 
-/** herdr の `THEME_NAMES`（`src/config/theme.rs:4-23`）の順から `terminal` を除いた 17 種（ブラウザにはホストの端末が無い）。 */
+/** herdr の `THEME_NAMES`（`src/config/theme.rs:4-23`）の順から `terminal` を除いた 17 種と製品独自の2種（ブラウザにはホストの端末が無い）。 */
 export const THEME_NAMES = [
   "catppuccin",
   "catppuccin-latte",
@@ -25,6 +25,8 @@ export const THEME_NAMES = [
   "rose-pine",
   "rose-pine-dawn",
   "vesper",
+  "sodashitsu-assistant",
+  "sodashitsu-assistant-dark",
 ] as const;
 export type ThemeName = (typeof THEME_NAMES)[number];
 
@@ -35,7 +37,7 @@ export function isThemeName(v: unknown): v is ThemeName {
 /** 既定は dracula——今の見た目のまま（herdr の既定 catppuccin とは違う。requirements の非機能要件）。 */
 export const DEFAULT_THEME_NAME: ThemeName = "dracula";
 
-/** 明暗（明るい 7 種・暗い 10 種。requirements のスコープ）。 */
+/** 明暗（明るい 8 種・暗い 11 種。requirements のスコープ）。 */
 export const THEME_APPEARANCE: Readonly<Record<ThemeName, "light" | "dark">> = {
   catppuccin: "dark",
   "catppuccin-latte": "light",
@@ -54,6 +56,8 @@ export const THEME_APPEARANCE: Readonly<Record<ThemeName, "light" | "dark">> = {
   "rose-pine": "dark",
   "rose-pine-dawn": "light",
   vesper: "dark",
+  "sodashitsu-assistant": "light",
+  "sodashitsu-assistant-dark": "dark",
 };
 
 /** 端末の配色。サーバの Mirror は foreground・background・cursor・ansi で答え、web の xterm.js は全部を使う。 */
@@ -91,11 +95,24 @@ export const DEFAULT_THEME: TerminalPalette = {
 };
 
 /**
- * dracula 以外の 16 テーマの端末の配色——**上流の値そのまま**。出典は `mbadolato/iTerm2-Color-Schemes` の
+ * 既存の16テーマは上流の配色、sodashitsu-assistantの2種は製品独自の配色。既存テーマの出典は `mbadolato/iTerm2-Color-Schemes` の
  * `0b55a9e609daa0727be7d0d4705616dbe8d08fed` の `windowsterminal/<名前>.json`（各行の注記。research F8）。16 色の順は
  * black・red・green・yellow・blue・purple・cyan・white とその bright。手で写さず、ファイルから書き出した値を貼った。
  */
-const TERMINAL_UPSTREAM: Readonly<Record<Exclude<ThemeName, "dracula">, TerminalPalette>> = {
+const TERMINAL_BASE: Readonly<Record<Exclude<ThemeName, "dracula">, TerminalPalette>> = {
+  // Product palettes: cream/navy and the desktop assistant's navy/gold.
+  "sodashitsu-assistant": {
+    foreground: "#172438", background: "#fbf8f0", cursor: "#86620f",
+    selectionBackground: "#e5be61", selectionForeground: "#172438",
+    ansi: ["#172438", "#a32f38", "#236f43", "#86620f", "#245d99", "#78509b", "#116e78", "#d9d1bd",
+      "#52657a", "#bd3c46", "#287b4d", "#916b12", "#286cb0", "#8958ae", "#137c88", "#fffdf8"],
+  },
+  "sodashitsu-assistant-dark": {
+    foreground: "#edf3fa", background: "#172438", cursor: "#e5be61",
+    selectionBackground: "#c9a64f", selectionForeground: "#142136",
+    ansi: ["#101927", "#ff9b9b", "#8ed7a6", "#e5be61", "#90bfff", "#c9b5ff", "#7ce1df", "#edf3fa",
+      "#869bb4", "#ffb8b8", "#a9edbf", "#f3d98e", "#b3d4ff", "#ded0ff", "#a4f2ed", "#ffffff"],
+  },
   // windowsterminal/Catppuccin Mocha.json
   "catppuccin": {
     foreground: "#cdd6f4",
@@ -325,7 +342,7 @@ export function finalizePalette(p: TerminalPalette): TerminalPalette {
   return out;
 }
 
-/** 名前ごとの端末の配色（web の表示とサーバの答えの両方がここを引く）。dracula は `DEFAULT_THEME`、ほかは上流＋規則。 */
+/** 名前ごとの端末の配色（web の表示とサーバの答えの両方がここを引く）。dracula は `DEFAULT_THEME`、ほかは基礎配色＋規則。 */
 export const TERMINAL_PALETTES: Readonly<Record<ThemeName, TerminalPalette>> = Object.fromEntries(
-  THEME_NAMES.map((name) => [name, name === "dracula" ? DEFAULT_THEME : finalizePalette(TERMINAL_UPSTREAM[name])]),
+  THEME_NAMES.map((name) => [name, name === "dracula" ? DEFAULT_THEME : finalizePalette(TERMINAL_BASE[name])]),
 ) as Record<ThemeName, TerminalPalette>;

@@ -5,7 +5,7 @@ import { DEFAULT_THEME_NAME, isThemeName, type ThemeName } from "@sodashitsu/pro
  * ここを呼ぶ。`public/theme-boot.js`（最初の描画）は明暗の選び方だけを複製し、`themeBoot.test.ts` で揃っていることを確かめる（design D5）。
  */
 
-/** 設定の一覧に出す名前（上流のテーマの正式な呼び名。design「インターフェース」web）。 */
+/** 設定の一覧に出す名前（既存テーマは上流の正式な呼び名、アシスタントテーマは製品独自。design「インターフェース」web）。 */
 export const THEME_LABELS: Readonly<Record<ThemeName, string>> = {
   catppuccin: "Catppuccin Mocha",
   "catppuccin-latte": "Catppuccin Latte",
@@ -24,9 +24,11 @@ export const THEME_LABELS: Readonly<Record<ThemeName, string>> = {
   "rose-pine": "Rosé Pine",
   "rose-pine-dawn": "Rosé Pine Dawn",
   vesper: "Vesper",
+  "sodashitsu-assistant": "操舵室アシスタント",
+  "sodashitsu-assistant-dark": "操舵室アシスタント（ダーク）",
 };
 
-/** herdr の `sibling_theme_names`（`src/app/mod.rs:219-244`）の 7 組。[暗い, 明るい]。 */
+/** herdr の `sibling_theme_names`（`src/app/mod.rs:219-244`）の7組と製品独自の1組。[暗い, 明るい]。 */
 const SIBLINGS: readonly (readonly [ThemeName, ThemeName])[] = [
   ["catppuccin", "catppuccin-latte"],
   ["tokyo-night", "tokyo-night-day"],
@@ -35,6 +37,7 @@ const SIBLINGS: readonly (readonly [ThemeName, ThemeName])[] = [
   ["solarized", "solarized-light"],
   ["kanagawa", "kanagawa-lotus"],
   ["rose-pine", "rose-pine-dawn"],
+  ["sodashitsu-assistant-dark", "sodashitsu-assistant"],
 ];
 
 /** 対の無いテーマの明るい側（design D7：herdr が明るい側の名前を知らないときに落とす先。herdr 自身は対の無い名前を明暗とも同じにする）。 */

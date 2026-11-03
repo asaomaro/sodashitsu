@@ -14,7 +14,7 @@ import {
 const HEX = /^#[0-9a-f]{6}$/;
 
 describe("THEME_NAMES", () => {
-  it("herdr の 18 種（`src/config/theme.rs:4-23`）の順から terminal を除いた 17 種（requirements のスコープ・設定の一覧の並び）", () => {
+  it("herdr の 18 種（`src/config/theme.rs:4-23`）の順から terminal を除いた17種と製品独自の2種", () => {
     expect(THEME_NAMES).toEqual([
       "catppuccin",
       "catppuccin-latte",
@@ -33,10 +33,12 @@ describe("THEME_NAMES", () => {
       "rose-pine",
       "rose-pine-dawn",
       "vesper",
+      "sodashitsu-assistant",
+      "sodashitsu-assistant-dark",
     ]);
   });
 
-  it("isThemeName は 17 種だけを通す", () => {
+  it("isThemeName は 19 種だけを通す", () => {
     for (const n of THEME_NAMES) expect(isThemeName(n)).toBe(true);
     expect(isThemeName("terminal")).toBe(false);
     expect(isThemeName("Dracula")).toBe(false);
@@ -50,7 +52,7 @@ describe("THEME_NAMES", () => {
 });
 
 describe("THEME_APPEARANCE", () => {
-  it("明るい 7 種・暗い 10 種", () => {
+  it("明るい8種・暗い11種", () => {
     const light = THEME_NAMES.filter((n) => THEME_APPEARANCE[n] === "light");
     expect(light).toEqual([
       "catppuccin-latte",
@@ -60,8 +62,9 @@ describe("THEME_APPEARANCE", () => {
       "solarized-light",
       "kanagawa-lotus",
       "rose-pine-dawn",
+      "sodashitsu-assistant",
     ]);
-    expect(THEME_NAMES.length - light.length).toBe(10);
+    expect(THEME_NAMES.length - light.length).toBe(11);
   });
 
   it("端末の背景の明るさと合う（herdr の `inferred_appearance`：299R+587G+114B >= 128000 なら明るい。research F2）", () => {
@@ -80,7 +83,7 @@ describe("THEME_APPEARANCE", () => {
 });
 
 describe("TERMINAL_PALETTES", () => {
-  it("17 種すべてに、#rrggbb の文字・背景・カーソルと 16 色がある", () => {
+  it("19 種すべてに、#rrggbb の文字・背景・カーソルと 16 色がある", () => {
     for (const n of THEME_NAMES) {
       const p = TERMINAL_PALETTES[n];
       expect(
@@ -133,9 +136,9 @@ describe("TERMINAL_PALETTES", () => {
     expect(TERMINAL_PALETTES.vesper.ansi[15]).toBe("#ffffff");
   });
 
-  it("規則 (a)：選んだ文字を背景色にするのは、ちょうど 5 つ（design D2・decisions D5）", () => {
+  it("規則 (a)：既存の上流テーマで選んだ文字を背景色にするのは、ちょうど5つ（design D2・decisions D5）", () => {
     const inverted = THEME_NAMES.filter(
-      (n) => TERMINAL_PALETTES[n].selectionForeground !== undefined,
+      (n) => !n.startsWith("sodashitsu-assistant") && TERMINAL_PALETTES[n].selectionForeground !== undefined,
     );
     expect(inverted).toEqual(["catppuccin", "nord", "gruvbox-light", "kanagawa", "kanagawa-lotus"]);
     for (const n of inverted) {

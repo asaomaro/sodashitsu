@@ -9,7 +9,7 @@ import {
 
 /**
  * 画面の枠の色（CSS 変数。20260921-theme-settings の design D3・表）。**dracula は今の値の定数**（`App.vue` の `:root` はその写しで、
- * 一致は `uiTokens.test.ts` が守る）。ほかの 16 テーマは herdr の画面の枠の配色から組み立て、WCAG のコントラストに**足りない色だけ**
+ * 一致は `uiTokens.test.ts` が守る）。既存の16テーマはherdr、追加2テーマは製品独自の配色から組み立て、WCAG のコントラストに**足りない色だけ**
  * 明度を寄せる（`ensureContrast`。色相は保つ）。どのテーマでも表の相手に対して比が足りることは `uiTokens.test.ts` が全数で確かめる（AC9）。
  */
 
@@ -81,7 +81,7 @@ const DRACULA: UiTokens = {
 };
 
 /** herdr の `Palette` のうち使う項目（`panel_bg`・`surface0`・`text`・`overlay1`・`accent`・`red`・`yellow`・`green`・`peach`）。 */
-interface HerdrPalette {
+interface BasePalette {
   panelBg: string;
   surface0: string;
   text: string;
@@ -94,10 +94,19 @@ interface HerdrPalette {
 }
 
 /**
- * herdr `da6bcd5969779bfe0396bcf89a8025d4375d611e` の `src/app/state.rs:78-527`（`Palette::catppuccin()` 〜 `vesper()`）の値（research F1）。
- * 手で写さず、ソースから書き出した値を貼った。
+ * 既存テーマはherdr `da6bcd5969779bfe0396bcf89a8025d4375d611e` の `src/app/state.rs:78-527`（`Palette::catppuccin()` 〜 `vesper()`）の値（research F1）。
+ * 既存テーマはソースから書き出した値。アシスタント2種は製品独自の配色。
  */
-const HERDR: Readonly<Record<Exclude<ThemeName, "dracula">, HerdrPalette>> = {
+const PALETTES: Readonly<Record<Exclude<ThemeName, "dracula">, BasePalette>> = {
+  // Product palettes; the dark palette matches the assistant's card and buttons.
+  "sodashitsu-assistant": {
+    panelBg: "#f8f5ec", surface0: "#e5dcc6", text: "#172438", overlay1: "#52657a",
+    accent: "#c9a64f", red: "#a32f38", yellow: "#86620f", green: "#236f43", peach: "#916017",
+  },
+  "sodashitsu-assistant-dark": {
+    panelBg: "#172438", surface0: "#263c56", text: "#edf3fa", overlay1: "#869bb4",
+    accent: "#c9a64f", red: "#ff9b9b", yellow: "#e5be61", green: "#8ed7a6", peach: "#f3c17b",
+  },
   catppuccin: {
     panelBg: "#181825",
     surface0: "#313244",
@@ -308,7 +317,7 @@ export function resizeLineColor(bg: string, menuBg: string, accent: string, fg: 
 }
 
 function build(name: Exclude<ThemeName, "dracula">): UiTokens {
-  const p = HERDR[name];
+  const p = PALETTES[name];
   const dark = THEME_APPEARANCE[name] === "dark";
   const away = dark ? "#ffffff" : "#000000"; // 文字・状態の色を寄せる向き（背景から遠ざかる）
   const menuBg = p.panelBg;
