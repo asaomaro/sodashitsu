@@ -144,7 +144,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <p class="session-switch-dialog-title">
         session の一覧（開ける session は新しいタブで開きます）
       </p>
-      <button
+      <button data-assistant-feature
         ref="closeEl"
         type="button"
         class="session-switch-dialog-close"

@@ -899,7 +899,7 @@ watchDragInterrupt(view, () => {
   <nav ref="el" class="sidebar" :class="{ 'sidebar-collapsed': view.sidebarCollapsed }" :style="view.sidebarCollapsed ? {} : { width: `${view.sidebarWidth}px` }">
     <DragPreview v-if="view.workspaceDrag && workspaceDragPreview" :x="workspaceDragPreview.x" :y="workspaceDragPreview.y" :label="workspaceDragPreview.label" :kind="workspaceDragPreview.kind" :count="workspaceDragPreview.count" />
     <div v-if="sessionLabel !== null" class="sidebar-session">
-      <button
+      <button data-assistant-feature
         type="button"
         class="sidebar-btn sidebar-session-btn"
         aria-haspopup="dialog"
@@ -923,12 +923,12 @@ watchDragInterrupt(view, () => {
       aria-label="spaces"
     >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <button type="button" ref="spacesToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!spacesFolded" :aria-label="spacesFolded ? `spaces（${spacesCount} 件）` : undefined" aria-controls="sidebar-spaces-body" @click="view.toggleSectionCollapsed('spaces')" @keydown="onButtonKeydown">
+        <button data-assistant-feature type="button" ref="spacesToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!spacesFolded" :aria-label="spacesFolded ? `spaces（${spacesCount} 件）` : undefined" aria-controls="sidebar-spaces-body" @click="view.toggleSectionCollapsed('spaces')" @keydown="onButtonKeydown">
           <span class="sidebar-section-mark" aria-hidden="true">{{ spacesFolded ? "▸" : "▾" }}</span>
           <span class="sidebar-section-title">spaces</span>
           <span v-if="spacesFolded" class="sidebar-section-count">{{ spacesCount }}</span>
         </button>
-        <button v-if="!spacesFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
+        <button data-assistant-feature v-if="!spacesFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${WORKSPACE_SORT_LABEL[view.workspaceSort]}（押すと切り替え）`" @click="view.toggleWorkspaceSort()" @keydown="onButtonKeydown">
           {{ WORKSPACE_SORT_LABEL[view.workspaceSort] }}
         </button>
       </div>
@@ -973,7 +973,7 @@ watchDragInterrupt(view, () => {
                      onRowPointerDown/onRowPointerUp にも伝播し、`onToggleCollapse` が二重に呼ばれる
                      （グループの頭）か、意図せず focusWorkspace が呼ばれる（worktree グループの
                      頭）。`@click.stop` だけでは pointerup 側の伝播は止まらない。 -->
-                <button
+                <button data-assistant-feature
                   v-if="i === 0 && row.isGroupHead"
                   type="button"
                   class="sidebar-group-toggle"
@@ -1056,7 +1056,7 @@ watchDragInterrupt(view, () => {
       aria-label="agents"
     >
       <div v-if="!view.sidebarCollapsed" class="sidebar-section-header">
-        <button type="button" ref="agentsToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!agentsFolded" :aria-label="agentsFolded ? `agents（${agents.length} 件${agentsBlocked ? '・入力待ちあり' : ''}）` : undefined" aria-controls="sidebar-agents-body" @click="view.toggleSectionCollapsed('agents')" @keydown="onButtonKeydown">
+        <button data-assistant-feature type="button" ref="agentsToggleEl" class="sidebar-btn sidebar-section-toggle" :aria-expanded="!agentsFolded" :aria-label="agentsFolded ? `agents（${agents.length} 件${agentsBlocked ? '・入力待ちあり' : ''}）` : undefined" aria-controls="sidebar-agents-body" @click="view.toggleSectionCollapsed('agents')" @keydown="onButtonKeydown">
           <span class="sidebar-section-mark" aria-hidden="true">{{ agentsFolded ? "▸" : "▾" }}</span>
           <span class="sidebar-section-title">agents</span>
           <template v-if="agentsFolded">
@@ -1064,7 +1064,7 @@ watchDragInterrupt(view, () => {
             <StateIcon v-if="agentsBlocked" class="sidebar-state-icon" state="blocked" />
           </template>
         </button>
-        <button v-if="!agentsFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
+        <button data-assistant-feature v-if="!agentsFolded" type="button" class="sidebar-btn sidebar-sort-btn" :aria-label="`並び順: ${AGENT_SORT_LABEL[view.agentSort]}（押すと切り替え）`" @click="view.toggleAgentSort()" @keydown="onButtonKeydown">
           {{ AGENT_SORT_LABEL[view.agentSort] }}
         </button>
       </div>
@@ -1083,7 +1083,7 @@ watchDragInterrupt(view, () => {
               <span v-else-if="t.kind === 'text'" v-bind="textTokenAttrs(t, i)">{{ t.text }}</span>
             </template>
             <!-- サブエージェントの件数（20261004-subagent-display）。1 行目の右端（利用者の行の並びの設定で 1 行目が空なら出ない）。行のクリック（その pane へ移る）・ドラッグの開始へ伝えない。 -->
-            <button
+            <button data-assistant-feature
               v-if="i === 0 && subagentCount(agent) > 0"
               type="button"
               class="sidebar-subagent-btn"
@@ -1105,10 +1105,10 @@ watchDragInterrupt(view, () => {
 
     <div class="sidebar-footer sidebar-footer-modern">
       <!-- モダンの配置（20261008-ui-style AC14・AC15）: 「新規」と「メニュー」を、通知のベルと並べて最下部に置く（spaces の区画の中の同じボタンは出さない）。畳んだサイドバーでは縦に並ぶ（印だけ。読み上げの名前は保つ）。 -->
-        <button type="button" class="sidebar-btn sidebar-footer-new" data-sidebar-act="new" aria-label="新規" title="新規" aria-haspopup="menu" :aria-expanded="newMenuOpen ? 'true' : 'false'" @click="onOpenNewMenu" @keydown="onButtonKeydown">
+        <button data-assistant-feature type="button" class="sidebar-btn sidebar-footer-new" data-sidebar-act="new" aria-label="新規" title="新規" aria-haspopup="menu" :aria-expanded="newMenuOpen ? 'true' : 'false'" @click="onOpenNewMenu" @keydown="onButtonKeydown">
           {{ view.sidebarCollapsed ? "＋" : "＋ 新規" }}
         </button>
-        <button type="button" class="sidebar-btn sidebar-footer-menu" data-sidebar-act="menu" aria-label="メニュー" title="メニュー" aria-haspopup="menu" :aria-expanded="globalMenuOpen ? 'true' : 'false'" @click="onOpenGlobalMenu" @keydown="onButtonKeydown">
+        <button data-assistant-feature type="button" class="sidebar-btn sidebar-footer-menu" data-sidebar-act="menu" aria-label="メニュー" title="メニュー" aria-haspopup="menu" :aria-expanded="globalMenuOpen ? 'true' : 'false'" @click="onOpenGlobalMenu" @keydown="onButtonKeydown">
           {{ view.sidebarCollapsed ? "⋯" : "メニュー" }}
         </button>
       <!-- 通知のベル（20261005-notify-bell）。畳んでも見える帯なので、先送りした件数のバッヂがいつでも見える。 -->
@@ -1117,7 +1117,7 @@ watchDragInterrupt(view, () => {
     </div>
 
     <!-- モダンの配置（AC13）: たたむ・広げるの印を、サイドバーと主な領域の境の線の、縦の中央に置く（小さな丸＋矢印。押せる当たりは 24px）。幅のつまみ（下）の上にあり、この上では幅のドラッグは始まらない。 -->
-    <button
+    <button data-assistant-feature
       type="button"
       class="sidebar-edge-toggle"
       :aria-expanded="!view.sidebarCollapsed"

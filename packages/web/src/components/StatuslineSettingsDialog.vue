@@ -62,7 +62,7 @@ function graph(id: (typeof STATUSLINE_GRAPHS)[number]["id"], event: Event, patte
   >
     <header>
       <strong>Statuslineの設定</strong
-      ><button type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
+      ><button data-assistant-feature type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
     </header>
     <p>変更はすべてのstatuslineへ反映され、Web版・端末版で共有されます。</p>
     <label

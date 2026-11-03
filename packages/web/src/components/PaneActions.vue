@@ -65,7 +65,7 @@ function keepFocus(ev: MouseEvent): void {
     data-pane-actions
     @mousedown="keepFocus"
   >
-    <button
+    <button data-assistant-feature
       v-if="showMenu !== false"
       type="button"
       class="pane-actions-btn"
@@ -78,7 +78,7 @@ function keepFocus(ev: MouseEvent): void {
     >
       ⋮
     </button>
-    <button
+    <button data-assistant-feature
       v-if="showInfo"
       type="button"
       class="pane-actions-btn"
@@ -101,7 +101,7 @@ function keepFocus(ev: MouseEvent): void {
         <circle cx="8" cy="5" r="0.9" fill="currentColor" />
       </svg>
     </button>
-    <button
+    <button data-assistant-feature
       v-if="showAddView"
       type="button"
       class="pane-actions-btn"
@@ -116,7 +116,7 @@ function keepFocus(ev: MouseEvent): void {
         <path d="M8 5v6M5 8h6" stroke="currentColor" />
       </svg>
     </button>
-    <button
+    <button data-assistant-feature
       v-for="action in visible()"
       :key="action"
       type="button"
@@ -130,7 +130,7 @@ function keepFocus(ev: MouseEvent): void {
       {{ marks[action] }}
     </button>
     <details v-if="overflow().length" class="pane-actions-more">
-      <summary class="pane-actions-btn" aria-label="エージェント操作">⋯</summary>
+      <summary class="pane-actions-btn soda-button-feature" aria-label="エージェント操作">⋯</summary>
       <div class="pane-actions-menu">
         <button
           v-for="action in overflow()"
@@ -146,7 +146,7 @@ function keepFocus(ev: MouseEvent): void {
       </div>
     </details>
     <template v-if="showSplit">
-      <button
+      <button data-assistant-feature
         type="button"
         class="pane-actions-btn"
         tabindex="-1"
@@ -169,7 +169,7 @@ function keepFocus(ev: MouseEvent): void {
           <path d="M8 3v10" stroke="currentColor" stroke-width="1.3" />
         </svg>
       </button>
-      <button
+      <button data-assistant-feature
         type="button"
         class="pane-actions-btn"
         tabindex="-1"
@@ -193,7 +193,7 @@ function keepFocus(ev: MouseEvent): void {
         </svg>
       </button>
     </template>
-    <button
+    <button data-assistant-feature
       type="button"
       class="pane-actions-btn"
       tabindex="-1"
@@ -231,7 +231,7 @@ function keepFocus(ev: MouseEvent): void {
         />
       </svg>
     </button>
-    <button
+    <button data-assistant-feature
       type="button"
       class="pane-actions-btn pane-actions-close"
       tabindex="-1"

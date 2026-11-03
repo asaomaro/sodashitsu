@@ -402,7 +402,7 @@ function onViewKey(key: AskViewKey): void {
         <h2 id="ask-origin" ref="titleEl" class="ask-origin" tabindex="-1" data-ask-origin>
           {{ origin }}
         </h2>
-        <button
+        <button data-assistant-feature
           type="button"
           class="ask-maximize"
           :aria-label="maximized ? '元のサイズに戻す' : '最大化'"

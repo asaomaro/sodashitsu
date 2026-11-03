@@ -176,7 +176,7 @@ function close() {
       @pointercancel="grip = null"
     >
       <strong>{{ target.mode === "messages" ? "送信メッセージ" : "会話の要約" }}</strong
-      ><button type="button" aria-label="閉じる" @click="close">×</button>
+      ><button data-assistant-feature type="button" aria-label="閉じる" @click="close">×</button>
     </header>
     <p v-if="error" role="alert">{{ error }}</p>
     <template v-if="target.mode === 'messages'">

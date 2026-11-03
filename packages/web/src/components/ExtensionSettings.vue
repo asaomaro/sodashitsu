@@ -227,7 +227,7 @@ function isOn(e: { state: string; enabledInConfig: boolean; disabledByUser: bool
             <button data-assistant-action type="button" class="settings-btn" :disabled="!isOn(e)" :aria-disabled="store.busy.has(e.key) ? 'true' : undefined" data-ext-restart :aria-label="`拡張 ${e.id} を起動し直す`" @click="restart(e)">
               {{ store.busy.has(e.key) ? "処理中…" : "起動し直す" }}
             </button>
-            <button type="button" class="settings-btn" data-ext-log-toggle :aria-expanded="logs[e.key] !== undefined" :aria-label="`拡張 ${e.id} のログ`" @click="toggleLog(e.key)">
+            <button data-assistant-feature type="button" class="settings-btn" data-ext-log-toggle :aria-expanded="logs[e.key] !== undefined" :aria-label="`拡張 ${e.id} のログ`" @click="toggleLog(e.key)">
               ログ
             </button>
             <button data-assistant-action

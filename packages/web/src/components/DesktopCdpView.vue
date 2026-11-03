@@ -493,13 +493,13 @@ onBeforeUnmount(() => {
       >
         共有を停止
       </button>
-      <button v-if="connected" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
+      <button data-assistant-feature v-if="connected" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
       <button data-assistant-action v-if="connected" :disabled="!enabled" title="ブラウザのタブ内全体へ最大化。Escでも元に戻せます"
         :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? '元に戻す' : '最大化' }}</button>
     <label v-if="control && allowFit" class="fit-toggle" title="Windows側で開いている同じVSCodeのレイアウトも変わります"><input v-model="fit" type="checkbox" />表示領域に合わせる</label>
       <button data-assistant-action v-if="socket?.readyState === 3" :disabled="!enabled" @click="connect">再接続</button>
       </div>
-      <button v-if="connected" type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
+      <button data-assistant-feature v-if="connected" type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
         :aria-label="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
         :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
         @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
@@ -537,7 +537,7 @@ onBeforeUnmount(() => {
         placeholder="日本語などをここで変換して送信"
       /><button data-assistant-action :disabled="!enabled">文字を送る</button>
     </form>
-    <button type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
+    <button data-assistant-feature type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
       :aria-label="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
       :title="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
       @click="toggleTextInput">{{ inputCollapsed ? '▴' : '▾' }}</button>

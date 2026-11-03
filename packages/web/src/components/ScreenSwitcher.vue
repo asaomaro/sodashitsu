@@ -51,7 +51,7 @@ function fullName(def: ScreenDef): string {
         view.sidebarCollapsed ? def.shortLabel : def.label
       }}</span>
     </button>
-    <button ref="button" class="screen-switcher-btn" :class="{'screen-switcher-btn-active':current}" data-screen-more aria-haspopup="true" :aria-expanded="menuOpen" :title="current?.label??'その他の画面'" @click="toggle" @keydown.esc="menuOpen=false">
+    <button data-assistant-feature ref="button" class="screen-switcher-btn" :class="{'screen-switcher-btn-active':current}" data-screen-more aria-haspopup="true" :aria-expanded="menuOpen" :title="current?.label??'その他の画面'" @click="toggle" @keydown.esc="menuOpen=false">
       <span class="screen-switcher-label">{{view.sidebarCollapsed?(current?.shortLabel??'他'):(current?.label??'その他')}} ▾<span v-if="pending" class="screen-pending"> {{pending}}</span></span>
     </button>
     <Teleport to="body"><nav v-if="menuOpen" ref="menu" class="screen-extra-menu" :style="{left:left+'px',top:top+'px'}" aria-label="その他の画面" @keydown.esc="menuOpen=false;button?.focus()"><button data-usage-analytics @click="analyticsSelected=true;view.openDashboard();menuOpen=false;button?.focus()">エージェント利用分析</button><button v-for="def in extra" :key="def.id" :data-screen-id="def.id" :aria-current="view.screen===def.id?'page':undefined" @click="view.setScreen(def.id);menuOpen=false;button?.focus()">{{def.label}}<span v-if="def.id==='connections'&&pending">（{{pending}}）</span></button></nav></Teleport>

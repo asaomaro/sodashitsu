@@ -48,7 +48,7 @@ onBeforeUnmount(() => {
     aria-label="サーバーの使用状況"
     title="Sodashitsuサーバーが動く環境の情報（WSLではLinux環境）"
   >
-    <button
+    <button data-assistant-feature
       type="button"
       aria-label="フッターの設定"
       title="フッターの設定"

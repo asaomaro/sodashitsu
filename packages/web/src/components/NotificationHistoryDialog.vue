@@ -163,7 +163,7 @@ function cancelClear(): void {
           <span class="nh-age">{{ ageLabel(now, e.at) }}</span>
           <span class="nh-move" aria-hidden="true">移動</span>
         </button>
-        <button type="button" class="nh-del" :aria-label="`削除: ${e.label}`" @click="remove(e.key, i)">×</button>
+        <button data-assistant-feature type="button" class="nh-del" :aria-label="`削除: ${e.label}`" @click="remove(e.key, i)">×</button>
       </li>
     </ul>
     <div class="nh-actions">

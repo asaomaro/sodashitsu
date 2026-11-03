@@ -195,7 +195,7 @@ function key(e: KeyboardEvent) {
       <strong>{{ target?.mode === "notes" ? "セッションのメモ" : "エージェントのToDo" }}</strong>
       <span>{{ identity?.sessionId.slice(0, 8) }}</span
       ><button data-assistant-action :disabled="busy" @click="load()">再読込</button
-      ><button aria-label="閉じる" @click="close">×</button>
+      ><button data-assistant-feature aria-label="閉じる" @click="close">×</button>
     </header>
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="target?.mode === 'notes'" class="notes-layout">

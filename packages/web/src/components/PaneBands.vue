@@ -191,7 +191,7 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
         <DisplayScriptMark v-if="edged" :info="b" part="mark" class="pane-band-script-mark" />
         <DisplayScriptMark :info="b" part="button" />
         <DisplayScriptMark :info="b" part="end" />
-        <button
+        <button data-assistant-feature
           v-if="edged"
           type="button"
           class="pane-band-close"
@@ -205,7 +205,7 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
         >
           ⋮
         </button>
-        <button
+        <button data-assistant-feature
           v-if="edged"
           type="button"
           class="pane-band-close"
@@ -218,7 +218,7 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
         >
           −
         </button>
-        <button
+        <button data-assistant-feature
           type="button"
           class="pane-band-close"
           aria-label="この表示を閉じる"
@@ -233,7 +233,7 @@ function onRowKey(ev: KeyboardEvent, paneId: string): void {
       </span>
       <div class="pane-band-ring" aria-hidden="true"></div>
     </div>
-    <button
+    <button data-assistant-feature
       v-if="hidden.length > 0"
       type="button"
       class="pane-bands-more"

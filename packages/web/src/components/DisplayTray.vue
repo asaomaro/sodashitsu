@@ -113,7 +113,7 @@ function onKeydown(ev: KeyboardEvent): void {
 
 <template>
   <span ref="el" class="display-tray" role="group" aria-label="表示のボタン" data-display-chrome data-display-tray @keydown="onKeydown">
-    <button
+    <button data-assistant-feature
       v-for="it in shown"
       :key="it.b.id"
       type="button"
@@ -135,7 +135,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <span class="display-tray-name">{{ it.short }}</span>
       <DisplayScriptMark v-if="store.infos.get(it.b.id)" :info="store.infos.get(it.b.id)!" part="mark" />
     </button>
-    <button
+    <button data-assistant-feature
       v-if="hiddenCount > 0"
       type="button"
       class="display-tray-btn display-tray-more"

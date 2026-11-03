@@ -193,7 +193,7 @@ function onKeydown(ev: KeyboardEvent): void {
     <div class="display-head-actions">
       <DisplayScriptMark :info="info" part="button" />
       <DisplayScriptMark :info="info" part="end" />
-      <button
+      <button data-assistant-feature
         type="button"
         class="display-head-btn"
         aria-label="この表示のメニュー"
@@ -206,7 +206,7 @@ function onKeydown(ev: KeyboardEvent): void {
       >
         ⋮
       </button>
-      <button
+      <button data-assistant-feature
         v-if="collapsible"
         type="button"
         class="display-head-btn"
@@ -219,7 +219,7 @@ function onKeydown(ev: KeyboardEvent): void {
       >
         ▸
       </button>
-      <button
+      <button data-assistant-feature
         type="button"
         class="display-head-btn"
         aria-label="この表示を閉じる"

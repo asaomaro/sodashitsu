@@ -75,7 +75,7 @@ function onButtonKeydown(ev: KeyboardEvent): void {
     :class="{ 'machine-header-dim': state !== 'online', 'machine-header-compact': compact }"
     :data-machine-id="machineId"
   >
-    <button
+    <button data-assistant-feature
       type="button"
       class="machine-toggle"
       :aria-expanded="!collapsed"
@@ -99,7 +99,7 @@ function onButtonKeydown(ev: KeyboardEvent): void {
       <span class="machine-label">{{ compact ? shortLabel : label }}</span>
       <span v-if="!compact" class="machine-state" :data-state="state">{{ stateText }}</span>
     </button>
-    <button v-if="machineId !== LOCAL_MACHINE_ID" type="button" class="machine-desktop"
+    <button data-assistant-feature v-if="machineId !== LOCAL_MACHINE_ID" type="button" class="machine-desktop"
       :disabled="state !== 'online'" :aria-label="`${label} のデスクトップを別窓で開く`"
       title="デスクトップを別窓で開く" @click="openDesktop" @keydown="onButtonKeydown">▤</button>
 

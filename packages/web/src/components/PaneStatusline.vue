@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
     :data-pane-id="paneId"
   >
     <div class="statusline-width" :style="{ height: `${rows * 22 + 2}px` }">
-      <button
+      <button data-assistant-feature
         aria-label="Statuslineの設定"
         title="Statuslineの設定"
         @click="view.openDialogWithContext({ kind: 'statuslineSettings' })"

@@ -596,7 +596,7 @@ watch(
                 >
                   後へ
                 </button>
-                <button
+                <button data-assistant-feature
                   type="button"
                   class="sr-btn"
                   data-toggle-detail

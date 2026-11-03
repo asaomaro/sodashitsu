@@ -1200,13 +1200,13 @@ onBeforeUnmount(() => {
         <button data-assistant-action v-if="!lockScreenCover" :disabled="!ready || !control || !imeKeys"
           :title="imeKeys ? '接続先のIMEをOFFにする' : '接続先をIMEキー対応版に更新してください'"
           @pointerdown.prevent @click="sendIme('ImeOff')">IME OFF</button>
-        <button :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
+        <button data-assistant-feature :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button>
         <button data-assistant-action data-desktop-maximize :aria-pressed="maximized" @click="toggleMaximize">
           {{ maximized ? "元に戻す" : "最大化" }}
         </button>
         <button data-assistant-action @click="close">閉じる</button>
         </div>
-        <button type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
+        <button data-assistant-feature type="button" class="viewer-collapse-button" :aria-expanded="!toolbarCollapsed"
           :aria-label="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
           :title="toolbarCollapsed ? '操作バーを表示' : '操作バーを畳む'"
           @dblclick.stop @click="toggleToolbar">{{ toolbarCollapsed ? '▾' : '▴' }}</button>
@@ -1515,7 +1515,7 @@ onBeforeUnmount(() => {
           :placeholder="secureDesktop ? 'Windowsの認証画面に送る文字（保存しません）' : '日本語はここで変換を確定'"
         /><button data-assistant-action :disabled="!control || !text">文字を送る</button>
       </form>
-      <button type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
+      <button data-assistant-feature type="button" class="viewer-collapse-button" :aria-expanded="!inputCollapsed"
         :aria-label="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
         :title="inputCollapsed ? '文字入力欄を表示' : '文字入力欄を畳む'"
         @click="toggleTextInput">{{ inputCollapsed ? '▴' : '▾' }}</button>

@@ -209,7 +209,7 @@ function stop(ev: Event): void {
     >
       <div class="command-popup-header">
         <span id="command-popup-title" class="command-popup-title">{{ ctx.title }}</span>
-        <button
+        <button data-assistant-feature
           type="button"
           class="command-popup-close"
           tabindex="-1"
