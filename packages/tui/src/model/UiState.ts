@@ -136,8 +136,8 @@ export const TOAST_MS = 4000;
 
 export class UiState {
   pendingConnectionRequests=0;
-  screen: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections" = "base";
-  setScreen(screen: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections"): void {
+  screen: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections" | "analytics" | "resources" = "base";
+  setScreen(screen: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections" | "analytics" | "resources"): void {
     if (this.screen === screen) return;
     this.screen = screen;
     this.emit();

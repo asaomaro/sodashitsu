@@ -231,7 +231,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
       y,
       truncate(text, width),
       fg,
-      ((ctx.screen ?? "base") === action || action==="screens"&&["schedule","history","connections"].includes(ctx.screen??"base")) ? activeBg : bg,
+      ((ctx.screen ?? "base") === action || action==="screens"&&["schedule","history","connections","analytics","resources"].includes(ctx.screen??"base")) ? activeBg : bg,
       0,
       width,
     );
@@ -309,7 +309,7 @@ export function paintSidebar(grid: Grid, rect: Rect, ctx: ChromeContext): Sideba
     control(rect.y, rect.x + 1, "端末", "base");
     control(rect.y, rect.x + (switchRows === 1 ? 6 : half), "グラフ", "graph");
     control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 13 : 1), "状況", "dashboard");
-    control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), (switchRows === 1 && inner < 26 ? "他 ▾" : ctx.screen === "schedule" ? "予約 ▾" : ctx.screen === "history" ? "履歴 ▾" : ctx.screen === "connections" ? "接続 ▾" : "その他 ▾")+(ctx.pendingConnectionRequests?` ${ctx.pendingConnectionRequests}`:""), "screens");
+    control(rect.y + (switchRows - 1), rect.x + (switchRows === 1 ? 18 : half), (switchRows === 1 && inner < 26 ? "他 ▾" : ctx.screen === "schedule" ? "予約 ▾" : ctx.screen === "history" ? "履歴 ▾" : ctx.screen === "connections" ? "接続 ▾" : ctx.screen === "analytics" ? "分析 ▾" : ctx.screen === "resources" ? "リソース ▾" : "その他 ▾")+(ctx.pendingConnectionRequests?` ${ctx.pendingConnectionRequests}`:""), "screens");
     const footerY = rect.y + rect.h - 2;
     if (inner >= 16) {
       control(footerY, rect.x + 1, "＋新規", "new");

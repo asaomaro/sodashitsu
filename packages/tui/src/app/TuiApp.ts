@@ -8,6 +8,7 @@ import { SessionToolsDialog } from "../modes/SessionToolsDialog.js";
 import { systemFooterSettingsSections } from "../settings/systemFooterSettings.js";
 import { statuslineSettingsSections } from "../settings/statuslineSettings.js";
 import { GraphTerminal } from "../modes/GraphTerminal.js";
+import { MonitorView } from "../modes/MonitorView.js";
 import { ScheduleView } from "../modes/ScheduleView.js";
 import { PluginPackages } from "../modes/PluginPackages.js";
 import { GraphView } from "../modes/GraphView.js";
@@ -271,6 +272,8 @@ export class TuiApp {
   readonly overlays: OverlayHost;
   readonly displays: DisplayModel;
   readonly dockedViews: DockedViews;
+  readonly analytics: MonitorView;
+  readonly resources: MonitorView;
   readonly schedules: ScheduleView;
   readonly connections: ConnectionsView;
   private historyScreen:ConversationDialog|null=null;
@@ -419,6 +422,9 @@ export class TuiApp {
     this.disposers.push(() => this.dockedViews.dispose());
     this.connections=new ConnectionsView(this.ui,this.prefsPort,()=>this.scheduleRender());
     this.disposers.push(()=>this.connections.dispose(),()=>this.historyScreen?.dispose());
+    this.analytics = new MonitorView("analytics", this.ui, this.rpc, () => this.scheduleRender());
+    this.resources = new MonitorView("resources", this.ui, this.rpc, () => this.scheduleRender());
+    this.disposers.push(() => this.analytics.dispose(), () => this.resources.dispose());
     this.schedules = new ScheduleView(this.model, this.ui, this.rpc, () => this.scheduleRender());
     this.disposers.push(() => this.schedules.dispose());
     this.graphView = new GraphView(
@@ -468,10 +474,14 @@ export class TuiApp {
           this.dashboard.cancelInteraction();
         if (this.ui.dialogContext !== null || this.ui.contextMenu !== null) {
           this.schedules.cancelInteraction();
+          this.analytics.cancelInteraction();
+          this.resources.cancelInteraction();
           this.dockedViews.release();
           this.mouse.cancel();
           this.statuslines.cancel();
         }
+        this.analytics.sync(this.resourcesConnected && this.ui.screen === "analytics");
+        this.resources.sync(this.resourcesConnected && this.ui.screen === "resources");
         this.connections.sync(this.ui.screen === "connections");
         if(this.ui.screen==="history"&&!this.historyScreen)this.historyScreen=new ConversationDialog("sessions",null,this.ui,this.rpc,this.prefs,this.model,()=>this.scheduleRender(),id=>this.dispatcher.focusPaneAcrossViews(id),()=>undefined);
         else if(this.ui.screen!=="history"&&this.historyScreen){this.historyScreen.dispose();this.historyScreen=null;}
@@ -795,6 +805,8 @@ export class TuiApp {
     this.asks.onOpened();
     this.panes.connectionOpened();
     this.resourcesConnected = true;
+    this.analytics.sync(this.ui.screen === "analytics");
+    this.resources.sync(this.ui.screen === "resources");
     this.usage.connected();
     void this.displays.connect();
     this.commitView();
@@ -848,6 +860,8 @@ export class TuiApp {
       this.popup = null;
     }
     this.resourcesConnected = false;
+    this.analytics.sync(false);
+    this.resources.sync(false);
     this.resourcePoller.setActive(false);
     this.usage.disconnected();
     this.displays.disconnect();
@@ -1027,6 +1041,14 @@ export class TuiApp {
       this.scheduleRender();
       return;
     }
+    if (this.ui.screen === "analytics" || this.ui.screen === "resources") {
+      const target = this.ui.screen === "analytics" ? this.analytics : this.resources;
+      if (ev.kind === "key") {
+        if (chordOf(ev.key) === this.keymap.prefix || this.keys.mode !== "terminal") this.keys.handle(ev);
+        else target.handleKey(ev.key);
+      } else if (ev.kind === "mouse" && !target.handleMouse(ev)) this.mouse.handle(ev);
+      this.scheduleRender(); return;
+    }
     if(this.ui.screen==="connections"||this.ui.screen==="history") {
       const target=this.ui.screen==="connections"?this.connections:this.historyScreen;
       if(ev.kind==="key") { const chord=chordOf(ev.key);if(chord===this.keymap.prefix||this.keys.mode!=="terminal")this.keys.handle(ev);else target?.handleKey(ev.key); }
@@ -1138,6 +1160,7 @@ export class TuiApp {
   }
 
   private sendToFocusedPane(bytes: string): void {
+    if (this.ui.screen === "analytics" || this.ui.screen === "resources") return;
     const id = this.model.focusedPaneId;
     if (!id) return;
     this.sendToPane(id, bytes);
@@ -1518,6 +1541,8 @@ export class TuiApp {
     this.ui.closeContextMenu();
     this.dockedViews.dispose();
     this.schedules.reset();
+    this.analytics.sync(false); this.analytics.reset();
+    this.resources.sync(false); this.resources.reset();
     if(this.ui.screen==="history")this.ui.setScreen("base");
     this.graphView.reset();
     this.model.reset(id);
@@ -1762,6 +1787,8 @@ export class TuiApp {
         }
         if (this.ui.screen === "graph")
           return this.graphView.render(grid, layout.paneArea, this.theme);
+        if (this.ui.screen === "analytics") return this.analytics.render(grid, layout.paneArea, this.theme);
+        if (this.ui.screen === "resources") return this.resources.render(grid, layout.paneArea, this.theme);
         if(this.ui.screen==="connections")return this.connections.render(grid,layout.paneArea,this.theme);
         if(this.ui.screen==="history")return this.historyScreen?.render({grid,theme:this.theme},layout.paneArea)??null;
         if (this.ui.screen === "schedule")

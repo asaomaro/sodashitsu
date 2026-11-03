@@ -1,0 +1,29 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/modes/MonitorView.test.ts (7 tests | 1 failed | 6 skipped) 17ms
+   × coalesces rapid filter changes until the outstanding collection finishes 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/MonitorView.test.ts > coalesces rapid filter changes until the outstanding collection finishes
+AssertionError: expected "vi.fn()" to be called 1 times, but got 4 times
+ ❯ src/modes/MonitorView.test.ts:66:100
+     64|  let resolve!:(v:UsageInsights)=>void;
+     65|  const request=vi.fn().mockImplementationOnce(()=>new Promise<UsageIns…
+     66|  const h=make("analytics",request);h.v.sync(true);h.key("d");h.key("k"…
+       |                                                                                                    ^
+     67|  resolve(insightsFixture());await vi.waitFor(()=>expect(request).toHav…
+     68| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  17:54:50
+   Duration  1.43s (transform 80%, import 18%, tests 1%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/MonitorView.test.ts -t coalesces rapid

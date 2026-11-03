@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/app/TuiApp.monitors.test.ts (1 test | 1 failed) 124ms
+   × opens both read-only screens from Other, consumes input and returns with Escape 123ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/app/TuiApp.monitors.test.ts > opens both read-only screens from Other, consumes input and returns with Escape
+AssertionError: expected [ Uint8Array[ 3, 2, 112, 49, 2 ] ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/app/TuiApp.monitors.test.ts:19:56
+     17|   const before=h.ws.sent.filter(m=>m instanceof Uint8Array).length;
+     18|   h.io.type("\x02\x02");
+     19|   expect(h.ws.sent.filter(m=>m instanceof Uint8Array)).toHaveLength(be…
+       |                                                        ^
+     20|   h.io.type("3");h.app.renderNow();expect(await h.screen()).toContain(…
+     21|   h.io.type("\x1b[200~do not send\x1b[201~");expect(h.ws.sent.filter(m…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:54:47
+   Duration  2.64s (transform 78%, import 17%, tests 5%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/app/TuiApp.monitors.test.ts

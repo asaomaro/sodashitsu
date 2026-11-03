@@ -1,0 +1,75 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/tui
+
+ ❯ src/modes/MonitorView.test.ts (7 tests | 1 failed | 6 skipped) 1025ms
+   × keeps token-unknown groups distinct from measured zero 1024ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/modes/MonitorView.test.ts > keeps token-unknown groups distinct from measured zero
+AssertionError: expected ' エージェント利用分析 · 自動更新                   …' to contain 'トークン 未取得'
+
+- Expected
++ Received
+
+- トークン 未取得
++  エージェント利用分析 · 自動更新                                                                              
++  [1 概要]  2 比較   3 親子・ツール   4 収集状況   5 エージェント分析                                          
++  d 期間 30日 · k CLI すべて · m 親子 すべて                                                                   
++  r 更新 · p 自動更新停止/再開 · ↑↓/PgUp/PgDn スクロール · Esc 端末                                            
++  期間 2026-10-05 ～ 2026-11-03 (UTC)                                                                          
++  トークン 0 · 呼出 0 · ツール 2 · エラー 0                                                                    
++  入力 0 / 出力 0 / キャッシュ読込 0 / 書込 0                                                                  
++  一部の記録のみの集計です（収集状況を参照）。                                                                 
++  活動: 開始 3 / 完了 2 / 中断 0 / 失敗 1                                                                      
++  エージェント別                                                                                               
++  [????????????] Muse · 0 tok (未取得) · 0回 · tool 2                                                          
++  日別                                                                                                         
++  [????????????] 2026-11-03 · 100 tok (未取得) · 3回 · tool 2                                                  
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
++                                                                                                               
+
+ ❯ src/modes/MonitorView.test.ts:59:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  17:54:52
+   Duration  2.41s (transform 45%, tests 44%, import 10%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/tui:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/modes/MonitorView.test.ts -t keeps token-unknown

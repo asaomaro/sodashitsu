@@ -10,7 +10,7 @@ import type { TabScroll } from "./tabBar.js";
 /** chrome（サイドバー・tab バー・枠）を描くのに要るもの。 */
 export interface ChromeContext {
   model: SessionModel;
-  screen?: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections";
+  screen?: "base" | "dashboard" | "schedule" | "graph" | "history" | "connections" | "analytics" | "resources";
   notificationCount?: number;
   pendingConnectionRequests?:number;
   chromeControls?: boolean;
