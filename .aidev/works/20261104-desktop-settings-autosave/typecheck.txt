@@ -1,0 +1,16 @@
+
+> sodashitsu-workspace@0.1.0 typecheck /workspaces/sodashitsu-main-live-assistant-agents
+> node scripts/run-quiet.mjs "pnpm -r --filter=./packages/* run typecheck && tsc -p scripts/tsconfig.json"
+
+Scope: 8 of 9 workspace projects
+packages/protocol typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/protocol typecheck: Done
+packages/client-core typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/client-core typecheck: Done
+packages/desktop-assistant typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/tui typecheck$ tsc --noEmit -p tsconfig.typecheck.json
+packages/web typecheck$ vue-tsc --noEmit -p tsconfig.typecheck.json
+packages/desktop-assistant typecheck: Done
+packages/tui typecheck: Done
+packages/web typecheck: Done
+packages/server typecheck$ tsc --noEmit -p tsconfig.typecheck.json

@@ -1942,3 +1942,12 @@ it("waits for the shared headline and keeps full detail in the conversation only
   expect(await fixture.handlers.get('assistant:inbox')!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame})).toMatchObject({noticeSummaries:{[notice.id]:{text:'詳細な作業要約'.repeat(100)}}});
  }finally{rpc.options.prefsChanged!({rev:10001,prefs:{}});rpc.request.mockImplementation(original!);await save(event,{enabled:false});}
 });
+
+it("keeps disabled settings open for automatic saves and quits only when switching off",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},save=fixture.handlers.get('assistant:save')!;
+ await new Promise(done=>setImmediate(done));fixture.quit.mockClear();await save(event,{enabled:false,appearance:'light'});await new Promise(done=>setImmediate(done));
+ expect(fixture.quit).not.toHaveBeenCalled();
+ await save(event,{enabled:true,mode:'tray',voiceEnabled:false});await save(event,{enabled:false});await new Promise(done=>setImmediate(done));
+ expect(fixture.quit).toHaveBeenCalledOnce();
+});

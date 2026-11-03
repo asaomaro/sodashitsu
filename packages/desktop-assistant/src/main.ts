@@ -1777,9 +1777,10 @@ function registerIpc(): void {
       if (action === "save") {
         if (managed && DesktopAssistantPreferences.parse(input).launchAtLogin) throw Error("sodaによる起動管理中は、Windowsログイン時の単独起動を併用できません");
         const oldVoice=JSON.stringify([controller.preferences.voiceProvider,controller.preferences.voicevoxOrigin,controller.preferences.voicevoxStyleId,controller.preferences.voiceFollowCharacter,controller.preferences.characterId,controller.preferences.voiceCoreVersion,controller.preferences.serverOrigin]);
+        const wasEnabled=controller.preferences.enabled;
         const saved = await controller.update(input,true);
         if(oldVoice!==JSON.stringify([saved.voiceProvider,saved.voicevoxOrigin,saved.voicevoxStyleId,saved.voiceFollowCharacter,saved.characterId,saved.voiceCoreVersion,saved.serverOrigin])){++voiceEpoch;voice.stop();}
-        if (!saved.enabled) {
+        if (wasEnabled && !saved.enabled) {
           if (managed) managedStreams!.output.write('{"type":"disabled"}\n');
           setImmediate(() => app.quit());
         }

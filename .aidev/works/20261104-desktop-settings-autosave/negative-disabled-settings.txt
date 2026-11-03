@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (60 tests | 1 failed | 59 skipped) 1573ms
+   × keeps disabled settings open for automatic saves and quits only when switching off 21ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 59 skipped (60)
+   Start at  00:13:29
+   Duration  1.87s (tests 89%, transform 10%, import 1%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > keeps disabled settings open for automatic saves and quits only when switching off
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array []
+
+
+Number of calls: 1
+
+ ❯ src/main.test.ts:1950:27
+    1948|  const event={sender:settings.webContents,senderFrame:settings.webCont…
+    1949|  await new Promise(done=>setImmediate(done));fixture.quit.mockClear();…
+    1950|  expect(fixture.quit).not.toHaveBeenCalled();
+       |                           ^
+    1951|  await save(event,{enabled:true,mode:'tray',voiceEnabled:false});await…
+    1952|  expect(fixture.quit).toHaveBeenCalledOnce();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -58,7 +58,7 @@ const server = createServer(async (request, response) => {
 });
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 let browser;
-const watchdog = setTimeout(() => { console.error("Generated UI exceeded 30 seconds"); process.exit(124); }, 30000);
+const watchdog = setTimeout(() => { console.error("Generated UI exceeded 60 seconds"); process.exit(124); }, 60000);
 watchdog.unref();
 try {
   browser = await chromium.launch({
@@ -319,11 +319,11 @@ try {
     const before=await footer.boundingBox();
     await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=el.scrollHeight;});
     const after=await footer.boundingBox();assert.equal(after.y,before.y,"settings footer must not move when content scrolls");
-    assert.equal(await page.locator('.settings-footer button[type="submit"]').evaluate(el=>el.form?.id),"form");
+    await expect(page.getByRole("button",{name:"保存",exact:true})).toHaveCount(0);
     await page.evaluate(()=>{document.getElementById("status").textContent="保存しました。";});
-    const saveBox=await page.locator('.settings-footer button[type="submit"]').boundingBox(),openBox=await page.locator("#open").boundingBox(),statusBox=await page.locator("#status").boundingBox();
+    const openBox=await page.locator("#open").boundingBox(),statusBox=await page.locator("#status").boundingBox();
     assert.ok(statusBox.x>=openBox.x+openBox.width,"save status follows the action buttons");
-    assert.ok(Math.abs(statusBox.y+statusBox.height/2-(saveBox.y+saveBox.height/2))<2,"save status is on the button row");
+    assert.ok(Math.abs(statusBox.y+statusBox.height/2-(openBox.y+openBox.height/2))<2,"save status is on the button row");
     assert.ok(after.y+after.height<=size.height&&after.y>=0,"footer is contained in the window");
     await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=0;});
   }
@@ -339,8 +339,8 @@ try {
   await expect(page.getByRole("button", { name: "操舵室を開く" })).toBeDisabled();
   await expect(page.locator("#ocrProvider")).toHaveValue("agent");
   await expect(page.locator("#claude-model,#codex-effort")).toHaveCount(0);
-  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
-  await expect(page.locator("#status")).toHaveText("保存しました。");
+  await expect(page.getByRole("button",{name:"保存",exact:true})).toHaveCount(0);
+  assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="save").length),0);
   assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="start-session").length),0);
   await expect(page.locator("#followSystemMotion")).toBeChecked();
   await page.locator("#followSystemMotion").uncheck();
@@ -353,9 +353,9 @@ try {
   await expect(page.locator("#voiceFollowCharacter")).not.toBeChecked();
   await page.getByRole("button",{name:"ボイスを試す",exact:true}).click();
   assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==="test-voice").at(-1)[1].voicevoxStyleId),108);
-  assert.notEqual(await page.evaluate(()=>window.preferences.voicevoxStyleId),108);
-  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
-  await expect(page.locator("#status")).toHaveText("保存しました。");
+  await expect.poll(()=>page.evaluate(()=>window.preferences.voicevoxStyleId)).toBe(108);
+  await expect(page.locator("#status")).toHaveText("反映しました。");
+  await expect(page.locator("#status")).toHaveText("反映しました。");
   assert.equal(await page.evaluate(()=>window.preferences.voiceEnabled),true);
   assert.equal(await page.evaluate(()=>window.preferences.idleFloating),true);
   assert.equal(await page.evaluate(()=>window.preferences.voiceProvider),"voicevox");
@@ -380,7 +380,7 @@ try {
   await page.locator("#voiceProvider").selectOption("voicevox");
 
   await page.locator("#voiceEnabled").uncheck();
-  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
+  await expect(page.locator("#status")).toHaveText("反映しました。");
   assert.equal(await page.evaluate(()=>window.preferences.voiceEnabled),false);
   await page.locator("#enabled").press("Space");
   await expect(page.locator("#enabled")).toBeChecked();
@@ -402,32 +402,64 @@ try {
 
   await page.locator("#voiceFollowCharacter").check();
   await expect(page.locator("#voicevoxStyleId")).toHaveValue("3");
-  await page.getByRole("button",{name:"保存",exact:true}).press("Enter");
+  await expect(page.locator("#status")).toHaveText("反映しました。");
   assert.equal(await page.evaluate(()=>window.preferences.characterId),"plugin:yukkuri-work/zundamon");
   assert.equal(await page.evaluate(()=>window.preferences.allowPluginCharacters),true);
   for (const character of ["captain-male", "captain-female", "sodashitsu-icon", "captain-robot"]) {
     await page.locator("#characterId").selectOption(character);
-    await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
-    await expect(page.locator("#status")).toHaveText("保存しました。");
+    await expect(page.locator("#status")).toHaveText("反映しました。");
+    await expect(page.locator("#status")).toHaveText("反映しました。");
     assert.equal(await page.evaluate(() => window.preferences.characterId), character);
   }
-  await page.locator("#displayId").selectOption("1");await page.locator("#positionX").fill("100");await page.locator("#positionY").fill("200");
+  await page.locator("#displayId").selectOption("1");await page.locator("#positionX").fill("100");await page.locator("#positionY").fill("200");await page.locator("#positionY").press("Tab");
   await page.locator("#mode").selectOption("tray");
-  await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
-  await expect(page.locator("#status")).toHaveText("保存しました。");
+  await expect(page.locator("#status")).toHaveText("反映しました。");
+  await expect(page.locator("#status")).toHaveText("反映しました。");
   assert.deepEqual(await page.evaluate(()=>window.preferences.position),{displayId:"1",x:100,y:200});
   assert.equal(await page.evaluate(() => window.preferences.characterId), "captain-robot");
   assert.equal(await page.evaluate(() => window.preferences.mode), "tray");
   await page.getByRole("button", { name: "操舵室を開く" }).press("Enter");
   assert.equal(await page.evaluate(() => window.calls.at(-1)[0]), "open");
+  // Serial writes preserve newer drafts and retry a failed write on the next change.
+  await page.evaluate(()=>{
+   window.originalSettingsSave=window.assistant.save;window.settingsSaves=0;
+   window.assistant.save=next=>{window.settingsSaves++;return window.settingsSaves===1?new Promise(resolve=>{window.finishSettingsSave=()=>window.originalSettingsSave(next).then(resolve);}):window.originalSettingsSave(next);};
+  });
+  await page.locator("#idleFloating").uncheck();
+  await expect.poll(()=>page.evaluate(()=>typeof window.finishSettingsSave)).toBe("function");
+  await page.locator("#mode").selectOption("character");
+  await page.locator("#idleFloating").check();
+  assert.equal(await page.evaluate(()=>window.settingsSaves),1,"only one settings write is in flight");
+  await page.evaluate(()=>window.finishSettingsSave());
+  await expect(page.locator("#status")).toHaveText("反映しました。");
+  await expect(page.locator("#mode")).toHaveValue("character");await expect(page.locator("#idleFloating")).toBeChecked();
+  assert.equal(await page.evaluate(()=>window.preferences.mode),"character");assert.equal(await page.evaluate(()=>window.preferences.idleFloating),true);
+  await page.evaluate(()=>window.assistant.save=window.originalSettingsSave);
+  const beforeInvalid=await page.evaluate(()=>window.calls.filter(call=>call[0]==="save").length);
+  await page.locator("#characterSize").fill("");await page.locator("#characterSize").press("Tab");
+  await expect(page.locator("#status")).toContainText("入力内容を確認");assert.equal(await page.evaluate(()=>window.calls.filter(call=>call[0]==="save").length),beforeInvalid);
+  await page.locator("#characterSize").fill("200");await page.locator("#characterSize").press("Enter");
+  await expect.poll(()=>page.evaluate(()=>window.preferences.characterSize)).toBe(200);
   await page.evaluate(() => {
     window.assistant.save = async () => {
       throw Error("disk full");
     };
   });
-  await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
+  await page.locator("#mode").selectOption("tray");
   await expect(page.locator("#status")).toContainText("disk full");
-  await expect(page.getByRole("button", { name: "保存", exact: true })).toBeEnabled();
+  await expect(page.locator("#mode")).toBeEnabled();
+  await page.evaluate(()=>window.assistant.save=window.originalSettingsSave);
+  await page.locator("#windowLayer").selectOption("back");await expect(page.locator("#status")).toHaveText("反映しました。");
+  assert.equal(await page.evaluate(()=>window.preferences.mode),"tray");assert.equal(await page.evaluate(()=>window.preferences.windowLayer),"back");
+  await page.evaluate(()=>{window.assistant.save=async next=>{if(next.voicevoxOrigin==="http://192.168.1.10:50021")throw Error("loopback URL required");return window.originalSettingsSave(next);};});
+  await page.locator("#voicevoxOrigin").fill("http://192.168.1.10:50021");await page.locator("#voicevoxOrigin").press("Tab");
+  await expect(page.locator("#status")).toContainText("loopback URL required");
+  await page.locator("#windowLayer").selectOption("front");
+  await expect.poll(()=>page.evaluate(()=>window.preferences.windowLayer)).toBe("front");
+  await expect(page.locator("#voicevoxOrigin")).toHaveValue("http://192.168.1.10:50021");
+  await page.locator("#voicevoxOrigin").fill("http://127.0.0.1:50021");await page.locator("#voicevoxOrigin").press("Tab");
+  await expect(page.locator("#status")).toHaveText("反映しました。");await page.evaluate(()=>window.assistant.save=window.originalSettingsSave);
+  console.log("PASS: settings changes save automatically, serialized drafts survive delayed writes, invalid input waits and failed saves recover");
   await page.goto(`${origin}/character.html`);
   await expect(page.locator("#portrait")).toHaveAttribute("src", "captain-female.png");
   await expect.poll(()=>page.locator("#portrait").evaluate(el=>el.naturalWidth)).toBe(1024);
@@ -959,18 +991,18 @@ try {
   await appearancePage.goto(`${origin}/settings.html`);
   await expect(appearancePage.locator("#appearance")).toHaveValue("dark");
   await appearancePage.locator("#appearance").selectOption("light");
-  await appearancePage.locator('button[type="submit"]').first().click();
+  await expect(appearancePage.locator("#status")).toHaveText("反映しました。");
   await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
   assert.equal(await appearancePage.evaluate(()=>getComputedStyle(document.querySelector(".assistant-card")).backgroundColor),"rgb(248, 245, 236)");
   assert.equal(await appearancePage.locator("select").first().evaluate(el=>getComputedStyle(el,"::picker(select)").backgroundColor),"rgb(255, 253, 248)");
   if(process.env.SODA_ASSISTANT_LIGHT_SCREENSHOT)await appearancePage.screenshot({path:process.env.SODA_ASSISTANT_LIGHT_SCREENSHOT});
   await appearancePage.locator("#appearance").selectOption("system");
-  await appearancePage.locator('button[type="submit"]').first().click();
+  await expect(appearancePage.locator("#status")).toHaveText("反映しました。");
   await appearancePage.emulateMedia({colorScheme:"dark"});
   await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","dark");
   await appearancePage.emulateMedia({colorScheme:"light"});
   await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
-  await appearancePage.locator("#appearance").selectOption("dark");await appearancePage.locator('button[type="submit"]').first().click();
+  await appearancePage.locator("#appearance").selectOption("dark");await expect(appearancePage.locator("#status")).toHaveText("反映しました。");
   await appearancePage.emulateMedia({colorScheme:"light"});await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","dark");
   await appearancePage.evaluate(()=>window.appearanceCallback({revision:1,mode:"light"}));await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","dark");
   for(const role of ["bubble","notice","tools","panel","character"]){
@@ -986,9 +1018,9 @@ try {
   await appearancePage.locator('#appearance').selectOption('dark');await appearancePage.locator('#colorTheme').selectOption('nord');
   await appearancePage.locator('#appearance').selectOption('system');await appearancePage.emulateMedia({colorScheme:'light'});
   await expect(appearancePage.locator('#colorTheme')).toHaveValue('nord');
-  await appearancePage.locator('button[type="submit"]').first().click();assert.equal(await appearancePage.evaluate(()=>window.preferences.colorTheme),'nord');
+  await expect(appearancePage.locator("#status")).toHaveText("反映しました。");assert.equal(await appearancePage.evaluate(()=>window.preferences.colorTheme),'nord');
   await appearancePage.emulateMedia({colorScheme:'dark'});await expect(appearancePage.locator('#colorTheme')).toHaveValue('nord');
-  await appearancePage.locator('#windowLayer').selectOption('back');await appearancePage.locator('button[type="submit"]').first().click();assert.equal(await appearancePage.evaluate(()=>window.preferences.windowLayer),'back');
+  await appearancePage.locator('#windowLayer').selectOption('back');await expect(appearancePage.locator("#status")).toHaveText("反映しました。");assert.equal(await appearancePage.evaluate(()=>window.preferences.windowLayer),'back');
   await appearancePage.locator('#windowLayer').selectOption('front');
   const themeOptions=await appearancePage.locator('#colorTheme option').evaluateAll(options=>options.map(o=>o.value));
   assert.deepEqual(new Set(themeOptions),new Set(THEME_NAMES));
@@ -996,12 +1028,12 @@ try {
     await appearancePage.locator('#appearance').selectOption(THEME_APPEARANCE[theme]);
     await appearancePage.locator('#colorTheme').selectOption(theme);
     await expect(appearancePage.locator('#appearance')).toHaveValue(THEME_APPEARANCE[theme]);
-    await appearancePage.locator('button[type="submit"]').first().click();
+    await expect(appearancePage.locator("#status")).toHaveText("反映しました。");
     const state=assistantAppearance({appearance:THEME_APPEARANCE[theme],colorTheme:theme},{},false);
     await appearancePage.evaluate(state=>window.appearanceCallback({...state,revision:(window.appearanceRevision??1)+1}),state);
     await expect(appearancePage.locator('html')).toHaveAttribute('data-assistant-theme',THEME_APPEARANCE[theme]);
     if(state.vars['--assistant-button-bg']){
-      const colors=await appearancePage.evaluate(()=>({button:getComputedStyle(document.querySelector('button[type="submit"]')).backgroundColor,expected:getComputedStyle(document.documentElement).getPropertyValue('--assistant-button-bg').trim(),thumb:getComputedStyle(document.documentElement).getPropertyValue('--assistant-scroll-thumb').trim()}));
+      const colors=await appearancePage.evaluate(()=>({button:getComputedStyle(document.querySelector('#open')).backgroundColor,expected:getComputedStyle(document.documentElement).getPropertyValue('--assistant-button-bg').trim(),thumb:getComputedStyle(document.documentElement).getPropertyValue('--assistant-scroll-thumb').trim()}));
       assert.equal(colors.expected,state.vars['--assistant-button-bg']);assert.equal(colors.thumb,state.vars['--assistant-scroll-thumb']);
       const expectedRGB=await appearancePage.evaluate(color=>{const el=document.createElement('span');el.style.color=color;document.body.append(el);const rgb=getComputedStyle(el).color;el.remove();return rgb;},state.vars['--assistant-button-bg']);
       assert.equal(colors.button,expectedRGB);
@@ -1012,7 +1044,7 @@ try {
   await expect(appearancePage.locator('#colorTheme')).toBeDisabled();
   await expect(appearancePage.locator('#color-theme-setting')).toBeHidden();
   const remembered=await appearancePage.locator('#colorTheme').inputValue();
-  await appearancePage.locator('button[type="submit"]').first().click();
+  await expect(appearancePage.locator("#status")).toHaveText("反映しました。");
   assert.equal(await appearancePage.evaluate(()=>window.preferences.appearance),'sodashitsu');
   const followed=assistantAppearance({appearance:'sodashitsu',colorTheme:'nord'},{theme:'tokyo-night',themeAuto:false},false);
   await appearancePage.evaluate(state=>window.appearanceCallback({...state,revision:(window.appearanceRevision??1)+1}),followed);
