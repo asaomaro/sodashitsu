@@ -1,0 +1,3159 @@
+[
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "予約を登録",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "予約を保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "編集",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "{{job.enabled ? \"無効にする\" : \"有効にする\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "今すぐ実行",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "実行結果",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/schedule/ScheduleView.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "すべて表示",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageAnalytics.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{tab[1]}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageAnalytics.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "{{reportBusy ? \"分析中…\" : \"レポートを生成\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/DashboardView.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "状況一覧",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/DashboardView.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "利用分析",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "期間・条件",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "{{d}}日",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "{{busy?'集計中…':'集計・更新'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "全セッションへ戻る",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "セッションCSV",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "JSON",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "(動的なラベル)",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "{{g.label}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "session-node",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "session-node sub",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 10,
+    "kind": "normal",
+    "label": "(動的なラベル)",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageInsightsPanel.vue",
+    "ordinal": 11,
+    "kind": "action",
+    "label": "このセッションの推移・モデル・ツールを分析",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/PaneInfoView.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "一覧を開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/PaneInfoView.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "ダッシュボードを開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/UsageAccountCost.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{busy ? \"取得中…\" : \"記録を更新\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/AccountCostDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/AccountCostDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/AgentUsageReport.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "HTMLを保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/PastSessions.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{busy ? \"処理中…\" : \"検索・更新\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/dashboard/PastSessions.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "別ペインで再開",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/OnboardingDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "スキップ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/OnboardingDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "この設定ではじめる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayScriptMark.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{DISPLAY_ENGAGE_LABEL}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayScriptMark.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "{{DISPLAY_END_LABEL}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabViews.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "作業画面",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabViews.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "アプリ画面",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabViews.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "ビューを追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabViews.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "{{p.agent?.label ?? p.label ?? \"ターミナル\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabViews.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabViews.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AskDialog.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{maximized ? \"❐\" : \"□\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AskDialog.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "◢",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/VscodeSharingSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "共有設定を保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayTray.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "display-tray-btn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayTray.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "ほか {{hiddenCount}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConversationWindow.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConversationWindow.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "{{m.text.slice(0, 100)}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConversationWindow.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "{{busy ? \"読み込み中…\" : \"続きを読む\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConversationWindow.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "{{busy ? \"要約中…\" : summary ? \"要約を更新\" : \"要約を生成\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConversationWindow.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "履歴から作り直す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ReceivedDownloads.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "もう一度保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ReceivedDownloads.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "解放",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NativeTabView.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "操作元の閲覧タブに移す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DashboardDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DetachedView.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "再接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{{ files: \"ファイル\", file: \"表示・編集\", \"git-graph\": \"Gitグラフ\", \"git-diff\": \"差分\" }[ section ]}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "再読込",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "検索",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "再読込",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "ツリーへ戻る",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "{{m.path}}{{m.line ? \":\" + m.line : \"\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "{{e.directory ? (expanded.has(e.path) ? \"▾ \" : \"▸ \") : \"· \"}}{{e.name}}{{e.link ? \" ↗\" : \"\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "作業中の差分",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkspaceView.vue",
+    "ordinal": 10,
+    "kind": "action",
+    "label": "表示",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "登録を解除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "VSCodeを起動・接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "選択したVSCodeに接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "共有元を接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "{{control ? \"閲覧に戻る\" : \"操作する\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "共有を停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "情報・設定",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "{{maximized ? '元に戻す' : '最大化'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 9,
+    "kind": "action",
+    "label": "再接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 10,
+    "kind": "normal",
+    "label": "{{toolbarCollapsed ? '▾' : '▴'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 11,
+    "kind": "action",
+    "label": "文字を送る",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCdpView.vue",
+    "ordinal": 12,
+    "kind": "normal",
+    "label": "{{inputCollapsed ? '▴' : '▾'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AgentForkDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{run.finished ? \"閉じる\" : \"閉じる（裏で続けます）\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AgentForkDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "取りやめ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AgentForkDialog.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "{{submitting ? \"起動しています…\" : \"fork する\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/StatuslineSettingsDialog.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/StatuslineSettingsDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "表示行数を1行に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/StatuslineSettingsDialog.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "↑",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/StatuslineSettingsDialog.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "↓",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/StatuslineSettingsDialog.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ScreenSwitcher.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "screen-switcher-btn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ScreenSwitcher.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "screen-switcher-btn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ScreenSwitcher.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "エージェント利用分析",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ScreenSwitcher.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "{{def.label}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SystemFooter.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "⋮",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointPairing.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "このブラウザの鍵を作成",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointPairing.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "この接続先を記憶して暗号化で接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointPairing.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "相手の設定を削除して切断",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointPairing.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "通常接続へ明示的に切り替える",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SessionToolsWindow.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "再読込",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SessionToolsWindow.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SessionToolsWindow.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "新しいメモ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SessionToolsWindow.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "(動的なラベル)",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SessionToolsWindow.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SessionToolsWindow.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneStatusline.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "⋮",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PluginPackages.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "パッケージを探す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PluginPackages.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "確認して登録",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PluginPackages.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "許可して登録・有効化",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PluginPackages.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AssistantSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "準備・起動を再試行",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/GitHistoryGraph.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{row.label}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Toast.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{a.label}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Toast.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabBar.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "tab-bar-item",
+    "role": "tab"
+  },
+  {
+    "file": "packages/web/src/components/TabBar.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "＋",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/TabBar.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "＋作業ビュー",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneInfoDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginView.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "ログイン",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/MachineHeader.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{collapsed ? \"▸\" : \"▾\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/MachineHeader.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "machine-select",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/MachineHeader.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "▤",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "情報・設定",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "{{maximized ? \"元に戻す\" : \"最大化\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "このpaneでエージェントからの表示を許可",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "許可を取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "{{helperConnected ? \"登録して開く\" : \"登録\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WebPreview.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "表示を閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneBands.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "⋮",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneBands.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "−",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneBands.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneBands.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "ほか {{hidden.length}} 件",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayFrame.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "元の表示へ戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayFrame.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "{{note === DISPLAY_NOTE_BREAKER ? \"再開\" : \"もう一度出す\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCompanionPage.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "共有補助を接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCompanionPage.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "補助を切断",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCompanionPage.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "画面を選んで共有開始",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopCompanionPage.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "動画・音声を停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/CommandPopup.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SubagentListDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ReconnectOverlay.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "再試行",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionApprovalDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "承認しない",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionApprovalDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "後で",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionApprovalDialog.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "承認して動かす",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{enabled ? \"ファイル転送を解除\" : \"ファイル転送を許可\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "一覧を更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "フォルダを選んで送信",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "📁 {{entry.name}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "{{entry.name}} をZIPで受信",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "ダウンロード",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "一時停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "再開",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopFiles.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationHistoryDialog.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "nh-go",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationHistoryDialog.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationHistoryDialog.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "すべて削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationHistoryDialog.vue",
+    "ordinal": 3,
+    "kind": "danger",
+    "label": "削除する",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationHistoryDialog.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "やめる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationHistoryDialog.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{reloading ? \"読み直し中…\" : \"読み直す\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "settings-switch ext-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "{{store.busy.has(e.key) ? \"処理中…\" : \"起動し直す\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "ログ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "確認",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "承認を取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ExtensionSettings.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "記録を消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PanePanel.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{p.title}}",
+    "role": "tab"
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "sidebar-btn sidebar-session-btn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "sidebar-btn sidebar-section-toggle",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "{{WORKSPACE_SORT_LABEL[view.workspaceSort]}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "{{row.collapsed ? \"▸\" : \"▾\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "sidebar-btn sidebar-section-toggle",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "{{AGENT_SORT_LABEL[view.agentSort]}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "sidebar-subagent-btn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "{{view.sidebarCollapsed ? \"＋\" : \"＋ 新規\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "{{view.sidebarCollapsed ? \"⋯\" : \"メニュー\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/Sidebar.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "sidebar-edge-toggle",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayPanelHead.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "⋮",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayPanelHead.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "▸",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DisplayPanelHead.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "⋮",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "利用状況（情報）",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "このペインにビューを追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "{{marks[action]}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "{{HEADER_ACTION_LABELS[action]}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "右へ分割",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "下へ分割",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "pane-actions-btn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/PaneActions.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "共有設定を保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{agentActive ? \"操作を引き取る\" : control ? \"閲覧に戻る\" : \"操作する\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "IME ON",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "IME OFF",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "情報・設定",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "{{maximized ? \"元に戻す\" : \"最大化\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "{{toolbarCollapsed ? '▾' : '▴'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "既定のモニターで接続し直す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "閲覧だけ許可",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 9,
+    "kind": "action",
+    "label": "キーボード・マウス操作も許可",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 10,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 11,
+    "kind": "action",
+    "label": "既定のモニターで接続し直す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 12,
+    "kind": "action",
+    "label": "Ctrl+Alt+Del",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 13,
+    "kind": "action",
+    "label": "このモニターで接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 14,
+    "kind": "action",
+    "label": "この解像度で接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 15,
+    "kind": "action",
+    "label": "再同期",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 16,
+    "kind": "action",
+    "label": "共有停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 17,
+    "kind": "action",
+    "label": "適用して再接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 18,
+    "kind": "action",
+    "label": "動画共有を依頼",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 19,
+    "kind": "action",
+    "label": "動画・音声を停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 20,
+    "kind": "action",
+    "label": "{{sound ? \"音声を止める\" : \"音声を再生\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 21,
+    "kind": "action",
+    "label": "選択モニターを別窓で開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 22,
+    "kind": "action",
+    "label": "マイク転送を開始",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 23,
+    "kind": "action",
+    "label": "マイク転送を停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 24,
+    "kind": "action",
+    "label": "{{clipboardGranted ? \"クリップボード共有を解除\" : \"クリップボード共有を許可\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 25,
+    "kind": "action",
+    "label": "共有元から取得",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 26,
+    "kind": "action",
+    "label": "共有元へ送信",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 27,
+    "kind": "action",
+    "label": "{{clipboardSync ? \"自動同期を停止\" : \"双方向の自動同期を開始\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 28,
+    "kind": "action",
+    "label": "画像・書式を手元へコピー",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 29,
+    "kind": "action",
+    "label": "画像・書式を共有元へ送信",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 30,
+    "kind": "action",
+    "label": "画像・書式の転送を取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 31,
+    "kind": "action",
+    "label": "候補を更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 32,
+    "kind": "action",
+    "label": "エージェントへの画面提供・操作を許可",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 33,
+    "kind": "action",
+    "label": "エージェント許可を取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 34,
+    "kind": "action",
+    "label": "サインイン画面へ進む",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 35,
+    "kind": "action",
+    "label": "文字を送る",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/RemoteDesktopWindow.vue",
+    "ordinal": 36,
+    "kind": "normal",
+    "label": "{{inputCollapsed ? '▴' : '▾'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SystemFooterSettingsDialog.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SystemFooterSettingsDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/MachineRows.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "machine-row",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "使い切りコードを発行",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginSettings.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "コードを失効",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginSettings.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "登録を削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginSettings.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "認証アプリを登録",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginSettings.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "登録を確定",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/LoginSettings.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{tab.label}}",
+    "role": "tab"
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "＋接続ビュー",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "{{tab.label}} · {{machineLabel}}",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "閉じる",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "←",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "→",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "名前を変更",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/ViewerTabBar.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "＋ {{label}}",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/DesktopNativeTransfer.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "このPCで直接ドラッグを準備",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopNativeTransfer.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "補助プログラムを停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopNativeTransfer.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "手動の補助プログラムへ接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "このPCの暗号化接続用の鍵を作成",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointSettings.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "暗号化の必須設定を保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointSettings.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "この接続元を許可",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/DesktopEndpointSettings.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "許可を取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "変更",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "{{captureHint(PREFIX_TARGET)}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "変更",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "{{captureHint(changeTarget(def.id, b))}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "追加：prefix の後",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "追加：直接",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "{{captureHint(addTarget(def.id, via))}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 10,
+    "kind": "action",
+    "label": "変更",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 11,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 12,
+    "kind": "normal",
+    "label": "{{captureHint(navigateChangeTarget(def.id, b))}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 13,
+    "kind": "action",
+    "label": "追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 14,
+    "kind": "action",
+    "label": "既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 15,
+    "kind": "normal",
+    "label": "{{captureHint(navigateAddTarget(def.id))}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 16,
+    "kind": "action",
+    "label": "足す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 17,
+    "kind": "action",
+    "label": "すべて既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 18,
+    "kind": "action",
+    "label": "戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 19,
+    "kind": "action",
+    "label": "やめる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 20,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/KeySettings.vue",
+    "ordinal": 21,
+    "kind": "action",
+    "label": "こちらへ移す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NameDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NameDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "OK",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/NotificationBell.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "notify-bell",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorktreeOpenDialog.vue",
+    "ordinal": 0,
+    "kind": "danger",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/HelpDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/AskViewer.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{it.title}}",
+    "role": "tab"
+  },
+  {
+    "file": "packages/web/src/components/SessionSwitchDialog.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "行を上へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "行を下へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "行を削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "前へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "後へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "詳細",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "上へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "下へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 9,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 10,
+    "kind": "action",
+    "label": "条件を追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 11,
+    "kind": "action",
+    "label": "追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 12,
+    "kind": "action",
+    "label": "行を追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 13,
+    "kind": "action",
+    "label": "既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 14,
+    "kind": "action",
+    "label": "戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SidebarRowsSettings.vue",
+    "ordinal": 15,
+    "kind": "action",
+    "label": "やめる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkAgentRequests.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{busy ? '起動中…' : '起動'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorkAgentRequests.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "取り消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorktreeCreateDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/WorktreeCreateDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "作成して開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConfirmDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/ConfirmDialog.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "{{confirmLabel}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "{{item.label}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "すべての上書きを既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 9,
+    "kind": "action",
+    "label": "やめる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 10,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 11,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 12,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 13,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 14,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 15,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 16,
+    "kind": "action",
+    "label": "既定に戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 17,
+    "kind": "action",
+    "label": "上へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 18,
+    "kind": "action",
+    "label": "下へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 19,
+    "kind": "action",
+    "label": "削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 20,
+    "kind": "action",
+    "label": "追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 21,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 22,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 23,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 24,
+    "kind": "action",
+    "label": "{{agentIntegrations.status?.agents[k.value]?.installed ? \"解除\" : \"導入\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 25,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 26,
+    "kind": "action",
+    "label": "外す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 27,
+    "kind": "action",
+    "label": "導入",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 28,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 29,
+    "kind": "action",
+    "label": "{{['installed', 'needs_update'].includes(agentIntegrations.status.agyStatusLine.state) ? '外す' : '導入'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 30,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 31,
+    "kind": "action",
+    "label": "{{['installed', 'needs_update'].includes(agentIntegrations.status.copilotStatusLine.state) ? '外す' : '導入'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 32,
+    "kind": "normal",
+    "label": "settings-switch",
+    "role": "switch"
+  },
+  {
+    "file": "packages/web/src/components/SettingsDialog.vue",
+    "ordinal": 33,
+    "kind": "action",
+    "label": "はじめの案内を開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "外部Sodashitsuを追加",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "操作を委譲する",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "登録して接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "キャンセル",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "{{item.enabled ? \"無効化\" : \"有効化\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "登録削除",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "委譲を停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "申請を拒否",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 9,
+    "kind": "action",
+    "label": "接続を申請",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 10,
+    "kind": "action",
+    "label": "コードを確認して委譲",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/screens/ConnectionsScreen.vue",
+    "ordinal": 11,
+    "kind": "action",
+    "label": "入力を戻す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/resources/ResourceMonitorView.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{paused?'自動更新を再開':'自動更新を一時停止'}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/resources/ResourceMonitorView.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "更新",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphAddForm.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "取りやめ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphAddForm.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "{{retrying ? \"もう一度起動する\" : \"足して、端末を開く\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/SubagentPanel.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphFrameLayer.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{t.label}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphFrameLayer.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "＋",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/RekeyPicker.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "取り消し",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/RekeyPicker.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "選び直す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "＋ pane",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "＋ workspace ▾",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "線を結ぶ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "並びを整える",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "そのほか ▾",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "再開",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "−",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "＋",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "全体を表示",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 9,
+    "kind": "action",
+    "label": "{{graph.graph?.paused ? \"全体を再開\" : \"全体を一時停止\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 10,
+    "kind": "action",
+    "label": "別のマシンの pane を載せる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 11,
+    "kind": "normal",
+    "label": "履歴",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 12,
+    "kind": "normal",
+    "label": "全体表示",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 13,
+    "kind": "normal",
+    "label": "−",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 14,
+    "kind": "normal",
+    "label": "＋",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 15,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 16,
+    "kind": "normal",
+    "label": "+{{more.n}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 17,
+    "kind": "normal",
+    "label": "{{m.direction === \"out\" ? \"→\" : \"←\"}} {{m.otherName}}（{{m.otherSpace}}・{{LINK_KIND_NAME[m.link.kind]}}{{m.status ? `・${m.status}` : \"\"}}）",
+    "role": "menuitem"
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphCanvas.vue",
+    "ordinal": 18,
+    "kind": "normal",
+    "label": "{{chipLabel(e)}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphMinimap.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{collapsed ? \"▣\" : \"▾\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/HistoryPanel.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "すべての線",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/HistoryPanel.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphConfirm.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "{{cancelLabel}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphConfirm.vue",
+    "ordinal": 1,
+    "kind": "danger",
+    "label": "{{confirmLabel}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphSpaceBar.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "graph-space",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "最新を読み込む",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "最新を読み込む",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "向きを入れ替える",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "再開（回数を 0 に戻す）",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "一時停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "履歴",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 6,
+    "kind": "danger",
+    "label": "削除…",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 7,
+    "kind": "action",
+    "label": "取り消し",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/LinkPanel.vue",
+    "ordinal": 8,
+    "kind": "action",
+    "label": "保存",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphSubagentLayer.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "graph-subagent",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphSubagentLayer.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "ほか {{c.more.n}} 件",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/MobileGraphSheet.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/MobileGraphSheet.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "再開（回数を 0 に戻す）",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/MobileGraphSheet.vue",
+    "ordinal": 2,
+    "kind": "action",
+    "label": "一時停止",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphLinkMark.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "graph-mark-go",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphLinkMark.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "⚙",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphNode.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "graph-node-subagents",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphNode.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "選び直す…",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphNode.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "pane へ",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphNode.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "graph-node-handle",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/PaneChecklist.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "取り消し",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/PaneChecklist.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "適用",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "表示あり {{displayCount}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "{{win.pinned ? \"留め中\" : \"留める\"}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "基本画面で開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 4,
+    "kind": "action",
+    "label": "引き取って開く",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 5,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/GraphTerminalWindow.vue",
+    "ordinal": 6,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/components/graph/SubagentTranscriptWindow.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "Esc",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "Tab",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "Ctrl",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "Alt",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "↑",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "↓",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "←",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "→",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "PgUp",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "PgDn",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/ExtraKeys.vue",
+    "ordinal": 10,
+    "kind": "normal",
+    "label": "Prefix",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "{{workspaceLabel}} / {{tabLabel}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "この端末に合わせる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "⌨",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "予約",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "セッション履歴",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "外部接続",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 6,
+    "kind": "normal",
+    "label": "リソースモニター",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 7,
+    "kind": "normal",
+    "label": "表示{{panelCount}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 8,
+    "kind": "normal",
+    "label": "タブの表示{{tabPanelCount}}",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 9,
+    "kind": "normal",
+    "label": "連携",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 10,
+    "kind": "normal",
+    "label": "設定",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 11,
+    "kind": "normal",
+    "label": "端末へ戻る",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileShell.vue",
+    "ordinal": 12,
+    "kind": "normal",
+    "label": "端末へ戻る",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileDisplaySheet.vue",
+    "ordinal": 0,
+    "kind": "action",
+    "label": "この表示を消す",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileDisplaySheet.vue",
+    "ordinal": 1,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/MobileDisplaySheet.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "{{p.title}}",
+    "role": "tab"
+  },
+  {
+    "file": "packages/web/src/mobile/MobileDisplaySheet.vue",
+    "ordinal": 3,
+    "kind": "action",
+    "label": "閉じる",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/PanePicker.vue",
+    "ordinal": 0,
+    "kind": "normal",
+    "label": "×",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/PanePicker.vue",
+    "ordinal": 1,
+    "kind": "normal",
+    "label": "pane-picker-row pane-picker-row-workspace",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/PanePicker.vue",
+    "ordinal": 2,
+    "kind": "normal",
+    "label": "pane-picker-row pane-picker-row-tab",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/PanePicker.vue",
+    "ordinal": 3,
+    "kind": "normal",
+    "label": "pane-picker-row",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/PanePicker.vue",
+    "ordinal": 4,
+    "kind": "normal",
+    "label": "利用状況",
+    "role": ""
+  },
+  {
+    "file": "packages/web/src/mobile/PanePicker.vue",
+    "ordinal": 5,
+    "kind": "normal",
+    "label": "pane-picker-row pane-picker-dashboard",
+    "role": ""
+  }
+]

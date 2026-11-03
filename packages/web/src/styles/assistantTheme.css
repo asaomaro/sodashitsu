@@ -14,20 +14,20 @@
   scrollbar-color: var(--soda-accent) var(--soda-assistant-scroll-track);
   scrollbar-width: thin;
 }
-:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[type="submit"], input[type="button"], input[type="submit"], button[data-assistant-action], .settings-btn, .settings-close, .settings-reopen-button, .keys-btn, .onboarding-button, .tab-bar-new, .tab-bar-add-view, .confirm-dialog-actions > button, .name-dialog-actions > button, .worktree-dialog-actions > button, .help-dialog-actions > button, .fork-actions > button, .session-switch-dialog-close, .dashboard-dialog-close) {
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[data-assistant-action]:not([data-assistant-action="danger"]), input[type="button"], input[type="submit"]) {
   background: var(--soda-accent);
   color: var(--soda-accent-fg);
   border-color: var(--soda-accent);
   border-radius: 8px;
 }
-:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[type="submit"], input[type="button"], input[type="submit"], button[data-assistant-action], .settings-btn, .settings-close, .settings-reopen-button, .keys-btn, .onboarding-button, .tab-bar-new, .tab-bar-add-view, .confirm-dialog-actions > button, .name-dialog-actions > button, .worktree-dialog-actions > button, .help-dialog-actions > button, .fork-actions > button, .session-switch-dialog-close, .dashboard-dialog-close):hover:not(:disabled) {
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[data-assistant-action]:not([data-assistant-action="danger"]), input[type="button"], input[type="submit"]):hover:not(:disabled) {
   background: color-mix(in srgb, var(--soda-accent), var(--soda-accent-fg) 10%);
 }
-:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[type="submit"], input[type="button"], input[type="submit"], button[data-assistant-action], .settings-btn, .settings-close, .settings-reopen-button, .keys-btn, .onboarding-button, .tab-bar-new, .tab-bar-add-view, .confirm-dialog-actions > button, .name-dialog-actions > button, .worktree-dialog-actions > button, .help-dialog-actions > button, .fork-actions > button, .session-switch-dialog-close, .dashboard-dialog-close):is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"]) {
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[data-assistant-action]:not([data-assistant-action="danger"]), input[type="button"], input[type="submit"]):is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"]) {
   box-shadow: inset 0 0 0 2px var(--soda-accent-fg);
 }
 
-:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[type="submit"], input[type="button"], input[type="submit"], button[data-assistant-action], .settings-btn, .settings-close, .settings-reopen-button, .keys-btn, .onboarding-button, .tab-bar-new, .tab-bar-add-view, .confirm-dialog-actions > button, .name-dialog-actions > button, .worktree-dialog-actions > button, .help-dialog-actions > button, .fork-actions > button, .session-switch-dialog-close, .dashboard-dialog-close):focus-visible {
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button[data-assistant-action]:not([data-assistant-action="danger"]), input[type="button"], input[type="submit"]):focus-visible {
   outline: 2px solid var(--soda-fg);
   outline-offset: 2px;
 }
