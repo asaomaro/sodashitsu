@@ -16,3 +16,9 @@ HTMLのbutton要素すべてに金色の面・角丸・選択枠を適用して�
 ## 実画面での追加補正
 
 金背景を除去すると、既存MachineHeaderの選択PC名のaccent-fg（紺色）が紺背景上で読みにくいため、この2テーマの選択PC名だけ通常fgへ補正。fixtureにApp.vueの実CSSも含め、選択PC名の前景色を検証。独立再レビューで必須指摘なし。再検証とnegative control、最終Vite生成は通過。
+
+## 稼働反映
+
+b98fad9d / aade330bをmainへpushしWeb配布物を反映。handoffで8 PTYを停止せず引き継ぎ、10 pane UUIDを全件保持。アシスタントrunning/readyを確認。
+
+実配布CSSで通常/ダークのメニュー・サイドバー・設定目次/スイッチが金色でなく、操作ボタンが金色であることを検証。選択PC名が通常fgで読めることも確認。保存設定は変更していない。/tmp/soda-action-scope-final.pngを目視。ブラウザの既存ページは再読み込みで新CSSを読む。
