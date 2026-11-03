@@ -975,6 +975,7 @@ try {
   for(const role of ["bubble","notice","tools","panel","character"]){
     await appearancePage.goto(`${origin}/${role}.html`);await appearancePage.evaluate(()=>window.appearanceCallback({revision:2,mode:"light"}));
     await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
+    if(role==="bubble")assert.equal(await appearancePage.locator('#notification-summary-enabled').evaluate(el=>getComputedStyle(el).accentColor),"rgb(201, 166, 79)");
   }
   await appearancePage.goto(`${origin}/settings.html`);
   const themeOptions=await appearancePage.locator('#colorTheme option').evaluateAll(options=>options.map(o=>o.value));
@@ -991,6 +992,7 @@ try {
       assert.equal(colors.expected,state.vars['--assistant-button-bg']);assert.equal(colors.thumb,state.vars['--assistant-scroll-thumb']);
       const expectedRGB=await appearancePage.evaluate(color=>{const el=document.createElement('span');el.style.color=color;document.body.append(el);const rgb=getComputedStyle(el).color;el.remove();return rgb;},state.vars['--assistant-button-bg']);
       assert.equal(colors.button,expectedRGB);
+      assert.equal(await appearancePage.locator('input[type="checkbox"]').first().evaluate(el=>getComputedStyle(el).accentColor),expectedRGB);
     }else assert.equal(await appearancePage.evaluate(()=>document.documentElement.style.getPropertyValue('--assistant-button-bg')),'');
   }
   await appearancePage.locator('#appearance').selectOption('sodashitsu');

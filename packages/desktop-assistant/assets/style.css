@@ -113,7 +113,7 @@
 .assistant-scroll legend{color:var(--assistant-gold);padding:0 5px}
 .assistant-scroll label{font-size:13px;overflow-wrap:anywhere}.assistant-scroll input,.assistant-scroll select,.assistant-scroll textarea{min-width:0;max-width:100%;font:inherit}
 .assistant-scroll textarea{background:var(--assistant-input);color:var(--assistant-fg);border:1px solid var(--assistant-border)}
-.assistant-scroll input[type=checkbox]{accent-color:var(--assistant-scroll-thumb,#c9a64f)}
+input:is([type=checkbox],[type=radio]){accent-color:var(--assistant-button-bg,#c9a64f)}
 .assistant-scroll hr{border:0;border-top:1px solid var(--assistant-line);margin:16px 0}
 .window-toolbar{display:flex;gap:8px;flex:0 0 auto;padding:0 0 8px}
 .window-toolbar button{font-size:13px;padding:6px 10px}

@@ -1,0 +1,30 @@
+
+> @sodashitsu/desktop-assistant@0.1.0 verify:ui /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+> node scripts/verify-ui.mjs
+
+PASS: original Sodashitsu icon loads, rotates around its centre, and obeys rotation/reduced-motion preferences
+PASS: one outer content scroll, fully expanded sections/editors, and keyboard folding at 400x640, 400x540 and 320x480
+PASS: generated settings keyboard flow, four-character selection, recovery, character/bubble actions and scoped bubble chat plus local tool drafts/notes/voice/transcription preview and clipboard editor fencing, explicit microphone stop/review/upload and late-permission cancellation, OCR preview/recognition/import and note-save fencing
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/desktop-assistant@0.1.0 verify:ui: `node scripts/verify-ui.mjs`
+Exit status 1
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'auto'
+- 'rgb(201, 166, 79)'
+
+    at file:///workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant/scripts/verify-ui.mjs:978:31 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'auto',
+  expected: 'rgb(201, 166, 79)',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.15.0
