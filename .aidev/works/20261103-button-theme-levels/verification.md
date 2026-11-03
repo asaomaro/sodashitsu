@@ -10,4 +10,6 @@
 - CSSクラス規則はdocs/ui-style.md、プラグイン入口はdocs/plugin-packages.md、display APIはdocs/display.mdへ記載。
 - デスクトップアシスタント設定の固定フッターは直前mainのda61317aで完了。本変更の稼働更新と同時に配布する。
 
-稼働更新の結果はmain反映後に追記する。
+## 稼働反映
+
+mainの26f0fd79をpushし、handoff完了。10pane UUIDを保持、実行中8PTYを停止せず引継ぎ。稼働Webの機能ボタン44個を検出し、none/actions/featuresのCSS変化を確認（保存設定は変更しない）。アシスタントはpreparing/cache→app→running/readyを確認。内蔵配布資産41個とruntime6種の整合性検証も成功。
