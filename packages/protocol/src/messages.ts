@@ -1,3 +1,4 @@
+import {NotificationSummaryParams,type NotificationWorkSummary} from "./conversation.js";
 import {AssistantModelCatalogParams,type AssistantModelCatalog} from "./desktopAssistant.js";
 import {UsageInsightsParams,type UsageInsights} from "./usageInsights.js";
 import {VoiceCoreCancelParams,VoiceCoreCallParams,type VoiceCoreResult} from "./voiceCore.js";
@@ -1631,6 +1632,7 @@ export const METHOD_SCHEMAS = {
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
   "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
+  "notification.summary": NotificationSummaryParams,
   "notification.update": NotificationUpdateParams,
   "agent.account_cost": AccountCostParams,
   "agent.usage": AgentUsageParams,
@@ -1836,6 +1838,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
   "notification.test": { ok: true };
   "notification.state": NotificationState;
+  "notification.summary": NotificationWorkSummary;
   "notification.update": NotificationState;
   "agent.account_cost": AccountCostResult;
   "agent.usage": AgentUsageResult;

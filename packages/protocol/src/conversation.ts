@@ -63,9 +63,11 @@ export interface SummarySettings {
   model: string;
   sessionId: string;
   autoUpdate?: boolean | undefined;
+  notificationSummary?: boolean | undefined;
 }
 export const SummarySettingsSchema = z.object({
   autoUpdate: z.boolean().optional(),
+  notificationSummary: z.boolean().optional(),
   kind: ConversationKind,
   model: z
     .string()
@@ -182,4 +184,13 @@ export function configuredAgentActions(
   return AGENT_HEADER_ACTIONS.filter(
     (action) => settings[action] === "display" || (menu && settings[action] === "menu"),
   );
+}
+
+/** Shared per-notification work summary. Source text is collected by the server only. */
+export const NotificationSummaryParams=z.object({paneId:z.uuid(),workspaceId:z.uuid().optional(),agentInstanceId:z.uuid().optional(),key:z.string().min(1).max(200),refresh:z.boolean().default(false)});
+export interface NotificationWorkSummary {
+ status:"disabled"|"waiting"|"summarizing"|"ready"|"error";
+ text:string;
+ message:string;
+ updatedAt?:number;
 }

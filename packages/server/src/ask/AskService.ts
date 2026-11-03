@@ -159,6 +159,13 @@ export class AskService {
     return entry?.ready === true && entry.paneId === paneId;
   }
 
+  /** Plain bounded question text for authenticated shared work summaries. No media or actions. */
+  notificationText(paneId:string,askId:string):string|null {
+    const entry=this.byId.get(askId);
+    if(!entry?.ready||entry.paneId!==paneId)return null;
+    return JSON.stringify(pending(entry).spec).slice(0,2000);
+  }
+
   /** 待っている質問の数（テスト・診断用）。 */
   get pendingCount(): number {
     return this.byId.size;
