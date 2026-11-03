@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/agent/assistantModels.test.ts (5 tests | 1 failed | 4 skipped) 16ms
+   × rejects a symlinked model cache rather than following it 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.test.ts > rejects a symlinked model cache rather than following it
+AssertionError: expected [ { id: 'secret-model', …(2) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "efforts": [],
++     "id": "secret-model",
++     "label": "secret-model",
++   },
++ ]
+
+ ❯ src/agent/assistantModels.test.ts:33:54
+     31|  const dir=await mkdtemp(join(tmpdir(),'soda-model-link-'));dirs.push(…
+     32|  const target=join(dir,'target.json');await writeFile(target,JSON.stri…
+     33|  expect((await readAssistantModels('codex')).models).toEqual([]);
+       |                                                      ^
+     34| });
+     35| it('cleans up the owned process group after a successful text catalog …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  21:54:27
+   Duration  1.28s (transform 77%, import 21%, tests 1%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.test.ts -t rejects a symlinked

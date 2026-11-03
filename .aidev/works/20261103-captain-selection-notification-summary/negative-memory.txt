@@ -1,0 +1,45 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/controller.test.ts (17 tests | 1 failed | 16 skipped) 17ms
+   × remembers captain kind and profiles without recreating windows or letting stale settings overwrite them 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/controller.test.ts > remembers captain kind and profiles without recreating windows or letting stale settings overwrite them
+AssertionError: expected { version: 1, enabled: false, …(33) } to match object { captainKind: 'muse', …(2) }
+(32 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -7,8 +7,8 @@
+      "muse": {
+        "effort": "low",
+        "model": "muse-test",
+      },
+    },
+-   "captainKind": "muse",
++   "captainKind": "codex",
+    "notificationSummary": false,
+  }
+
+ ❯ src/controller.test.ts:223:33
+    221|  await controller.chooseCaptain("codex",{model:"gpt-test",effort:"high…
+    222|  await controller.chooseCaptain("muse",{model:"muse-test",effort:"low"…
+    223|  expect(controller.preferences).toMatchObject({captainKind:"muse",noti…
+       |                                 ^
+    224|  expect(native.character).not.toHaveBeenCalled();expect(native.tray).n…
+    225|  await controller.update({...stale,appearance:"light"},true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 skipped (17)
+   Start at  21:54:02
+   Duration  1.44s (transform 76%, import 22%, tests 1%, worker 1%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/controller.test.ts -t remembers captain kind

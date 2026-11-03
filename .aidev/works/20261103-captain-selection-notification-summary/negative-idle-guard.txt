@@ -1,0 +1,43 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/assistant/AssistantSessions.test.ts (50 tests | 1 failed | 49 skipped) 109ms
+   × does not inject an automatic notification summary if the captain starts working while input is queued 105ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/assistant/AssistantSessions.test.ts > does not inject an automatic notification summary if the captain starts working while input is queued
+AssertionError: expected { ok: true, …(1) } to match object { ok: false }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ok": false,
++   "ok": true,
+  }
+
+ ❯ src/assistant/AssistantSessions.test.ts:876:24
+    874|  const pending=surface.invoke({clientId:randomUUID(),sink:{} as never}…
+    875|  await vi.waitFor(()=>expect(release).toBeTypeOf("function"));f.sessio…
+    876|  expect(await pending).toMatchObject({ok:false});expect(host.writes).t…
+       |                        ^
+    877| });
+    878|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 49 skipped (50)
+   Start at  21:54:07
+   Duration  3.09s (transform 79%, import 17%, tests 4%)
+
+  Transform  transforming modules took 2.31s · 79% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/assistant/AssistantSessions.test.ts -t does not inject an automatic notification summary

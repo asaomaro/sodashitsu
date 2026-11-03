@@ -1,0 +1,38 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (54 tests | 1 failed | 53 skipped) 1670ms
+   × opens only a current roster actor in a reply terminal and rejects stale, hidden, and settings callers 34ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > opens only a current roster actor in a reply terminal and rejects stale, hidden, and settings callers
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ src/main.test.ts:1824:77
+    1822|  await open(local,{source});const panel=fixture.windows.at(-1)!,url=re…
+    1823|  expect(url).toContain("assistantView=reply");expect(url).toContain(so…
+    1824|  await expect(open(local,{source:{...source,agentInstanceId:randomUUID…
+       |                                                                             ^
+    1825|  connection.feed.agents=[];await expect(open(local,{source})).rejects.…
+    1826|  chat.hide();await expect(open(local,{source})).rejects.toThrow("会話を開い…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 53 skipped (54)
+   Start at  21:54:11
+   Duration  2.07s (tests 87%, transform 10%, import 2%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/main.test.ts -t opens only a current roster actor

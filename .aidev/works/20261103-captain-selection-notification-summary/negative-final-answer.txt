@@ -1,0 +1,28 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/assistantChat.test.ts (27 tests | 1 failed | 26 skipped) 120ms
+   × summarizes worker context only when captain is idle, recognizes the answer, and avoids duplicate/self notifications 118ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/assistantChat.test.ts > summarizes worker context only when captain is idle, recognizes the answer, and avoids duplicate/self notifications
+AssertionError: expected '通知を確認します。' to contain '返信案'
+
+Expected: "返信案"
+Received: "通知を確認します。"
+
+ ❯ src/assistantChat.test.ts:353:54
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 26 skipped (27)
+   Start at  21:54:04
+   Duration  1.60s (transform 70%, import 22%, tests 8%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/assistantChat.test.ts -t summarizes worker context

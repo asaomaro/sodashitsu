@@ -1,0 +1,32 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/agent/assistantModels.test.ts (5 tests | 1 failed | 4 skipped) 10ms
+   × cleans up the owned process group after a successful text catalog command 9ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/agent/assistantModels.test.ts > cleans up the owned process group after a successful text catalog command
+AssertionError: expected "kill" to be called with arguments: [ -987654321, 'SIGKILL' ]
+
+Number of calls: 0
+
+ ❯ src/agent/assistantModels.test.ts:41:127
+     39|   vi.mocked(spawn).mockReturnValue(child as never);const result=readAs…
+     40|   queueMicrotask(()=>{child.stdout.write('gemini-generated-high\tGener…
+     41|   expect((await result).models).toEqual([{id:'gemini-generated-high',l…
+       |                                                                                                                               ^
+     42|  }finally{kill.mockRestore();}
+     43| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  21:54:29
+   Duration  1.15s (transform 77%, import 22%, tests 1%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/agent/assistantModels.test.ts -t cleans up the owned process group
