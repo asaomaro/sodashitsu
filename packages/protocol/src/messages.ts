@@ -1,3 +1,4 @@
+import {AssistantModelCatalogParams,type AssistantModelCatalog} from "./desktopAssistant.js";
 import {UsageInsightsParams,type UsageInsights} from "./usageInsights.js";
 import {VoiceCoreCancelParams,VoiceCoreCallParams,type VoiceCoreResult} from "./voiceCore.js";
 import {ResourceAppReportParams,type ResourceMonitorSnapshot} from "./resourceMonitor.js";
@@ -1626,6 +1627,7 @@ export const METHOD_SCHEMAS = {
   "agent.fork": AgentForkParams,
   "agent.fork_preview": AgentForkPreviewParams,
   "agent.kinds": AgentKindsParams,
+  "agent.model_options": AssistantModelCatalogParams,
   "agent.subagent_transcript": AgentSubagentTranscriptParams,
   "notification.test": NotificationStateParams,
   "notification.state": NotificationStateParams,
@@ -1644,6 +1646,7 @@ export const METHOD_SCHEMAS = {
   "agent.note_delete": SessionNoteDeleteParams,
   "agent.todos": SessionToolsParams,
   "agent.conversation": AgentConversationParams,
+  "agent.conversation_tail": AgentConversationParams,
   "agent.sessions": AgentSessionsParams,
   "agent.resume": AgentResumeParams,
   "agent.command": AgentCommandParams,
@@ -1829,6 +1832,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.fork": AgentForkResult;
   "agent.fork_preview": AgentForkPreviewResult;
   "agent.kinds": AgentKindsResult;
+  "agent.model_options": AssistantModelCatalog;
   "agent.subagent_transcript": AgentSubagentTranscriptResult;
   "notification.test": { ok: true };
   "notification.state": NotificationState;
@@ -1844,6 +1848,7 @@ export interface MethodResultMap extends WorkAgentResults, WorkResults, ExecResu
   "agent.note_delete": SessionNotes;
   "agent.todos": AgentTodos;
   "agent.conversation": ConversationPage;
+  "agent.conversation_tail": ConversationPage;
   "agent.sessions": { sessions: PastAgentSession[]; partial: boolean };
   "agent.resume": Record<string, never>;
   "agent.command": Record<string, never>;

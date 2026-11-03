@@ -85,6 +85,7 @@ export interface ConversationSummary {
   updatedAt?: number;
   stale?: boolean;
   sourceSessionId?: string;
+  sourceKind?: ConversationKind;
   text: string;
   sessionId: string | null;
   model: string;

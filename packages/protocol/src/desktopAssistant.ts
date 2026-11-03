@@ -96,6 +96,8 @@ export const DesktopAssistantPreferences = z
     version: z.literal(1).default(1),
     enabled: z.boolean().default(false),
     agentProfiles: AssistantAgentProfiles.default(AssistantAgentProfiles.parse({})),
+    captainKind: z.enum(ASSISTANT_AGENT_KINDS).default("codex"),
+    notificationSummary: z.boolean().default(true),
     mode: z.enum(["character", "tray"]).default("character"),
     appearance: z.enum(["light", "dark", "system"]).default("dark"),
     characterId: AssistantCharacterId.default("captain-female"),
@@ -220,6 +222,7 @@ export const AssistantSessionPromptParams = AssistantSessionGetParams.extend({
   instanceId: z.uuid(),
   text: z.string().min(1).max(8192),
   characterId: AssistantCharacterId.optional(),
+  idleOnly: z.boolean().optional(),
   imageRequestId: z.uuid().optional(),
   ttlMs: z.number().int().min(1).max(60000).optional(),
 }).strict().refine(value => (value.imageRequestId === undefined) === (value.ttlMs === undefined), "画像指示には識別子と期限の両方が必要です");
@@ -255,6 +258,7 @@ export const AssistantReplyKeysParams = AssistantSourceParams.extend({
   keyName: z.enum(["Enter", "Escape", "y", "n"]),
 }).strict();
 export interface AssistantSourceInfo {
+  conversationSessionId?: string;
   paneId: string;
   tabId: string;
   workspaceId: string;
@@ -334,3 +338,8 @@ export interface AssistantAppsInfo {
     inputSchema: Record<string, unknown>;
   }>;
 }
+
+export type AssistantAgentKind = z.infer<typeof AssistantAgentKind>;
+export const AssistantModelCatalogParams=z.object({kind:z.enum(ASSISTANT_AGENT_KINDS)}).strict();
+export const AssistantModelCatalog=z.object({models:z.array(z.object({id:AssistantLaunchSettings.shape.model,label:z.string().max(200),efforts:z.array(AssistantLaunchSettings.shape.effort).max(10)})).max(128),message:z.string().max(500)});
+export type AssistantModelCatalog=z.infer<typeof AssistantModelCatalog>;
