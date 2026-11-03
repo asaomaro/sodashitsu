@@ -278,6 +278,21 @@ try {
     await page.setViewportSize({width:520,height:670});
     await page.screenshot({path:`/tmp/soda-assistant-${role}-styled.png`});
   };
+  for(const size of [{width:520,height:670},{width:360,height:480}]){
+    await page.setViewportSize(size);
+    const footer=page.locator(".settings-footer");await expect(footer).toBeVisible();
+    const before=await footer.boundingBox();
+    await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=el.scrollHeight;});
+    const after=await footer.boundingBox();assert.equal(after.y,before.y,"settings footer must not move when content scrolls");
+    assert.equal(await page.locator('.settings-footer button[type="submit"]').evaluate(el=>el.form?.id),"form");
+    await page.evaluate(()=>{document.getElementById("status").textContent="保存しました。";});
+    const saveBox=await page.locator('.settings-footer button[type="submit"]').boundingBox(),openBox=await page.locator("#open").boundingBox(),statusBox=await page.locator("#status").boundingBox();
+    assert.ok(statusBox.x>=openBox.x+openBox.width,"save status follows the action buttons");
+    assert.ok(Math.abs(statusBox.y+statusBox.height/2-(saveBox.y+saveBox.height/2))<2,"save status is on the button row");
+    assert.ok(after.y+after.height<=size.height&&after.y>=0,"footer is contained in the window");
+    await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=0;});
+  }
+  await page.evaluate(()=>{document.getElementById("status").textContent="";});
   await checkWindow("settings");
   await page.goto(`${origin}/panel.html`);
   await page.locator("#panel-slot").evaluate(el=>{el.textContent="生成した操舵室ビュー（実際のアプリでは隔離した描画面を配置）";});

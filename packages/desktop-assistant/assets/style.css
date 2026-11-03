@@ -151,3 +151,7 @@
 .tools-panel #ocr-preview[hidden]{display:none}
 #ocr-selection{position:absolute;border:2px solid var(--assistant-gold);background:var(--assistant-selection);pointer-events:none}
 #ocr-selection[hidden]{display:none}
+
+.settings-footer{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:8px 0 0;border-top:1px solid var(--assistant-line);background:var(--assistant-bg)}
+.settings-footer button{flex:0 0 auto;font-size:13px;padding:6px 10px}
+.settings-footer #status{flex:1;min-width:0;margin:0;font-size:13px;line-height:1.4;overflow-wrap:anywhere}
