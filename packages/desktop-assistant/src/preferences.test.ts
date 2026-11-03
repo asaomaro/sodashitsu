@@ -63,5 +63,7 @@ it("keeps existing dark appearance and persists the system appearance choice",as
  const {path}=await fixture(),file=new PreferencesFile(path);
  expect((await file.read()).appearance).toBe("dark");
  await file.write({appearance:"system"});expect((await file.read()).appearance).toBe("system");
+ await file.write({appearance:"sodashitsu",colorTheme:"nord"});expect(await file.read()).toMatchObject({appearance:"sodashitsu",colorTheme:"nord"});
  expect(()=>DesktopAssistantPreferences.parse({appearance:"arbitrary"})).toThrow();
+ expect(()=>DesktopAssistantPreferences.parse({colorTheme:"arbitrary"})).toThrow();
 });

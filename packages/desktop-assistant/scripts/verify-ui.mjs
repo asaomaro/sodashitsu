@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import assert from "node:assert/strict";
+import { THEME_NAMES, THEME_APPEARANCE } from "@sodashitsu/protocol";
+import { assistantAppearance } from "../dist/appearance.js";
 
 // Standalone generated UI verification: headless Chromium only, no Electron/OS/agent start.
 const root = fileURLToPath(new URL("../assets/", import.meta.url));
@@ -974,6 +976,33 @@ try {
     await appearancePage.goto(`${origin}/${role}.html`);await appearancePage.evaluate(()=>window.appearanceCallback({revision:2,mode:"light"}));
     await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
   }
+  await appearancePage.goto(`${origin}/settings.html`);
+  const themeOptions=await appearancePage.locator('#colorTheme option').evaluateAll(options=>options.map(o=>o.value));
+  assert.deepEqual(new Set(themeOptions),new Set(THEME_NAMES));
+  for(const theme of THEME_NAMES){
+    await appearancePage.locator('#colorTheme').selectOption(theme);
+    await expect(appearancePage.locator('#appearance')).toHaveValue(THEME_APPEARANCE[theme]);
+    await appearancePage.locator('button[type="submit"]').first().click();
+    const state=assistantAppearance({appearance:THEME_APPEARANCE[theme],colorTheme:theme},{},false);
+    await appearancePage.evaluate(state=>window.appearanceCallback({...state,revision:(window.appearanceRevision??1)+1}),state);
+    await expect(appearancePage.locator('html')).toHaveAttribute('data-assistant-theme',THEME_APPEARANCE[theme]);
+    if(state.vars['--assistant-button-bg']){
+      const colors=await appearancePage.evaluate(()=>({button:getComputedStyle(document.querySelector('button[type="submit"]')).backgroundColor,expected:getComputedStyle(document.documentElement).getPropertyValue('--assistant-button-bg').trim(),thumb:getComputedStyle(document.documentElement).getPropertyValue('--assistant-scroll-thumb').trim()}));
+      assert.equal(colors.expected,state.vars['--assistant-button-bg']);assert.equal(colors.thumb,state.vars['--assistant-scroll-thumb']);
+      const expectedRGB=await appearancePage.evaluate(color=>{const el=document.createElement('span');el.style.color=color;document.body.append(el);const rgb=getComputedStyle(el).color;el.remove();return rgb;},state.vars['--assistant-button-bg']);
+      assert.equal(colors.button,expectedRGB);
+    }else assert.equal(await appearancePage.evaluate(()=>document.documentElement.style.getPropertyValue('--assistant-button-bg')),'');
+  }
+  await appearancePage.locator('#appearance').selectOption('sodashitsu');
+  await expect(appearancePage.locator('#colorTheme')).toBeDisabled();
+  const remembered=await appearancePage.locator('#colorTheme').inputValue();
+  await appearancePage.locator('button[type="submit"]').first().click();
+  assert.equal(await appearancePage.evaluate(()=>window.preferences.appearance),'sodashitsu');
+  const followed=assistantAppearance({appearance:'sodashitsu',colorTheme:'nord'},{theme:'tokyo-night',themeAuto:false},false);
+  await appearancePage.evaluate(state=>window.appearanceCallback({...state,revision:(window.appearanceRevision??1)+1}),followed);
+  await expect(appearancePage.locator('html')).toHaveAttribute('data-assistant-theme','dark');
+  await appearancePage.locator('#appearance').selectOption('dark');await expect(appearancePage.locator('#colorTheme')).toBeEnabled();
+  assert.equal(await appearancePage.locator('#colorTheme').inputValue(),remembered);
   await appearancePage.close();assert.deepEqual(errors,[]);
   console.log("PASS: assistant normal/dark/system preferences, live OS changes, stale revisions, and every local window");
   const captainPage=await context.newPage();await captainPage.goto(`${origin}/bubble.html`);

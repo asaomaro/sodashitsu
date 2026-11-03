@@ -1,3 +1,4 @@
+import {assistantAppearance} from "./appearance.js";
 import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog} from "@sodashitsu/protocol";
 import {presentWindow} from "./windowPresentation.js";
 import {resourceHostIdentity,resourceProcessIdentities} from "@sodashitsu/client-core/nodeResourceIdentity";
@@ -15,6 +16,7 @@ import { FullscreenPolicy } from "./fullscreen.js";
 import { bubbleBounds, noticeBounds, resizeBubbleBounds, BUBBLE_RESIZE_HANDLES, WINDOW_RESIZE_HANDLES, resizeWindowBounds, type WindowResizeHandle, type BubbleResizeHandle, type Rect } from "./geometry.js";
 import {
   app,
+  nativeTheme,
   BrowserWindow,
   WebContentsView,
   clipboard,
@@ -184,7 +186,19 @@ let characterNotificationSeq=0;
 let automaticNoticeEpoch = 0;
 let compact: BrowserWindow | null = null;
 let compactPayload: { id?: string; title: string; message: string } | null = null;
-let appearanceRevision=0,appearanceMode="dark";
+let appearanceRevision=0,appearanceSignature="";
+let sharedAppearance:import("@sodashitsu/protocol").SharedPrefs={},sharedAppearanceRev=-1;
+function appearanceState() { return {revision:appearanceRevision,...assistantAppearance(controller.preferences,sharedAppearance,nativeTheme.shouldUseDarkColors)}; }
+function publishAppearance():void {
+ const state=appearanceState(),signature=JSON.stringify({...state,revision:0});
+ if(signature===appearanceSignature)return;
+ appearanceSignature=signature;++appearanceRevision;
+ for(const {window} of localWindows.values())if(!window.isDestroyed())window.webContents.send("assistant:appearance-changed",{...state,revision:appearanceRevision});
+}
+function receiveAppearance(rpc:AssistantRpc,state:import("@sodashitsu/protocol").ResultOf<"prefs.get">):void {
+ if(control!==rpc||!state||!Number.isSafeInteger(state.rev)||state.rev<sharedAppearanceRev||!state.prefs||typeof state.prefs!=="object"||Array.isArray(state.prefs))return;
+ sharedAppearanceRev=state.rev;sharedAppearance=state.prefs;publishAppearance();
+}
 let compactRevision = 0;
 let compactHeight = 220;
 let latestNotification: {seq:number;id?:string;title:string;message:string}|null=null;
@@ -627,6 +641,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
     controlOrigin = null;
   }
   if (!preferences.enabled || control) return;
+  sharedAppearance={};sharedAppearanceRev=-1;publishAppearance();
   const origin = preferences.serverOrigin;
   const rpc = new AssistantRpc(origin, {
     kind:"desktop",
@@ -638,11 +653,13 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
       ),
     status: (connected) => {
       if (control === rpc) {
+        if(connected)void rpc.request("prefs.get",{}).then(state=>receiveAppearance(rpc,state)).catch(()=>{});
         assistantChat?.connection(connected);
         reminders?.connection(connected);
         remoteNotices?.connection(connected);
       }
     },
+    prefsChanged: state=>receiveAppearance(rpc,state),
     changed: () => {
       if (control === rpc) {
         void assistantChat?.refresh();
@@ -916,7 +933,7 @@ const adapter: NativeAdapter = {
     character = null;
   },
   tray(preferences) {
-    if(appearanceMode!==preferences.appearance){appearanceMode=preferences.appearance;++appearanceRevision;for(const {window} of localWindows.values())if(!window.isDestroyed())window.webContents.send("assistant:appearance-changed",{revision:appearanceRevision,mode:appearanceMode});}
+    publishAppearance();
     bubbleResize = null;
     updateBackend(preferences);
     if (bubble && !bubble.isDestroyed()) {
@@ -1211,7 +1228,7 @@ function registerIpc(): void {
         }
         return chromeState(owner.window);
       }
-      if(action==="appearance-state")return{revision:appearanceRevision,mode:controller.preferences.appearance};
+      if(action==="appearance-state")return appearanceState();
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "voice-speakers") {
@@ -2017,6 +2034,7 @@ else {
       try{screenLocked=powerMonitor.getSystemIdleState(1)==="locked";}catch{}
       if (managed) await controller.initializeManaged(managed.serverOrigin);
       else controller.initialize();
+      nativeTheme.on("updated",()=>publishAppearance());
       powerMonitor.on("suspend", () => {
         suspended = true;
         publishCharacterState();

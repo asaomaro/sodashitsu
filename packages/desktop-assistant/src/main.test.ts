@@ -12,7 +12,7 @@ const fixture = vi.hoisted(() => ({
   permissionChecks: new Map<string, (...args: any[]) => boolean>(),
   permissionRequests: new Map<string, (...args: any[]) => void>(),
   controls: [] as Array<{
-    options: { status: (connected: boolean) => void };
+    options: { status: (connected: boolean) => void; prefsChanged?:(state:{rev:number;prefs:Record<string,unknown>})=>void };
     start: ReturnType<typeof vi.fn>;
     stop: ReturnType<typeof vi.fn>;
     request: ReturnType<typeof vi.fn>;
@@ -145,6 +145,7 @@ vi.mock("electron", () => ({
       { id: "screen:generated", name: "Generated screen", display_id: "1" },
     ]),
   },
+  nativeTheme: Object.assign(new EventEmitter(), { shouldUseDarkColors: false }),
   powerMonitor: Object.assign(new EventEmitter(), { getSystemIdleState: vi.fn(() => "active") }),
   clipboard: {
     read: vi.fn(async () => [
@@ -259,7 +260,7 @@ vi.mock("./assistantRpc.js", () => ({
     );
     constructor(
       _origin: string,
-      readonly options: { status: (connected: boolean) => void },
+      readonly options: { status: (connected: boolean) => void; prefsChanged?:(state:{rev:number;prefs:Record<string,unknown>})=>void },
     ) {
       fixture.controls.push(this);
     }
@@ -1743,12 +1744,12 @@ it("shares only the saved appearance mode with local windows and broadcasts mode
  const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,local={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
  const save=fixture.handlers.get("assistant:save")!,state=fixture.handlers.get("assistant:appearance-state")!;
  await save(local,{enabled:true,mode:"tray",appearance:"light"});
- const first=await state(local) as {revision:number;mode:string};expect(first).toEqual({revision:expect.any(Number),mode:"light"});
+ const first=await state(local) as {revision:number;mode:string};expect(first).toMatchObject({revision:expect.any(Number),mode:"light"});
  await fixture.handlers.get("assistant:tools-open")!(local);const tools=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));
  const toolEvent={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};expect(await state(toolEvent)).toEqual(first);
  await save(local,{enabled:true,mode:"tray",appearance:"system"});
- expect(tools.webContents.send).toHaveBeenCalledWith("assistant:appearance-changed",{revision:first.revision+1,mode:"system"});
- expect(await state(toolEvent)).toEqual({revision:first.revision+1,mode:"system"});
+ expect(tools.webContents.send).toHaveBeenCalledWith("assistant:appearance-changed",expect.objectContaining({revision:first.revision+1,mode:"system"}));
+ expect(await state(toolEvent)).toMatchObject({revision:first.revision+1,mode:"system"});
  await expect(state({sender:tools.webContents,senderFrame:{url:"https://untrusted.test/"}})).rejects.toThrow("許可");
  tools.close();
 });
@@ -1864,4 +1865,29 @@ it("defers notification display until audio is ready and keeps text when stopped
   const textNotice=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(textNotice.isVisible()).toBe(true));expect(textNotice.url).toContain('/notice.html');
   expect(await fixture.handlers.get('assistant:voice-state')!(event)).toMatchObject({speaking:false});
  }finally{finish?.();await fixture.handlers.get('assistant:save')!(event,{enabled:false});}
+});
+
+it("follows shared theme changes and OS selection without overwriting the independent palette",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ const save=fixture.handlers.get('assistant:save')!,state=fixture.handlers.get('assistant:appearance-state')!;
+ await save(event,{enabled:true,mode:'tray',appearance:'sodashitsu',colorTheme:'nord'});
+ const rpc=fixture.controls.at(-1)!;
+ rpc.request.mockResolvedValueOnce({rev:98,prefs:{theme:'kanagawa-lotus'}});
+ rpc.options.status(true);
+ await vi.waitFor(async()=>expect(await state(event)).toMatchObject({theme:'kanagawa-lotus',mode:'light'}));
+ expect(rpc.request).toHaveBeenCalledWith('prefs.get',{});
+ rpc.options.prefsChanged!({rev:100,prefs:{theme:'one-light',themeAuto:false}});
+ expect(await state(event)).toMatchObject({mode:'light',theme:'one-light'});
+ rpc.options.prefsChanged!({rev:101,prefs:{theme:'tokyo-night',themeAuto:true,themeLight:'gruvbox-light',themeDark:'dracula'}});
+ const {nativeTheme}=await import('electron');
+ Object.assign(nativeTheme,{shouldUseDarkColors:true});nativeTheme.emit('updated');
+ expect(await state(event)).toMatchObject({mode:'dark',theme:'dracula',vars:{'--assistant-button-bg':'#6070a1'}});
+ rpc.options.prefsChanged!({rev:99,prefs:{theme:'one-light'}});
+ expect(await state(event)).toMatchObject({theme:'dracula'});
+ Object.assign(nativeTheme,{shouldUseDarkColors:false});nativeTheme.emit('updated');expect(await state(event)).toMatchObject({mode:'light',theme:'gruvbox-light'});
+ expect(await fixture.handlers.get('assistant:read')!(event)).toMatchObject({appearance:'sodashitsu',colorTheme:'nord'});
+ await save(event,{enabled:true,mode:'tray',appearance:'dark',colorTheme:'nord'});
+ rpc.options.prefsChanged!({rev:102,prefs:{theme:'one-light'}});expect(await state(event)).toMatchObject({mode:'dark',theme:'nord'});
+ await save(event,{enabled:false});
 });

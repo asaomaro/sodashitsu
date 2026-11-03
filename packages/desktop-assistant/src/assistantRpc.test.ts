@@ -168,3 +168,11 @@ it("identifies the native form renderer as desktop when subscribing to questions
  const packet=f.socket!.sent.at(-1);expect(packet.method).toBe("ask.subscribe");expect(packet.params).toEqual({renderer:"assistant"});
  f.socket!.message({id:packet.id,result:{asks:[]}});await expect(pending).resolves.toEqual({asks:[]});
 });
+
+it("delivers valid shared preference events without treating them as conversation updates",async()=>{
+ const prefsChanged=vi.fn(),f=await fixture({prefsChanged});f.ready();
+ f.socket!.message({event:'prefs.changed',data:{rev:1,prefs:{theme:'nord'}}});
+ expect(prefsChanged).toHaveBeenCalledExactlyOnceWith({rev:1,prefs:{theme:'nord'}});
+ f.socket!.message({event:'prefs.changed',data:{rev:2,prefs:[]}});
+ f.socket!.message({event:'prefs.changed',data:{rev:-1,prefs:{}}});expect(prefsChanged).toHaveBeenCalledOnce();
+});

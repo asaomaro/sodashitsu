@@ -8,6 +8,7 @@ import { getCACertificates } from "node:tls";
 import WebSocket from "ws";
 
 export type AssistantMethod =
+  | "prefs.get"
   | "ask.subscribe"
   | "server.resource_app_demand"
   | "server.resource_app_report"
@@ -58,6 +59,7 @@ export interface AssistantRpcOptions {
   cookie(origin: string): Promise<string | null>;
   status(connected: boolean): void;
   changed(): void;
+  prefsChanged?(state: ResultOf<"prefs.get">): void;
   socket?: (url: string, cookie: string, origin: string) => Socket;
   now?: () => number;
 }
@@ -300,6 +302,9 @@ export class AssistantRpc {
                 ),typeof error.code==="string"?{code:error.code.slice(0,64)}:{}),
               );
             } else item.resolve(message.result);
+          } else if (message.event === "prefs.changed") {
+            const state=message.data as ResultOf<"prefs.get"> | undefined;
+            if (state && Number.isSafeInteger(state.rev) && state.rev >= 0 && state.prefs && typeof state.prefs === "object" && !Array.isArray(state.prefs)) this.options.prefsChanged?.(state);
           } else if (
             message.event === "pane.updated" ||
             message.event === "pane.closed" ||

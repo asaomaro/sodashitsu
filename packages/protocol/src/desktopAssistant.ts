@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { THEME_NAMES } from "./theme.js";
 import { agentStartExecutable } from "./agentStart.js";
 import type { AgentInfo } from "./model.js";
 /** Explicitly configured Soda endpoint only. Credentials, paths, fragments and insecure LAN are not accepted. */
@@ -99,7 +100,8 @@ export const DesktopAssistantPreferences = z
     captainKind: z.enum(ASSISTANT_AGENT_KINDS).default("codex"),
     notificationSummary: z.boolean().default(true),
     mode: z.enum(["character", "tray"]).default("character"),
-    appearance: z.enum(["light", "dark", "system"]).default("dark"),
+    appearance: z.enum(["light", "dark", "system", "sodashitsu"]).default("dark"),
+    colorTheme: z.enum(THEME_NAMES).default("sodashitsu-assistant-dark"),
     characterId: AssistantCharacterId.default("captain-female"),
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),
