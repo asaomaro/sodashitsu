@@ -10,3 +10,5 @@
 - 同梱39リソース・6 runtime variantsのmanifest/hash検証成功。
 
 ログ: /tmp/soda-sections-{tests,final-ui,build,typecheck,server-tests}.log。
+
+mainへfast-forward統合し安全なhandoffで反映。6つの実端末を停止せず維持し、8ペインUUID全件を保持した。デスクトップアシスタントのphase=running / stage=readyを確認。
