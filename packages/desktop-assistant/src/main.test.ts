@@ -50,6 +50,19 @@ const fixture = vi.hoisted(() => ({
   speech:vi.fn(async (_text:string,_signal:AbortSignal)=>{}),
   wavPlay:vi.fn(async()=>{}),
 }));
+class MockView {
+ static count=0;
+ url="";destroyed=false;bounds={x:0,y:0,width:0,height:0};
+ constructor(readonly options:Record<string,unknown>){ }
+ setBackgroundColor=vi.fn();
+ setBounds=vi.fn((bounds:typeof this.bounds)=>{this.bounds=bounds;});
+ readonly webContents=Object.assign(new EventEmitter(),{
+   id:10000+(++MockView.count),mainFrame:{url:""},setWindowOpenHandler:vi.fn(),invalidate:vi.fn(),focus:vi.fn(),
+   isDestroyed:()=>this.destroyed,close:vi.fn(()=>{this.destroyed=true;}),
+   loadURL:vi.fn(async(url:string)=>{this.url=url;this.webContents.mainFrame.url=url;}),
+ });
+}
+const remoteOf=(window:MockWindow)=>window.contentView.children[0]!;
 class MockWindow extends EventEmitter {
   destroyed = false;
   visible = false;
@@ -80,9 +93,10 @@ class MockWindow extends EventEmitter {
     this.visible = false;
     this.emit("closed");
   }
+  contentView={children:[] as MockView[],addChildView:(view:MockView)=>{this.contentView.children.push(view);}};
   bounds = {x:0,y:0,width:400,height:640};
   getBounds = () => ({...this.bounds});
-  setBounds = vi.fn((value: typeof this.bounds) => {this.bounds={...value};});
+  setBounds = vi.fn((value: typeof this.bounds) => {this.bounds={...value};this.emit("resize");});
   menu:unknown="default";
   setMenu=vi.fn(value=>{this.menu=value;});
   minimized=false;maximized=false;
@@ -151,6 +165,7 @@ vi.mock("electron", () => ({
   },
   dialog: { showOpenDialog: vi.fn(async () => ({ canceled: true, filePaths: [] })) },
   BrowserWindow: MockWindow,
+  WebContentsView:MockView,
   ipcMain: {
     handle: (name: string, handler: (event: unknown, input?: unknown) => Promise<unknown>) =>
       fixture.handlers.set(name, handler),
@@ -331,23 +346,23 @@ it("enables robot captain without focus stealing, fences IPC and opens a native-
   ).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:open")!(characterEvent);
   const panel = fixture.windows[2]!;
-  expect(panel.url).toBe("http://127.0.0.1:7780/");
-  expect(panel.options).toMatchObject({
+  expect(remoteOf(panel).url).toBe("http://127.0.0.1:7780/");
+  expect(remoteOf(panel).options).toMatchObject({
     webPreferences: {
       partition: "persist:assistant-server",
       sandbox: true,
       nodeIntegration: false,
     },
   });
-  expect((panel.options.webPreferences as Record<string, unknown>).preload).toBeUndefined();
+  expect((remoteOf(panel).options.webPreferences as Record<string, unknown>).preload).toBeUndefined();
   await expect(
     fixture.handlers.get("assistant:save")!(
-      { sender: panel.webContents, senderFrame: panel.webContents.mainFrame },
+      { sender: remoteOf(panel).webContents, senderFrame: remoteOf(panel).webContents.mainFrame },
       {},
     ),
   ).rejects.toThrow("許可");
   const preventDefault = vi.fn();
-  panel.webContents.emit("will-navigate", { preventDefault }, "https://evil.test");
+  remoteOf(panel).webContents.emit("will-navigate", { preventDefault }, "https://evil.test");
   expect(preventDefault).toHaveBeenCalledOnce();
   await fixture.handlers.get("assistant:save")!(event, {
     enabled: true,
@@ -711,7 +726,7 @@ it("handles failed retarget navigation and can return explicitly to ordinary Sod
   });
   await fixture.handlers.get("assistant:open")!(event);
   const panel = fixture.windows.find(
-    (window) => !window.destroyed && window.url === "http://127.0.0.1:7780/",
+    (window) => !window.destroyed && window.contentView.children[0]?.url === "http://127.0.0.1:7780/",
   )!;
   const notice = {
     id: "00000000-0000-4000-8000-000000000091",
@@ -737,14 +752,14 @@ it("handles failed retarget navigation and can return explicitly to ordinary Sod
     workspaceId: notice.source.workspaceId,
     agent: { instanceId: notice.source.agentInstanceId },
   }));
-  vi.spyOn(panel, "loadURL").mockRejectedValueOnce(Error("generated connection failure"));
+  vi.spyOn(remoteOf(panel).webContents, "loadURL").mockRejectedValueOnce(Error("generated connection failure"));
   await fixture.handlers.get("assistant:source-open")!(
     { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame },
     { noticeId: notice.id },
   );
-  await vi.waitFor(() => expect(panel.url).toMatch(/^data:text\/plain/));
+  await vi.waitFor(() => expect(remoteOf(panel).url).toMatch(/^data:text\/plain/));
   await fixture.handlers.get("assistant:open")!(event);
-  expect(panel.url).toBe("http://127.0.0.1:7780/");
+  expect(remoteOf(panel).url).toBe("http://127.0.0.1:7780/");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
 });
 it("grants one selected display without audio and consumes its PNG only once", async () => {
@@ -1041,12 +1056,12 @@ it("routes a remote notice reply through its registered machine and revokes it w
   });
   expect(hub.request.mock.calls.some((call) => call[0] === "assistant.reply_key")).toBe(false);
   await fixture.handlers.get("assistant:source-open")!(local, { noticeId: notice.id });
-  expect(fixture.windows.at(-1)!.url).toContain(`assistantMachine=${machineId}`);
-  const firstUrl = new URL(fixture.windows.at(-1)!.url);
+  expect(remoteOf(fixture.windows.at(-1)!).url).toContain(`assistantMachine=${machineId}`);
+  const firstUrl = new URL(remoteOf(fixture.windows.at(-1)!).url);
   const askId = "a".repeat(32);
   connection.options.changed([{...notice,kind:"question",key:`ask:${askId}`}],false);
   await fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id});
-  const secondUrl = new URL(fixture.windows.at(-1)!.url);
+  const secondUrl = new URL(remoteOf(fixture.windows.at(-1)!).url);
   expect(secondUrl.search).not.toBe(firstUrl.search);
   expect(new URLSearchParams(secondUrl.hash.slice(1)).get("assistantAsk")).toBe(askId);
   await fixture.handlers.get("assistant:save")!(event, {
@@ -1216,17 +1231,17 @@ it("opens a separate response window and focuses the existing full Soda window b
   await fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id,destination:"reply"});
   const reply = fixture.windows.at(-1)!;
   expect(reply).not.toBe(full);
-  expect(new URL(reply.url).searchParams.get("assistantView")).toBe("reply");
-  expect(new URLSearchParams(new URL(reply.url).hash.slice(1)).get("assistantAsk")).toBe("response-choice");
-  expect(reply.options.webPreferences).toMatchObject({sandbox:true,nodeIntegration:false,contextIsolation:true});
-  expect(reply.options.webPreferences).not.toHaveProperty("preload");
-  expect(full.url).toBe("http://127.0.0.1:7780/");
+  expect(new URL(remoteOf(reply).url).searchParams.get("assistantView")).toBe("reply");
+  expect(new URLSearchParams(new URL(remoteOf(reply).url).hash.slice(1)).get("assistantAsk")).toBe("response-choice");
+  expect(remoteOf(reply).options.webPreferences).toMatchObject({sandbox:true,nodeIntegration:false,contextIsolation:true});
+  expect(remoteOf(reply).options.webPreferences).not.toHaveProperty("preload");
+  expect(remoteOf(full).url).toBe("http://127.0.0.1:7780/");
   expect(full.focus).toHaveBeenCalledTimes(fullFocus);
   const count = fixture.windows.length;
   await fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id,destination:"main"});
   expect(fixture.windows.length).toBe(count);
-  expect(new URL(full.url).searchParams.get("assistantView")).toBe("main");
-  expect(full.focus).toHaveBeenCalledTimes(fullFocus+1);
+  expect(new URL(remoteOf(full).url).searchParams.get("assistantView")).toBe("main");
+  await vi.waitFor(()=>expect(full.focus).toHaveBeenCalledTimes(fullFocus+1));
   expect(reply.isDestroyed()).toBe(false);
   await expect(fixture.handlers.get("assistant:source-open")!(local,{noticeId:notice.id,destination:"external"})).rejects.toThrow();
   await fixture.handlers.get("assistant:save")!(event,{enabled:false});
@@ -1480,7 +1495,7 @@ it("opens reusable tools separately, transfers drafts without sending, and revok
  const chat={sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame};
  await fixture.handlers.get("assistant:tools-open")!(chat);const tools=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));
  const local={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};
- expect(tools.url).toBe("soda-assistant://app/tools.html");expect(tools.options).toMatchObject({show:true,frame:false,resizable:true,transparent:false});
+ expect(tools.url).toBe("soda-assistant://app/tools.html");expect(tools.options).toMatchObject({show:true,frame:false,resizable:false,transparent:true});
  const count=fixture.windows.length;await fixture.handlers.get("assistant:tools-open")!(chat);expect(fixture.windows.length).toBe(count);expect(tools.focus).toHaveBeenCalled();
  await fixture.handlers.get("assistant:hide")!(chat);expect(tools.isVisible()).toBe(true);
  await fixture.handlers.get("assistant:draft-message")!(local,{text:"要約用の文面"});expect(bubble.isVisible()).toBe(true);
@@ -1524,15 +1539,15 @@ it("opens the dedicated terminal or its pinned form in a reply popup while ordin
  await vi.waitFor(async()=>expect(await fixture.handlers.get("assistant:conversation")!(local)).toMatchObject({connected:true,session:{state:"ready"}}));
  await fixture.handlers.get("assistant:open")!(local);const full=fixture.windows.at(-1)!;
  await fixture.handlers.get("assistant:session-open")!(local);const reply=fixture.windows.at(-1)!;
- expect(reply).not.toBe(full);expect(new URL(reply.url).searchParams.get("assistantView")).toBe("reply");
- expect(new URLSearchParams(new URL(reply.url).hash.slice(1)).has("assistantAsk")).toBe(false);
+ expect(reply).not.toBe(full);expect(new URL(remoteOf(reply).url).searchParams.get("assistantView")).toBe("reply");
+ expect(new URLSearchParams(new URL(remoteOf(reply).url).hash.slice(1)).has("assistantAsk")).toBe(false);
  const askId=randomUUID();pending=[{askId:randomUUID(),paneId:randomUUID()},{askId,paneId:scope.paneId},{askId:randomUUID(),paneId:scope.paneId}];
  await fixture.handlers.get("assistant:session-open")!(local);
- const target=new URLSearchParams(new URL(reply.url).hash.slice(1));expect(target.get("assistantAsk")).toBe(askId);expect(target.get("assistantPane")).toBe(scope.paneId);
- expect(full.url).toBe("http://127.0.0.1:7780/");
- const previous=reply.url;let finish!:(value:unknown)=>void;rpc.request.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ const target=new URLSearchParams(new URL(remoteOf(reply).url).hash.slice(1));expect(target.get("assistantAsk")).toBe(askId);expect(target.get("assistantPane")).toBe(scope.paneId);
+ expect(remoteOf(full).url).toBe("http://127.0.0.1:7780/");
+ const previous=remoteOf(reply).url;let finish!:(value:unknown)=>void;rpc.request.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
  const delayed=fixture.handlers.get("assistant:session-open")!(local);rpc.options.status(false);finish({asks:pending});
- await expect(delayed).rejects.toThrow("専用セッションが変更");expect(reply.url).toBe(previous);
+ await expect(delayed).rejects.toThrow("専用セッションが変更");expect(remoteOf(reply).url).toBe(previous);
  await fixture.handlers.get("assistant:save")!(event,{enabled:false});
 });
 
@@ -1554,7 +1569,7 @@ it("loads settings in a visible native window and activates the loaded content w
  app.emit("activate");const settings=fixture.windows.at(-1)!;
  await new Promise(resolve=>setImmediate(resolve));
  expect(settings.url).toBe("soda-assistant://app/settings.html");
- expect(settings.options.show).toBe(true);expect(settings.options.backgroundColor).toBe("#172438");
+ expect(settings.options.show).toBe(true);expect(settings.options.backgroundColor).toBe("#00000000");
  expect(settings.show).not.toHaveBeenCalled();
  finish();await vi.waitFor(()=>expect(settings.show).toHaveBeenCalledOnce());
  expect(settings.focus).toHaveBeenCalledOnce();expect(settings.webContents.invalidate).toHaveBeenCalledOnce();
@@ -1626,10 +1641,10 @@ it("uses the resident CLI backend and selected CORE version without an HTTP synt
 it("limits native window controls to their own settings/tools main frame",async()=>{
  const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
  const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
- expect(settings.options).toMatchObject({frame:false,resizable:true,show:true,minWidth:360,minHeight:360});expect(settings.menu).toBeNull();
+ expect(settings.options).toMatchObject({frame:false,resizable:false,show:true,minWidth:360,minHeight:360});expect(settings.menu).toBeNull();
  const action=fixture.handlers.get("assistant:window-action")!;
- await action(event,"maximize");expect(settings.isMaximized()).toBe(true);
- await action(event,"maximize");expect(settings.isMaximized()).toBe(false);
+ const before=settings.getBounds();await action(event,"maximize");expect(settings.getBounds()).toEqual({x:0,y:0,width:1920,height:1040});
+ await action(event,"maximize");expect(settings.getBounds()).toEqual(before);
  await action(event,"minimize");expect(settings.minimize).toHaveBeenCalledOnce();
  await expect(action(event,"shell")).rejects.toThrow();
  await expect(action({...event,senderFrame:{url:settings.url}},"close")).rejects.toThrow("許可");
@@ -1638,4 +1653,30 @@ it("limits native window controls to their own settings/tools main frame",async(
  await expect(action({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame},"close")).rejects.toThrow("許可");
  await fixture.handlers.get("assistant:tools-open")!({sender:bubble.webContents,senderFrame:bubble.webContents.mainFrame});const tools=fixture.windows.at(-1)!;
  await action({sender:tools.webContents,senderFrame:tools.webContents.mainFrame},"close");expect(tools.destroyed).toBe(true);expect(settings.destroyed).toBe(false);
+});
+
+it("revokes transparent-window resize gestures and restores removed-display windows inside the current display",async()=>{
+ const {screen}=await import("electron"),settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},resize=fixture.handlers.get("assistant:window-resize")!;
+ settings.show();const cursor=vi.spyOn(screen,"getCursorScreenPoint").mockReturnValue({x:100,y:100});settings.setBounds({x:100,y:100,width:500,height:500});
+ let result=await resize(event,{phase:"start",handle:"se"}) as {token:string};cursor.mockReturnValue({x:140,y:180});await resize(event,{phase:"move",token:result.token});expect(settings.getBounds()).toEqual({x:100,y:100,width:540,height:580});
+ for(const lifecycle of ["hide","minimize","blur","navigation"]){settings.show();result=await resize(event,{phase:"start",handle:"n"}) as {token:string};
+  if(lifecycle==="navigation")settings.webContents.emit("did-start-navigation",{},settings.url,false,true);else settings.emit(lifecycle);
+  await expect(resize(event,{phase:"move",token:result.token})).rejects.toThrow("開始し直して");
+ }
+ const displays=vi.spyOn(screen,"getAllDisplays").mockReturnValue([{id:1,workArea:{x:0,y:0,width:1920,height:1040}},{id:2,workArea:{x:1920,y:0,width:1280,height:1000}}] as any);
+ settings.setBounds({x:2100,y:100,width:600,height:600});await fixture.handlers.get("assistant:window-action")!(event,"maximize");
+ displays.mockReturnValue([{id:1,workArea:{x:0,y:0,width:1920,height:1040}}] as any);await fixture.handlers.get("assistant:window-action")!(event,"maximize");
+ const b=settings.getBounds();expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.width).toBeLessThanOrEqual(1920);expect(b.y+b.height).toBeLessThanOrEqual(1040);
+});
+it("isolates the compact panel shell from remote contents and closes child renderers",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ await fixture.handlers.get("assistant:save")!(event,{enabled:true,mode:"tray",quietFullscreen:false});
+ await fixture.handlers.get("assistant:open")!(event);const panel=fixture.windows.at(-1)!,view=remoteOf(panel);
+ expect(panel.url).toBe("soda-assistant://app/panel.html");expect(panel.options).toMatchObject({frame:false,transparent:true,resizable:false});expect(view.options.webPreferences).not.toHaveProperty("preload");
+ expect(view.bounds).toEqual({x:12,y:42,width:376,height:586});panel.setBounds({x:0,y:0,width:900,height:700});expect(view.bounds).toEqual({x:12,y:42,width:876,height:646});
+ const local={sender:panel.webContents,senderFrame:panel.webContents.mainFrame};await expect(fixture.handlers.get("assistant:read")!(local)).rejects.toThrow("許可");await expect(fixture.handlers.get("assistant:save")!(local,{enabled:false})).rejects.toThrow("許可");
+ await expect(fixture.handlers.get("assistant:window-action")!({sender:view.webContents,senderFrame:view.webContents.mainFrame},"close")).rejects.toThrow("許可");
+ const remoteContents=view.webContents;(view as any).webContents=undefined;
+ panel.close();expect(view.destroyed).toBe(true);expect(remoteContents.close).toHaveBeenCalledOnce();expect(settings.destroyed).toBe(false);
 });

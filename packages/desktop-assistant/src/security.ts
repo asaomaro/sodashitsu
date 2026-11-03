@@ -1,6 +1,6 @@
-export type LocalRole = "character" | "settings" | "bubble" | "notice" | "tools";
+export type LocalRole = "character" | "settings" | "bubble" | "notice" | "tools" | "panel";
 export const LOCAL_ORIGIN = "soda-assistant://app";
-const roles = new Set<LocalRole>(["character", "settings", "bubble", "notice", "tools"]);
+const roles = new Set<LocalRole>(["character", "settings", "bubble", "notice", "tools", "panel"]);
 
 export function localRole(url: string): LocalRole | null {
   try {
@@ -33,6 +33,7 @@ export function authorizeLocalSender(
 ): boolean {
   if (!sender.mainFrame || !sender.current || localRole(sender.frameUrl) !== sender.role)
     return false;
+  if (sender.role === "panel") return action === "window-action" || action === "window-resize";
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;
   if (action === "voice-test" || action === "voice-speakers" || action === "voice-match" || action === "voice-versions") return sender.role === "settings";
@@ -51,7 +52,7 @@ export function authorizeLocalSender(
     ].includes(action)
   )
     return sender.role === "settings";
-  if (action === "window-action") return sender.role === "settings" || sender.role === "tools";
+  if (action === "window-action" || action === "window-resize") return sender.role === "settings" || sender.role === "tools";
   if (action === "hide") return sender.role === "bubble" || sender.role === "tools";
   if(action==="tools-open")return sender.role==="bubble" || sender.role==="settings";
   if(action==="draft-state"||action==="draft-consume")return sender.role==="bubble";

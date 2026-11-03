@@ -12,6 +12,7 @@ const files = new Set([
   "character.js",
   "actor.js",
   "settings.html",
+  "panel.html",
   "settings.js",
   "bubble.html",
   "tools.html",
@@ -220,6 +221,7 @@ try {
       beginResize:async input=>{window.calls.push(["resize-start",input]);return{token:"00000000-0000-4000-8000-000000000080"};},
       resize:async input=>window.calls.push(["resize-move",input]),
       endResize:async input=>window.calls.push(["resize-end",input]),
+      windowResize: async input => {window.calls.push(["window-resize",input]);return {token:"00000000-0000-4000-8000-000000000080"};},
       windowAction: async action => window.calls.push(["window-action",action]),
       hide: async () => window.calls.push(["hide"]),
     };
@@ -239,9 +241,9 @@ try {
       await expect(page.locator(".speech-tail")).toHaveCount(0);
       const layout=await page.evaluate(()=>{
         const body=document.body,card=document.querySelector(".assistant-card"),content=document.querySelector(".assistant-scroll");
-        return {outer:document.documentElement.scrollHeight<=innerHeight&&document.documentElement.scrollWidth<=innerWidth,scroll:getComputedStyle(content).overflowY,border:getComputedStyle(card).borderTopColor,radius:getComputedStyle(card).borderTopLeftRadius,scrollbar:getComputedStyle(content).scrollbarColor,head:document.querySelector(".assistant-window-header").getBoundingClientRect().top};
+        return {outer:document.documentElement.scrollHeight<=innerHeight&&document.documentElement.scrollWidth<=innerWidth,scroll:getComputedStyle(content).overflowY,border:getComputedStyle(card).borderTopColor,radius:getComputedStyle(card).borderTopLeftRadius,scrollbar:getComputedStyle(content).scrollbarColor,background:getComputedStyle(body).backgroundColor,card:card.getBoundingClientRect().toJSON(),header:document.querySelector(".assistant-window-header").getBoundingClientRect().height,head:document.querySelector(".assistant-window-header").getBoundingClientRect().top};
       });
-      assert.ok(layout.outer,role+" has no page scrollbar");assert.equal(layout.scroll,"auto");assert.equal(layout.border,"rgb(229, 190, 97)");assert.equal(layout.radius,"20px");assert.ok(layout.scrollbar.includes("201, 166, 79"));
+      assert.ok(layout.outer,role+" has no page scrollbar");assert.equal(layout.background,"rgba(0, 0, 0, 0)");assert.equal(layout.card.x,0);assert.equal(layout.card.y,0);assert.equal(layout.card.width,size.width);assert.ok(layout.header<=30);assert.equal(layout.scroll,"auto");assert.equal(layout.border,"rgb(229, 190, 97)");assert.equal(layout.radius,"20px");assert.ok(layout.scrollbar.includes("201, 166, 79"));
       await page.locator(".assistant-scroll").evaluate(el=>{el.scrollTop=el.scrollHeight;});
       assert.equal(await page.locator(".assistant-window-header").evaluate(el=>el.getBoundingClientRect().top),layout.head);
       await page.getByRole("button",{name:"最小化",exact:true}).click();
@@ -254,6 +256,12 @@ try {
     await page.screenshot({path:`/tmp/soda-assistant-${role}-styled.png`});
   };
   await checkWindow("settings");
+  await page.goto(`${origin}/panel.html`);
+  await page.locator("#panel-slot").evaluate(el=>{el.textContent="生成した操舵室ビュー（実際のアプリでは隔離した描画面を配置）";});
+  await checkWindow("panel");
+  await page.locator("[data-window-resize=e]").hover();await page.mouse.down();await page.mouse.move(518,350);await page.mouse.up();
+  await expect.poll(()=>page.evaluate(()=>window.calls.some(c=>c[0]==="window-resize"&&c[1].phase==="start"&&c[1].handle==="e"))).toBe(true);
+  await page.goto(`${origin}/settings.html`);
   await page.setViewportSize({width:400,height:640});
   await expect(page.getByRole("button", { name: "操舵室を開く" })).toBeDisabled();
   await expect(page.locator("#ocrProvider")).toHaveValue("agent");

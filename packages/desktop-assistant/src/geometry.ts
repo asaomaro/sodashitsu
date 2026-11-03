@@ -137,3 +137,18 @@ export function resizeBubbleBounds(
   if (handle.includes("n")) top = clamp(start.y + Math.round(dy), area.y, bottom - minHeight);
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
+
+/** Resize transparent desktop cards programmatically: Electron transparent windows have no reliable native resize. */
+export const WINDOW_RESIZE_HANDLES=["n","ne","e","se","s","sw","w","nw"] as const;
+export type WindowResizeHandle=typeof WINDOW_RESIZE_HANDLES[number];
+export function resizeWindowBounds(start:Rect,handle:WindowResizeHandle,dx:number,dy:number,area:Rect):Rect{
+ const minW=Math.min(360,area.width),minH=Math.min(360,area.height);
+ const width=Math.min(area.width,Math.max(minW,start.width)),height=Math.min(area.height,Math.max(minH,start.height));
+ start={x:Math.max(area.x,Math.min(start.x,area.x+area.width-width)),y:Math.max(area.y,Math.min(start.y,area.y+area.height-height)),width,height};
+ let left=start.x,right=start.x+start.width,top=start.y,bottom=start.y+start.height;
+ if(handle.includes("w"))left=Math.max(area.x,Math.min(right-minW,start.x+dx));
+ if(handle.includes("e"))right=Math.min(area.x+area.width,Math.max(left+minW,start.x+start.width+dx));
+ if(handle.includes("n"))top=Math.max(area.y,Math.min(bottom-minH,start.y+dy));
+ if(handle.includes("s"))bottom=Math.min(area.y+area.height,Math.max(top+minH,start.y+start.height+dy));
+ return {x:Math.round(left),y:Math.round(top),width:Math.round(right-left),height:Math.round(bottom-top)};
+}

@@ -11,10 +11,11 @@ import { characterPng } from "./characterPng.js";
 import { managedChannel } from "./managedChannel.js";
 import { managedLaunch } from "./managedLaunch.js";
 import { FullscreenPolicy } from "./fullscreen.js";
-import { bubbleBounds, noticeBounds, resizeBubbleBounds, BUBBLE_RESIZE_HANDLES, type BubbleResizeHandle, type Rect } from "./geometry.js";
+import { bubbleBounds, noticeBounds, resizeBubbleBounds, BUBBLE_RESIZE_HANDLES, WINDOW_RESIZE_HANDLES, resizeWindowBounds, type WindowResizeHandle, type BubbleResizeHandle, type Rect } from "./geometry.js";
 import {
   app,
   BrowserWindow,
+  WebContentsView,
   clipboard,
   dialog,
   desktopCapturer,
@@ -74,6 +75,7 @@ const preload = fileURLToPath(new URL("./preload.cjs", import.meta.url));
 const allowedAssets = new Map([
   ["/character.html", "text/html"],
   ["/settings.html", "text/html"],
+  ["/panel.html", "text/html"],
   ["/bubble.html", "text/html"],
   ["/tools.html", "text/html"],
   ["/tool-window.js", "text/javascript"],
@@ -235,6 +237,16 @@ function showCompact(payload: { id?: string; title: string; message: string }): 
 }
 const fullscreen = new FullscreenPolicy();
 let settingsRequested = false;
+const panelViews = new WeakMap<BrowserWindow,{view:WebContentsView;shell:Promise<void>}>();
+const windowRestores=new WeakMap<BrowserWindow,Rect>();
+const windowResizes=new WeakMap<BrowserWindow,{token:string;handle:WindowResizeHandle;start:Rect;cursor:{x:number;y:number};area:Rect;expires:number}>();
+function windowArea(win:BrowserWindow,bounds:Rect=win.getBounds()):Rect {
+ const displays=adapter.displays();if(!displays.length)throw Error("表示できるディスプレイがありません。");
+ const overlap=(area:Rect)=>Math.max(0,Math.min(bounds.x+bounds.width,area.x+area.width)-Math.max(bounds.x,area.x))*Math.max(0,Math.min(bounds.y+bounds.height,area.y+area.height)-Math.max(bounds.y,area.y));
+ const distance=(area:Rect)=>(bounds.x+bounds.width/2-area.x-area.width/2)**2+(bounds.y+bounds.height/2-area.y-area.height/2)**2;
+ return [...displays].sort((a,b)=>overlap(b.workArea)-overlap(a.workArea)||distance(a.workArea)-distance(b.workArea))[0]!.workArea;
+}
+
 const localWindows = new Map<number, { window: BrowserWindow; role: LocalRole }>();
 function characterCatalog(){
  return characters.list().map(character=>{const p=assistantPersona(character.id);return {...character,persona:p?{name:p.name,first:p.profile.first,tone:p.profile.tone}:null};});
@@ -350,11 +362,12 @@ function localWindow(role: LocalRole): BrowserWindow {
     show: role === "settings" || role === "tools",
     title: "操舵室アシスタント",
     icon:join(assets,process.platform==="win32"?"sodashitsu.ico":"sodashitsu.png"),
-    backgroundColor:(role==="settings"||role==="tools")?"#172438":"#00000000",
+    backgroundColor:"#00000000",
+    hasShadow:false,
     frame: false,
     ...((role === "settings" || role === "tools") ? {minWidth:360,minHeight:360} : {}),
-    transparent: role !== "settings" && role !== "tools",
-    resizable: role === "settings" || role === "tools",
+    transparent: true,
+    resizable: false,
     focusable: role !== "character",
     skipTaskbar: role !== "settings" && role !== "tools",
     alwaysOnTop: role !== "settings" && role !== "tools",
@@ -375,6 +388,7 @@ function localWindow(role: LocalRole): BrowserWindow {
     if (pendingCharacterPack?.owner === id) pendingCharacterPack = null;
   });
   const discardOnHide = () => {
+    windowResizes.delete(win);
     if (role === "bubble" || role === "tools") {
       if(role==="bubble"){bubbleResize=null;++bubbleEpoch;}else ++toolsEpoch;
       if(role==="tools"||!toolsWindow)transcription?.cancel();
@@ -386,6 +400,7 @@ function localWindow(role: LocalRole): BrowserWindow {
       if (!win.isDestroyed()) win.destroy(); // End capture even if the hidden renderer cannot respond.
     }
   };
+  win.on("blur",()=>windowResizes.delete(win));
   win.on("show", () => { if (role === "bubble") closeCompact(); });
   win.on("hide", () => { if (role === "bubble") bubbleRequested = false; discardOnHide(); });
   win.on("minimize", () => { if (role === "bubble") bubbleRequested = false; discardOnHide(); });
@@ -720,15 +735,20 @@ function openTools():void {
     if(toolsWindow===win)toolsWindow=null;
   });
 }
+function presentPanel(win:BrowserWindow):void {
+ presentWindow(win);const view=panelViews.get(win)?.view;
+ if(!win.isDestroyed()&&view&&!view.webContents.isDestroyed()){view.webContents.focus();view.webContents.invalidate();}
+}
 function loadPanel(win: BrowserWindow, url: string): void {
   const navigation = ++panelNavigation;
   responseNavigations.set(win, navigation);
   const showLoaded=()=>{
-    if(!win.isDestroyed()&&responseNavigations.get(win)===navigation)presentWindow(win);
+    if(!win.isDestroyed()&&responseNavigations.get(win)===navigation)presentPanel(win);
   };
-  void win.loadURL(url).then(showLoaded).catch(() => {
+  const remote=panelViews.get(win)!;
+  void Promise.all([remote.shell,remote.view.webContents.loadURL(url)]).then(showLoaded).catch(() => {
     if (win.isDestroyed() || responseNavigations.get(win) !== navigation) return;
-    void win
+    void remote.view.webContents
       .loadURL(
         `data:text/plain;charset=utf-8,${encodeURIComponent("操舵室に接続できません。サーバと接続先を確認し、吹き出しから開き直してください。")}`,
       )
@@ -757,7 +777,7 @@ function openPanel(
   const existing = destination === "reply" ? responsePanel : panel;
   if (existing && !existing.isDestroyed()) {
     if (target || panelTargeted) loadPanel(existing, url.href);
-    else presentWindow(existing);
+    else presentPanel(existing);
     if (destination === "main") panelTargeted = !!target;
     return;
   }
@@ -765,7 +785,8 @@ function openPanel(
   const win = new BrowserWindow({
     show:false,
     icon:join(assets,process.platform==="win32"?"sodashitsu.ico":"sodashitsu.png"),
-    backgroundColor:"#19283b",
+    frame:false,transparent:true,resizable:false,hasShadow:false,minWidth:360,minHeight:360,
+    backgroundColor:"#00000000",
     width: destination === "reply" ? 800 : 1100,
     height: destination === "reply" ? 560 : 780,
     title: destination === "reply" ? "操舵室・通知への応答" : "操舵室",
@@ -773,21 +794,34 @@ function openPanel(
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      partition: "persist:assistant-server",
+      partition: "assistant-local",preload,
       webSecurity: true,
       webviewTag: false,
     },
   });
+  const view=new WebContentsView({webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,partition:"persist:assistant-server",webSecurity:true,webviewTag:false}});
+  const remoteContents=view.webContents;
+  view.setBackgroundColor("#172438");win.contentView.addChildView(view);
+  const layout=()=>{const {width,height}=win.getBounds();view.setBounds({x:12,y:42,width:Math.max(1,width-24),height:Math.max(1,height-54)});};
+  win.on("resize",layout);layout();win.setMenu(null);
+  const shellId=win.webContents.id;localWindows.set(shellId,{window:win,role:"panel"});
+  const cancelResize=()=>{windowResizes.delete(win);};
+  win.on("hide",cancelResize);win.on("minimize",cancelResize);win.on("blur",cancelResize);
+  win.webContents.on("did-start-navigation",(_event,_url,_inPlace,mainFrame)=>{if(mainFrame)windowResizes.delete(win);});
+  win.webContents.setWindowOpenHandler(()=>({action:"deny"}));win.webContents.on("will-navigate",event=>event.preventDefault());
+  const shell=win.loadURL(`${LOCAL_ORIGIN}/panel.html`);panelViews.set(win,{view,shell});
   if (destination === "reply") responsePanel = win;
   else { panel = win; panelTargeted = !!target; }
-  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  win.webContents.on("will-navigate", (event, url) => {
+  view.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  view.webContents.on("will-navigate", (event, url) => {
     if (!sameServerNavigation(url, origin)) event.preventDefault();
   });
-  win.webContents.on("will-redirect", (event, url) => {
+  view.webContents.on("will-redirect", (event, url) => {
     if (!sameServerNavigation(url, origin)) event.preventDefault();
   });
   win.on("closed", () => {
+    localWindows.delete(shellId);panelViews.delete(win);
+    if(!remoteContents.isDestroyed())remoteContents.close();
     if (panel === win) panel = null;
     if (responsePanel === win) responsePanel = null;
   });
@@ -954,6 +988,7 @@ function registerIpc(): void {
     "chat",
     "hide",
     "window-action",
+    "window-resize",
     "inbox",
     "tools-open",
     "draft-state",
@@ -1058,12 +1093,26 @@ function registerIpc(): void {
         resize.expires = Date.now()+30000;
         return;
       }
+      if (action === "window-resize") {
+        const operation=z.discriminatedUnion("phase",[
+          z.object({phase:z.literal("start"),handle:z.enum(WINDOW_RESIZE_HANDLES)}).strict(),
+          z.object({phase:z.enum(["move","end"]),token:z.uuid()}).strict(),
+        ]).parse(input);
+        if(operation.phase==="start"){
+          if(windowRestores.has(owner.window)||!owner.window.isVisible()||owner.window.isMinimized())throw Error("元の大きさに戻して操作してください。");
+          const token=randomUUID();windowResizes.set(owner.window,{token,handle:operation.handle,start:owner.window.getBounds(),cursor:screen.getCursorScreenPoint(),area:windowArea(owner.window),expires:Date.now()+30000});return {token};
+        }
+        const resize=windowResizes.get(owner.window);
+        if(!resize||resize.token!==operation.token||Date.now()>resize.expires||!owner.window.isVisible()||owner.window.isMinimized())throw Error("リサイズを開始し直してください。");
+        if(operation.phase==="end"){windowResizes.delete(owner.window);return;}
+        const cursor=screen.getCursorScreenPoint();owner.window.setBounds(resizeWindowBounds(resize.start,resize.handle,cursor.x-resize.cursor.x,cursor.y-resize.cursor.y,resize.area));resize.expires=Date.now()+30000;return;
+      }
       if (action === "window-action") {
         const operation=z.enum(["minimize","maximize","close"]).parse(input);
+        windowResizes.delete(owner.window);
         if (operation === "close") owner.window.close();
         else if (operation === "minimize") owner.window.minimize();
-        else if (owner.window.isMaximized()) owner.window.unmaximize();
-        else owner.window.maximize();
+        else {const restore=windowRestores.get(owner.window);if(restore){windowRestores.delete(owner.window);owner.window.setBounds(resizeWindowBounds(restore,"e",0,0,windowArea(owner.window,restore)));}else{windowRestores.set(owner.window,owner.window.getBounds());owner.window.setBounds(windowArea(owner.window));}}
         return;
       }
       if (action === "read") return controller.preferences;

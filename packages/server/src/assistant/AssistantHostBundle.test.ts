@@ -21,7 +21,7 @@ it("loads soda's GUI resources without node_modules using a synthetic Electron A
    expect(info.isFile()&&!info.isSymbolicLink()).toBe(true);expect(bytes.length).toBe(entry.bytes);
    expect(createHash("sha256").update(bytes).digest("hex")).toBe(entry.sha256);
   }
-  for(const name of ["dist/main.mjs","dist/preload.cjs","assets/character.html","assets/bubble.html","assets/captain-robot.svg","THIRD_PARTY_NOTICES.txt"])
+  for(const name of ["dist/main.mjs","dist/preload.cjs","assets/character.html","assets/bubble.html","assets/panel.html","assets/window.js","assets/captain-robot.svg","THIRD_PARTY_NOTICES.txt"])
    expect(manifest.entries.some(entry=>entry.path===name)).toBe(true);
   expect(await readFile(join(host,"THIRD_PARTY_NOTICES.txt"),"utf8")).toMatch(/zod@/);
   await run(process.execPath,["--check",join(host,"dist/main.mjs")]);
@@ -30,7 +30,7 @@ it("loads soda's GUI resources without node_modules using a synthetic Electron A
   await writeFile(electron,`const deny=new Proxy(function(){throw Error('unexpected native call')},{get(){throw Error('unexpected native access')}});
    export const app={setName(name){if(name!=="Sodashitsu Assistant")throw Error("Unexpected application identity")},requestSingleInstanceLock(){return false},quit(){console.log('synthetic_gui_declined_owned_start')}};
    export const protocol={registerSchemesAsPrivileged(){}};
-   export const BrowserWindow=deny,Menu=deny,Tray=deny,clipboard=deny,desktopCapturer=deny,dialog=deny,ipcMain=deny,nativeImage=deny,powerMonitor=deny,screen=deny,session=deny;`);
+   export const BrowserWindow=deny,WebContentsView=deny,Menu=deny,Tray=deny,clipboard=deny,desktopCapturer=deny,dialog=deny,ipcMain=deny,nativeImage=deny,powerMonitor=deny,screen=deny,session=deny;`);
   await writeFile(loader,`export async function resolve(id,ctx,next){if(id==='electron')return {url:${JSON.stringify(pathToFileURL(electron).href)},shortCircuit:true};return next(id,ctx);}`);
   const loaded=await run(process.execPath,["--no-warnings","--experimental-loader",pathToFileURL(loader).href,join(host,"dist/main.mjs")],{cwd:directory,timeout:10000,maxBuffer:8192});
   expect(loaded.stdout).toContain("synthetic_gui_declined_owned_start");

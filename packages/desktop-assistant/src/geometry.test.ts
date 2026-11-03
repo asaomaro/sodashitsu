@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { DesktopAssistantPreferences } from "@sodashitsu/protocol";
-import { bubbleBounds, noticeBounds, characterBounds, resizeBubbleBounds } from "./geometry.js";
+import { WINDOW_RESIZE_HANDLES,resizeWindowBounds,bubbleBounds, noticeBounds, characterBounds, resizeBubbleBounds } from "./geometry.js";
 it("keeps character and tray bubbles within the selected secondary monitor and falls back on removal", () => {
   const displays = [
     { id: "primary", workArea: { x: 0, y: 0, width: 1920, height: 1040 } },
@@ -77,4 +77,14 @@ it("keeps tall and wide custom artwork flush with the taskbar and anchors bubble
   expect(char.x+char.width).toBe(1920);expect(char.y+char.height).toBe(1040);expect(char.width/char.height).toBeCloseTo(ratio,1);
   expect(bubble.y+bubble.height).toBe(char.y+2);expect(notice.x+notice.width).toBe(char.x+2);expect(notice.y+notice.height).toBeLessThanOrEqual(1040);
  }
+});
+
+it("resizes every transparent card edge within current work areas and minimum sizes",()=>{
+ const start={x:100,y:100,width:500,height:500},area={x:0,y:0,width:1000,height:900};
+ expect(resizeWindowBounds(start,"se",50,70,area)).toEqual({x:100,y:100,width:550,height:570});
+ expect(resizeWindowBounds(start,"nw",-50,-20,area)).toEqual({x:50,y:80,width:550,height:520});
+ for(const h of WINDOW_RESIZE_HANDLES)for(const delta of [-10000,10000]){
+  const r=resizeWindowBounds(start,h,delta,delta,area);expect(r.width).toBeGreaterThanOrEqual(360);expect(r.height).toBeGreaterThanOrEqual(360);expect(r.x).toBeGreaterThanOrEqual(area.x);expect(r.y).toBeGreaterThanOrEqual(area.y);expect(r.x+r.width).toBeLessThanOrEqual(area.width);expect(r.y+r.height).toBeLessThanOrEqual(area.height);
+ }
+ const small={x:-300,y:-200,width:300,height:200};expect(resizeWindowBounds({x:2000,y:0,width:1200,height:900},"e",0,0,small)).toEqual(small);
 });
