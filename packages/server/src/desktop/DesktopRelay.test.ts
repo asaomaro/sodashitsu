@@ -76,7 +76,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     isHostAllowed: () => true,
     allowedHostPorts: () => [new URL(origin).host],
   });
-  const startRequests: {options: Record<string,unknown>;videoTicket?:string;imageTicket?:string}[] = [];
+  const relayOrigins:string[]=[];
+  const startRequests: {url:string;options: Record<string,unknown>;videoTicket?:string;imageTicket?:string}[] = [];
   let closed = 0,
     starts = 0, providerStartCalls = 0;
   const link = {
@@ -130,7 +131,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   } as unknown as MachineLink;
   const relay = new DesktopRelay(auth, origins, {
     route: (id) => (id === "remote" ? { kind: "ok", link } : { kind: "unknown" }),
-  });
+  },()=>relayOrigins);
   web.on("upgrade", (req, socket, head) => {
     void relay.upgrade(req, socket, head);
   });
@@ -171,7 +172,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     revoke: () => revoke("ok"),
     closed: () => closed,
     providerStartCalls: () => providerStartCalls,
-    startRequests,
+    startRequests,relayOrigins,
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
@@ -1917,4 +1918,9 @@ it.each(['all','owned-virtual'] as const)('refuses nonphysical %s coexistence in
  first.ws.on('message',(raw:Buffer,binary:boolean)=>{if(binary)try{first.send({type:'ack',seq:decodeDesktopFrame(new Uint8Array(raw)).info.seq});}catch{}});if(first.frames.length)first.send({type:'ack',seq:decodeDesktopFrame(first.frames.at(-1)!).info.seq});
  second.send(virtualFirst?pr:vr);await expect.poll(()=>second.ws.readyState).toBe(WebSocket.CLOSED);expect(second.messages.some(m=>m.type==='ready')).toBe(false);expect(first.ws.readyState).toBe(WebSocket.OPEN);const before=first.frames.length;await expect.poll(()=>first.frames.length).toBeGreaterThan(before);
  }
+});
+
+it("uses the public callback for a viewer opened on localhost",async()=>{
+ const f=await fixture();f.relayOrigins.push("https://controller.example");const viewer=await f.viewer();viewer.send(start);
+ await expect.poll(()=>f.startRequests.length).toBe(1);expect(f.startRequests[0]!.url).toBe("wss://controller.example/desktop-share");
 });

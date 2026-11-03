@@ -58,6 +58,7 @@ import { DesktopAgentAccess, type AgentTarget, type AgentFrame, type DesktopAgen
 import type { AuthService } from "../auth/AuthService.js";
 import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { MachineLink } from "../machine/MachineLink.js";
+import {desktopRelayOrigin} from "./relayOrigin.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
 import { unlockFailure } from "./unlockFailure.js";
 
@@ -185,6 +186,7 @@ export class DesktopRelay {
     private readonly auth: Pick<AuthService,"authorizeUpgrade"|"verifySession"|"onSessionRevoked">,
     private readonly origins: Pick<OriginRejectionLog,"admit">,
     private readonly machines: {route(id:string):{kind:"ok";link:Pick<MachineLink,"openChannel">}|{kind:"unknown"|"offline"}},
+    private readonly publicOrigins:()=>readonly string[]=()=>[],
   ) {
     this.microphoneLanes=new DesktopVideoLanes(id=>auth.verifySession(id),8192);
     this.fileLanes=new DesktopVideoLanes(id=>auth.verifySession(id),262144);
@@ -643,7 +645,7 @@ export class DesktopRelay {
     const ticket = randomBytes(32).toString("base64url");
     v.ticketHash = hash(ticket);
     this.invites.set(v.ticketHash, v);
-    const url = new URL("/desktop-share", v.origin);
+    const url = new URL("/desktop-share", desktopRelayOrigin(v.origin,this.publicOrigins()));
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
     delete legacyOptions.imeKeys;

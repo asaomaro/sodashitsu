@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopRelay.test.ts (304 tests | 1 failed | 303 skipped) 85ms
+   × uses the public callback for a viewer opened on localhost 83ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 303 skipped (304)
+   Start at  00:45:54
+   Duration  1.69s (transform 78%, import 17%, tests 5%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopRelay.test.ts > uses the public callback for a viewer opened on localhost
+AssertionError: expected 'ws://127.0.0.1:38801/desktop-share' to be 'wss://controller.example/desktop-share' // Object.is equality
+
+Expected: "wss://controller.example/desktop-share"
+Received: "ws://127.0.0.1:38801/desktop-share"
+
+ ❯ src/desktop/DesktopRelay.test.ts:1925:88
+    1923| it("uses the public callback for a viewer opened on localhost",async()…
+    1924|  const f=await fixture();f.relayOrigins.push("https://controller.examp…
+    1925|  await expect.poll(()=>f.startRequests.length).toBe(1);expect(f.startR…
+       |                                                                                        ^
+    1926| });
+    1927|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

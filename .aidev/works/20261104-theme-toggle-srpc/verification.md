@@ -5,3 +5,15 @@
 関連7ファイル96テスト、pnpm build、pnpm typecheck成功。ブラウザでは共有prefs要求を模擬し、利用者の保存設定を変更せず、巡回・OS明暗追従・ベル左の位置・折り畳み後の可視性を確認した。
 
 review_bubble_resizeによる差分全体の独立レビューで必須指摘なし。既存テーマの表示名検査が17テーマのまま残っていたため、現行の19テーマに更新した。
+
+## 実機で検出したlocalhostコールバックの不具合
+
+sr-pcへの更新とWindows上のpnpm install --frozen-lockfile・pnpm build成功。既存4ペインを維持している。localhostから閲覧すると、共有元が自身のlocalhostへコールバックして開始要求を拒否し0フレームだった。公開HTTPS URLで同じ接続先を開くとロック画面readyを受信でき、許可設定の問題ではないことを確認した。
+
+明示的なextraOriginsの外部HTTPS URLだけをloopback閲覧時のproviderコールバックに使用する修正を追加。viewerの認証・Origin、短命ticketとprovider側の許可リストは維持する。IPリテラルとしての127/8と、localhost・::1だけを対象とし、127.example.comは変更しない。
+
+関連307テスト・build・typecheck成功。URL構築だけを戻すと回帰テストが失敗する負例を記録し、元のバイト列へ復元後に全体を検証した。review_resource_monitorの独立レビュー、127.*判定修正の再レビューとも必須指摘なし。
+
+## Windowsロック解除サービス
+
+sr-pcのインストール済みサービスは古い版で停止しており、ロック画面からサインイン画面へ切り替えると共有が終了する。現行インストーラーは-ValidateOnlyでコンパイル成功。現在のリモート実行は非管理者のため、WindowsのUAC確認が必要。昇格起動の要求を行い、利用者へ本体のロック解除・UAC承認を依頼している。PINはログ・成果物・リポジトリへ保存していない。
