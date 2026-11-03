@@ -419,14 +419,17 @@ public static class SodaDesktopUnlock {
     [DllImport("kernel32.dll",SetLastError=true)]static extern bool UpdateProcThreadAttribute(IntPtr list,uint flags,IntPtr attribute,IntPtr value,IntPtr size,IntPtr previous,IntPtr returned);
     [DllImport("kernel32.dll")]static extern void DeleteProcThreadAttributeList(IntPtr list);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CreateProcess(string app,StringBuilder args,IntPtr psa,IntPtr tsa,bool inherit,uint flags,IntPtr env,string cwd,ref STARTUPINFOEX startup,out PI process);
+    [DllImport("kernel32.dll",SetLastError=true)]static extern uint WaitForSingleObject(SafeFileHandle handle,uint milliseconds);
+    [DllImport("kernel32.dll",SetLastError=true)]static extern bool GetExitCodeProcess(SafeFileHandle handle,out uint code);
     sealed class ProxyChild:IDisposable {
-        public Process Process;public SafeFileHandle Job;
+        public int Id;public SafeFileHandle Process;public SafeFileHandle Job;
+        public int WaitForExit(){uint code;Require(WaitForSingleObject(Process,UInt32.MaxValue)==0);Require(GetExitCodeProcess(Process,out code));return unchecked((int)code);}
         public void Dispose(){if(Job!=null)Job.Dispose();if(Process!=null)Process.Dispose();}
     }
     static ProxyChild StartProxy(string application,string arguments) {
         var job=new SafeFileHandle(CreateJobObject(IntPtr.Zero,null),true);
         IntPtr list=IntPtr.Zero,handles=IntPtr.Zero,jobValue=IntPtr.Zero;bool initialized=false;
-        var copies=new List<IntPtr>();PI child=new PI();Process process=null;
+        var copies=new List<IntPtr>();PI child=new PI();SafeFileHandle process=null;
         try {
             Require(!job.IsInvalid);
             var limit=new JOB_LIMIT();limit.basic.flags=0x2000;
@@ -444,8 +447,10 @@ public static class SodaDesktopUnlock {
             Require(UpdateProcThreadAttribute(list,0,new IntPtr(0x2000d),jobValue,new IntPtr(IntPtr.Size),IntPtr.Zero,IntPtr.Zero));
             var startup=new STARTUPINFOEX {startup=new STARTUPINFO {cb=Marshal.SizeOf(typeof(STARTUPINFOEX)),flags=0x100,input=copies[0],output=copies[1],error=copies[2]},attributes=list};
             Require(CreateProcess(application,new StringBuilder("\""+application+"\" "+arguments),IntPtr.Zero,IntPtr.Zero,true,0x80000|0x08000000,IntPtr.Zero,Path.GetDirectoryName(application),ref startup,out child));
-            process=Process.GetProcessById((int)child.pid);
-            return new ProxyChild {Process=process,Job=job};
+            // Retain the creation handle: .NET Framework cannot reliably read
+            // ExitCode from a Process obtained by PID after the child has exited.
+            process=new SafeFileHandle(child.process,true);child.process=IntPtr.Zero;
+            return new ProxyChild {Id=unchecked((int)child.pid),Process=process,Job=job};
         }catch{job.Dispose();if(process!=null)process.Dispose();throw;}
         finally {
             if(child.thread!=IntPtr.Zero)CloseHandle(child.thread);if(child.process!=IntPtr.Zero)CloseHandle(child.process);
@@ -459,10 +464,10 @@ public static class SodaDesktopUnlock {
         // parent stdout-copy loop to hang after EOF. Terminating PowerShell also
         // closes the private job and reaps its lease/share child and descendants.
         using(var child=StartProxy(InstalledExecutable(),lease?LeaseArgument(virtualAllowed,unlockAllowed,elevatedAllowed):elevatedAllowed?"--elevated":"--share")) {
-            child.Process.WaitForExit();
-            if(lease)Require(child.Process.ExitCode==0);
-            else if(elevatedAllowed){if(child.Process.ExitCode!=0){Console.Out.WriteLine("{\"type\":\"protected_desktop_failure\",\"code\":\"worker_unavailable\"}");Console.Out.Flush();}}
-            else FinishShare(child.Process.ExitCode,SelectSource,Console.Out);
+            int exitCode=child.WaitForExit();
+            if(lease)Require(exitCode==0);
+            else if(elevatedAllowed){if(exitCode!=0){Console.Out.WriteLine("{\"type\":\"protected_desktop_failure\",\"code\":\"worker_unavailable\"}");Console.Out.Flush();}}
+            else FinishShare(exitCode,SelectSource,Console.Out);
         }
     }
     static void FinishShare(int exitCode,Func<string> select,TextWriter output) {

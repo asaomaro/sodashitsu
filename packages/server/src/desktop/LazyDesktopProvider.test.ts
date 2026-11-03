@@ -12,6 +12,29 @@ function fake(){
  const provider={get epoch(){return epoch;},start,requireEndpoint:vi.fn(()=>{epoch++;}),endpointScope:vi.fn((_origin:string,active:()=>boolean)=>({active,start:async()=>{if(!active())throw Error('expired');return start();},release:vi.fn(),close:vi.fn()})),configure:vi.fn(),enableSavedTransfers:vi.fn(),clientGone:vi.fn(),dispose:vi.fn(),resumeUnlockLease:vi.fn(),resumeSavedTransfers:vi.fn(),suspendSavedTransfers:vi.fn(async()=>{})};
  return{provider:provider as unknown as DesktopProviderApi,start};
 }
+it('starts the saved unlock lease after a cold provider load without starting a viewer',async()=>{
+ const {provider:core,start}=fake(),create=vi.fn(()=>core);
+ const provider=new LazyDesktopProvider(undefined,async()=>create);
+ provider.configure({...config,allowUnlock:true,unlockLeaseCommand:['generated-unlock']});
+ await vi.waitFor(()=>expect(core.resumeUnlockLease).toHaveBeenCalledOnce());
+ expect(start).not.toHaveBeenCalled();
+ await provider.start('owner',{} as never);
+ expect(create).toHaveBeenCalledOnce();expect(core.resumeUnlockLease).toHaveBeenCalledOnce();
+ provider.dispose();
+});
+it.each([false,true])('starts a cold lease once and avoids a duplicate restart on configure (endpointOnly=%s)',async(endpointOnly)=>{
+ const {DesktopProvider}=await import('./DesktopProvider.js');
+ const settings={...config,allowUnlock:true,unlockLeaseCommand:['generated-unlock']};
+ const core=new DesktopProvider(settings);
+ const resume=vi.spyOn(core,'resumeUnlockLease').mockImplementation(()=>{});
+ const start=vi.spyOn(core,'start').mockResolvedValue({started:true});
+ const provider=new LazyDesktopProvider(undefined,async()=>()=>core);
+ provider.requireEndpoint(endpointOnly);provider.configure(settings);
+ await vi.waitFor(()=>expect(resume).toHaveBeenCalledOnce());
+ await provider.start('owner',{} as never);expect(start).toHaveBeenCalledOnce();expect(resume).toHaveBeenCalledOnce();
+ provider.configure(settings);expect(resume).toHaveBeenCalledTimes(2);
+ provider.dispose();
+});
 it('keeps disabled metadata, saved-store declaration, endpoint policy and shutdown free of provider loading',async()=>{
  const load=vi.fn();const provider=new LazyDesktopProvider(undefined,load);
  provider.configure(undefined);provider.enableSavedTransfers('/generated/saved','generated');provider.clientGone('owner');provider.capabilities();provider.endpointScope('http://127.0.0.1:7780',()=>true).close();

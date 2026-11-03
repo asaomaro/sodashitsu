@@ -30,7 +30,7 @@ export class LazyDesktopProvider implements DesktopProviderApi {
  capabilities(){return this.provider?.capabilities()??desktopProviderCapabilities(this.config,this.endpointOnly,!!this.saved);}
  configure(config:DesktopProviderConfig|undefined){
   ++this.generation;this.config=config;this.companion.configure(config?.allowMedia===true,config?.iceServers??[]);
-  if(this.provider)this.provider.configure(config);else if(this.saved)this.invalidateCold();if(config?.allowUnlock)this.resumeUnlockLease();
+  if(this.provider)this.provider.configure(config);else{if(this.saved)this.invalidateCold();if(config?.allowUnlock)this.resumeUnlockLease();}
  }
  private unavailable(){return new RpcError('unauthorized','Desktop sharing is disabled or changing');}
  private usable(){return !!this.config&&!this.suspended&&!this.holds&&!this.fault;}
@@ -49,7 +49,7 @@ export class LazyDesktopProvider implements DesktopProviderApi {
     if(!this.usable()||generation!==this.generation)throw this.unavailable();
     const provider=create(this.config!,this.companion);provider.requireEndpoint(this.endpointOnly);
     if(this.saved)provider.enableSavedTransfers(this.saved.directory,this.saved.binding,state);
-    this.initialProviderEpoch=provider.epoch;this.provider=provider;return provider;
+    this.initialProviderEpoch=provider.epoch;this.provider=provider;if(!this.endpointOnly)provider.resumeUnlockLease();return provider;
    })().finally(()=>{this.loading=undefined;});
   }
   const provider=await this.loading;if(!this.usable())throw this.unavailable();return provider;

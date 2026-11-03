@@ -1,0 +1,2 @@
+exitCode: 0
+desktop_unlock_proxy_exit_codes_passed

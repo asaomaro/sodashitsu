@@ -1,0 +1,18 @@
+exitCode: 0
+desktop_helper_roles:{"microphone":false,"audio":false,"codecs":false,"pipe":false,"virtualDisplay":false,"protectedDesktop":false,"richClipboard":false}
+desktop_helper_compiled
+desktop_unlock_pipe_cancelled
+desktop_unlock_utf8_pipe_passed
+desktop_unlock_duplex_pipe_passed
+owned_virtual_mode_checks_passed: exact source, original deadline, rollback, no orphan restoration guardian; fake driver only
+display_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-apply, restore/disarm, preserve-local-change, partial-failure rollback; fake driver only; no OS mode changes
+desktop_unlock_proxy_exit_codes_passed
+desktop_unlock_process_query_passed
+desktop_lock_cover_checks_passed
+desktop_input_checks_passed
+desktop_frame_preparation_checks_passed
+frame_preparation_model: duration=5000ms capture_encode=65ms ack=100ms fps_limit=30 serial_frames=31 overlapped_frames=50; deterministic model, not a desktop benchmark
+desktop_input_priority_checks_passed: native input during blocked video work; bounded queue; control/release FIFO; in-progress control and snapshot commit serialization; legacy fallback; fake input only
+desktop_unlock_checks_passed
+desktop_unlock_no_console_utf8_passed
+desktop_input_ack_no_console_passed

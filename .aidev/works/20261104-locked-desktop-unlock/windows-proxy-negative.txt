@@ -1,0 +1,9 @@
+exitCode: 1
+Exception calling "RunExitCodes" with "0" argument(s): "Process was not started by this object, so requested informatio
+n cannot be determined."
+At C:\Users\<owner>\AppData\Local\sodashitsu\unlock-proxy-check-20261104\validate-unlock-proxy.ps1:5 char:1
++ [SodaDesktopTests.UnlockProcessChecks]::RunExitCodes()
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : InvalidOperationException
+ 

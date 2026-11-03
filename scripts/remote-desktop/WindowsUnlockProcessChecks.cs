@@ -27,10 +27,28 @@ namespace SodaDesktopTests {
             Check(rejected,"Unsafe process descriptor or non-logon SID accepted");
         }
         public static void Run() {Run(null);}
+        public static void RunExitCodes() {
+            string command=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"cmd.exe");
+            foreach(int expected in new[]{0,7}) {
+                var owned=(IDisposable)Call("StartProxy",command,"/d /c exit /b "+expected);
+                try {
+                    var wait=owned.GetType().GetMethod("WaitForExit");int actual;
+                    if(wait!=null)actual=(int)wait.Invoke(owned,new object[0]);
+                    else {
+                        // Exercise the former production path for the negative control.
+                        var process=(Process)owned.GetType().GetField("Process").GetValue(owned);
+                        process.WaitForExit();actual=process.ExitCode;
+                    }
+                    Check(actual==expected,"Native proxy lost the child exit code");
+                } finally {owned.Dispose();}
+            }
+            Console.WriteLine("desktop_unlock_proxy_exit_codes_passed");
+        }
         public static void Run(string sourceRoot) {
+            RunExitCodes();
             string shell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe");
             var owned=(IDisposable)Call("StartProxy",shell,"-NoProfile -NonInteractive -Command Start-Sleep -Seconds 30");
-            var ownedObserver=Process.GetProcessById(((Process)owned.GetType().GetField("Process").GetValue(owned)).Id);
+            var ownedObserver=Process.GetProcessById((int)owned.GetType().GetField("Id").GetValue(owned));
             IntPtr observedHandle=ownedObserver.Handle;
             try {
                 owned.Dispose();
@@ -40,7 +58,7 @@ namespace SodaDesktopTests {
                 string root=sourceRoot.Replace("'","''");
                 string command="$ErrorActionPreference='Stop';Add-Type -Path @('"+root+@"\WindowsDesktopUnlock.cs','"+root+@"\WindowsDesktopHost.cs') -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll;"+
                     "$child=[SodaDesktopUnlock].GetMethod('StartProxy',[Reflection.BindingFlags]'NonPublic,Static').Invoke($null,@('"+shell.Replace("'","''")+"','-NoProfile -NonInteractive -Command Start-Sleep -Seconds 30'));"+
-                    "[Console]::Out.WriteLine($child.Process.Id);[Console]::Out.Flush();Start-Sleep -Seconds 30";
+                    "[Console]::Out.WriteLine($child.Id);[Console]::Out.Flush();Start-Sleep -Seconds 30";
                 var start=new ProcessStartInfo(shell,"-NoProfile -NonInteractive -EncodedCommand "+Convert.ToBase64String(Encoding.Unicode.GetBytes(command))) {
                     UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true
                 };
