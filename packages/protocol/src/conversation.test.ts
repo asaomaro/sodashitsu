@@ -46,3 +46,11 @@ it("separates header and menu visibility and migrates old button settings", asyn
 it("offers history, summary and task inspection for all five installed kinds",()=>{
  for(const kind of ["claude","codex","muse","agy","copilot"])expect(headerActionsFor(kind,true,["messages","summary","todos"])).toEqual(["messages","summary","todos"]);
 });
+
+it("accepts bounded model IDs and provider-specific effort while preserving old settings",()=>{
+ expect(SummarySettingsSchema.parse({kind:"codex",model:"provider/model@version",effort:"xhigh",sessionId:""}).effort).toBe("xhigh");
+ expect(SummarySettingsSchema.safeParse({kind:"claude",model:"sonnet",effort:"none",sessionId:""}).success).toBe(false);
+ expect(SummarySettingsSchema.safeParse({kind:"codex",model:"m",effort:"unsafe",sessionId:""}).success).toBe(false);
+ expect(SummarySettingsSchema.safeParse({kind:"codex",model:"--unsafe",sessionId:""}).success).toBe(false);
+ expect(SummarySettingsSchema.safeParse({kind:"claude",model:"",sessionId:""}).success).toBe(true);
+});

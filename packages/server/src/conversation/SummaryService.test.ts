@@ -323,3 +323,12 @@ it.skipIf(process.platform === "win32")(
     expect(() => JSON.parse(result.text)).toThrow();
   },
 );
+
+it.skipIf(process.platform === "win32")("passes the selected effort to Codex and regenerates after an effort change",async()=>{
+ const f=await fixture(),settings={kind:"codex" as const,model:"m",sessionId:"",effort:"high" as const};
+ const result=await f.service.generate("p",settings);expect(result.effort).toBe("high");
+ let launch=JSON.parse(await readFile(f.log,"utf8"));expect(launch.args).toContain('model_reasoning_effort="high"');
+ f.read.mockClear();await f.service.generate("p",settings);expect(f.read).not.toHaveBeenCalled();
+ f.read.mockClear();const changed=await f.service.generate("p",{...settings,effort:"low"});expect(changed.effort).toBe("low");expect(f.read.mock.calls[0]?.[2]).toBe(0);
+ launch=JSON.parse(await readFile(f.log,"utf8"));expect(launch.args).toContain('model_reasoning_effort="low"');
+});

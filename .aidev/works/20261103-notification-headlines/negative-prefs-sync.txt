@@ -1,0 +1,40 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/web| src/store/prefsApply.test.ts (7 tests | 1 failed | 6 skipped) 15ms
+   ❯ applyPrefsToStores (5)
+     × applies saved conversation settings on connection and resets removed settings 13ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  23:57:32
+   Duration  1.50s (transform 70%, import 18%, environment 11%, tests 1%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/store/prefsApply.test.ts > applyPrefsToStores > applies saved conversation settings on connection and resets removed settings
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/store/prefsApply.test.ts:77:40
+     75|     applyPrefsToStores(pinia, { summarySettings: summary, agentHeaderA…
+     76|     expect(settings.summarySettings).toEqual(summary);
+     77|     expect(settings.summaryConfigured).toBe(true);
+       |                                        ^
+     78|     expect(settings.agentHeaderActions).toEqual(["summary"]);
+     79|     applyPrefsToStores(pinia, {});
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

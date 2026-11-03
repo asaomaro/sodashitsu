@@ -3,6 +3,7 @@ import {
   loadAgentHeaderActions,
   loadAgentActionSettings,
   loadSummarySettings,
+  SummarySettingsSchema,
   loadStatuslineSettings,
 } from "@sodashitsu/protocol";
 import {
@@ -61,6 +62,7 @@ export function applyPrefsToStores(pinia: Pinia, raw: Record<string, unknown>): 
   set("agentActionSettings", loadAgentActionSettings(raw["agentActionSettings"], raw["agentHeaderActions"]));
   set("agentHeaderActions", loadAgentHeaderActions(raw["agentHeaderActions"]));
   set("summarySettings", loadSummarySettings(raw["summarySettings"]));
+  set("summaryConfigured", SummarySettingsSchema.safeParse(raw["summarySettings"]).success);
   set("statuslineSettings", loadStatuslineSettings(raw["statuslineSettings"]));
   set("keyboardLockInFullscreen", loadKeyboardLockInFullscreen(raw["keyboardLockInFullscreen"]));
   set("paneFrameThickness", loadPaneFrameThickness(raw["paneFrameThickness"]));

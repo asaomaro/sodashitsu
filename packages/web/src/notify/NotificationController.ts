@@ -1,4 +1,4 @@
-import type { NotificationState,SharedNotice } from "@sodashitsu/protocol";
+import type { NotificationWorkSummary,NotificationState,SharedNotice } from "@sodashitsu/protocol";
 import type { AgentInfo } from "@sodashitsu/protocol";
 import type { Pinia } from "pinia";
 import { nextTick, watch } from "vue";
@@ -29,6 +29,7 @@ const BLOCKED_DELAY_MS = 1000;
 
 export interface NotificationControllerOptions {
   pinia: Pinia;
+  summary?:(paneId:string,key:string)=>Promise<NotificationWorkSummary>;
   loadShared?:()=>Promise<NotificationState>;
   updateShared?:(n:Omit<SharedNotice,"at">)=>Promise<NotificationState>;
   desktop: DesktopNotifierPort;
@@ -84,6 +85,7 @@ export class NotificationController {
 
   /** 遅延中の鍵（`blocked` の 1 秒待ち）。同じ鍵で 2 本目を立てない。 */
   readonly #pending = new Map<NotifyKey, ReturnType<typeof setTimeout>>();
+  readonly #desktopSummaries=new Map<string,{key:string;scope:number;timer:ReturnType<typeof setTimeout>|null}>();
   /**
    * **このマシンのスナップショットを 1 回適用したか**。下りている間は `session.panes` が空（読み込み直後・マシン切替の最中）で、
    * 照合すると全件が「pane が無い＝解消」になって履歴が消え、空が共有の localStorage へ書かれる。**照合による掃除はこの旗が立ってから**
@@ -180,7 +182,7 @@ export class NotificationController {
    * （`StoreAdapter.resetBaseline`）。
    */
   resetForMachineSwitch(): void {
-    this.#sharedScope++;this.#shared.clear();
+    this.#sharedScope++;this.#shared.clear();for(const id of this.#desktopSummaries.keys())this.#cancelDesktopSummary(id);
     const clearT = this.#opts.clearTimeoutFn ?? clearTimeout;
     for (const h of this.#pending.values()) clearT(h);
     this.#pending.clear();
@@ -296,14 +298,11 @@ export class NotificationController {
     // `false` は「この環境では原理的に出せない」（Android Chrome）の合図に取っておく。
     if (routes.desktop && store.desktopUsable && this.#opts.desktop.permission() === "granted") {
       const { paneName, place } = describeParts(lookup, paneId);
-      const ok = this.#opts.desktop.show({
-        title: `${TITLE_PREFIX[kind]}: ${paneName}`,
-        body: place,
-        tag: paneId,
-        onClick: () => this.focusNotification(key),
-      });
-      // **出せなかった環境を覚える**（Android Chrome 等）。以後は設定に「使えません」と出す。
-      if (!ok) store.desktopUsable = false;
+      const show=(headline?:string)=>{
+        const ok=this.#opts.desktop.show({title:`${TITLE_PREFIX[kind]}: ${paneName}`,body:headline?`${headline}\n${place}`:place,tag:paneId,onClick:()=>this.focusNotification(key)});
+        if(!ok)store.desktopUsable=false;
+      };
+      if(this.#opts.summary)void this.#summarizeDesktop(paneId,key,show);else show();
     }
 
     if (routes.sound) {
@@ -318,6 +317,30 @@ export class NotificationController {
         if (r === "blocked") this.#unlockSound();
       }
     }
+  }
+
+  #cancelDesktopSummary(paneId:string):void {
+    const job=this.#desktopSummaries.get(paneId);if(!job)return;
+    this.#desktopSummaries.delete(paneId);if(job.timer)(this.#opts.clearTimeoutFn??clearTimeout)(job.timer);
+  }
+  async #summarizeDesktop(paneId:string,key:string,show:(headline?:string)=>void):Promise<void>{
+    this.#cancelDesktopSummary(paneId);
+    const job={key,scope:this.#sharedScope,timer:null as ReturnType<typeof setTimeout>|null},expires=Date.now()+200000;
+    this.#desktopSummaries.set(paneId,job);
+    const valid=()=>{
+      if(this.#desktopSummaries.get(paneId)!==job||job.scope!==this.#sharedScope)return false;
+      const q=this.#store.queue.find(q=>q.key===key&&q.paneId===paneId),entry=q&&historyEntryOf(q,"dismissed");
+      return !!entry&&!isResolved(entry,this.#paneNow(paneId))&&routesFor({windowFocused:(this.#opts.hasFocus??(()=>document.hasFocus()))(),paneVisible:this.#opts.isPaneVisible(paneId)},this.#store.prefs).desktop;
+    };
+    const poll=async()=>{
+      if(!valid()){if(this.#desktopSummaries.get(paneId)===job)this.#cancelDesktopSummary(paneId);return;}
+      let result:NotificationWorkSummary|undefined;
+      try{result=await this.#opts.summary!(paneId,key);}catch{}
+      if(!valid())return;
+      if(result&&(result.status==="waiting"||result.status==="summarizing")&&Date.now()<expires){job.timer=(this.#opts.setTimeoutFn??setTimeout)(()=>{job.timer=null;void poll();},2000);return;}
+      this.#desktopSummaries.delete(paneId);show(result?.status==="ready"?result.headline:undefined);
+    };
+    await poll();
   }
 
   /**
@@ -341,7 +364,7 @@ export class NotificationController {
   syncToasts(): void {
     const alive = new Set(this.#view.toasts.map((t) => t.id));
     for (const e of this.#store.dropMissingToasts(alive)) {
-      this.#opts.desktop.closeByTag(e.paneId);
+      this.#cancelDesktopSummary(e.paneId);this.#opts.desktop.closeByTag(e.paneId);
       this.#share({key:e.key,paneId:e.paneId},"deferred");
       this.#toHistory(e, "dismissed"); // 応答せずに閉じた＝判断の先送り（解消済みなら入らない）
     }
@@ -584,6 +607,7 @@ export class NotificationController {
   }
 
   #cleanup(toastId: number | null, paneId: string): void {
+    this.#cancelDesktopSummary(paneId);
     if (toastId != null) this.#view.dismissToast(toastId);
     this.#opts.desktop.closeByTag(paneId);
   }

@@ -1,4 +1,4 @@
-import {loadSummarySettings,NotificationSummaryParams} from "@sodashitsu/protocol";
+import {SummarySettingsSchema,loadSummarySettings,NotificationSummaryParams} from "@sodashitsu/protocol";
 import {sourceTarget} from "../../assistant/SourceTarget.js";
 import {conversationResumeArgs} from "../../agent/conversationResume.js";
 import { SessionToolsParams, SessionNoteSaveParams, SessionNoteDeleteParams } from "@sodashitsu/protocol";
@@ -46,7 +46,11 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
       const pane=deps.session.getPane(p.paneId),tab=pane&&deps.session.getTab(pane.tabId);
       if(!pane?.agent||!tab)throw new RpcError("not_found","通知元が見つかりません");
       const source={serverOrigin:"http://127.0.0.1:7780",machineId:"local",paneId:p.paneId,workspaceId:p.workspaceId??tab.workspaceId,agentInstanceId:p.agentInstanceId??pane.agent.instanceId};
-      const target=sourceTarget(deps,source,p.key,true),settings=loadSummarySettings(deps.prefs?.get().prefs.summarySettings);
+      const target=sourceTarget(deps,source,p.key,true),rawSettings=deps.prefs?.get().prefs.summarySettings;
+      if(!SummarySettingsSchema.safeParse(rawSettings).success)return p.expectedSettings?{status:"waiting" as const,text:"",message:"要約設定の保存を待っています。"}:{status:"disabled" as const,text:"",message:"要約エージェントが未設定です。"};
+      const settings=loadSummarySettings(rawSettings);
+      const expected=p.expectedSettings;
+      if(expected&&(expected.kind!==settings.kind||expected.model!==settings.model||(expected.effort??"")!==(settings.effort??"")||(expected.notificationSummary!==undefined&&expected.notificationSummary!==(settings.notificationSummary!==false))))return {status:"waiting" as const,text:"",message:"要約設定の保存を待っています。"};
       let conversation:{kind:string;sessionId:string}|undefined;
       try{const found=deps.conversations?.source(p.paneId);if(found)conversation={kind:found.kind,sessionId:found.sessionId};}catch{}
       const scope=JSON.stringify([p.key,source,pane.agentSession?.sessionId,conversation,target.workspace.projectDir,target.workspace.cwd]);
@@ -55,8 +59,10 @@ export function registerConversationMethods(surface: ControlSurface, deps: Metho
         target.guard();
         if(deps.session.getPane(p.paneId)?.agentSession?.sessionId!==reference)throw new RpcError("not_found","会話が変更されました");
         if(conversation){const now=deps.conversations!.source(p.paneId);if(now.kind!==conversation.kind||now.sessionId!==conversation.sessionId)throw new RpcError("not_found","会話が変更されました");}
-        const current=loadSummarySettings(deps.prefs?.get().prefs.summarySettings);
-        if(current.notificationSummary===false||current.kind!==settings.kind||current.model!==settings.model)throw new RpcError("not_found","要約設定が変更されました");
+        const currentRaw=deps.prefs?.get().prefs.summarySettings;
+        if(!SummarySettingsSchema.safeParse(currentRaw).success)throw new RpcError("not_found","要約エージェントが未設定です");
+        const current=loadSummarySettings(currentRaw);
+        if(current.notificationSummary===false||current.kind!==settings.kind||current.model!==settings.model||(current.effort??"")!==(settings.effort??""))throw new RpcError("not_found","要約設定が変更されました");
       };
       // The disabled state is available without starting a job.
       if(settings.notificationSummary===false)return {status:"disabled" as const,text:"",message:"通知の作業要約は設定で無効です。"};

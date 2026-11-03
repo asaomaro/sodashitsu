@@ -1,0 +1,36 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/web| src/components/NotificationWorkSummary.test.ts (3 tests | 1 failed | 2 skipped) 24ms
+   × shows only the short generated headline, never the detailed summary 23ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  23:57:01
+   Duration  1.60s (transform 69%, import 17%, environment 12%, tests 2%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/web| src/components/NotificationWorkSummary.test.ts > shows only the short generated headline, never the detailed summary
+AssertionError: expected '詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作…' to contain '保存先の統一'
+
+Expected: "保存先の統一"
+Received: "詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案詳細な作業要約・返信案"
+
+ ❯ src/components/NotificationWorkSummary.test.ts:14:41
+     12|  const request=vi.fn(async()=>({status:"ready",headline:"保存先の統一が完了しました…
+     13|  const w=mount(NotificationWorkSummary,{props:{paneId:crypto.randomUUI…
+     14|  await flushPromises();expect(w.text()).toContain("保存先の統一");expect(w.t…
+       |                                         ^
+     15|  expect(request).toHaveBeenCalledWith("notification.summary",expect.ob…
+     16| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AssistantLaunchSettings, ASSISTANT_EFFORTS } from "./desktopAssistant.js";
 export const ConversationKind = z.enum(["claude", "codex", "muse", "agy", "copilot"]);
 export type ConversationKind = z.infer<typeof ConversationKind>;
 export interface ConversationMessage {
@@ -64,19 +65,20 @@ export interface SummarySettings {
   sessionId: string;
   autoUpdate?: boolean | undefined;
   notificationSummary?: boolean | undefined;
+  effort?: import("./desktopAssistant.js").AssistantLaunchSettings["effort"] | undefined;
 }
 export const SummarySettingsSchema = z.object({
   autoUpdate: z.boolean().optional(),
   notificationSummary: z.boolean().optional(),
   kind: ConversationKind,
-  model: z
-    .string()
-    .max(100)
-    .regex(/^[a-zA-Z0-9_.:/-]*$/),
+  model: AssistantLaunchSettings.shape.model,
+  effort: AssistantLaunchSettings.shape.effort.optional(),
   sessionId: z
     .string()
     .max(128)
     .regex(/^[a-zA-Z0-9_-]*$/),
+}).superRefine((value,ctx)=>{
+ if(value.effort&&!(ASSISTANT_EFFORTS[value.kind] as readonly string[]).includes(value.effort))ctx.addIssue({code:"custom",path:["effort"],message:"この種類で指定できないeffortです"});
 });
 export const AgentSummaryParams = z.object({
   mode: z.enum(["update", "rebuild"]).default("update"),
@@ -84,6 +86,7 @@ export const AgentSummaryParams = z.object({
   settings: SummarySettingsSchema,
 });
 export interface ConversationSummary {
+  effort?: import("./desktopAssistant.js").AssistantLaunchSettings["effort"] | undefined;
   updatedAt?: number;
   stale?: boolean;
   sourceSessionId?: string;
@@ -187,8 +190,10 @@ export function configuredAgentActions(
 }
 
 /** Shared per-notification work summary. Source text is collected by the server only. */
-export const NotificationSummaryParams=z.object({paneId:z.uuid(),workspaceId:z.uuid().optional(),agentInstanceId:z.uuid().optional(),key:z.string().min(1).max(200),refresh:z.boolean().default(false)});
+export const NotificationSummaryParams=z.object({paneId:z.uuid(),workspaceId:z.uuid().optional(),agentInstanceId:z.uuid().optional(),key:z.string().min(1).max(200),refresh:z.boolean().default(false),expectedSettings:z.object({kind:ConversationKind,model:AssistantLaunchSettings.shape.model,effort:AssistantLaunchSettings.shape.effort.optional(),notificationSummary:z.boolean().optional()}).optional()});
+export const NotificationSummaryOutput=z.object({headline:z.string().min(1).max(240),text:z.string().min(1).max(24000)});
 export interface NotificationWorkSummary {
+ headline?:string;
  status:"disabled"|"waiting"|"summarizing"|"ready"|"error";
  text:string;
  message:string;

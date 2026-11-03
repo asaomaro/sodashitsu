@@ -1,0 +1,1 @@
+{"summaryVisible":true,"escaped":true,"interceptedOnly":1,"narrowLayout":{"textRight":288.9895324707031,"actionLeft":298.5832824707031,"actionRight":351.7864074707031,"closeRight":389.5676574707031,"width":400},"oldInlineOverflow":true}

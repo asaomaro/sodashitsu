@@ -27,7 +27,7 @@ export const UsageInsightFilters=z.object({
 });
 
 export const UsageReportParams = z.object({
-  settings: SummarySettingsSchema.pick({ kind: true, model: true }),
+  settings: z.object({kind:SummarySettingsSchema.shape.kind,model:SummarySettingsSchema.shape.model}),
   accountKey: z.string().min(1).max(128).optional(),
   history: UsageHistoryParams.optional(),
   insights:UsageInsightFilters.optional(),

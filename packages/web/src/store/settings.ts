@@ -5,6 +5,7 @@ import {
   loadAgentActionSettings,
   type AgentActionSettings,
   loadSummarySettings,
+  SummarySettingsSchema,
   type AgentHeaderAction,
   type SummarySettings,
 } from "@sodashitsu/protocol";
@@ -176,14 +177,17 @@ export const useSettingsStore = defineStore("settings", () => {
     writePrefs({ statuslineSettings: statuslineSettings.value });
   }
   const summarySettings = ref(loadSummarySettings(initial["summarySettings"]));
+  const summaryConfigured=ref(SummarySettingsSchema.safeParse(initial["summarySettings"]).success);
   function setAgentHeaderActions(v: AgentHeaderAction[]): void {
     agentHeaderActions.value = loadAgentHeaderActions(v);
     writePrefs({ agentHeaderActions: agentHeaderActions.value });
   }
   function setSummarySettings(v: SummarySettings): void {
     summarySettings.value = loadSummarySettings(v);
+    summaryConfigured.value=SummarySettingsSchema.safeParse(v).success;
     writePrefs({ summarySettings: summarySettings.value });
   }
+  function clearSummarySettings(){summarySettings.value=loadSummarySettings(undefined);summaryConfigured.value=false;writePrefs({summarySettings:null});}
 
   /** 状態を色に加えて記号でも示すか（`StateIcon.vue` が読む）。 */
   const statusSymbols = ref(loadStatusSymbols(initial["statusSymbols"]));
@@ -591,6 +595,7 @@ export const useSettingsStore = defineStore("settings", () => {
     agentHeaderActions.value = loadAgentHeaderActions(prefs["agentHeaderActions"]);
     agentActionSettings.value = loadAgentActionSettings(prefs["agentActionSettings"], prefs["agentHeaderActions"]);
     summarySettings.value = loadSummarySettings(prefs["summarySettings"]);
+    summaryConfigured.value=SummarySettingsSchema.safeParse(prefs["summarySettings"]).success;
     systemFooterSettings.value = loadSystemFooterSettings(prefs["systemFooterSettings"]);
     statuslineSettings.value = loadStatuslineSettings(prefs["statuslineSettings"]);
     const nextPosition = loadTabBarPosition(prefs["tabBarPosition"]);
@@ -693,7 +698,7 @@ export const useSettingsStore = defineStore("settings", () => {
     systemFooterSettings, setSystemFooterSettings,
     statuslineSettings, setStatuslineSettings,
     agentHeaderActions,
-    summarySettings,
+    summarySettings,summaryConfigured,clearSummarySettings,
     setAgentHeaderActions,
     agentActionSettings,
     setAgentActionSettings,

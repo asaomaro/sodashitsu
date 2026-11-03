@@ -428,10 +428,10 @@ it("delivers a compact notification without opening chat and obeys mute", async 
   expect(bubble.focus).not.toHaveBeenCalled();
   expect(bubble.url).toBe("soda-assistant://app/notice.html");
   const bubbleEvent = { sender: bubble.webContents, senderFrame: bubble.webContents.mainFrame };
-  expect(await fixture.handlers.get("assistant:notice-state")!(bubbleEvent)).toMatchObject({message:notice.message});
+  expect(await fixture.handlers.get("assistant:notice-state")!(bubbleEvent)).toMatchObject({message:"作業状況を確認してください。"});
   await expect(fixture.handlers.get("assistant:inbox")!(bubbleEvent)).rejects.toThrow("許可");
   connection.options.changed([{...notice,message:"詳しい完了内容"}],false);
-  expect(bubble.webContents.send).toHaveBeenCalledWith("assistant:notice-changed",expect.objectContaining({message:"詳しい完了内容"}));
+  expect(bubble.webContents.send).toHaveBeenCalledWith("assistant:notice-changed",expect.objectContaining({message:"作業状況を確認してください。"}));
   await expect(fixture.handlers.get("assistant:inbox")!(event)).rejects.toThrow("許可");
   await fixture.handlers.get("assistant:save")!(event, { enabled: false });
   expect(connection.stop).toHaveBeenCalledOnce();
@@ -1921,4 +1921,24 @@ it("uses the current stacking mode when a delayed chat window becomes ready",asy
   await save(event,{enabled:true,mode:'tray',windowLayer:'back'});chat.emit('ready-to-show');
   expect(chat.focus).not.toHaveBeenCalled();expect(chat.showInactive).toHaveBeenCalled();expect(chat.setAlwaysOnTop).toHaveBeenLastCalledWith(false);
  }finally{fixture.deferReady=false;await save(event,{enabled:false});}
+});
+
+it("waits for the shared headline and keeps full detail in the conversation only",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},save=fixture.handlers.get('assistant:save')!;
+ await save(event,{enabled:true,mode:'tray',quietFullscreen:false,voiceEnabled:false});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation();let finish!:(value:unknown)=>void;
+ rpc.request.mockImplementation(async(method:string)=>method==='notification.summary'?new Promise(done=>{finish=done;}):{ok:true});
+ try{
+  rpc.options.prefsChanged!({rev:10000,prefs:{summarySettings:{kind:'codex',model:'',effort:'',sessionId:''}}});
+  const notice={id:randomUUID(),key:'done:headline',kind:'done',title:'担当',message:'非常に長い通知の原文'.repeat(100),at:Date.now(),source:{serverOrigin:'http://127.0.0.1:7780',machineId:'local',paneId:randomUUID(),workspaceId:randomUUID(),agentInstanceId:randomUUID()}};
+  const count=fixture.windows.length;fixture.connections.at(-1)!.options.changed([notice],true);
+  await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));expect(fixture.windows.length).toBe(count);
+  finish({status:'ready',headline:'台本の確認待ちです',text:'詳細な作業要約'.repeat(100),message:''});
+  await vi.waitFor(()=>expect(fixture.windows.at(-1)?.url).toBe('soda-assistant://app/notice.html'));
+  const compact=fixture.windows.at(-1)!,local={sender:compact.webContents,senderFrame:compact.webContents.mainFrame};
+  expect(await fixture.handlers.get('assistant:notice-state')!(local)).toMatchObject({message:'台本の確認待ちです'});
+  await fixture.handlers.get('assistant:chat')!(event);const chat=fixture.windows.at(-1)!;
+  expect(await fixture.handlers.get('assistant:inbox')!({sender:chat.webContents,senderFrame:chat.webContents.mainFrame})).toMatchObject({noticeSummaries:{[notice.id]:{text:'詳細な作業要約'.repeat(100)}}});
+ }finally{rpc.options.prefsChanged!({rev:10001,prefs:{}});rpc.request.mockImplementation(original!);await save(event,{enabled:false});}
 });

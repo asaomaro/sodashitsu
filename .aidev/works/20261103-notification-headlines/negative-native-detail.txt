@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (59 tests | 1 failed | 58 skipped) 1614ms
+   × waits for the shared headline and keeps full detail in the conversation only 85ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 58 skipped (59)
+   Start at  23:57:29
+   Duration  1.90s (tests 90%, transform 9%, import 1%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > waits for the shared headline and keeps full detail in the conversation only
+AssertionError: expected { revision: 3, …(3) } to match object { message: '台本の確認待ちです' }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "message": "台本の確認待ちです",
++   "message": "非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文非常に長い通知の原文",
+  }
+
+ ❯ src/main.test.ts:1940:72
+    1938|   await vi.waitFor(()=>expect(fixture.windows.at(-1)?.url).toBe('soda-…
+    1939|   const compact=fixture.windows.at(-1)!,local={sender:compact.webConte…
+    1940|   expect(await fixture.handlers.get('assistant:notice-state')!(local))…
+       |                                                                        ^
+    1941|   await fixture.handlers.get('assistant:chat')!(event);const chat=fixt…
+    1942|   expect(await fixture.handlers.get('assistant:inbox')!({sender:chat.w…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

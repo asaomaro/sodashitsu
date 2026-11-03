@@ -1642,3 +1642,14 @@ describe("shared notification state",()=>{
   await Promise.resolve();await Promise.resolve();expect(useNotificationsStore(pinia).queue).toHaveLength(0);
  });
 });
+
+it("uses the generated headline in OS notifications and keeps legacy content without a configured agent",async()=>{
+ useNotificationsStore(pinia).setPrefs({toast:true,desktop:true,sound:false});seedSession(makeAgent({state:"blocked",since:5}));
+ const summary=vi.fn().mockResolvedValueOnce({status:"ready",headline:"リリースの判断待ちです",text:"長い作業要約".repeat(100),message:""}).mockResolvedValueOnce({status:"disabled",text:"",message:"未設定"});
+ const h=makeController({summary});h.c.deliver("blocked","p1","blocked:a1:5");await Promise.resolve();await Promise.resolve();expect(h.desktop.shown[0]?.body).toContain("リリースの判断待ちです");expect(h.desktop.shown[0]?.body).not.toContain("長い作業要約");
+ h.c.onPaneClosed("p1");seedSession(makeAgent({state:"blocked",since:6}));h.c.deliver("blocked","p1","blocked:a1:6");await Promise.resolve();await Promise.resolve();expect(h.desktop.shown.at(-1)?.body).toBe("ws-A / tab-A");h.c.resetForMachineSwitch();
+});
+it("does not deliver a late OS headline after a notification is resolved",async()=>{
+ useNotificationsStore(pinia).setPrefs({toast:true,desktop:true,sound:false});seedSession(makeAgent({state:"blocked",since:5}));
+ let finish!:(v:any)=>void;const h=makeController({summary:vi.fn(()=>new Promise<import("@sodashitsu/protocol").NotificationWorkSummary>(done=>finish=done))});h.c.deliver("blocked","p1","blocked:a1:5");h.c.onPaneClosed("p1");finish({status:"ready",headline:"古い見出し",text:"",message:""});await Promise.resolve();await Promise.resolve();expect(h.desktop.shown).toHaveLength(0);h.c.resetForMachineSwitch();
+});

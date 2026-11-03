@@ -71,13 +71,15 @@ describe("applyPrefsToStores", () => {
   });
   it("applies saved conversation settings on connection and resets removed settings", () => {
     const settings = useSettingsStore(pinia);
-    const summary = { kind: "codex", model: "GPT-6-Luna", sessionId: "" };
+    const summary = { kind: "codex", model: "GPT-6-Luna", effort:"", sessionId: "" };
     applyPrefsToStores(pinia, { summarySettings: summary, agentHeaderActions: ["summary"] });
     expect(settings.summarySettings).toEqual(summary);
+    expect(settings.summaryConfigured).toBe(true);
     expect(settings.agentHeaderActions).toEqual(["summary"]);
     applyPrefsToStores(pinia, {});
     expect(settings.summarySettings).toEqual({ kind: "claude", model: "", sessionId: "" });
     expect(settings.agentHeaderActions).toContain("messages");
+    expect(settings.summaryConfigured).toBe(false);
   });
   it("保存の項目名をストアの値へ（読み込みと同じ load* で）当てる", () => {
     const settings = useSettingsStore(pinia);

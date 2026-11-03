@@ -181,7 +181,7 @@ function cancelClear(): void {
 </template>
 
 <style scoped>
-.nh-row{flex-wrap:wrap}.nh-row>.notification-work-summary{flex-basis:100%}
+.nh-row{flex-wrap:wrap}.nh-row>.notification-headline{flex-basis:100%}
 .nh-dialog {
   box-shadow: var(--soda-shape-shadow, none);
   border: 1px solid var(--soda-menu-border, #44475a);

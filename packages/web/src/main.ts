@@ -534,6 +534,7 @@ connection.onClosed(() => prefsSync.onClosed());
 // 通知（20260920-agent-notifications）。`registry`（表示中の pane を引く）より後、
 // `ActionDispatcher`（`prefix+o` の行き先に使う）より前にしか置けない。
 const notifications = new NotificationController({
+  summary:(paneId,key)=>!settings.summaryConfigured||settings.summarySettings.notificationSummary===false?Promise.resolve({status:"disabled",text:"",message:""}):conn.request("notification.summary",{paneId,key,refresh:false,expectedSettings:{kind:settings.summarySettings.kind,model:settings.summarySettings.model,effort:settings.summarySettings.effort??"",notificationSummary:true}}),
   loadShared: () => conn.request("notification.state", {}),
   updateShared: (n) => conn.request("notification.update", n),
   pinia,

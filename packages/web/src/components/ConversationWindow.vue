@@ -220,7 +220,7 @@ function close() {
     </template>
     <template v-else
       ><p>
-        {{ settings.summarySettings.kind }} · {{ settings.summarySettings.model || "既定モデル" }} ·
+        {{ settings.summarySettings.kind }} · {{ settings.summarySettings.model || "既定モデル" }} · effort {{ settings.summarySettings.effort || "既定" }} ·
         要約セッションは自動管理
       </p>
       <div class="summary-actions">

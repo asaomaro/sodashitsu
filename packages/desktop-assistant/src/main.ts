@@ -1,5 +1,5 @@
 import {NoticeSummaries} from "./noticeSummaries.js";
-import {loadSummarySettings} from "@sodashitsu/protocol";
+import {SummarySettingsSchema,loadSummarySettings} from "@sodashitsu/protocol";
 import {assistantAppearance} from "./appearance.js";
 import {AssistantSource,AssistantLaunchSettings,AssistantModelCatalog} from "@sodashitsu/protocol";
 import {presentWindow} from "./windowPresentation.js";
@@ -199,7 +199,7 @@ function publishAppearance():void {
 }
 function receiveAppearance(rpc:AssistantRpc,state:import("@sodashitsu/protocol").ResultOf<"prefs.get">):void {
  if(control!==rpc||!state||!Number.isSafeInteger(state.rev)||state.rev<sharedAppearanceRev||!state.prefs||typeof state.prefs!=="object"||Array.isArray(state.prefs))return;
- sharedAppearanceRev=state.rev;sharedAppearance=state.prefs;publishAppearance();configureNoticeSummaries();publishInbox();
+ sharedAppearanceRev=state.rev;sharedAppearance=state.prefs;publishAppearance();configureNoticeSummaries();publishInbox();deliverPendingHeadline();
 }
 let compactRevision = 0;
 let compactHeight = 220;
@@ -226,12 +226,12 @@ function closeCompact(): void {
   compact?.destroy();
   compact = null;
 }
-function compactState() { return { revision: compactRevision, ...compactPayload, ...(compactPayload?{message:assistantPersonaNotification(activeCharacterId(),compactPayload.title,compactPayload.message)}:{}) }; }
+function compactState() { return { revision: compactRevision, ...compactPayload }; }
 function refreshCompact(): void {
   if (!compactPayload?.id) return;
   const current = [...localNotices, ...remoteRows].find(n => n.id === compactPayload!.id);
   if (!current) { closeCompact(); return; }
-  compactPayload = { id: current.id, title: current.title, message: current.message };
+  compactPayload = { id: current.id, title: current.title, message: shortNotificationMessage(current) };
   ++compactRevision;
   compact?.webContents.send("assistant:notice-changed", compactState());
 }
@@ -241,7 +241,7 @@ function showCompact(payload: { id?: string; title: string; message: string }): 
   if (payload.id) {
     const current = [...localNotices, ...remoteRows].find(n => n.id === payload.id);
     if (!current) return;
-    payload = { id: current.id, title: current.title, message: current.message };
+    payload = { id: current.id, title: current.title, message: shortNotificationMessage(current) };
   }
   compactPayload = payload;
   ++compactRevision;
@@ -476,17 +476,38 @@ function localWindow(role: LocalRole): BrowserWindow {
   return win;
 }
 
-function notifyBubble(payload?: { id?: string; title: string; message: string }): void {
+let pendingHeadline:{content:{id:string;title:string;message:string};epoch:number;speechEpoch:number}|null=null;
+function summaryConfigured(){return SummarySettingsSchema.safeParse(sharedAppearance.summarySettings).success&&loadSummarySettings(sharedAppearance.summarySettings).notificationSummary!==false;}
+function shortNotificationMessage(notice:import("@sodashitsu/protocol").AssistantNotice){
+ const result=noticeSummaries.snapshot()[notice.id];
+ return result?.status==="ready"&&result.headline?result.headline:notice.kind==="attention"?"入力待ちです。":notice.kind==="question"?"質問フォームが届きました。":notice.kind==="done"?"作業が完了しました。":"作業状況を確認してください。";
+}
+function deliverPendingHeadline(){
+ const pending=pendingHeadline;if(!pending)return;
+ if(pending.epoch!==automaticNoticeEpoch||!notices.some(n=>n.id===pending.content.id)){pendingHeadline=null;return;}
+ const result=noticeSummaries.snapshot()[pending.content.id];
+ if(summaryConfigured()&&(!result||result.status==="waiting"||result.status==="summarizing"))return;
+ pendingHeadline=null;
+ notifyBubble(pending.content,pending.speechEpoch,true);
+}
+function notifyBubble(payload?: { id?: string; title: string; message: string },speechEpoch=voiceEpoch,headlinePrepared=false): void {
   const latest = [...localNotices, ...remoteRows].sort((a,b) => b.at - a.at)[0];
   payload ??= latest ? { id: latest.id, title: latest.title || "エージェントからの通知", message: latest.message } : { title: "操舵室からのお知らせ", message: "新しい通知が届きました。" };
-  const content = payload;
+  let content = payload;
   const requestEpoch = ++automaticNoticeEpoch;
-  const speechEpoch=voiceEpoch;
+  pendingHeadline=null;
   const preferences = controller.preferences;
   if (quitting || suspended || !preferences.enabled || preferences.mute) return;
   try {
     if (powerMonitor.getSystemIdleState(1) === "locked") return;
   } catch {}
+  const source=content.id?notices.find(n=>n.id===content.id):undefined;
+  const summary=source?noticeSummaries.snapshot()[source.id]:undefined;
+  if(source&&!headlinePrepared&&(summaryConfigured()&&(!summary||summary.status==="waiting"||summary.status==="summarizing"))){
+    pendingHeadline={content:{id:source.id,title:content.title,message:content.message},epoch:requestEpoch,speechEpoch};
+    return;
+  }
+  if(source)content={...content,message:shortNotificationMessage(source)};
   const current = () => requestEpoch === automaticNoticeEpoch && !quitting && !suspended &&
     controller.preferences.enabled && !controller.preferences.mute &&
     (!content.id || [...localNotices,...remoteRows].some(n=>n.id===content.id));
@@ -585,15 +606,15 @@ const noticeSummaries=new NoticeSummaries(async(notice,refresh)=>{
  const rpc=notice.source.machineId==="local"?control:remoteNotices?.rpcFor(notice.source.machineId);
  if(!rpc||notice.source.serverOrigin!==controller.preferences.serverOrigin)throw Error("通知元に接続できません。");
  return rpc.request("notification.summary",{paneId:notice.source.paneId,workspaceId:notice.source.workspaceId,agentInstanceId:notice.source.agentInstanceId,key:notice.key,refresh});
-},()=>publishInbox());
+},()=>{publishInbox();deliverPendingHeadline();});
 function configureNoticeSummaries(){
  const settings=loadSummarySettings(sharedAppearance.summarySettings);
- noticeSummaries.configure(notices,JSON.stringify([controller.preferences.serverOrigin,settings]),controller.preferences.enabled&&settings.notificationSummary!==false);
+ noticeSummaries.configure(notices,JSON.stringify([controller.preferences.serverOrigin,settings]),controller.preferences.enabled&&summaryConfigured());
 }
 function combineNotices() {
   notices = [...localNotices, ...remoteRows].sort((a, b) => b.at - a.at).slice(0, 32);
   configureNoticeSummaries();
-  publishInbox();
+  publishInbox();deliverPendingHeadline();
 }
 function inbox() {
   const rows = controller.preferences.enabled ? [
