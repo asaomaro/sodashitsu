@@ -1897,6 +1897,8 @@ function onNativeCancel(ev: Event): void {
   color: var(--soda-fg, #f8f8f2);
   border: 1px solid var(--soda-menu-border, #44475a);
   border-radius: var(--soda-shape-radius-l);
+  /* Keep the dialog as the scroll container; clip native scrollbar ends to its frame. */
+  clip-path: inset(0 round var(--soda-shape-radius-l));
 }
 .settings-dialog::backdrop {
   background: var(--soda-backdrop, rgba(0, 0, 0, 0.4));

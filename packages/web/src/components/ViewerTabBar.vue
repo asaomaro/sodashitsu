@@ -213,10 +213,12 @@ async function close(id: string) {
   top: 100%;
   z-index: 100;
   background: var(--soda-menu-bg, #282a36);
-  border: 1px solid var(--soda-border, #45475a);
-  padding: 4px;
-  min-width: 180px;
-  box-shadow: 0 3px 8px #0006;
+  border: 1px solid var(--soda-menu-border, #44475a);
+  border-radius: max(8px, var(--soda-shape-menu-radius, 0px));
+  padding: var(--soda-shape-menu-pad-y, 0.25em) 4px;
+  min-width: 12em;
+  color: var(--soda-menu-fg, #f8f8f2);
+  box-shadow: var(--soda-shape-shadow, none);
 }
 .viewer-menu-row {
   border-bottom: 1px solid var(--soda-border, #45475a);
@@ -225,10 +227,13 @@ async function close(id: string) {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 5px 8px;
+  padding: 0.35em var(--soda-shape-pad-x, 1em);
+  min-height: var(--soda-shape-control-h, auto);
+  box-sizing: border-box;
+  border-radius: 6px;
 }
-.viewer-menu button:hover {
-  background: var(--soda-selection-bg, #45475a);
+.viewer-menu button:not(:disabled):is(:hover, :focus-visible) {
+  background: var(--soda-menu-active-bg, #44475a);
 }
 .viewer-tabs button:focus-visible {
   outline: 2px solid var(--soda-accent, #89b4fa);
@@ -252,8 +257,7 @@ async function close(id: string) {
 .viewer-tabs .viewer-menu-button:hover {
   background: var(--soda-menu-hover-bg, #343746);
 }
-:root[data-ui-style="modern"] .viewer-item,
-:root[data-ui-style="modern"] .viewer-menu {
+:root[data-ui-style="modern"] .viewer-item {
   font-size: var(--soda-shape-seg-font);
 }
 :root[data-ui-style="modern"] .viewer-tabs .viewer-menu-button {
