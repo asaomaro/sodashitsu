@@ -96,7 +96,7 @@ function selectPane(paneId: string, tabId: string, workspaceId: string): void {
 <template>
   <div ref="rootEl" class="pane-picker" role="dialog" aria-modal="true" aria-label="pane の一覧" tabindex="-1" @keydown.esc="emit('close')">
     <div class="pane-picker-header">
-      <button type="button" class="pane-picker-close" aria-label="閉じる" @click="emit('close')">×</button>
+      <button data-assistant-feature type="button" class="pane-picker-close" aria-label="閉じる" @click="emit('close')">×</button>
     </div>
     <section class="pane-picker-section" aria-label="spaces">
       <div v-for="{ workspace, state, tabs } in spaces" :key="workspace.id" class="pane-picker-workspace">
@@ -116,7 +116,7 @@ function selectPane(paneId: string, tabId: string, workspaceId: string): void {
           <StateIcon class="pane-picker-state" :state="state" />
           <span class="pane-picker-label">{{ workspace?.label }} / {{ tab?.label }} — {{ agent.name ? `${agent.name}（${agent.label}）` : agent.label }}</span>
         </button>
-        <button type="button" class="pane-picker-info" data-picker-pane-info :aria-label="`${agent.name ?? agent.label}の利用状況`" @click="openPaneInfo(pane.id)">利用状況</button>
+        <button data-assistant-feature type="button" class="pane-picker-info" data-picker-pane-info :aria-label="`${agent.name ?? agent.label}の利用状況`" @click="openPaneInfo(pane.id)">利用状況</button>
       </div>
     </section>
     <!-- ダッシュボード（20261010-agent-usage PR3 の AC4。MobileShell には入口を足せないので、ここから開く）。重ねるダイアログで、選んだ pane へ移れる。 -->

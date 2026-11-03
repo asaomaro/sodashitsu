@@ -62,7 +62,7 @@ function onKeydown(ev: KeyboardEvent): void {
   >
     <div class="subagent-panel-head">
       <h3 class="subagent-panel-heading">サブエージェント — {{ info.name }}</h3>
-      <button
+      <button data-assistant-feature
         type="button"
         class="subagent-panel-close"
         aria-label="サブエージェントの一覧を閉じる"

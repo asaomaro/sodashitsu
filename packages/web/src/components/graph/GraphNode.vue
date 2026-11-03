@@ -131,7 +131,7 @@ const ariaLabel = computed(() => {
           </svg>
           <span aria-hidden="true">{{ subagentCount }}</span>
         </span>
-        <button
+        <button data-assistant-feature
           v-else
           type="button"
           class="graph-node-subagents"

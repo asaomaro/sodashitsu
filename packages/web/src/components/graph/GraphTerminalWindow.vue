@@ -304,7 +304,7 @@ const sizeText = computed(() => (props.win.cols > 0 ? `${props.win.cols} × ${pr
         <span class="gtw-name">{{ info.name }}</span>
         <span v-if="workspaceLabel" class="gtw-ws">{{ workspaceLabel }}</span>
       </div>
-      <button
+      <button data-assistant-feature
         v-if="displayCount > 0"
         type="button"
         class="gtw-btn gtw-display-mark"
@@ -313,7 +313,7 @@ const sizeText = computed(() => (props.win.cols > 0 ? `${props.win.cols} × ${pr
       >
         表示あり {{ displayCount }}
       </button>
-      <button
+      <button data-assistant-feature
         type="button"
         class="gtw-btn gtw-pin"
         data-graph-terminal-pin
@@ -323,8 +323,8 @@ const sizeText = computed(() => (props.win.cols > 0 ? `${props.win.cols} × ${pr
       >
         {{ win.pinned ? "留め中" : "留める" }}
       </button>
-      <button type="button" class="gtw-btn gtw-open-base" data-graph-terminal-open-base @click="onOpenBase">基本画面で開く</button>
-      <button type="button" class="gtw-btn gtw-close" aria-label="窓を閉じる" data-graph-terminal-close @click="onClose">×</button>
+      <button data-assistant-feature type="button" class="gtw-btn gtw-open-base" data-graph-terminal-open-base @click="onOpenBase">基本画面で開く</button>
+      <button data-assistant-feature type="button" class="gtw-btn gtw-close" aria-label="窓を閉じる" data-graph-terminal-close @click="onClose">×</button>
     </header>
     <div
       ref="bodyEl"

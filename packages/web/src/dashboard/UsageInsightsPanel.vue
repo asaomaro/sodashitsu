@@ -80,7 +80,7 @@ const weekdayHeat=computed(()=>Array.from({length:24},(_,hour)=>({hour,known:(re
 <template>
  <section class="insights" data-usage-insights aria-label="利用分析ダッシュボード">
   <div class="insights-heading"><div><span class="eyebrow">USAGE INTELLIGENCE</span><h2>エージェント利用の全体像</h2><p>消費の推移、委譲、ツール利用をひとつの画面で。</p></div></div>
-  <div class="filter-toolbar"><button :aria-expanded="filtersOpen" @click="filtersOpen=!filtersOpen">期間・条件</button><span>{{ result?.from??from }} 〜 {{ result?.to??to }} UTC</span><button v-for="d in [7,30,90]" :key="d" :disabled="busy" @click="preset(d)">{{ d }}日</button></div>
+  <div class="filter-toolbar"><button data-assistant-feature :aria-expanded="filtersOpen" @click="filtersOpen=!filtersOpen">期間・条件</button><span>{{ result?.from??from }} 〜 {{ result?.to??to }} UTC</span><button v-for="d in [7,30,90]" :key="d" :disabled="busy" @click="preset(d)">{{ d }}日</button></div>
   <form v-show="filtersOpen" class="insights-filters" @submit.prevent="load()">
    <label>開始<input v-model="from" type="date" :disabled="busy"/></label><label>終了<input v-model="to" type="date" :disabled="busy"/></label>
    <label>PC<select v-model="machine" :disabled="busy"><option value="current">現在のPC</option><option v-if="port" value="all">接続中の全PCを比較</option><option v-for="s in machines.sections" :key="s.id" :value="s.id">{{ s.label }}</option></select></label>

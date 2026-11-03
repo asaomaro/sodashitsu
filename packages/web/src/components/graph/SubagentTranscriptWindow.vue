@@ -218,7 +218,7 @@ const preview = (t: string): string => t.replace(/\s+/g, " ").slice(0, 80);
           running ? "実行中" : "終了"
         }}</span>
       </div>
-      <button
+      <button data-assistant-feature
         type="button"
         class="sat-btn sat-close"
         aria-label="記録の窓を閉じる"

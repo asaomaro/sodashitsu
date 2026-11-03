@@ -2715,7 +2715,7 @@ function chipAria(e: EdgeView): string {
           <button data-assistant-action type="button" class="graph-tool graph-tidy" :disabled="!graph.graph" title="この空間の囲いとノードを詰めて並べ直します（確認します）" @click="requestTidy">
             並びを整える
           </button>
-          <button
+          <button data-assistant-feature
             type="button"
             class="graph-tool graph-more"
             aria-haspopup="menu"
@@ -2737,10 +2737,10 @@ function chipAria(e: EdgeView): string {
           </span>
           <span class="graph-toolbar-spacer"></span>
           <GraphFind ref="findRef" :items="findItems" @choose="onFindChoose" @leave="leaveFrameLayer" />
-          <button type="button" class="graph-tool graph-zoom-out" aria-label="縮小" title="縮小（-）" @click="zoomBy(1 / 1.2)">−</button>
+          <button data-assistant-feature type="button" class="graph-tool graph-zoom-out" aria-label="縮小" title="縮小（-）" @click="zoomBy(1 / 1.2)">−</button>
           <span class="graph-zoom" aria-live="off">{{ zoomPercent }}</span>
-          <button type="button" class="graph-tool graph-zoom-in" aria-label="拡大" title="拡大（+）" @click="zoomBy(1.2)">＋</button>
-          <button type="button" class="graph-tool graph-fit" title="全体を表示（1）" @click="fitAll">全体を表示</button>
+          <button data-assistant-feature type="button" class="graph-tool graph-zoom-in" aria-label="拡大" title="拡大（+）" @click="zoomBy(1.2)">＋</button>
+          <button data-assistant-feature type="button" class="graph-tool graph-fit" title="全体を表示（1）" @click="fitAll">全体を表示</button>
         </template>
         <template v-else>
         <h2 class="graph-title">連携（グラフ）</h2>
@@ -2773,7 +2773,7 @@ function chipAria(e: EdgeView): string {
         >
           上限のため、出ていない pane が {{ graph.hiddenLocalPaneCount }} 個あります
         </span>
-        <button
+        <button data-assistant-feature
           type="button"
           class="graph-tool graph-history"
           :aria-pressed="history !== null"
@@ -2781,10 +2781,10 @@ function chipAria(e: EdgeView): string {
         >
           履歴
         </button>
-        <button type="button" class="graph-tool graph-fit" title="全体表示（1）" @click="fitAll">
+        <button data-assistant-feature type="button" class="graph-tool graph-fit" title="全体表示（1）" @click="fitAll">
           全体表示
         </button>
-        <button
+        <button data-assistant-feature
           type="button"
           class="graph-tool graph-zoom-out"
           aria-label="縮小"
@@ -2794,7 +2794,7 @@ function chipAria(e: EdgeView): string {
           −
         </button>
         <span class="graph-zoom" aria-live="off">{{ zoomPercent }}</span>
-        <button
+        <button data-assistant-feature
           type="button"
           class="graph-tool graph-zoom-in"
           aria-label="拡大"
@@ -2803,7 +2803,7 @@ function chipAria(e: EdgeView): string {
         >
           ＋
         </button>
-        <button type="button" class="graph-close" aria-label="閉じる" @click="view.closeGraph()">
+        <button data-assistant-feature type="button" class="graph-close" aria-label="閉じる" @click="view.closeGraph()">
           ×
         </button>
         </template>

@@ -48,7 +48,7 @@ function graph(id: keyof SystemFooterGraphs, event: Event, pattern = false) {
   >
     <header>
       <strong>フッターの設定</strong
-      ><button type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
+      ><button data-assistant-feature type="button" aria-label="閉じる" @click="view.closeDialog()">×</button>
     </header>
     <p>
       接続先サーバー全体の情報です。WSLではLinux側の使用状況です。変更はWeb版・端末版で共有します。

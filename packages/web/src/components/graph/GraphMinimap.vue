@@ -110,7 +110,7 @@ function onUp(ev: PointerEvent): void {
 
 <template>
   <div class="graph-minimap" :class="{ 'graph-minimap-collapsed': collapsed }" data-graph-minimap @pointerdown.stop @wheel.stop>
-    <button
+    <button data-assistant-feature
       type="button"
       class="graph-minimap-toggle"
       :aria-expanded="!collapsed"

@@ -129,7 +129,7 @@ onBeforeUnmount(() => { dead = true; clearInterval(timer); if (allowedPane.value
 
 <template>
   <section ref="surface" class="preview-window" :class="{ 'soda-viewport-maximized': maximized, 'has-app': !!current }" :popover="maximized ? 'manual' : undefined" tabindex="-1" role="region" aria-label="Webプレビュー" data-web-preview @keydown.capture="maximizeKey">
-    <header><strong>Webプレビュー</strong><button v-if="current" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button><button data-assistant-action :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? "元に戻す" : "最大化" }}</button></header>
+    <header><strong>Webプレビュー</strong><button data-assistant-feature v-if="current" :aria-expanded="infoOpen" @click="infoOpen = !infoOpen">情報・設定</button><button data-assistant-action :aria-pressed="maximized" @click="toggleMaximize">{{ maximized ? "元に戻す" : "最大化" }}</button></header>
     <div v-show="!current || infoOpen" class="preview-controls">
     <label>表示元のペイン <select v-model="sourcePane" aria-label="表示元のペイン"><option value="">自動選択</option><option v-for="p in panes" :key="p.id" :value="p.id">{{ p.label || p.title || p.id.slice(0,8) }}</option></select></label>
     <div class="preview-tools">

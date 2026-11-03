@@ -62,7 +62,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <button v-if="linkId" type="button" class="history-panel-all" @click="emit('clearFilter')">
         すべての線
       </button>
-      <button
+      <button data-assistant-feature
         type="button"
         class="history-panel-close"
         aria-label="履歴を閉じる"

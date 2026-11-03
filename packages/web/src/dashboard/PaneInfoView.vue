@@ -222,7 +222,7 @@ function openDashboard(): void {
         <dt>サブエージェント</dt>
         <dd data-pane-info-subagents>
           {{ subagentCount === null ? NONE : `${subagentCount} 件` }}
-          <button v-if="subagentCount !== null && subagentCount > 0" type="button" class="pinfo-btn" data-pane-info-open-subagents @click="openSubagents">一覧を開く</button>
+          <button data-assistant-feature v-if="subagentCount !== null && subagentCount > 0" type="button" class="pinfo-btn" data-pane-info-open-subagents @click="openSubagents">一覧を開く</button>
         </dd>
       </dl>
 
@@ -232,7 +232,7 @@ function openDashboard(): void {
       </section>
     </template>
     <div class="pinfo-foot">
-      <button type="button" class="pinfo-btn" data-pane-info-open-dashboard @click="openDashboard">ダッシュボードを開く</button>
+      <button data-assistant-feature type="button" class="pinfo-btn" data-pane-info-open-dashboard @click="openDashboard">ダッシュボードを開く</button>
     </div>
   </section>
 </template>

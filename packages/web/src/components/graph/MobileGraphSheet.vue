@@ -66,7 +66,7 @@ onMounted(() => {
     >
       <div class="graph-sheet-head">
         <h3 class="graph-sheet-title">{{ title }}</h3>
-        <button type="button" class="graph-sheet-close" aria-label="閉じる" @click="emit('close')">
+        <button data-assistant-feature type="button" class="graph-sheet-close" aria-label="閉じる" @click="emit('close')">
           ×
         </button>
       </div>

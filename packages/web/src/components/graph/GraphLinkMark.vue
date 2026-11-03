@@ -87,7 +87,7 @@ function onKeydown(ev: KeyboardEvent): void {
       <span class="graph-mark-kind">{{ kindName }}</span>
       <span v-if="status" class="graph-mark-status">{{ status }}</span>
     </span>
-    <button
+    <button data-assistant-feature
       v-if="!readOnly"
       type="button"
       class="graph-mark-settings"

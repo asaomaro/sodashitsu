@@ -129,7 +129,7 @@ function dismiss(id: number): void {
            4 秒で消えるので実害が無かったが、**消えないトーストはキーボードで片付けられる必要がある**。
            本体のクリックは「消す」なので、ボタン側は `.stop` で食い止める。 -->
       <button data-assistant-action v-for="a in t.actions" :key="a.label" type="button" class="toast-action" @click.stop="a.run()">{{ a.label }}</button>
-      <button v-if="t.kind === 'sticky'" type="button" class="toast-close" aria-label="閉じる" @click.stop="dismiss(t.id)">×</button>
+      <button data-assistant-feature v-if="t.kind === 'sticky'" type="button" class="toast-close" aria-label="閉じる" @click.stop="dismiss(t.id)">×</button>
     </div>
   </div>
 </template>

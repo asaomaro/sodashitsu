@@ -160,10 +160,10 @@ onBeforeUnmount(() => touchScroll?.dispose());
 <template>
   <div class="mobile-shell" :style="{ height: `${viewportHeight}px` }">
     <header class="mobile-shell-bar">
-      <button type="button" class="mobile-shell-title" @click="showPicker = true">
+      <button data-assistant-feature type="button" class="mobile-shell-title" @click="showPicker = true">
         {{ workspaceLabel }} / {{ tabLabel }}
       </button>
-      <button
+      <button data-assistant-feature
         type="button"
         class="mobile-shell-fit-btn"
         :aria-pressed="fitEnabled"
@@ -171,7 +171,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
       >
         この端末に合わせる
       </button>
-      <button
+      <button data-assistant-feature
         type="button"
         class="mobile-shell-keyboard-btn"
         :aria-pressed="showKeyboard"
@@ -187,7 +187,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
       <!-- 通知のベル（20261005-notify-bell）。応答せずに閉じた知らせの件数。モバイルにはサイドバーが無いので、ここが入口。 -->
       <NotificationBell variant="mobile" />
       <details><summary>{{view.screen==='schedule'?'予約':view.screen==='history'?'セッション履歴':view.screen==='connections'?'外部接続':view.screen==='resources'?'リソースモニター':'その他'}} ▾</summary><button @click="view.setScreen('schedule')">予約</button><button @click="view.setScreen('history')">セッション履歴</button><button @click="view.setScreen('connections')">外部接続</button><button @click="view.setScreen('resources')">リソースモニター</button></details>
-      <button
+      <button data-assistant-feature
         v-if="panelCount > 0"
         type="button"
         class="mobile-shell-display-btn"
@@ -196,7 +196,7 @@ onBeforeUnmount(() => touchScroll?.dispose());
       >
         表示{{ panelCount }}
       </button>
-      <button
+      <button data-assistant-feature
         v-if="tabPanelCount > 0"
         type="button"
         @click="
@@ -206,8 +206,8 @@ onBeforeUnmount(() => touchScroll?.dispose());
       >
         タブの表示{{ tabPanelCount }}
       </button>
-      <button type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
-      <button
+      <button data-assistant-feature type="button" class="mobile-shell-graph-btn" @click="view.openGraph()">連携</button>
+      <button data-assistant-feature
         type="button"
         class="mobile-shell-settings-btn"
         @click="view.openDialogWithContext({ kind: 'settings' })"

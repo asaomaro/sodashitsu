@@ -77,9 +77,9 @@ const injectPrefix = (): void => {
 
 <template>
   <div class="extra-keys" role="toolbar" aria-label="追加キー">
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('Escape')">Esc</button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('Tab')">Tab</button>
-    <button
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('Escape')">Esc</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('Tab')">Tab</button>
+    <button data-assistant-feature
       type="button"
       class="extra-keys-btn"
       :class="{ 'extra-keys-btn-active': ctrlState !== 'off' }"
@@ -90,7 +90,7 @@ const injectPrefix = (): void => {
     >
       Ctrl
     </button>
-    <button
+    <button data-assistant-feature
       type="button"
       class="extra-keys-btn"
       :class="{ 'extra-keys-btn-active': altState !== 'off' }"
@@ -101,13 +101,13 @@ const injectPrefix = (): void => {
     >
       Alt
     </button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowUp')">↑</button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowDown')">↓</button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowLeft')">←</button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowRight')">→</button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('PageUp')">PgUp</button>
-    <button type="button" class="extra-keys-btn" @click="injectSimpleKey('PageDown')">PgDn</button>
-    <button type="button" class="extra-keys-btn" @click="injectPrefix">Prefix</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowUp')">↑</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowDown')">↓</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowLeft')">←</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('ArrowRight')">→</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('PageUp')">PgUp</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectSimpleKey('PageDown')">PgDn</button>
+    <button data-assistant-feature type="button" class="extra-keys-btn" @click="injectPrefix">Prefix</button>
   </div>
 </template>
 
