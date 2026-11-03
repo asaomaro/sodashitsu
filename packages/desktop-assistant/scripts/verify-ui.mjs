@@ -19,6 +19,7 @@ const files = new Set([
   "tool-window.js",
   "window.js",
   "sections.js",
+  "appearance.js",
   "file-inputs.js",
   "reminder-notices.js",
   "bubble.js",
@@ -216,10 +217,13 @@ try {
       onDraft:callback=>{window.draftCallback=callback;return()=>{};},
       consumeDraft:async input=>window.calls.push(["consume-draft",input]),
       draftMessage:async input=>{window.calls.push(["draft-message",input]);await window.deliverToolDraft({revision:(window.mockDraftRevision=(window.mockDraftRevision||0)+1),text:input.text});},
+      appearanceState:async()=>({revision:1,mode:window.preferences.appearance??"dark"}),
+      onAppearance:callback=>{window.appearanceCallback=state=>{window.appearanceRevision=state.revision;callback(state);};return()=>{};},
       read: async () => window.preferences,
       save: async (preferences) => {
         window.calls.push(["save", preferences]);
         window.preferences = preferences;
+        window.appearanceCallback?.({revision:(window.appearanceRevision??1)+1,mode:preferences.appearance??"dark"});
         return preferences;
       },
       open: async () => window.calls.push(["open"]),
@@ -879,6 +883,29 @@ try {
     assert.deepEqual(await other.evaluate(()=>window.calls.at(-1)),["send-message",{revision,instanceId:actorId,text:`${kind}への返答`}]);
   }
   await other.close();
+  const appearancePage=await context.newPage();appearancePage.on("pageerror",error=>errors.push(String(error)));
+  await appearancePage.goto(`${origin}/settings.html`);
+  await expect(appearancePage.locator("#appearance")).toHaveValue("dark");
+  await appearancePage.locator("#appearance").selectOption("light");
+  await appearancePage.locator('button[type="submit"]').first().click();
+  await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
+  assert.equal(await appearancePage.evaluate(()=>getComputedStyle(document.querySelector(".assistant-card")).backgroundColor),"rgb(248, 245, 236)");
+  if(process.env.SODA_ASSISTANT_LIGHT_SCREENSHOT)await appearancePage.screenshot({path:process.env.SODA_ASSISTANT_LIGHT_SCREENSHOT});
+  await appearancePage.locator("#appearance").selectOption("system");
+  await appearancePage.locator('button[type="submit"]').first().click();
+  await appearancePage.emulateMedia({colorScheme:"dark"});
+  await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","dark");
+  await appearancePage.emulateMedia({colorScheme:"light"});
+  await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
+  await appearancePage.locator("#appearance").selectOption("dark");await appearancePage.locator('button[type="submit"]').first().click();
+  await appearancePage.emulateMedia({colorScheme:"light"});await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","dark");
+  await appearancePage.evaluate(()=>window.appearanceCallback({revision:1,mode:"light"}));await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","dark");
+  for(const role of ["bubble","notice","tools","panel","character"]){
+    await appearancePage.goto(`${origin}/${role}.html`);await appearancePage.evaluate(()=>window.appearanceCallback({revision:2,mode:"light"}));
+    await expect(appearancePage.locator("html")).toHaveAttribute("data-assistant-theme","light");
+  }
+  await appearancePage.close();assert.deepEqual(errors,[]);
+  console.log("PASS: assistant normal/dark/system preferences, live OS changes, stale revisions, and every local window");
   await context.close();
   console.log("generated Copilot and Antigravity bubble text and pinned reply PASS");
 } finally {

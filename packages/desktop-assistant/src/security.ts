@@ -33,6 +33,7 @@ export function authorizeLocalSender(
 ): boolean {
   if (!sender.mainFrame || !sender.current || localRole(sender.frameUrl) !== sender.role)
     return false;
+  if(action==="appearance-state")return true;
   if (sender.role === "panel") return action === "window-action" || action === "window-resize" || action === "window-state";
   if (action === "read" || action === "settings" || action === "open" || action === "chat")
     return true;

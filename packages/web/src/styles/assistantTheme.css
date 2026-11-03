@@ -1,0 +1,45 @@
+/* The assistant palettes also style controls; other themes keep their own controls. */
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) {
+  --soda-assistant-scroll-track: #e5dcc6;
+  --soda-assistant-field-bg: #fffdf8;
+  accent-color: var(--soda-accent);
+  scrollbar-color: var(--soda-accent) var(--soda-assistant-scroll-track);
+  scrollbar-width: thin;
+}
+:root[data-theme="sodashitsu-assistant-dark"] { --soda-assistant-scroll-track: #23364d;--soda-assistant-field-bg: #23364d; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) * {
+  scrollbar-color: var(--soda-accent) var(--soda-assistant-scroll-track);
+  scrollbar-width: thin;
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(button, input[type="button"], input[type="submit"]) {
+  background: var(--soda-accent);
+  color: var(--soda-accent-fg);
+  border-color: var(--soda-accent);
+  border-radius: 8px;
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--soda-accent), var(--soda-accent-fg) 10%);
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) button:is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"]) {
+  box-shadow: inset 0 0 0 2px var(--soda-accent-fg);
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) .settings-switch[aria-checked="true"] .settings-mark {
+  background: var(--soda-accent-fg);
+  color: var(--soda-accent);
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) button:focus-visible {
+  outline: 2px solid var(--soda-fg);
+  outline-offset: 2px;
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"])) {
+  background: var(--soda-assistant-field-bg);
+  color: var(--soda-fg);
+  border-color: var(--soda-menu-border);
+  border-radius: 8px;
+}
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) ::-webkit-scrollbar { width:8px;height:8px; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) ::-webkit-scrollbar-track { background:var(--soda-assistant-scroll-track);border-radius:8px; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) ::-webkit-scrollbar-thumb { background:var(--soda-accent);border:2px solid var(--soda-assistant-scroll-track);border-radius:8px; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) ::-webkit-scrollbar-button { display:none; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) ::-webkit-scrollbar-corner { background:transparent; }
+:root:is([data-theme="sodashitsu-assistant"], [data-theme="sodashitsu-assistant-dark"]) .xterm .scrollbar > .slider { background:var(--soda-accent) !important;border-radius:8px; }

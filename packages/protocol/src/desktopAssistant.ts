@@ -97,6 +97,7 @@ export const DesktopAssistantPreferences = z
     enabled: z.boolean().default(false),
     agentProfiles: AssistantAgentProfiles.default(AssistantAgentProfiles.parse({})),
     mode: z.enum(["character", "tray"]).default("character"),
+    appearance: z.enum(["light", "dark", "system"]).default("dark"),
     characterId: AssistantCharacterId.default("captain-female"),
     serverOrigin: Origin.default("http://127.0.0.1:7780"),
     launchAtLogin: z.boolean().default(false),

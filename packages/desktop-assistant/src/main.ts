@@ -80,6 +80,7 @@ const allowedAssets = new Map([
   ["/tools.html", "text/html"],
   ["/tool-window.js", "text/javascript"],
   ["/window.js", "text/javascript"],
+  ["/appearance.js", "text/javascript"],
   ["/sections.js", "text/javascript"],
   ["/file-inputs.js", "text/javascript"],
   ["/reminder-notices.js", "text/javascript"],
@@ -182,6 +183,7 @@ let characterNotificationSeq=0;
 let automaticNoticeEpoch = 0;
 let compact: BrowserWindow | null = null;
 let compactPayload: { id?: string; title: string; message: string } | null = null;
+let appearanceRevision=0,appearanceMode="dark";
 let compactRevision = 0;
 let compactHeight = 220;
 let latestNotification: {seq:number;id?:string;title:string;message:string}|null=null;
@@ -899,6 +901,7 @@ const adapter: NativeAdapter = {
     character = null;
   },
   tray(preferences) {
+    if(appearanceMode!==preferences.appearance){appearanceMode=preferences.appearance;++appearanceRevision;for(const {window} of localWindows.values())if(!window.isDestroyed())window.webContents.send("assistant:appearance-changed",{revision:appearanceRevision,mode:appearanceMode});}
     bubbleResize = null;
     updateBackend(preferences);
     if (bubble && !bubble.isDestroyed())
@@ -1021,6 +1024,7 @@ function screenshotPermission(
 }
 function registerIpc(): void {
   for (const action of [
+    "appearance-state",
     "read",
     "save",
     "open",
@@ -1167,6 +1171,7 @@ function registerIpc(): void {
         }
         return chromeState(owner.window);
       }
+      if(action==="appearance-state")return{revision:appearanceRevision,mode:controller.preferences.appearance};
       if (action === "read") return controller.preferences;
       if (action === "inbox") return inbox();
       if (action === "voice-speakers") {

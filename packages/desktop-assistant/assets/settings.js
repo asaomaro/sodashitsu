@@ -1,6 +1,6 @@
 "use strict";
 let current;
-const fields = ["enabled", "mode", "characterId", "characterSize", "serverOrigin", "reducedMotion", "followSystemMotion", "idleFloating", "iconRotation", "mute", "voiceEnabled", "voiceFollowCharacter", "voiceCoreVersion", "voiceProvider", "voicevoxOrigin", "voicevoxStyleId", "transcriptionEnabled", "transcriptionProvider", "transcriptionOrigin", "ocrEnabled", "ocrProvider", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications", "quietFullscreen"];
+const fields = ["enabled", "mode", "appearance", "characterId", "characterSize", "serverOrigin", "reducedMotion", "followSystemMotion", "idleFloating", "iconRotation", "mute", "voiceEnabled", "voiceFollowCharacter", "voiceCoreVersion", "voiceProvider", "voicevoxOrigin", "voicevoxStyleId", "transcriptionEnabled", "transcriptionProvider", "transcriptionOrigin", "ocrEnabled", "ocrProvider", "ocrExecutable", "ocrLanguage", "allowPluginCharacters", "allowPluginViews", "allowPluginActions", "remoteNotifications", "quietFullscreen"];
 const status = document.getElementById("status");
 function display(preferences) {
  current = preferences;
@@ -9,7 +9,7 @@ function display(preferences) {
   const element = document.getElementById(key);
   if (element.type === "checkbox") element.checked = (key === "followSystemMotion" || key === "iconRotation" || key === "voiceFollowCharacter") ? preferences[key] !== false : preferences[key];
   else {
-   const defaults={voiceProvider:"system",voicevoxOrigin:"http://127.0.0.1:50021",voicevoxStyleId:2,ocrProvider:"agent"};
+   const defaults={appearance:"dark",voiceProvider:"system",voicevoxOrigin:"http://127.0.0.1:50021",voicevoxStyleId:2,ocrProvider:"agent"};
    const value=preferences[key]??defaults[key]??"";
    if(key==="voiceCoreVersion"&&value&&!Array.from(element.options).some(o=>o.value===value)){const o=document.createElement("option");o.value=value;o.textContent=value;element.append(o);}
    if(key==="voicevoxStyleId"&&!Array.from(element.options).some(o=>o.value===String(value))){const o=document.createElement("option");o.value=String(value);o.textContent=`保存済みの声（${value}）`;element.append(o);}

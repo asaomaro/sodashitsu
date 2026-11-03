@@ -58,3 +58,10 @@ it("restores model/effort profiles from the actual preferences file", async () =
  await new PreferencesFile(path).write({agentProfiles:profiles});
  expect((await new PreferencesFile(path).read()).agentProfiles).toMatchObject(profiles);
 });
+
+it("keeps existing dark appearance and persists the system appearance choice",async()=>{
+ const {path}=await fixture(),file=new PreferencesFile(path);
+ expect((await file.read()).appearance).toBe("dark");
+ await file.write({appearance:"system"});expect((await file.read()).appearance).toBe("system");
+ expect(()=>DesktopAssistantPreferences.parse({appearance:"arbitrary"})).toThrow();
+});

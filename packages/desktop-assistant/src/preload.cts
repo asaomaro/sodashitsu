@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld(
     draftState:()=>ipcRenderer.invoke("assistant:draft-state"),
     draftMessage:(input:unknown)=>ipcRenderer.invoke("assistant:draft-message",input),
     onDraft:(callback:(state:unknown)=>void)=>{const receive=(_event:unknown,state:unknown)=>callback(state);ipcRenderer.on("assistant:draft-changed",receive);return()=>ipcRenderer.removeListener("assistant:draft-changed",receive);},
+    appearanceState:()=>ipcRenderer.invoke("assistant:appearance-state"),
+    onAppearance:(callback:(state:unknown)=>void)=>{const receive=(_event:unknown,state:unknown)=>callback(state);ipcRenderer.on("assistant:appearance-changed",receive);return()=>ipcRenderer.removeListener("assistant:appearance-changed",receive);},
     read: () => ipcRenderer.invoke("assistant:read"),
     save: (preferences: unknown) => ipcRenderer.invoke("assistant:save", preferences),
     open: () => ipcRenderer.invoke("assistant:open"),

@@ -1733,3 +1733,17 @@ it("accepts tools-only bounded media imports and rejects stale OCR/audio context
  const minimized=vi.spyOn(tools,"isMinimized").mockReturnValue(true);await expect(audio(local,{...request,revision:current.revision,context:current.transcriptionContext})).rejects.toThrow("開いて");await expect(upload(local,{revision:image.state.revision,bytes})).rejects.toThrow("開いて");minimized.mockRestore();
  tools.hide();await expect(audio(local,{...request,revision:current.revision,context:current.transcriptionContext})).rejects.toThrow("開いて");tools.close();
 });
+
+it("shares only the saved appearance mode with local windows and broadcasts mode changes",async()=>{
+ const settings=fixture.windows.find(w=>!w.destroyed&&w.url.endsWith("settings.html"))!,local={sender:settings.webContents,senderFrame:settings.webContents.mainFrame};
+ const save=fixture.handlers.get("assistant:save")!,state=fixture.handlers.get("assistant:appearance-state")!;
+ await save(local,{enabled:true,mode:"tray",appearance:"light"});
+ const first=await state(local) as {revision:number;mode:string};expect(first).toEqual({revision:expect.any(Number),mode:"light"});
+ await fixture.handlers.get("assistant:tools-open")!(local);const tools=fixture.windows.at(-1)!;await vi.waitFor(()=>expect(tools.isVisible()).toBe(true));
+ const toolEvent={sender:tools.webContents,senderFrame:tools.webContents.mainFrame};expect(await state(toolEvent)).toEqual(first);
+ await save(local,{enabled:true,mode:"tray",appearance:"system"});
+ expect(tools.webContents.send).toHaveBeenCalledWith("assistant:appearance-changed",{revision:first.revision+1,mode:"system"});
+ expect(await state(toolEvent)).toEqual({revision:first.revision+1,mode:"system"});
+ await expect(state({sender:tools.webContents,senderFrame:{url:"https://untrusted.test/"}})).rejects.toThrow("許可");
+ tools.close();
+});
