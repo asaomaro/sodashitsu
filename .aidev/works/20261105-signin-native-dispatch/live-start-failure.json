@@ -1,0 +1,43 @@
+{
+  "ok": false,
+  "message": "Controller failed: control-signin-service.ps1 Signin controller could not verify installation, run evidence, or the requested transition. Inspect the dedicated run/admin journals; do not reset keys, trust, or replay an unknown request.\r\n",
+  "steps": [
+    {
+      "phase": "controller-start",
+      "pid": 9900,
+      "tool": "control-signin-service.ps1",
+      "startedAt": "2026-11-04T14:57:27.3770972Z"
+    },
+    {
+      "receipt": {
+        "state": "stopped",
+        "journal": "initial"
+      },
+      "phase": "before"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 28168,
+      "tool": "control-signin-admin.ps1",
+      "startedAt": "2026-11-04T14:57:28.1616813Z"
+    },
+    {
+      "phase": "prepare",
+      "operation": "initialize",
+      "receipt": {
+        "state": "pending",
+        "nonce": "edc16075-8f93-4257-a130-80a6f9e971fa",
+        "cipherSha256": "b9559c70b4cc0eacc0c6a8941a626614dcfb7868006e2b688c38ec200ee03085",
+        "expiresAt": 1793804368823,
+        "operation": "initialize"
+      }
+    },
+    {
+      "phase": "controller-start",
+      "pid": 29816,
+      "tool": "control-signin-service.ps1",
+      "startedAt": "2026-11-04T14:57:28.9646877Z"
+    }
+  ],
+  "at": "2026-11-04T14:57:35.0168150Z"
+}

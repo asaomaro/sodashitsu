@@ -1,0 +1,12 @@
+{
+  "id": "abaed62f-f538-4814-859d-b97b9f0d3d7c",
+  "status": "exited",
+  "stdout": "signin_native_service_name_lifecycle_and_failure_passed\r\nsignin_host_generated_environment_job_descendants_and_revocation_passed\r\nsignin_native_closed_roles_generated_pass\r\nsignin_presence_generated_readonly_expiry_and_commands_passed\r\nsignin_worker_generated_data_and_abi_passed\r\nsignin_native_compiled_no_execution\r\nsignin_native_compiled_staging_only\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

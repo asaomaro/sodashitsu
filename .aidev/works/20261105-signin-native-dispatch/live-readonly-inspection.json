@@ -1,0 +1,57 @@
+{
+  "at": "2026-11-04T15:10:25.1815811Z",
+  "changedServiceOrState": false,
+  "ok": true,
+  "inventory": {
+    "admin": {
+      "directory": false,
+      "name": "admin.pending",
+      "sha256": "b9559c70b4cc0eacc0c6a8941a626614dcfb7868006e2b688c38ec200ee03085",
+      "length": 780
+    },
+    "runtime": {},
+    "runs": {
+      "directory": false,
+      "name": "intent.pending",
+      "sha256": "0165b97993dfda3dde25672f48f4413ddd67ee9377ac600b2f1e0d78ba2d7528",
+      "length": 1204
+    },
+    "slot": [
+      {
+        "directory": true,
+        "name": "admin",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "runs",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "runtime",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": false,
+        "name": "quiescence.lock",
+        "sha256": "8de0b3c47f112c59745f717a626932264c422a7563954872e237b223af4ad643",
+        "length": 1
+      }
+    ]
+  },
+  "scm": {
+    "State": "Stopped",
+    "StartMode": "Manual",
+    "ProcessId": 0,
+    "ExitCode": 0,
+    "ServiceSpecificExitCode": 0
+  },
+  "status": {
+    "state": "stopped",
+    "journal": "pending"
+  }
+}

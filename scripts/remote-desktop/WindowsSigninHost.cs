@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.AccessControl;
-using System.ServiceProcess;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
@@ -90,20 +90,79 @@ public static class SodaDesktopSigninHost {
     internal static void WaitAfterCompletion(SodaDesktopSigninRunSession run,WaitHandle stop,Func<bool> retained){
         if(run==null||stop==null||retained==null)throw Failure();if(!run.Admin)while(!stop.WaitOne(250)&&retained()){}if(!retained())throw Failure();
     }
-    sealed class Service:ServiceBase {
-        readonly ManualResetEvent stop=new ManualResetEvent(false);Thread thread;
-        internal Service(){ServiceName="SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(Owner);CanStop=true;CanShutdown=true;AutoLog=false;}
-        protected override void OnStart(string[] args){
-            if(args==null||args.Length!=0||!Environment.Is64BitProcess||!SodaDesktopSigninVault.SystemPrimary()||thread!=null)throw Failure();
-            thread=new Thread(()=>{try{SodaDesktopSigninHost.Run(stop);}catch{ExitCode=1;}finally{ThreadPool.QueueUserWorkItem(_=>{try{Stop();}catch{}});}});thread.IsBackground=true;thread.Start();
+    // SCM supports the full fixed 82-character name; ServiceBase caps names at
+    // 80. Keep the installed identity and use the native service dispatcher.
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]internal delegate void ServiceMain(uint count,IntPtr arguments);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]internal delegate uint ServiceHandler(uint control,uint eventType,IntPtr data,IntPtr context);
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]internal struct ServiceEntry {
+        [MarshalAs(UnmanagedType.LPWStr)]internal string Name;internal ServiceMain Main;
+    }
+    [StructLayout(LayoutKind.Sequential)]internal struct ServiceStatus {
+        internal uint Type,State,Accepted,Exit,Specific,Checkpoint,WaitHint;
+    }
+    internal delegate bool StatusWriter(IntPtr handle,ref ServiceStatus status);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern bool StartServiceCtrlDispatcherW([In]ServiceEntry[] entries);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern IntPtr RegisterServiceCtrlHandlerExW(string name,ServiceHandler handler,IntPtr context);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",ExactSpelling=true,SetLastError=true)]static extern bool SetServiceStatus(IntPtr handle,ref ServiceStatus status);
+    internal sealed class StopDeadline:IDisposable {
+        readonly object gate=new object();IDisposable timer;bool ended;
+        internal StopDeadline(Func<Action,IDisposable> schedule,Action expire){
+            timer=schedule(()=>{lock(gate){if(ended)return;ended=true;expire();}});
         }
-        protected override void OnStop(){stop.Set();if(thread!=null&&Thread.CurrentThread!=thread&&!thread.Join(25000))Environment.FailFast("Signin host could not stop");}
-        protected override void OnShutdown(){OnStop();}
-        protected override void Dispose(bool disposing){if(disposing){OnStop();stop.Dispose();}base.Dispose(disposing);}
+        public void Dispose(){lock(gate){ended=true;if(timer!=null){timer.Dispose();timer=null;}}}
+    }
+    internal sealed class Service:IDisposable {
+        readonly ManualResetEvent stop=new ManualResetEvent(false);readonly object gate=new object();
+        readonly Func<string,ServiceHandler,IntPtr> register;readonly StatusWriter publish;readonly Action<WaitHandle> run;
+        readonly ServiceMain entry;readonly ServiceHandler handler;internal readonly string Name;readonly Func<Action,IDisposable> schedule;StopDeadline deadline;
+        ServiceStatus status;IntPtr handle;bool entered,disposed;internal int ExitCode;
+        internal Service():this(null,null,null){}
+        // Generated checks replace only native SCM calls and the protected Host.
+        internal Service(Func<string,ServiceHandler,IntPtr> register,StatusWriter publish,Action<WaitHandle> run,Func<Action,IDisposable> schedule=null){
+            Name="SodaDesktopSignin-"+SodaDesktopSigninPackage.Slot(Owner);
+            this.register=register??((name,callback)=>RegisterServiceCtrlHandlerExW(name,callback,IntPtr.Zero));
+            this.publish=publish??SetServiceStatus;this.run=run??SodaDesktopSigninHost.Run;
+            this.schedule=schedule??new Func<Action,IDisposable>(action=>new System.Threading.Timer(_=>action(),null,25000,Timeout.Infinite));entry=Entry;handler=Control;
+        }
+        void Report(uint state){
+            // Caller holds gate. STOPPED is final and published only after Run
+            // has returned with every child/job/package lease released.
+            if(status.State==1)return;
+            if(state==1&&deadline!=null){deadline.Dispose();deadline=null;}
+            status=new ServiceStatus{Type=0x10,State=state,Accepted=state==4?5u:0u,Exit=ExitCode==0?0u:1066u,Specific=ExitCode==0?0u:1u,Checkpoint=state==2||state==3?1u:0u,WaitHint=state==2||state==3?30000u:0u};
+            if(!publish(handle,ref status)){stop.Set();Environment.FailFast("Signin service could not report its state");}
+        }
+        internal uint Control(uint control,uint eventType,IntPtr data,IntPtr context){
+            try{lock(gate){
+                if(disposed||handle==IntPtr.Zero||status.State==1)return 120;
+                if(control==4){Report(status.State);return 0;}
+                if(control!=1&&control!=5)return 120;
+                if(status.State!=4&&status.State!=3)return 120;
+                if(status.State==4)deadline=new StopDeadline(schedule,()=>Environment.FailFast("Signin host could not stop within deadline"));
+                stop.Set();if(status.State==4)Report(3);return 0;
+            }}catch{Environment.FailFast("Signin service control failed");return 120;}
+        }
+        internal void Entry(uint count,IntPtr arguments){
+            bool admitted=false;
+            try{
+                lock(gate){if(entered||disposed)throw Failure();entered=true;admitted=true;handle=register(Name,handler);if(handle==IntPtr.Zero)throw Failure();Report(2);}
+                // argv[0] is the service name. No caller start arguments, paths,
+                // credentials or command mode are accepted by this service.
+                if(count!=1||arguments==IntPtr.Zero||Marshal.PtrToStringUni(Marshal.ReadIntPtr(arguments))!=Name)throw Failure();
+                lock(gate){Report(4);}run(stop);
+            }catch{ExitCode=1;}
+            finally{lock(gate){if(admitted&&handle!=IntPtr.Zero)Report(1);}if(ExitCode!=0)Environment.ExitCode=1;}
+        }
+        internal void Dispatch(){
+            var table=new[]{new ServiceEntry{Name=Name,Main=entry},new ServiceEntry()};
+            try{if(!StartServiceCtrlDispatcherW(table)||ExitCode!=0)throw Failure();}
+            finally{GC.KeepAlive(entry);GC.KeepAlive(handler);GC.KeepAlive(table);}
+        }
+        public void Dispose(){lock(gate){if(disposed)return;if(entered&&handle!=IntPtr.Zero&&status.State!=1)Environment.FailFast("Signin dispatcher returned before cleanup");disposed=true;if(deadline!=null)deadline.Dispose();stop.Dispose();}}
     }
     public static void Main(string[] args){
         // No --console, executable path, credentials, SCM arguments or repair mode.
         if(args==null||args.Length!=0||!Environment.Is64BitProcess||!SodaDesktopSigninVault.SystemPrimary())throw Failure();
-        SodaDesktopSigninPackage.OwnerSid(Owner);ServiceBase.Run(new Service());
+        SodaDesktopSigninPackage.OwnerSid(Owner);using(var service=new Service())service.Dispatch();
     }
 }

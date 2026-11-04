@@ -1,0 +1,12 @@
+{
+  "id": "0c82aa5b-a612-45ec-ac46-763c5879962f",
+  "status": "exited",
+  "stdout": "signin_native_service_name_lifecycle_and_failure_passed\r\nsignin_host_generated_environment_job_descendants_and_revocation_passed\r\n",
+  "stderr": "Add-Type : c:\\Users\\<owner>\\AppData\\Local\\Temp\\jb3dx0ye.0.cs(1135) : 'Timer' は、'System.Threading.Timer' と 'System.Wind\r\nows.Forms.Timer'' 間のあいまいな参照です。\r\nc:\\Users\\<owner>\\AppData\\Local\\Temp\\jb3dx0ye.0.cs(1134) :             this.publish=publish??SetServiceStatus;this.run=\r\nrun??SodaDesktopSigninHost.Run;\r\nc:\\Users\\<owner>\\AppData\\Local\\Temp\\jb3dx0ye.0.cs(1135) : >>>             this.schedule=schedule??new Func<Action,IDis\r\nposable>(action=>new Timer(_=>action(),null,25000,Timeout.Infinite));entry=Entry;handler=Control;\r\nc:\\Users\\<owner>\\AppData\\Local\\Temp\\jb3dx0ye.0.cs(1136) :         }\r\nAt C:\\Users\\<owner>\\AppData\\Local\\sodashitsu\\signin-layout-check-20261104\\build-signin-host.ps1:16 char:5\r\n+     Add-Type -TypeDefinition $combined -CompilerParameters $parameter ...\r\n+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : InvalidData: (Microsoft.Power...peCompilerError:AddTypeCompilerError) [Add-Type], Except \r\n   ion\r\n    + FullyQualifiedErrorId : SOURCE_CODE_ERROR,Microsoft.PowerShell.Commands.AddTypeCommand\r\n \r\nService compile-only validation failed\r\nAt C:\\Users\\<owner>\\AppData\\Local\\sodashitsu\\signin-layout-check-20261104\\validate-signin-host.ps1:28 char:29\r\n+ ... ($LASTEXITCODE -ne 0){throw 'Service compile-only validation failed'}\r\n+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Service compile-only validation failed:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Service compile-only validation failed\r\n \r\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

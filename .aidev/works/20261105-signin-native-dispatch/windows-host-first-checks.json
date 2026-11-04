@@ -1,0 +1,12 @@
+{
+  "id": "8c5d34a7-cd4a-4eab-91c0-b24593bf7607",
+  "status": "exited",
+  "stdout": "signin_native_service_name_lifecycle_and_failure_passed\r\nsignin_host_generated_environment_job_descendants_and_revocation_passed\r\n",
+  "stderr": "Add-Type : c:\\Users\\<owner>\\AppData\\Local\\Temp\\wwczkcfu.0.cs(1135) : 演算子 '??' を 'System.Func<System.Action,System.IDis\r\nposable>' と 'ラムダ式' 型のオペランドに適用することはできません。\r\nc:\\Users\\<owner>\\AppData\\Local\\Temp\\wwczkcfu.0.cs(1134) :             this.publish=publish??SetServiceStatus;this.run=\r\nrun??SodaDesktopSigninHost.Run;\r\nc:\\Users\\<owner>\\AppData\\Local\\Temp\\wwczkcfu.0.cs(1135) : >>>             this.schedule=schedule??(action=>new Timer(_\r\n=>action(),null,25000,Timeout.Infinite));entry=Entry;handler=Control;\r\nc:\\Users\\<owner>\\AppData\\Local\\Temp\\wwczkcfu.0.cs(1136) :         }\r\nAt C:\\Users\\<owner>\\AppData\\Local\\sodashitsu\\signin-layout-check-20261104\\build-signin-host.ps1:16 char:5\r\n+     Add-Type -TypeDefinition $combined -CompilerParameters $parameter ...\r\n+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : InvalidData: (Microsoft.Power...peCompilerError:AddTypeCompilerError) [Add-Type], Except \r\n   ion\r\n    + FullyQualifiedErrorId : SOURCE_CODE_ERROR,Microsoft.PowerShell.Commands.AddTypeCommand\r\n \r\nService compile-only validation failed\r\nAt C:\\Users\\<owner>\\AppData\\Local\\sodashitsu\\signin-layout-check-20261104\\validate-signin-host.ps1:28 char:29\r\n+ ... ($LASTEXITCODE -ne 0){throw 'Service compile-only validation failed'}\r\n+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Service compile-only validation failed:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Service compile-only validation failed\r\n \r\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

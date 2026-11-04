@@ -110,3 +110,9 @@ SYSTEM専用の鍵・登録情報・管理要求・実行記録は、コード�
 同じ検査結果で完了する場合だけ、`-Action complete -MarkerSha256 <inspectの値>`を指定します。すべての証拠を保持し直して照合し、サービスのowner/DACLを設定・同じhandleで読み戻してからmarkerを除去し、最後にmanualへ変更します。サービスは起動しません。初期SCM ACLで許容する一般ユーザーのquery/interrogate/user-controlは停止中・無効の初回状態だけに限定し、start/change-config/ownership/DACL変更は許可しません。通常のサービス検査の基準は維持します。
 
 marker除去前に失敗すれば、その状態と無効サービスを残します。marker除去後・manual変更前の中断は、従来の`recover-signin-initial.ps1`で照合できます。鍵・trust・登録情報・journalの再生成、未知の配置の削除や採用はしません。
+
+## 固定サービス名のnative起動
+
+固定名は `SodaDesktopSignin-` とowner SIDの64桁SHA-256を組み合わせた82文字です。.NET ServiceBaseの80文字制限を避けるため、登録済みの名前を短縮せずnative SCM dispatcherを使います。サービスへ渡す追加の起動引数は拒否します。stop/shutdownは25秒の停止期限を持ち、全cleanupが終わるまでSTOPPEDを報告しません。
+
+`validate-signin-service-dispatch.ps1 -NegativeControls` は通常権限の生成adapterで名前と起動/停止/失敗を検査します。実SCM・鍵・trustは操作しません。既存の `validate-signin-host.ps1` は子プロセス/Jobと配布用EXE生成を含みます。起動失敗で未確認のpending要求が残った場合は、修正版のEXEを上書きして再送することはできません。要求とjournalを保持して明示的な復旧を行います。
