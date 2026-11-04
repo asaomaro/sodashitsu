@@ -1,0 +1,42 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/desktop/DesktopRelay.test.ts (310 tests | 4 failed | 306 skipped) 738ms
+   × freezes a lost authentication image lane until its terminal control notice: transition 244ms
+   × freezes a lost authentication image lane until its terminal control notice: timeout 164ms
+   × freezes a lost authentication image lane until its terminal control notice: stop 167ms
+   × freezes a lost authentication image lane until its terminal control notice: parent-close 161ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopRelay.test.ts > freezes a lost authentication image lane until its terminal control notice: transition
+ FAIL  src/desktop/DesktopRelay.test.ts > freezes a lost authentication image lane until its terminal control notice: timeout
+ FAIL  src/desktop/DesktopRelay.test.ts > freezes a lost authentication image lane until its terminal control notice: stop
+ FAIL  src/desktop/DesktopRelay.test.ts > freezes a lost authentication image lane until its terminal control notice: parent-close
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/desktop/DesktopRelay.test.ts:750:25
+    748|  if(outcome==="timeout")server.provider.removeAllListeners("close");
+    749|  server.imageLane.fail();
+    750|  expect(server.control).toBe(false);expect(server.imageCloseTimer).toB…
+       |                         ^
+    751|  v.send({type:"control",enabled:true});v.send({type:"input",seq:1,fram…
+    752|  await new Promise<void>(resolve=>{v.ws.once("pong",()=>resolve());v.w…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 306 skipped (310)
+   Start at  21:22:44
+   Duration  2.55s (transform 58%, tests 30%, import 12%)
+
+undefined
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: vitest run src/desktop/DesktopRelay.test.ts -t authentication image lane

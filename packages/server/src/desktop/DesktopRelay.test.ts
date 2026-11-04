@@ -735,6 +735,34 @@ it.each([true,false])("keeps legacy image routing when viewer/provider image cap
  expect(f.startRequests[0]).not.toHaveProperty("imageTicket");expect(v.messages.find(m=>m.type==="ready")).not.toHaveProperty("imageLane");expect(v.messages.some(m=>m.type==="image_ticket")).toBe(false);v.send({type:"stop"});
 });
 
+it.each(["transition","timeout","stop","parent-close"])("freezes a lost authentication image lane until its terminal control notice: %s",async outcome=>{
+ const f=await fixture(true,false,true,true),v=await f.viewer("images");v.send(start);
+ await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ const server=[...(f.relay as any).viewers][0],ticket=v.messages.find(m=>m.type==="image_ticket")!.ticket;
+ const image=new WebSocket(f.endpoint,DESKTOP_IMAGE_LANE_PROTOCOL,{headers:{cookie:"test=ok",origin:f.origin}});image.on("error",()=>{});
+ await new Promise<void>((resolve,reject)=>{image.once("open",resolve);image.once("error",reject);});image.send(JSON.stringify({type:"video_viewer",ticket}));v.send({type:"image_ready"});
+ await expect.poll(()=>server.imageActive).toBe(true);
+ v.send({type:"control",enabled:true});await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ // Hold back the control transport's close observation to exercise the
+ // bounded deadline separately from the real parent-close case.
+ if(outcome==="timeout")server.provider.removeAllListeners("close");
+ server.imageLane.fail();
+ expect(server.control).toBe(false);expect(server.imageCloseTimer).toBeDefined();
+ v.send({type:"control",enabled:true});v.send({type:"input",seq:1,frameSeq:server.seq,input:{kind:"key",code:"F13",down:true}});
+ await new Promise<void>(resolve=>{v.ws.once("pong",()=>resolve());v.ws.ping();});
+ expect(server.control).toBe(false);expect(server.viewerSeq).toBe(0);
+ const emit=(m:unknown)=>server.provider.emit("message",Buffer.from(JSON.stringify(m)),false);
+ emit({type:"control",enabled:true});expect(server.control).toBe(false);
+ emit({type:"session_unlocked",unexpected:true});expect(v.messages.some(m=>m.type==="session_unlocked")).toBe(false);
+ if(outcome==="transition")emit({type:"session_unlocked"});
+ if(outcome==="stop")v.send({type:"stop"});
+ await expect.poll(()=>v.ws.readyState,{timeout:3000}).toBe(WebSocket.CLOSED);
+ expect(server.imageCloseTimer).toBeUndefined();
+ expect(v.messages.filter(m=>m.type==="session_unlocked")).toHaveLength(outcome==="transition"?1:0);
+ expect(v.messages.some(m=>m.type==="error")).toBe(outcome==="timeout");
+ expect(await readFile(f.record,"utf8").catch(()=>"")).not.toContain('"code":"F13"');
+});
+
 it("image channel cannot send controls and losing an active channel closes its parent",async()=>{
  const f=await fixture(),v=await f.viewer("images");v.send(start);await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
  const ticket=v.messages.find(m=>m.type==="image_ticket")!.ticket,server=Array.from((f.relay as any).viewers)[0] as any;

@@ -91,6 +91,7 @@ type Viewer = {
   richRequested?:boolean;richClipboard?:boolean;richGranted?:boolean;clipboardLane?:ReturnType<DesktopVideoLanes["issue"]>;
   nativeAudioRequested?:boolean;nativeAudio?:boolean;requestedNativeAudio?:boolean;
   nativeDatagramsRequested?:boolean;nativeDatagrams?:boolean;
+  imageCloseTimer?:ReturnType<typeof setTimeout>;
   imageLaneRequested?:boolean; imageLane?:ReturnType<DesktopVideoLanes["issue"]>; imageAttached?:boolean; imageViewerReady?:boolean; imageActive?:boolean; receiveImage?:(bytes:Buffer,binary:boolean)=>void;
   cursorRequested?:boolean;
   cursor?:boolean;
@@ -428,6 +429,9 @@ export class DesktopRelay {
       }
       try {
         const rawMessage=JSON.parse(bytes.toString());
+        // A retired authentication image lane must not accept more viewer work
+        // while its authoritative control-channel transition is in flight.
+        if(v.imageCloseTimer){if(rawMessage.type==="stop")this.stop(v);return;}
         if(rawMessage.type==="image_ready"&&Object.keys(rawMessage).length===1){
           if(!v.imageLane||!v.ready)throw Error("Unexpected image acknowledgement");v.imageViewerReady=true;this.activateImages(v);return;
         }
@@ -844,7 +848,17 @@ export class DesktopRelay {
     if(v.imageLaneRequested&&caps.imageLane){
       v.imageLane=this.imageLanes.issue(v.sessionId,v.origin,(bytes,binary)=>v.receiveImage?.(bytes,binary),
         ()=>{v.imageAttached=true;this.activateImages(v);},
-        ()=>{if(!this.viewers.has(v))return;if(v.imageActive){this.send(v.ws,{type:"error",message:"画像の専用接続が切れました。接続し直してください。"});this.stop(v);return;}v.imageAttached=false;if(v.provider)this.send(v.provider,{type:"image_closed"});this.send(v.ws,{type:"image_closed"});});
+        ()=>{if(!this.viewers.has(v))return;if(v.imageActive){
+          const failed=()=>{if(!this.viewers.has(v))return;this.send(v.ws,{type:"error",message:"画像の専用接続が切れました。接続し直してください。"});this.stop(v);};
+          // Provider teardown closes independent sockets. Its image close can
+          // overtake session_unlocked on the control socket. Freeze work now;
+          // only an authenticated terminal notice may authorize a reconnect.
+          if(v.ready&&v.secureDesktop&&!v.elevatedDesktop){
+            v.control=false;this.agents.revoke(v.agent);
+            v.imageCloseTimer=setTimeout(failed,1000);v.imageCloseTimer.unref();
+          }else failed();
+          return;
+        }v.imageAttached=false;if(v.provider)this.send(v.provider,{type:"image_closed"});this.send(v.ws,{type:"image_closed"});});
       this.send(v.ws,{type:"image_ticket",ticket:v.imageLane.viewerTicket});
     }
     await rpc.request("desktop.start", {
@@ -909,6 +923,12 @@ export class DesktopRelay {
           return;
         }
         const v = owner;
+        if(v.imageCloseTimer){
+          if(binary||lane||imageLane)return;
+          if(bytes.length>65536)throw Error("Invalid terminal notice");
+          const terminal=JSON.parse(bytes.toString());
+          if(!(["session_unlocked","lock_screen_changed"].includes(terminal.type)&&Object.keys(terminal).length===1||terminal.type==="unlock_failure"&&Object.keys(terminal).length===2))return;
+        }
         if(imageLane&&(!v.imageActive||!binary||isDesktopMediaChunk(bytes)||isDesktopCursor(bytes)||isDesktopAudio(bytes)))throw Error("Image lane only");
         if (lane) {
           if (!v.videoActive) return;
@@ -1210,6 +1230,7 @@ export class DesktopRelay {
   }
   private stop(v: Viewer): void {
     if (!this.viewers.delete(v)) return;
+    clearTimeout(v.imageCloseTimer);delete v.imageCloseTimer;
     delete v.controlRequests;
     this.agents.revoke(v.agent);
     v.fileLane?.close();
