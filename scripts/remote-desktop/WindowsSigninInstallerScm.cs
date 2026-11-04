@@ -25,9 +25,14 @@ internal sealed class SodaDesktopSigninInstallerScm:IDisposable {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",ExactSpelling=true)]static extern uint SetSecurityInfo(IntPtr handle,int type,uint information,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool GetSecurityDescriptorOwner(IntPtr descriptor,out IntPtr owner,out bool defaulted);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("advapi32.dll",SetLastError=true)]static extern bool GetSecurityDescriptorDacl(IntPtr descriptor,out bool present,out IntPtr dacl,out bool defaulted);
-    static void Secure(IntPtr service){
+    // Win32 SE_OBJECT_TYPE, not System.Security.AccessControl.ResourceType.
+    const int ServiceObjectType=2;
+    internal delegate uint SecurityWriter(IntPtr handle,int kind,uint information,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
+    internal static void Secure(IntPtr service){SecureCore(service,SetSecurityInfo,SodaDesktopSigninServicePolicy.Security);}
+    internal static void SecureCore(IntPtr service,SecurityWriter write,Func<IntPtr,byte[]> read){
+        if(service==IntPtr.Zero||write==null||read==null)throw Failure();
         var descriptor=new RawSecurityDescriptor("O:BAG:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)");byte[] bytes=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(bytes,0);var pinned=GCHandle.Alloc(bytes,GCHandleType.Pinned);
-        try{IntPtr owner,dacl;bool defaulted,present;IntPtr pointer=pinned.AddrOfPinnedObject();if(!GetSecurityDescriptorOwner(pointer,out owner,out defaulted)||!GetSecurityDescriptorDacl(pointer,out present,out dacl,out defaulted)||!present||owner==IntPtr.Zero||dacl==IntPtr.Zero||SetSecurityInfo(service,5,5,owner,IntPtr.Zero,dacl,IntPtr.Zero)!=0)throw Failure();}finally{pinned.Free();}
+        try{IntPtr owner,dacl;bool defaulted,present;IntPtr pointer=pinned.AddrOfPinnedObject();if(!GetSecurityDescriptorOwner(pointer,out owner,out defaulted)||!GetSecurityDescriptorDacl(pointer,out present,out dacl,out defaulted)||!present||owner==IntPtr.Zero||dacl==IntPtr.Zero||write(service,ServiceObjectType,5,owner,IntPtr.Zero,dacl,IntPtr.Zero)!=0)throw Failure();if(!SodaDesktopSigninServicePolicy.Acl(read(service)))throw Failure();}finally{pinned.Free();}
     }
     sealed class Native:Calls {
         readonly string owner;IntPtr manager,service;

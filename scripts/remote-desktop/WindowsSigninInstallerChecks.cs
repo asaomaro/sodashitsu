@@ -17,7 +17,16 @@ public static class SodaDesktopSigninInstallerChecks {
  static SodaDesktopSigninInstaller.Verified Verify(string code,string hash){var source=SodaDesktopSigninInstallSource.Open(code,Owner,hash);return new SodaDesktopSigninInstaller.Verified(source,source.Current);}
  static void Create(string path){if(!SodaDesktopSigninInstallFiles.Absent(path))throw new InvalidOperationException("Generated directory collision");Directory.CreateDirectory(path);}
  static SodaDesktopSigninQuiescence.Pin Barrier(SodaDesktopSigninInstallFiles.Paths paths){return SodaDesktopSigninQuiescence.OpenCore(Path.Combine(paths.Slot,"quiescence.lock"),new[]{paths.Slot},(path,acl)=>true);}
+ static void ServiceSecurity(){
+  foreach(string mode in new[]{"ok","write-failed","bad-readback"}){
+   int writes=0,reads=0;bool failed=false;var handle=new IntPtr(123);
+   var descriptor=new System.Security.AccessControl.RawSecurityDescriptor("O:BAG:BAD:P(A;;GA;;;SY)(A;;GA;;;BA)");var bytes=new byte[descriptor.BinaryLength];descriptor.GetBinaryForm(bytes,0);
+   try{SodaDesktopSigninInstallerScm.SecureCore(handle,(h,kind,info,owner,group,dacl,sacl)=>{writes++;Check(h==handle&&kind==2&&info==5&&owner!=IntPtr.Zero&&dacl!=IntPtr.Zero&&group==IntPtr.Zero&&sacl==IntPtr.Zero,"Native service security request changed");return mode=="write-failed"?5u:0u;},h=>{reads++;Check(h==handle,"Service security readback changed handle");return mode=="bad-readback"?new byte[0]:bytes;});}catch(InvalidOperationException error){if(error.Message=="Native service security request changed")throw;failed=true;}
+   Check(failed==(mode!="ok")&&writes==1&&reads==(mode=="write-failed"?0:1),"Invalid native service ACL was accepted");
+  }
+ }
  public static void Run(){
+  ServiceSecurity();
   byte[] descriptor=SodaDesktopSigninPackageNative.PrivateFileDescriptor();var security=new System.Security.AccessControl.RawSecurityDescriptor(descriptor,0);Check(security.Owner.Value=="S-1-5-32-544"&&SodaDesktopSigninQuiescence.Private(descriptor),"New private file owner or ACL was not explicit");
   // The fixed install root is short; generated .signin/hash/UUID paths must
   // also fit legacy FileStream MAX_PATH on localized user profiles.

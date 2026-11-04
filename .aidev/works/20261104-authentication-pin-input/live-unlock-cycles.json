@@ -1,0 +1,29 @@
+{
+  "recordType": "aggregate of observed browser events and DOM states",
+  "installedUnlockSha256": "6A0D6D41A0AD985FB6AFFF670454C2D41BAB4CDC1C234C7B52D74B0F3509E581",
+  "cycles": [
+    {
+      "sessionUnlockedEvent": true,
+      "automaticNormalReady": true,
+      "normalFrames": 14,
+      "explicitControlGranted": true,
+      "mouseMoveSucceeded": true,
+      "errors": []
+    },
+    {
+      "sessionUnlockedEvent": true,
+      "automaticNormalReady": true,
+      "normalFrames": 26,
+      "explicitControlGranted": true,
+      "mouseMoveSucceeded": true,
+      "errors": []
+    }
+  ],
+  "betweenCycles": {
+    "serverHandoff": false,
+    "manualReconnect": false,
+    "resourceFaultReset": false
+  },
+  "pinSaved": false,
+  "screenshotsRetained": false
+}

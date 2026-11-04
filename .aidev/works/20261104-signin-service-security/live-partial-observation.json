@@ -1,0 +1,24 @@
+{
+  "recordType": "aggregate of observed Windows command outputs",
+  "unlockUpdateSucceeded": true,
+  "signinInstallSucceeded": false,
+  "signinServiceRegistry": {
+    "type": 16,
+    "start": 4
+  },
+  "scQuery": {
+    "state": "STOPPED",
+    "win32ExitCode": 1077,
+    "serviceExitCode": 0
+  },
+  "serviceSecurity": {
+    "ownerIsSystemOrAdmins": true,
+    "ownerIsInstallerUser": false
+  },
+  "applicationError": {
+    "timeUtc": "2026-11-04T13:13:51.1965854Z",
+    "application": "powershell.exe",
+    "exceptionCode": "0xc0000409"
+  },
+  "protectedInitialEvidenceVerifiedByRecovery": false
+}

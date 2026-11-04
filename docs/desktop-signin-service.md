@@ -100,3 +100,13 @@ UTF8ファイルから渡す場合は、Windowsの`cmd.exe /d /c "type operation
 SYSTEM専用の鍵・登録情報・管理要求・実行記録は、コードとは別の`%ProgramFiles%\Sodashitsu\DesktopSigninData\<owner SIDのSHA-256>`へ置きます。専用rootと各owner slotはSYSTEM/Administratorsだけがアクセスできる固定ACLです。コードの更新・退避でstateを移動・再生成しません。
 
 標準ProgramDataの祖先には一般ユーザーの属性変更権限もあるため、現在の祖先検査を緩めずにこの保存先を使います。既存のProgramDataやProgram FilesのACLを修復・変更して通すことはしません。旧`%ProgramData%\sodashitsu\desktop-signin\<owner hash>`がある場合や存在確認ができない場合、導入・更新・復旧・stateアクセスを拒否します。旧stateの自動コピー・削除・別の鍵の自動生成は行いません。既存の旧配置を使う場合は、別途レビューした移行が必要です。
+
+## 初回導入マーカーが残っている場合の明示的な完了
+
+`recover-signin-install.ps1`は、専用サービスの初回登録後に中断し、`install.transition`が残った未起動の配置だけを扱います。管理者で、レビュー済みの同じownerとmanifestを指定します。`-ValidateOnly`はコンパイルだけです。
+
+`-Action inspect`はコード・stateのprivate ACL、canonicalな初回marker、停止/無効の固定サービス構成、同じpackage/barrierに結び付いたinitial journal、空のadmin/runtimeを確認し、markerのSHA256を返します。サービスやmarkerを変更しません。
+
+同じ検査結果で完了する場合だけ、`-Action complete -MarkerSha256 <inspectの値>`を指定します。すべての証拠を保持し直して照合し、サービスのowner/DACLを設定・同じhandleで読み戻してからmarkerを除去し、最後にmanualへ変更します。サービスは起動しません。初期SCM ACLで許容する一般ユーザーのquery/interrogate/user-controlは停止中・無効の初回状態だけに限定し、start/change-config/ownership/DACL変更は許可しません。通常のサービス検査の基準は維持します。
+
+marker除去前に失敗すれば、その状態と無効サービスを残します。marker除去後・manual変更前の中断は、従来の`recover-signin-initial.ps1`で照合できます。鍵・trust・登録情報・journalの再生成、未知の配置の削除や採用はしません。

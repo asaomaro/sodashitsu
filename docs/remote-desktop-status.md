@@ -97,7 +97,7 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
 | マイク転送 | 仮想audio cable。VB-Audio公式Pack45のx64 installer/catalog/sysの署名は確認済み、導入/再起動は未実施。導入後は明示したrender IDだけを転送先へ設定する |
-| サインアウト後の専用接続 | 専用bundle/Native host/manifestを生成してValidateOnly成功。実導入UACはキャンセルとして返った。承認後の導入・鍵/trust・別machine登録・起動・実サインアウト検証が必要 |
+| サインアウト後の専用接続 | 専用bundle/Native hostの生成とValidateOnlyは成功。実導入はサービス登録途中で中断し、無効/停止状態。固定配布物と初回記録を保持した限定復旧を検証中。鍵/trust・別machine登録・起動・実サインアウト検証は未実施 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
 マイク用配布物の取得元・導入条件は[VB-Audio公式](https://vb-audio.com/Cable/)で確認しました。再起動を伴うdriver導入は、動作中の利用者sessionへの影響を確認してから行います。
@@ -107,3 +107,5 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 認証workerの単独Enterと文字入力のdown/upを同じWindows入力要求にまとめる修正を追加し、Windows上で生成scopeの正例・3負例・復元後正例と既存の安全境界検査が成功しました。[検証記録](../.aidev/works/20261104-authentication-input/verification.md)に実装範囲を記載しています。インストール済み補助サービスの管理者更新と、その後の実ロック解除はまだ必要です。
 
 利用者のUAC承認後、sr-pcの補助サービス更新を確認しました。実ロック解除後の明示再接続・通常画像・操作取得・マウス移動と、その後の新規接続は成功しました。今回、入力解放不明による恒久的な再接続拒否は再現していません。ただし解除直後に画像の専用接続が一度切れて手動再接続を要したため、自動再接続と反復安定性は残件です。詳細は上記認証入力の検証記録を参照してください。
+
+PIN末尾の数字も認証専用workerで押下/解放を一括投入する追加修正（6d349156）を補助サービスへ適用しました。sr-pcで実ロック解除→通常画面の自動再接続→明示的な操作権取得・マウス移動を2回続けて確認し、手動再接続や途中のserver再起動は不要でした。[追加検証記録](../.aidev/works/20261104-authentication-pin-input/verification.md)に範囲を記載しています。長時間・別PCでの安定性確認は引き続き残ります。

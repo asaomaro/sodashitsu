@@ -27,10 +27,22 @@ public static class SodaDesktopSigninServicePolicy {
             return system&&admins;
         }catch{return false;}
     }
+    // Only for a verified never-started, disabled initial installation. The
+    // default SCM ACL can grant query/user-control rights but cannot grant an
+    // unprivileged principal start, configuration, ownership or DACL changes.
+    internal static bool InitialAcl(byte[] bytes){
+        try{var d=new RawSecurityDescriptor(bytes,0);if(d.Owner==null||(d.Owner.Value!="S-1-5-18"&&d.Owner.Value!="S-1-5-32-544")||d.DiscretionaryAcl==null||(d.ControlFlags&ControlFlags.DiscretionaryAclPresent)==0)return false;bool system=false,admins=false;
+            foreach(GenericAce raw in d.DiscretionaryAcl){var a=raw as CommonAce;if(a==null||a.IsCallback||a.AceQualifier!=AceQualifier.AccessAllowed||(a.AceFlags&AceFlags.InheritOnly)!=0)return false;uint mask=unchecked((uint)a.AccessMask);string sid=a.SecurityIdentifier.Value;
+                if(sid=="S-1-5-18"){system|=mask!=0;continue;}if(sid=="S-1-5-32-544"){admins|=(mask&0x10000000)!=0||(mask&0x000f01ff)==0x000f01ff;continue;}if((mask&~0x0002018du)!=0)return false;
+            }return system&&admins;
+        }catch{return false;}
+    }
     internal static void Validate(Facts f,string name,string executable){ValidateStart(f,name,executable,3);}
     internal static void ValidateDisabled(Facts f,string name,string executable){ValidateStart(f,name,executable,4);}
-    static void ValidateStart(Facts f,string name,string executable,uint start){
-        if(f==null||f.Name!=name||String.IsNullOrEmpty(executable)||!Path.IsPathRooted(executable)||executable.IndexOf('"')>=0||executable.IndexOf('%')>=0||!String.Equals(f.Binary,"\""+executable+"\"",StringComparison.OrdinalIgnoreCase)||f.Account!="LocalSystem"||f.Type!=0x10||f.Start!=start||f.ErrorControl!=1||f.Group!=""||f.Dependencies!=""||f.RecoveryCommand!=""||f.RebootMessage!=""||f.ResetPeriod!=0||f.Delayed!=0||f.FailureOnCrash!=0||f.Triggers!=0||f.LaunchProtected!=0||f.Actions==null||f.Actions.Length>16||!Acl(f.Security))throw Failure();
+    internal static void ValidateInitialDisabled(Facts f,string name,string executable){ValidateStart(f,name,executable,4,true);}
+    static void ValidateStart(Facts f,string name,string executable,uint start){ValidateStart(f,name,executable,start,false);}
+    static void ValidateStart(Facts f,string name,string executable,uint start,bool initial){
+        if(f==null||f.Name!=name||String.IsNullOrEmpty(executable)||!Path.IsPathRooted(executable)||executable.IndexOf('"')>=0||executable.IndexOf('%')>=0||!String.Equals(f.Binary,"\""+executable+"\"",StringComparison.OrdinalIgnoreCase)||f.Account!="LocalSystem"||f.Type!=0x10||f.Start!=start||f.ErrorControl!=1||f.Group!=""||f.Dependencies!=""||f.RecoveryCommand!=""||f.RebootMessage!=""||f.ResetPeriod!=0||f.Delayed!=0||f.FailureOnCrash!=0||f.Triggers!=0||f.LaunchProtected!=0||f.Actions==null||f.Actions.Length>16||!(initial?InitialAcl(f.Security):Acl(f.Security)))throw Failure();
         foreach(uint action in f.Actions)if(action!=0)throw Failure();
     }
     [StructLayout(LayoutKind.Sequential)]internal struct Config {internal uint Type,Start,Error;internal IntPtr Binary,Group;internal uint Tag;internal IntPtr Dependencies,Account,Display;}
@@ -53,6 +65,7 @@ public static class SodaDesktopSigninServicePolicy {
         if(ok||Marshal.GetLastWin32Error()!=122||needed<4||needed>65536)throw Failure();var buffer=new Buffer((int)needed);bool transferred=false;
         try{uint returned;ok=level==-1?QueryServiceObjectSecurity(service,5,buffer.Pointer,(uint)buffer.Size,out returned):level==0?QueryServiceConfigW(service,buffer.Pointer,(uint)buffer.Size,out returned):QueryServiceConfig2W(service,(uint)level,buffer.Pointer,(uint)buffer.Size,out returned);if(!ok||returned>buffer.Size)throw Failure();transferred=true;return buffer;}finally{if(!transferred)buffer.Dispose();}
     }
+    internal static byte[] Security(IntPtr service){using(var buffer=Read(service,-1)){var bytes=new byte[buffer.Size];Marshal.Copy(buffer.Pointer,bytes,0,bytes.Length);return bytes;}}
     internal static void Configuration(Buffer buffer,Facts facts){if(buffer.Size<Marshal.SizeOf(typeof(Config)))throw Failure();var config=(Config)Marshal.PtrToStructure(buffer.Pointer,typeof(Config));facts.Type=config.Type;facts.Start=config.Start;facts.ErrorControl=config.Error;facts.Binary=buffer.Text(config.Binary,false);facts.Group=buffer.Text(config.Group,false);facts.Dependencies=buffer.Text(config.Dependencies,true);facts.Account=buffer.Text(config.Account,false);}
     internal static void Recovery(Buffer buffer,Facts facts){if(buffer.Size<Marshal.SizeOf(typeof(FailureActions)))throw Failure();var actions=(FailureActions)Marshal.PtrToStructure(buffer.Pointer,typeof(FailureActions));if(actions.Count>16)throw Failure();facts.ResetPeriod=actions.Reset;facts.RebootMessage=buffer.Text(actions.Reboot,false);facts.RecoveryCommand=buffer.Text(actions.Command,false);facts.Actions=new uint[actions.Count];if(actions.Count>0){buffer.Offset(actions.Actions,checked((int)actions.Count*8));for(int i=0;i<facts.Actions.Length;i++)facts.Actions[i]=unchecked((uint)Marshal.ReadInt32(actions.Actions,i*8));}}
     static uint Value(IntPtr service,int level){using(var buffer=Read(service,level))return unchecked((uint)Marshal.ReadInt32(buffer.Pointer));}
@@ -60,7 +73,9 @@ public static class SodaDesktopSigninServicePolicy {
      * Callers still need protected package, owner mutex and quiescence proof. */
     public static void Inspect(string owner){InspectStart(owner,false);}
     internal static void InspectDisabled(string owner){InspectStart(owner,true);}
-    static void InspectStart(string owner,bool disabled){
+    internal static void InspectInitialDisabled(string owner){InspectStart(owner,true,true);}
+    static void InspectStart(string owner,bool disabled){InspectStart(owner,disabled,false);}
+    static void InspectStart(string owner,bool disabled,bool initial){
         owner=SodaDesktopSigninPackage.OwnerSid(owner);string name=Name(owner),executable=Executable(owner);IntPtr manager=IntPtr.Zero,service=IntPtr.Zero;
         try{
             manager=OpenSCManagerW(null,null,1);if(manager==IntPtr.Zero)throw Failure();service=OpenServiceW(manager,name,0x00020001);if(service==IntPtr.Zero)throw Failure();var facts=new Facts{Name=name};
@@ -68,7 +83,7 @@ public static class SodaDesktopSigninServicePolicy {
             using(var buffer=Read(service,2))Recovery(buffer,facts);
             facts.Delayed=Value(service,3);facts.FailureOnCrash=Value(service,4);facts.Triggers=Value(service,8);facts.LaunchProtected=Value(service,12);
             using(var buffer=Read(service,-1)){facts.Security=new byte[buffer.Size];Marshal.Copy(buffer.Pointer,facts.Security,0,buffer.Size);}
-            ValidateStart(facts,name,executable,disabled?4u:3u);
+            ValidateStart(facts,name,executable,disabled?4u:3u,initial);
         }finally{if(service!=IntPtr.Zero)CloseServiceHandle(service);if(manager!=IntPtr.Zero)CloseServiceHandle(manager);}
     }
 }

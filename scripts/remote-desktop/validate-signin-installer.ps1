@@ -10,6 +10,8 @@ try{
  $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Generated installation checks failed'}
  if($NegativeControls){
   $variants=@(
+   @('native-service-object','WindowsSigninInstallerScm.cs','const int ServiceObjectType=2;','const int ServiceObjectType=5;','Native service security request changed',1),
+   @('security-readback','WindowsSigninInstallerScm.cs','!SodaDesktopSigninServicePolicy.Acl(read(service))','read(service)==null','Invalid native service ACL was accepted',1),
    @('ready','WindowsSigninInstallerScm.cs','!ready()','(ready()==false&&ready()==true)','Unverified package registered service',2),
    @('enable-commit','WindowsSigninInstallerScm.cs','!committed()','(committed()==false&&committed()==true)','Uncommitted installation enabled service',2),
    @('marker','WindowsSigninInstaller.cs','files.MarkerCleared','true','Maintenance marker bypassed before enabling',2),
@@ -20,7 +22,7 @@ try{
    finally{[IO.File]::WriteAllBytes((Join-Path $root $name),$original[$name]);if([Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $root $name))) -cne [Convert]::ToBase64String($original[$name])){throw 'Source bytes not restored'}}
   }
   $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object{[string]$_};if($code -ne 0){throw 'Restored installation checks failed'}
-  'signin_installer_4_source_negative_controls_and_restore_passed'
+  'signin_installer_6_source_negative_controls_and_restore_passed'
  }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0
