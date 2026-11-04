@@ -1,6 +1,6 @@
 # リモートデスクトップの開発状況
 
-2026-11-04更新（R1/R2の実機確認を追記）。Windows/WSL経路とLinux/macOS native実験版を区別します。「実装済み」は実機・実ドライバー・実サービスを組み合わせた動作確認の完了を意味しません。段階実装の作業記録は当時の検証証拠として保持し、現在の全残件は本書のR1〜R5/U1〜U12を使います。優先度にかかわらず未完了項目を残し、実装・方式調査・権限設計・更新/実機確認を区別します。
+2026-11-04更新（R1〜R3の実機確認を追記）。Windows/WSL経路とLinux/macOS native実験版を区別します。「実装済み」は実機・実ドライバー・実サービスを組み合わせた動作確認の完了を意味しません。段階実装の作業記録は当時の検証証拠として保持し、現在の全残件は本書のR1〜R5/U1〜U12を使います。優先度にかかわらず未完了項目を残し、実装・方式調査・権限設計・更新/実機確認を区別します。
 
 | 範囲 | 実装状況 |
 | --- | --- |
@@ -50,7 +50,7 @@
 | --- | --- | --- |
 | R1 | sr-pcの更新 | 完了（2026-11-04、1701bfb4）。mainを反映しbuild/handoff、既存4paneの保持を確認。利用者のUAC承認でロック解除サービスも更新済み |
 | R2 | sr-pcとの通常接続・再接続・放置後の安定性確認 | 一部確認済み（2026-11-04、1701bfb4）。通常画面の閲覧・マウス操作、実ロック画面からPIN解除、通常画面への自動再接続・操作を確認。cold leaseとWindows proxy終了コード取得の不具合を修正。長時間放置・反復接続の安定性確認は残る |
-| R3 | Windows拡張機能の実機確認 | 未完了。実サービス/UAC/signin・仮想driver/monitor・解像度復元・実音声/マイク・clipboard/Explorerを、利用する設定と権限の範囲で確認する |
+| R3 | Windows拡張機能の実機確認 | 一部確認済み（caaddccd）。実解像度変更/復元、H.264と音声buffer、text/PNG/HTMLのclipboard往復、ファイル送受信、同一monitorの2窓と操作排他、保護Default/UACの実画像、保護DefaultのH.264/ファイル転送を確認。仮想IDDの署名済み配布、物理複数monitor、仮想audio cable/マイク、実Explorer drop、昇格アプリ/UAC入力、専用signinサービスの導入承認/登録/実サインアウトは残る |
 | R4 | Linux/macOS nativeの実機確認 | 未完了。対象デスクトップが現在利用できない。OSの許可/終了、monitor選択、Linux VIRTUAL、macOS mode復元、動画/音声/仮想出力へのマイク/clipboardを対応範囲で確認する。WSLや生成fixtureを実機の代わりにしない |
 | R5 | デスクトップアシスタントの実機確認 | 未完了。このPCでenabled/runningの復帰は確認済みだが、実GUIの配置/DPI・通知/返答・会話/フォーム・画像/録音/モデル・無効化/再起動/スリープを組み合わせた検証は別。詳細は[アシスタント](desktop-assistant.md) |
 
@@ -88,3 +88,16 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 上記は着手順の案であり、下位項目を取り下げる意味ではありません。未実装12分野を一括で見積もった「8〜16人週」はこの一覧の確定工数として使いません。対象OS/agent/画面種別、採用方式と検証条件を分解した後に見積もります。今後の更新はR/UのIDを保ち、状態・実装済みの範囲・次の対応・検証結果を更新します。
 
 2026-11-04のR1/R2の更新とロック解除の根拠は[実機検証記録](../.aidev/works/20261104-locked-desktop-unlock/verification.md)を参照してください。R3の他機能は、この確認で完了とは扱いません。
+
+## Windows実機で追加確認した範囲（2026-11-04）
+
+[拡張機能の実機記録](../.aidev/works/20261104-desktop-extensions-live/verification.md)に結果と復元手順を記載しています。解像度guardianの依存不足を修正し、対応モード1600×900から1920×1200への変更と元モードへの復元を確認しました。専用転送フォルダーとしてsr-pcのDownloads/Sodashitsu-RemoteFilesを設定しています。
+
+| 残る項目 | 必要なもの・現在の準備 |
+| --- | --- |
+| 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
+| マイク転送 | 仮想audio cable。VB-Audio公式Pack45のx64 installer/catalog/sysの署名は確認済み、導入/再起動は未実施。導入後は明示したrender IDだけを転送先へ設定する |
+| サインアウト後の専用接続 | 専用bundle/Native host/manifestを生成してValidateOnly成功。実導入UACはキャンセルとして返った。承認後の導入・鍵/trust・別machine登録・起動・実サインアウト検証が必要 |
+| 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
+
+マイク用配布物の取得元・導入条件は[VB-Audio公式](https://vb-audio.com/Cable/)で確認しました。再起動を伴うdriver導入は、動作中の利用者sessionへの影響を確認してから行います。

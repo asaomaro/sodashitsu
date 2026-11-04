@@ -493,7 +493,7 @@ export class DesktopProvider {
           const m = RemoteDesktopViewerMessage.parse(rawMessage);
           if(p.options.sharedDesktop&&(!p.options.sharedRate||!s.sharedRate)&&m.type==="media"&&m.settings)m.settings.adaptive=false;
           if(m.type==="media"&&m.enabled&&m.settings?.transport==="native"&&p.videoTicket&&!s.videoReady){this.send(s,{type:"media_unavailable"});return;}
-          if(m.type==="media"&&!m.enabled&&s.ready&&!s.secureDesktop){s.native?.fromViewer(m);this.companion.fromViewer(s,m);return;}
+          if(m.type==="media"&&!m.enabled&&s.ready&&(!s.secureDesktop||s.protectedVideoActive)){s.native?.fromViewer(m);if(!s.secureDesktop)this.companion.fromViewer(s,m);return;}
           if(m.type==="native_audio_control"&&s.ready&&(!s.secureDesktop||s.protectedAudioActive)){s.native?.fromViewer(m);return;}
           if(m.type==="media"&&m.enabled&&m.settings?.audio&&(cfg.allowSystemAudio??cfg.allowMedia)!==true){this.send(s,{type:"media_unavailable"});return;}
           if((m.type==="rtc_signal"||m.type==="media_fallback")&&s.ready&&(!s.secureDesktop||s.protectedVideoActive)&&s.native?.fromViewer(m))return;

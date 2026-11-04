@@ -1,0 +1,49 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+> vitest run src/desktop/DesktopRelay.test.ts -t 'stops protected .* video without'
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+ ❯ src/desktop/DesktopRelay.test.ts (306 tests | 2 failed | 304 skipped) 404ms
+   × stops protected elevated-default video without an unavailable error and keeps images usable 241ms
+   × stops protected elevated-uac video without an unavailable error and keeps images usable 161ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/desktop/DesktopRelay.test.ts > stops protected elevated-default video without an unavailable error and keeps images usable
+ FAIL  src/desktop/DesktopRelay.test.ts > stops protected elevated-uac video without an unavailable error and keeps images usable
+AssertionError: expected [ { type: 'media_unavailable' }, …(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "type": "media_unavailable",
++   },
++   {
++     "type": "media_unavailable",
++   },
++ ]
+
+ ❯ src/desktop/DesktopRelay.test.ts:855:79
+    853|  await expect.poll(()=>v.frames.filter(frame=>!isDesktopMediaChunk(fra…
+    854|  await expect.poll(async()=>(await readFile(f.lifecycle,"utf8")).split…
+    855|  expect(v.messages.filter(m=>m.type==="media_unavailable"||m.type==="e…
+       |                                                                               ^
+    856| });
+    857| it.each(["elevated-default","elevated-uac"] as const)("requires the ac…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 304 skipped (306)
+   Start at  18:43:45
+   Duration  1.83s (transform 62%, tests 23%, import 14%)
+
+/workspaces/sodashitsu-main-live-assistant-agents/packages/server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/server@0.1.0 test: `vitest run src/desktop/DesktopRelay.test.ts -t 'stops protected .* video without'`
+Exit status 1

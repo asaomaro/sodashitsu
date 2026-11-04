@@ -1,0 +1,12 @@
+{
+  "id": "7c9c5ada-2186-430c-a46d-38c63a23f351",
+  "status": "exited",
+  "stdout": "owned_virtual_mode_checks_passed: exact source, original deadline, rollback, no orphan restoration guardian; fake driver only\r\ndisplay_lease_checks_passed: DEVMODE220, supported-mode-only, guardian-before-apply, restore/disarm, preserve-local-change, partial-failure rollback; fake driver only; no OS mode changes\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

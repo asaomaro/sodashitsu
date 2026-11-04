@@ -1,0 +1,13 @@
+
+> @sodashitsu/server@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+> vitest run src/desktop/DesktopRelay.test.ts src/desktop/DesktopProvider.test.ts src/desktop/DesktopNativeVideo.test.ts
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+
+ Test Files  3 passed (3)
+      Tests  329 passed (329)
+   Start at  18:43:48
+   Duration  92.67s (tests 97%, transform 3%, import 1%)
+

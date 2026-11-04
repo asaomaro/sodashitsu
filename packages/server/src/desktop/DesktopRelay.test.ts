@@ -843,6 +843,17 @@ function protectedFixture(config:{mode?:"elevated-default"|"elevated-uac";allowe
   return fixture(true,legacy,true,secure,false,false,undefined,undefined,true,false,true,false,true,config);
 }
 const protectedStart={...start,options:{...start.options,features:true,elevatedDesktop:true}};
+it.each(["elevated-default","elevated-uac"] as const)("stops protected %s video without an unavailable error and keeps images usable",async mode=>{
+ const f=await protectedFixture({mode,allowed:true}),v=await f.viewer([DESKTOP_PROTECTED_PROTOCOL,DESKTOP_NATIVE_VIDEO_PROTOCOL,desktopFeaturesProtocol(["protectedVideo"])]);
+ v.send({...protectedStart,options:{...protectedStart.options,width:640}});await expect.poll(()=>v.messages.some(m=>m.type==="ready")).toBe(true);
+ v.send({type:"media",enabled:true,settings:{transport:"native",audio:false,adaptive:false,maxBitrateKbps:2500}});await expect.poll(()=>v.messages.some(m=>m.type==="media_stream")).toBe(true);
+ const before=v.frames.filter(frame=>!isDesktopMediaChunk(frame)).length;
+ const image=v.frames.filter(frame=>!isDesktopMediaChunk(frame)).at(-1)!;v.send({type:"ack",seq:decodeDesktopFrame(image).info.seq});
+ v.send({type:"media",enabled:false});v.send({type:"media",enabled:false});v.send({type:"keyframe"});
+ await expect.poll(()=>v.frames.filter(frame=>!isDesktopMediaChunk(frame)).length).toBeGreaterThan(before);
+ await expect.poll(async()=>(await readFile(f.lifecycle,"utf8")).split("\n").filter(line=>line&&JSON.parse(line).type==="native_stop").length).toBe(1);
+ expect(v.messages.filter(m=>m.type==="media_unavailable"||m.type==="error")).toEqual([]);expect(v.ws.readyState).toBe(WebSocket.OPEN);
+});
 it.each(["elevated-default","elevated-uac"] as const)("requires the actual %s helper proof and keeps protected input human-only",async mode=>{
   const f=await protectedFixture({mode,allowed:true,expectEnv:"1"}),viewer=await f.viewer("protected");viewer.send(protectedStart);
   await expect.poll(()=>viewer.frames.length).toBeGreaterThan(0);
