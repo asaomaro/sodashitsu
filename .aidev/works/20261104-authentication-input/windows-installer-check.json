@@ -1,0 +1,12 @@
+{
+  "id": "23ad039f-5ae3-44dc-a80e-20b3449a1e47",
+  "status": "exited",
+  "stdout": "desktop_unlock_compiled\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}
