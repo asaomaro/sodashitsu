@@ -1,0 +1,17 @@
+
+> @sodashitsu/desktop-assistant@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+> vitest run
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+
+ Test Files  33 passed (33)
+      Tests  281 passed (281)
+   Start at  19:49:44
+   Duration  4.72s (transform 51%, tests 28%, import 20%, worker 1%)
+
+  Transform  |@sodashitsu/desktop-assistant| transforming modules took 16.80s · 51% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

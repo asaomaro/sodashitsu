@@ -1,0 +1,1 @@
+electron_desktop_popups_passed: real renderer opens sibling/nested windows; HttpOnly session shared; no remote preload; parent retained; child renderer closed

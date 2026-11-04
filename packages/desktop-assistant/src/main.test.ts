@@ -1951,3 +1951,29 @@ it("keeps disabled settings open for automatic saves and quits only when switchi
  await save(event,{enabled:true,mode:'tray',voiceEnabled:false});await save(event,{enabled:false});await new Promise(done=>setImmediate(done));
  expect(fixture.quit).toHaveBeenCalledOnce();
 });
+
+it("opens desktop popups in isolated sibling windows and keeps the original panel",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},save=fixture.handlers.get('assistant:save')!;
+ await save(event,{enabled:true,mode:'tray',quietFullscreen:false,voiceEnabled:false});
+ await fixture.handlers.get('assistant:open')!(event);const parent=fixture.windows.at(-1)!;
+ const handler=remoteOf(parent).webContents.setWindowOpenHandler.mock.calls.at(-1)![0];
+ const origin='http://127.0.0.1:7780',url=origin+'/desktop-view#'+encodeURIComponent(JSON.stringify({machineId:'generated-remote',label:'Generated desktop'}));
+ const created:MockWindow[]=[];
+ try{
+  expect(handler({url})).toEqual({action:'deny'});const desktop=fixture.windows.at(-1)!;created.push(desktop);
+  expect(desktop).not.toBe(parent);await vi.waitFor(()=>expect(remoteOf(desktop).url).toBe(url));
+  expect(remoteOf(desktop).options.webPreferences).toMatchObject({sandbox:true,contextIsolation:true,nodeIntegration:false,partition:'persist:assistant-server'});
+  expect(remoteOf(desktop).options.webPreferences).not.toHaveProperty('preload');
+  expect(desktop.options.title).toBe('操舵室・リモートデスクトップ');expect(remoteOf(parent).url).toBe(origin+'/');
+  await expect(fixture.handlers.get('assistant:window-action')!({sender:remoteOf(desktop).webContents,senderFrame:remoteOf(desktop).webContents.mainFrame},'close')).rejects.toThrow('許可');
+  const nested=remoteOf(desktop).webContents.setWindowOpenHandler.mock.calls.at(-1)![0];
+  expect(nested({url})).toEqual({action:'deny'});const second=fixture.windows.at(-1)!;created.push(second);expect(second).not.toBe(desktop);
+  const count=fixture.windows.length;
+  for(const denied of [origin+'/settings',url.replace(origin,'https://foreign.invalid'),origin+'/desktop-view#%'])expect(handler({url:denied})).toEqual({action:'deny'});
+  expect(fixture.windows).toHaveLength(count);
+  await fixture.handlers.get('assistant:open')!(event);expect(fixture.windows).toHaveLength(count);expect(parent.visible).toBe(true);
+  const contents=remoteOf(desktop).webContents;desktop.close();expect(contents.close).toHaveBeenCalledOnce();expect(parent.destroyed).toBe(false);
+  expect(nested({url})).toEqual({action:'deny'});expect(fixture.windows).toHaveLength(count);
+ }finally{for(const win of created)if(!win.destroyed)win.close();parent.close();await save(event,{enabled:false});}
+});

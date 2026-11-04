@@ -118,3 +118,16 @@ export function sameServerNavigation(url: string, origin: string): boolean {
     return false;
   }
 }
+
+/** The server renderer validates desktop launch preferences. Only its dedicated
+ * same-server route may create a remote window; no native preload is exposed. */
+export function desktopPopupNavigation(url:string,origin:string):boolean {
+  try {
+    const target=new URL(url);
+    if(!["http:","https:"].includes(target.protocol)||!sameServerNavigation(url,origin)||target.pathname!=="/desktop-view"||target.search||target.hash.length<2||target.hash.length>8192)return false;
+    const launch=JSON.parse(decodeURIComponent(target.hash.slice(1)));
+    return !!launch&&typeof launch==="object"&&!Array.isArray(launch)&&
+      typeof launch.machineId==="string"&&/^[a-zA-Z0-9-]{1,128}$/.test(launch.machineId)&&
+      typeof launch.label==="string"&&launch.label.length<=256&&!launch.label.includes("\0");
+  }catch{return false;}
+}

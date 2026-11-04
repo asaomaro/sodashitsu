@@ -69,6 +69,7 @@ import {
   authorizeLocalSender,
   LOCAL_ORIGIN,
   sameServerNavigation,
+  desktopPopupNavigation,
   type LocalRole,
 } from "./security.js";
 
@@ -848,9 +849,11 @@ function loadPanel(win: BrowserWindow, url: string): void {
 function openPanel(
   origin: string,
   target?: { paneId: string; workspaceId: string; instanceId: string; machineId?: string; askId?: string },
-  destination: "main" | "reply" = "main",
+  destination: "main" | "reply" | "desktop" = "main",
+  desktopUrl?: string,
 ): void {
-  const url = new URL(origin);
+  if(destination==="desktop"&&(!desktopUrl||!desktopPopupNavigation(desktopUrl,origin)))return;
+  const url = new URL(destination==="desktop"?desktopUrl!:origin);
   // A fresh query forces a new document even when only the guarded pane/form hash changes.
   if (target) {
     url.searchParams.set("assistantNavigation", randomUUID());
@@ -864,7 +867,7 @@ function openPanel(
       assistantMachine: target.machineId ?? "local",
       ...(target.askId ? {assistantAsk: target.askId} : {}),
     }).toString();
-  const existing = destination === "reply" ? responsePanel : panel;
+  const existing = destination === "desktop" ? null : destination === "reply" ? responsePanel : panel;
   if (existing && !existing.isDestroyed()) {
     if (target || panelTargeted) loadPanel(existing, url.href);
     else presentPanel(existing);
@@ -879,7 +882,7 @@ function openPanel(
     backgroundColor:"#00000000",
     width: destination === "reply" ? 800 : 1100,
     height: destination === "reply" ? 560 : 780,
-    title: destination === "reply" ? "操舵室・通知への応答" : "操舵室",
+    title: destination === "desktop" ? "操舵室・リモートデスクトップ" : destination === "reply" ? "操舵室・通知への応答" : "操舵室",
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
@@ -901,8 +904,11 @@ function openPanel(
   win.webContents.setWindowOpenHandler(()=>({action:"deny"}));win.webContents.on("will-navigate",event=>event.preventDefault());
   const shell=win.loadURL(`${LOCAL_ORIGIN}/panel.html`);panelViews.set(win,{view,shell});
   if (destination === "reply") responsePanel = win;
-  else { panel = win; panelTargeted = !!target; }
-  view.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  else if(destination==="main") { panel = win; panelTargeted = !!target; }
+  view.webContents.setWindowOpenHandler(({url}) => {
+    if(!win.isDestroyed()&&desktopPopupNavigation(url,origin))openPanel(origin,undefined,"desktop",url);
+    return { action: "deny" };
+  });
   view.webContents.on("will-navigate", (event, url) => {
     if (!sameServerNavigation(url, origin)) event.preventDefault();
   });

@@ -1,0 +1,4 @@
+
+> @sodashitsu/desktop-assistant@0.1.0 build /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+> tsc -b
+

@@ -1,0 +1,36 @@
+
+> @sodashitsu/desktop-assistant@0.1.0 test /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+> vitest run src/main.test.ts -t 'opens desktop popups in isolated sibling windows'
+
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant
+
+ ❯ |@sodashitsu/desktop-assistant| src/main.test.ts (61 tests | 1 failed | 60 skipped) 1848ms
+   × opens desktop popups in isolated sibling windows and keeps the original panel 37ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/desktop-assistant| src/main.test.ts > opens desktop popups in isolated sibling windows and keeps the original panel
+AssertionError: expected { Object (_events, _eventsCount, ...) } not to be { Object (_events, _eventsCount, ...) } // Object.is equality
+
+Compared values have no visual difference.
+
+ ❯ src/main.test.ts:1965:23
+    1963|  try{
+    1964|   expect(handler({url})).toEqual({action:'deny'});const desktop=fixtur…
+    1965|   expect(desktop).not.toBe(parent);await vi.waitFor(()=>expect(remoteO…
+       |                       ^
+    1966|   expect(remoteOf(desktop).options.webPreferences).toMatchObject({sand…
+    1967|   expect(remoteOf(desktop).options.webPreferences).not.toHaveProperty(…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 60 skipped (61)
+   Start at  19:48:32
+   Duration  2.14s (tests 90%, transform 8%, import 1%)
+
+/workspaces/sodashitsu-main-live-assistant-agents/packages/desktop-assistant:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @sodashitsu/desktop-assistant@0.1.0 test: `vitest run src/main.test.ts -t 'opens desktop popups in isolated sibling windows'`
+Exit status 1
