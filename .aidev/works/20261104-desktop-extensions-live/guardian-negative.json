@@ -1,0 +1,12 @@
+{
+  "id": "b1cd4625-b695-4e60-8791-1abb0f442e95",
+  "status": "exited",
+  "stdout": "",
+  "stderr": "Exception calling \"Arm\" with \"3\" argument(s): \"Display guardian unavailable\"\r\nAt C:\\Users\\<owner>\\AppData\\Local\\sodashitsu\\guardian-check-20261104\\validate-display-guardian.ps1:10 char:5\r\n+     $driver.Arm($Device,$sentinel,$sentinel)\r\n+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : NotSpecified: (:) [], ParentContainsErrorRecordException\r\n    + FullyQualifiedErrorId : InvalidOperationException\r\n \r\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

@@ -950,7 +950,8 @@ public static class SodaDesktopDisplay {
             var plan=new Plan { Device=device,Original=original,Target=target,StopEvent=eventName };
             using(var self=Process.GetCurrentProcess()){plan.Parent=self.Id;plan.StartTicks=self.StartTime.ToUniversalTime().Ticks;}
             string data=Convert.ToBase64String(Encoding.UTF8.GetBytes(new JavaScriptSerializer().Serialize(plan)));
-            string command="$ErrorActionPreference='Stop'; Add-Type -TypeDefinition ([IO.File]::ReadAllText('"+Path.GetFullPath(source).Replace("'","''")+"')) -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll; [SodaDesktopDisplay]::Watch('"+data+"')";
+            string hostSource=Path.GetFullPath(source),unlockSource=Path.Combine(Path.GetDirectoryName(hostSource),"WindowsDesktopUnlock.cs");
+            string command="$ErrorActionPreference='Stop'; Add-Type -Path @('"+hostSource.Replace("'","''")+"','"+unlockSource.Replace("'","''")+"') -ReferencedAssemblies System.dll,System.Core.dll,System.Drawing.dll,System.Windows.Forms.dll,System.Web.Extensions.dll,System.ServiceProcess.dll; [SodaDesktopDisplay]::Watch('"+data+"')";
             string exe=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe");
             var info=new ProcessStartInfo(exe,"-NoProfile -NonInteractive -Command "+Quote(command)) {UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
             using(var guard=Process.Start(info)) {
