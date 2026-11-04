@@ -94,3 +94,9 @@ UTF8ファイルから渡す場合は、Windowsの`cmd.exe /d /c "type operation
 更新の印を取り除いた直後に中断した場合は、`-Action restore -OwnerSid ... -ManifestSha256 ...`で現在の配布物を指定します。印がなく、現在のpackageとバリアに一致する初期または独立正常停止記録があり、adminが空で、無効・停止設定を検証できた場合だけ手動設定へ戻します。runtime・鍵・信頼設定・登録情報は保持します。
 
 成功してもサービスを起動しません。一般の異常終了や、独立した正常停止証拠のない実行履歴を消して再開する機能ではありません。生成した一時配布物・DPAPI・バリア・SCM代替で検証し、実際のSCM変更・実機復旧は未実施です。
+
+## 専用stateの保存先
+
+SYSTEM専用の鍵・登録情報・管理要求・実行記録は、コードとは別の`%ProgramFiles%\Sodashitsu\DesktopSigninData\<owner SIDのSHA-256>`へ置きます。専用rootと各owner slotはSYSTEM/Administratorsだけがアクセスできる固定ACLです。コードの更新・退避でstateを移動・再生成しません。
+
+標準ProgramDataの祖先には一般ユーザーの属性変更権限もあるため、現在の祖先検査を緩めずにこの保存先を使います。既存のProgramDataやProgram FilesのACLを修復・変更して通すことはしません。旧`%ProgramData%\sodashitsu\desktop-signin\<owner hash>`がある場合や存在確認ができない場合、導入・更新・復旧・stateアクセスを拒否します。旧stateの自動コピー・削除・別の鍵の自動生成は行いません。既存の旧配置を使う場合は、別途レビューした移行が必要です。

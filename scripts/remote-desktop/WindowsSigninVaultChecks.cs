@@ -34,6 +34,11 @@ public static class SodaDesktopSigninVaultChecks {
         catch(InvalidOperationException error){Check(error.Message=="Signin enrollment is unavailable","Unexpected observed scope failure");}
         finally {if(observed!=null)Array.Clear(observed,0,observed.Length);}
         Console.WriteLine("signin_vault_same_user_current_user_blob_accepted="+accepted.ToString().ToLowerInvariant());
+        Check(SodaDesktopSigninVault.StateRoot()==Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSigninData"),"State root crossed into metadata-writable ProgramData");
+        string legacySeen=null;SodaDesktopSigninVault.RequireNoLegacyState(Owner,p=>{legacySeen=p;return true;});
+        Check(legacySeen!=null&&legacySeen.StartsWith(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"Legacy guard checked another namespace");
+        bool legacyRejected=false;try{SodaDesktopSigninVault.RequireNoLegacyState(Owner,p=>false);}catch(InvalidOperationException){legacyRejected=true;}
+        Check(legacyRejected,"Legacy owner state was silently replaced");
         var path=SodaDesktopSigninVault.StoragePath(Owner);var otherPath=SodaDesktopSigninVault.StoragePath(Other);
         Check(path!=otherPath && Path.GetFileName(path)=="enrollment.dpapi" && !path.Contains(Owner),"Owner storage slots are not separated");
         var facts=new SodaDesktopSigninVault.FileFacts(Info(),1);Check(facts.Regular&&facts.Same(new SodaDesktopSigninVault.FileFacts(Info(),1)),"Generated regular file rejected");

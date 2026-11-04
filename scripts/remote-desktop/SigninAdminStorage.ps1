@@ -11,7 +11,7 @@ function Open-SodaSigninAdminStorage([string]$OwnerSid,[Func[bool]]$Current) {
  while($null -ne $item){
   if($depth -gt 64 -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'unsafe ancestor'}
   $acl=Get-Acl -LiteralPath $item.FullName
-  if($depth -lt 2){if(-not (Test-SodaSigninStorageAcl $acl)){throw 'confidential ACL required'}}
+  if($depth -lt 2 -or $item.FullName -eq ([SodaDesktopSigninVault]::StateRoot())){if(-not (Test-SodaSigninStorageAcl $acl)){throw 'confidential ACL required'}}
   else{if(-not (Test-SodaEndpointAcl ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value) @($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) 'S-1-5-18' $false)){throw 'unsafe ancestor ACL'}}
   $item=$item.Parent;$depth++
  }

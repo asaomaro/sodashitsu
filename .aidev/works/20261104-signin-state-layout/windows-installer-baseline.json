@@ -1,0 +1,12 @@
+{
+  "id": "1f6eacac-0279-4672-9689-2b872e3d1b60",
+  "status": "exited",
+  "stdout": "System.Management.Automation.MethodInvocationException: Exception calling \"Run\" with \"0\" argument(s): \"Partial registration lost disabled recovery state\" ---> System.InvalidOperationException: Partial registration lost disabled recovery state\r\n   at SodaDesktopSigninInstallerChecks.Run()\r\n   at CallSite.Target(Closure , CallSite , Type )\r\n   --- End of inner exception stack trace ---\r\n   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)\r\n   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n",
+  "stderr": "Generated installation checks failed\r\nAt C:\\git\\sodashitsu\\scripts\\remote-desktop\\validate-signin-installer.ps1:10 char:147\r\n+ ... ing]$_};if($code -ne 0){throw 'Generated installation checks failed'}\r\n+                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Generated installation checks failed:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Generated installation checks failed\r\n \r\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

@@ -15,6 +15,7 @@ public static class SodaDesktopSigninVault {
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll",SetLastError=true)]static extern uint GetFileType(SafeFileHandle handle);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr GetStdHandle(int kind);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("advapi32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern bool LookupAccountSidW(string system,byte[] sid,StringBuilder name,ref uint nameSize,StringBuilder domain,ref uint domainSize,out int use);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern uint GetFileAttributesW(string path);
     static Exception Failure(){return new InvalidOperationException("Signin enrollment is unavailable");}
     public static void VerifyLayouts(){if(Marshal.SizeOf(typeof(Info))!=52 || Marshal.OffsetOf(typeof(Info),"Links").ToInt32()!=40)throw Failure();}
     public static string Owner(string owner){
@@ -36,12 +37,25 @@ public static class SodaDesktopSigninVault {
             return LookupAccountSidW(null,bytes,name,ref nameSize,domain,ref domainSize,out use) && use==1;
         }catch{return false;}
     }
-    public static string StoragePath(string owner){
+    // Separate mutable SYSTEM state from the immutable release directory. The
+    // standard ProgramData ancestor permits metadata writes; do not weaken the
+    // existing no-reparse/replacement ACL policy to accommodate that ancestor.
+    public static string StateRoot(){return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Sodashitsu","DesktopSigninData");}
+    static string OwnerSlot(string owner){
         var text=Encoding.UTF8.GetBytes(Owner(owner));byte[] hash;
         using(var sha=SHA256.Create())hash=sha.ComputeHash(text);
-        string slot=BitConverter.ToString(hash).Replace("-","").ToLowerInvariant();
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin",slot,"enrollment.dpapi");
+        return BitConverter.ToString(hash).Replace("-","").ToLowerInvariant();
     }
+    internal static void RequireNoLegacyState(string owner,Func<string,bool> absent){
+        string legacy=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin",OwnerSlot(owner));
+        if(absent==null||!absent(legacy))throw Failure();
+    }
+    public static void RequireNoLegacyState(string owner){RequireNoLegacyState(owner,path=>{
+        if(GetFileAttributesW(path)!=UInt32.MaxValue)return false;
+        int error=Marshal.GetLastWin32Error();if(error!=2&&error!=3)throw Failure();return true;
+    });}
+    public static string StateDirectory(string owner){RequireNoLegacyState(owner);return Path.Combine(StateRoot(),OwnerSlot(owner));}
+    public static string StoragePath(string owner){return Path.Combine(StateDirectory(owner),"enrollment.dpapi");}
     static byte[] Entropy(string owner){return Encoding.UTF8.GetBytes("Sodashitsu signin enrollment v1\0"+Owner(owner));}
     public static byte[] Protect(byte[] plain,string owner){
         byte[] copy=null,entropy=null,result=null;

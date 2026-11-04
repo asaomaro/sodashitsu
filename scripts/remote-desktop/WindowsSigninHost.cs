@@ -50,18 +50,18 @@ public static class SodaDesktopSigninHost {
         readonly List<SodaDesktopSigninPackageNative.Held> held;internal readonly string Path;readonly object gate=new object();bool disposed;
         RuntimeLease(string path,List<SodaDesktopSigninPackageNative.Held> held){Path=path;this.held=held;}
         internal static RuntimeLease Open(){
-            string path=System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin",SodaDesktopSigninPackage.Slot(Owner),"runtime");
+            string path=System.IO.Path.Combine(SodaDesktopSigninVault.StateDirectory(Owner),"runtime");
             var items=new List<string>();var held=new List<SodaDesktopSigninPackageNative.Held>();bool transferred=false;
             try {
                 if(path.Length>512||path.Length<3||path[1]!=':'||path[2]!='\\')throw Failure();
                 var drive=new DriveInfo(System.IO.Path.GetPathRoot(path));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();
                 for(string current=path;!String.IsNullOrEmpty(current);current=System.IO.Path.GetDirectoryName(current)){if(items.Count>=64)throw Failure();items.Add(current);}
-                items.Reverse();foreach(string current in items){bool leaf=current==path;held.Add(SodaDesktopSigninPackageNative.OpenCore(current,true,leaf,0,bytes=>leaf?PrivateRuntimeAcl(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false),null));}
+                items.Reverse();foreach(string current in items){bool leaf=current==path;held.Add(SodaDesktopSigninPackageNative.OpenCore(current,true,leaf,0,bytes=>leaf?PrivateRuntimeAcl(bytes):SodaDesktopSigninQuiescence.StateAncestor(current,bytes),null));}
                 held.Add(Barrier(path,PrivateRuntimeAcl));
                 var result=new RuntimeLease(path,held);transferred=true;return result;
             }finally{if(!transferred)SodaDesktopSigninPackageNative.Release(held);}
         }
-        internal bool Current(){lock(gate){try{if(disposed)return false;foreach(var item in held){bool secret=item.Path==Path||!item.Directory;SodaDesktopSigninPackageNative.CheckCore(item,bytes=>secret?PrivateRuntimeAcl(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false));}return !disposed;}catch{return false;}}}
+        internal bool Current(){lock(gate){try{if(disposed)return false;foreach(var item in held){bool secret=item.Path==Path||!item.Directory;SodaDesktopSigninPackageNative.CheckCore(item,bytes=>secret?PrivateRuntimeAcl(bytes):SodaDesktopSigninQuiescence.StateAncestor(item.Path,bytes));}return !disposed;}catch{return false;}}}
         internal string BarrierSha256{get{lock(gate){if(!Current())throw Failure();return held[held.Count-1].Before.Fingerprint();}}}
         public void Dispose(){lock(gate){disposed=true;SodaDesktopSigninPackageNative.Release(held);}}
     }

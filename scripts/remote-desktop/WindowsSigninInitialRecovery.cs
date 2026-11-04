@@ -14,7 +14,7 @@ public static class SodaDesktopSigninInitialRecovery {
         using(var mutex=SodaDesktopSigninControllerMutex.Acquire(owner,10000))using(var package=SodaDesktopSigninPackageNative.VerifyController(owner,manifest)){
             Func<bool> current=()=>timer.ElapsedMilliseconds<60000&&mutex.Current()&&package.Current()&&SodaDesktopSigninPackageNative.Authority(true);
             var paths=SodaDesktopSigninInstallFiles.Paths.Installed(owner,Guid.NewGuid().ToString("N"));
-            using(var service=new Native(owner))return Core(owner,manifest,paths.Slot,service,current,()=>SodaDesktopSigninQuiescence.Open(owner),(path,acl)=>String.Equals(path,paths.Slot,StringComparison.OrdinalIgnoreCase)||path.StartsWith(paths.Slot+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(acl):SodaDesktopSigninPackage.CodeAcl(acl,false));
+            using(var service=new Native(owner))return Core(owner,manifest,paths.Slot,service,current,()=>SodaDesktopSigninQuiescence.Open(owner),(path,acl)=>String.Equals(path,paths.Slot,StringComparison.OrdinalIgnoreCase)||path.StartsWith(paths.Slot+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(acl):SodaDesktopSigninQuiescence.StateAncestor(path,acl));
         }
     }
     internal sealed class Storage:IDisposable {

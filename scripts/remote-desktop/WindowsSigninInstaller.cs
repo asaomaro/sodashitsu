@@ -16,7 +16,7 @@ public static class SodaDesktopSigninInstaller {
             Func<bool> authority=()=>timer.ElapsedMilliseconds<300000&&mutex.Current()&&SodaDesktopSigninPackageNative.Authority(true);
             using(var service=SodaDesktopSigninInstallerScm.Open(owner,authority)){
                 var paths=SodaDesktopSigninInstallFiles.Paths.Installed(owner,Guid.NewGuid().ToString("N"));
-                Func<string,byte[],bool> policy=(path,acl)=>Within(paths.Slot,path)||Within(paths.Code,path)||Within(paths.Stage,path)?SodaDesktopSigninQuiescence.Private(acl):SodaDesktopSigninPackage.CodeAcl(acl,false);
+                Func<string,byte[],bool> policy=(path,acl)=>Within(paths.Slot,path)||Within(paths.Code,path)||Within(paths.Stage,path)?SodaDesktopSigninQuiescence.Private(acl):SodaDesktopSigninQuiescence.StateAncestor(path,acl);
                 return InstallCore(release,owner,paths,service,authority,SodaDesktopSigninInstallFiles.CreatePrivateDirectory,policy,
                     ()=>Verify(owner,manifest),()=>SodaDesktopSigninQuiescence.Open(owner),SodaDesktopSigninPackageNative.CreatePrivateFile);
             }

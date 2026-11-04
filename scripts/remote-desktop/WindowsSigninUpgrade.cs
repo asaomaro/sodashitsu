@@ -17,7 +17,7 @@ public static class SodaDesktopSigninUpgrade {
   Require(Environment.Is64BitProcess&&SodaDesktopSigninPackageNative.Authority(true)&&SodaDesktopSigninVault.UserAccount(owner));var timer=Stopwatch.StartNew();
   using(var mutex=SodaDesktopSigninControllerMutex.Acquire(owner,10000))using(var release=SodaDesktopSigninInstallSource.Open(source,owner,newHash)){
    Func<bool> current=()=>timer.ElapsedMilliseconds<300000&&mutex.Current()&&SodaDesktopSigninPackageNative.Authority(true);var paths=SodaDesktopSigninInstallFiles.Paths.Installed(owner,Guid.NewGuid().ToString("N"));
-   Func<string,byte[],bool> policy=(path,acl)=>Within(paths.Slot,path)||Within(paths.ProgramParent,path)&&!String.Equals(paths.ProgramParent,path,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(acl):SodaDesktopSigninPackage.CodeAcl(acl,false);
+   Func<string,byte[],bool> policy=(path,acl)=>Within(paths.Slot,path)||Within(paths.ProgramParent,path)&&!String.Equals(paths.ProgramParent,path,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(acl):SodaDesktopSigninQuiescence.StateAncestor(path,acl);
    using(var service=SodaDesktopSigninUpgradeScm.Open(owner,current))return Core(owner,oldHash,release,paths,service,current,()=>SodaDesktopSigninQuiescence.Open(owner),policy,SodaDesktopSigninInstallFiles.CreatePrivateDirectory,SodaDesktopSigninPackageNative.CreatePrivateFile);
   }
  }

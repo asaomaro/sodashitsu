@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 internal static class SodaDesktopSigninRunStorage {
     static Exception Failure(){return new InvalidOperationException("Signin run storage is unavailable");}
     static string Slot(string owner){
-        string path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin",SodaDesktopSigninPackage.Slot(owner));
+        string path=SodaDesktopSigninVault.StateDirectory(owner);
         if(path.Length>512||path.Length<3||path[1]!=':'||path[2]!='\\')throw Failure();var drive=new DriveInfo(Path.GetPathRoot(path));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();return path;
     }
     internal static bool MaintenanceAbsent(string slot){return SodaDesktopSigninPackageNative.Absent(Path.Combine(slot,"install.transition"));}
@@ -20,7 +20,7 @@ internal static class SodaDesktopSigninRunStorage {
         if(!SodaDesktopSigninPackageNative.Authority(controller)||current==null||!current())throw Failure();string slot=Slot(owner),runs=Path.Combine(slot,"runs");
         var parents=new List<string>();for(string item=slot;!String.IsNullOrEmpty(item);item=Path.GetDirectoryName(item)){if(parents.Count>=64)throw Failure();parents.Add(item);}parents.Reverse();
         if(!MaintenanceAbsent(slot))throw Failure();
-        return new SodaDesktopSigninRunJournal(runs,owner,package,barrier,role,()=>MaintenanceAbsent(slot)&&SodaDesktopSigninPackageNative.Authority(controller)&&current(),SodaDesktopSigninQuiescence.Private,parents,(path,bytes)=>String.Equals(path,slot,StringComparison.OrdinalIgnoreCase)||String.Equals(path,runs,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false),()=>SodaDesktopSigninControllerMutex.AcquireJournal(owner,5000),SodaDesktopSigninPackageNative.CreatePrivateFile);
+        return new SodaDesktopSigninRunJournal(runs,owner,package,barrier,role,()=>MaintenanceAbsent(slot)&&SodaDesktopSigninPackageNative.Authority(controller)&&current(),SodaDesktopSigninQuiescence.Private,parents,(path,bytes)=>String.Equals(path,slot,StringComparison.OrdinalIgnoreCase)||String.Equals(path,runs,StringComparison.OrdinalIgnoreCase)?SodaDesktopSigninQuiescence.Private(bytes):SodaDesktopSigninQuiescence.StateAncestor(path,bytes),()=>SodaDesktopSigninControllerMutex.AcquireJournal(owner,5000),SodaDesktopSigninPackageNative.CreatePrivateFile);
     }
     // No decryption: only the actual pending envelope's canonical owner/nonce
     // and cipher-envelope digest are needed to bind the selected startup branch.

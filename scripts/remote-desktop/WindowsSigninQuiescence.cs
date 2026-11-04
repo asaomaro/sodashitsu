@@ -41,10 +41,16 @@ public static class SodaDesktopSigninQuiescence {
     }
     /** Pin before the controller stops a verified exact service instance. Never
      * deletes/replaces/creates the barrier or repairs an unsafe path or ACL. */
+    // All state directories, including the shared StateRoot, are private. Code
+    // ancestors keep the existing stricter replacement/metadata ACL ceiling.
+    public static bool StateAncestor(string path,byte[] bytes){
+        string root=SodaDesktopSigninVault.StateRoot();
+        return String.Equals(path,root,StringComparison.OrdinalIgnoreCase)||path.StartsWith(root+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)?Private(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false);
+    }
     public static Pin Open(string owner){
-        string slot=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),"sodashitsu","desktop-signin",SodaDesktopSigninPackage.Slot(owner)),path=Path.Combine(slot,"quiescence.lock");
+        string slot=SodaDesktopSigninVault.StateDirectory(owner),path=Path.Combine(slot,"quiescence.lock");
         if(path.Length>512||path.Length<3||path[1]!=':'||path[2]!='\\')throw Failure();var drive=new DriveInfo(Path.GetPathRoot(path));if(drive.DriveType!=DriveType.Fixed||!String.Equals(drive.DriveFormat,"NTFS",StringComparison.OrdinalIgnoreCase))throw Failure();
         var directories=new List<string>();for(string current=slot;!String.IsNullOrEmpty(current);current=Path.GetDirectoryName(current)){if(directories.Count>=64)throw Failure();directories.Add(current);}directories.Reverse();
-        return OpenCore(path,directories,(item,bytes)=>String.Equals(item,slot,StringComparison.OrdinalIgnoreCase)||String.Equals(item,path,StringComparison.OrdinalIgnoreCase)?Private(bytes):SodaDesktopSigninPackage.CodeAcl(bytes,false));
+        return OpenCore(path,directories,(item,bytes)=>String.Equals(item,slot,StringComparison.OrdinalIgnoreCase)||String.Equals(item,path,StringComparison.OrdinalIgnoreCase)?Private(bytes):StateAncestor(item,bytes));
     }
 }
