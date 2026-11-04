@@ -91,3 +91,22 @@ DesktopNativeVideo.fromViewerは停止後falseを返すため、Provider保護�
 Default/UACの実Provider+Relay検査で、native_stopは1回、重複停止も誤エラーなし、画像継続を確認。修正前だけへ戻すと両ケースがmedia_unavailableにより失敗（protected-stop-negative.txt）。修正版を元のSHA256に戻して関連3ファイルを検査。source/testと最終文書の独立点検で必須指摘なし。
 
 関連3ファイル329テスト、pnpm build、pnpm typecheckがすべて成功。生成した転送テストファイル2件はSHA256一致を確認して削除し、専用転送folder設定だけを保持した。
+
+## 最終反映と入力解放の未解決事象
+
+f57ffb4fをmainへpush、Aとsr-pcへ反映。Aは14pane、sr-pcは4paneを保持してhandoffした。sr-pcのserver build成功。
+
+反映後の最終再確認で、再びロック→PINとEnterで解除した後、通常・保護共有の再接続が拒否された。Bのdesktop.startの応答から、resources.faultedによるserver_busy（入力解放を確認できない）が原因と確定。直接windows-helperは同許可でready=true/exit0、物理helperはlease1本のみ。設定再適用でfaultを解除しない保護は維持する。
+
+独立点検で、認証を成立させたEnter down後、対応up前にdesktopが切り替わり、元scope外への解放を拒否してterminal ACKが出ない経路が最有力。入力件数/cleanup段階/ACK有無の追加観測は未実施で、原因確定や修正完了とは扱わない。新desktopへキーを送ったり、exit0だけでcleanとみなしたり、faultを無条件に解除したりしない。これにより反映後の動画停止実機再検証はまだ完了していない（回帰テスト329件と反映前の実再現は記録済み）。
+
+
+通常desktopであることと、全キー/ボタンのdown状態が500msの間ないことをWindows APIで確認できた場合だけhandoffを実行する保守処理を行った。実際にsr-pcは4paneを保持し、通常共有がerrors=[]・実frame12以上で復帰した。故障flagを設定操作で消したり、旧helperの終了だけをclean証拠へ変更したりしていない。
+
+復帰後のf57ffb4fで保護DefaultのH.264を実frame61まで描画してから停止。画像frame17→28が継続し、errors=[]。重複して停止してもerrors=[]で管理者画面・閲覧中を維持した。これにより、上記「反映後の動画停止実機再検証」は完了した。PIN/Enterとscope遷移に伴う入力解放不明の事象自体は未解決のまま残す。
+
+## Electronからの別窓起動（追加報告の調査）
+
+利用者がデスクトップアシスタント内の操舵室でリモートデスクトップアイコンを押しても開かないと報告。MachineHeader.openDesktopは/desktop-viewへwindow.openする一方、assistant main.tsのopenPanel内WebContentsViewがsetWindowOpenHandlerで全件denyしていることを確認。タブの有無自体ではなく、新規ウィンドウ要求の明示拒否が原因。
+
+同一Electron process内の専用BrowserWindow/WebContentsViewへ、同一server originの検証済み/desktop-viewだけを開く案を推奨。既存persist:assistant-serverセッションを使い、remote contentへnative preloadを付けない分離を維持する。通常の外部リンクや任意URLのポップアップ許可は別問題として扱う。この追加報告については方針検討のみで、仕様決定・実装はまだ行っていない。

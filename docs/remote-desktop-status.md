@@ -101,3 +101,5 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
 マイク用配布物の取得元・導入条件は[VB-Audio公式](https://vb-audio.com/Cable/)で確認しました。再起動を伴うdriver導入は、動作中の利用者sessionへの影響を確認してから行います。
+
+2026-11-04の最終確認では、PIN認証を成立させるキー入力とdesktop遷移の間で入力解放の確認が取れず、再接続を安全に拒否する事象も確認しました。原因候補・復旧条件は同実機記録に残しています。この残件を解消したとは扱いません。
