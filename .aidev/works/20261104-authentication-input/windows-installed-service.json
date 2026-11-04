@@ -1,0 +1,2 @@
+{"id":"fa46c0b0-405c-4d50-ae0f-d752f57fd3d8","status":"exited","stdout":"{\r\n    \"ok\":  true,\r\n    \"at\":  \"2026-11-04T12:09:07.5059556Z\",\r\n    \"kind\":  \"unlock-service-update\"\r\n}\r\n\r\n{\"serviceStatus\":\"Running\",\"sha256\":\"16F39A0CFD689DB9918321E8A2FD2DBAB4F47FF9252320EDD39482CEA1DD5E1E\",\"authenticationBatchMarkerPresent\":true}\r\n","stderr":"","stdoutTruncated":false,"stderrTruncated":false,"exitCode":0,"signal":null,"timedOut":false,"cancelled":false}
+
