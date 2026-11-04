@@ -14,3 +14,9 @@ ready済みの認証画面（secure、elevatedではない）だけ、画像切�
 - source/test差分をreview_resource_monitorが独立点検し、terminal項目数・親終了・deadline分離検査の追加差分も再点検。必須指摘なし。
 
 実環境へ反映後の自動再接続は、この時点で未確認。
+
+## 反映と追加実機確認
+
+9caee3adをmainへpush。Aは14pane、sr-pcは既存4paneすべてを保持してhandoffし、assistantもrunning/readyを確認。画像切断エラーの前にsession_unlockedがbrowserへ届くようになり、自動再接続を開始した。ただしBの入力解放故障によって再接続が拒否されたため、全体の自動復帰成功とは扱わない。追加の数字キー対策は隣の20261104-authentication-pin-inputへ記録する。
+
+pnpm smokeはlogin/hello/workspace/端末echo/custom-popupまで成功後、Web UIの .xterm-helper-textarea 可視待機15秒で失敗。作業外の独立worktree（938601b8）へ同じ依存/未変更Web成果物を用意し、DesktopRelayをそのrevisionから再生成して試した結果も同じ箇所で失敗した。今回のrelay差分に起因する失敗とは判定せず、起動検査全体は未合格として残す（smoke.txt、smoke-baseline.txt）。

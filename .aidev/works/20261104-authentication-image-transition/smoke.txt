@@ -1,0 +1,29 @@
+
+> sodashitsu-workspace@0.1.0 smoke /workspaces/sodashitsu-main-live-assistant-agents
+> node --enable-source-maps packages/server/dist/smoke.js
+
+smoke: starting server on 127.0.0.1:44523 (state dir /tmp/soda-smoke-D55jWi)
+{"ts":"2026-11-04T12:28:05.885Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-04T12:28:05.886Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-04T12:28:05.886Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-04T12:28:05.887Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-04T12:28:05.896Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-smoke-D55jWi/commands.json","count":1}
+smoke: agent manifests ok (23/23)
+smoke: login ok
+smoke: websocket connected
+smoke: client.hello ok
+smoke: workspace.create ok (pane 5048d534-8a11-42a0-b347-64704518a5f4)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-11-04T12:28:06.721Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"825d81e5-2dda-499b-8cea-c0f551ee04a0","paneId":"5048d534-8a11-42a0-b347-64704518a5f4"}
+smoke: custom command popup round trip ok
+smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for locator('.xterm-helper-textarea') to be visible[22m
+
+    at checkWebUiRendersAndAcceptsInput (/workspaces/sodashitsu-main-live-assistant-agents/packages/server/src/smoke.ts:120:16)
+    at async main (/workspaces/sodashitsu-main-live-assistant-agents/packages/server/src/smoke.ts:309:5) {
+  log: [ "  - waiting for locator('.xterm-helper-textarea') to be visible" ],
+  name: 'TimeoutError'
+}
+ ELIFECYCLE  Command failed with exit code 1.

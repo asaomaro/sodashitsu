@@ -250,10 +250,10 @@ public static class SodaDesktopHost {
             if(kind=="key") {
                 string code=(string)input["code"];ushort key=VirtualKey(code);bool down=(bool)input["down"];
                 if(code=="NumpadEnter")key|=0x100;
-                // A bare authentication Enter may switch desktops on key-down.
+                // A bare authentication Enter or final PIN digit may switch desktops on key-down.
                 // Insert its matching release in the same native call, before
                 // the scope can be lost between two network input messages.
-                if(Secure&&SecureLockState!=null&&ProtectedMode==null&&down&&(key==13||key==(13|0x100))&&Keys.Count==0&&Buttons.Count==0){
+                if(Secure&&SecureLockState!=null&&ProtectedMode==null&&down&&(key==13||key==(13|0x100)||key>=48&&key<=57||key>=96&&key<=105)&&Keys.Count==0&&Buttons.Count==0){
                     Keys.Add(key);EmitInputs(new[]{KeyInput(key,true),KeyInput(key,false)});Keys.Remove(key);
                 }else ApplyKey(Keys,key,down,Key);
             } else if(kind=="text") {
@@ -284,30 +284,30 @@ public static class SodaDesktopHost {
         if(ResourceFence!=null||Control||MemoryInput!=null||MemoryBatchInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
         var type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");if(type==null)throw new InvalidOperationException("Missing resource fence");
         bool oldSecure=Secure,oldStopping=Stopping;long oldHeartbeat=LastHeartbeat;string oldMode=ProtectedMode;var oldLockState=SecureLockState;
-        try{foreach(string mode in new[]{"enter","numpad","text","partial-enter","partial-text","normal","elevated","modifier","button","lost"}){
-            bool live=mode!="lost",partial=mode.StartsWith("partial-"),text=mode=="text"||mode=="partial-text";
-            bool pulse=mode=="enter"||mode=="numpad"||mode=="text"||partial;int calls=0;var sizes=new List<int>();var output=new List<object>();
+        try{foreach(string mode in new[]{"enter","numpad","digit","numpad-digit","text","partial-enter","partial-digit","partial-text","normal","normal-digit","elevated","elevated-digit","modifier","modifier-digit","button","button-digit","lost"}){
+            bool live=mode!="lost",partial=mode.StartsWith("partial-"),text=mode=="text"||mode=="partial-text",digit=mode=="digit"||mode.EndsWith("-digit");
+            bool pulse=mode=="enter"||mode=="numpad"||mode=="digit"||mode=="numpad-digit"||mode=="text"||partial;int calls=0;var sizes=new List<int>();var output=new List<object>();
             Keys.Clear();Buttons.Clear();ResourceFences.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();
-            Secure=mode!="normal";ProtectedMode=mode=="elevated"?"elevated-uac":null;SecureLockState=mode=="normal"||mode=="elevated"?null:(Func<int>)(()=>live?1:0);Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;
+            Secure=!mode.StartsWith("normal");ProtectedMode=mode.StartsWith("elevated")?"elevated-uac":null;SecureLockState=mode.StartsWith("normal")||mode.StartsWith("elevated")?null:(Func<int>)(()=>live?1:0);Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;
             MemoryDesktop=()=>live;ResourceScope=()=>live;MemoryOutput=output.Add;
             ResourceInput=type.GetMethod("ReleaseInput");ResourceCommand=type.GetMethod("Fence");
             ResourceFence=Activator.CreateInstance(type,new object[]{(Func<bool>)ResourceNeutral,(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;
             string epoch=Guid.NewGuid().ToString("D");ResourceEpochs["control"]=epoch;
-            if(mode=="modifier")Keys.Add(17);if(mode=="button")Buttons.Add(0);
-            ushort key=(ushort)(mode=="numpad"?(13|0x100):13);
+            if(mode.StartsWith("modifier"))Keys.Add(17);if(mode.StartsWith("button"))Buttons.Add(0);
+            ushort key=(ushort)(mode=="numpad"?(13|0x100):mode=="numpad-digit"?99:digit?51:13);
             MemoryBatchInput=inputs=>{
                 calls++;sizes.Add(inputs.Length);
                 if(pulse){
                     if(inputs.Length!=2)throw new InvalidOperationException("Authentication input was not one down/up batch");
                     var a=inputs[0].data.key;var b=inputs[1].data.key;
                     if(inputs[0].type!=1||inputs[1].type!=1||a.vk!=b.vk||a.scan!=b.scan||(a.flags&2)!=0||b.flags!=(a.flags|2))throw new InvalidOperationException("Authentication release encoding mismatch");
-                    if(text&&(a.scan!='a'||a.flags!=4)||!text&&(a.vk!=13||a.flags!=(mode=="numpad"?1u:0u)))throw new InvalidOperationException("Authentication key encoding changed");
+                    if(text&&(a.scan!='a'||a.flags!=4)||!text&&(a.vk!=(key&255)||a.flags!=(mode=="numpad"?1u:0u)))throw new InvalidOperationException("Authentication key encoding changed");
                     live=false;
                 }
                 return partial?1u:(uint)inputs.Length;
             };
             bool failed=false,accepted=false;
-            try{accepted=Apply(text?new Dictionary<string,object>{{"kind","text"},{"text","a"}}:new Dictionary<string,object>{{"kind","key"},{"code",mode=="numpad"?"NumpadEnter":"Enter"},{"down",true}});}catch(InvalidOperationException){failed=true;}
+            try{accepted=Apply(text?new Dictionary<string,object>{{"kind","text"},{"text","a"}}:new Dictionary<string,object>{{"kind","key"},{"code",mode=="numpad"?"NumpadEnter":mode=="numpad-digit"?"Numpad3":digit?"Digit3":"Enter"},{"down",true}});}catch(InvalidOperationException){failed=true;}
             if(partial){
                 if(!failed||!Stopping||!text&&!Keys.Contains(key))throw new InvalidOperationException("Partial authentication input was accepted or forgotten");
                 if(ResourceCleanup("control",epoch,true)||output.Count!=0)throw new InvalidOperationException("Partial authentication input produced cleanup proof");

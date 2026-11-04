@@ -1,0 +1,24 @@
+smoke: starting server on 127.0.0.1:41083 (state dir /tmp/soda-smoke-VztwJq)
+{"ts":"2026-11-04T12:29:58.297Z","level":"info","msg":"agent manifest extended","kind":"copilot","path":"github-copilot-extra.toml","added":1}
+{"ts":"2026-11-04T12:29:58.298Z","level":"info","msg":"agent manifest extended","kind":"agy","path":"antigravity-extra.toml","added":1}
+{"ts":"2026-11-04T12:29:58.299Z","level":"info","msg":"agent manifest extended","kind":"muse","path":"muse-extra.toml","added":1}
+{"ts":"2026-11-04T12:29:58.299Z","level":"info","msg":"agent manifests loaded","ok":23,"total":23}
+{"ts":"2026-11-04T12:29:58.311Z","level":"info","msg":"custom commands loaded","file":"/tmp/soda-smoke-VztwJq/commands.json","count":1}
+smoke: agent manifests ok (23/23)
+smoke: login ok
+smoke: websocket connected
+smoke: client.hello ok
+smoke: workspace.create ok (pane 59077d14-5270-4140-943b-3c1370b52f69)
+smoke: pane.subscribe ok
+smoke: echo round trip ok
+{"ts":"2026-11-04T12:29:59.143Z","level":"info","msg":"custom command run","commandId":"smoke-cat","type":"popup","clientId":"2d3f0066-3bb5-4bf1-a21b-38ba16ea5505","paneId":"59077d14-5270-4140-943b-3c1370b52f69"}
+smoke: custom command popup round trip ok
+smoke: FAIL page.waitForSelector: Timeout 15000ms exceeded.
+Call log:
+[2m  - waiting for locator('.xterm-helper-textarea') to be visible[22m
+
+    at checkWebUiRendersAndAcceptsInput (/tmp/soda-auth-image-smoke-938601b8/packages/server/src/smoke.ts:120:16)
+    at async main (/tmp/soda-auth-image-smoke-938601b8/packages/server/src/smoke.ts:309:5) {
+  log: [ "  - waiting for locator('.xterm-helper-textarea') to be visible" ],
+  name: 'TimeoutError'
+}
