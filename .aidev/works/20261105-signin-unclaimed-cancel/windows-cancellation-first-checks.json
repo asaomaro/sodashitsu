@@ -1,0 +1,12 @@
+{
+  "id": "bbf426ab-9e1e-4db9-ae11-5ace865b7979",
+  "status": "exited",
+  "stdout": "System.Management.Automation.MethodInvocationException: Exception calling \"Run\" with \"0\" argument(s): \"Signin cancellation requires intact expired unclaimed initialization evidence\" ---> System.InvalidOperationException: Signin cancellation requires intact expired unclaimed initialization evidence\r\n   at SodaDesktopSigninUnclaimedRecovery.Storage.Move(String from, String to)\r\n   at SodaDesktopSigninUnclaimedRecovery.Core(String owner, String manifest, String slot, String runHash, String adminHash, Func`1 stopped, Func`1 current, Func`1 barrier, Func`3 policy, Action`1 createDirectory, Func`2 createFile, Func`1 wall, Action`1 afterStep)\r\n   at SodaDesktopSigninUnclaimedRecoveryChecks.Fixture.Run(Action`1 step)\r\n   at SodaDesktopSigninUnclaimedRecoveryChecks.Run()\r\n   at CallSite.Target(Closure , CallSite , Type )\r\n   --- End of inner exception stack trace ---\r\n   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)\r\n   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n",
+  "stderr": "Generated unclaimed cancellation checks failed\r\nAt C:\\Users\\<owner>\\AppData\\Local\\sodashitsu\\signin-layout-check-20261104\\validate-signin-unclaimed-recovery.ps1:14 ch\r\nar:32\r\n+ ... ($code -ne 0){throw 'Generated unclaimed cancellation checks failed'}\r\n+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : OperationStopped: (Generated uncla...n checks failed:String) [], RuntimeException\r\n    + FullyQualifiedErrorId : Generated unclaimed cancellation checks failed\r\n \r\n",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 1,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

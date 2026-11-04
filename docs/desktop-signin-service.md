@@ -116,3 +116,13 @@ marker除去前に失敗すれば、その状態と無効サービスを残し�
 固定名は `SodaDesktopSignin-` とowner SIDの64桁SHA-256を組み合わせた82文字です。.NET ServiceBaseの80文字制限を避けるため、登録済みの名前を短縮せずnative SCM dispatcherを使います。サービスへ渡す追加の起動引数は拒否します。stop/shutdownは25秒の停止期限を持ち、全cleanupが終わるまでSTOPPEDを報告しません。
 
 `validate-signin-service-dispatch.ps1 -NegativeControls` は通常権限の生成adapterで名前と起動/停止/失敗を検査します。実SCM・鍵・trustは操作しません。既存の `validate-signin-host.ps1` は子プロセス/Jobと配布用EXE生成を含みます。起動失敗で未確認のpending要求が残った場合は、修正版のEXEを上書きして再送することはできません。要求とjournalを保持して明示的な復旧を行います。
+
+## 未受理のまま期限が切れた初期化要求の取消
+
+`recover-signin-unclaimed.ps1` は、初期化の管理要求がclaim前に期限切れとなった場合だけの明示的なローカル復旧です。`-ValidateOnly` はコンパイルだけを行います。実行時は昇格した管理者で、固定owner/配布物のSHAと、確認した元 `intent.pending`／`admin.pending` の生バイトSHAを `-RunFileSha256`／`-AdminFileSha256` に指定します。
+
+停止中の厳格なサービス構成、同じ配布物と排他barrier、鍵などがまだない初回slot、空runtime、未受理の2ファイルだけを必要とします。暗号化済み要求のowner/nonce/hash/package/barrierと両期限を照合し、操作がinitializeであることを確認します。claim/started/不明なファイル・未期限切れ・別操作があれば拒否します。
+
+`install.transition` を先に保存し、元runs/adminを `runs-unclaimed-<id>`／`admin-unclaimed-<id>` へ非置換で退避します。Windowsのdirectory移動前だけ元file handleを閉じ、移動後は同じfile identityとhashを確認したarchive handleを再保持します。新しい実行世代のinitialと空adminを用意し、永久の `unclaimed-<id>.json` に取消の結び付きを残してから印を除去します。元要求を再生・削除せず、cleanなprocess停止を証明した記録とは扱いません。サービスの起動・停止・設定変更や鍵/trustの生成・消去は行いません。成功後は既存の明示的な更新へ進めます。
+
+途中失敗では印・退避済み/未退避の原本・途中ファイルを保持し、既存の起動・更新・復旧を拒否します。自動で再試行・印の削除・初期化はしません。生成検査は `validate-signin-unclaimed-recovery.ps1 -NegativeControls` です。実配置への適用はまだ未検証です。
