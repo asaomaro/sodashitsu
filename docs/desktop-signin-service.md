@@ -125,4 +125,18 @@ marker除去前に失敗すれば、その状態と無効サービスを残し�
 
 `install.transition` を先に保存し、元runs/adminを `runs-unclaimed-<id>`／`admin-unclaimed-<id>` へ非置換で退避します。Windowsのdirectory移動前だけ元file handleを閉じ、移動後は同じfile identityとhashを確認したarchive handleを再保持します。新しい実行世代のinitialと空adminを用意し、永久の `unclaimed-<id>.json` に取消の結び付きを残してから印を除去します。元要求を再生・削除せず、cleanなprocess停止を証明した記録とは扱いません。サービスの起動・停止・設定変更や鍵/trustの生成・消去は行いません。成功後は既存の明示的な更新へ進めます。
 
-途中失敗では印・退避済み/未退避の原本・途中ファイルを保持し、既存の起動・更新・復旧を拒否します。自動で再試行・印の削除・初期化はしません。生成検査は `validate-signin-unclaimed-recovery.ps1 -NegativeControls` です。実配置への適用はまだ未検証です。
+途中失敗では印・退避済み/未退避の原本・途中ファイルを保持し、既存の起動・更新・復旧を拒否します。自動で再試行・印の削除・初期化はしません。生成検査は `validate-signin-unclaimed-recovery.ps1 -NegativeControls` です。sr-pcの実配置では、下記のとおり取消と更新を確認済みです。
+
+2026-11-05のsr-pcでは、この未受理取消と次の配布物への更新が成功しました。その後のadmin起動は観測済みのまま異常終了したため、この取消操作の対象にはなりません。native hostとTypeScriptで状態保存先の判定が一致しない不具合を修正しています。
+
+## 観測済みの異常終了から、OS再起動を挟む限定復旧
+
+`recover-signin-restart.ps1` は、未claimの期限切れinitialize、空のruntime、正確なobserved記録3件、以前の未受理取消1件と完了した更新1件の履歴だけを対象にします。既存鍵・登録情報・未知のファイル・他の履歴は拒否します。一般の異常終了を自動復旧するものではありません。
+
+昇格した管理者で `-Action bind -OwnerSid … -ManifestSha256 … -RunFileSha256 … -AdminFileSha256 …` を実行し、返された `ticketSha256` を記録します。固定配布物、SCMの停止状態、元の生バイト、全項目のidentity/hash、排他barrierを照合し、起動を遮断する印を保存します。固定System32の `services.exe` を、SYSTEM・session 0・critical・生存が確認できるnative handleで保持し、PIDと作成時刻を印に固定します。
+
+OS再起動後、同じ指定に `-Action recover -TicketSha256 …` を渡します。検証済みのcritical SCM実体が変わり、その他の証拠が一致する場合だけ、元のruns/adminを退避して新generationと永久receiptを作ります。旧Host/Nodeの正常終了やJob-zeroを証明したことにはしません。同じ実体、証拠の差異、中断状態、再実行は拒否し、原本と印を保持します。復旧操作自体は再起動もサービス起動も行いません。
+
+この境界の考え方は、[Microsoftのcritical system servicesの説明](https://learn.microsoft.com/en-us/windows/win32/rstmgr/critical-system-services)と[IsProcessCritical](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocesscritical)に基づきます。kernelのboot GUIDとは区別します。critical属性の変更やSCMの終了は行いません。
+
+`-ValidateOnly` はコンパイルだけ、`validate-signin-restart-recovery.ps1 -NegativeControls` は通常ユーザーの隔離ファイルで成功・再実行拒否・中断保持と負例を検査します。sr-pcでBindと同じ再起動状態からのRecover拒否は確認済みです。実OS再起動後のRecover以降は[実機記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)で未完了として管理しています。

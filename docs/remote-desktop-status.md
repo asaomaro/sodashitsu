@@ -96,9 +96,11 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | 残る項目 | 必要なもの・現在の準備 |
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
-| マイク転送 | 仮想audio cable。VB-Audio公式Pack45のx64 installer/catalog/sysの署名は確認済み、導入/再起動は未実施。導入後は明示したrender IDだけを転送先へ設定する |
-| サインアウト後の専用接続 | 専用bundle/Native hostの生成とValidateOnlyは成功。実導入時の権限設定不具合を修正し、利用者のUAC承認後に固定配布物/初回記録を照合した限定復旧が成功。手動起動の登録は完了。初回initialize要求を準備したが、管理モードの起動は.NETのサービス名80文字上限により失敗。固定82文字名を保つnative SCM修正はWindows生成検査/実EXE生成を通過。実機は停止中で未受理の期限切れ要求/journalを保持。復旧と配布物更新、trust/enroll/通常起動・実サインアウトは未実施 |
+| マイク転送 | VB-Audio公式Pack45の署名済みx64 driverを導入済み（2026-11-05、installer exit0）。導入で変わった既定出力は元へ戻し、全6roleの一致を確認。OS再起動・明示した仮想render IDへの実マイク転送検証は未完了 |
+| サインアウト後の専用接続 | 手動起動の登録、未受理要求の取消とnative SCM修正版への更新は成功。その後の観測済み異常終了を保存し、状態保存先のTypeScript修正と新パッケージ生成、再起動境界のBind・同一状態の拒否を確認。実再起動後のRecover/更新/initialize/trust/enroll/通常起動・実サインアウトは未完了。下記の2026-11-05追記と現在の実機記録を参照 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
+
+2026-11-05追記: サインイン専用サービスは期限切れ未受理要求の取消とnative SCM修正版への更新が成功しました。その後、nativeとTypeScriptの状態保存先の不一致で管理モードが観測済みのまま異常終了したため、TypeScriptを修正（6da256c3）。新パッケージは隔離stageへ生成済みです。元の観測記録を保ったOS再起動境界の限定復旧を追加し、実機のBindと同一状態での拒否、生成取引・5中断を検証しました。再起動後の実Recover/更新/initialize/trust/enroll/通常起動・実サインアウトは未完了です。[現在の記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)を参照してください。
 
 マイク用配布物の取得元・導入条件は[VB-Audio公式](https://vb-audio.com/Cable/)で確認しました。再起動を伴うdriver導入は、動作中の利用者sessionへの影響を確認してから行います。
 

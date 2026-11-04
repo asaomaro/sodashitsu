@@ -1,0 +1,12 @@
+{
+  "id": "b5b8ab6b-57e8-4bdd-8e99-5988b9c42d22",
+  "status": "exited",
+  "stdout": "signin_restart_closed_history_keys_digest_and_same_instance_checks_passed\r\nsignin_restart_closed_history_keys_digest_and_same_instance_checks_passed\r\nsignin_restart_closed_history_keys_digest_and_same_instance_checks_passed\r\nsignin_restart_closed_history_keys_digest_and_same_instance_checks_passed\r\nsignin_restart_closed_history_keys_digest_and_same_instance_checks_passed\r\nsignin_restart_closed_history_keys_digest_and_same_instance_checks_passed\r\nsignin_restart_transactions_replay_and_5_interruptions_preserve_originals_passed\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

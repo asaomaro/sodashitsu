@@ -1,0 +1,12 @@
+{
+  "id": "c3a581a7-442f-4bf3-adae-9c5619261079",
+  "status": "exited",
+  "stdout": "{\"defaults\":{\"value\":[{\"flow\":0,\"role\":0,\"id\":\"{0.0.0.00000000}.{b80b61cb-dff2-461d-8202-f65216925d87}\"},{\"flow\":0,\"role\":1,\"id\":\"{0.0.0.00000000}.{b80b61cb-dff2-461d-8202-f65216925d87}\"},{\"flow\":0,\"role\":2,\"id\":\"{0.0.0.00000000}.{b80b61cb-dff2-461d-8202-f65216925d87}\"},{\"flow\":1,\"role\":0,\"id\":\"{0.0.1.00000000}.{7b86f3f8-1de3-49a9-89e0-c3594c4700bf}\"},{\"flow\":1,\"role\":1,\"id\":\"{0.0.1.00000000}.{7b86f3f8-1de3-49a9-89e0-c3594c4700bf}\"},{\"flow\":1,\"role\":2,\"id\":\"{0.0.1.00000000}.{7b86f3f8-1de3-49a9-89e0-c3594c4700bf}\"}],\"Count\":6},\"allSixDefaultsRestored\":true,\"at\":\"2026-11-04T23:42:51.2167785Z\"}\r\n",
+  "stderr": "#< CLIXML\r\n<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\"><Obj S=\"progress\" RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N=\"SourceId\">1</I64><PR N=\"Record\"><AV>Preparing modules for first use.</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}
