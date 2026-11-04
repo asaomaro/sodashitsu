@@ -192,8 +192,14 @@ public static class SodaDesktopHost {
         try { uint needed; var name=new StringBuilder(256); return GetUserObjectInformation(h,2,name,512,out needed) && name.ToString()=="Default"; }
         finally { CloseDesktop(h); }
     }
-    static void Emit(INPUT value) {
-        try { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");if(MemoryInput!=null){MemoryInput(value);return;}if(SendInput(1,new INPUT[]{value},Marshal.SizeOf(typeof(INPUT)))!=1) throw new InvalidOperationException("Input denied"); }
+    static Func<INPUT[],uint> MemoryBatchInput;
+    static void Emit(INPUT value) { EmitInputs(new[]{value}); }
+    static void EmitInputs(INPUT[] values) {
+        try { if(Secure && !AllowedDesktop())throw new InvalidOperationException("Secure desktop ended");uint sent;
+            if(MemoryBatchInput!=null)sent=MemoryBatchInput(values);
+            else if(MemoryInput!=null){foreach(var value in values)MemoryInput(value);sent=(uint)values.Length;}
+            else sent=SendInput((uint)values.Length,values,Marshal.SizeOf(typeof(INPUT)));
+            if(sent!=values.Length)throw new InvalidOperationException("Input denied"); }
         catch { if(ResourceFence!=null){Stopping=true;foreach(var fence in ResourceFences.Values)fence.GetType().GetMethod("Close").Invoke(fence,null);}throw; }
     }
     static INPUT KeyInput(ushort token,bool down) {
@@ -244,10 +250,15 @@ public static class SodaDesktopHost {
             if(kind=="key") {
                 string code=(string)input["code"];ushort key=VirtualKey(code);bool down=(bool)input["down"];
                 if(code=="NumpadEnter")key|=0x100;
-                ApplyKey(Keys,key,down,Key);
+                // A bare authentication Enter may switch desktops on key-down.
+                // Insert its matching release in the same native call, before
+                // the scope can be lost between two network input messages.
+                if(Secure&&SecureLockState!=null&&ProtectedMode==null&&down&&(key==13||key==(13|0x100))&&Keys.Count==0&&Buttons.Count==0){
+                    Keys.Add(key);EmitInputs(new[]{KeyInput(key,true),KeyInput(key,false)});Keys.Remove(key);
+                }else ApplyKey(Keys,key,down,Key);
             } else if(kind=="text") {
                 string text=(string)input["text"]; if(text.Length<1 || text.Length>1024) throw new InvalidOperationException();
-                foreach(char c in text) { var a=new INPUT();a.type=1;a.data.key.scan=c;a.data.key.flags=4;Emit(a);a.data.key.flags=6;Emit(a); }
+                foreach(char c in text) { var a=new INPUT();a.type=1;a.data.key.scan=c;a.data.key.flags=4;var up=a;up.data.key.flags=6;EmitInputs(new[]{a,up}); }
             } else if(kind=="wheel") {
                 int delta=Num(input,"delta");if(Math.Abs(delta)>1200)throw new InvalidOperationException();Mouse(0x800,unchecked((uint)delta),0,0);
             } else if(kind=="pointer") {
@@ -266,6 +277,54 @@ public static class SodaDesktopHost {
             } else throw new InvalidOperationException();
             return true;
         }
+    }
+    // Generated scope transition checks; all native input is intercepted as a
+    // whole batch. No real desktop, keyboard or clipboard is accessed.
+    public static void VerifyAuthenticationInput(){
+        if(ResourceFence!=null||Control||MemoryInput!=null||MemoryBatchInput!=null||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Fresh validation process required");
+        var type=typeof(SodaDesktopHost).Assembly.GetType("SodaDesktopResourceFence");if(type==null)throw new InvalidOperationException("Missing resource fence");
+        bool oldSecure=Secure,oldStopping=Stopping;long oldHeartbeat=LastHeartbeat;string oldMode=ProtectedMode;var oldLockState=SecureLockState;
+        try{foreach(string mode in new[]{"enter","numpad","text","partial-enter","partial-text","normal","elevated","modifier","button","lost"}){
+            bool live=mode!="lost",partial=mode.StartsWith("partial-"),text=mode=="text"||mode=="partial-text";
+            bool pulse=mode=="enter"||mode=="numpad"||mode=="text"||partial;int calls=0;var sizes=new List<int>();var output=new List<object>();
+            Keys.Clear();Buttons.Clear();ResourceFences.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();
+            Secure=mode!="normal";ProtectedMode=mode=="elevated"?"elevated-uac":null;SecureLockState=mode=="normal"||mode=="elevated"?null:(Func<int>)(()=>live?1:0);Control=true;Stopping=false;LastHeartbeat=Clock.ElapsedMilliseconds;
+            MemoryDesktop=()=>live;ResourceScope=()=>live;MemoryOutput=output.Add;
+            ResourceInput=type.GetMethod("ReleaseInput");ResourceCommand=type.GetMethod("Fence");
+            ResourceFence=Activator.CreateInstance(type,new object[]{(Func<bool>)ResourceNeutral,(Action)ReleaseHeldStrict,(Action)(()=>{}),(Action)(()=>{})});ResourceFences["control"]=ResourceFence;
+            string epoch=Guid.NewGuid().ToString("D");ResourceEpochs["control"]=epoch;
+            if(mode=="modifier")Keys.Add(17);if(mode=="button")Buttons.Add(0);
+            ushort key=(ushort)(mode=="numpad"?(13|0x100):13);
+            MemoryBatchInput=inputs=>{
+                calls++;sizes.Add(inputs.Length);
+                if(pulse){
+                    if(inputs.Length!=2)throw new InvalidOperationException("Authentication input was not one down/up batch");
+                    var a=inputs[0].data.key;var b=inputs[1].data.key;
+                    if(inputs[0].type!=1||inputs[1].type!=1||a.vk!=b.vk||a.scan!=b.scan||(a.flags&2)!=0||b.flags!=(a.flags|2))throw new InvalidOperationException("Authentication release encoding mismatch");
+                    if(text&&(a.scan!='a'||a.flags!=4)||!text&&(a.vk!=13||a.flags!=(mode=="numpad"?1u:0u)))throw new InvalidOperationException("Authentication key encoding changed");
+                    live=false;
+                }
+                return partial?1u:(uint)inputs.Length;
+            };
+            bool failed=false,accepted=false;
+            try{accepted=Apply(text?new Dictionary<string,object>{{"kind","text"},{"text","a"}}:new Dictionary<string,object>{{"kind","key"},{"code",mode=="numpad"?"NumpadEnter":"Enter"},{"down",true}});}catch(InvalidOperationException){failed=true;}
+            if(partial){
+                if(!failed||!Stopping||!text&&!Keys.Contains(key))throw new InvalidOperationException("Partial authentication input was accepted or forgotten");
+                if(ResourceCleanup("control",epoch,true)||output.Count!=0)throw new InvalidOperationException("Partial authentication input produced cleanup proof");
+            }else if(pulse){
+                if(failed||!accepted||calls!=1||sizes[0]!=2||Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Authentication pulse retained input");
+                Release();if(!ResourceCleanup("control",epoch,true)||output.Count!=1)throw new InvalidOperationException("Neutral authentication transition lost cleanup proof");
+                var ack=Obj(Json.DeserializeObject(OutputJson.Serialize(output[0])));if((string)ack["type"]!="resource_fence_ack"||(string)ack["id"]!=epoch||!(bool)ack["terminal"])throw new InvalidOperationException("Authentication cleanup correlation changed");
+                Apply(new Dictionary<string,object>{{"kind","key"},{"code","Enter"},{"down",false}});if(calls!=1)throw new InvalidOperationException("Authentication key-up reached the new scope");
+            }else if(mode=="lost"){
+                if(accepted||failed||calls!=0)throw new InvalidOperationException("Lost authentication scope received input");
+            }else{
+                if(failed||!accepted||calls!=1||sizes[0]!=1||!Keys.Contains(key))throw new InvalidOperationException("Ordinary or chorded Enter semantics changed");
+                Release();if(Keys.Count!=0||Buttons.Count!=0)throw new InvalidOperationException("Ordinary input release failed");
+            }
+            ResourceFence=null;
+        }}finally{Keys.Clear();Buttons.Clear();Control=false;MemoryInput=null;MemoryBatchInput=null;MemoryDesktop=null;MemoryOutput=null;ResourceFence=null;ResourceFences.Clear();ResourceEpochs.Clear();ResourceReleased.Clear();ResourceReleased.UnionWith(new[]{"control","clipboard","microphone"});ResourceScope=null;ResourceInput=null;ResourceCommand=null;Secure=oldSecure;ProtectedMode=oldMode;SecureLockState=oldLockState;Stopping=oldStopping;LastHeartbeat=oldHeartbeat;}
+        Console.WriteLine("authentication_input_generated_batch_transition_cleanup_partial_failure_and_ordinary_semantics_passed");
     }
     // Generated input-failure checks: all input/desktop/monitor/output endpoints
     // are memory-backed before calling the production Apply/Release paths.
