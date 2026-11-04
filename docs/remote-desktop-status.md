@@ -97,7 +97,7 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
 | マイク転送 | 仮想audio cable。VB-Audio公式Pack45のx64 installer/catalog/sysの署名は確認済み、導入/再起動は未実施。導入後は明示したrender IDだけを転送先へ設定する |
-| サインアウト後の専用接続 | 専用bundle/Native hostの生成とValidateOnlyは成功。実導入はサービス登録途中で中断し、無効/停止状態。固定配布物と初回記録を保持した限定復旧を検証中。鍵/trust・別machine登録・起動・実サインアウト検証は未実施 |
+| サインアウト後の専用接続 | 専用bundle/Native hostの生成とValidateOnlyは成功。実導入時の権限設定不具合を修正し、利用者のUAC承認後に固定配布物/初回記録を照合した限定復旧が成功。手動起動の登録を完了したがサービスは未起動。鍵/trust・別machine登録・起動・実サインアウト検証は未実施 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
 マイク用配布物の取得元・導入条件は[VB-Audio公式](https://vb-audio.com/Cable/)で確認しました。再起動を伴うdriver導入は、動作中の利用者sessionへの影響を確認してから行います。

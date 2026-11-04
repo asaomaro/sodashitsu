@@ -23,4 +23,8 @@ completeは外部marker hashを照合して、厳格ACL設定と同一handle読�
 - recover-signin-install.ps1 -ValidateOnlyが成功。コンパイルのみで配置/SCMは変更していない。
 - review_resource_monitorが設計、source/test、marker前後の失敗境界、初期ACLの限定、同一handle読み戻しを独立点検し必須指摘なし。
 
-実配置のinspect/completeとSYSTEM起動・鍵/trust・別machine登録・実サインアウトは、まだ確認していない。
+## 利用者承認後の実配置
+
+2026-11-04T14:19:33Z、利用者がUAC承認した限定復旧wrapperで、固定配布物のinspect→同じmarker SHAでcompleteが成功。実receiptは `initial-install-completed`、`started:false`。配布物SHA256は `2fee9af791dde7547e4f554f5a355f530f75294eb878d53641064ca56f9f6d67`、marker SHA256は `c3f1b0e21fc79faeed8a7d7e527f7d55969586332b0b2e4e9de41d521482360f`。厳格ACLの読み戻しと再検査後に初回markerを除去し、無効から手動起動へ変更した。サービス起動・鍵/trust・接続先登録はこの操作に含まない。通常ユーザーからの後続sc query/qcはアクセス拒否であり、状態取得成功として扱わない。
+
+SYSTEMでの鍵初期化、viewer trust、別machine登録、通常起動・実サインアウト検証は引き続き未実施。

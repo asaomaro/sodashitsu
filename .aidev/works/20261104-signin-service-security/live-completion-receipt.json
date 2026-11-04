@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "at": "2026-11-04T14:19:33.7898893Z",
+  "completion": {
+    "state": "initial-install-completed",
+    "markerSha256": "c3f1b0e21fc79faeed8a7d7e527f7d55969586332b0b2e4e9de41d521482360f",
+    "packageSha256": "2fee9af791dde7547e4f554f5a355f530f75294eb878d53641064ca56f9f6d67",
+    "started": false
+  }
+}
