@@ -4,7 +4,7 @@ import {createHash} from "node:crypto";
 import {afterEach,expect,it,vi} from "vitest";
 import {DesktopSigninContextProcess,type DesktopSigninPresenceDependencies} from "./DesktopSigninPresenceProcess.js";
 const ownerSid="S-1-5-21-1-2-3-1001",root="C:\\Program Files\\Sodashitsu\\DesktopSignin-generated",slot=createHash("sha256").update(ownerSid).digest("hex");
-const context={type:"signin_context",ownerSid,packageRoot:root,stateDir:"C:\\ProgramData\\sodashitsu\\desktop-signin\\"+slot+"\\runtime"};
+const context={type:"signin_context",ownerSid,packageRoot:root,stateDir:"C:\\Program Files\\Sodashitsu\\DesktopSigninData\\"+slot+"\\runtime"};
 class Child extends EventEmitter{stdin=new PassThrough();stdout=new PassThrough();stderr=new PassThrough();kill=vi.fn(()=>true);}
 const processes:DesktopSigninContextProcess[]=[];
 afterEach(()=>{for(const p of processes)p.close();processes.length=0;vi.useRealTimers();});

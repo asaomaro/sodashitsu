@@ -4,7 +4,7 @@ import {createHash} from "node:crypto";
 import {afterEach,expect,it,vi} from "vitest";
 import {desktopSigninContext,DesktopSigninPresenceProcess,type DesktopSigninPresenceDependencies} from "./DesktopSigninPresenceProcess.js";
 const ownerSid="S-1-5-21-1-2-3-1001",root="C:\\Program Files\\Sodashitsu\\DesktopSignin-generated",slot=createHash("sha256").update(ownerSid).digest("hex");
-const context={type:"signin_context",ownerSid,packageRoot:root,stateDir:"C:\\ProgramData\\sodashitsu\\desktop-signin\\"+slot+"\\runtime"};
+const context={type:"signin_context",ownerSid,packageRoot:root,stateDir:"C:\\Program Files\\Sodashitsu\\DesktopSigninData\\"+slot+"\\runtime"};
 const pulse=(seq=1)=>({type:"signin_presence",seq,validForMs:1000});
 class Child extends EventEmitter{stdin=new PassThrough();stdout=new PassThrough();stderr=new PassThrough();kill=vi.fn(()=>true);}
 const processes:DesktopSigninPresenceProcess[]=[];afterEach(()=>{for(const p of processes)p.close();processes.length=0;vi.useRealTimers();});
@@ -16,6 +16,11 @@ function fixture(spawnAbort=false){let now=0,active=true,onCheck:(()=>void)|unde
  return {process,child,abort,closed,unsafeStop,spawn,output,finish,onCheck:(value:()=>void)=>{onCheck=value;},clock:(v:number)=>{now=v;},lose:()=>{active=false;}};
 }
 it("accepts only native fixed-slot metadata, never an argv or env state path",()=>{expect(desktopSigninContext(context,ownerSid,root)).toEqual(context);for(const bad of [{...context,stateDir:"C:\\arbitrary"},{...context,stateDir:context.stateDir+"\\..\\runtime"},{...context,ownerSid:"S-1-5-18"},{...context,packageRoot:"C:\\other"},{...context,stateDir:"\\\\server\\"+context.stateDir},{...context,extra:true}])expect(()=>desktopSigninContext(bad,ownerSid,root)).toThrow();});
+it("matches the native Program Files state root exactly and rejects the retired ProgramData slot",()=>{
+ expect(desktopSigninContext(context,ownerSid,root)).toEqual(context);
+ expect(desktopSigninContext({...context,stateDir:context.stateDir.toUpperCase()},ownerSid,root).stateDir).toBe(context.stateDir.toUpperCase());
+ for(const stateDir of ["C:\\ProgramData\\sodashitsu\\desktop-signin\\"+slot+"\\runtime","D:\\Program Files\\Sodashitsu\\DesktopSigninData\\"+slot+"\\runtime","C:\\other\\Sodashitsu\\DesktopSigninData\\"+slot+"\\runtime",context.stateDir.replace(slot,"f".repeat(64))])expect(()=>desktopSigninContext({...context,stateDir},ownerSid,root)).toThrow();
+});
 it("starts only the fixed readonly purpose and never configures capture or input",()=>{const f=fixture();expect(f.spawn.mock.calls[0]![1]).toEqual(["--broker","presence"]);expect(f.spawn.mock.calls[0]![2].shell).toBeUndefined();expect(f.child.stdin.read().toString()).toBe('{"type":"heartbeat"}\n');f.finish();});
 it("publishes native context only after a fresh pulse and makes loss terminal",async()=>{const f=fixture();let ready=false;void f.process.ready().then(()=>{ready=true;});f.output(context);await Promise.resolve();expect(ready).toBe(false);expect(f.process.active()).toBe(false);f.output(pulse());expect(await f.process.ready()).toEqual(context);expect(f.process.active()).toBe(true);f.clock(1000);expect(f.process.active()).toBe(false);f.output(pulse(2));expect(f.process.active()).toBe(false);expect(f.closed).toHaveBeenCalledOnce();f.finish();await f.process.settled();});
 it("returns inactive only after a clean broker stop, permitting a later fresh probe",async()=>{const f=fixture();f.output(context);f.finish();expect(await f.process.ready()).toBeNull();await expect(f.process.settled()).resolves.toBeUndefined();expect(f.unsafeStop).not.toHaveBeenCalled();});

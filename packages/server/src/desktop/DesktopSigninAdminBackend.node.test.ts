@@ -1,7 +1,7 @@
 import {afterEach,expect,it,vi} from 'vitest';
 import {desktopSigninAdminBackend,type DesktopSigninAdminBackendDependencies} from './DesktopSigninAdminBackend.node.js';
 import type {DesktopSigninAdminPermit} from './DesktopSigninAdministration.js';
-const ownerSid='S-1-5-21-1-2-3-1001',nonce='11111111-1111-4111-8111-111111111111',fp='a'.repeat(64),peer={fingerprint:'b'.repeat(64),label:'generated',role:'viewer' as const},context={type:'signin_context' as const,ownerSid,packageRoot:'C:\\Program Files\\Sodashitsu\\fixed',stateDir:'C:\\ProgramData\\sodashitsu\\desktop-signin\\fixed\\runtime'},binding={nonce,cipherSha256:'c'.repeat(64)};
+const ownerSid='S-1-5-21-1-2-3-1001',nonce='11111111-1111-4111-8111-111111111111',fp='a'.repeat(64),peer={fingerprint:'b'.repeat(64),label:'generated',role:'viewer' as const},context={type:'signin_context' as const,ownerSid,packageRoot:'C:\\Program Files\\Sodashitsu\\fixed',stateDir:'C:\\Program Files\\Sodashitsu\\DesktopSigninData\\fixed\\runtime'},binding={nonce,cipherSha256:'c'.repeat(64)};
 const cleanup:(()=>Promise<void>)[]=[];afterEach(async()=>{for(const run of cleanup.splice(0))await run();});
 function fixture(){let active=true,permitActive=true;const abort=new AbortController(),permit:DesktopSigninAdminPermit={active:()=>permitActive,expiresAt:11000};
  const store={status:vi.fn(async()=>({initialized:true as const,required:true,fingerprint:fp,peers:[peer]})),initialize:vi.fn(async()=>({fingerprint:fp})),setRequired:vi.fn(async()=>{}),trust:vi.fn(async()=>{}),revoke:vi.fn(async()=>{}),close:vi.fn(),settled:vi.fn(async()=>{})};

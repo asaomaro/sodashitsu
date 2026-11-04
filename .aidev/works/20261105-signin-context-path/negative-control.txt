@@ -1,0 +1,34 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninPresenceProcess.test.ts (22 tests | 1 failed | 21 skipped) 32ms
+   × matches the native Program Files state root exactly and rejects the retired ProgramData slot 30ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 skipped (22)
+   Start at  07:50:07
+   Duration  355ms (import 54%, transform 29%, tests 14%, worker 2%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninPresenceProcess.test.ts > matches the native Program Files state root exactly and rejects the retired ProgramData slot
+Error: Signin presence is unavailable
+ ❯ failure src/desktop/DesktopSigninPresenceProcess.ts:7:19
+      5| import {z} from "zod";
+      6| import type {DesktopSigninWorkerDependencies} from "./DesktopSigninWor…
+      7| const failure=()=>new Error("Signin presence is unavailable");
+       |                   ^
+      8| const contextSchema=z.object({type:z.literal("signin_context"),ownerSi…
+      9| const pulseSchema=z.object({type:z.literal("signin_presence"),seq:z.nu…
+ ❯ desktopSigninContext src/desktop/DesktopSigninPresenceProcess.ts:18:132
+ ❯ src/desktop/DesktopSigninPresenceProcess.test.ts:20:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

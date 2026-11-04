@@ -1,0 +1,95 @@
+{
+  "at": "2026-11-04T22:42:24.5304285Z",
+  "changedServiceOrState": false,
+  "ok": true,
+  "inventory": {
+    "admin": {
+      "directory": false,
+      "name": "admin.pending",
+      "sha256": "80e6e94958b4dfb0eed4e261317596234a98827efbd9195bb640014bc80cb0f2",
+      "length": 780
+    },
+    "runtime": {},
+    "runs": [
+      {
+        "directory": false,
+        "name": "intent.claimed",
+        "sha256": "287905972574c0e743840427fa81cb21b066b13239923188f3c32875dfd2d1b2",
+        "length": 1204
+      },
+      {
+        "directory": false,
+        "name": "observation",
+        "sha256": "40acb40adabe26bafdf4547f0d9f5f8a78118eccdc27e1e70bb818fe14ceca29",
+        "length": 1125
+      },
+      {
+        "directory": false,
+        "name": "started",
+        "sha256": "e181e4945632e0f4635e20ed33eb7db0c33e285d77ed51fe06db81725201ae5e",
+        "length": 1141
+      }
+    ],
+    "slot": [
+      {
+        "directory": true,
+        "name": "admin",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "admin-unclaimed-01bfd4f5a0ba4352a08aa9fc2d6907ec",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "runs",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "runs-old-7d05139722a043258bec0f001c15477e",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "runs-unclaimed-01bfd4f5a0ba4352a08aa9fc2d6907ec",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": true,
+        "name": "runtime",
+        "sha256": null,
+        "length": 0
+      },
+      {
+        "directory": false,
+        "name": "quiescence.lock",
+        "sha256": "8de0b3c47f112c59745f717a626932264c422a7563954872e237b223af4ad643",
+        "length": 1
+      },
+      {
+        "directory": false,
+        "name": "unclaimed-01bfd4f5a0ba4352a08aa9fc2d6907ec.json",
+        "sha256": "6664d96e90ab31ce36c73f993feb52af84c117b8ffc150ac724a6313b97721a5",
+        "length": 1024
+      }
+    ]
+  },
+  "scm": {
+    "State": "Stopped",
+    "StartMode": "Manual",
+    "ProcessId": 0,
+    "ExitCode": 1066,
+    "ServiceSpecificExitCode": 1
+  },
+  "status": {
+    "state": "stopped",
+    "journal": "observed"
+  }
+}

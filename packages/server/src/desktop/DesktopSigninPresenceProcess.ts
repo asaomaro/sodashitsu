@@ -14,8 +14,8 @@ export function desktopSigninContext(raw:unknown,ownerSid:string,expectedRoot:st
  const data=contextSchema.parse(raw),parts=ownerSid.split("-").slice(2);
  if(!/^S-1-[0-9]+(?:-[0-9]+){1,15}$/.test(ownerSid)||["S-1-5-18","S-1-5-19","S-1-5-20"].includes(ownerSid)||parts.some((p,i)=>!/^(?:0|[1-9][0-9]*)$/.test(p)||!Number.isSafeInteger(Number(p))||Number(p)>(i===0?0xffffffffffff:0xffffffff))||data.ownerSid!==ownerSid)throw failure();
  for(const path of [data.packageRoot,data.stateDir,expectedRoot])if(!/^[A-Za-z]:\\/.test(path)||path.slice(2).includes(":")||/[\x00-\x1f"<>|?*]/.test(path)||win32.resolve(path)!==path)throw failure();
- const slot=createHash("sha256").update(ownerSid).digest("hex"),suffix="\\"+win32.join("sodashitsu","desktop-signin",slot,"runtime");
- if(data.packageRoot.toLowerCase()!==expectedRoot.toLowerCase()||!data.stateDir.toLowerCase().endsWith(suffix.toLowerCase()))throw failure();return Object.freeze(data);
+ const slot=createHash("sha256").update(ownerSid).digest("hex"),stateDir=win32.join(win32.dirname(expectedRoot),"DesktopSigninData",slot,"runtime");
+ if(data.packageRoot.toLowerCase()!==expectedRoot.toLowerCase()||data.stateDir.toLowerCase()!==stateDir.toLowerCase())throw failure();return Object.freeze(data);
 }
 /** Dedicated SYSTEM service only: fixed readonly broker purpose. Context is
  * published only after a native signed-out pulse, never from an argv/env path. */

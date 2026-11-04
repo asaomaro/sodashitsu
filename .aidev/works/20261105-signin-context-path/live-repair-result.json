@@ -1,0 +1,108 @@
+{
+  "ok": false,
+  "message": "Controller failed: control-signin-service.ps1 Signin controller could not verify installation, run evidence, or the requested transition. Inspect the dedicated run/admin journals; do not reset keys, trust, or replay an unknown request.\r\n",
+  "steps": [
+    {
+      "phase": "controller-start",
+      "pid": 25716,
+      "tool": "control-signin-service.ps1",
+      "startedAt": "2026-11-04T22:35:46.2443998Z"
+    },
+    {
+      "receipt": {
+        "state": "stopped",
+        "journal": "pending"
+      },
+      "phase": "before"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 17176,
+      "tool": "install-signin-service.ps1",
+      "startedAt": "2026-11-04T22:35:47.2654228Z"
+    },
+    {
+      "receipt": {
+        "validated": true,
+        "ownerSid": "<owner-sid>",
+        "packageSha256": "ec399280816050b7527689769bec8f879bae0441940265e954bd70da8ecc83fa",
+        "service": "SodaDesktopSignin-68f6fb663a79fe1678d88cde0d7b34d23fa8c55adae6cfad3033cf20a8f8664d",
+        "startsService": false,
+        "writesInstalledState": false
+      },
+      "phase": "package-preflight"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 31324,
+      "tool": "recover-signin-unclaimed.ps1",
+      "startedAt": "2026-11-04T22:35:48.1873964Z"
+    },
+    {
+      "receipt": {
+        "state": "expired-unclaimed-initialize-canceled",
+        "started": false,
+        "packageSha256": "2fee9af791dde7547e4f554f5a355f530f75294eb878d53641064ca56f9f6d67",
+        "runsArchive": "runs-unclaimed-01bfd4f5a0ba4352a08aa9fc2d6907ec",
+        "adminArchive": "admin-unclaimed-01bfd4f5a0ba4352a08aa9fc2d6907ec",
+        "receipt": "unclaimed-01bfd4f5a0ba4352a08aa9fc2d6907ec.json",
+        "newRunId": "e003e67c-7601-463d-a2c8-0adf4d332f12"
+      },
+      "phase": "cancel-expired-unclaimed"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 10304,
+      "tool": "upgrade-signin-service.ps1",
+      "startedAt": "2026-11-04T22:35:50.0424384Z"
+    },
+    {
+      "receipt": {
+        "state": "upgraded",
+        "started": false,
+        "packageSha256": "ec399280816050b7527689769bec8f879bae0441940265e954bd70da8ecc83fa",
+        "oldPackageSha256": "2fee9af791dde7547e4f554f5a355f530f75294eb878d53641064ca56f9f6d67",
+        "codeArchive": "C:\\Program Files\\Sodashitsu\\.signin-old-7d05139722a043258bec0f001c15477e",
+        "runArchive": "C:\\Program Files\\Sodashitsu\\DesktopSigninData\\68f6fb663a79fe1678d88cde0d7b34d23fa8c55adae6cfad3033cf20a8f8664d\\runs-old-7d05139722a043258bec0f001c15477e"
+      },
+      "phase": "upgrade"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 5792,
+      "tool": "control-signin-service.ps1",
+      "startedAt": "2026-11-04T22:36:03.3212519Z"
+    },
+    {
+      "receipt": {
+        "state": "stopped",
+        "journal": "initial"
+      },
+      "phase": "updated-status"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 29888,
+      "tool": "control-signin-admin.ps1",
+      "startedAt": "2026-11-04T22:36:03.9735134Z"
+    },
+    {
+      "phase": "prepare",
+      "operation": "initialize",
+      "receipt": {
+        "state": "pending",
+        "nonce": "9e5dacc5-d547-47e1-909f-03dbed0599a1",
+        "cipherSha256": "80e6e94958b4dfb0eed4e261317596234a98827efbd9195bb640014bc80cb0f2",
+        "expiresAt": 1793831884641,
+        "operation": "initialize"
+      }
+    },
+    {
+      "phase": "controller-start",
+      "pid": 35124,
+      "tool": "control-signin-service.ps1",
+      "startedAt": "2026-11-04T22:36:04.7826375Z"
+    }
+  ],
+  "at": "2026-11-04T22:36:06.6851746Z"
+}
