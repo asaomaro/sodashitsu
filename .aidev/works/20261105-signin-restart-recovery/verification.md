@@ -40,3 +40,18 @@ raw logの個人profile名だけを <owner-profile> に置換した。PIN・秘�
 - raw WebSocketを使う生成音の試行ではsr-pcが自動ロックしており、readyのsecureDesktop=true/lockScreenCover=trueとなった。現行仕様どおりマイク機能は交渉されず、音は送信していない。仮想CABLE Outputだけを明示した30秒のメタデータprobeはパケットを受信できたが、440Hz到達の成功証拠はない。音声データ・個人画面は保存していない。probe/共有は終了済み。
 - 全体テストの設定画面失敗について、修正前590419efの該当1テストだけの実行は成功（残り146skip）。全ファイル実行のworker SIGABRT/順序依存は未解決として残す。今回の修正の関連66件・ビルド・型検査の成功とは区別する。
 - 再起動後に最初のWindowsログインと操舵室起動を手元で行えるか、利用者への確認が未回答。UACの再承認を求めているのではなく、現行接続がログイン後起動に依存するための手元操作の確認。再起動はまだ行わず、元のmarker/journalを保持している。
+
+
+## 2026-11-05 ロック解除後の仮想マイク再検証
+
+通常のリモート閲覧経路でsr-pcのWindowsを解除できた。物理マイクは使用せず、440Hzの生成PCMを既存の明示的なVB-CABLE render endpointへ送り、対応するvirtual capture endpointだけを30秒計測した。PCMは保存しない。
+ロック中の試行はmicrophoneを交渉できず、captureのpeakRmsは0.522程度（無信号）だった。
+解除後はmicrophone=true / microphone_ready / runningまで進み、captureはpeakRms=5751.5123となり生成信号が実際に届いた。ただし6秒の転送途中でunavailableとなり中断したため、連続転送は未合格。再起動要求があるドライバーの検証と継続性の調査を残す。
+
+```text
+{"virtualCaptureOnly":true,"packets":2999,"samples":1439520,"peakRms":5751.5123065590324,"hzAtPeak":500,"pcmSaved":false}
+Error: Virtual sink unavailable
+```
+
+周波数は短い窓の粗いゼロ交差推定で500Hz。入力の生成周波数440Hzとの厳密なスペクトル照合や連続転送の合格値として扱わない。
+再起動後にユーザーの初回Windowsサインインが可能か確認中。応答なしを可能と解釈して再起動しない。
