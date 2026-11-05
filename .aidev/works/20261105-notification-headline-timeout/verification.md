@@ -59,3 +59,13 @@ production host bundleを修正版へ更新した隔離アプリで、Windows上
 ```
 
 検証したnative bundleはLinuxのレビュー済みbuildとSHA256 ef45f7a58173c6d959ab4100cdb5b0811ab9ded8cd7dfecc8848eaff0d44e094で完全一致。Windows側の未修正bundleからの小さいbyte差分を隔離アプリだけに適用し、適用前後の全体hashを検証した。通常の配布物や秘密設定に差分を適用していない。
+
+
+## 導入
+
+- 4ba0be68をmainへpush。MY-NOTEPCのC:\git\sodashitsu-windows-notifyとsr-pcのC:\git\sodashitsuをbf12705aへfast-forward更新し、desktop-assistant/serverのWindows build成功。
+- sr-pc側の稼働workerをhandoffし、認証済みcontrol statusで2026-11-05T08:09:41.444Z / adopted=3 / dropped=0を確認。buildしたWindows host bundleのSHA256は検証済みのef45f7a58173c6d959ab4100cdb5b0811ab9ded8cd7dfecc8848eaff0d44e094と一致。
+- Windows main.jsの既存RunOnce pinは変化なし。
+- 隔離17880サーバーを認証済みserver.stopで終了し、17880/17980の待受0を確認。隔離local-authと自前のcodex.exeダミーは撤去。自前workspaceは閉じ、通常サーバーの共有設定や通常の要約エージェントは変更していない。
+
+- WSL稼働サーバーもhandoffで13 paneを維持した。
