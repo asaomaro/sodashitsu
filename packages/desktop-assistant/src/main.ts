@@ -477,18 +477,20 @@ function localWindow(role: LocalRole): BrowserWindow {
   return win;
 }
 
+let pendingHeadlineTimer:ReturnType<typeof setTimeout>|undefined;
+function clearPendingHeadline(){pendingHeadline=null;clearTimeout(pendingHeadlineTimer);pendingHeadlineTimer=undefined;}
 let pendingHeadline:{content:{id:string;title:string;message:string};epoch:number;speechEpoch:number}|null=null;
 function summaryConfigured(){return SummarySettingsSchema.safeParse(sharedAppearance.summarySettings).success&&loadSummarySettings(sharedAppearance.summarySettings).notificationSummary!==false;}
 function shortNotificationMessage(notice:import("@sodashitsu/protocol").AssistantNotice){
  const result=noticeSummaries.snapshot()[notice.id];
  return result?.status==="ready"&&result.headline?result.headline:notice.kind==="attention"?"入力待ちです。":notice.kind==="question"?"質問フォームが届きました。":notice.kind==="done"?"作業が完了しました。":"作業状況を確認してください。";
 }
-function deliverPendingHeadline(){
+function deliverPendingHeadline(expired=false){
  const pending=pendingHeadline;if(!pending)return;
- if(pending.epoch!==automaticNoticeEpoch||!notices.some(n=>n.id===pending.content.id)){pendingHeadline=null;return;}
+ if(pending.epoch!==automaticNoticeEpoch||!notices.some(n=>n.id===pending.content.id)){clearPendingHeadline();return;}
  const result=noticeSummaries.snapshot()[pending.content.id];
- if(summaryConfigured()&&(!result||result.status==="waiting"||result.status==="summarizing"))return;
- pendingHeadline=null;
+ if(!expired&&summaryConfigured()&&(!result||result.status==="waiting"||result.status==="summarizing"))return;
+ clearPendingHeadline();
  notifyBubble(pending.content,pending.speechEpoch,true);
 }
 function notifyBubble(payload?: { id?: string; title: string; message: string },speechEpoch=voiceEpoch,headlinePrepared=false): void {
@@ -496,7 +498,7 @@ function notifyBubble(payload?: { id?: string; title: string; message: string },
   payload ??= latest ? { id: latest.id, title: latest.title || "エージェントからの通知", message: latest.message } : { title: "操舵室からのお知らせ", message: "新しい通知が届きました。" };
   let content = payload;
   const requestEpoch = ++automaticNoticeEpoch;
-  pendingHeadline=null;
+  clearPendingHeadline();
   const preferences = controller.preferences;
   if (quitting || suspended || !preferences.enabled || preferences.mute) return;
   try {
@@ -506,6 +508,7 @@ function notifyBubble(payload?: { id?: string; title: string; message: string },
   const summary=source?noticeSummaries.snapshot()[source.id]:undefined;
   if(source&&!headlinePrepared&&(summaryConfigured()&&(!summary||summary.status==="waiting"||summary.status==="summarizing"))){
     pendingHeadline={content:{id:source.id,title:content.title,message:content.message},epoch:requestEpoch,speechEpoch};
+    pendingHeadlineTimer=setTimeout(()=>deliverPendingHeadline(true),15000);pendingHeadlineTimer.unref();
     return;
   }
   if(source)content={...content,message:shortNotificationMessage(source)};
@@ -739,7 +742,7 @@ function updateChat(preferences: DesktopAssistantPreferences): void {
 }
 function updateBackend(preferences: DesktopAssistantPreferences): void {
   if (suspended) return;
-  ++automaticNoticeEpoch;
+  ++automaticNoticeEpoch;clearPendingHeadline();
   voice.configure(preferences.enabled && preferences.voiceEnabled && !preferences.mute);
   configureNoticeSummaries();
   closeCompact();
@@ -1842,7 +1845,7 @@ else {
     voice.stop();
     noticeSummaries.stop();
     closeCompact();
-    ++automaticNoticeEpoch;
+    ++automaticNoticeEpoch;clearPendingHeadline();
     fullscreen.stop();
     backend?.stop();
     backend = null;
@@ -2065,7 +2068,7 @@ else {
         publishCharacterState();
         voice.configure(false);
         closeCompact();
-        ++automaticNoticeEpoch;
+        ++automaticNoticeEpoch;clearPendingHeadline();
         fullscreen.stop();
         transcription.cancel();
         ocr.discard();
@@ -2087,7 +2090,7 @@ else {
         screenLocked=true;publishCharacterState();
         voice.configure(false);
         closeCompact();
-        ++automaticNoticeEpoch;
+        ++automaticNoticeEpoch;clearPendingHeadline();
         fullscreen.stop();
         transcription.cancel();
         ocr.discard();
@@ -2097,14 +2100,14 @@ else {
       powerMonitor.on("unlock-screen", () => {
         screenLocked=false;publishCharacterState();
         const prefs=controller.preferences;voice.configure(prefs.enabled&&prefs.voiceEnabled&&!prefs.mute);
-        ++automaticNoticeEpoch;
+        ++automaticNoticeEpoch;clearPendingHeadline();
         fullscreen.invalidate();
       });
       powerMonitor.on("resume", () => {
         suspended = false;
         publishCharacterState();
         const prefs=controller.preferences;voice.configure(prefs.enabled&&prefs.voiceEnabled&&!prefs.mute);
-        ++automaticNoticeEpoch;
+        ++automaticNoticeEpoch;clearPendingHeadline();
         fullscreen.invalidate();
         const previousControl = control,
           previousBackend = backend;

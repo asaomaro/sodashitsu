@@ -1977,3 +1977,29 @@ it("opens desktop popups in isolated sibling windows and keeps the original pane
   expect(nested({url})).toEqual({action:'deny'});expect(fixture.windows).toHaveLength(count);
  }finally{for(const win of created)if(!win.destroyed)win.close();parent.close();await save(event,{enabled:false});}
 });
+
+it("shows a simple notice when its shared headline stalls without announcing a late duplicate",async()=>{
+ const settings=fixture.windows.filter(w=>!w.isDestroyed()&&w.url.endsWith('/settings.html')).at(-1)!;
+ const event={sender:settings.webContents,senderFrame:settings.webContents.mainFrame},save=fixture.handlers.get('assistant:save')!;
+ await save(event,{enabled:true,mode:'tray',quietFullscreen:false,voiceEnabled:false});
+ const rpc=fixture.controls.at(-1)!,original=rpc.request.getMockImplementation();let finish!:(value:unknown)=>void;
+ rpc.request.mockImplementation(async(method:string)=>method==='notification.summary'?new Promise(done=>{finish=done;}):{ok:true});
+ const originalTimeout=globalThis.setTimeout;let deadline:(()=>void)|undefined;
+ const timeout=vi.spyOn(globalThis,'setTimeout').mockImplementation(((handler:()=>void,ms?:number,...args:unknown[])=>{
+  if(ms===15000)deadline=handler;
+  return originalTimeout(()=>Reflect.apply(handler,undefined,args),ms);
+ }) as typeof setTimeout);
+ try{
+  rpc.options.prefsChanged!({rev:20000,prefs:{summarySettings:{kind:'codex',model:'',effort:'',sessionId:''}}});
+  const notice={id:randomUUID(),key:'done:stalled-headline',kind:'done',title:'担当',message:'元の通知',at:Date.now(),source:{serverOrigin:'http://127.0.0.1:7780',machineId:'local',paneId:randomUUID(),workspaceId:randomUUID(),agentInstanceId:randomUUID()}};
+  const count=fixture.windows.length;fixture.connections.at(-1)!.options.changed([notice],true);
+  await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));expect(fixture.windows).toHaveLength(count);
+  expect(deadline).toBeTypeOf('function');deadline!();
+  await vi.waitFor(()=>expect(fixture.windows.at(-1)?.url).toBe('soda-assistant://app/notice.html'));
+  const compact=fixture.windows.at(-1)!,local={sender:compact.webContents,senderFrame:compact.webContents.mainFrame};
+  expect(await fixture.handlers.get('assistant:notice-state')!(local)).toMatchObject({message:'作業が完了しました。'});
+  finish({status:'ready',headline:'後から完成した短い要約',text:'作業の詳細',message:''});
+  await vi.waitFor(async()=>expect(await fixture.handlers.get('assistant:notice-state')!(local)).toMatchObject({message:'後から完成した短い要約'}));
+  expect(fixture.windows.at(-1)).toBe(compact);expect(fixture.windows).toHaveLength(count+1);
+ }finally{timeout.mockRestore();rpc.options.prefsChanged!({rev:20001,prefs:{}});rpc.request.mockImplementation(original!);await save(event,{enabled:false});}
+});
