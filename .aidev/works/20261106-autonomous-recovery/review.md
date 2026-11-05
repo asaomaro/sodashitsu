@@ -15,3 +15,11 @@
 S4U metadata probeについては、所有者の暗黙WRITE_DACとタスクの編集可能性を指摘。作成時OW ACEとUpdate/SD変更の負確認を追加し、readonly exit codeのみとした。SchedulerがPフラグを読み戻さないためtaskについてP必須条件を外し、厳密な4 ACEを維持。登録・実行結果はまだない。
 
 Microsoft公式: [Task security contexts](https://learn.microsoft.com/en-us/windows/win32/taskschd/security-contexts-for-running-tasks)、[Owner Rights SID](https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/manage/understand-security-identifiers)。
+
+
+## 起動段階の診断の独立レビュー
+
+review_resource_monitorが追加差分を読み取り点検。101..109の範囲制限とSCMへの伝搬、
+範囲外・未分類1／正常0、後始末後のSTOPPED、許可・再試行条件の不変、
+秘密・例外本文を出力しないこと、文書表との一致を確認。必須指摘なし。
+レビュー側でWindows検証を重複実行していない。

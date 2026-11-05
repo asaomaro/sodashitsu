@@ -24,3 +24,16 @@
 起動時の非admin保守接続は復帰したが、online/reconnectingが断続的である。暗号化signin serviceは更新後も停止し、通常user serverは対話ログイン前なので起動していない。固定InteractiveToken taskもログイン済みsessionを必要とし、ログイン前の権限を作るものではない。利用者へログインを再依頼しない。
 
 System32の固定PSだけでowner/Session0/Adminをexit codeで返す一回限りS4U metadata probeを準備し、独立点検した。実行前に原子的な4 ACE、OWによる暗黙WRITE_DAC抑止、定義/ACL更新のAccessDeniedを確認する。登録や固定が拒否されれば実行しない。現在は保守接続待ちで、probeは未登録・未実行。結果を管理操作の自動許可として扱わない。
+
+
+## 追加した起動段階の診断
+
+従来はHost内のどの失敗もSCM 1066/1で潰れていたため、固定の101..109を
+SERVICE_EXIT_CODEへ伝える変更を追加。例外本文・child output・秘密を公開せず、
+後始末完了後にだけSTOPPEDを報告する順序と正常終了0/汎用失敗1を保持する。
+Windowsの通常アカウントでservice lifecycleと8つのソース変異の負対照を実行し成功。
+新規のstage-report変異は該当箇所を従来のSpecific=1へ戻し、意図したassertionで拒否。
+範囲外の番号も1へ閉じることを検査した。生出力はevidence/signin-stage-native.txt。
+
+この追加はまだsr-pcへ導入していない。保守接続がreconnectingのため、
+導入済みb499の1066/1から実際の新番号を得たとは主張しない。

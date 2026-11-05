@@ -19,6 +19,8 @@ if($NegativeControls){
   @('stop-event','stop.Set();if(status.State==4)Report(3);','if(status.State==4)Report(3);','Service stop event missing'),
   @('start-arguments','if(count!=1||arguments==IntPtr.Zero||Marshal.PtrToStringUni(Marshal.ReadIntPtr(arguments))!=Name)throw Failure();','if(count==UInt32.MaxValue)throw Failure();','Invalid service start arguments executed runner'),
   @('deadline','if(status.State==4)deadline=new StopDeadline(schedule,()=>Environment.FailFast("Signin host could not stop within deadline"));','if(status.State==4){}','Service stop deadline missing or not canceled'),
+  @('stage-report','Specific=ExitCode==0?0u:specific','Specific=ExitCode==0?0u:1u','Fixed startup stage lost or unbounded'),
+  @('stage-bound','Code=code>=101&&code<=109?code:1u;','Code=code;','Fixed startup stage lost or unbounded'),
   @('failure-exit','}catch{ExitCode=1;}','}catch{ExitCode=0;}','Service failure lost exit status')
  )
  try{

@@ -1,0 +1,75 @@
+signin_native_service_name_lifecycle_and_failure_passed
+negative managed-name
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Fixed service name exceeded managed limit" ---> System.InvalidOperationException: Fixed service name exceeded managed limit
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative shutdown-accept
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Service accepted controls incorrect" ---> System.InvalidOperationException: Service accepted controls incorrect
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative stop-event
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Service stop event missing" ---> System.InvalidOperationException: Service stop event missing
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative start-arguments
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Invalid service start arguments executed runner" ---> System.InvalidOperationException: Invalid service start arguments executed runner
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative deadline
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Service stop deadline missing or not canceled" ---> System.InvalidOperationException: Service stop deadline missing or not canceled
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative stage-report
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Fixed startup stage lost or unbounded" ---> System.InvalidOperationException: Fixed startup stage lost or unbounded
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative stage-bound
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Fixed startup stage lost or unbounded" ---> System.InvalidOperationException: Fixed startup stage lost or unbounded
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+negative failure-exit
+System.Management.Automation.MethodInvocationException: "0" 個の引数を指定して "ServiceLifecycle" を呼び出し中に例外が発生しました: "Service failure lost exit status" ---> System.InvalidOperationException: Service failure lost exit status
+   場所 SodaDesktopSigninHostChecks.ServiceLifecycle()
+   場所 CallSite.Target(Closure , CallSite , Type )
+   --- 内部例外スタック トレースの終わり ---
+   場所 System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)
+   場所 System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+   場所 System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)
+signin_native_service_name_lifecycle_and_failure_passed
+signin_native_service_source_negatives_and_restore_passed

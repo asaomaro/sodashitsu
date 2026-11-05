@@ -66,6 +66,15 @@ public static class SodaDesktopSigninHostChecks {
                     else{var last=states[states.Count-1];Check(last.State==1&&last.Exit==1066&&last.Specific==1,"Service failure reported clean stop");}
                 }
             }
+            foreach(uint code in new uint[]{0,1,100,101,102,103,104,105,106,107,108,109,110,UInt32.MaxValue}){
+                bool cleaned=false;var states=new System.Collections.Generic.List<SodaDesktopSigninHost.ServiceStatus>();
+                using(var service=new SodaDesktopSigninHost.Service((name,handler)=>new IntPtr(7),
+                    delegate(IntPtr handle,ref SodaDesktopSigninHost.ServiceStatus value){if(value.State==1)Check(cleaned,"Diagnostic reported before cleanup");states.Add(value);return true;},
+                    stop=>{try{throw new SodaDesktopSigninHost.StartupFailure(code);}finally{cleaned=true;}})){
+                    ServiceEntry(service,1,service.Name);var last=states[states.Count-1];
+                    Check(service.ExitCode==1&&Environment.ExitCode==1&&last.State==1&&last.Exit==1066&&last.Specific==(code>=101&&code<=109?code:1u),"Fixed startup stage lost or unbounded");
+                }
+            }
             Action alarm=null;int expired=0;var canceled=new DeadlineLease();
             using(var timeout=new SodaDesktopSigninHost.StopDeadline(action=>{alarm=action;return canceled;},()=>expired++)){alarm();alarm();Check(expired==1,"Stop deadline did not fire once");}
             Check(canceled.Disposed,"Expired deadline lease retained");expired=0;

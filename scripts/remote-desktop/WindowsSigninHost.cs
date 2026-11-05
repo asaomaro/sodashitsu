@@ -10,6 +10,12 @@ using System.Threading;
 public static class SodaDesktopSigninHost {
     internal const string Owner="__SIGNIN_OWNER_SID__";
     internal static Exception Failure(){return new InvalidOperationException("Signin host is unavailable");}
+    // Only fixed stage numbers leave the service. Exception text, paths and
+    // child output never enter SCM status. Cleanup and admission stay unchanged.
+    internal sealed class StartupFailure:Exception {
+        internal readonly uint Code;
+        internal StartupFailure(uint code):base("Signin host is unavailable"){Code=code>=101&&code<=109?code:1u;}
+    }
     internal sealed class Plan {
         internal readonly string Application,Arguments,WorkingDirectory,EnvironmentBlock;
         internal Plan(string application,string arguments,string system,string runtime){
@@ -67,18 +73,19 @@ public static class SodaDesktopSigninHost {
     }
     internal static void Run(WaitHandle stop){
         SodaDesktopSigninPackageNative.Lease package=null;RuntimeLease runtime=null;SodaDesktopSigninProcess.Child child=null;SodaDesktopSigninRunSession run=null;
+        uint stage=101;
         try {
-            package=SodaDesktopSigninPackageNative.Verify(Owner);runtime=RuntimeLease.Open();
+            package=SodaDesktopSigninPackageNative.Verify(Owner);stage=102;runtime=RuntimeLease.Open();
             if(stop.WaitOne(0)||!package.Current())return;
             Func<bool> retained=()=>package.Current()&&runtime.Current();
-            var journal=SodaDesktopSigninRunStorage.OpenHost(Owner,package.ManifestSha256,runtime.BarrierSha256,retained);
-            run=SodaDesktopSigninRunSession.Open(journal,Owner,retained,stop);if(!run.Ready())throw Failure();
-            child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&retained(),()=>run.Resume(),()=>run.ConfirmResume());
-            while(!stop.WaitOne(250)&&retained()&&child.Running()){}
-            if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
+            stage=103;var journal=SodaDesktopSigninRunStorage.OpenHost(Owner,package.ManifestSha256,runtime.BarrierSha256,retained);
+            stage=104;run=SodaDesktopSigninRunSession.Open(journal,Owner,retained,stop);if(!run.Ready())throw Failure();
+            stage=105;child=SodaDesktopSigninProcess.Start(Plan.Installed(package,runtime.Path),()=>!stop.WaitOne(0)&&retained(),()=>run.Resume(),()=>run.ConfirmResume());
+            stage=106;while(!stop.WaitOne(250)&&retained()&&child.Running()){}
+            stage=107;if(stop.WaitOne(0)){if(!child.TryGraceful())throw Failure();}
             else if(!retained()||!child.ExitedSuccessfully()||!child.TryGraceful())throw Failure();
-            run.Complete(child,retained);WaitAfterCompletion(run,stop,retained);
-        }finally {
+            stage=108;run.Complete(child,retained);stage=109;WaitAfterCompletion(run,stop,retained);
+        }catch{throw new StartupFailure(stage);}finally {
             // Holding the entire package until ALL descendants stop is mandatory.
             // On an OS failure never release the leases to a surviving child.
             if(child!=null&&!child.Stop())Environment.FailFast("Signin host could not stop its child");
@@ -115,7 +122,7 @@ public static class SodaDesktopSigninHost {
         readonly ManualResetEvent stop=new ManualResetEvent(false);readonly object gate=new object();
         readonly Func<string,ServiceHandler,IntPtr> register;readonly StatusWriter publish;readonly Action<WaitHandle> run;
         readonly ServiceMain entry;readonly ServiceHandler handler;internal readonly string Name;readonly Func<Action,IDisposable> schedule;StopDeadline deadline;
-        ServiceStatus status;IntPtr handle;bool entered,disposed;internal int ExitCode;
+        ServiceStatus status;IntPtr handle;bool entered,disposed;internal int ExitCode;uint specific=1;
         internal Service():this(null,null,null){}
         // Generated checks replace only native SCM calls and the protected Host.
         internal Service(Func<string,ServiceHandler,IntPtr> register,StatusWriter publish,Action<WaitHandle> run,Func<Action,IDisposable> schedule=null){
@@ -129,7 +136,7 @@ public static class SodaDesktopSigninHost {
             // has returned with every child/job/package lease released.
             if(status.State==1)return;
             if(state==1&&deadline!=null){deadline.Dispose();deadline=null;}
-            status=new ServiceStatus{Type=0x10,State=state,Accepted=state==4?5u:0u,Exit=ExitCode==0?0u:1066u,Specific=ExitCode==0?0u:1u,Checkpoint=state==2||state==3?1u:0u,WaitHint=state==2||state==3?30000u:0u};
+            status=new ServiceStatus{Type=0x10,State=state,Accepted=state==4?5u:0u,Exit=ExitCode==0?0u:1066u,Specific=ExitCode==0?0u:specific,Checkpoint=state==2||state==3?1u:0u,WaitHint=state==2||state==3?30000u:0u};
             if(!publish(handle,ref status)){stop.Set();Environment.FailFast("Signin service could not report its state");}
         }
         internal uint Control(uint control,uint eventType,IntPtr data,IntPtr context){
@@ -150,7 +157,7 @@ public static class SodaDesktopSigninHost {
                 // credentials or command mode are accepted by this service.
                 if(count!=1||arguments==IntPtr.Zero||Marshal.PtrToStringUni(Marshal.ReadIntPtr(arguments))!=Name)throw Failure();
                 lock(gate){Report(4);}run(stop);
-            }catch{ExitCode=1;}
+            }catch(StartupFailure error){specific=error.Code;ExitCode=1;}catch{ExitCode=1;}
             finally{lock(gate){if(admitted&&handle!=IntPtr.Zero)Report(1);}if(ExitCode!=0)Environment.ExitCode=1;}
         }
         internal void Dispatch(){
