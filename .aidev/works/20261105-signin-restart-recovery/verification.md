@@ -28,3 +28,11 @@ raw logの個人profile名だけを <owner-profile> に置換した。PIN・秘�
 - 公式署名ValidのVB-CABLE x64 installer（734c35dfa6d98f48782a451633ceb471166ec70d60482fd89a1123d0ee3c4f41）をUAC確認後に実行。Install Driver成功表示、installer exit0、OS再起動を要求。
 - 導入前の既定audio endpoint全6roleをメタデータだけで記録。installerがrender既定を変更したのでWindowsサウンド画面から元のRealtekへ復元。全6roleが元と一致、audio-defaults-restored.json。録音・既存音声の保存なし。
 - 再起動後の実Recover/更新/initialize/trust/enroll/専用接続、および実マイク転送は未完了。再起動直後の現行remote接続はWindowsログイン後の操舵室起動に依存する。自動ログインは未設定。利用者へ初回ログインの手元操作が可能か確認中であり、まだ再起動していない。
+
+## 追加の準備と確認
+
+- main 36577744をsr-pcへpull。`context-connect-admin.ps1`（profile内stage、SHA a3fd9228238e25572ce9e9f48a74eebe6645d7ec0fc6e33a05840255b572ea7e）は復旧→新配布物へ更新→initialize/trust/enrollの束縛済み要求・結果照合/ack→通常起動までを準備した。34ソースをcanonical LF SHAで照合してBA/SY限定のProgramFiles配下へコピーし、秘密値はstdin/メモリーでだけ扱う。独立読み取りレビューで必須指摘なし。まだ実行していない。再起動前にこの手順を実行しない。
+- 通常ユーザーのlocalhost RPCで既存permissionsを保持してallowMicrophoneを有効化し、実CABLE Inputのrender endpoint IDを明示。変更前permissionsはsr-pcの専用stageに排他的に保存した。物理speakerの既定値は変更しない。
+- raw WebSocketを使う生成音の試行ではsr-pcが自動ロックしており、readyのsecureDesktop=true/lockScreenCover=trueとなった。現行仕様どおりマイク機能は交渉されず、音は送信していない。仮想CABLE Outputだけを明示した30秒のメタデータprobeはパケットを受信できたが、440Hz到達の成功証拠はない。音声データ・個人画面は保存していない。probe/共有は終了済み。
+- 全体テストの設定画面失敗について、修正前590419efの該当1テストだけの実行は成功（残り146skip）。全ファイル実行のworker SIGABRT/順序依存は未解決として残す。今回の修正の関連66件・ビルド・型検査の成功とは区別する。
+- 再起動後に最初のWindowsログインと操舵室起動を手元で行えるか、利用者への確認が未回答。UACの再承認を求めているのではなく、現行接続がログイン後起動に依存するための手元操作の確認。再起動はまだ行わず、元のmarker/journalを保持している。
