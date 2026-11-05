@@ -32,7 +32,7 @@ export async function desktopSigninCycle(ownerSid:string,signal:AbortSignal,deps
  if(signal.aborted)return "ended";
  const controller=new AbortController();let failed=false,stopping=false,creating=false,policyUntil=Infinity;
  let presence:Presence|undefined,store:Store|undefined,identity:ReturnType<DesktopSigninRuntimeDependencies["identity"]>|undefined,endpoint:Endpoint|undefined,connector:ReturnType<DesktopSigninRuntimeDependencies["connector"]>|undefined;
- let timer:ReturnType<typeof setInterval>|undefined,watching=false;
+ let timer:ReturnType<typeof setTimeout>|undefined;
  const pending=new Set<Promise<unknown>>();let resolveStop!:()=>void;const stopped=new Promise<void>(resolve=>{resolveStop=resolve;});
  const stop=()=>{if(stopping)return;stopping=true;controller.abort();connector?.close();presence?.close();resolveStop();};
  const fail=()=>{failed=true;stop();};
@@ -50,10 +50,13 @@ export async function desktopSigninCycle(ownerSid:string,signal:AbortSignal,deps
   if(!owned())throw failure();const context=await presence.ready();
   if(!context){await presence.settled();return "inactive";}
   if(!active())throw failure();
-  policyUntil=deps.now()+5000;
-  const enrollment=await read(()=>deps.enrollment(ownerSid,{active,signal:controller.signal}));if(!active())throw failure();
+  const initialReadAt=deps.now();policyUntil=initialReadAt+5000;
   store=deps.store(context);if(!active())throw failure();
-  const status=await read(()=>store!.status()),policy=enrollment.publicStatus();
+  // Both inputs are readonly and independently bounded. Their shared freshness
+  // window remains anchored before either read starts.
+  const [enrollment,status]=await Promise.all([
+   read(()=>deps.enrollment(ownerSid,{active,signal:controller.signal})),read(()=>store!.status()),
+  ]),policy=enrollment.publicStatus();
   if(!active()||!status.initialized||!status.required||status.fingerprint!==policy.provider||!policy.peers.every(peer=>status.peers.some(actual=>actual.role==="viewer"&&actual.fingerprint===peer.fingerprint)))throw failure();
   const baseline=digest(enrollment,status);
   identity=deps.identity({enrollment,store,active,signal:controller.signal});if(!active())throw failure();
@@ -65,15 +68,27 @@ export async function desktopSigninCycle(ownerSid:string,signal:AbortSignal,deps
    start:(owner,params,scope)=>endpoint!.start(owner,params,scope),clientGone:owner=>endpoint?.clientGone(owner),
   };
   connector=deps.connector({enrollment,handlers,active,signal:controller.signal});if(!active())throw failure();result="ended";
-  timer=setInterval(()=>{
+  let nextCheckAt=initialReadAt+2000;
+  const schedule=()=>{
    if(!active())return;
-   if(watching)return;watching=true;const checkUntil=deps.now()+5000;
-   void (async()=>{const latestEnrollment=await read(()=>deps.enrollment(ownerSid,{active,signal:controller.signal})),latestStatus=await read(()=>store!.status());if(!active()||digest(latestEnrollment,latestStatus)!==baseline)throw failure();if(deps.now()>=checkUntil)throw failure();policyUntil=checkUntil;})().catch(()=>{if(!signal.aborted)fail();}).finally(()=>{watching=false;});
-  },2000);timer.unref();
+   // Reading Windows ACL/DPAPI can consume most of the poll interval. Starting
+   // a new interval after completion would leave a gap beyond the old lease.
+   timer=setTimeout(()=>{
+    if(!active())return;
+    const checkAt=deps.now(),checkUntil=checkAt+5000;nextCheckAt=checkAt+2000;
+    void (async()=>{
+     const [latestEnrollment,latestStatus]=await Promise.all([
+      read(()=>deps.enrollment(ownerSid,{active,signal:controller.signal})),read(()=>store!.status()),
+     ]);
+     if(!active()||digest(latestEnrollment,latestStatus)!==baseline||deps.now()>=checkUntil)throw failure();
+     policyUntil=checkUntil;
+    })().catch(()=>{if(!signal.aborted)fail();}).finally(schedule);
+   },Math.max(0,nextCheckAt-deps.now()));timer.unref();
+  };schedule();
   await stopped;if(failed)throw failure();return result;
  }catch{if(signal.aborted&&!failed)return "ended";failed=true;throw failure();}
  finally{
-  stop();clearInterval(timer);signal.removeEventListener("abort",outer);connector?.close();identity?.close();if(!identity)store?.close();
+  stop();clearTimeout(timer);signal.removeEventListener("abort",outer);connector?.close();identity?.close();if(!identity)store?.close();
   let timeout:ReturnType<typeof setTimeout>|undefined;
   try{
    await Promise.race([(async()=>{if(endpoint)await endpoint.close();if(identity)await identity.settled();else if(store)await store.settled();if(presence){presence.close();await presence.settled();}await Promise.allSettled([...pending]);})(),new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(failure()),8000);timeout.unref();})]);

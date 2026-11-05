@@ -40,3 +40,30 @@ it("completes a normal readonly startup stop during enrollment read after every 
 it("cannot report a clean cancellation if normal teardown is not confirmed",async()=>{vi.useFakeTimers();const f=fixture(),run=f.start();f.reveal();await flush();f.abort.abort();await vi.advanceTimersByTimeAsync(8000);await expect(run).rejects.toThrow();expect(f.deps.unsafeStop).toHaveBeenCalledOnce();f.stopProof();});
 
 it("does not classify an old readonly timer as failure after parent stop while the read settles within teardown",async()=>{vi.useFakeTimers();const f=fixture();let resolve!:(value:DesktopSigninEnrollment)=>void;vi.mocked(f.deps.enrollment).mockImplementationOnce(()=>new Promise(done=>{resolve=done;}));const run=f.start();let ended=false;void run.then(()=>{ended=true;},()=>{ended=true;});f.reveal();await flush();f.clock(4000);await vi.advanceTimersByTimeAsync(4000);f.abort.abort();f.stopProof();f.clock(5000);await vi.advanceTimersByTimeAsync(1000);expect(ended).toBe(false);f.clock(6000);resolve(enrollment());await vi.advanceTimersByTimeAsync(1000);await expect(run).resolves.toBe("ended");expect(f.deps.unsafeStop).not.toHaveBeenCalled();});
+
+
+it("keeps readonly Windows checks fresh when each bounded read takes two seconds",async()=>{
+ vi.useFakeTimers({now:0});const f=fixture(),state=await f.store.status();f.deps.now=()=>Date.now();
+ const delay=async<T>(value:T)=>{await new Promise(resolve=>setTimeout(resolve,2000));return value;};
+ vi.mocked(f.deps.enrollment).mockImplementation(()=>delay(enrollment()));f.store.status.mockImplementation(()=>delay(state));
+ const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(2001);
+ expect(f.deps.connector).toHaveBeenCalledOnce();expect(f.connectorOptions()!.active()).toBe(true);
+ await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!.active()).toBe(true);
+ expect(f.store.status.mock.calls.length).toBeGreaterThan(5);expect(f.connector.close).not.toHaveBeenCalled();
+ f.abort.abort();f.stopProof();await vi.advanceTimersByTimeAsync(2000);await expect(run).resolves.toBe("ended");
+});
+it("does not extend the five second policy window for slow parallel checks",async()=>{
+ vi.useFakeTimers({now:0});const f=fixture(),state=await f.store.status();f.deps.now=()=>Date.now();
+ const delay=async<T>(value:T)=>{await new Promise(resolve=>setTimeout(resolve,3000));return value;};
+ vi.mocked(f.deps.enrollment).mockImplementation(()=>delay(enrollment()));f.store.status.mockImplementation(()=>delay(state));
+ const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(3001);expect(f.deps.connector).toHaveBeenCalledOnce();
+ await vi.advanceTimersByTimeAsync(2000);expect(f.connectorOptions()!.active()).toBe(false);
+ expect(f.connector.close).toHaveBeenCalled();f.stopProof();await vi.advanceTimersByTimeAsync(1000);await expect(run).resolves.toBe("ended");
+});
+it("starts the next policy check from the previous start rather than its completion",async()=>{
+ vi.useFakeTimers({now:0});const f=fixture(),state=await f.store.status();f.deps.now=()=>Date.now();
+ f.store.status.mockImplementation(async()=>{await new Promise(resolve=>setTimeout(resolve,2000));return state;});
+ const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(2001);expect(f.deps.connector).toHaveBeenCalledOnce();
+ await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!.active()).toBe(true);expect(f.connector.close).not.toHaveBeenCalled();
+ f.abort.abort();f.stopProof();await vi.advanceTimersByTimeAsync(2000);await expect(run).resolves.toBe("ended");
+});

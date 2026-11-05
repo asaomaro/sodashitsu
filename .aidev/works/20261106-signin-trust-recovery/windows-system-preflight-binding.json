@@ -1,0 +1,12 @@
+{
+  "id": "5d2864ad-b189-4bca-867e-c0f1c0d2e5aa",
+  "status": "exited",
+  "stdout": "{\r\n    \"reboots\":  false,\r\n    \"root\":  \"C:\\\\Program Files\\\\Sodashitsu\\\\.trust-case-boot-7c02b85a59e14c51b6890b2b460b4d83\",\r\n    \"bootTask\":  \"SodashitsuTrustCaseRecovery-7c02b85a59e14c51b6890b2b460b4d83\",\r\n    \"ok\":  true,\r\n    \"bound\":  {\r\n                  \"state\":  \"bound\",\r\n                  \"ticketSha256\":  \"c50588f012149d0dfa38f5aeb15f64a45751b49e442966bb833a23bd61679705\",\r\n                  \"startsService\":  false,\r\n                  \"reboots\":  false\r\n              },\r\n    \"steps\":  [\r\n                  {\r\n                      \"phase\":  \"system-preflight\",\r\n                      \"taskRemoved\":  true,\r\n                      \"completed\":  true\r\n                  }\r\n              ]\r\n}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

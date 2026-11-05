@@ -97,7 +97,7 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 | --- | --- |
 | 一時仮想画面 | Sodashitsu専用IDDの署名済み配布物。リポジトリ/CIのunsigned artifactを導入可能な配布物とは扱わない |
 | マイク転送 | VB-Audio公式Pack45の署名済みx64 driverを導入済み（2026-11-05、installer exit0）。導入で変わった既定出力は元へ戻し、全6roleの一致を確認。OS再起動・明示した仮想render IDへの実マイク転送検証は未完了 |
-| サインアウト後の専用接続 | 手動起動の登録、未受理要求の取消とnative SCM修正版への更新は成功。その後の観測済み異常終了を保存し、状態保存先のTypeScript修正と新パッケージ生成、再起動境界のBind・同一状態の拒否を確認。実再起動後のRecover/更新/initialize/trust/enroll/通常起動・実サインアウトは未完了。下記の2026-11-05追記と現在の実機記録を参照 |
+| サインアウト後の専用接続 | 元要求と鍵を保持した実再起動後のrecover、2viewer照合、enroll、通常起動まで確認。ログイン前の暗号化接続は未成立。readonly確認の周期を修正して生成テストを通過したが、修正版の実機導入・接続・サインイン検証は未完了。下記の最新追記を参照 |
 | 複数monitor / Explorer drop | 2台以上の実monitor・混在DPIの確認、Windowsブラウザと実Explorer間のOLE drop。1画面の2窓共有と補助プログラム準備成功だけでは完了にしない |
 
 2026-11-05追記: サインイン専用サービスは期限切れ未受理要求の取消とnative SCM修正版への更新が成功しました。その後、nativeとTypeScriptの状態保存先の不一致で管理モードが観測済みのまま異常終了したため、TypeScriptを修正（6da256c3）。新パッケージは隔離stageへ生成済みです。元の観測記録を保ったOS再起動境界の限定復旧を追加し、実機のBindと同一状態での拒否、生成取引・5中断を検証しました。再起動後の実Recover/更新/initialize/trust/enroll/通常起動・実サインアウトは未完了です。[現在の記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)を参照してください。
@@ -113,3 +113,5 @@ U1〜U8/U10の能力・拒否条件は[ProviderCore](../packages/server/src/desk
 PIN末尾の数字も認証専用workerで押下/解放を一括投入する追加修正（6d349156）を補助サービスへ適用しました。sr-pcで実ロック解除→通常画面の自動再接続→明示的な操作権取得・マウス移動を2回続けて確認し、手動再接続や途中のserver再起動は不要でした。[追加検証記録](../.aidev/works/20261104-authentication-pin-input/verification.md)に範囲を記載しています。長時間・別PCでの安定性確認は引き続き残ります。
 
 2026-11-06追記: 既存鍵をSYSTEMで読み取り検証する限定復旧を追加し、実OS再起動後に鍵保持のrecover・修正版package更新・initialize・利用者browserのtrustまで確認しました。検証用viewerのtrust起動で停止しており、専用signinのenroll/通常起動・実サインインは未完了です。ログイン前の制限済み通常ユーザーSession0保守RPCは自動復帰しましたが、Winlogonの画面操作を許可するものではありません。[現在の検証記録](../.aidev/works/20261105-claimed-initialize-recovery/verification.md)。
+
+2026-11-06追加: 検証用viewerのtrustも保存済みだったため再送せず、元要求・鍵・履歴を固定した限定復旧を実再起動後に実施しました。SYSTEM taskでrecover/status(2viewer)/enroll/通常起動まで完了しています。ただし、ログイン前の暗号化接続は未成立です。認証情報を順次読み、完了後から次の確認を待つと5秒の有効期限に間に合わない事象を生成テストで再現し、独立したreadonly読取を並列化、次の確認を前回の読取開始時点から予定する修正を行いました。5秒の期限と失効後の復活禁止は維持します。旧コードで新規3ケースの失敗、修正後の関連103テスト成功を確認しました。実機の原因がこの周期だけかは未確定です。修正版の管理者導入にはログイン後の接続が必要です。[調査・復旧の記録](../.aidev/works/20261106-signin-trust-recovery/tasks.md)。

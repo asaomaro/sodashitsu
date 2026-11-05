@@ -1,0 +1,12 @@
+{
+  "id": "699ff72e-82de-45d0-a67a-33b6bf8ed5db",
+  "status": "exited",
+  "stdout": "{\"phase\":\"normal-start\",\"provider\":\"6c5823a1a59724bb43aacb0132960b537bcbf4203a1a5c86eead10e1aa8295d5\",\"package\":\"8e6d72110ffafcbfbe4b8e4e582dcecf83976e8a2d645a2c37066a31cb8429d9\",\"state\":\"completed\"}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}
