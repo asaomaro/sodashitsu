@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-05T23:50:01.760928+00:00",
+  "machineState": "reconnecting",
+  "taskName": "SodashitsuReadonlyS4U-1daf4c05440948138fbea1dd611b25b4",
+  "receiptObtained": false,
+  "waitStopped": true,
+  "nextStep": "Read the fixed UUID task before retrying if a transport response was lost; no claim of successful registration or execution."
+}

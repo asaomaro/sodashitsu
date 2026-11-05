@@ -37,3 +37,12 @@ Windowsの通常アカウントでservice lifecycleと8つのソース変異の�
 
 この追加はまだsr-pcへ導入していない。保守接続がreconnectingのため、
 導入済みb499の1066/1から実際の新番号を得たとは主張しない。
+
+
+## 接続待ちの終了時点
+
+通常側と起動時保守側はreconnecting、signin側はconnectingのまま。
+保守接続の復帰を待つローカルmonitorを終了し、バックグラウンドで後から診断操作が
+始まる状態は残していない。S4U probeの応答receiptは得られておらず、登録・実行成功は
+未確認。再接続後はevidence/maintenance-unavailable.jsonの固定UUID taskを照会してから
+再試行を判断する。利用者へ手動ログインを再依頼していない。
