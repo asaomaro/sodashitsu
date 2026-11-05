@@ -34,3 +34,6 @@
 今回のsr-pc assistant.settings.getはenabled=false/phase=disabled。設定を変更せず、今回のログイン後の実通知は未検証。以前のWindows隔離fixtureでの通知確認結果と混ぜない。
 
 review_resource_monitorが自動起動runner、実VBS/Run値、実サーバーtokenを独立点検。動的import修正後、必須指摘なし。次回ログオン実行と停止状態からの新規起動は未検証として残した。通常サーバー・専用サービスのsystem境界と不明runの扱いも分けて記録した。
+
+
+2026-11-06追記: claim済み部分identityを保持する限定復旧、修正版への更新、既存鍵でのinitializeが追加再起動後に成功した。Session0の通常ユーザー保守RPCも手元ログインなしに自動復帰した。検証用viewerのtrust起動で停止したため、enroll/通常起動/実サインインは未完了。詳細は[追加検証](../20261105-claimed-initialize-recovery/verification.md)。

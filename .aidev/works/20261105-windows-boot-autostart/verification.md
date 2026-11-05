@@ -58,3 +58,5 @@ review_resource_monitorが設計を点検。実測Admin=trueを優先、通常�
 利用者から「再起動してよいです」と明示指示を受けたため、自動再接続未検証であることを伝えた上で、sr-pcへWindows標準の再起動要求を送った。環境のComputerNameがOSK2-024680-2と一致する場合だけ実行するguardを付け、shutdown.exe /r /t 15 の終了コード0を確認。以後、既存sr-pcはreconnectingになった。
 
 要求後の接続一覧を150秒監視したが、通常・サインイン用・起動時用のどの経路もonlineへ戻らなかった。再起動要求の受理と接続断は確認できたが、OSの起動完了、ログイン後RunOnce実行、操舵室の自動復帰は未確認。実OS boot IDを再照合できていないため、専用signin serviceの再起動条件が満たされたとも断定しない。
+
+2026-11-06追記: その後、隔離した通常ユーザーSession0サーバーの実token・認証RPC接続・二重起動防止・固有停止でのprocess/port終了を確認し、boot taskを登録した。追加の実OS再起動で約51秒後に認証RPCが手元ログインなしに自動復帰し、boot-statusのAdmin=false/Medium8192/UIAccess0/特権SeChangeNotifyPrivilegeのみを再確認した。途中に一時再接続とWMI read exec timeoutがあり、安定性まで完了したとはしない。通常ログイン時Runの実自動起動は次の手元ログインで確認する。[追加検証](../20261105-claimed-initialize-recovery/verification.md)。

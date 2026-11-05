@@ -1,0 +1,12 @@
+{
+  "id": "f9fe4d50-173b-4623-8089-9b66e8424660",
+  "status": "exited",
+  "stdout": "{\"phase\":\"run-trust-owned\",\"errorKind\":\"RuntimeException\",\"state\":\"failed\"}\r\n{\"at\":\"2026-11-05T14:44:50.125Z\",\"runnerPid\":12108,\"status\":\"ready\",\"serverPid\":12460,\"identity\":{\"integrity\":8192,\"elevation\":1,\"uiAccess\":0,\"elevationType\":1,\"threadToken\":false,\"admin\":false,\"owner\":\"S-1-5-21-2255109513-3773794534-3440117263-1001\",\"privileges\":[\"SeChangeNotifyPrivilege\"]},\"serverToken\":{\"integrity\":8192,\"elevation\":1,\"uiAccess\":0,\"elevationType\":1,\"threadToken\":false,\"admin\":false,\"owner\":\"S-1-5-21-2255109513-3773794534-3440117263-1001\",\"privileges\":[\"SeChangeNotifyPrivilege\"]},\"buildSha256\":\"76128f1e509c213c59ca48c552acb8f00ea0482d2036edf346227826c90971fd\",\"origin\":\"http://127.0.0.1:17882\"}\n\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

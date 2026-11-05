@@ -1,0 +1,12 @@
+{
+  "id": "115b9986-a933-4366-8d91-377043577bc0",
+  "status": "exited",
+  "stdout": "{\r\n    \"reboots\":  false,\r\n    \"root\":  \"C:\\\\Program Files\\\\Sodashitsu\\\\.claimed-boot-46a1398019ed4525b5d870262fc5f66e\",\r\n    \"bootTask\":  \"SodashitsuClaimedRecovery-46a1398019ed4525b5d870262fc5f66e\",\r\n    \"ok\":  true,\r\n    \"steps\":  [\r\n                  {\r\n                      \"phase\":  \"system-preflight\",\r\n                      \"taskRemoved\":  true,\r\n                      \"completed\":  true\r\n                  }\r\n              ],\r\n    \"bound\":  {\r\n                  \"state\":  \"claimed-initialize-restart-bound\",\r\n                  \"ticketSha256\":  \"fda172cc9ed2b17acbf83b0d4db2914915063d2c881f739b67c424a4af2c4229\",\r\n                  \"provider\":  \"6c5823a1a59724bb43aacb0132960b537bcbf4203a1a5c86eead10e1aa8295d5\",\r\n                  \"runtimeSha256\":  \"ce12a201d810dc406512ae582368e7162cb06e609813fd3614e6d24b1affd438\",\r\n                  \"startsService\":  false,\r\n                  \"reboots\":  false\r\n              },\r\n    \"package\":  \"8e6d72110ffafcbfbe4b8e4e582dcecf83976e8a2d645a2c37066a31cb8429d9\"\r\n}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

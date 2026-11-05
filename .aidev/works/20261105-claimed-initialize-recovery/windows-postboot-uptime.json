@@ -1,0 +1,12 @@
+{
+  "id": "d43cff12-450a-4363-ac40-fe18947bd348",
+  "status": "exited",
+  "stdout": "{\"utc\":\"2026-11-05T15:00:25.9738421Z\",\"uptimeMilliseconds\":979031,\"sessionId\":0,\"recovery\":{\"phase\":\"run-trust-owned\",\"errorKind\":\"RuntimeException\",\"state\":\"failed\"}}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

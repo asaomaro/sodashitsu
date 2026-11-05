@@ -1,0 +1,12 @@
+{
+  "id": "69538c4b-eb02-4440-bbd3-bfd570ea8edd",
+  "status": "exited",
+  "stdout": "{\r\n    \"sddl\":  \"O:BAG:BAD:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;SY)\",\r\n    \"instances\":  0,\r\n    \"attempted\":  false,\r\n    \"lastRun\":  \"1999-11-29T15:00:00.0000000Z\",\r\n    \"lastResult\":  267011,\r\n    \"validated\":  false,\r\n    \"taskState\":  3,\r\n    \"failed\":  null\r\n}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

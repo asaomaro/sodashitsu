@@ -4,12 +4,13 @@
 
 - [x] 5秒超の複合初期化でcommit済み・結果なしになる生成回帰を確認（旧コードで失敗）。
 - [x] 複合step30秒/全体60秒と単調時計の不可逆失効。native5秒/teardown8秒/要求expiry維持。
-- [ ] 最終レビュー、ビルド、型検査、Windows導入。
+- [x] 最終レビュー、ビルド、型検査、Windows専用package導入。
 - [x] 保守用Session0サーバーを制限済み通常ユーザーで起動し、認証RPC接続・二重起動防止・正常停止を実測。
 - [x] SYSTEMによる既存identityの読取専用復号・形式/公開鍵一致確認。秘密は出力しない。
 - [x] claimed initialize + 部分runtimeのみを対象とする明示復旧の実装/生成否定テスト/独立点検。
-- [ ] runtimeを全バイト維持したまま新SCM実体の証拠に基づきadmin/runsだけ退避。元要求は完了不明として保存。
-- [ ] 修正版へ更新して別nonceの明示initialize。既存鍵を再利用し、復号失敗時に再生成しない。
+- [x] runtimeを全バイト維持したまま新SCM実体の証拠に基づきadmin/runsだけ退避。元要求は完了不明として保存。
+- [x] 修正版へ更新して別nonceの明示initialize。既存鍵を再利用し、復号失敗時に再生成しない。
+- [ ] trust-ownedの起動失敗を、保存した要求・結果を読んで確認。enroll/通常起動・専用経路の実サインイン。
 - [ ] サインイン/通知の実機確認とログイン時の自動起動確認。
 
-追加再起動はまだ行っていない。現行のpending専用recoveryをclaimedへ流用せず、任意treeや不明要求のreplayは許可しない。
+追加再起動を実施し、制限済みSession0の保守RPCが自動復帰した。trust-ownedで停止し、Windowsログインの利用者応答を待っている。現行のpending専用recoveryをclaimedへ流用せず、任意treeや不明要求のreplayは許可しない。

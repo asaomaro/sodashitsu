@@ -1,0 +1,12 @@
+{
+  "id": "ae8e8819-1f11-4903-9d9c-d9b022c890d5",
+  "status": "exited",
+  "stdout": "{\"nativeHeadlineTimeout\":true,\"notificationWindowVisible\":true,\"ownedSourceMatched\":true,\"simpleFallback\":true,\"elapsedMs\":16001,\"realModelUsed\":false}\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

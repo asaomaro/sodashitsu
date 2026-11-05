@@ -1,0 +1,12 @@
+{
+  "id": "25a59868-89a5-4e86-8ebf-f064458b4164",
+  "status": "exited",
+  "stdout": "restart_requested_without_force\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}
