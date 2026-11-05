@@ -60,3 +60,25 @@ Node.js v24.18.0
 修正後のnative実行用ソースは元ファイルを直接ステージし、SHA256 44d09f0c6260eab4bc6171e6871535a99d5b8e1a471df3517b4f1c9b708aba73 で一致を確認。元ファイルは負例のために書き換えず、同一検証の参照先のみ別コピーへ変更した。最初の30秒上限は試験全体に不足したため、120秒へ変更して実行した。
 
 追加検証: ローカルの許可不要providerと無効なリモート共有設定を分離した試験、CLIの旧2分制限を超えて維持する試験。
+
+
+## 導入と実接続
+
+- b0da2efaをmainへpushし、Windows MY-NOTEPCのC:\git\sodashitsu-windows-notifyで全体build成功。
+- sr-pcのC:\git\sodashitsuもfast-forward更新。全体buildはexecの120秒上限に達したため、変更対象runtime（protocol/client-core/tui/desktop-assistant/server/cli）のbuildを300秒上限で実行し、buildExit=0を確認。
+- WSL側handoffは13 paneを維持。sr-pc側は自己execの返答が途切れたため、別接続の認証済みcontrol statusで2026-11-05T07:36:33.400Z / adopted=3 / dropped=0を確認。
+- sr-pcの更新後main.js SHA256は76128f1e509c213c59ca48c552acb8f00ea0482d2036edf346227826c90971fd。既存の再ログイン時再開スクリプトのpinと一致し、変更不要。
+- sr-pcの閲覧ウィンドウを閉じて、実CLI `--machine sr-pc desktop session --headless` から自前fixtureのプロセスIDとウィンドウ名を照合。UIの値設定・ボタン実行と明示的な画像取得が成功。画像は保存・ログ出力しない。接続開始後131秒でも同じfixtureのUI情報を取得でき、releaseが成功した。
+
+実CLIのstdout検証ログ:
+
+```text
+{"headlessConnected":true,"expiresAt":0}
+{"remoteUiSetValue":true,"remoteUiInvoke":true,"imageFallback":true}
+{"stillConnected":true,"elapsedSeconds":51,"fixtureVerified":true}
+{"stillConnected":true,"elapsedSeconds":96,"fixtureVerified":true}
+{"stillConnected":true,"elapsedSeconds":131,"fixtureVerified":true}
+{"released":true}
+```
+
+- sr-pc上のlocalhostへ直接接続する `--local` 相当の実CLIセッションでも、コードを渡さずに専用leaseが作られ、同じfixtureのUI情報を取得できた（`localHeadless=true, expiresAt=0, fixtureVerified=true`）。リモート用の共有設定は変更していない。
