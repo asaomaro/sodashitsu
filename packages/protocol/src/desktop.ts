@@ -13,6 +13,7 @@ import {DesktopNativeFormatAck} from "./desktopNativeAdaptive.js";
 import {DesktopProtectedMode} from "./desktopProtected.js";
 import {DesktopMonitorLayout} from "./desktopMonitors.js";
 import { z } from "zod";
+import {DesktopUiObserveParams,DesktopUiActParams,type DesktopUiSnapshot} from "./desktopUi.js";
 export const DESKTOP_SHARED_DELTAS_PROTOCOL="soda-desktop-shared-deltas-v1";
 import {DesktopNativeAudioControl} from "./desktopAudio.js";
 import {
@@ -311,6 +312,9 @@ export interface DesktopSettingsResult {
   canConfigure: boolean;
 }
 export const DesktopMethods = {
+  "desktop.agent.ui_observe":DesktopUiObserveParams,
+  "desktop.agent.ui_act":DesktopUiActParams,
+  "desktop.agent.headless":z.object({local:z.boolean().default(false)}).strict(),
   "desktop.native_helper.start":z.object({viewerId:z.uuid()}).strict(),
   "desktop.native_helper.touch":z.object({viewerId:z.uuid()}).strict(),
   "desktop.native_helper.stop":z.object({viewerId:z.uuid()}).strict(),
@@ -336,6 +340,9 @@ export const DesktopMethods = {
   "desktop.agent.release": z.object({ leaseId: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }).strict(),
 };
 export interface DesktopResults {
+  "desktop.agent.ui_observe":DesktopUiSnapshot;
+  "desktop.agent.ui_act":{acted:true};
+  "desktop.agent.headless":{leaseId:string;expiresAt:number};
   "desktop.native_helper.start":DesktopNativeHelperDescriptor;
   "desktop.native_helper.touch":{};
   "desktop.native_helper.stop":{};

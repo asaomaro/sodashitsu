@@ -68,3 +68,19 @@ it("starts native helpers only for an admitted direct browser origin and scopes 
  expect(await surface.invoke(ctx as unknown as Parameters<typeof surface.invoke>[0],"desktop.native_helper.start",{viewerId,origin:"https://forged.example"})).toMatchObject({ok:false,error:{code:"invalid_params"}});expect(start).toHaveBeenCalledTimes(1);
  expect((await surface.invoke(base,"desktop.native_helper.stop",{viewerId})).ok).toBe(true);expect(stop).toHaveBeenCalledWith("browser-owner",viewerId);
 });
+
+it("allows authenticated remote headless access but never forwards the local permission bypass",async()=>{
+ const surface=new ControlSurface(),openHeadless=vi.fn(async()=>({leaseId:"x".repeat(43),expiresAt:0}));
+ registerDesktopMethods(surface,{desktopRelay:{agents:new DesktopAgentAccess(),openHeadless}} as unknown as MethodDeps);
+ const base={clientId:"remote-owner",sink:{clientId:"remote-owner",bufferedAmount:0,sendOutput(){},sendSnapshot(){}}};
+ for(const ctx of[base,{...base,connection:{localSettings:true}},{...base,connection:{localSettings:true},connectionAuthorized:()=>false}]){
+  expect(await surface.invoke(ctx as never,"desktop.agent.headless",{local:false})).toMatchObject({ok:false,error:{code:"unauthorized"}});
+ }
+ const remote={...base,connection:{localSettings:false},connectionAuthorized:()=>true};
+ expect(await surface.invoke(remote as never,"desktop.agent.headless",{local:true})).toMatchObject({ok:false,error:{code:"unauthorized"}});
+ expect(openHeadless).not.toHaveBeenCalled();
+ expect(await surface.invoke(remote as never,"desktop.agent.headless",{local:false})).toMatchObject({ok:true});
+ expect(openHeadless).toHaveBeenLastCalledWith("remote-owner",false,expect.any(Function));
+ expect(await surface.invoke({...remote,connection:{localSettings:true}} as never,"desktop.agent.headless",{local:true})).toMatchObject({ok:true});
+ expect(openHeadless).toHaveBeenLastCalledWith("remote-owner",true,expect.any(Function));
+});

@@ -21,12 +21,12 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
       !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
   )
     throw Error("Desktop requires HTTPS or loopback origin");
-  if (cmd.opts.machine && cmd.opts.machine !== "local")
+  if (cmd.opts.machine && cmd.opts.machine !== "local" && (!cmd.headless||cmd.local))
     throw Error("Connect to A with --url; desktop grants cannot be forwarded through --machine");
   const ticket = process.env.SODA_DESKTOP_GRANT;
-  const encrypted=isDesktopAgentEncryptedGrant(ticket??"");
+  const encrypted=!cmd.headless&&isDesktopAgentEncryptedGrant(ticket??"");
   if(encrypted){const grant=parseDesktopAgentGrant(ticket!);if(!cmd.endpointFingerprint||cmd.endpointFingerprint!==grant.provider||url.origin!==grant.origin)throw Error("Specify an independent matching endpoint fingerprint and Root origin");}
-  else{if(cmd.endpointFingerprint!==undefined||cmd.identityDir!==undefined)throw Error("Endpoint identity options require an encrypted grant");DesktopMethods["desktop.agent.attach"].parse({ticket});}
+  else{if(cmd.endpointFingerprint!==undefined||cmd.identityDir!==undefined)throw Error("Endpoint identity options require an encrypted grant");if(!cmd.headless)DesktopMethods["desktop.agent.attach"].parse({ticket});}
   if (cmd.action === "model" && !process.env.OPENAI_API_KEY)
     throw Error(
       "Set OPENAI_API_KEY; screenshots will be sent to OpenAI only when this command runs",
@@ -93,7 +93,12 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
         try {
           const m = JSON.parse(line.value);
           id = m.id;
-          if (m.method === "observe") {
+          if(m.method==="ui.observe"||((m.method==="observe"||m.method==="inspect")&&cmd.headless&&m.prefer!=="image"&&m.path===undefined&&m.region===undefined&&m.afterFrameSeq===undefined)){
+            const p=DesktopMethods["desktop.agent.ui_observe"].parse({leaseId:"x".repeat(43),...(m.windowId===undefined?{}:{windowId:m.windowId})});
+            const result=await session.uiObserve?.(p.windowId)??{available:false,reason:"この接続ではUI情報を利用できません"};
+            if(result.available||m.method==="ui.observe"||m.windowId!==undefined){await emit({id,result});continue;}
+          }
+          if (m.method === "observe"||m.method==="inspect") {
             const p = DesktopMethods["desktop.agent.observe"].parse({
                 leaseId: "x".repeat(43),
                 ...(m.region === undefined ? {} : { region: m.region }),
@@ -109,12 +114,16 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
               const { imageBase64, ...meta } = result;
               await emit({ id, result: { ...meta, path: m.path } });
             } else await emit({ id, result });
+          }else if(m.method==="ui.act"||m.method==="act"&&m.elementId!==undefined){
+            const {leaseId:_,...input}=DesktopMethods["desktop.agent.ui_act"].parse({leaseId:"x".repeat(43),observationId:m.observationId,elementId:m.elementId,action:m.action,...(m.value===undefined?{}:{value:m.value})});
+            if(!session.uiAct)throw Error("この接続ではUI操作を利用できません");
+            await emit({id,result:await session.uiAct(input)});
           } else if (m.method === "act") {
             await emit({ id, result: await session.act(m.observationId, m.inputs) });
           } else if (m.method === "release") {
             await emit({ id, result: await session.release() });
             break;
-          } else throw Error("method must be observe, act, or release");
+          } else throw Error("method must be inspect, observe, act, ui.observe, ui.act, or release");
         } catch (e) {
           if (session.abort.signal.aborted) break;
           await emit({
@@ -135,5 +144,6 @@ export async function runDesktop(cmd: Extract<Command, { kind: "desktop" }>, sto
     }
   };
   if(encrypted)return run(signal=>DesktopEncryptedAgentSession.open({opts:cmd.opts,sessions:store,code:ticket!,fingerprint:cmd.endpointFingerprint,identityDir:cmd.identityDir,signal}),()=>{});
+  if(cmd.headless)return withSession(cmd.opts,store,async client=>{await client.hello();return run(()=>DesktopAgentSession.headless(client,cmd.local===true),()=>client.close());});
   return withSession(cmd.opts,store,async client=>{await client.hello();return run(()=>DesktopAgentSession.attach(client,ticket!),()=>client.close());});
 }

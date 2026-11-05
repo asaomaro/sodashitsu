@@ -469,7 +469,11 @@ export async function composeServer(
       allowClipboard: options.desktopClipboard === true, allowDisplayResize: options.desktopResize === true, allowUnlock: options.desktopUnlock === true } } : {}),
   });
   const exec = new ExecService();
-  const desktopRelay = new DesktopRelay(auth, originRejections, machines,()=>options.extraOrigins,{provider:desktop});
+  const desktopRelay = new DesktopRelay(auth, originRejections, machines,()=>options.extraOrigins,{provider:desktop,createLocal:async()=>{
+    const provider=new LazyDesktopProvider(undefined);
+    await DesktopSettings.open({file:join(options.stateDir,"local-computer-permissions.json"),provider,origins:()=>[],startup:{enabled:true,allowInput:true,allowClipboard:false,allowDisplayResize:false}});
+    return provider;
+  }});
   const desktopEndpoint=new DesktopEndpointService({stateDir:options.stateDir,provider:desktop,origins:desktopOriginsFromEnv(process.env,()=>delegations.list().delegations.filter(d=>d.state==="online").map(d=>d.url))});
   const desktopEndpointRelay=new DesktopEndpointRelay(auth,originRejections,machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);

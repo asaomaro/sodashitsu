@@ -670,7 +670,7 @@ sodactl desktop model --url https://A.example --task '画面の状態を確認�
 
 `session` はstdin/stdoutのNDJSONで `observe` / `act` / `release` を扱います。参照クライアントと同様にobserveへ `path` を渡すと新規ファイルだけへ0600で保存します。入力行64KiB・出力4MiBを上限とし、非同期の出力待機も2秒で打ち切ります。CLIは権限と接続を先に閉じ、読まれないpipe書込みが残る場合は停止処理開始から2.5秒で終了します（この強制終了はexit 1、未配送の出力は破棄）。OSによる同期書込みがevent loop自体を止める場合の期限保証はありません。入力失敗・切断・SIGINT/SIGTERM・期限切れで同じ接続を閉じ、結果が不明な入力は再送しません。
 
-`mcp` は[2025-11-25 stdio transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)のJSON-RPCを実装し、`desktop_observe`（image+観測metadata）、`desktop_act`（観測ID+型付き入力）、`desktop_release` の3ツールだけを公開します。MCPホストの起動コマンドへ上記を登録し、環境で短命コードを渡します。起動だけではコードを消費せず、最初のツール呼出し時にattachします。権限延長・共有開始・一覧取得はできません。任意のモデルを持つMCPホストで利用するための入口であり、全ホストとの互換性は未検証です。
+`mcp` は[2025-11-25 stdio transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)のJSON-RPCを実装し、`desktop_observe`（image+観測metadata）、`desktop_act`（観測ID+型付き入力）、`desktop_release` 、`desktop_ui_observe`、`desktop_ui_act` の5ツールを公開します。MCPホストの起動コマンドへ上記を登録し、環境で短命コードを渡します。起動だけではコードを消費せず、最初のツール呼出し時にattachします。権限延長・共有開始・一覧取得はできません。任意のモデルを持つMCPホストで利用するための入口であり、全ホストとの互換性は未検証です。
 
 `model` は[OpenAI Responses computer tool](https://developers.openai.com/api/docs/guides/tools-computer-use)の `computer_call.actions[]` と `computer_call_output` を扱います。既定モデルは確認時の公式例に合わせ `gpt-6.1-sol`、`--model` で変更できます。`OPENAI_API_KEY` は環境だけから読み、モデルを実行した場合にだけ取得画像・指示を `https://api.openai.com/v1/responses` へ送ります。`store:false`と履歴を使いますが、API側のデータ取扱いを無保持と保証する設定ではありません。開発中の検証はmock APIだけです。API利用権・実モデル互換性・実画面でのタスク成功率は未検証です。Anthropic等の専用adapterはありません（MCPから利用可能）。
 
@@ -1110,3 +1110,37 @@ Windowsの一時仮想画面は、物理monitorが複数あっても所有して
 寸法は実ピクセルです。Retina等のOS論理座標と区別し、同じ物理寸法のモードでは元の論理倍率を優先します。要求寸法が存在しないときは近似モードへ変更しません。適用後も同じ画面のUUID・mode・配置・回転とScreenCaptureKitの寸法を確認し、変更のたびに再接続して操作許可を解除します。
 
 通常終了時は保持しているキーとボタンを解放してから復元を試みます。現地利用者が画面のmode・配置・向きを変更した場合や画面のUUIDが変わった場合は上書きしません。Windows用PowerShell guardianは使いません。OS障害や強制終了を含めた実機での復元保証はしておらず、生成factsによる適用・復元・期限・入力解除順序の検証と区別します。
+
+
+## ブラウザを開かないエージェント操作
+
+`--headless` は閲覧ウィンドウを作らず、認証済みのCLI接続に操作を結び付けます。画面やタブを切り替えても終了せず、従来の画面から渡すコードの2分制限はありません。CLI終了、接続切断、共有設定の変更、入力許可の取り消しで終了します。共有元で「画面共有」と「入力」が許可されている必要があります。認証や接続先の共有許可を省略する設定ではありません。
+
+```sh
+# 登録済みのリモートPC。UI取得も入力も接続先で実行します。
+sodactl --machine sr-pc desktop session --headless
+sodactl --machine sr-pc desktop mcp --headless
+
+# このPCのlocalhostへ直接接続。PC登録・共有設定・画面からの許可コードは不要。
+sodactl desktop session --local --url http://127.0.0.1:7780
+sodactl desktop mcp --local --url http://127.0.0.1:7780
+```
+
+`--local` はヘッドレスモードを含みます。localhostへの直接接続だけで利用でき、リモートPCへの転送、LAN URL、プロキシ経由では共有許可の省略はできません。専用の補助プログラムを必要時に起動し、リモート共有の設定は変更しません。従来のコードによる接続と暗号化接続は残ります。暗号化接続必須の共有元へ、`--headless` から暗号化要件を迂回して接続することはできません。
+
+ここでのヘッドレスは「閲覧ウィンドウなし」の意味です。Windowsへのログイン済みセッションと取得可能なデスクトップは必要です。未ログイン、ロック画面、UAC画面の操作や、モニターなしでの仮想画面作成は、このモードの対象ではありません。
+
+### UI情報を使う操作
+
+Windows 10/11のヘッドレス接続では、`session` の `observe` とMCPの `desktop_observe` がWindows UI Automationの情報を優先します。非対応の画面では画像へ切り替えます。`prefer:"image"`、画像保存の `path`、領域指定は画像を使います。`desktop model` の組み込みcomputer toolは引き続き画像を使います。UI情報による操作には `session` またはMCPを使ってください。
+
+UI情報にはウィンドウ一覧、対象のウィンドウ、要素の名前・種類・値・操作可能なアクションが含まれます。パスワード要素の値は返さず、その要素への操作も提供しません。名前や値は画面由来のデータとして扱ってください。
+
+```json
+{"id":1,"method":"ui.observe"}
+{"id":2,"method":"ui.act","observationId":"取得した観測ID","elementId":"取得した要素ID","action":"invoke"}
+```
+
+`ui.observe` に取得済みの `windowId` を渡すと対象を指定できます。`ui.act` の操作は `invoke`、`set_value`（`value` 必須）、`toggle`、`select`、`expand`、`collapse`、`focus` です。MCPでは `desktop_ui_observe` と `desktop_ui_act` を使います。
+
+要素は最大512件・深さ8段で取得します。操作前にウィンドウ、プロセス、要素と文脈を再照合します。観測は60秒・1回限りで、画像の取得や他の操作後は取り直してください。結果が不明な操作は自動で再送しません。UI情報が取得できないアプリ、権限が異なるアプリ、独自描画の部分には画像操作を使います。

@@ -40,7 +40,7 @@ export class DesktopAgentAccess {
   private grants = new Map<AgentTarget, Grant>();
   private tickets = new Map<string, Grant>();
   private leases = new Map<string, Grant>();
-  grant(target: AgentTarget,recipient?:DesktopAgentRecipient) {
+  grant(target: AgentTarget,recipient?:DesktopAgentRecipient,persistent=false) {
     if(recipient&&(!/^[a-f0-9]{64}$/.test(recipient.fingerprint)||recipient.scope!==undefined&&!/^[A-Za-z0-9_-]{43}$/.test(recipient.scope)||!this.bindingActive(recipient)))throw new RpcError("unauthorized","Agent recipient is unavailable");
     this.revoke(target);
     const now = performance.now(),
@@ -48,7 +48,7 @@ export class DesktopAgentAccess {
     const g: Grant = {
       target,
       ...(recipient?{recipient:{fingerprint:recipient.fingerprint,...(recipient.scope?{scope:recipient.scope}:{}),active:recipient.active}}:{}),
-      expires: now + 120000,
+      expires: persistent ? Infinity : now + 120000,
       ticketExpires: now + 30000,
       busy: false,
       dead: false,
@@ -56,7 +56,7 @@ export class DesktopAgentAccess {
     this.grants.set(target, g);
     this.tickets.set(digest(Buffer.from(ticket)), g);
     target.control(false);
-    target.state(false, Date.now() + 120000);
+    target.state(false, persistent?0:Date.now() + 120000);
     if(!this.validBinding(g)){this.revoke(target);throw new RpcError("unauthorized","Agent recipient is unavailable");}
     return { ticket, expiresAt: Date.now() + 30000 };
   }
@@ -80,9 +80,16 @@ export class DesktopAgentAccess {
     g.lease = secret();
     this.leases.set(g.lease, g);
     g.target.control(true);
-    g.target.state(true, Date.now() + Math.max(0, g.expires - performance.now()));
+    g.target.state(true, Number.isFinite(g.expires)?Date.now() + Math.max(0, g.expires - performance.now()):0);
     this.require(owner,g.lease);
-    return { leaseId: g.lease, expiresAt: Date.now() + Math.max(0, g.expires - performance.now()) };
+    return { leaseId: g.lease, expiresAt: Number.isFinite(g.expires)?Date.now() + Math.max(0, g.expires - performance.now()):0 };
+  }
+  assertActive(owner:string,lease:string):void{this.require(owner,lease);}
+  async exclusive<T>(owner:string,lease:string,operation:()=>Promise<T>):Promise<T>{
+    const g=this.require(owner,lease);
+    if(g.busy||g.preparing)throw new RpcError("server_busy","Action or observation is in progress");
+    g.busy=true;delete g.observation;
+    try{const result=await operation();this.require(owner,lease);return result;}finally{g.busy=false;}
   }
   private require(owner: string, lease: string) {
     const g = this.leases.get(lease);

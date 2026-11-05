@@ -210,3 +210,15 @@ it("rejects stale regional proofs and cannot return an old pending observation a
  const next=f.api.grant(f.target);done();await rejection;
  expect(f.api.attach("b",next.ticket).leaseId).toHaveLength(43);expect(f.target.input).not.toHaveBeenCalled();
 });
+
+it("keeps a headless lease beyond the viewer deadline and revokes it when its authenticated owner leaves",()=>{
+ const {api,target}=fixture(),now=performance.now();
+ const clock=vi.spyOn(performance,"now").mockReturnValue(now);
+ let active=true;
+ const lease=api.attach("headless",api.grant(target,undefined,true).ticket,()=>active);
+ expect(lease.expiresAt).toBe(0);
+ clock.mockReturnValue(now+3600000);api.tick();api.assertActive("headless",lease.leaseId);
+ active=false;api.tick();
+ expect(()=>api.assertActive("headless",lease.leaseId)).toThrow();
+ expect(target.releaseInputs).toHaveBeenCalled();
+});

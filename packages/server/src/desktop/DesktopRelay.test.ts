@@ -51,7 +51,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   const origin = `http://127.0.0.1:${(web.address() as AddressInfo).port}`,
     endpoint = origin.replace("http", "ws") + "/desktop-share";
   const Provider=lazy?LazyDesktopProvider:DesktopProvider;
-  const provider = new Provider(configured ? {
+  const configuration = {
     command: [process.execPath, helper, "--allow-input", "--record", record,"--lifecycle-ledger",lifecycle, ...(protectedConfig?["--protected-end-marker",endedMarker,"--input-ledger",ledger,...(protectedConfig.mode?["--protected-mode",protectedConfig.mode]:[]),...(protectedConfig.force?["--protected-unconditional"]:[]),...(protectedConfig.expectEnv?["--expect-elevated-request",protectedConfig.expectEnv]:[])]:[]), ...(secure ? ["--secure"] : []), ...(cover ? ["--lock-cover"] : []), ...(nativeFailure ? ["--startup-failure", nativeFailure] : []), ...(readyFailure ? ["--ready-failure", readyFailure] : []), ...(!imeKeys ? ["--no-ime-keys"] : []), ...(unconditionalIme ? ["--unconditional-ime-keys"] : []), ...(!extendedInput ? ["--no-extended-input"] : []), ...(dxgi ? ["--dxgi"] : []), ...(nativeFixture ? ["--static","--native-60fps","--native-fixture",fileURLToPath(new URL("../../../../scripts/remote-desktop/fixtures/h264-generated.json",import.meta.url))] : [])],
     allowInput,
     allowNativeVideo: nativeFixture,
@@ -59,7 +59,8 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
     ...(protectedConfig?{allowClipboard:true,fileRoot:dir,allowMonitors:true,allowVirtualDisplay:true}:{}),
     allowUnlock: unlockAllowed,
     origins: () => [origin],
-  } : undefined);
+  };
+  const provider=new Provider(configured?configuration:undefined);
   let revoke: (id: string) => void = () => undefined;
   const auth = {
     authorizeUpgrade: async (req: { headers: Record<string, string> }) =>
@@ -131,7 +132,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   } as unknown as MachineLink;
   const relay = new DesktopRelay(auth, origins, {
     route: (id) => (id === "remote" ? { kind: "ok", link } : { kind: "unknown" }),
-  },()=>relayOrigins,{provider});
+  },()=>relayOrigins,{provider,createLocal:async()=>configured?provider:new DesktopProvider({...configuration,allowInput:true,allowUnlock:false})});
   web.on("upgrade", (req, socket, head) => {
     void relay.upgrade(req, socket, head);
   });
@@ -176,6 +177,35 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
+it("keeps browserless local and remote-style leases until the RPC owner disconnects",async()=>{
+ const f=await fixture();let active=true;
+ const lease=await f.relay.openHeadless("cli",true,()=>active);
+ expect(lease.expiresAt).toBe(0);
+ await f.relay.agents.refresh("cli",lease.leaseId);
+ expect(f.relay.agents.observe("cli",lease.leaseId).width).toBeGreaterThan(0);
+ expect(f.closed()).toBe(0);
+ active=false;f.relay.clientGone("cli");
+ expect(()=>f.relay.agents.assertActive("cli",lease.leaseId)).toThrow();
+ await expect.poll(()=>(f.provider as unknown as {active:unknown}).active).toBeUndefined();
+ const next=await f.relay.openHeadless("remote-cli",false,()=>true);
+ expect(next.expiresAt).toBe(0);f.relay.clientGone("remote-cli");
+});
+it("opens local headless capture without enabling global remote sharing",async()=>{
+ const f=await fixture(false,false,false);
+ expect(f.provider.capabilities().available).toBe(false);
+ const lease=await f.relay.openHeadless("local-cli",true,()=>true);
+ await f.relay.agents.refresh("local-cli",lease.leaseId);
+ expect(f.relay.agents.observe("local-cli",lease.leaseId).width).toBeGreaterThan(0);
+ expect(f.provider.capabilities().available).toBe(false);
+ await expect(f.relay.openHeadless("remote-cli",false,()=>true)).rejects.toThrow();
+ f.relay.clientGone("local-cli");
+});
+it("rejects headless capture on locked or disabled shared sources",async()=>{
+ const disabled=await fixture(true,false,false);
+ await expect(disabled.relay.openHeadless("disabled",false,()=>true)).rejects.toThrow();
+ const locked=await fixture(true,false,true,true);
+ await expect(locked.relay.openHeadless("locked",false,()=>true)).rejects.toThrow();
+});
 it("shares and controls the local desktop without opening a machine channel, and releases its helper",async()=>{
  const f=await fixture(),v=await f.viewer("extended");
  v.send({...start,machineId:"local"});

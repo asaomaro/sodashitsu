@@ -1089,3 +1089,10 @@ sodactl work memory read decisions.md
 #### 暗号化したエージェント接続
 
 `desktop session` / `desktop mcp` / `desktop model` は、`SODA_DESKTOP_GRANT` に暗号化コードを設定した場合、`--endpoint-fingerprint <別途確認した共有元PCの指紋>` を必須にします。`--identity-dir <絶対パス>` はCLI鍵の保存先を変更した場合の指定です。鍵の準備・登録・画面からの許可・2分の寿命・双方向の使い方は [リモートデスクトップ](remote-desktop.md#暗号化接続からエージェントへ許可する) を参照してください。
+
+
+#### 閲覧ウィンドウなしのデスクトップ操作
+
+`desktop session|mcp|model --headless` は認証済み接続を操作に使い、閲覧画面と短命コードを必要としません。`--machine <名前>` でリモートPCも指定できます。接続先の画面共有・入力の許可は必要です。localhostへ直接接続する `--local` では、PC登録と共有許可の設定も不要です。
+
+`session` の `observe` は利用できる場合にUI情報を優先します。`ui.observe` / `ui.act` でUI要素を取得・操作でき、`prefer:"image"` で従来の画像を要求できます。MCPには `desktop_ui_observe` / `desktop_ui_act` を追加しています。接続継続・対応範囲・入力形式は [ブラウザを開かないエージェント操作](remote-desktop.md#ブラウザを開かないエージェント操作) を参照してください。

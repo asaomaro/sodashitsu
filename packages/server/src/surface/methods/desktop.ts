@@ -1,6 +1,7 @@
 import { DesktopMethods,DesktopEndpointMethods, RpcError } from "@sodashitsu/protocol";
 import type { ControlSurface } from "../ControlSurface.js";
 import type { MethodDeps } from "./deps.js";
+import {DesktopUi} from "../../desktop/DesktopUi.js";
 
 export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps): void {
   const nativeHelpers=deps.desktopNativeHelpers;
@@ -27,6 +28,17 @@ export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps
   }
   const agents = deps.desktopRelay?.agents;
   if (agents) {
+    const ui=new DesktopUi(agents,(owner,lease)=>deps.desktopRelay!.assertHeadless(owner,lease));
+    surface.register("desktop.agent.ui_observe",{schema:DesktopMethods["desktop.agent.ui_observe"],handler:(ctx,p)=>ui.observe(ctx.clientId,p.leaseId,p.windowId)});
+    surface.register("desktop.agent.ui_act",{schema:DesktopMethods["desktop.agent.ui_act"],handler:(ctx,p)=>ui.act(ctx.clientId,p)});
+    surface.register("desktop.agent.headless",{
+      schema:DesktopMethods["desktop.agent.headless"],
+      handler:(ctx,p)=>{
+        if(!ctx.connection||ctx.connectionAuthorized?.()!==true||p.local&&ctx.connection.localSettings!==true)
+          throw new RpcError("unauthorized","許可コード不要のローカル操作は、このPCのlocalhostから接続してください");
+        return deps.desktopRelay!.openHeadless(ctx.clientId,p.local,()=>ctx.connectionAuthorized?.()===true);
+      },
+    });
     surface.register("desktop.agent.attach", {
       schema: DesktopMethods["desktop.agent.attach"],
       handler: (ctx, p) => agents.attach(ctx.clientId, p.ticket),
@@ -34,6 +46,7 @@ export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps
     surface.register("desktop.agent.observe", {
       schema: DesktopMethods["desktop.agent.observe"],
       handler: async (ctx, p) => {
+        ui.invalidate(p.leaseId);
         if (ctx.sink.bufferedAmount > 256 * 1024) {
           agents.release(ctx.clientId, p.leaseId);
           throw new RpcError("server_busy", "Agent output is congested; lease revoked");
@@ -48,7 +61,7 @@ export function registerDesktopMethods(surface: ControlSurface, deps: MethodDeps
     });
     surface.register("desktop.agent.act", {
       schema: DesktopMethods["desktop.agent.act"],
-      handler: (ctx, p) => agents.act(ctx.clientId, p.leaseId, p.observationId, p.inputs),
+      handler: (ctx, p) => {ui.invalidate(p.leaseId);return agents.act(ctx.clientId, p.leaseId, p.observationId, p.inputs);},
     });
     surface.register("desktop.agent.release", {
       schema: DesktopMethods["desktop.agent.release"],

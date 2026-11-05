@@ -43,6 +43,8 @@ it("MCP exposes only scoped desktop tools and returns image content without a li
     "desktop_observe",
     "desktop_act",
     "desktop_release",
+    "desktop_ui_observe",
+    "desktop_ui_act",
   ]);
   input.write(
     JSON.stringify({
@@ -127,4 +129,32 @@ it("settles stdout backpressure within a bounded time", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("prefers native UI controls, allows explicit screenshots and falls back for unsupported apps",async()=>{
+ const input=new PassThrough(),output=new PassThrough(),received:any[]=[];let buffer="";
+ output.on("data",chunk=>{buffer+=chunk;for(;;){const end=buffer.indexOf("\n");if(end<0)break;received.push(JSON.parse(buffer.slice(0,end)));buffer=buffer.slice(end+1);}});
+ const uiObserve=vi.fn(async()=>({available:true,observationId:crypto.randomUUID(),elements:[]})),observe=vi.fn(async()=>({imageBase64:"AQID",format:"image/png"})),uiAct=vi.fn(async()=>({acted:true})),close=vi.fn();
+ const running=desktopMcp(input,output,async()=>({uiObserve,uiAct,observe,close,abort:new AbortController()} as unknown as DesktopAgentSession));
+ const send=(id:number,name:string,args:unknown={})=>input.write(JSON.stringify({jsonrpc:"2.0",id,method:"tools/call",params:{name,arguments:args}})+"\n");
+ input.write('{"jsonrpc":"2.0","id":1,"method":"initialize"}\n');
+ send(2,"desktop_observe");await vi.waitFor(()=>expect(received).toHaveLength(2));
+ expect(observe).not.toHaveBeenCalled();expect(JSON.parse(received[1].result.content[0].text).available).toBe(true);
+ send(3,"desktop_observe",{prefer:"image"});await vi.waitFor(()=>expect(received).toHaveLength(3));expect(observe).toHaveBeenCalledTimes(1);
+ uiObserve.mockResolvedValueOnce({available:false,reason:"unsupported"} as never);
+ send(4,"desktop_observe");await vi.waitFor(()=>expect(received).toHaveLength(4));expect(received[3].result.content[0].type).toBe("image");
+ const action={observationId:crypto.randomUUID(),elementId:crypto.randomUUID(),action:"invoke"};send(5,"desktop_ui_act",action);
+ await vi.waitFor(()=>expect(received).toHaveLength(5));expect(uiAct).toHaveBeenCalledWith(action);
+ input.end();await running;expect(close).toHaveBeenCalled();
+});
+it("does not expire a headless session when the old viewer grant timeout passes",async()=>{
+ vi.useFakeTimers();
+ try{
+  const close=vi.fn(),request=vi.fn(async()=>({leaseId:"x".repeat(43),expiresAt:0})),client={request,close,onClose:vi.fn()} as unknown as Parameters<typeof DesktopAgentSession.headless>[0];
+  const session=await DesktopAgentSession.headless(client,false);
+  expect(request).toHaveBeenCalledWith("desktop.agent.headless",{local:false},{timeoutMs:60000});
+  await vi.advanceTimersByTimeAsync(3600000);
+  expect(close).not.toHaveBeenCalled();expect(session.abort.signal.aborted).toBe(false);
+  session.close();expect(close).toHaveBeenCalledOnce();
+ }finally{vi.useRealTimers();}
 });

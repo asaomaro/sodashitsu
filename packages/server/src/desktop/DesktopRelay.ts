@@ -61,6 +61,7 @@ import type { MachineLink } from "../machine/MachineLink.js";
 import {desktopRelayOrigin} from "./relayOrigin.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
 import {LocalDesktopRpc} from "./LocalDesktopRpc.js";
+import {HeadlessViewer} from "./HeadlessViewer.js";
 import type {DesktopProviderApi} from "./DesktopProvider.js";
 import { unlockFailure } from "./unlockFailure.js";
 
@@ -69,7 +70,17 @@ import { DesktopVideoLanes } from "./DesktopVideoLanes.js";
 
 class DesktopSetupRequired extends Error {}
 
+interface ViewerSocket {
+ readonly readyState:number;readonly bufferedAmount:number;readonly protocol:string;
+ send(data:string|Uint8Array):void;
+ on(event:string,callback:(...args:any[])=>void):unknown;
+ once(event:string,callback:(...args:any[])=>void):unknown;
+ close(code?:number,reason?:string):void;terminate():void;
+}
+type LocalProvider=Pick<DesktopProviderApi,"capabilities"|"endpointScope"|"clientGone"|"epoch">;
 type Viewer = {
+  headlessActive?:()=>boolean;
+  sourceProvider?:LocalProvider;
   agentRegions?:boolean;
   regionSpec?:import("@sodashitsu/protocol").DesktopRegionSpec;
   nativePlatformRequested?:boolean;nativePlatform?:import("@sodashitsu/protocol").DesktopNativePlatform;inputCapabilities?:DesktopInputCapabilities;nativeInputFloor?:number;
@@ -126,7 +137,7 @@ type Viewer = {
   agent: AgentTarget;
   latest?: AgentFrame;
   inputWaits: Map<number, { resolve(): void; reject(e: Error): void }>;
-  ws: WebSocket;
+  ws: ViewerSocket;
   sessionId: string;
   origin: string;
   provider?: WebSocket;
@@ -185,6 +196,61 @@ export class DesktopRelay {
   private readonly timer;
   private closed = false;
   readonly agents = new DesktopAgentAccess();
+  private readonly headlessOwners=new Map<string,HeadlessViewer>();
+  private readonly headlessLeases=new Map<string,string>();
+  assertHeadless(owner:string,lease:string):void{
+    if(this.headlessLeases.get(owner)!==lease)throw new RpcError("unauthorized","このUI操作には専用のヘッドレス接続が必要です");
+    this.agents.assertActive(owner,lease);
+  }
+  private directProvider:DesktopProviderApi|undefined;
+  private directLoading:Promise<DesktopProviderApi>|undefined;
+  private direct():Promise<DesktopProviderApi>{
+    if(this.directProvider)return Promise.resolve(this.directProvider);
+    if(!this.local?.createLocal)throw new RpcError("not_found","ローカル操作はこの環境では利用できません");
+    return this.directLoading??=this.local.createLocal().then(provider=>{
+      if(this.closed){provider.dispose();throw new Error("desktop stopped");}
+      return this.directProvider=provider;
+    }).finally(()=>{this.directLoading=undefined;});
+  }
+  /** Authenticated RPC ownership replaces browser focus and short-lived viewer tickets. */
+  async openHeadless(owner:string,local:boolean,active:()=>boolean):Promise<{leaseId:string;expiresAt:number}>{
+    if(this.closed||!active())throw new RpcError("unauthorized","接続が終了しています");
+    if(this.headlessOwners.has(owner))throw new RpcError("server_busy","この接続のデスクトップは既に使用中です");
+    const socket=new HeadlessViewer();this.headlessOwners.set(owner,socket);
+    socket.once("close",()=>{if(this.headlessOwners.get(owner)===socket){this.headlessOwners.delete(owner);this.headlessLeases.delete(owner);}});
+    try{
+      const source=local?await this.direct():undefined;
+      if(socket.readyState!==1||!active())throw new RpcError("unauthorized","接続が終了しています");
+      const provider=source??this.local?.provider;
+      if(!provider)throw new RpcError("not_found","デスクトップ共有を利用できません");
+      const epoch=provider.epoch;
+      const live=()=>active()&&provider.epoch===epoch&&provider.capabilities().available&&provider.capabilities().allowInput;
+      if(!live())throw new RpcError("unauthorized","共有元で画面共有と入力を許可してください");
+      this.viewer(socket,"", "http://127.0.0.1",false,false);
+      const v=[...this.viewers].find(row=>row.ws===socket)!;
+      v.headlessActive=live;v.nativePlatformRequested=true;if(source)v.sourceProvider=source;
+      return await new Promise((resolve,reject)=>{
+        let settled=false;
+        const deadline=setTimeout(()=>{socket.onFailure("デスクトップの準備が時間内に完了しませんでした");},45000);deadline.unref();
+        const heartbeat=setInterval(()=>socket.receive({type:"heartbeat"}),2000);heartbeat.unref();
+        let revoke=()=>{};
+        socket.once("close",()=>{clearTimeout(deadline);clearInterval(heartbeat);revoke();if(!settled){settled=true;reject(new RpcError("unauthorized",socket.failureMessage??"デスクトップ接続が終了しました"));}});
+        socket.onFailure=message=>{if(!settled){settled=true;reject(new RpcError("unauthorized",message));}socket.close();};
+        socket.onFrame=()=>{
+          if(settled)return;
+          try{
+            if(!live()||!v.ready||!v.allowInput||v.secureDesktop)throw new Error("この画面は操作できません");
+            const grant=this.agents.grant(v.agent,undefined,true);
+            const lease=this.agents.attach(owner,grant.ticket,live);
+            this.headlessLeases.set(owner,lease.leaseId);
+            revoke=this.agents.onOwnerRevoked(owner,()=>socket.close());
+            settled=true;clearTimeout(deadline);resolve(lease);
+          }catch{socket.onFailure("この画面は操作できません");}
+        };
+        socket.receive({type:"start",machineId:"local",options:{width:1280,fps:5,quality:75}});
+      });
+    }catch(error){socket.close();throw error;}
+  }
   private localServer:Server|undefined;
   private localOpening:Promise<string>|undefined;
   private localOrigin: string|undefined;
@@ -213,7 +279,7 @@ export class DesktopRelay {
     private readonly origins: Pick<OriginRejectionLog,"admit">,
     private readonly machines: {route(id:string):{kind:"ok";link:Pick<MachineLink,"openChannel">}|{kind:"unknown"|"offline"}},
     private readonly publicOrigins:()=>readonly string[]=()=>[],
-    private readonly local?:{provider:Pick<DesktopProviderApi,"capabilities"|"endpointScope"|"clientGone">},
+    private readonly local?:{provider:LocalProvider;createLocal?:()=>Promise<DesktopProviderApi>},
   ) {
     this.microphoneLanes=new DesktopVideoLanes(id=>auth.verifySession(id),8192);
     this.fileLanes=new DesktopVideoLanes(id=>auth.verifySession(id),262144);
@@ -229,7 +295,7 @@ export class DesktopRelay {
       this.videoLanes.tick();this.imageLanes.tick();this.clipboardLanes.tick();this.microphoneLanes.tick();this.fileLanes.tick();
       for (const v of this.viewers)
         if (
-          !auth.verifySession(v.sessionId) ||
+          !(v.headlessActive?v.headlessActive():auth.verifySession(v.sessionId)) ||
           now - v.lastSeen > 12000 ||
           (v.pending && now - v.frameAt > 5000) ||
           (v.started && !v.ready && now - v.since > (v.nativePlatform?140000:v.virtualDisplay?25000:15000))
@@ -293,7 +359,7 @@ export class DesktopRelay {
       else this.provider(ws);
     });
   }
-  private send(ws: WebSocket, value: unknown): boolean {
+  private send(ws: ViewerSocket, value: unknown): boolean {
     if (ws.readyState !== WebSocket.OPEN || ws.bufferedAmount > DESKTOP_MAX_FRAME_BYTES + 4096)
       return false;
     ws.send(value instanceof Uint8Array ? value : JSON.stringify(value));
@@ -318,7 +384,7 @@ export class DesktopRelay {
     const grant=this.agents.grant(v.agent,recipient);this.send(v.ws,{type:"control",enabled:false});return grant;
   }
   revokeEndpointAgent(sessionId:string):void{for(const v of this.viewers)if(v.sessionId===sessionId)this.agents.revoke(v.agent);}
-  private viewer(ws: WebSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false,sharedProtectedRequested=false,sharedMicrophoneRequested=false,fileCheckpointsRequested=false,foldersRequested=false,sharedCursorRequested=false,sharedClipboardRequested=false,sharedDeltasRequested=false,folderCheckpointsRequested=false,sharedMonitorsRequested=false,independentMonitorsRequested=false,sharedVirtualRequested=false,protectedFilesRequested=false,protectedVideoRequested=false,protectedAudioRequested=false,sharedProtectedVideoRequested=false,virtualMonitorsRequested=false): void {
+  private viewer(ws: ViewerSocket, sessionId: string, origin: string, nativeVideoRequested=false,nativeWindowRequested=false, videoLaneRequested=false,nativeRateRequested=false,cursorRequested=false,imageLaneRequested=false,nativeDatagramsRequested=false,nativeAudioRequested=false,richRequested=false,fileRequested=false,monitorsRequested=false,nativeAdaptiveRequested=false,nativeCodecsRequested=false,virtualDisplayRequested=false,elevatedRequested=false,sharedRequested=false,sharedNativeRequested=false,sharedDatagramsRequested=false,microphoneRequested=false,sharedAudioRequested=false,nativePlatformRequested=false,microphoneOpusRequested=false,sharedResolutionRequested=false,sharedProtectedRequested=false,sharedMicrophoneRequested=false,fileCheckpointsRequested=false,foldersRequested=false,sharedCursorRequested=false,sharedClipboardRequested=false,sharedDeltasRequested=false,folderCheckpointsRequested=false,sharedMonitorsRequested=false,independentMonitorsRequested=false,sharedVirtualRequested=false,protectedFilesRequested=false,protectedVideoRequested=false,protectedAudioRequested=false,sharedProtectedVideoRequested=false,virtualMonitorsRequested=false): void {
     const now = performance.now();
     const v: Viewer = {
       chain: new DesktopFrameChain(),
@@ -448,7 +514,7 @@ export class DesktopRelay {
         binary ||
         bytes.byteLength > 65536 ||
         ++v.messages > 300 ||
-        !this.auth.verifySession(sessionId)
+        !(v.headlessActive?v.headlessActive():this.auth.verifySession(sessionId))
       ) {
         this.stop(v);
         return;
@@ -604,7 +670,7 @@ export class DesktopRelay {
     options: import("@sodashitsu/protocol").DesktopOptions,
   ): Promise<void> {
     const rpc = machineId === "local" && this.local
-      ? new LocalDesktopRpc(this.local.provider,()=>this.localSourceOrigin(),v.origin)
+      ? new LocalDesktopRpc(v.sourceProvider??this.local.provider,()=>this.localSourceOrigin(),v.origin)
       : (()=>{
           const route=this.machines.route(machineId);
           if(route.kind!=="ok")throw new Error("machine unavailable");
@@ -938,7 +1004,7 @@ export class DesktopRelay {
             !v ||
             v.provider ||
             !this.viewers.has(v) ||
-            !this.auth.verifySession(v.sessionId) ||
+            !(v.headlessActive?v.headlessActive():this.auth.verifySession(v.sessionId)) ||
             performance.now() - v.since > 10000
           )
             throw new Error();
@@ -1285,6 +1351,7 @@ export class DesktopRelay {
       }
   }
   clientGone(owner: string): void {
+    this.headlessOwners.get(owner)?.close();
     this.agents.clientGone(owner);
   }
   closeShares(): void {
@@ -1303,6 +1370,7 @@ export class DesktopRelay {
     clearInterval(this.timer);
     this.revoked.dispose();
     this.closeShares();
+    this.directProvider?.dispose();
     this.server.close();
   }
 }

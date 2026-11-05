@@ -103,3 +103,4 @@ export * from "./voiceCore.js";
 export * from "./usageInsights.js";
 
 export * from "./usageReportDocument.js";
+export * from "./desktopUi.js";
