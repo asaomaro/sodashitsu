@@ -29,3 +29,11 @@ MY-NOTEPC: `C:\git\sodashitsu-windows-notify`へgit clone。Windows Node 24で�
 sr-pc: Windows側の`C:\git\sodashitsu`から別の17880・専用state/userDataで接続を確認。ここもロック中。既存共有窓はロック画面の非撮影カバーを表示し、保護画面共有は既存専用サービスの未復旧により開始不可。利用者へ手元で解除可能か確認中。PINの盲入力、サービスの未知journal初期化、強制再起動は行わない。
 
 他のWindows PCで報告された「通知一覧にはあるが吹き出しが出ない」の原因は未確定。こちらのWindowsロック状態をそのPCの原因として扱わない。ロック解除後の通知表示・読み上げの検証が残る。
+
+## 導入
+
+- 49807a61をmainへpush。MY-NOTEPC側のクローンとsr-pcへfast-forward pullし、Windows Node 24でそれぞれbuild成功。
+- 稼働中のWSL側はhandoffで13 paneを維持。assistant.enabled=true / phase=runningを更新後に確認。
+- sr-pcのWindows worker更新は、自己exec経由の待機がexec.read timeoutになったが、後続の認証済みcontrol statusでlastHandoff adopted=3 / dropped=0を確認（2026-11-05T04:31:46.301Z）。Windows supervisorのPIDは同じままworkerが置き換わるため、PID不変を未更新の根拠にはしない。
+- sr-pcの新しい通常サーバーへWindows Edgeの専用headless contextで接続し、`desktop-view`のmachineId=localを表示。PCの接続登録なしでstatus=「ロック画面・閲覧中」/ errors=[] / lockCover=1を確認。これは実Windows helper経路の確認であり、ロック解除後の通常画面・入力・通知の実機合格とは区別する。contextは終了した。
+- 別ポート17880の検証用サーバーは確認後に認証済みserver.stopで停止し、test local-authの削除と通常サーバーの稼働を確認した。専用state/userDataと再開手順を残し、既存の通常サーバー・設定は停止/変更していない。

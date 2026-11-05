@@ -31,6 +31,10 @@ raw logの個人profile名だけを <owner-profile> に置換した。PIN・秘�
 
 ## 追加の準備と確認
 
+- 2026-11-05追加: 再起動後に利用者が手動ログインすると通常ユーザーのSodaサーバーを一度だけ再開するHKCU RunOnce `SodashitsuResumeSigninRecovery20261105` を登録。自動ログイン・PIN保存・SYSTEM化は行わない。既存の登録値がないことと実行ユーザーのowner一致を確認してから専用値のみ作成し、読み戻しを照合した。
+- 実体はprofile内stageの `resume-user-server-20261105.mjs`（SHA256 3f5a57c34a28e37e582181000ee2cf07c6e84a37ea2254a77dfb3592d56eb30c）。Bのmain.js SHA 76128f1e509c213c59ca48c552acb8f00ea0482d2036edf346227826c90971fd と固定Node pathを照合し、既存製品のfindOrStartを再利用する。現在の起動条件（HTTP / 127.0.0.1:7780 / 通常state-dir）を維持し、lock/serve/local-auth PID、local-login、WS-readyを45秒・起動試行1回で検査する。結果は排他的にready/manual-start-requiredのみ保存し、秘密やcookieをログへ出さない。
+- 独立レビューで独自PID部分一致と起動直後の成功扱いを指摘されたため、その案を撤回して製品の検出・起動確認へ統合。修正版の再レビューは追加必須指摘なし。新規起動を拒否する`--check`を実稼働中に通し、サーバーを増やさずreadyを確認した。RunOnceの実行と実OS再起動はまだ行っていない。再起動後の最初の手動ログインが可能か、利用者の回答待ち。
+
 - main 36577744をsr-pcへpull。`context-connect-admin.ps1`（profile内stage、SHA a3fd9228238e25572ce9e9f48a74eebe6645d7ec0fc6e33a05840255b572ea7e）は復旧→新配布物へ更新→initialize/trust/enrollの束縛済み要求・結果照合/ack→通常起動までを準備した。34ソースをcanonical LF SHAで照合してBA/SY限定のProgramFiles配下へコピーし、秘密値はstdin/メモリーでだけ扱う。独立読み取りレビューで必須指摘なし。まだ実行していない。再起動前にこの手順を実行しない。
 - 通常ユーザーのlocalhost RPCで既存permissionsを保持してallowMicrophoneを有効化し、実CABLE Inputのrender endpoint IDを明示。変更前permissionsはsr-pcの専用stageに排他的に保存した。物理speakerの既定値は変更しない。
 - raw WebSocketを使う生成音の試行ではsr-pcが自動ロックしており、readyのsecureDesktop=true/lockScreenCover=trueとなった。現行仕様どおりマイク機能は交渉されず、音は送信していない。仮想CABLE Outputだけを明示した30秒のメタデータprobeはパケットを受信できたが、440Hz到達の成功証拠はない。音声データ・個人画面は保存していない。probe/共有は終了済み。
