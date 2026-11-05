@@ -146,7 +146,7 @@ async function close(id: string) {
           v-for="(label, kind) in VIEWER_LABELS"
           :key="kind"
           role="menuitem"
-          :disabled="!view.workspaceId || (kind === 'desktop' && machines.selectedId === 'local')"
+          :disabled="!view.workspaceId"
           @click="create(kind)"
         >
           ＋ {{ label }}

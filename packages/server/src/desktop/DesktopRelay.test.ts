@@ -131,7 +131,7 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   } as unknown as MachineLink;
   const relay = new DesktopRelay(auth, origins, {
     route: (id) => (id === "remote" ? { kind: "ok", link } : { kind: "unknown" }),
-  },()=>relayOrigins);
+  },()=>relayOrigins,{provider});
   web.on("upgrade", (req, socket, head) => {
     void relay.upgrade(req, socket, head);
   });
@@ -176,6 +176,25 @@ async function fixture(allowInput = true, legacy = false, configured = true, sec
   };
 }
 const start = { type: "start", machineId: "remote", options: { width: 320, fps: 10, quality: 65 } };
+it("shares and controls the local desktop without opening a machine channel, and releases its helper",async()=>{
+ const f=await fixture(),v=await f.viewer("extended");
+ v.send({...start,machineId:"local"});
+ await expect.poll(()=>v.frames.length).toBeGreaterThan(0);
+ expect(f.providerStartCalls()).toBe(0);
+ v.send({type:"control",enabled:true});
+ await expect.poll(()=>v.messages.some(m=>m.type==="control"&&m.enabled)).toBe(true);
+ v.send({type:"input",seq:1,frameSeq:decodeDesktopFrame(v.frames.at(-1)!).info.seq,input:{kind:"key",code:"KeyA",down:true}});
+ await expect.poll(()=>v.messages.some(m=>m.type==="input_ack"&&m.seq===1)).toBe(true);
+ await expect.poll(async()=>{try{return (await readFile(f.record,"utf8")).includes('"code":"KeyA"');}catch{return false;}}).toBe(true);
+ v.ws.close();
+ await expect.poll(()=>f.provider.capabilities().available).toBe(true);
+ await expect.poll(()=>(f.provider as unknown as {active:unknown}).active).toBeUndefined();
+});
+it("keeps disabled local sharing disabled without falling back to another machine",async()=>{
+ const f=await fixture(true,false,false),v=await f.viewer();v.send({...start,machineId:"local"});
+ await expect.poll(()=>v.messages.some(m=>m.type==="error")).toBe(true);
+ expect(v.frames).toHaveLength(0);expect(f.providerStartCalls()).toBe(0);
+});
 it.each(["pipe","json","shared"])("keeps %s physical input witnesses on B and invalidates them for the next input",async mode=>{
  const f=await fixture(),cfg=(f.provider as any).config;
  f.provider.configure({...cfg,fileRoot:dirname(f.record),command:[...cfg.command,"--pointer-witness-generated",...(mode==="pipe"?["--input-ack-pipe"]:[])]});

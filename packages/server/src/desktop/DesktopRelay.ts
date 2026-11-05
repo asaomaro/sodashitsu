@@ -22,7 +22,7 @@ import {DESKTOP_MONITORS_PROTOCOL} from "@sodashitsu/protocol";
 import {DESKTOP_FILES_PROTOCOL,DesktopFileRequest,DesktopFileResult} from "@sodashitsu/protocol";
 import {DESKTOP_RICH_CLIPBOARD_PROTOCOL,DesktopRichClipboardRequest,DesktopRichClipboardResult} from "@sodashitsu/protocol";
 import { createHash, randomBytes } from "node:crypto";
-import type { IncomingMessage } from "node:http";
+import {createServer,type Server,type IncomingMessage} from "node:http";
 import type { Duplex } from "node:stream";
 import { performance } from "node:perf_hooks";
 import { WebSocket, WebSocketServer } from "ws";
@@ -60,6 +60,8 @@ import type { OriginRejectionLog } from "../auth/OriginRejectionLog.js";
 import type { MachineLink } from "../machine/MachineLink.js";
 import {desktopRelayOrigin} from "./relayOrigin.js";
 import { DesktopBridgeRpc } from "./bridgeRpc.js";
+import {LocalDesktopRpc} from "./LocalDesktopRpc.js";
+import type {DesktopProviderApi} from "./DesktopProvider.js";
 import { unlockFailure } from "./unlockFailure.js";
 
 import { DesktopCursorStream } from "./DesktopCursorStream.js";
@@ -128,7 +130,7 @@ type Viewer = {
   sessionId: string;
   origin: string;
   provider?: WebSocket;
-  rpc?: DesktopBridgeRpc;
+  rpc?: Pick<DesktopBridgeRpc,"request"|"close">;
   ticketHash?: string;
   started: boolean;
   ready: boolean;
@@ -183,11 +185,35 @@ export class DesktopRelay {
   private readonly timer;
   private closed = false;
   readonly agents = new DesktopAgentAccess();
+  private localServer:Server|undefined;
+  private localOpening:Promise<string>|undefined;
+  private localOrigin: string|undefined;
+  private localSourceOrigin():Promise<string>{
+    if(this.closed)return Promise.reject(new Error("desktop stopped"));
+    if(this.localOrigin)return Promise.resolve(this.localOrigin);
+    if(this.localOpening)return this.localOpening;
+    const server=this.localServer=createServer((_req,res)=>{res.writeHead(404);res.end();});
+    server.on("upgrade",(req,socket,head)=>{
+      // This loopback receiver serves source tickets only, never browser viewers.
+      if(req.headers.origin!==undefined){socket.destroy();return;}
+      void this.upgrade(req,socket,head);
+    });
+    this.localOpening=new Promise<string>((resolve,reject)=>{
+      server.once("error",reject);
+      server.listen(0,"127.0.0.1",()=>{
+        const address=server.address();
+        if(this.closed||!address||typeof address!=="object"){server.close();reject(new Error("desktop stopped"));return;}
+        this.localOrigin=`http://127.0.0.1:${address.port}`;server.unref();resolve(this.localOrigin);
+      });
+    }).finally(()=>{this.localOpening=undefined;});
+    return this.localOpening;
+  }
   constructor(
     private readonly auth: Pick<AuthService,"authorizeUpgrade"|"verifySession"|"onSessionRevoked">,
     private readonly origins: Pick<OriginRejectionLog,"admit">,
     private readonly machines: {route(id:string):{kind:"ok";link:Pick<MachineLink,"openChannel">}|{kind:"unknown"|"offline"}},
     private readonly publicOrigins:()=>readonly string[]=()=>[],
+    private readonly local?:{provider:Pick<DesktopProviderApi,"capabilities"|"endpointScope"|"clientGone">},
   ) {
     this.microphoneLanes=new DesktopVideoLanes(id=>auth.verifySession(id),8192);
     this.fileLanes=new DesktopVideoLanes(id=>auth.verifySession(id),262144);
@@ -577,11 +603,15 @@ export class DesktopRelay {
     machineId: string,
     options: import("@sodashitsu/protocol").DesktopOptions,
   ): Promise<void> {
-    const route = this.machines.route(machineId);
-    if (route.kind !== "ok") throw new Error("machine unavailable");
-    const channel = route.link.openChannel();
-    if (!channel) throw new Error("machine unavailable");
-    const rpc = new DesktopBridgeRpc(channel, () => this.stop(v));
+    const rpc = machineId === "local" && this.local
+      ? new LocalDesktopRpc(this.local.provider,()=>this.localSourceOrigin(),v.origin)
+      : (()=>{
+          const route=this.machines.route(machineId);
+          if(route.kind!=="ok")throw new Error("machine unavailable");
+          const channel=route.link.openChannel();
+          if(!channel)throw new Error("machine unavailable");
+          return new DesktopBridgeRpc(channel,()=>this.stop(v));
+        })();
     v.rpc = rpc;
     await rpc.hello();
     if (!this.viewers.has(v)) return;
@@ -649,7 +679,8 @@ export class DesktopRelay {
     const ticket = randomBytes(32).toString("base64url");
     v.ticketHash = hash(ticket);
     this.invites.set(v.ticketHash, v);
-    const url = new URL("/desktop-share", desktopRelayOrigin(v.origin,this.publicOrigins()));
+    const url = new URL("/desktop-share", machineId==="local"&&this.local?await this.localSourceOrigin():desktopRelayOrigin(v.origin,this.publicOrigins()));
+    if (!this.viewers.has(v)) return;
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const { deltas, image, adaptive, features, display, ...legacyOptions } = options;
     delete legacyOptions.imeKeys;
@@ -1266,6 +1297,7 @@ export class DesktopRelay {
     this.videoLanes.close();this.imageLanes.close();
   }
   dispose(): void {
+    this.localServer?.close(()=>{});
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.timer);

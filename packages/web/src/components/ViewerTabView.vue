@@ -29,15 +29,12 @@ const label = computed(
       class="preview-target"
     />
     <RemoteDesktopWindow :key="tab.machineId"
-      v-else-if="tab.kind === 'desktop' && tab.machineId !== 'local'"
+      v-else-if="tab.kind === 'desktop'"
       embedded
       :machine-id="tab.machineId"
       :label="label"
       @close="tabs.remove(tab.id)"
     />
-    <p v-else-if="tab.kind === 'desktop'" role="status">
-      外部マシンを選択してデスクトップを開いてください。
-    </p>
     <DesktopCdpView v-else :machine-id="tab.machineId" :machine-label="label" :enabled="true" />
   </div>
 </template>

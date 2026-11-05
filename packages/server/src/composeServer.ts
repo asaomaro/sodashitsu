@@ -469,7 +469,7 @@ export async function composeServer(
       allowClipboard: options.desktopClipboard === true, allowDisplayResize: options.desktopResize === true, allowUnlock: options.desktopUnlock === true } } : {}),
   });
   const exec = new ExecService();
-  const desktopRelay = new DesktopRelay(auth, originRejections, machines,()=>options.extraOrigins);
+  const desktopRelay = new DesktopRelay(auth, originRejections, machines,()=>options.extraOrigins,{provider:desktop});
   const desktopEndpoint=new DesktopEndpointService({stateDir:options.stateDir,provider:desktop,origins:desktopOriginsFromEnv(process.env,()=>delegations.list().delegations.filter(d=>d.state==="online").map(d=>d.url))});
   const desktopEndpointRelay=new DesktopEndpointRelay(auth,originRejections,machines);
   const desktopCompanion = new DesktopCompanionServer(desktop.companion, auth, originRejections);

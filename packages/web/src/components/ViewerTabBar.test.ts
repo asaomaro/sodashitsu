@@ -5,6 +5,18 @@ import ViewerTabBar from "./ViewerTabBar.vue";
 import { useViewerTabsStore } from "../store/viewerTabs.js";
 import { useViewStore } from "../store/view.js";
 import { useMachinesStore } from "../store/machines.js";
+it("opens a local desktop connection view without registering a remote PC",async()=>{
+ const pinia=createPinia();setActivePinia(pinia);const view=useViewStore(),tabs=useViewerTabsStore();
+ view.setView("w1","t1");useMachinesStore().selectedId="local";
+ const entry={id:crypto.randomUUID(),kind:"desktop" as const,label:"デスクトップ",machineId:"local",workspaceId:"w1"};
+ const request=vi.fn(async()=>({tab:entry,tabs:[entry],rev:1}));tabs.connect({request} as never);
+ const wrapper=mount(ViewerTabBar,{global:{plugins:[pinia]}});
+ await wrapper.get(".viewer-menu-button").trigger("click");
+ const item=wrapper.findAll('[role="menuitem"]').find(b=>b.text()==="＋ デスクトップ")!;
+ expect(item.attributes("disabled")).toBeUndefined();await item.trigger("click");await flushPromises();
+ expect(request).toHaveBeenCalledWith("viewer_tabs.create",expect.objectContaining({kind:"desktop",machineId:"local"}));
+ expect(wrapper.get('[role="tab"]').attributes("aria-label")).toBe("デスクトップ");wrapper.unmount();
+});
 it("creates and manages a viewer from the compact dropdown and exposes source-specific labels", async () => {
   const pinia = createPinia();
   setActivePinia(pinia);
