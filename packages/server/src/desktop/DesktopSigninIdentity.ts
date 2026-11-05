@@ -3,7 +3,7 @@ import type {DesktopEndpointIdentity} from "@sodashitsu/client-core/desktop/Desk
 import type {DesktopSigninCallScope} from "./DesktopSigninDispatch.js";
 import {DesktopSigninEnrollment} from "./DesktopSigninEnrollment.js";
 
-type Store = Pick<DesktopEndpointStore,"status"|"endpoint"|"close"|"settled">;
+type Store = Pick<DesktopEndpointStore,"status"|"verifiedEndpoint"|"close"|"settled">;
 export interface DesktopSigninIdentityPermit {
   readonly identity: DesktopEndpointIdentity;
   readonly allowInput: boolean;
@@ -72,14 +72,10 @@ export class DesktopSigninIdentity {
       timer = setTimeout(abort,5000); timer.unref();
       if (!current()) {finish();return;}
       const read = (async () => {
-        const state = await this.options.store.status();
-        if (!current() || !this.trusted(state,fingerprint)) throw failure();
-        const local = await this.options.store.endpoint(fingerprint,"viewer");
-        if (!current() || !local.active() || !current()) throw failure();
+        const local = await this.options.store.verifiedEndpoint(fingerprint,"viewer");
+        if (!current() || !local.active() || !this.trusted(local.status,fingerprint)) throw failure();
         const actual = await local.identity.fingerprint();
-        if (!current() || actual!==this.#policy.provider) throw failure();
-        const latest = await this.options.store.status();
-        if (!current() || !this.trusted(latest,fingerprint) || !local.active() || !current()) throw failure();
+        if (!current() || actual!==this.#policy.provider || local.status.fingerprint!==actual || !local.active() || !current()) throw failure();
         let revoked = false;
         const active = () => {
           let valid = false;

@@ -139,6 +139,18 @@ export class DesktopEndpointStore {
   const identity=await this.identity(data),latest=await this.load();
   if(this.closed||policy!==this.policyRevision||this.denied.has(key)||this.pending.has(key)||(this.revisions.get(key)??0)!==revision||!latest||latest.publicKey!==data.publicKey||latest.secret!==data.secret||!latest.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw Error("Desktop endpoint peer is not trusted");return {identity,active:()=>!this.closed&&policy===this.policyRevision&&!this.denied.has(key)&&!this.pending.has(key)&&(this.revisions.get(key)??0)===revision};
  }
+ /** One local restoration with policy from the same post-restoration read.
+  * Keeps the original double-read identity/peer checks while avoiding separate
+  * status restorations around a dedicated signin request. Never serialize it. */
+ async verifiedEndpoint(peerFingerprint:string,role:z.infer<typeof Role>):Promise<{identity:DesktopEndpointIdentity;active():boolean;status:{initialized:true;required:boolean;fingerprint:string;peers:DesktopTrustedPeer[]}}> {
+  Fingerprint.parse(peerFingerprint);Role.parse(role);const policy=this.policyRevision,key=role+":"+peerFingerprint,revision=this.revisions.get(key)??0;
+  const active=()=>!this.closed&&policy===this.policyRevision&&!this.denied.has(key)&&!this.pending.has(key)&&(this.revisions.get(key)??0)===revision;
+  const data=await this.load();if(!active()||!data||!data.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw failure();
+  const identity=await this.identity(data),latest=await this.load(),marker=await this.readMarker();
+  if(!active()||!latest||latest.publicKey!==data.publicKey||latest.secret!==data.secret||!latest.peers.some(peer=>peer.role===role&&peer.fingerprint===peerFingerprint))throw failure();
+  const fingerprint=await identity.fingerprint();if(!active())throw failure();
+  return {identity,active,status:{initialized:true,required:latest.required||marker,fingerprint,peers:latest.peers.filter(peer=>!this.denied.has(peer.role+":"+peer.fingerprint)).map(peer=>({...peer}))}};
+ }
  initialize():Promise<{fingerprint:string}> {return this.mutate(async data=>{
   if(data)return {data,result:{fingerprint:await (await this.identity(data)).fingerprint()}};
   let secret="";const identity=await DesktopEndpointIdentity.create(crypto,async value=>{secret=Buffer.from(value).toString("base64");});const created:Vault={version:1,required:false,publicKey:identity.publicKey,secret,peers:[]};return {data:created,result:{fingerprint:await identity.fingerprint()}};

@@ -1,0 +1,62 @@
+{
+  "phase": "normal-start",
+  "provider": "6c5823a1a59724bb43aacb0132960b537bcbf4203a1a5c86eead10e1aa8295d5",
+  "package": "b499ce681b2f80f6c06ac8f653ac2a50b1bfa41f54b7ce32ff9655f6ee040d1c",
+  "steps": [
+    {
+      "receipt": {
+        "state": "recovered",
+        "keysPreserved": true,
+        "originalOutcome": "unknown",
+        "cleanExitClaimed": false,
+        "started": false,
+        "provider": "6c5823a1a59724bb43aacb0132960b537bcbf4203a1a5c86eead10e1aa8295d5"
+      },
+      "phase": "recover"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 7832,
+      "tool": "upgrade-signin-service.ps1",
+      "startedAt": "2026-11-05T22:46:26.0437406Z"
+    },
+    {
+      "phase": "controller-exit",
+      "exitCode": 0,
+      "stderr": "",
+      "tool": "upgrade-signin-service.ps1"
+    },
+    {
+      "receipt": {
+        "state": "upgraded",
+        "started": false,
+        "packageSha256": "b499ce681b2f80f6c06ac8f653ac2a50b1bfa41f54b7ce32ff9655f6ee040d1c",
+        "oldPackageSha256": "8e6d72110ffafcbfbe4b8e4e582dcecf83976e8a2d645a2c37066a31cb8429d9",
+        "codeArchive": "C:\\Program Files\\Sodashitsu\\.signin-old-e22abc842240421ea1662f37518034f5",
+        "runArchive": "C:\\Program Files\\Sodashitsu\\DesktopSigninData\\68f6fb663a79fe1678d88cde0d7b34d23fa8c55adae6cfad3033cf20a8f8664d\\runs-old-e22abc842240421ea1662f37518034f5"
+      },
+      "phase": "upgrade"
+    },
+    {
+      "phase": "controller-start",
+      "pid": 12232,
+      "tool": "control-signin-service.ps1",
+      "startedAt": "2026-11-05T22:47:42.3026696Z"
+    },
+    {
+      "phase": "controller-exit",
+      "exitCode": 0,
+      "stderr": "",
+      "tool": "control-signin-service.ps1"
+    },
+    {
+      "receipt": {
+        "state": "observation-acknowledged",
+        "journal": "observed",
+        "runId": "f19342f3-8929-4871-a566-110b54efc202"
+      },
+      "phase": "normal-start"
+    }
+  ],
+  "state": "completed"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "e1cf5563-c26d-40b5-8491-f09e92c83889",
+  "status": "exited",
+  "stdout": "normal_case_generated_snapshot_new_scm_archives_interruptions_passed\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

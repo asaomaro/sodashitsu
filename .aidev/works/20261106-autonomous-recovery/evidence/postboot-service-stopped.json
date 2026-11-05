@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "sessionId": 0,
+  "mutatesInstalledState": false,
+  "inspection": {
+    "packageSha256": "b499ce681b2f80f6c06ac8f653ac2a50b1bfa41f54b7ce32ff9655f6ee040d1c",
+    "state": 1,
+    "pid": 0,
+    "exit": 1066,
+    "specific": 1
+  },
+  "at": "2026-11-05T22:50:54.0039212Z"
+}

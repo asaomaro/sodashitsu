@@ -1,0 +1,34 @@
+param([switch]$ValidateOnly)
+$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue'
+$env:TEMP=$PSScriptRoot;$env:TMP=$PSScriptRoot;$env:PSModulePath=Join-Path $PSHOME 'Modules'
+$identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+if(-not $identity.IsSystem -or $identity.ImpersonationLevel -ne 'None' -or [Diagnostics.Process]::GetCurrentProcess().SessionId -ne 0 -or $env:COMPUTERNAME -ne 'OSK2-024680-2'){exit 40}
+$owner='S-1-5-21-2255109513-3773794534-3440117263-1001';$old='8e6d72110ffafcbfbe4b8e4e582dcecf83976e8a2d645a2c37066a31cb8429d9';$fresh='b499ce681b2f80f6c06ac8f653ac2a50b1bfa41f54b7ce32ff9655f6ee040d1c';$provider='6c5823a1a59724bb43aacb0132960b537bcbf4203a1a5c86eead10e1aa8295d5';$ownPeer='8d001013b25a257531b36f8434c4e28626ac87df156645ec249b14dbdca02686'
+$steps=New-Object Collections.ArrayList;$activeManifest=$old;$phase='validation';$enrollmentBytes=$null;$enrollmentJson=$null
+function Invoke-Tool([string]$tool,[string[]]$more,[string]$inputText){
+ $a=@('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot $tool),'-OwnerSid',$owner)
+ if($tool -eq 'upgrade-signin-service.ps1'){$a+=@('-OldManifestSha256',$old,'-SourceDirectory',(Join-Path $PSScriptRoot 'package'),'-ManifestSha256',$fresh)}else{$a+=@('-ManifestSha256',$(if($tool -eq 'install-signin-service.ps1'){$fresh}else{$activeManifest}))};$a+=$more
+ $psi=New-Object Diagnostics.ProcessStartInfo;$psi.FileName='C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe';$psi.Arguments=($a|ForEach-Object{'"'+$_+'"'}) -join ' ';$psi.WorkingDirectory='C:\Windows\System32';$psi.UseShellExecute=$false;$psi.CreateNoWindow=$true;$psi.RedirectStandardInput=$true;$psi.RedirectStandardOutput=$true;$psi.RedirectStandardError=$true
+ $p=New-Object Diagnostics.Process;$p.StartInfo=$psi
+ try{if(-not $p.Start()){throw 'Controller start failed'};$out=$p.StandardOutput.ReadToEndAsync();$err=$p.StandardError.ReadToEndAsync();if($null -ne $inputText){$bytes=[Text.Encoding]::UTF8.GetBytes($inputText);try{$p.StandardInput.BaseStream.Write($bytes,0,$bytes.Length)}finally{[Array]::Clear($bytes,0,$bytes.Length)}};$p.StandardInput.Close()
+ [void]$steps.Add(@{phase='controller-start';tool=$tool;pid=$p.Id;startedAt=$p.StartTime.ToUniversalTime().ToString('o')})
+ if(-not $p.WaitForExit(100000)){throw 'Controller completion unknown; do not replay'};[void]$steps.Add(@{phase='controller-exit';tool=$tool;exitCode=$p.ExitCode;stderr=$err.Result});if($p.ExitCode -ne 0){throw 'Controller refused'};if($more -contains '-ValidateOnly' -and $tool -ne 'install-signin-service.ps1'){return @{compiled=$true}};return ($out.Result|ConvertFrom-Json)
+ }finally{$p.Dispose()}
+}
+$names=@('WindowsSigninVault.cs','WindowsSigninPackage.cs','WindowsSigninPackageNative.cs','WindowsSigninRunRecord.cs','WindowsSigninRunJournal.cs','WindowsSigninProcessEvidence.cs','WindowsSigninServicePolicy.cs','WindowsSigninQuiescence.cs','WindowsSigninAdminEnvelope.cs','WindowsSigninControllerMutex.cs','WindowsSigninScm.cs','WindowsSigninInstallFiles.cs','WindowsSigninUnclaimedRecovery.cs','WindowsSigninRestartRecovery.cs','WindowsSigninPartialIdentityProof.cs','NormalCaseRecovery.cs')
+try{
+ $all=(@($names|ForEach-Object{[IO.File]::ReadAllText((Join-Path $PSScriptRoot $_))})) -join "`n"
+ $using=@([regex]::Matches($all,'(?m)^using [^;]+;')|ForEach-Object {$_.Value}|Select-Object -Unique)
+ $all=($using -join "`n")+"`n"+[regex]::Replace($all,'(?m)^using [^;]+;','')
+ Add-Type -TypeDefinition $all -ReferencedAssemblies System.dll,System.Core.dll,System.Security.dll,System.Web.Extensions.dll
+ if(-not [SodaDesktopSigninVault]::SystemPrimary()){throw 'System primary required'}
+ if($ValidateOnly){$saved=Get-Content (Join-Path $PSScriptRoot 'bound.json') -Raw|ConvertFrom-Json;if($saved.ticketSha256 -ne 'cdcd541c40eca3d9edc6dc9064a129e33ff54d0c3a669f589885f2639058e461'){throw 'Saved binding changed'};$preview=[SodaNormalCaseRecovery]::Run('inspect-bound',$saved.ticketSha256);foreach($tool in @('upgrade-signin-service.ps1','control-signin-service.ps1')){$null=Invoke-Tool $tool @('-ValidateOnly') $null};$package=Invoke-Tool 'install-signin-service.ps1' @('-ValidateOnly','-SourceDirectory',(Join-Path $PSScriptRoot 'package')) $null;if($package.packageSha256 -ne $fresh -or -not $package.validated -or $package.writesInstalledState -ne $false -or $package.startsService -ne $false){throw 'Pinned package preflight failed'};[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'validated.json'),(@{ok=$true;system=$true;sessionId=0;mutatesInstalledState=$false;inspection=$preview}|ConvertTo-Json -Depth 6));exit 0}
+ if(Test-Path (Join-Path $PSScriptRoot 'attempted')){exit 0};try{$attempt=[IO.File]::Open((Join-Path $PSScriptRoot 'attempted'),[IO.FileMode]::CreateNew);$attempt.Dispose()}catch [IO.IOException]{exit 44}
+ $binding=Get-Content (Join-Path $PSScriptRoot 'bound.json') -Raw|ConvertFrom-Json
+ if($binding.ticketSha256 -notmatch '\A[a-f0-9]{64}\z'){throw 'Bound operation mismatch'}
+ $phase='recover';$recovered=[SodaNormalCaseRecovery]::Run('recover',$binding.ticketSha256);[void]$steps.Add(@{phase=$phase;receipt=$recovered});if(-not $recovered.keysPreserved -or $recovered.provider -ne $provider -or $recovered.originalOutcome -ne 'unknown' -or $recovered.cleanExitClaimed -ne $false){throw 'Recovery incomplete'}
+ $phase='upgrade';$upgraded=Invoke-Tool 'upgrade-signin-service.ps1' @() $null;[void]$steps.Add(@{phase=$phase;receipt=$upgraded});if($upgraded.state -ne 'upgraded' -or $upgraded.oldPackageSha256 -ne $old -or $upgraded.packageSha256 -ne $fresh -or $upgraded.started -ne $false){throw 'Pinned runtime upgrade incomplete'};$activeManifest=$fresh
+ $phase='normal-start';$normal=Invoke-Tool 'control-signin-service.ps1' @('-Action','start') $null;[void]$steps.Add(@{phase=$phase;receipt=$normal});if($normal.state -ne 'observation-acknowledged'){throw 'Normal admission not confirmed'}
+ [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'public-status.json'),(@{state='completed';phase=$phase;provider=$provider;package=$fresh;steps=@($steps)}|ConvertTo-Json -Depth 14 -Compress));[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'completed.json'),(@{ok=$true;phase=$phase;steps=@($steps)}|ConvertTo-Json -Depth 14));exit 0
+}catch{[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'public-status.json'),(@{state='failed';phase=$phase;errorKind=$_.Exception.GetBaseException().GetType().Name;steps=@($steps)}|ConvertTo-Json -Depth 14 -Compress));[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'failed.json'),(@{ok=$false;phase=$phase;errorKind=$_.Exception.GetBaseException().GetType().Name;steps=@($steps)}|ConvertTo-Json -Depth 14));exit 1}
+finally{if($null -ne $enrollmentBytes){[Array]::Clear($enrollmentBytes,0,$enrollmentBytes.Length)};$enrollmentJson=$null;$enrollment=$null;$operation=$null}

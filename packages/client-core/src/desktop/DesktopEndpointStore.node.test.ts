@@ -59,3 +59,27 @@ it("rechecks owner lifetime after the final asynchronous vault read",async()=>{
   const restore=vi.spyOn(local,"load").mockImplementation(async()=>{const data=await read();if(++reads===2)f.store.close();return data;});
   try{await expect(f.store.localIdentity()).rejects.toThrow();}finally{restore.mockRestore();}
 });
+
+it("returns a verified viewer identity with policy from its post-restoration vault",async()=>{
+ const f=await fixture(),initialized=await f.store.initialize(),fingerprint="a".repeat(64);await f.store.setRequired(true);await f.store.trust({fingerprint,role:"viewer",label:"Generated viewer"});
+ const value=await f.store.verifiedEndpoint(fingerprint,"viewer");expect(value.status).toEqual({initialized:true,required:true,fingerprint:initialized.fingerprint,peers:[{fingerprint,role:"viewer",label:"Generated viewer"}]});expect(await value.identity.fingerprint()).toBe(initialized.fingerprint);expect(value.active()).toBe(true);
+ const revoked=f.store.revoke(fingerprint,"viewer");expect(value.active()).toBe(false);await revoked;await expect(f.store.verifiedEndpoint(fingerprint,"viewer")).rejects.toThrow();
+});
+it.each(["revoke","policy","close","replacement","peer-removed"])("rejects a verified snapshot across %s during restoration",async mode=>{
+ const f=await fixture(),other=await fixture(),fingerprint="b".repeat(64);await f.store.initialize();await other.store.initialize();await f.store.trust({fingerprint,role:"viewer",label:"Generated viewer"});
+ const begun=gate(),release=gate(),original=DesktopEndpointIdentity.restore.bind(DesktopEndpointIdentity);let held=false;
+ const restore=vi.spyOn(DesktopEndpointIdentity,"restore").mockImplementation(async(...args)=>{if(!held){held=true;begun.resolve();await release.promise;}return original(...args);});
+ const pending=f.store.verifiedEndpoint(fingerprint,"viewer"),rejected=expect(pending).rejects.toThrow();
+ try{await begun.promise;
+  if(mode==="revoke")await f.store.revoke(fingerprint,"viewer");if(mode==="policy")await f.store.setRequired(true);if(mode==="close")f.store.close();
+  if(mode==="replacement")await writeFile(join(f.store.directory,"identity.json"),await readFile(join(other.store.directory,"identity.json")),{mode:0o600});
+  if(mode==="peer-removed"){const editor=f.reopen();try{await editor.revoke(fingerprint,"viewer");}finally{editor.close();}}
+  release.resolve();await rejected;
+ }finally{release.resolve();await Promise.allSettled([pending]);restore.mockRestore();}
+});
+it("requires viewer role and validates the required marker in a verified snapshot",async()=>{
+ const f=await fixture(),fingerprint="c".repeat(64);await f.store.initialize();await f.store.trust({fingerprint,role:"agent",label:"Generated agent"});await expect(f.store.verifiedEndpoint(fingerprint,"viewer")).rejects.toThrow();await f.store.trust({fingerprint,role:"viewer",label:"Generated viewer"});
+ expect((await f.store.verifiedEndpoint(fingerprint,"viewer")).status.required).toBe(false);
+ await writeFile(join(f.stateDir,"desktop-endpoint-required.json"),JSON.stringify({version:1,required:true}),{mode:0o600});expect((await f.store.verifiedEndpoint(fingerprint,"viewer")).status.required).toBe(true);
+ await writeFile(join(f.stateDir,"desktop-endpoint-required.json"),'{"version":1,"required":"false"}',{mode:0o600});await expect(f.store.verifiedEndpoint(fingerprint,"viewer")).rejects.toThrow();
+});

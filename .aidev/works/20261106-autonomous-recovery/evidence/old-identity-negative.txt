@@ -1,0 +1,35 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+stdout | src/desktop/DesktopSigninIdentity.test.ts > finishes a bounded verified snapshot without redundant status restorations
+{
+  legacyStatusCalls: 2,
+  legacyEndpointCalls: 1,
+  elapsed: 5000,
+  deadlineRejected: true
+}
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninIdentity.test.ts (33 tests | 1 failed | 32 skipped) 23ms
+   × finishes a bounded verified snapshot without redundant status restorations 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninIdentity.test.ts > finishes a bounded verified snapshot without redundant status restorations
+AssertionError: expected Error: Signin endpoint identity is unavai… to not be an instance of Error
+ ❯ src/desktop/DesktopSigninIdentity.test.ts:64:301
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 32 skipped (33)
+   Start at  07:35:38
+   Duration  800ms (transform 76%, import 20%, tests 3%)
+

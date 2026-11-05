@@ -9,7 +9,7 @@ import {readDesktopSigninEnrollment} from "./DesktopSigninVault.node.js";
 import type {DesktopSigninEnrollment} from "./DesktopSigninEnrollment.js";
 import type {DesktopSigninHandlers} from "./DesktopSigninDispatch.js";
 const failure=()=>new Error("Signin runtime is unavailable");
-type Store=Pick<DesktopEndpointStore,"status"|"endpoint"|"close"|"settled">;
+type Store=Pick<DesktopEndpointStore,"status"|"verifiedEndpoint"|"close"|"settled">;
 type Presence=Pick<DesktopSigninPresenceProcess,"ready"|"active"|"close"|"settled">;
 type Endpoint=Pick<DesktopSigninEndpoint,"start"|"clientGone"|"close">;
 export interface DesktopSigninRuntimeDependencies {

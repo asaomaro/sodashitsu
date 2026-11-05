@@ -1,0 +1,12 @@
+{
+  "id": "7dc06798-df60-408f-a611-cacba4ca29c7",
+  "status": "exited",
+  "stdout": "{\r\n    \"reboots\":  false,\r\n    \"root\":  \"C:\\\\Program Files\\\\Sodashitsu\\\\.normal-final-boot-36b0415af24d4bf3b054a3b4e65bac64\",\r\n    \"bootTask\":  \"SodashitsuNormalFinalRecovery-36b0415af24d4bf3b054a3b4e65bac64\",\r\n    \"ok\":  true,\r\n    \"bound\":  {\r\n                  \"ticketSha256\":  \"cdcd541c40eca3d9edc6dc9064a129e33ff54d0c3a669f589885f2639058e461\",\r\n                  \"startsService\":  false,\r\n                  \"reboots\":  false,\r\n                  \"state\":  \"same-binding-transferred\"\r\n              },\r\n    \"steps\":  [\r\n                  {\r\n                      \"phase\":  \"system-preflight\",\r\n                      \"taskRemoved\":  true,\r\n                      \"completed\":  true\r\n                  },\r\n                  {\r\n                      \"phase\":  \"transfer-never-run-boot\",\r\n                      \"priorDisabled\":  true,\r\n                      \"priorTask\":  \"SodashitsuNormalCaseRecovery-fc28150a52694c93bdc7bb1574b397a9\",\r\n                      \"bindingPreserved\":  true,\r\n                      \"newEnabled\":  true\r\n                  }\r\n              ]\r\n}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

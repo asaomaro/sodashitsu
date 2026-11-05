@@ -16,7 +16,7 @@ function fixture(){
  const abort=new AbortController();controllers.push(abort);
  const presence={active:()=>live,ready:()=>ready,close:vi.fn(()=>{live=false;presenceOptions?.closed();}),settled:vi.fn(()=>proof)};
  const state={initialized:true as const,required:true,fingerprint:provider,peers:[{fingerprint:peer,label:"generated",role:"viewer" as const}]};
- const store={status:vi.fn(async()=>state),endpoint:vi.fn(),close:vi.fn(),settled:vi.fn(async()=>{})};
+ const store={status:vi.fn(async()=>state),verifiedEndpoint:vi.fn(),close:vi.fn(),settled:vi.fn(async()=>{})};
  const identity={endpoint:vi.fn(),close:vi.fn(()=>store.close()),settled:vi.fn(async()=>{})};
  const endpoint={start:vi.fn(async()=>({started:true as const})),clientGone:vi.fn(),close:vi.fn(async()=>{})},connector={close:vi.fn()};
  const deps:DesktopSigninRuntimeDependencies={now:()=>now,unsafeStop:vi.fn(),presence:vi.fn(options=>{presenceOptions=options;return presence;}),enrollment:vi.fn(async()=>enrollment()),store:vi.fn(()=>store),identity:vi.fn(()=>identity),endpoint:vi.fn(()=>endpoint),connector:vi.fn(options=>{connectorOptions=options;return connector;})};
