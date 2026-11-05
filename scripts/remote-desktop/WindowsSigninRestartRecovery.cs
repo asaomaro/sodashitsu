@@ -14,14 +14,14 @@ using Microsoft.Win32.SafeHandles;
 public static class SodaDesktopSigninRestartRecovery {
     static Exception Failure(){return new InvalidOperationException("Restart recovery requires unchanged bound abnormal-run evidence and a new critical SCM instance");}
     static void Require(bool value){if(!value)throw Failure();}
-    static string Hash(byte[] value){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(value)).Replace("-","").ToLowerInvariant();}
-    static byte[] Encode(object value){return new UTF8Encoding(false,true).GetBytes(new JavaScriptSerializer{MaxJsonLength=65536,RecursionLimit=12}.Serialize(value));}
+    internal static string Hash(byte[] value){using(var sha=SHA256.Create())return BitConverter.ToString(sha.ComputeHash(value)).Replace("-","").ToLowerInvariant();}
+    internal static byte[] Encode(object value){return new UTF8Encoding(false,true).GetBytes(new JavaScriptSerializer{MaxJsonLength=65536,RecursionLimit=12}.Serialize(value));}
     static string Id(SodaDesktopSigninPackageNative.Held held){var v=held.Before.Value;return v.Volume.ToString("x8")+v.IndexHigh.ToString("x8")+v.IndexLow.ToString("x8")+v.CreatedHigh.ToString("x8")+v.CreatedLow.ToString("x8");}
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern SafeProcessHandle OpenProcess(uint access,bool inherit,uint pid);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool IsProcessCritical(SafeProcessHandle process,out bool critical);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",SetLastError=true)]static extern bool GetProcessTimes(SafeProcessHandle process,out ulong created,out ulong exited,out ulong kernel,out ulong user);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)][DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)]static extern bool MoveFileExW(string from,string to,uint flags);
-    sealed class ScmInstance:IDisposable {
+    internal sealed class ScmInstance:IDisposable {
         SafeProcessHandle handle;SodaDesktopSigninProcessEvidence.Pin pin;
         internal readonly string Identity;
         internal ScmInstance(Func<bool> current){
@@ -37,7 +37,7 @@ public static class SodaDesktopSigninRestartRecovery {
     }
     // Closed bounded snapshot: every descendant is no-follow, single-link,
     // private, identity/hash pinned. Barrier is already held exclusively.
-    sealed class Tree:IDisposable {
+    internal sealed class Tree:IDisposable {
         readonly string root;readonly Func<string,byte[],bool> policy;readonly Func<bool> current;
         readonly List<SodaDesktopSigninPackageNative.Held> held=new List<SodaDesktopSigninPackageNative.Held>();
         readonly SortedDictionary<string,string> entries=new SortedDictionary<string,string>(StringComparer.Ordinal);
@@ -56,9 +56,9 @@ public static class SodaDesktopSigninRestartRecovery {
         internal void Same(Tree other){Require(Digest()==other.Digest());}
         public void Dispose(){SodaDesktopSigninPackageNative.Release(held);}
     }
-    static byte[] Read(string path,Func<string,byte[],bool> policy){using(var h=SodaDesktopSigninPackageNative.OpenRenamableCore(path,65536,a=>policy(path,a))){var b=new byte[checked((int)h.Before.Value.SizeLow)];int at=0;while(at<b.Length){int n=h.Stream.Read(b,at,b.Length-at);Require(n>0);at+=n;}Require(h.Stream.ReadByte()==-1);SodaDesktopSigninPackageNative.CheckCore(h,a=>policy(path,a));return b;}}
-    static void Write(string path,byte[] bytes,Func<string,byte[],bool> policy,Func<string,FileStream> createFile){using(var f=createFile(path)){f.Write(bytes,0,bytes.Length);f.Flush(true);}Require(Hash(Read(path,policy))==Hash(bytes));}
-    static void Exact(string path,params string[] names){var actual=Directory.GetFileSystemEntries(path).Select(Path.GetFileName).OrderBy(p=>p,StringComparer.Ordinal).ToArray();Require(actual.SequenceEqual(names.OrderBy(p=>p,StringComparer.Ordinal)));}
+    internal static byte[] Read(string path,Func<string,byte[],bool> policy){using(var h=SodaDesktopSigninPackageNative.OpenRenamableCore(path,65536,a=>policy(path,a))){var b=new byte[checked((int)h.Before.Value.SizeLow)];int at=0;while(at<b.Length){int n=h.Stream.Read(b,at,b.Length-at);Require(n>0);at+=n;}Require(h.Stream.ReadByte()==-1);SodaDesktopSigninPackageNative.CheckCore(h,a=>policy(path,a));return b;}}
+    internal static void Write(string path,byte[] bytes,Func<string,byte[],bool> policy,Func<string,FileStream> createFile){using(var f=createFile(path)){f.Write(bytes,0,bytes.Length);f.Flush(true);}Require(Hash(Read(path,policy))==Hash(bytes));}
+    internal static void Exact(string path,params string[] names){var actual=Directory.GetFileSystemEntries(path).Select(Path.GetFileName).OrderBy(p=>p,StringComparer.Ordinal).ToArray();Require(actual.SequenceEqual(names.OrderBy(p=>p,StringComparer.Ordinal)));}
     // This recovery is deliberately limited to the one prior unclaimed cancel
     // plus one completed upgrade history. Other histories need separate review.
     internal static void Slot(string slot,string owner,string barrier,bool marker,string recovered,Func<string,byte[],bool> policy){

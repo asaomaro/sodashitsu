@@ -24,22 +24,28 @@ export interface DesktopSigninAdminBackend {
 export interface DesktopSigninAdministrationDependencies {
  backend():DesktopSigninAdminBackend;
  result(bytes:Uint8Array,permit:DesktopSigninAdminPermit):Promise<void>;
- uuid():string;unsafeStop():void;
+ uuid():string;unsafeStop():void;now?():number;
 }
 /** Only call after the fixed SYSTEM helper has durably claimed a private local
  * request. Backend must independently enforce this permit at persistence time.
  * No normal server/RPC, automatic key initialization or network is reachable. */
 export async function desktopSigninAdministration(claim:{request:DesktopSigninAdminRequest;cipherSha256:string},scope:{active():boolean;signal:AbortSignal},deps:DesktopSigninAdministrationDependencies):Promise<void>{
+ const clock=deps.now??(()=>performance.now()),born=clock(),overallUntil=born+60000;let last=born,stepUntil=overallUntil,budgetEnded=false;
  const {request}=claim,binding=request.binding();fingerprint.parse(claim.cipherSha256);let backend:DesktopSigninAdminBackend|undefined;
- const owned=()=>!scope.signal.aborted&&scope.active();const permit:DesktopSigninAdminPermit={expiresAt:binding.expiresAt,active:()=>request.current(owned)};
+ const owned=()=>!scope.signal.aborted&&scope.active();
+ const budgetActive=()=>{try{const at=clock();if(budgetEnded||!Number.isFinite(born)||born<0||!Number.isFinite(at)||at<last||at>=overallUntil||at>=stepUntil){budgetEnded=true;return false;}last=at;return true;}catch{budgetEnded=true;return false;}};
+ const permit:DesktopSigninAdminPermit={expiresAt:binding.expiresAt,active:()=>budgetActive()&&request.current(owned)};
  let rejectStop!:(error:Error)=>void,ended=false;const stopped=new Promise<never>((_,reject)=>{rejectStop=reject;});void stopped.catch(()=>{});const pending=new Set<Promise<unknown>>();
  let backendClosed=false,closeFailed=false;const closeBackend=()=>{if(backend&&!backendClosed){backendClosed=true;try{backend.close();}catch{closeFailed=true;}}};
  const stop=()=>{if(!ended){ended=true;request.close();rejectStop(failure());}closeBackend();};
- const guard=()=>{if(ended||!permit.active()){stop();throw failure();}};
+ const guard=(until=overallUntil)=>{if(ended||!permit.active()||last>=until){stop();throw failure();}};
+ // A Windows operation performs several separately bounded native checks.
+ // Keep the request lease authoritative and bound the composite work as well.
+ const overall=setTimeout(stop,60000);overall.unref();
  const abort=()=>stop();scope.signal.addEventListener('abort',abort,{once:true});const health=setInterval(()=>{if(!permit.active())stop();},100);health.unref();
- const step=async<T>(operation:()=>Promise<T>):Promise<T>=>{guard();let timer:ReturnType<typeof setTimeout>|undefined;
-  const task=Promise.resolve().then(()=>{guard();return operation();});pending.add(task);void task.then(()=>pending.delete(task),()=>pending.delete(task));
-  try{const result=await Promise.race([task,stopped,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{stop();reject(failure());},5000);timer.unref();})]);guard();return result;}finally{clearTimeout(timer);}
+ const step=async<T>(operation:()=>Promise<T>):Promise<T>=>{guard();const until=stepUntil=last+30000;let timer:ReturnType<typeof setTimeout>|undefined;
+  const task=Promise.resolve().then(()=>{guard(until);return operation();});pending.add(task);void task.then(()=>pending.delete(task),()=>pending.delete(task));
+  try{const result=await Promise.race([task,stopped,new Promise<never>((_,reject)=>{timer=setTimeout(()=>{stop();reject(failure());},30000);timer.unref();})]);guard(until);return result;}finally{clearTimeout(timer);}
  };
  let resultAttempted=false;const publish=async(value:unknown)=>{guard();if(resultAttempted)throw failure();resultAttempted=true;const bytes=Buffer.from(JSON.stringify(value));try{if(bytes.length>16384)throw failure();await step(()=>deps.result(bytes,permit));}finally{bytes.fill(0);}};
  const header={version:1,purpose:'desktop-signin-admin-result',ownerSid:binding.ownerSid,nonce:binding.nonce,cipherSha256:claim.cipherSha256};
@@ -66,7 +72,7 @@ export async function desktopSigninAdministration(claim:{request:DesktopSigninAd
    if(resultAttempted)throw failure();guard();await publish({...header,outcome:'incomplete'});
   }
  }finally{
-  clearInterval(health);scope.signal.removeEventListener('abort',abort);stop();let timer:ReturnType<typeof setTimeout>|undefined;
+  clearTimeout(overall);clearInterval(health);scope.signal.removeEventListener('abort',abort);stop();let timer:ReturnType<typeof setTimeout>|undefined;
   try{await Promise.race([(async()=>{if(backend)await backend.settled();await Promise.allSettled([...pending]);})(),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(failure()),8000);timer.unref();})]);if(closeFailed)throw failure();}
   catch{try{deps.unsafeStop();}catch{}throw failure();}finally{clearTimeout(timer);}
  }

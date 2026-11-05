@@ -1,0 +1,41 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninAdministration.test.ts (25 tests | 1 failed | 24 skipped) 17ms
+   × finishes a committed Windows initialization whose checks take more than five seconds 16ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 24 skipped (25)
+   Start at  22:02:32
+   Duration  1.54s (transform 73%, import 25%, tests 1%, worker 1%)
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninAdministration.test.ts > finishes a committed Windows initialization whose checks take more than five seconds
+AssertionError: expected { ok: false } to deeply equal { ok: true }
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "ok": false,
+  }
+
+ ❯ src/desktop/DesktopSigninAdministration.test.ts:34:63
+     32|  f.backend.initialize.mockImplementation(async()=>{committed=true;awai…
+     33|  const result=f.run().then(()=>({ok:true}),()=>({ok:false}));
+     34|  await vi.advanceTimersByTimeAsync(6000);expect(await result).toEqual(…
+       |                                                               ^
+     35|  expect(committed).toBe(true);expect(f.backend.initialize).toHaveBeenC…
+     36|  expect(f.backend.requireEncryption).toHaveBeenCalledOnce();expect(f.r…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

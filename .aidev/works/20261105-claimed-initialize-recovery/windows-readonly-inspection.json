@@ -1,0 +1,12 @@
+{
+  "id": "39d204e1-4ddd-4b03-bb9a-849133262dc0",
+  "status": "exited",
+  "stdout": "{\r\n    \"runHash\":  \"6a9303e145fe2f6f8640006a5117aecf2cc31cbdb66a5061dfead15527d454f5\",\r\n    \"inspection\":  {\r\n                       \"state\":  \"claimed-initialize-inspected\",\r\n                       \"runId\":  \"24ed5b37-ad1f-4ca2-b99b-1b3e4c5c015c\",\r\n                       \"provider\":  \"6c5823a1a59724bb43aacb0132960b537bcbf4203a1a5c86eead10e1aa8295d5\",\r\n                       \"runtimeSha256\":  \"ce12a201d810dc406512ae582368e7162cb06e609813fd3614e6d24b1affd438\",\r\n                       \"inventorySha256\":  \"111bc2ae43a1acc5a8f1c3efb450d05f895c5c8f5dd1442312a37a39a99e1eff\",\r\n                       \"scmInstance\":  \"1352:134383521598645145\",\r\n                       \"mutates\":  false\r\n                   },\r\n    \"nonce\":  \"7de08294-cebc-4396-9d6a-1636c826bb30\",\r\n    \"proofSha256\":  \"2baefe46128b6ccc660154e5a8efeb2fa9aa99548361b6ecd356b76feebf6d98\",\r\n    \"ok\":  true,\r\n    \"claimHash\":  \"0176791b3b8ce511784230fabc9fdbc98f52c3c612f4dc9dce8d98dfcb729b06\"\r\n}\r\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false
+}

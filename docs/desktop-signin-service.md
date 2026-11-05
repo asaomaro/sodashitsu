@@ -140,3 +140,17 @@ OS再起動後、同じ指定に `-Action recover -TicketSha256 …` を渡し�
 この境界の考え方は、[Microsoftのcritical system servicesの説明](https://learn.microsoft.com/en-us/windows/win32/rstmgr/critical-system-services)と[IsProcessCritical](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-isprocesscritical)に基づきます。kernelのboot GUIDとは区別します。critical属性の変更やSCMの終了は行いません。
 
 `-ValidateOnly` はコンパイルだけ、`validate-signin-restart-recovery.ps1 -NegativeControls` は通常ユーザーの隔離ファイルで成功・再実行拒否・中断保持と負例を検査します。sr-pcでBindと同じ再起動状態からのRecover拒否は確認済みです。実OS再起動後のRecover以降は[実機記録](../.aidev/works/20261105-signin-restart-recovery/verification.md)で未完了として管理しています。
+
+## claim後の初期化が鍵の保存直後に中断した場合
+
+`recover-signin-claimed-initialize.ps1` は、期限切れのclaim済みinitialize、観測済みの実行記録、既知の取消・再起動復旧履歴、`runtime/desktop-endpoint/identity.json` だけがある状態に限定した管理者用ツールです。未知の履歴やファイル、既存のtrust・登録情報があれば拒否します。初期化要求の再生や鍵の作り直しは行いません。
+
+先に、レビュー済みのソースを管理者だけが書ける場所へ配置し、`create-signin-partial-identity-proof.ps1 -OwnerSid … -ManifestSha256 … -Nonce …` をSYSTEMのprimary tokenで実行します。これは既存鍵の読取専用検査です。SYSTEMのCurrentUser DPAPIで復号し、P-256 PKCS8形式、秘密鍵による署名と保存公開鍵の一致、trustが空であることを確認します。鍵・平文を出力せず、privateな固定先へpackage・SCM実体・runtimeのSHAと公開指紋を含む証拠を作ります。生成したtaskの終了と削除を確認してから次へ進みます。
+
+復旧ツールへ `-OwnerSid`、`-ManifestSha256`、元の `-RunFileSha256`／`-ClaimFileSha256`、新しい `-ProofNonce`／`-ProofSha256` を指定します。省略時の `-Action inspect` は照合だけです。証拠は90秒以内で、実行中のSCM実体・barrier・保存された暗号文と一致する必要があります。
+
+`-Action bind` は全項目を固定した印とticket SHAを保存します。OS再起動後、別nonceで同じSYSTEM検査を行い、`-Action recover -TicketSha256 …` を実行します。新しいcritical SCM実体と、元の暗号文・公開指紋・全履歴が一致する場合だけ、runs/adminをUUID名で退避して新しい初期境界を作ります。runtimeは全バイト維持し、元要求の結果は「不明」のまま保存します。サービスは起動しません。中断後は印と原本を残し、自動再試行しません。
+
+その後は、修正版への明示更新と、別nonceの新しいinitialize要求を使います。既存identityの読み込みに失敗した場合の鍵再生成は認めません。複合初期化の期限は各段階30秒・全体60秒で、要求自体の期限も維持します。タイマー通知が遅れても単調時計の期限を超えた結果を成功扱いしません。個別native保存処理の期限は変えていません。
+
+`validate-signin-claimed-initialize.ps1 -NegativeControls` は、実SCMや実保存先を使わず、生成した鍵・履歴で照合、退避、5箇所の中断、改変したソースの拒否を検査します。実機の進捗は[検証記録](../.aidev/works/20261105-claimed-initialize-recovery/verification.md)に分けて記載します。
