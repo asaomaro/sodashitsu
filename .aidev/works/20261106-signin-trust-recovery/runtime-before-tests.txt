@@ -1,0 +1,65 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents
+
+ ❯ |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts (26 tests | 3 failed) 106ms
+   × keeps readonly Windows checks fresh when each bounded read takes two seconds 3ms
+   × does not extend the five second policy window for slow parallel checks 1ms
+   × starts the next policy check from the previous start rather than its completion 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts > keeps readonly Windows checks fresh when each bounded read takes two seconds
+AssertionError: expected "vi.fn()" to be called once, but got 0 times
+ ❯ src/desktop/DesktopSigninRuntime.test.ts:50:27
+     48|  vi.mocked(f.deps.enrollment).mockImplementation(()=>delay(enrollment(…
+     49|  const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(2001…
+     50|  expect(f.deps.connector).toHaveBeenCalledOnce();expect(f.connectorOpt…
+       |                           ^
+     51|  await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!…
+     52|  expect(f.store.status.mock.calls.length).toBeGreaterThan(5);expect(f.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts > does not extend the five second policy window for slow parallel checks
+AssertionError: expected "vi.fn()" to be called once, but got 0 times
+ ❯ src/desktop/DesktopSigninRuntime.test.ts:59:98
+     57|  const delay=async<T>(value:T)=>{await new Promise(resolve=>setTimeout…
+     58|  vi.mocked(f.deps.enrollment).mockImplementation(()=>delay(enrollment(…
+     59|  const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(3001…
+       |                                                                                                  ^
+     60|  await vi.advanceTimersByTimeAsync(2000);expect(f.connectorOptions()!.…
+     61|  expect(f.connector.close).toHaveBeenCalled();f.stopProof();await vi.a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |@sodashitsu/server| src/desktop/DesktopSigninRuntime.test.ts > starts the next policy check from the previous start rather than its completion
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/desktop/DesktopSigninRuntime.test.ts:67:82
+     65|  f.store.status.mockImplementation(async()=>{await new Promise(resolve…
+     66|  const run=f.start();f.reveal();await vi.advanceTimersByTimeAsync(2001…
+     67|  await vi.advanceTimersByTimeAsync(12000);expect(f.connectorOptions()!…
+       |                                                                                  ^
+     68|  f.abort.abort();f.stopProof();await vi.advanceTimersByTimeAsync(2000)…
+     69| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 23 passed (26)
+   Start at  01:38:53
+   Duration  1.61s (transform 73%, import 19%, tests 7%)
+

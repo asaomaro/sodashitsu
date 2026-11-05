@@ -1,0 +1,8 @@
+
+> sodashitsu-workspace@0.1.0 build:signin /workspaces/sodashitsu-main-live-assistant-agents
+> node scripts/remote-desktop/build-signin-bundle.mjs
+
+
+ WARN  inlineDynamicImports option is deprecated, please use codeSplitting: false instead.
+
+signin_bundle_built_no_execution
