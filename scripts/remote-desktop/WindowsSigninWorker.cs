@@ -51,15 +51,7 @@ public static class SodaDesktopSigninWorker {
                     pending.ContinueWith(failed=>failed.Exception.Handle(error=>true),TaskContinuationOptions.OnlyOnFaulted|TaskContinuationOptions.ExecuteSynchronously);
                     while(!pending.IsCompleted){Require(timer.ElapsedMilliseconds<5000&&package.Current()&&child.Running());Thread.Sleep(20);}Require(timer.ElapsedMilliseconds<5000);pending.GetAwaiter().GetResult();
                     stage=213;uint actual;Require(SodaDesktopSigninWorkerNative.GetNamedPipeClientProcessId(pipe.SafePipeHandle,out actual)&&actual==pid&&child.Running());
-                    using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,65536,true))using(var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true))using(var stop=new ManualResetEvent(false)){
-                        stage=214;var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
-                        var outbound=new Thread(()=>{try{string line;while((line=Line(reader,3000000))!=null){parentOut.WriteLine(line);parentOut.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
-                        inbound.Start();outbound.Start();timer.Restart();while(!stop.WaitOne(50)&&child.Running()&&package.Current()&&timer.ElapsedMilliseconds<120000){}
-                        if(!child.Stop())Environment.FailFast("Signin worker could not stop");pipe.Dispose();
-                        // Closing this broker's stdin is controlled by the Node
-                        // owner. A blocked background stdin read ends at process exit.
-                        if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");
-                    }
+                    stage=214;Pump(parentIn,parentOut,pipe,()=>child.Running(),()=>package.Current(),()=>child.Stop());
                 }finally{if(!child.Stop())Environment.FailFast("Signin worker could not stop");child.Dispose();}
             }
             }
@@ -68,6 +60,20 @@ public static class SodaDesktopSigninWorker {
         // and all native child/package/runtime leases have been released.
         stage=215;parentOut.WriteLine("{\"type\":\"signin_stopped\"}");parentOut.Flush();
         }catch(SodaDesktopSigninWorkerNative.DiagnosticFailure){throw;}catch{throw new SodaDesktopSigninWorkerNative.DiagnosticFailure(stage);}
+    }
+    // The pipe owns its handle. The stdin pump can remain blocked until broker
+    // exit, so its borrowed writer must not be disposed while that thread lives.
+    // In particular, Dispose would Flush the already closed pipe even with
+    // leaveOpen=true. Every transmitted line is explicitly flushed instead.
+    static void Pump(TextReader parentIn,TextWriter parentOut,Stream pipe,Func<bool> running,Func<bool> current,Func<bool> stopChild){
+        using(var reader=new StreamReader(pipe,new UTF8Encoding(false,true),false,65536,true))using(var stop=new ManualResetEvent(false)){
+            var writer=new StreamWriter(pipe,new UTF8Encoding(false),4096,true);
+            var inbound=new Thread(()=>{try{string line;while((line=Line(parentIn,16384))!=null){writer.WriteLine(line);writer.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
+            var outbound=new Thread(()=>{try{string line;while((line=Line(reader,3000000))!=null){parentOut.WriteLine(line);parentOut.Flush();}}catch{}finally{try{stop.Set();}catch{}}}){IsBackground=true};
+            inbound.Start();outbound.Start();var timer=Stopwatch.StartNew();while(!stop.WaitOne(50)&&running()&&current()&&timer.ElapsedMilliseconds<120000){}
+            if(!stopChild())Environment.FailFast("Signin worker could not stop");pipe.Dispose();
+            if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");
+        }
     }
     // Context inspection verifies the installed SYSTEM image and private runtime
     // but never queries/opens a desktop or creates a Winlogon child.
@@ -250,6 +256,18 @@ public static class SodaDesktopSigninWorker {
         using(var memory=new MemoryStream()){
             using(var output=Utf8Writer(memory))output.WriteLine("生成");Generated(new UTF8Encoding(false,true).GetString(memory.ToArray())=="生成"+Environment.NewLine,"Broker UTF8 output changed");
             memory.Position=0;using(var input=Utf8Reader(memory))Generated(Line(input,32)=="生成","Broker UTF8 input changed");
+        }
+        // Use an actual Windows pipe: MemoryStream.Flush is a no-op after
+        // Dispose and cannot catch the borrowed StreamWriter disposal regression.
+        string pipeName="SodaSigninPumpFixture-"+Guid.NewGuid().ToString("N");
+        using(var pipe=new NamedPipeServerStream(pipeName,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous))
+        using(var peer=new NamedPipeClientStream(".",pipeName,PipeDirection.InOut)){
+            var connection=pipe.BeginWaitForConnection(null,null);peer.Connect(2000);pipe.EndWaitForConnection(connection);peer.Dispose();
+            bool childStopped=false;var order=new List<string>();
+            try{Pump(new StringReader(""),new StringWriter(),pipe,()=>true,()=>true,()=>{childStopped=true;order.Add("job-zero");return true;});}
+            catch(ObjectDisposedException){throw new InvalidOperationException("Pump reflushed a closed pipe");}
+            order.Add("terminal");Generated(childStopped&&order.Count==2&&order[0]=="job-zero"&&order[1]=="terminal","Pump terminal preceded child cleanup");
+            bool closed=false;try{pipe.ReadByte();}catch(ObjectDisposedException){closed=true;}Generated(closed,"Pump left pipe open");
         }
         int contextCalls=0;Generated(ContextRoute(new[]{"--context"},()=>contextCalls++)&&contextCalls==1,"Context route not dispatched");
         foreach(var argv in new[]{new string[0],new[]{"--context","input"},new[]{"--broker","presence"},new[]{"--worker"},new[]{"context"}})Generated(!ContextRoute(argv,()=>contextCalls++)&&contextCalls==1,"Context route accepted other purpose");

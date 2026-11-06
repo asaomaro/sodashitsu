@@ -87,3 +87,23 @@ Boot task c3efd99d901f43c7979ccbf358534579は15秒delay/12分上限、fresh191 R
 206 parent handle、207 parent照合、208 aggregate open、209 aggregate照合、210 pipe、211 worker create、
 212 connect待ち、213 pipe認証、214 pump、215終了行、240 Node entryのreject。
 番号は失敗状態の説明だけで、正常終了や入力解放ACKを意味しない。Specific報告は従来同様全Job清掃後。
+
+## epoch修正版の実導入（再開後）
+
+- [x] 2a7b2032のWindows package v4を生成、manifest 6e27d59e…、readonly Preview validated=true。
+- [x] ビルド用junctionは元リンクを退避し末尾区切りのみ修復。依存バージョンは変更しない。
+- [x] 旧1ba/run217aの固定EpochStartupCaseを独立点検、inspect/recover各一回成功。unknown/keys保持/cleanExitClaimed=false、runs initial。
+- [x] fresh8cad標準operator（旧1ba→新6e27）とBoot23bfを準備。Prior SCM1352を固定しguard compile-only/独立レビュー成功。
+- [x] 完了済Boot c3を無効化、新Bootは未実行を確認。SSH Automatic/Running、対話ユーザー不在、SCM1066/107/Manualを確認して/fなし再起動要求。
+- [ ] 新bootの標準更新・実サービス・prelogin接続を確認する。
+
+Boot receiptの成功は起動観測ACKに限り、継続稼働や操作成功とは区別する。鍵・元runは保存する。
+
+## 実6e27のSpecific214とpipe終了処理
+
+- [x] 新boot 2026-11-06T18:19:22Z、SCM1268:134384627775760276。標準Upgrade 1ba→6e27、run8b7fbece…の起動観測ACKを一回取得。
+- [ ] その後Specific214で停止。prelogin接続成功・継続健全とはしない。
+- [x] Windows NamedPipeでpipe.Dispose後のleaveOpen StreamWriter.DisposeがObjectDisposedExceptionとなることを再現。MemoryStreamでは再現しない。
+- [x] Broker Pumpのwriterを借用wrapperにし二重Flushを除去。Job0/pipe閉鎖/outboundJoin後terminalの条件は維持。
+- [x] 実pipe回帰テスト、Disposeのみ戻す負例を含む28 controls、byte exact復元後再成功。独立レビュー必須指摘なし。
+- [ ] 修正版packageを標準導入し実サービスを再検証。

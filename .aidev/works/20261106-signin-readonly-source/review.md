@@ -39,3 +39,15 @@ review_resource_monitorがcase・生成tests・固定operator SDK/pins/ACL/once 
 source自身のclose・own stop・未確認teardownを回復扱いしないことを確認。
 phaseは既知値のみ、Hostが保持する終了childのstage107時だけ採用し、finally清掃後に報告。
 負例の生出力と復元hashはevidenceへ保存。実1ba serviceの失敗がこのraceだけとはまだ断定しない。
+
+## epoch修正版の新boot準備
+
+review_resource_monitorで旧1ba→新6e27、source v4、Prior SCM1352、meta SHAと38 pinsの一致を独立確認。
+必須指摘なし。新boot/Stopped1077/Specific0限定、標準Upgrade後start、once claim、鍵3hash、SY/BA ACLを維持。
+未知/timeoutの結果は再利用しない。guardはconstructorを実行せずcompile-only成功。
+
+## Broker pipe終了処理
+
+review_resource_monitorで製品/実pipeテスト/validatorを独立点検、mustなし。
+借用writerを先にDisposeする案はstdin threadとの競合があるため不採用。広い例外の握りつぶしは追加しない。
+Windows native 28負例/復元を確認。実214停止がこの問題だけに由来するかは未確認。

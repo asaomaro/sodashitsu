@@ -15,6 +15,7 @@ try {
     if($code -ne 0 -or -not (($output|Out-String).Contains('signin_worker_generated_data_and_abi_passed'))){throw 'Generated worker checks failed'}
     if($NegativeControls){
         $variants=@(
+            @('pump-closed-writer','WindowsSigninWorker.cs','if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");','if(!outbound.Join(1000))Environment.FailFast("Signin output did not stop");writer.Dispose();','Pump reflushed a closed pipe'),
             @('context-route','WindowsSigninWorker.cs','if(args.Length!=1||args[0]!="--context")return false;','if(args.Length!=1)return false;','Context route accepted other purpose'),
             @('control-reentry','WindowsSigninScope.cs','CurrentCore(read)||ended||revision!=controlRevision','CurrentCore(read)||ended','Reentrant release was overwritten'),
             @('frame-serial','WindowsSigninScope.cs','frame.Serial!=serial||','','Replaced frame ticket published'),
@@ -57,7 +58,7 @@ try {
         }
         $output=& $shell -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1;$code=$LASTEXITCODE;$output|ForEach-Object {Write-Output ([string]$_)}
         if($code -ne 0){throw 'Restored worker checks failed'}
-        'signin_worker_27_source_negative_controls_and_restore_passed'
+        'signin_worker_28_source_negative_controls_and_restore_passed'
     }
 }finally{[IO.Directory]::Delete($root,$true)}
 exit 0
