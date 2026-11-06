@@ -75,3 +75,14 @@ it("bounds and validates raw UTF-8 before accepting records or requests",()=>{
  expect(()=>value.classify(bytes({id:"x".repeat(129),method:"desktop.endpoint.status",params:{}}))).toThrow();
  expect(()=>value.classify(bytes({id:"control\n",method:"desktop.endpoint.status",params:{}}))).toThrow();
 });
+
+it("rewrites only strict loopback relay hints to the enrolled origin",()=>{
+ const value=enrollment();
+ for(const url of ["ws://localhost:7780/desktop-e2e","ws://127.0.0.1:1234/desktop-e2e","ws://[::1]:7780/desktop-e2e"]){
+  const raw={...start(),url},result=value.classify(request("desktop.endpoint.start",raw));
+  expect(result).toEqual({id:"1",method:"desktop.endpoint.start",params:start()});expect(raw.url).toBe(url);
+  for(const patch of [{machineId:"b".repeat(32)},{hello:{...raw.hello,role:"agent"}}])expect(()=>value.classify(request("desktop.endpoint.start",{...raw,...patch}))).toThrow();
+ }
+ for(const url of ["ws://localhost:7780/other","ws://localhost:7780/desktop-e2e?","ws://localhost:7780/desktop-e2e#","ws://localhost:7780/desktop-e2e?x=1","ws://localhost:7780/desktop-e2e#x","ws://u:p@localhost:7780/desktop-e2e","ws://localhost.evil.invalid/desktop-e2e","ws://192.0.2.1/desktop-e2e","wss://localhost:7780/desktop-e2e","ws://2130706433:7780/desktop-e2e","ws://localhost:7780/desktop%2De2e"])
+  expect(()=>value.classify(request("desktop.endpoint.start",{...start(),url}))).toThrow();
+});

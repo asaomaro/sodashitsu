@@ -160,3 +160,14 @@ readonly console fixtureのtask上限は1分、子の上限は8秒。実行フ�
 
 初版テストはserver出力読取なしのbackpressureを作ったため無効。server readを先に待機し、clientへの入力は独立出力判定後だけ送る形へ是正した。
 実fixture終了とJob0/復元を確認し、検査失敗を製品成功扱いしない。
+
+## 実a173とRootローカルorigin
+
+- [x] 2562faafをWindowsでbuildしたa1736091…を標準更新、runba285fb1… ACK、Host2468 Running0/0。
+- [x] presence初回614ms/最大gap443ms/18秒50pulseへ改善。f1 signin alias onlineを維持。
+- [x] owned Browserの公開指紋8d0010…2686/Provider6c5823…95d5/required marker一致をreadonly確認。秘密鍵・pinのresetや移動なし。
+- [ ] 実Browserは暗号化接続失敗。RootRelayがbrowser origin localhostをforwardする一方、Signinはenrolled origin完全一致のみという不一致を修正中。
+- [x] strict loopback hintのみ登録済みURLへ正規化、接続にはclassified.paramsを使用。他origin・credentials/query/fragment・非canonical hint・別machine/roleは拒否。
+- [x] 実socket fixtureでrawhint127:1ではなく登録済みfixtureへ暗号化handshake。467 tests/26files、server typecheck/build成功。
+- [x] 旧Enrollmentのみ/旧Endpointのみ戻す負例それぞれ意図case失敗、byte exact復元。独立レビューmustなし、空?/＃も拒否追加。
+- [ ] 修正版の実適用・画面表示・サインインを確認。

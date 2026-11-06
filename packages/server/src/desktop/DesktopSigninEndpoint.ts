@@ -31,9 +31,10 @@ export class DesktopSigninEndpoint {
     if(!this.live()||this.#pending||this.#contexts.size)throw failure();this.#pending=true;
     let ctx:Context|undefined;
     try{
-      const p=DesktopEndpointStart.parse(raw);
-      const classified=this.options.enrollment.classify(utf8.encode(JSON.stringify({id:"endpoint",method:"desktop.endpoint.start",params:p})));
-      if(classified.method!=="desktop.endpoint.start"||p.parent||p.attachment||p.binding||p.hello.role!=="viewer")throw failure();
+      const classified=this.options.enrollment.classify(utf8.encode(JSON.stringify({id:"endpoint",method:"desktop.endpoint.start",params:DesktopEndpointStart.parse(raw)})));
+      if(classified.method!=="desktop.endpoint.start")throw failure();
+      const p=classified.params;
+      if(p.parent||p.attachment||p.binding||p.hello.role!=="viewer")throw failure();
       const fingerprint=createHash("sha256").update(Buffer.from(p.hello.identity,"hex")).digest("hex");
       const permit=await this.options.identity.endpoint(fingerprint,scope);
       if(!this.live()||scope.signal.aborted||!scope.active()||!permit.active()||!this.live())throw failure();

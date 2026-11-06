@@ -1,0 +1,13 @@
+
+ RUN  v5.0.1 /workspaces/sodashitsu-main-live-assistant-agents/packages/server
+
+[warn] `inlineDynamicImports` option is deprecated, please use `codeSplitting: false` instead.
+
+ Test Files  26 passed (26)
+      Tests  467 passed (467)
+   Start at  04:44:36
+   Duration  5.52s (transform 59%, import 24%, tests 16%, worker 1%)
+
+  Transform  transforming modules took 30.67s · 59% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

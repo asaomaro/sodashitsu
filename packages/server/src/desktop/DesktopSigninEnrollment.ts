@@ -66,7 +66,14 @@ export class DesktopSigninEnrollment {
       const message=request.parse(json(bytes));
       if(message.method==="desktop.endpoint.start") {
         const expected=new URL(this.#data.origin);expected.protocol=expected.protocol==="https:"?"wss:":"ws:";expected.pathname="/desktop-e2e";
-        if(message.params.machineId!==this.#data.machineId || message.params.url!==expected.href || message.params.hello.role!=="viewer")throw unavailable();
+        if(message.params.machineId!==this.#data.machineId || message.params.hello.role!=="viewer")throw unavailable();
+        if(message.params.url!==expected.href){
+          // A browser opened on Root's local listener reports a loopback URL.
+          // Treat only that exact endpoint as a hint; never connect to the hint.
+          const hint=new URL(message.params.url);
+          if(hint.protocol!=="ws:"||!["localhost","127.0.0.1","[::1]"].includes(hint.hostname)||hint.pathname!=="/desktop-e2e"||hint.username||hint.password||hint.search||hint.hash||message.params.url.includes("?")||message.params.url.includes("#")||hint.href!==message.params.url)throw unavailable();
+        }
+        return {...message,params:{...message.params,url:expected.href}};
       }
       return message;
     }catch{throw unavailable();}

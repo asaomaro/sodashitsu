@@ -77,3 +77,9 @@ view/inputの初期と前後照合、native desktop/WTS/observer失効、既存�
 review_resource_monitorで接続先/匿名token/PID認証/清掃を変えないAsynchronous指定と実duplex回帰を独立点検。
 初版のbackpressureを除去し、server側出力読取が待機する中でclient入力なしに書込み完了することを確認する。
 旧指定だけ戻す負例は、入力を与えて両threadを終了させた後に意図したassertionで失敗する。
+
+## 登録originへの固定
+
+review_resource_monitorでprovider側の登録済みURL固定を採用。Root側で公開URLを推測しない。
+strict ws loopback hintは受け取るだけで接続先には使わず、canonical enrollment URL/CA/TLS検証/署名peer照合を維持。
+独立点検の空query/fragment指摘を反映、両負例と復元hashが現sourceに一致することも確認。mustなし。
